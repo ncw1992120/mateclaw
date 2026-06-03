@@ -92,8 +92,9 @@ export default {
   },
   chat: {
     title: '对话',
-    placeholder: '输入消息…',
+    placeholder: 'Enter 发送，Ctrl+Enter 换行',
     send: '发送',
+    newLine: '换行',
     clear: '清空对话',
     newConversation: '新对话',
     welcome: '欢迎使用问数智能体，请输入您的分析问题',

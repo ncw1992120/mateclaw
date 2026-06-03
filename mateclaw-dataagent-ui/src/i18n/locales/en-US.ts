@@ -92,8 +92,9 @@ export default {
   },
   chat: {
     title: 'Chat',
-    placeholder: 'Type a message…',
+    placeholder: 'Enter to send, Ctrl+Enter for new line',
     send: 'Send',
+    newLine: 'New Line',
     clear: 'Clear Chat',
     newConversation: 'New Conversation',
     welcome: 'Welcome to Data Insight Agent, enter your analysis question',

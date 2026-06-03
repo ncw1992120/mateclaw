@@ -20,39 +20,6 @@
     </div>
 
     <div class="nav-right">
-      <el-input
-        v-model="searchText"
-        :placeholder="t('workbench.searchPlaceholder')"
-        size="small"
-        class="search-input"
-      >
-        <template #prefix>
-          <span class="search-icon">🔍</span>
-        </template>
-      </el-input>
-
-      <template v-if="activeNav === 'smart-ask'">
-        <div class="nav-divider"></div>
-
-        <button class="nav-btn btn-outline" @click="handleExportReport">
-          {{ t('workbench.exportReport') }}
-        </button>
-
-        <button class="nav-btn btn-primary" @click="handleMySkills">
-          {{ t('workbench.mySkills') }} ▾
-        </button>
-
-        <button
-          class="nav-btn btn-immersion"
-          :class="{ active: immersionMode }"
-          @click="toggleImmersion"
-        >
-          {{ t('workbench.immersionMode') }}
-        </button>
-      </template>
-
-      <div class="nav-divider" v-if="activeNav !== 'smart-ask'"></div>
-
       <button class="nav-btn icon-btn" :title="t('nav.appCenter')">⊞</button>
       <button class="nav-btn icon-btn" :title="t('nav.notification')">🔔</button>
       <button class="nav-btn icon-btn" :title="t('nav.settings')">⚙</button>
@@ -62,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -70,14 +37,8 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-/** 搜索文本 */
-const searchText = ref('')
-
 /** 当前激活的导航项 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
-
-/** 沉浸模式状态 */
-const immersionMode = ref(false)
 
 /** 导航项配置 */
 const navItems = [
@@ -92,19 +53,6 @@ const navItems = [
 /** 导航点击 */
 function handleNavClick(key: string): void {
   router.push({ path: '/', query: { ...route.query, nav: key } })
-}
-
-/** 导出报告 */
-function handleExportReport(): void {
-}
-
-/** 我的技能 */
-function handleMySkills(): void {
-}
-
-/** 切换沉浸模式 */
-function toggleImmersion(): void {
-  immersionMode.value = !immersionMode.value
 }
 </script>
 
@@ -206,77 +154,6 @@ function toggleImmersion(): void {
   height: 24px;
   background: #e5e6eb;
   flex-shrink: 0;
-}
-
-.search-input {
-  width: 200px;
-}
-
-.search-input :deep(.el-input__wrapper) {
-  border-radius: 18px;
-  box-shadow: 0 0 0 1px #e5e6eb inset;
-}
-
-.search-icon {
-  font-size: 12px;
-}
-
-.nav-btn {
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-outline {
-  height: 32px;
-  border-radius: 16px;
-  border: 1px solid #e5e6eb;
-  background: #f2f3f5;
-  padding: 0 14px;
-  font-size: 12px;
-  color: #4e5969;
-}
-
-.btn-outline:hover {
-  border-color: #f05a23;
-  color: #f05a23;
-  background: rgba(240, 90, 35, 0.06);
-}
-
-.btn-primary {
-  height: 32px;
-  border-radius: 16px;
-  border: none;
-  background: #f05a23;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0 14px;
-}
-
-.btn-primary:hover {
-  background: #e75c01;
-}
-
-.btn-immersion {
-  padding: 4px 12px;
-  border-radius: 12px;
-  border: 1px solid #e5e6eb;
-  background: #f2f3f5;
-  color: #86909c;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.btn-immersion:hover,
-.btn-immersion.active {
-  background: #f05a23;
-  color: #fff;
-  border-color: #f05a23;
 }
 
 .icon-btn {

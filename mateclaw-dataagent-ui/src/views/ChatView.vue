@@ -210,12 +210,13 @@
 
     <!-- Input Bar -->
     <div class="input-bar">
-      <input
+      <textarea
         v-model="inputMessage"
         class="chat-input"
         :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholder')"
         :disabled="chatStore.isStreaming"
-        @keydown.enter.exact.prevent="handleSend"
+        rows="1"
+        @keydown="handleKeydown"
       />
       <button v-if="chatStore.isStreaming" class="btn-stop" @click="handleStop">{{ t('chat.stop') }}</button>
       <button v-else class="btn-send" :disabled="!canSend" @click="handleSend">{{ t('chat.send') }}</button>
@@ -424,6 +425,29 @@ function handleSend(): void {
   inputMessage.value = ''
   const modelName = modelStore.activeModel?.modelName
   chatStore.sendMessage(chatStore.currentAgentId, message, modelName)
+}
+
+/** 键盘事件处理：Enter发送，Ctrl+Enter换行 */
+function handleKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Enter') {
+    if (event.ctrlKey || event.metaKey) {
+      // Ctrl+Enter 或 Cmd+Enter 换行
+      event.preventDefault()
+      const target = event.target as HTMLTextAreaElement
+      const start = target.selectionStart
+      const end = target.selectionEnd
+      const value = inputMessage.value
+      inputMessage.value = value.substring(0, start) + '\n' + value.substring(end)
+      // 设置光标位置到新行的开头
+      nextTick(() => {
+        target.selectionStart = target.selectionEnd = start + 1
+      })
+    } else {
+      // 单独 Enter 发送消息
+      event.preventDefault()
+      handleSend()
+    }
+  }
 }
 
 /** 停止生成 */
@@ -1074,13 +1098,16 @@ onUnmounted(() => {
 
 .chat-input {
   flex: 1;
-  height: 40px;
+  min-height: 40px;
+  max-height: 120px;
   border-radius: 16px;
   border: 1px solid var(--light-grey);
-  padding: 0 16px;
+  padding: 10px 16px;
   font-size: 13px;
   outline: none;
   font-family: inherit;
+  resize: none;
+  line-height: 1.5;
 }
 
 .chat-input:focus {
