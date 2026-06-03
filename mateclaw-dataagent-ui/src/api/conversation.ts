@@ -1,0 +1,20 @@
+import api from './index'
+import type { Conversation, MessageVO } from '@/types'
+
+/** API 路径常量 */
+const BASE_URL = '/dataagent/api/v1/conversations'
+
+/** 获取会话列表 */
+export function listConversations() {
+  return api.get<Conversation[]>(`${BASE_URL}`)
+}
+
+/** 获取指定会话的消息历史 */
+export function listMessages(conversationId: string) {
+  return api.get<MessageVO[]>(`${BASE_URL}/${conversationId}/messages`)
+}
+
+/** 删除会话 */
+export function deleteConversation(conversationId: string) {
+  return api.delete(`${BASE_URL}/${conversationId}`)
+}

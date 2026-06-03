@@ -1,0 +1,196 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import type { ModelConfig, ModelProvider } from '@/types'
+import * as modelApi from '@/api/model'
+
+/** 模型配置状态管理 */
+export const useModelStore = defineStore('model', () => {
+  /** 启用的模型列表 */
+  const enabledModels = ref<ModelConfig[]>([])
+  /** Provider 目录列表 */
+  const providers = ref<ModelProvider[]>([])
+  /** 当前激活模型 */
+  const activeModel = ref<ModelConfig | null>(null)
+  /** 默认模型 */
+  const defaultModel = ref<ModelConfig | null>(null)
+  /** 加载状态 */
+  const loading = ref(false)
+
+  /** 获取启用模型列表 */
+  async function fetchEnabledModels(): Promise<void> {
+    loading.value = true
+    try {
+      enabledModels.value = await modelApi.listEnabledModels() as unknown as ModelConfig[]
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /** 获取 Provider 目录 */
+  async function fetchProviders(): Promise<void> {
+    loading.value = true
+    try {
+      const list = await modelApi.listCatalog() as unknown as Record<string, unknown>[]
+      providers.value = list.map(p => ({
+        ...p,
+        providerId: p.id,
+        models: (p.models as Record<string, unknown>[])?.map((m: Record<string, unknown>) => ({ ...m, modelId: m.id })),
+        extraModels: (p.extraModels as Record<string, unknown>[])?.map((m: Record<string, unknown>) => ({ ...m, modelId: m.id })),
+      })) as unknown as ModelProvider[]
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /** 获取默认模型 */
+  async function fetchDefaultModel(): Promise<void> {
+    try {
+      defaultModel.value = await modelApi.getDefaultModel() as unknown as ModelConfig
+    } catch {
+      defaultModel.value = null
+    }
+  }
+
+  /** 获取当前激活模型 */
+  async function fetchActiveModel(): Promise<void> {
+    try {
+      const info = await modelApi.getActiveModel() as unknown as { activeLlm: { providerId: string; model: string } }
+      if (info?.activeLlm?.model) {
+        const matched = enabledModels.value.find(m => m.modelName === info.activeLlm.model && m.provider === info.activeLlm.providerId)
+        if (matched) {
+          activeModel.value = matched
+        } else {
+          activeModel.value = { modelName: info.activeLlm.model, provider: info.activeLlm.providerId } as ModelConfig
+        }
+      } else {
+        activeModel.value = null
+      }
+    } catch {
+      activeModel.value = null
+    }
+  }
+
+  /** 设置当前激活模型 */
+  async function setActiveModelById(modelId: number): Promise<void> {
+    await modelApi.setActiveModel(modelId)
+    await fetchActiveModel()
+  }
+
+  /** 启用 Provider */
+  async function enableProvider(providerId: string): Promise<void> {
+    await modelApi.enableProvider(providerId)
+    await fetchProviders()
+    await fetchEnabledModels()
+  }
+
+  /** 禁用 Provider */
+  async function disableProvider(providerId: string): Promise<void> {
+    await modelApi.disableProvider(providerId)
+    await fetchProviders()
+    await fetchEnabledModels()
+  }
+
+  /** 更新 Provider 配置 */
+  async function updateProvider(providerId: string, data: Partial<ModelProvider>): Promise<void> {
+    await modelApi.updateProviderConfig(providerId, data)
+    await fetchProviders()
+  }
+
+  /** 创建模型 */
+  async function createModel(data: Partial<ModelConfig>): Promise<void> {
+    await modelApi.createModel(data)
+    await fetchEnabledModels()
+  }
+
+  /** 更新模型 */
+  async function updateModel(id: number, data: Partial<ModelConfig>): Promise<void> {
+    await modelApi.updateModel(id, data)
+    await fetchEnabledModels()
+    if (activeModel.value?.id === id) {
+      await fetchActiveModel()
+    }
+  }
+
+  /** 删除模型 */
+  async function deleteModel(id: number): Promise<void> {
+    await modelApi.deleteModel(id)
+    await fetchEnabledModels()
+    if (activeModel.value?.id === id) {
+      activeModel.value = null
+    }
+  }
+
+  /** 设置默认模型 */
+  async function setDefaultModel(id: number): Promise<void> {
+    await modelApi.setDefaultModel(id)
+    await fetchDefaultModel()
+    await fetchEnabledModels()
+  }
+
+  /** 测试供应商连接，返回 { success, message, latencyMs } */
+  async function testConnection(providerId: string): Promise<{ success: boolean; message?: string; latencyMs?: number }> {
+    try {
+      const result = await modelApi.testProviderConnection(providerId) as { success: boolean; message?: string; errorMessage?: string; latencyMs?: number }
+      return {
+        success: result.success,
+        message: result.success ? result.message : result.errorMessage,
+        latencyMs: result.latencyMs,
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, message: msg }
+    }
+  }
+
+  /** 测试模型可用性，返回 { success, message, latencyMs } */
+  async function testModelAvailability(providerId: string, modelId: string): Promise<{ success: boolean; message?: string; latencyMs?: number }> {
+    try {
+      const result = await modelApi.testModel(providerId, modelId) as { success: boolean; message?: string; errorMessage?: string; latencyMs?: number }
+      return {
+        success: result.success,
+        message: result.success ? result.message : result.errorMessage,
+        latencyMs: result.latencyMs,
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, message: msg }
+    }
+  }
+
+  /** 创建自定义 Provider */
+  async function createCustomProvider(data: Record<string, unknown>): Promise<void> {
+    await modelApi.createCustomProvider(data as Partial<ModelProvider>)
+    await fetchProviders()
+  }
+
+  /** 发现远端模型 */
+  async function discoverModels(providerId: string): Promise<void> {
+    await modelApi.discoverModels(providerId)
+    await fetchProviders()
+    await fetchEnabledModels()
+  }
+
+  return {
+    enabledModels,
+    providers,
+    activeModel,
+    defaultModel,
+    loading,
+    fetchEnabledModels,
+    fetchProviders,
+    fetchDefaultModel,
+    fetchActiveModel,
+    setActiveModelById,
+    enableProvider,
+    disableProvider,
+    updateProvider,
+    createModel,
+    updateModel,
+    deleteModel,
+    setDefaultModel,
+    testConnection,
+    testModelAvailability,
+    createCustomProvider,
+    discoverModels,
+  }
+})

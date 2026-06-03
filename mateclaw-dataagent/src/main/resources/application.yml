@@ -1,0 +1,64 @@
+server:
+  port: 18089
+  servlet:
+    context-path: /dataagent/api
+
+spring:
+  application:
+    name: mateclaw-dataagent
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:data_agent}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: "199"
+    locations:
+      - classpath:db/migration/mysql
+    validate-on-migrate: true
+    clean-disabled: true
+    placeholder-replacement: false
+  ai:
+    dashscope:
+      api-key: ${AI_DASHSCOPE_API_KEY:placeholder}
+
+mateclaw:
+  jwt:
+    secret: ${JWT_SECRET:MateClaw-JWT-Secret-Key-2024-Please-Change-In-Production}
+    expiration: 86400000
+  mcp:
+    enabled: true
+  skill:
+    workspace:
+      root: ${user.home}/.mateclaw/skills
+      auto-init: true
+      delete-policy: archive
+    hub:
+      base-url: https://clawhub.ai
+      search-path: /api/v1/search
+      skills-path: /api/v1/skills
+      download-path: /api/v1/download
+      http-timeout: 15
+      http-retries: 3
+  plugin:
+    enabled: true
+    user-dir: ${user.home}/.mateclaw/plugins
+  hooks:
+    enabled: true
+    global-rate-limit: 200
+    global-concurrency: 32
+    dispatch-deadline: 5s
+    trusted-domains: []
+  runtime:
+    flyway-enabled: true
+
+springdoc:
+  api-docs:
+    path: /v1/api-docs
+  swagger-ui:
+    path: /v1/swagger-ui.html
