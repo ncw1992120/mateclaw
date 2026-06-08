@@ -71,7 +71,7 @@ public class ChatClient extends AbstractApiClient {
     public R<String> chat(Long agentId, ChatReq request) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("agentId", agentId);
-        return post(buildUrl(ApiPathConstants.CHAT, params), request,
+        return post(ApiPathConstants.CHAT, params, request,
                 new ParameterizedTypeReference<R<String>>() {});
     }
 

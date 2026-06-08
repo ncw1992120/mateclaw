@@ -30,7 +30,7 @@ public class SttClient extends AbstractApiClient {
         if (language != null) {
             params.put("language", language);
         }
-        return post(buildUrl(ApiPathConstants.STT_TRANSCRIBE, params), null,
+        return post(ApiPathConstants.STT_TRANSCRIBE, params, null,
                 new ParameterizedTypeReference<Map<String, Object>>() {});
     }
 }

@@ -64,6 +64,10 @@ public abstract class AbstractApiClient {
      * @return 完整 URL
      */
     protected String buildUrl(String path) {
+        // 如果 path 已经是完整 URL（由 buildUrl(path, params) 预先构建），直接返回，避免重复拼接
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            return path;
+        }
         return baseUrl + path;
     }
 
@@ -153,6 +157,11 @@ public abstract class AbstractApiClient {
         return response.getBody();
     }
 
+    /** POST 带查询参数重载，避免调用方先 buildUrl 再传入导致双重拼接 */
+    protected <T> T post(String path, Map<String, Object> params, Object body, ParameterizedTypeReference<T> typeReference) {
+        return post(buildUrl(path, params), body, typeReference);
+    }
+
     /**
      * 发送 PUT 请求
      *
@@ -173,6 +182,11 @@ public abstract class AbstractApiClient {
                 typeReference
         );
         return response.getBody();
+    }
+
+    /** PUT 带查询参数重载 */
+    protected <T> T put(String path, Map<String, Object> params, Object body, ParameterizedTypeReference<T> typeReference) {
+        return put(buildUrl(path, params), body, typeReference);
     }
 
     /**

@@ -28,7 +28,7 @@ public class ChannelQRCodeClient extends AbstractApiClient {
      */
     public Map<String, Object> begin(String channelType, Map<String, String> params) {
         Map<String, Object> queryParams = params != null ? new LinkedHashMap<>(params) : new LinkedHashMap<>();
-        return post(buildUrl(resolvePath(ApiPathConstants.CHANNEL_QRCODE_BEGIN, channelType), queryParams), null,
+        return post(resolvePath(ApiPathConstants.CHANNEL_QRCODE_BEGIN, channelType), queryParams, null,
                 new ParameterizedTypeReference<Map<String, Object>>() {});
     }
 

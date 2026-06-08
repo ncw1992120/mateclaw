@@ -7,6 +7,7 @@ import vip.mate.client.model.PageData;
 import vip.mate.client.model.R;
 import vip.mate.client.model.response.ConversationResp;
 import vip.mate.client.model.response.ConversationStreamStatusResp;
+import vip.mate.client.model.response.MessagePageResp;
 import vip.mate.client.model.response.MessageResp;
 
 import java.util.LinkedHashMap;
@@ -59,15 +60,30 @@ public class ConversationClient extends AbstractApiClient {
      * @param limit          消息数量限制（可选）
      * @return 消息列表
      */
-    public R<List<MessageResp>> listMessages(String conversationId, Long beforeId, Integer limit) {
+    /**
+     * 获取全部消息（不分页）
+     * 服务端 limit=null 时返回 List，适合消息量不大的场景
+     */
+    public R<List<MessageResp>> listMessages(String conversationId) {
+        return get(resolvePath(ApiPathConstants.CONVERSATION_MESSAGES, conversationId), null,
+                new ParameterizedTypeReference<R<List<MessageResp>>>() {});
+    }
+
+    /**
+     * 获取消息（分页）
+     * 服务端 limit>0 时返回 {messages, hasMore}
+     *
+     * @param limit    每页条数
+     * @param beforeId 上拉加载时传上一批最早消息的 id，首次加载传 null
+     */
+    public R<MessagePageResp> listMessagesPage(String conversationId, Long beforeId, int limit) {
         Map<String, Object> params = new LinkedHashMap<>();
+        params.put("limit", limit);
         if (beforeId != null) {
             params.put("beforeId", beforeId);
         }
-        if (limit != null) {
-            params.put("limit", limit);
-        }
-        return get(resolvePath(ApiPathConstants.CONVERSATION_MESSAGES, conversationId), params, new ParameterizedTypeReference<R<List<MessageResp>>>() {});
+        return get(resolvePath(ApiPathConstants.CONVERSATION_MESSAGES, conversationId), params,
+                new ParameterizedTypeReference<R<MessagePageResp>>() {});
     }
 
     /**

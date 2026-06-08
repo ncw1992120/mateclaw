@@ -193,7 +193,7 @@ public class WikiClient extends AbstractApiClient {
         if (force != null) {
             params.put("force", force);
         }
-        return post(buildUrl(resolvePath(ApiPathConstants.WIKI_KB_RAW_REPROCESS, kbId, rawId), params), null,
+        return post(resolvePath(ApiPathConstants.WIKI_KB_RAW_REPROCESS, kbId, rawId), params, null,
                 new ParameterizedTypeReference<R<Void>>() {});
     }
 
@@ -337,7 +337,7 @@ public class WikiClient extends AbstractApiClient {
         if (force != null) {
             params.put("force", force);
         }
-        return post(buildUrl(resolvePath(ApiPathConstants.WIKI_KB_PROCESS, kbId), params), null,
+        return post(resolvePath(ApiPathConstants.WIKI_KB_PROCESS, kbId), params, null,
                 new ParameterizedTypeReference<R<KbProcessResp>>() {});
     }
 

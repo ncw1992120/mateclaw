@@ -156,7 +156,7 @@ public class SecurityClient extends AbstractApiClient {
     public R<String> toggleRule(String ruleId, Boolean enabled) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("enabled", enabled);
-        return put(buildUrl(resolvePath(ApiPathConstants.SECURITY_GUARD_RULE_TOGGLE, ruleId), params), null,
+        return put(resolvePath(ApiPathConstants.SECURITY_GUARD_RULE_TOGGLE, ruleId), params, null,
                 new ParameterizedTypeReference<R<String>>() {});
     }
 

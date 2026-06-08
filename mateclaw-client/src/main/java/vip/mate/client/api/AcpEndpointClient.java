@@ -87,7 +87,7 @@ public class AcpEndpointClient extends AbstractApiClient {
     public R<AcpEndpoint> toggle(Long id, Boolean enabled) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("enabled", enabled);
-        return put(buildUrl(resolvePath(ApiPathConstants.ACP_ENDPOINT_TOGGLE, id), params), null,
+        return put(resolvePath(ApiPathConstants.ACP_ENDPOINT_TOGGLE, id), params, null,
                 new ParameterizedTypeReference<R<AcpEndpoint>>() {});
     }
 

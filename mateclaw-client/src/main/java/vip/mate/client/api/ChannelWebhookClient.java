@@ -75,7 +75,7 @@ public class ChannelWebhookClient extends AbstractApiClient {
         if (domain != null) {
             params.put("domain", domain);
         }
-        return post(buildUrl(ApiPathConstants.CHANNEL_WEBHOOK_FEISHU_REGISTER_BEGIN, params), null,
+        return post(ApiPathConstants.CHANNEL_WEBHOOK_FEISHU_REGISTER_BEGIN, params, null,
                 new ParameterizedTypeReference<Map<String, Object>>() {});
     }
 

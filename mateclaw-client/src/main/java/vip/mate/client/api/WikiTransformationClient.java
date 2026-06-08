@@ -98,7 +98,7 @@ public class WikiTransformationClient extends AbstractApiClient {
         if (sync != null) {
             params.put("sync", sync);
         }
-        return post(buildUrl(resolvePath(ApiPathConstants.WIKI_TRANSFORMATION_APPLY, id), params), request,
+        return post(resolvePath(ApiPathConstants.WIKI_TRANSFORMATION_APPLY, id), params, request,
                 new ParameterizedTypeReference<R<WikiTransformationRunResp>>() {});
     }
 
@@ -114,7 +114,7 @@ public class WikiTransformationClient extends AbstractApiClient {
         if (kbId != null) {
             params.put("kbId", kbId);
         }
-        return post(buildUrl(resolvePath(ApiPathConstants.WIKI_TRANSFORMATION_AGGREGATE, id), params), null,
+        return post(resolvePath(ApiPathConstants.WIKI_TRANSFORMATION_AGGREGATE, id), params, null,
                 new ParameterizedTypeReference<R<TransformationAggregateResp>>() {});
     }
 

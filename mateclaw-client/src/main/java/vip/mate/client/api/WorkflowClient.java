@@ -81,7 +81,7 @@ public class WorkflowClient extends AbstractApiClient {
         if (userId != null) {
             params.put("userId", userId);
         }
-        return put(buildUrl(resolvePath(ApiPathConstants.WORKFLOW_DRAFT, id), params), draft,
+        return put(resolvePath(ApiPathConstants.WORKFLOW_DRAFT, id), params, draft,
                 new ParameterizedTypeReference<R<Workflow>>() {});
     }
 
@@ -109,7 +109,7 @@ public class WorkflowClient extends AbstractApiClient {
         if (userId != null) {
             params.put("userId", userId);
         }
-        return post(buildUrl(resolvePath(ApiPathConstants.WORKFLOW_PUBLISH, id), params), request,
+        return post(resolvePath(ApiPathConstants.WORKFLOW_PUBLISH, id), params, request,
                 new ParameterizedTypeReference<R<PublishOutcomeResp>>() {});
     }
 
