@@ -31,6 +31,9 @@ public class DatasourceVO {
     /** 用户名 */
     private String username;
 
+    /** 密码（AES 加密存储） */
+    private String password;
+
     /** 连接参数（JSON） */
     private String connectionParams;
 

@@ -4,23 +4,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
-import vip.mate.dataagent.dto.DatasourceColumnVO;
-import vip.mate.dataagent.dto.DatasourceCreateRequest;
-import vip.mate.dataagent.dto.DatasourceTableVO;
-import vip.mate.dataagent.dto.DatasourceUpdateRequest;
-import vip.mate.dataagent.dto.DatasourceVO;
-import vip.mate.dataagent.dto.TableDataPreviewVO;
-import vip.mate.dataagent.dto.TableSyncRequest;
+import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
+import vip.mate.dataagent.aloudata.AloudataEndpointService;
+import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
 import java.util.List;
@@ -38,6 +27,8 @@ import java.util.Map;
 public class DataAgentDatasourceController {
 
     private final DatasourceManageService datasourceService;
+    private final AloudataService aloudataService;
+    private final AloudataEndpointService aloudataEndpointService;
 
     /**
      * 数据源列表
@@ -188,5 +179,39 @@ public class DataAgentDatasourceController {
             @Parameter(description = "表 ID") @PathVariable Long tableId) {
         datasourceService.deleteTable(datasourceId, tableId);
         return R.ok(null);
+    }
+
+    // ==================== Aloudata 指标平台相关接口 ====================
+
+    /**
+     * 查询 Aloudata 指标列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics")
+    @Operation(summary = "查询 Aloudata 指标列表", description = "获取 Aloudata 指标平台下的所有指标列表")
+    public R<List<AloudataMetricVO>> listAloudataMetrics(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataService.listMetrics(datasourceId));
+    }
+
+    /**
+     * 执行 Aloudata 指标数据查询
+     */
+    @PostMapping("/{datasourceId}/aloudata/query")
+    @Operation(summary = "执行 Aloudata 指标查询", description = "使用指标和维度组合，查询指定的指标计算结果")
+    public R<AloudataMetricQueryResponse> queryAloudataMetrics(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @RequestBody AloudataMetricQueryRequest request) {
+        return R.ok(aloudataService.queryMetrics(datasourceId, request));
+    }
+
+    /**
+     * 获取 Aloudata API 端点参数规范
+     */
+    @GetMapping("/aloudata/api-specs")
+    @Operation(summary = "获取 Aloudata API 端点参数规范",
+            description = "获取所有 Aloudata API 端点的请求参数和响应参数规范定义，"
+                    + "包括参数名称、类型、是否必填、默认值、传递方式和说明")
+    public R<Map<String, ApiEndpoint>> getAloudataApiSpecs() {
+        return R.ok(aloudataEndpointService.getEndpoints());
     }
 }

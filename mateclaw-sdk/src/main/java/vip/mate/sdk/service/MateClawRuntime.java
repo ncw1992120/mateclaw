@@ -1,21 +1,14 @@
 package vip.mate.sdk.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.ai.tool.ToolCallback;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.model.AgentEntity;
 import vip.mate.datasource.model.DatasourceEntity;
-import vip.mate.llm.model.ActiveModelsInfo;
-import vip.mate.llm.model.DiscoverResult;
-import vip.mate.llm.model.EnableResult;
-import vip.mate.llm.model.ModelConfigEntity;
-import vip.mate.llm.model.ModelSlotRequest;
-import vip.mate.llm.model.ProviderConfigRequest;
-import vip.mate.llm.model.ProviderInfoDTO;
-import vip.mate.llm.model.TestResult;
-import vip.mate.llm.model.CreateCustomProviderRequest;
-import vip.mate.llm.model.AddProviderModelRequest;
-import org.springframework.ai.tool.ToolCallback;
+import vip.mate.llm.model.*;
+import vip.mate.skill.model.SkillEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -267,6 +260,13 @@ public interface MateClawRuntime {
     List<ModelConfigEntity> listEnabledModels();
 
     /**
+     * 获取所有已启用的模型（含 chat 和 embedding 类型）
+     *
+     * @return 所有已启用的模型配置实体列表
+     */
+    List<ModelConfigEntity> listAllEnabledModels();
+
+    /**
      * 获取默认模型
      *
      * @return 默认模型配置实体
@@ -337,6 +337,21 @@ public interface MateClawRuntime {
     List<ModelConfigEntity> listModelsByType(String modelType, String modality);
 
     /**
+     * 获取默认向量（embedding）模型
+     *
+     * @return 默认向量模型配置实体，未配置时返回 null
+     */
+    ModelConfigEntity getDefaultEmbeddingModel();
+
+    /**
+     * 设置默认向量（embedding）模型
+     *
+     * @param id 模型 ID
+     * @return 更新后的模型配置实体
+     */
+    ModelConfigEntity setDefaultEmbeddingModel(Long id);
+
+    /**
      * 发现远端模型
      *
      * @param providerId Provider ID
@@ -369,4 +384,77 @@ public interface MateClawRuntime {
      * @return 测试结果
      */
     TestResult testModel(String providerId, String modelId);
+
+    // ==================== 技能管理 ====================
+
+    /**
+     * 获取技能分页列表
+     *
+     * @param page        页码（从 1 开始）
+     * @param size        每页条数
+     * @param keyword     关键字（可选，模糊匹配名称/描述/标签）
+     * @param skillType   技能类型（可选，builtin / mcp / dynamic 等）
+     * @param enabled     是否启用（可选）
+     * @param workspaceId 工作区 ID（可选）
+     * @return 技能分页数据
+     */
+    IPage<SkillEntity> pageSkills(
+            int page, int size, String keyword, String skillType, Boolean enabled,
+            Long workspaceId, String sort, String lifecycleState);
+
+    /**
+     * 获取所有技能列表（不分页）
+     *
+     * @param workspaceId 工作区 ID（可选）
+     * @return 技能列表
+     */
+    List<SkillEntity> listSkills(Long workspaceId);
+
+    /**
+     * 获取已启用技能列表
+     *
+     * @param workspaceId 工作区 ID（可选）
+     * @return 已启用技能列表
+     */
+    List<SkillEntity> listEnabledSkills(Long workspaceId);
+
+    /**
+     * 获取技能详情
+     *
+     * @param id 技能 ID
+     * @return 技能实体
+     */
+    SkillEntity getSkill(Long id);
+
+    /**
+     * 创建技能
+     *
+     * @param entity 技能实体
+     * @return 创建后的技能实体
+     */
+    SkillEntity createSkill(SkillEntity entity);
+
+    /**
+     * 更新技能
+     *
+     * @param entity 技能实体（需包含 ID）
+     * @return 更新后的技能实体
+     */
+    SkillEntity updateSkill(SkillEntity entity);
+
+    /**
+     * 硬删除技能（admin only）
+     *
+     * @param id 技能 ID
+     */
+    void hardDeleteSkill(Long id);
+
+    /**
+     * 切换技能启停状态
+     *
+     * @param id      技能 ID
+     * @param enabled 是否启用
+     * @return 更新后的技能实体
+     */
+    SkillEntity toggleSkill(Long id, boolean enabled);
 }

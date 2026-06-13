@@ -1,18 +1,17 @@
 package vip.mate.dataagent;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Import;
-
 import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAgentAutoConfiguration;
-
 import org.springframework.ai.mcp.client.common.autoconfigure.McpClientAutoConfiguration;
 import org.springframework.ai.mcp.client.common.autoconfigure.McpToolCallbackAutoConfiguration;
 import org.springframework.ai.mcp.client.common.autoconfigure.StdioTransportAutoConfiguration;
 import org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration;
 import org.springframework.ai.mcp.client.httpclient.autoconfigure.SseHttpClientTransportAutoConfiguration;
 import org.springframework.ai.mcp.client.httpclient.autoconfigure.StreamableHttpHttpClientTransportAutoConfiguration;
-
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Import;
+import vip.mate.dataagent.service.code.CodeExecutorProperties;
 import vip.mate.sdk.config.MateClawRuntimeAutoConfiguration;
 
 /**
@@ -33,6 +32,7 @@ import vip.mate.sdk.config.MateClawRuntimeAutoConfiguration;
                 DashScopeAgentAutoConfiguration.class,
         }
 )
+@EnableConfigurationProperties(CodeExecutorProperties.class)
 @Import(MateClawRuntimeAutoConfiguration.class)
 public class DataAgentApplication {
 

@@ -20,8 +20,6 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-ai.version>1.1.6</spring-ai.version>
-        <mybatis-plus.version>3.5.16</mybatis-plus.version>
     </properties>
 
     <dependencyManagement>
@@ -66,71 +64,4 @@
             <optional>true</optional>
         </dependency>
     </dependencies>
-
-    <!--
-      Dependency repositories, with US + CN mirrors listed side by side so builds
-      are reasonable on either continent. Maven tries repositories in the order
-      they are declared — the first one that resolves an artifact wins.
-    -->
-    <repositories>
-        <repository>
-            <id>maven-central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-        <repository>
-            <id>google-maven-central</id>
-            <name>Google Maven Central Mirror</name>
-            <url>https://maven-central.storage-download.googleapis.com/maven2</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-        <repository>
-            <id>aliyun-public</id>
-            <name>Aliyun Public</name>
-            <url>https://maven.aliyun.com/repository/public</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-        <repository>
-            <id>spring-milestones</id>
-            <name>Spring Milestones</name>
-            <url>https://repo.spring.io/milestone</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-        <repository>
-            <id>aliyun-spring</id>
-            <name>Aliyun Spring Mirror</name>
-            <url>https://maven.aliyun.com/repository/spring</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-    </repositories>
-
-    <pluginRepositories>
-        <pluginRepository>
-            <id>maven-central</id>
-            <name>Maven Central</name>
-            <url>https://repo.maven.apache.org/maven2</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </pluginRepository>
-        <pluginRepository>
-            <id>google-maven-central</id>
-            <name>Google Maven Central Mirror</name>
-            <url>https://maven-central.storage-download.googleapis.com/maven2</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </pluginRepository>
-        <pluginRepository>
-            <id>aliyun-public</id>
-            <name>Aliyun Public</name>
-            <url>https://maven.aliyun.com/repository/public</url>
-            <releases><enabled>true</enabled></releases>
-            <snapshots><enabled>false</enabled></snapshots>
-        </pluginRepository>
-    </pluginRepositories>
 </project>

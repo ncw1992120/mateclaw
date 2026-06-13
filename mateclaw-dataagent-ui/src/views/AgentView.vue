@@ -63,50 +63,12 @@
       </div>
     </div>
 
-    <!-- 新建/编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? t('agent.edit') : t('agent.create')"
-      width="560px"
-      destroy-on-close
-    >
-      <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        label-width="110px"
-        label-position="right"
-      >
-        <el-form-item :label="t('agent.name')" prop="name">
-          <el-input v-model="formData.name" />
-        </el-form-item>
-        <el-form-item :label="t('agent.description')" prop="description">
-          <el-input v-model="formData.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item :label="t('agent.type')" prop="agentType">
-          <el-select v-model="formData.agentType" class="w-full">
-            <el-option label="React" value="react" />
-            <el-option label="Plan & Execute" value="plan_execute" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('agent.prompt')" prop="systemPrompt">
-          <el-input v-model="formData.systemPrompt" type="textarea" :rows="5" />
-        </el-form-item>
-        <el-form-item :label="t('agent.model')" prop="modelName">
-          <el-input v-model="formData.modelName" />
-        </el-form-item>
-        <el-form-item :label="t('agent.maxIterations')" prop="maxIterations">
-          <el-input-number v-model="formData.maxIterations" :min="1" :max="50" class="w-full" />
-        </el-form-item>
-        <el-form-item :label="t('agent.enabled')" prop="enabled">
-          <el-switch v-model="formData.enabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">{{ t('common.confirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <!-- 编辑/新建弹窗 -->
+    <AgentFormDialog
+      v-model:visible="formDialogVisible"
+      :edit-id="editingId"
+      @saved="handleFormSaved"
+    />
 
     <!-- 应用模板对话框 -->
     <el-dialog
@@ -144,6 +106,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import type { Agent } from '@/types'
+import AgentFormDialog from './dialog/AgentFormDialog.vue'
 
 /** 默认工作空间 ID */
 const DEFAULT_WORKSPACE_ID = 1
@@ -152,46 +115,23 @@ const { t } = useI18n()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
-/** 对话框是否可见 */
-const dialogVisible = ref(false)
-/** 是否编辑模式 */
-const isEdit = ref(false)
-/** 编辑时的 Agent ID */
+/** 编辑/新建弹窗是否可见 */
+const formDialogVisible = ref(false)
+/** 正在编辑的 Agent ID（新建时为 null） */
 const editingId = ref<number | null>(null)
-/** 提交中 */
-const submitting = ref(false)
 
 /** 模板对话框是否可见 */
 const templateDialogVisible = ref(false)
 /** 应用模板中 */
 const applyingTemplate = ref(false)
 
-/** 表单引用 */
-const formRef = ref<FormInstance | null>(null)
+/** 模板表单引用 */
 const templateFormRef = ref<FormInstance | null>(null)
-
-/** 表单数据 */
-const formData = reactive<Partial<Agent>>({
-  name: '',
-  description: '',
-  agentType: 'react',
-  systemPrompt: '',
-  modelName: '',
-  maxIterations: 5,
-  enabled: true,
-  workspaceId: DEFAULT_WORKSPACE_ID,
-})
 
 /** 模板表单数据 */
 const templateFormData = reactive({
   templateId: 1,
   workspaceId: DEFAULT_WORKSPACE_ID,
-})
-
-/** 表单校验规则 */
-const formRules = reactive<FormRules>({
-  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
-  agentType: [{ required: true, message: '请选择类型', trigger: 'change' }],
 })
 
 /** 模板表单校验规则 */
@@ -200,62 +140,21 @@ const templateFormRules = reactive<FormRules>({
   workspaceId: [{ required: true, message: '请输入工作空间 ID', trigger: 'blur' }],
 })
 
-/** 重置表单数据 */
-function resetForm(): void {
-  formData.name = ''
-  formData.description = ''
-  formData.agentType = 'react'
-  formData.systemPrompt = ''
-  formData.modelName = ''
-  formData.maxIterations = 5
-  formData.enabled = true
-  formData.workspaceId = DEFAULT_WORKSPACE_ID
-}
-
-/** 新建 Agent */
+/** 新建 Agent - 弹出弹窗 */
 function handleCreate(): void {
-  isEdit.value = false
   editingId.value = null
-  resetForm()
-  dialogVisible.value = true
+  formDialogVisible.value = true
 }
 
-/** 编辑 Agent */
+/** 编辑 Agent - 弹出弹窗 */
 function handleEdit(agent: Agent): void {
-  isEdit.value = true
   editingId.value = agent.id
-  Object.assign(formData, {
-    name: agent.name,
-    description: agent.description,
-    agentType: agent.agentType,
-    systemPrompt: agent.systemPrompt,
-    modelName: agent.modelName,
-    maxIterations: agent.maxIterations,
-    enabled: agent.enabled,
-    workspaceId: agent.workspaceId,
-  })
-  dialogVisible.value = true
+  formDialogVisible.value = true
 }
 
-/** 提交表单 */
-async function handleSubmit(): Promise<void> {
-  if (!formRef.value) return
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  submitting.value = true
-  try {
-    if (isEdit.value && editingId.value) {
-      await agentStore.updateAgent(editingId.value, { ...formData })
-      ElMessage.success(t('agent.updateSuccess'))
-    } else {
-      await agentStore.createAgent({ ...formData })
-      ElMessage.success(t('agent.createSuccess'))
-    }
-    dialogVisible.value = false
-  } finally {
-    submitting.value = false
-  }
+/** 弹窗保存成功 */
+function handleFormSaved(): void {
+  editingId.value = null
 }
 
 /** 删除 Agent */

@@ -13,14 +13,17 @@ export const useModelStore = defineStore('model', () => {
   const activeModel = ref<ModelConfig | null>(null)
   /** 默认模型 */
   const defaultModel = ref<ModelConfig | null>(null)
+  /** 默认向量模型 */
+  const defaultEmbeddingModel = ref<ModelConfig | null>(null)
   /** 加载状态 */
   const loading = ref(false)
 
-  /** 获取启用模型列表 */
+  /** 获取启用模型列表（含 chat 和 embedding 类型） */
   async function fetchEnabledModels(): Promise<void> {
     loading.value = true
     try {
-      enabledModels.value = await modelApi.listEnabledModels() as unknown as ModelConfig[]
+      const all = await modelApi.listAllEnabledModels() as unknown as ModelConfig[]
+      enabledModels.value = all.filter(m => m.enabled)
     } finally {
       loading.value = false
     }
@@ -170,11 +173,28 @@ export const useModelStore = defineStore('model', () => {
     await fetchEnabledModels()
   }
 
+  /** 获取默认向量模型 */
+  async function fetchDefaultEmbeddingModel(): Promise<void> {
+    try {
+      defaultEmbeddingModel.value = await modelApi.getDefaultEmbeddingModel() as unknown as ModelConfig
+    } catch {
+      defaultEmbeddingModel.value = null
+    }
+  }
+
+  /** 设置默认向量模型 */
+  async function setDefaultEmbeddingModelById(id: number): Promise<void> {
+    await modelApi.setDefaultEmbeddingModel(id)
+    await fetchDefaultEmbeddingModel()
+    await fetchEnabledModels()
+  }
+
   return {
     enabledModels,
     providers,
     activeModel,
     defaultModel,
+    defaultEmbeddingModel,
     loading,
     fetchEnabledModels,
     fetchProviders,
@@ -192,5 +212,7 @@ export const useModelStore = defineStore('model', () => {
     testModelAvailability,
     createCustomProvider,
     discoverModels,
+    fetchDefaultEmbeddingModel,
+    setDefaultEmbeddingModelById,
   }
 })

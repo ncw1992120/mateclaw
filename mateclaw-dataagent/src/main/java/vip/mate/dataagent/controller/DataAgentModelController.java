@@ -3,27 +3,10 @@ package vip.mate.dataagent.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.dto.ModelActiveRequest;
-import vip.mate.llm.model.ActiveModelsInfo;
-import vip.mate.llm.model.AddProviderModelRequest;
-import vip.mate.llm.model.CreateCustomProviderRequest;
-import vip.mate.llm.model.DiscoverResult;
-import vip.mate.llm.model.EnableResult;
-import vip.mate.llm.model.ModelConfigEntity;
-import vip.mate.llm.model.ModelSlotRequest;
-import vip.mate.llm.model.ProviderConfigRequest;
-import vip.mate.llm.model.ProviderInfoDTO;
-import vip.mate.llm.model.TestResult;
+import vip.mate.llm.model.*;
 import vip.mate.sdk.service.MateClawRuntime;
 
 import java.util.List;
@@ -135,6 +118,15 @@ public class DataAgentModelController {
     @Operation(summary = "启用模型列表", description = "获取所有已启用的模型配置")
     public R<List<ModelConfigEntity>> listEnabledModels() {
         return R.ok(runtime.listEnabledModels());
+    }
+
+    /**
+     * 获取所有已启用的模型（含 chat 和 embedding 类型）
+     */
+    @GetMapping("/all-enabled")
+    @Operation(summary = "全部启用模型", description = "获取所有已启用的模型配置，包含对话和向量类型")
+    public R<List<ModelConfigEntity>> listAllEnabledModels() {
+        return R.ok(runtime.listAllEnabledModels());
     }
 
     /**
@@ -269,5 +261,23 @@ public class DataAgentModelController {
             @RequestParam(defaultValue = "chat") String modelType,
             @RequestParam(required = false) String modality) {
         return R.ok(runtime.listModelsByType(modelType, modality));
+    }
+
+    /**
+     * 获取默认向量模型
+     */
+    @GetMapping("/default-embedding")
+    @Operation(summary = "获取默认向量模型", description = "获取当前配置的默认向量（embedding）模型")
+    public R<ModelConfigEntity> getDefaultEmbeddingModel() {
+        return R.ok(runtime.getDefaultEmbeddingModel());
+    }
+
+    /**
+     * 设置默认向量模型
+     */
+    @PostMapping("/{id}/default-embedding")
+    @Operation(summary = "设置默认向量模型", description = "将指定模型设为默认向量（embedding）模型")
+    public R<ModelConfigEntity> setDefaultEmbeddingModel(@PathVariable Long id) {
+        return R.ok(runtime.setDefaultEmbeddingModel(id));
     }
 }

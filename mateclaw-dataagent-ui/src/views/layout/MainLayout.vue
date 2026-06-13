@@ -29,6 +29,11 @@
         <WorkbenchView />
       </template>
 
+      <!-- 帮助 -->
+      <template v-else-if="activeNav === 'help'">
+        <HelpCenterView />
+      </template>
+
       <!-- 其他页面占位 -->
       <template v-else>
         <div class="placeholder-page">
@@ -48,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/useAgentStore'
@@ -60,6 +65,7 @@ import WorkspaceHome from '../workspace/WorkspaceHome.vue'
 import WorkbenchView from '../WorkbenchView.vue'
 import DatasourceView from '../DatasourceView.vue'
 import DatasetView from '../DatasetView.vue'
+import HelpCenterView from '../help/HelpCenterView.vue'
 import PlaceholderPage from '../common/PlaceholderPage.vue'
 import ModelConfigDialog from '../dialog/ModelConfigDialog.vue'
 import AgentConfigDialog from '../dialog/AgentConfigDialog.vue'
@@ -117,8 +123,11 @@ const currentPageTitle = computed(() => {
   return key ? t(key) : currentSubPage.value
 })
 
-/** 页面切换计数器（用于强制重新渲染组件） */
+/** 子页面切换计数器（用于强制重新渲染组件） */
 const pageKey = ref(0)
+
+/** 切回标签页时尝试续连的处理函数（onUnmounted 时清理） */
+let handleVisibilityChange: (() => void) | null = null
 
 /** 当前渲染组件 */
 const currentComponent = computed(() => {
@@ -146,6 +155,22 @@ onMounted(() => {
   modelStore.fetchActiveModel()
   modelStore.fetchProviders()
   chatStore.fetchConversations()
+  // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
+  chatStore.tryResumeStream()
+
+  // 用户切回该 tab 时再次尝试续连，覆盖：刷新→离开→回来 的场景
+  handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      chatStore.tryResumeStream()
+    }
+  }
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  if (handleVisibilityChange) {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
 })
 </script>
 

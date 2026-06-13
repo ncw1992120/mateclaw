@@ -3,6 +3,7 @@ package vip.mate.dataagent.tool;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,7 +16,6 @@ import vip.mate.datasource.service.EChartsOptionBuilder;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
-import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

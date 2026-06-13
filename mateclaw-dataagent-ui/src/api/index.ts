@@ -49,14 +49,24 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     const res = response.data as R<unknown>
+    // 兼容非 R 格式响应（如 Spring 默认错误页）
+    if (res == null || typeof res !== 'object' || !('code' in res)) {
+      console.error('[API] 非 R 格式响应:', response.status, response.data)
+      const rawMsg = (response.data as any)?.message || (response.data as any)?.error || '服务器异常'
+      ElMessage.error(rawMsg)
+      return Promise.reject(new Error(rawMsg))
+    }
     if (res.code !== 200) {
+      console.error('[API] 业务错误:', res.code, res.msg, response.config?.url, response.data)
       ElMessage.error(res.msg || '请求失败')
       return Promise.reject(new Error(res.msg || '请求失败'))
     }
     return res.data as any
   },
   (error) => {
-    const message = error.response?.data?.msg || error.message || '网络异常'
+    const errData = error.response?.data
+    const message = errData?.msg || errData?.message || error.message || '网络异常'
+    console.error('[API] 网络/HTTP 错误:', error.response?.status, message, error.config?.url)
     ElMessage.error(message)
     return Promise.reject(error)
   }

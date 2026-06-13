@@ -56,6 +56,16 @@ mateclaw:
     trusted-domains: []
   runtime:
     flyway-enabled: true
+  # Python 代码执行器配置
+  code-executor:
+    enabled: ${PYTHON_EXECUTOR_ENABLED:true}
+    python-command: ${PYTHON_COMMAND:}
+    pip-command: ${PIP_COMMAND:}
+    code-timeout-seconds: ${PYTHON_CODE_TIMEOUT:60}
+    pip-timeout-seconds: ${PYTHON_PIP_TIMEOUT:120}
+    max-retries: ${PYTHON_MAX_RETRIES:3}
+    max-std-out-length: ${PYTHON_MAX_STDOUT:50000}
+    max-std-err-length: ${PYTHON_MAX_STDERR:10000}
 
 springdoc:
   api-docs:

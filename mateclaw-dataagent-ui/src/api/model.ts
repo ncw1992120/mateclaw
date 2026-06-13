@@ -29,6 +29,11 @@ export function listEnabledModels() {
   return api.get<ModelConfig[]>(`${BASE_URL}/enabled`)
 }
 
+/** 获取所有已启用的模型（含 chat 和 embedding 类型） */
+export function listAllEnabledModels() {
+  return api.get<ModelConfig[]>(`${BASE_URL}/all-enabled`)
+}
+
 /** 获取默认模型 */
 export function getDefaultModel() {
   return api.get<ModelConfig>(`${BASE_URL}/default`)
@@ -117,4 +122,17 @@ export function testModel(providerId: string, modelId: string) {
 /** 按类型筛选模型 */
 export function listModelsByType(modelType: string, modality?: string) {
   return api.get<ModelConfig[]>(`${BASE_URL}/by-type`, { params: { modelType, modality } })
+}
+
+/** 获取默认向量模型 */
+export function getDefaultEmbeddingModel() {
+  return api.get<ModelConfig>(`${BASE_URL}/default-embedding`)
+}
+
+/**
+ * 设置默认向量模型
+ * 后端走 is_default 字段统一管理，与对话模型共用同一存储，通过 model_type 区分互斥。
+ */
+export function setDefaultEmbeddingModel(id: number) {
+  return api.post<ModelConfig>(`${BASE_URL}/${id}/default-embedding`)
 }

@@ -65,6 +65,9 @@ public final class DataAgentConstants {
     /** 数据源类型：Kafka */
     public static final String SOURCE_TYPE_KAFKA = "kafka";
 
+    /** 数据源类型：Aloudata */
+    public static final String SOURCE_TYPE_ALOUDATA = "aloudata";
+
     /** 表类型：普通表 */
     public static final String TABLE_TYPE_TABLE = "table";
 
@@ -106,6 +109,74 @@ public final class DataAgentConstants {
 
     /** 数据集默认每页条数 */
     public static final int DATASET_DEFAULT_PAGE_SIZE = 50;
+
+    /** 语义模型状态：停用 */
+    public static final int SEMANTIC_STATUS_DISABLED = 0;
+
+    /** 语义模型状态：启用 */
+    public static final int SEMANTIC_STATUS_ENABLED = 1;
+
+    /** 逻辑外键关系类型：一对一 */
+    public static final String RELATION_TYPE_ONE_TO_ONE = "1:1";
+
+    /** 逻辑外键关系类型：一对多 */
+    public static final String RELATION_TYPE_ONE_TO_MANY = "1:N";
+
+    /** 逻辑外键关系类型：多对一 */
+    public static final String RELATION_TYPE_MANY_TO_ONE = "N:1";
+
+    /** Schema 嵌入文本当前版本 */
+    public static final int SCHEMA_EMBEDDING_TEXT_VERSION = 1;
+
+    /** Schema 语义检索默认 Top-K */
+    public static final int SCHEMA_SEARCH_DEFAULT_TOP_K = 10;
+
+    /** Schema 语义检索默认相似度阈值 */
+    public static final double SCHEMA_SEARCH_DEFAULT_THRESHOLD = 0.3;
+
+    /** Schema 语义检索 RRF 融合参数 k */
+    public static final int SCHEMA_SEARCH_RRF_K = 60;
+
+    /** Schema 关键词检索匹配字段 */
+    public static final String[] SCHEMA_KEYWORD_SEARCH_FIELDS = {
+            "table_name", "column_name", "business_name", "business_description", "synonyms", "column_comment"
+    };
+
+    /** Python 执行器默认代码超时时间（秒） */
+    public static final long PYTHON_DEFAULT_CODE_TIMEOUT_SECONDS = 60;
+
+    /** Python 执行器默认最大重试次数 */
+    public static final int PYTHON_DEFAULT_MAX_RETRIES = 3;
+
+    /** Python 执行器默认标准输出最大长度 */
+    public static final int PYTHON_DEFAULT_MAX_STDOUT_LENGTH = 50000;
+
+    /** Python 执行器默认标准错误最大长度 */
+    public static final int PYTHON_DEFAULT_MAX_STDERR_LENGTH = 10000;
+
+    /** 帮助文档状态：草稿 */
+    public static final String HELP_DOC_STATUS_DRAFT = "draft";
+
+    /** 帮助文档状态：已发布 */
+    public static final String HELP_DOC_STATUS_PUBLISHED = "published";
+
+    /** 帮助分类顶级父 ID */
+    public static final Long HELP_CATEGORY_ROOT_PARENT_ID = 0L;
+
+    /** 帮助文档搜索默认返回条数 */
+    public static final int HELP_SEARCH_DEFAULT_LIMIT = 20;
+
+    /** 帮助文档搜索最小关键字长度 */
+    public static final int HELP_SEARCH_MIN_KEYWORD_LENGTH = 2;
+
+    /** 帮助文档反馈最低评分 */
+    public static final int HELP_FEEDBACK_MIN_RATING = 1;
+
+    /** 帮助文档反馈最高评分 */
+    public static final int HELP_FEEDBACK_MAX_RATING = 5;
+
+    /** 帮助文档相关推荐默认数量 */
+    public static final int HELP_RELATED_DOCS_DEFAULT_LIMIT = 5;
 
     private DataAgentConstants() {
     }

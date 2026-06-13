@@ -1,0 +1,264 @@
+<template>
+  <div class="help-doc-editor">
+    <div class="editor-toolbar">
+      <el-radio-group v-model="editorMode" size="small">
+        <el-radio-button value="edit">{{ t('helpCenter.editMode') }}</el-radio-button>
+        <el-radio-button value="split">{{ t('helpCenter.splitMode') }}</el-radio-button>
+        <el-radio-button value="preview">{{ t('helpCenter.previewMode') }}</el-radio-button>
+      </el-radio-group>
+    </div>
+    <div class="editor-body" :class="editorMode">
+      <div class="editor-pane" v-show="editorMode === 'edit' || editorMode === 'split'">
+        <el-input
+          v-model="localContent"
+          type="textarea"
+          :rows="24"
+          :placeholder="t('helpCenter.contentPlaceholder')"
+          class="editor-textarea"
+          @input="handleInput"
+        />
+      </div>
+      <div class="editor-preview" v-show="editorMode === 'preview' || editorMode === 'split'">
+        <article
+          class="markdown-body"
+          v-if="localContent"
+          v-html="renderMarkdown(localContent)"
+        />
+        <el-empty v-else :description="t('helpCenter.emptyContent')" />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Marked } from 'marked'
+import hljs from 'highlight.js'
+import DOMPurify from 'dompurify'
+
+const { t } = useI18n()
+
+const props = defineProps<{
+  modelValue: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+}>()
+
+/** 编辑器模式 */
+const editorMode = ref<'edit' | 'split' | 'preview'>('split')
+/** 本地内容 */
+const localContent = ref(props.modelValue)
+
+/** Markdown 渲染器 */
+const customRenderer = {
+  heading({ tokens, depth }: { tokens: { text: string; raw: string }[]; depth: number }): string {
+    const text = tokens.map(t => t.text).join('')
+    const id = text.replace(/[^\w\u4e00-\u9fa5]+/g, '-').toLowerCase()
+    return `<h${depth} id="heading-${id}">${text}</h${depth}>\n`
+  },
+  code({ text, lang }: { text: string; lang?: string; escaped?: boolean }): string {
+    const infoStr = (lang || '').split(/\s/)[0]
+    const detectedLang = infoStr
+    const hasLanguage = !!detectedLang && !!hljs.getLanguage(detectedLang)
+    let highlighted: string
+    try {
+      highlighted = hasLanguage
+        ? hljs.highlight(text, { language: detectedLang }).value
+        : hljs.highlightAuto(text).value
+    } catch {
+      highlighted = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+    const langClass = hasLanguage ? ` language-${detectedLang}` : ''
+    return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>\n`
+  },
+}
+
+const markedInstance = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: customRenderer as any,
+})
+
+const purifyConfig = {
+  ADD_ATTR: ['class', 'style', 'id'],
+  ADD_TAGS: ['div', 'span', 'pre', 'code'],
+}
+
+function renderMarkdown(content: string): string {
+  const html = markedInstance.parse(content) as string
+  return DOMPurify.sanitize(html, purifyConfig)
+}
+
+/** 处理输入 */
+function handleInput(): void {
+  emit('update:modelValue', localContent.value)
+}
+
+/** 同步外部值 */
+watch(() => props.modelValue, (val) => {
+  if (val !== localContent.value) {
+    localContent.value = val
+  }
+})
+</script>
+
+<style scoped>
+.help-doc-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f2f5;
+  margin-bottom: 12px;
+}
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+.editor-body.edit .editor-pane {
+  flex: 1;
+}
+
+.editor-body.preview .editor-preview {
+  flex: 1;
+}
+
+.editor-body.split .editor-pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-body.split .editor-preview {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.editor-textarea :deep(.el-textarea__inner) {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editor-preview {
+  background: #fff;
+}
+
+.markdown-body {
+  max-width: 880px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1d2129;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4) {
+  margin: 1.6em 0 0.6em;
+  font-weight: 600;
+  color: #1d2129;
+  scroll-margin-top: 16px;
+}
+
+.markdown-body :deep(h1) { font-size: 1.8em; }
+.markdown-body :deep(h2) {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #f0f2f5;
+}
+.markdown-body :deep(h3) { font-size: 1.25em; }
+.markdown-body :deep(h4) { font-size: 1.1em; }
+
+.markdown-body :deep(p) { margin: 0.8em 0; }
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 1.6em;
+  margin: 0.8em 0;
+}
+
+.markdown-body :deep(li) { margin: 0.3em 0; }
+
+.markdown-body :deep(pre) {
+  background: #fafbfc;
+  border: 1px solid #e8ecf2;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.markdown-body :deep(code) {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.markdown-body :deep(p code),
+.markdown-body :deep(li code) {
+  background: #f2f3f5;
+  color: #d63384;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.markdown-body :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.2em 0;
+  font-size: 14px;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid #e8ecf2;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.markdown-body :deep(th) {
+  background: #fafbfc;
+  font-weight: 600;
+}
+
+.markdown-body :deep(tr:hover) { background: #fafbfc; }
+
+.markdown-body :deep(blockquote) {
+  margin: 1em 0;
+  padding: 8px 16px;
+  border-left: 4px solid #f05a23;
+  background: #fff8f5;
+  color: #4e5969;
+  border-radius: 0 4px 4px 0;
+}
+
+.markdown-body :deep(a) {
+  color: #f05a23;
+  text-decoration: none;
+}
+
+.markdown-body :deep(a:hover) { text-decoration: underline; }
+</style>

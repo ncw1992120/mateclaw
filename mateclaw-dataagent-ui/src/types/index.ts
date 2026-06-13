@@ -167,7 +167,7 @@ export interface ModelInfo {
 export type ChatRole = 'user' | 'assistant'
 
 /** 聊天富内容卡片类型 */
-export type ChatCardType = 'text' | 'queryplan' | 'insight' | 'chart' | 'clarify' | 'dashboard' | 'followup' | 'feedback'
+export type ChatCardType = 'text' | 'queryplan' | 'insight' | 'chart' | 'echarts' | 'clarify' | 'dashboard' | 'followup' | 'feedback'
 
 /** QueryPlan 卡片数据 */
 export interface QueryPlanData {
@@ -192,6 +192,17 @@ export interface ChartSeriesItem {
   name: string
   data: number[]
   type?: string
+}
+
+/**
+ * ECharts 标准 Option 数据（后端直接返回的 ECharts 配置）
+ * 后端返回符合 ECharts option 规范的数据时，前端直接透传给 echarts.setOption() 渲染
+ */
+export interface EChartsOptionData {
+  /** 图表标题 */
+  title?: string
+  /** ECharts 标准 option 对象 */
+  option: Record<string, unknown>
 }
 
 /** 澄清卡片数据 */
@@ -224,7 +235,7 @@ export type FollowupData = string[]
 /** 聊天消息富内容卡片 */
 export interface ChatCard {
   type: ChatCardType
-  data: QueryPlanData | ChartCardData | ClarifyData | DashboardCardData | FollowupData | string
+  data: QueryPlanData | ChartCardData | EChartsOptionData | ClarifyData | DashboardCardData | FollowupData | string
 }
 
 /** 聊天消息 */
@@ -326,6 +337,12 @@ export const THINKING_LEVELS = [
   { value: 'max', label: '最高' },
 ] as const
 
+/** Agent 最大迭代次数上限（前端输入框限制） */
+export const AGENT_MAX_ITERATIONS_LIMIT = 9999
+
+/** Agent 最小迭代次数 */
+export const AGENT_MIN_ITERATIONS_LIMIT = 1
+
 /** 数据集实体 */
 export interface Dataset {
   id: string
@@ -389,3 +406,271 @@ export const MODEL_TYPES = [
   { value: 'chat', label: '对话' },
   { value: 'embedding', label: '向量' },
 ] as const
+
+/** 技能实体（代理 mateclaw-server） */
+export interface Skill {
+  id: number
+  /** 技能 slug，唯一标识 */
+  name: string
+  /** 中文显示名 */
+  nameZh: string
+  /** 英文显示名 */
+  nameEn: string
+  /** 技能描述 */
+  description: string
+  /** 技能类型：builtin（内置）/ custom（自定义）/ mcp（MCP协议） */
+  skillType: string
+  /** 技能图标（emoji 或 URL） */
+  icon: string
+  /** 技能版本 */
+  version: string
+  /** 技能作者 */
+  author: string
+  /** 是否启用 */
+  enabled: boolean
+  /** 是否系统内置（不可删除） */
+  builtin: boolean
+  /** 标签（逗号分隔） */
+  tags: string
+  /** 拥有者工作区 */
+  workspaceId: number
+  /** 安全扫描状态 */
+  securityScanStatus: string
+  /** 生命周期状态：active / stale / archived */
+  lifecycleState: string
+  /** 是否被钉住 */
+  pinned: boolean
+  createTime: string
+  updateTime: string
+}
+
+/** 技能类型选项（对齐后端 SkillEntity.skillType 实际值：builtin / custom / mcp） */
+export const SKILL_TYPE_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'builtin', label: '内置' },
+  { value: 'mcp', label: 'MCP' },
+  { value: 'custom', label: '自定义' },
+] as const
+
+/** 技能分页响应（对齐 MyBatis Plus IPage 结构） */
+export interface SkillPage {
+  records: Skill[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}
+
+/** 字段级语义模型 */
+export interface SemanticModel {
+  id: string
+  datasourceId: string
+  tableName: string
+  columnName: string
+  businessName: string
+  businessDescription: string
+  synonyms: string
+  dataType: string
+  columnComment: string
+  exampleValues: string
+  enumValues: string
+  unit: string
+  valueRange: string
+  /** 状态：0-停用 / 1-启用 */
+  status: number
+  promptInfo: string
+  createTime: string
+  updateTime: string
+}
+
+/** 创建语义模型请求 */
+export interface SemanticModelCreateRequest {
+  datasourceId: string
+  tableName: string
+  columnName: string
+  businessName?: string
+  businessDescription?: string
+  synonyms?: string
+  dataType?: string
+  columnComment?: string
+  exampleValues?: string
+  enumValues?: string
+  unit?: string
+  valueRange?: string
+}
+
+/** 更新语义模型请求 */
+export interface SemanticModelUpdateRequest {
+  businessName?: string
+  businessDescription?: string
+  synonyms?: string
+  exampleValues?: string
+  enumValues?: string
+  unit?: string
+  valueRange?: string
+  status?: number
+}
+
+/** 逻辑外键关系 */
+export interface LogicalRelation {
+  id: string
+  datasourceId: string
+  sourceTableName: string
+  sourceColumnName: string
+  targetTableName: string
+  targetColumnName: string
+  /** 关系类型：1:1 / 1:N / N:1 */
+  relationType: string
+  description: string
+  promptInfo: string
+  createTime: string
+  updateTime: string
+}
+
+/** 创建逻辑外键关系请求 */
+export interface LogicalRelationCreateRequest {
+  datasourceId: string
+  sourceTableName: string
+  sourceColumnName: string
+  targetTableName: string
+  targetColumnName: string
+  relationType?: string
+  description?: string
+}
+
+/** 更新逻辑外键关系请求 */
+export interface LogicalRelationUpdateRequest {
+  relationType?: string
+  description?: string
+}
+
+/** 关系类型选项 */
+export const RELATION_TYPE_OPTIONS = [
+  { value: '1:1', label: '1:1' },
+  { value: '1:N', label: '1:N' },
+  { value: 'N:1', label: 'N:1' },
+] as const
+
+/** Schema 语义检索请求 */
+export interface SchemaSearchRequest {
+  datasourceId: string
+  query: string
+  topK?: number
+  similarityThreshold?: number
+}
+
+/** Schema 检索结果 - 表级命中项 */
+export interface TableHit {
+  tableName: string
+  tableComment: string
+  score: number
+  /** 匹配来源：keyword / semantic / hybrid */
+  matchSource: string
+  semanticFields: SemanticModel[]
+  sampleData: string
+}
+
+/** Schema 语义检索结果 */
+export interface SchemaSearchResult {
+  tableHits: TableHit[]
+  relations: LogicalRelation[]
+  elapsedMs: number
+}
+
+/** 帮助文档分类 */
+export interface HelpCategory {
+  id: string
+  name: string
+  parentId: string
+  sortOrder: number
+  icon: string
+  description: string
+  children: HelpCategory[]
+  documentCount: number
+  createTime: string
+  updateTime: string
+}
+
+/** 帮助文档分类请求 */
+export interface HelpCategoryRequest {
+  name?: string
+  parentId?: string
+  sortOrder?: number
+  icon?: string
+  description?: string
+}
+
+/** 帮助文档 */
+export interface HelpDocument {
+  id: string
+  categoryId: string
+  categoryName: string
+  title: string
+  content: string
+  sortOrder: number
+  status: string
+  author: string
+  /** 标签（逗号分隔） */
+  tags: string
+  /** 文档摘要 */
+  summary: string
+  viewCount: number
+  createTime: string
+  updateTime: string
+}
+
+/** 帮助文档请求 */
+export interface HelpDocumentRequest {
+  categoryId?: string
+  title?: string
+  content?: string
+  sortOrder?: number
+  status?: string
+  author?: string
+  tags?: string
+  summary?: string
+}
+
+/** 帮助文档搜索结果 */
+export interface HelpSearchResult {
+  id: string
+  categoryId: string
+  categoryName: string
+  title: string
+  /** 匹配的内容摘要（含高亮标记） */
+  highlightContent: string
+  status: string
+  author: string
+  viewCount: number
+  updateTime: string
+}
+
+/** 帮助文档反馈请求 */
+export interface HelpFeedbackRequest {
+  rating?: number
+  suggestion?: string
+  userId?: string
+}
+
+/** 帮助文档反馈 */
+export interface HelpFeedback {
+  id: string
+  documentId: string
+  rating: number
+  suggestion: string
+  userId: string
+  createTime: string
+  updateTime: string
+}
+
+/** 帮助文档反馈汇总 */
+export interface HelpFeedbackSummary {
+  documentId: string
+  averageRating: number
+  totalFeedbacks: number
+  star5Count: number
+  star4Count: number
+  star3Count: number
+  star2Count: number
+  star1Count: number
+}

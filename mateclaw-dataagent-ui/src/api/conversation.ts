@@ -18,3 +18,8 @@ export function listMessages(conversationId: string) {
 export function deleteConversation(conversationId: string) {
   return api.delete(`${BASE_URL}/${conversationId}`)
 }
+
+/** 重命名会话标题 */
+export function renameConversation(conversationId: string, title: string) {
+  return api.put(`${BASE_URL}/${conversationId}/title`, { title })
+}

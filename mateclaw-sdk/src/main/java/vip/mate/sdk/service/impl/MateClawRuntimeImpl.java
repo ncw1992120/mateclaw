@@ -1,5 +1,6 @@
 package vip.mate.sdk.service.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
@@ -11,21 +12,15 @@ import vip.mate.agent.model.AgentEntity;
 import vip.mate.agent.service.TemplateService;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.datasource.service.DatasourceService;
-import vip.mate.llm.model.ActiveModelsInfo;
-import vip.mate.llm.model.AddProviderModelRequest;
-import vip.mate.llm.model.CreateCustomProviderRequest;
-import vip.mate.llm.model.DiscoverResult;
-import vip.mate.llm.model.EnableResult;
-import vip.mate.llm.model.ModelConfigEntity;
-import vip.mate.llm.model.ModelSlotConfig;
-import vip.mate.llm.model.ModelSlotRequest;
-import vip.mate.llm.model.ProviderConfigRequest;
-import vip.mate.llm.model.ProviderInfoDTO;
-import vip.mate.llm.model.TestResult;
+import vip.mate.exception.MateClawException;
+import vip.mate.llm.model.*;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.llm.service.ModelDiscoveryService;
 import vip.mate.llm.service.ModelProviderService;
 import vip.mate.sdk.service.MateClawRuntime;
+import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.service.SkillService;
+import vip.mate.system.service.SystemSettingService;
 import vip.mate.tool.ToolRegistry;
 
 import java.util.List;
@@ -48,6 +43,8 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     private final ModelConfigService modelConfigService;
     private final ModelProviderService modelProviderService;
     private final ModelDiscoveryService modelDiscoveryService;
+    private final SkillService skillService;
+    private final SystemSettingService systemSettingService;
 
     /**
      * 与指定 Agent 进行结构化流式对话
@@ -287,6 +284,17 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     }
 
     /**
+     * 获取所有已启用的模型（含 chat 和 embedding 类型）
+     */
+    @Override
+    public List<ModelConfigEntity> listAllEnabledModels() {
+        return modelConfigService.listModels()
+                .stream()
+                .filter(ModelConfigEntity::getEnabled)
+                .toList();
+    }
+
+    /**
      * 获取默认模型
      */
     @Override
@@ -365,6 +373,44 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     }
 
     /**
+     * 获取默认向量（embedding）模型
+     */
+    @Override
+    public ModelConfigEntity getDefaultEmbeddingModel() {
+        // 优先取 is_default=1 的 embedding 模型（与 chat 模型共用同一字段、各自独立）
+        ModelConfigEntity marked = modelConfigService.listEnabledModels()
+                .stream()
+                .filter(modelConfigEntity -> modelConfigEntity.getEnabled()
+                        && "embedding".equals(modelConfigEntity.getModelType()) && modelConfigEntity.getIsDefault())
+                .findFirst()
+                .orElse(null);
+
+        if (marked != null) {
+            return marked;
+        }
+        // 未配置时回退到第一个启用的 embedding 模型
+        return modelConfigService.findFirstEnabledEmbedding();
+    }
+
+    /**
+     * 设置默认向量（embedding）模型
+     */
+    @Override
+    public ModelConfigEntity setDefaultEmbeddingModel(Long id) {
+        ModelConfigEntity model = modelConfigService.getModel(id);
+        if (!Boolean.TRUE.equals(model.getEnabled())) {
+            throw new MateClawException("err.llm.only_enabled_default",
+                    "只有启用状态的模型才能设为默认向量模型");
+        }
+        if (!"embedding".equals(model.getModelType())) {
+            throw new MateClawException("err.llm.not_embedding_model",
+                    "只有向量（embedding）类型的模型才能设为默认向量模型");
+        }
+        // 通过 is_default 字段设置，统一存储；setDefaultModel 内部已实现按类型分类清旗
+        return modelConfigService.setDefaultModel(id);
+    }
+
+    /**
      * 发现远端模型
      */
     @Override
@@ -395,5 +441,74 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public TestResult testModel(String providerId, String modelId) {
         return modelDiscoveryService.testModel(providerId, modelId);
+    }
+
+    // ==================== 技能管理 ====================
+
+    /**
+     * 获取技能分页列表
+     */
+    @Override
+    public IPage<SkillEntity> pageSkills(int page, int size, String keyword, String skillType,
+                                          Boolean enabled, Long workspaceId,
+                                          String sort, String lifecycleState) {
+        return skillService.pageSkills(page, size, keyword, skillType, enabled, null, sort, null, null,
+                java.util.Set.of(), workspaceId, lifecycleState);
+    }
+
+    /**
+     * 获取所有技能列表（不分页）
+     */
+    @Override
+    public List<SkillEntity> listSkills(Long workspaceId) {
+        return skillService.listSkills(workspaceId);
+    }
+
+    /**
+     * 获取已启用技能列表
+     */
+    @Override
+    public List<SkillEntity> listEnabledSkills(Long workspaceId) {
+        return skillService.listEnabledSkills(workspaceId);
+    }
+
+    /**
+     * 获取技能详情
+     */
+    @Override
+    public SkillEntity getSkill(Long id) {
+        return skillService.getSkill(id);
+    }
+
+    /**
+     * 创建技能
+     */
+    @Override
+    public SkillEntity createSkill(SkillEntity entity) {
+        return skillService.createSkill(entity);
+    }
+
+    /**
+     * 更新技能
+     */
+    @Override
+    public SkillEntity updateSkill(SkillEntity entity) {
+        return skillService.updateSkill(entity);
+    }
+
+    /**
+     * 硬删除技能
+     */
+    @Override
+    public void hardDeleteSkill(Long id) {
+        skillService.hardDeleteSkill(id);
+    }
+
+    /**
+     * 切换技能启停状态
+     */
+    @Override
+    public SkillEntity toggleSkill(Long id, boolean enabled) {
+        return skillService.toggleSkill(id, enabled);
     }
 }

@@ -1,35 +1,28 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.constants.DataAgentConstants;
-import vip.mate.dataagent.dto.DatasourceColumnVO;
-import vip.mate.dataagent.dto.DatasourceCreateRequest;
-import vip.mate.dataagent.dto.DatasourceTableVO;
-import vip.mate.dataagent.dto.DatasourceUpdateRequest;
-import vip.mate.dataagent.dto.DatasourceVO;
-import vip.mate.dataagent.dto.TableDataPreviewVO;
+import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceColumnEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.model.DatasourceTableEntity;
 import vip.mate.dataagent.repository.DatasourceColumnMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.repository.DatasourceTableMapper;
+import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
 import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +36,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     private final DatasourceMapper datasourceMapper;
     private final DatasourceTableMapper datasourceTableMapper;
     private final DatasourceColumnMapper datasourceColumnMapper;
+    private final AloudataService aloudataService;
+    private final AloudataConfigHelper aloudataConfigHelper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 获取所有数据源
@@ -384,6 +380,10 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             String sourceType = entity.getSourceType();
             if (sourceType == null) {
                 return false;
+            }
+            if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(sourceType)) {
+                AloudataConfigDTO config = aloudataConfigHelper.parseConfig(entity);
+                return aloudataService.testConnection(config);
             }
             return switch (sourceType) {
                 case "mysql", "postgresql", "oracle", "clickhouse", "doris" -> testJdbcConnection(entity);
@@ -903,4 +903,5 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         return vo;
     }
+
 }

@@ -1,11 +1,7 @@
 package vip.mate.dataagent.service;
 
-import vip.mate.dataagent.dto.DatasourceColumnVO;
-import vip.mate.dataagent.dto.DatasourceCreateRequest;
-import vip.mate.dataagent.dto.DatasourceTableVO;
-import vip.mate.dataagent.dto.DatasourceUpdateRequest;
-import vip.mate.dataagent.dto.DatasourceVO;
-import vip.mate.dataagent.dto.TableDataPreviewVO;
+import vip.mate.dataagent.dto.*;
+
 import java.util.List;
 
 /**
