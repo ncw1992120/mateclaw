@@ -339,7 +339,15 @@ MERGE INTO mate_model_config (id, name, provider, model_name, description, tempe
 (1000000273, 'Claude Sonnet 4.6', 'openrouter', 'anthropic/claude-sonnet-4-6', 'Claude Sonnet 4.6 via OpenRouter', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
 -- RFC-062: Claude 4.7 via Claude Code OAuth subscription (Pro/Max plan).
 (1000000280, 'Claude Opus 4.7', 'anthropic-claude-code', 'claude-opus-4-7', 'Claude Opus 4.7 via Claude Code Pro/Max subscription', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
-(1000000281, 'Claude Sonnet 4.6', 'anthropic-claude-code', 'claude-sonnet-4-6', 'Claude Sonnet 4.6 via Claude Code Pro/Max subscription', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0);
+(1000000281, 'Claude Sonnet 4.6', 'anthropic-claude-code', 'claude-sonnet-4-6', 'Claude Sonnet 4.6 via Claude Code Pro/Max subscription', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+-- Claude 4.8 series (direct Anthropic + OpenRouter, including the -fast variant).
+-- Shares 4.7's strict sampling contract (temperature/top_p/top_k must be NULL)
+-- and the new xhigh thinking tier — handled in AnthropicChatModelBuilder.
+(1000000290, 'Claude Opus 4.8', 'anthropic', 'claude-opus-4-8', 'Anthropic Claude Opus 4.8 (xhigh adaptive thinking)', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000291, 'Claude Opus 4.8 Fast', 'anthropic', 'claude-opus-4-8-fast', 'Claude Opus 4.8 fast variant (higher output speed, 2x pricing)', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000292, 'Claude Opus 4.8', 'openrouter', 'anthropic/claude-opus-4-8', 'Claude Opus 4.8 via OpenRouter', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000293, 'Claude Opus 4.8 Fast', 'openrouter', 'anthropic/claude-opus-4-8-fast', 'Claude Opus 4.8 fast variant via OpenRouter', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000294, 'Claude Opus 4.8', 'anthropic-claude-code', 'claude-opus-4-8', 'Claude Opus 4.8 via Claude Code Pro/Max subscription', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0);
 
 -- Default system settings
 MERGE INTO mate_system_setting (id, setting_key, setting_value, description, create_time, update_time)
@@ -539,7 +547,7 @@ VALUES (
     NULL,
     FALSE,
     30,
-    30,
+    60,
     'disconnected',
     NULL,
     NULL,
@@ -570,7 +578,7 @@ VALUES (
     NULL,
     FALSE,
     30,
-    30,
+    60,
     'disconnected',
     NULL,
     NULL,
@@ -1301,15 +1309,15 @@ VALUES (1000100002, 'Weekly Work Summary', '0 18 * * 5', 'Asia/Shanghai', 100000
 -- Daily 2:00 AM: consolidate daily notes → MEMORY.md
 MERGE INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
 KEY (id)
-VALUES (1000100010, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000001, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
+VALUES (1000100010, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000001, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Note: MEMORY.md is injected into every conversation, so only consolidate cross-project, long-term stable information; do NOT write project-specific volatile facts into MEMORY.md (project codenames, names, tech stacks, repos, a single project''s metrics/budget/team/launch date, or decisions that hold only for one project) — they conflict across projects and cause mix-ups. Keep those in the daily note or maintain them via structured project memory. Rule of thumb: only facts that still hold after switching projects belong in MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
 
 MERGE INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
 KEY (id)
-VALUES (1000100011, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000002, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
+VALUES (1000100011, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000002, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Note: MEMORY.md is injected into every conversation, so only consolidate cross-project, long-term stable information; do NOT write project-specific volatile facts into MEMORY.md (project codenames, names, tech stacks, repos, a single project''s metrics/budget/team/launch date, or decisions that hold only for one project) — they conflict across projects and cause mix-ups. Keep those in the daily note or maintain them via structured project memory. Rule of thumb: only facts that still hold after switching projects belong in MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
 
 MERGE INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
 KEY (id)
-VALUES (1000100012, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000003, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
+VALUES (1000100012, 'Memory Consolidation', '0 2 * * *', 'Asia/Shanghai', 1000000003, 'text', 'Review your recent memory/ daily note files and consolidate recurring important information (user preferences, stable facts, lessons learned, workflows) into MEMORY.md. Note: MEMORY.md is injected into every conversation, so only consolidate cross-project, long-term stable information; do NOT write project-specific volatile facts into MEMORY.md (project codenames, names, tech stacks, repos, a single project''s metrics/budget/team/launch date, or decisions that hold only for one project) — they conflict across projects and cause mix-ups. Keep those in the daily note or maintain them via structured project memory. Rule of thumb: only facts that still hold after switching projects belong in MEMORY.md. Keep the original daily notes intact, only update MEMORY.md. Briefly describe what consolidations were made.', NULL, TRUE, NOW(), NOW(), 0);
 
 -- ==================== Workspace File Seed Data ====================
 -- Each Agent has its own workspace document collection: AGENTS.md / SOUL.md / PROFILE.md / MEMORY.md

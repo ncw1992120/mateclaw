@@ -116,6 +116,7 @@
         @suggestion-click="sendSuggestion"
         @toggle-thinking="handleToggleThinking"
         @approve="handleApprove"
+        @approve-always="handleApproveAlways"
         @deny="handleDeny"
       >
         <!-- Issue #81 v2 R2: blocking-only popup. Recoverable cases use the
@@ -216,6 +217,7 @@
         v-model="inputText"
         :loading="isGenerating && !hasPendingApproval"
         :disabled="blockingPrompt || !currentAgent"
+        :skills-enabled="!!currentAgent && !currentAgent.skillsDisabled"
         :placeholder="$t('chat.messagePlaceholder')"
         :hint="currentRuntimeModel"
         :attachments="pendingAttachments"
@@ -231,6 +233,7 @@
         @file-select="handleFileSelect"
         @attachment-remove="removeAttachment"
         @approve="handleApprove"
+        @approve-always="handleApproveAlways"
         @deny="handleDeny"
         :enable-talk-mode="!!selectedAgentId"
         :thinking-enabled="thinkingEnabled"
@@ -259,7 +262,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { mcToast } from '@/composables/useMcToast'
 import { ChatDotRound, Delete, Setting, UploadFilled } from '@element-plus/icons-vue'
-import { conversationApi, agentApi, modelApi, chatApi, cronJobApi } from '@/api/index'
+import { conversationApi, agentApi, modelApi, chatApi, cronJobApi, approvalApi } from '@/api/index'
+import { ElMessage } from 'element-plus'
 import { copyToClipboard } from '@/utils/clipboard'
 import { useFileDrop } from '@/composables/useFileDrop'
 import { useIsMobile, useMediaQuery, BREAKPOINTS } from '@/composables/useBreakpoint'
@@ -1184,11 +1188,28 @@ const goalSystemLineDetail = computed(() => {
   return '预算耗尽。'
 })
 
+// True when the current conversation's message stream already contains a
+// setGoal tool call — authoritative even before the goal_created SSE event
+// updates the goal store.
+const goalSetInStream = computed(() => {
+  return messages.value.some((m) => {
+    if (m.role !== 'assistant') return false
+    const tcs: any = (m as any).metadata?.toolCalls
+    return Array.isArray(tcs) && tcs.some((tc: any) => tc?.name === 'setGoal')
+  })
+})
+
 const showGoalSetPrompt = computed(() => {
   if (!currentConversationId.value || !selectedAgentId.value) return false
   if (isGenerating.value) return false
   // Active goal? The ring covers that — no need for a prompt.
   if (goalStore.activeGoal(currentConversationId.value)) return false
+  // A goal was already set this conversation via the setGoal tool — even if
+  // the goal_created/goal_evaluated SSE event hasn't updated the store yet
+  // (the turn can end a render frame before that event lands). Reading the
+  // stream directly closes that flash window: never offer to set a goal when
+  // the agent already set one here.
+  if (goalSetInStream.value) return false
   // Recent terminal still showing? Let the user dismiss that first.
   if (goalTerminalForCurrent.value) return false
   if (goalStore.isPromptDismissed(currentConversationId.value)) return false
@@ -1817,6 +1838,57 @@ async function handleApprove(pendingId: string) {
 async function handleDeny(pendingId: string) {
   if (!currentConversationId.value) return
   await handleSendMessage('/deny')
+}
+
+// Always-approve: create the matching grant first, then send /approve as usual.
+// Failure to create the grant doesn't block the approval — we still forward
+// /approve so the user's click isn't lost, just toast the error.
+async function handleApproveAlways(
+  payload: { pendingId: string; scope: 'CONVERSATION' | 'AGENT' | 'USER' },
+) {
+  if (!currentConversationId.value) return
+  const pa = activePendingApproval.value
+  if (!pa) return
+
+  // Resolve scope_id from the scope dimension.
+  let scopeId = ''
+  if (payload.scope === 'CONVERSATION') {
+    scopeId = currentConversationId.value
+  } else if (payload.scope === 'AGENT') {
+    scopeId = String(currentAgent.value?.id ?? '')
+  } else if (payload.scope === 'USER') {
+    const me = localStorage.getItem('mc-user-id')
+    if (me) scopeId = me
+  }
+  if (!scopeId) {
+    ElMessage.error('Cannot resolve scope id for always-approve')
+    await handleSendMessage('/approve')
+    return
+  }
+
+  try {
+    const sev = pa.maxSeverity ?? 'LOW'
+    // Severity ceiling = at-or-above the current finding's severity. CRITICAL
+    // never enters this path (the backend rejects it), so HIGH covers the rest.
+    const ceiling = sev === 'HIGH' || sev === 'CRITICAL' ? 'HIGH'
+      : sev === 'MEDIUM' ? 'MEDIUM' : 'LOW'
+    const ruleId = pa.findings?.find((f: { ruleId?: string }) => !!f.ruleId)?.ruleId ?? null
+    await approvalApi.createGrant({
+      scopeType: payload.scope,
+      scopeId,
+      toolName: pa.toolName,
+      ruleId,
+      maxSeverity: ceiling,
+      grantKind: payload.scope === 'CONVERSATION' ? 'UNTIL_CONVERSATION_END' : 'ALWAYS',
+      note: `created from approval banner (${pa.toolName})`,
+    })
+    ElMessage.success(
+      t('chat.approveAlwaysCreated', { tool: pa.toolName }) as string,
+    )
+  } catch (e: any) {
+    ElMessage.error(e?.message || 'Failed to create auto-approve rule')
+  }
+  await handleSendMessage('/approve')
 }
 
 // 重连到运行中的流

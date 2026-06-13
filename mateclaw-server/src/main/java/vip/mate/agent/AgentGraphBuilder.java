@@ -128,6 +128,18 @@ public class AgentGraphBuilder {
     private final vip.mate.goal.config.GoalProperties goalProperties;
 
     /**
+     * Auto-grant resolver wired into the executor so an active
+     * {@code mate_approval_grant} row can skip {@code createPending()} for matching
+     * tool calls. Together with {@link #workspaceLookupCache}, these two deps form
+     * the auto-grant entry point; the executor's null-guard turns the feature off
+     * cleanly if either is missing.
+     */
+    private final vip.mate.approval.grant.service.ApprovalGrantResolver approvalGrantResolver;
+
+    /** Conversation→workspaceId lookup cache; see {@link #approvalGrantResolver}. */
+    private final vip.mate.approval.grant.WorkspaceLookupCache workspaceLookupCache;
+
+    /**
      * Optional audit pipeline. Setter injection (rather than a constructor
      * parameter) keeps existing constructor-based wiring + tests intact.
      * When present, the executor receives it so child-agent denied-tool
@@ -186,6 +198,17 @@ public class AgentGraphBuilder {
     }
 
     /**
+     * True when the Agent declared its own modelName and that name resolved to
+     * a real enabled row (rather than silently falling back to the system default).
+     */
+    private boolean agentModelOverrideResolved(AgentEntity entity, ModelConfigEntity resolved) {
+        if (entity == null || resolved == null) return false;
+        String agentModelName = entity.getModelName();
+        if (agentModelName == null || agentModelName.isBlank()) return false;
+        return agentModelName.equalsIgnoreCase(resolved.getModelName());
+    }
+
+    /**
      * 根据 AgentEntity 构建完整的 Agent 实例。
      *
      * <p>{@code modelProvider} / {@code modelName} carry an optional
@@ -231,14 +254,17 @@ public class AgentGraphBuilder {
         // Agents and conversations without an explicit choice.
         ModelConfigEntity globalDefault;
         boolean explicitPinHonoured;
+        boolean agentOverrideHonoured;
         try {
             explicitPinHonoured = pinResolvesToEnabledModel(modelProvider, modelName);
             globalDefault = resolveRuntimeBaseModel(modelProvider, modelName, entity.getModelName());
+            agentOverrideHonoured = !explicitPinHonoured
+                    && agentModelOverrideResolved(entity, globalDefault);
         } catch (Exception e) {
             throw new MateClawException("err.agent.no_default_model", "无法构建 Agent：请先在「设置 → 模型」中配置并启用默认模型");
         }
         ModelConfigEntity runtimeModel;
-        if (explicitPinHonoured) {
+        if (explicitPinHonoured || agentOverrideHonoured) {
             // The caller (admin UI / chat console) handed us a concrete
             // (provider, model) pin and it points to an enabled row. Honour
             // it verbatim — running providerRouter.selectPrimary here would
@@ -510,7 +536,10 @@ public class AgentGraphBuilder {
                     streamTracker, fallbackChain, llmCacheMetricsAggregator, providerHealthTracker,
                     primaryModelConfig != null ? primaryModelConfig.getProvider() : null,
                     providerPool);
-            ToolExecutionExecutor executor = new ToolExecutionExecutor(toolSet, toolGuardService, approvalService, streamTracker, toolTimeoutProperties, toolResultStorage, toolConcurrencyRegistry);
+            ToolExecutionExecutor executor = new ToolExecutionExecutor(
+                    toolSet, toolGuardService, approvalService, streamTracker,
+                    toolTimeoutProperties, toolResultStorage, toolConcurrencyRegistry,
+                    workspaceLookupCache, approvalGrantResolver);
             // Issue #46: enable skill-aware "Tool not found" hint so when the
             // LLM mis-calls a skill name as a tool, the response tells it
             // the right invocation pattern instead of a dead-end error.
@@ -752,7 +781,10 @@ public class AgentGraphBuilder {
                     streamTracker, fallbackChain, llmCacheMetricsAggregator, providerHealthTracker,
                     primaryModelConfig != null ? primaryModelConfig.getProvider() : null,
                     providerPool);
-            ToolExecutionExecutor executor = new ToolExecutionExecutor(toolSet, toolGuardService, approvalService, streamTracker, toolTimeoutProperties, toolResultStorage, toolConcurrencyRegistry);
+            ToolExecutionExecutor executor = new ToolExecutionExecutor(
+                    toolSet, toolGuardService, approvalService, streamTracker,
+                    toolTimeoutProperties, toolResultStorage, toolConcurrencyRegistry,
+                    workspaceLookupCache, approvalGrantResolver);
             // Issue #46: enable skill-aware "Tool not found" hint so when the
             // LLM mis-calls a skill name as a tool, the response tells it
             // the right invocation pattern instead of a dead-end error.
@@ -1283,6 +1315,23 @@ public class AgentGraphBuilder {
 
     // ==================== Prompt 构建 ====================
 
+    /**
+     * Cache-stable platform identity, appended to every agent's system
+     * prompt. Answers "who are you / what are you based on". The volatile
+     * "which model right now" fact is injected per-turn by
+     * {@link vip.mate.agent.context.RuntimeContextInjector} instead, to
+     * keep this prefix's prompt-cache hash stable.
+     */
+    static final String ABOUT_YOU_BLOCK = """
+
+            ## About You
+            You are powered by MateClaw — a multi-user AI Agent platform built on
+            Spring Boot 3.5 and Spring AI Alibaba Graph. You are reachable through
+            WebChat and 8+ IM channels (DingTalk, Feishu, WeCom, WeChat, Telegram,
+            Discord, QQ, Slack). If asked who you are or what you are based on,
+            answer with MateClaw and the technology stack above.
+            """;
+
     private String buildEnhancedPrompt(AgentEntity entity, boolean builtinSearchEnabled) {
         // The agent's own systemPrompt encodes its identity (role / goal /
         // backstory). The memory block from workspace files (AGENTS.md, SOUL.md,
@@ -1358,6 +1407,18 @@ public class AgentGraphBuilder {
                 Use workspace memory tools (MEMORY.md, daily notes) for long-form narrative notes.
                 Use structured memory tools for key-value facts the system can query efficiently.
 
+                ## Memory vs Knowledge Base Precedence
+                When a question is about the user themselves — who they are, their current
+                project, its name/codename, tech stack, goals, metrics, budget, team, or what
+                they are working on — your recalled memory (the <memory-context> block plus
+                structured/workspace memory) is the authoritative source. Knowledge-base / wiki
+                pages are reference material that may describe unrelated, example, or upstream
+                projects; do NOT treat a KB page's subject as the user's own project. Only read
+                the knowledge base for explicit reference lookups, never to decide what the
+                user's project is. If memory and a KB page disagree about the user's project,
+                trust memory. If memory has no answer, say you do not have it rather than
+                adopting a KB article as the user's project.
+
                 ## Session Search
                 - `session_search(agentId, currentConversationId, mode, query, limit)` — search conversation history
                 - mode="recent": list recent conversations (titles, times, message counts)
@@ -1426,7 +1487,7 @@ public class AgentGraphBuilder {
         // Wiki 知识库上下文注入
         String wikiContext = wikiContextService.buildWikiContext(entity.getId());
 
-        return basePrompt + toolGuidance + searchGuidance + wikiContext;
+        return basePrompt + ABOUT_YOU_BLOCK + toolGuidance + searchGuidance + wikiContext;
     }
 
     /**

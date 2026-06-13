@@ -384,7 +384,14 @@ VALUES
 (1000000273, 'Claude Sonnet 4.6', 'openrouter', 'anthropic/claude-sonnet-4-6', 'OpenRouter 代理 Claude Sonnet 4.6', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
 -- RFC-062：通过 Claude Code Pro/Max 订阅调用 Claude 4.7
 (1000000280, 'Claude Opus 4.7', 'anthropic-claude-code', 'claude-opus-4-7', '通过 Claude Code Pro/Max 订阅调用 Claude Opus 4.7', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
-(1000000281, 'Claude Sonnet 4.6', 'anthropic-claude-code', 'claude-sonnet-4-6', '通过 Claude Code Pro/Max 订阅调用 Claude Sonnet 4.6', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0)
+(1000000281, 'Claude Sonnet 4.6', 'anthropic-claude-code', 'claude-sonnet-4-6', '通过 Claude Code Pro/Max 订阅调用 Claude Sonnet 4.6', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+-- Claude 4.8 系列（直连 Anthropic + OpenRouter，包含 -fast 高速变体）
+-- 与 4.7 共享严格采样契约：temperature / top_p / top_k 必须为空，新增 xhigh 思考档位
+(1000000290, 'Claude Opus 4.8', 'anthropic', 'claude-opus-4-8', 'Anthropic Claude Opus 4.8（xhigh 自适应思考）', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000291, 'Claude Opus 4.8 Fast', 'anthropic', 'claude-opus-4-8-fast', 'Claude Opus 4.8 高速变体（输出更快、单价 2x）', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000292, 'Claude Opus 4.8', 'openrouter', 'anthropic/claude-opus-4-8', 'OpenRouter 代理 Claude Opus 4.8', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000293, 'Claude Opus 4.8 Fast', 'openrouter', 'anthropic/claude-opus-4-8-fast', 'OpenRouter 代理 Claude Opus 4.8 高速变体', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0),
+(1000000294, 'Claude Opus 4.8', 'anthropic-claude-code', 'claude-opus-4-8', '通过 Claude Code Pro/Max 订阅调用 Claude Opus 4.8', NULL, 4096, NULL, TRUE, TRUE, FALSE, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE name=VALUES(name), provider=VALUES(provider), model_name=VALUES(model_name), description=VALUES(description), temperature=VALUES(temperature), max_tokens=VALUES(max_tokens), top_p=VALUES(top_p), builtin=VALUES(builtin), enabled=VALUES(enabled), is_default=VALUES(is_default), update_time=VALUES(update_time), deleted=VALUES(deleted);
 
 -- 默认系统设置
@@ -586,7 +593,7 @@ VALUES (
     NULL,
     FALSE,
     30,
-    30,
+    60,
     'disconnected',
     NULL,
     NULL,
@@ -617,7 +624,7 @@ VALUES (
     NULL,
     FALSE,
     30,
-    30,
+    60,
     'disconnected',
     NULL,
     NULL,
@@ -1343,15 +1350,15 @@ ON DUPLICATE KEY UPDATE name=VALUES(name), cron_expression=VALUES(cron_expressio
 -- ==================== 记忆整合定时任务 ====================
 -- 每天凌晨 2:00 整合 daily notes → MEMORY.md
 INSERT INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
-VALUES (1000100010, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000001, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
+VALUES (1000100010, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000001, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。注意：MEMORY.md 会被注入每一次对话，只整合跨项目长期稳定的信息；具体项目的代号、名称、技术栈、仓库、单项目的指标/预算/团队/上线日期或只对某个项目成立的决策等易变事实，不要写入 MEMORY.md（会随项目切换互相冲突、导致张冠李戴），应留在 daily note 或通过结构化 project 记忆维护。判定口诀：换一个项目后仍成立才进 MEMORY.md。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE name=VALUES(name), cron_expression=VALUES(cron_expression), timezone=VALUES(timezone), agent_id=VALUES(agent_id), task_type=VALUES(task_type), trigger_message=VALUES(trigger_message), request_body=VALUES(request_body), enabled=VALUES(enabled), update_time=VALUES(update_time), deleted=VALUES(deleted);
 
 INSERT INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
-VALUES (1000100011, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000002, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
+VALUES (1000100011, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000002, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。注意：MEMORY.md 会被注入每一次对话，只整合跨项目长期稳定的信息；具体项目的代号、名称、技术栈、仓库、单项目的指标/预算/团队/上线日期或只对某个项目成立的决策等易变事实，不要写入 MEMORY.md（会随项目切换互相冲突、导致张冠李戴），应留在 daily note 或通过结构化 project 记忆维护。判定口诀：换一个项目后仍成立才进 MEMORY.md。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE name=VALUES(name), cron_expression=VALUES(cron_expression), timezone=VALUES(timezone), agent_id=VALUES(agent_id), task_type=VALUES(task_type), trigger_message=VALUES(trigger_message), request_body=VALUES(request_body), enabled=VALUES(enabled), update_time=VALUES(update_time), deleted=VALUES(deleted);
 
 INSERT INTO mate_cron_job (id, name, cron_expression, timezone, agent_id, task_type, trigger_message, request_body, enabled, create_time, update_time, deleted)
-VALUES (1000100012, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000003, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
+VALUES (1000100012, '记忆整合', '0 2 * * *', 'Asia/Shanghai', 1000000003, 'text', '请回顾你最近的 memory/ 日记文件，将反复出现的重要信息（用户偏好、稳定事实、经验教训、工作流）提炼整合到 MEMORY.md 中。注意：MEMORY.md 会被注入每一次对话，只整合跨项目长期稳定的信息；具体项目的代号、名称、技术栈、仓库、单项目的指标/预算/团队/上线日期或只对某个项目成立的决策等易变事实，不要写入 MEMORY.md（会随项目切换互相冲突、导致张冠李戴），应留在 daily note 或通过结构化 project 记忆维护。判定口诀：换一个项目后仍成立才进 MEMORY.md。保留日记原文不动，只更新 MEMORY.md。完成后简要说明做了哪些整合。', NULL, TRUE, NOW(), NOW(), 0)
 ON DUPLICATE KEY UPDATE name=VALUES(name), cron_expression=VALUES(cron_expression), timezone=VALUES(timezone), agent_id=VALUES(agent_id), task_type=VALUES(task_type), trigger_message=VALUES(trigger_message), request_body=VALUES(request_body), enabled=VALUES(enabled), update_time=VALUES(update_time), deleted=VALUES(deleted);
 
 -- ==================== 工作区文件种子数据（参考 MateClaw md_files/zh） ====================

@@ -509,6 +509,8 @@ public class ReasoningNode implements NodeAction {
         String workspaceBasePath = state.value(vip.mate.agent.graph.state.MateClawStateKeys.WORKSPACE_BASE_PATH, "");
         String agentIdStr = state.value(MateClawStateKeys.AGENT_ID, "");
         String userMsg = state.value(MateClawStateKeys.USER_MESSAGE, "");
+        String runtimeModelName = state.value(MateClawStateKeys.RUNTIME_MODEL_NAME, "");
+        String runtimeProviderId = state.value(MateClawStateKeys.RUNTIME_PROVIDER_ID, "");
 
         // Build the non-history prefix ONCE. The PTL retry branch below
         // reuses this list verbatim so the retried prompt has exactly the
@@ -517,7 +519,7 @@ public class ReasoningNode implements NodeAction {
         // segment which led to "answer regressed after compaction"
         // complaints on long sessions.
         List<Message> nonHistoryPrefix = buildNonHistoryPrefix(systemPrompt, workspaceBasePath, agentIdStr, userMsg,
-                accessor.chatOrigin());
+                accessor.chatOrigin(), runtimeModelName, runtimeProviderId);
 
         // Append the runtime-rendered skill catalog as a SEPARATE SystemMessage
         // right after the skeleton system prompt. Keeping it out of the baked
@@ -967,11 +969,24 @@ public class ReasoningNode implements NodeAction {
                                         String workspaceBasePath,
                                         String agentIdStr,
                                         String userMsg,
-                                        vip.mate.agent.context.ChatOrigin chatOrigin) {
+                                        vip.mate.agent.context.ChatOrigin chatOrigin,
+                                        String runtimeModelName,
+                                        String runtimeProviderId) {
         List<Message> prefix = new ArrayList<>();
         prefix.add(new SystemMessage(systemPrompt));
-        prefix.add(new UserMessage(RuntimeContextInjector.buildContextMessage(workspaceBasePath, null, chatOrigin)));
-        if (wikiContextService != null && agentIdStr != null && !agentIdStr.isEmpty()) {
+        prefix.add(new UserMessage(RuntimeContextInjector.buildContextMessage(
+                workspaceBasePath, null, chatOrigin, runtimeModelName, runtimeProviderId)));
+        // When this turn already recalled the user's own current project from
+        // structured memory, skip auto-injecting knowledge-base reference context.
+        // Otherwise the KB pages (reference material, possibly about unrelated
+        // projects) compete with — and tend to override — the user's actual
+        // project identity. The agent can still query the wiki on demand.
+        boolean projectRecalled = userMsg != null
+                && userMsg.contains(vip.mate.memory.service.StructuredMemoryService.PROJECT_RECALLED_MARKER);
+        if (projectRecalled) {
+            log.debug("[ReasoningNode] Skipping wiki-relevant injection: user's project was recalled from memory this turn");
+        }
+        if (!projectRecalled && wikiContextService != null && agentIdStr != null && !agentIdStr.isEmpty()) {
             try {
                 Long parsedAgentId = Long.parseLong(agentIdStr);
                 String wikiRelevant = wikiContextService.buildRelevantContext(parsedAgentId, userMsg);

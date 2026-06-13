@@ -35,6 +35,11 @@ v1.4.0 makes Feishu a first-class channel — interactive cards, streaming cards
 Feishu specifics are spelled out in the [Feishu](#feishu-lark) section below.
 :::
 
+::: tip 1.5.0 channel improvements
+- **Shared inbound media pipeline** — **WeChat and WeCom** are currently wired onto a shared inbound-media downloader + magic-byte type detection + exponential-backoff retry (other IM channels to follow). File types are decided from content bytes (no more hardcoded `image/*`); HEIC / WEBP / DOCX / XLSX and friends are detected correctly, with automatic retry on download failure.
+- **Feishu: follow-up text auto-carries recent files (#201)** — send a file in a Feishu chat first (even without @-mentioning the employee), then a text message, and the cached files are auto-attached as content parts for the employee — 5 files per chat, 60-minute TTL.
+:::
+
 ---
 
 ## The nine channels
@@ -103,7 +108,11 @@ All credentials encrypted at rest. One agent can have many channels; different c
 Built in. No setup, no credentials. Uses Server-Sent Events for real-time streaming.
 
 ```
-GET /api/v1/chat/{agentId}/stream
+POST /api/v1/chat/stream
+Content-Type: application/json
+Accept: text/event-stream
+
+{"agentId": 1, "message": "...", "conversationId": "..."}
 ```
 
 Event format documented in [Chat & Messaging](./chat).
