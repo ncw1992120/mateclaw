@@ -7,6 +7,8 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import vip.mate.agent.context.ChatOrigin;
+import vip.mate.agent.context.ChatOriginHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.LogicalRelationVO;
 import vip.mate.dataagent.dto.SchemaSearchRequest;
@@ -18,6 +20,7 @@ import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.LogicalRelationService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
+import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.util.JdbcUtils;
 import vip.mate.datasource.service.EChartsOptionBuilder;
 import vip.mate.datasource.service.SqlValidationService;
@@ -27,6 +30,7 @@ import vip.mate.skill.knowledge.SkillScopedToolCallback;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 数据源只读 SQL 查询工具
@@ -62,8 +66,9 @@ public class DatasourceQueryTool {
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final SemanticModelService semanticModelService;
     private final LogicalRelationService logicalRelationService;
+    private final DataAgentChatScopeContext scopeContext;
 
-    private static final String TOOL_NAME = "query_datasource";
+    private static final String TOOL_NAME = "data_query";
 
     private static final String TOOL_DESCRIPTION = """
             在数据源上执行只读 SQL 查询，用于复杂分析和精确计算。
@@ -115,8 +120,24 @@ public class DatasourceQueryTool {
     private static final int MARKDOWN_TABLE_THRESHOLD = 20;
     private static final int MAX_COLUMNS_FOR_TABLE = 10;
 
+    /**
+     * mateclaw-server 中默认提供的内置数据源工具 Bean 名称。
+     * <p>
+     * dataagent 自身已实现 data_query 工具覆盖数据源元数据查询场景，
+     * 为避免 Agent 因 server 内置工具而绕过 dataagent 的数据源（dataagent_datasource）查询逻辑，
+     * 启动时禁用该 Bean。
+     */
+    private static final String SERVER_DATASOURCE_TOOL_BEAN = "datasourceTool";
+
     @PostConstruct
     public void register() {
+        // 禁用 mateclaw-server 内置 DatasourceTool，避免与本工具的数据源查询动作冲突
+        try {
+            mateClawRuntime.disableBuiltinToolByBeanName(SERVER_DATASOURCE_TOOL_BEAN);
+        } catch (Exception e) {
+            log.warn("Failed to disable builtin tool {}: {}", SERVER_DATASOURCE_TOOL_BEAN, e.getMessage());
+        }
+
         SkillScopedToolCallback toolCallback = new SkillScopedToolCallback(
                 TOOL_NAME,
                 TOOL_DESCRIPTION,
@@ -145,12 +166,16 @@ public class DatasourceQueryTool {
     }
 
     /**
-     * 列出所有可用数据源
+     * 列出所有可用数据源（受用户勾选白名单约束）
      */
     private String listDatasources() {
+        Set<Long> allowed = currentDatasourceWhitelist();
         var datasources = datasourceManageService.listDatasources();
         JSONArray arr = new JSONArray();
         for (var ds : datasources) {
+            if (!allowed.isEmpty() && (ds.getId() == null || !allowed.contains(ds.getId()))) {
+                continue;
+            }
             JSONObject obj = new JSONObject();
             obj.set("id", ds.getId());
             obj.set("name", ds.getName());
@@ -163,16 +188,23 @@ public class DatasourceQueryTool {
         JSONObject result = new JSONObject();
         result.set("datasources", arr);
         result.set("count", arr.size());
+        if (!allowed.isEmpty()) {
+            result.set("scopeNotice", "用户已限定数据源范围，仅返回白名单内的数据源");
+        }
         return result.toStringPretty();
     }
 
     /**
-     * 列出指定数据源下的所有表
+     * 列出指定数据源下的所有表（仅当 datasourceId 在白名单内时允许）
      */
     private String listTables(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
         if (datasourceId == null) {
             return error("list_tables 需要 datasourceId 参数");
+        }
+        String denyMsg = checkDatasourceAllowed(datasourceId);
+        if (denyMsg != null) {
+            return error(denyMsg);
         }
         var tables = datasourceManageService.listTables(datasourceId);
         JSONArray arr = new JSONArray();
@@ -205,12 +237,16 @@ public class DatasourceQueryTool {
     }
 
     /**
-     * 执行只读 SQL 查询
+     * 执行只读 SQL 查询（仅当 datasourceId 在白名单内时允许）
      */
     private String executeSql(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
         if (datasourceId == null) {
             return error("execute_sql 需要 datasourceId 参数");
+        }
+        String denyMsg = checkDatasourceAllowed(datasourceId);
+        if (denyMsg != null) {
+            return error(denyMsg);
         }
         String sql = input.getStr("sql");
         if (sql == null || sql.isBlank()) {
@@ -330,12 +366,16 @@ public class DatasourceQueryTool {
     }
 
     /**
-     * 语义检索相关表
+     * 语义检索相关表（仅当 datasourceId 在白名单内时允许）
      */
     private String searchSchema(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
         if (datasourceId == null) {
             return error("search_schema 需要 datasourceId 参数");
+        }
+        String denyMsg = checkDatasourceAllowed(datasourceId);
+        if (denyMsg != null) {
+            return error(denyMsg);
         }
         String query = input.getStr("query");
         if (query == null || query.isBlank()) {
@@ -390,5 +430,37 @@ public class DatasourceQueryTool {
 
     private String error(String message) {
         return JSONUtil.toJsonStr(new JSONObject().set("error", message));
+    }
+
+    /**
+     * 读取当前会话的数据源白名单。
+     * <p>
+     * 通过 {@link ChatOriginHolder} 拿到当前 conversationId，再从
+     * {@link DataAgentChatScopeContext} 中取出前端勾选时写入的白名单。
+     * 当返回空集合时表示未配置白名单（不做约束）。
+     */
+    private Set<Long> currentDatasourceWhitelist() {
+        ChatOrigin origin = ChatOriginHolder.get();
+        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
+            return Set.of();
+        }
+        return scopeContext.getAllowedDatasourceIds(origin.conversationId());
+    }
+
+    /**
+     * 校验 datasourceId 是否在白名单内。
+     *
+     * @param datasourceId 工具调用传入的数据源 ID
+     * @return 不在白名单时返回拒绝原因；允许访问时返回 null
+     */
+    private String checkDatasourceAllowed(Long datasourceId) {
+        Set<Long> allowed = currentDatasourceWhitelist();
+        if (allowed.isEmpty()) {
+            return null;
+        }
+        if (datasourceId == null || !allowed.contains(datasourceId)) {
+            return "数据源 " + datasourceId + " 不在用户勾选的白名单内，禁止访问。允许的数据源ID：" + allowed;
+        }
+        return null;
     }
 }

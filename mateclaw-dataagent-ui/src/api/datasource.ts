@@ -34,6 +34,11 @@ export function testConnection(id: string) {
   return api.post(`${BASE_URL}/${id}/test`)
 }
 
+/** 测试数据源连接（不创建记录） */
+export function testConnectionApi(data: Partial<Datasource>) {
+  return api.post<boolean>(`${BASE_URL}/test`, data)
+}
+
 /** 切换数据源启用状态 */
 export function toggle(id: string, enabled: boolean) {
   return api.put(`${BASE_URL}/${id}/toggle`, { enabled })

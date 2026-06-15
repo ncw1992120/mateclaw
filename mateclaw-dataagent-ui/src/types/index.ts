@@ -271,6 +271,8 @@ export interface ChatRequest {
   conversationId: string
   /** 模型名称（可选，覆盖 Agent 默认模型） */
   modelName?: string
+  /** 数据源 ID 白名单（可选，限制 LLM 只能访问指定数据源） */
+  datasourceIds?: number[]
 }
 
 /** 会话摘要 */
@@ -282,6 +284,7 @@ export interface Conversation {
   messageCount: number
   lastMessage: string
   lastActiveTime: string
+  pinned?: number
   createTime: string
   updateTime: string
 }

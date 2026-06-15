@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
@@ -30,22 +31,52 @@ public class AloudataServiceImpl implements AloudataService {
     private final DatasourceMapper datasourceMapper;
     private final AloudataApiClient apiClient;
     private final AloudataConfigHelper configHelper;
+    private final AloudataEndpointService endpointService;
+
+    /** 测试连接使用的 API 端点名 */
+    private static final String TEST_CONNECTION_ENDPOINT = "category_list";
+
+    /** 指标列表端点名 */
+    private static final String METRICS_LIST_ENDPOINT = "metrics_list";
+
+    /** 指标查询端点名 */
+    private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
+
+    /** 指标详情端点名 */
+    private static final String METRIC_DETAIL_ENDPOINT = "metric_detail";
+
+    /** 指标可用维度端点名 */
+    private static final String METRIC_AVAILABLE_DIMENSIONS_ENDPOINT = "metric_available_dimensions";
+
+    /** 维度列表端点名 */
+    private static final String DIMENSIONS_LIST_ENDPOINT = "dimensions_list";
+
+    /** 维度详情端点名 */
+    private static final String DIMENSION_DETAIL_ENDPOINT = "dimension_detail";
+
+    /** 指标列表响应字段 → DTO 属性别名映射（API 字段名与 DTO 属性名不一致时使用） */
+    private static final Map<String, String> METRIC_FIELD_ALIASES = Map.of(
+            "id", "metricId",
+            "metricCategoryId", "metricCategoryId"
+    );
+
+    /** 维度列表响应字段 → DTO 属性别名映射 */
+    private static final Map<String, String> DIMENSION_FIELD_ALIASES = Map.of(
+            "id", "dimensionId"
+    );
 
     /**
      * 测试 Aloudata 连接
      * <p>
-     * 通过调用 metrics_list 接口（pageSize=1）验证连接和认证是否正常
+     * 通过调用 category_list 接口验证连接和认证是否正常，
+     * 相比 metrics_list 返回数据量更小，响应更快
      */
     @Override
     public boolean testConnection(AloudataConfigDTO config) {
         try {
-            Map<String, Object> params = new LinkedHashMap<>();
-            params.put("tenant-id", config.getTenantId());
-            params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-            params.put("auth-value", config.getAuthValue());
-            params.put("pageSize", 1);
+            Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(TEST_CONNECTION_ENDPOINT, config);
 
-            ResponseEntity<Map> response = apiClient.callWithParams("metrics_list", config, params);
+            ResponseEntity<Map> response = apiClient.callWithParams(TEST_CONNECTION_ENDPOINT, config, params);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Boolean success = (Boolean) response.getBody().get("success");
@@ -70,12 +101,9 @@ public class AloudataServiceImpl implements AloudataService {
         AloudataConfigDTO config = configHelper.parseConfig(entity);
 
         try {
-            Map<String, Object> params = new LinkedHashMap<>();
-            params.put("tenant-id", config.getTenantId());
-            params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-            params.put("auth-value", config.getAuthValue());
+            Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(METRICS_LIST_ENDPOINT, config);
 
-            ResponseEntity<Map> response = apiClient.callWithParams("metrics_list", config, params);
+            ResponseEntity<Map> response = apiClient.callWithParams(METRICS_LIST_ENDPOINT, config, params);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Map<String, Object> responseBody = response.getBody();
@@ -87,14 +115,7 @@ public class AloudataServiceImpl implements AloudataService {
                         List<AloudataMetricVO> result = new ArrayList<>();
                         for (Map<String, Object> metric : metricsList) {
                             AloudataMetricVO vo = new AloudataMetricVO();
-                            vo.setMetricId(String.valueOf(metric.get("id")));
-                            vo.setMetricName((String) metric.get("metricName"));
-                            vo.setMetricDisplayName((String) metric.get("metricDisplayName"));
-                            vo.setType((String) metric.get("type"));
-                            vo.setBusinessCaliber((String) metric.get("businessCaliber"));
-                            vo.setOwner((String) metric.get("owner"));
-                            vo.setBusinessOwner((String) metric.get("businessOwner"));
-                            vo.setMetricCategoryId(String.valueOf(metric.get("metricCategoryId")));
+                            endpointService.mapResponseToDto(METRICS_LIST_ENDPOINT, metric, vo, METRIC_FIELD_ALIASES);
                             result.add(vo);
                         }
                         return result;
@@ -120,26 +141,10 @@ public class AloudataServiceImpl implements AloudataService {
         AloudataConfigDTO config = configHelper.parseConfig(entity);
 
         try {
-            Map<String, Object> params = new LinkedHashMap<>();
-            params.put("tenant-id", config.getTenantId());
-            params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-            params.put("auth-value", config.getAuthValue());
-            params.put("metrics", request.getMetrics());
-            params.put("dimensions", request.getDimensions());
-            if (request.getFilters() != null) {
-                params.put("filters", request.getFilters());
-            }
-            if (request.getOrderBy() != null) {
-                params.put("orderBy", request.getOrderBy());
-            }
-            if (request.getLimit() != null) {
-                params.put("limit", request.getLimit());
-            }
-            if (request.getOffset() != null) {
-                params.put("offset", request.getOffset());
-            }
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    METRICS_QUERY_ENDPOINT, config, request);
 
-            ResponseEntity<Map> response = apiClient.callWithParams("metrics_query", config, params);
+            ResponseEntity<Map> response = apiClient.callWithParams(METRICS_QUERY_ENDPOINT, config, params);
 
             AloudataMetricQueryResponse result = new AloudataMetricQueryResponse();
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -196,15 +201,10 @@ public class AloudataServiceImpl implements AloudataService {
             boolean hasNext = true;
 
             while (hasNext) {
-                Map<String, Object> params = new LinkedHashMap<>();
-                params.put("tenant-id", config.getTenantId());
-                params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-                params.put("auth-value", config.getAuthValue());
-                params.put("statusFilters", List.of("PUBLISHED"));
-                params.put("pageNumber", pageNumber);
-                params.put("pageSize", pageSize);
+                Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                        METRICS_LIST_ENDPOINT, config, metricsListInput(pageNumber, pageSize));
 
-                ResponseEntity<Map> response = apiClient.callWithParams("metrics_list", config, params);
+                ResponseEntity<Map> response = apiClient.callWithParams(METRICS_LIST_ENDPOINT, config, params);
                 if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                     break;
                 }
@@ -234,26 +234,14 @@ public class AloudataServiceImpl implements AloudataService {
             List<AloudataMetricSemanticDTO> result = new ArrayList<>();
             for (Map<String, Object> metric : allMetrics) {
                 AloudataMetricSemanticDTO dto = new AloudataMetricSemanticDTO();
-                dto.setMetricId(String.valueOf(metric.get("id")));
-                dto.setMetricName((String) metric.get("metricName"));
-                dto.setMetricDisplayName((String) metric.get("metricDisplayName"));
-                dto.setType((String) metric.get("type"));
-                dto.setBusinessCaliber((String) metric.get("businessCaliber"));
-                dto.setOwner((String) metric.get("owner"));
-                dto.setBusinessOwner((String) metric.get("businessOwner"));
-                dto.setMetricCategoryId(String.valueOf(metric.get("metricCategoryId")));
-                dto.setStatus((String) metric.get("status"));
-                dto.setUnit((String) metric.get("unit"));
+                endpointService.mapResponseToDto(METRICS_LIST_ENDPOINT, metric, dto, METRIC_FIELD_ALIASES);
 
                 // 3. 尝试获取指标详情（含同义词）
                 try {
-                    Map<String, Object> detailParams = new LinkedHashMap<>();
-                    detailParams.put("tenant-id", config.getTenantId());
-                    detailParams.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-                    detailParams.put("auth-value", config.getAuthValue());
-                    detailParams.put("metricName", dto.getMetricName());
+                    Map<String, Object> detailParams = endpointService.buildParamsFromConfigAndInput(
+                            METRIC_DETAIL_ENDPOINT, config, metricDetailInput(dto.getMetricName()));
 
-                    ResponseEntity<Map> detailResponse = apiClient.callWithParams("metric_detail", config, detailParams);
+                    ResponseEntity<Map> detailResponse = apiClient.callWithParams(METRIC_DETAIL_ENDPOINT, config, detailParams);
                     if (detailResponse.getStatusCode().is2xxSuccessful() && detailResponse.getBody() != null) {
                         Map<String, Object> detailBody = detailResponse.getBody();
                         if (Boolean.TRUE.equals(detailBody.get("success")) && detailBody.get("data") != null) {
@@ -279,13 +267,10 @@ public class AloudataServiceImpl implements AloudataService {
 
                 // 4. 获取可用维度
                 try {
-                    Map<String, Object> dimParams = new LinkedHashMap<>();
-                    dimParams.put("tenant-id", config.getTenantId());
-                    dimParams.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-                    dimParams.put("auth-value", config.getAuthValue());
-                    dimParams.put("metricNames", List.of(dto.getMetricName()));
+                    Map<String, Object> dimParams = endpointService.buildParamsFromConfigAndInput(
+                            METRIC_AVAILABLE_DIMENSIONS_ENDPOINT, config, metricNamesInput(dto.getMetricName()));
 
-                    ResponseEntity<Map> dimResponse = apiClient.callWithParams("metric_available_dimensions", config, dimParams);
+                    ResponseEntity<Map> dimResponse = apiClient.callWithParams(METRIC_AVAILABLE_DIMENSIONS_ENDPOINT, config, dimParams);
                     if (dimResponse.getStatusCode().is2xxSuccessful() && dimResponse.getBody() != null) {
                         Map<String, Object> dimBody = dimResponse.getBody();
                         if (Boolean.TRUE.equals(dimBody.get("success")) && dimBody.get("data") != null) {
@@ -339,14 +324,10 @@ public class AloudataServiceImpl implements AloudataService {
             boolean hasNext = true;
 
             while (hasNext) {
-                Map<String, Object> params = new LinkedHashMap<>();
-                params.put("tenant-id", config.getTenantId());
-                params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-                params.put("auth-value", config.getAuthValue());
-                params.put("pageNumber", pageNumber);
-                params.put("pageSize", pageSize);
+                Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                        DIMENSIONS_LIST_ENDPOINT, config, pageInput(pageNumber, pageSize));
 
-                ResponseEntity<Map> response = apiClient.callWithParams("dimensions_list", config, params);
+                ResponseEntity<Map> response = apiClient.callWithParams(DIMENSIONS_LIST_ENDPOINT, config, params);
                 if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                     break;
                 }
@@ -375,21 +356,14 @@ public class AloudataServiceImpl implements AloudataService {
             List<AloudataDimensionSemanticDTO> result = new ArrayList<>();
             for (Map<String, Object> dim : allDimensions) {
                 AloudataDimensionSemanticDTO dto = new AloudataDimensionSemanticDTO();
-                dto.setDimensionId(String.valueOf(dim.get("id")));
-                dto.setDimName((String) dim.get("dimName"));
-                dto.setDimDisplayName((String) dim.get("dimDisplayName"));
-                dto.setOriginDataType((String) dim.get("originDataType"));
-                dto.setDimDescription((String) dim.get("dimDescription"));
+                endpointService.mapResponseToDto(DIMENSIONS_LIST_ENDPOINT, dim, dto, DIMENSION_FIELD_ALIASES);
 
                 // 3. 尝试获取维度详情（含同义词）
                 try {
-                    Map<String, Object> detailParams = new LinkedHashMap<>();
-                    detailParams.put("tenant-id", config.getTenantId());
-                    detailParams.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
-                    detailParams.put("auth-value", config.getAuthValue());
-                    detailParams.put("dimName", dto.getDimName());
+                    Map<String, Object> detailParams = endpointService.buildParamsFromConfigAndInput(
+                            DIMENSION_DETAIL_ENDPOINT, config, dimensionDetailInput(dto.getDimName()));
 
-                    ResponseEntity<Map> detailResponse = apiClient.callWithParams("dimension_detail", config, detailParams);
+                    ResponseEntity<Map> detailResponse = apiClient.callWithParams(DIMENSION_DETAIL_ENDPOINT, config, detailParams);
                     if (detailResponse.getStatusCode().is2xxSuccessful() && detailResponse.getBody() != null) {
                         Map<String, Object> detailBody = detailResponse.getBody();
                         if (Boolean.TRUE.equals(detailBody.get("success")) && detailBody.get("data") != null) {
@@ -425,5 +399,57 @@ public class AloudataServiceImpl implements AloudataService {
             log.error("查询 Aloudata 维度语义信息失败: {}", e.getMessage());
             throw new RuntimeException("查询维度语义信息失败: " + e.getMessage(), e);
         }
+    }
+
+    private Object metricsListInput(Integer pageNumber, Integer pageSize) {
+        return new Object() {
+            public List<String> statusFilters() {
+                return List.of("PUBLISHED");
+            }
+
+            public Integer pageNumber() {
+                return pageNumber;
+            }
+
+            public Integer pageSize() {
+                return pageSize;
+            }
+        };
+    }
+
+    private Object pageInput(Integer pageNumber, Integer pageSize) {
+        return new Object() {
+            public Integer pageNumber() {
+                return pageNumber;
+            }
+
+            public Integer pageSize() {
+                return pageSize;
+            }
+        };
+    }
+
+    private Object metricDetailInput(String metricName) {
+        return new Object() {
+            public String metricName() {
+                return metricName;
+            }
+        };
+    }
+
+    private Object metricNamesInput(String metricName) {
+        return new Object() {
+            public List<String> metricNames() {
+                return List.of(metricName);
+            }
+        };
+    }
+
+    private Object dimensionDetailInput(String dimName) {
+        return new Object() {
+            public String dimName() {
+                return dimName;
+            }
+        };
     }
 }

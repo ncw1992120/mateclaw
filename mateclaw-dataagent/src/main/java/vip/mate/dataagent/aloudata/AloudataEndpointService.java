@@ -5,6 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 
+import vip.mate.dataagent.dto.AloudataConfigDTO;
+
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,6 +110,25 @@ public class AloudataEndpointService {
      */
     private Map<String, ApiEndpoint> getDefaultEndpoints() {
         Map<String, ApiEndpoint> defaults = new LinkedHashMap<>();
+
+        // ==================== 类目管理 ====================
+        defaults.put("category_list", new ApiEndpoint("anymetrics",
+                "/anymetrics/api/v1/category/list", "GET", "查询指标类目列表",
+                mergeParams(commonHeaderParams(), List.of(
+                        new ApiParam("type", "String", false, null, "类目类型：METRIC/DIMENSION", "QUERY")
+                )),
+                List.of(
+                        new ApiParam("code", "String", true, null, "接口响应码", null),
+                        new ApiParam("success", "Boolean", true, null, "请求是否成功", null),
+                        new ApiParam("errorMsg", "String", true, null, "报错信息", null),
+                        new ApiParam("traceId", "String", true, null, "追踪ID", null),
+                        new ApiParam("data", "Array[Object]", true, null, "类目列表", null),
+                        new ApiParam("data[].id", "String", true, null, "类目ID", null),
+                        new ApiParam("data[].name", "String", true, null, "类目名称", null),
+                        new ApiParam("data[].parentId", "String", false, null, "父类目ID", null),
+                        new ApiParam("data[].type", "String", true, null, "类目类型：METRIC/DIMENSION", null)
+                )
+        ));
 
         // ==================== 指标管理 ====================
         defaults.put("metrics_list", new ApiEndpoint("anymetrics",
@@ -391,5 +413,250 @@ public class AloudataEndpointService {
         List<ApiParam> merged = new ArrayList<>(headerParams);
         merged.addAll(specificParams);
         return merged;
+    }
+
+    /**
+     * 从配置中构建指定端点的 HEADER 参数 Map
+     * <p>
+     * 根据端点定义的 HEADER 类型 requestParams，从 AloudataConfigDTO 中提取对应的值。
+     * 支持动态扩展：当端点配置新增 HEADER 参数时，只需在 resolveConfigValue 中添加对应的取值逻辑。
+     * 端点未定义时降级为基础认证参数。
+     *
+     * @param endpointName 端点名称
+     * @param config       连接配置
+     * @return HEADER 参数 Map
+     */
+    public Map<String, Object> buildHeaderParamsFromConfig(String endpointName, AloudataConfigDTO config) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        ApiEndpoint endpoint = getEndpoint(endpointName);
+        if (endpoint == null || endpoint.getRequestParams() == null) {
+            // 降级：端点未定义时使用基础认证参数
+            params.put("tenant-id", config.getTenantId());
+            params.put("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
+            params.put("auth-value", config.getAuthValue());
+            return params;
+        }
+        for (ApiParam paramDef : endpoint.getRequestParams()) {
+            if (!"HEADER".equalsIgnoreCase(paramDef.getParamLocation())) {
+                continue;
+            }
+            Object value = resolveConfigValue(paramDef.getName(), config);
+            if (value != null) {
+                params.put(paramDef.getName(), value);
+            }
+        }
+        return params;
+    }
+
+    /**
+     * 根据端点参数定义合并 HEADER 参数和业务输入参数
+     * <p>
+     * 业务输入只会合并端点 requestParams 中声明的非 HEADER 参数，避免调用方硬编码 API 参数清单。
+     *
+     * @param endpointName 端点名称
+     * @param config       连接配置
+     * @param inputParams  业务输入参数
+     * @return API 调用参数 Map
+     */
+    public Map<String, Object> buildParamsFromConfigAndInput(String endpointName, AloudataConfigDTO config,
+                                                              Map<String, Object> inputParams) {
+        Map<String, Object> params = buildHeaderParamsFromConfig(endpointName, config);
+        ApiEndpoint endpoint = getEndpoint(endpointName);
+        if (endpoint == null || endpoint.getRequestParams() == null || inputParams == null || inputParams.isEmpty()) {
+            return params;
+        }
+        for (ApiParam paramDef : endpoint.getRequestParams()) {
+            if ("HEADER".equalsIgnoreCase(paramDef.getParamLocation())) {
+                continue;
+            }
+            Object value = inputParams.get(paramDef.getName());
+            if (value != null) {
+                params.put(paramDef.getName(), value);
+            }
+        }
+        return params;
+    }
+
+    /**
+     * 根据端点参数定义从输入对象中动态读取业务参数
+     *
+     * @param endpointName 端点名称
+     * @param config       连接配置
+     * @param input        输入对象
+     * @return API 调用参数 Map
+     */
+    public Map<String, Object> buildParamsFromConfigAndInput(String endpointName, AloudataConfigDTO config,
+                                                              Object input) {
+        Map<String, Object> params = buildHeaderParamsFromConfig(endpointName, config);
+        ApiEndpoint endpoint = getEndpoint(endpointName);
+        if (endpoint == null || endpoint.getRequestParams() == null || input == null) {
+            return params;
+        }
+        for (ApiParam paramDef : endpoint.getRequestParams()) {
+            if ("HEADER".equalsIgnoreCase(paramDef.getParamLocation())) {
+                continue;
+            }
+            Object value = readProperty(input, paramDef.getName());
+            if (value != null) {
+                params.put(paramDef.getName(), value);
+            }
+        }
+        return params;
+    }
+
+    /**
+     * 按端点 responseParams 定义，将响应 Map 中的字段动态映射到 DTO 对象
+     * <p>
+     * 仅处理 {@code data[]} 层级的字段（形如 {@code data[].fieldName}），
+     * 自动跳过响应级通用字段（success/code/errorMsg/traceId）。
+     * 字段名到 DTO setter 的映射规则：
+     * <ol>
+     *   <li>先查 fieldAliasMap（处理不一致映射，如 id → metricId）</li>
+     *   <li>再尝试同名 setter（如 metricName → setMetricName）</li>
+     * </ol>
+     *
+     * @param endpointName 端点名称
+     * @param source       响应中的单条数据 Map
+     * @param target       目标 DTO 对象
+     * @param fieldAliasMap 字段别名映射（key=API 字段名, value=DTO 属性名），可为 null
+     */
+    public void mapResponseToDto(String endpointName, Map<String, Object> source,
+                                  Object target, Map<String, String> fieldAliasMap) {
+        ApiEndpoint endpoint = getEndpoint(endpointName);
+        if (endpoint == null || endpoint.getResponseParams() == null || source == null || target == null) {
+            return;
+        }
+        for (ApiParam paramDef : endpoint.getResponseParams()) {
+            String name = paramDef.getName();
+            // 只处理 data[] 层级的字段
+            if (!name.startsWith("data[].")) {
+                continue;
+            }
+            String apiFieldName = name.substring("data[].".length());
+            Object value = source.get(apiFieldName);
+            if (value == null) {
+                continue;
+            }
+            // 优先使用别名映射，其次使用 API 字段名本身
+            String dtoPropertyName = (fieldAliasMap != null && fieldAliasMap.containsKey(apiFieldName))
+                    ? fieldAliasMap.get(apiFieldName) : apiFieldName;
+            writeProperty(target, dtoPropertyName, value);
+        }
+    }
+
+    /**
+     * 按端点 responseParams 定义，将响应 Map 中的字段动态映射到 DTO 对象
+     * <p>
+     * 无别名映射，直接按 API 字段名匹配 DTO 属性
+     */
+    public void mapResponseToDto(String endpointName, Map<String, Object> source, Object target) {
+        mapResponseToDto(endpointName, source, target, null);
+    }
+
+    /**
+     * 根据 HEADER 参数名从配置中解析对应的值
+     */
+    private Object resolveConfigValue(String paramName, AloudataConfigDTO config) {
+        return switch (paramName) {
+            case "tenant-id" -> config.getTenantId();
+            case "auth-type" -> config.getAuthType() != null ? config.getAuthType() : "UID";
+            case "auth-value" -> config.getAuthValue();
+            default -> null;
+        };
+    }
+
+    /**
+     * 按参数名读取对象属性
+     */
+    private Object readProperty(Object input, String paramName) {
+        String propertyName = paramName.replace("-", "_");
+        Object getterValue = invokeNoArgMethod(input, "get" + toUpperCamel(propertyName));
+        if (getterValue != null) {
+            return getterValue;
+        }
+        return invokeNoArgMethod(input, propertyName);
+    }
+
+    /**
+     * 按属性名写入对象属性
+     */
+    private void writeProperty(Object target, String propertyName, Object value) {
+        String setterName = "set" + toUpperCamel(propertyName);
+        try {
+            Method[] methods = target.getClass().getDeclaredMethods();
+            for (Method m : methods) {
+                if (m.getName().equals(setterName) && m.getParameterCount() == 1) {
+                    Class<?> paramType = m.getParameterTypes()[0];
+                    Object converted = convertValue(value, paramType);
+                    if (converted != null) {
+                        m.setAccessible(true);
+                        m.invoke(target, converted);
+                    }
+                    return;
+                }
+            }
+        } catch (ReflectiveOperationException e) {
+            log.debug("写入属性 [{}.{}] 失败: {}", target.getClass().getSimpleName(), propertyName, e.getMessage());
+        }
+    }
+
+    /**
+     * 将值转换为目标类型
+     */
+    private Object convertValue(Object value, Class<?> targetType) {
+        if (value == null) {
+            return null;
+        }
+        if (targetType.isAssignableFrom(value.getClass())) {
+            return value;
+        }
+        if (targetType == String.class) {
+            return String.valueOf(value);
+        }
+        if (targetType == Long.class || targetType == long.class) {
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+        }
+        if (targetType == Integer.class || targetType == int.class) {
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 调用无参方法
+     */
+    private Object invokeNoArgMethod(Object input, String methodName) {
+        try {
+            Method method = input.getClass().getDeclaredMethod(methodName);
+            method.setAccessible(true);
+            return method.invoke(input);
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 转换为 UpperCamel 命名
+     */
+    private String toUpperCamel(String value) {
+        StringBuilder result = new StringBuilder();
+        boolean upperNext = true;
+        for (char ch : value.toCharArray()) {
+            if (ch == '_' || ch == '-') {
+                upperNext = true;
+                continue;
+            }
+            if (upperNext) {
+                result.append(Character.toUpperCase(ch));
+                upperNext = false;
+            } else {
+                result.append(ch);
+            }
+        }
+        return result.toString();
     }
 }

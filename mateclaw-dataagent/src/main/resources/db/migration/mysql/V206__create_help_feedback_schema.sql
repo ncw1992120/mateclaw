@@ -1,5 +1,5 @@
 -- ============================================================
--- DataAgent 帮助中心功能：文档反馈表 + 文档标签关联表
+-- DataAgent 帮助中心功能：文档反馈表
 -- ============================================================
 
 -- 1. 帮助文档反馈表
@@ -15,8 +15,3 @@ CREATE TABLE IF NOT EXISTS `dataagent_help_feedback` (
     PRIMARY KEY (`id`),
     KEY `idx_help_feedback_document` (`document_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帮助文档反馈表';
-
--- 2. 为文档表添加标签字段和摘要字段
-ALTER TABLE `dataagent_help_document` ADD COLUMN `tags` VARCHAR(500) DEFAULT NULL COMMENT '标签（逗号分隔）' AFTER `author`;
-ALTER TABLE `dataagent_help_document` ADD COLUMN `summary` VARCHAR(500) DEFAULT NULL COMMENT '文档摘要' AFTER `content`;
-ALTER TABLE `dataagent_help_document` ADD FULLTEXT KEY `ft_help_doc_search` (`title`, `content`);

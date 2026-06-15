@@ -51,6 +51,8 @@ export const useChatStore = defineStore('chat', () => {
   const conversationId = ref<string>(initialReconnect?.conversationId || '')
 
   const isStreaming = ref(false)
+  /** 用户在前端勾选的数据源 ID 白名单（string 对齐 Datasource.id 类型）；空数组表示不限制（由 LLM 自主选择） */
+  const selectedDatasourceIds = ref<string[]>([])
   /**
    * 正在生成响应的会话 id 集合。
    * <p>
@@ -160,6 +162,19 @@ export const useChatStore = defineStore('chat', () => {
     const target = conversations.value.find(c => c.conversationId === convId)
     if (target) {
       target.title = newTitle
+    }
+  }
+
+  /**
+   * 设置会话置顶状态。
+   * @param convId 目标会话 id
+   * @param pinned 是否置顶
+   */
+  async function setConversationPinned(convId: string, pinned: boolean): Promise<void> {
+    await conversationApi.setPinned(convId, pinned)
+    const target = conversations.value.find(c => c.conversationId === convId)
+    if (target) {
+      target.pinned = pinned ? 1 : 0
     }
   }
 
@@ -292,7 +307,7 @@ export const useChatStore = defineStore('chat', () => {
       // 因此仅靠流关闭触发的 finally 无法及时把 UI 切回非生成态。
       // 这里识别 done 后显式置位并打断 for-await，UI 才能立刻从"正在生成"切回正常。
       let streamFinished = false
-      for await (const sse of streamChat(agentId, message, conversationId.value, modelName, streamOptions)) {
+      for await (const sse of streamChat(agentId, message, conversationId.value, modelName, streamOptions, selectedDatasourceIds.value)) {
         if (!isStreaming.value) break
         handleSseEvent(sse, flushBuf, () => { streamFinished = true })
         if (streamFinished) break
@@ -516,11 +531,42 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 重新生成指定 AI 消息：删除该消息及其之后的所有消息，重新发送对应的用户问题
+   * @param msgIndex AI 消息在 messages 数组中的索引
+   */
+  async function regenerateMessage(msgIndex: number): Promise<void> {
+    if (isStreaming.value) return
+    const msg = messages.value[msgIndex]
+    if (!msg || msg.role !== 'assistant') return
+
+    // 找到该 AI 消息之前的最近一条用户消息
+    let userMsgIndex = -1
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages.value[i].role === 'user') {
+        userMsgIndex = i
+        break
+      }
+    }
+    if (userMsgIndex === -1) return
+
+    const userContent = messages.value[userMsgIndex].content
+
+    // 删除从该 AI 消息起的所有后续消息（含自身）
+    messages.value.splice(msgIndex)
+
+    // 重新发送用户消息
+    const agentId = currentAgentId.value
+    if (!agentId) return
+    await sendMessage(agentId, userContent)
+  }
+
   return {
     messages,
     currentAgentId,
     conversationId,
     isStreaming,
+    selectedDatasourceIds,
     streamingConversations,
     conversations,
     conversationsLoading,
@@ -530,6 +576,7 @@ export const useChatStore = defineStore('chat', () => {
     clearMessages,
     generateConversationId,
     sendMessage,
+    regenerateMessage,
     stopChat,
     reconnect,
     tryResumeStream,
@@ -537,6 +584,7 @@ export const useChatStore = defineStore('chat', () => {
     switchConversation,
     deleteConversation,
     renameConversation,
+    setConversationPinned,
     isConversationStreaming: (convId: string): boolean => streamingConversations.value.has(convId),
   }
 })

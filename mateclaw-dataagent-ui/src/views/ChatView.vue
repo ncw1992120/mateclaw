@@ -5,7 +5,7 @@
       <!-- Empty State -->
       <div v-if="chatStore.messages.length === 0" class="empty-state">
         <div class="empty-avatar">
-          <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=friendly%20AI%20assistant%20avatar%2C%20cute%20robot%20face%2C%20soft%20blue%20gradient%2C%20minimalist%20style%2C%20clean%20background&image_size=square" alt="AI" class="avatar-img" />
+          <span class="avatar-bot">🤖</span>
         </div>
         <p class="empty-greeting">{{ greetingText }}</p>
         <!-- 智能问数快捷菜单 -->
@@ -26,66 +26,105 @@
       <template v-for="(msg, index) in chatStore.messages" :key="index">
         <!-- User Message -->
         <div v-if="msg.role === 'user'" class="msg user">
-          <div class="bubble user-bubble">{{ msg.content }}</div>
+          <div class="user-content-wrapper">
+            <div class="bubble user-bubble">{{ msg.content }}</div>
+            <!-- 用户消息操作栏（气泡外左下角） -->
+            <div class="msg-actions msg-actions--user">
+              <button
+                class="action-btn"
+                :class="{ copied: copyState[index] === 'copied' }"
+                type="button"
+                :title="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                @click="handleCopy(index, msg.content)"
+              >
+                <el-icon v-if="copyState[index] !== 'copied'"><CopyDocument /></el-icon>
+                <el-icon v-else><Select /></el-icon>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- AI Message -->
         <div v-else class="msg ai">
           <div class="avatar">AI</div>
-          <div class="bubble ai-bubble">
-            <!-- Token & model info (右上角) -->
-            <div v-if="getTokenInfo(msg)" class="meta-header">
-              <span class="meta-token">{{ getTokenInfo(msg) }}</span>
-            </div>
-
-            <!-- Tool calls (seg-tool 卡片，参考 mateclaw-ui ToolCallSegment 样式) -->
-            <template v-for="(tc, tcIdx) in getToolCalls(msg)" :key="`tool-${tcIdx}`">
-              <div
-                class="seg-tool"
-                :class="{
-                  'is-running': tc.status === 'running',
-                  'is-success': tc.status === 'completed' && tc.success !== false,
-                  'is-error': tc.status === 'error' || tc.success === false,
-                }"
-              >
-                <div class="seg-tool__header" @click="toggleToolExpand(tcIdx)">
-                  <span class="seg-tool__status">
-                    <span v-if="tc.status === 'running'" class="spin-icon">⟳</span>
-                    <span v-else-if="tc.status === 'completed' && tc.success !== false">✓</span>
-                    <span v-else>✕</span>
-                  </span>
-                  <span class="seg-tool__type-icon">⚙</span>
-                  <span class="seg-tool__name">{{ tc.name || tc.toolName }}</span>
-                  <span v-if="truncateArgs(tc.arguments as string)" class="seg-tool__args">{{ truncateArgs(tc.arguments as string) }}</span>
-                  <span
-                    v-if="tc.result != null"
-                    class="seg-tool__arrow"
-                    :class="{ 'is-open': expandedTools.has(tcIdx) }"
-                  >▾</span>
-                </div>
-                <Transition name="seg-slide">
-                  <div v-if="expandedTools.has(tcIdx) && tc.result != null" class="seg-tool__body">
-                    <pre>{{ formatResultPreview(tc.result as string) }}</pre>
-                  </div>
-                </Transition>
+          <div class="ai-content-wrapper">
+            <div class="bubble ai-bubble">
+              <!-- Token & model info (右上角) -->
+              <div v-if="getTokenInfo(msg)" class="meta-header">
+                <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
-            </template>
 
-            <!-- Thinking (collapsible) -->
-            <el-collapse v-if="msg.thinking" class="thinking-collapse">
-              <el-collapse-item :title="t('chat.thinking')">
-                <div class="thinking-content">{{ msg.thinking }}</div>
-              </el-collapse-item>
-            </el-collapse>
+              <!-- Tool calls (seg-tool 卡片，参考 mateclaw-ui ToolCallSegment 样式) -->
+              <template v-for="(tc, tcIdx) in getToolCalls(msg)" :key="`tool-${tcIdx}`">
+                <div
+                  class="seg-tool"
+                  :class="{
+                    'is-running': tc.status === 'running',
+                    'is-success': tc.status === 'completed' && tc.success !== false,
+                    'is-error': tc.status === 'error' || tc.success === false,
+                  }"
+                >
+                  <div class="seg-tool__header" @click="toggleToolExpand(tcIdx)">
+                    <span class="seg-tool__status">
+                      <span v-if="tc.status === 'running'" class="spin-icon">⟳</span>
+                      <span v-else-if="tc.status === 'completed' && tc.success !== false">✓</span>
+                      <span v-else>✕</span>
+                    </span>
+                    <span class="seg-tool__type-icon">⚙</span>
+                    <span class="seg-tool__name">{{ tc.name || tc.toolName }}</span>
+                    <span v-if="truncateArgs(tc.arguments as string)" class="seg-tool__args">{{ truncateArgs(tc.arguments as string) }}</span>
+                    <span
+                      v-if="tc.result != null"
+                      class="seg-tool__arrow"
+                      :class="{ 'is-open': expandedTools.has(tcIdx) }"
+                    >▾</span>
+                  </div>
+                  <Transition name="seg-slide">
+                    <div v-if="expandedTools.has(tcIdx) && tc.result != null" class="seg-tool__body">
+                      <pre>{{ formatResultPreview(tc.result as string) }}</pre>
+                    </div>
+                  </Transition>
+                </div>
+              </template>
 
-            <!-- Text content -->
-            <div v-if="msg.content" class="msg-text" v-html="renderMarkdown(msg.content)" />
+              <!-- Thinking (collapsible) -->
+              <el-collapse v-if="msg.thinking" class="thinking-collapse">
+                <el-collapse-item :title="t('chat.thinking')">
+                  <div class="thinking-content">{{ msg.thinking }}</div>
+                </el-collapse-item>
+              </el-collapse>
 
-            <!-- Streaming cursor -->
-            <span
-              v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content"
-              class="streaming-cursor"
-            />
+              <!-- Text content -->
+              <div v-if="msg.content" class="msg-text" v-html="renderMarkdown(msg.content)" />
+
+              <!-- Streaming cursor -->
+              <span
+                v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content"
+                class="streaming-cursor"
+              />
+            </div>
+            <!-- AI 消息操作栏（气泡外右下角） -->
+            <div class="msg-actions msg-actions--ai">
+              <button
+                class="action-btn"
+                :class="{ copied: copyState[index] === 'copied' }"
+                type="button"
+                :title="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                @click="handleCopy(index, msg.content)"
+              >
+                <el-icon v-if="copyState[index] !== 'copied'"><CopyDocument /></el-icon>
+                <el-icon v-else><Select /></el-icon>
+              </button>
+              <button
+                v-if="!chatStore.isStreaming"
+                class="action-btn"
+                type="button"
+                :title="t('chat.regenerate')"
+                @click="handleRegenerate(index)"
+              >
+                <el-icon><RefreshRight /></el-icon>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -215,6 +254,45 @@
       </div>
     </div>
 
+    <!-- Datasource Selector Toolbar -->
+    <div v-if="enabledDatasources.length > 0" class="ds-toolbar">
+      <el-popover :width="260" trigger="click" placement="top-start" :persistent="false">
+        <template #reference>
+          <button class="ds-trigger" :class="{ active: chatStore.selectedDatasourceIds.length > 0 }">
+            <span class="ds-trigger-icon">⚙</span>
+            <span class="ds-trigger-text">{{ dsTriggerLabel }}</span>
+            <span class="ds-trigger-arrow">▾</span>
+          </button>
+        </template>
+        <div class="ds-popover">
+          <div class="ds-popover-header">
+            <span>{{ t('chat.datasourceScope') }}</span>
+            <span
+              v-if="chatStore.selectedDatasourceIds.length > 0"
+              class="ds-popover-clear"
+              @click="chatStore.selectedDatasourceIds = []"
+            >{{ t('chat.clearDatasourceScope') }}</span>
+          </div>
+          <div class="ds-popover-list">
+            <label
+              v-for="ds in enabledDatasources"
+              :key="ds.id"
+              class="ds-popover-item"
+              :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
+            >
+              <input
+                type="checkbox"
+                :checked="chatStore.selectedDatasourceIds.includes(ds.id)"
+                @change="toggleDatasource(ds.id)"
+              />
+              <span class="ds-item-name">{{ ds.name }}</span>
+              <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
+            </label>
+          </div>
+        </div>
+      </el-popover>
+    </div>
+
     <!-- Input Bar -->
     <div class="input-bar">
       <textarea
@@ -240,7 +318,10 @@ import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData } from '@/types'
+import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
+import { copyToClipboard } from '@/utils/clipboard'
+import * as datasourceApi from '@/api/datasource'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, Datasource } from '@/types'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -258,6 +339,37 @@ const smartAskMenuItems = [
   { key: 'compare', label: 'smartAskMenu.compare', icon: '📈' },
   { key: 'forecast', label: 'smartAskMenu.forecast', icon: '🔮' },
 ]
+
+/** 已启用的数据源列表（用于输入框上方数据源选择器） */
+const enabledDatasources = ref<Datasource[]>([])
+
+/** 加载数据源列表 */
+async function loadDatasources(): Promise<void> {
+  try {
+    const list = await datasourceApi.list() as unknown as Datasource[]
+    enabledDatasources.value = list.filter(ds => ds.enabled)
+  } catch {
+    enabledDatasources.value = []
+  }
+}
+
+/** 切换数据源选中状态 */
+function toggleDatasource(dsId: string): void {
+  const ids = chatStore.selectedDatasourceIds
+  const idx = ids.indexOf(dsId)
+  if (idx >= 0) {
+    ids.splice(idx, 1)
+  } else {
+    ids.push(dsId)
+  }
+}
+
+/** 数据源触发按钮文案 */
+const dsTriggerLabel = computed(() => {
+  const count = chatStore.selectedDatasourceIds.length
+  if (count === 0) return t('chat.datasourceScope')
+  return `${t('chat.datasourceScope')} (${count})`
+})
 
 /** 根据时间段生成问候语 */
 const greetingText = computed(() => {
@@ -305,6 +417,25 @@ const clarifyConfirmed = reactive<Record<string, boolean>>({})
 
 /** 反馈状态 */
 const feedbackState = reactive<Record<string, string>>({})
+
+/** 复制状态：按消息索引记录 */
+const copyState = reactive<Record<number, 'idle' | 'copied'>>({})
+
+/** 复制消息内容到剪贴板 */
+function handleCopy(msgIndex: number, content: string): void {
+  if (!content) return
+  copyToClipboard(content).then(() => {
+    copyState[msgIndex] = 'copied'
+    setTimeout(() => {
+      copyState[msgIndex] = 'idle'
+    }, 2000)
+  }).catch(() => {})
+}
+
+/** 重新生成 AI 消息 */
+function handleRegenerate(msgIndex: number): void {
+  chatStore.regenerateMessage(msgIndex)
+}
 
 /** 工具调用展开状态（按消息索引+工具索引） */
 const expandedTools = reactive<Set<number>>(new Set())
@@ -1313,6 +1444,8 @@ watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, () => {
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  // 加载数据源列表（用于输入框上方数据源选择器）
+  loadDatasources()
   // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载
   if (chatStore.conversationId && !chatStore.isStreaming) {
     chatStore.switchConversation(chatStore.conversationId, true).finally(() => {
@@ -1376,16 +1509,18 @@ onUnmounted(() => {
 .empty-avatar {
   width: 64px;
   height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
-  overflow: hidden;
   margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.15);
+  background: linear-gradient(135deg, #fff7f2 0%, #f5f6f8 100%);
+  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.12);
 }
 
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.avatar-bot {
+  font-size: 30px;
+  line-height: 1;
 }
 
 .empty-greeting {
@@ -1454,6 +1589,17 @@ onUnmounted(() => {
 
 .msg.ai {
   align-self: flex-start;
+}
+
+.ai-content-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .avatar {
@@ -2164,6 +2310,196 @@ onUnmounted(() => {
 .feedback span.active {
   background: var(--very-light-orange);
   color: var(--dark-orange);
+}
+
+/* 消息操作栏（位于气泡外部） */
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.msg:hover .msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.msg-actions--ai {
+  justify-content: flex-start;
+}
+
+.msg-actions--user {
+  justify-content: flex-start;
+  padding-right: 4px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--muted, #94a3b8);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  background: var(--lighter-grey, rgba(0, 0, 0, 0.05));
+  color: var(--mid-grey, #64748b);
+}
+
+.action-btn.copied {
+  color: #10b981;
+}
+
+/* Datasource Selector Toolbar */
+.ds-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 4px 16px;
+  border-top: 1px solid var(--light-grey);
+  background: var(--white);
+  flex-shrink: 0;
+}
+
+.ds-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--light-grey);
+  background: var(--white);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+  line-height: 1.6;
+}
+
+.ds-trigger:hover {
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+  background: var(--very-light-orange);
+}
+
+.ds-trigger.active {
+  border-color: var(--main-orange);
+  color: var(--dark-orange);
+  background: var(--light-orange);
+  font-weight: 600;
+}
+
+.ds-trigger-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ds-trigger-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-trigger-arrow {
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.6;
+}
+
+/* Popover */
+.ds-popover {
+  padding: 0;
+}
+
+.ds-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--body-text);
+  border-bottom: 1px solid var(--light-grey, #eee);
+}
+
+.ds-popover-clear {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.ds-popover-clear:hover {
+  color: var(--main-orange);
+}
+
+.ds-popover-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.ds-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 0 4px;
+  transition: background 0.12s;
+  font-size: 12px;
+  color: var(--body-text);
+}
+
+.ds-popover-item:hover {
+  background: var(--very-light-orange);
+}
+
+.ds-popover-item.checked {
+  background: var(--light-orange);
+  color: var(--dark-orange);
+}
+
+.ds-popover-item input[type="checkbox"] {
+  accent-color: var(--main-orange);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ds-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-item-type {
+  font-size: 9px;
+  color: var(--muted);
+  background: var(--near-white);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.ds-popover-item.checked .ds-item-type {
+  color: var(--dark-orange);
+  background: rgba(240, 90, 35, 0.08);
 }
 
 /* Input Bar */

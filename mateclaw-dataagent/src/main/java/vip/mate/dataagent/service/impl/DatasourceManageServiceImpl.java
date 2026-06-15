@@ -174,6 +174,16 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     }
 
     /**
+     * 使用连接参数测试数据源连通性（不持久化数据源记录）
+     */
+    @Override
+    public boolean testConnectionByParams(DatasourceCreateRequest request) {
+        DatasourceEntity entity = new DatasourceEntity();
+        BeanUtils.copyProperties(request, entity);
+        return doTestConnection(entity);
+    }
+
+    /**
      * 切换数据源启停状态
      */
     @Override

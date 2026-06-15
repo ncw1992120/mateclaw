@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.dto.ModelActiveRequest;
+import vip.mate.dataagent.service.DataAgentModelService;
 import vip.mate.llm.model.*;
 import vip.mate.sdk.service.MateClawRuntime;
 
@@ -25,6 +26,7 @@ import java.util.Map;
 public class DataAgentModelController {
 
     private final MateClawRuntime runtime;
+    private final DataAgentModelService modelService;
 
     /**
      * 获取 Provider 列表（仅 enabled）
@@ -130,16 +132,21 @@ public class DataAgentModelController {
     }
 
     /**
+     * 获取所有模型（含启用和禁用）
+     */
+    @GetMapping("/all")
+    @Operation(summary = "全部模型", description = "获取所有模型配置，包含启用和禁用状态")
+    public R<List<ModelConfigEntity>> listAllModels() {
+        return R.ok(runtime.listAllModels());
+    }
+
+    /**
      * 获取默认模型
      */
     @GetMapping("/default")
     @Operation(summary = "默认模型", description = "获取当前默认模型配置")
     public R<ModelConfigEntity> getDefaultModel() {
-        try {
-            return R.ok(runtime.getDefaultModel());
-        } catch (Exception e) {
-            return R.ok(null);
-        }
+        return R.ok(modelService.getDefaultModelSafe());
     }
 
     /**
@@ -148,11 +155,7 @@ public class DataAgentModelController {
     @GetMapping("/active")
     @Operation(summary = "激活模型", description = "获取当前激活的模型信息")
     public R<ActiveModelsInfo> getActiveModel() {
-        try {
-            return R.ok(runtime.getActiveModel());
-        } catch (Exception e) {
-            return R.ok(null);
-        }
+        return R.ok(modelService.getActiveModelSafe());
     }
 
     /**
@@ -161,11 +164,7 @@ public class DataAgentModelController {
     @PutMapping("/active")
     @Operation(summary = "设置激活模型", description = "通过模型 ID 设置当前激活模型")
     public R<ActiveModelsInfo> setActiveModel(@RequestBody ModelActiveRequest request) {
-        ModelConfigEntity model = runtime.getModel(request.getModelId());
-        ModelSlotRequest slotRequest = new ModelSlotRequest();
-        slotRequest.setProviderId(model.getProvider());
-        slotRequest.setModel(model.getModelName());
-        return R.ok(runtime.setActiveModel(slotRequest));
+        return R.ok(modelService.setActiveModel(request.getModelId()));
     }
 
     /**

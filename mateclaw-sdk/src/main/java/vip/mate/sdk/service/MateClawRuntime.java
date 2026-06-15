@@ -132,6 +132,17 @@ public interface MateClawRuntime {
     void registerTool(ToolCallback tool);
 
     /**
+     * 按 Spring Bean 名称禁用内置 @Tool Bean。
+     * <p>
+     * 用于宿主应用屏蔽 mateclaw-server 中默认启用的内置工具，避免与宿主自定义工具发生同名冲突。
+     * 调用后会向 mate_tool 表写入或更新一条 enabled=false 的记录，ToolRegistry 在下一次构建
+     * AgentToolSet 时会跳过该 Bean。
+     *
+     * @param beanName Spring Bean 名称（即 @Component 默认或显式指定的名称）
+     */
+    void disableBuiltinToolByBeanName(String beanName);
+
+    /**
      * 按工作区列出 Agent
      *
      * @param workspaceId 工作区 ID
@@ -265,6 +276,13 @@ public interface MateClawRuntime {
      * @return 所有已启用的模型配置实体列表
      */
     List<ModelConfigEntity> listAllEnabledModels();
+
+    /**
+     * 获取所有模型（含启用和禁用）
+     *
+     * @return 所有模型配置实体列表
+     */
+    List<ModelConfigEntity> listAllModels();
 
     /**
      * 获取默认模型

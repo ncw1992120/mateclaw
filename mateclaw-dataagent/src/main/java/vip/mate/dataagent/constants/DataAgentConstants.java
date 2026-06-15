@@ -5,6 +5,9 @@ package vip.mate.dataagent.constants;
  */
 public final class DataAgentConstants {
 
+    private DataAgentConstants() {
+    }
+
     /** 默认工作区 ID */
     public static final Long DEFAULT_WORKSPACE_ID = 1L;
 
@@ -177,7 +180,4 @@ public final class DataAgentConstants {
 
     /** 帮助文档相关推荐默认数量 */
     public static final int HELP_RELATED_DOCS_DEFAULT_LIMIT = 5;
-
-    private DataAgentConstants() {
-    }
 }

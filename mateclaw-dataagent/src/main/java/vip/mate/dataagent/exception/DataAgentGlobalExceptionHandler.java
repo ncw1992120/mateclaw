@@ -19,6 +19,37 @@ import vip.mate.common.result.R;
 public class DataAgentGlobalExceptionHandler {
 
     /**
+     * 处理业务异常（携带状态码）
+     */
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<R<Void>> handleBusinessException(BusinessException e) {
+        log.warn("业务异常: code={}, msg={}", e.getCode(), e.getMessage());
+        HttpStatus httpStatus = HttpStatus.resolve(e.getCode());
+        if (httpStatus == null) {
+            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return ResponseEntity.status(httpStatus).body(R.fail(e.getCode(), e.getMessage()));
+    }
+
+    /**
+     * 处理参数校验异常（400）
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<R<Void>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("参数异常: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(R.fail(400, e.getMessage()));
+    }
+
+    /**
+     * 处理状态冲突异常（409）
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<R<Void>> handleIllegalStateException(IllegalStateException e) {
+        log.warn("状态异常: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(R.fail(409, e.getMessage()));
+    }
+
+    /**
      * 兜底：捕获所有未处理的异常
      */
     @ExceptionHandler(Exception.class)

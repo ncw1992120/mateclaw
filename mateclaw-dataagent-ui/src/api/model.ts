@@ -34,6 +34,11 @@ export function listAllEnabledModels() {
   return api.get<ModelConfig[]>(`${BASE_URL}/all-enabled`)
 }
 
+/** 获取所有模型（含启用和禁用） */
+export function listAllModels() {
+  return api.get<ModelConfig[]>(`${BASE_URL}/all`)
+}
+
 /** 获取默认模型 */
 export function getDefaultModel() {
   return api.get<ModelConfig>(`${BASE_URL}/default`)

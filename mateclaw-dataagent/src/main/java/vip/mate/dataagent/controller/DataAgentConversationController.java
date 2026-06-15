@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
-import vip.mate.workspace.conversation.ConversationService;
+import vip.mate.dataagent.service.DataAgentConversationService;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -16,7 +16,8 @@ import java.util.Map;
  * DataAgent 会话管理控制器
  * <p>
  * 提供会话列表查询、消息历史加载、会话删除等接口。
- * 复用 mateclaw-server 的 ConversationService 实现持久化操作。
+ * 通过 DataAgentConversationService 调用 ConversationRuntime（mateclaw-sdk 封装），
+ * 不直接依赖 mateclaw-server 内部服务实现。
  */
 @RestController
 @RequestMapping("/v1/conversations")
@@ -24,7 +25,7 @@ import java.util.Map;
 @Tag(name = "DataAgent 会话管理", description = "数据分析 Agent 会话管理接口")
 public class DataAgentConversationController {
 
-    private final ConversationService conversationService;
+    private final DataAgentConversationService conversationService;
 
     /**
      * 获取会话列表
@@ -32,7 +33,7 @@ public class DataAgentConversationController {
     @GetMapping
     @Operation(summary = "获取会话列表", description = "返回当前用户的所有会话，按最后活跃时间倒序")
     public R<List<ConversationVO>> list() {
-        return R.ok(conversationService.listConversations("dataagent"));
+        return R.ok(conversationService.listConversations());
     }
 
     /**
@@ -41,7 +42,7 @@ public class DataAgentConversationController {
     @GetMapping("/{conversationId}/messages")
     @Operation(summary = "获取会话消息历史", description = "返回指定会话的全部消息，按创建时间正序")
     public R<List<MessageVO>> listMessages(@PathVariable String conversationId) {
-        return R.ok(conversationService.listMessageViews(conversationId));
+        return R.ok(conversationService.listMessages(conversationId));
     }
 
     /**
@@ -61,10 +62,19 @@ public class DataAgentConversationController {
     @Operation(summary = "重命名会话", description = "更新指定会话的标题，长度限制 1-100 字符")
     public R<Void> rename(@PathVariable String conversationId, @RequestBody Map<String, String> body) {
         String title = body.getOrDefault("title", "").trim();
-        if (title.isEmpty() || title.length() > 100) {
+        if (!conversationService.renameConversation(conversationId, title)) {
             return R.fail("标题不合法");
         }
-        conversationService.renameConversation(conversationId, title);
+        return R.ok();
+    }
+
+    /**
+     * 置顶或取消置顶会话
+     */
+    @PutMapping("/{conversationId}/pin")
+    @Operation(summary = "置顶或取消置顶会话", description = "更新指定会话的置顶状态，置顶会话在列表中优先展示")
+    public R<Void> setPinned(@PathVariable String conversationId, @RequestBody Map<String, Boolean> body) {
+        conversationService.setPinned(conversationId, Boolean.TRUE.equals(body.get("pinned")));
         return R.ok();
     }
 }

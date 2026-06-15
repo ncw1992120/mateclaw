@@ -7,8 +7,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
+import vip.mate.dataagent.dto.DatasourceVO;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
+import vip.mate.dataagent.service.DatasourceManageService;
+import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.workspace.conversation.ConversationService;
@@ -20,9 +23,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * DataAgent 聊天服务实现
@@ -45,25 +50,42 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final ConversationService conversationService;
     private final DataAgentStreamTracker streamTracker;
     private final ObjectMapper objectMapper;
+    private final DataAgentChatScopeContext scopeContext;
+    private final DatasourceManageService datasourceManageService;
     private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
 
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
                                     ConversationService conversationService,
                                     DataAgentStreamTracker streamTracker,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    DataAgentChatScopeContext scopeContext,
+                                    DatasourceManageService datasourceManageService) {
         this.runtime = runtime;
         this.conversationService = conversationService;
         this.streamTracker = streamTracker;
         this.objectMapper = objectMapper;
+        this.scopeContext = scopeContext;
+        this.datasourceManageService = datasourceManageService;
     }
 
     @Override
     public SseEmitter streamChat(Long agentId, String message, String conversationId) {
-        return streamChat(agentId, message, conversationId, null);
+        return streamChat(agentId, message, conversationId, null, null);
     }
 
     @Override
     public SseEmitter streamChat(Long agentId, String message, String conversationId, String modelName) {
+        return streamChat(agentId, message, conversationId, modelName, null);
+    }
+
+    @Override
+    public SseEmitter streamChat(Long agentId, String message, String conversationId,
+                                 String modelName, List<Long> datasourceIds) {
+        // 把"用户勾选数据源"信息写入会话级上下文，供 DatasourceQueryTool 在工具执行阶段读取
+        scopeContext.put(conversationId, datasourceIds);
+
+        // 注入数据源白名单提示词，并在前端展示原始 message（持久化时仍存原文）
+        String llmMessage = decorateMessageWithDatasourceScope(message, datasourceIds);
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -89,8 +111,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 ));
 
                 Flux<StreamDelta> stream = modelName != null
-                        ? runtime.chatStructuredStream(agentId, message, conversationId, modelName)
-                        : runtime.chatStructuredStream(agentId, message, conversationId);
+                        ? runtime.chatStructuredStream(agentId, llmMessage, conversationId, modelName)
+                        : runtime.chatStructuredStream(agentId, llmMessage, conversationId);
 
                 Disposable disposable = stream
                         .doOnNext(delta -> {
@@ -140,12 +162,24 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                     broadcastEvent(conversationId, "error", Map.of("message", e.getMessage() != null ? e.getMessage() : "unknown error"));
                 } catch (Exception ignored) {}
                 streamTracker.complete(conversationId);
+                scopeContext.clear(conversationId);
                 conversationService.updateStreamStatus(conversationId, "idle");
                 completeEmitterQuietly(emitter, emitterDone);
             }
         });
 
         return emitter;
+    }
+
+    @Override
+    public SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
+                                             String modelName, List<Long> datasourceIds,
+                                             boolean reconnect, Long lastEventId) {
+        String convId = conversationId != null ? conversationId : "default";
+        if (reconnect) {
+            return reconnect(convId, lastEventId != null ? lastEventId : 0L);
+        }
+        return streamChat(agentId, message, convId, modelName, datasourceIds);
     }
 
     @Override
@@ -176,11 +210,18 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     @Override
     public String chat(Long agentId, String message, String conversationId) {
-        return chat(agentId, message, conversationId, null);
+        return chat(agentId, message, conversationId, null, null);
     }
 
     @Override
     public String chat(Long agentId, String message, String conversationId, String modelName) {
+        return chat(agentId, message, conversationId, modelName, null);
+    }
+
+    @Override
+    public String chat(Long agentId, String message, String conversationId,
+                       String modelName, List<Long> datasourceIds) {
+        scopeContext.put(conversationId, datasourceIds);
         try {
             conversationService.getOrCreateConversation(conversationId, agentId, "dataagent");
             conversationService.saveMessage(conversationId, "user", message);
@@ -189,11 +230,16 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         }
 
         StreamAccumulator accumulator = new StreamAccumulator();
+        String llmMessage = decorateMessageWithDatasourceScope(message, datasourceIds);
         Flux<StreamDelta> stream = modelName != null
-                ? runtime.chatStructuredStream(agentId, message, conversationId, modelName)
-                : runtime.chatStructuredStream(agentId, message, conversationId);
+                ? runtime.chatStructuredStream(agentId, llmMessage, conversationId, modelName)
+                : runtime.chatStructuredStream(agentId, llmMessage, conversationId);
 
-        stream.doOnNext(delta -> accumulator.accept(delta, null)).blockLast();
+        try {
+            stream.doOnNext(delta -> accumulator.accept(delta, null)).blockLast();
+        } finally {
+            scopeContext.clear(conversationId);
+        }
 
         String response = accumulator.getContent();
         List<MessageContentPart> parts = accumulator.toAssistantParts();
@@ -213,6 +259,64 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         boolean stopped = streamTracker.requestStop(conversationId);
         log.info("[DataAgent] Stop requested: conversationId={}, stopped={}", conversationId, stopped);
         return stopped;
+    }
+
+    /**
+     * 在用户消息前注入"数据源白名单"约束提示词。
+     * <p>
+     * 若用户在前端勾选了具体数据源，则以系统提示的方式告知 Agent：
+     * 仅可使用指定数据源 ID，禁止访问其他数据源；同时附带每个数据源的名称/描述，
+     * 让 LLM 在不调用 list_datasources 的情况下也能直接选择正确的数据源。
+     * <p>
+     * 工具侧的 {@code DatasourceQueryTool} 会从 {@link DataAgentChatScopeContext} 拿到
+     * 同一份白名单做兜底校验，即便 LLM 未严格遵循提示词，也无法越权访问其他数据源。
+     *
+     * @param originalMessage 用户原始消息
+     * @param datasourceIds   用户勾选的数据源白名单
+     * @return 注入提示后的消息文本，未配置白名单时直接返回原文
+     */
+    private String decorateMessageWithDatasourceScope(String originalMessage, List<Long> datasourceIds) {
+        if (datasourceIds == null || datasourceIds.isEmpty()) {
+            return originalMessage;
+        }
+        Set<Long> idSet = Set.copyOf(datasourceIds);
+        List<DatasourceVO> allowed;
+        try {
+            allowed = datasourceManageService.listDatasources().stream()
+                    .filter(ds -> ds.getId() != null && idSet.contains(ds.getId()))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("[DataAgent] Failed to load datasources for scope hint: {}", e.getMessage());
+            allowed = List.of();
+        }
+        StringBuilder hint = new StringBuilder();
+        hint.append("[系统约束-数据源范围]\n");
+        hint.append("用户已经在前端勾选了如下数据源，请严格遵守以下规则：\n");
+        hint.append("1) 仅允许在以下白名单内的数据源上执行 list_tables / search_schema / execute_sql；\n");
+        hint.append("2) 禁止调用 list_datasources，也不要访问白名单外的任何 datasourceId；\n");
+        hint.append("3) 当用户问题与白名单数据源不匹配时，请直接说明无法回答，并提示用户调整勾选。\n\n");
+        hint.append("白名单数据源：\n");
+        if (allowed.isEmpty()) {
+            for (Long id : datasourceIds) {
+                hint.append("- datasourceId=").append(id).append('\n');
+            }
+        } else {
+            for (DatasourceVO ds : allowed) {
+                hint.append("- datasourceId=").append(ds.getId())
+                        .append(", name=").append(safe(ds.getName()))
+                        .append(", type=").append(safe(ds.getSourceType()));
+                if (ds.getDescription() != null && !ds.getDescription().isBlank()) {
+                    hint.append(", description=").append(ds.getDescription());
+                }
+                hint.append('\n');
+            }
+        }
+        hint.append("\n[用户问题]\n").append(originalMessage);
+        return hint.toString();
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private void handleStreamFinalize(SseEmitter emitter, AtomicBoolean emitterDone,
@@ -279,6 +383,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             streamTracker.clearStopRequested(conversationId);
             // Mark done in tracker — keeps RunState for 5-min reconnect window
             streamTracker.complete(conversationId);
+            // 流终态时清理数据源白名单缓存，避免内存泄漏；后续问数会在 streamChat 入口重新写入
+            scopeContext.clear(conversationId);
             try {
                 conversationService.updateStreamStatus(conversationId, "idle");
             } catch (Exception e) {

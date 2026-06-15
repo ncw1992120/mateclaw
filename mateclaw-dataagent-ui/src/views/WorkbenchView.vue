@@ -35,18 +35,18 @@
       <!-- 历史对话侧栏（问数、洞察、报告页面展示） -->
       <div v-if="showSelectorPanel" class="history-sidebar" :class="{ collapsed: historyCollapsed }">
         <div class="history-header">
-          <!-- 操作按钮行（新对话 + 折叠） -->
+          <div class="header-spacer"></div>
+          <button v-if="!historyCollapsed" class="new-chat-btn" :title="t('conversation.newChat')" @click="handleNewChat">
+            <span class="new-chat-icon" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </span>
+            <span class="new-chat-label">{{ t('conversation.newChat') }}</span>
+          </button>
+          <!-- 操作按钮行 -->
           <div class="history-actions">
-            <!-- 新对话按钮（仅问数页面展示） -->
-            <button v-if="!historyCollapsed && activeSidebarItem === 'qa'" class="new-chat-btn" :title="t('conversation.newChat')" @click="handleNewChat">
-              <span class="new-chat-icon" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-              </span>
-              <span class="new-chat-label">{{ t('conversation.newChat') }}</span>
-            </button>
             <button class="history-collapse-btn" :title="historyCollapsed ? t('conversation.expand') : t('conversation.collapse')" @click="historyCollapsed = !historyCollapsed">
               <span v-if="historyCollapsed" class="collapse-svg" aria-hidden="true">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -64,81 +64,92 @@
         <template v-if="!historyCollapsed">
           <!-- 历史对话列表（仅问数页面展示） -->
           <template v-if="activeSidebarItem === 'qa'">
-            <div class="history-title-row">
-              <span class="history-section-title">{{ t('conversation.history') }}</span>
-            </div>
             <div class="history-list">
-              <div
-                v-for="conv in chatStore.conversations"
-                :key="conv.conversationId"
-                class="history-item"
-                :class="{ active: chatStore.conversationId === conv.conversationId, 'menu-open': openMenuConvId === conv.conversationId, streaming: chatStore.isConversationStreaming(conv.conversationId) }"
-                @click="handleSwitchConversation(conv.conversationId)"
-              >
-                <template v-if="editingConvId === conv.conversationId">
-                  <input
-                    v-model="editingTitle"
-                    class="history-item-edit-input"
-                    :maxlength="100"
-                    autofocus
-                    @click.stop
-                    @keydown.enter="handleConfirmRename(conv.conversationId)"
-                    @keydown.esc="handleCancelRename"
-                    @blur="handleConfirmRename(conv.conversationId)"
-                  />
-                </template>
-                <template v-else>
-                  <span
-                    v-if="chatStore.isConversationStreaming(conv.conversationId)"
-                    class="history-item-spinner"
-                    :title="t('conversation.streaming')"
-                    aria-hidden="true"
-                  ></span>
-                  <div class="history-item-content">
-                    <span class="history-item-title">{{ conv.title || t('conversation.untitled') }}</span>
-                    <span class="history-item-meta">
-                      <span class="history-item-time">{{ formatRelativeTime(conv.lastActiveTime) }}</span>
-                      <span class="meta-sep">·</span>
-                      <span class="history-item-count">{{ t('conversation.messageCount', { n: conv.messageCount }) }}</span>
-                    </span>
-                  </div>
-                  <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }">
-                    <button class="history-item-action" :title="t('conversation.more')" @click.stop="handleToggleMenu(conv.conversationId)">
-                      <span class="dot-icon" aria-hidden="true">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="5" cy="12" r="2"/>
-                          <circle cx="12" cy="12" r="2"/>
-                          <circle cx="19" cy="12" r="2"/>
+              <template v-for="group in groupedConversations" :key="group.key">
+                <div class="history-group-title">{{ group.label }}</div>
+                <div
+                  v-for="conv in group.items"
+                  :key="conv.conversationId"
+                  class="history-item"
+                  :class="{ active: chatStore.conversationId === conv.conversationId, 'menu-open': openMenuConvId === conv.conversationId, streaming: chatStore.isConversationStreaming(conv.conversationId) }"
+                  @click="handleSwitchConversation(conv.conversationId)"
+                >
+                  <template v-if="editingConvId === conv.conversationId">
+                    <input
+                      v-model="editingTitle"
+                      class="history-item-edit-input"
+                      :maxlength="100"
+                      autofocus
+                      @click.stop
+                      @keydown.enter="handleConfirmRename(conv.conversationId)"
+                      @keydown.esc="handleCancelRename"
+                      @blur="handleConfirmRename(conv.conversationId)"
+                    />
+                  </template>
+                  <template v-else>
+                    <span
+                      v-if="chatStore.isConversationStreaming(conv.conversationId)"
+                      class="history-item-spinner"
+                      :title="t('conversation.streaming')"
+                      aria-hidden="true"
+                    ></span>
+                    <div class="history-item-content">
+                      <span class="history-item-title">
+                        <span v-if="isConversationPinned(conv)" class="history-pin-mark" aria-hidden="true">↗</span>
+                        {{ conv.title || t('conversation.untitled') }}
+                      </span>
+                      <span class="history-item-meta">
+                        <span class="history-item-time">{{ formatRelativeTime(conv.lastActiveTime) }}</span>
+                        <span class="meta-sep">·</span>
+                        <span class="history-item-count">{{ t('conversation.messageCount', { n: conv.messageCount }) }}</span>
+                      </span>
+                    </div>
+                    <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }">
+                      <button class="history-item-action" :title="t('conversation.more')" @click.stop="handleToggleMenu(conv.conversationId)">
+                        <span class="dot-icon" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="5" cy="12" r="2"/>
+                            <circle cx="12" cy="12" r="2"/>
+                            <circle cx="19" cy="12" r="2"/>
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+                  </template>
+                  <!-- 浮层操作菜单 -->
+                  <div v-if="openMenuConvId === conv.conversationId" class="history-item-menu" @click.stop>
+                    <button class="history-menu-item" @click="handleTogglePin(conv.conversationId)">
+                      <span class="menu-icon" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 2l3 7 7 .6-5.3 4.6 1.6 6.8L12 17.4 5.7 21l1.6-6.8L2 9.6 9 9z"/>
                         </svg>
                       </span>
+                      <span>{{ isConversationPinned(conv) ? '取消置顶' : '置顶' }}</span>
+                    </button>
+                    <button class="history-menu-item" @click="handleStartRename(conv)">
+                      <span class="menu-icon" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 20h9"/>
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                        </svg>
+                      </span>
+                      <span>{{ t('conversation.rename') }}</span>
+                    </button>
+                    <button class="history-menu-item danger" @click="handleConfirmDelete(conv.conversationId)">
+                      <span class="menu-icon" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/>
+                          <path d="M10 11v6"/>
+                          <path d="M14 11v6"/>
+                          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </span>
+                      <span>{{ t('conversation.delete') }}</span>
                     </button>
                   </div>
-                </template>
-                <!-- 浮层操作菜单 -->
-                <div v-if="openMenuConvId === conv.conversationId" class="history-item-menu" @click.stop>
-                  <button class="history-menu-item" @click="handleStartRename(conv)">
-                    <span class="menu-icon" aria-hidden="true">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 20h9"/>
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
-                      </svg>
-                    </span>
-                    <span>{{ t('conversation.rename') }}</span>
-                  </button>
-                  <button class="history-menu-item danger" @click="handleConfirmDelete(conv.conversationId)">
-                    <span class="menu-icon" aria-hidden="true">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/>
-                        <path d="M10 11v6"/>
-                        <path d="M14 11v6"/>
-                        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
-                      </svg>
-                    </span>
-                    <span>{{ t('conversation.delete') }}</span>
-                  </button>
                 </div>
-              </div>
+              </template>
               <div v-if="chatStore.conversations.length === 0" class="history-empty">
                 {{ t('conversation.history') }}
               </div>
@@ -258,6 +269,21 @@ const activeSidebarItem = usePersistedRef<(typeof SIDEBAR_ITEM_KEYS)[number]>(
 /** 是否显示选择器面板（问数、洞察、报告页面展示） */
 const showSelectorPanel = computed(() => ['qa', 'interpret', 'report'].includes(activeSidebarItem.value))
 
+/** 历史会话分组 */
+interface ConversationGroup {
+  key: string
+  label: string
+  items: Conversation[]
+}
+
+const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
+
+const HISTORY_GROUP_PINNED = '置顶'
+const HISTORY_GROUP_TODAY = '今天'
+const HISTORY_GROUP_YESTERDAY = '昨天'
+const HISTORY_GROUP_SEVEN_DAYS = '7 天内'
+const HISTORY_GROUP_THIRTY_DAYS = '30 天内'
+
 /** 侧边栏菜单项配置（图标对齐 mateclaw-ui 的 SVG 风格） */
 const sidebarItems = [
   {
@@ -310,6 +336,35 @@ const availableModels = computed(() => {
   )
 })
 
+/** 按最后活跃时间分组后的历史会话列表 */
+const groupedConversations = computed<ConversationGroup[]>(() => {
+  const groupMap = new Map<string, ConversationGroup>()
+  const now = new Date()
+  const todayStart = getDayStart(now).getTime()
+  const yesterdayStart = todayStart - DAY_MILLISECONDS
+  const sevenDaysStart = todayStart - 6 * DAY_MILLISECONDS
+  const thirtyDaysStart = todayStart - 29 * DAY_MILLISECONDS
+
+  const sortedConversations = [...chatStore.conversations].sort((a, b) => getConversationTime(b) - getConversationTime(a))
+  const pinnedItems = sortedConversations.filter(conv => isConversationPinned(conv))
+
+  sortedConversations
+    .filter(conv => !isConversationPinned(conv))
+    .forEach(conv => {
+      const group = getConversationGroup(conv, todayStart, yesterdayStart, sevenDaysStart, thirtyDaysStart)
+      if (!groupMap.has(group.key)) {
+        groupMap.set(group.key, { ...group, items: [] })
+      }
+      groupMap.get(group.key)?.items.push(conv)
+    })
+
+  const groups = Array.from(groupMap.values())
+  if (pinnedItems.length > 0) {
+    groups.unshift({ key: 'pinned', label: HISTORY_GROUP_PINNED, items: pinnedItems })
+  }
+  return groups
+})
+
 /** 模型切换 */
 async function handleModelChange(modelId: number): Promise<void> {
   await modelStore.setActiveModelById(modelId)
@@ -353,6 +408,20 @@ function handleToggleMenu(convId: string): void {
     editingTitle.value = ''
   }
   openMenuConvId.value = openMenuConvId.value === convId ? null : convId
+}
+
+/** 切换会话置顶状态 */
+async function handleTogglePin(convId: string): Promise<void> {
+  const conv = chatStore.conversations.find(c => c.conversationId === convId)
+  if (!conv) return
+  const newPinned = !isConversationPinned(conv)
+  await chatStore.setConversationPinned(convId, newPinned)
+  openMenuConvId.value = null
+}
+
+/** 判断会话是否已置顶 */
+function isConversationPinned(conv: Conversation): boolean {
+  return conv.pinned === 1
 }
 
 /** 点击页面其他位置关闭菜单 */
@@ -406,6 +475,47 @@ async function handleConfirmDelete(convId: string): Promise<void> {
   } catch {
     // 错误已在 axios 拦截器提示
   }
+}
+
+/** 获取会话排序时间 */
+function getConversationTime(conv: Conversation): number {
+  const time = new Date(conv.lastActiveTime || conv.updateTime || conv.createTime).getTime()
+  if (Number.isNaN(time)) {
+    return 0
+  }
+  return time
+}
+
+/** 获取日期所在自然日的开始时间 */
+function getDayStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+/** 获取会话所属历史分组 */
+function getConversationGroup(
+  conv: Conversation,
+  todayStart: number,
+  yesterdayStart: number,
+  sevenDaysStart: number,
+  thirtyDaysStart: number,
+): Omit<ConversationGroup, 'items'> {
+  const date = new Date(conv.lastActiveTime || conv.updateTime || conv.createTime)
+  const time = date.getTime()
+  if (Number.isNaN(time) || time >= todayStart) {
+    return { key: 'today', label: HISTORY_GROUP_TODAY }
+  }
+  if (time >= yesterdayStart) {
+    return { key: 'yesterday', label: HISTORY_GROUP_YESTERDAY }
+  }
+  if (time >= sevenDaysStart) {
+    return { key: 'seven-days', label: HISTORY_GROUP_SEVEN_DAYS }
+  }
+  if (time >= thirtyDaysStart) {
+    return { key: 'thirty-days', label: HISTORY_GROUP_THIRTY_DAYS }
+  }
+  const year = date.getFullYear()
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  return { key: `${year}-${month}`, label: `${year}年${month}月` }
 }
 
 /**
@@ -788,25 +898,29 @@ onBeforeUnmount(() => {
 }
 
 /** 操作按钮行（新对话 + 折叠按钮） */
+.header-spacer {
+  flex: 1;
+}
+
 .history-actions {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  justify-content: flex-end;
 }
 
 .history-collapse-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--light-grey);
   background: var(--white);
   color: var(--muted);
   cursor: pointer;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   transition: all 0.2s ease;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
@@ -836,70 +950,50 @@ onBeforeUnmount(() => {
 }
 
 .new-chat-btn {
-  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 36px;
-  border: 1px solid var(--main-orange);
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--main-orange) 0%, #ff7a3d 100%);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 5px;
+  height: 28px;
+  padding: 0 48px;
+  border: 1px solid var(--light-grey);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
-  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.18);
-  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .new-chat-btn:hover {
-  background: linear-gradient(135deg, #e54d1c 0%, var(--main-orange) 100%);
+  border-color: var(--main-orange);
+  background: var(--very-light-orange);
+  color: var(--main-orange);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.28);
+  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.12);
 }
 
 .new-chat-btn:active {
   transform: translateY(0);
-  box-shadow: 0 1px 3px rgba(240, 90, 35, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .new-chat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
   line-height: 1;
-  transition: transform 0.2s ease;
 }
 
 .new-chat-icon :deep(svg) {
   display: block;
 }
 
-.new-chat-btn:hover .new-chat-icon {
-  transform: rotate(90deg);
-}
-
 .new-chat-label {
   white-space: nowrap;
-}
-
-.history-title-row {
-  padding: 12px 12px 8px;
-  flex-shrink: 0;
-}
-
-.history-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.5px;
 }
 
 .history-list {
@@ -909,6 +1003,22 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.history-group-title {
+  align-self: flex-start;
+  margin: 14px 0 10px 2px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #f5f6f8;
+  color: #8a8f99;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.history-group-title:first-child {
+  margin-top: 10px;
 }
 
 .history-item {
@@ -924,6 +1034,10 @@ onBeforeUnmount(() => {
 
 .history-item:hover {
   background: var(--very-light-orange);
+}
+
+.history-item.pinned:not(.active) {
+  background: rgba(240, 90, 35, 0.035);
 }
 
 .history-item.active {
@@ -948,6 +1062,12 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.4;
+}
+
+.history-pin-mark {
+  color: var(--main-orange);
+  font-size: 11px;
+  margin-right: 3px;
 }
 
 .history-item.active .history-item-title {

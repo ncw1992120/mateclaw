@@ -23,14 +23,17 @@ CREATE TABLE IF NOT EXISTS `dataagent_help_document` (
     `category_id`       BIGINT       NOT NULL COMMENT '所属分类 ID',
     `title`             VARCHAR(200) NOT NULL COMMENT '文档标题',
     `content`           MEDIUMTEXT            DEFAULT NULL COMMENT '文档内容（Markdown 格式）',
+    `summary`           VARCHAR(500)          DEFAULT NULL COMMENT '文档摘要',
     `sort_order`        INT                   DEFAULT 0 COMMENT '排序序号（升序）',
     `status`            VARCHAR(20)           DEFAULT 'draft' COMMENT '文档状态：draft/published',
     `author`            VARCHAR(100)          DEFAULT NULL COMMENT '作者',
+    `tags`              VARCHAR(500)          DEFAULT NULL COMMENT '标签（逗号分隔）',
     `view_count`        INT                   DEFAULT 0 COMMENT '浏览次数',
     `create_time`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`           INT          NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
     PRIMARY KEY (`id`),
     KEY `idx_help_doc_category` (`category_id`),
-    KEY `idx_help_doc_status` (`status`)
+    KEY `idx_help_doc_status` (`status`),
+    FULLTEXT KEY `ft_help_doc_search` (`title`, `content`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帮助文档表';

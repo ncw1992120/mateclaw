@@ -350,13 +350,7 @@ public class AloudataCallTool {
      * 自动填充 HEADER 参数（从 config 解析），将 Agent 输入参数名中的下划线还原为连字符
      */
     private Map<String, Object> buildParamsFromInput(String endpointName, JSONObject input, AloudataConfigDTO config) {
-        Map<String, Object> params = new LinkedHashMap<>();
-
-        // 自动填充认证 HEADER 参数
-        params.put("tenant-id", config.getTenantId());
-        String authType = config.getAuthType() != null ? config.getAuthType() : "UID";
-        params.put("auth-type", authType);
-        params.put("auth-value", config.getAuthValue());
+        Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(endpointName, config);
 
         // 从 input 中提取非 datasourceId 参数
         ApiEndpoint endpoint = endpointService.getEndpoint(endpointName);

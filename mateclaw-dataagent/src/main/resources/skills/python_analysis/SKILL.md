@@ -24,12 +24,12 @@ dependencies:
 ### 第一步：评估分析需求
 
 判断是否需要使用 Python 分析：
-- 简单的聚合、过滤、排序 → 优先使用 SQL（query_datasource 的 execute_sql）
+- 简单的聚合、过滤、排序 → 优先使用 SQL（data_query 的 execute_sql）
 - 复杂统计、机器学习、高级可视化 → 使用 Python 分析
 
 ### 第二步：获取数据
 
-1. 先通过 `query_datasource` 的 `execute_sql` 获取所需数据
+1. 先通过 `data_query` 的 `execute_sql` 获取所需数据
 2. SQL 查询结果将作为 Python 代码的输入数据
 
 ### 第三步：编写并执行 Python 代码

@@ -298,10 +298,10 @@ public class AloudataApiClient {
         String service = (endpoint != null) ? endpoint.getService() : "anymetrics";
 
         return switch (service) {
-            case "semantic" -> String.format("http://%s:%d",
+            case "semantic" -> String.format("%s:%d",
                     config.getSemanticHost(),
                     config.getSemanticPort() != null ? config.getSemanticPort() : DEFAULT_SEMANTIC_PORT);
-            default -> String.format("http://%s:%d",
+            default -> String.format("%s:%d",
                     config.getAnymetricsHost(),
                     config.getAnymetricsPort() != null ? config.getAnymetricsPort() : DEFAULT_ANYMETRICS_PORT);
         };

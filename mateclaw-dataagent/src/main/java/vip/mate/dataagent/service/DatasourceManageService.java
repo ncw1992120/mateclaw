@@ -57,6 +57,14 @@ public interface DatasourceManageService {
     boolean testConnection(Long id);
 
     /**
+     * 使用连接参数测试数据源连通性（不持久化数据源记录）
+     *
+     * @param request 连接参数
+     * @return 连接是否成功
+     */
+    boolean testConnectionByParams(DatasourceCreateRequest request);
+
+    /**
      * 切换数据源启停状态
      *
      * @param id      数据源 ID

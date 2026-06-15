@@ -348,7 +348,7 @@ const form = reactive({
   semanticPort: '8085',
   aloudataPort: '8083',
   tenantId: '',
-  authType: 'ACCOUNT',
+  authType: 'UID',
   authValue: '',
 })
 
@@ -415,18 +415,21 @@ async function handleTestConnection(): Promise<void> {
   }
   testing.value = true
   try {
-    if (!createdDsId.value) {
+    let result: boolean
+    if (isEditMode.value || createdDsId.value) {
+      // 编辑模式或已有记录：使用 ID 测试连接
+      const testId = createdDsId.value!
+      result = await datasourceApi.testConnection(testId)
+    } else {
+      // 新建模式：仅做连通性测试，不创建数据源记录
       const request = buildCreateRequest()
-      const ds = await datasourceApi.create(request)
-      createdDsId.value = ds.id
+      result = await datasourceApi.testConnectionApi(request)
     }
-    const result = await datasourceApi.testConnection(createdDsId.value)
     if (result) {
       ElMessage.success(t('datasourcePage.testSuccess'))
     } else {
       ElMessage.error(t('datasourcePage.testFail'))
     }
-    store.fetchDatasources()
   } catch {
     ElMessage.error(t('datasourcePage.testFail'))
   } finally {

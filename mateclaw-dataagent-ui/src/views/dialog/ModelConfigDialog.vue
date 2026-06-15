@@ -79,13 +79,12 @@
                         {{ t('modelConfig.discover') }}
                       </el-button>
                       <el-button
-                        v-if="provider.isCustom"
-                        size="small"
-                        type="danger"
-                        @click="handleDeleteProvider(provider.providerId)"
-                      >
-                        {{ t('modelConfig.delete') }}
-                      </el-button>
+                      size="small"
+                      type="danger"
+                      @click="handleDeleteProvider(provider)"
+                    >
+                      {{ t('modelConfig.delete') }}
+                    </el-button>
                     </template>
                   </div>
                 </div>
@@ -199,8 +198,16 @@
                 <el-tag size="small">{{ getProviderName(model.provider) }}</el-tag>
                 <el-tag v-if="model.isDefault" type="warning" size="small">{{ t('modelConfig.default') }}</el-tag>
                 <el-tag v-if="model.builtin" size="small" type="info">{{ t('modelConfig.builtin') }}</el-tag>
+                <el-tag v-if="!model.enabled" type="danger" size="small">{{ t('modelConfig.statusDisabled') }}</el-tag>
               </div>
               <div class="model-actions">
+                <!-- 启用/禁用切换 -->
+                <el-switch
+                  :model-value="model.enabled"
+                  :disabled="model.isDefault"
+                  size="small"
+                  @change="(val: boolean) => handleToggleModelEnabled(model, val)"
+                />
                 <el-button
                   v-if="!model.isDefault"
                   size="small"
@@ -212,7 +219,6 @@
                   {{ t('modelConfig.edit') }}
                 </el-button>
                 <el-button
-                  v-if="!model.builtin"
                   size="small"
                   type="danger"
                   @click="handleDeleteModel(model.id)"
@@ -374,11 +380,11 @@ const configuredProviders = computed(() => {
 const hasConfiguredProviders = computed(() => configuredProviders.value.length > 0)
 
 /**
- * 可用模型列表（仅来自已配置的 Provider）
+ * 可用模型列表（来自已配置的 Provider，含启用和禁用）
  */
 const availableModels = computed(() => {
   const configuredIds = new Set(configuredProviders.value.map(p => p.providerId))
-  return modelStore.enabledModels.filter(m => configuredIds.has(m.provider))
+  return modelStore.allModels.filter(m => configuredIds.has(m.provider))
 })
 
 function getProviderName(providerId: string): string {
@@ -441,10 +447,15 @@ async function handleDisableProvider(providerId: string): Promise<void> {
   ElMessage.success(t('common.success'))
 }
 
-/** 删除自定义 Provider */
-async function handleDeleteProvider(providerId: string): Promise<void> {
-  await ElMessageBox.confirm(t('modelConfig.deleteProviderConfirm'), t('common.confirm'))
-  await modelStore.updateProvider(providerId, { enabled: false } as Partial<ModelProvider>)
+/** 删除供应商 */
+async function handleDeleteProvider(provider: ModelProvider): Promise<void> {
+  if (provider.isCustom) {
+    await ElMessageBox.confirm(t('modelConfig.deleteProviderConfirm'), t('common.confirm'))
+    await modelStore.deleteProvider(provider.providerId)
+  } else {
+    await ElMessageBox.confirm(t('modelConfig.deleteBuiltinProviderConfirm'), t('common.confirm'))
+    await modelStore.disableProvider(provider.providerId)
+  }
   ElMessage.success(t('common.success'))
 }
 
@@ -561,6 +572,16 @@ async function handleSaveModel(): Promise<void> {
 async function handleDeleteModel(id: number): Promise<void> {
   await ElMessageBox.confirm(t('modelConfig.deleteModelConfirm'), t('common.confirm'))
   await modelStore.deleteModel(id)
+}
+
+/** 切换模型启用/禁用状态 */
+async function handleToggleModelEnabled(model: ModelConfig, enabled: boolean): Promise<void> {
+  if (!enabled && model.isDefault) {
+    ElMessage.warning(t('modelConfig.cannotDisableDefault'))
+    return
+  }
+  await modelStore.toggleModelEnabled(model.id, enabled)
+  ElMessage.success(t('common.success'))
 }
 </script>
 

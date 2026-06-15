@@ -23,3 +23,8 @@ export function deleteConversation(conversationId: string) {
 export function renameConversation(conversationId: string, title: string) {
   return api.put(`${BASE_URL}/${conversationId}/title`, { title })
 }
+
+/** 置顶或取消置顶会话 */
+export function setPinned(conversationId: string, pinned: boolean) {
+  return api.put(`${BASE_URL}/${conversationId}/pin`, { pinned })
+}

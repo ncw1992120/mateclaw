@@ -7,6 +7,8 @@ import * as modelApi from '@/api/model'
 export const useModelStore = defineStore('model', () => {
   /** 启用的模型列表 */
   const enabledModels = ref<ModelConfig[]>([])
+  /** 所有模型列表（含启用和禁用） */
+  const allModels = ref<ModelConfig[]>([])
   /** Provider 目录列表 */
   const providers = ref<ModelProvider[]>([])
   /** 当前激活模型 */
@@ -18,12 +20,16 @@ export const useModelStore = defineStore('model', () => {
   /** 加载状态 */
   const loading = ref(false)
 
-  /** 获取启用模型列表（含 chat 和 embedding 类型） */
+  /** 获取启用模型列表（含 chat 和 embedding 类型），同时更新全量模型列表 */
   async function fetchEnabledModels(): Promise<void> {
     loading.value = true
     try {
-      const all = await modelApi.listAllEnabledModels() as unknown as ModelConfig[]
-      enabledModels.value = all.filter(m => m.enabled)
+      const [enabled, all] = await Promise.all([
+        modelApi.listAllEnabledModels() as unknown as ModelConfig[],
+        modelApi.listAllModels() as unknown as ModelConfig[],
+      ])
+      enabledModels.value = enabled.filter(m => m.enabled)
+      allModels.value = all
     } finally {
       loading.value = false
     }
@@ -123,6 +129,19 @@ export const useModelStore = defineStore('model', () => {
     }
   }
 
+  /** 切换模型启用/禁用状态 */
+  async function toggleModelEnabled(id: number, enabled: boolean): Promise<void> {
+    const model = allModels.value.find(m => m.id === id)
+    if (!model) {
+      return
+    }
+    await modelApi.updateModel(id, { ...model, enabled } as Partial<ModelConfig>)
+    await fetchEnabledModels()
+    if (!enabled && activeModel.value?.id === id) {
+      activeModel.value = null
+    }
+  }
+
   /** 设置默认模型 */
   async function setDefaultModel(id: number): Promise<void> {
     await modelApi.setDefaultModel(id)
@@ -166,6 +185,13 @@ export const useModelStore = defineStore('model', () => {
     await fetchProviders()
   }
 
+  /** 删除自定义 Provider */
+  async function deleteProvider(providerId: string): Promise<void> {
+    await modelApi.deleteCustomProvider(providerId)
+    await fetchProviders()
+    await fetchEnabledModels()
+  }
+
   /** 发现远端模型 */
   async function discoverModels(providerId: string): Promise<void> {
     await modelApi.discoverModels(providerId)
@@ -191,6 +217,7 @@ export const useModelStore = defineStore('model', () => {
 
   return {
     enabledModels,
+    allModels,
     providers,
     activeModel,
     defaultModel,
@@ -207,10 +234,12 @@ export const useModelStore = defineStore('model', () => {
     createModel,
     updateModel,
     deleteModel,
+    toggleModelEnabled,
     setDefaultModel,
     testConnection,
     testModelAvailability,
     createCustomProvider,
+    deleteProvider,
     discoverModels,
     fetchDefaultEmbeddingModel,
     setDefaultEmbeddingModelById,

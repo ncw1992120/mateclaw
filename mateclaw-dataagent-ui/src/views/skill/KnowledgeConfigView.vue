@@ -395,8 +395,8 @@
                 </el-button>
               </div>
               <el-radio-group v-model="configIngestMode">
-                <el-radio-button label="eager">{{ t('knowledgeConfig.eager') }}</el-radio-button>
-                <el-radio-button label="lazy">{{ t('knowledgeConfig.lazy') }}</el-radio-button>
+                <el-radio-button value="eager">{{ t('knowledgeConfig.eager') }}</el-radio-button>
+                <el-radio-button value="lazy">{{ t('knowledgeConfig.lazy') }}</el-radio-button>
               </el-radio-group>
               <p class="config-hint">{{ configIngestMode === 'eager' ? t('knowledgeConfig.eagerHint') : t('knowledgeConfig.lazyHint') }}</p>
             </div>
@@ -647,14 +647,14 @@
         </el-form-item>
         <el-form-item :label="t('knowledgeConfig.transOutputTarget')">
           <el-radio-group v-model="transformForm.outputTarget">
-            <el-radio-button label="none">{{ t('knowledgeConfig.outputNone') }}</el-radio-button>
-            <el-radio-button label="page">{{ t('knowledgeConfig.outputPage') }}</el-radio-button>
+            <el-radio-button value="none">{{ t('knowledgeConfig.outputNone') }}</el-radio-button>
+            <el-radio-button value="page">{{ t('knowledgeConfig.outputPage') }}</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item :label="t('knowledgeConfig.transFormat')">
           <el-radio-group v-model="transformForm.outputFormat">
-            <el-radio-button label="markdown">Markdown</el-radio-button>
-            <el-radio-button label="json">JSON</el-radio-button>
+            <el-radio-button value="markdown">Markdown</el-radio-button>
+            <el-radio-button value="json">JSON</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="transformForm.outputFormat === 'json'" :label="t('knowledgeConfig.transSchema')">
@@ -684,7 +684,7 @@ import {
   Plus, Delete, Loading, Collection, Document, Files, ArrowLeft,
   Upload, Folder, Search, Close, RefreshRight, Download, VideoPlay,
   Share, SetUp, Clock, Grid, EditPen, Monitor, FullScreen, Refresh,
-  ArrowDown,
+  ArrowDown, Warning,
 } from '@element-plus/icons-vue'
 import {
   listKBs, createKB, deleteKB, updateKB, processKB, getConfig, updateConfig,

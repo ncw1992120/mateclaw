@@ -81,13 +81,23 @@ public class DataAgentDatasourceController {
     }
 
     /**
-     * 测试连接
+     * 测试连接（基于已有数据源 ID）
      */
     @PostMapping("/{id}/test")
     @Operation(summary = "测试连接", description = "测试数据源连接是否可用")
     public R<Boolean> testConnection(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         return R.ok(datasourceService.testConnection(id));
+    }
+
+    /**
+     * 测试连接（不创建数据源记录，仅做连通性测试）
+     */
+    @PostMapping("/test")
+    @Operation(summary = "测试连接（预览）", description = "使用连接参数测试数据源连通性，不持久化数据源记录")
+    public R<Boolean> testConnectionByParams(
+            @RequestBody DatasourceCreateRequest request) {
+        return R.ok(datasourceService.testConnectionByParams(request));
     }
 
     /**
