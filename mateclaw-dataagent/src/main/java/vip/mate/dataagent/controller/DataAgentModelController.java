@@ -252,6 +252,15 @@ public class DataAgentModelController {
     }
 
     /**
+     * 测试 Embedding 模型连通性
+     */
+    @PostMapping("/embedding/{modelId}/test")
+    @Operation(summary = "测试 Embedding 模型", description = "测试指定 Embedding 模型的连通性（嵌入短文本验证 API key）")
+    public R<Map<String, Object>> testEmbeddingModel(@PathVariable Long modelId) {
+        return R.ok(runtime.testEmbeddingModel(modelId));
+    }
+
+    /**
      * 按类型筛选模型
      */
     @GetMapping("/by-type")

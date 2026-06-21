@@ -10,6 +10,8 @@ public class ChatRequest {
     private String conversationId;
     private String message;
     private String modelName;
+    /** Provider ID of the model the user picked. Paired with {@link #modelName}; null means no per-conversation override. */
+    private String modelProvider;
     /** Whether this is a reconnect request after stream interruption */
     private boolean reconnect;
     /** Last SSE event ID received before disconnection (for dedup replay) */
@@ -22,5 +24,5 @@ public class ChatRequest {
      * execute_sql / search_schema 等动作做兜底校验，禁止越权访问。
      * 为空或为 null 时表示不限制（由 LLM 自主选择）。
      */
-    private List<Long> datasourceIds;
+    private List<String> datasourceIds;
 }

@@ -118,7 +118,7 @@ const chatStore = useChatStore()
 /** 编辑/新建弹窗是否可见 */
 const formDialogVisible = ref(false)
 /** 正在编辑的 Agent ID（新建时为 null） */
-const editingId = ref<number | null>(null)
+const editingId = ref<number | string | null>(null)
 
 /** 模板对话框是否可见 */
 const templateDialogVisible = ref(false)
@@ -158,7 +158,7 @@ function handleFormSaved(): void {
 }
 
 /** 删除 Agent */
-async function handleDelete(id: number): Promise<void> {
+async function handleDelete(id: number | string): Promise<void> {
   await ElMessageBox.confirm(t('agent.deleteConfirm'), t('common.confirm'), {
     type: 'warning',
   })
@@ -167,7 +167,7 @@ async function handleDelete(id: number): Promise<void> {
 }
 
 /** 选中 Agent（用于聊天和右侧面板） */
-async function handleSelectAgent(id: number): Promise<void> {
+async function handleSelectAgent(id: number | string): Promise<void> {
   await agentStore.selectAgent(id)
   chatStore.setAgent(id)
 }

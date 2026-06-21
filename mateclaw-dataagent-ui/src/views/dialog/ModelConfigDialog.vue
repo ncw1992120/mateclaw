@@ -201,31 +201,39 @@
                 <el-tag v-if="!model.enabled" type="danger" size="small">{{ t('modelConfig.statusDisabled') }}</el-tag>
               </div>
               <div class="model-actions">
-                <!-- 启用/禁用切换 -->
-                <el-switch
-                  :model-value="model.enabled"
-                  :disabled="model.isDefault"
-                  size="small"
-                  @change="(val: boolean) => handleToggleModelEnabled(model, val)"
-                />
-                <el-button
-                  v-if="!model.isDefault"
-                  size="small"
-                  @click="handleSetDefault(model.id)"
-                >
-                  {{ t('modelConfig.setDefault') }}
-                </el-button>
-                <el-button size="small" @click="openEditModel(model)">
-                  {{ t('modelConfig.edit') }}
-                </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  @click="handleDeleteModel(model.id)"
-                >
-                  {{ t('modelConfig.delete') }}
-                </el-button>
-              </div>
+              <!-- 连通性测试 -->
+              <el-button
+                size="small"
+                :loading="testingModel === model.id"
+                @click="handleTestModel(model)"
+              >
+                {{ t('modelConfig.testConnection') }}
+              </el-button>
+              <!-- 启用/禁用切换 -->
+              <el-switch
+                :model-value="model.enabled"
+                :disabled="model.isDefault"
+                size="small"
+                @change="(val: boolean) => handleToggleModelEnabled(model, val)"
+              />
+              <el-button
+                v-if="!model.isDefault"
+                size="small"
+                @click="handleSetDefault(model.id)"
+              >
+                {{ t('modelConfig.setDefault') }}
+              </el-button>
+              <el-button size="small" @click="openEditModel(model)">
+                {{ t('modelConfig.edit') }}
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                @click="handleDeleteModel(model.id)"
+              >
+                {{ t('modelConfig.delete') }}
+              </el-button>
+            </div>
             </div>
           </div>
 
@@ -321,6 +329,7 @@ const editingConfigs = reactive<Record<string, { baseUrl: string; apiKey: string
 
 /** 操作状态 */
 const testingConnection = ref<string | null>(null)
+const testingModel = ref<number | null>(null)
 const savingConfig = ref<string | null>(null)
 const discovering = ref<string | null>(null)
 
@@ -431,6 +440,32 @@ async function handleTestConnection(providerId: string): Promise<void> {
     }
   } finally {
     testingConnection.value = null
+  }
+}
+
+/** 测试单个模型连通性 */
+async function handleTestModel(model: ModelConfig): Promise<void> {
+  testingModel.value = model.id
+  try {
+    if (model.modelType === 'embedding') {
+      const result = await modelStore.testEmbeddingModelAvailability(model.id)
+      if (result.success) {
+        const dimInfo = result.dimensions != null ? ` (${t('modelConfig.embeddingDimensions', { dim: result.dimensions })})` : ''
+        ElMessage.success((result.message || t('modelConfig.connectionOk')) + dimInfo)
+      } else {
+        ElMessage.error(result.message || t('modelConfig.connectionFail'))
+      }
+    } else {
+      const result = await modelStore.testModelAvailability(model.provider, String(model.id))
+      if (result.success) {
+        const latency = result.latencyMs != null ? ` (${result.latencyMs}ms)` : ''
+        ElMessage.success((result.message || t('modelConfig.connectionOk')) + latency)
+      } else {
+        ElMessage.error(result.message || t('modelConfig.connectionFail'))
+      }
+    }
+  } finally {
+    testingModel.value = null
   }
 }
 

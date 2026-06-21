@@ -39,173 +39,246 @@
           <p v-if="selectedDbId !== 60" class="version-hint">{{ '\uD83D\uDCA1' }} {{ t('dsForm.versionHint', { versions: '5.5、5.6、5.7、8.0' }) }}</p>
           <p v-else class="version-hint">{{ '\uD83D\uDCA1' }} Aloudata CAN 指标平台，支持指标查询、维度分析等功能</p>
 
-          <div class="form-fields">
+          <div class="form-grid">
             <!-- 显示名称 -->
-            <div class="field-row">
-              <label class="field-label required">{{ t('dsForm.fieldDisplayName') }}</label>
-              <input v-model="form.displayName" class="field-input" :placeholder="t('dsForm.placeholderDisplayName')" />
+            <div class="form-field form-field-wide">
+              <label class="form-label required">{{ t('dsForm.fieldDisplayName') }}</label>
+              <input
+                v-model="form.displayName"
+                class="form-input"
+                :placeholder="t('dsForm.placeholderDisplayName')"
+              />
             </div>
 
             <!-- Aloudata 专用配置 -->
             <template v-if="selectedDbId === 60">
-              <!-- anymetrics 服务地址 -->
-              <div class="field-row">
-                <label class="field-label required">服务地址</label>
-                <input v-model="form.host" class="field-input" placeholder="Aloudata CAN 平台访问地址" />
+              <!-- 产品层服务地址 -->
+              <div class="form-field">
+                <label class="form-label required">{{ t('metricPlatform.fieldProductAddress') }}</label>
+                <input
+                  v-model="form.productHost"
+                  class="form-input"
+                  :placeholder="t('metricPlatform.placeholderProductAddress')"
+                />
               </div>
 
-              <!-- anymetrics 端口 -->
-              <div class="field-row">
-                <label class="field-label required">产品层端口</label>
-                <input v-model="form.aloudataPort" class="field-input short" placeholder="默认 8083" />
+              <!-- 产品层端口 -->
+              <div class="form-field">
+                <label class="form-label required">{{ t('metricPlatform.fieldProductPort') }}</label>
+                <input
+                  v-model="form.aloudataPort"
+                  class="form-input"
+                  placeholder="8083"
+                />
               </div>
 
-              <!-- semantic 端口 -->
-              <div class="field-row">
-                <label class="field-label required">语义层端口</label>
-                <input v-model="form.semanticPort" class="field-input short" placeholder="默认 8085" />
+              <!-- 语义层服务地址 -->
+              <div class="form-field">
+                <label class="form-label required">{{ t('metricPlatform.fieldSemanticAddress') }}</label>
+                <input
+                  v-model="form.semanticHost"
+                  class="form-input"
+                  :placeholder="t('metricPlatform.placeholderSemanticAddress')"
+                />
               </div>
 
-              <!-- 租户ID -->
-              <div class="field-row">
-                <label class="field-label required">租户ID</label>
-                <input v-model="form.tenantId" class="field-input" placeholder="请输入租户ID" />
-                <el-tooltip content="租户ID，用于指标查询内容所在的租户" placement="top">
-                  <span class="field-tip">!</span>
-                </el-tooltip>
+              <!-- 语义层端口 -->
+              <div class="form-field">
+                <label class="form-label required">{{ t('metricPlatform.fieldSemanticPort') }}</label>
+                <input
+                  v-model="form.semanticPort"
+                  class="form-input"
+                  placeholder="8085"
+                />
+              </div>
+
+              <!-- 租户 ID -->
+              <div class="form-field">
+                <label class="form-label required">
+                  <span>租户 ID</span>
+                  <el-tooltip content="租户 ID，用于指标查询内容所在的租户" placement="top">
+                    <span class="form-tip">?</span>
+                  </el-tooltip>
+                </label>
+                <input
+                  v-model="form.tenantId"
+                  class="form-input"
+                  placeholder="请输入租户 ID"
+                />
               </div>
 
               <!-- 认证方式 -->
-              <div class="field-row">
-                <label class="field-label required">认证方式</label>
-                <select v-model="form.authType" class="field-select">
+              <div class="form-field">
+                <label class="form-label required">
+                  <span>认证方式</span>
+                  <el-tooltip content="认证方式。支持 UID、TOKEN、ACCOUNT、APIKEY" placement="top">
+                    <span class="form-tip">?</span>
+                  </el-tooltip>
+                </label>
+                <select v-model="form.authType" class="form-select">
                   <option value="UID">UID</option>
                   <option value="TOKEN">TOKEN</option>
                   <option value="ACCOUNT">ACCOUNT</option>
                   <option value="APIKEY">APIKEY</option>
                 </select>
-                <el-tooltip content="认证方式。支持 UID、TOKEN、ACCOUNT、APIKEY" placement="top">
-                  <span class="field-tip">!</span>
-                </el-tooltip>
               </div>
 
               <!-- 认证值 -->
-              <div class="field-row">
-                <label class="field-label required">认证值</label>
+              <div class="form-field form-field-wide">
+                <label class="form-label required">
+                  <span>认证值</span>
+                  <el-tooltip content="与认证方式对应的认证值" placement="top">
+                    <span class="form-tip">?</span>
+                  </el-tooltip>
+                </label>
                 <div class="password-field">
                   <input
                     v-model="form.authValue"
-                    class="field-input"
+                    class="form-input"
                     :type="showPassword ? 'text' : 'password'"
-                    :placeholder="form.authType === 'UID' ? '请输入用户ID' : form.authType === 'TOKEN' ? '请输入 TOKEN' : form.authType === 'APIKEY' ? '请输入 APIKEY' : '请输入账号'"
+                    :placeholder="form.authType === 'UID' ? '请输入用户 ID' : form.authType === 'TOKEN' ? '请输入 TOKEN' : form.authType === 'APIKEY' ? '请输入 APIKEY' : '请输入账号'"
                   />
-                  <span class="eye-btn" @click="showPassword = !showPassword">
+                  <button
+                    type="button"
+                    class="eye-btn"
+                    :title="showPassword ? '隐藏' : '显示'"
+                    @click="showPassword = !showPassword"
+                  >
                     <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  </span>
+                  </button>
                 </div>
-                <el-tooltip content="与认证方式对应的认证值" placement="top">
-                  <span class="field-tip">!</span>
-                </el-tooltip>
               </div>
             </template>
 
             <!-- 数据库类型通用配置 (非 Aloudata) -->
             <template v-else>
               <!-- 数据库地址 -->
-              <div class="field-row">
-                <label class="field-label required">{{ t('dsForm.fieldHost') }}</label>
-                <input v-model="form.host" class="field-input" :placeholder="t('dsForm.placeholderHost')" />
+              <div class="form-field">
+                <label class="form-label required">{{ t('dsForm.fieldHost') }}</label>
+                <input
+                  v-model="form.host"
+                  class="form-input"
+                  :placeholder="t('dsForm.placeholderHost')"
+                />
               </div>
 
               <!-- 端口 -->
-              <div class="field-row">
-                <label class="field-label required">{{ t('dsForm.fieldPort') }}</label>
-                <input v-model="form.port" class="field-input short" />
+              <div class="form-field">
+                <label class="form-label required">{{ t('dsForm.fieldPort') }}</label>
+                <input
+                  v-model="form.port"
+                  class="form-input"
+                  style="max-width: 120px;"
+                />
               </div>
 
               <!-- 数据库 -->
-              <div class="field-row">
-                <label class="field-label required">{{ t('dsForm.fieldDatabase') }}</label>
-                <input v-model="form.database" class="field-input" :placeholder="t('dsForm.placeholderDatabase')" />
+              <div class="form-field">
+                <label class="form-label required">{{ t('dsForm.fieldDatabase') }}</label>
+                <input
+                  v-model="form.database"
+                  class="form-input"
+                  :placeholder="t('dsForm.placeholderDatabase')"
+                />
               </div>
 
               <!-- 用户名 -->
-              <div class="field-row">
-                <label class="field-label required">{{ t('dsForm.fieldUsername') }}</label>
-                <input v-model="form.username" class="field-input" :placeholder="t('dsForm.placeholderUsername')" />
+              <div class="form-field">
+                <label class="form-label required">{{ t('dsForm.fieldUsername') }}</label>
+                <input
+                  v-model="form.username"
+                  class="form-input"
+                  :placeholder="t('dsForm.placeholderUsername')"
+                />
               </div>
 
               <!-- 密码 -->
-              <div class="field-row">
-                <label class="field-label required">{{ t('dsForm.fieldPassword') }}</label>
+              <div class="form-field form-field-wide">
+                <label class="form-label required">{{ t('dsForm.fieldPassword') }}</label>
                 <div class="password-field">
-                  <input v-model="form.password" class="field-input" :type="showPassword ? 'text' : 'password'" :placeholder="t('dsForm.placeholderPassword')" />
-                  <span class="eye-btn" @click="showPassword = !showPassword">
+                  <input
+                    v-model="form.password"
+                    class="form-input"
+                    :type="showPassword ? 'text' : 'password'"
+                    :placeholder="t('dsForm.placeholderPassword')"
+                  />
+                  <button
+                    type="button"
+                    class="eye-btn"
+                    :title="showPassword ? '隐藏' : '显示'"
+                    @click="showPassword = !showPassword"
+                  >
                     <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  </span>
+                  </button>
                 </div>
               </div>
 
               <!-- 服务器版本 -->
-              <div class="field-row">
-                <label class="field-label">{{ t('dsForm.fieldVersion') }}</label>
-                <select v-model="form.version" class="field-select">
+              <div class="form-field">
+                <label class="form-label">{{ t('dsForm.fieldVersion') }}</label>
+                <select v-model="form.version" class="form-select">
                   <option v-for="v in versionOptions" :key="v.value" :value="v.value">{{ v.label }}</option>
                 </select>
               </div>
 
               <!-- VPC/线路配置 -->
-              <div class="field-section">
-                <label class="section-label">{{ t('dsForm.vpcConfig') }}</label>
-                <p class="section-desc">{{ t('dsForm.vpcDesc') }}</p>
+              <div class="form-field form-field-wide">
+                <label class="form-label" style="font-weight: 600; margin-bottom: 4px;">{{ t('dsForm.vpcConfig') }}</label>
+                <p class="field-desc" style="margin: 0; font-size: 12px; color: #86909c;">{{ t('dsForm.vpcDesc') }}</p>
               </div>
 
               <!-- SSL -->
-              <div class="field-toggle">
-                <label class="field-label">{{ t('dsForm.ssl') }}</label>
-                <label class="switch">
-                  <input v-model="form.sslEnabled" type="checkbox" />
-                  <span class="slider"></span>
+              <div class="form-field form-field-wide">
+                <label class="checkbox-label">
+                  <label class="switch">
+                    <input v-model="form.sslEnabled" type="checkbox" />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="switch-text">{{ t('dsForm.ssl') }}</span>
                 </label>
               </div>
 
               <!-- SSH -->
-              <div class="field-toggle">
-                <label class="field-label">{{ t('dsForm.ssh') }}</label>
-                <label class="switch">
-                  <input v-model="form.sshEnabled" type="checkbox" />
-                  <span class="slider"></span>
+              <div class="form-field form-field-wide">
+                <label class="checkbox-label">
+                  <label class="switch">
+                    <input v-model="form.sshEnabled" type="checkbox" />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="switch-text">{{ t('dsForm.ssh') }}</span>
                 </label>
-                <p v-if="form.sshEnabled" class="toggle-desc">{{ t('dsForm.sshDesc') }}</p>
+                <p v-if="form.sshEnabled" class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">{{ t('dsForm.sshDesc') }}</p>
               </div>
 
-              <!-- 跨VPC/SQL -->
-              <div class="field-toggle">
-                <label class="field-label">{{ t('dsForm.crossVpcSql') }}</label>
-                <label class="switch">
-                  <input v-model="form.crossVpcEnabled" type="checkbox" />
-                  <span class="slider"></span>
+              <!-- 跨 VPC/SQL -->
+              <div class="form-field form-field-wide">
+                <label class="checkbox-label">
+                  <label class="switch">
+                    <input v-model="form.crossVpcEnabled" type="checkbox" />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="switch-text">{{ t('dsForm.crossVpcSql') }}</span>
                 </label>
-                <p v-if="form.crossVpcEnabled" class="toggle-desc">{{ t('dsForm.crossVpcDesc') }}</p>
+                <p v-if="form.crossVpcEnabled" class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">{{ t('dsForm.crossVpcDesc') }}</p>
               </div>
 
               <!-- 开启上传文件入口 -->
-              <div class="field-checkbox">
-                <label class="checkbox-wrap">
+              <div class="form-field form-field-wide">
+                <label class="checkbox-label">
                   <input v-model="form.uploadEnabled" type="checkbox" checked />
-                  <span class="checkmark"></span>
-                  {{ t('dsForm.uploadFileEntry') }}
+                  <span class="checkmark-new"></span>
+                  <span class="switch-text">{{ t('dsForm.uploadFileEntry') }}</span>
                 </label>
               </div>
 
               <!-- 白名单列表 -->
-              <div class="whitelist-section">
-                <label class="field-label">{{ t('dsForm.whitelistLabel') }}</label>
-                <div class="whitelist-box">
-                  <pre class="whitelist-text">{{ whitelistIps }}</pre>
-                  <button class="copy-btn" @click="copyWhitelist">{{ t('dsForm.copyWhitelist') }}</button>
+              <div class="form-field form-field-wide">
+                <label class="form-label">{{ t('dsForm.whitelistLabel') }}</label>
+                <div class="whitelist-box-new">
+                  <pre class="whitelist-text-new">{{ whitelistIps }}</pre>
+                  <button class="copy-btn-new" @click="copyWhitelist">{{ t('dsForm.copyWhitelist') }}</button>
                 </div>
               </div>
             </template>
@@ -277,6 +350,25 @@ onMounted(async () => {
       if (ds) {
         form.displayName = ds.name || ''
         form.host = ds.host || ''
+        // 产品层与语义层地址统一从 connection_params 读取，
+        // 未配置时回退到独立字段 productHost / semanticHost，最后回退到通用 host 字段（兼容历史数据）
+        let cpAnyHost = ''
+        let cpSemHost = ''
+        if (ds.connectionParams) {
+          try {
+            const cp = JSON.parse(ds.connectionParams)
+            if (cp.anymetricsHost) {
+              cpAnyHost = cp.anymetricsHost
+            }
+            if (cp.semanticHost) {
+              cpSemHost = cp.semanticHost
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+        form.productHost = cpAnyHost || ds.productHost || ds.host || ''
+        form.semanticHost = cpSemHost || ds.semanticHost || ds.host || ''
         form.port = String(ds.port || 3306)
         form.aloudataPort = String((ds.sourceType === 'aloudata' && ds.connectionParams)
           ? (JSON.parse(ds.connectionParams).anymetricsPort || 8083)
@@ -335,6 +427,9 @@ const datasourceInfo = computed(() => {
 const form = reactive({
   displayName: '',
   host: '',
+  // Aloudata 产品层与语义层独立地址（独立进程服务）
+  productHost: '',
+  semanticHost: '',
   port: '3306',
   database: '',
   username: '',
@@ -360,8 +455,59 @@ const versionOptions = [
   { value: '5.5', label: '5.5' },
 ]
 
-/** 白名单IP */
+/** 白名单 IP */
 const whitelistIps = `47.101.100.24/0,191.0.0.0/47,10.137.30/0,192.92.0/0,234.204.106.15.160/0,24.106.15.160/0,23.106/15`
+
+/** 验证表单必填项 */
+function validateForm(): { valid: boolean; message: string } {
+  const isAloudata = selectedDbId.value === 60
+  
+  // 通用必填项检查
+  if (!form.displayName || !form.displayName.trim()) {
+    return { valid: false, message: t('dsForm.validation.displayNameRequired') }
+  }
+  
+  if (isAloudata) {
+    // Aloudata 类型必填项
+    if (!form.productHost || !form.productHost.trim()) {
+      return { valid: false, message: '产品层服务地址不能为空' }
+    }
+    if (!form.aloudataPort || !String(form.aloudataPort).trim()) {
+      return { valid: false, message: '产品层端口不能为空' }
+    }
+    if (!form.semanticHost || !form.semanticHost.trim()) {
+      return { valid: false, message: '语义层服务地址不能为空' }
+    }
+    if (!form.semanticPort || !String(form.semanticPort).trim()) {
+      return { valid: false, message: '语义层端口不能为空' }
+    }
+    if (!form.tenantId || !form.tenantId.trim()) {
+      return { valid: false, message: '租户 ID 不能为空' }
+    }
+    if (!form.authValue || !form.authValue.trim()) {
+      return { valid: false, message: '认证值不能为空' }
+    }
+  } else {
+    // 数据库类型必填项
+    if (!form.host || !form.host.trim()) {
+      return { valid: false, message: t('dsForm.validation.hostRequired') }
+    }
+    if (!form.port || !String(form.port).trim()) {
+      return { valid: false, message: t('dsForm.validation.portRequired') }
+    }
+    if (!form.database || !form.database.trim()) {
+      return { valid: false, message: t('dsForm.validation.databaseRequired') }
+    }
+    if (!form.username || !form.username.trim()) {
+      return { valid: false, message: t('dsForm.validation.usernameRequired') }
+    }
+    if (!form.password || !form.password.trim()) {
+      return { valid: false, message: t('dsForm.validation.passwordRequired') }
+    }
+  }
+  
+  return { valid: true, message: '' }
+}
 
 /** 复制白名单 */
 function copyWhitelist(): void {
@@ -390,20 +536,23 @@ function buildCreateRequest() {
   const request: Record<string, any> = {
     name: form.displayName,
     sourceType: sourceTypeMap[selectedDbId.value] || 'mysql',
-    host: form.host,
     port: isAloudata ? undefined : Number(form.port) || 3306,
     databaseName: form.database,
     username: isAloudata ? form.tenantId : form.username,
     password: isAloudata ? form.authValue : form.password,
     enabled: true,
   }
-  // Aloudata 额外配置
+  // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {
     request.connectionParams = JSON.stringify({
+      anymetricsHost: form.productHost,
+      semanticHost: form.semanticHost,
       anymetricsPort: Number(form.aloudataPort) || 8083,
       semanticPort: Number(form.semanticPort) || 8085,
       authType: form.authType,
     })
+  } else {
+    request.host = form.host
   }
   return request
 }
@@ -413,6 +562,14 @@ async function handleTestConnection(): Promise<void> {
   if (testing.value || submitting.value) {
     return
   }
+  
+  // 验证必填项
+  const validation = validateForm()
+  if (!validation.valid) {
+    ElMessage.error(validation.message)
+    return
+  }
+  
   testing.value = true
   try {
     let result: boolean
@@ -442,6 +599,14 @@ async function handleSubmit(): Promise<void> {
   if (submitting.value || testing.value) {
     return
   }
+  
+  // 验证必填项
+  const validation = validateForm()
+  if (!validation.valid) {
+    ElMessage.error(validation.message)
+    return
+  }
+  
   submitting.value = true
   try {
     const request = buildCreateRequest()
@@ -620,171 +785,237 @@ async function handleSubmit(): Promise<void> {
   margin: 0 0 20px 0;
 }
 
-/* 表单字段 */
-.form-fields {
+/* 表单网格布局 */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin-top: 20px;
+}
+
+.form-field {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.field-row {
+.form-field-wide {
+  grid-column: 1 / -1;
+}
+
+.form-label {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.field-label {
-  width: 90px;
+  gap: 4px;
   font-size: 13px;
   color: #4e5969;
-  flex-shrink: 0;
-  text-align: right;
+  font-weight: 500;
 }
 
-.field-label.required::before {
+.form-label.required::before {
   content: '*';
   color: #f53f3f;
-  margin-right: 4px;
+  font-weight: 600;
+  margin-right: 2px;
 }
 
-.field-input {
-  flex: 1;
-  max-width: 360px;
-  height: 34px;
+.form-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e5e6eb;
+  color: #86909c;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: help;
+  transition: all 0.15s;
+}
+
+.form-tip:hover {
+  background: #165dff;
+  color: #fff;
+}
+
+.form-input,
+.form-select {
+  height: 36px;
   border: 1px solid #e5e6eb;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
   color: #1d2129;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.15s;
   font-family: inherit;
   background: #fff;
+  box-sizing: border-box;
+  width: 100%;
 }
 
-.field-input:focus {
+.form-input:hover:not(:disabled),
+.form-select:hover:not(:disabled) {
+  border-color: #c9cdd4;
+}
+
+.form-input:focus,
+.form-select:focus {
   border-color: #165dff;
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
 }
 
-.field-input.short {
-  max-width: 120px;
+.form-input:disabled {
+  background: #f7f8fa;
+  color: #1d2129;
+  cursor: not-allowed;
+  border-color: #e5e6eb;
 }
 
-.field-input::placeholder {
+.form-input::placeholder {
   color: #c9cdd4;
 }
 
-.field-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #f53f3f;
-  color: #fff;
-  font-size: 11px;
-  font-weight: bold;
-  cursor: pointer;
-  flex-shrink: 0;
-  margin-left: 4px;
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%2386909c' d='M6 8.5L1.5 4h9z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px;
+  padding-right: 32px;
 }
 
-.field-tip:hover {
-  background: #cb2630;
-}
-
-.password-field,
-.schema-field {
+.password-field {
   position: relative;
-  flex: 1;
-  max-width: 360px;
   display: flex;
   align-items: center;
 }
 
-.password-field .field-input,
-.schema-field .field-input {
-  flex: 1;
-  max-width: none;
-  padding-right: 36px;
+.password-field .form-input {
+  padding-right: 40px;
 }
 
-.password-field .field-input::-ms-reveal,
-.password-field .field-input::-webkit-credentials-auto-fill-button {
+.password-field .form-input::-ms-reveal,
+.password-field .form-input::-webkit-credentials-auto-fill-button {
   display: none;
 }
 
 .eye-btn {
   position: absolute;
-  right: 10px;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #c9cdd4;
-  transition: color 0.2s;
+  border-radius: 4px;
+  transition: all 0.15s;
 }
 
 .eye-btn:hover {
+  color: #165dff;
+  background: #f2f3f5;
+}
+
+/* 开关切换新样式 */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #4e5969;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input[type='checkbox'] {
+  display: none;
+}
+
+.switch-text {
+  font-size: 13px;
   color: #4e5969;
 }
 
-.eye-btn.small {
-  font-size: 12px;
-}
-
-.field-select {
-  width: 360px;
-  height: 34px;
-  border: 1px solid #e5e6eb;
-  border-radius: 4px;
-  padding: 0 12px;
-  font-size: 13px;
-  color: #1d2129;
-  outline: none;
-  background: #fff;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.field-select:focus {
-  border-color: #165dff;
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.1);
-}
-
-/* 分段标题 */
-.field-section {
-  padding-top: 8px;
-  border-top: 1px solid #f2f3f5;
-}
-
-.section-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #1d2129;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.section-desc {
+.field-desc {
   font-size: 12px;
   color: #86909c;
-  margin: 0;
   line-height: 1.5;
 }
 
-/* 开关切换 */
-.field-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* 白名单新样式 */
+.whitelist-box-new {
+  position: relative;
+  background: #fafbfc;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  padding: 12px 80px 12px 16px;
+  min-height: 60px;
 }
 
-.field-toggle .field-label {
-  width: auto;
-  text-align: left;
+.whitelist-text-new {
+  font-family: 'Courier New', monospace;
+  font-size: 11.5px;
+  color: #4e5969;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.copy-btn-new {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 12px;
+  border: 1px solid #c9cdd4;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #4e5969;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.copy-btn-new:hover {
+  border-color: #165dff;
+  color: #165dff;
+}
+
+/* 复选框新样式 */
+.checkmark-new {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #c9cdd4;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.checkbox-label input:checked + .checkmark-new {
+  background: #165dff;
+  border-color: #165dff;
+}
+
+.checkbox-label input:checked + .checkmark-new::after {
+  content: '✓';
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  position: absolute;
 }
 
 .switch {

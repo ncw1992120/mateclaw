@@ -4,29 +4,49 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingRequest;
+import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService;
 import vip.mate.agent.AgentService.StreamDelta;
+import vip.mate.agent.binding.model.AgentProviderPreference;
+import vip.mate.agent.binding.model.AgentSkillBinding;
+import vip.mate.agent.binding.model.AgentToolBinding;
+import vip.mate.agent.binding.service.AgentBindingService;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.model.AgentEntity;
 import vip.mate.agent.service.TemplateService;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.datasource.service.DatasourceService;
 import vip.mate.exception.MateClawException;
+import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.*;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.llm.service.ModelDiscoveryService;
 import vip.mate.llm.service.ModelProviderService;
 import vip.mate.sdk.service.MateClawRuntime;
+import vip.mate.sdk.service.WikiRuntime;
+import vip.mate.skill.installer.SkillInstaller;
+import vip.mate.skill.installer.ZipSkillFetcher;
+import vip.mate.skill.installer.model.HubSkillInfo;
+import vip.mate.skill.installer.model.InstallRequest;
+import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.runtime.SkillFrontmatterParser;
 import vip.mate.skill.service.SkillService;
 import vip.mate.system.service.SystemSettingService;
 import vip.mate.tool.ToolRegistry;
+import vip.mate.tool.model.AvailableToolDTO;
 import vip.mate.tool.model.ToolEntity;
 import vip.mate.tool.repository.ToolMapper;
+import vip.mate.tool.service.AvailableToolService;
+import vip.mate.wiki.model.WikiKnowledgeBaseEntity;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -49,8 +69,14 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     private final ModelConfigService modelConfigService;
     private final ModelProviderService modelProviderService;
     private final ModelDiscoveryService modelDiscoveryService;
+    private final EmbeddingModelFactory embeddingModelFactory;
     private final SkillService skillService;
     private final SystemSettingService systemSettingService;
+    private final AgentBindingService agentBindingService;
+    private final AvailableToolService availableToolService;
+    private final WikiRuntime wikiRuntime;
+    private final SkillInstaller skillInstaller;
+    private final SkillFrontmatterParser skillFrontmatterParser;
 
     /**
      * 与指定 Agent 进行结构化流式对话
@@ -490,6 +516,37 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
         return modelDiscoveryService.testModel(providerId, modelId);
     }
 
+    /**
+     * 测试 Embedding 模型连通性
+     */
+    @Override
+    public Map<String, Object> testEmbeddingModel(Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            ModelConfigEntity config = modelConfigService.getModel(modelId);
+            if (!"embedding".equals(config.getModelType())) {
+                result.put("success", false);
+                result.put("message", "模型类型不是 embedding: " + config.getModelType());
+                return result;
+            }
+            // 清除缓存，确保本次测试用最新的 API key
+            embeddingModelFactory.evict(modelId);
+            EmbeddingModel model = embeddingModelFactory.build(config);
+            EmbeddingRequest request = new EmbeddingRequest(List.of("test"), null);
+            EmbeddingResponse resp = model.call(request);
+            float[] vec = resp.getResults().get(0).getOutput();
+            result.put("success", true);
+            result.put("dimensions", vec.length);
+            result.put("model", config.getModelName());
+            result.put("message", "连通性测试成功");
+        } catch (Exception e) {
+            log.warn("[EmbeddingTest] modelId={} test failed", modelId, e);
+            result.put("success", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
     // ==================== 技能管理 ====================
 
     /**
@@ -557,5 +614,140 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public SkillEntity toggleSkill(Long id, boolean enabled) {
         return skillService.toggleSkill(id, enabled);
+    }
+
+    // ==================== 技能导入 ====================
+
+    /**
+     * 在 ClawHub 市场搜索可用技能
+     */
+    @Override
+    public List<HubSkillInfo> searchSkillHub(String query, int limit) {
+        return skillInstaller.searchHub(query, limit);
+    }
+
+    /**
+     * 启动一个异步技能安装任务
+     */
+    @Override
+    public InstallTask startInstallSkill(InstallRequest request) {
+        return skillInstaller.startInstall(request);
+    }
+
+    /**
+     * 查询安装任务状态
+     */
+    @Override
+    public InstallTask getInstallTaskStatus(String taskId) {
+        return skillInstaller.getTaskStatus(taskId);
+    }
+
+    /**
+     * 取消正在执行的安装任务
+     */
+    @Override
+    public void cancelInstallTask(String taskId) {
+        skillInstaller.cancelTask(taskId);
+    }
+
+    /**
+     * 通过上传 ZIP 包同步安装技能
+     */
+    @Override
+    public Map<String, Object> installSkillFromZip(MultipartFile zipFile, boolean enable, boolean overwrite,
+                                                   String targetName, Long workspaceId) {
+        if (zipFile == null || zipFile.isEmpty()) {
+            throw new MateClawException("err.skill.zip_empty", "ZIP 文件不能为空");
+        }
+        String filename = zipFile.getOriginalFilename();
+        if (filename == null || !filename.toLowerCase().endsWith(".zip")) {
+            throw new MateClawException("err.skill.zip_invalid", "仅支持 .zip 文件");
+        }
+        try {
+            var bundle = ZipSkillFetcher.parse(zipFile, skillFrontmatterParser);
+            return skillInstaller.installFromBundle(bundle, enable, overwrite, targetName, workspaceId);
+        } catch (MateClawException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("ZIP install failed: {}", e.getMessage(), e);
+            throw new MateClawException("err.skill.zip_install_failed", "ZIP 安装失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 通过名称卸载技能
+     */
+    @Override
+    public void uninstallSkillByName(String skillName, Long workspaceId) {
+        skillInstaller.uninstall(skillName, workspaceId);
+    }
+
+    // ==================== Agent 能力绑定 ====================
+
+    /**
+     * 获取 Agent 已绑定的技能列表
+     */
+    @Override
+    public List<AgentSkillBinding> listAgentSkillBindings(Long agentId) {
+        return agentBindingService.listSkillBindings(agentId);
+    }
+
+    /**
+     * 批量设置 Agent 的技能绑定
+     */
+    @Override
+    public void setAgentSkillBindings(Long agentId, List<Long> skillIds) {
+        agentBindingService.setSkillBindings(agentId, skillIds);
+        agentService.invalidateAgentCache(agentId);
+    }
+
+    /**
+     * 获取 Agent 已绑定的工具列表
+     */
+    @Override
+    public List<AgentToolBinding> listAgentToolBindings(Long agentId) {
+        return agentBindingService.listToolBindings(agentId);
+    }
+
+    /**
+     * 批量设置 Agent 的工具绑定
+     */
+    @Override
+    public void setAgentToolBindings(Long agentId, List<String> toolNames) {
+        agentBindingService.setToolBindings(agentId, toolNames);
+        agentService.invalidateAgentCache(agentId);
+    }
+
+    /**
+     * 获取 Agent 的偏好 Provider 顺序
+     */
+    @Override
+    public List<AgentProviderPreference> listAgentProviderPreferences(Long agentId) {
+        return agentBindingService.listProviderPreferences(agentId);
+    }
+
+    /**
+     * 批量设置 Agent 的偏好 Provider 顺序
+     */
+    @Override
+    public void setAgentProviderPreferences(Long agentId, List<String> providerIds) {
+        agentBindingService.setProviderPreferences(agentId, providerIds);
+        agentService.invalidateAgentCache(agentId);
+    }
+
+    /**
+     * 获取 Agent 的可用工具完整列表
+     */
+    @Override
+    public List<AvailableToolDTO> listAvailableTools() {
+        return availableToolService.listAvailable();
+    }
+
+    /**
+     * 列出指定工作区下可绑定到 Agent 的知识库
+     */
+    @Override
+    public List<WikiKnowledgeBaseEntity> listBindableKnowledgeBases(Long workspaceId) {
+        return wikiRuntime.listKBsByWorkspace(workspaceId);
     }
 }

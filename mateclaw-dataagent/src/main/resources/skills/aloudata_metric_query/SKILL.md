@@ -1,92 +1,89 @@
 ---
 name: aloudata_metric_query
 version: "2.0.0"
-description: "当用户需要查询指标平台的指标数据或维度信息时，使用 Aloudata 指标平台工具。适用于基于已定义的语义化指标和维度进行业务分析。"
+description: "通过 Aloudata 指标平台查询指标数据。支持语义检索指标和维度、构造指标查询请求、获取指标列表和维度列表。"
 dependencies:
   tools:
-    - aloudata_metrics_list
-    - aloudata_metrics_query
-    - aloudata_dimensions_list
     - aloudata_search_semantic
+    - aloudata_metrics_list
+    - aloudata_dimensions_list
+    - aloudata_metric_available_dimensions
+    - aloudata_metrics_query
 ---
 
-# Aloudata 指标平台查询技能
+# Aloudata 指标查询技能
 
-当用户需要查询指标平台的指标数据时，按照以下工作流程操作。
+## 适用场景
 
-> **注意**：Aloudata API 端点以动态 Tool 方式注册，Tool 名称格式为 `aloudata_{端点名}`。
-> 完整可用 Tool 列表由 `aloudata.api.endpoints` 配置决定，以下为常用端点。
-
-## 前提条件
-
-使用此技能前，需要确保已配置 Aloudata 类型的数据源。如果用户未指定数据源，先询问用户使用哪个数据源。
-
-> **关于 datasourceId**：所有 Aloudata Tool 都需要 `datasourceId` 参数，这是**本地系统中配置的指标平台数据源 ID**，用于定位连接配置和认证信息。它**不会**传递给远程 Aloudata API，Aloudata 平台不识别此参数。
+用户需要查询指标数据、了解指标口径、查看维度信息，或需要基于指标平台进行数据分析。
 
 ## 工作流程
 
-### 第一步：发现可用指标
-调用 `aloudata_metrics_list(datasourceId=<id>)` 查看数据源下的所有指标。
-- 每个指标包含 metricName、metricDisplayName、type、businessCaliber 等信息
-- 根据用户问题推断最相关的指标；不确定时询问用户
-- 注意指标的 businessCaliber（业务口径）描述，理解指标的含义
-- 可选参数：keyword（搜索关键词）、statusFilters（状态过滤）、pageNumber/pageSize（分页）
+### 第一步：语义检索指标和维度
 
-### 第二步：了解可用维度
-如果用户需要按维度分析：
-- 调用 `aloudata_dimensions_list(datasourceId=<id>)` 查看所有维度
-- 或调用 `aloudata_metric_available_dimensions(datasourceId=<id>, metricNames=[...])` 查看指定指标的可用维度
-- 维度是指标的分组/切片条件，如时间、地区、产品类别等
-- 根据用户需求选择合适的维度
+调用 `aloudata_search_semantic(datasourceId, keyword)` 检索相关的指标和维度。
 
-### 第三步：查询指标数据
-调用 `aloudata_metrics_query(datasourceId=<id>, metrics=[...], dimensions=[...])` 查询指标数据。
-- metrics 为必填参数，传入指标名称列表
-- dimensions 为可选参数，传入维度名称列表用于分组
-- filters 为可选参数，传入过滤条件
-- timeConstraint 为可选参数，传入时间范围约束
-- limit 和 offset 用于分页控制
-- queryResultType 控制返回类型：SQL_AND_DATA（默认）/ SQL / DATA
+**这一步是关键**：直接返回精确的 metricName 和 dimName，无需猜测指标名。
 
-### 第四步：解读结果
-- 用自然语言总结查询结果的要点
-- 如果结果为空，分析可能的原因（如指标名称错误、过滤条件过严等）
-- 如果查询结果包含数值列，系统会自动生成 ECharts 图表，无需手动生成图表代码
-- **重要：不要使用 write_file 工具生成 HTML 图表文件，系统已内置图表渲染能力**
+返回格式包含：
+- **指标命中**：metricName(展示名) [类型] - 口径, 同义词: ..., 可用维度: ...
+- **维度命中**：dimName(展示名) [数据类型] - 描述, 同义词: ..., 示例值: ...
 
-## 其他可用工具
+**检索策略**：
+- 关键词检索：匹配 metricName、metricDisplayName、businessCaliber、synonyms
+- 向量语义检索：理解自然语言含义（如"营收"匹配到"销售额"指标）
+- 混合检索：关键词 + 向量 + RRF 融合，确保准确性和召回率
 
-- `aloudata_metric_detail` — 查询单个指标详情（需要 metricName）
-- `aloudata_metric_batch_detail` — 批量查询指标详情（需要 metricNames）
-- `aloudata_metric_tree` — 获取树状结构指标列表
-- `aloudata_dimension_detail` — 查询维度详情（需要 dimName）
-- `aloudata_dimension_values` — 预览维度取值（需要 dimName）
-- `aloudata_attribution_tree` — 指标归因分析（需要 metricName）
-- `aloudata_attribution_multi_dim` — 多维归因分析（需要 metricName + dimensions）
-- `aloudata_attribution_validate` — 归因分析校验（需要 metricName）
-- `aloudata_attribution_drilldown` — 归因下钻查询（需要 metricName + dimensions）
-- `aloudata_search_semantic` — 搜索本地语义模型（需要 datasourceId + keyword）
+### 第二步：确认可用维度
 
-## 使用场景
+根据第一步返回的指标，检查其 `availableDimensions` 字段：
+- 如果用户需要的维度在列表中 → 直接使用 dimName
+- 如果需要确认或查看更多维度 → 调用 `aloudata_metric_available_dimensions(metricNames)`
 
-指标平台查询适用于以下场景：
-- 用户提到"指标"、"度量"、"KPI"等关键词
-- 用户需要基于已定义的业务指标进行分析
-- 用户需要查看指标的维度拆解
-- 用户需要了解指标的业务口径和定义
+**常见维度类型**：
+- 时间维度：`metric_time__day`、`metric_time__month`、`metric_time__year` — 用于时间范围和时间对比
+- 业务维度：如 `region`(区域)、`channel`(渠道)、`category`(类目) — 用于数据拆解
+- 衍生维度：如 `metric_time__week`(周)、`metric_time__quarter`(季度) — 按需使用
 
-## 与数据集查询和 SQL 查询的区别
+### 第三步：构造查询请求
 
-- **指标平台查询**：基于已定义的语义化指标和维度，业务语义明确，适合业务分析
-- **数据集查询**：基于已治理的数据集，字段已分类，适合结构化数据探索
-- **SQL 查询**：直接查询原始数据源表，灵活但需要了解表结构
+使用第一步得到的 metricName/dimName 构造 `aloudata_metrics_query` 请求。
 
-如果用户的问题更适合直接查询原始表或数据集，建议使用对应的技能。
+**请求参数说明**：
+- `metrics`：指标英文名列表（如 `["sales_amount"]`），**必须使用第一步返回的 metricName**
+- `dimensions`：维度英文名列表（如 `["region", "metric_time__month"]`），**必须使用第一步返回的 dimName**
+- `filters`：筛选条件数组，格式 `[{"dimName": "region", "operator": "IN", "values": ["华东", "华南"]}]`
+- `timeConstraint`：时间约束（如 `"2024-01-01/2024-01-31"`），时间维度名通常是 `metric_time__day` 或 `metric_time__month`
+- `metricDefinitions`：快速计算定义，用于环比、同比、占比等衍生指标
+- `orderBy`：排序字段，格式 `[{"fieldName": "sales_amount", "direction": "DESC"}]`
+- `limit` / `offset`：分页参数
 
-## 错误处理
+**快速计算(metricDefinitions)示例**：
+- 环比增长率：`{"refMetric": "sales_amount", "specifyDimension": "metric_time__month"}`
+- 同比增长率：`{"refMetric": "sales_amount", "specifyDimension": "metric_time__year"}`
+- 占比：`{"refMetric": "sales_amount", "specifyDimension": "region"}`
 
-如果查询失败：
-1. 仔细阅读错误信息
-2. 常见原因：数据源 ID 无效、数据源类型不是 aloudata、指标名称错误、认证失败
-3. 如果提示"数据源类型不是 aloudata"，建议用户检查数据源配置
-4. 如果认证失败，建议用户检查数据源的连接配置和认证信息
+### 第四步：输出自检
+
+在展示结果前，进行自检：
+1. **指标名验证**：确认 metrics 参数使用的是 metricName（英文名），不是展示名
+2. **维度名验证**：确认 dimensions 参数使用的是 dimName（英文名），不是展示名
+3. **时间范围**：确认 timeConstraint 格式正确，时间维度名正确
+4. **维度可用性**：确认使用的维度在指标的 availableDimensions 列表中
+
+### 第五步：解读结果
+
+根据查询结果向用户解读：
+- 数据趋势和变化
+- 异常值和关注点
+- 维度拆解后的差异分析
+
+如果数据适合可视化，结果中会包含 echarts 图表配置。
+
+## 重要提示
+
+1. **必须先检索再查询**：不要直接构造 metrics_query 请求，必须先通过 aloudata_search_semantic 获取精确的 metricName 和 dimName
+2. **使用英文名构造请求**：metrics 和 dimensions 参数必须使用英文名(metricName/dimName)，不要使用中文展示名
+3. **维度需确认可用**：使用维度前，先检查指标的 availableDimensions 列表
+4. **时间维度特殊处理**：时间维度名通常为 `metric_time__*` 格式，在 dimensions 中指定时间粒度，在 timeConstraint 中指定时间范围
+5. **同义词匹配**：用户可能使用非标准名称（如"营收"而非"销售额"），语义检索会通过同义词自动匹配

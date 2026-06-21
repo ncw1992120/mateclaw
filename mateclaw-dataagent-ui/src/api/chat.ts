@@ -99,9 +99,10 @@ export interface StreamOptions {
 }
 
 export async function* streamChat(
-  agentId: number,
+  agentId: number | string,
   message: string,
   conversationId: string,
+  modelProvider?: string,
   modelName?: string,
   options?: StreamOptions,
   datasourceIds?: string[]
@@ -116,11 +117,14 @@ export async function* streamChat(
   }
 
   const body: Record<string, unknown> = { agentId, message, conversationId }
+  if (modelProvider) {
+    body.modelProvider = modelProvider
+  }
   if (modelName) {
     body.modelName = modelName
   }
   if (datasourceIds && datasourceIds.length > 0) {
-    body.datasourceIds = datasourceIds.map(id => Number(id))
+    body.datasourceIds = datasourceIds
   }
 
   const abortController = new AbortController()

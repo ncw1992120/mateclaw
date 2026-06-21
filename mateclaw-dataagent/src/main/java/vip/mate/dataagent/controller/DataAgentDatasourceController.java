@@ -9,7 +9,11 @@ import vip.mate.common.result.R;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.dto.*;
-import vip.mate.dataagent.service.AloudataService;
+import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
+import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
+import vip.mate.dataagent.model.AloudataCategoryEntity;
+import vip.mate.dataagent.service.AloudataSemanticSyncService;
+
 import vip.mate.dataagent.service.DatasourceManageService;
 
 import java.util.List;
@@ -27,8 +31,8 @@ import java.util.Map;
 public class DataAgentDatasourceController {
 
     private final DatasourceManageService datasourceService;
-    private final AloudataService aloudataService;
     private final AloudataEndpointService aloudataEndpointService;
+    private final AloudataSemanticSyncService aloudataSyncService;
 
     /**
      * 数据源列表
@@ -194,24 +198,99 @@ public class DataAgentDatasourceController {
     // ==================== Aloudata 指标平台相关接口 ====================
 
     /**
-     * 查询 Aloudata 指标列表
+     * 触发 Aloudata 语义层全量同步
      */
-    @GetMapping("/{datasourceId}/aloudata/metrics")
-    @Operation(summary = "查询 Aloudata 指标列表", description = "获取 Aloudata 指标平台下的所有指标列表")
-    public R<List<AloudataMetricVO>> listAloudataMetrics(
+    @PostMapping("/{datasourceId}/aloudata/sync")
+    @Operation(summary = "同步 Aloudata 语义层", description = "从 Aloudata 指标平台同步指标、维度、类目元数据到本地语义层（MySQL + ES）")
+    public R<AloudataSemanticSyncService.SyncResult> syncAloudataSemantic(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
-        return R.ok(aloudataService.listMetrics(datasourceId));
+        return R.ok(aloudataSyncService.fullSync(datasourceId));
     }
 
     /**
-     * 执行 Aloudata 指标数据查询
+     * 重建 ES 索引（仅从 MySQL 读取已同步数据写入 ES，不重新从 Aloudata API 拉取）
      */
-    @PostMapping("/{datasourceId}/aloudata/query")
-    @Operation(summary = "执行 Aloudata 指标查询", description = "使用指标和维度组合，查询指定的指标计算结果")
-    public R<AloudataMetricQueryResponse> queryAloudataMetrics(
+    @PostMapping("/{datasourceId}/aloudata/rebuild-es")
+    @Operation(summary = "重建 ES 索引", description = "将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引，不从 Aloudata API 重新拉取。适用于 ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景")
+    public R<AloudataSemanticSyncService.SyncResult> rebuildEsIndex(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.rebuildEsIndex(datasourceId));
+    }
+
+    /**
+     * 查询 Aloudata 语义层同步状态
+     */
+    @GetMapping("/{datasourceId}/aloudata/sync-status")
+    @Operation(summary = "查询同步状态", description = "查询 Aloudata 语义层的同步状态和已同步数量")
+    public R<AloudataSemanticSyncService.SyncResult> getAloudataSyncStatus(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.getSyncStatus(datasourceId));
+    }
+
+    /**
+     * 查询已同步的指标列表（分页）
+     */
+    @GetMapping("/{datasourceId}/aloudata/synced-metrics")
+    @Operation(summary = "已同步指标列表", description = "获取已同步到本地语义层的 Aloudata 指标列表（分页）")
+    public R<List<AloudataMetricSemanticDTO>> listSyncedMetrics(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
-            @RequestBody AloudataMetricQueryRequest request) {
-        return R.ok(aloudataService.queryMetrics(datasourceId, request));
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int pageNumber,
+            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize) {
+        return R.ok(aloudataSyncService.listSyncedMetrics(datasourceId, pageNumber, pageSize));
+    }
+
+    /**
+     * 查询已同步的维度列表（分页）
+     */
+    @GetMapping("/{datasourceId}/aloudata/synced-dimensions")
+    @Operation(summary = "已同步维度列表", description = "获取已同步到本地语义层的 Aloudata 维度列表（分页）")
+    public R<List<AloudataDimensionSemanticDTO>> listSyncedDimensions(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") int pageNumber,
+            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize) {
+        return R.ok(aloudataSyncService.listSyncedDimensions(datasourceId, pageNumber, pageSize));
+    }
+
+    /**
+     * 查询指标关联的维度列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimensions")
+    @Operation(summary = "指标可用维度", description = "查询指定指标关联的可用维度名称列表")
+    public R<List<String>> listMetricDimensions(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标英文名") @PathVariable String metricName) {
+        return R.ok(aloudataSyncService.listMetricDimensions(datasourceId, metricName));
+    }
+
+    /**
+     * 查询已同步的类目列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/synced-categories")
+    @Operation(summary = "已同步类目列表", description = "获取已同步到本地语义层的 Aloudata 类目列表，支持按类型过滤")
+    public R<List<AloudataCategoryEntity>> listSyncedCategories(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "类目类型过滤（可选）：CATEGORY_METRIC / CATEGORY_DIMENSION") @RequestParam(required = false) String categoryType) {
+        return R.ok(aloudataSyncService.listSyncedCategories(datasourceId, categoryType));
+    }
+
+    /**
+     * 按指标类目分组查询指标列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/grouped")
+    @Operation(summary = "按类目分组指标列表", description = "获取按指标类目分组的指标列表，前端可直接按分组渲染")
+    public R<List<MetricCategoryGroupDTO>> listMetricsGroupByCategory(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.listMetricsGroupByCategory(datasourceId));
+    }
+
+    /**
+     * 按维度类目分组查询维度列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/grouped")
+    @Operation(summary = "按类目分组维度列表", description = "获取按维度类目分组的维度列表，前端可直接按分组渲染")
+    public R<List<DimensionCategoryGroupDTO>> listDimensionsGroupByCategory(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.listDimensionsGroupByCategory(datasourceId));
     }
 
     /**

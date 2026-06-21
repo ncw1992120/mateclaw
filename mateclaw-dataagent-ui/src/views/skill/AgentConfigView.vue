@@ -32,7 +32,7 @@
           <div class="card-icon">{{ agent.icon || '🤖' }}</div>
           <el-switch
             :model-value="agent.enabled"
-            @update:model-value="(val: boolean) => handleToggle(agent, val)"
+            @update:model-value="(val: boolean | string | number) => handleToggle(agent, !!val)"
           />
         </div>
         <div class="card-body">
@@ -82,7 +82,7 @@ const loading = ref(false)
 /** 新建/编辑弹窗状态 */
 const dialogVisible = ref(false)
 /** 正在编辑的 Agent ID（新建时为 null） */
-const editingId = ref<number | null>(null)
+const editingId = ref<number | string | null>(null)
 
 /** 智能体名（兼容 name 为空或中英文名） */
 function resolveAgentName(agent: Agent): string {

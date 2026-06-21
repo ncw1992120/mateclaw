@@ -1,6 +1,6 @@
 /** Agent 实体 */
 export interface Agent {
-  id: number
+  id: number | string
   name: string
   description: string
   agentType: string
@@ -12,8 +12,70 @@ export interface Agent {
   tags: string
   workspaceId: number
   defaultThinkingLevel: string
+  /** Agent 主知识库 ID（用于 wiki 工具默认目标） */
+  primaryKbId?: number | string | null
+  /** 是否禁用全部技能（true 时不注入 SKILL.md，且禁用技能扩展工具） */
+  skillsDisabled?: boolean
+  /** 是否禁用全部用户可选工具 */
+  toolsDisabled?: boolean
   createTime: string
   updateTime: string
+}
+
+/** Agent 已绑定的技能 */
+export interface AgentSkillBinding {
+  id: number | string
+  agentId: number | string
+  skillId: number
+  enabled: boolean
+  createTime: string
+  updateTime: string
+}
+
+/** Agent 已绑定的工具 */
+export interface AgentToolBinding {
+  id: number | string
+  agentId: number | string
+  toolName: string
+  enabled: boolean
+  createTime: string
+  updateTime: string
+}
+
+/** Agent 偏好 Provider 配置 */
+export interface AgentProviderPreference {
+  id: number | string
+  agentId: number | string
+  providerId: string
+  sortOrder: number
+  enabled: boolean
+  createTime: string
+  updateTime: string
+}
+
+/** 可绑定工具（Picker 用） */
+export interface AvailableTool {
+  rowId: string
+  source: string
+  providerId: number | null
+  providerName: string | null
+  name: string
+  rawName: string
+  description: string
+  group: string
+  groupId: string
+  stale: boolean
+  available: boolean
+  unavailableReason: string | null
+}
+
+/** 可绑定知识库（Picker 用） */
+export interface AvailableKnowledgeBase {
+  id: number | string
+  name: string
+  description: string
+  pageCount?: number
+  rawCount?: number
 }
 
 /** 数据源实体 */
@@ -23,6 +85,10 @@ export interface Datasource {
   description: string
   sourceType: string
   host: string
+  /** 产品层服务地址（Aloudata anymetrics，端口默认 8083） */
+  productHost: string
+  /** 语义层服务地址（Aloudata semantic，端口默认 8085） */
+  semanticHost: string
   port: number
   databaseName: string
   username: string
@@ -75,6 +141,41 @@ export interface DatasourceColumn {
   foreignKeyColumn: string
   createTime: string
   updateTime: string
+}
+
+/** Aloudata 同步状态 */
+export interface AloudataSyncStatus {
+  metricCount: number
+  dimensionCount: number
+  metricDimensionCount: number
+  categoryCount: number
+  elapsedMs: number
+  status: 'completed' | 'not_synced' | 'failed' | 'running'
+  message: string
+}
+
+/** Aloudata 已同步指标 */
+export interface AloudataSyncedMetric {
+  metricName: string
+  metricDisplayName: string
+  type: string
+  businessCaliber: string
+  synonyms: string[]
+  metricCategoryName: string
+  unit: string
+  availableDimensions: string[]
+}
+
+/** Aloudata 已同步维度 */
+export interface AloudataSyncedDimension {
+  dimName: string
+  dimDisplayName: string
+  originDataType: string
+  dimDescription: string
+  synonyms: string[]
+  configType: string
+  isTimeDimension: boolean
+  exampleValues: string
 }
 
 /** 数据源类型选项 */
@@ -266,21 +367,21 @@ export interface R<T> {
 
 /** 聊天请求参数 */
 export interface ChatRequest {
-  agentId: number
+  agentId: number | string
   message: string
   conversationId: string
   /** 模型名称（可选，覆盖 Agent 默认模型） */
   modelName?: string
   /** 数据源 ID 白名单（可选，限制 LLM 只能访问指定数据源） */
-  datasourceIds?: number[]
+  datasourceIds?: string[]
 }
 
 /** 会话摘要 */
 export interface Conversation {
-  id: number
+  id: number | string
   conversationId: string
   title: string
-  agentId: number
+  agentId: number | string
   messageCount: number
   lastMessage: string
   lastActiveTime: string
@@ -291,7 +392,7 @@ export interface Conversation {
 
 /** 消息视图对象 */
 export interface MessageVO {
-  id: number
+  id: number | string
   conversationId: string
   role: string
   content: string
@@ -462,6 +563,57 @@ export interface SkillPage {
   size: number
   current: number
   pages: number
+}
+
+/** 技能市场（ClawHub）摘要 */
+export interface HubSkillInfo {
+  name: string
+  slug: string
+  description: string
+  author: string
+  version: string
+  icon: string
+  tags: string[]
+  downloads: number
+  bundleUrl: string
+}
+
+/** 技能安装请求 */
+export interface SkillInstallRequest {
+  /** bundle URL（GitHub 仓库 URL 或 ClawHub skill URL） */
+  bundleUrl: string
+  /** 版本（git ref / hub version，可选） */
+  version?: string
+  /** 安装后是否启用，默认 true */
+  enable?: boolean
+  /** 指定 skill 名称（覆盖 SKILL.md 中的名称） */
+  targetName?: string
+  /** 同名 skill 已存在时是否覆盖，默认 false */
+  overwrite?: boolean
+  /** 所属工作区 ID */
+  workspaceId?: number
+}
+
+/** 技能安装任务状态枚举 */
+export type InstallStatus = 'PENDING' | 'INSTALLING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
+/** 技能安装结果 */
+export interface SkillInstallResult {
+  name: string
+  enabled: boolean
+  sourceUrl: string
+  sourceType: string
+}
+
+/** 技能安装任务 */
+export interface SkillInstallTask {
+  taskId: string
+  bundleUrl: string
+  status: InstallStatus
+  error?: string
+  result?: SkillInstallResult
+  createdAt: string
+  updatedAt: string
 }
 
 /** 字段级语义模型 */

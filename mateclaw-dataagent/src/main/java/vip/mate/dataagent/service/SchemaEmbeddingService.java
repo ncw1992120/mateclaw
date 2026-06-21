@@ -8,7 +8,8 @@ import vip.mate.dataagent.dto.SchemaSearchResult;
  * <p>
  * 提供数据源 Schema 的向量化嵌入和语义检索能力。
  * 将表级 Schema 信息（表名+表描述+列名+列描述+语义模型）嵌入为向量，
- * 支持关键词检索、向量语义检索和混合检索（RRF 融合）。
+ * 使用 Elasticsearch 进行关键词检索和向量语义检索（混合检索 RRF 融合）。
+ * Elasticsearch 不可用时自动降级为 MySQL LIKE 模糊匹配。
  */
 public interface SchemaEmbeddingService {
 
@@ -35,11 +36,12 @@ public interface SchemaEmbeddingService {
     /**
      * 语义检索相关表
      * <p>
-     * 支持三种检索模式：
+     * 优先使用 Elasticsearch 进行关键词检索和向量语义检索（混合模式 RRF 融合），
+     * ES 不可用时降级为 MySQL LIKE 模糊匹配 + 内存余弦相似度计算。
      * <ul>
-     *   <li>关键词检索：在表名、列名、业务名、描述等字段中匹配</li>
-     *   <li>向量语义检索：基于 Schema 嵌入向量的余弦相似度</li>
-     *   <li>混合检索：RRF 融合关键词和语义检索结果</li>
+     *   <li>关键词检索：ES multi_match / MySQL LIKE 模糊匹配</li>
+     *   <li>向量语义检索：ES kNN 近似最近邻 / 内存余弦相似度</li>
+     *   <li>混合检索：ES RRF 融合 / 内存 RRF 融合</li>
      * </ul>
      *
      * @param request 检索请求

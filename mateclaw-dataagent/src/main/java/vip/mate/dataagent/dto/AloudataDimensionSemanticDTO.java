@@ -42,4 +42,10 @@ public class AloudataDimensionSemanticDTO implements Serializable {
 
     /** 同义词列表 */
     private List<String> synonyms;
+
+    /** 维度类目 ID */
+    private String categoryId;
+
+    /** 维度类目名称 */
+    private String categoryName;
 }

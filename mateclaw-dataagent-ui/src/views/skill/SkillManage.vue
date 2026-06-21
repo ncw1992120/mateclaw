@@ -18,6 +18,14 @@
             </svg>
             {{ loading ? t('skillManage.refreshing') : t('skillManage.refresh') }}
           </button>
+          <button class="btn-secondary" @click="openImportDialog">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {{ t('skillManage.import') }}
+          </button>
           <button class="btn-primary" @click="openCreateModal">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -296,6 +304,14 @@
         </div>
       </div>
     </div>
+
+    <!-- 导入技能弹窗（URL / 市场 / ZIP） -->
+    <ImportSkillDialog
+      v-model:visible="importDialogVisible"
+      :workspace-id="currentWorkspaceId"
+      @installed="onSkillInstalled"
+      @removed="onSkillRemoved"
+    />
   </div>
 </template>
 
@@ -306,15 +322,18 @@ import { ElMessage, ElMessageBox, ElPagination } from 'element-plus'
 import * as skillApi from '@/api/skill'
 import { SKILL_TYPE_OPTIONS, type Skill } from '@/types'
 import { useAgentStore } from '@/stores/useAgentStore'
+import ImportSkillDialog from './ImportSkillDialog.vue'
 
 const { t, locale } = useI18n()
 const agentStore = useAgentStore()
 
 /** 当前工作区 ID：优先从当前 Agent 获取，否则取列表中第一个 Agent 的，最后兜底 1 */
-const currentWorkspaceId = computed(() => {
-  return agentStore.currentAgent?.workspaceId
+const currentWorkspaceId = computed<number>(() => {
+  const id = agentStore.currentAgent?.workspaceId
     ?? agentStore.agents[0]?.workspaceId
     ?? 1
+  // 确保返回 number 类型
+  return typeof id === 'number' ? id : Number(id) || 1
 })
 
 /** 每段分页状态：已启用 / 未启用 */
@@ -353,6 +372,24 @@ const query = reactive({
 
 /** 弹窗 */
 const showModal = ref(false)
+
+/** 导入弹窗 */
+const importDialogVisible = ref(false)
+
+/** 打开导入技能弹窗 */
+function openImportDialog(): void {
+  importDialogVisible.value = true
+}
+
+/** 导入成功回调：刷新列表 */
+async function onSkillInstalled(_name: string): Promise<void> {
+  await loadAll()
+}
+
+/** 卸载回调：刷新列表 */
+async function onSkillRemoved(_name: string): Promise<void> {
+  await loadAll()
+}
 
 /** 表单数据 */
 const form = reactive({

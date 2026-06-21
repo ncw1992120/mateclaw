@@ -227,7 +227,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
-import { usePersistedRef } from '@/composables/usePersistedRef'
+import { usePersistedRef, usePersistedState } from '@/composables/usePersistedRef'
 import ChatView from '@/views/ChatView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
@@ -241,8 +241,8 @@ const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
 
-/** 当前选中的模型 ID */
-const selectedModelId = ref<number | undefined>(undefined)
+/** 当前选中的模型 ID（刷新后保留） */
+const selectedModelId = usePersistedState<number | undefined>('mc-workbench-selected-model-id', undefined)
 
 /** 左侧菜单是否折叠 */
 const sidebarCollapsed = ref(false)
@@ -365,13 +365,16 @@ const groupedConversations = computed<ConversationGroup[]>(() => {
   return groups
 })
 
-/** 模型切换 */
-async function handleModelChange(modelId: number): Promise<void> {
-  await modelStore.setActiveModelById(modelId)
+/** 模型切换（仅更新前端选择状态，不调用后端 API） */
+function handleModelChange(modelId: number): void {
+  selectedModelId.value = modelId
+  const model = availableModels.value.find(m => m.id === modelId)
+  chatStore.selectedModelName = model?.modelName ?? ''
+  chatStore.selectedModelProvider = model?.provider ?? ''
 }
 
 /** Agent 切换 */
-async function handleAgentChange(agentId: number): Promise<void> {
+async function handleAgentChange(agentId: number | string): Promise<void> {
   await agentStore.selectAgent(agentId)
 }
 
@@ -395,7 +398,8 @@ async function handleSwitchConversation(convId: string): Promise<void> {
   openMenuConvId.value = null
   if (chatStore.conversationId === convId && chatStore.messages.length > 0) return
   if (chatStore.isStreaming) {
-    await chatStore.stopChat()
+    // 仅断开前端 SSE 连接，不停止后端流，保留续连能力
+    chatStore.disconnectStream()
   }
   await chatStore.switchConversation(convId)
 }
@@ -586,9 +590,20 @@ watch(() => enabledAgents.value.length, (len) => {
  * 保证下拉框始终展示一个模型值
  */
 watch(availableModels, (models) => {
-  if (!selectedModelId.value && models.length > 0) {
+  if (models.length === 0) return
+  // 如果已有选中 ID（localStorage 恢复），同步恢复 modelName 和 provider
+  if (selectedModelId.value) {
+    const model = models.find(m => m.id === selectedModelId.value)
+    if (model) {
+      chatStore.selectedModelName = model.modelName
+      chatStore.selectedModelProvider = model.provider
+    }
+  } else {
+    // 否则选中默认/第一个模型
     const def = models.find(m => m.isDefault) ?? models[0]
     selectedModelId.value = def.id
+    chatStore.selectedModelName = def.modelName
+    chatStore.selectedModelProvider = def.provider
   }
 }, { immediate: true })
 
@@ -603,8 +618,6 @@ onMounted(async () => {
   if (modelStore.providers.length === 0) {
     modelStore.fetchProviders()
   }
-  // 拉取后端当前激活的模型
-  modelStore.fetchActiveModel()
   // 点击非历史项区域时，关闭弹出的操作菜单
   document.addEventListener('click', handleDocumentClick)
 })

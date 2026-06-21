@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="vip.mate.dataagent.repository.AloudataMetricMapper">
+
+    <insert id="upsertBatch" parameterType="java.util.List">
+        INSERT INTO `dataagent_aloudata_metric`
+        (`id`, `datasource_id`, `metric_name`, `metric_display_name`, `type`,
+         `business_caliber`, `owner`, `metric_category_id`, `metric_category_name`,
+         `status`, `unit`, `synonyms`, `embedding_text`, `sync_version`,
+         `embedding`, `embedding_model_id`, `create_time`, `update_time`)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.metricName}, #{item.metricDisplayName}, #{item.type},
+             #{item.businessCaliber}, #{item.owner}, #{item.metricCategoryId}, #{item.metricCategoryName},
+             #{item.status}, #{item.unit}, #{item.synonyms}, #{item.embeddingText}, #{item.syncVersion},
+             #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            `metric_display_name` = VALUES(`metric_display_name`),
+            `type` = VALUES(`type`),
+            `business_caliber` = VALUES(`business_caliber`),
+            `owner` = VALUES(`owner`),
+            `metric_category_id` = VALUES(`metric_category_id`),
+            `metric_category_name` = VALUES(`metric_category_name`),
+            `status` = VALUES(`status`),
+            `unit` = VALUES(`unit`),
+            `synonyms` = VALUES(`synonyms`),
+            `embedding_text` = VALUES(`embedding_text`),
+            `sync_version` = VALUES(`sync_version`),
+            `embedding` = COALESCE(VALUES(`embedding`), `embedding`),
+            `embedding_model_id` = COALESCE(VALUES(`embedding_model_id`), `embedding_model_id`),
+            `update_time` = VALUES(`update_time`)
+    </insert>
+
+</mapper>

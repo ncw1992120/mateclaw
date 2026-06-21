@@ -130,6 +130,46 @@ public class AloudataServiceImpl implements AloudataService {
     }
 
     /**
+     * 查询维度列表
+     */
+    @Override
+    public List<AloudataDimensionVO> listDimensions(Long datasourceId) {
+        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+        if (entity == null) {
+            throw new RuntimeException("数据源不存在: " + datasourceId);
+        }
+        AloudataConfigDTO config = configHelper.parseConfig(entity);
+
+        try {
+            Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(DIMENSIONS_LIST_ENDPOINT, config);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(DIMENSIONS_LIST_ENDPOINT, config, params);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> responseBody = response.getBody();
+                Boolean success = (Boolean) responseBody.get("success");
+                if (Boolean.TRUE.equals(success)) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> dimensionsList = (List<Map<String, Object>>) responseBody.get("data");
+                    if (dimensionsList != null) {
+                        List<AloudataDimensionVO> result = new ArrayList<>();
+                        for (Map<String, Object> dimension : dimensionsList) {
+                            AloudataDimensionVO vo = new AloudataDimensionVO();
+                            endpointService.mapResponseToDto(DIMENSIONS_LIST_ENDPOINT, dimension, vo, DIMENSION_FIELD_ALIASES);
+                            result.add(vo);
+                        }
+                        return result;
+                    }
+                }
+            }
+            return Collections.emptyList();
+        } catch (Exception e) {
+            log.error("查询 Aloudata 维度列表失败: {}", e.getMessage());
+            throw new RuntimeException("查询维度列表失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * 执行指标数据查询
      */
     @Override

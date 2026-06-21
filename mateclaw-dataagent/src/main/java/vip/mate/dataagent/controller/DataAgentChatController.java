@@ -24,7 +24,7 @@ public class DataAgentChatController {
     public SseEmitter stream(@RequestBody ChatRequest req) {
         return chatService.streamChatFromRequest(
                 req.getAgentId(), req.getMessage(), req.getConversationId(),
-                req.getModelName(), req.getDatasourceIds(),
+                req.getModelProvider(), req.getModelName(), req.getDatasourceIds(),
                 req.isReconnect(), req.getLastEventId());
     }
 
@@ -32,7 +32,7 @@ public class DataAgentChatController {
     @Operation(summary = "同步对话", description = "等待 Agent 完整回复后返回，可选指定模型名称与数据源白名单")
     public String chat(@RequestBody ChatRequest req) {
         return chatService.chat(req.getAgentId(), req.getMessage(), req.getConversationId(),
-                req.getModelName(), req.getDatasourceIds());
+                req.getModelProvider(), req.getModelName(), req.getDatasourceIds());
     }
 
     @DeleteMapping("/stream/{conversationId}")

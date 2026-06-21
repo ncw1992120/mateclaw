@@ -28,6 +28,14 @@ public interface AloudataService {
     List<AloudataMetricVO> listMetrics(Long datasourceId);
 
     /**
+     * 查询维度列表
+     *
+     * @param datasourceId 数据源 ID
+     * @return 维度列表
+     */
+    List<AloudataDimensionVO> listDimensions(Long datasourceId);
+
+    /**
      * 执行指标数据查询
      *
      * @param datasourceId 数据源 ID

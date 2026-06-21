@@ -81,3 +81,79 @@ export function previewTableData(datasourceId: string, tableId: string, limit: n
     { params: { limit } }
   )
 }
+
+// ==================== Aloudata 语义层同步 ====================
+
+/** 触发 Aloudata 语义层全量同步 */
+export function syncAloudataSemantic(datasourceId: string | number) {
+  return api.post<{
+    metricCount: number
+    dimensionCount: number
+    metricDimensionCount: number
+    categoryCount: number
+    elapsedMs: number
+    status: string
+    message: string
+  }>(`${BASE_URL}/${datasourceId}/aloudata/sync`)
+}
+
+/** 查询 Aloudata 同步状态 */
+export function getAloudataSyncStatus(datasourceId: string | number) {
+  return api.get<{
+    metricCount: number
+    dimensionCount: number
+    metricDimensionCount: number
+    categoryCount: number
+    elapsedMs: number
+    status: string
+    message: string
+  }>(`${BASE_URL}/${datasourceId}/aloudata/sync-status`)
+}
+
+/** 查询已同步的指标列表 */
+export function listSyncedMetrics(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20) {
+  return api.get<{
+    metricName: string
+    metricDisplayName: string
+    type: string
+    businessCaliber: string
+    synonyms: string[]
+    metricCategoryName: string
+    unit: string
+    availableDimensions: string[]
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-metrics`, { params: { pageNumber, pageSize } })
+}
+
+/** 查询已同步的维度列表 */
+export function listSyncedDimensions(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20) {
+  return api.get<{
+    dimName: string
+    dimDisplayName: string
+    originDataType: string
+    dimDescription: string
+    synonyms: string[]
+    configType: string
+    isTimeDimension: boolean
+    exampleValues: string
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-dimensions`, { params: { pageNumber, pageSize } })
+}
+
+/** 查询指标关联的维度列表 */
+export function listMetricDimensions(datasourceId: string | number, metricName: string) {
+  return api.get<string[]>(`${BASE_URL}/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
+}
+
+/** 查询已同步的类目列表 */
+export function listSyncedCategories(datasourceId: string | number, categoryType?: string) {
+  return api.get<{
+    id: number
+    datasourceId: number
+    categoryId: string
+    categoryName: string
+    categoryType: string
+    parentId: string
+    syncVersion: number
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-categories`, {
+    params: categoryType ? { categoryType } : undefined,
+  })
+}

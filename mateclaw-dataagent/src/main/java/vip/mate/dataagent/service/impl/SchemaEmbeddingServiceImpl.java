@@ -17,6 +17,7 @@ import vip.mate.dataagent.dto.SchemaSearchResult;
 import vip.mate.dataagent.dto.SemanticModelVO;
 import vip.mate.dataagent.model.*;
 import vip.mate.dataagent.repository.*;
+import vip.mate.dataagent.service.SchemaElasticsearchService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
@@ -31,8 +32,8 @@ import java.util.stream.Collectors;
 /**
  * Schema 向量化检索服务实现
  * <p>
- * 将数据源表级 Schema 信息嵌入为向量，支持关键词检索、向量语义检索和混合检索（RRF 融合）。
- * EmbeddingModelFactory 和 WikiEmbeddingService 为可选依赖，缺失时优雅降级。
+ * 将数据源表级 Schema 信息嵌入为向量，使用 Elasticsearch 进行关键词检索和向量语义检索。
+ * 支持混合检索（RRF 融合）。Elasticsearch 不可用时自动降级为 MySQL 模糊匹配。
  */
 @Service
 @RequiredArgsConstructor
@@ -47,6 +48,10 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
     private final LogicalRelationMapper logicalRelationMapper;
     private final ModelConfigService modelConfigService;
     private final SystemSettingService systemSettingService;
+
+    /** Elasticsearch 检索服务（可选，缺失时降级为 MySQL 检索） */
+    @Autowired(required = false)
+    private SchemaElasticsearchService schemaElasticsearchService;
 
     /** 可选依赖：Embedding 模型工厂，缺失时嵌入操作降级为仅保存文本 */
     @Autowired(required = false)
@@ -102,9 +107,191 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
 
     /**
      * 语义检索相关表
+     * <p>
+     * 优先使用 Elasticsearch 进行关键词和向量语义检索（混合模式），
+     * ES 不可用时降级为 MySQL LIKE 模糊匹配 + 内存余弦相似度计算。
      */
     @Override
     public SchemaSearchResult searchSchema(SchemaSearchRequest request) {
+        /* 优先使用 Elasticsearch 检索 */
+        if (schemaElasticsearchService != null) {
+            return searchSchemaWithElasticsearch(request);
+        }
+        /* 降级：使用 MySQL 检索 */
+        return searchSchemaWithMySQL(request);
+    }
+
+    /**
+     * 删除数据源的所有 Schema 嵌入
+     */
+    @Override
+    public void deleteByDatasourceId(Long datasourceId) {
+        if (datasourceId == null) {
+            return;
+        }
+        LambdaQueryWrapper<SchemaEmbeddingEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SchemaEmbeddingEntity::getDatasourceId, datasourceId);
+        schemaEmbeddingMapper.delete(wrapper);
+        log.info("已删除数据源 [{}] 的所有 Schema 嵌入", datasourceId);
+
+        /* 同步删除 ES 索引 */
+        if (schemaElasticsearchService != null) {
+            try {
+                schemaElasticsearchService.deleteByDatasourceId(datasourceId);
+            } catch (Exception e) {
+                log.warn("ES 索引删除失败，数据源: {} - {}", datasourceId, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 删除单张表的 Schema 嵌入
+     */
+    @Override
+    public void deleteByTableName(Long datasourceId, String tableName) {
+        if (datasourceId == null || !StringUtils.hasText(tableName)) {
+            return;
+        }
+        LambdaQueryWrapper<SchemaEmbeddingEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SchemaEmbeddingEntity::getDatasourceId, datasourceId);
+        wrapper.eq(SchemaEmbeddingEntity::getTableName, tableName);
+        schemaEmbeddingMapper.delete(wrapper);
+        log.info("已删除表 [{}.{}] 的 Schema 嵌入", datasourceId, tableName);
+
+        /* 同步删除 ES 索引 */
+        if (schemaElasticsearchService != null) {
+            try {
+                schemaElasticsearchService.deleteByTableName(datasourceId, tableName);
+            } catch (Exception e) {
+                log.warn("ES 索引删除失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 构建表级 Schema 嵌入文本
+     * <p>
+     * 格式: "表名 表注释 | 字段: 列名1(业务别名1) [类型1] - 描述1, 列名2(业务别名2) [类型2] - 描述2, ..."
+     */
+    @Override
+    public String buildEmbeddingText(Long datasourceId, String tableName) {
+        if (datasourceId == null || !StringUtils.hasText(tableName)) {
+            return "";
+        }
+
+        /* 查询表注释 */
+        String tableComment = getTableComment(datasourceId, tableName);
+
+        /* 查询列信息 */
+        DatasourceTableEntity tableEntity = getTableEntity(datasourceId, tableName);
+        List<DatasourceColumnEntity> columns = listColumns(datasourceId, tableEntity);
+
+        /* 查询语义模型（status=1 启用） */
+        Map<String, SemanticModelEntity> semanticMap = listEnabledSemanticModels(datasourceId, tableName);
+
+        /* 构建嵌入文本 */
+        StringBuilder sb = new StringBuilder();
+        sb.append(tableName);
+        if (StringUtils.hasText(tableComment)) {
+            sb.append(" ").append(tableComment);
+        }
+        sb.append(" | 字段: ");
+
+        List<String> columnParts = new ArrayList<>();
+        for (DatasourceColumnEntity column : columns) {
+            SemanticModelEntity semantic = semanticMap.get(column.getColumnName());
+            String part = buildColumnPart(column, semantic);
+            columnParts.add(part);
+        }
+        sb.append(String.join(", ", columnParts));
+
+        return sb.toString();
+    }
+
+    // ==================== Elasticsearch 检索 ====================
+
+    /**
+     * 使用 Elasticsearch 进行检索
+     * <p>
+     * 支持三种模式：
+     * 1. 混合检索（关键词 + 向量 kNN + RRF 融合）
+     * 2. 仅向量语义检索
+     * 3. 仅关键词检索
+     */
+    private SchemaSearchResult searchSchemaWithElasticsearch(SchemaSearchRequest request) {
+        long startTime = System.currentTimeMillis();
+        SchemaSearchResult result = new SchemaSearchResult();
+
+        if (request == null || request.getDatasourceId() == null || !StringUtils.hasText(request.getQuery())) {
+            result.setTableHits(List.of());
+            result.setRelations(List.of());
+            result.setElapsedMs(System.currentTimeMillis() - startTime);
+            return result;
+        }
+
+        int topK = request.getTopK() != null ? request.getTopK() : DataAgentConstants.SCHEMA_SEARCH_DEFAULT_TOP_K;
+        double threshold = request.getSimilarityThreshold() != null
+                ? request.getSimilarityThreshold()
+                : DataAgentConstants.SCHEMA_SEARCH_DEFAULT_THRESHOLD;
+
+        /* 尝试获取查询向量 */
+        float[] queryVector = null;
+        boolean semanticAvailable = isSemanticAvailable();
+        if (semanticAvailable) {
+            queryVector = generateQueryVector(request.getQuery());
+        }
+
+        /* 使用 ES 混合检索 */
+        SchemaSearchResult esResult;
+        try {
+            esResult = schemaElasticsearchService.hybridSearch(request, queryVector);
+        } catch (Exception e) {
+            log.warn("Elasticsearch 检索失败，降级为 MySQL: {}", e.getMessage());
+            return searchSchemaWithMySQL(request);
+        }
+
+        /* 补充表注释和语义字段信息（ES 仅返回表名和分数，需从 MySQL 补充） */
+        List<SchemaSearchResult.TableHit> enrichedHits = new ArrayList<>();
+        Set<String> hitTableNames = new HashSet<>();
+        for (SchemaSearchResult.TableHit hit : esResult.getTableHits()) {
+            hitTableNames.add(hit.getTableName());
+            hit.setTableComment(getTableComment(request.getDatasourceId(), hit.getTableName()));
+            hit.setSemanticFields(listSemanticModelVOs(request.getDatasourceId(), hit.getTableName()));
+            enrichedHits.add(hit);
+        }
+
+        /* 查询命中表相关的逻辑外键关系 */
+        List<LogicalRelationVO> relations = listRelatedRelations(request.getDatasourceId(), hitTableNames);
+
+        result.setTableHits(enrichedHits);
+        result.setRelations(relations);
+        result.setElapsedMs(System.currentTimeMillis() - startTime);
+        return result;
+    }
+
+    /**
+     * 生成查询向量
+     */
+    private float[] generateQueryVector(String query) {
+        EmbeddingModel embeddingModel = resolveEmbeddingModel();
+        if (embeddingModel == null) {
+            return null;
+        }
+        try {
+            EmbeddingResponse resp = embeddingModel.call(new EmbeddingRequest(List.of(query), null));
+            return resp.getResults().get(0).getOutput();
+        } catch (Exception e) {
+            log.warn("查询文本向量化失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    // ==================== MySQL 降级检索 ====================
+
+    /**
+     * MySQL 降级检索（ES 不可用时使用）
+     */
+    private SchemaSearchResult searchSchemaWithMySQL(SchemaSearchRequest request) {
         long startTime = System.currentTimeMillis();
         SchemaSearchResult result = new SchemaSearchResult();
 
@@ -178,75 +365,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         return result;
     }
 
-    /**
-     * 删除数据源的所有 Schema 嵌入
-     */
-    @Override
-    public void deleteByDatasourceId(Long datasourceId) {
-        if (datasourceId == null) {
-            return;
-        }
-        LambdaQueryWrapper<SchemaEmbeddingEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SchemaEmbeddingEntity::getDatasourceId, datasourceId);
-        schemaEmbeddingMapper.delete(wrapper);
-        log.info("已删除数据源 [{}] 的所有 Schema 嵌入", datasourceId);
-    }
-
-    /**
-     * 删除单张表的 Schema 嵌入
-     */
-    @Override
-    public void deleteByTableName(Long datasourceId, String tableName) {
-        if (datasourceId == null || !StringUtils.hasText(tableName)) {
-            return;
-        }
-        LambdaQueryWrapper<SchemaEmbeddingEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SchemaEmbeddingEntity::getDatasourceId, datasourceId);
-        wrapper.eq(SchemaEmbeddingEntity::getTableName, tableName);
-        schemaEmbeddingMapper.delete(wrapper);
-        log.info("已删除表 [{}.{}] 的 Schema 嵌入", datasourceId, tableName);
-    }
-
-    /**
-     * 构建表级 Schema 嵌入文本
-     * <p>
-     * 格式: "表名 表注释 | 字段: 列名1(业务别名1) [类型1] - 描述1, 列名2(业务别名2) [类型2] - 描述2, ..."
-     */
-    @Override
-    public String buildEmbeddingText(Long datasourceId, String tableName) {
-        if (datasourceId == null || !StringUtils.hasText(tableName)) {
-            return "";
-        }
-
-        /* 查询表注释 */
-        String tableComment = getTableComment(datasourceId, tableName);
-
-        /* 查询列信息 */
-        DatasourceTableEntity tableEntity = getTableEntity(datasourceId, tableName);
-        List<DatasourceColumnEntity> columns = listColumns(datasourceId, tableEntity);
-
-        /* 查询语义模型（status=1 启用） */
-        Map<String, SemanticModelEntity> semanticMap = listEnabledSemanticModels(datasourceId, tableName);
-
-        /* 构建嵌入文本 */
-        StringBuilder sb = new StringBuilder();
-        sb.append(tableName);
-        if (StringUtils.hasText(tableComment)) {
-            sb.append(" ").append(tableComment);
-        }
-        sb.append(" | 字段: ");
-
-        List<String> columnParts = new ArrayList<>();
-        for (DatasourceColumnEntity column : columns) {
-            SemanticModelEntity semantic = semanticMap.get(column.getColumnName());
-            String part = buildColumnPart(column, semantic);
-            columnParts.add(part);
-        }
-        sb.append(String.join(", ", columnParts));
-
-        return sb.toString();
-    }
-
     // ==================== private 方法 ====================
 
     /**
@@ -254,6 +372,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
      * <p>
      * 构建嵌入文本，尝试获取 EmbeddingModel 生成向量。
      * 若模型不可用则仅保存嵌入文本，向量字段留空。
+     * 同时写入 Elasticsearch 索引。
      */
     private boolean doEmbedTable(Long datasourceId, String tableName) {
         /* 构建嵌入文本 */
@@ -277,6 +396,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
 
         /* 尝试生成向量 */
         byte[] embeddingBytes = null;
+        float[] embeddingVector = null;
         Long embeddingModelId = null;
         ModelConfigEntity resolvedConfig = resolveEmbeddingModelConfig();
         EmbeddingModel embeddingModel = null;
@@ -292,6 +412,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
                 float[] vector = embeddingModel.embed(embeddingText);
                 if (vector != null && vector.length > 0) {
                     embeddingBytes = WikiEmbeddingService.floatsToBytes(vector);
+                    embeddingVector = vector;
                     embeddingModelId = resolvedConfig.getId();
                 }
             } catch (Exception e) {
@@ -301,7 +422,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
             log.info("EmbeddingModel 不可用，表 [{}.{}] 仅保存嵌入文本", datasourceId, tableName);
         }
 
-        /* 插入或更新 */
+        /* 插入或更新 MySQL 记录 */
         if (existing != null) {
             existing.setEmbeddingText(embeddingText);
             existing.setEmbedding(embeddingBytes);
@@ -318,18 +439,21 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
             entity.setEmbeddingTextVersion(DataAgentConstants.SCHEMA_EMBEDDING_TEXT_VERSION);
             schemaEmbeddingMapper.insert(entity);
         }
+
+        /* 同步写入 Elasticsearch 索引 */
+        if (schemaElasticsearchService != null) {
+            try {
+                schemaElasticsearchService.indexSchema(datasourceId, tableName, embeddingText, embeddingVector);
+            } catch (Exception e) {
+                log.warn("ES 索引写入失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
+            }
+        }
+
         return true;
     }
 
     /**
      * 解析可用的 EmbeddingModel 实例
-     * <p>
-     * 解析优先级：
-     * <ol>
-     *   <li>系统默认：{@code mate_system_setting} 表中 {@code embedding.default.model.id} 配置</li>
-     *   <li>任意 enabled 的 embedding 模型（取第一个）</li>
-     *   <li>全无 → 返回 null，上层降级</li>
-     * </ol>
      */
     private EmbeddingModel resolveEmbeddingModel() {
         if (embeddingModelFactory == null) {
@@ -451,7 +575,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
     }
 
     /**
-     * 关键词检索
+     * 关键词检索（MySQL 降级方案）
      * <p>
      * 在 SemanticModelEntity 的多个字段中模糊匹配，聚合到表级别
      */
@@ -503,7 +627,7 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
     }
 
     /**
-     * 向量语义检索
+     * 向量语义检索（MySQL 降级方案）
      * <p>
      * 将查询文本向量化，与数据源下所有 Schema 嵌入计算余弦相似度
      */

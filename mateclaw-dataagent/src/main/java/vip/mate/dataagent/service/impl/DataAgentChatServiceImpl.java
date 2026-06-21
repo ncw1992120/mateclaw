@@ -25,7 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -34,12 +36,14 @@ import java.util.stream.Collectors;
  * <p>
  * 参考 ChatController 的流式架构：
  * <ul>
- *   <li>StreamAccumulator.accept(delta, conversationId) 累积 + 广播一体化</li>
+ *   <li>StreamAccumulator.accept() 累积与广播分离——锁内只做数据累积，锁外执行 SSE 推送</li>
  *   <li>通过 DataAgentStreamTracker.broadcast() 广播到所有 emitter 订阅者</li>
  *   <li>使用 Utf8SseEmitter 显式声明 charset=UTF-8</li>
  *   <li>register() + attach() 生产者-消费者解耦，支持重连回放</li>
  *   <li>心跳保活防止代理/Nginx idle timeout 中断长连接</li>
  *   <li>markFirstTokenReceived 自动调整心跳频率</li>
+ *   <li>handleStreamFinalize 提交到 sseExecutor 执行，避免阻塞 Reactor 线程</li>
+ *   <li>有界线程池防止线程泄漏</li>
  * </ul>
  */
 @Slf4j
@@ -52,7 +56,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final ObjectMapper objectMapper;
     private final DataAgentChatScopeContext scopeContext;
     private final DatasourceManageService datasourceManageService;
-    private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
+    private final ExecutorService sseExecutor;
 
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
                                     ConversationService conversationService,
@@ -66,26 +70,38 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.objectMapper = objectMapper;
         this.scopeContext = scopeContext;
         this.datasourceManageService = datasourceManageService;
+        // 有界线程池：核心 2 线程，最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
+        int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+        this.sseExecutor = new ThreadPoolExecutor(
+                2, maxThreads,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(256),
+                r -> {
+                    Thread t = new Thread(r, "dataagent-sse");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 
-    @Override
-    public SseEmitter streamChat(Long agentId, String message, String conversationId) {
-        return streamChat(agentId, message, conversationId, null, null);
-    }
-
-    @Override
-    public SseEmitter streamChat(Long agentId, String message, String conversationId, String modelName) {
-        return streamChat(agentId, message, conversationId, modelName, null);
-    }
-
+    /**
+     * 流式对话（含模型覆盖和数据源白名单）。
+     * <p>
+     * 通过 {@code modelProvider} + {@code modelName} 将用户选择的模型 pin 到 conversation 级别，
+     * AgentService 的 {@code getOrBuildAgentForConversation} 按 (agentId, modelKey) 缓存不同模型变体，
+     * 避免每次对话都 updateAgent + refreshAgent。
+     */
     @Override
     public SseEmitter streamChat(Long agentId, String message, String conversationId,
-                                 String modelName, List<Long> datasourceIds) {
+                                 String modelProvider, String modelName, List<String> datasourceIds) {
+        // 将 String 类型的数据源 ID 转换为 Long 类型
+        List<Long> longIds = convertToLongIds(datasourceIds);
         // 把"用户勾选数据源"信息写入会话级上下文，供 DatasourceQueryTool 在工具执行阶段读取
-        scopeContext.put(conversationId, datasourceIds);
+        scopeContext.put(conversationId, longIds);
 
         // 注入数据源白名单提示词，并在前端展示原始 message（持久化时仍存原文）
-        String llmMessage = decorateMessageWithDatasourceScope(message, datasourceIds);
+        String llmMessage = decorateMessageWithDatasourceScope(message, longIds);
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -99,6 +115,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             AtomicBoolean finalized = new AtomicBoolean(false);
             try {
                 conversationService.getOrCreateConversation(conversationId, agentId, "dataagent");
+                // Pin 模型到 conversation 级别，与 ChatController 保持一致。
+                // AgentService.getOrBuildAgentForConversation 从 conversation 表读取 pinned model，
+                // 按 (agentId, modelKey) 缓存不同模型变体，无需 updateAgent + refreshAgent。
+                if (modelProvider != null && !modelProvider.isBlank()
+                        && modelName != null && !modelName.isBlank()) {
+                    conversationService.updateConversationModel(conversationId, modelProvider, modelName);
+                }
                 conversationService.saveMessage(conversationId, "user", message);
                 conversationService.updateStreamStatus(conversationId, "running");
 
@@ -110,9 +133,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         "timestamp", System.currentTimeMillis()
                 ));
 
-                Flux<StreamDelta> stream = modelName != null
-                        ? runtime.chatStructuredStream(agentId, llmMessage, conversationId, modelName)
-                        : runtime.chatStructuredStream(agentId, llmMessage, conversationId);
+                Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, llmMessage, conversationId);
 
                 Disposable disposable = stream
                         .doOnNext(delta -> {
@@ -120,7 +141,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                 return;
                             }
                             try {
-                                accumulator.accept(delta, conversationId);
+                                List<PendingBroadcast> pending = accumulator.accept(delta, conversationId);
+                                // 在锁外执行广播（JSON 序列化 + SSE 推送），避免 I/O 阻塞锁
+                                for (PendingBroadcast pb : pending) {
+                                    try {
+                                        broadcastEvent(conversationId, pb.eventName(), pb.data());
+                                    } catch (Exception e) {
+                                        log.warn("[DataAgent] Failed to broadcast event {}: {}", pb.eventName(), e.getMessage());
+                                    }
+                                }
                                 // Mark first token received to relax heartbeat cadence
                                 if (!accumulator.firstTokenMarked) {
                                     accumulator.firstTokenMarked = true;
@@ -134,7 +163,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             if (!finalized.compareAndSet(false, true)) return;
                             boolean wasStopped = streamTracker.isStopRequested(conversationId);
                             String persistStatus = wasStopped ? "stopped" : "completed";
-                            handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus);
+                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
+                            sseExecutor.execute(() ->
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus));
                         })
                         .doOnError(e -> {
                             if (!finalized.compareAndSet(false, true)) return;
@@ -142,12 +173,16 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     || (e.getCause() instanceof java.util.concurrent.CancellationException);
                             String status = isUserStop ? "stopped" : "failed";
                             log.warn("[DataAgent] Stream {} for conversation {}: {}", status, conversationId, e.getMessage());
-                            handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status);
+                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
+                            sseExecutor.execute(() ->
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status));
                         })
                         .doOnCancel(() -> {
                             if (!finalized.compareAndSet(false, true)) return;
                             log.info("[DataAgent] Stream cancelled for conversation {}", conversationId);
-                            handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped");
+                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
+                            sseExecutor.execute(() ->
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped"));
                         })
                         .subscribe(
                                 chunk -> {},
@@ -173,13 +208,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     @Override
     public SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
-                                             String modelName, List<Long> datasourceIds,
+                                             String modelProvider, String modelName, List<String> datasourceIds,
                                              boolean reconnect, Long lastEventId) {
         String convId = conversationId != null ? conversationId : "default";
         if (reconnect) {
             return reconnect(convId, lastEventId != null ? lastEventId : 0L);
         }
-        return streamChat(agentId, message, convId, modelName, datasourceIds);
+        return streamChat(agentId, message, convId, modelProvider, modelName, datasourceIds);
     }
 
     @Override
@@ -208,32 +243,32 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         return emitter;
     }
 
-    @Override
-    public String chat(Long agentId, String message, String conversationId) {
-        return chat(agentId, message, conversationId, null, null);
-    }
-
-    @Override
-    public String chat(Long agentId, String message, String conversationId, String modelName) {
-        return chat(agentId, message, conversationId, modelName, null);
-    }
-
+    /**
+     * 同步对话（含模型覆盖和数据源白名单）。
+     * <p>
+     * 与流式对话一致，通过 conversation-pinned-model 机制覆盖模型，
+     * 避免每次对话都 updateAgent + refreshAgent。
+     */
     @Override
     public String chat(Long agentId, String message, String conversationId,
-                       String modelName, List<Long> datasourceIds) {
-        scopeContext.put(conversationId, datasourceIds);
+                       String modelProvider, String modelName, List<String> datasourceIds) {
+        // 将 String 类型的数据源 ID 转换为 Long 类型
+        List<Long> longIds = convertToLongIds(datasourceIds);
+        scopeContext.put(conversationId, longIds);
         try {
             conversationService.getOrCreateConversation(conversationId, agentId, "dataagent");
+            if (modelProvider != null && !modelProvider.isBlank()
+                    && modelName != null && !modelName.isBlank()) {
+                conversationService.updateConversationModel(conversationId, modelProvider, modelName);
+            }
             conversationService.saveMessage(conversationId, "user", message);
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to save user message for conversation {}: {}", conversationId, e.getMessage());
         }
 
         StreamAccumulator accumulator = new StreamAccumulator();
-        String llmMessage = decorateMessageWithDatasourceScope(message, datasourceIds);
-        Flux<StreamDelta> stream = modelName != null
-                ? runtime.chatStructuredStream(agentId, llmMessage, conversationId, modelName)
-                : runtime.chatStructuredStream(agentId, llmMessage, conversationId);
+        String llmMessage = decorateMessageWithDatasourceScope(message, longIds);
+        Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, llmMessage, conversationId);
 
         try {
             stream.doOnNext(delta -> accumulator.accept(delta, null)).blockLast();
@@ -276,32 +311,45 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      * @return 注入提示后的消息文本，未配置白名单时直接返回原文
      */
     private String decorateMessageWithDatasourceScope(String originalMessage, List<Long> datasourceIds) {
-        if (datasourceIds == null || datasourceIds.isEmpty()) {
-            return originalMessage;
-        }
-        Set<Long> idSet = Set.copyOf(datasourceIds);
-        List<DatasourceVO> allowed;
+        List<DatasourceVO> allDatasources;
         try {
-            allowed = datasourceManageService.listDatasources().stream()
-                    .filter(ds -> ds.getId() != null && idSet.contains(ds.getId()))
-                    .collect(Collectors.toList());
+            allDatasources = datasourceManageService.listDatasources();
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to load datasources for scope hint: {}", e.getMessage());
-            allowed = List.of();
+            allDatasources = List.of();
         }
+
+        boolean hasScope = datasourceIds != null && !datasourceIds.isEmpty();
+        List<DatasourceVO> targetDatasources;
+        if (hasScope) {
+            Set<Long> idSet = Set.copyOf(datasourceIds);
+            targetDatasources = allDatasources.stream()
+                    .filter(ds -> ds.getId() != null && idSet.contains(ds.getId()))
+                    .collect(Collectors.toList());
+        } else {
+            // 用户未勾选数据源时，列出所有可用数据源，让 LLM 知道正确的 datasourceId
+            targetDatasources = allDatasources;
+        }
+
         StringBuilder hint = new StringBuilder();
-        hint.append("[系统约束-数据源范围]\n");
-        hint.append("用户已经在前端勾选了如下数据源，请严格遵守以下规则：\n");
-        hint.append("1) 仅允许在以下白名单内的数据源上执行 list_tables / search_schema / execute_sql；\n");
-        hint.append("2) 禁止调用 list_datasources，也不要访问白名单外的任何 datasourceId；\n");
-        hint.append("3) 当用户问题与白名单数据源不匹配时，请直接说明无法回答，并提示用户调整勾选。\n\n");
-        hint.append("白名单数据源：\n");
-        if (allowed.isEmpty()) {
+        if (hasScope) {
+            hint.append("[系统约束-数据源范围]\n");
+            hint.append("用户已经在前端勾选了如下数据源，请严格遵守以下规则：\n");
+            hint.append("1) 仅允许在以下白名单内的数据源上执行 list_tables / search_schema / execute_sql；\n");
+            hint.append("2) 禁止调用 list_datasources，也不要访问白名单外的任何 datasourceId；\n");
+            hint.append("3) 当用户问题与白名单数据源不匹配时，请直接说明无法回答，并提示用户调整勾选。\n\n");
+            hint.append("白名单数据源：\n");
+        } else {
+            hint.append("[系统提示-数据源信息]\n");
+            hint.append("当前可用的数据源列表如下，请根据用户问题选择合适的数据源，使用对应的 datasourceId 调用工具：\n\n");
+        }
+
+        if (targetDatasources.isEmpty() && hasScope) {
             for (Long id : datasourceIds) {
                 hint.append("- datasourceId=").append(id).append('\n');
             }
         } else {
-            for (DatasourceVO ds : allowed) {
+            for (DatasourceVO ds : targetDatasources) {
                 hint.append("- datasourceId=").append(ds.getId())
                         .append(", name=").append(safe(ds.getName()))
                         .append(", type=").append(safe(ds.getSourceType()));
@@ -317,6 +365,24 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * 将 String 类型的数据源 ID 列表转换为 Long 类型。
+     * <p>
+     * 前端通过 HTTP 请求传递的 ID 为字符串，避免 JavaScript 大数精度丢失。
+     * 后端内部统一使用 Long 类型与数据源实体保持一致。
+     *
+     * @param ids 前端传递的 String 类型 ID 列表
+     * @return Long 类型 ID 列表
+     */
+    private List<Long> convertToLongIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .map(Long::valueOf)
+                .collect(Collectors.toList());
     }
 
     private void handleStreamFinalize(SseEmitter emitter, AtomicBoolean emitterDone,
@@ -390,11 +456,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             } catch (Exception e) {
                 log.debug("[DataAgent] stream_status reset failed for {}: {}", conversationId, e.getMessage());
             }
-            // Gracefully complete emitter after a short delay for event flushing
-            sseExecutor.execute(() -> {
-                try { Thread.sleep(150); } catch (InterruptedException ignored) {}
-                completeEmitterQuietly(emitter, emitterDone);
-            });
+            // DataAgentStreamTracker.broadcast() 是同步推送（锁内 emitter.send()），
+            // done 事件广播后数据已刷出，无需额外延迟。直接 complete emitter。
+            completeEmitterQuietly(emitter, emitterDone);
         }
     }
 
@@ -453,11 +517,16 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     /**
-     * 流式累积器 — 累积数据与广播一体化
+     * 待广播事件（锁外执行 I/O 的桥接结构）
+     */
+    record PendingBroadcast(String eventName, Map<String, Object> data) {}
+
+    /**
+     * 流式累积器 — 累积与广播分离
      * <p>
-     * 参考 ChatController.StreamAccumulator 的设计：
-     * accept(delta, conversationId) 在累积数据的同时通过 broadcastEvent() 实时推送 SSE 事件，
-     * 确保 doOnNext 中只需调用一次 accumulator.accept() 即完成累积 + 广播。
+     * accept(delta, conversationId) 在 synchronized 锁内只做数据累积，
+     * 将需要广播的事件收集到 pendingBroadcasts 列表，锁外再执行
+     * JSON 序列化 + SSE 推送，避免 I/O 操作长时间持有锁导致流式推送卡顿。
      */
     final class StreamAccumulator {
         private final StringBuilder content = new StringBuilder();
@@ -473,91 +542,97 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         boolean firstTokenMarked = false;
 
         /**
-         * 接受流式增量数据，累积到内部缓冲区，并通过 tracker 广播 SSE 事件
+         * 接受流式增量数据，累积到内部缓冲区，并收集需要广播的事件。
+         * <p>
+         * 数据累积在 synchronized 锁内完成；广播事件收集到返回列表中，
+         * 由调用方在锁外执行 JSON 序列化 + SSE 推送，避免 I/O 阻塞锁。
          *
          * @param delta          流式增量数据
-         * @param conversationId 会话 ID，非 null 时广播 SSE 事件；null 时仅累积（同步模式）
+         * @param conversationId 会话 ID，非 null 时收集广播事件；null 时仅累积（同步模式）
+         * @return 需要在锁外广播的事件列表，可能为空
          */
-        synchronized void accept(StreamDelta delta, String conversationId) {
+        List<PendingBroadcast> accept(StreamDelta delta, String conversationId) {
             if (delta == null) {
-                return;
+                return List.of();
             }
 
-            if (delta.isEvent()) {
-                if ("_usage_final".equals(delta.eventType())) {
-                    Map<String, Object> data = delta.eventData();
-                    promptTokens = ((Number) data.getOrDefault("promptTokens", 0)).intValue();
-                    completionTokens = ((Number) data.getOrDefault("completionTokens", 0)).intValue();
-                    runtimeModelName = String.valueOf(data.getOrDefault("runtimeModelName", ""));
-                    runtimeProviderId = String.valueOf(data.getOrDefault("runtimeProviderId", ""));
-                    return;
-                }
-                if ("phase".equals(delta.eventType())) {
-                    if (conversationId != null && delta.eventData() != null) {
-                        String phase = String.valueOf(delta.eventData().getOrDefault("phase", ""));
-                        if (!phase.isEmpty()) {
-                            streamTracker.updatePhase(conversationId, phase);
+            List<PendingBroadcast> pending = new ArrayList<>();
+
+            synchronized (this) {
+                if (delta.isEvent()) {
+                    if ("_usage_final".equals(delta.eventType())) {
+                        Map<String, Object> data = delta.eventData();
+                        promptTokens = ((Number) data.getOrDefault("promptTokens", 0)).intValue();
+                        completionTokens = ((Number) data.getOrDefault("completionTokens", 0)).intValue();
+                        runtimeModelName = String.valueOf(data.getOrDefault("runtimeModelName", ""));
+                        runtimeProviderId = String.valueOf(data.getOrDefault("runtimeProviderId", ""));
+                        return List.of();
+                    }
+                    if ("phase".equals(delta.eventType())) {
+                        if (conversationId != null && delta.eventData() != null) {
+                            String phase = String.valueOf(delta.eventData().getOrDefault("phase", ""));
+                            if (!phase.isEmpty()) {
+                                streamTracker.updatePhase(conversationId, phase);
+                            }
+                        }
+                        return List.of();
+                    }
+                    if ("finish_reason".equals(delta.eventType())) {
+                        return List.of();
+                    }
+                    accumulateToolEvent(delta.eventType(), delta.eventData());
+                    if (conversationId != null) {
+                        pending.add(new PendingBroadcast(delta.eventType(), delta.eventData()));
+                        // Track tool execution for heartbeat cadence
+                        if ("tool_call_started".equals(delta.eventType()) && delta.eventData() != null) {
+                            String toolName = String.valueOf(delta.eventData().getOrDefault("toolName", ""));
+                            if (!toolName.isEmpty()) {
+                                streamTracker.updateRunningTool(conversationId, toolName);
+                            }
+                        } else if ("tool_call_completed".equals(delta.eventType())) {
+                            streamTracker.updateRunningTool(conversationId, null);
                         }
                     }
-                    return;
+                    return pending;
                 }
-                if ("finish_reason".equals(delta.eventType())) {
-                    return;
-                }
-                accumulateToolEvent(delta.eventType(), delta.eventData());
-                if (conversationId != null) {
-                    try {
-                        broadcastEvent(conversationId, delta.eventType(), delta.eventData());
-                    } catch (Exception e) {
-                        log.warn("[DataAgent] Failed to broadcast event {}: {}", delta.eventType(), e.getMessage());
-                    }
-                    // Track tool execution for heartbeat cadence
-                    if ("tool_call_started".equals(delta.eventType()) && delta.eventData() != null) {
-                        String toolName = String.valueOf(delta.eventData().getOrDefault("toolName", ""));
-                        if (!toolName.isEmpty()) {
-                            streamTracker.updateRunningTool(conversationId, toolName);
-                        }
-                    } else if ("tool_call_completed".equals(delta.eventType())) {
-                        streamTracker.updateRunningTool(conversationId, null);
-                    }
-                }
-                return;
-            }
 
-            if (delta.content() != null && !delta.content().isBlank()) {
-                if (!delta.segmentOnly()) {
-                    content.append(delta.content());
+                if (delta.content() != null && !delta.content().isBlank()) {
+                    if (!delta.segmentOnly()) {
+                        content.append(delta.content());
+                    }
+                    if (conversationId != null && !delta.persistenceOnly()) {
+                        pending.add(new PendingBroadcast("content_delta", Map.of("delta", delta.content())));
+                    }
+                    var seg = findLastRunning("content");
+                    if (seg != null) {
+                        seg.put("text", seg.getOrDefault("text", "") + delta.content());
+                    } else {
+                        finalizeRunningSegments("thinking");
+                        var s = newSegment("content");
+                        s.put("text", delta.content());
+                        segments.add(s);
+                    }
                 }
-                if (conversationId != null && !delta.persistenceOnly()) {
-                    broadcastEvent(conversationId, "content_delta", Map.of("delta", delta.content()));
-                }
-                var seg = findLastRunning("content");
-                if (seg != null) {
-                    seg.put("text", seg.getOrDefault("text", "") + delta.content());
-                } else {
-                    finalizeRunningSegments("thinking");
-                    var s = newSegment("content");
-                    s.put("text", delta.content());
-                    segments.add(s);
+
+                if (delta.thinking() != null && !delta.thinking().isBlank()) {
+                    if (!delta.segmentOnly()) {
+                        thinking.append(delta.thinking());
+                    }
+                    if (conversationId != null && !delta.persistenceOnly()) {
+                        pending.add(new PendingBroadcast("thinking_delta", Map.of("delta", delta.thinking())));
+                    }
+                    var seg = findLastRunning("thinking");
+                    if (seg != null) {
+                        seg.put("thinkingText", seg.getOrDefault("thinkingText", "") + delta.thinking());
+                    } else {
+                        var s = newSegment("thinking");
+                        s.put("thinkingText", delta.thinking());
+                        segments.add(s);
+                    }
                 }
             }
 
-            if (delta.thinking() != null && !delta.thinking().isBlank()) {
-                if (!delta.segmentOnly()) {
-                    thinking.append(delta.thinking());
-                }
-                if (conversationId != null && !delta.persistenceOnly()) {
-                    broadcastEvent(conversationId, "thinking_delta", Map.of("delta", delta.thinking()));
-                }
-                var seg = findLastRunning("thinking");
-                if (seg != null) {
-                    seg.put("thinkingText", seg.getOrDefault("thinkingText", "") + delta.thinking());
-                } else {
-                    var s = newSegment("thinking");
-                    s.put("thinkingText", delta.thinking());
-                    segments.add(s);
-                }
-            }
+            return pending;
         }
 
         String getContent() { return content.toString().trim(); }

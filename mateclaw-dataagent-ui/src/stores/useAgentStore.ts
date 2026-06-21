@@ -24,32 +24,34 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   /** 选中 Agent */
-  async function selectAgent(id: number): Promise<void> {
+  async function selectAgent(id: number | string): Promise<void> {
     const data = await agentApi.get(id)
     currentAgent.value = data as unknown as Agent
   }
 
   /** 创建 Agent */
-  async function createAgent(data: Partial<Agent>): Promise<void> {
-    await agentApi.create(data)
+  async function createAgent(data: Partial<Agent>): Promise<Agent | undefined> {
+    const created = (await agentApi.create(data)) as unknown as Agent | undefined
     if (data.workspaceId) {
       await fetchAgents(data.workspaceId)
     }
+    return created
   }
 
   /** 更新 Agent */
-  async function updateAgent(id: number, data: Partial<Agent>): Promise<void> {
-    await agentApi.update(id, data)
+  async function updateAgent(id: number | string, data: Partial<Agent>): Promise<Agent | undefined> {
+    const updated = (await agentApi.update(id, data)) as unknown as Agent | undefined
     if (data.workspaceId) {
       await fetchAgents(data.workspaceId)
     }
     if (currentAgent.value?.id === id) {
       await selectAgent(id)
     }
+    return updated
   }
 
   /** 删除 Agent */
-  async function deleteAgent(id: number): Promise<void> {
+  async function deleteAgent(id: number | string): Promise<void> {
     const workspaceId = currentAgent.value?.workspaceId
     await agentApi.remove(id)
     if (currentAgent.value?.id === id) {

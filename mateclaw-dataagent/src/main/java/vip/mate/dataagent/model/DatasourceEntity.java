@@ -26,8 +26,14 @@ public class DatasourceEntity {
     /** 数据源类型：mysql / postgresql / oracle / snowflake / bigquery / redshift / clickhouse / doris / mongodb / elasticsearch / csv / excel / parquet / api / kafka */
     private String sourceType;
 
-    /** 主机地址 */
+    /** 主机地址（通用字段，可作为历史数据兜底） */
     private String host;
+
+    /** 产品层服务地址（Aloudata anymetrics，端口默认 8083） */
+    private String productHost;
+
+    /** 语义层服务地址（Aloudata semantic，端口默认 8085） */
+    private String semanticHost;
 
     /** 端口 */
     private Integer port;

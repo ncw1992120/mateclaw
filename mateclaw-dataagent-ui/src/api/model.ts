@@ -121,7 +121,12 @@ export function testProviderConnection(providerId: string) {
 
 /** 测试单个模型可用性 */
 export function testModel(providerId: string, modelId: string) {
-  return api.post(`${BASE_URL}/${providerId}/models/${modelId}/test`)
+  return api.post<TestResult>(`${BASE_URL}/${providerId}/models/${modelId}/test`)
+}
+
+/** 测试 Embedding 模型连通性 */
+export function testEmbeddingModel(modelId: number) {
+  return api.post(`${BASE_URL}/embedding/${modelId}/test`)
 }
 
 /** 按类型筛选模型 */

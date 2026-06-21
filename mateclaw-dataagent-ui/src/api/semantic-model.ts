@@ -59,3 +59,39 @@ export function autoInit(datasourceId: string) {
 export function syncFromAloudata(datasourceId: string) {
   return api.post<number>(`${BASE_URL}/sync-aloudata`, null, { params: { datasourceId } })
 }
+
+/** 查询已同步的 Aloudata 指标列表（从数据库查） */
+export function listAloudataMetrics(datasourceId: string, pageNumber = 1, pageSize = 100) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-metrics`, {
+    params: { pageNumber, pageSize },
+  })
+}
+
+/** 查询已同步的 Aloudata 维度列表（从数据库查） */
+export function listAloudataDimensions(datasourceId: string, pageNumber = 1, pageSize = 100) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-dimensions`, {
+    params: { pageNumber, pageSize },
+  })
+}
+
+/** 查询已同步的 Aloudata 类目列表 */
+export function listAloudataCategories(datasourceId: string, categoryType?: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-categories`, {
+    params: categoryType ? { categoryType } : {},
+  })
+}
+
+/** 查询指标关联的维度名称列表 */
+export function listMetricDimensions(datasourceId: string, metricName: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
+}
+
+/** 按类目分组查询指标列表（后端分组） */
+export function listMetricsGroupedByCategory(datasourceId: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/grouped`)
+}
+
+/** 按类目分组查询维度列表（后端分组） */
+export function listDimensionsGroupedByCategory(datasourceId: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/grouped`)
+}

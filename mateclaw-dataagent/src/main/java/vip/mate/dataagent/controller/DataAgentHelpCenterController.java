@@ -20,7 +20,7 @@ import java.util.List;
 @RequestMapping("/v1/help-center")
 @RequiredArgsConstructor
 @Tag(name = "帮助中心", description = "帮助文档分类管理与文档 CRUD 接口")
-public class HelpCenterController {
+public class DataAgentHelpCenterController {
 
     private final HelpCenterService helpCenterService;
 

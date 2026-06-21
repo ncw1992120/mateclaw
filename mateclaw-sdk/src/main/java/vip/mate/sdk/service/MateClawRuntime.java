@@ -2,13 +2,22 @@ package vip.mate.sdk.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
+import vip.mate.agent.binding.model.AgentProviderPreference;
+import vip.mate.agent.binding.model.AgentSkillBinding;
+import vip.mate.agent.binding.model.AgentToolBinding;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.model.AgentEntity;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.llm.model.*;
+import vip.mate.skill.installer.model.HubSkillInfo;
+import vip.mate.skill.installer.model.InstallRequest;
+import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.tool.model.AvailableToolDTO;
+import vip.mate.wiki.model.WikiKnowledgeBaseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -403,6 +412,14 @@ public interface MateClawRuntime {
      */
     TestResult testModel(String providerId, String modelId);
 
+    /**
+     * 测试 Embedding 模型连通性
+     *
+     * @param modelId 模型 ID
+     * @return 测试结果（含 success、dimensions、model、message 等字段）
+     */
+    Map<String, Object> testEmbeddingModel(Long modelId);
+
     // ==================== 技能管理 ====================
 
     /**
@@ -475,4 +492,126 @@ public interface MateClawRuntime {
      * @return 更新后的技能实体
      */
     SkillEntity toggleSkill(Long id, boolean enabled);
+
+    // ==================== 技能导入 ====================
+
+    /**
+     * 在 ClawHub 市场搜索可用技能
+     *
+     * @param query 搜索关键词
+     * @param limit 返回条数上限
+     * @return 市场技能信息列表
+     */
+    List<HubSkillInfo> searchSkillHub(String query, int limit);
+
+    /**
+     * 启动一个异步技能安装任务
+     * <p>
+     * 适用于从 GitHub 仓库或 ClawHub 市场安装，支持取消与任务状态轮询。
+     *
+     * @param request 安装请求（含 bundleUrl、version、enable、overwrite、targetName 等）
+     * @return 安装任务（包含 taskId 与初始状态）
+     */
+    InstallTask startInstallSkill(InstallRequest request);
+
+    /**
+     * 查询安装任务状态
+     *
+     * @param taskId 任务 ID
+     * @return 任务状态对象，未找到时返回 null
+     */
+    InstallTask getInstallTaskStatus(String taskId);
+
+    /**
+     * 取消正在执行的安装任务
+     *
+     * @param taskId 任务 ID
+     */
+    void cancelInstallTask(String taskId);
+
+    /**
+     * 通过上传 ZIP 包同步安装技能
+     *
+     * @param zipFile     上传的 ZIP 文件
+     * @param enable      安装后是否启用
+     * @param overwrite   同名技能已存在时是否覆盖
+     * @param targetName  指定安装后的 skill 名称（可选）
+     * @param workspaceId 所属工作区 ID
+     * @return 安装结果摘要（skillId、name、version、filesCount）
+     */
+    Map<String, Object> installSkillFromZip(MultipartFile zipFile, boolean enable, boolean overwrite,
+                                            String targetName, Long workspaceId);
+
+    /**
+     * 通过名称卸载技能
+     *
+     * @param skillName   技能名称
+     * @param workspaceId 所属工作区 ID
+     */
+    void uninstallSkillByName(String skillName, Long workspaceId);
+
+    // ==================== Agent 能力绑定 ====================
+
+    /**
+     * 获取 Agent 已绑定的技能列表
+     *
+     * @param agentId Agent ID
+     * @return 已绑定的技能绑定记录列表
+     */
+    List<AgentSkillBinding> listAgentSkillBindings(Long agentId);
+
+    /**
+     * 批量设置 Agent 的技能绑定（替换模式）
+     *
+     * @param agentId  Agent ID
+     * @param skillIds 技能 ID 列表
+     */
+    void setAgentSkillBindings(Long agentId, List<Long> skillIds);
+
+    /**
+     * 获取 Agent 已绑定的工具列表
+     *
+     * @param agentId Agent ID
+     * @return 已绑定的工具绑定记录列表
+     */
+    List<AgentToolBinding> listAgentToolBindings(Long agentId);
+
+    /**
+     * 批量设置 Agent 的工具绑定（替换模式）
+     *
+     * @param agentId   Agent ID
+     * @param toolNames 工具名称列表
+     */
+    void setAgentToolBindings(Long agentId, List<String> toolNames);
+
+    /**
+     * 获取 Agent 的偏好 Provider 顺序
+     *
+     * @param agentId Agent ID
+     * @return 偏好 Provider 列表（按 sortOrder 升序）
+     */
+    List<AgentProviderPreference> listAgentProviderPreferences(Long agentId);
+
+    /**
+     * 批量设置 Agent 的偏好 Provider 顺序（替换模式）
+     *
+     * @param agentId     Agent ID
+     * @param providerIds Provider ID 列表（按偏好顺序）
+     */
+    void setAgentProviderPreferences(Long agentId, List<String> providerIds);
+
+    /**
+     * 获取 Agent 的可用工具完整列表（含内置 + MCP，用于绑定 picker）
+     *
+     * @return 可用工具 DTO 列表
+     */
+    List<AvailableToolDTO> listAvailableTools();
+
+    /**
+     * 列出指定工作区下可绑定到 Agent 的知识库
+     *
+     * @param workspaceId 工作区 ID
+     * @return 知识库实体列表
+     */
+    List<WikiKnowledgeBaseEntity> listBindableKnowledgeBases(Long workspaceId);
 }

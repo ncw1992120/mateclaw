@@ -54,41 +54,50 @@
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
 
-              <!-- Tool calls (seg-tool 卡片，参考 mateclaw-ui ToolCallSegment 样式) -->
-              <template v-for="(tc, tcIdx) in getToolCalls(msg)" :key="`tool-${tcIdx}`">
+              <!-- Segments (优先渲染 metadata.segments，包含 tool_call/thinking/content) -->
+              <template v-for="(seg, segIdx) in getSegments(msg)" :key="`seg-${segIdx}`">
+                <!-- tool_call 类型 -->
                 <div
+                  v-if="seg.type === 'tool_call'"
                   class="seg-tool"
                   :class="{
-                    'is-running': tc.status === 'running',
-                    'is-success': tc.status === 'completed' && tc.success !== false,
-                    'is-error': tc.status === 'error' || tc.success === false,
+                    'is-running': seg.status === 'running',
+                    'is-success': seg.status === 'completed' && seg.toolSuccess !== false,
+                    'is-error': seg.status === 'error' || seg.toolSuccess === false,
                   }"
                 >
-                  <div class="seg-tool__header" @click="toggleToolExpand(tcIdx)">
+                  <div class="seg-tool__header" @click="toggleToolExpand(segIdx)">
                     <span class="seg-tool__status">
-                      <span v-if="tc.status === 'running'" class="spin-icon">⟳</span>
-                      <span v-else-if="tc.status === 'completed' && tc.success !== false">✓</span>
+                      <span v-if="seg.status === 'running'" class="spin-icon">⟳</span>
+                      <span v-else-if="seg.status === 'completed' && seg.toolSuccess !== false">✓</span>
                       <span v-else>✕</span>
                     </span>
                     <span class="seg-tool__type-icon">⚙</span>
-                    <span class="seg-tool__name">{{ tc.name || tc.toolName }}</span>
-                    <span v-if="truncateArgs(tc.arguments as string)" class="seg-tool__args">{{ truncateArgs(tc.arguments as string) }}</span>
+                    <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
+                    <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
                     <span
-                      v-if="tc.result != null"
+                      v-if="seg.toolResult != null"
                       class="seg-tool__arrow"
-                      :class="{ 'is-open': expandedTools.has(tcIdx) }"
+                      :class="{ 'is-open': expandedTools.has(segIdx) }"
                     >▾</span>
                   </div>
                   <Transition name="seg-slide">
-                    <div v-if="expandedTools.has(tcIdx) && tc.result != null" class="seg-tool__body">
-                      <pre>{{ formatResultPreview(tc.result as string) }}</pre>
+                    <div v-if="expandedTools.has(segIdx) && seg.toolResult != null" class="seg-tool__body">
+                      <pre>{{ formatResultPreview(seg.toolResult as string) }}</pre>
                     </div>
                   </Transition>
                 </div>
+
+                <!-- thinking 类型 -->
+                <el-collapse v-else-if="seg.type === 'thinking' && seg.thinkingText" class="thinking-collapse">
+                  <el-collapse-item :title="t('chat.thinking')">
+                    <div class="thinking-content">{{ seg.thinkingText }}</div>
+                  </el-collapse-item>
+                </el-collapse>
               </template>
 
-              <!-- Thinking (collapsible) -->
-              <el-collapse v-if="msg.thinking" class="thinking-collapse">
+              <!-- Thinking (兜底：当 metadata.segments 不存在时使用 msg.thinking) -->
+              <el-collapse v-if="!hasSegments(msg) && msg.thinking" class="thinking-collapse">
                 <el-collapse-item :title="t('chat.thinking')">
                   <div class="thinking-content">{{ msg.thinking }}</div>
                 </el-collapse-item>
@@ -489,9 +498,23 @@ const purifyConfig = {
 }
 
 /** 渲染 Markdown */
+const markdownCache = new Map<string, string>()
+const MAX_MARKDOWN_CACHE = 64
 function renderMarkdown(content: string): string {
+  if (!content) return ''
+  const cached = markdownCache.get(content)
+  if (cached !== undefined) return cached
   const html = markedInstance.parse(content) as string
-  return DOMPurify.sanitize(html, purifyConfig)
+  const sanitized = DOMPurify.sanitize(html, purifyConfig)
+  // 简单的 LRU：超过上限时丢弃最早插入项（Map 保留插入顺序）
+  if (markdownCache.size >= MAX_MARKDOWN_CACHE) {
+    const firstKey = markdownCache.keys().next().value
+    if (firstKey !== undefined) {
+      markdownCache.delete(firstKey)
+    }
+  }
+  markdownCache.set(content, sanitized)
+  return sanitized
 }
 
 /** 判断消息是否有可展示的 metadata */
@@ -500,11 +523,28 @@ function hasMetadata(msg: typeof chatStore.messages.value[0]): boolean {
   const meta = msg.metadata as Record<string, unknown>
   const toolCalls = meta.toolCalls as Array<Record<string, unknown>> | undefined
   if (toolCalls && toolCalls.length > 0) return true
+  const segments = meta.segments as Array<Record<string, unknown>> | undefined
+  if (segments && segments.length > 0) return true
   if (meta.runtimeModel || meta.promptTokens || meta.completionTokens) return true
   return false
 }
 
-/** 提取工具调用列表 */
+/** 检查消息是否有 metadata.segments */
+function hasSegments(msg: typeof chatStore.messages.value[0]): boolean {
+  if (!msg.metadata || typeof msg.metadata !== 'object') return false
+  const meta = msg.metadata as Record<string, unknown>
+  const segments = meta.segments as Array<Record<string, unknown>> | undefined
+  return !!(segments && segments.length > 0)
+}
+
+/** 提取 segments 数组 */
+function getSegments(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
+  if (!msg.metadata || typeof msg.metadata !== 'object') return []
+  const meta = msg.metadata as Record<string, unknown>
+  return (meta.segments as Array<Record<string, unknown>>) || []
+}
+
+/** 提取工具调用列表（兜底：当 metadata.segments 不存在时使用） */
 function getToolCalls(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
   if (!msg.metadata || typeof msg.metadata !== 'object') return []
   const meta = msg.metadata as Record<string, unknown>
@@ -1344,7 +1384,7 @@ function handleSend(): void {
   const message = inputMessage.value.trim()
   if (!message || chatStore.isStreaming || !chatStore.currentAgentId) return
   inputMessage.value = ''
-  const modelName = modelStore.activeModel?.modelName
+  const modelName = chatStore.selectedModelName || undefined
   chatStore.sendMessage(chatStore.currentAgentId, message, modelName)
 }
 
@@ -1379,7 +1419,7 @@ function handleStop(): void {
 /** 追问点击 */
 function handleFollowup(text: string): void {
   if (chatStore.isStreaming || !chatStore.currentAgentId) return
-  const modelName = modelStore.activeModel?.modelName
+  const modelName = chatStore.selectedModelName || undefined
   chatStore.sendMessage(chatStore.currentAgentId, text, modelName)
 }
 
@@ -1394,7 +1434,7 @@ function handleSmartAskMenu(item: { key: string; label: string }): void {
     forecast: t('smartAskMenu.forecastPrompt'),
   }
   const prompt = promptMap[item.key] || t('smartAskMenu.defaultPrompt')
-  const modelName = modelStore.activeModel?.modelName
+  const modelName = chatStore.selectedModelName || undefined
   chatStore.sendMessage(chatStore.currentAgentId, prompt, modelName)
 }
 
@@ -1433,21 +1473,32 @@ function handleResize(): void {
   })
 }
 
-watch(() => chatStore.messages.length, () => {
-  scrollToBottom()
-  nextTick(scanAndMountEChartsBlocks)
-})
-watch(() => chatStore.messages[chatStore.messages.length - 1]?.content, () => {
-  scrollToBottom()
-  nextTick(scanAndMountEChartsBlocks)
-})
+// 合并 messages.length 与最后一条 content 的 watch，避免同一 tick 内重复
+// 触发 scanAndMountEChartsBlocks（流式期间频率极高，重复扫描显著卡顿）。
+watch(
+  () => [
+    chatStore.messages.length,
+    chatStore.messages[chatStore.messages.length - 1]?.content,
+  ],
+  () => {
+    scrollToBottom()
+    nextTick(scanAndMountEChartsBlocks)
+  }
+)
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   // 加载数据源列表（用于输入框上方数据源选择器）
   loadDatasources()
-  // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载
-  if (chatStore.conversationId && !chatStore.isStreaming) {
+  // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载。
+  // 但若 sessionStorage 中存在 reconnect 状态（lastEventId 已持久化），
+  // 说明 MainLayout 正在/即将发起 SSE 续连，此时再 force=true 拉历史会：
+  //   1) 清空 lastEventId/seenEventIds 破坏续连去重；
+  //   2) 整体替换 messages 数组导致 reconnect 中 FlushBuffer 持有的 msgIndex 错位；
+  //   3) 抢占浏览器并发额度延迟 SSE 重连。
+  // 此场景下跳过 force 拉取，让 reconnect 流式完成；仅当无续连状态时才 force 重拉。
+  const hasPendingReconnect = chatStore.hasPendingReconnect()
+  if (chatStore.conversationId && !chatStore.isStreaming && !hasPendingReconnect) {
     chatStore.switchConversation(chatStore.conversationId, true).finally(() => {
       nextTick(scanAndMountEChartsBlocks)
     })

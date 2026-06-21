@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import vip.mate.agent.context.ChatOrigin;
+import vip.mate.agent.context.ChatOriginHolder;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
@@ -18,8 +20,12 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.AloudataSemanticEsService;
+import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
+import vip.mate.dataagent.support.DataAgentChatScopeContext;
+import vip.mate.dataagent.util.JdbcUtils;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
@@ -27,6 +33,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Aloudata API 动态工具注册器
@@ -54,8 +61,11 @@ public class AloudataCallTool {
     private final AloudataConfigHelper configHelper;
     private final SemanticModelService semanticModelService;
     private final SchemaEmbeddingService schemaEmbeddingService;
+    private final AloudataSemanticEsService aloudataSemanticEsService;
+    private final AloudataSemanticSyncService aloudataSemanticSyncService;
     private final DatasourceMapper datasourceMapper;
     private final MateClawRuntime mateClawRuntime;
+    private final DataAgentChatScopeContext scopeContext;
 
     /** 指标查询端点名，需要 ECharts 图表生成等增值逻辑 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
@@ -115,7 +125,8 @@ public class AloudataCallTool {
     private void registerSearchSemanticTool() {
         String description = "搜索 Aloudata 指标/维度的本地语义模型，"
                 + "返回匹配的业务名称、业务描述、同义词等信息，帮助理解用户意图。"
-                + "支持关键词检索和向量语义检索的混合模式（RRF 融合），向量不可用时自动降级为关键词检索。"
+                + "使用 Elasticsearch 进行关键词检索和向量语义检索的混合模式（RRF 融合），"
+                + "ES 不可用时自动降级为 MySQL 模糊匹配。"
                 + "需要 datasourceId 和 keyword 参数。";
 
         String inputSchema = """
@@ -317,6 +328,12 @@ public class AloudataCallTool {
                 return error("需要 datasourceId 参数指定数据源");
             }
 
+            // 校验数据源白名单
+            String scopeDenyMsg = checkDatasourceScope(datasourceId);
+            if (scopeDenyMsg != null) {
+                return error(scopeDenyMsg);
+            }
+
             // 校验数据源
             String validationError = validateAloudataDatasource(datasourceId);
             if (validationError != null) {
@@ -388,8 +405,8 @@ public class AloudataCallTool {
 
         if (!Boolean.TRUE.equals(success)) {
             String errorMsg = (String) responseBody.get("errorMsg");
-            String message = (String) responseBody.get("detailErrorMsg");
-            return error("API 返回错误: " + (errorMsg != null ? errorMsg : message));
+            String detailErrorMsg = (String) responseBody.get("detailErrorMsg");
+            return error("API: " + endpointName + " 返回错误: " + (errorMsg != null ? errorMsg : detailErrorMsg));
         }
 
         // 通用 JSON 格式化
@@ -407,8 +424,9 @@ public class AloudataCallTool {
     /**
      * 处理语义搜索 Tool 调用
      * <p>
-     * 优先使用 SchemaEmbeddingService 的混合检索（关键词+向量+RRF融合），
-     * 向量不可用时自动降级为关键词检索。同时返回表间关联关系辅助理解数据结构。
+     * 对于 Aloudata 数据源：使用 AloudataSemanticEsService 进行指标+维度级检索，
+     * 直接命中指标名和维度名，用于构造 metrics_query 请求。
+     * 对于非 Aloudata 数据源：保持原有表级检索逻辑（SchemaEmbeddingService）。
      */
     private String handleSearchSemantic(String toolInput) {
         try {
@@ -422,62 +440,157 @@ public class AloudataCallTool {
                 return error("需要 keyword 参数");
             }
 
-            String validationError = validateAloudataDatasource(datasourceId);
-            if (validationError != null) {
-                return error(validationError);
+            // 校验数据源白名单
+            String scopeDenyMsg = checkDatasourceScope(datasourceId);
+            if (scopeDenyMsg != null) {
+                return error(scopeDenyMsg);
             }
 
-            /* 构建混合检索请求 */
-            SchemaSearchRequest request = new SchemaSearchRequest();
-            request.setDatasourceId(datasourceId);
-            request.setQuery(keyword);
-            request.setTopK(input.getInt("topK", DataAgentConstants.SCHEMA_SEARCH_DEFAULT_TOP_K));
-            request.setSimilarityThreshold(input.getDouble("similarityThreshold",
-                    DataAgentConstants.SCHEMA_SEARCH_DEFAULT_THRESHOLD));
+            int topK = input.getInt("topK", DataAgentConstants.ALOUDATA_SEARCH_DEFAULT_TOP_K);
+            double threshold = input.getDouble("similarityThreshold",
+                    DataAgentConstants.ALOUDATA_SEARCH_DEFAULT_THRESHOLD);
 
-            SchemaSearchResult searchResult = schemaEmbeddingService.searchSchema(request);
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("**搜索关键词**: ").append(keyword).append("\n");
-            sb.append("**数据源 ID**: ").append(datasourceId).append("\n");
-            sb.append("**匹配结果**: ").append(searchResult.getTableHits().size()).append(" 个表/分组");
-            sb.append(" (检索耗时: ").append(searchResult.getElapsedMs()).append("ms)\n\n");
-
-            if (searchResult.getTableHits().isEmpty()) {
-                sb.append("未找到匹配的指标或维度。请尝试使用 aloudata_metrics_list 或 aloudata_dimensions_list 查看所有可用项。");
-                return sb.toString();
+            // 判断数据源类型，选择检索路径
+            DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+            if (entity == null) {
+                return error("数据源不存在, id=" + datasourceId);
             }
 
-            /* 按虚拟表名分组展示命中结果 */
-            for (SchemaSearchResult.TableHit hit : searchResult.getTableHits()) {
-                sb.append("### ").append(hit.getTableName());
-                if (hit.getTableComment() != null && !hit.getTableComment().isBlank()) {
-                    sb.append(" - ").append(hit.getTableComment());
-                }
-                sb.append(" [匹配分数: ").append(String.format("%.3f", hit.getScore()));
-                sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n\n");
-
-                if (hit.getSemanticFields() != null && !hit.getSemanticFields().isEmpty()) {
-                    for (SemanticModelVO vo : hit.getSemanticFields()) {
-                        sb.append("- ").append(vo.getPromptInfo()).append("\n");
-                    }
-                    sb.append("\n");
-                }
+            if ("aloudata".equalsIgnoreCase(entity.getSourceType())) {
+                // Aloudata 数据源：指标+维度级语义检索
+                return handleAloudataSemanticSearch(datasourceId, keyword, topK, threshold);
+            } else {
+                // 非 Aloudata 数据源：保持原有表级检索
+                return handleGenericSemanticSearch(datasourceId, keyword, topK, threshold);
             }
-
-            /* 展示表间关联关系 */
-            if (searchResult.getRelations() != null && !searchResult.getRelations().isEmpty()) {
-                sb.append("## 关联关系\n\n");
-                for (LogicalRelationVO rel : searchResult.getRelations()) {
-                    sb.append("- ").append(rel.getPromptInfo()).append("\n");
-                }
-            }
-
-            return sb.toString();
         } catch (Exception e) {
             log.error("语义搜索失败: {}", e.getMessage(), e);
             return error(e.getMessage());
         }
+    }
+
+    /**
+     * Aloudata 数据源的指标+维度级语义检索
+     * <p>
+     * 优先使用新版语义层检索（AloudataSemanticEsService，指标+维度粒度 + ES + 向量），
+     * 若新版语义层未同步，降级到旧版表级检索（SchemaEmbeddingService）。
+     */
+    private String handleAloudataSemanticSearch(Long datasourceId, String keyword, int topK, double threshold) {
+        /* 先检查是否已同步新版语义层 */
+        var syncStatus = aloudataSemanticSyncService.getSyncStatus(datasourceId);
+        if ("completed".equals(syncStatus.status())) {
+            /* 新版语义层已同步，使用指标+维度级检索 */
+            AloudataSearchResult searchResult = aloudataSemanticEsService.hybridSearch(datasourceId, keyword, topK, threshold);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("**搜索关键词**: ").append(keyword).append("\n");
+            sb.append("**数据源 ID**: ").append(datasourceId).append("\n");
+
+            int metricCount = searchResult.getMetricHits() != null ? searchResult.getMetricHits().size() : 0;
+            int dimensionCount = searchResult.getDimensionHits() != null ? searchResult.getDimensionHits().size() : 0;
+            sb.append("**匹配结果**: ").append(metricCount).append(" 个指标 + ").append(dimensionCount).append(" 个维度");
+            sb.append(" (检索耗时: ").append(searchResult.getElapsedMs()).append("ms)\n\n");
+
+            /* 展示指标命中 */
+            if (searchResult.getMetricHits() != null && !searchResult.getMetricHits().isEmpty()) {
+                sb.append("## 指标\n\n");
+                for (AloudataSearchResult.MetricHit hit : searchResult.getMetricHits()) {
+                    sb.append("- ").append(hit.getPromptInfo());
+                    sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
+                    sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
+                }
+                sb.append("\n");
+            }
+
+            /* 展示维度命中 */
+            if (searchResult.getDimensionHits() != null && !searchResult.getDimensionHits().isEmpty()) {
+                sb.append("## 维度\n\n");
+                for (AloudataSearchResult.DimensionHit hit : searchResult.getDimensionHits()) {
+                    sb.append("- ").append(hit.getPromptInfo());
+                    sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
+                    sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
+                }
+                sb.append("\n");
+            }
+
+            if (metricCount == 0 && dimensionCount == 0) {
+                sb.append("未找到匹配的指标或维度。请尝试使用 aloudata_metrics_list 或 aloudata_dimensions_list 查看所有可用项。");
+            }
+
+            return sb.toString();
+        }
+
+        /* 新版语义层未同步，降级到旧版表级检索 */
+        log.info("Aloudata 数据源 [{}] 新版语义层未同步，降级到旧版表级检索", datasourceId);
+        return handleGenericSemanticSearch(datasourceId, keyword, topK, threshold);
+    }
+
+    /**
+     * 非 Aloudata 数据源的通用表级语义检索（保持原有逻辑）
+     */
+    private String handleGenericSemanticSearch(Long datasourceId, String keyword, int topK, double threshold) {
+        String validationError = validateDatasourceAccessible(datasourceId);
+        if (validationError != null) {
+            return error(validationError);
+        }
+
+        SchemaSearchRequest request = new SchemaSearchRequest();
+        request.setDatasourceId(datasourceId);
+        request.setQuery(keyword);
+        request.setTopK(topK);
+        request.setSimilarityThreshold(threshold);
+
+        SchemaSearchResult searchResult = schemaEmbeddingService.searchSchema(request);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("**搜索关键词**: ").append(keyword).append("\n");
+        sb.append("**数据源 ID**: ").append(datasourceId).append("\n");
+        sb.append("**匹配结果**: ").append(searchResult.getTableHits().size()).append(" 个表/分组");
+        sb.append(" (检索耗时: ").append(searchResult.getElapsedMs()).append("ms)\n\n");
+
+        if (searchResult.getTableHits().isEmpty()) {
+            sb.append("未找到匹配的表。请尝试使用 list_tables 查看所有可用表。");
+            return sb.toString();
+        }
+
+        for (SchemaSearchResult.TableHit hit : searchResult.getTableHits()) {
+            sb.append("### ").append(hit.getTableName());
+            if (hit.getTableComment() != null && !hit.getTableComment().isBlank()) {
+                sb.append(" - ").append(hit.getTableComment());
+            }
+            sb.append(" [匹配分数: ").append(String.format("%.3f", hit.getScore()));
+            sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n\n");
+
+            if (hit.getSemanticFields() != null && !hit.getSemanticFields().isEmpty()) {
+                for (SemanticModelVO vo : hit.getSemanticFields()) {
+                    sb.append("- ").append(vo.getPromptInfo()).append("\n");
+                }
+                sb.append("\n");
+            }
+        }
+
+        if (searchResult.getRelations() != null && !searchResult.getRelations().isEmpty()) {
+            sb.append("## 关联关系\n\n");
+            for (LogicalRelationVO rel : searchResult.getRelations()) {
+                sb.append("- ").append(rel.getPromptInfo()).append("\n");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 校验数据源是否可访问（通用，不限 Aloudata 类型）
+     */
+    private String validateDatasourceAccessible(Long datasourceId) {
+        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+        if (entity == null) {
+            return "数据源不存在, id=" + datasourceId;
+        }
+        if (entity.getEnabled() == null || !entity.getEnabled()) {
+            return "数据源已禁用, id=" + datasourceId;
+        }
+        return null;
     }
 
     /**
@@ -501,5 +614,38 @@ public class AloudataCallTool {
 
     private String error(String message) {
         return JSONUtil.toJsonStr(new JSONObject().set("error", message));
+    }
+
+    /**
+     * 读取当前会话的数据源白名单。
+     *
+     * @see DatasourceQueryTool#currentDatasourceWhitelist()
+     */
+    private Set<Long> currentDatasourceWhitelist() {
+        ChatOrigin origin = ChatOriginHolder.get();
+        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
+            return Set.of();
+        }
+        return scopeContext.getAllowedDatasourceIds(origin.conversationId());
+    }
+
+    /**
+     * 校验 datasourceId 是否在用户勾选的白名单内。
+     * <p>
+     * 与 {@link DatasourceQueryTool#checkDatasourceAllowed(Long)} 逻辑一致：
+     * 白名单为空时不做约束，白名单非空时必须匹配。
+     *
+     * @param datasourceId 工具调用传入的数据源 ID
+     * @return 不在白名单时返回拒绝原因；允许访问时返回 null
+     */
+    private String checkDatasourceScope(Long datasourceId) {
+        Set<Long> allowed = currentDatasourceWhitelist();
+        if (allowed.isEmpty()) {
+            return null;
+        }
+        if (datasourceId == null || !allowed.contains(datasourceId)) {
+            return "数据源 " + datasourceId + " 不在用户勾选的白名单内，禁止访问。允许的数据源ID：" + allowed;
+        }
+        return null;
     }
 }

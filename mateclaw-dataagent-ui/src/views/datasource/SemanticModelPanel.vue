@@ -279,8 +279,11 @@ async function handleSyncAloudata(): Promise<void> {
   }
   syncingAloudata.value = true
   try {
-    const count = await semanticModelApi.syncFromAloudata(props.datasourceId)
-    ElMessage.success(t('semanticModel.syncSuccess', { count }))
+    const result = await datasourceApi.syncAloudataSemantic(props.datasourceId)
+    const summary = result
+      ? `指标: ${result.metricCount}, 维度: ${result.dimensionCount}, 关联: ${result.metricDimensionCount}`
+      : ''
+    ElMessage.success(t('semanticModel.syncSuccess', { count: summary }))
     loadModels()
   } catch (e: any) {
     ElMessage.error(e.message || t('semanticModel.syncFailed'))

@@ -1,0 +1,105 @@
+package vip.mate.dataagent.service;
+
+import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
+import vip.mate.dataagent.dto.AloudataDimensionSemanticDTO;
+import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
+import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
+import vip.mate.dataagent.model.AloudataCategoryEntity;
+
+import java.util.List;
+
+/**
+ * Aloudata 语义层同步服务接口
+ * <p>
+ * 负责从 Aloudata 指标平台同步指标、维度、类目元数据到本地 MySQL + ES。
+ * 优化 N+1 调用：使用 metric_batch_detail 批量获取指标详情，
+ * 批量调用 metric_available_dimensions 建立指标-维度关联。
+ */
+public interface AloudataSemanticSyncService {
+
+    /**
+     * 同步结果
+     */
+    record SyncResult(
+            int metricCount,
+            int dimensionCount,
+            int metricDimensionCount,
+            int categoryCount,
+            long elapsedMs,
+            String status,
+            String message
+    ) {}
+
+    /**
+     * 全量同步 Aloudata 元数据到本地语义层
+     * <p>
+     * 流程：
+     * 1. category_list → 类目映射
+     * 2. metrics_list (分页) → 指标列表
+     * 3. metric_batch_detail (1次) → 批量获取同义词
+     * 4. metric_available_dimensions (批量) → 指标-维度关联
+     * 5. dimensions_list (分页) → 维度列表
+     * 6. dimension_detail (逐个) → 维度同义词
+     * 7. 向量化 + ES 索引
+     *
+     * @param datasourceId 本地数据源 ID
+     * @return 同步结果
+     */
+    SyncResult fullSync(Long datasourceId);
+
+    /**
+     * 查询已同步的指标列表（分页）
+     */
+    List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize);
+
+    /**
+     * 查询已同步的维度列表（分页）
+     */
+    List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize);
+
+    /**
+     * 查询指标关联的维度名称列表
+     */
+    List<String> listMetricDimensions(Long datasourceId, String metricName);
+
+    /**
+     * 查询同步状态
+     */
+    SyncResult getSyncStatus(Long datasourceId);
+
+    /**
+     * 查询已同步的类目列表
+     *
+     * @param datasourceId 数据源 ID
+     * @param categoryType 类目类型过滤（可选）：CATEGORY_METRIC / CATEGORY_DIMENSION
+     */
+    List<AloudataCategoryEntity> listSyncedCategories(Long datasourceId, String categoryType);
+
+    /**
+     * 按指标类目分组查询指标列表
+     *
+     * @param datasourceId 数据源 ID
+     * @return 按类目分组的指标列表
+     */
+    List<MetricCategoryGroupDTO> listMetricsGroupByCategory(Long datasourceId);
+
+    /**
+     * 按维度类目分组查询维度列表
+     *
+     * @param datasourceId 数据源 ID
+     * @return 按类目分组的维度列表
+     */
+    List<DimensionCategoryGroupDTO> listDimensionsGroupByCategory(Long datasourceId);
+
+    /**
+     * 将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引
+     * <p>
+     * 不从 Aloudata API 重新拉取，仅从本地 MySQL 分页读取数据，
+     * 生成向量（如 EmbeddingModel 可用）并写入 Elasticsearch。
+     * 适用于：ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景。
+     *
+     * @param datasourceId 数据源 ID
+     * @return 同步结果（metricCount/dimensionCount 为 ES 写入数量）
+     */
+    SyncResult rebuildEsIndex(Long datasourceId);
+}

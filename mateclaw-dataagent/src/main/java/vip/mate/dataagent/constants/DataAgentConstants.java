@@ -180,4 +180,51 @@ public final class DataAgentConstants {
 
     /** 帮助文档相关推荐默认数量 */
     public static final int HELP_RELATED_DOCS_DEFAULT_LIMIT = 5;
+
+    /** Schema 嵌入 Elasticsearch 索引名称 */
+    public static final String SCHEMA_ELASTICSEARCH_INDEX = "dataagent_schema_embedding";
+
+    /** Schema 嵌入 ES 向量检索字段名 */
+    public static final String SCHEMA_ES_EMBEDDING_FIELD = "embedding";
+
+    /** Schema 嵌入 ES 嵌入文本字段名 */
+    public static final String SCHEMA_ES_EMBEDDING_TEXT_FIELD = "embeddingText";
+
+    /** Elasticsearch 默认向量检索候选数（numCandidates） */
+    public static final int ES_KNN_NUM_CANDIDATES = 100;
+
+    // ==================== Aloudata 语义层 ====================
+
+    /** Aloudata 指标 ES 索引名称 */
+    public static final String ALOUDATA_METRIC_ES_INDEX = "dataagent_aloudata_metric";
+
+    /** Aloudata 维度 ES 索引名称 */
+    public static final String ALOUDATA_DIMENSION_ES_INDEX = "dataagent_aloudata_dimension";
+
+    /** Aloudata ES 向量检索字段名 */
+    public static final String ALOUDATA_ES_EMBEDDING_FIELD = "embedding";
+
+    /** Aloudata ES 嵌入文本字段名 */
+    public static final String ALOUDATA_ES_EMBEDDING_TEXT_FIELD = "embeddingText";
+
+    /** Aloudata 同步：metric_available_dimensions 批量大小 */
+    public static final int ALOUDATA_SYNC_BATCH_SIZE = 10;
+
+    /** Aloudata 同步：指标列表分页大小 */
+    public static final int ALOUDATA_SYNC_METRIC_PAGE_SIZE = 100;
+
+    /** Aloudata 同步：维度列表分页大小 */
+    public static final int ALOUDATA_SYNC_DIMENSION_PAGE_SIZE = 100;
+
+    /** Aloudata 同步：批量 Upsert 大小 */
+    public static final int ALOUDATA_SYNC_BATCH_UPSERT_SIZE = 500;
+
+    /** Aloudata 语义检索默认 Top-K */
+    public static final int ALOUDATA_SEARCH_DEFAULT_TOP_K = 10;
+
+    /** Aloudata 语义检索默认相似度阈值 */
+    public static final double ALOUDATA_SEARCH_DEFAULT_THRESHOLD = 0.3;
+
+    /** 默认 Embedding 向量维度 */
+    public static final int DEFAULT_EMBEDDING_DIMENSION = 1024;
 }

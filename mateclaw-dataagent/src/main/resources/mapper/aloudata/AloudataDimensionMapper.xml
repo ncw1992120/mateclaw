@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="vip.mate.dataagent.repository.AloudataDimensionMapper">
+
+    <insert id="upsertBatch" parameterType="java.util.List">
+        INSERT INTO `dataagent_aloudata_dimension`
+        (`id`, `datasource_id`, `dim_name`, `dim_display_name`, `origin_data_type`,
+         `dim_description`, `is_time_dimension`, `synonyms`, `config_type`, `config_value`,
+         `dataset_name`, `example_values`, `embedding_text`, `sync_version`,
+         `embedding`, `embedding_model_id`, `create_time`, `update_time`)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.dimName}, #{item.dimDisplayName}, #{item.originDataType},
+             #{item.dimDescription}, #{item.isTimeDimension}, #{item.synonyms}, #{item.configType}, #{item.configValue},
+             #{item.datasetName}, #{item.exampleValues}, #{item.embeddingText}, #{item.syncVersion},
+             #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            `dim_display_name` = VALUES(`dim_display_name`),
+            `origin_data_type` = VALUES(`origin_data_type`),
+            `dim_description` = VALUES(`dim_description`),
+            `is_time_dimension` = VALUES(`is_time_dimension`),
+            `synonyms` = VALUES(`synonyms`),
+            `config_type` = VALUES(`config_type`),
+            `config_value` = VALUES(`config_value`),
+            `dataset_name` = VALUES(`dataset_name`),
+            `example_values` = VALUES(`example_values`),
+            `embedding_text` = VALUES(`embedding_text`),
+            `sync_version` = VALUES(`sync_version`),
+            `embedding` = COALESCE(VALUES(`embedding`), `embedding`),
+            `embedding_model_id` = COALESCE(VALUES(`embedding_model_id`), `embedding_model_id`),
+            `update_time` = VALUES(`update_time`)
+    </insert>
+
+</mapper>

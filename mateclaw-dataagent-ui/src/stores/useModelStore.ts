@@ -179,6 +179,21 @@ export const useModelStore = defineStore('model', () => {
     }
   }
 
+  /** 测试 Embedding 模型连通性，返回 { success, message, dimensions } */
+  async function testEmbeddingModelAvailability(modelId: number): Promise<{ success: boolean; message?: string; dimensions?: number }> {
+    try {
+      const result = await modelApi.testEmbeddingModel(modelId) as { success: boolean; message?: string; dimensions?: number }
+      return {
+        success: result.success,
+        message: result.message,
+        dimensions: result.dimensions,
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, message: msg }
+    }
+  }
+
   /** 创建自定义 Provider */
   async function createCustomProvider(data: Record<string, unknown>): Promise<void> {
     await modelApi.createCustomProvider(data as Partial<ModelProvider>)
@@ -238,6 +253,7 @@ export const useModelStore = defineStore('model', () => {
     setDefaultModel,
     testConnection,
     testModelAvailability,
+    testEmbeddingModelAvailability,
     createCustomProvider,
     deleteProvider,
     discoverModels,

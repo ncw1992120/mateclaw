@@ -29,13 +29,22 @@ public class AloudataConfigHelper {
      */
     public AloudataConfigDTO parseConfig(DatasourceEntity entity) {
         AloudataConfigDTO config = new AloudataConfigDTO();
-        config.setAnymetricsHost(entity.getHost());
-        config.setSemanticHost(entity.getHost());
-
+        // 产品层与语义层地址统一从 connection_params 读取（JSON 中 anymetricsHost / semanticHost）；
+        // 未配置时回退到独立字段 productHost / semanticHost，最后回退到通用 host 字段以兼容历史数据
+        String anymetricsHost = null;
+        String semanticHost = null;
         if (entity.getConnectionParams() != null && !entity.getConnectionParams().isEmpty()) {
             try {
                 Map<String, Object> params = objectMapper.readValue(entity.getConnectionParams(),
                         new TypeReference<Map<String, Object>>() {});
+                Object anyHost = params.get("anymetricsHost");
+                if (anyHost instanceof String && !((String) anyHost).isBlank()) {
+                    anymetricsHost = (String) anyHost;
+                }
+                Object semHost = params.get("semanticHost");
+                if (semHost instanceof String && !((String) semHost).isBlank()) {
+                    semanticHost = (String) semHost;
+                }
                 if (params.get("anymetricsPort") != null) {
                     config.setAnymetricsPort(((Number) params.get("anymetricsPort")).intValue());
                 }
@@ -56,10 +65,27 @@ public class AloudataConfigHelper {
                 log.warn("解析 connectionParams 失败，使用默认配置: {}", e.getMessage());
             }
         }
+        config.setAnymetricsHost(firstNonBlank(anymetricsHost, entity.getProductHost(), entity.getHost()));
+        config.setSemanticHost(firstNonBlank(semanticHost, entity.getSemanticHost(), entity.getHost()));
 
         // username 字段存储租户ID，password 字段存储认证值
         config.setTenantId(entity.getUsername());
         config.setAuthValue(entity.getPassword());
         return config;
+    }
+
+    /**
+     * 按顺序返回首个非空字符串；全部为空时返回 null
+     */
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
+        return null;
     }
 }

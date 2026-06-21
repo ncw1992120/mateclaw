@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: mateclaw-dataagent
+  elasticsearch:
+    uris: ${ES_URIS:http://es.service:80}
+    username: ${ES_USERNAME:elastic}
+    password: ${ES_PASSWORD:TWMM22KT82GJW7P77LK87lY4}
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:data_agent}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -26,6 +30,10 @@ spring:
   ai:
     dashscope:
       api-key: ${AI_DASHSCOPE_API_KEY:placeholder}
+
+# MyBatis Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
 
 mateclaw:
   jwt:

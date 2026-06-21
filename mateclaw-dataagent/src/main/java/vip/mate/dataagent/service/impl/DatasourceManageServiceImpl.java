@@ -102,6 +102,12 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (request.getHost() != null) {
             entity.setHost(request.getHost());
         }
+        if (request.getProductHost() != null) {
+            entity.setProductHost(request.getProductHost());
+        }
+        if (request.getSemanticHost() != null) {
+            entity.setSemanticHost(request.getSemanticHost());
+        }
         if (request.getPort() != null) {
             entity.setPort(request.getPort());
         }

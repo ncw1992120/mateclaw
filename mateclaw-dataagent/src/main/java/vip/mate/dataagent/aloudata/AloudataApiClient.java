@@ -116,7 +116,7 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         Map<String, String> pathVariables = new LinkedHashMap<>();
-        Map<String, String> queryParams = new LinkedHashMap<>();
+        List<String[]> queryParams = new ArrayList<>();
         Map<String, Object> bodyParams = new LinkedHashMap<>();
 
         for (ApiParam paramDef : endpoint.getRequestParams()) {
@@ -131,7 +131,25 @@ public class AloudataApiClient {
             switch (location.toUpperCase()) {
                 case "HEADER" -> headers.set(paramDef.getName(), String.valueOf(value));
                 case "PATH" -> pathVariables.put(paramDef.getName(), String.valueOf(value));
-                case "QUERY" -> queryParams.put(paramDef.getName(), String.valueOf(value));
+                case "QUERY" -> {
+                    /* Array 类型参数展开为重复参数名：key=v1&key=v2 */
+                    if (value instanceof Collection<?> collection) {
+                        for (Object item : collection) {
+                            if (item != null) {
+                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                            }
+                        }
+                    } else if (value.getClass().isArray()) {
+                        for (int i = 0; i < java.lang.reflect.Array.getLength(value); i++) {
+                            Object item = java.lang.reflect.Array.get(value, i);
+                            if (item != null) {
+                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                            }
+                        }
+                    } else {
+                        queryParams.add(new String[]{paramDef.getName(), String.valueOf(value)});
+                    }
+                }
                 case "BODY" -> bodyParams.put(paramDef.getName(), value);
                 default -> log.warn("未知的参数位置类型 [{}]: {}", paramDef.getName(), location);
             }
@@ -143,8 +161,8 @@ public class AloudataApiClient {
 
         // 追加查询参数
         if (!queryParams.isEmpty()) {
-            String queryString = queryParams.entrySet().stream()
-                    .map(e -> e.getKey() + "=" + e.getValue())
+            String queryString = queryParams.stream()
+                    .map(pair -> pair[0] + "=" + pair[1])
                     .collect(Collectors.joining("&"));
             url += (url.contains("?") ? "&" : "?") + queryString;
         }

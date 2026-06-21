@@ -48,7 +48,13 @@
               :class="{ active: selectedDsId === ds.id, disabled: !ds.enabled }"
               @click="handleSelectDs(ds)"
             >
-              <span class="item-icon">📊</span>
+              <span class="item-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3" />
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                </svg>
+              </span>
               <div class="item-info">
                 <span class="item-name">{{ ds.name }}</span>
                 <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
@@ -100,18 +106,26 @@
               </button>
               <button
                 class="toolbar-btn"
-                :disabled="syncingId === selectedDs.id"
-                :title="t('datasourcePage.actionSync')"
-                @click="handleSync(selectedDs)"
+                :disabled="syncing || debouncedSyncPending"
+                :title="t('metricPlatform.syncTrigger')"
+                @click="handleSyncMetadata"
               >
-                <span class="btn-icon">{{ syncingId === selectedDs.id ? '⏳' : '🔄' }}</span>
-                <span class="btn-text">{{ t('datasourcePage.actionSync') }}</span>
+                <span v-if="syncing" class="btn-spinner" />
+                <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+                <span class="btn-text">{{ syncing ? t('metricPlatform.syncing') : t('metricPlatform.syncTrigger') }}</span>
               </button>
             </div>
           </div>
 
           <div v-if="selectedDsId" class="detail-body">
-            <MetricPlatformPanel :datasource-id="selectedDsId" :refresh-key="panelRefreshKey" />
+            <MetricPlatformPanel
+              :datasource-id="selectedDsId"
+              :refresh-key="panelRefreshKey"
+            />
           </div>
           <div v-else class="detail-placeholder">
             <p>{{ t('datasourcePage.selectSource') }}</p>
@@ -129,6 +143,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
+import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import type { Datasource } from '@/types'
 import DatasourceForm from './datasource/DatasourceForm.vue'
 import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
@@ -148,7 +163,8 @@ const selectedDsId = ref('')
 /** 右侧详情面板的强制刷新版本号（重命名等不切换选中时递增） */
 const panelRefreshKey = ref(0)
 const testingId = ref<string | null>(null)
-const syncingId = ref<string | null>(null)
+/** 同步中状态（语义层同步，工具栏同步按钮专用） */
+const syncing = ref(false)
 
 /** 仅展示指标平台数据源 */
 const metricPlatformList = computed<Datasource[]>(() => {
@@ -296,18 +312,41 @@ async function handleToggle(ds: Datasource): Promise<void> {
   }
 }
 
-/** 同步数据表（触发 Schema 发现） */
-async function handleSync(ds: Datasource): Promise<void> {
-  syncingId.value = ds.id
+/** 真正执行同步的函数（被防抖包装） */
+async function doSync(): Promise<void> {
+  if (!selectedDs.value) return
+  syncing.value = true
   try {
-    await datasourceApi.triggerSchemaDiscovery(ds.id)
-    ElMessage.success(t('datasourcePage.syncSuccess'))
-    store.fetchDatasources()
-  } catch {
-    ElMessage.error(t('datasourcePage.syncFail'))
+    const { data } = await datasourceApi.syncAloudataSemantic(selectedDs.value.id)
+    if ((data as any)?.status === 'completed') {
+      ElMessage.success(t('metricPlatform.syncSuccess'))
+    } else {
+      ElMessage.error((data as any)?.message || t('metricPlatform.syncFailed'))
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('metricPlatform.syncFailed'))
   } finally {
-    syncingId.value = null
+    syncing.value = false
   }
+}
+
+/**
+ * 防抖包装：800ms 内的多次点击只触发最后一次。
+ * 语义层同步会拉取全量元数据并写入语义层，非常消耗资源，必须避免重复触发。
+ */
+const { invoke: debouncedInvoke, pending: debouncedSyncPending } = useDebouncedFn(
+  doSync,
+  800,
+)
+
+/** 触发同步元数据（被防抖处理） */
+function handleSyncMetadata(): void {
+  if (syncing.value) return
+  if (debouncedSyncPending.value) {
+    ElMessage.warning(t('metricPlatform.syncDebounceHint'))
+    return
+  }
+  debouncedInvoke()
 }
 </script>
 
@@ -471,9 +510,16 @@ async function handleSync(ds: Datasource): Promise<void> {
 }
 
 .item-icon {
-  font-size: 20px;
   flex-shrink: 0;
-  line-height: 1;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(22, 93, 255, 0.1) 0%, rgba(22, 93, 255, 0.04) 100%);
+  color: #165dff;
+  box-shadow: inset 0 0 0 1px rgba(22, 93, 255, 0.06);
 }
 
 .item-info {
@@ -557,7 +603,7 @@ async function handleSync(ds: Datasource): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 16px 24px;
   background: #fff;
   border-bottom: 1px solid #e5e6eb;
   flex-shrink: 0;
@@ -612,28 +658,50 @@ async function handleSync(ds: Datasource): Promise<void> {
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 5px;
   height: 30px;
   padding: 0 12px;
   border: 1px solid #e5e6eb;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #fff;
   color: #4e5969;
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
   white-space: nowrap;
+  user-select: none;
 }
 
 .toolbar-btn:hover:not(:disabled) {
   border-color: #165dff;
   color: #165dff;
+  background: #f5f8ff;
+  box-shadow: 0 1px 3px rgba(22, 93, 255, 0.1);
 }
 
 .toolbar-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(22, 93, 255, 0.2);
+  border-top-color: #165dff;
+  border-radius: 50%;
+  animation: ds-btn-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ds-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn-icon {

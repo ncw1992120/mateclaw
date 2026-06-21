@@ -55,7 +55,7 @@
             <el-switch
               :model-value="agent.enabled"
               size="small"
-              @change="(val) => handleToggleEnable(agent, val)"
+              @change="(val: boolean | string | number) => handleToggleEnable(agent, !!val)"
             />
           </div>
           <div class="row-cell action-cell">

@@ -19,8 +19,14 @@ public class DatasourceVO {
     /** 数据源类型 */
     private String sourceType;
 
-    /** 主机地址 */
+    /** 主机地址（兼容旧数据） */
     private String host;
+
+    /** 产品层服务地址（Aloudata anymetrics） */
+    private String productHost;
+
+    /** 语义层服务地址（Aloudata semantic） */
+    private String semanticHost;
 
     /** 端口 */
     private Integer port;

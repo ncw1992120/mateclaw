@@ -9,25 +9,21 @@ import java.util.List;
  */
 public interface DataAgentChatService {
 
-    SseEmitter streamChat(Long agentId, String message, String conversationId);
-
-    SseEmitter streamChat(Long agentId, String message, String conversationId, String modelName);
-
     /**
-     * 流式对话（含数据源白名单）。
+     * 流式对话（含模型覆盖和数据源白名单）。
      * <p>
-     * 当 {@code datasourceIds} 非空时，后端会在用户消息前注入"仅允许使用以下数据源"
-     * 的提示词，并把白名单写入 {@link vip.mate.dataagent.support.DataAgentChatScopeContext}，
-     * 由 {@code DatasourceQueryTool} 做兜底校验。
+     * 通过 {@code modelProvider} + {@code modelName} 将用户选择的模型 pin 到 conversation 级别，
+     * AgentService 按 (agentId, modelKey) 缓存不同模型变体，避免每次对话都 updateAgent + refreshAgent。
      *
      * @param agentId        Agent ID
      * @param message        用户消息
      * @param conversationId 会话 ID
-     * @param modelName      模型名称（可选）
-     * @param datasourceIds  用户勾选的数据源白名单；null/空表示不限制
+     * @param modelProvider  模型 Provider ID（可选，与 modelName 成对传入）
+     * @param modelName      模型名称（可选，与 modelProvider 成对传入）
+     * @param datasourceIds  数据源白名单（可选）
      */
     SseEmitter streamChat(Long agentId, String message, String conversationId,
-                          String modelName, List<Long> datasourceIds);
+                          String modelProvider, String modelName, List<String> datasourceIds);
 
     /**
      * 流式对话（从请求参数，自动处理默认值）
@@ -35,6 +31,7 @@ public interface DataAgentChatService {
      * @param agentId        Agent ID
      * @param message        用户消息
      * @param conversationId 会话 ID（可为null，默认为"default"）
+     * @param modelProvider  模型 Provider ID（可选）
      * @param modelName      模型名称（可选）
      * @param datasourceIds  数据源白名单（可选）
      * @param reconnect      是否断线重连
@@ -42,7 +39,7 @@ public interface DataAgentChatService {
      * @return SSE 发射器
      */
     SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
-                                      String modelName, List<Long> datasourceIds,
+                                      String modelProvider, String modelName, List<String> datasourceIds,
                                       boolean reconnect, Long lastEventId);
 
     /**
@@ -50,15 +47,11 @@ public interface DataAgentChatService {
      */
     SseEmitter reconnect(String conversationId, long lastEventId);
 
-    String chat(Long agentId, String message, String conversationId);
-
-    String chat(Long agentId, String message, String conversationId, String modelName);
-
     /**
-     * 同步对话（含数据源白名单）。
+     * 同步对话（含模型覆盖和数据源白名单）。
      */
     String chat(Long agentId, String message, String conversationId,
-                String modelName, List<Long> datasourceIds);
+                String modelProvider, String modelName, List<String> datasourceIds);
 
     boolean requestStop(String conversationId);
 }

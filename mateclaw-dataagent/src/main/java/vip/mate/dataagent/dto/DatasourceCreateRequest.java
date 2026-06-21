@@ -17,8 +17,14 @@ public class DatasourceCreateRequest {
     /** 数据源类型 */
     private String sourceType;
 
-    /** 主机地址 */
+    /** 主机地址（兼容旧数据，未配置产品层/语义层地址时使用） */
     private String host;
+
+    /** 产品层服务地址（Aloudata anymetrics） */
+    private String productHost;
+
+    /** 语义层服务地址（Aloudata semantic） */
+    private String semanticHost;
 
     /** 端口 */
     private Integer port;

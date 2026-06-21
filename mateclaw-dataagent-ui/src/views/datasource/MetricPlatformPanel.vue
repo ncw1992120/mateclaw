@@ -2,168 +2,170 @@
   <div class="metric-platform-panel">
     <!-- 指标平台连接 -->
     <section class="mp-section">
-      <div class="section-header">
-        <div class="section-header-row">
-          <h2 class="section-title">
-            <span class="title-icon">📡</span>
-            {{ t('metricPlatform.sectionTitle') }}
-          </h2>
+      <div class="mp-card">
+        <div class="section-header">
+          <div class="section-header-left">
+            <span class="section-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                <line x1="12" y1="20" x2="12.01" y2="20" />
+              </svg>
+            </span>
+            <div class="title-block">
+              <h2 class="section-title">{{ t('metricPlatform.sectionTitle') }}</h2>
+              <p class="section-desc">{{ t('metricPlatform.sectionDesc') }}</p>
+            </div>
+          </div>
           <div class="section-actions">
             <template v-if="!isEditing">
               <button
-                class="section-action-btn edit"
+                class="section-action-btn"
                 :title="t('datasourcePage.actionEdit')"
                 @click="handleEdit"
               >
-                <span class="btn-icon">✏️</span>
-                <span class="btn-text">{{ t('datasourcePage.actionEdit') }}</span>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+                <span>{{ t('datasourcePage.actionEdit') }}</span>
               </button>
             </template>
             <template v-else>
               <button
-                class="section-action-btn cancel"
+                class="section-action-btn"
                 :disabled="saving"
                 @click="handleCancel"
               >
                 {{ t('common.cancel') }}
               </button>
               <button
-                class="section-action-btn primary"
+                class="section-action-btn"
                 :disabled="saving"
                 @click="handleSave"
               >
-                {{ saving ? t('common.loading') : t('common.save') }}
+                <span v-if="saving" class="btn-spinner" />
+                <span>{{ saving ? t('common.loading') : t('common.save') }}</span>
               </button>
             </template>
           </div>
         </div>
-        <p class="section-desc">{{ t('metricPlatform.sectionDesc') }}</p>
-      </div>
 
-      <!-- 指标平台连接表单 -->
-      <div class="form-fields">
-        <!-- 显示名称 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldDisplayName') }}</label>
-          <input
-            v-model="form.displayName"
-            class="field-input"
-            :disabled="!isEditing"
-            :placeholder="t('metricPlatform.placeholderDisplayName')"
-          />
-        </div>
-
-        <!-- 服务地址 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldServiceAddress') }}</label>
-          <input
-            v-model="form.serviceAddress"
-            class="field-input"
-            :disabled="!isEditing"
-            :placeholder="t('metricPlatform.placeholderServiceAddress')"
-          />
-        </div>
-
-        <!-- 产品层端口 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldProductPort') }}</label>
-          <input
-            v-model="form.productPort"
-            class="field-input short"
-            :disabled="!isEditing"
-            :placeholder="t('metricPlatform.placeholderProductPort')"
-          />
-        </div>
-
-        <!-- 语义层端口 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldSemanticPort') }}</label>
-          <input
-            v-model="form.semanticPort"
-            class="field-input short"
-            :disabled="!isEditing"
-            :placeholder="t('metricPlatform.placeholderSemanticPort')"
-          />
-        </div>
-
-        <!-- 租户ID -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldTenantId') }}</label>
-          <input
-            v-model="form.tenantId"
-            class="field-input"
-            :disabled="!isEditing"
-            :placeholder="t('metricPlatform.placeholderTenantId')"
-          />
-          <el-tooltip content="租户ID，用于指标查询内容所在的租户" placement="top">
-            <span class="field-tip">!</span>
-          </el-tooltip>
-        </div>
-
-        <!-- 认证方式 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldAuthMethod') }}</label>
-          <select v-model="form.authMethod" class="field-select" :disabled="!isEditing">
-            <option value="UID">UID</option>
-            <option value="TOKEN">TOKEN</option>
-            <option value="ACCOUNT">ACCOUNT</option>
-            <option value="APIKEY">APIKEY</option>
-          </select>
-          <el-tooltip content="认证方式。支持 UID、TOKEN、ACCOUNT、APIKEY" placement="top">
-            <span class="field-tip">!</span>
-          </el-tooltip>
-        </div>
-
-        <!-- 认证值 -->
-        <div class="field-row">
-          <label class="field-label required">{{ t('metricPlatform.fieldAuthValue') }}</label>
-          <div class="password-field">
+        <div class="form-grid">
+          <!-- 显示名称 -->
+          <div class="form-field form-field-wide">
+            <label class="form-label required">{{ t('metricPlatform.fieldDisplayName') }}</label>
             <input
-              v-model="form.authValue"
-              class="field-input"
-              :type="showPassword ? 'text' : 'password'"
+              v-model="form.displayName"
+              class="form-input"
               :disabled="!isEditing"
-              :placeholder="t('metricPlatform.placeholderAuthValue')"
+              :placeholder="t('metricPlatform.placeholderDisplayName')"
             />
-            <span class="eye-btn" @click="showPassword = !showPassword">
-              <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </span>
           </div>
-          <el-tooltip content="与认证方式对应的认证值" placement="top">
-            <span class="field-tip">!</span>
-          </el-tooltip>
-        </div>
-      </div>
-    </section>
 
-    <!-- 指标元数据 -->
-    <section class="mp-section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <span class="title-icon">📊</span>
-          {{ t('metricPlatform.metadataTitle') }}
-          <span class="title-locale">kb.metrics</span>
-        </h2>
-        <p class="section-desc">{{ t('metricPlatform.metadataDesc') }}</p>
-      </div>
-
-      <div class="metadata-list">
-        <div
-          v-for="(item, idx) in metadataItems"
-          :key="idx"
-          class="metadata-item"
-        >
-          <div class="metadata-left">
-            <span class="folder-icon">📁</span>
-            <span class="metadata-name">{{ item.name }}</span>
+          <!-- 产品层服务地址 -->
+          <div class="form-field">
+            <label class="form-label required">{{ t('metricPlatform.fieldProductAddress') }}</label>
+            <input
+              v-model="form.productAddress"
+              class="form-input"
+              :disabled="!isEditing"
+              :placeholder="t('metricPlatform.placeholderProductAddress')"
+            />
           </div>
-          <div class="metadata-right">
-            <span class="metadata-badge">{{ item.count }} {{ t('metricPlatform.metadataCountSuffix') }}</span>
-            <span class="metadata-sync">
-              <span class="check-icon">✓</span>
-              {{ t('metricPlatform.metadataTagPrefix') }} {{ item.syncedAt }}
-            </span>
+
+          <!-- 产品层端口 -->
+          <div class="form-field">
+            <label class="form-label required">{{ t('metricPlatform.fieldProductPort') }}</label>
+            <input
+              v-model="form.productPort"
+              class="form-input"
+              :disabled="!isEditing"
+              :placeholder="t('metricPlatform.placeholderProductPort')"
+            />
+          </div>
+
+          <!-- 语义层服务地址 -->
+          <div class="form-field">
+            <label class="form-label required">{{ t('metricPlatform.fieldSemanticAddress') }}</label>
+            <input
+              v-model="form.semanticAddress"
+              class="form-input"
+              :disabled="!isEditing"
+              :placeholder="t('metricPlatform.placeholderSemanticAddress')"
+            />
+          </div>
+
+          <!-- 语义层端口 -->
+          <div class="form-field">
+            <label class="form-label required">{{ t('metricPlatform.fieldSemanticPort') }}</label>
+            <input
+              v-model="form.semanticPort"
+              class="form-input"
+              :disabled="!isEditing"
+              :placeholder="t('metricPlatform.placeholderSemanticPort')"
+            />
+          </div>
+
+          <!-- 租户 ID -->
+          <div class="form-field">
+            <label class="form-label required">
+              <span>{{ t('metricPlatform.fieldTenantId') }}</span>
+              <el-tooltip :content="t('metricPlatform.tooltipTenantId')" placement="top">
+                <span class="form-tip">?</span>
+              </el-tooltip>
+            </label>
+            <input
+              v-model="form.tenantId"
+              class="form-input"
+              :disabled="!isEditing"
+              :placeholder="t('metricPlatform.placeholderTenantId')"
+            />
+          </div>
+
+          <!-- 认证方式 -->
+          <div class="form-field">
+            <label class="form-label required">
+              <span>{{ t('metricPlatform.fieldAuthMethod') }}</span>
+              <el-tooltip :content="t('metricPlatform.tooltipAuthMethod')" placement="top">
+                <span class="form-tip">?</span>
+              </el-tooltip>
+            </label>
+            <select v-model="form.authMethod" class="form-select" :disabled="!isEditing">
+              <option value="UID">UID</option>
+              <option value="TOKEN">TOKEN</option>
+              <option value="ACCOUNT">ACCOUNT</option>
+              <option value="APIKEY">APIKEY</option>
+            </select>
+          </div>
+
+          <!-- 认证值 -->
+          <div class="form-field form-field-wide">
+            <label class="form-label required">
+              <span>{{ t('metricPlatform.fieldAuthValue') }}</span>
+              <el-tooltip :content="t('metricPlatform.tooltipAuthValue')" placement="top">
+                <span class="form-tip">?</span>
+              </el-tooltip>
+            </label>
+            <div class="password-field">
+              <input
+                v-model="form.authValue"
+                class="form-input"
+                :type="showPassword ? 'text' : 'password'"
+                :disabled="!isEditing"
+                :placeholder="t('metricPlatform.placeholderAuthValue')"
+              />
+              <button
+                type="button"
+                class="eye-btn"
+                :title="showPassword ? t('metricPlatform.hide') : t('metricPlatform.show')"
+                @click="showPassword = !showPassword"
+              >
+                <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -171,29 +173,189 @@
 
     <!-- 指标管理 -->
     <section class="mp-section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <span class="title-icon">⚙️</span>
-          {{ t('metricPlatform.manageTitle') }}
-        </h2>
-        <p class="section-desc">{{ t('metricPlatform.manageDesc') }}</p>
-      </div>
+      <div class="mp-card">
+        <div class="section-header">
+          <div class="section-header-left">
+            <span class="section-icon manage">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+            </span>
+            <div class="title-block">
+              <h2 class="section-title">{{ t('metricPlatform.manageTitle') }}</h2>
+              <p class="section-desc">{{ t('metricPlatform.manageDesc') }}</p>
+            </div>
+          </div>
+        </div>
 
-      <div class="indicator-grid">
-        <div
-          v-for="(ind, idx) in indicators"
-          :key="idx"
-          class="indicator-card"
-        >
-          <div class="indicator-head">
-            <span class="indicator-name">{{ t(ind.nameKey) }}</span>
-            <el-switch v-model="ind.enabled" />
+        <!-- 加载状态 -->
+        <div v-if="loadingMetrics" class="loading-container">
+          <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
+            <Loading />
+          </el-icon>
+          <span class="loading-text">{{ t('common.loading') }}</span>
+        </div>
+
+        <!-- 指标管理主容器（左侧类目树 + 右侧表格） -->
+        <div v-else-if="metricCategoryGroups.length > 0" class="metric-management-container">
+          <!-- 左侧类目树 -->
+          <div class="category-tree-panel">
+            <div class="tree-header">
+              <span class="tree-title">类目</span>
+            </div>
+            <div class="tree-content">
+              <div
+                v-for="group in metricCategoryGroups"
+                :key="group.categoryId"
+                class="tree-node"
+                :class="{ 'is-active': selectedCategoryId === group.categoryId }"
+                @click="selectCategory(group.categoryId)"
+              >
+                <span class="tree-node-expand" @click.stop="toggleCategory(group.categoryId, 'metric')">
+                  <el-icon :class="{ 'is-expanded': expandedMetricCategories.has(group.categoryId) }">
+                    <ArrowRight v-if="!expandedMetricCategories.has(group.categoryId)" />
+                    <ArrowDown v-else />
+                  </el-icon>
+                </span>
+                <span class="tree-node-icon">
+                  <el-icon><Folder /></el-icon>
+                </span>
+                <span class="tree-node-name">{{ group.categoryName }}</span>
+                <span class="tree-node-count">{{ group.metricCount }}</span>
+              </div>
+            </div>
           </div>
-          <div class="indicator-meta">
-            <span class="tql-tag">{{ t(ind.tagKey) }}</span>
-            <span class="meta-text">{{ t(ind.descKey) }}</span>
+
+          <!-- 右侧指标表格 -->
+          <div class="metric-table-panel">
+            <div class="table-header">
+              <span class="table-title">全部指标</span>
+              <span class="table-count">{{ metrics.length }} 个指标</span>
+            </div>
+            <el-table :data="currentMetrics" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
+              <el-table-column type="selection" width="40" align="center" />
+              <el-table-column prop="metricDisplayName" :label="t('metricPlatform.metricDisplayName')" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="metric-name-cell">
+                    <el-icon><DataLine /></el-icon>
+                    <span>{{ row.metricDisplayName || row.metricName }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="metricName" :label="t('metricPlatform.metricName')" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="status" :label="t('metricPlatform.metricStatus')" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.status === 'ONLINE' ? 'success' : 'info'">{{ row.status === 'ONLINE' ? '已发布' : '未发布' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="metricCategoryName" :label="t('metricPlatform.categoryName')" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="owner" :label="t('metricPlatform.owner')" min-width="100" show-overflow-tooltip />
+              <el-table-column :label="t('metricPlatform.availableDimensions')" min-width="160" show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.availableDimensions?.join('、') || '-' }}
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
-          <div class="indicator-range">{{ t(ind.rangeKey) }}</div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-else class="empty-container">
+          <el-empty :description="t('metricPlatform.noMetrics')" :image-size="80" />
+        </div>
+      </div>
+    </section>
+
+    <!-- 维度管理 -->
+    <section class="mp-section">
+      <div class="mp-card">
+        <div class="section-header">
+          <div class="section-header-left">
+            <span class="section-icon manage">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+            </span>
+            <div class="title-block">
+              <h2 class="section-title">{{ t('metricPlatform.dimensionTitle') }}</h2>
+              <p class="section-desc">{{ t('metricPlatform.dimensionDesc') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 加载状态 -->
+        <div v-if="loadingDimensions" class="loading-container">
+          <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
+            <Loading />
+          </el-icon>
+          <span class="loading-text">{{ t('common.loading') }}</span>
+        </div>
+
+        <!-- 维度管理主容器（左侧类目树 + 右侧表格） -->
+        <div v-else-if="dimensionCategoryGroups.length > 0" class="metric-management-container">
+          <!-- 左侧类目树 -->
+          <div class="category-tree-panel">
+            <div class="tree-header">
+              <span class="tree-title">类目</span>
+            </div>
+            <div class="tree-content">
+              <div
+                v-for="group in dimensionCategoryGroups"
+                :key="group.categoryId"
+                class="tree-node"
+                :class="{ 'is-active': selectedDimensionCategoryId === group.categoryId }"
+                @click="selectDimensionCategory(group.categoryId)"
+              >
+                <span class="tree-node-expand" @click.stop="toggleCategory(group.categoryId, 'dimension')">
+                  <el-icon :class="{ 'is-expanded': expandedDimensionCategories.has(group.categoryId) }">
+                    <ArrowRight v-if="!expandedDimensionCategories.has(group.categoryId)" />
+                    <ArrowDown v-else />
+                  </el-icon>
+                </span>
+                <span class="tree-node-icon">
+                  <el-icon><Folder /></el-icon>
+                </span>
+                <span class="tree-node-name">{{ group.categoryName }}</span>
+                <span class="tree-node-count">{{ group.dimensionCount }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧维度表格 -->
+          <div class="metric-table-panel">
+            <div class="table-header">
+              <span class="table-title">全部维度</span>
+              <span class="table-count">{{ dimensions.length }} 个维度</span>
+            </div>
+            <el-table :data="currentDimensions" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
+              <el-table-column type="selection" width="40" align="center" />
+              <el-table-column prop="dimDisplayName" :label="t('metricPlatform.dimDisplayName')" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <div class="metric-name-cell">
+                    <el-icon><DataLine /></el-icon>
+                    <span>{{ row.dimDisplayName || row.dimName }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="dimName" :label="t('metricPlatform.dimName')" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="configType" :label="t('metricPlatform.dimConfigType')" width="110" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.configType === 'COLUMN_BIND' ? 'primary' : 'info'">{{ row.configType }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="originDataType" :label="t('metricPlatform.dataType')" width="110" align="center" />
+              <el-table-column prop="dimDescription" :label="t('metricPlatform.dimDesc')" min-width="180" show-overflow-tooltip />
+            </el-table>
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-else class="empty-container">
+          <el-empty :description="t('metricPlatform.noDimensions')" :image-size="80" />
         </div>
       </div>
     </section>
@@ -201,10 +363,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { reactive, ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Loading, ArrowRight, ArrowDown, Folder, DataLine } from '@element-plus/icons-vue'
 import * as datasourceApi from '@/api/datasource'
+import { listAloudataMetrics, listAloudataDimensions, listMetricsGroupedByCategory, listDimensionsGroupedByCategory } from '@/api/semantic-model'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { Datasource } from '@/types'
 
@@ -229,8 +393,9 @@ const saving = ref(false)
 /** 连接信息表单初始值，加载后由详情接口回填 */
 const form = reactive({
   displayName: '',
-  serviceAddress: '',
+  productAddress: '',
   productPort: '',
+  semanticAddress: '',
   semanticPort: '',
   tenantId: '',
   authMethod: 'UID',
@@ -240,8 +405,10 @@ const form = reactive({
 /** 编辑前的表单快照（取消时恢复） */
 const formBackup = reactive({ ...form })
 
-/** connectionParams 解析后的结构（含 anymetricsPort / semanticPort / authType） */
+/** connectionParams 解析后的结构（含 anymetricsHost / semanticHost / anymetricsPort / semanticPort / authType） */
 interface ConnectionParams {
+  anymetricsHost?: string
+  semanticHost?: string
   anymetricsPort?: number
   semanticPort?: number
   authType?: string
@@ -263,8 +430,11 @@ function parseConnectionParams(raw: string | undefined | null): ConnectionParams
 /** 根据详情接口回填表单 */
 function fillFormFromDatasource(ds: Datasource): void {
   const cp = parseConnectionParams(ds.connectionParams)
+  // 产品层与语义层地址统一从 connection_params 读取（JSON 中 anymetricsHost / semanticHost）；
+  // 未配置时回退到独立字段，再回退到通用 host 字段（兼容历史数据）
   form.displayName = ds.name || ''
-  form.serviceAddress = ds.host || ''
+  form.productAddress = cp.anymetricsHost || ds.productHost || ds.host || ''
+  form.semanticAddress = cp.semanticHost || ds.semanticHost || ds.host || ''
   form.productPort = cp.anymetricsPort != null ? String(cp.anymetricsPort) : ''
   form.semanticPort = cp.semanticPort != null ? String(cp.semanticPort) : ''
   form.tenantId = ds.username || ''
@@ -283,6 +453,172 @@ async function loadDatasource(id: string): Promise<void> {
   }
 }
 
+/** 指标列表数据结构（匹配后端 AloudataMetricSemanticDTO） */
+interface MetricItem {
+  metricId: string
+  metricName: string
+  metricDisplayName: string
+  type: string
+  businessCaliber: string
+  owner: string
+  metricCategoryId: string
+  metricCategoryName: string
+  status: string
+  unit: string
+  synonyms?: string[]
+  availableDimensions?: string[]
+}
+
+/** 维度列表数据结构（匹配后端 AloudataDimensionSemanticDTO） */
+interface DimensionItem {
+  dimensionId: string
+  dimName: string
+  dimDisplayName: string
+  originDataType: string
+  dimDescription: string
+  configType: string
+  datasetName: string
+  synonyms?: string[]
+}
+
+/** 类目分组数据结构（后端返回） */
+interface MetricCategoryGroup {
+  categoryId: string
+  categoryName: string
+  metricCount: number
+  metrics: MetricItem[]
+}
+
+interface DimensionCategoryGroup {
+  categoryId: string
+  categoryName: string
+  dimensionCount: number
+  dimensions: DimensionItem[]
+}
+
+/** 指标列表 */
+const metrics = ref<MetricItem[]>([])
+
+/** 维度列表 */
+const dimensions = ref<DimensionItem[]>([])
+
+/** 指标类目分组列表（后端返回） */
+const metricCategoryGroups = ref<MetricCategoryGroup[]>([])
+
+/** 维度类目分组列表（后端返回） */
+const dimensionCategoryGroups = ref<DimensionCategoryGroup[]>([])
+
+/** 加载状态 */
+const loadingMetrics = ref(false)
+const loadingDimensions = ref(false)
+
+/** 展开的指标类目 */
+const expandedMetricCategories = ref<Set<string>>(new Set())
+
+/** 展开的维度类目 */
+const expandedDimensionCategories = ref<Set<string>>(new Set())
+
+/** 当前选中的类目 ID */
+const selectedCategoryId = ref<string>('all')
+
+/** 当前展示的指标列表（根据选中类目过滤） */
+const currentMetrics = computed<MetricItem[]>(() => {
+  if (selectedCategoryId.value === 'all') {
+    return metrics.value
+  }
+  const group = metricCategoryGroups.value.find(g => g.categoryId === selectedCategoryId.value)
+  return group?.metrics || []
+})
+
+/** 当前选中的维度类目 ID */
+const selectedDimensionCategoryId = ref<string>('all')
+
+/** 当前展示的维度列表（根据选中类目过滤） */
+const currentDimensions = computed<DimensionItem[]>(() => {
+  if (selectedDimensionCategoryId.value === 'all') {
+    return dimensions.value
+  }
+  const group = dimensionCategoryGroups.value.find(g => g.categoryId === selectedDimensionCategoryId.value)
+  return group?.dimensions || []
+})
+
+/** 选择维度类目 */
+function selectDimensionCategory(categoryId: string): void {
+  selectedDimensionCategoryId.value = categoryId
+}
+
+/** 切换类目展开/折叠 */
+function toggleCategory(categoryId: string, type: 'metric' | 'dimension'): void {
+  if (type === 'metric') {
+    const set = new Set(expandedMetricCategories.value)
+    if (set.has(categoryId)) {
+      set.delete(categoryId)
+    } else {
+      set.add(categoryId)
+    }
+    expandedMetricCategories.value = set
+  } else {
+    const set = new Set(expandedDimensionCategories.value)
+    if (set.has(categoryId)) {
+      set.delete(categoryId)
+    } else {
+      set.add(categoryId)
+    }
+    expandedDimensionCategories.value = set
+  }
+}
+
+/** 选择类目 */
+function selectCategory(categoryId: string): void {
+  selectedCategoryId.value = categoryId
+}
+
+/** 加载指标列表（按类目分组，后端已分组） */
+async function loadMetrics(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  loadingMetrics.value = true
+  try {
+    const res = await listMetricsGroupedByCategory(props.datasourceId)
+    const groups = (res as any) || []
+    metricCategoryGroups.value = groups
+    // 平铺所有指标用于兼容无类目情况
+    metrics.value = groups.flatMap(g => g.metrics)
+    // 默认展开所有类目
+    expandedMetricCategories.value = new Set(groups.map(g => g.categoryId))
+  } catch (error) {
+    console.error('Failed to load metrics:', error)
+    metricCategoryGroups.value = []
+    metrics.value = []
+  } finally {
+    loadingMetrics.value = false
+  }
+}
+
+/** 加载维度列表（按类目分组，后端已分组） */
+async function loadDimensions(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  loadingDimensions.value = true
+  try {
+    const res = await listDimensionsGroupedByCategory(props.datasourceId)
+    const groups = (res as any) || []
+    dimensionCategoryGroups.value = groups
+    // 平铺所有维度用于兼容无类目情况
+    dimensions.value = groups.flatMap(g => g.dimensions)
+    // 默认展开所有类目
+    expandedDimensionCategories.value = new Set(groups.map(g => g.categoryId))
+  } catch (error) {
+    console.error('Failed to load dimensions:', error)
+    dimensionCategoryGroups.value = []
+    dimensions.value = []
+  } finally {
+    loadingDimensions.value = false
+  }
+}
+
 /** 切换选中数据源或父级强制刷新时重新加载表单数据 */
 watch(
   () => [props.datasourceId, props.refreshKey],
@@ -290,6 +626,15 @@ watch(
     isEditing.value = false
     if (id) {
       loadDatasource(id)
+      // 加载指标、维度分组列表
+      loadMetrics()
+      loadDimensions()
+    } else {
+      // 清空指标和维度数据
+      metrics.value = []
+      dimensions.value = []
+      metricCategoryGroups.value = []
+      dimensionCategoryGroups.value = []
     }
   },
   { immediate: true },
@@ -315,14 +660,17 @@ async function handleSave(): Promise<void> {
   saving.value = true
   try {
     if (props.datasourceId) {
+      // 产品层与语义层是独立的进程服务，地址分别保存到 connection_params 中，
+      // 不再使用 host 字段作为兜底，避免历史上 host 字段相同时两个地址被同步覆盖
       const params = {
+        anymetricsHost: form.productAddress,
+        semanticHost: form.semanticAddress,
         anymetricsPort: Number(form.productPort) || 8080,
         semanticPort: Number(form.semanticPort) || 8080,
         authType: form.authMethod,
       }
       const updated = await datasourceApi.update(props.datasourceId, {
         name: form.displayName,
-        host: form.serviceAddress,
         username: form.tenantId,
         password: form.authValue,
         connectionParams: JSON.stringify(params),
@@ -340,13 +688,6 @@ async function handleSave(): Promise<void> {
     saving.value = false
   }
 }
-
-/** 指标元数据列表（演示数据） */
-const metadataItems = reactive([
-  { name: 'AUM 指标', count: 3, syncedAt: '2025-05-21' },
-  { name: '客户指标', count: 3, syncedAt: '2025-05-21' },
-  { name: '行为指标', count: 3, syncedAt: '2025-05-21' },
-])
 
 /** 指标管理列表（演示数据） */
 const indicators = reactive([
@@ -385,33 +726,93 @@ const indicators = reactive([
 .metric-platform-panel {
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 24px 32px 32px;
-  background: transparent;
-  height: 100%;
+  gap: 20px;
+  padding: 24px 32px 40px;
+  background: linear-gradient(180deg, #f7f8fa 0%, #f0f2f5 100%);
+  min-height: 100%;
   box-sizing: border-box;
 }
 
-/* ========== 通用 Section ========== */
+/* ========== Section 通用卡片 ========== */
 .mp-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+}
+
+.mp-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #ebedf0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  padding: 22px 24px 24px;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.mp-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  border-color: #e0e3e8;
 }
 
 .section-header {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.section-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.section-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(22, 93, 255, 0.1) 0%, rgba(22, 93, 255, 0.04) 100%);
+  color: #165dff;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px rgba(22, 93, 255, 0.06);
+}
+
+.section-icon.manage {
+  background: linear-gradient(135deg, rgba(0, 180, 42, 0.1) 0%, rgba(0, 180, 42, 0.04) 100%);
+  color: #00b42a;
+  box-shadow: inset 0 0 0 1px rgba(0, 180, 42, 0.06);
+}
+
+.title-block {
+  display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
-.section-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d2129;
+  margin: 0;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
 }
 
+.section-desc {
+  font-size: 12.5px;
+  color: #8c939d;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ========== 操作按钮 ========== */
 .section-actions {
   display: flex;
   align-items: center;
@@ -422,16 +823,18 @@ const indicators = reactive([
 .section-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 12px;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
   border: 1px solid #e5e6eb;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #fff;
   color: #4e5969;
-  font-size: 12.5px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s ease;
   font-family: inherit;
   white-space: nowrap;
 }
@@ -439,295 +842,209 @@ const indicators = reactive([
 .section-action-btn:hover:not(:disabled) {
   border-color: #165dff;
   color: #165dff;
+  background: #f5f8ff;
+  box-shadow: 0 1px 3px rgba(22, 93, 255, 0.12);
 }
 
 .section-action-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.section-action-btn.cancel:hover:not(:disabled) {
-  border-color: #c9cdd4;
-  color: #1d2129;
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(22, 93, 255, 0.2);
+  border-top-color: #165dff;
+  border-radius: 50%;
+  animation: panel-btn-spin 0.8s linear infinite;
 }
 
-.section-action-btn.primary {
-  background: #165dff;
-  border-color: #165dff;
-  color: #fff;
+@keyframes panel-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.section-action-btn.primary:hover:not(:disabled) {
-  background: #0e42d2;
-  border-color: #0e42d2;
-  color: #fff;
+/* ========== 表单网格 ========== */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
 }
 
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1d2129;
-  margin: 0;
-}
-
-.title-icon {
-  font-size: 16px;
-}
-
-.title-locale {
-  font-size: 12px;
-  color: #86909c;
-  font-weight: 400;
-  margin-left: 4px;
-}
-
-.section-desc {
-  font-size: 12.5px;
-  color: #86909c;
-  margin: 0;
-  line-height: 1.6;
-}
-
-/* ========== 指标平台连接表单 ========== */
-.form-fields {
+.form-field {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.field-row {
+.form-field-wide {
+  grid-column: 1 / -1;
+}
+
+.form-label {
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.field-label {
-  width: 90px;
+  gap: 4px;
   font-size: 13px;
   color: #4e5969;
-  flex-shrink: 0;
-  text-align: right;
+  font-weight: 500;
 }
 
-.field-label.required::before {
+.form-label.required::before {
   content: '*';
   color: #f53f3f;
-  margin-right: 4px;
+  font-weight: 600;
+  margin-right: 2px;
 }
 
-.field-input {
-  flex: 1;
-  max-width: 360px;
-  height: 34px;
+.form-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e5e6eb;
+  color: #86909c;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: help;
+  transition: all 0.15s;
+}
+
+.form-tip:hover {
+  background: #165dff;
+  color: #fff;
+}
+
+.form-input,
+.form-select {
+  height: 36px;
   border: 1px solid #e5e6eb;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
   color: #1d2129;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.15s;
   font-family: inherit;
   background: #fff;
   box-sizing: border-box;
+  width: 100%;
 }
 
-.field-input:focus {
+.form-input:hover:not(:disabled),
+.form-select:hover:not(:disabled) {
+  border-color: #c9cdd4;
+}
+
+.form-input:focus,
+.form-select:focus {
   border-color: #165dff;
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
 }
 
-.field-input:disabled,
-.field-select:disabled {
+.form-input:disabled,
+.form-select:disabled {
   background: #f7f8fa;
   color: #1d2129;
   cursor: not-allowed;
   border-color: #e5e6eb;
 }
 
-.field-input:disabled::placeholder {
+.form-input::placeholder {
   color: #c9cdd4;
 }
 
-.field-input.short {
-  max-width: 120px;
-}
-
-.field-input::placeholder {
-  color: #c9cdd4;
-}
-
-.field-tip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #f53f3f;
-  color: #fff;
-  font-size: 11px;
-  font-weight: bold;
-  cursor: pointer;
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.field-tip:hover {
-  background: #cb2630;
-}
-
-.field-select {
-  width: 360px;
-  height: 34px;
-  border: 1px solid #e5e6eb;
-  border-radius: 4px;
-  padding: 0 12px;
-  font-size: 13px;
-  color: #1d2129;
-  outline: none;
-  background: #fff;
-  cursor: pointer;
-  font-family: inherit;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.field-select:focus {
-  border-color: #165dff;
-  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.1);
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%2386909c' d='M6 8.5L1.5 4h9z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px;
+  padding-right: 32px;
 }
 
 .password-field {
   position: relative;
-  flex: 1;
-  max-width: 360px;
   display: flex;
   align-items: center;
 }
 
-.password-field .field-input {
-  flex: 1;
-  max-width: none;
-  padding-right: 36px;
+.password-field .form-input {
+  padding-right: 40px;
 }
 
-.password-field .field-input::-ms-reveal,
-.password-field .field-input::-webkit-credentials-auto-fill-button {
+.password-field .form-input::-ms-reveal,
+.password-field .form-input::-webkit-credentials-auto-fill-button {
   display: none;
 }
 
 .eye-btn {
   position: absolute;
-  right: 10px;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #c9cdd4;
-  transition: color 0.2s;
+  border-radius: 4px;
+  transition: all 0.15s;
 }
 
 .eye-btn:hover {
-  color: #4e5969;
+  color: #165dff;
+  background: #f2f3f5;
 }
 
-/* ========== 指标元数据列表 ========== */
-.metadata-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e5e6eb;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.metadata-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid #f0f1f3;
-  transition: background 0.15s;
-}
-
-.metadata-item:last-child {
-  border-bottom: none;
-}
-
-.metadata-item:hover {
-  background: #fafbfc;
-}
-
-.metadata-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.folder-icon {
-  font-size: 18px;
-  color: #ffb547;
-}
-
-.metadata-name {
-  font-size: 13.5px;
-  color: #1d2129;
-  font-weight: 500;
-}
-
-.metadata-right {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.metadata-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: #f05a23;
-  background: #fff2e8;
-  border-radius: 10px;
-}
-
-.metadata-sync {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #86909c;
-}
-
-.check-icon {
-  color: #00b42a;
-  font-weight: 700;
-}
-
-/* ========== 指标管理 卡片网格 ========== */
+/* ========== 指标管理卡片网格 ========== */
 .indicator-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
 .indicator-card {
-  border: 1px solid #e5e6eb;
-  border-radius: 6px;
+  border: 1px solid #ebedf0;
+  border-radius: 8px;
   background: #fff;
   padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.15s;
+  transition: all 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.indicator-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #e5e6eb;
+  transition: background 0.2s;
+}
+
+.indicator-card.is-on::before {
+  background: linear-gradient(180deg, #f05a23 0%, #e75c01 100%);
 }
 
 .indicator-card:hover {
-  border-color: #c9cdd4;
+  border-color: #165dff;
+  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .indicator-head {
@@ -753,11 +1070,11 @@ const indicators = reactive([
 .tql-tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 2px 7px;
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: #f05a23;
-  background: #fff2e8;
+  background: rgba(240, 90, 35, 0.08);
   border-radius: 3px;
   letter-spacing: 0.3px;
 }
@@ -775,5 +1092,308 @@ const indicators = reactive([
 
 :deep(.el-switch) {
   --el-switch-on-color: #f05a23;
+}
+
+/* ========== 维度管理卡片网格 ========== */
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dimension-card {
+  border: 1px solid #ebedf0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dimension-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #165dff 0%, #0e42d2 100%);
+  transition: background 0.2s;
+}
+
+.dimension-card:hover {
+  border-color: #165dff;
+  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.dimension-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dimension-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.dimension-type-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #165dff;
+  background: rgba(22, 93, 255, 0.08);
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+.dimension-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.meta-value {
+  font-size: 12px;
+  color: #4e5969;
+  font-weight: 500;
+}
+
+.dimension-desc {
+  font-size: 12px;
+  color: #86909c;
+  line-height: 1.5;
+}
+
+/* ========== 加载和空状态 ========== */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 0;
+}
+
+.loading-text {
+  font-size: 13px;
+  color: #86909c;
+}
+
+.empty-container {
+  padding: 20px 0;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* ========== 类目分组样式 ========== */
+.category-group {
+  margin-bottom: 8px;
+}
+
+.category-group:last-child {
+  margin-bottom: 0;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f7f8fa;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.category-header:hover {
+  background: #eef0f5;
+}
+
+.category-arrow {
+  font-size: 10px;
+  color: #86909c;
+  transition: transform 0.2s;
+}
+
+.category-arrow.is-expanded {
+  transform: rotate(90deg);
+}
+
+.category-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d2129;
+}
+
+.category-count {
+  font-size: 12px;
+  color: #86909c;
+  background: #e8e8e8;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-left: auto;
+}
+
+.category-content {
+  padding: 8px 0 0 0;
+}
+
+/* ========== 指标管理布局（左侧类目树 + 右侧表格） ========== */
+.metric-management-container {
+  display: flex;
+  gap: 16px;
+  height: 650px;
+}
+
+/* 左侧类目树面板 */
+.category-tree-panel {
+  width: 240px;
+  flex-shrink: 0;
+  background: #f7f8fa;
+  border-radius: 6px;
+  border: 1px solid #ebedf0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tree-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #ebedf0;
+  background: #f0f2f5;
+}
+
+.tree-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d2129;
+}
+
+.tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tree-node:hover {
+  background: #eef0f5;
+}
+
+.tree-node.is-active {
+  background: #e6f0ff;
+}
+
+.tree-node-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.tree-node-expand .el-icon {
+  font-size: 14px;
+  color: #86909c;
+  transition: transform 0.2s;
+}
+
+.tree-node-expand .el-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
+.tree-node-icon {
+  display: flex;
+  align-items: center;
+  color: #86909c;
+}
+
+.tree-node-name {
+  flex: 1;
+  font-size: 13px;
+  color: #1d2129;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node-count {
+  font-size: 12px;
+  color: #86909c;
+  background: #e8e8e8;
+  border-radius: 10px;
+  padding: 1px 8px;
+  flex-shrink: 0;
+}
+
+/* 右侧指标表格面板 */
+.metric-table-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #ebedf0;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #ebedf0;
+  background: #fafafa;
+}
+
+.table-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d2129;
+}
+
+.table-count {
+  font-size: 12px;
+  color: #86909c;
+}
+
+.metric-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metric-name-cell .el-icon {
+  color: #165dff;
 }
 </style>

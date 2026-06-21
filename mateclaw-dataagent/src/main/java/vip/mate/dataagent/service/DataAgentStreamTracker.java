@@ -130,6 +130,10 @@ public class DataAgentStreamTracker {
 
     /**
      * Reconnect-aware attach: 跳过 id <= lastEventId 的已送达事件。
+     * <p>
+     * 注意：回放与订阅必须在同一 lock 内完成以保证事件顺序——若先订阅再 lock 外回放，
+     * broadcast 会把实时事件推给 emitter，与回放事件交错导致客户端 content 累积错乱。
+     * 因此沿用 lock 内 send 的设计，依靠 broadcast 期间也持有 lock 实现互斥。
      */
     public boolean attach(String conversationId, SseEmitter emitter, long lastEventId) {
         RunState state = runs.get(conversationId);
