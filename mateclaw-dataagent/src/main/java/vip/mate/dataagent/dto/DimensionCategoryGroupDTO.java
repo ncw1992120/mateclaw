@@ -21,9 +21,15 @@ public class DimensionCategoryGroupDTO implements Serializable {
     /** 类目名称 */
     private String categoryName;
 
-    /** 该类目下的维度数量 */
+    /** 父级类目 ID */
+    private String parentId;
+
+    /** 该类目下的维度数量（含所有子类目） */
     private int dimensionCount;
 
     /** 该类目下的维度列表 */
     private List<AloudataDimensionSemanticDTO> dimensions;
+
+    /** 子类目分组 */
+    private List<DimensionCategoryGroupDTO> children;
 }

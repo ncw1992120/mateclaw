@@ -456,7 +456,7 @@ async function handleTestModel(model: ModelConfig): Promise<void> {
         ElMessage.error(result.message || t('modelConfig.connectionFail'))
       }
     } else {
-      const result = await modelStore.testModelAvailability(model.provider, String(model.id))
+      const result = await modelStore.testModelAvailability(model.provider, model.modelName)
       if (result.success) {
         const latency = result.latencyMs != null ? ` (${result.latencyMs}ms)` : ''
         ElMessage.success((result.message || t('modelConfig.connectionOk')) + latency)

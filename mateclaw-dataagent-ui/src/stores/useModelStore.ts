@@ -165,9 +165,9 @@ export const useModelStore = defineStore('model', () => {
   }
 
   /** 测试模型可用性，返回 { success, message, latencyMs } */
-  async function testModelAvailability(providerId: string, modelId: string): Promise<{ success: boolean; message?: string; latencyMs?: number }> {
+  async function testModelAvailability(providerId: string, modelName: string): Promise<{ success: boolean; message?: string; latencyMs?: number }> {
     try {
-      const result = await modelApi.testModel(providerId, modelId) as { success: boolean; message?: string; errorMessage?: string; latencyMs?: number }
+      const result = await modelApi.testModel(providerId, modelName) as { success: boolean; message?: string; errorMessage?: string; latencyMs?: number }
       return {
         success: result.success,
         message: result.success ? result.message : result.errorMessage,

@@ -407,10 +407,10 @@ public interface MateClawRuntime {
      * 测试单个模型可用性
      *
      * @param providerId Provider ID
-     * @param modelId    模型标识
+     * @param modelName  模型名称（如 gpt-4o）
      * @return 测试结果
      */
-    TestResult testModel(String providerId, String modelId);
+    TestResult testModel(String providerId, String modelName);
 
     /**
      * 测试 Embedding 模型连通性

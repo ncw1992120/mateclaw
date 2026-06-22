@@ -21,9 +21,15 @@ public class MetricCategoryGroupDTO implements Serializable {
     /** 类目名称 */
     private String categoryName;
 
-    /** 该类目下的指标数量 */
+    /** 父级类目 ID */
+    private String parentId;
+
+    /** 该类目下的指标数量（含所有子类目） */
     private int metricCount;
 
     /** 该类目下的指标列表 */
     private List<AloudataMetricSemanticDTO> metrics;
+
+    /** 子类目分组 */
+    private List<MetricCategoryGroupDTO> children;
 }

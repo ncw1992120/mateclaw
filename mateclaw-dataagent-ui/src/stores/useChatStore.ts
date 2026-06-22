@@ -188,12 +188,7 @@ export const useChatStore = defineStore('chat', () => {
       conversationId.value = convId
       messages.value = msgList
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content || '',
-          timestamp: new Date(m.createTime).getTime(),
-          metadata: m.metadata || undefined,
-        }))
+        .map(buildChatMessageFromVO)
       if (!isSameConversation) {
         // 检查目标会话是否有保存的续连状态，如果有则恢复并尝试重连
         const savedLastEventId = reconnectStates.get(convId)
@@ -453,12 +448,7 @@ export const useChatStore = defineStore('chat', () => {
       const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
       messages.value = msgList
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content || '',
-          timestamp: new Date(m.createTime).getTime(),
-          metadata: m.metadata || undefined,
-        }))
+        .map(buildChatMessageFromVO)
     } catch (e) {
       console.warn('[ChatStore] Reconnect: failed to load history messages', e)
     }
@@ -658,6 +648,78 @@ export const useChatStore = defineStore('chat', () => {
       default:
         break
     }
+  }
+
+  /**
+   * 从消息 VO 构建前端 ChatMessage。
+   * 特别处理 contentParts：把 type=thinking 的片段恢复为 msg.thinking，
+   * 并同步补充到 metadata.segments，使刷新后思考过程仍可展示。
+   *
+   * @param m 后端返回的消息 VO
+   * @return 前端使用的 ChatMessage
+   */
+  function buildChatMessageFromVO(m: MessageVO): ChatMessage {
+    const thinking = extractThinkingText(m.contentParts)
+    const metadata = enrichMetadataWithThinking(m.metadata, thinking)
+    return {
+      role: m.role as 'user' | 'assistant',
+      content: m.content || '',
+      thinking,
+      timestamp: new Date(m.createTime).getTime(),
+      metadata,
+    }
+  }
+
+  /**
+   * 从 contentParts 中提取 thinking 文本。
+   *
+   * @param parts 消息内容片段列表
+   * @return 所有 thinking 片段的文本拼接
+   */
+  function extractThinkingText(parts: unknown[] | null | undefined): string {
+    if (!parts || !Array.isArray(parts)) {
+      return ''
+    }
+    return parts
+      .filter((p): p is { type?: string; text?: string } => {
+        return p !== null && typeof p === 'object'
+      })
+      .filter(p => p.type === 'thinking')
+      .map(p => p.text || '')
+      .join('')
+  }
+
+  /**
+   * 若 metadata.segments 中不存在 thinking 片段，则将 thinking 文本补充为 segment，
+   * 保持与实时流式响应的 segments 渲染逻辑一致。
+   *
+   * @param metadata 原始元数据
+   * @param thinking 思考文本
+   * @return 补充后的元数据
+   */
+  function enrichMetadataWithThinking(
+    metadata: Record<string, unknown> | undefined,
+    thinking: string,
+  ): Record<string, unknown> | undefined {
+    if (!thinking) {
+      return metadata
+    }
+    const meta = metadata || {}
+    const segments = (meta.segments as Array<Record<string, unknown>> | undefined) || []
+    const hasThinkingSegment = segments.some(s => s.type === 'thinking')
+    if (hasThinkingSegment) {
+      return meta
+    }
+    const nextSegments = [
+      ...segments,
+      {
+        id: `th-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'thinking',
+        status: 'completed',
+        thinkingText: thinking,
+      },
+    ]
+    return { ...meta, segments: nextSegments }
   }
 
   /**

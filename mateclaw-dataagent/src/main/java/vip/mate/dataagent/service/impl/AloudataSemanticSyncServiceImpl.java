@@ -190,32 +190,14 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                         .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
                         .orderByAsc(AloudataMetricEntity::getMetricCategoryId));
 
-        // 按 metricCategoryId 分组，O(n) 复杂度
+        // 按 metricCategoryId 分组
         Map<String, List<AloudataMetricEntity>> grouped = allMetrics.stream()
                 .collect(Collectors.groupingBy(
-                        m -> StringUtils.hasText(m.getMetricCategoryId()) ? m.getMetricCategoryId() : "",
+                        m -> StringUtils.hasText(m.getMetricCategoryId()) ? m.getMetricCategoryId() : "uncategorized",
                         LinkedHashMap::new,
                         Collectors.toList()));
 
-        List<MetricCategoryGroupDTO> result = new ArrayList<>();
-        for (Map.Entry<String, List<AloudataMetricEntity>> entry : grouped.entrySet()) {
-            String categoryId = entry.getKey();
-            List<AloudataMetricEntity> metricsInCategory = entry.getValue();
-
-            MetricCategoryGroupDTO group = new MetricCategoryGroupDTO();
-            if (categoryId.isEmpty()) {
-                group.setCategoryId("uncategorized");
-                group.setCategoryName("未分类指标");
-            } else {
-                group.setCategoryId(categoryId);
-                group.setCategoryName(metricsInCategory.get(0).getMetricCategoryName());
-            }
-            group.setMetricCount(metricsInCategory.size());
-            group.setMetrics(metricsInCategory.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList()));
-            result.add(group);
-        }
-
-        return result;
+        return buildMetricCategoryTree(datasourceId, "CATEGORY_METRIC", grouped);
     }
 
     @Override
@@ -226,32 +208,14 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                         .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
                         .orderByAsc(AloudataDimensionEntity::getDimCategoryId));
 
-        // 按 dimCategoryId 分组，O(n) 复杂度
+        // 按 dimCategoryId 分组
         Map<String, List<AloudataDimensionEntity>> grouped = allDimensions.stream()
                 .collect(Collectors.groupingBy(
-                        d -> StringUtils.hasText(d.getDimCategoryId()) ? d.getDimCategoryId() : "",
+                        d -> StringUtils.hasText(d.getDimCategoryId()) ? d.getDimCategoryId() : "uncategorized",
                         LinkedHashMap::new,
                         Collectors.toList()));
 
-        List<DimensionCategoryGroupDTO> result = new ArrayList<>();
-        for (Map.Entry<String, List<AloudataDimensionEntity>> entry : grouped.entrySet()) {
-            String categoryId = entry.getKey();
-            List<AloudataDimensionEntity> dimensionsInCategory = entry.getValue();
-
-            DimensionCategoryGroupDTO group = new DimensionCategoryGroupDTO();
-            if (categoryId.isEmpty()) {
-                group.setCategoryId("uncategorized");
-                group.setCategoryName("未分类维度");
-            } else {
-                group.setCategoryId(categoryId);
-                group.setCategoryName(dimensionsInCategory.get(0).getDimCategoryName());
-            }
-            group.setDimensionCount(dimensionsInCategory.size());
-            group.setDimensions(dimensionsInCategory.stream().map(this::toDimensionSemanticDTO).collect(Collectors.toList()));
-            result.add(group);
-        }
-
-        return result;
+        return buildDimensionCategoryTree(datasourceId, "CATEGORY_DIMENSION", grouped);
     }
 
     @Override
@@ -1051,6 +1015,163 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         if (entity.getSynonyms() != null && !entity.getSynonyms().isBlank()) {
             dto.setSynonyms(Arrays.asList(entity.getSynonyms().split(",")));
         }
+        return dto;
+    }
+
+    /**
+     * 类目树节点（用于构建指标/维度分组树）
+     */
+    private static class CategoryNode<T> {
+        /** 类目 ID */
+        String categoryId;
+        /** 类目名称 */
+        String categoryName;
+        /** 父级类目 ID */
+        String parentId;
+        /** 该类目下的原始数据列表（会聚合所有子类目数据） */
+        List<T> items = new ArrayList<>();
+        /** 子类目节点 */
+        List<CategoryNode<T>> children = new ArrayList<>();
+    }
+
+    /**
+     * 构建指标类目分组树
+     */
+    private List<MetricCategoryGroupDTO> buildMetricCategoryTree(
+            Long datasourceId, String categoryType,
+            Map<String, List<AloudataMetricEntity>> grouped) {
+        Map<String, List<AloudataMetricSemanticDTO>> dtoGrouped = new LinkedHashMap<>();
+        for (Map.Entry<String, List<AloudataMetricEntity>> entry : grouped.entrySet()) {
+            dtoGrouped.put(entry.getKey(), entry.getValue().stream()
+                    .map(this::toMetricSemanticDTO)
+                    .collect(Collectors.toList()));
+        }
+        List<CategoryNode<AloudataMetricSemanticDTO>> roots = buildCategoryNodeTree(
+                datasourceId, categoryType, dtoGrouped, "未分类指标");
+        return roots.stream().map(this::toMetricCategoryGroupDto).collect(Collectors.toList());
+    }
+
+    /**
+     * 构建维度类目分组树
+     */
+    private List<DimensionCategoryGroupDTO> buildDimensionCategoryTree(
+            Long datasourceId, String categoryType,
+            Map<String, List<AloudataDimensionEntity>> grouped) {
+        Map<String, List<AloudataDimensionSemanticDTO>> dtoGrouped = new LinkedHashMap<>();
+        for (Map.Entry<String, List<AloudataDimensionEntity>> entry : grouped.entrySet()) {
+            dtoGrouped.put(entry.getKey(), entry.getValue().stream()
+                    .map(this::toDimensionSemanticDTO)
+                    .collect(Collectors.toList()));
+        }
+        List<CategoryNode<AloudataDimensionSemanticDTO>> roots = buildCategoryNodeTree(
+                datasourceId, categoryType, dtoGrouped, "未分类维度");
+        return roots.stream().map(this::toDimensionCategoryGroupDto).collect(Collectors.toList());
+    }
+
+    /**
+     * 通用类目树构建：根据类目元数据和已分组数据，构建层级树并聚合子节点数据
+     */
+    private <T> List<CategoryNode<T>> buildCategoryNodeTree(
+            Long datasourceId, String categoryType,
+            Map<String, List<T>> grouped, String uncategorizedName) {
+        // 查询该类目类型下的所有类目元数据
+        List<AloudataCategoryEntity> categories = categoryMapper.selectList(
+                new LambdaQueryWrapper<AloudataCategoryEntity>()
+                        .eq(AloudataCategoryEntity::getDatasourceId, datasourceId)
+                        .eq(AloudataCategoryEntity::getCategoryType, categoryType)
+                        .orderByAsc(AloudataCategoryEntity::getCategoryName));
+
+        Map<String, CategoryNode<T>> nodeMap = new LinkedHashMap<>();
+
+        // 创建未分类节点
+        CategoryNode<T> uncategorizedNode = new CategoryNode<>();
+        uncategorizedNode.categoryId = "uncategorized";
+        uncategorizedNode.categoryName = uncategorizedName;
+        nodeMap.put("uncategorized", uncategorizedNode);
+
+        // 创建类目节点
+        for (AloudataCategoryEntity cat : categories) {
+            CategoryNode<T> node = new CategoryNode<>();
+            node.categoryId = cat.getCategoryId();
+            node.categoryName = cat.getCategoryName();
+            node.parentId = cat.getParentId();
+            nodeMap.put(node.categoryId, node);
+        }
+
+        // 将分组数据挂载到对应节点
+        for (Map.Entry<String, List<T>> entry : grouped.entrySet()) {
+            CategoryNode<T> node = nodeMap.get(entry.getKey());
+            if (node != null) {
+                node.items.addAll(entry.getValue());
+            } else {
+                // 未知类目统一归到未分类
+                uncategorizedNode.items.addAll(entry.getValue());
+            }
+        }
+
+        // 构建父子关系
+        List<CategoryNode<T>> roots = new ArrayList<>();
+        for (CategoryNode<T> node : nodeMap.values()) {
+            if (StringUtils.hasText(node.parentId) && nodeMap.containsKey(node.parentId)) {
+                nodeMap.get(node.parentId).children.add(node);
+            } else {
+                roots.add(node);
+            }
+        }
+
+        // 聚合子节点数据并过滤空分支
+        roots.removeIf(node -> !aggregateCategoryNode(node));
+        return roots;
+    }
+
+    /**
+     * 后序遍历聚合子节点数据，返回当前节点或后代是否包含数据
+     */
+    private <T> boolean aggregateCategoryNode(CategoryNode<T> node) {
+        boolean hasData = !node.items.isEmpty();
+        List<CategoryNode<T>> nonEmptyChildren = new ArrayList<>();
+        for (CategoryNode<T> child : node.children) {
+            if (aggregateCategoryNode(child)) {
+                hasData = true;
+                nonEmptyChildren.add(child);
+                node.items.addAll(child.items);
+            }
+        }
+        node.children = nonEmptyChildren;
+        return hasData;
+    }
+
+    /**
+     * 将指标类目节点转换为 DTO
+     */
+    private MetricCategoryGroupDTO toMetricCategoryGroupDto(
+            CategoryNode<AloudataMetricSemanticDTO> node) {
+        MetricCategoryGroupDTO dto = new MetricCategoryGroupDTO();
+        dto.setCategoryId(node.categoryId);
+        dto.setCategoryName(node.categoryName);
+        dto.setParentId(node.parentId);
+        dto.setMetricCount(node.items.size());
+        dto.setMetrics(new ArrayList<>(node.items));
+        dto.setChildren(node.children.stream()
+                .map(this::toMetricCategoryGroupDto)
+                .collect(Collectors.toList()));
+        return dto;
+    }
+
+    /**
+     * 将维度类目节点转换为 DTO
+     */
+    private DimensionCategoryGroupDTO toDimensionCategoryGroupDto(
+            CategoryNode<AloudataDimensionSemanticDTO> node) {
+        DimensionCategoryGroupDTO dto = new DimensionCategoryGroupDTO();
+        dto.setCategoryId(node.categoryId);
+        dto.setCategoryName(node.categoryName);
+        dto.setParentId(node.parentId);
+        dto.setDimensionCount(node.items.size());
+        dto.setDimensions(new ArrayList<>(node.items));
+        dto.setChildren(node.children.stream()
+                .map(this::toDimensionCategoryGroupDto)
+                .collect(Collectors.toList()));
         return dto;
     }
 }

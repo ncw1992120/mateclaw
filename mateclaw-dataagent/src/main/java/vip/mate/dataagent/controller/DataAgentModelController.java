@@ -245,10 +245,10 @@ public class DataAgentModelController {
     /**
      * 测试单个模型可用性
      */
-    @PostMapping("/{providerId}/models/{modelId}/test")
-    @Operation(summary = "测试模型", description = "测试指定模型的可用性")
-    public R<TestResult> testModel(@PathVariable String providerId, @PathVariable String modelId) {
-        return R.ok(runtime.testModel(providerId, modelId));
+    @PostMapping("/{providerId}/models/{modelName}/test")
+    @Operation(summary = "测试模型", description = "测试指定模型的可用性，modelName 为模型名称（如 gpt-4o）")
+    public R<TestResult> testModel(@PathVariable String providerId, @PathVariable String modelName) {
+        return R.ok(runtime.testModel(providerId, modelName));
     }
 
     /**

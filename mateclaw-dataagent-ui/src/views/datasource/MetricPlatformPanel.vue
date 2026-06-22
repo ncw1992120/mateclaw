@@ -208,32 +208,35 @@
             </div>
             <div class="tree-content">
               <div
+                class="tree-node tree-node-all"
+                :class="{ 'is-active': selectedCategoryId === 'all' }"
+                @click="selectCategory('all')"
+              >
+                <span class="tree-node-expand is-placeholder" />
+                <span class="tree-node-icon">
+                  <el-icon><FolderOpened /></el-icon>
+                </span>
+                <span class="tree-node-name">全部指标</span>
+                <span class="tree-node-count">{{ metrics.length }}</span>
+              </div>
+              <category-tree-node
                 v-for="group in metricCategoryGroups"
                 :key="group.categoryId"
-                class="tree-node"
-                :class="{ 'is-active': selectedCategoryId === group.categoryId }"
-                @click="selectCategory(group.categoryId)"
-              >
-                <span class="tree-node-expand" @click.stop="toggleCategory(group.categoryId, 'metric')">
-                  <el-icon :class="{ 'is-expanded': expandedMetricCategories.has(group.categoryId) }">
-                    <ArrowRight v-if="!expandedMetricCategories.has(group.categoryId)" />
-                    <ArrowDown v-else />
-                  </el-icon>
-                </span>
-                <span class="tree-node-icon">
-                  <el-icon><Folder /></el-icon>
-                </span>
-                <span class="tree-node-name">{{ group.categoryName }}</span>
-                <span class="tree-node-count">{{ group.metricCount }}</span>
-              </div>
+                :group="group"
+                type="metric"
+                :selected-id="selectedCategoryId"
+                :expanded-set="expandedMetricCategories"
+                @select="selectCategory"
+                @toggle="toggleCategory"
+              />
             </div>
           </div>
 
           <!-- 右侧指标表格 -->
           <div class="metric-table-panel">
             <div class="table-header">
-              <span class="table-title">全部指标</span>
-              <span class="table-count">{{ metrics.length }} 个指标</span>
+              <span class="table-title">{{ currentMetricCategoryName }}</span>
+              <span class="table-count">{{ currentMetrics.length }} 个指标</span>
             </div>
             <el-table :data="currentMetrics" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
               <el-table-column type="selection" width="40" align="center" />
@@ -304,32 +307,35 @@
             </div>
             <div class="tree-content">
               <div
+                class="tree-node tree-node-all"
+                :class="{ 'is-active': selectedDimensionCategoryId === 'all' }"
+                @click="selectDimensionCategory('all')"
+              >
+                <span class="tree-node-expand is-placeholder" />
+                <span class="tree-node-icon">
+                  <el-icon><FolderOpened /></el-icon>
+                </span>
+                <span class="tree-node-name">全部维度</span>
+                <span class="tree-node-count">{{ dimensions.length }}</span>
+              </div>
+              <category-tree-node
                 v-for="group in dimensionCategoryGroups"
                 :key="group.categoryId"
-                class="tree-node"
-                :class="{ 'is-active': selectedDimensionCategoryId === group.categoryId }"
-                @click="selectDimensionCategory(group.categoryId)"
-              >
-                <span class="tree-node-expand" @click.stop="toggleCategory(group.categoryId, 'dimension')">
-                  <el-icon :class="{ 'is-expanded': expandedDimensionCategories.has(group.categoryId) }">
-                    <ArrowRight v-if="!expandedDimensionCategories.has(group.categoryId)" />
-                    <ArrowDown v-else />
-                  </el-icon>
-                </span>
-                <span class="tree-node-icon">
-                  <el-icon><Folder /></el-icon>
-                </span>
-                <span class="tree-node-name">{{ group.categoryName }}</span>
-                <span class="tree-node-count">{{ group.dimensionCount }}</span>
-              </div>
+                :group="group"
+                type="dimension"
+                :selected-id="selectedDimensionCategoryId"
+                :expanded-set="expandedDimensionCategories"
+                @select="selectDimensionCategory"
+                @toggle="toggleCategory"
+              />
             </div>
           </div>
 
           <!-- 右侧维度表格 -->
           <div class="metric-table-panel">
             <div class="table-header">
-              <span class="table-title">全部维度</span>
-              <span class="table-count">{{ dimensions.length }} 个维度</span>
+              <span class="table-title">{{ currentDimensionCategoryName }}</span>
+              <span class="table-count">{{ currentDimensions.length }} 个维度</span>
             </div>
             <el-table :data="currentDimensions" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
               <el-table-column type="selection" width="40" align="center" />
@@ -366,9 +372,11 @@
 import { reactive, ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading, ArrowRight, ArrowDown, Folder, DataLine } from '@element-plus/icons-vue'
+import { Loading, FolderOpened, DataLine } from '@element-plus/icons-vue'
 import * as datasourceApi from '@/api/datasource'
-import { listAloudataMetrics, listAloudataDimensions, listMetricsGroupedByCategory, listDimensionsGroupedByCategory } from '@/api/semantic-model'
+import { listMetricsGroupedByCategory, listDimensionsGroupedByCategory } from '@/api/semantic-model'
+import CategoryTreeNode from './CategoryTreeNode.vue'
+import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { Datasource } from '@/types'
 
@@ -481,19 +489,18 @@ interface DimensionItem {
   synonyms?: string[]
 }
 
-/** 类目分组数据结构（后端返回） */
-interface MetricCategoryGroup {
-  categoryId: string
-  categoryName: string
+/** 指标类目分组（支持层级树） */
+interface MetricCategoryGroup extends CategoryTreeNodeGroup {
   metricCount: number
   metrics: MetricItem[]
+  children?: MetricCategoryGroup[]
 }
 
-interface DimensionCategoryGroup {
-  categoryId: string
-  categoryName: string
+/** 维度类目分组（支持层级树） */
+interface DimensionCategoryGroup extends CategoryTreeNodeGroup {
   dimensionCount: number
   dimensions: DimensionItem[]
+  children?: DimensionCategoryGroup[]
 }
 
 /** 指标列表 */
@@ -521,24 +528,42 @@ const expandedDimensionCategories = ref<Set<string>>(new Set())
 /** 当前选中的类目 ID */
 const selectedCategoryId = ref<string>('all')
 
+/** 当前选中的指标类目名称 */
+const currentMetricCategoryName = computed<string>(() => {
+  if (selectedCategoryId.value === 'all') {
+    return '全部指标'
+  }
+  const group = findMetricGroupById(metricCategoryGroups.value, selectedCategoryId.value)
+  return group?.categoryName || '全部指标'
+})
+
 /** 当前展示的指标列表（根据选中类目过滤） */
 const currentMetrics = computed<MetricItem[]>(() => {
   if (selectedCategoryId.value === 'all') {
     return metrics.value
   }
-  const group = metricCategoryGroups.value.find(g => g.categoryId === selectedCategoryId.value)
+  const group = findMetricGroupById(metricCategoryGroups.value, selectedCategoryId.value)
   return group?.metrics || []
 })
 
 /** 当前选中的维度类目 ID */
 const selectedDimensionCategoryId = ref<string>('all')
 
+/** 当前选中的维度类目名称 */
+const currentDimensionCategoryName = computed<string>(() => {
+  if (selectedDimensionCategoryId.value === 'all') {
+    return '全部维度'
+  }
+  const group = findDimensionGroupById(dimensionCategoryGroups.value, selectedDimensionCategoryId.value)
+  return group?.categoryName || '全部维度'
+})
+
 /** 当前展示的维度列表（根据选中类目过滤） */
 const currentDimensions = computed<DimensionItem[]>(() => {
   if (selectedDimensionCategoryId.value === 'all') {
     return dimensions.value
   }
-  const group = dimensionCategoryGroups.value.find(g => g.categoryId === selectedDimensionCategoryId.value)
+  const group = findDimensionGroupById(dimensionCategoryGroups.value, selectedDimensionCategoryId.value)
   return group?.dimensions || []
 })
 
@@ -547,22 +572,64 @@ function selectDimensionCategory(categoryId: string): void {
   selectedDimensionCategoryId.value = categoryId
 }
 
+/**
+ * 递归查找指标类目分组
+ */
+function findMetricGroupById(
+  groups: MetricCategoryGroup[],
+  categoryId: string,
+): MetricCategoryGroup | undefined {
+  for (const group of groups) {
+    if (group.categoryId === categoryId) {
+      return group
+    }
+    if (group.children) {
+      const found = findMetricGroupById(group.children, categoryId)
+      if (found) {
+        return found
+      }
+    }
+  }
+  return undefined
+}
+
+/**
+ * 递归查找维度类目分组
+ */
+function findDimensionGroupById(
+  groups: DimensionCategoryGroup[],
+  categoryId: string,
+): DimensionCategoryGroup | undefined {
+  for (const group of groups) {
+    if (group.categoryId === categoryId) {
+      return group
+    }
+    if (group.children) {
+      const found = findDimensionGroupById(group.children, categoryId)
+      if (found) {
+        return found
+      }
+    }
+  }
+  return undefined
+}
+
 /** 切换类目展开/折叠 */
-function toggleCategory(categoryId: string, type: 'metric' | 'dimension'): void {
-  if (type === 'metric') {
+function toggleCategory(payload: { categoryId: string; type: 'metric' | 'dimension' }): void {
+  if (payload.type === 'metric') {
     const set = new Set(expandedMetricCategories.value)
-    if (set.has(categoryId)) {
-      set.delete(categoryId)
+    if (set.has(payload.categoryId)) {
+      set.delete(payload.categoryId)
     } else {
-      set.add(categoryId)
+      set.add(payload.categoryId)
     }
     expandedMetricCategories.value = set
   } else {
     const set = new Set(expandedDimensionCategories.value)
-    if (set.has(categoryId)) {
-      set.delete(categoryId)
+    if (set.has(payload.categoryId)) {
+      set.delete(payload.categoryId)
     } else {
-      set.add(categoryId)
+      set.add(payload.categoryId)
     }
     expandedDimensionCategories.value = set
   }
@@ -571,6 +638,22 @@ function toggleCategory(categoryId: string, type: 'metric' | 'dimension'): void 
 /** 选择类目 */
 function selectCategory(categoryId: string): void {
   selectedCategoryId.value = categoryId
+}
+
+/**
+ * 递归收集类目树中所有节点的 categoryId
+ */
+function collectCategoryIds(groups: (MetricCategoryGroup | DimensionCategoryGroup)[]): Set<string> {
+  const ids = new Set<string>()
+  for (const group of groups) {
+    ids.add(group.categoryId)
+    if (group.children) {
+      for (const id of collectCategoryIds(group.children)) {
+        ids.add(id)
+      }
+    }
+  }
+  return ids
 }
 
 /** 加载指标列表（按类目分组，后端已分组） */
@@ -583,10 +666,10 @@ async function loadMetrics(): Promise<void> {
     const res = await listMetricsGroupedByCategory(props.datasourceId)
     const groups = (res as any) || []
     metricCategoryGroups.value = groups
-    // 平铺所有指标用于兼容无类目情况
+    // 平铺所有指标（根节点已聚合子节点数据）
     metrics.value = groups.flatMap(g => g.metrics)
     // 默认展开所有类目
-    expandedMetricCategories.value = new Set(groups.map(g => g.categoryId))
+    expandedMetricCategories.value = collectCategoryIds(groups)
   } catch (error) {
     console.error('Failed to load metrics:', error)
     metricCategoryGroups.value = []
@@ -606,10 +689,10 @@ async function loadDimensions(): Promise<void> {
     const res = await listDimensionsGroupedByCategory(props.datasourceId)
     const groups = (res as any) || []
     dimensionCategoryGroups.value = groups
-    // 平铺所有维度用于兼容无类目情况
+    // 平铺所有维度（根节点已聚合子节点数据）
     dimensions.value = groups.flatMap(g => g.dimensions)
     // 默认展开所有类目
-    expandedDimensionCategories.value = new Set(groups.map(g => g.categoryId))
+    expandedDimensionCategories.value = collectCategoryIds(groups)
   } catch (error) {
     console.error('Failed to load dimensions:', error)
     dimensionCategoryGroups.value = []
@@ -1299,10 +1382,11 @@ const indicators = reactive([
 .tree-node {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 16px;
   cursor: pointer;
   transition: background 0.2s;
+  position: relative;
 }
 
 .tree-node:hover {
@@ -1313,6 +1397,21 @@ const indicators = reactive([
   background: #e6f0ff;
 }
 
+.tree-node.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: #165dff;
+  border-radius: 0 2px 2px 0;
+}
+
+.tree-node-all .tree-node-icon {
+  color: #165dff;
+}
+
 .tree-node-expand {
   display: flex;
   align-items: center;
@@ -1320,6 +1419,11 @@ const indicators = reactive([
   width: 16px;
   height: 16px;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tree-node-expand.is-placeholder {
+  cursor: default;
 }
 
 .tree-node-expand .el-icon {
@@ -1335,7 +1439,8 @@ const indicators = reactive([
 .tree-node-icon {
   display: flex;
   align-items: center;
-  color: #86909c;
+  color: #165dff;
+  flex-shrink: 0;
 }
 
 .tree-node-name {
@@ -1348,12 +1453,19 @@ const indicators = reactive([
 }
 
 .tree-node-count {
-  font-size: 12px;
+  font-size: 11px;
   color: #86909c;
   background: #e8e8e8;
   border-radius: 10px;
   padding: 1px 8px;
   flex-shrink: 0;
+  min-width: 20px;
+  text-align: center;
+}
+
+.tree-node.is-active .tree-node-count {
+  background: #165dff;
+  color: #fff;
 }
 
 /* 右侧指标表格面板 */

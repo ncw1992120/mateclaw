@@ -512,8 +512,8 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
      * 测试单个模型可用性
      */
     @Override
-    public TestResult testModel(String providerId, String modelId) {
-        return modelDiscoveryService.testModel(providerId, modelId);
+    public TestResult testModel(String providerId, String modelName) {
+        return modelDiscoveryService.testModel(providerId, modelName);
     }
 
     /**

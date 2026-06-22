@@ -46,7 +46,6 @@
 
         <!-- AI Message -->
         <div v-else class="msg ai">
-          <div class="avatar">AI</div>
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble">
               <!-- Token & model info (右上角) -->
@@ -414,6 +413,8 @@ const inputMessage = ref('')
 
 /** 聊天区域容器引用 */
 const chatAreaRef = ref<HTMLElement | null>(null)
+/** 缓存 DOM 引用用于卸载时移除滚动监听 */
+let chatAreaEl: HTMLElement | null = null
 
 /** QueryPlan 确认状态 */
 const queryPlanConfirmed = reactive<Record<string, boolean>>({})
@@ -1384,8 +1385,10 @@ function handleSend(): void {
   const message = inputMessage.value.trim()
   if (!message || chatStore.isStreaming || !chatStore.currentAgentId) return
   inputMessage.value = ''
+  userScrolledUp.value = false
   const modelName = chatStore.selectedModelName || undefined
   chatStore.sendMessage(chatStore.currentAgentId, message, modelName)
+  scrollToBottom(true)
 }
 
 /** 键盘事件处理：Enter发送，Ctrl+Enter换行 */
@@ -1453,13 +1456,38 @@ function handleModify(field: string): void {
   console.log('Modify field:', field)
 }
 
-/** 滚动到底部 */
-function scrollToBottom(): void {
+/** 用户是否已主动向上翻看历史（生成过程中不再自动下滚） */
+const userScrolledUp = ref(false)
+
+/** 判断当前滚动位置是否在底部附近 */
+function isNearBottom(): boolean {
+  const el = chatAreaRef.value
+  if (!el) {
+    return true
+  }
+  const threshold = 50
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+}
+
+/** 滚动到底部（仅在用户未主动上翻时执行） */
+function scrollToBottom(force = false): void {
   nextTick(() => {
-    if (chatAreaRef.value) {
+    if (!chatAreaRef.value) {
+      return
+    }
+    if (force || !userScrolledUp.value) {
       chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight
     }
   })
+}
+
+/** 监听聊天区域滚动，检测用户是否主动向上翻看 */
+function handleScroll(): void {
+  if (isNearBottom()) {
+    userScrolledUp.value = false
+  } else {
+    userScrolledUp.value = true
+  }
 }
 
 /** 窗口缩放处理 */
@@ -1488,6 +1516,8 @@ watch(
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  chatAreaEl = chatAreaRef.value
+  chatAreaEl?.addEventListener('scroll', handleScroll)
   // 加载数据源列表（用于输入框上方数据源选择器）
   loadDatasources()
   // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载。
@@ -1509,6 +1539,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  chatAreaEl?.removeEventListener('scroll', handleScroll)
   chartInstances.forEach(instance => instance.dispose())
   chartInstances.clear()
   echartsInstances.forEach(instance => instance.dispose())
