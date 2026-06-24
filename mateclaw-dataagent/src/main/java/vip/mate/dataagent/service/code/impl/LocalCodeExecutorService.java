@@ -38,7 +38,7 @@ public class LocalCodeExecutorService implements CodeExecutorService {
     private final String resolvedPipCommand;
 
     /** Python 命令候选列表（按优先级排序） */
-    private static final String[] PYTHON_CANDIDATES = {"python3", "py", "python"};
+    private static final String[] PYTHON_CANDIDATES = {"python3", "python"};
 
     /** pip 命令候选列表（按优先级排序） */
     private static final String[] PIP_CANDIDATES = {"pip3", "pip"};
