@@ -30,6 +30,7 @@
             <div class="bubble user-bubble">{{ msg.content }}</div>
             <!-- 用户消息操作栏（气泡外左下角） -->
             <div class="msg-actions msg-actions--user">
+              <span class="msg-time">{{ formatMsgTime(msg.timestamp) }}</span>
               <button
                 class="action-btn"
                 :class="{ copied: copyState[index] === 'copied' }"
@@ -53,7 +54,7 @@
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
 
-              <!-- Segments (优先渲染 metadata.segments，包含 tool_call/thinking/content) -->
+              <!-- Segments (按时间线渲染 tool_call 与中间 content 叙述) -->
               <template v-for="(seg, segIdx) in getSegments(msg)" :key="`seg-${segIdx}`">
                 <!-- tool_call 类型 -->
                 <div
@@ -87,23 +88,35 @@
                   </Transition>
                 </div>
 
-                <!-- thinking 类型 -->
-                <el-collapse v-else-if="seg.type === 'thinking' && seg.thinkingText" class="thinking-collapse">
-                  <el-collapse-item :title="t('chat.thinking')">
-                    <div class="thinking-content">{{ seg.thinkingText }}</div>
-                  </el-collapse-item>
-                </el-collapse>
+                <!-- content 类型（中间叙述：默认折叠的"执行过程"摘要） -->
+                <div
+                  v-else-if="seg.type === 'content' && !isFinalContentSegment(msg, segIdx)"
+                  class="seg-narration"
+                >
+                  <button
+                    class="seg-narration__toggle"
+                    type="button"
+                    @click="toggleNarrationExpand(index, segIdx)"
+                  >
+                    <span class="seg-narration__icon">💭</span>
+                    <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                    <span
+                      class="seg-narration__arrow"
+                      :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
+                    >▾</span>
+                  </button>
+                  <Transition name="seg-slide">
+                    <div
+                      v-if="isNarrationExpanded(index, segIdx)"
+                      class="seg-narration__body"
+                      v-html="renderMarkdown((seg.text as string) || '')"
+                    />
+                  </Transition>
+                </div>
               </template>
 
-              <!-- Thinking (兜底：当 metadata.segments 不存在时使用 msg.thinking) -->
-              <el-collapse v-if="!hasSegments(msg) && msg.thinking" class="thinking-collapse">
-                <el-collapse-item :title="t('chat.thinking')">
-                  <div class="thinking-content">{{ msg.thinking }}</div>
-                </el-collapse-item>
-              </el-collapse>
-
-              <!-- Text content -->
-              <div v-if="msg.content" class="msg-text" v-html="renderMarkdown(msg.content)" />
+              <!-- Final answer (优先使用最后一个 content segment 作为最终答案；兼容历史消息回退到 msg.content) -->
+              <div v-if="getFinalAnswer(msg)" class="msg-text" v-html="renderMarkdown(getFinalAnswer(msg))" />
 
               <!-- Streaming cursor -->
               <span
@@ -113,6 +126,7 @@
             </div>
             <!-- AI 消息操作栏（气泡外右下角） -->
             <div class="msg-actions msg-actions--ai">
+              <span class="msg-time">{{ formatMsgTime(msg.timestamp) }}</span>
               <button
                 class="action-btn"
                 :class="{ copied: copyState[index] === 'copied' }"
@@ -428,6 +442,29 @@ const clarifyConfirmed = reactive<Record<string, boolean>>({})
 /** 反馈状态 */
 const feedbackState = reactive<Record<string, string>>({})
 
+/** 格式化消息时间戳，包含日期和时间 */
+function formatMsgTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const pad = (n: number): string => n.toString().padStart(2, '0')
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+
+  const isSameDay = (a: Date, b: Date): boolean =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+
+  if (isSameDay(date, now)) {
+    return time
+  }
+
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  if (isSameDay(date, yesterday)) {
+    return t('time.yesterdayAt', { time })
+  }
+
+  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  return `${ymd} ${time}`
+}
+
 /** 复制状态：按消息索引记录 */
 const copyState = reactive<Record<number, 'idle' | 'copied'>>({})
 
@@ -449,6 +486,9 @@ function handleRegenerate(msgIndex: number): void {
 
 /** 工具调用展开状态（按消息索引+工具索引） */
 const expandedTools = reactive<Set<number>>(new Set())
+
+/** 中间叙述（content segment）展开状态，key = `${msgIndex}-${segIdx}` */
+const expandedNarrations = ref<Set<string>>(new Set())
 
 /** 图表实例映射 */
 const chartInstances = new Map<string, echarts.ECharts>()
@@ -530,19 +570,58 @@ function hasMetadata(msg: typeof chatStore.messages.value[0]): boolean {
   return false
 }
 
-/** 检查消息是否有 metadata.segments */
-function hasSegments(msg: typeof chatStore.messages.value[0]): boolean {
-  if (!msg.metadata || typeof msg.metadata !== 'object') return false
-  const meta = msg.metadata as Record<string, unknown>
-  const segments = meta.segments as Array<Record<string, unknown>> | undefined
-  return !!(segments && segments.length > 0)
-}
-
-/** 提取 segments 数组 */
+/**
+ * 提取 segments 数组：保留 tool_call 与 content 类型，过滤 thinking。
+ * 中间 content（除最后一条外）渲染为可折叠的"执行过程"摘要，
+ * 最后一条 content 作为最终答案在气泡底部以正常字号展示。
+ */
 function getSegments(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
   if (!msg.metadata || typeof msg.metadata !== 'object') return []
   const meta = msg.metadata as Record<string, unknown>
-  return (meta.segments as Array<Record<string, unknown>>) || []
+  const segments = (meta.segments as Array<Record<string, unknown>>) || []
+  return segments.filter(seg => seg.type === 'tool_call' || seg.type === 'content')
+}
+
+/** 找到最后一个 content 类型 segment 的索引（在 getSegments 返回数组中的索引） */
+function getLastContentSegmentIndex(msg: typeof chatStore.messages.value[0]): number {
+  const segs = getSegments(msg)
+  for (let i = segs.length - 1; i >= 0; i--) {
+    if (segs[i].type === 'content') return i
+  }
+  return -1
+}
+
+/** 判断给定 segment 是否为最后一条 content（即"最终答案"） */
+function isFinalContentSegment(msg: typeof chatStore.messages.value[0], segIdx: number): boolean {
+  return getLastContentSegmentIndex(msg) === segIdx
+}
+
+/**
+ * 获取最终答案文本：优先取最后一条 content segment 的 text；
+ * 若 metadata.segments 缺失（历史消息或异常情况），回退到 msg.content。
+ */
+function getFinalAnswer(msg: typeof chatStore.messages.value[0]): string {
+  const segs = getSegments(msg)
+  const lastIdx = getLastContentSegmentIndex(msg)
+  if (lastIdx >= 0) {
+    return (segs[lastIdx].text as string) || ''
+  }
+  return msg.content || ''
+}
+
+/** 展开/收起某条中间叙述。key 形如 `${msgIndex}-${segIdx}`，跨消息独立。 */
+function toggleNarrationExpand(msgIdx: number, segIdx: number): void {
+  const key = `${msgIdx}-${segIdx}`
+  if (expandedNarrations.value.has(key)) {
+    expandedNarrations.value.delete(key)
+  } else {
+    expandedNarrations.value.add(key)
+  }
+}
+
+/** 判断某条中间叙述是否处于展开状态。 */
+function isNarrationExpanded(msgIdx: number, segIdx: number): boolean {
+  return expandedNarrations.value.has(`${msgIdx}-${segIdx}`)
 }
 
 /** 提取工具调用列表（兜底：当 metadata.segments 不存在时使用） */
@@ -2442,6 +2521,14 @@ onUnmounted(() => {
   color: #10b981;
 }
 
+.msg-time {
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+  white-space: nowrap;
+  line-height: 28px;
+  margin-right: 4px;
+}
+
 /* Datasource Selector Toolbar */
 .ds-toolbar {
   display: flex;
@@ -2649,36 +2736,6 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* Thinking Collapse */
-:deep(.thinking-collapse) {
-  border: none;
-  margin-bottom: 8px;
-}
-
-:deep(.el-collapse-item__header) {
-  font-size: 12px;
-  color: #9ca3af;
-  height: 28px;
-  line-height: 28px;
-  border: none;
-  background: transparent;
-}
-
-:deep(.el-collapse-item__wrap) {
-  border: none;
-  background: transparent;
-}
-
-:deep(.el-collapse-item__content) {
-  padding-bottom: 4px;
-}
-
-.thinking-content {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: pre-wrap;
-}
-
 /* Metadata */
 .meta-header {
   display: flex;
@@ -2809,6 +2866,71 @@ onUnmounted(() => {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* seg-narration (中间叙述：非最终答案的 content segment) */
+.seg-narration {
+  border-left: 3px solid #e0e0e0;
+  background: #fafafa;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.seg-narration__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #606266;
+  text-align: left;
+}
+
+.seg-narration__toggle:hover {
+  color: #303133;
+  background: #f2f2f2;
+}
+
+.seg-narration__icon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.seg-narration__label {
+  font-weight: 500;
+}
+
+.seg-narration__arrow {
+  margin-left: auto;
+  font-size: 10px;
+  color: #c0c4cc;
+  transition: transform 0.2s;
+}
+
+.seg-narration__arrow.is-open {
+  transform: rotate(180deg);
+}
+
+.seg-narration__body {
+  padding: 0 10px 8px 28px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #606266;
+}
+
+.seg-narration__body :deep(p) {
+  margin: 0 0 6px;
+}
+
+.seg-narration__body :deep(p:last-child) {
+  margin-bottom: 0;
 }
 
 /* seg-slide transition (Vue Transition) */

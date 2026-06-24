@@ -277,13 +277,12 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 流式内容批量刷新缓冲区
    * <p>
-   * 使用 requestAnimationFrame 对齐浏览器渲染周期，将高频的 content_delta/thinking_delta
+   * 使用 requestAnimationFrame 对齐浏览器渲染周期，将高频的 content_delta
    * 合并到同一帧内更新，避免每个 delta 都触发 Vue 重新渲染。
    * 低频事件（tool_call、message_complete 等）会立即 flush 确保数据一致性。
    */
   class FlushBuffer {
     private contentBuf = ''
-    private thinkingBuf = ''
     private rafId: number | null = null
     private msgIndex: number
 
@@ -293,11 +292,6 @@ export const useChatStore = defineStore('chat', () => {
 
     appendContent(delta: string): void {
       this.contentBuf += delta
-      this.scheduleFlush()
-    }
-
-    appendThinking(delta: string): void {
-      this.thinkingBuf += delta
       this.scheduleFlush()
     }
 
@@ -333,10 +327,6 @@ export const useChatStore = defineStore('chat', () => {
         msg.content += this.contentBuf
         this.contentBuf = ''
       }
-      if (this.thinkingBuf) {
-        msg.thinking = (msg.thinking || '') + this.thinkingBuf
-        this.thinkingBuf = ''
-      }
     }
   }
 
@@ -362,7 +352,6 @@ export const useChatStore = defineStore('chat', () => {
     const assistantMessage: ChatMessage = {
       role: 'assistant',
       content: '',
-      thinking: '',
       timestamp: Date.now(),
       metadata: {},
     }
@@ -454,14 +443,13 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // 若历史末尾不是 assistant（说明对话仍在进行中、回复尚未落库），补一条空占位，
-    // 让回放的 content_delta/thinking_delta 有正确目标可写入；否则 FlushBuffer
+    // 让回放的 content_delta 有正确目标可写入；否则 FlushBuffer
     // 会指向 user 消息，applyToMessage 因 role 不匹配而静默丢弃事件。
     const last = messages.value[messages.value.length - 1]
     if (!last || last.role !== 'assistant') {
       messages.value.push({
         role: 'assistant',
         content: '',
-        thinking: '',
         timestamp: Date.now(),
         metadata: {},
       })
@@ -540,10 +528,7 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
       case 'thinking_delta': {
-        const delta = data.delta as string | undefined
-        if (delta) {
-          flushBuf.appendThinking(delta)
-        }
+        // 前端不接受和渲染 thinking chunk，直接忽略
         break
       }
       case 'tool_call_started': {
@@ -652,74 +637,17 @@ export const useChatStore = defineStore('chat', () => {
 
   /**
    * 从消息 VO 构建前端 ChatMessage。
-   * 特别处理 contentParts：把 type=thinking 的片段恢复为 msg.thinking，
-   * 并同步补充到 metadata.segments，使刷新后思考过程仍可展示。
    *
    * @param m 后端返回的消息 VO
    * @return 前端使用的 ChatMessage
    */
   function buildChatMessageFromVO(m: MessageVO): ChatMessage {
-    const thinking = extractThinkingText(m.contentParts)
-    const metadata = enrichMetadataWithThinking(m.metadata, thinking)
     return {
       role: m.role as 'user' | 'assistant',
       content: m.content || '',
-      thinking,
       timestamp: new Date(m.createTime).getTime(),
-      metadata,
+      metadata: m.metadata as Record<string, unknown> | undefined,
     }
-  }
-
-  /**
-   * 从 contentParts 中提取 thinking 文本。
-   *
-   * @param parts 消息内容片段列表
-   * @return 所有 thinking 片段的文本拼接
-   */
-  function extractThinkingText(parts: unknown[] | null | undefined): string {
-    if (!parts || !Array.isArray(parts)) {
-      return ''
-    }
-    return parts
-      .filter((p): p is { type?: string; text?: string } => {
-        return p !== null && typeof p === 'object'
-      })
-      .filter(p => p.type === 'thinking')
-      .map(p => p.text || '')
-      .join('')
-  }
-
-  /**
-   * 若 metadata.segments 中不存在 thinking 片段，则将 thinking 文本补充为 segment，
-   * 保持与实时流式响应的 segments 渲染逻辑一致。
-   *
-   * @param metadata 原始元数据
-   * @param thinking 思考文本
-   * @return 补充后的元数据
-   */
-  function enrichMetadataWithThinking(
-    metadata: Record<string, unknown> | undefined,
-    thinking: string,
-  ): Record<string, unknown> | undefined {
-    if (!thinking) {
-      return metadata
-    }
-    const meta = metadata || {}
-    const segments = (meta.segments as Array<Record<string, unknown>> | undefined) || []
-    const hasThinkingSegment = segments.some(s => s.type === 'thinking')
-    if (hasThinkingSegment) {
-      return meta
-    }
-    const nextSegments = [
-      ...segments,
-      {
-        id: `th-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: 'thinking',
-        status: 'completed',
-        thinkingText: thinking,
-      },
-    ]
-    return { ...meta, segments: nextSegments }
   }
 
   /**

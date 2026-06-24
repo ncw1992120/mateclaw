@@ -343,7 +343,6 @@ export interface ChatCard {
 export interface ChatMessage {
   role: ChatRole
   content: string
-  thinking?: string
   cards?: ChatCard[]
   timestamp: number
   /** 后端持久化的 Agent 元数据：toolCalls、segments 等 */
@@ -430,15 +429,6 @@ export interface TimePreset {
 export const AGENT_TYPES = [
   { value: 'react', label: 'ReAct' },
   { value: 'plan_execute', label: 'Plan-Execute' },
-] as const
-
-/** 思考深度枚举 */
-export const THINKING_LEVELS = [
-  { value: 'off', label: '关闭' },
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'max', label: '最高' },
 ] as const
 
 /** Agent 最大迭代次数上限（前端输入框限制） */
