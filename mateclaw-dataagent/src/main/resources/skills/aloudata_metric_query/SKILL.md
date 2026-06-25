@@ -6,8 +6,8 @@ dependencies:
   tools:
     - search_business_term
     - aloudata_search_semantic
-    - aloudata_metrics_list
-    - aloudata_dimensions_list
+    - aloudata_metric_list
+    - aloudata_dimension_list
     - aloudata_metric_available_dimensions
     - aloudata_metrics_query
 references:

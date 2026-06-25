@@ -625,7 +625,7 @@ watch(
   () => [chatStore.selectedModelProvider, chatStore.selectedModelName] as const,
   ([provider, modelName]) => {
     if (!provider || !modelName) {
-      // 模型被清空（新建对话），重置 selectedModelId 让上面的 watch 重新选择默认模型
+      // 模型被清空（如切换至无 pinned model 的会话），重置 selectedModelId 让上面的 watch 重新选择默认模型
       selectedModelId.value = undefined
       return
     }

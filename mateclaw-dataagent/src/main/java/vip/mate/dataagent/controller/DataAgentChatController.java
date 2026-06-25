@@ -20,19 +20,21 @@ public class DataAgentChatController {
     private final DataAgentChatService chatService;
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "流式对话", description = "通过 SSE 推送 Agent 结构化流式响应，支持 content_delta/thinking_delta/tool_call 等命名事件。reconnect=true 时附着到已有流并回放 buffer。可通过 datasourceIds 限制 Agent 仅访问指定数据源。")
+    @Operation(summary = "流式对话", description = "通过 SSE 推送 Agent 结构化流式响应，支持 content_delta/thinking_delta/tool_call 等命名事件。reconnect=true 时附着到已有流并回放 buffer。可通过 datasourceIds 限制 Agent 仅访问指定数据源，通过 tenantCodes 限制 Agent 仅访问指定业务域。")
     public SseEmitter stream(@RequestBody ChatRequest req) {
         return chatService.streamChatFromRequest(
                 req.getAgentId(), req.getMessage(), req.getConversationId(),
                 req.getModelProvider(), req.getModelName(), req.getDatasourceIds(),
+                req.getTenantCodes(),
                 req.isReconnect(), req.getLastEventId());
     }
 
     @PostMapping
-    @Operation(summary = "同步对话", description = "等待 Agent 完整回复后返回，可选指定模型名称与数据源白名单")
+    @Operation(summary = "同步对话", description = "等待 Agent 完整回复后返回，可选指定模型名称、数据源白名单与业务域白名单")
     public String chat(@RequestBody ChatRequest req) {
         return chatService.chat(req.getAgentId(), req.getMessage(), req.getConversationId(),
-                req.getModelProvider(), req.getModelName(), req.getDatasourceIds());
+                req.getModelProvider(), req.getModelName(), req.getDatasourceIds(),
+                req.getTenantCodes());
     }
 
     @DeleteMapping("/stream/{conversationId}")

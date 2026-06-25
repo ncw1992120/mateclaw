@@ -21,9 +21,11 @@ public interface DataAgentChatService {
      * @param modelProvider  模型 Provider ID（可选，与 modelName 成对传入）
      * @param modelName      模型名称（可选，与 modelProvider 成对传入）
      * @param datasourceIds  数据源白名单（可选）
+     * @param tenantCodes    业务域白名单（可选）
      */
     SseEmitter streamChat(Long agentId, String message, String conversationId,
-                          String modelProvider, String modelName, List<String> datasourceIds);
+                          String modelProvider, String modelName, List<String> datasourceIds,
+                          List<String> tenantCodes);
 
     /**
      * 流式对话（从请求参数，自动处理默认值）
@@ -34,12 +36,14 @@ public interface DataAgentChatService {
      * @param modelProvider  模型 Provider ID（可选）
      * @param modelName      模型名称（可选）
      * @param datasourceIds  数据源白名单（可选）
+     * @param tenantCodes    业务域白名单（可选）
      * @param reconnect      是否断线重连
      * @param lastEventId    上次事件ID（可选，默认0）
      * @return SSE 发射器
      */
     SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
                                       String modelProvider, String modelName, List<String> datasourceIds,
+                                      List<String> tenantCodes,
                                       boolean reconnect, Long lastEventId);
 
     /**
@@ -51,7 +55,8 @@ public interface DataAgentChatService {
      * 同步对话（含模型覆盖和数据源白名单）。
      */
     String chat(Long agentId, String message, String conversationId,
-                String modelProvider, String modelName, List<String> datasourceIds);
+                String modelProvider, String modelName, List<String> datasourceIds,
+                List<String> tenantCodes);
 
     boolean requestStop(String conversationId);
 }

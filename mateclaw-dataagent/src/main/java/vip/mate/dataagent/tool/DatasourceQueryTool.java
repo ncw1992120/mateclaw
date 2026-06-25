@@ -447,6 +447,13 @@ public class DatasourceQueryTool {
         if (tenantCode == null || tenantCode.isBlank()) {
             return error("search_business_term 需要 tenantCode 参数");
         }
+
+        // 校验业务域白名单
+        Set<String> allowedTenantCodes = currentTenantCodeWhitelist();
+        if (allowedTenantCodes != null && !allowedTenantCodes.isEmpty() && !allowedTenantCodes.contains(tenantCode)) {
+            return error("业务域 " + tenantCode + " 不在用户勾选的白名单内，禁止访问");
+        }
+
         String query = input.getStr("query");
         if (query == null || query.isBlank()) {
             return error("search_business_term 需要 query 参数");
@@ -509,6 +516,21 @@ public class DatasourceQueryTool {
             return Set.of();
         }
         return scopeContext.getAllowedDatasourceIds(origin.conversationId());
+    }
+
+    /**
+     * 读取当前会话的业务域白名单。
+     * <p>
+     * 通过 {@link ChatOriginHolder} 拿到当前 conversationId，再从
+     * {@link DataAgentChatScopeContext} 中取出前端勾选时写入的业务域白名单。
+     * 当返回空集合时表示未配置白名单（不做约束）。
+     */
+    private Set<String> currentTenantCodeWhitelist() {
+        ChatOrigin origin = ChatOriginHolder.get();
+        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
+            return Set.of();
+        }
+        return scopeContext.getAllowedTenantCodes(origin.conversationId());
     }
 
     /**

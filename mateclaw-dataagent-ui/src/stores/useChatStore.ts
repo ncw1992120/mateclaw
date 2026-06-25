@@ -62,6 +62,8 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   /** 用户在前端勾选的数据源 ID 白名单（刷新后保留）；空数组表示不限制（由 LLM 自主选择） */
   const selectedDatasourceIds = usePersistedState<string[]>('mc-chat-selected-datasource-ids', [])
+  /** 用户在前端勾选的业务域（租户编码）白名单（刷新后保留）；空数组表示不限制 */
+  const selectedTenantCodes = usePersistedState<string[]>('mc-chat-selected-tenant-codes', [])
   /**
    * 正在生成响应的会话 id 集合。
    * <p>
@@ -113,6 +115,7 @@ export const useChatStore = defineStore('chat', () => {
     const id = crypto.randomUUID()
     conversationId.value = id
     selectedDatasourceIds.value = []
+    selectedTenantCodes.value = []
     clearPersistedReconnectState()
     savePersistedReconnectState({ conversationId: id, lastEventId: lastEventId.value })
     return id
@@ -127,9 +130,8 @@ export const useChatStore = defineStore('chat', () => {
     lastEventId.value = null
     seenEventIds.value.clear()
     clearPersistedReconnectState()
-    // 新对话清空模型选择状态，让 WorkbenchView 的 watch 逻辑自动选择默认模型
-    selectedModelName.value = ''
-    selectedModelProvider.value = ''
+    // 保留已选中的模型（通过 usePersistedState 持久化到 localStorage），
+    // 新建对话时继续使用用户上次选择的模型
     generateConversationId()
   }
 
@@ -397,7 +399,7 @@ export const useChatStore = defineStore('chat', () => {
       // 因此仅靠流关闭触发的 finally 无法及时把 UI 切回非生成态。
       // 这里识别 done 后显式置位并打断 for-await，UI 才能立刻从"正在生成"切回正常。
       let streamFinished = false
-      for await (const sse of streamChat(agentId, message, convId, selectedModelProvider.value || undefined, modelName, streamOptions, selectedDatasourceIds.value)) {
+      for await (const sse of streamChat(agentId, message, convId, selectedModelProvider.value || undefined, modelName, streamOptions, selectedDatasourceIds.value, selectedTenantCodes.value)) {
         if (!isStreaming.value) break
         handleSseEvent(sse, flushBuf, () => { streamFinished = true })
         if (streamFinished) break
@@ -779,6 +781,7 @@ export const useChatStore = defineStore('chat', () => {
     conversationId,
     isStreaming,
     selectedDatasourceIds,
+    selectedTenantCodes,
     streamingConversations,
     conversations,
     conversationsLoading,

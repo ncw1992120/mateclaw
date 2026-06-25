@@ -523,11 +523,20 @@ public class AloudataCallTool {
      */
     private String handleSearchBusinessTerm(String toolInput) {
         try {
+            ChatOrigin origin = ChatOriginHolder.get();
             JSONObject input = JSONUtil.parseObj(toolInput);
             String tenantCode = input.getStr("tenantCode");
             if (tenantCode == null || tenantCode.isBlank()) {
                 return error("需要 tenantCode 参数");
             }
+
+            // 校验业务域白名单
+            Set<String> allowedTenantCodes = scopeContext.getAllowedTenantCodes(
+                    origin != null ? origin.conversationId() : null);
+            if (allowedTenantCodes != null && !allowedTenantCodes.isEmpty() && !allowedTenantCodes.contains(tenantCode)) {
+                return error("业务域 " + tenantCode + " 不在用户勾选的白名单内，禁止访问");
+            }
+
             String keyword = input.getStr("keyword");
             if (keyword == null || keyword.isBlank()) {
                 return error("需要 keyword 参数");

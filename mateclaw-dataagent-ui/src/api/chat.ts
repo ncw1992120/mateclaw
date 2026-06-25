@@ -105,7 +105,8 @@ export async function* streamChat(
   modelProvider?: string,
   modelName?: string,
   options?: StreamOptions,
-  datasourceIds?: string[]
+  datasourceIds?: string[],
+  tenantCodes?: string[]
 ): AsyncGenerator<SseEvent> {
   const token = localStorage.getItem('token')
   const headers: Record<string, string> = {
@@ -125,6 +126,9 @@ export async function* streamChat(
   }
   if (datasourceIds && datasourceIds.length > 0) {
     body.datasourceIds = datasourceIds
+  }
+  if (tenantCodes && tenantCodes.length > 0) {
+    body.tenantCodes = tenantCodes
   }
 
   const abortController = new AbortController()

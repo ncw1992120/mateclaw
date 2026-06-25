@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 把"前端选择"这种与用户输入耦合度很高的状态从 Controller 透传到 Tool。
  * <p>
  * 生命周期：与 SSE 会话保持一致，{@link DataAgentChatServiceImpl#streamChat} 入口
- * 写入，{@code handleStreamFinalize} 在流终态时清理；同时 {@link #put} 会覆盖旧值，
+ * 写入，{@code handleStreamFinalize} 在流终态时清理；同时 {@link #putDatasourceIds} 会覆盖旧值，
  * 保证同一 conversationId 下后续问数能切换数据源勾选。
  * <p>
  * 这里有意做成 Spring Bean 而非 ThreadLocal：SSE 由 sseExecutor 线程池处理，
@@ -26,7 +26,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DataAgentChatScopeContext {
 
     /** conversationId -> allowed datasourceId 集合（不可变） */
-    private final Map<String, Set<Long>> scopes = new ConcurrentHashMap<>();
+    private final Map<String, Set<Long>> datasourceIdScopes = new ConcurrentHashMap<>();
+
+    /** conversationId -> allowed tenantCode 集合（不可变） */
+    private final Map<String, Set<String>> tenantScopes = new ConcurrentHashMap<>();
 
     /**
      * 写入或更新会话级数据源白名单。
@@ -34,15 +37,15 @@ public class DataAgentChatScopeContext {
      * @param conversationId 会话 ID
      * @param datasourceIds  允许使用的数据源 ID 列表；为空或 null 表示清除限制
      */
-    public void put(String conversationId, List<Long> datasourceIds) {
+    public void putDatasourceIds(String conversationId, List<Long> datasourceIds) {
         if (conversationId == null || conversationId.isBlank()) {
             return;
         }
         if (datasourceIds == null || datasourceIds.isEmpty()) {
-            scopes.remove(conversationId);
+            datasourceIdScopes.remove(conversationId);
             return;
         }
-        scopes.put(conversationId, Set.copyOf(datasourceIds));
+        datasourceIdScopes.put(conversationId, Set.copyOf(datasourceIds));
     }
 
     /**
@@ -55,8 +58,39 @@ public class DataAgentChatScopeContext {
         if (conversationId == null || conversationId.isBlank()) {
             return Collections.emptySet();
         }
-        Set<Long> ids = scopes.get(conversationId);
+        Set<Long> ids = datasourceIdScopes.get(conversationId);
         return ids != null ? ids : Collections.emptySet();
+    }
+
+    /**
+     * 写入或更新会话级业务域白名单。
+     *
+     * @param conversationId 会话 ID
+     * @param tenantCodes    允许使用的租户编码列表；为空或 null 表示清除限制
+     */
+    public void putTenantCodes(String conversationId, List<String> tenantCodes) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return;
+        }
+        if (tenantCodes == null || tenantCodes.isEmpty()) {
+            tenantScopes.remove(conversationId);
+            return;
+        }
+        tenantScopes.put(conversationId, Set.copyOf(tenantCodes));
+    }
+
+    /**
+     * 获取会话级业务域白名单。
+     *
+     * @param conversationId 会话 ID
+     * @return 不可变白名单集合；未配置时返回 {@link Collections#emptySet()}
+     */
+    public Set<String> getAllowedTenantCodes(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return Collections.emptySet();
+        }
+        Set<String> codes = tenantScopes.get(conversationId);
+        return codes != null ? codes : Collections.emptySet();
     }
 
     /**
@@ -69,7 +103,7 @@ public class DataAgentChatScopeContext {
         if (conversationId == null || conversationId.isBlank()) {
             return false;
         }
-        return scopes.containsKey(conversationId);
+        return datasourceIdScopes.containsKey(conversationId);
     }
 
     /**
@@ -81,6 +115,7 @@ public class DataAgentChatScopeContext {
         if (conversationId == null || conversationId.isBlank()) {
             return;
         }
-        scopes.remove(conversationId);
+        datasourceIdScopes.remove(conversationId);
+        tenantScopes.remove(conversationId);
     }
 }

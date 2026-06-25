@@ -124,6 +124,8 @@ export default {
     datasourceScope: '指定数据源',
     datasourcePlaceholder: '不限制（可选数据源）',
     clearDatasourceScope: '清除',
+    businessDomainScope: '指定业务域',
+    clearBusinessDomainScope: '清除',
     toolRequestParams: '请求参数',
     toolResponseParams: '响应参数',
   },
