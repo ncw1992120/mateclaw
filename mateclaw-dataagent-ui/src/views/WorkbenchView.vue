@@ -94,7 +94,7 @@
                       aria-hidden="true"
                     ></span>
                     <div class="history-item-content">
-                      <span class="history-item-title">
+                      <span class="history-item-title" :title="conv.title || t('conversation.untitled')">
                         <span v-if="isConversationPinned(conv)" class="history-pin-mark" aria-hidden="true">↗</span>
                         {{ conv.title || t('conversation.untitled') }}
                       </span>
