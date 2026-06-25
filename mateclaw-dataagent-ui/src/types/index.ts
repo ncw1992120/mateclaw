@@ -385,6 +385,10 @@ export interface Conversation {
   lastMessage: string
   lastActiveTime: string
   pinned?: number
+  /** 会话绑定的模型 Provider ID（null 表示继承 Agent 默认） */
+  modelProvider?: string | null
+  /** 会话绑定的模型名称（null 表示继承 Agent 默认） */
+  modelName?: string | null
   createTime: string
   updateTime: string
 }

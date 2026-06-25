@@ -591,21 +591,53 @@ watch(() => enabledAgents.value.length, (len) => {
  */
 watch(availableModels, (models) => {
   if (models.length === 0) return
+  // 如果 chatStore 已有模型信息（切换会话恢复的），根据 provider+modelName 反查 modelId
+  if (chatStore.selectedModelProvider && chatStore.selectedModelName) {
+    const matched = models.find(m =>
+      m.provider === chatStore.selectedModelProvider && m.modelName === chatStore.selectedModelName
+    )
+    if (matched) {
+      selectedModelId.value = matched.id
+      return
+    }
+  }
   // 如果已有选中 ID（localStorage 恢复），同步恢复 modelName 和 provider
   if (selectedModelId.value) {
     const model = models.find(m => m.id === selectedModelId.value)
     if (model) {
       chatStore.selectedModelName = model.modelName
       chatStore.selectedModelProvider = model.provider
+      return
     }
-  } else {
-    // 否则选中默认/第一个模型
-    const def = models.find(m => m.isDefault) ?? models[0]
-    selectedModelId.value = def.id
-    chatStore.selectedModelName = def.modelName
-    chatStore.selectedModelProvider = def.provider
   }
+  // 否则选中默认/第一个模型
+  const def = models.find(m => m.isDefault) ?? models[0]
+  selectedModelId.value = def.id
+  chatStore.selectedModelName = def.modelName
+  chatStore.selectedModelProvider = def.provider
 }, { immediate: true })
+
+/**
+ * 监听 chatStore 中模型状态变化（切换会话/新建对话时），反向同步 selectedModelId
+ * 确保下拉框显示与 chatStore 一致的模型
+ */
+watch(
+  () => [chatStore.selectedModelProvider, chatStore.selectedModelName] as const,
+  ([provider, modelName]) => {
+    if (!provider || !modelName) {
+      // 模型被清空（新建对话），重置 selectedModelId 让上面的 watch 重新选择默认模型
+      selectedModelId.value = undefined
+      return
+    }
+    // 根据 provider+modelName 反查 modelId
+    const matched = availableModels.value.find(m =>
+      m.provider === provider && m.modelName === modelName
+    )
+    if (matched && matched.id !== selectedModelId.value) {
+      selectedModelId.value = matched.id
+    }
+  }
+)
 
 /**
  * 挂载时确保模型数据已就绪

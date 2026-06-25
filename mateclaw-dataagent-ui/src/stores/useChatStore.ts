@@ -127,6 +127,9 @@ export const useChatStore = defineStore('chat', () => {
     lastEventId.value = null
     seenEventIds.value.clear()
     clearPersistedReconnectState()
+    // 新对话清空模型选择状态，让 WorkbenchView 的 watch 逻辑自动选择默认模型
+    selectedModelName.value = ''
+    selectedModelProvider.value = ''
     generateConversationId()
   }
 
@@ -180,6 +183,19 @@ export const useChatStore = defineStore('chat', () => {
     const oldHadStream = !isSameConversation && !!lastEventId.value && !!oldConvId
     if (oldHadStream) {
       reconnectStates.set(oldConvId, lastEventId.value!)
+    }
+
+    // 切换会话时同步模型选择状态：从会话列表中查找目标会话的 pinned model
+    if (!isSameConversation) {
+      const targetConv = conversations.value.find(c => c.conversationId === convId)
+      if (targetConv?.modelProvider && targetConv?.modelName) {
+        selectedModelProvider.value = targetConv.modelProvider
+        selectedModelName.value = targetConv.modelName
+      } else {
+        // 会话没有 pinned model，清空让 WorkbenchView 的 watch 逻辑设置默认模型
+        selectedModelProvider.value = ''
+        selectedModelName.value = ''
+      }
     }
 
     historyLoading.value = true
