@@ -76,14 +76,21 @@
                     <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
                     <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
                     <span
-                      v-if="seg.toolResult != null"
+                      v-if="seg.toolArgs != null || seg.toolResult != null"
                       class="seg-tool__arrow"
                       :class="{ 'is-open': expandedTools.has(segIdx) }"
                     >▾</span>
                   </div>
                   <Transition name="seg-slide">
-                    <div v-if="expandedTools.has(segIdx) && seg.toolResult != null" class="seg-tool__body">
-                      <pre>{{ formatResultPreview(seg.toolResult as string) }}</pre>
+                    <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null)" class="seg-tool__body">
+                      <div v-if="seg.toolArgs != null" class="seg-tool__section">
+                        <div class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</div>
+                        <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
+                      </div>
+                      <div v-if="seg.toolResult != null" class="seg-tool__section">
+                        <div class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</div>
+                        <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
+                      </div>
                     </div>
                   </Transition>
                 </div>
@@ -677,6 +684,17 @@ function formatResultPreview(result: string): string {
     return JSON.stringify(parsed, null, 2)
   } catch {
     return result.length > 500 ? result.slice(0, 500) + '...' : result
+  }
+}
+
+/** 格式化工具参数/结果（展开区展示完整内容，不做截断） */
+function formatToolBody(value: string | undefined): string {
+  if (!value) return ''
+  try {
+    const parsed = JSON.parse(value)
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return value
   }
 }
 
@@ -2850,6 +2868,17 @@ onUnmounted(() => {
 
 .seg-tool__body {
   padding: 0 10px 6px 22px;
+}
+
+.seg-tool__section + .seg-tool__section {
+  margin-top: 8px;
+}
+
+.seg-tool__section-title {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .seg-tool__body pre {

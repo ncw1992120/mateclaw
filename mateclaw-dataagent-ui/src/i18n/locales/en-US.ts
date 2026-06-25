@@ -124,6 +124,8 @@ export default {
     datasourceScope: 'Datasource Scope',
     datasourcePlaceholder: 'All datasources (optional)',
     clearDatasourceScope: 'Clear',
+    toolRequestParams: 'Request Parameters',
+    toolResponseParams: 'Response Parameters',
   },
   smartAskMenu: {
     interpret: 'Data Interpret',
