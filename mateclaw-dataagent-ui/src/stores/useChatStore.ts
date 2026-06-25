@@ -513,17 +513,60 @@ export const useChatStore = defineStore('chat', () => {
    *                   后端不会因 done 而关闭 SSE 连接，仅靠流关闭触发的 finally
    *                   无法把 UI 切回非生成态，必须由调用方主动打断。
    */
+  /**
+   * 获取指定消息的 segments 数组（确保一定返回数组引用）。
+   * 流式阶段由前端实时构建；历史消息由后端持久化。
+   */
+  function ensureSegments(msgIdx: number): Array<Record<string, unknown>> {
+    const msg = messages.value[msgIdx]
+    if (!msg) return []
+    if (!msg.metadata) msg.metadata = {}
+    const meta = msg.metadata as Record<string, unknown>
+    if (!Array.isArray(meta.segments)) {
+      meta.segments = []
+    }
+    return meta.segments as Array<Record<string, unknown>>
+  }
+
+  /** 找到最后一个 status=running 的指定类型 segment */
+  function findLastRunningSegment(segments: Array<Record<string, unknown>>, type: string): Record<string, unknown> | undefined {
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].type === type && segments[i].status === 'running') return segments[i]
+    }
+    return undefined
+  }
+
+  /** 关闭所有 status=running 的 segment（对话结束时调用） */
+  function finalizeAllRunningSegments(segments: Array<Record<string, unknown>>): void {
+    for (const seg of segments) {
+      if (seg.status === 'running') seg.status = 'completed'
+    }
+  }
+
   function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, onFinished?: () => void): void {
     const evt = sse.event
     const data = sse.data
 
     if (typeof data !== 'object') return
 
+    const msgIdx = messages.value.length - 1
+
     switch (evt) {
       case 'content_delta': {
         const delta = data.delta as string | undefined
         if (delta) {
           flushBuf.appendContent(delta)
+          // 同步构建 content segment
+          const segments = ensureSegments(msgIdx)
+          let contentSeg = findLastRunningSegment(segments, 'content')
+          if (!contentSeg) {
+            // 关闭可能存在的 running thinking segment
+            const thinkSeg = findLastRunningSegment(segments, 'thinking')
+            if (thinkSeg) thinkSeg.status = 'completed'
+            contentSeg = { type: 'content', status: 'running', text: '' }
+            segments.push(contentSeg)
+          }
+          contentSeg.text = (contentSeg.text as string || '') + delta
         }
         break
       }
@@ -533,8 +576,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'tool_call_started': {
         flushBuf.flush()
-        const idx = messages.value.length - 1
-        const prev = messages.value[idx]
+        const prev = messages.value[msgIdx]
         if (!prev || prev.role !== 'assistant') return
         const toolName = data.toolName as string | undefined
         const toolCallId = data.toolCallId as string | undefined
@@ -552,12 +594,24 @@ export const useChatStore = defineStore('chat', () => {
               startTime: Date.now(),
             },
           ]
-          messages.value[idx] = {
+          // 关闭 running content segment，创建 running tool_call segment
+          const segments = ensureSegments(msgIdx)
+          const runningContent = findLastRunningSegment(segments, 'content')
+          if (runningContent) runningContent.status = 'completed'
+          segments.push({
+            type: 'tool_call',
+            status: 'running',
+            toolName,
+            toolCallId: toolCallId || '',
+            toolArgs: toolArgs || '',
+          })
+          messages.value[msgIdx] = {
             ...prev,
             metadata: {
               ...prevMeta,
               toolCalls: nextToolCalls,
               currentPhase: 'executing_tool',
+              segments,
             },
           }
         }
@@ -565,8 +619,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'tool_call_completed': {
         flushBuf.flush()
-        const idx = messages.value.length - 1
-        const prev = messages.value[idx]
+        const prev = messages.value[msgIdx]
         if (!prev || prev.role !== 'assistant') return
         const toolName = data.toolName as string | undefined
         const toolCallId = data.toolCallId as string | undefined
@@ -583,11 +636,24 @@ export const useChatStore = defineStore('chat', () => {
             }
             return tc
           })
-          messages.value[idx] = {
+          // 更新对应 tool_call segment 为 completed
+          const segments = ensureSegments(msgIdx)
+          for (const seg of segments) {
+            if (seg.type === 'tool_call' && seg.status === 'running'
+              && ((seg.toolCallId && seg.toolCallId === toolCallId)
+                || (seg.toolName === toolName))) {
+              seg.status = 'completed'
+              seg.toolSuccess = success !== false
+              if (result) seg.toolResult = result
+              break
+            }
+          }
+          messages.value[msgIdx] = {
             ...prev,
             metadata: {
               ...prevMeta,
               toolCalls: nextToolCalls,
+              segments,
             },
           }
         }
@@ -603,10 +669,16 @@ export const useChatStore = defineStore('chat', () => {
         } else if (status === 'failed') {
           lastMsg.content += '\n[生成失败]'
         }
+        // 关闭所有 running segments
+        const segments = ensureSegments(msgIdx)
+        finalizeAllRunningSegments(segments)
         break
       }
       case 'done': {
         flushBuf.flush()
+        // 关闭所有 running segments
+        const segments = ensureSegments(msgIdx)
+        finalizeAllRunningSegments(segments)
         // 后端在 done 后并不会关闭 SSE 流，必须在此处把 UI 切回非生成态，
         // 否则状态栏会一直显示"正在生成"、按钮一直是"停止"。
         isStreaming.value = false
@@ -623,6 +695,9 @@ export const useChatStore = defineStore('chat', () => {
         if (msg) {
           lastMsg.content += `\n[错误] ${msg}`
         }
+        // 关闭所有 running segments
+        const segments = ensureSegments(msgIdx)
+        finalizeAllRunningSegments(segments)
         break
       }
       case 'heartbeat':
