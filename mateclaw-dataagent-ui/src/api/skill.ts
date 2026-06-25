@@ -10,9 +10,6 @@ import type {
 /** 技能 CRUD 路径 */
 const BASE_URL = '/dataagent/api/v1/skills'
 
-/** 技能安装路径 */
-const INSTALL_URL = '/dataagent/api/v1/skills/install'
-
 /** 技能分页查询 */
 export function page(params: {
   page?: number
@@ -64,24 +61,24 @@ export function toggle(id: number, enabled: boolean) {
 
 /** 在 ClawHub 市场搜索技能 */
 export function searchHub(query: string, limit = 20) {
-  return api.get<HubSkillInfo[]>(`${INSTALL_URL}/hub/search`, {
+  return api.get<HubSkillInfo[]>(`${BASE_URL}/install/hub/search`, {
     params: { q: query, limit },
   })
 }
 
 /** 启动一个异步安装任务（GitHub URL / ClawHub 市场） */
 export function startInstall(data: SkillInstallRequest) {
-  return api.post<SkillInstallTask>(`${INSTALL_URL}/start`, data)
+  return api.post<SkillInstallTask>(`${BASE_URL}/install/start`, data)
 }
 
 /** 查询安装任务状态 */
 export function getInstallStatus(taskId: string) {
-  return api.get<SkillInstallTask>(`${INSTALL_URL}/status/${taskId}`)
+  return api.get<SkillInstallTask>(`${BASE_URL}/install/status/${taskId}`)
 }
 
 /** 取消安装任务 */
 export function cancelInstall(taskId: string) {
-  return api.post<void>(`${INSTALL_URL}/cancel/${taskId}`)
+  return api.post<void>(`${BASE_URL}/install/cancel/${taskId}`)
 }
 
 /**
@@ -96,7 +93,7 @@ export function installFromZip(
 ) {
   const form = new FormData()
   form.append('file', file)
-  return api.post<Record<string, unknown>>(`${INSTALL_URL}/upload`, form, {
+  return api.post<Record<string, unknown>>(`${BASE_URL}/install/upload`, form, {
     params: {
       enable: options.enable !== false,
       overwrite: options.overwrite === true,
@@ -109,7 +106,7 @@ export function installFromZip(
 
 /** 通过名称卸载技能 */
 export function uninstallByName(skillName: string, workspaceId?: number) {
-  return api.delete<{ message: string }>(`${INSTALL_URL}/${encodeURIComponent(skillName)}`, {
+  return api.delete<{ message: string }>(`${BASE_URL}/install/${encodeURIComponent(skillName)}`, {
     params: { workspaceId },
   })
 }
