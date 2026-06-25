@@ -25,12 +25,7 @@ import vip.mate.wiki.dto.RelatedPageResult;
 import vip.mate.wiki.hotcache.HotCacheUpdateReason;
 import vip.mate.wiki.job.event.WikiJobCreatedEvent;
 import vip.mate.wiki.job.model.WikiProcessingJobEntity;
-import vip.mate.wiki.model.WikiHotCacheEntity;
-import vip.mate.wiki.model.WikiKnowledgeBaseEntity;
-import vip.mate.wiki.model.WikiPageEntity;
-import vip.mate.wiki.model.WikiRawMaterialEntity;
-import vip.mate.wiki.model.WikiTransformationEntity;
-import vip.mate.wiki.model.WikiTransformationRunEntity;
+import vip.mate.wiki.model.*;
 import vip.mate.wiki.sse.WikiProgressBus;
 
 import java.io.IOException;

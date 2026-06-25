@@ -1,0 +1,17 @@
+/**
+ * 示例4：指定日期范围 + 区域筛选
+ * 用户: "2024年1月华东区域的销售额趋势"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="销售额") → metricName="sales_amount"
+ * 2. 确认可用维度包含 region 和 metric_time__day
+ * 3. aloudata_metrics_query → 如下请求
+ */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["metric_time__day", "region"],
+    "filters": ["[region] IN (\"华东\")"],
+    "timeConstraint": "[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\"",
+    "orders": {"fieldName": "metric_time__day", "direction": "ASC"},
+    "limit": 31
+}

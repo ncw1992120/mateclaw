@@ -12,21 +12,9 @@ import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.constants.DataAgentConstants;
-import vip.mate.dataagent.dto.AloudataConfigDTO;
-import vip.mate.dataagent.dto.AloudataDimensionSemanticDTO;
-import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
-import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
-import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
-import vip.mate.dataagent.model.AloudataCategoryEntity;
-import vip.mate.dataagent.model.AloudataDimensionEntity;
-import vip.mate.dataagent.model.AloudataMetricDimensionEntity;
-import vip.mate.dataagent.model.AloudataMetricEntity;
-import vip.mate.dataagent.model.DatasourceEntity;
-import vip.mate.dataagent.repository.AloudataCategoryMapper;
-import vip.mate.dataagent.repository.AloudataDimensionMapper;
-import vip.mate.dataagent.repository.AloudataMetricDimensionMapper;
-import vip.mate.dataagent.repository.AloudataMetricMapper;
-import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.model.*;
+import vip.mate.dataagent.repository.*;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
@@ -154,6 +142,44 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         wrapper.eq(AloudataMetricDimensionEntity::getMetricName, metricName);
         List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
         return relations.stream().map(AloudataMetricDimensionEntity::getDimName).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AloudataDimensionSemanticDTO> listMetricDimensionDetails(Long datasourceId, String metricName) {
+        // 先查关联的维度名称列表
+        LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
+        wrapper.eq(AloudataMetricDimensionEntity::getMetricName, metricName);
+        List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
+        if (relations.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> dimNames = relations.stream().map(AloudataMetricDimensionEntity::getDimName).collect(Collectors.toList());
+        // 根据维度名称批量查维度详情
+        LambdaQueryWrapper<AloudataDimensionEntity> dimWrapper = new LambdaQueryWrapper<>();
+        dimWrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        dimWrapper.in(AloudataDimensionEntity::getDimName, dimNames);
+        List<AloudataDimensionEntity> entities = dimensionMapper.selectList(dimWrapper);
+        return entities.stream().map(this::toDimensionSemanticDTO).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AloudataMetricSemanticDTO> listDimensionMetricDetails(Long datasourceId, String dimName) {
+        // 先查关联的指标名称列表
+        LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
+        wrapper.eq(AloudataMetricDimensionEntity::getDimName, dimName);
+        List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
+        if (relations.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> metricNames = relations.stream().map(AloudataMetricDimensionEntity::getMetricName).collect(Collectors.toList());
+        // 根据指标名称批量查指标详情
+        LambdaQueryWrapper<AloudataMetricEntity> metricWrapper = new LambdaQueryWrapper<>();
+        metricWrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
+        metricWrapper.in(AloudataMetricEntity::getMetricName, metricNames);
+        List<AloudataMetricEntity> entities = metricMapper.selectList(metricWrapper);
+        return entities.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList());
     }
 
     @Override

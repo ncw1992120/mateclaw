@@ -1,0 +1,14 @@
+/**
+ * 示例1：简单指标查询
+ * 用户: "上个月的销售额是多少"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="销售额") → metricName="sales_amount"
+ * 2. aloudata_metrics_query → 如下请求
+ */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateAdd(DateTrunc(Today(),\"MONTH\"),-1,\"MONTH\")",
+    "limit": 10
+}

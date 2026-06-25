@@ -9,11 +9,8 @@ import vip.mate.common.result.R;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.dto.*;
-import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
-import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
-
 import vip.mate.dataagent.service.DatasourceManageService;
 
 import java.util.List;
@@ -260,6 +257,28 @@ public class DataAgentDatasourceController {
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "指标英文名") @PathVariable String metricName) {
         return R.ok(aloudataSyncService.listMetricDimensions(datasourceId, metricName));
+    }
+
+    /**
+     * 查询指标关联的维度详情列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimension-details")
+    @Operation(summary = "指标可用维度详情", description = "查询指定指标关联的可用维度详情列表，包含维度名称、展示名、描述等")
+    public R<List<AloudataDimensionSemanticDTO>> listMetricDimensionDetails(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标英文名") @PathVariable String metricName) {
+        return R.ok(aloudataSyncService.listMetricDimensionDetails(datasourceId, metricName));
+    }
+
+    /**
+     * 查询维度关联的指标详情列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/metric-details")
+    @Operation(summary = "维度关联指标详情", description = "查询指定维度关联的指标详情列表，包含指标名称、展示名、业务口径等")
+    public R<List<AloudataMetricSemanticDTO>> listDimensionMetricDetails(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "维度英文名") @PathVariable String dimName) {
+        return R.ok(aloudataSyncService.listDimensionMetricDetails(datasourceId, dimName));
     }
 
     /**

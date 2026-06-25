@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
-
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 
 import java.lang.reflect.Method;

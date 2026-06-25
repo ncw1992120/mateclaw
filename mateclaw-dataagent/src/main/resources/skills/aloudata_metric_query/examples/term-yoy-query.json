@@ -1,0 +1,19 @@
+/**
+ * 示例2：涉及业务术语的同比查询
+ * 用户: "各区域营收的同比增长率"
+ *
+ * 工具调用流程:
+ * 1. search_business_term(tenantCode="default", keyword="营收") → 确认同义词: 收入, 营业收入
+ * 2. aloudata_search_semantic(datasourceId=1, keyword="营收") → metricName="sales_amount"
+ * 3. aloudata_metrics_query → 如下请求
+ */
+{
+    "metrics": [
+        "sales_amount",
+        "sales_amount__sameperiod__yoy__growth"
+    ],
+    "dimensions": ["region", "metric_time__month"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "orders": {"fieldName": "sales_amount__sameperiod__yoy__growth", "direction": "DESC"},
+    "limit": 20
+}

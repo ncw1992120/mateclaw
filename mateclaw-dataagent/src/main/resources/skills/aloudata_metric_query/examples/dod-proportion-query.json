@@ -1,0 +1,19 @@
+/**
+ * 示例3：日环比 + 渠道占比
+ * 用户: "今天的订单量和日环比，以及各渠道占比"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="订单量") → metricName="order_count"
+ * 2. 确认可用维度包含 channel 和 metric_time__day
+ * 3. aloudata_metrics_query → 如下请求
+ */
+{
+    "metrics": [
+        "order_count",
+        "order_count__sameperiod__dod__growth",
+        "order_count__proportion__channel"
+    ],
+    "dimensions": ["channel", "metric_time__day"],
+    "timeConstraint": "[metric_time__day]=Today()",
+    "limit": 50
+}

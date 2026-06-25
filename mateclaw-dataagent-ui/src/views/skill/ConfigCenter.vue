@@ -22,6 +22,7 @@
     <section class="config-content">
       <SkillManage v-if="activeTab === 'skill'" />
       <DataConfigView v-else-if="activeTab === 'data'" />
+      <BusinessDictionaryView v-else-if="activeTab === 'dictionary'" />
       <AgentConfigView v-else-if="activeTab === 'agent'" />
       <ModelConfigView v-else-if="activeTab === 'model'" />
       <KnowledgeConfigView v-else-if="activeTab === 'knowledge'" />
@@ -34,6 +35,7 @@ import { useI18n } from 'vue-i18n'
 import { usePersistedRef } from '@/composables/usePersistedRef'
 import SkillManage from './SkillManage.vue'
 import DataConfigView from './DataConfigView.vue'
+import BusinessDictionaryView from './BusinessDictionaryView.vue'
 import AgentConfigView from './AgentConfigView.vue'
 import ModelConfigView from './ModelConfigView.vue'
 import KnowledgeConfigView from './KnowledgeConfigView.vue'
@@ -41,7 +43,7 @@ import KnowledgeConfigView from './KnowledgeConfigView.vue'
 const { t } = useI18n()
 
 /** Tab 可选取值 */
-const TAB_KEYS = ['skill', 'data', 'agent', 'model', 'knowledge'] as const
+const TAB_KEYS = ['skill', 'data', 'dictionary', 'agent', 'model', 'knowledge'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 /** 当前激活的 Tab（刷新后保留） */
@@ -60,6 +62,10 @@ const tabs = [
   {
     key: 'data' as const,
     labelKey: 'configCenter.tabData',
+  },
+  {
+    key: 'dictionary' as const,
+    labelKey: 'configCenter.tabDictionary',
   },
   {
     key: 'agent' as const,

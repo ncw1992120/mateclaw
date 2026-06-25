@@ -86,6 +86,16 @@ export function listMetricDimensions(datasourceId: string, metricName: string) {
   return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
 }
 
+/** 查询指标关联的维度详情列表（含展示名、描述等） */
+export function listMetricDimensionDetails(datasourceId: string, metricName: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimension-details`)
+}
+
+/** 查询维度关联的指标详情列表（含展示名、业务口径等） */
+export function listDimensionMetricDetails(datasourceId: string, dimName: string) {
+  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/metric-details`)
+}
+
 /** 按类目分组查询指标列表（后端分组） */
 export function listMetricsGroupedByCategory(datasourceId: string) {
   return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/grouped`)

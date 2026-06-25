@@ -157,7 +157,7 @@ function handleToggle(): void {
 }
 
 .tree-node-expand .el-icon.is-expanded {
-  transform: rotate(90deg);
+  transform: none;
 }
 
 .tree-node-icon {

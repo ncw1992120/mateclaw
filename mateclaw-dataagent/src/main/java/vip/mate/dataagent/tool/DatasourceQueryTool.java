@@ -10,12 +10,14 @@ import org.springframework.stereotype.Component;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.context.ChatOriginHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.LogicalRelationVO;
 import vip.mate.dataagent.dto.SchemaSearchRequest;
 import vip.mate.dataagent.dto.SchemaSearchResult;
 import vip.mate.dataagent.dto.SemanticModelVO;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.LogicalRelationService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
@@ -66,6 +68,7 @@ public class DatasourceQueryTool {
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final SemanticModelService semanticModelService;
     private final LogicalRelationService logicalRelationService;
+    private final BusinessTermEsService businessTermEsService;
     private final DataAgentChatScopeContext scopeContext;
 
     private static final String TOOL_NAME = "data_query";
@@ -81,6 +84,7 @@ public class DatasourceQueryTool {
             2. action='list_tables' — 列出指定数据源下的所有表（需要 datasourceId）
             3. action='execute_sql' — 执行只读 SQL 查询（需要 datasourceId 和 sql）
             4. action='search_schema' — 语义检索相关表（需要 datasourceId 和 query），返回 Top-K 相关表的语义描述和关联关系，用于理解数据结构后再编写 SQL
+            5. action='search_business_term' — 搜索业务术语和同义词（需要 tenantCode 和 query），帮助理解用户查询中的业务术语含义
             对于复杂聚合、多表关联、精确数值计算等场景，优先使用 execute_sql 而非分页获取数据后在内存中计算。
             """;
 
@@ -90,8 +94,8 @@ public class DatasourceQueryTool {
               "properties": {
                 "action": {
                   "type": "string",
-                  "description": "动作：list_datasources / list_tables / execute_sql / search_schema",
-                  "enum": ["list_datasources", "list_tables", "execute_sql", "search_schema"]
+                  "description": "动作：list_datasources / list_tables / execute_sql / search_schema / search_business_term",
+                  "enum": ["list_datasources", "list_tables", "execute_sql", "search_schema", "search_business_term"]
                 },
                 "datasourceId": {
                   "type": "integer",
@@ -103,7 +107,12 @@ public class DatasourceQueryTool {
                 },
                 "query": {
                   "type": "string",
-                  "description": "自然语言查询，用于语义检索相关表（search_schema 时必填）"
+                  "description": "自然语言查询，用于语义检索相关表（search_schema 时必填）或搜索业务术语（search_business_term 时必填）"
+                },
+                "tenantCode": {
+                  "type": "string",
+                  "description": "租户编码（search_business_term 时必填），区分不同业务域"
+                }
                 }
               },
               "required": ["action"]
@@ -114,6 +123,7 @@ public class DatasourceQueryTool {
     private static final String ACTION_LIST_TABLES = "list_tables";
     private static final String ACTION_EXECUTE_SQL = "execute_sql";
     private static final String ACTION_SEARCH_SCHEMA = "search_schema";
+    private static final String ACTION_SEARCH_BUSINESS_TERM = "search_business_term";
 
     private static final int QUERY_TIMEOUT_SECONDS = 30;
     private static final int MAX_ROWS = 500;
@@ -157,7 +167,8 @@ public class DatasourceQueryTool {
                 case ACTION_LIST_TABLES -> listTables(input);
                 case ACTION_EXECUTE_SQL -> executeSql(input);
                 case ACTION_SEARCH_SCHEMA -> searchSchema(input);
-                default -> error("未知动作: " + action + "，支持: list_datasources / list_tables / execute_sql / search_schema");
+                case ACTION_SEARCH_BUSINESS_TERM -> searchBusinessTerm(input);
+                default -> error("未知动作: " + action + "，支持: list_datasources / list_tables / execute_sql / search_schema / search_business_term");
             };
         } catch (Exception e) {
             log.error("数据源查询失败: {}", e.getMessage(), e);
@@ -423,6 +434,59 @@ public class DatasourceQueryTool {
             for (LogicalRelationVO rel : result.getRelations()) {
                 sb.append("- ").append(rel.getPromptInfo()).append("\n");
             }
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * 搜索业务术语和同义词
+     */
+    private String searchBusinessTerm(JSONObject input) {
+        String tenantCode = input.getStr("tenantCode");
+        if (tenantCode == null || tenantCode.isBlank()) {
+            return error("search_business_term 需要 tenantCode 参数");
+        }
+        String query = input.getStr("query");
+        if (query == null || query.isBlank()) {
+            return error("search_business_term 需要 query 参数");
+        }
+
+        int topK = input.getInt("topK", DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_TOP_K);
+        double threshold = input.getDouble("similarityThreshold",
+                DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD);
+
+        BusinessTermSearchResult result = businessTermEsService.hybridSearch(tenantCode, query, topK, threshold);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("**查询**: ").append(query).append("\n");
+        sb.append("**租户**: ").append(tenantCode).append("\n");
+
+        int hitCount = result.getTermHits() != null ? result.getTermHits().size() : 0;
+        sb.append("**匹配结果**: ").append(hitCount).append(" 个术语");
+        sb.append(" (检索耗时: ").append(result.getElapsedMs()).append("ms)\n\n");
+
+        if (result.getTermHits() != null && !result.getTermHits().isEmpty()) {
+            sb.append("## 术语匹配\n\n");
+            for (BusinessTermSearchResult.TermHit hit : result.getTermHits()) {
+                sb.append("- **").append(hit.getTermName()).append("**");
+                if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
+                    sb.append("（同义词: ").append(hit.getSynonyms()).append("）");
+                }
+                if (hit.getDescription() != null && !hit.getDescription().isBlank()) {
+                    sb.append(" - ").append(hit.getDescription());
+                }
+                if (hit.getCategory() != null && !hit.getCategory().isBlank()) {
+                    sb.append(" [分类: ").append(hit.getCategory()).append("]");
+                }
+                sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
+                sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
+            }
+            sb.append("\n");
+        }
+
+        if (hitCount == 0) {
+            sb.append("未找到匹配的业务术语。请尝试更换关键词或检查租户编码是否正确。");
         }
 
         return sb.toString();

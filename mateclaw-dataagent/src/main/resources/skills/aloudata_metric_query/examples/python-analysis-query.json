@@ -1,0 +1,16 @@
+/**
+ * 示例7：指标平台 + Python 深度分析
+ * 用户: "分析各渠道销售额的趋势和异常"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="销售额") → metricName="sales_amount"
+ * 2. aloudata_metrics_query → 获取各渠道销售额时间序列数据（如下请求）
+ * 3. python_analysis(execute_python) → 将查询结果作为 input，执行时序分析 + 异常检测
+ */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["channel", "metric_time__day"],
+    "timeConstraint": "[metric_time__day]>=DateAdd(Today(),-90,\"DAY\")",
+    "orders": {"fieldName": "metric_time__day", "direction": "ASC"},
+    "limit": 500
+}

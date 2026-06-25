@@ -722,6 +722,62 @@ export interface SchemaSearchResult {
   elapsedMs: number
 }
 
+/** 业务术语 */
+export interface BusinessTerm {
+  id: string
+  tenantCode: string
+  termName: string
+  synonyms: string
+  description: string
+  category: string
+  parentId: string | null
+  parentTermName: string | null
+  /** 状态：0-停用 / 1-启用 */
+  status: number
+  promptInfo: string
+  createTime: string
+  updateTime: string
+}
+
+/** 创建业务术语请求 */
+export interface BusinessTermCreateRequest {
+  tenantCode: string
+  termName: string
+  synonyms?: string
+  description?: string
+  category?: string
+  parentId?: string | null
+}
+
+/** 更新业务术语请求 */
+export interface BusinessTermUpdateRequest {
+  termName?: string
+  synonyms?: string
+  description?: string
+  category?: string
+  parentId?: string | null
+  status?: number
+}
+
+/** 术语语义检索命中项 */
+export interface BusinessTermHit {
+  termName: string
+  synonyms: string | null
+  description: string | null
+  category: string | null
+  parentTermName: string | null
+  score: number
+  matchSource: string
+}
+
+/** 术语语义检索结果 */
+export interface BusinessTermSearchResult {
+  query: string
+  tenantCode: string
+  termHits: BusinessTermHit[]
+  elapsedMs: number
+}
+
 /** 帮助文档分类 */
 export interface HelpCategory {
   id: string

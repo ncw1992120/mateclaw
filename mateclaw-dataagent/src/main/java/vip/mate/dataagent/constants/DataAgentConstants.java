@@ -227,4 +227,26 @@ public final class DataAgentConstants {
 
     /** 默认 Embedding 向量维度 */
     public static final int DEFAULT_EMBEDDING_DIMENSION = 1024;
+
+    // ==================== 业务术语 ====================
+
+    /** 业务术语状态：停用 */
+    public static final int BUSINESS_TERM_STATUS_DISABLED = 0;
+
+    /** 业务术语状态：启用 */
+    public static final int BUSINESS_TERM_STATUS_ENABLED = 1;
+
+    /** 业务术语 ES 索引名称 */
+    public static final String BUSINESS_TERM_ES_INDEX = "dataagent_business_term";
+
+    /** 业务术语关键词检索匹配字段 */
+    public static final String[] BUSINESS_TERM_KEYWORD_SEARCH_FIELDS = {
+            "termName", "synonyms", "description", "category", "embeddingText"
+    };
+
+    /** 业务术语语义检索默认 Top-K */
+    public static final int BUSINESS_TERM_SEARCH_DEFAULT_TOP_K = 10;
+
+    /** 业务术语语义检索默认相似度阈值 */
+    public static final double BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD = 0.3;
 }

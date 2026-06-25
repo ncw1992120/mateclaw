@@ -1,9 +1,9 @@
 package vip.mate.dataagent.service;
 
-import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
 import vip.mate.dataagent.dto.AloudataDimensionSemanticDTO;
-import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
+import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
 import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
+import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 
 import java.util.List;
@@ -61,6 +61,16 @@ public interface AloudataSemanticSyncService {
      * 查询指标关联的维度名称列表
      */
     List<String> listMetricDimensions(Long datasourceId, String metricName);
+
+    /**
+     * 查询指标关联的维度详情列表
+     */
+    List<AloudataDimensionSemanticDTO> listMetricDimensionDetails(Long datasourceId, String metricName);
+
+    /**
+     * 查询维度关联的指标详情列表
+     */
+    List<AloudataMetricSemanticDTO> listDimensionMetricDetails(Long datasourceId, String dimName);
 
     /**
      * 查询同步状态

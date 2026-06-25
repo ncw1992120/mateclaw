@@ -1,0 +1,16 @@
+/**
+ * 示例8：指标平台 + 数据库联合查询
+ * 用户: "对比指标平台的 KPI 达成率与数据库中的实际订单数据"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic → 检索 KPI 相关指标
+ * 2. aloudata_metrics_query → 获取指标平台 KPI 数据（如下请求）
+ * 3. data_query(execute_sql) → 获取数据库实际订单数据
+ * 4. python_analysis(execute_python) → 两份数据对比分析
+ */
+{
+    "metrics": ["kpi_achievement_rate"],
+    "dimensions": ["region", "metric_time__month"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "limit": 50
+}

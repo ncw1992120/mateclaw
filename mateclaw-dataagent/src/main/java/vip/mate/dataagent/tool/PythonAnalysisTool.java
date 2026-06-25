@@ -21,8 +21,8 @@ import vip.mate.skill.knowledge.SkillScopedToolCallback;
  * 借鉴 DataAgent 项目的 Python 分析经验：
  * <ul>
  *   <li>上下文过大会导致模型准确性下降，应由 Python 来分析更合适</li>
- *   <li>SQL 负责结构化数据查询，Python 负责复杂数据分析和计算</li>
- *   <li>SQL 查询结果作为 Python 的标准输入，避免大上下文问题</li>
+ *   <li>数据查询负责结构化数据获取（数据库 SQL 或指标平台查询），Python 负责复杂数据分析和计算</li>
+ *   <li>查询结果作为 Python 的标准输入，避免大上下文问题</li>
  * </ul>
  * <p>
  * 暴露两个动作：
@@ -51,8 +51,17 @@ public class PythonAnalysisTool {
             4. 高级数据可视化（matplotlib/seaborn/plotly 图表）
             5. 时序分析、数据透视、多表关联计算等 SQL 难以完成的复杂分析
 
-            核心设计：SQL 负责结构化数据查询，Python 负责复杂数据分析和计算。
-            SQL 查询结果通过 input 参数传入 Python，避免大上下文导致模型准确性下降。
+            核心设计：数据查询负责结构化数据获取，Python 负责复杂数据分析和计算。
+            数据来源包括：
+            - 数据库（通过 data_query 的 execute_sql 执行 SQL 查询获取结构化数据）
+            - 指标平台（通过 aloudata_metrics_query 查询指标数据，或 aloudata_search_semantic 检索指标/维度元数据）
+            - 业务术语（通过 search_business_term 查询术语定义和同义词，辅助理解业务含义）
+            查询结果通过 input 参数传入 Python，避免大上下文导致模型准确性下降。
+
+            典型工作流：
+            1. 先通过数据查询工具（data_query / aloudata_metrics_query）获取所需数据
+            2. 再通过 python_analysis 执行 Python 代码进行复杂分析
+            3. 若用户提问涉及业务术语，先通过 search_business_term 查询术语含义
 
             支持两种动作：
             1. action='execute_python' — 执行 Python 代码（需要 code，可选 input 和 requirement）
@@ -80,7 +89,7 @@ public class PythonAnalysisTool {
                 },
                 "input": {
                   "type": "string",
-                  "description": "Python 代码的标准输入数据，通常是 JSON 格式的 SQL 查询结果（execute_python 时可选）"
+                  "description": "Python 代码的标准输入数据，通常是 JSON 格式的查询结果（来自 data_query 的 SQL 查询或 aloudata_metrics_query 的指标数据，execute_python 时可选）"
                 },
                 "requirement": {
                   "type": "string",

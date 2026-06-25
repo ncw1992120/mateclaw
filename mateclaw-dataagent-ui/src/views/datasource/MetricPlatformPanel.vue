@@ -236,9 +236,24 @@
           <div class="metric-table-panel">
             <div class="table-header">
               <span class="table-title">{{ currentMetricCategoryName }}</span>
-              <span class="table-count">{{ currentMetrics.length }} 个指标</span>
+              <div class="table-header-right">
+                <div class="search-wrap">
+                  <el-input
+                    v-model="metricSearchKeyword"
+                    size="small"
+                    :placeholder="t('metricPlatform.searchMetrics')"
+                    clearable
+                    @clear="metricSearchKeyword = ''"
+                  >
+                    <template #prefix>
+                      <el-icon><Search /></el-icon>
+                    </template>
+                  </el-input>
+                </div>
+                <span class="table-count">{{ filteredMetrics.length }} 个指标</span>
+              </div>
             </div>
-            <el-table :data="currentMetrics" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
+            <el-table :data="filteredMetrics" stripe size="small" style="width: 100%" height="600" @expand-change="handleMetricExpand">
               <el-table-column type="selection" width="40" align="center" />
               <el-table-column prop="metricDisplayName" :label="t('metricPlatform.metricDisplayName')" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
@@ -256,9 +271,38 @@
               </el-table-column>
               <el-table-column prop="metricCategoryName" :label="t('metricPlatform.categoryName')" min-width="120" show-overflow-tooltip />
               <el-table-column prop="owner" :label="t('metricPlatform.owner')" min-width="100" show-overflow-tooltip />
-              <el-table-column :label="t('metricPlatform.availableDimensions')" min-width="160" show-overflow-tooltip>
+              <el-table-column type="expand" width="40">
                 <template #default="{ row }">
-                  {{ row.availableDimensions?.join('、') || '-' }}
+                  <div class="metric-dimensions-expand">
+                    <div class="expand-label">{{ t('metricPlatform.availableDimensions') }}</div>
+                    <div class="expand-content">
+                      <!-- 加载中 -->
+                      <div v-if="metricDimensionLoadingMap[row.metricName]" class="expand-loading">
+                        <el-icon class="is-loading" style="font-size: 14px; color: #165dff;"><Loading /></el-icon>
+                        <span>{{ t('common.loading') }}</span>
+                      </div>
+                      <!-- 维度详情列表 -->
+                      <template v-else-if="metricDimensionDetailMap[row.metricName]?.length">
+                        <div
+                          v-for="dim in metricDimensionDetailMap[row.metricName]"
+                          :key="dim.dimName"
+                          class="dimension-item"
+                        >
+                          <div class="dimension-item-header">
+                            <span class="dimension-item-name">{{ dim.dimDisplayName || dim.dimName }}</span>
+                            <el-tag v-if="dim.configType" size="small" type="info">{{ dim.configType }}</el-tag>
+                          </div>
+                          <div class="dimension-item-meta">
+                            <span v-if="dim.dimName" class="meta-pair"><span class="meta-key">{{ t('metricPlatform.dimName') }}:</span> {{ dim.dimName }}</span>
+                            <span v-if="dim.originDataType" class="meta-pair"><span class="meta-key">{{ t('metricPlatform.dataType') }}:</span> {{ dim.originDataType }}</span>
+                          </div>
+                          <div v-if="dim.dimDescription" class="dimension-item-desc">{{ dim.dimDescription }}</div>
+                        </div>
+                      </template>
+                      <!-- 空状态 -->
+                      <div v-else class="expand-empty">-</div>
+                    </div>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -335,9 +379,24 @@
           <div class="metric-table-panel">
             <div class="table-header">
               <span class="table-title">{{ currentDimensionCategoryName }}</span>
-              <span class="table-count">{{ currentDimensions.length }} 个维度</span>
+              <div class="table-header-right">
+                <div class="search-wrap">
+                  <el-input
+                    v-model="dimensionSearchKeyword"
+                    size="small"
+                    :placeholder="t('metricPlatform.searchDimensions')"
+                    clearable
+                    @clear="dimensionSearchKeyword = ''"
+                  >
+                    <template #prefix>
+                      <el-icon><Search /></el-icon>
+                    </template>
+                  </el-input>
+                </div>
+                <span class="table-count">{{ filteredDimensions.length }} 个维度</span>
+              </div>
             </div>
-            <el-table :data="currentDimensions" stripe size="small" style="width: 100%" height="600" :virtual-scroll="true">
+            <el-table :data="filteredDimensions" stripe size="small" style="width: 100%" height="600" @expand-change="handleDimensionExpand">
               <el-table-column type="selection" width="40" align="center" />
               <el-table-column prop="dimDisplayName" :label="t('metricPlatform.dimDisplayName')" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
@@ -354,7 +413,42 @@
                 </template>
               </el-table-column>
               <el-table-column prop="originDataType" :label="t('metricPlatform.dataType')" width="110" align="center" />
-              <el-table-column prop="dimDescription" :label="t('metricPlatform.dimDesc')" min-width="180" show-overflow-tooltip />
+              <el-table-column type="expand" width="40">
+                <template #default="{ row }">
+                  <div class="metric-dimensions-expand">
+                    <div class="expand-label">{{ t('metricPlatform.relatedMetrics') }}</div>
+                    <div class="expand-content">
+                      <!-- 加载中 -->
+                      <div v-if="dimensionMetricLoadingMap[row.dimName]" class="expand-loading">
+                        <el-icon class="is-loading" style="font-size: 14px; color: #165dff;"><Loading /></el-icon>
+                        <span>{{ t('common.loading') }}</span>
+                      </div>
+                      <!-- 指标详情列表 -->
+                      <template v-else-if="dimensionMetricDetailMap[row.dimName]?.length">
+                        <div
+                          v-for="metric in dimensionMetricDetailMap[row.dimName]"
+                          :key="metric.metricName"
+                          class="dimension-item"
+                        >
+                          <div class="dimension-item-header">
+                            <span class="dimension-item-name">{{ metric.metricDisplayName || metric.metricName }}</span>
+                            <el-tag v-if="metric.status" size="small" :type="metric.status === 'ONLINE' ? 'success' : 'info'">
+                              {{ metric.status === 'ONLINE' ? '已发布' : '未发布' }}
+                            </el-tag>
+                          </div>
+                          <div class="dimension-item-meta">
+                            <span v-if="metric.metricName" class="meta-pair"><span class="meta-key">{{ t('metricPlatform.metricName') }}:</span> {{ metric.metricName }}</span>
+                            <span v-if="metric.owner" class="meta-pair"><span class="meta-key">{{ t('metricPlatform.owner') }}:</span> {{ metric.owner }}</span>
+                          </div>
+                          <div v-if="metric.businessCaliber" class="dimension-item-desc">{{ metric.businessCaliber }}</div>
+                        </div>
+                      </template>
+                      <!-- 空状态 -->
+                      <div v-else class="expand-empty">-</div>
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
             </el-table>
           </div>
         </div>
@@ -372,9 +466,9 @@
 import { reactive, ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Loading, FolderOpened, DataLine } from '@element-plus/icons-vue'
+import { Loading, FolderOpened, DataLine, Search } from '@element-plus/icons-vue'
 import * as datasourceApi from '@/api/datasource'
-import { listMetricsGroupedByCategory, listDimensionsGroupedByCategory } from '@/api/semantic-model'
+import { listMetricsGroupedByCategory, listDimensionsGroupedByCategory, listMetricDimensionDetails, listDimensionMetricDetails } from '@/api/semantic-model'
 import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
@@ -519,6 +613,70 @@ const dimensionCategoryGroups = ref<DimensionCategoryGroup[]>([])
 const loadingMetrics = ref(false)
 const loadingDimensions = ref(false)
 
+/** 指标展开行：维度详情缓存（按 metricName 索引） */
+const metricDimensionDetailMap = ref<Record<string, DimensionItem[]>>({})
+
+/** 指标展开行：维度详情加载状态 */
+const metricDimensionLoadingMap = ref<Record<string, boolean>>({})
+
+/** 加载指标关联的维度详情（按需请求，带缓存） */
+async function loadMetricDimensionDetails(metricName: string): Promise<void> {
+  if (metricDimensionDetailMap.value[metricName] || metricDimensionLoadingMap.value[metricName]) {
+    return
+  }
+  if (!props.datasourceId) {
+    return
+  }
+  metricDimensionLoadingMap.value[metricName] = true
+  try {
+    const res = await listMetricDimensionDetails(props.datasourceId, metricName)
+    metricDimensionDetailMap.value[metricName] = (res as any) || []
+  } catch {
+    metricDimensionDetailMap.value[metricName] = []
+  } finally {
+    metricDimensionLoadingMap.value[metricName] = false
+  }
+}
+
+/** 维度展开行：指标详情缓存（按 dimName 索引） */
+const dimensionMetricDetailMap = ref<Record<string, MetricItem[]>>({})
+
+/** 维度展开行：指标详情加载状态 */
+const dimensionMetricLoadingMap = ref<Record<string, boolean>>({})
+
+/** 加载维度关联的指标详情（按需请求，带缓存） */
+async function loadDimensionMetricDetails(dimName: string): Promise<void> {
+  if (dimensionMetricDetailMap.value[dimName] || dimensionMetricLoadingMap.value[dimName]) {
+    return
+  }
+  if (!props.datasourceId) {
+    return
+  }
+  dimensionMetricLoadingMap.value[dimName] = true
+  try {
+    const res = await listDimensionMetricDetails(props.datasourceId, dimName)
+    dimensionMetricDetailMap.value[dimName] = (res as any) || []
+  } catch {
+    dimensionMetricDetailMap.value[dimName] = []
+  } finally {
+    dimensionMetricLoadingMap.value[dimName] = false
+  }
+}
+
+/** 指标行展开/收起事件，展开时按需加载维度详情 */
+function handleMetricExpand(row: MetricItem, expandedRows: MetricItem[]): void {
+  if (expandedRows.some(r => r.metricName === row.metricName)) {
+    loadMetricDimensionDetails(row.metricName)
+  }
+}
+
+/** 维度行展开/收起事件，展开时按需加载指标详情 */
+function handleDimensionExpand(row: DimensionItem, expandedRows: DimensionItem[]): void {
+  if (expandedRows.some(r => r.dimName === row.dimName)) {
+    loadDimensionMetricDetails(row.dimName)
+  }
+}
+
 /** 展开的指标类目 */
 const expandedMetricCategories = ref<Set<string>>(new Set())
 
@@ -546,6 +704,24 @@ const currentMetrics = computed<MetricItem[]>(() => {
   return group?.metrics || []
 })
 
+/** 指标搜索关键词 */
+const metricSearchKeyword = ref('')
+
+/** 搜索过滤后的指标列表 */
+const filteredMetrics = computed<MetricItem[]>(() => {
+  const list = currentMetrics.value
+  const keyword = metricSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return list
+  }
+  return list.filter(m => {
+    return (m.metricDisplayName?.toLowerCase().includes(keyword))
+      || (m.metricName?.toLowerCase().includes(keyword))
+      || (m.metricCategoryName?.toLowerCase().includes(keyword))
+      || (m.owner?.toLowerCase().includes(keyword))
+  })
+})
+
 /** 当前选中的维度类目 ID */
 const selectedDimensionCategoryId = ref<string>('all')
 
@@ -565,6 +741,24 @@ const currentDimensions = computed<DimensionItem[]>(() => {
   }
   const group = findDimensionGroupById(dimensionCategoryGroups.value, selectedDimensionCategoryId.value)
   return group?.dimensions || []
+})
+
+/** 维度搜索关键词 */
+const dimensionSearchKeyword = ref('')
+
+/** 搜索过滤后的维度列表 */
+const filteredDimensions = computed<DimensionItem[]>(() => {
+  const list = currentDimensions.value
+  const keyword = dimensionSearchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return list
+  }
+  return list.filter(d => {
+    return (d.dimDisplayName?.toLowerCase().includes(keyword))
+      || (d.dimName?.toLowerCase().includes(keyword))
+      || (d.dimDescription?.toLowerCase().includes(keyword))
+      || (d.dimCategoryName?.toLowerCase().includes(keyword))
+  })
 })
 
 /** 选择维度类目 */
@@ -718,6 +912,10 @@ watch(
       dimensions.value = []
       metricCategoryGroups.value = []
       dimensionCategoryGroups.value = []
+      metricDimensionDetailMap.value = {}
+      metricDimensionLoadingMap.value = {}
+      dimensionMetricDetailMap.value = {}
+      dimensionMetricLoadingMap.value = {}
     }
   },
   { immediate: true },
@@ -1488,6 +1686,25 @@ const indicators = reactive([
   background: #fafafa;
 }
 
+.table-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.search-wrap {
+  width: 200px;
+}
+
+.search-wrap :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #e5e6eb inset;
+}
+
+.search-wrap :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #165dff inset;
+}
+
 .table-title {
   font-size: 14px;
   font-weight: 500;
@@ -1507,5 +1724,89 @@ const indicators = reactive([
 
 .metric-name-cell .el-icon {
   color: #165dff;
+}
+
+/* ========== 指标展开行：可用维度 ========== */
+.metric-dimensions-expand {
+  display: flex;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f7f8fa;
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.expand-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1d2129;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 24px;
+}
+
+.expand-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.expand-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #86909c;
+}
+
+.dimension-item {
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #ebedf0;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dimension-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dimension-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1d2129;
+}
+
+.dimension-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.meta-pair {
+  font-size: 12px;
+  color: #4e5969;
+}
+
+.meta-key {
+  color: #86909c;
+}
+
+.dimension-item-desc {
+  font-size: 12px;
+  color: #86909c;
+  line-height: 1.5;
+}
+
+.expand-empty {
+  font-size: 13px;
+  color: #86909c;
 }
 </style>

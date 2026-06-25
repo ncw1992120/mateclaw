@@ -22,18 +22,14 @@ import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
+import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
-import vip.mate.dataagent.util.JdbcUtils;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Aloudata API 动态工具注册器
@@ -63,12 +59,16 @@ public class AloudataCallTool {
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final AloudataSemanticEsService aloudataSemanticEsService;
     private final AloudataSemanticSyncService aloudataSemanticSyncService;
+    private final BusinessTermEsService businessTermEsService;
     private final DatasourceMapper datasourceMapper;
     private final MateClawRuntime mateClawRuntime;
     private final DataAgentChatScopeContext scopeContext;
 
     /** 指标查询端点名，需要 ECharts 图表生成等增值逻辑 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
+
+    /** 术语检索工具名 */
+    private static final String SEARCH_BUSINESS_TERM_TOOL_NAME = "search_business_term";
 
     /** Tool 名称前缀 */
     private static final String TOOL_PREFIX = "aloudata_";
@@ -116,7 +116,10 @@ public class AloudataCallTool {
         // 注册语义搜索 Tool（查本地语义模型，不走 API）
         registerSearchSemanticTool();
 
-        log.info("Aloudata 动态 Tool 注册完成，共注册 {} 个 API Tool + 1 个语义搜索 Tool", registeredCount);
+        // 注册业务术语检索 Tool（查业务术语和同义词，不走 API）
+        registerSearchBusinessTermTool();
+
+        log.info("Aloudata 动态 Tool 注册完成，共注册 {} 个 API Tool + 1 个语义搜索 Tool + 1 个术语检索 Tool", registeredCount);
     }
 
     /**
@@ -161,6 +164,52 @@ public class AloudataCallTool {
                 this::handleSearchSemantic
         );
         mateClawRuntime.registerTool(toolCallback);
+    }
+
+    /**
+     * 注册业务术语检索 Tool
+     */
+    private void registerSearchBusinessTermTool() {
+        String description = "搜索业务术语和同义词词典，"
+                + "返回匹配的术语名称、定义、同义词、分类等信息，帮助理解用户查询中的业务术语含义。"
+                + "当用户提问中包含业务术语、缩写或别名时，应先调用此工具查询其标准术语名和定义，"
+                + "再结合语义搜索工具查找对应的指标或维度。"
+                + "使用 Elasticsearch 进行关键词检索和向量语义检索的混合模式（RRF 融合），"
+                + "ES 不可用时自动降级为 MySQL 模糊匹配。"
+                + "需要 tenantCode 和 keyword 参数。";
+
+        String inputSchema = """
+                {
+                  "type": "object",
+                  "properties": {
+                    "tenantCode": {
+                      "type": "string",
+                      "description": "租户编码（区分不同业务域），如 default、finance、customer"
+                    },
+                    "keyword": {
+                      "type": "string",
+                      "description": "搜索关键词，用于搜索术语名称、同义词、定义等"
+                    },
+                    "topK": {
+                      "type": "integer",
+                      "description": "返回结果数量上限，默认10"
+                    },
+                    "similarityThreshold": {
+                      "type": "number",
+                      "description": "向量语义检索相似度阈值（0-1），默认0.3，越低返回越多结果"
+                    }
+                  },
+                  "required": ["tenantCode", "keyword"]
+                }
+                """;
+
+        SkillScopedToolCallback termToolCallback = new SkillScopedToolCallback(
+                SEARCH_BUSINESS_TERM_TOOL_NAME,
+                description,
+                inputSchema,
+                this::handleSearchBusinessTerm
+        );
+        mateClawRuntime.registerTool(termToolCallback);
     }
 
     /**
@@ -465,6 +514,65 @@ public class AloudataCallTool {
             }
         } catch (Exception e) {
             log.error("语义搜索失败: {}", e.getMessage(), e);
+            return error(e.getMessage());
+        }
+    }
+
+    /**
+     * 处理业务术语检索 Tool 调用
+     */
+    private String handleSearchBusinessTerm(String toolInput) {
+        try {
+            JSONObject input = JSONUtil.parseObj(toolInput);
+            String tenantCode = input.getStr("tenantCode");
+            if (tenantCode == null || tenantCode.isBlank()) {
+                return error("需要 tenantCode 参数");
+            }
+            String keyword = input.getStr("keyword");
+            if (keyword == null || keyword.isBlank()) {
+                return error("需要 keyword 参数");
+            }
+
+            int topK = input.getInt("topK", DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_TOP_K);
+            double threshold = input.getDouble("similarityThreshold",
+                    DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD);
+
+            BusinessTermSearchResult searchResult = businessTermEsService.hybridSearch(tenantCode, keyword, topK, threshold);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("**搜索关键词**: ").append(keyword).append("\n");
+            sb.append("**租户**: ").append(tenantCode).append("\n");
+
+            int hitCount = searchResult.getTermHits() != null ? searchResult.getTermHits().size() : 0;
+            sb.append("**匹配结果**: ").append(hitCount).append(" 个术语");
+            sb.append(" (检索耗时: ").append(searchResult.getElapsedMs()).append("ms)\n\n");
+
+            if (searchResult.getTermHits() != null && !searchResult.getTermHits().isEmpty()) {
+                sb.append("## 术语匹配\n\n");
+                for (BusinessTermSearchResult.TermHit hit : searchResult.getTermHits()) {
+                    sb.append("- **").append(hit.getTermName()).append("**");
+                    if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
+                        sb.append("（同义词: ").append(hit.getSynonyms()).append("）");
+                    }
+                    if (hit.getDescription() != null && !hit.getDescription().isBlank()) {
+                        sb.append(" - ").append(hit.getDescription());
+                    }
+                    if (hit.getCategory() != null && !hit.getCategory().isBlank()) {
+                        sb.append(" [分类: ").append(hit.getCategory()).append("]");
+                    }
+                    sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
+                    sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
+                }
+                sb.append("\n");
+            }
+
+            if (hitCount == 0) {
+                sb.append("未找到匹配的业务术语。请尝试更换关键词或检查租户编码是否正确。");
+            }
+
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("业务术语搜索失败: {}", e.getMessage(), e);
             return error(e.getMessage());
         }
     }

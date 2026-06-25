@@ -1,0 +1,21 @@
+/**
+ * 示例6：时间限定衍生指标
+ * 用户: "当月销售额和近7日销售额对比"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="销售额") → metricName="sales_amount"
+ * 2. aloudata_metrics_query → 如下请求
+ *
+ * 说明: sales_amount 为当月累计值，
+ *       sales_amount__timefilter__... 为近7日的值，
+ *       两者在同一行结果中对比
+ */
+{
+    "metrics": [
+        "sales_amount",
+        "sales_amount__timefilter__[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")"
+    ],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "limit": 10
+}
