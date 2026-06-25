@@ -1,20 +1,21 @@
 /**
- * 示例5：同环比 + 排名
- * 用户: "各城市的销售额排名及同比变化"
+ * 示例11：使用 resultFilters 结果筛选
+ * 用户: "销售额排名前10的城市"
  *
  * 工具调用流程:
  * 1. aloudata_search_semantic(datasourceId=1, keyword="销售额") → metricName="sales_amount"
- * 2. 确认可用维度包含 province, city, metric_time__month
- * 3. aloudata_metrics_query → 如下请求
+ * 2. aloudata_metrics_query → 如下请求
+ *
+ * 说明: 先计算排名，再通过 resultFilters 筛选排名前10
  */
 {
     "metrics": [
         "sales_amount",
-        "sales_amount__sameperiod__yoy__growth",
         "sales_amount__rank"
     ],
-    "dimensions": ["province", "city", "metric_time__month"],
+    "dimensions": ["city", "metric_time__month"],
     "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "resultFilters": ["[sales_amount__rank]<=10"],
     "orders": [{"sales_amount__rank": "asc"}],
-    "limit": 100
+    "limit": 10
 }

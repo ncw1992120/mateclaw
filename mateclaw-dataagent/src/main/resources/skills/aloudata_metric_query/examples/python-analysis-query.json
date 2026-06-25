@@ -11,6 +11,6 @@
     "metrics": ["sales_amount"],
     "dimensions": ["channel", "metric_time__day"],
     "timeConstraint": "[metric_time__day]>=DateAdd(Today(),-90,\"DAY\")",
-    "orders": {"fieldName": "metric_time__day", "direction": "ASC"},
+    "orders": [{"metric_time__day": "asc"}],
     "limit": 500
 }

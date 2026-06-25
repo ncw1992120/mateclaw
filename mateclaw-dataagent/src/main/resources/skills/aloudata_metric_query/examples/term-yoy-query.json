@@ -14,6 +14,6 @@
     ],
     "dimensions": ["region", "metric_time__month"],
     "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
-    "orders": {"fieldName": "sales_amount__sameperiod__yoy__growth", "direction": "DESC"},
+    "orders": {"sales_amount__sameperiod__yoy__growth": "desc"},
     "limit": 20
 }

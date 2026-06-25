@@ -1,0 +1,26 @@
+/**
+ * 示例9：使用 metricDefinitions 定义临时指标
+ * 用户: "各城市的订单量以及全国总订单量"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="订单量") → metricName="orderCount"
+ * 2. aloudata_metrics_query → 如下请求
+ *
+ * 说明: orderCount 为各城市订单量，
+ *       orderCount_total 为通过 specifyDimension INCLUDE 限定的全国总订单量
+ */
+{
+    "metrics": ["orderCount", "orderCount_total"],
+    "metricDefinitions": {
+        "orderCount_total": {
+            "refMetric": "orderCount",
+            "specifyDimension": {
+                "type": "INCLUDE",
+                "dimensions": "metric_time__day,province"
+            }
+        }
+    },
+    "dimensions": ["metric_time__day", "province", "city"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "limit": 30
+}

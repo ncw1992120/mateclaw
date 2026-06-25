@@ -1,0 +1,23 @@
+/**
+ * 示例12：占比 + 排名组合查询
+ * 用户: "各城市订单量的省内占比和省内排名"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="订单量") → metricName="order_count"
+ * 2. 确认可用维度包含 province, city, metric_time__day
+ * 3. aloudata_metrics_query → 如下请求
+ *
+ * 说明: 占比和排名的范围维度都是 province，
+ *       province 必须在 dimensions 中声明
+ */
+{
+    "metrics": [
+        "order_count",
+        "order_count__proportion__province",
+        "order_count__rank__province"
+    ],
+    "dimensions": ["province", "city", "metric_time__day"],
+    "timeConstraint": "[metric_time__day]=Today()",
+    "orders": [{"order_count__rank__province": "asc"}],
+    "limit": 100
+}

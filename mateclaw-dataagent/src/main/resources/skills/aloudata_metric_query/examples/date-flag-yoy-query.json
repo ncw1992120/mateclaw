@@ -1,0 +1,18 @@
+/**
+ * 示例10：指定日期标识的同环比查询
+ * 用户: "今天的订单量与上一个工作日对比的增长率"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=1, keyword="订单量") → metricName="order_count"
+ * 2. 确认日期标识名称（如 workdays），在「管理设置」->「时间限定」中获取
+ * 3. aloudata_metrics_query → 如下请求
+ */
+{
+    "metrics": [
+        "order_count",
+        "order_count__sameperiod__dod__workdays__growth"
+    ],
+    "dimensions": ["metric_time__day"],
+    "timeConstraint": "[metric_time__day]=Today()",
+    "limit": 10
+}

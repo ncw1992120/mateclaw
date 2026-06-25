@@ -1,0 +1,53 @@
+{
+    "skill_name": "aloudata_metric_query",
+    "evals": [
+        {
+            "id": 1,
+            "prompt": "上个月的销售额是多少",
+            "expected_output": "应调用 aloudata_search_semantic 搜索'销售额'获取 metricName，然后构造 aloudata_metrics_query 请求，包含 timeConstraint 指定上月范围",
+            "files": []
+        },
+        {
+            "id": 2,
+            "prompt": "各区域营收的同比增长率",
+            "expected_output": "应先通过 search_business_term 确认'营收'的同义词，再调用 aloudata_search_semantic 搜索，构造包含同环比快速计算(sameperiod__yoy__growth)的查询，dimensions 中包含 region 和 metric_time__month",
+            "files": []
+        },
+        {
+            "id": 3,
+            "prompt": "今天的订单量和日环比，以及各渠道占比",
+            "expected_output": "应构造包含 order_count、order_count__sameperiod__dod__growth、order_count__proportion__channel 的 metrics，dimensions 包含 channel 和 metric_time__day，timeConstraint 为今天",
+            "files": []
+        },
+        {
+            "id": 4,
+            "prompt": "2024年1月华东区域的销售额趋势",
+            "expected_output": "应构造包含 filters 筛选 region='华东'，timeConstraint 指定 2024-01-01 到 2024-01-31，dimensions 包含 metric_time__day 和 region，按日期升序排序",
+            "files": []
+        },
+        {
+            "id": 5,
+            "prompt": "各城市的销售额排名及同比变化",
+            "expected_output": "应构造包含 sales_amount__rank 和 sales_amount__sameperiod__yoy__growth 的 metrics，dimensions 包含 province、city、metric_time__month，按排名升序排序",
+            "files": []
+        },
+        {
+            "id": 6,
+            "prompt": "当月销售额和近7日销售额对比",
+            "expected_output": "应使用时间限定快速计算语法 sales_amount__timefilter__，构造两个指标对比，dimensions 包含 metric_time__month",
+            "files": []
+        },
+        {
+            "id": 7,
+            "prompt": "今天的订单量与上一个工作日对比的增长率",
+            "expected_output": "应使用带日期标识的同环比语法 order_count__sameperiod__dod__workdays__growth，dimensions 包含 metric_time__day",
+            "files": []
+        },
+        {
+            "id": 8,
+            "prompt": "销售额排名前10的城市",
+            "expected_output": "应使用 sales_amount__rank 快速计算，并通过 resultFilters 筛选排名<=10，按排名升序排序",
+            "files": []
+        }
+    ]
+}

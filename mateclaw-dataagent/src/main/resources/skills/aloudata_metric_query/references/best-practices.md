@@ -150,7 +150,7 @@
     ],
     "dimensions": ["province", "city", "metric_time__month"],
     "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
-    "orders": {"fieldName": "sales_amount__rank", "direction": "ASC"}
+    "orders": [{"sales_amount__rank": "asc"}]
 }
 ```
 
@@ -164,7 +164,7 @@
     "dimensions": ["metric_time__day", "region"],
     "filters": ["[region] IN (\"华东\",\"华南\")"],
     "timeConstraint": "[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\"",
-    "orders": {"fieldName": "metric_time__day", "direction": "ASC"}
+    "orders": [{"metric_time__day": "asc"}]
 }
 ```
 
@@ -196,6 +196,60 @@
     ],
     "dimensions": ["metric_time__month"],
     "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+}
+```
+
+### 模式8：使用 metricDefinitions 定义临时指标
+
+查询订单量及其在指定维度范围内的值。
+
+```json
+{
+    "metrics": ["orderCount", "orderCount_total"],
+    "metricDefinitions": {
+        "orderCount_total": {
+            "refMetric": "orderCount",
+            "specifyDimension": {
+                "type": "INCLUDE",
+                "dimensions": "metric_time__day,province"
+            }
+        }
+    },
+    "dimensions": ["metric_time__day", "province", "city"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "limit": 30
+}
+```
+
+### 模式9：指定日期标识的同环比
+
+查询工作日环比。
+
+```json
+{
+    "metrics": [
+        "order_count",
+        "order_count__sameperiod__dod__workdays__growth"
+    ],
+    "dimensions": ["metric_time__day"],
+    "timeConstraint": "[metric_time__day]=Today()"
+}
+```
+
+### 模式10：使用 resultFilters 结果筛选
+
+查询销售额排名前10的城市。
+
+```json
+{
+    "metrics": [
+        "sales_amount",
+        "sales_amount__rank"
+    ],
+    "dimensions": ["city", "metric_time__month"],
+    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "resultFilters": ["[sales_amount__rank]<=10"],
+    "orders": [{"sales_amount__rank": "asc"}]
 }
 ```
 
@@ -244,3 +298,4 @@
 - [ ] 同环比的偏移粒度是否大于等于日期粒度？
 - [ ] 占比/排名的范围维度是否在 dimensions 中声明？
 - [ ] filters 中的维度引用是否使用方括号？字符串值是否用双引号？
+- [ ] orders 中的 fieldName 是否包含在 metrics 或 dimensions 中？

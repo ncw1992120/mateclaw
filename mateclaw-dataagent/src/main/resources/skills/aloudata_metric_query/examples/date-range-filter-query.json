@@ -10,8 +10,8 @@
 {
     "metrics": ["sales_amount"],
     "dimensions": ["metric_time__day", "region"],
-    "filters": ["[region] IN (\"华东\")"],
+    "filters": ["IN(['region'], \"华东\")"],
     "timeConstraint": "[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\"",
-    "orders": {"fieldName": "metric_time__day", "direction": "ASC"},
+    "orders": [{"metric_time__day": "asc"}],
     "limit": 31
 }
