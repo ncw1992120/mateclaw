@@ -124,8 +124,6 @@ export default {
     datasourceScope: 'Datasource Scope',
     datasourcePlaceholder: 'All datasources (optional)',
     clearDatasourceScope: 'Clear',
-    businessDomainScope: 'Business Domain',
-    clearBusinessDomainScope: 'Clear',
     toolRequestParams: 'Request Parameters',
     toolResponseParams: 'Response Parameters',
   },

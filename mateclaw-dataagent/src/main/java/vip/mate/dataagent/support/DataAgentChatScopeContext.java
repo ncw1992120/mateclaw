@@ -28,9 +28,6 @@ public class DataAgentChatScopeContext {
     /** conversationId -> allowed datasourceId 集合（不可变） */
     private final Map<String, Set<Long>> datasourceIdScopes = new ConcurrentHashMap<>();
 
-    /** conversationId -> allowed tenantCode 集合（不可变） */
-    private final Map<String, Set<String>> tenantScopes = new ConcurrentHashMap<>();
-
     /**
      * 写入或更新会话级数据源白名单。
      *
@@ -63,34 +60,37 @@ public class DataAgentChatScopeContext {
     }
 
     /**
-     * 写入或更新会话级业务域白名单。
+     * 解析数据源 ID：含单值自动注入、可用列表引导。
+     * <p>
+     * 策略：
+     * <ol>
+     *   <li>白名单为空 → 不限制，返回原值</li>
+     *   <li>白名单只有一个值 → 自动注入（忽略 LLM 传值），返回白名单值</li>
+     *   <li>白名单有多个值：
+     *     <ul>
+     *       <li>LLM 传值在白名单内 → 通过</li>
+     *       <li>LLM 传值不在白名单内 → 返回错误，附带可用列表</li>
+     *     </ul>
+     *   </li>
+     * </ol>
      *
      * @param conversationId 会话 ID
-     * @param tenantCodes    允许使用的租户编码列表；为空或 null 表示清除限制
+     * @param inputId        工具调用传入的数据源 ID
+     * @return 解析结果：通过时 resolvedValue 为可用值，失败时 errorMessage 非空
      */
-    public void putTenantCodes(String conversationId, List<String> tenantCodes) {
-        if (conversationId == null || conversationId.isBlank()) {
-            return;
+    public ScopeResolveResult<Long> resolveDatasourceId(String conversationId, Long inputId) {
+        Set<Long> allowed = getAllowedDatasourceIds(conversationId);
+        if (allowed.isEmpty()) {
+            return ScopeResolveResult.ok(inputId);
         }
-        if (tenantCodes == null || tenantCodes.isEmpty()) {
-            tenantScopes.remove(conversationId);
-            return;
+        if (allowed.size() == 1) {
+            return ScopeResolveResult.ok(allowed.iterator().next());
         }
-        tenantScopes.put(conversationId, Set.copyOf(tenantCodes));
-    }
-
-    /**
-     * 获取会话级业务域白名单。
-     *
-     * @param conversationId 会话 ID
-     * @return 不可变白名单集合；未配置时返回 {@link Collections#emptySet()}
-     */
-    public Set<String> getAllowedTenantCodes(String conversationId) {
-        if (conversationId == null || conversationId.isBlank()) {
-            return Collections.emptySet();
+        if (inputId != null && allowed.contains(inputId)) {
+            return ScopeResolveResult.ok(inputId);
         }
-        Set<String> codes = tenantScopes.get(conversationId);
-        return codes != null ? codes : Collections.emptySet();
+        return ScopeResolveResult.fail(
+                "数据源 " + inputId + " 不在用户勾选的白名单内。可用的数据源ID：" + allowed);
     }
 
     /**
@@ -116,6 +116,73 @@ public class DataAgentChatScopeContext {
             return;
         }
         datasourceIdScopes.remove(conversationId);
-        tenantScopes.remove(conversationId);
+    }
+
+    /**
+     * 白名单解析结果。
+     *
+     * @param <T> 值类型（Long 用于数据源 ID，String 用于租户编码）
+     */
+    public static final class ScopeResolveResult<T> {
+
+        /** 解析后的可用值 */
+        private final T resolvedValue;
+
+        /** 错误信息；非空表示拒绝访问 */
+        private final String errorMessage;
+
+        private ScopeResolveResult(T resolvedValue, String errorMessage) {
+            this.resolvedValue = resolvedValue;
+            this.errorMessage = errorMessage;
+        }
+
+        /**
+         * 创建通过结果。
+         *
+         * @param value 解析后的可用值
+         * @param <T>   值类型
+         * @return 通过结果
+         */
+        public static <T> ScopeResolveResult<T> ok(T value) {
+            return new ScopeResolveResult<>(value, null);
+        }
+
+        /**
+         * 创建失败结果。
+         *
+         * @param message 错误信息（附带可用列表）
+         * @param <T>    值类型
+         * @return 失败结果
+         */
+        public static <T> ScopeResolveResult<T> fail(String message) {
+            return new ScopeResolveResult<>(null, message);
+        }
+
+        /**
+         * 获取解析后的可用值。
+         *
+         * @return 可用值；失败时为 null
+         */
+        public T getResolvedValue() {
+            return resolvedValue;
+        }
+
+        /**
+         * 获取错误信息。
+         *
+         * @return 错误信息；通过时为 null
+         */
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        /**
+         * 是否存在错误。
+         *
+         * @return true 表示拒绝访问
+         */
+        public boolean hasError() {
+            return errorMessage != null;
+        }
     }
 }

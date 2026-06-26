@@ -284,7 +284,7 @@
     </div>
 
     <!-- Datasource Selector Toolbar -->
-    <div v-if="enabledDatasources.length > 0 || tenantCodeList.length > 0" class="ds-toolbar">
+    <div v-if="enabledDatasources.length > 0" class="ds-toolbar">
       <el-popover :width="260" trigger="click" placement="top-start" :persistent="false">
         <template #reference>
           <button class="ds-trigger" :class="{ active: chatStore.selectedDatasourceIds.length > 0 }">
@@ -320,40 +320,6 @@
           </div>
         </div>
       </el-popover>
-      <el-popover :width="260" trigger="click" placement="top-start" :persistent="false">
-        <template #reference>
-          <button class="ds-trigger" :class="{ active: chatStore.selectedTenantCodes.length > 0 }">
-            <span class="ds-trigger-icon">📋</span>
-            <span class="ds-trigger-text">{{ tenantTriggerLabel }}</span>
-            <span class="ds-trigger-arrow">▾</span>
-          </button>
-        </template>
-        <div class="ds-popover">
-          <div class="ds-popover-header">
-            <span>{{ t('chat.businessDomainScope') }}</span>
-            <span
-              v-if="chatStore.selectedTenantCodes.length > 0"
-              class="ds-popover-clear"
-              @click="chatStore.selectedTenantCodes = []"
-            >{{ t('chat.clearBusinessDomainScope') }}</span>
-          </div>
-          <div class="ds-popover-list">
-            <label
-              v-for="code in tenantCodeList"
-              :key="code"
-              class="ds-popover-item"
-              :class="{ checked: chatStore.selectedTenantCodes.includes(code) }"
-            >
-              <input
-                type="checkbox"
-                :checked="chatStore.selectedTenantCodes.includes(code)"
-                @change="toggleTenantCode(code)"
-              />
-              <span class="ds-item-name">{{ code }}</span>
-            </label>
-          </div>
-        </div>
-      </el-popover>
     </div>
 
     <!-- Input Bar -->
@@ -384,7 +350,6 @@ import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
-import * as businessTermApi from '@/api/business-term'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, Datasource } from '@/types'
 
 const { t } = useI18n()
@@ -433,37 +398,6 @@ const dsTriggerLabel = computed(() => {
   const count = chatStore.selectedDatasourceIds.length
   if (count === 0) return t('chat.datasourceScope')
   return `${t('chat.datasourceScope')} (${count})`
-})
-
-/** 已配置术语的租户编码列表 */
-const tenantCodeList = ref<string[]>([])
-
-/** 加载租户编码列表 */
-async function loadTenantCodes(): Promise<void> {
-  try {
-    const codes = await businessTermApi.listTenantCodes() as unknown as string[]
-    tenantCodeList.value = codes || []
-  } catch {
-    tenantCodeList.value = []
-  }
-}
-
-/** 切换业务域选中状态 */
-function toggleTenantCode(code: string): void {
-  const codes = chatStore.selectedTenantCodes
-  const idx = codes.indexOf(code)
-  if (idx >= 0) {
-    codes.splice(idx, 1)
-  } else {
-    codes.push(code)
-  }
-}
-
-/** 业务域触发按钮文案 */
-const tenantTriggerLabel = computed(() => {
-  const count = chatStore.selectedTenantCodes.length
-  if (count === 0) return t('chat.businessDomainScope')
-  return `${t('chat.businessDomainScope')} (${count})`
 })
 
 /** 根据时间段生成问候语 */
@@ -1549,8 +1483,7 @@ function handleSend(): void {
   if (!message || chatStore.isStreaming || !chatStore.currentAgentId) return
   inputMessage.value = ''
   userScrolledUp.value = false
-  const modelName = chatStore.selectedModelName || undefined
-  chatStore.sendMessage(chatStore.currentAgentId, message, modelName)
+  chatStore.sendMessage(chatStore.currentAgentId, message)
   scrollToBottom(true)
 }
 
@@ -1585,8 +1518,7 @@ function handleStop(): void {
 /** 追问点击 */
 function handleFollowup(text: string): void {
   if (chatStore.isStreaming || !chatStore.currentAgentId) return
-  const modelName = chatStore.selectedModelName || undefined
-  chatStore.sendMessage(chatStore.currentAgentId, text, modelName)
+  chatStore.sendMessage(chatStore.currentAgentId, text)
 }
 
 /** 智能问数快捷菜单点击 */
@@ -1600,8 +1532,7 @@ function handleSmartAskMenu(item: { key: string; label: string }): void {
     forecast: t('smartAskMenu.forecastPrompt'),
   }
   const prompt = promptMap[item.key] || t('smartAskMenu.defaultPrompt')
-  const modelName = chatStore.selectedModelName || undefined
-  chatStore.sendMessage(chatStore.currentAgentId, prompt, modelName)
+  chatStore.sendMessage(chatStore.currentAgentId, prompt)
 }
 
 /** 确认 QueryPlan */
@@ -1683,8 +1614,6 @@ onMounted(() => {
   chatAreaEl?.addEventListener('scroll', handleScroll)
   // 加载数据源列表（用于输入框上方数据源选择器）
   loadDatasources()
-  // 加载租户编码列表（用于输入框上方业务域选择器）
-  loadTenantCodes()
   // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载。
   // 但若 sessionStorage 中存在 reconnect 状态（lastEventId 已持久化），
   // 说明 MainLayout 正在/即将发起 SSE 续连，此时再 force=true 拉历史会：

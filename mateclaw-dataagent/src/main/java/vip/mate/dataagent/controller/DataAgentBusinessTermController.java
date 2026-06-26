@@ -130,11 +130,10 @@ public class DataAgentBusinessTermController {
     @GetMapping("/semantic-search")
     @Operation(summary = "语义混合检索", description = "使用 ES 关键词+向量语义混合检索（RRF融合），ES不可用时降级为MySQL LIKE查询")
     public R<BusinessTermSearchResult> semanticSearch(
-            @Parameter(description = "租户编码") @RequestParam String tenantCode,
             @Parameter(description = "搜索关键词") @RequestParam String query,
             @Parameter(description = "返回结果数量上限") @RequestParam(defaultValue = "10") int topK,
             @Parameter(description = "向量语义检索相似度阈值") @RequestParam(defaultValue = "0.3") double threshold) {
-        return R.ok(businessTermService.semanticSearch(tenantCode, query, topK, threshold));
+        return R.ok(businessTermService.semanticSearch(query, topK, threshold));
     }
 
     /**

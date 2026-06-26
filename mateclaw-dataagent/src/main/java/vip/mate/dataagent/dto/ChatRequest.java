@@ -25,13 +25,4 @@ public class ChatRequest {
      * 为空或为 null 时表示不限制（由 LLM 自主选择）。
      */
     private List<String> datasourceIds;
-
-    /**
-     * 用户在前端勾选的业务域（租户编码）白名单。
-     * <p>
-     * 非空时，后端会在系统提示词中告知 Agent 仅可使用这些业务域的术语；
-     * 同时 search_business_term 工具会按此列表做兜底校验，禁止越权访问。
-     * 为空或为 null 时表示不限制（由 LLM 自主选择）。
-     */
-    private List<String> tenantCodes;
 }

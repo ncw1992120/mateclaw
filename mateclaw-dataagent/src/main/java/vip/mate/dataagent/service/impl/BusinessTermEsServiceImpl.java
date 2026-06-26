@@ -226,13 +226,14 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
     }
 
     @Override
-    public BusinessTermSearchResult hybridSearch(String tenantCode, String query, int topK, double similarityThreshold) {
+    public BusinessTermSearchResult hybridSearch(String query, int topK, double similarityThreshold) {
         long startTime = System.currentTimeMillis();
         BusinessTermSearchResult result = new BusinessTermSearchResult();
         result.setQuery(query);
-        result.setTenantCode(tenantCode);
+        // 跨所有租户检索术语，结果不再绑定具体业务域
+        result.setTenantCode(null);
 
-        if (tenantCode == null || !StringUtils.hasText(query)) {
+        if (!StringUtils.hasText(query)) {
             result.setTermHits(List.of());
             result.setElapsedMs(System.currentTimeMillis() - startTime);
             return result;
@@ -241,12 +242,12 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         ElasticsearchClient client = getAvailableClient();
         if (client == null) {
             log.debug("ES 不可用，降级为 MySQL LIKE 查询");
-            return fallbackMySqlSearch(tenantCode, query, topK, startTime);
+            return fallbackMySqlSearch(null, query, topK, startTime);
         }
 
         ensureIndexIfNeeded();
 
-        List<TermHit> termHits = esSearchTerms(client, tenantCode, query, topK, similarityThreshold);
+        List<TermHit> termHits = esSearchTerms(client, null, query, topK, similarityThreshold);
 
         result.setTermHits(termHits);
         result.setElapsedMs(System.currentTimeMillis() - startTime);
@@ -267,18 +268,25 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
-                                .query(q -> q.bool(b -> b
-                                        .filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)))
-                                        .should(sh -> sh.multiMatch(mm -> mm
-                                                .fields("termName", "description", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
-                                                .query(query)))
-                                ))
-                                .knn(knn -> knn
-                                        .field(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD)
-                                        .queryVector(queryVector)
-                                        .k(topK)
-                                        .numCandidates(DataAgentConstants.ES_KNN_NUM_CANDIDATES)
-                                        .filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode))))
+                                .query(q -> q.bool(b -> {
+                                    if (tenantCode != null) {
+                                        b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
+                                    }
+                                    b.should(sh -> sh.multiMatch(mm -> mm
+                                            .fields("termName", "description", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .query(query)));
+                                    return b;
+                                }))
+                                .knn(knn -> {
+                                    knn.field(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD)
+                                            .queryVector(queryVector)
+                                            .k(topK)
+                                            .numCandidates(DataAgentConstants.ES_KNN_NUM_CANDIDATES);
+                                    if (tenantCode != null) {
+                                        knn.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
+                                    }
+                                    return knn;
+                                })
                                 .rank(r -> r.rrf(rrf -> rrf.rankConstant((long) DataAgentConstants.SCHEMA_SEARCH_RRF_K))),
                         Map.class
                 );
@@ -288,12 +296,15 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
-                                .query(q -> q.bool(b -> b
-                                        .filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)))
-                                        .must(m -> m.multiMatch(mm -> mm
-                                                .fields("termName", "termName.keyword", "synonyms", "description", "category", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
-                                                .query(query)))
-                                )),
+                                .query(q -> q.bool(b -> {
+                                    if (tenantCode != null) {
+                                        b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
+                                    }
+                                    b.must(m -> m.multiMatch(mm -> mm
+                                            .fields("termName", "termName.keyword", "synonyms", "description", "category", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .query(query)));
+                                    return b;
+                                })),
                         Map.class
                 );
                 return extractTermHits(response, "keyword", 0);
@@ -353,7 +364,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
     private List<TermHit> fallbackMySqlSearchTerms(String tenantCode, String query, int topK) {
         String likePattern = "%" + query + "%";
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+        if (tenantCode != null) {
+            wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+        }
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
         wrapper.eq(BusinessTermEntity::getDeleted, 0);
         wrapper.and(w -> w
@@ -408,7 +421,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
 
     private boolean hasTermEmbeddings(String tenantCode) {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+        if (tenantCode != null) {
+            wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+        }
         wrapper.isNotNull(BusinessTermEntity::getEmbedding);
         wrapper.last("LIMIT 1");
         return businessTermMapper.selectCount(wrapper) > 0;

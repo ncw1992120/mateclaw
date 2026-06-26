@@ -23,6 +23,7 @@ import vip.mate.dataagent.service.LogicalRelationService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
+import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
 import vip.mate.dataagent.util.JdbcUtils;
 import vip.mate.datasource.service.EChartsOptionBuilder;
 import vip.mate.datasource.service.SqlValidationService;
@@ -84,7 +85,7 @@ public class DatasourceQueryTool {
             2. action='list_tables' — 列出指定数据源下的所有表（需要 datasourceId）
             3. action='execute_sql' — 执行只读 SQL 查询（需要 datasourceId 和 sql）
             4. action='search_schema' — 语义检索相关表（需要 datasourceId 和 query），返回 Top-K 相关表的语义描述和关联关系，用于理解数据结构后再编写 SQL
-            5. action='search_business_term' — 搜索业务术语和同义词（需要 tenantCode 和 query），帮助理解用户查询中的业务术语含义
+            5. action='search_business_term' — 搜索业务术语和同义词（需要 query），帮助理解用户查询中的业务术语含义
             对于复杂聚合、多表关联、精确数值计算等场景，优先使用 execute_sql 而非分页获取数据后在内存中计算。
             """;
 
@@ -108,11 +109,6 @@ public class DatasourceQueryTool {
                 "query": {
                   "type": "string",
                   "description": "自然语言查询，用于语义检索相关表（search_schema 时必填）或搜索业务术语（search_business_term 时必填）"
-                },
-                "tenantCode": {
-                  "type": "string",
-                  "description": "租户编码（search_business_term 时必填），区分不同业务域"
-                }
                 }
               },
               "required": ["action"]
@@ -210,12 +206,17 @@ public class DatasourceQueryTool {
      */
     private String listTables(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
+
+        // 解析数据源白名单（含单值自动注入、可用列表引导）
+        ChatOrigin dsOrigin = ChatOriginHolder.get();
+        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+        if (dsScope.hasError()) {
+            return error(dsScope.getErrorMessage());
+        }
+        datasourceId = dsScope.getResolvedValue();
         if (datasourceId == null) {
             return error("list_tables 需要 datasourceId 参数");
-        }
-        String denyMsg = checkDatasourceAllowed(datasourceId);
-        if (denyMsg != null) {
-            return error(denyMsg);
         }
         var tables = datasourceManageService.listTables(datasourceId);
         JSONArray arr = new JSONArray();
@@ -252,12 +253,17 @@ public class DatasourceQueryTool {
      */
     private String executeSql(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
+
+        // 解析数据源白名单（含单值自动注入、可用列表引导）
+        ChatOrigin dsOrigin = ChatOriginHolder.get();
+        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+        if (dsScope.hasError()) {
+            return error(dsScope.getErrorMessage());
+        }
+        datasourceId = dsScope.getResolvedValue();
         if (datasourceId == null) {
             return error("execute_sql 需要 datasourceId 参数");
-        }
-        String denyMsg = checkDatasourceAllowed(datasourceId);
-        if (denyMsg != null) {
-            return error(denyMsg);
         }
         String sql = input.getStr("sql");
         if (sql == null || sql.isBlank()) {
@@ -381,12 +387,17 @@ public class DatasourceQueryTool {
      */
     private String searchSchema(JSONObject input) {
         Long datasourceId = input.getLong("datasourceId");
+
+        // 解析数据源白名单（含单值自动注入、可用列表引导）
+        ChatOrigin dsOrigin = ChatOriginHolder.get();
+        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+        if (dsScope.hasError()) {
+            return error(dsScope.getErrorMessage());
+        }
+        datasourceId = dsScope.getResolvedValue();
         if (datasourceId == null) {
             return error("search_schema 需要 datasourceId 参数");
-        }
-        String denyMsg = checkDatasourceAllowed(datasourceId);
-        if (denyMsg != null) {
-            return error(denyMsg);
         }
         String query = input.getStr("query");
         if (query == null || query.isBlank()) {
@@ -440,20 +451,9 @@ public class DatasourceQueryTool {
     }
 
     /**
-     * 搜索业务术语和同义词
+     * 搜索业务术语和同义词（跨所有业务域/租户）
      */
     private String searchBusinessTerm(JSONObject input) {
-        String tenantCode = input.getStr("tenantCode");
-        if (tenantCode == null || tenantCode.isBlank()) {
-            return error("search_business_term 需要 tenantCode 参数");
-        }
-
-        // 校验业务域白名单
-        Set<String> allowedTenantCodes = currentTenantCodeWhitelist();
-        if (allowedTenantCodes != null && !allowedTenantCodes.isEmpty() && !allowedTenantCodes.contains(tenantCode)) {
-            return error("业务域 " + tenantCode + " 不在用户勾选的白名单内，禁止访问");
-        }
-
         String query = input.getStr("query");
         if (query == null || query.isBlank()) {
             return error("search_business_term 需要 query 参数");
@@ -463,11 +463,10 @@ public class DatasourceQueryTool {
         double threshold = input.getDouble("similarityThreshold",
                 DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD);
 
-        BusinessTermSearchResult result = businessTermEsService.hybridSearch(tenantCode, query, topK, threshold);
+        BusinessTermSearchResult result = businessTermEsService.hybridSearch(query, topK, threshold);
 
         StringBuilder sb = new StringBuilder();
         sb.append("**查询**: ").append(query).append("\n");
-        sb.append("**租户**: ").append(tenantCode).append("\n");
 
         int hitCount = result.getTermHits() != null ? result.getTermHits().size() : 0;
         sb.append("**匹配结果**: ").append(hitCount).append(" 个术语");
@@ -493,7 +492,7 @@ public class DatasourceQueryTool {
         }
 
         if (hitCount == 0) {
-            sb.append("未找到匹配的业务术语。请尝试更换关键词或检查租户编码是否正确。");
+            sb.append("未找到匹配的业务术语。请尝试更换关键词。");
         }
 
         return sb.toString();
@@ -516,37 +515,5 @@ public class DatasourceQueryTool {
             return Set.of();
         }
         return scopeContext.getAllowedDatasourceIds(origin.conversationId());
-    }
-
-    /**
-     * 读取当前会话的业务域白名单。
-     * <p>
-     * 通过 {@link ChatOriginHolder} 拿到当前 conversationId，再从
-     * {@link DataAgentChatScopeContext} 中取出前端勾选时写入的业务域白名单。
-     * 当返回空集合时表示未配置白名单（不做约束）。
-     */
-    private Set<String> currentTenantCodeWhitelist() {
-        ChatOrigin origin = ChatOriginHolder.get();
-        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
-            return Set.of();
-        }
-        return scopeContext.getAllowedTenantCodes(origin.conversationId());
-    }
-
-    /**
-     * 校验 datasourceId 是否在白名单内。
-     *
-     * @param datasourceId 工具调用传入的数据源 ID
-     * @return 不在白名单时返回拒绝原因；允许访问时返回 null
-     */
-    private String checkDatasourceAllowed(Long datasourceId) {
-        Set<Long> allowed = currentDatasourceWhitelist();
-        if (allowed.isEmpty()) {
-            return null;
-        }
-        if (datasourceId == null || !allowed.contains(datasourceId)) {
-            return "数据源 " + datasourceId + " 不在用户勾选的白名单内，禁止访问。允许的数据源ID：" + allowed;
-        }
-        return null;
     }
 }

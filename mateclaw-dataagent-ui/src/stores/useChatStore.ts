@@ -62,8 +62,6 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   /** 用户在前端勾选的数据源 ID 白名单（刷新后保留）；空数组表示不限制（由 LLM 自主选择） */
   const selectedDatasourceIds = usePersistedState<string[]>('mc-chat-selected-datasource-ids', [])
-  /** 用户在前端勾选的业务域（租户编码）白名单（刷新后保留）；空数组表示不限制 */
-  const selectedTenantCodes = usePersistedState<string[]>('mc-chat-selected-tenant-codes', [])
   /**
    * 正在生成响应的会话 id 集合。
    * <p>
@@ -115,7 +113,6 @@ export const useChatStore = defineStore('chat', () => {
     const id = crypto.randomUUID()
     conversationId.value = id
     selectedDatasourceIds.value = []
-    selectedTenantCodes.value = []
     clearPersistedReconnectState()
     savePersistedReconnectState({ conversationId: id, lastEventId: lastEventId.value })
     return id
@@ -348,7 +345,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendMessage(agentId: number | string, message: string, modelName?: string): Promise<void> {
+  async function sendMessage(agentId: number | string, message: string): Promise<void> {
     if (isStreaming.value) return
 
     if (!conversationId.value) {
@@ -360,6 +357,13 @@ export const useChatStore = defineStore('chat', () => {
     if (streamingConversations.value.has(convId)) return
 
     const isNewConversation = !conversations.value.some(c => c.conversationId === convId)
+
+    // 同步快照模型信息，确保 modelName 与 modelProvider 来自同一时刻、同一来源，
+    // 避免"一个从参数取、一个从 store 实时读"导致两者不一致，
+    // 进而让后端因只收到其中一个字段而 fallback 到会话旧 pin / 全局默认模型，
+    // 产生"请求到其他模型 URL"的问题。
+    const modelProvider = selectedModelProvider.value || undefined
+    const modelName = selectedModelName.value || undefined
 
     messages.value.push({
       role: 'user',
@@ -399,7 +403,7 @@ export const useChatStore = defineStore('chat', () => {
       // 因此仅靠流关闭触发的 finally 无法及时把 UI 切回非生成态。
       // 这里识别 done 后显式置位并打断 for-await，UI 才能立刻从"正在生成"切回正常。
       let streamFinished = false
-      for await (const sse of streamChat(agentId, message, convId, selectedModelProvider.value || undefined, modelName, streamOptions, selectedDatasourceIds.value, selectedTenantCodes.value)) {
+      for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value)) {
         if (!isStreaming.value) break
         handleSseEvent(sse, flushBuf, () => { streamFinished = true })
         if (streamFinished) break
@@ -767,7 +771,7 @@ export const useChatStore = defineStore('chat', () => {
     // 删除从该 AI 消息起的所有后续消息（含自身）
     messages.value.splice(msgIndex)
 
-    // 重新发送用户消息
+    // 重新发送用户消息（模型信息由 sendMessage 内部从 store 同步快照读取）
     const agentId = currentAgentId.value
     if (!agentId) return
     await sendMessage(agentId, userContent)
@@ -781,7 +785,6 @@ export const useChatStore = defineStore('chat', () => {
     conversationId,
     isStreaming,
     selectedDatasourceIds,
-    selectedTenantCodes,
     streamingConversations,
     conversations,
     conversationsLoading,

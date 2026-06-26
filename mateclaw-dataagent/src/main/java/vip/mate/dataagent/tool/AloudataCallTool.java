@@ -26,6 +26,7 @@ import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
+import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
@@ -176,16 +177,12 @@ public class AloudataCallTool {
                 + "再结合语义搜索工具查找对应的指标或维度。"
                 + "使用 Elasticsearch 进行关键词检索和向量语义检索的混合模式（RRF 融合），"
                 + "ES 不可用时自动降级为 MySQL 模糊匹配。"
-                + "需要 tenantCode 和 keyword 参数。";
+                + "跨所有业务域检索术语，需要 keyword 参数。";
 
         String inputSchema = """
                 {
                   "type": "object",
                   "properties": {
-                    "tenantCode": {
-                      "type": "string",
-                      "description": "租户编码（区分不同业务域），如 default、finance、customer"
-                    },
                     "keyword": {
                       "type": "string",
                       "description": "搜索关键词，用于搜索术语名称、同义词、定义等"
@@ -199,7 +196,7 @@ public class AloudataCallTool {
                       "description": "向量语义检索相似度阈值（0-1），默认0.3，越低返回越多结果"
                     }
                   },
-                  "required": ["tenantCode", "keyword"]
+                  "required": ["keyword"]
                 }
                 """;
 
@@ -373,14 +370,17 @@ public class AloudataCallTool {
         try {
             JSONObject input = JSONUtil.parseObj(toolInput);
             Long datasourceId = input.getLong("datasourceId");
+
+            // 解析数据源白名单（含单值自动注入、可用列表引导）
+            ChatOrigin dsOrigin = ChatOriginHolder.get();
+            String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+            ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+            if (dsScope.hasError()) {
+                return error(dsScope.getErrorMessage());
+            }
+            datasourceId = dsScope.getResolvedValue();
             if (datasourceId == null) {
                 return error("需要 datasourceId 参数指定数据源");
-            }
-
-            // 校验数据源白名单
-            String scopeDenyMsg = checkDatasourceScope(datasourceId);
-            if (scopeDenyMsg != null) {
-                return error(scopeDenyMsg);
             }
 
             // 校验数据源
@@ -481,18 +481,21 @@ public class AloudataCallTool {
         try {
             JSONObject input = JSONUtil.parseObj(toolInput);
             Long datasourceId = input.getLong("datasourceId");
+
+            // 解析数据源白名单（含单值自动注入、可用列表引导）
+            ChatOrigin dsOrigin = ChatOriginHolder.get();
+            String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+            ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+            if (dsScope.hasError()) {
+                return error(dsScope.getErrorMessage());
+            }
+            datasourceId = dsScope.getResolvedValue();
             if (datasourceId == null) {
                 return error("需要 datasourceId 参数");
             }
             String keyword = input.getStr("keyword");
             if (keyword == null || keyword.isBlank()) {
                 return error("需要 keyword 参数");
-            }
-
-            // 校验数据源白名单
-            String scopeDenyMsg = checkDatasourceScope(datasourceId);
-            if (scopeDenyMsg != null) {
-                return error(scopeDenyMsg);
             }
 
             int topK = input.getInt("topK", DataAgentConstants.ALOUDATA_SEARCH_DEFAULT_TOP_K);
@@ -523,20 +526,7 @@ public class AloudataCallTool {
      */
     private String handleSearchBusinessTerm(String toolInput) {
         try {
-            ChatOrigin origin = ChatOriginHolder.get();
             JSONObject input = JSONUtil.parseObj(toolInput);
-            String tenantCode = input.getStr("tenantCode");
-            if (tenantCode == null || tenantCode.isBlank()) {
-                return error("需要 tenantCode 参数");
-            }
-
-            // 校验业务域白名单
-            Set<String> allowedTenantCodes = scopeContext.getAllowedTenantCodes(
-                    origin != null ? origin.conversationId() : null);
-            if (allowedTenantCodes != null && !allowedTenantCodes.isEmpty() && !allowedTenantCodes.contains(tenantCode)) {
-                return error("业务域 " + tenantCode + " 不在用户勾选的白名单内，禁止访问");
-            }
-
             String keyword = input.getStr("keyword");
             if (keyword == null || keyword.isBlank()) {
                 return error("需要 keyword 参数");
@@ -546,11 +536,10 @@ public class AloudataCallTool {
             double threshold = input.getDouble("similarityThreshold",
                     DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD);
 
-            BusinessTermSearchResult searchResult = businessTermEsService.hybridSearch(tenantCode, keyword, topK, threshold);
+            BusinessTermSearchResult searchResult = businessTermEsService.hybridSearch(keyword, topK, threshold);
 
             StringBuilder sb = new StringBuilder();
             sb.append("**搜索关键词**: ").append(keyword).append("\n");
-            sb.append("**租户**: ").append(tenantCode).append("\n");
 
             int hitCount = searchResult.getTermHits() != null ? searchResult.getTermHits().size() : 0;
             sb.append("**匹配结果**: ").append(hitCount).append(" 个术语");
@@ -576,7 +565,7 @@ public class AloudataCallTool {
             }
 
             if (hitCount == 0) {
-                sb.append("未找到匹配的业务术语。请尝试更换关键词或检查租户编码是否正确。");
+                sb.append("未找到匹配的业务术语。请尝试更换关键词。");
             }
 
             return sb.toString();
@@ -731,38 +720,5 @@ public class AloudataCallTool {
 
     private String error(String message) {
         return JSONUtil.toJsonStr(new JSONObject().set("error", message));
-    }
-
-    /**
-     * 读取当前会话的数据源白名单。
-     *
-     * @see DatasourceQueryTool#currentDatasourceWhitelist()
-     */
-    private Set<Long> currentDatasourceWhitelist() {
-        ChatOrigin origin = ChatOriginHolder.get();
-        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
-            return Set.of();
-        }
-        return scopeContext.getAllowedDatasourceIds(origin.conversationId());
-    }
-
-    /**
-     * 校验 datasourceId 是否在用户勾选的白名单内。
-     * <p>
-     * 与 {@link DatasourceQueryTool#checkDatasourceAllowed(Long)} 逻辑一致：
-     * 白名单为空时不做约束，白名单非空时必须匹配。
-     *
-     * @param datasourceId 工具调用传入的数据源 ID
-     * @return 不在白名单时返回拒绝原因；允许访问时返回 null
-     */
-    private String checkDatasourceScope(Long datasourceId) {
-        Set<Long> allowed = currentDatasourceWhitelist();
-        if (allowed.isEmpty()) {
-            return null;
-        }
-        if (datasourceId == null || !allowed.contains(datasourceId)) {
-            return "数据源 " + datasourceId + " 不在用户勾选的白名单内，禁止访问。允许的数据源ID：" + allowed;
-        }
-        return null;
     }
 }

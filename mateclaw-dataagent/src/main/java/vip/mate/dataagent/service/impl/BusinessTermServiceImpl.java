@@ -308,8 +308,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
      * 语义混合检索术语
      */
     @Override
-    public BusinessTermSearchResult semanticSearch(String tenantCode, String query, int topK, double threshold) {
-        return businessTermEsService.hybridSearch(tenantCode, query, topK, threshold);
+    public BusinessTermSearchResult semanticSearch(String query, int topK, double threshold) {
+        return businessTermEsService.hybridSearch(query, topK, threshold);
     }
 
     /**

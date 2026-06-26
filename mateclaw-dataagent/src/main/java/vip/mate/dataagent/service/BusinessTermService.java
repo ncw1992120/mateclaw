@@ -110,16 +110,15 @@ public interface BusinessTermService {
     int rebuildEsIndex(String tenantCode);
 
     /**
-     * 语义混合检索术语
+     * 语义混合检索术语（跨所有租户）
      * <p>
      * 使用 ES 关键词检索 + 向量语义检索（RRF 融合），
      * ES 不可用时降级为 MySQL LIKE 查询。
      *
-     * @param tenantCode 租户编码
      * @param query      搜索关键词
      * @param topK       返回结果数量上限
      * @param threshold  向量语义检索相似度阈值
      * @return 检索结果
      */
-    BusinessTermSearchResult semanticSearch(String tenantCode, String query, int topK, double threshold);
+    BusinessTermSearchResult semanticSearch(String query, int topK, double threshold);
 }

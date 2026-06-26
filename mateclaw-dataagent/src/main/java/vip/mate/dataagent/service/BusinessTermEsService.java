@@ -49,16 +49,15 @@ public interface BusinessTermEsService {
     void deleteTerm(BusinessTermEntity entity);
 
     /**
-     * 混合检索术语
+     * 混合检索术语（跨所有租户）
      * <p>
      * 同时执行关键词检索和向量语义检索，使用 RRF 融合结果。
      * ES 不可用时降级为 MySQL LIKE 查询。
      *
-     * @param tenantCode         租户编码
      * @param query              搜索关键词
      * @param topK               返回结果数量上限
      * @param similarityThreshold 向量语义检索相似度阈值
      * @return 检索结果
      */
-    BusinessTermSearchResult hybridSearch(String tenantCode, String query, int topK, double similarityThreshold);
+    BusinessTermSearchResult hybridSearch(String query, int topK, double similarityThreshold);
 }

@@ -373,8 +373,6 @@ export interface ChatRequest {
   modelName?: string
   /** 数据源 ID 白名单（可选，限制 LLM 只能访问指定数据源） */
   datasourceIds?: string[]
-  /** 业务域（租户编码）白名单（可选，限制 LLM 只能使用指定业务域的术语） */
-  tenantCodes?: string[]
 }
 
 /** 会话摘要 */
