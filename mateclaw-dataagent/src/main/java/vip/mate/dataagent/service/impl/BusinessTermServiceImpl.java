@@ -152,18 +152,10 @@ public class BusinessTermServiceImpl implements BusinessTermService {
             }
             entity.setTermName(request.getTermName());
         }
-        if (request.getSynonyms() != null) {
-            entity.setSynonyms(request.getSynonyms());
-        }
-        if (request.getDescription() != null) {
-            entity.setDescription(request.getDescription());
-        }
-        if (request.getCategory() != null) {
-            entity.setCategory(request.getCategory());
-        }
-        if (request.getParentId() != null) {
-            entity.setParentId(request.getParentId());
-        }
+        entity.setSynonyms(request.getSynonyms());
+        entity.setDescription(request.getDescription());
+        entity.setCategory(request.getCategory());
+        entity.setParentId(request.getParentId());
         if (request.getStatus() != null) {
             entity.setStatus(request.getStatus());
         }
@@ -183,6 +175,31 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         }
         entity.setDeleted(1);
         businessTermMapper.updateById(entity);
+    }
+
+    /**
+     * 按租户删除所有术语（逻辑删除）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteByTenantCode(String tenantCode) {
+        LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+        wrapper.eq(BusinessTermEntity::getDeleted, 0);
+        List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
+        if (entities.isEmpty()) {
+            return;
+        }
+        for (BusinessTermEntity entity : entities) {
+            entity.setDeleted(1);
+            businessTermMapper.updateById(entity);
+        }
+        // 同步删除 ES 索引
+        try {
+            businessTermEsService.deleteByTenantCode(tenantCode);
+        } catch (Exception e) {
+            log.warn("删除租户 [{}] 术语 ES 索引失败: {}", tenantCode, e.getMessage());
+        }
     }
 
     /**

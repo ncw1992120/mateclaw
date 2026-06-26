@@ -34,6 +34,7 @@ public class BusinessTermEntity {
     private String category;
 
     /** 父术语 ID（支持层级结构，顶级为 NULL） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long parentId;
 
     /** 嵌入文本（用于生成向量） */

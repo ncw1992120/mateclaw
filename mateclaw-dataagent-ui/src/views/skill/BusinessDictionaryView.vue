@@ -119,7 +119,7 @@ async function handleAddTenant(): Promise<void> {
   }
 }
 
-/** 移除租户（仅从左侧列表移除，不删除数据） */
+/** 移除租户（删除该租户下的所有术语数据） */
 async function handleRemoveTenant(code: string): Promise<void> {
   try {
     await ElMessageBox.confirm(
@@ -131,10 +131,12 @@ async function handleRemoveTenant(code: string): Promise<void> {
         cancelButtonText: t('common.cancel'),
       },
     )
+    await businessTermApi.removeByTenantCode(code)
     tenantList.value = tenantList.value.filter(c => c !== code)
     if (selectedTenantCode.value === code) {
       selectedTenantCode.value = tenantList.value.length > 0 ? tenantList.value[0] : ''
     }
+    ElMessage.success(t('businessDictionary.removeTenantSuccess'))
   } catch {
     // user cancelled
   }

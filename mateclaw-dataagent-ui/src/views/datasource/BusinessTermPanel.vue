@@ -118,12 +118,12 @@
             </div>
             <div class="form-group half">
               <label class="form-label">{{ t('businessTerm.fieldParentId') }}</label>
-              <select v-model="formData.parentId" class="form-select">
-                <option :value="null">{{ t('businessTerm.fieldParentIdPlaceholder') }}</option>
-                <option v-for="pt in parentOptions" :key="pt.id" :value="pt.id">
-                  {{ pt.termName }}
-                </option>
-              </select>
+              <select v-model="formData.parentId" class="form-select" @change="handleParentIdChange">
+              <option :value="null">{{ t('businessTerm.fieldParentIdPlaceholder') }}</option>
+              <option v-for="pt in parentOptions" :key="pt.id" :value="pt.id">
+                {{ pt.termName }}
+              </option>
+            </select>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as businessTermApi from '@/api/business-term'
@@ -177,6 +177,12 @@ const formData = ref<BusinessTermCreateRequest>({
 })
 
 onMounted(() => {
+  loadTerms()
+})
+
+/** 租户切换时重新加载术语列表 */
+watch(() => props.tenantCode, () => {
+  keyword.value = ''
   loadTerms()
 })
 
@@ -262,6 +268,13 @@ function handleEdit(term: BusinessTerm): void {
   showDialog.value = true
 }
 
+/** 父术语选择变化时规范化 */
+function handleParentIdChange(): void {
+  if (formData.value.parentId === '' || formData.value.parentId === undefined) {
+    formData.value.parentId = null
+  }
+}
+
 /** 提交表单 */
 async function handleSubmit(): Promise<void> {
   if (!formData.value.tenantCode || !formData.value.termName) {
@@ -276,7 +289,7 @@ async function handleSubmit(): Promise<void> {
         synonyms: formData.value.synonyms,
         description: formData.value.description,
         category: formData.value.category,
-        parentId: formData.value.parentId,
+        parentId: formData.value.parentId || null,
       }
       await businessTermApi.update(editingId.value, updateData)
       ElMessage.success(t('businessTerm.updateSuccess'))

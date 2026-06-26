@@ -81,6 +81,17 @@ public class DataAgentBusinessTermController {
     }
 
     /**
+     * 按租户删除所有术语
+     */
+    @DeleteMapping
+    @Operation(summary = "按租户删除术语", description = "删除指定租户下的所有术语（逻辑删除）")
+    public R<Void> deleteByTenantCode(
+            @Parameter(description = "租户编码") @RequestParam String tenantCode) {
+        businessTermService.deleteByTenantCode(tenantCode);
+        return R.ok(null);
+    }
+
+    /**
      * 删除术语
      */
     @DeleteMapping("/{id}")

@@ -71,6 +71,13 @@ public interface BusinessTermService {
     void delete(Long id);
 
     /**
+     * 按租户删除所有术语（逻辑删除）
+     *
+     * @param tenantCode 租户编码
+     */
+    void deleteByTenantCode(String tenantCode);
+
+    /**
      * 启用术语
      *
      * @param id 术语 ID

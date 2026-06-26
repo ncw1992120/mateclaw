@@ -31,9 +31,11 @@ export function update(id: string, data: BusinessTermUpdateRequest) {
   return api.put<BusinessTerm>(`${BASE_URL}/${id}`, data)
 }
 
-/** 删除术语 */
-export function remove(id: string) {
-  return api.delete(`${BASE_URL}/${id}`)
+/** 按租户删除所有术语 */
+export function removeByTenantCode(tenantCode: string) {
+  return api.delete(`${BASE_URL}`, {
+    params: { tenantCode },
+  })
 }
 
 /** 启用术语 */
