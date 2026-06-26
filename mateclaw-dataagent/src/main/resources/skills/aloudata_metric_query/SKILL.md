@@ -9,6 +9,7 @@ dependencies:
     - aloudata_metric_list
     - aloudata_dimension_list
     - aloudata_metric_available_dimensions
+    - aloudata_dimension_values
     - aloudata_metrics_query
 references:
   - references/api-doc.md
@@ -36,7 +37,7 @@ templates:
 
 ### 第一步：理解业务术语（可选但推荐）
 
-当用户提问涉及业务术语、缩写或别名时，先通过 `search_business_term(tenantCode, keyword)` 查询术语的标准名称、定义和同义词。
+当用户提问涉及业务术语、缩写或别名时，先通过 `search_business_term(keyword)` 查询术语的标准名称、定义和同义词。检索跨所有业务域进行，无需指定租户。
 
 **为什么需要这一步**：
 - 用户可能说"营收"，但指标平台的标准指标名是"销售额"
@@ -60,10 +61,10 @@ templates:
 - `metrics`（必填）：指标英文名列表，如 `["sales_amount"]`。支持快速计算语法（同环比、占比、排名、时间限定）
 - `dimensions`（选填）：维度英文名列表，如 `["region", "metric_time__month"]`。日期维度支持粒度切换（`metric_time__day`/`metric_time__month`/`metric_time__year`）
 - `timeConstraint`（选填）：指标日期范围，如 `"DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"`
-- `filters`（选填）：全局筛选，对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
+- `filters`（选填）：全局筛选，对全部指标生效，如 `["IN(['region'], \"华东\", \"华南\")"]`
 - `resultFilters`（选填）：结果筛选，对查询结果进行二次过滤
 - `metricDefinitions`（选填）：临时指标定义，用于 specifyDimension 等复杂衍生
-- `orders`（选填）：排序，格式 `{"fieldName": "sales_amount", "direction": "DESC"}`
+- `orders`（选填）：排序，格式 `[{"fieldName": "direction"}]`。fieldName：字段名称，direction：asc或者desc
 - `limit`（选填）：返回条数，默认100
 - `offset`（选填）：偏移量，默认1
 - `queryResultType`（选填）：返回内容类型，`SQL_AND_DATA`（默认）/`SQL`/`DATA`

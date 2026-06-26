@@ -261,7 +261,7 @@
 
 当用户使用业务术语（非标准指标名）时：
 
-1. `search_business_term(tenantCode, keyword)` → 获取术语定义和同义词
+1. `search_business_term(keyword)` → 获取术语定义和同义词（跨所有业务域检索）
 2. 用术语名和同义词作为 aloudata_search_semantic 的关键词
 3. 提高指标检索的召回率和准确性
 
