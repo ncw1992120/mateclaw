@@ -22,6 +22,21 @@ export interface Agent {
   updateTime: string
 }
 
+/** 工作区文件实体（智能体上下文文件） */
+export interface WorkspaceFile {
+  id: number | string
+  agentId: number | string
+  filename: string
+  content: string | null
+  fileSize: number
+  enabled: boolean
+  sortOrder: number
+  ownerKey: string | null
+  scope: string
+  createTime: string
+  updateTime: string
+}
+
 /** Agent 已绑定的技能 */
 export interface AgentSkillBinding {
   id: number | string
@@ -440,6 +455,15 @@ export const AGENT_MAX_ITERATIONS_LIMIT = 9999
 
 /** Agent 最小迭代次数 */
 export const AGENT_MIN_ITERATIONS_LIMIT = 1
+
+/** 思考深度枚举 */
+export const THINKING_LEVELS = [
+  { value: 'off', label: '关闭' },
+  { value: 'low', label: '低' },
+  { value: 'medium', label: '中' },
+  { value: 'high', label: '高' },
+  { value: 'max', label: '最高' },
+] as const
 
 /** 数据集实体 */
 export interface Dataset {

@@ -77,6 +77,16 @@
             </el-form-item>
 
             <div class="form-row">
+              <el-form-item label="思考深度" class="flex-1">
+                <el-select v-model="formData.defaultThinkingLevel" clearable class="w-full">
+                  <el-option
+                    v-for="tl in THINKING_LEVELS"
+                    :key="tl.value"
+                    :label="tl.label"
+                    :value="tl.value"
+                  />
+                </el-select>
+              </el-form-item>
               <el-form-item :label="t('agent.enabled')" class="w-140">
                 <el-switch v-model="formData.enabled" />
               </el-form-item>
@@ -330,6 +340,7 @@ import { useModelStore } from '@/stores/useModelStore'
 import * as agentApi from '@/api/agent'
 import {
   AGENT_TYPES,
+  THINKING_LEVELS,
   AGENT_MAX_ITERATIONS_LIMIT,
   AGENT_MIN_ITERATIONS_LIMIT,
 } from '@/types'

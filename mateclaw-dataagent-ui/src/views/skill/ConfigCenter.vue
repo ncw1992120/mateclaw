@@ -26,6 +26,7 @@
       <AgentConfigView v-else-if="activeTab === 'agent'" />
       <ModelConfigView v-else-if="activeTab === 'model'" />
       <KnowledgeConfigView v-else-if="activeTab === 'knowledge'" />
+      <WorkspaceConfigView v-else-if="activeTab === 'workspace'" />
     </section>
   </div>
 </template>
@@ -39,11 +40,12 @@ import BusinessDictionaryView from './BusinessDictionaryView.vue'
 import AgentConfigView from './AgentConfigView.vue'
 import ModelConfigView from './ModelConfigView.vue'
 import KnowledgeConfigView from './KnowledgeConfigView.vue'
+import WorkspaceConfigView from './WorkspaceConfigView.vue'
 
 const { t } = useI18n()
 
 /** Tab 可选取值 */
-const TAB_KEYS = ['skill', 'data', 'dictionary', 'agent', 'model', 'knowledge'] as const
+const TAB_KEYS = ['skill', 'data', 'dictionary', 'agent', 'model', 'knowledge', 'workspace'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 /** 当前激活的 Tab（刷新后保留） */
@@ -78,6 +80,10 @@ const tabs = [
   {
     key: 'knowledge' as const,
     labelKey: 'configCenter.tabKnowledge',
+  },
+  {
+    key: 'workspace' as const,
+    labelKey: 'configCenter.tabWorkspace',
   },
 ]
 </script>

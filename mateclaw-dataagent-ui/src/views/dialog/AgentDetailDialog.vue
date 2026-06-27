@@ -64,6 +64,16 @@
         </el-form-item>
 
         <div class="form-row">
+          <el-form-item :label="t('agentConfig.thinkingLevel')" class="flex-1">
+            <el-select v-model="formData.defaultThinkingLevel" clearable class="w-full">
+              <el-option
+                v-for="tl in THINKING_LEVELS"
+                :key="tl.value"
+                :label="tl.label"
+                :value="tl.value"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item :label="t('agent.enabled')" class="w-120">
             <el-switch v-model="formData.enabled" />
           </el-form-item>
@@ -95,7 +105,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useModelStore } from '@/stores/useModelStore'
-import { AGENT_TYPES, AGENT_MAX_ITERATIONS_LIMIT, AGENT_MIN_ITERATIONS_LIMIT } from '@/types'
+import { AGENT_TYPES, THINKING_LEVELS, AGENT_MAX_ITERATIONS_LIMIT, AGENT_MIN_ITERATIONS_LIMIT } from '@/types'
 import type { Agent } from '@/types'
 
 const props = defineProps<{

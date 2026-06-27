@@ -110,7 +110,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function generateConversationId(): string {
-    const id = crypto.randomUUID()
+    const id = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     conversationId.value = id
     selectedDatasourceIds.value = []
     clearPersistedReconnectState()
