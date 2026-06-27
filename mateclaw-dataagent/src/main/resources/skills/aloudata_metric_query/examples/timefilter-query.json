@@ -16,6 +16,6 @@
         "sales_amount__timefilter__[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")"
     ],
     "dimensions": ["metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "limit": 10
 }

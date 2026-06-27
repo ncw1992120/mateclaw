@@ -21,6 +21,6 @@
         }
     },
     "dimensions": ["metric_time__day", "province", "city"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "limit": 30
 }

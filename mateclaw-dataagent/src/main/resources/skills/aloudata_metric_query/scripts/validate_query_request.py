@@ -141,11 +141,17 @@ def validate_request(request: dict) -> dict:
     # 7. 检查 timeConstraint 格式
     time_constraint = request.get("timeConstraint", "")
     if time_constraint:
+        # 检查是否缺少外层括号
+        if not (time_constraint.startswith("(") and time_constraint.endswith(")")):
+            errors.append(
+                f"timeConstraint 格式错误: '{time_constraint}'，"
+                f"整个表达式必须用 () 包裹，如 (DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
+            )
         # 检查是否使用了错误的日期范围格式（如 2024-01-01/2024-01-31）
         if re.match(r"^\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2}$", time_constraint):
             errors.append(
                 f"timeConstraint 格式错误: '{time_constraint}'，"
-                f"请使用表达式语法，如 [metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\""
+                f"请使用表达式语法，如 ([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")"
             )
 
     # 8. 检查 filters 中的维度引用格式

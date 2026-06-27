@@ -14,7 +14,7 @@
         "sales_amount__rank"
     ],
     "dimensions": ["city", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "resultFilters": ["[sales_amount__rank]<=10"],
     "orders": [{"sales_amount__rank": "asc"}],
     "limit": 10

@@ -152,43 +152,62 @@
 
 timeConstraint 用于指定指标日期范围，使用表达式语法。
 
+**格式要求**：整个表达式**必须用 `()` 包裹**。
+
+### 两种引用模式
+
+| 模式 | 语法 | 适用场景 | 示例 |
+|------|------|---------|------|
+| **DateTrunc 截断比较** | `DateTrunc([metric_time],\"粒度\")=DateTrunc(Today(),\"粒度\")` | 按月/年汇总时，截断到同一粒度比较 | 当月、上月、今年 |
+| **直接维度比较** | `[metric_time__粒度] 运算符 值` | 精确到天/月/年粒度的范围筛选 | 近7天、指定日期范围 |
+
 ### 常用表达式速查
 
 | 场景 | 表达式 |
 |------|--------|
-| 当月 | `DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")` |
-| 上月 | `DateTrunc([metric_time],\"MONTH\")=DateAdd(DateTrunc(Today(),\"MONTH\"),-1,\"MONTH\")` |
-| 近7天 | `[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")` |
-| 近30天 | `[metric_time__day]>=DateAdd(Today(),-30,\"DAY\")` |
-| 今年 | `DateTrunc([metric_time],\"YEAR\")=DateTrunc(Today(),\"YEAR\")` |
-| 指定日期范围 | `[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\"` |
-| 指定月份 | `[metric_time__month]=\"2024-03\"` |
-| 今天 | `[metric_time__day]=Today()` |
+| 当月 | `(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))` |
+| 上月 | `(DateTrunc([metric_time],\"MONTH\")=DateAdd(DateTrunc(Today(),\"MONTH\"),-1,\"MONTH\"))` |
+| 近7天 | `([metric_time__day]>=DateAdd(Today(),-7,\"DAY\"))` |
+| 近30天 | `([metric_time__day]>=DateAdd(Today(),-30,\"DAY\"))` |
+| 今年 | `(DateTrunc([metric_time],\"YEAR\")=DateTrunc(Today(),\"YEAR\"))` |
+| 指定日期范围 | `([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")` |
+| 指定月份 | `([metric_time__month]=\"2024-03\")` |
+| 今天 | `([metric_time__day]=Today())` |
 
 ### 表达式函数
 
 | 函数 | 说明 | 示例 |
 |------|------|------|
 | `Today()` | 当前日期 | `Today()` |
-| `DateAdd(date, N, unit)` | 日期偏移 | `DateAdd(Today(),-7,"DAY")` |
+| `DateAdd(date, N, unit)` | 日期偏移，N 为整数（负数=向前） | `DateAdd(Today(),-7,"DAY")` |
 | `DateTrunc(date, unit)` | 日期截断到指定粒度 | `DateTrunc(Today(),"MONTH")` |
 
-unit 取值：`DAY` / `MONTH` / `YEAR`
+unit 取值：`"DAY"` / `"MONTH"` / `"YEAR"`（注意 JSON 中需转义为 `\"DAY\"`）
 
 ### 维度引用
 
-在表达式中使用方括号引用时间维度：
+在表达式中使用方括号引用时间维度，支持两种粒度：
 
-- `[metric_time]` — 基础时间维度
-- `[metric_time__day]` — 日粒度
-- `[metric_time__month]` — 月粒度
-- `[metric_time__year]` — 年粒度
+- `[metric_time]` — 基础时间维度，配合 DateTrunc 函数进行截断比较
+- `[metric_time__day]` — 日粒度，用于直接比较或范围筛选
+- `[metric_time__month]` — 月粒度，用于直接比较
+- `[metric_time__year]` — 年粒度，用于直接比较
 
 ### 与 dimensions 的配合
 
-- 在 dimensions 中指定时间粒度（如 `metric_time__month`）
-- 在 timeConstraint 中指定时间范围
-- 两者配合使用，不要在 timeConstraint 中重复指定粒度
+timeConstraint 和 dimensions 协同工作，遵循以下规则：
+
+1. **dimensions 决定显示粒度**：在 dimensions 中指定 `metric_time__day`/`metric_time__month`/`metric_time__year`
+2. **timeConstraint 决定筛选范围**：在 timeConstraint 中指定日期条件
+3. **粒度独立原则**：dimensions 和 timeConstraint 可以使用不同的时间粒度。例如 dimensions 用 `metric_time__day` 展示每日数据，timeConstraint 用 `([metric_time__month]="2024-03")` 限定只查 3 月
+
+### 正确 vs 错误对照
+
+| 正确 | 错误 | 说明 |
+|------|------|------|
+| `(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))` | `DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")` | 缺少外层括号 |
+| `([metric_time__day]>=DateAdd(Today(),-7,\"DAY\"))` | `[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")` | 缺少外层括号 |
+| `([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")` | `([metric_time__day] between \"2024-01-01\" and \"2024-01-31\")` | 不支持 BETWEEN，用 AND 连接 |
 
 ---
 

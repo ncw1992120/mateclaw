@@ -1,7 +1,7 @@
 {
     "metrics": ["{{METRIC_NAMES}}"],
     "dimensions": ["{{DIMENSION_NAMES}}"],
-    "timeConstraint": "{{TIME_CONSTRAINT}}",
+    "timeConstraint": "({{TIME_CONSTRAINT}})",
     "filters": ["{{FILTERS}}"],
     "orders": [{"{{ORDER_FIELD}}": "{{ORDER_DIRECTION}}"}],
     "limit": {{LIMIT}},

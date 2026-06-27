@@ -13,6 +13,6 @@
         "order_count__sameperiod__dod__workdays__growth"
     ],
     "dimensions": ["metric_time__day"],
-    "timeConstraint": "[metric_time__day]=Today()",
+    "timeConstraint": "([metric_time__day]=Today())",
     "limit": 10
 }

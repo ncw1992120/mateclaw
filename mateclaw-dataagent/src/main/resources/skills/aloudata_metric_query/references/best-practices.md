@@ -37,7 +37,7 @@
 {
     "metrics": ["sales_amount", "sales_amount__sameperiod__yoy__growth"],
     "dimensions": ["region", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
 }
 ```
 
@@ -71,7 +71,7 @@
 **正确**：使用表达式语法
 ```json
 {
-    "timeConstraint": "[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\""
+    "timeConstraint": "([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")"
 }
 ```
 
@@ -105,7 +105,7 @@
 {
     "metrics": ["sales_amount"],
     "dimensions": ["metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
 }
 ```
 
@@ -117,7 +117,7 @@
 {
     "metrics": ["sales_amount"],
     "dimensions": ["region", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
 }
 ```
 
@@ -133,7 +133,7 @@
         "sales_amount__sameperiod__mom__growth"
     ],
     "dimensions": ["metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
 }
 ```
 
@@ -149,7 +149,7 @@
         "sales_amount__rank"
     ],
     "dimensions": ["province", "city", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "orders": [{"sales_amount__rank": "asc"}]
 }
 ```
@@ -163,7 +163,7 @@
     "metrics": ["sales_amount"],
     "dimensions": ["metric_time__day", "region"],
     "filters": ["[region] IN (\"华东\",\"华南\")"],
-    "timeConstraint": "[metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\"",
+    "timeConstraint": "([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")",
     "orders": [{"metric_time__day": "asc"}]
 }
 ```
@@ -180,7 +180,7 @@
         "order_count__proportion__channel"
     ],
     "dimensions": ["channel", "metric_time__day"],
-    "timeConstraint": "[metric_time__day]=Today()"
+    "timeConstraint": "([metric_time__day]=Today())"
 }
 ```
 
@@ -195,7 +195,7 @@
         "sales_amount__timefilter__[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")"
     ],
     "dimensions": ["metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
 }
 ```
 
@@ -216,7 +216,7 @@
         }
     },
     "dimensions": ["metric_time__day", "province", "city"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "limit": 30
 }
 ```
@@ -232,7 +232,7 @@
         "order_count__sameperiod__dod__workdays__growth"
     ],
     "dimensions": ["metric_time__day"],
-    "timeConstraint": "[metric_time__day]=Today()"
+    "timeConstraint": "([metric_time__day]=Today())"
 }
 ```
 
@@ -247,7 +247,7 @@
         "sales_amount__rank"
     ],
     "dimensions": ["city", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "resultFilters": ["[sales_amount__rank]<=10"],
     "orders": [{"sales_amount__rank": "asc"}]
 }
@@ -293,7 +293,7 @@
 
 - [ ] metrics 中的指标名是否为英文名（metricName）？是否来自 aloudata_search_semantic 返回？
 - [ ] dimensions 中的维度名是否为英文名（dimName）？是否在 availableDimensions 中？
-- [ ] timeConstraint 表达式是否使用了正确的语法（方括号引用维度、双引号转义）？
+- [ ] timeConstraint 表达式是否使用了正确的语法（整个表达式用 `()` 包裹、方括号引用维度、双引号转义）？
 - [ ] 使用同环比时，metric_time 是否在 dimensions 或 timeConstraint 中？
 - [ ] 同环比的偏移粒度是否大于等于日期粒度？
 - [ ] 占比/排名的范围维度是否在 dimensions 中声明？

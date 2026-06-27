@@ -11,6 +11,6 @@
 {
     "metrics": ["kpi_achievement_rate"],
     "dimensions": ["region", "metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
     "limit": 50
 }

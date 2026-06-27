@@ -9,6 +9,6 @@
 {
     "metrics": ["sales_amount"],
     "dimensions": ["metric_time__month"],
-    "timeConstraint": "DateTrunc([metric_time],\"MONTH\")=DateAdd(DateTrunc(Today(),\"MONTH\"),-1,\"MONTH\")",
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateAdd(DateTrunc(Today(),\"MONTH\"),-1,\"MONTH\"))",
     "limit": 10
 }

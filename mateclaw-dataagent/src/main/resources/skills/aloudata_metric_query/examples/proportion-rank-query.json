@@ -17,7 +17,7 @@
         "order_count__rank__province"
     ],
     "dimensions": ["province", "city", "metric_time__day"],
-    "timeConstraint": "[metric_time__day]=Today()",
+    "timeConstraint": "([metric_time__day]=Today())",
     "orders": [{"order_count__rank__province": "asc"}],
     "limit": 100
 }

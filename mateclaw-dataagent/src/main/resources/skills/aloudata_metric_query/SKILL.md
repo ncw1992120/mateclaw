@@ -60,7 +60,7 @@ templates:
 **基本参数**：
 - `metrics`（必填）：指标英文名列表，如 `["sales_amount"]`。支持快速计算语法（同环比、占比、排名、时间限定）
 - `dimensions`（选填）：维度英文名列表，如 `["region", "metric_time__month"]`。日期维度支持粒度切换（`metric_time__day`/`metric_time__month`/`metric_time__year`）
-- `timeConstraint`（选填）：指标日期范围，如 `"DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")"`
+- `timeConstraint`（选填）：指标日期范围，表达式语法。**必须用 `()` 包裹整个表达式**。如 `"(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"`
 - `filters`（选填）：全局筛选，对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
 - `resultFilters`（选填）：结果筛选，对查询结果进行二次过滤
 - `metricDefinitions`（选填）：临时指标定义，用于 specifyDimension 等复杂衍生
@@ -81,7 +81,7 @@ templates:
 
 1. 确认 metrics 使用 metricName（英文名），不是展示名
 2. 确认 dimensions 使用 dimName（英文名），不是展示名
-3. 确认 timeConstraint 格式正确（使用方括号引用维度、双引号转义）
+3. 确认 timeConstraint 格式正确（整个表达式用 `()` 包裹，使用方括号引用维度、双引号转义）
 4. 确认使用的维度在指标的 availableDimensions 列表中
 5. 确认同环比偏移粒度不小于日期粒度
 6. 确认占比/排名的范围维度在 dimensions 中声明
