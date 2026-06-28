@@ -35,8 +35,43 @@
 
     <div class="nav-right">
       <button class="nav-btn icon-btn" :title="t('nav.notification')">🔔</button>
-      <button class="nav-btn icon-btn" :title="t('nav.settings')">⚙</button>
-      <div class="user-avatar" :title="t('nav.user')">👤</div>
+
+      <!-- 工作区切换器 -->
+      <el-dropdown v-if="userStore.workspaces.length > 0" trigger="click" @command="handleWorkspaceSwitch">
+        <div class="workspace-switcher">
+          <span class="workspace-icon">🏢</span>
+          <span class="workspace-name">{{ userStore.currentWorkspace?.name || '选择工作区' }}</span>
+        </div>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="ws in userStore.workspaces"
+              :key="ws.id"
+              :command="ws.id"
+              :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
+            >
+              {{ ws.name }}
+              <span v-if="ws.memberRole" class="ws-role">{{ ws.memberRole }}</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <!-- 用户菜单 -->
+      <el-dropdown trigger="click" @command="handleUserCommand">
+        <div class="user-avatar-wrapper">
+          <div class="user-avatar">{{ avatarText }}</div>
+          <span class="user-name">{{ userStore.nickname || userStore.username || '用户' }}</span>
+        </div>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item disabled>
+              {{ userStore.username }}（{{ userStore.role }}）
+            </el-dropdown-item>
+            <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </header>
 </template>
@@ -45,10 +80,19 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/useUserStore'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
+
+/** 用户头像文字（昵称或用户名首字） */
+const avatarText = computed(() => {
+  const name = userStore.nickname || userStore.username || '用'
+  return name.charAt(0).toUpperCase()
+})
 
 /** 当前激活的导航项 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
@@ -61,6 +105,22 @@ const navItems = [
 /** 导航点击 */
 function handleNavClick(key: string): void {
   router.push({ path: '/', query: { ...route.query, nav: key } })
+}
+
+/** 切换工作区 */
+function handleWorkspaceSwitch(workspaceId: string | number): void {
+  userStore.setCurrentWorkspace(workspaceId)
+  ElMessage.success('已切换工作区')
+  // 刷新当前页面数据
+  window.location.reload()
+}
+
+/** 用户菜单命令处理 */
+function handleUserCommand(command: string): void {
+  if (command === 'logout') {
+    userStore.logout()
+    router.push('/login')
+  }
 }
 </script>
 
@@ -201,23 +261,91 @@ function handleNavClick(key: string): void {
 }
 
 .user-avatar {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e8edff 0%, #d9e3ff 100%);
+  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
   cursor: pointer;
-  margin-left: 8px;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .user-avatar:hover {
-  box-shadow: 0 2px 10px rgba(22, 93, 255, 0.22);
+  box-shadow: 0 2px 10px rgba(240, 90, 35, 0.3);
   transform: scale(1.05);
+}
+
+.user-avatar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px 4px 4px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+  margin-left: 4px;
+}
+
+.user-avatar-wrapper:hover {
+  background: #f2f3f5;
+}
+
+.user-name {
+  font-size: 13px;
+  color: #1d2129;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 工作区切换器 */
+.workspace-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-right: 4px;
+}
+
+.workspace-switcher:hover {
+  background: #f2f3f5;
+}
+
+.workspace-icon {
+  font-size: 16px;
+}
+
+.workspace-name {
+  font-size: 13px;
+  color: #1d2129;
+  font-weight: 500;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-role {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #86909c;
+}
+
+:deep(.el-dropdown-menu .is-active) {
+  color: var(--main-orange);
+  font-weight: 600;
 }
 
 /* ========== 响应式适配 ========== */

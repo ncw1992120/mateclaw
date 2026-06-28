@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.dto.*;
@@ -36,6 +38,7 @@ public class DataAgentDatasourceController {
      */
     @GetMapping
     @Operation(summary = "数据源列表", description = "获取所有数据源")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     public R<List<DatasourceVO>> list() {
         return R.ok(datasourceService.listDatasources());
     }
@@ -45,6 +48,7 @@ public class DataAgentDatasourceController {
      */
     @GetMapping("/{id}")
     @Operation(summary = "数据源详情", description = "根据 ID 获取数据源详情")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     public R<DatasourceVO> get(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         return R.ok(datasourceService.getDatasource(id));
@@ -55,6 +59,7 @@ public class DataAgentDatasourceController {
      */
     @PostMapping
     @Operation(summary = "创建数据源", description = "新增数据源配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> create(@RequestBody DatasourceCreateRequest request) {
         return R.ok(datasourceService.createDatasource(request));
     }
@@ -64,6 +69,7 @@ public class DataAgentDatasourceController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新数据源", description = "更新数据源配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> update(
             @Parameter(description = "数据源 ID") @PathVariable Long id,
             @RequestBody DatasourceUpdateRequest request) {
@@ -75,6 +81,7 @@ public class DataAgentDatasourceController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除数据源", description = "删除指定数据源及其关联的表和字段元数据")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<Void> delete(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         datasourceService.deleteDatasource(id);

@@ -20,6 +20,8 @@ import vip.mate.agent.binding.service.AgentBindingService;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.model.AgentEntity;
 import vip.mate.agent.service.TemplateService;
+import vip.mate.auth.model.UserEntity;
+import vip.mate.auth.service.AuthService;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.datasource.service.DatasourceService;
 import vip.mate.exception.MateClawException;
@@ -39,6 +41,7 @@ import vip.mate.skill.model.SkillEntity;
 import vip.mate.skill.runtime.SkillFrontmatterParser;
 import vip.mate.skill.service.SkillService;
 import vip.mate.system.service.SystemSettingService;
+import vip.mate.workspace.core.service.WorkspaceService;
 import vip.mate.tool.ToolRegistry;
 import vip.mate.tool.model.AvailableToolDTO;
 import vip.mate.tool.model.ToolEntity;
@@ -77,6 +80,8 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     private final WikiRuntime wikiRuntime;
     private final SkillInstaller skillInstaller;
     private final SkillFrontmatterParser skillFrontmatterParser;
+    private final WorkspaceService workspaceService;
+    private final AuthService authService;
 
     /**
      * 与指定 Agent 进行结构化流式对话
@@ -749,5 +754,30 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public List<WikiKnowledgeBaseEntity> listBindableKnowledgeBases(Long workspaceId) {
         return wikiRuntime.listKBsByWorkspace(workspaceId);
+    }
+
+    /**
+     * 断言用户在指定工作区具有最低角色权限
+     */
+    @Override
+    public void requireWorkspaceRole(Long workspaceId, Long userId, String minRole) {
+        workspaceService.requirePermission(workspaceId, userId, minRole);
+    }
+
+    /**
+     * 检查用户是否有指定工作区的最低角色权限（带缓存）
+     */
+    @Override
+    public boolean hasWorkspacePermission(Long workspaceId, Long userId, String minRole) {
+        return workspaceService.hasPermissionCached(workspaceId, userId, minRole);
+    }
+
+    /**
+     * 判断用户是否为全局管理员
+     */
+    @Override
+    public boolean isGlobalAdmin(Long userId) {
+        UserEntity user = authService.findById(userId);
+        return user != null && "admin".equalsIgnoreCase(user.getRole());
     }
 }

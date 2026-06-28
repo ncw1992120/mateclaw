@@ -215,7 +215,10 @@ export function getProcessingStatus(kbId: string) {
 
 /** SSE 进度订阅 — 返回原生 EventSource，由调用方管理生命周期 */
 export function subscribeProgress(kbId: string): EventSource {
-  return new EventSource(`${BASE_URL}/knowledge-bases/${kbId}/progress`)
+  // EventSource 不支持自定义 Header，通过 query param 传递 token（JwtAuthFilter 支持 ?token=xxx）
+  const token = localStorage.getItem('token')
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+  return new EventSource(`${BASE_URL}/knowledge-bases/${kbId}/progress${tokenParam}`)
 }
 
 /** ==================== Pages ==================== */

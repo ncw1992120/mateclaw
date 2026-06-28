@@ -31,13 +31,25 @@ const api = axios.create({
   ],
 })
 
-/** 请求拦截器：添加 Authorization 头 */
+/** 请求拦截器：添加 Authorization 头 + 工作区 ID 头 */
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    // 从 localStorage 读取当前工作区 ID，注入到请求头
+    const workspaceIdRaw = localStorage.getItem('workspaceId')
+    if (workspaceIdRaw) {
+      try {
+        const workspaceId = JSON.parse(workspaceIdRaw)
+        config.headers['X-Workspace-Id'] = String(workspaceId)
+      } catch {
+        // workspaceId 格式异常，忽略
+      }
+    }
+
     return config
   },
   (error) => {
@@ -45,9 +57,15 @@ api.interceptors.request.use(
   }
 )
 
-/** 响应拦截器：统一处理业务错误码 */
+/** 响应拦截器：统一处理业务错误码 + 401 跳登录 + 滑动续期 */
 api.interceptors.response.use(
   (response) => {
+    // 滑动续期：后端在 Token 接近过期时通过 X-New-Token 头返回新 Token
+    const newToken = response.headers['x-new-token']
+    if (newToken) {
+      localStorage.setItem('token', newToken)
+    }
+
     const res = response.data as R<unknown>
     // 兼容非 R 格式响应（如 Spring 默认错误页）
     if (res == null || typeof res !== 'object' || !('code' in res)) {
@@ -64,9 +82,22 @@ api.interceptors.response.use(
     return res.data as any
   },
   (error) => {
+    const status = error.response?.status
+
+    // 401：Token 过期或无效，清除登录状态并跳转登录页
+    if (status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('workspaceId')
+      // 避免在登录页重复跳转
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login'
+      }
+      return Promise.reject(error)
+    }
+
     const errData = error.response?.data
     const message = errData?.msg || errData?.message || error.message || '网络异常'
-    console.error('[API] 网络/HTTP 错误:', error.response?.status, message, error.config?.url)
+    console.error('[API] 网络/HTTP 错误:', status, message, error.config?.url)
     ElMessage.error(message)
     return Promise.reject(error)
   }

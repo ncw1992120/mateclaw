@@ -18,6 +18,9 @@ public class BusinessTermEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    /** 所属工作区 ID */
+    private Long workspaceId;
+
     /** 租户编码（区分不同业务域） */
     private String tenantCode;
 

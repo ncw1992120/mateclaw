@@ -7,6 +7,19 @@ const STOP_URL = '/dataagent/api/v1/chat/stream'
 
 const STREAM_TIMEOUT_MS = 120_000
 
+/**
+ * 处理 SSE 请求的 401 响应：清除登录状态并跳转登录页
+ */
+function handleStreamAuthFailure(status: number): void {
+  if (status === 401) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('workspaceId')
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login'
+    }
+  }
+}
+
 export function chat(data: ChatRequest) {
   return api.post(CHAT_URL, data)
 }
@@ -146,6 +159,7 @@ export async function* streamChat(
     })
 
     if (!response.ok) {
+      handleStreamAuthFailure(response.status)
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
@@ -262,6 +276,7 @@ export async function* reconnectStream(
     })
 
     if (!response.ok) {
+      handleStreamAuthFailure(response.status)
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 

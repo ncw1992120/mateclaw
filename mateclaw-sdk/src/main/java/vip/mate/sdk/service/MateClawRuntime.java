@@ -614,4 +614,33 @@ public interface MateClawRuntime {
      * @return 知识库实体列表
      */
     List<WikiKnowledgeBaseEntity> listBindableKnowledgeBases(Long workspaceId);
+
+    // ==================== 工作区权限 ====================
+
+    /**
+     * 断言用户在指定工作区具有最低角色权限，不通过则抛 403 异常
+     *
+     * @param workspaceId 工作区 ID
+     * @param userId      用户 ID
+     * @param minRole     最低角色要求：owner &gt; admin &gt; member &gt; viewer
+     */
+    void requireWorkspaceRole(Long workspaceId, Long userId, String minRole);
+
+    /**
+     * 检查用户是否有指定工作区的最低角色权限（带缓存，高频调用场景使用）
+     *
+     * @param workspaceId 工作区 ID
+     * @param userId      用户 ID
+     * @param minRole     最低角色要求
+     * @return true 如果用户有足够权限
+     */
+    boolean hasWorkspacePermission(Long workspaceId, Long userId, String minRole);
+
+    /**
+     * 判断用户是否为全局管理员（mate_user.role = admin）
+     *
+     * @param userId 用户 ID
+     * @return true 如果是全局管理员
+     */
+    boolean isGlobalAdmin(Long userId);
 }

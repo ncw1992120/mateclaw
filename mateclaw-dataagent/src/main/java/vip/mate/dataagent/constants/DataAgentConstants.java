@@ -249,4 +249,96 @@ public final class DataAgentConstants {
 
     /** 业务术语语义检索默认相似度阈值 */
     public static final double BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD = 0.3;
+
+    // ==================== 认证与权限 ====================
+
+    /** 工作区 ID 请求头名称 */
+    public static final String HEADER_WORKSPACE_ID = "X-Workspace-Id";
+
+    /** 登录接口路径（SecurityConfig 放行） */
+    public static final String AUTH_LOGIN_PATH = "/v1/auth/login";
+
+    /** 全局管理员角色标识 */
+    public static final String ROLE_ADMIN = "admin";
+
+    /** 普通用户角色标识 */
+    public static final String ROLE_USER = "user";
+
+    // ==================== 工作区角色 ====================
+
+    /** 工作区角色：拥有者 */
+    public static final String WORKSPACE_ROLE_OWNER = "owner";
+
+    /** 工作区角色：管理员 */
+    public static final String WORKSPACE_ROLE_ADMIN = "admin";
+
+    /** 工作区角色：成员 */
+    public static final String WORKSPACE_ROLE_MEMBER = "member";
+
+    /** 工作区角色：访客 */
+    public static final String WORKSPACE_ROLE_VIEWER = "viewer";
+
+    // ==================== 资源授权 ====================
+
+    /** 资源类型：技能 */
+    public static final String RESOURCE_TYPE_SKILL = "skill";
+
+    /** 资源类型：Agent */
+    public static final String RESOURCE_TYPE_AGENT = "agent";
+
+    /** 资源类型：数据源 */
+    public static final String RESOURCE_TYPE_DATASOURCE = "datasource";
+
+    /** 资源类型：语义模型 */
+    public static final String RESOURCE_TYPE_SEMANTIC_MODEL = "semantic_model";
+
+    /** 资源类型：知识库 */
+    public static final String RESOURCE_TYPE_KNOWLEDGE = "knowledge";
+
+    /** 授权类型：按角色 */
+    public static final String GRANT_TYPE_ROLE = "role";
+
+    /** 授权类型：按用户 */
+    public static final String GRANT_TYPE_USER = "user";
+
+    /** 授权类型：按用户组 */
+    public static final String GRANT_TYPE_GROUP = "group";
+
+    /** 权限：使用 */
+    public static final String PERMISSION_USE = "use";
+
+    /** 权限：管理 */
+    public static final String PERMISSION_MANAGE = "manage";
+
+    /** 权限：发布 */
+    public static final String PERMISSION_PUBLISH = "publish";
+
+    /** 授权状态：已撤销 */
+    public static final int GRANT_STATUS_REVOKED = 0;
+
+    /** 授权状态：生效中 */
+    public static final int GRANT_STATUS_ACTIVE = 1;
+
+    // ==================== 审批流程 ====================
+
+    /** 审批类型：技能发布 */
+    public static final String APPROVAL_TYPE_SKILL_PUBLISH = "skill_publish";
+
+    /** 审批类型：Agent 发布 */
+    public static final String APPROVAL_TYPE_AGENT_PUBLISH = "agent_publish";
+
+    /** 审批类型：资源授权 */
+    public static final String APPROVAL_TYPE_RESOURCE_GRANT = "resource_grant";
+
+    /** 审批状态：待审批 */
+    public static final String APPROVAL_STATUS_PENDING = "pending";
+
+    /** 审批状态：已通过 */
+    public static final String APPROVAL_STATUS_APPROVED = "approved";
+
+    /** 审批状态：已拒绝 */
+    public static final String APPROVAL_STATUS_REJECTED = "rejected";
+
+    /** 审批状态：已撤回 */
+    public static final String APPROVAL_STATUS_CANCELLED = "cancelled";
 }

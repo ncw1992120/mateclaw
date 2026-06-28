@@ -17,6 +17,9 @@ public class DatasourceEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    /** 所属工作区 ID */
+    private Long workspaceId;
+
     /** 数据源名称 */
     private String name;
 

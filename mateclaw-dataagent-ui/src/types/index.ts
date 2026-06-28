@@ -1,3 +1,45 @@
+/** 工作区（含成员角色） */
+export interface Workspace {
+  id: number | string
+  name: string
+  slug: string
+  description: string
+  basePath: string | null
+  ownerId: number | string | null
+  settingsJson: string | null
+  createTime: string
+  updateTime: string
+  /** 用户在该工作区的成员角色 */
+  memberRole: string | null
+  /** 角色级别（owner=4..viewer=1，0 表示非成员） */
+  roleLevel: number
+  /** 是否为全局管理员 */
+  isGlobalAdmin: boolean
+  /** 生效角色（全局管理员为 owner，否则为 memberRole） */
+  effectiveRole: string
+}
+
+/** 登录响应 */
+export interface LoginResponse {
+  id: number | string
+  token: string
+  username: string
+  nickname: string
+  role: string
+  /** 可见工作区列表 */
+  workspaces: Workspace[]
+}
+
+/** 当前用户信息（刷新恢复，token 可能为 null） */
+export interface CurrentUserInfo {
+  id: number | string
+  token: string | null
+  username: string
+  nickname: string
+  role: string
+  workspaces: Workspace[]
+}
+
 /** Agent 实体 */
 export interface Agent {
   id: number | string
