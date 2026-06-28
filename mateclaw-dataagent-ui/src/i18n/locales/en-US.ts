@@ -728,6 +728,7 @@ export default {
     more: 'More actions',
     messageCount: '{n} messages',
     streaming: 'Generating',
+    unread: 'Background completed',
   },
   time: {
     justNow: 'Just now',

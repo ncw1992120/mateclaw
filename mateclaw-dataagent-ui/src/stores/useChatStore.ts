@@ -96,6 +96,22 @@ export const useChatStore = defineStore('chat', () => {
   /** 是否因切换对话而断开 SSE 连接（非用户主动停止） */
   let disconnectedBySwitch = false
 
+  /** 用户是否主动点击了停止按钮（取消后禁止自动重连） */
+  let userStopped = false
+
+  /**
+   * 后台会话消息缓存（key: conversationId）。
+   * 切换会话时，当前会话的消息会暂存于此，后台 SSE 流继续更新；
+   * 切回时从此处恢复，避免历史消息丢失后台流式更新。
+   */
+  const backgroundConversationMessages = new Map<string, ChatMessage[]>()
+
+  /**
+   * 在后台运行完成的会话集合。
+   * 被收录的会话在侧栏显示"未读"标识，用户切回后自动清除。
+   */
+  const backgroundCompletedConversations = ref(new Set<string>())
+
   /**
    * 是否存在待续连的 SSE 流。
    * <p>
@@ -169,7 +185,6 @@ export const useChatStore = defineStore('chat', () => {
    *              用于菜单切换等场景下重新拉取最新数据并触发组件重新挂载图表
    */
   async function switchConversation(convId: string, force = false): Promise<void> {
-    if (isStreaming.value) return
     // 相同会话且消息已加载时短路，避免重复请求；
     // 刷新页面后 conversationId 会从 sessionStorage 恢复但 messages 为空，
     // 此时不能跳过，否则会出现"第一条历史点不进去"的 bug
@@ -177,6 +192,14 @@ export const useChatStore = defineStore('chat', () => {
 
     const oldConvId = conversationId.value
     const isSameConversation = oldConvId === convId
+
+    // 切换到不同会话时，如果当前正在流式生成，则将当前消息存入后台缓存
+    // 后续 sendMessage 的 for-await 循环检测到 conversationId 变更后会自动转为后台模式
+    if (!isSameConversation && isStreaming.value && oldConvId) {
+      backgroundConversationMessages.set(oldConvId, messages.value)
+      // 清除前台流式状态，允许新会话正常发送消息
+      isStreaming.value = false
+    }
 
     // 切换到不同会话时，保存当前会话的续连状态（如果有），以便切回后可重连
     const oldHadStream = !isSameConversation && !!lastEventId.value && !!oldConvId
@@ -191,7 +214,6 @@ export const useChatStore = defineStore('chat', () => {
         selectedModelProvider.value = targetConv.modelProvider
         selectedModelName.value = targetConv.modelName
       } else {
-        // 会话没有 pinned model，清空让 WorkbenchView 的 watch 逻辑设置默认模型
         selectedModelProvider.value = ''
         selectedModelName.value = ''
       }
@@ -199,11 +221,28 @@ export const useChatStore = defineStore('chat', () => {
 
     historyLoading.value = true
     try {
-      const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
-      conversationId.value = convId
-      messages.value = msgList
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(buildChatMessageFromVO)
+      // 优先从后台缓存恢复消息（包含后台流式更新）
+      const cachedMsgs = backgroundConversationMessages.get(convId)
+      if (cachedMsgs && cachedMsgs.length > 0) {
+        conversationId.value = convId
+        messages.value = cachedMsgs
+        // 切回后台会话时，清除未读标记
+        if (backgroundCompletedConversations.value.has(convId)) {
+          const nextCompleted = new Set(backgroundCompletedConversations.value)
+          nextCompleted.delete(convId)
+          backgroundCompletedConversations.value = nextCompleted
+        }
+        // 若后台会话仍在运行中，恢复前台流式状态
+        if (streamingConversations.value.has(convId)) {
+          isStreaming.value = true
+        }
+      } else {
+        const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+        conversationId.value = convId
+        messages.value = msgList
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(buildChatMessageFromVO)
+      }
       if (!isSameConversation) {
         // 检查目标会话是否有保存的续连状态，如果有则恢复并尝试重连
         const savedLastEventId = reconnectStates.get(convId)
@@ -217,8 +256,6 @@ export const useChatStore = defineStore('chat', () => {
         } else {
           lastEventId.value = null
           seenEventIds.value.clear()
-          // 仅在旧会话没有活跃流时才清除持久化续连状态；
-          // 若旧会话仍有流（已保存到 reconnectStates），保留 sessionStorage 以便刷新后重连
           if (!oldHadStream) {
             clearPersistedReconnectState()
           }
@@ -268,6 +305,7 @@ export const useChatStore = defineStore('chat', () => {
   async function stopChat(): Promise<void> {
     const stoppedConvId = conversationId.value
     if (!isStreaming.value || !stoppedConvId) return
+    userStopped = true
     try {
       await stopStream(stoppedConvId)
     } catch (e) {
@@ -283,10 +321,16 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 断开前端 SSE 连接，但不停止后端流。
    * 用于切换对话时保留后端流的续连能力，切回后可通过 reconnect 恢复。
+   * 同时清除当前会话的流式标记，避免侧栏一直显示旋转图标；
+   * 切回时 reconnect 会重新设置流式标记。
    */
   function disconnectStream(): void {
     disconnectedBySwitch = true
     isStreaming.value = false
+    const convId = conversationId.value
+    if (convId) {
+      markConversationStreaming(convId, false)
+    }
   }
 
   /**
@@ -300,9 +344,11 @@ export const useChatStore = defineStore('chat', () => {
     private contentBuf = ''
     private rafId: number | null = null
     private msgIndex: number
+    private getMsgs: () => ChatMessage[]
 
-    constructor(msgIndex: number) {
+    constructor(msgIndex: number, getMsgs: () => ChatMessage[]) {
       this.msgIndex = msgIndex
+      this.getMsgs = getMsgs
     }
 
     appendContent(delta: string): void {
@@ -335,7 +381,8 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     private applyToMessage(): void {
-      const msg = messages.value[this.msgIndex]
+      const msgs = this.getMsgs()
+      const msg = msgs[this.msgIndex]
       if (!msg || msg.role !== 'assistant') return
 
       if (this.contentBuf) {
@@ -356,16 +403,18 @@ export const useChatStore = defineStore('chat', () => {
 
     if (streamingConversations.value.has(convId)) return
 
+    // 重置用户停止标记，新消息允许正常重连
+    userStopped = false
+
     const isNewConversation = !conversations.value.some(c => c.conversationId === convId)
 
-    // 同步快照模型信息，确保 modelName 与 modelProvider 来自同一时刻、同一来源，
-    // 避免"一个从参数取、一个从 store 实时读"导致两者不一致，
-    // 进而让后端因只收到其中一个字段而 fallback 到会话旧 pin / 全局默认模型，
-    // 产生"请求到其他模型 URL"的问题。
     const modelProvider = selectedModelProvider.value || undefined
     const modelName = selectedModelName.value || undefined
 
-    messages.value.push({
+    // 使用本地引用，后台切换时仍指向原会话消息数组
+    let targetMsgs = messages.value
+
+    targetMsgs.push({
       role: 'user',
       content: message,
       timestamp: Date.now(),
@@ -377,18 +426,21 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
       metadata: {},
     }
-    messages.value.push(assistantMessage)
+    targetMsgs.push(assistantMessage)
 
     isStreaming.value = true
     markConversationStreaming(convId, true)
     currentAgentId.value = agentId
 
-    const assistantIdx = messages.value.length - 1
-    const flushBuf = new FlushBuffer(assistantIdx)
+    const assistantIdx = targetMsgs.length - 1
+    const flushBuf = new FlushBuffer(assistantIdx, () => targetMsgs)
 
     lastEventId.value = null
     seenEventIds.value.clear()
     savePersistedReconnectState({ conversationId: convId, lastEventId: null })
+
+    /** 当前会话是否已切到后台（用户切到其他会话后，本流继续运行） */
+    let isBackground = false
 
     try {
       const streamOptions = {
@@ -399,13 +451,25 @@ export const useChatStore = defineStore('chat', () => {
         seenEventIds: seenEventIds.value,
       }
 
-      // 注意：后端在发送 done 事件后并不会立即关闭 SSE 连接（连接常驻以支持续连/心跳），
-      // 因此仅靠流关闭触发的 finally 无法及时把 UI 切回非生成态。
-      // 这里识别 done 后显式置位并打断 for-await，UI 才能立刻从"正在生成"切回正常。
       let streamFinished = false
       for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value)) {
-        if (!isStreaming.value) break
-        handleSseEvent(sse, flushBuf, () => { streamFinished = true })
+        // 检测是否切换到其他会话
+        if (conversationId.value !== convId) {
+          if (!isBackground) {
+            // 首次检测到切换：保存当前消息到后台缓存
+            backgroundConversationMessages.set(convId, targetMsgs)
+            isBackground = true
+          }
+        }
+
+        // 后台模式下，仅用户主动停止才打断
+        if (isBackground) {
+          if (userStopped) break
+        } else {
+          if (!isStreaming.value) break
+        }
+
+        handleSseEvent(sse, flushBuf, targetMsgs, convId, () => { streamFinished = true })
         if (streamFinished) break
       }
 
@@ -418,7 +482,8 @@ export const useChatStore = defineStore('chat', () => {
       flushBuf.flush()
       // 流式连接中途断开：若后端仍有活流（已有 lastEventId），自动续连，
       // 不直接告知用户失败。常见场景：网络抖动 / SSE 临时断流。
-      if (lastEventId.value && convId) {
+      // 但用户主动取消、后台模式时跳过重连。
+      if (lastEventId.value && convId && !userStopped && !isBackground) {
         try {
           await reconnect()
           return
@@ -426,18 +491,24 @@ export const useChatStore = defineStore('chat', () => {
           console.warn('[ChatStore] Auto-reconnect after stream error failed:', reconnectErr)
         }
       }
-      const lastMsg = messages.value[messages.value.length - 1]
+      const lastMsg = targetMsgs[targetMsgs.length - 1]
       if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
         lastMsg.content = '抱歉，请求出现异常，请稍后重试。'
       }
     } finally {
       flushBuf.destroy()
-      isStreaming.value = false
-      if (disconnectedBySwitch) {
-        disconnectedBySwitch = false
-        // 因切换对话而断开，保留 streamingConversations 以显示旋转图标，保留 reconnectStates 以支持切回后重连
-      } else {
+      if (isBackground) {
+        // 后台会话：不修改前台 streaming 状态；流结束后更新后台缓存
         markConversationStreaming(convId, false)
+        backgroundConversationMessages.set(convId, targetMsgs)
+      } else {
+        isStreaming.value = false
+        if (disconnectedBySwitch) {
+          disconnectedBySwitch = false
+          // 因切换对话而断开，保留 streamingConversations 以显示旋转图标，保留 reconnectStates 以支持切回后重连
+        } else {
+          markConversationStreaming(convId, false)
+        }
       }
     }
   }
@@ -485,13 +556,13 @@ export const useChatStore = defineStore('chat', () => {
       seenEventIds: seenEventIds.value,
     }
 
-    const flushBuf = new FlushBuffer(messages.value.length - 1)
+    const flushBuf = new FlushBuffer(messages.value.length - 1, () => messages.value)
 
     try {
       let streamFinished = false
       for await (const sse of reconnectStream(convId, savedLastEventId, streamOptions)) {
         if (!isStreaming.value) break
-        handleSseEvent(sse, flushBuf, () => { streamFinished = true })
+        handleSseEvent(sse, flushBuf, messages.value, convId, () => { streamFinished = true })
         if (streamFinished) break
       }
       flushBuf.flush()
@@ -539,8 +610,8 @@ export const useChatStore = defineStore('chat', () => {
    * 获取指定消息的 segments 数组（确保一定返回数组引用）。
    * 流式阶段由前端实时构建；历史消息由后端持久化。
    */
-  function ensureSegments(msgIdx: number): Array<Record<string, unknown>> {
-    const msg = messages.value[msgIdx]
+  function ensureSegments(msgs: ChatMessage[], msgIdx: number): Array<Record<string, unknown>> {
+    const msg = msgs[msgIdx]
     if (!msg) return []
     if (!msg.metadata) msg.metadata = {}
     const meta = msg.metadata as Record<string, unknown>
@@ -565,13 +636,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, onFinished?: () => void): void {
+  function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, targetMsgs: ChatMessage[], onFinished?: () => void): void {
     const evt = sse.event
     const data = sse.data
 
     if (typeof data !== 'object') return
 
-    const msgIdx = messages.value.length - 1
+    const msgIdx = targetMsgs.length - 1
 
     switch (evt) {
       case 'content_delta': {
@@ -579,7 +650,7 @@ export const useChatStore = defineStore('chat', () => {
         if (delta) {
           flushBuf.appendContent(delta)
           // 同步构建 content segment
-          const segments = ensureSegments(msgIdx)
+          const segments = ensureSegments(targetMsgs, msgIdx)
           let contentSeg = findLastRunningSegment(segments, 'content')
           if (!contentSeg) {
             // 关闭可能存在的 running thinking segment
@@ -598,7 +669,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'tool_call_started': {
         flushBuf.flush()
-        const prev = messages.value[msgIdx]
+        const prev = targetMsgs[msgIdx]
         if (!prev || prev.role !== 'assistant') return
         const toolName = data.toolName as string | undefined
         const toolCallId = data.toolCallId as string | undefined
@@ -617,7 +688,7 @@ export const useChatStore = defineStore('chat', () => {
             },
           ]
           // 关闭 running content segment，创建 running tool_call segment
-          const segments = ensureSegments(msgIdx)
+          const segments = ensureSegments(targetMsgs, msgIdx)
           const runningContent = findLastRunningSegment(segments, 'content')
           if (runningContent) runningContent.status = 'completed'
           segments.push({
@@ -627,7 +698,7 @@ export const useChatStore = defineStore('chat', () => {
             toolCallId: toolCallId || '',
             toolArgs: toolArgs || '',
           })
-          messages.value[msgIdx] = {
+          targetMsgs[msgIdx] = {
             ...prev,
             metadata: {
               ...prevMeta,
@@ -641,7 +712,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'tool_call_completed': {
         flushBuf.flush()
-        const prev = messages.value[msgIdx]
+        const prev = targetMsgs[msgIdx]
         if (!prev || prev.role !== 'assistant') return
         const toolName = data.toolName as string | undefined
         const toolCallId = data.toolCallId as string | undefined
@@ -659,7 +730,7 @@ export const useChatStore = defineStore('chat', () => {
             return tc
           })
           // 更新对应 tool_call segment 为 completed
-          const segments = ensureSegments(msgIdx)
+          const segments = ensureSegments(targetMsgs, msgIdx)
           for (const seg of segments) {
             if (seg.type === 'tool_call' && seg.status === 'running'
               && ((seg.toolCallId && seg.toolCallId === toolCallId)
@@ -670,7 +741,7 @@ export const useChatStore = defineStore('chat', () => {
               break
             }
           }
-          messages.value[msgIdx] = {
+          targetMsgs[msgIdx] = {
             ...prev,
             metadata: {
               ...prevMeta,
@@ -683,7 +754,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'message_complete': {
         flushBuf.flush()
-        const lastMsg = messages.value[messages.value.length - 1]
+        const lastMsg = targetMsgs[targetMsgs.length - 1]
         if (lastMsg.role !== 'assistant') return
         const status = data.status as string | undefined
         if (status === 'stopped') {
@@ -692,33 +763,40 @@ export const useChatStore = defineStore('chat', () => {
           lastMsg.content += '\n[生成失败]'
         }
         // 关闭所有 running segments
-        const segments = ensureSegments(msgIdx)
+        const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
         break
       }
       case 'done': {
         flushBuf.flush()
         // 关闭所有 running segments
-        const segments = ensureSegments(msgIdx)
+        const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
-        // 后端在 done 后并不会关闭 SSE 流，必须在此处把 UI 切回非生成态，
-        // 否则状态栏会一直显示"正在生成"、按钮一直是"停止"。
-        isStreaming.value = false
-        lastEventId.value = null
-        clearPersistedReconnectState()
+        // 后台会话完成：不清除前台 isStreaming/lastEventId，仅标记未读
+        if (conversationId.value !== convId) {
+          markConversationStreaming(convId, false)
+          backgroundConversationMessages.set(convId, targetMsgs)
+          const nextCompleted = new Set(backgroundCompletedConversations.value)
+          nextCompleted.add(convId)
+          backgroundCompletedConversations.value = nextCompleted
+        } else {
+          isStreaming.value = false
+          lastEventId.value = null
+          clearPersistedReconnectState()
+        }
         onFinished?.()
         break
       }
       case 'error': {
         flushBuf.flush()
-        const lastMsg = messages.value[messages.value.length - 1]
+        const lastMsg = targetMsgs[targetMsgs.length - 1]
         if (lastMsg.role !== 'assistant') return
         const msg = data.message as string | undefined
         if (msg) {
           lastMsg.content += `\n[错误] ${msg}`
         }
         // 关闭所有 running segments
-        const segments = ensureSegments(msgIdx)
+        const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
         break
       }
@@ -786,6 +864,7 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     selectedDatasourceIds,
     streamingConversations,
+    backgroundCompletedConversations,
     conversations,
     conversationsLoading,
     historyLoading,

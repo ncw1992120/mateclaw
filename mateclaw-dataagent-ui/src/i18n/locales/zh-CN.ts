@@ -736,6 +736,7 @@ export default {
     more: '更多操作',
     messageCount: '{n} 条消息',
     streaming: '正在生成',
+    unread: '后台运行完成',
   },
   time: {
     justNow: '刚刚',

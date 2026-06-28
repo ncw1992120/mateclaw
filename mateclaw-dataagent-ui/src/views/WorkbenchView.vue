@@ -93,6 +93,12 @@
                       :title="t('conversation.streaming')"
                       aria-hidden="true"
                     ></span>
+                    <span
+                      v-else-if="chatStore.backgroundCompletedConversations.has(conv.conversationId)"
+                      class="history-item-unread"
+                      :title="t('conversation.unread')"
+                      aria-hidden="true"
+                    ></span>
                     <div class="history-item-content">
                       <span class="history-item-title" :title="conv.title || t('conversation.untitled')">
                         <span v-if="isConversationPinned(conv)" class="history-pin-mark" aria-hidden="true">↗</span>
@@ -396,10 +402,6 @@ async function handleSwitchConversation(convId: string): Promise<void> {
   if (editingConvId.value) return
   openMenuConvId.value = null
   if (chatStore.conversationId === convId && chatStore.messages.length > 0) return
-  if (chatStore.isStreaming) {
-    // 仅断开前端 SSE 连接，不停止后端流，保留续连能力
-    chatStore.disconnectStream()
-  }
   await chatStore.switchConversation(convId)
 }
 
@@ -1161,6 +1163,17 @@ onBeforeUnmount(() => {
 
 @keyframes history-spin {
   to { transform: rotate(360deg); }
+}
+
+/* 未读标识：后台会话完成时显示的小圆点 */
+.history-item-unread {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--main-orange);
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin: 0 2px;
 }
 
 /* 历史项右侧"三点"操作按钮 */
