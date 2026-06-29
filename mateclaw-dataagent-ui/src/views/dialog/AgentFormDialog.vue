@@ -378,8 +378,8 @@ const saving = ref(false)
 /** 当前激活 Tab */
 const activeTab = ref<'basic' | 'skills' | 'tools' | 'providers' | 'knowledge'>('basic')
 
-/** 仅展示已启用的模型列表 */
-const enabledModelList = computed(() => modelStore.enabledModels)
+/** 仅展示已启用的对话模型列表（智能体只能使用对话模型） */
+const enabledModelList = computed(() => modelStore.enabledModels.filter(m => !m.modelType || m.modelType === 'chat'))
 
 /** 表单引用 */
 const formRef = ref<FormInstance | null>(null)

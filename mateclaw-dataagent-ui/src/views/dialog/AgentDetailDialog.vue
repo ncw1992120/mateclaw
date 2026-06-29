@@ -133,9 +133,9 @@ const dialogTitle = computed(() => {
 /** 保存中状态 */
 const saving = ref(false)
 
-/** 仅展示已启用的模型列表 */
+/** 仅展示已启用的对话模型列表（智能体只能使用对话模型） */
 const enabledModelList = computed(() => {
-  return modelStore.enabledModels
+  return modelStore.enabledModels.filter(m => !m.modelType || m.modelType === 'chat')
 })
 
 /** 表单数据 */
