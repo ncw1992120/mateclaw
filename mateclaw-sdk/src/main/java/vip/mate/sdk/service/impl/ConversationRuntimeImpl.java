@@ -27,6 +27,16 @@ public class ConversationRuntimeImpl implements ConversationRuntime {
     }
 
     @Override
+    public List<ConversationVO> listConversations(String username, Long workspaceId) {
+        return conversationService.listConversations(username, workspaceId);
+    }
+
+    @Override
+    public boolean isConversationOwner(String conversationId, String username) {
+        return conversationService.isConversationOwner(conversationId, username);
+    }
+
+    @Override
     public List<MessageVO> listMessages(String conversationId) {
         return conversationService.listMessageViews(conversationId);
     }

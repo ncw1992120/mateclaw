@@ -8,6 +8,7 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
 import vip.mate.dataagent.dto.DatasourceVO;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
 import vip.mate.dataagent.service.DatasourceManageService;
@@ -52,6 +53,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final ObjectMapper objectMapper;
     private final DataAgentChatScopeContext scopeContext;
     private final DatasourceManageService datasourceManageService;
+    private final WorkspaceGuard workspaceGuard;
     private final ExecutorService sseExecutor;
 
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
@@ -59,13 +61,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     DataAgentStreamTracker streamTracker,
                                     ObjectMapper objectMapper,
                                     DataAgentChatScopeContext scopeContext,
-                                    DatasourceManageService datasourceManageService) {
+                                    DatasourceManageService datasourceManageService,
+                                    WorkspaceGuard workspaceGuard) {
         this.runtime = runtime;
         this.conversationService = conversationService;
         this.streamTracker = streamTracker;
         this.objectMapper = objectMapper;
         this.scopeContext = scopeContext;
         this.datasourceManageService = datasourceManageService;
+        this.workspaceGuard = workspaceGuard;
         // 有界线程池：核心 2 线程，最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
         int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
         this.sseExecutor = new ThreadPoolExecutor(
@@ -101,6 +105,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
+        // 在 HTTP 线程捕获用户身份，避免 sseExecutor 线程内 ThreadLocal 上下文丢失
+        final String username = workspaceGuard.currentUsername();
+        final Long workspaceId = workspaceGuard.currentWorkspaceId();
+
         // Register RunState first (creates buffer + starts heartbeat), then attach emitter
         streamTracker.register(conversationId);
         streamTracker.attach(conversationId, emitter);
@@ -110,7 +118,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             StreamAccumulator accumulator = new StreamAccumulator();
             AtomicBoolean finalized = new AtomicBoolean(false);
             try {
-                conversationService.getOrCreateConversation(conversationId, agentId, "dataagent");
+                conversationService.getOrCreateConversation(conversationId, agentId, username, workspaceId);
                 // Pin 模型到 conversation 级别，与 ChatController 保持一致。
                 // AgentService.getOrBuildAgentForConversation 从 conversation 表读取 pinned model，
                 // 按 (agentId, modelKey) 缓存不同模型变体，无需 updateAgent + refreshAgent。
@@ -251,8 +259,11 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         // 将 String 类型的数据源 ID 转换为 Long 类型
         List<Long> longIds = convertToLongIds(datasourceIds);
         scopeContext.putDatasourceIds(conversationId, longIds);
+        // 同步对话在 HTTP 线程内执行，可直接获取用户上下文
+        final String username = workspaceGuard.currentUsername();
+        final Long workspaceId = workspaceGuard.currentWorkspaceId();
         try {
-            conversationService.getOrCreateConversation(conversationId, agentId, "dataagent");
+            conversationService.getOrCreateConversation(conversationId, agentId, username, workspaceId);
             if (modelProvider != null && !modelProvider.isBlank()
                     && modelName != null && !modelName.isBlank()) {
                 conversationService.updateConversationModel(conversationId, modelProvider, modelName);

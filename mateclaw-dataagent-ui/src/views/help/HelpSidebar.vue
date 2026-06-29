@@ -5,12 +5,12 @@
       <div class="sidebar-actions">
         <el-tooltip :content="t('helpCenter.expandAll')" placement="bottom">
           <el-button link size="small" @click="handleExpandAll">
-            <el-icon><ArrowDown /></el-icon>
+            <el-icon><CaretBottom /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip :content="t('helpCenter.collapseAll')" placement="bottom">
           <el-button link size="small" @click="handleCollapseAll">
-            <el-icon><ArrowUp /></el-icon>
+            <el-icon><CaretTop /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip :content="t('helpCenter.newCategory')" placement="bottom">
@@ -41,22 +41,26 @@
       <div class="sidebar-tree">
         <el-tree
           ref="treeRef"
-          :data="categoryTree"
+          :data="mixedTree"
           :props="treeProps"
           node-key="id"
           highlight-current
-          :expand-on-click-node="false"
+          :expand-on-click-node="true"
           :default-expanded-keys="expandedKeys"
+          :current-node-key="currentNodeKey"
           @node-click="handleNodeClick"
         >
           <template #default="{ node, data }">
-            <div class="tree-node" :class="{ 'is-doc': !!data.isDoc }">
+            <div class="tree-node" :class="{ 'is-doc': data.isDoc }">
               <span class="tree-node-icon">
                 <template v-if="data.isDoc">
                   <el-icon size="14"><Document /></el-icon>
                 </template>
+                <template v-else-if="data.icon">
+                  {{ data.icon }}
+                </template>
                 <template v-else>
-                  {{ data.icon || defaultCategoryIcon }}
+                  <el-icon size="14"><Folder /></el-icon>
                 </template>
               </span>
               <span class="tree-node-label" :title="data.name || data.title">
@@ -65,31 +69,54 @@
               <span v-if="!data.isDoc && data.documentCount > 0" class="tree-node-count">
                 {{ data.documentCount }}
               </span>
-              <!-- 分类节点悬停操作按钮 -->
-              <span v-if="!data.isDoc" class="tree-node-actions">
-                <el-tooltip :content="t('helpCenter.newCategory')" placement="top">
-                  <el-icon class="action-icon" @click.stop="handleAddSubCategory(data)"><Plus /></el-icon>
-                </el-tooltip>
-                <el-tooltip :content="t('helpCenter.edit')" placement="top">
-                  <el-icon class="action-icon" @click.stop="handleEditCategory(data)"><Edit /></el-icon>
-                </el-tooltip>
-                <el-tooltip :content="t('helpCenter.delete')" placement="top">
-                  <el-icon class="action-icon action-delete" @click.stop="handleDeleteCategory(data)"><Delete /></el-icon>
-                </el-tooltip>
+              <span v-if="data.isDoc && data.status === 'draft'" class="tree-node-status">
+                {{ t('helpCenter.draft') }}
               </span>
+              <!-- 分类节点悬停操作菜单 -->
+              <el-dropdown
+                v-if="!data.isDoc"
+                class="tree-node-actions"
+                trigger="click"
+                @command="(cmd: string) => handleCategoryCommand(cmd, data)"
+              >
+                <span class="action-more" @click.stop>...</span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="newDoc">
+                      <el-icon><DocumentAdd /></el-icon>
+                      {{ t('helpCenter.newDocument') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="newSubCategory">
+                      <el-icon><Plus /></el-icon>
+                      {{ t('helpCenter.newCategory') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="edit">
+                      <el-icon><Edit /></el-icon>
+                      {{ t('helpCenter.edit') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>
+                      <el-icon><Delete /></el-icon>
+                      {{ t('helpCenter.delete') }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-tree>
-        <el-empty v-if="categoryTree.length === 0" :description="t('helpCenter.emptyCategory')" :image-size="60" />
+        <el-empty v-if="mixedTree.length === 0" :description="t('helpCenter.emptyCategory')" :image-size="60" />
       </div>
     </el-scrollbar>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Search, Document, ArrowDown, ArrowUp, Edit, Delete } from '@element-plus/icons-vue'
+import {
+  Plus, Search, Document, CaretBottom, CaretTop, Edit, Delete,
+  Folder, DocumentAdd
+} from '@element-plus/icons-vue'
 import type { HelpCategory, HelpDocument } from '@/types'
 
 const { t } = useI18n()
@@ -107,12 +134,10 @@ const emit = defineEmits<{
   (e: 'clearSearch'): void
   (e: 'newCategory'): void
   (e: 'newSubCategory', parentId: string): void
+  (e: 'newDoc', categoryId: string): void
   (e: 'editCategory', category: HelpCategory): void
   (e: 'deleteCategory', category: HelpCategory): void
 }>()
-
-/** 默认分类图标 */
-const defaultCategoryIcon = '📘'
 /** 搜索关键字 */
 const searchKeyword = ref('')
 /** 树引用 */
@@ -126,13 +151,29 @@ const treeProps = {
   label: 'name',
 }
 
-/** 构建分类树数据 */
-const categoryTree = computed(() => {
-  return buildMixedTree(props.categoryTree)
+/** 带文档的分类树 */
+interface CategoryWithDocs extends HelpCategory {
+  documents?: HelpDocument[]
+}
+
+/** 构建分类+文档混合树 */
+const mixedTree = computed(() => {
+  return buildMixedTree(props.categoryTree as CategoryWithDocs[])
+})
+
+/** 当前选中节点的 key */
+const currentNodeKey = computed(() => {
+  if (props.currentDocumentId) {
+    return `doc-${props.currentDocumentId}`
+  }
+  if (props.currentCategoryId) {
+    return `cat-${props.currentCategoryId}`
+  }
+  return null
 })
 
 /** 将分类树转为分类+文档混合树 */
-function buildMixedTree(categories: HelpCategory[]): any[] {
+function buildMixedTree(categories: CategoryWithDocs[]): any[] {
   return categories.map(cat => {
     const node: any = {
       id: `cat-${cat.id}`,
@@ -141,9 +182,27 @@ function buildMixedTree(categories: HelpCategory[]): any[] {
       icon: cat.icon,
       documentCount: cat.documentCount,
       parentId: cat.parentId,
+      isDoc: false,
     }
+    const children: any[] = []
     if (cat.children && cat.children.length > 0) {
-      node.children = buildMixedTree(cat.children)
+      children.push(...buildMixedTree(cat.children as CategoryWithDocs[]))
+    }
+    if (cat.documents && cat.documents.length > 0) {
+      for (const doc of cat.documents) {
+        children.push({
+          id: `doc-${doc.id}`,
+          rawId: doc.id,
+          name: doc.title,
+          title: doc.title,
+          isDoc: true,
+          rawDoc: doc,
+          status: doc.status,
+        })
+      }
+    }
+    if (children.length > 0) {
+      node.children = children
     }
     return node
   })
@@ -163,6 +222,11 @@ function handleNodeClick(data: any): void {
     } as HelpCategory
     emit('selectCategory', category)
   }
+}
+
+/** 新建文档 */
+function handleNewDoc(data: any): void {
+  emit('newDoc', data.rawId)
 }
 
 /** 添加子分类 */
@@ -194,6 +258,26 @@ function handleDeleteCategory(data: any): void {
   emit('deleteCategory', category)
 }
 
+/** 分类操作菜单命令分发 */
+function handleCategoryCommand(command: string, data: any): void {
+  switch (command) {
+    case 'newDoc':
+      handleNewDoc(data)
+      break
+    case 'newSubCategory':
+      handleAddSubCategory(data)
+      break
+    case 'edit':
+      handleEditCategory(data)
+      break
+    case 'delete':
+      handleDeleteCategory(data)
+      break
+    default:
+      break
+  }
+}
+
 /** 处理搜索 */
 function handleSearch(): void {
   const keyword = searchKeyword.value.trim()
@@ -211,14 +295,40 @@ function handleClearSearch(): void {
 
 /** 展开全部 */
 function handleExpandAll(): void {
-  if (treeRef.value) {
-    const allKeys = getAllNodeKeys(categoryTree.value)
-    expandedKeys.value = allKeys
+  if (!treeRef.value) {
+    return
   }
+  const nodes = treeRef.value.store?.nodesMap
+  if (!nodes) {
+    return
+  }
+  const keys: string[] = []
+  for (const key in nodes) {
+    if (Object.prototype.hasOwnProperty.call(nodes, key)) {
+      const node = nodes[key]
+      if (!node.data?.isDoc) {
+        node.expand()
+        keys.push(key)
+      }
+    }
+  }
+  expandedKeys.value = keys
 }
 
 /** 收起全部 */
 function handleCollapseAll(): void {
+  if (!treeRef.value) {
+    return
+  }
+  const nodes = treeRef.value.store?.nodesMap
+  if (!nodes) {
+    return
+  }
+  for (const key in nodes) {
+    if (Object.prototype.hasOwnProperty.call(nodes, key)) {
+      nodes[key].collapse()
+    }
+  }
   expandedKeys.value = []
 }
 
@@ -254,6 +364,15 @@ function getAllCategoryKeys(categories: HelpCategory[]): string[] {
   return keys
 }
 
+/** 监听当前选中节点，同步树高亮 */
+watch(currentNodeKey, (key) => {
+  if (key && treeRef.value) {
+    nextTick(() => {
+      treeRef.value.setCurrentKey(key)
+    })
+  }
+})
+
 /** 暴露方法供父组件调用 */
 function setExpandedKeys(keys: string[]): void {
   expandedKeys.value = keys
@@ -264,7 +383,7 @@ defineExpose({ setExpandedKeys })
 
 <style scoped>
 .help-sidebar {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -314,7 +433,7 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree :deep(.el-tree-node__content) {
-  height: 30px;
+  height: 32px;
   border-radius: 4px;
   padding: 0 6px;
   font-size: 13px;
@@ -325,8 +444,8 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: #e6f7ff;
-  color: #1677ff;
+  background: #fff2e8;
+  color: #f05a23;
   font-weight: 500;
 }
 
@@ -369,14 +488,22 @@ defineExpose({ setExpandedKeys })
 
 .tree-node.is-doc {
   font-size: 13px;
-  color: #666;
-  padding-left: 8px;
+  color: #555;
+  padding-left: 4px;
 }
 
 .tree-node-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-right: 6px;
   font-size: 14px;
   flex-shrink: 0;
+  color: #999;
+}
+
+.tree-node.is-doc .tree-node-icon {
+  color: #1677ff;
 }
 
 .tree-node-label {
@@ -396,35 +523,48 @@ defineExpose({ setExpandedKeys })
   flex-shrink: 0;
 }
 
-/* 悬停操作按钮 - 默认隐藏，悬停时显示 */
+.tree-node-status {
+  font-size: 11px;
+  color: #ff9c4d;
+  background: #fff2e8;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* 悬停操作菜单 - 默认隐藏，悬停时显示 */
 .tree-node-actions {
   display: none;
-  align-items: center;
-  gap: 2px;
   margin-left: 4px;
   flex-shrink: 0;
 }
 
 .sidebar-tree :deep(.el-tree-node__content:hover) .tree-node-actions {
-  display: flex;
+  display: inline-flex;
 }
 
-.action-icon {
+.sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) .tree-node-actions {
+  display: inline-flex;
+}
+
+.action-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   font-size: 13px;
+  font-weight: 600;
   color: #999;
   cursor: pointer;
-  padding: 2px;
   border-radius: 3px;
   transition: all 0.15s;
+  user-select: none;
 }
 
-.action-icon:hover {
+.action-more:hover {
   color: #1677ff;
   background: #e6f7ff;
-}
-
-.action-delete:hover {
-  color: #ff4d4f;
-  background: #fff1f0;
 }
 </style>

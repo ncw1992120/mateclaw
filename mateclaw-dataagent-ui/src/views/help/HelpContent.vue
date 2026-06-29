@@ -93,89 +93,15 @@
       </div>
     </template>
 
-    <!-- 文档卡片列表视图 -->
-    <template v-else-if="currentCategoryId && documentList.length > 0">
-      <div class="content-header simple">
-        <h1 class="content-title">{{ currentCategoryName }}</h1>
-        <div class="content-header-actions">
-          <el-button type="primary" size="small" @click="$emit('newDoc')">
-            <el-icon><Plus /></el-icon> {{ t('helpCenter.newDocument') }}
-          </el-button>
-        </div>
-      </div>
-      <div class="content-body">
-        <div class="doc-card-list">
-          <div
-            v-for="doc in documentList"
-            :key="doc.id"
-            class="doc-card"
-            @click="$emit('selectDoc', doc)"
-          >
-            <div class="doc-card-title">
-              <el-icon><Document /></el-icon>
-              <span>{{ doc.title }}</span>
-              <el-tag :type="doc.status === 'published' ? 'success' : 'info'" size="small">
-                {{ doc.status === 'published' ? t('helpCenter.published') : t('helpCenter.draft') }}
-              </el-tag>
-            </div>
-            <div class="doc-card-desc">
-              {{ getDocPreview(doc) }}
-            </div>
-            <div class="doc-card-meta">
-              <span v-if="doc.author"><el-icon><User /></el-icon> {{ doc.author }}</span>
-              <span><el-icon><Clock /></el-icon> {{ doc.updateTime }}</span>
-              <span v-if="doc.viewCount > 0"><el-icon><View /></el-icon> {{ doc.viewCount }}</span>
-            </div>
-            <div class="doc-card-tags" v-if="doc.tags">
-              <el-tag
-                v-for="tag in doc.tags.split(',')"
-                :key="tag"
-                size="small"
-                type="warning"
-                effect="plain"
-              >
-                {{ tag.trim() }}
-              </el-tag>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- 空分类 -->
-    <template v-else-if="currentCategoryId && documentList.length === 0">
-      <div class="content-header simple">
-        <h1 class="content-title">{{ currentCategoryName }}</h1>
-        <div class="content-header-actions">
-          <el-button type="primary" size="small" @click="$emit('newDoc')">
-            <el-icon><Plus /></el-icon> {{ t('helpCenter.newDocument') }}
-          </el-button>
-        </div>
-      </div>
-      <div class="content-body">
-        <el-empty :description="t('helpCenter.emptyDocDesc')" />
-      </div>
-    </template>
-
-    <!-- 欢迎页 -->
-    <template v-else>
-      <div class="welcome-page">
-        <div class="welcome-icon">📖</div>
-        <h2>{{ t('helpCenter.welcomeTitle') }}</h2>
-        <p>{{ t('helpCenter.welcomeDesc') }}</p>
-      </div>
-    </template>
+    <!-- 未选中文档：空白占位 -->
+    <div v-else class="content-blank" />
   </main>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Plus, Edit, Delete, Document, ArrowRight,
-  User, Clock, View
-} from '@element-plus/icons-vue'
+import { Edit, Delete, ArrowRight, User, Clock, View } from '@element-plus/icons-vue'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
@@ -189,9 +115,6 @@ const { t } = useI18n()
 
 const props = defineProps<{
   currentDocument: HelpDocument | null
-  currentCategoryId: string | null
-  currentCategoryName: string
-  documentList: HelpDocument[]
   categoryTree: HelpCategory[]
   searchVisible: boolean
   searchResults: HelpSearchResult[]
@@ -202,7 +125,6 @@ const emit = defineEmits<{
   (e: 'selectDoc', doc: HelpDocument | HelpSearchResult): void
   (e: 'selectCategory', category: HelpCategory): void
   (e: 'goHome'): void
-  (e: 'newDoc'): void
   (e: 'editDoc', doc: HelpDocument): void
   (e: 'deleteDoc', doc: HelpDocument): void
   (e: 'togglePublish', doc: HelpDocument): void
@@ -230,8 +152,6 @@ const breadcrumbPath = computed(() => {
   path.push({ id: props.currentDocument.id, name: props.currentDocument.title, type: 'category' })
   return path
 })
-
-import { computed } from 'vue'
 
 /** 递归查找分类路径 */
 function findCategoryPath(
@@ -319,27 +239,6 @@ function extractHeadings(markdown: string): { id: string; text: string; level: n
   return result
 }
 
-/** 截取 Markdown 纯文本预览 */
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/[#>*_~\-]/g, '')
-    .replace(/\n+/g, ' ')
-    .trim()
-}
-
-/** 获取文档预览文本 */
-function getDocPreview(doc: HelpDocument): string {
-  if (doc.summary) {
-    return doc.summary
-  }
-  const text = doc.content ? stripMarkdown(doc.content).slice(0, 150) : t('helpCenter.emptyContent')
-  return doc.content && doc.content.length > 150 ? text + '...' : text
-}
-
 /** 加载相关文档 */
 async function loadRelatedDocs(): Promise<void> {
   if (!props.currentDocument) {
@@ -420,6 +319,10 @@ watch(() => props.currentDocument, (val) => {
         contentBodyRef.value.scrollTop = 0
       }
     })
+  } else {
+    emit('headingsChange', [])
+    relatedDocs.value = []
+    feedbackSummary.value = null
   }
 }, { immediate: true })
 
@@ -444,10 +347,6 @@ defineExpose({ loadFeedbackSummary })
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
   gap: 16px;
-}
-
-.content-header.simple {
-  padding: 20px 32px;
 }
 
 .content-header-info {
@@ -520,6 +419,11 @@ defineExpose({ loadFeedbackSummary })
   flex: 1;
   overflow: auto;
   padding: 20px 32px 60px;
+}
+
+.content-blank {
+  flex: 1;
+  background: #fff;
 }
 
 .markdown-body {
@@ -623,103 +527,4 @@ defineExpose({ loadFeedbackSummary })
 }
 
 .markdown-body :deep(a:hover) { text-decoration: underline; }
-
-/* 文档卡片列表 */
-.doc-card-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-  max-width: 1200px;
-}
-
-.doc-card {
-  padding: 16px 18px;
-  border: 1px solid #eee;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: #fff;
-}
-
-.doc-card:hover {
-  border-color: #1677ff;
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.08);
-}
-
-.doc-card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #111;
-  margin-bottom: 8px;
-}
-
-.doc-card-title > span:nth-child(2) {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doc-card-desc {
-  font-size: 12px;
-  color: #666;
-  line-height: 1.6;
-  margin-bottom: 10px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.doc-card-meta {
-  display: flex;
-  gap: 14px;
-  font-size: 11px;
-  color: #999;
-}
-
-.doc-card-meta span {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.doc-card-tags {
-  display: flex;
-  gap: 4px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-
-/* 欢迎页 */
-.welcome-page {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px;
-}
-
-.welcome-icon {
-  font-size: 48px;
-  opacity: 0.5;
-}
-
-.welcome-page h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #333;
-}
-
-.welcome-page p {
-  margin: 0;
-  font-size: 13px;
-  color: #999;
-}
 </style>

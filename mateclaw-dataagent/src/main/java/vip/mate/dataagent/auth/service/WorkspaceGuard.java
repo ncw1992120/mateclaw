@@ -77,6 +77,17 @@ public class WorkspaceGuard {
     }
 
     /**
+     * 获取当前用户名
+     */
+    public String currentUsername() {
+        UserContext ctx = UserContextHolder.get();
+        if (ctx == null) {
+            throw new IllegalStateException("用户上下文未初始化");
+        }
+        return ctx.getUsername();
+    }
+
+    /**
      * 当前用户是否为全局管理员
      */
     public boolean isCurrentAdmin() {

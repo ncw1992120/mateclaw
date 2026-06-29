@@ -1,6 +1,6 @@
 <template>
   <div class="help-center">
-    <!-- 左侧：分类导航树 -->
+    <!-- 左侧：文档目录树 -->
     <HelpSidebar
       :categoryTree="categoryTree"
       :currentCategoryId="currentCategoryId"
@@ -11,16 +11,14 @@
       @clearSearch="handleClearSearch"
       @newCategory="showCategoryDialog(null)"
       @newSubCategory="handleNewSubCategory"
+      @newDoc="handleNewDoc"
       @editCategory="handleEditCategory"
       @deleteCategory="handleDeleteCategory"
     />
 
-    <!-- 中间：文档内容区 -->
+    <!-- 右侧：文档内容区 -->
     <HelpContent
       :currentDocument="currentDocument"
-      :currentCategoryId="currentCategoryId"
-      :currentCategoryName="currentCategoryName"
-      :documentList="documentList"
       :categoryTree="categoryTree"
       :searchVisible="searchVisible"
       :searchResults="searchResults"
@@ -28,7 +26,6 @@
       @selectDoc="handleDocClick"
       @selectCategory="handleCategoryClick"
       @goHome="handleGoHome"
-      @newDoc="showDocDialog(null)"
       @editDoc="handleEditDoc"
       @deleteDoc="handleDeleteDoc"
       @togglePublish="handleTogglePublish"
@@ -132,10 +129,6 @@ interface CategoryWithDocs extends HelpCategory {
 const categoryTree = ref<CategoryWithDocs[]>([])
 /** 当前选中的分类 ID */
 const currentCategoryId = ref<string | null>(null)
-/** 当前选中的分类名称 */
-const currentCategoryName = ref('')
-/** 当前分类下的文档列表 */
-const documentList = ref<HelpDocument[]>([])
 /** 当前查看的文档 */
 const currentDocument = ref<HelpDocument | null>(null)
 /** 当前文档的标题目录 */
@@ -185,13 +178,7 @@ async function fetchCategoryTree(): Promise<void> {
     const tree = await helpApi.listCategoryTree()
     const treeData = tree as unknown as HelpCategory[]
     // 递归为每个分类（含子分类）加载文档列表
-    const enriched = await enrichCategoryTree(treeData)
-    categoryTree.value = enriched
-    // 刷新当前分类的文档列表
-    if (currentCategoryId.value) {
-      const target = findCategoryById(enriched, currentCategoryId.value)
-      documentList.value = target?.documents || []
-    }
+    categoryTree.value = await enrichCategoryTree(treeData)
   } catch {
     // 错误已在拦截器处理
   }
@@ -218,46 +205,20 @@ async function enrichCategoryTree(categories: HelpCategory[]): Promise<CategoryW
   )
 }
 
-/** 递归查找分类 */
-function findCategoryById(categories: CategoryWithDocs[], id: string): CategoryWithDocs | null {
-  for (const cat of categories) {
-    if (cat.id === id) {
-      return cat
-    }
-    if (cat.children && cat.children.length > 0) {
-      const found = findCategoryById(cat.children as CategoryWithDocs[], id)
-      if (found) {
-        return found
-      }
-    }
-  }
-  return null
-}
-
 /** 点击分类节点 */
-async function handleCategoryClick(category: HelpCategory): Promise<void> {
+function handleCategoryClick(category: HelpCategory): void {
   currentCategoryId.value = category.id
-  currentCategoryName.value = category.name
   currentDocument.value = null
   searchVisible.value = false
-  await fetchDocuments(category.id)
-}
-
-/** 加载文档列表 */
-async function fetchDocuments(categoryId: string): Promise<void> {
-  try {
-    const data = await helpApi.listDocuments(categoryId)
-    documentList.value = data as unknown as HelpDocument[]
-  } catch {
-    documentList.value = []
-  }
 }
 
 /** 点击文档查看详情 */
 async function handleDocClick(doc: HelpDocument | HelpSearchResult): Promise<void> {
   try {
     const data = await helpApi.getDocument(doc.id)
-    currentDocument.value = data as unknown as HelpDocument
+    const detail = data as unknown as HelpDocument
+    currentDocument.value = detail
+    currentCategoryId.value = detail.categoryId
     searchVisible.value = false
     await nextTick()
   } catch {
@@ -298,9 +259,7 @@ function handleCloseSearch(): void {
 /** 返回首页 */
 function handleGoHome(): void {
   currentCategoryId.value = null
-  currentCategoryName.value = ''
   currentDocument.value = null
-  documentList.value = []
   searchVisible.value = false
 }
 
@@ -341,6 +300,12 @@ function handleNewSubCategory(parentId: string): void {
   categoryDialogVisible.value = true
 }
 
+/** 新建文档（从侧边栏分类触发） */
+function handleNewDoc(categoryId: string): void {
+  currentCategoryId.value = categoryId
+  showDocDialog(null)
+}
+
 /** 编辑分类（从侧边栏触发） */
 function handleEditCategory(category: HelpCategory): void {
   showCategoryDialog(category)
@@ -354,8 +319,6 @@ async function handleDeleteCategory(category: HelpCategory): Promise<void> {
     ElMessage.success(t('helpCenter.deleteSuccess'))
     if (currentCategoryId.value === category.id) {
       currentCategoryId.value = null
-      currentCategoryName.value = ''
-      documentList.value = []
     }
     await fetchCategoryTree()
   } catch {
@@ -508,9 +471,9 @@ onMounted(() => {
 }
 
 .help-center :deep(.help-sidebar) {
-  flex: 0 0 240px !important;
-  min-width: 240px !important;
-  max-width: 240px !important;
+  flex: 0 0 260px !important;
+  min-width: 260px !important;
+  max-width: 260px !important;
   height: 100% !important;
 }
 

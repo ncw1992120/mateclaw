@@ -24,6 +24,29 @@ public interface ConversationRuntime {
     List<ConversationVO> listConversations(String appType);
 
     /**
+     * 按用户名和工作区列出会话
+     * <p>
+     * 返回该用户创建的会话以及系统（定时任务）产生的会话，
+     * 仅限指定工作区内，按置顶与最后活跃时间倒序。
+     *
+     * @param username    用户名
+     * @param workspaceId 工作区 ID
+     * @return 会话视图列表
+     */
+    List<ConversationVO> listConversations(String username, Long workspaceId);
+
+    /**
+     * 校验用户是否拥有该会话
+     * <p>
+     * 定时任务产生的会话（username = system）对所有登录用户可见。
+     *
+     * @param conversationId 会话 ID
+     * @param username       用户名
+     * @return true 如果用户是会话拥有者或会话为系统会话
+     */
+    boolean isConversationOwner(String conversationId, String username);
+
+    /**
      * 获取会话消息历史
      *
      * @param conversationId 会话 ID
