@@ -4,9 +4,14 @@
     <div class="main">
       <!-- 左侧可展开菜单 -->
       <div class="left-sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <div class="sidebar-header">
-          <span v-if="!sidebarCollapsed" class="sidebar-title">{{ t('nav.smartAsk') }}</span>
-          <button class="collapse-btn" :title="sidebarCollapsed ? t('conversation.expand') : t('conversation.collapse')" @click="sidebarCollapsed = !sidebarCollapsed">
+        <!-- 顶部标题栏 -->
+        <div class="sidebar-topbar" :class="{ collapsed: sidebarCollapsed }">
+          <span v-if="!sidebarCollapsed" class="sidebar-brand">{{ t('nav.smartAsk') }}</span>
+          <button
+            class="collapse-btn top-collapse-btn"
+            :title="sidebarCollapsed ? t('conversation.expand') : t('conversation.collapse')"
+            @click="sidebarCollapsed = !sidebarCollapsed"
+          >
             <span class="collapse-btn-svg" aria-hidden="true">
               <svg v-if="sidebarCollapsed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 18 15 12 9 6"/>
@@ -17,25 +22,121 @@
             </span>
           </button>
         </div>
+
+        <!-- 工作区切换器 -->
+        <div v-if="!sidebarCollapsed" class="sidebar-workspace">
+          <el-dropdown trigger="click" @command="handleWorkspaceCommand">
+            <div class="workspace-trigger">
+              <div class="workspace-info">
+                <span class="workspace-current-name">{{ workspaceDisplayName(userStore.currentWorkspace) }}</span>
+                <span v-if="userStore.currentWorkspace?.memberRole" class="workspace-current-role">{{ userStore.currentWorkspace.memberRole }}</span>
+              </div>
+              <span class="workspace-trigger-arrow">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="ws in userStore.workspaces"
+                  :key="ws.id"
+                  :command="ws.id"
+                  :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
+                  :title="workspaceDisplayName(ws)"
+                >
+                  <span class="workspace-item-name">{{ workspaceDisplayName(ws) }}</span>
+                  <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
+                  <span v-if="ws.memberRole" class="ws-role">{{ ws.memberRole }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item divided command="manage">
+                  <span class="workspace-manage-text">{{ t('workspace.manage') }}</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
+        <!-- 折叠态：工作区图标入口 -->
+        <div v-else class="sidebar-workspace-collapsed">
+          <el-dropdown trigger="click" @command="handleWorkspaceCommand">
+            <div class="workspace-trigger-collapsed" :title="workspaceDisplayName(userStore.currentWorkspace)">
+              <span class="workspace-icon"><el-icon><OfficeBuilding /></el-icon></span>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="ws in userStore.workspaces"
+                  :key="ws.id"
+                  :command="ws.id"
+                  :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
+                >
+                  <span class="workspace-item-name">{{ workspaceDisplayName(ws) }}</span>
+                  <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
+                </el-dropdown-item>
+                <el-dropdown-item divided command="manage">{{ t('workspace.manage') }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
         <nav class="sidebar-menu">
-          <a
-            v-for="item in sidebarItems"
-            :key="item.key"
-            class="sidebar-item"
-            :class="{ active: activeSidebarItem === item.key }"
-            @click="activeSidebarItem = item.key"
-            :title="sidebarCollapsed ? t(item.label) : ''"
+          <div
+            v-for="group in sidebarGroups"
+            :key="group.title"
+            class="sidebar-group"
+            :class="{ collapsed: sidebarCollapsed }"
           >
-            <span class="sidebar-icon" v-html="item.icon"></span>
-            <span v-if="!sidebarCollapsed" class="sidebar-label">{{ t(item.label) }}</span>
-          </a>
+            <a
+              v-for="item in group.items"
+              :key="item.key"
+              class="sidebar-item"
+              :class="{ active: activeSidebarItem === item.key }"
+              @click="activeSidebarItem = item.key"
+              :title="sidebarCollapsed ? t(item.label) : ''"
+            >
+              <span class="sidebar-icon" v-html="item.icon"></span>
+              <span v-if="!sidebarCollapsed" class="sidebar-label">{{ t(item.label) }}</span>
+            </a>
+          </div>
         </nav>
+
+        <!-- 底部用户区 -->
+        <div class="sidebar-footer" :class="{ collapsed: sidebarCollapsed }">
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <div class="user-card" :class="{ collapsed: sidebarCollapsed }" :title="userStore.username">
+              <div class="user-avatar">
+                <span class="avatar-text">{{ avatarText }}</span>
+              </div>
+              <div v-if="!sidebarCollapsed" class="user-info">
+                <span class="user-name">{{ userStore.nickname || userStore.username || '用户' }}</span>
+                <span class="user-role">{{ userStore.role }}</span>
+              </div>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  {{ userStore.username }}（{{ userStore.role }}）
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <div v-if="!sidebarCollapsed" class="footer-actions">
+            <button class="footer-action-btn" :title="t('nav.settings')">
+              <el-icon><Setting /></el-icon>
+            </button>
+          </div>
+        </div>
+
       </div>
 
       <!-- 历史对话侧栏（问数、洞察、报告页面展示） -->
       <div v-if="showSelectorPanel" class="history-sidebar" :class="{ collapsed: historyCollapsed }">
         <div class="history-header">
           <div class="header-spacer"></div>
+
           <button v-if="!historyCollapsed" class="new-chat-btn" :title="t('conversation.newChat')" @click="handleNewChat">
             <span class="new-chat-icon" aria-hidden="true">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -229,23 +330,34 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
+import { useUserStore } from '@/stores/useUserStore'
 import { usePersistedRef, usePersistedState } from '@/composables/usePersistedRef'
 import ChatView from '@/views/ChatView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
-import type { Conversation } from '@/types'
+import { OfficeBuilding, Check, Setting } from '@element-plus/icons-vue'
+import type { Conversation, Workspace } from '@/types'
 
 /** 左侧菜单可选取值（一级菜单 key） */
 const SIDEBAR_ITEM_KEYS = ['qa', 'interpret', 'report', 'skill', 'help'] as const
 
 const { t } = useI18n()
+const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
+const userStore = useUserStore()
+
+/** 用户头像文字 */
+const avatarText = computed(() => {
+  const name = userStore.nickname || userStore.username || '用'
+  return name.charAt(0).toUpperCase()
+})
 
 /** 当前选中的模型 ID（刷新后保留） */
 const selectedModelId = usePersistedState<number | undefined>('mc-workbench-selected-model-id', undefined)
@@ -290,37 +402,47 @@ const HISTORY_GROUP_YESTERDAY = '昨天'
 const HISTORY_GROUP_SEVEN_DAYS = '7 天内'
 const HISTORY_GROUP_THIRTY_DAYS = '30 天内'
 
-/** 侧边栏菜单项配置（图标对齐 mateclaw-ui 的 SVG 风格） */
-const sidebarItems = [
+/** 侧边栏分组配置 */
+const sidebarGroups = [
   {
-    key: 'qa',
-    label: 'nav.subQa',
-    // 问数：对话气泡 + 问号，凸显"提问"语义
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    title: 'sidebar.core',
+    items: [
+      {
+        key: 'qa',
+        label: 'nav.subQa',
+        // 问数：对话气泡 + 问号
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+      },
+      {
+        key: 'interpret',
+        label: 'nav.subInterpret',
+        // 洞察：灯泡
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>`,
+      },
+      {
+        key: 'report',
+        label: 'nav.subReport',
+        // 报告：文档 + 柱状图
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="15" x2="8" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="16" y1="11" x2="16" y2="17"/></svg>`,
+      },
+    ],
   },
   {
-    key: 'interpret',
-    label: 'nav.subInterpret',
-    // 洞察：灯泡，代表"灵感/顿悟/洞见"
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>`,
-  },
-  {
-    key: 'report',
-    label: 'nav.subReport',
-    // 报告：文档 + 柱状图，凸显"分析报告"语义
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="15" x2="8" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="16" y1="11" x2="16" y2="17"/></svg>`,
-  },
-  {
-    key: 'skill',
-    label: 'nav.subSkill',
-    // 配置：齿轮，标准设置图标
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09c-.66 0-1.3.26-1.77.73-.47.47-.73 1.11-.73 1.77z"/></svg>`,
-  },
-  {
-    key: 'help',
-    label: 'nav.subHelp',
-    // 帮助：书本 + 问号，凸显"查阅文档/手册"语义
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    title: 'sidebar.system',
+    items: [
+      {
+        key: 'skill',
+        label: 'nav.subSkill',
+        // 配置：齿轮
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09c-.66 0-1.3.26-1.77.73-.47.47-.73 1.11-.73 1.77z"/></svg>`,
+      },
+      {
+        key: 'help',
+        label: 'nav.subHelp',
+        // 帮助：书本 + 问号
+        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+      },
+    ],
   },
 ]
 
@@ -381,6 +503,33 @@ function handleModelChange(modelId: number): void {
 /** Agent 切换 */
 async function handleAgentChange(agentId: number | string): Promise<void> {
   await agentStore.selectAgent(agentId)
+}
+
+/** 工作区显示名称：优先使用 name，空则回退 description */
+function workspaceDisplayName(ws: Workspace | null): string {
+  if (!ws) {
+    return '选择工作区'
+  }
+  return ws.name?.trim() || ws.description?.trim() || ''
+}
+
+/** 工作区下拉命令处理 */
+function handleWorkspaceCommand(command: string | number): void {
+  if (command === 'manage') {
+    router.push({ path: '/', query: { nav: 'workspace' } })
+    return
+  }
+  userStore.setCurrentWorkspace(command)
+  ElMessage.success('已切换工作区')
+  window.location.reload()
+}
+
+/** 用户菜单命令处理 */
+function handleUserCommand(command: string): void {
+  if (command === 'logout') {
+    userStore.logout()
+    router.push('/login')
+  }
 }
 
 /**
@@ -667,7 +816,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #fff;
+  background: var(--theme-bg);
   flex: 1;
 }
 
@@ -683,18 +832,34 @@ onBeforeUnmount(() => {
 .mid-topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  height: 60px;
-  padding: 0 20px;
-  background: var(--white);
-  border-bottom: 1px solid var(--light-grey);
+  gap: 20px;
+  height: 56px;
+  padding: 0 24px;
+  background: var(--theme-overlay);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
+  backdrop-filter: blur(12px);
 }
 
 .topbar-selector {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--theme-surface-hover);
+  border-radius: 20px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.topbar-selector:hover {
+  background: var(--theme-border);
+}
+
+.topbar-selector:focus-within {
+  border-color: rgba(240, 90, 35, 0.3);
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.06);
 }
 
 .agent-selector-header {
@@ -704,11 +869,17 @@ onBeforeUnmount(() => {
 }
 
 .agent-select-header {
-  width: 200px;
+  width: 180px;
 }
 
 .agent-select-header :deep(.el-input__wrapper) {
   border-radius: 16px;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.agent-select-header :deep(.el-input__inner) {
+  font-weight: 500;
 }
 
 .model-selector {
@@ -721,15 +892,22 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .model-select {
-  width: 220px;
-  min-width: 220px;
+  width: 200px;
+  min-width: 200px;
 }
 
 .model-select :deep(.el-input__wrapper) {
   border-radius: 16px;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.model-select :deep(.el-input__inner) {
+  font-weight: 500;
 }
 
 .model-select :deep(.el-select__selected-item) {
@@ -768,63 +946,205 @@ onBeforeUnmount(() => {
 
 /* 左侧侧边栏 */
 .left-sidebar {
-  width: 160px;
-  background: var(--white);
-  border-right: 1px solid var(--light-grey);
+  width: 210px;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: width 0.3s ease;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s ease, border-color 0.25s ease;
   overflow: hidden;
 }
 
 .left-sidebar.collapsed {
-  width: 48px;
+  width: 56px;
 }
 
-.sidebar-header {
-  height: 60px;
+/* 顶部伸缩按钮 */
+.sidebar-topbar {
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--light-grey);
+  padding: 0 10px 0 14px;
+  flex-shrink: 0;
 }
 
-.sidebar-title {
-  font-size: 14px;
+.sidebar-topbar.collapsed {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.sidebar-brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-text);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.top-collapse-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+/* 工作区切换器 */
+.sidebar-workspace {
+  padding: 8px 10px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.sidebar-workspace :deep(.el-dropdown) {
+  display: block;
+  width: 100%;
+}
+
+.workspace-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.workspace-trigger:hover {
+  border-color: rgba(240, 90, 35, 0.2);
+  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.05);
+}
+
+.workspace-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.workspace-current-name {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--body-text);
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.workspace-current-role {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--main-orange), var(--dark-orange));
+  padding: 2px 6px;
+  border-radius: 10px;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+.workspace-trigger-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.workspace-trigger:hover .workspace-trigger-arrow {
+  color: var(--main-orange);
+}
+
+.sidebar-workspace-collapsed {
+  padding: 12px 8px 10px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.workspace-trigger-collapsed {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
+  color: var(--main-orange);
+  transition: all 0.2s ease;
+}
+
+.workspace-trigger-collapsed:hover {
+  background: var(--theme-surface-elevated);
+  border-color: rgba(240, 90, 35, 0.18);
+}
+
+.workspace-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(240, 90, 35, 0.1);
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.workspace-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-check {
+  margin-left: 8px;
+  color: var(--main-orange);
+  font-size: 12px;
+}
+
+.workspace-manage-text {
+  color: var(--theme-text-secondary);
+}
+
+.ws-role {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .collapse-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--light-grey);
-  background: var(--white);
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
   font-size: 12px;
   color: var(--muted);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 6px;
   flex-shrink: 0;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .collapse-btn:hover {
-  background: var(--very-light-orange);
+  background: rgba(240, 90, 35, 0.08);
   color: var(--main-orange);
-  border-color: var(--main-orange);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.12);
-}
-
-.collapse-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .collapse-btn-svg {
@@ -841,35 +1161,46 @@ onBeforeUnmount(() => {
 .sidebar-menu {
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  gap: 4px;
+  padding: 6px 10px;
+  gap: 14px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-group.collapsed {
+  gap: 6px;
 }
 
 .sidebar-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 9px 10px;
   font-size: 13px;
-  color: var(--body-text);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   border-radius: 8px;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   text-decoration: none;
   white-space: nowrap;
   font-weight: 500;
-  position: relative;
 }
 
 .sidebar-icon {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
-  transition: color 0.2s;
+  color: var(--theme-text-muted);
+  transition: color 0.2s ease;
 }
 
 .sidebar-icon :deep(svg) {
@@ -883,7 +1214,7 @@ onBeforeUnmount(() => {
 }
 
 .sidebar-item:hover {
-  background: rgba(240, 90, 35, 0.06);
+  background: var(--theme-surface-hover);
   color: var(--main-orange);
 }
 
@@ -894,16 +1225,138 @@ onBeforeUnmount(() => {
 .sidebar-item.active {
   color: var(--main-orange);
   font-weight: 600;
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(240, 90, 35, 0.08);
 }
 
 .sidebar-item.active .sidebar-icon {
   color: var(--main-orange);
 }
 
+/* 侧边栏底部用户区 */
+.sidebar-footer {
+  padding: 10px;
+  border-top: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-footer :deep(.el-dropdown) {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-footer.collapsed {
+  padding: 10px 8px;
+  justify-content: center;
+}
+
+.sidebar-footer.collapsed :deep(.el-dropdown) {
+  flex: none;
+}
+
+.user-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 5px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.user-card:hover {
+  background: var(--theme-bg);
+  border-color: rgba(240, 90, 35, 0.12);
+  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.05);
+}
+
+.user-card.collapsed {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  border: 1.5px solid var(--theme-surface);
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.user-role {
+  font-size: 10px;
+  color: var(--theme-text-muted);
+  line-height: 1.2;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.footer-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-size: 15px;
+}
+
+.footer-action-btn:hover {
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+}
+
 .col-mid {
   flex: 1;
-  background: var(--near-white);
+  background: var(--theme-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -913,24 +1366,24 @@ onBeforeUnmount(() => {
 
 /* 历史对话侧栏 */
 .history-sidebar {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
-  background: var(--white);
-  border-right: 1px solid var(--light-grey);
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width 0.25s ease;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s ease, border-color 0.25s ease;
 }
 
 .history-sidebar.collapsed {
-  width: 48px;
+  width: 52px;
 }
 
 .history-header {
-  height: 60px;
-  padding: 12px;
-  border-bottom: 1px solid var(--light-grey);
+  height: 56px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -939,8 +1392,63 @@ onBeforeUnmount(() => {
 }
 
 .history-sidebar.collapsed .history-header {
-  padding: 12px 8px;
+  padding: 10px 8px;
   justify-content: center;
+}
+
+/* 工作区切换器 */
+.workspace-switcher {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  max-width: 130px;
+}
+
+.workspace-switcher:hover {
+  background: var(--theme-surface-elevated);
+  border-color: rgba(240, 90, 35, 0.18);
+}
+
+.workspace-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(240, 90, 35, 0.1);
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.workspace-name {
+  font-size: 12px;
+  color: var(--theme-text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-arrow {
+  font-size: 10px;
+  color: var(--main-orange);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.ws-role {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /** 操作按钮行（新对话 + 折叠按钮） */
@@ -961,27 +1469,18 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--light-grey);
-  background: var(--white);
+  border: none;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   flex-shrink: 0;
   border-radius: 8px;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .history-collapse-btn:hover {
   color: var(--main-orange);
-  border-color: var(--main-orange);
-  background: var(--very-light-orange);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.12);
-}
-
-.history-collapse-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: var(--theme-surface-hover);
 }
 
 .collapse-svg {
@@ -1000,31 +1499,24 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 28px;
-  padding: 0 48px;
-  border: 1px solid var(--light-grey);
+  height: 30px;
+  padding: 0 12px;
+  border: 1px dashed rgba(240, 90, 35, 0.4);
   border-radius: 8px;
-  background: var(--white);
-  color: var(--muted);
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  flex: 1;
 }
 
 .new-chat-btn:hover {
+  border-style: solid;
   border-color: var(--main-orange);
-  background: var(--very-light-orange);
-  color: var(--main-orange);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.12);
-}
-
-.new-chat-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  background: var(--theme-surface-hover);
 }
 
 .new-chat-icon {
@@ -1045,7 +1537,7 @@ onBeforeUnmount(() => {
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 8px;
+  padding: 0 10px 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1053,66 +1545,73 @@ onBeforeUnmount(() => {
 
 .history-group-title {
   align-self: flex-start;
-  margin: 14px 0 10px 2px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: #f5f6f8;
-  color: #8a8f99;
+  margin: 16px 0 8px 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 18px;
+  letter-spacing: 0.3px;
 }
 
 .history-group-title:first-child {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .history-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
-  min-height: 46px;
+  transition: all 0.15s ease;
+  min-height: 44px;
+  border: 1px solid transparent;
 }
 
 .history-item:hover {
-  background: var(--very-light-orange);
+  background: var(--theme-surface-hover);
+  border-color: var(--theme-border);
 }
 
 .history-item.pinned:not(.active) {
-  background: rgba(240, 90, 35, 0.035);
+  background: var(--theme-surface-hover);
+  border-color: var(--theme-border);
 }
 
 .history-item.active {
-  background: var(--very-light-orange);
+  background: var(--theme-surface-hover);
+  border-color: rgba(240, 90, 35, 0.15);
   color: var(--main-orange);
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(240, 90, 35, 0.06);
 }
 
 .history-item-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
 }
 
 .history-item-title {
   font-size: 13px;
-  color: var(--dark-text);
+  color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.4;
+  font-weight: 500;
 }
 
 .history-pin-mark {
   color: var(--main-orange);
-  font-size: 11px;
+  font-size: 10px;
   margin-right: 3px;
 }
 
@@ -1122,7 +1621,7 @@ onBeforeUnmount(() => {
 
 .history-item.active .history-item-meta {
   color: var(--main-orange);
-  opacity: 0.8;
+  opacity: 0.75;
 }
 
 .history-item-meta {
@@ -1145,7 +1644,7 @@ onBeforeUnmount(() => {
 }
 
 .meta-sep {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 /* 旋转图标：会话正在生成时显示在历史项最左侧 */
@@ -1168,12 +1667,13 @@ onBeforeUnmount(() => {
 /* 未读标识：后台会话完成时显示的小圆点 */
 .history-item-unread {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   background: var(--main-orange);
   border-radius: 50%;
   flex-shrink: 0;
   margin: 0 2px;
+  box-shadow: 0 0 0 2px var(--theme-surface);
 }
 
 /* 历史项右侧"三点"操作按钮 */
@@ -1182,7 +1682,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s ease;
 }
 
 .history-item:hover .history-item-actions,
@@ -1192,8 +1692,8 @@ onBeforeUnmount(() => {
 }
 
 .history-item-action {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: transparent;
   color: var(--muted);
@@ -1201,13 +1701,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 0;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
 .history-item-action:hover {
-  background: var(--lighter-grey);
+  background: var(--theme-surface-hover);
   color: var(--main-orange);
 }
 
@@ -1222,12 +1722,12 @@ onBeforeUnmount(() => {
   top: 100%;
   right: 8px;
   margin-top: 4px;
-  background: var(--white);
-  border: 1px solid var(--light-grey);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  min-width: 120px;
-  padding: 4px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 130px;
+  padding: 5px;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -1241,17 +1741,18 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   font-size: 13px;
-  color: var(--dark-text);
+  color: var(--theme-text);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 5px;
   text-align: left;
   width: 100%;
   font-family: inherit;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
 }
 
 .history-menu-item:hover {
-  background: var(--very-light-orange);
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
 }
 
 .history-menu-item.danger {
@@ -1259,7 +1760,7 @@ onBeforeUnmount(() => {
 }
 
 .history-menu-item.danger:hover {
-  background: #fef0ef;
+  background: rgba(229, 62, 62, 0.08);
 }
 
 .menu-icon {
@@ -1271,20 +1772,21 @@ onBeforeUnmount(() => {
 /* 内联重命名输入框 */
 .history-item-edit-input {
   flex: 1;
-  height: 26px;
-  padding: 0 6px;
+  height: 28px;
+  padding: 0 8px;
   font-size: 13px;
-  border: 1px solid var(--main-orange);
-  border-radius: 4px;
-  background: var(--white);
-  color: var(--dark-text);
+  border: 1px solid rgba(240, 90, 35, 0.4);
+  border-radius: 6px;
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
   outline: none;
   font-family: inherit;
   min-width: 0;
+  font-weight: 500;
 }
 
 .history-item-edit-input:focus {
-  box-shadow: 0 0 0 2px var(--very-light-orange);
+  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
 }
 
 /* 让 .history-item 作为 menu 浮层的定位锚点 */
@@ -1293,7 +1795,7 @@ onBeforeUnmount(() => {
 }
 
 .history-empty {
-  padding: 24px 12px;
+  padding: 32px 12px;
   font-size: 12px;
   color: var(--muted);
   text-align: center;

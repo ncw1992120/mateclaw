@@ -34,41 +34,27 @@
     </div>
 
     <div class="nav-right">
-      <button class="nav-btn icon-btn" :title="t('nav.notification')">🔔</button>
+      <button class="nav-btn icon-btn notification-btn" :title="t('nav.notification')">
+        <el-icon class="nav-icon"><Bell /></el-icon>
+        <span class="notification-dot"></span>
+      </button>
 
-      <!-- 工作区切换器 -->
-      <el-dropdown v-if="userStore.workspaces.length > 0" trigger="click" @command="handleWorkspaceSwitch">
-        <div class="workspace-switcher">
-          <span class="workspace-icon">🏢</span>
-          <span class="workspace-name">{{ userStore.currentWorkspace?.name || '选择工作区' }}</span>
-        </div>
+      <!-- 主题切换器 -->
+      <el-dropdown trigger="click" @command="handleThemeCommand">
+        <button class="nav-btn icon-btn theme-btn" :title="t('theme.title')">
+          <el-icon class="nav-icon"><Brush /></el-icon>
+        </button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item
-              v-for="ws in userStore.workspaces"
-              :key="ws.id"
-              :command="ws.id"
-              :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
+              v-for="item in themeOptions"
+              :key="item.key"
+              :command="item.key"
+              :class="{ 'is-active': themeStore.theme === item.key }"
             >
-              {{ ws.name }}
-              <span v-if="ws.memberRole" class="ws-role">{{ ws.memberRole }}</span>
+              <el-icon class="theme-option-icon"><component :is="item.icon" /></el-icon>
+              {{ t(item.label) }}
             </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
-      <!-- 用户菜单 -->
-      <el-dropdown trigger="click" @command="handleUserCommand">
-        <div class="user-avatar-wrapper">
-          <div class="user-avatar">{{ avatarText }}</div>
-          <span class="user-name">{{ userStore.nickname || userStore.username || '用户' }}</span>
-        </div>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item disabled>
-              {{ userStore.username }}（{{ userStore.role }}）
-            </el-dropdown-item>
-            <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -81,18 +67,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { useUserStore } from '@/stores/useUserStore'
+import { Bell, Brush, Sunny, Moon, View, MagicStick } from '@element-plus/icons-vue'
+import { useThemeStore, type ThemeMode } from '@/stores/useThemeStore'
+import type { Component } from 'vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
-
-/** 用户头像文字（昵称或用户名首字） */
-const avatarText = computed(() => {
-  const name = userStore.nickname || userStore.username || '用'
-  return name.charAt(0).toUpperCase()
-})
+const themeStore = useThemeStore()
 
 /** 当前激活的导航项 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
@@ -107,20 +89,19 @@ function handleNavClick(key: string): void {
   router.push({ path: '/', query: { ...route.query, nav: key } })
 }
 
-/** 切换工作区 */
-function handleWorkspaceSwitch(workspaceId: string | number): void {
-  userStore.setCurrentWorkspace(workspaceId)
-  ElMessage.success('已切换工作区')
-  // 刷新当前页面数据
-  window.location.reload()
-}
+/** 主题选项配置 */
+const themeOptions: { key: ThemeMode; label: string; icon: Component }[] = [
+  { key: 'light', label: 'theme.light', icon: Sunny },
+  { key: 'warm', label: 'theme.warm', icon: MagicStick },
+  { key: 'eye-care', label: 'theme.eyeCare', icon: View },
+  { key: 'dark', label: 'theme.dark', icon: Moon },
+  { key: 'system', label: 'theme.system', icon: Brush },
+]
 
-/** 用户菜单命令处理 */
-function handleUserCommand(command: string): void {
-  if (command === 'logout') {
-    userStore.logout()
-    router.push('/login')
-  }
+/** 主题菜单命令处理 */
+function handleThemeCommand(command: ThemeMode): void {
+  themeStore.setTheme(command)
+  ElMessage.success(t('theme.switchSuccess'))
 }
 </script>
 
@@ -132,11 +113,12 @@ function handleUserCommand(command: string): void {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #f0f1f3;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   z-index: 100;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 /* ========== 左侧：品牌 + 导航菜单 ========== */
@@ -175,7 +157,7 @@ function handleUserCommand(command: string): void {
 .brand-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   letter-spacing: 0.3px;
   line-height: 20px;
   white-space: nowrap;
@@ -195,7 +177,7 @@ function handleUserCommand(command: string): void {
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   border-radius: 6px;
   transition: color 0.2s ease, background 0.2s ease;
@@ -206,12 +188,12 @@ function handleUserCommand(command: string): void {
 }
 
 .nav-item:hover {
-  color: #f05a23;
+  color: var(--main-orange);
   background: rgba(240, 90, 35, 0.06);
 }
 
 .nav-item.active {
-  color: #f05a23;
+  color: var(--main-orange);
   font-weight: 600;
 }
 
@@ -223,7 +205,7 @@ function handleUserCommand(command: string): void {
   transform: translateX(-50%);
   width: 20px;
   height: 2px;
-  background: #f05a23;
+  background: var(--main-orange);
   border-radius: 1px;
 }
 
@@ -238,114 +220,56 @@ function handleUserCommand(command: string): void {
 .icon-btn {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: none;
   background: transparent;
-  font-size: 16px;
   color: #4e5969;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: all 0.2s ease;
   padding: 0;
 }
 
 .icon-btn:hover {
-  background: #f2f3f5;
-  color: #1d2129;
+  background: rgba(240, 90, 35, 0.08);
+  color: var(--main-orange);
 }
 
 .icon-btn:active {
-  background: #e5e6eb;
+  background: rgba(240, 90, 35, 0.12);
 }
 
-.user-avatar {
-  width: 32px;
-  height: 32px;
+.nav-icon {
+  font-size: 18px;
+}
+
+.notification-btn {
+  position: relative;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-  user-select: none;
-  flex-shrink: 0;
-}
-
-.user-avatar:hover {
-  box-shadow: 0 2px 10px rgba(240, 90, 35, 0.3);
-  transform: scale(1.05);
-}
-
-.user-avatar-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 4px 8px 4px 4px;
-  border-radius: 8px;
-  transition: background 0.2s ease;
-  margin-left: 4px;
-}
-
-.user-avatar-wrapper:hover {
-  background: #f2f3f5;
-}
-
-.user-name {
-  font-size: 13px;
-  color: #1d2129;
-  font-weight: 500;
-  white-space: nowrap;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 工作区切换器 */
-.workspace-switcher {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  margin-right: 4px;
-}
-
-.workspace-switcher:hover {
-  background: #f2f3f5;
-}
-
-.workspace-icon {
-  font-size: 16px;
-}
-
-.workspace-name {
-  font-size: 13px;
-  color: #1d2129;
-  font-weight: 500;
-  white-space: nowrap;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ws-role {
-  margin-left: 8px;
-  font-size: 11px;
-  color: #86909c;
+  background: #ef4444;
+  border: 1.5px solid var(--theme-surface);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
 }
 
 :deep(.el-dropdown-menu .is-active) {
   color: var(--main-orange);
   font-weight: 600;
+}
+
+.theme-option-icon {
+  margin-right: 6px;
+  font-size: 16px;
+  vertical-align: middle;
 }
 
 /* ========== 响应式适配 ========== */
@@ -381,10 +305,6 @@ function handleUserCommand(command: string): void {
     gap: 12px;
   }
   .icon-btn {
-    width: 32px;
-    height: 32px;
-  }
-  .user-avatar {
     width: 32px;
     height: 32px;
   }

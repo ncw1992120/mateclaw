@@ -1,4 +1,13 @@
 export default {
+  theme: {
+    title: 'Theme',
+    light: 'Light',
+    warm: 'Warm',
+    eyeCare: 'Eye Care',
+    dark: 'Dark',
+    system: 'System',
+    switchSuccess: 'Theme switched',
+  },
   nav: {
     brandName: 'Data Insight',
     smartAsk: 'Smart Ask',
@@ -20,6 +29,15 @@ export default {
     subSkill: 'Config',
     subWorkspace: 'Workspace',
     subHelp: 'Help',
+  },
+  workspace: {
+    manage: 'Manage Workspaces',
+  },
+  sidebar: {
+    core: 'Core',
+    system: 'System',
+    shortcuts: 'Shortcuts',
+    newChat: 'New Chat',
   },
   workspaceMenu: {
     agentContext: 'Agent Context',

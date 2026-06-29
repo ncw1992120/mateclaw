@@ -41,6 +41,9 @@ import vip.mate.skill.model.SkillEntity;
 import vip.mate.skill.runtime.SkillFrontmatterParser;
 import vip.mate.skill.service.SkillService;
 import vip.mate.system.service.SystemSettingService;
+import vip.mate.workspace.core.model.WorkspaceEntity;
+import vip.mate.workspace.core.model.WorkspaceMemberEntity;
+import vip.mate.workspace.core.model.WorkspaceWithRoleVO;
 import vip.mate.workspace.core.service.WorkspaceService;
 import vip.mate.tool.ToolRegistry;
 import vip.mate.tool.model.AvailableToolDTO;
@@ -779,5 +782,112 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     public boolean isGlobalAdmin(Long userId) {
         UserEntity user = authService.findById(userId);
         return user != null && "admin".equalsIgnoreCase(user.getRole());
+    }
+
+    // ==================== 工作区管理 ====================
+
+    /**
+     * 查询用户可见的工作区列表（含成员角色与生效角色）
+     */
+    @Override
+    public List<WorkspaceWithRoleVO> listWorkspacesWithRole(Long userId, boolean isGlobalAdmin) {
+        return workspaceService.listWithRoleByUserId(userId, isGlobalAdmin);
+    }
+
+    /**
+     * 根据 ID 获取工作区详情
+     */
+    @Override
+    public WorkspaceEntity getWorkspace(Long id) {
+        return workspaceService.getById(id);
+    }
+
+    /**
+     * 创建工作区
+     */
+    @Override
+    public WorkspaceEntity createWorkspace(WorkspaceEntity entity, Long creatorUserId) {
+        return workspaceService.create(entity, creatorUserId);
+    }
+
+    /**
+     * 更新工作区
+     */
+    @Override
+    public WorkspaceEntity updateWorkspace(WorkspaceEntity entity) {
+        return workspaceService.update(entity);
+    }
+
+    /**
+     * 删除工作区
+     */
+    @Override
+    public void deleteWorkspace(Long id) {
+        workspaceService.delete(id);
+    }
+
+    /**
+     * 获取工作区成员列表（含用户名、昵称）
+     */
+    @Override
+    public List<WorkspaceMemberEntity> listWorkspaceMembers(Long workspaceId) {
+        List<WorkspaceMemberEntity> members = workspaceService.listMembers(workspaceId);
+        for (WorkspaceMemberEntity m : members) {
+            UserEntity user = authService.findById(m.getUserId());
+            if (user != null) {
+                m.setUsername(user.getUsername());
+                m.setNickname(user.getNickname());
+            }
+        }
+        return members;
+    }
+
+    /**
+     * 添加工作区成员
+     * <p>
+     * 若用户不存在则创建账号，已有用户直接加入。密码仅用于新账号创建，
+     * 不会重置已有用户的密码（避免工作区管理员借此接管其他账号）。
+     */
+    @Override
+    public WorkspaceMemberEntity addWorkspaceMember(Long workspaceId, String username, String nickname,
+                                                     String password, String role) {
+        UserEntity target = authService.findByUsername(username);
+        if (target == null) {
+            if (password == null || password.isBlank()) {
+                throw new MateClawException("err.workspace.user_not_found",
+                        "用户不存在: " + username + "，需提供密码以创建账号");
+            }
+            UserEntity newUser = new UserEntity();
+            newUser.setUsername(username);
+            newUser.setPassword(password);
+            newUser.setNickname(nickname != null && !nickname.isBlank() ? nickname : username);
+            target = authService.createUser(newUser);
+        }
+        return workspaceService.addMember(workspaceId, target.getId(), role);
+    }
+
+    /**
+     * 更新成员角色
+     */
+    @Override
+    public WorkspaceMemberEntity updateWorkspaceMemberRole(Long workspaceId, Long userId, String role) {
+        return workspaceService.updateMemberRole(workspaceId, userId, role);
+    }
+
+    /**
+     * 移除工作区成员
+     */
+    @Override
+    public void removeWorkspaceMember(Long workspaceId, Long userId) {
+        workspaceService.removeMember(workspaceId, userId);
+    }
+
+    /**
+     * 根据用户名查询用户 ID
+     */
+    @Override
+    public Long findUserIdByUsername(String username) {
+        UserEntity user = authService.findByUsername(username);
+        return user != null ? user.getId() : null;
     }
 }

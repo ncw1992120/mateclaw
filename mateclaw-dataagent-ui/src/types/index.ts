@@ -19,6 +19,18 @@ export interface Workspace {
   effectiveRole: string
 }
 
+/** 工作区成员 */
+export interface WorkspaceMember {
+  id: number | string
+  workspaceId: number | string
+  userId: number | string
+  username: string
+  nickname: string
+  role: string
+  createTime: string
+  updateTime: string
+}
+
 /** 登录响应 */
 export interface LoginResponse {
   id: number | string

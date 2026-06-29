@@ -8,10 +8,26 @@ html, body, #app {
 }
 
 :root {
+  /* 品牌强调色 */
   --main-orange: #F05A23;
   --dark-orange: #E75C01;
   --light-orange: #FECEAF;
   --very-light-orange: #FEF7F2;
+
+  /* 主题语义色 */
+  --theme-bg: #ffffff;
+  --theme-surface: #ffffff;
+  --theme-surface-elevated: #ffffff;
+  --theme-surface-hover: rgba(240, 90, 35, 0.03);
+  --theme-text: #333333;
+  --theme-text-secondary: #555555;
+  --theme-text-muted: #999999;
+  --theme-border: rgba(0, 0, 0, 0.06);
+  --theme-border-strong: rgba(0, 0, 0, 0.08);
+  --theme-overlay: rgba(255, 255, 255, 0.85);
+  --theme-scrollbar: #E7E6E6;
+
+  /* 兼容旧变量 */
   --blue-grey: #44546A;
   --mid-grey: #7F7F7F;
   --light-grey: #E7E6E6;
@@ -24,14 +40,127 @@ html, body, #app {
   --muted: #999;
 }
 
+/* 温和 */
+html[data-theme='warm'] {
+  --main-orange: #C86B3A;
+  --dark-orange: #A85527;
+  --light-orange: #EAD3C6;
+  --very-light-orange: #F9F4F0;
+
+  --theme-bg: #F7F3EF;
+  --theme-surface: #FDFAF7;
+  --theme-surface-elevated: #FFFFFF;
+  --theme-surface-hover: rgba(160, 110, 80, 0.05);
+  --theme-text: #3A3228;
+  --theme-text-secondary: #5C5346;
+  --theme-text-muted: #958B80;
+  --theme-border: rgba(120, 100, 85, 0.09);
+  --theme-border-strong: rgba(120, 100, 85, 0.13);
+  --theme-overlay: rgba(247, 243, 239, 0.88);
+  --theme-scrollbar: #DDD6CD;
+
+  --blue-grey: #6B5E52;
+  --mid-grey: #9C8F82;
+  --light-grey: #E0D8D0;
+  --lighter-grey: #EDE8E2;
+  --near-white: #F7F3EF;
+  --white: #FDFAF7;
+  --black: #1A120B;
+  --dark-text: #3A3228;
+  --body-text: #5C5346;
+  --muted: #958B80;
+}
+
+/* 护眼 */
+html[data-theme='eye-care'] {
+  --main-orange: #6A9A68;
+  --dark-orange: #4A7A49;
+  --light-orange: #D6E8D4;
+  --very-light-orange: #F0F7EE;
+
+  --theme-bg: #F0F5EC;
+  --theme-surface: #F6FAF3;
+  --theme-surface-elevated: #FAFDF8;
+  --theme-surface-hover: rgba(100, 140, 95, 0.05);
+  --theme-text: #2E3B2E;
+  --theme-text-secondary: #4A5A4A;
+  --theme-text-muted: #7A8A7A;
+  --theme-border: rgba(80, 120, 80, 0.09);
+  --theme-border-strong: rgba(80, 120, 80, 0.13);
+  --theme-overlay: rgba(240, 245, 236, 0.88);
+  --theme-scrollbar: #C8D8C4;
+
+  --blue-grey: #5A6B5A;
+  --mid-grey: #8A9A8A;
+  --light-grey: #D0E0CC;
+  --lighter-grey: #E0F0DC;
+  --near-white: #F0F5EC;
+  --white: #F6FAF3;
+  --black: #1A2A1A;
+  --dark-text: #2E3B2E;
+  --body-text: #4A5A4A;
+  --muted: #7A8A7A;
+}
+
+/* 暗黑 */
+html[data-theme='dark'] {
+  --main-orange: #FF8C5A;
+  --dark-orange: #F05A23;
+  --light-orange: #4A3B32;
+  --very-light-orange: #2A2520;
+
+  --theme-bg: #121212;
+  --theme-surface: #1E1E1E;
+  --theme-surface-elevated: #2A2A2A;
+  --theme-surface-hover: rgba(255, 255, 255, 0.05);
+  --theme-text: #F0F0F0;
+  --theme-text-secondary: #D0D0D0;
+  --theme-text-muted: #888888;
+  --theme-border: rgba(255, 255, 255, 0.08);
+  --theme-border-strong: rgba(255, 255, 255, 0.12);
+  --theme-overlay: rgba(30, 30, 30, 0.85);
+  --theme-scrollbar: #3A3A3A;
+
+  --blue-grey: #A0AEC0;
+  --mid-grey: #888888;
+  --light-grey: #3A3A3A;
+  --lighter-grey: #2A2A2A;
+  --near-white: #1A1A1A;
+  --white: #121212;
+  --black: #FFFFFF;
+  --dark-text: #F0F0F0;
+  --body-text: #D0D0D0;
+  --muted: #888888;
+
+  color-scheme: dark;
+
+  /* Element Plus 暗色覆盖 */
+  --el-bg-color: #1E1E1E;
+  --el-bg-color-page: #121212;
+  --el-bg-color-overlay: #2A2A2A;
+  --el-text-color-primary: #F0F0F0;
+  --el-text-color-regular: #D0D0D0;
+  --el-text-color-secondary: #888888;
+  --el-text-color-placeholder: #666666;
+  --el-border-color: #3A3A3A;
+  --el-border-color-light: #2A2A2A;
+  --el-border-color-lighter: #333333;
+  --el-fill-color: #2A2A2A;
+  --el-fill-color-light: #333333;
+  --el-fill-color-lighter: #3A3A3A;
+  --el-fill-color-blank: #1E1E1E;
+  --el-mask-color: rgba(0, 0, 0, 0.6);
+}
+
 body {
   margin: 0;
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
   font-size: 14px;
-  color: var(--dark-text);
-  background: var(--white);
+  color: var(--theme-text);
+  background: var(--theme-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 ::-webkit-scrollbar {
@@ -39,7 +168,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--light-grey);
+  background: var(--theme-scrollbar);
   border-radius: 3px;
 }
 

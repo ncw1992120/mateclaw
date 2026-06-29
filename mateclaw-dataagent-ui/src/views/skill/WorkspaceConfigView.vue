@@ -18,6 +18,8 @@
     <!-- 右侧内容区 -->
     <section class="workspace-content">
       <AgentContextView v-if="activeSubMenu === 'agentContext'" />
+      <WorkspaceManageView v-else-if="activeSubMenu === 'workspaceManage'" />
+      <MemberManageView v-else-if="activeSubMenu === 'memberManage'" />
     </section>
   </div>
 </template>
@@ -26,12 +28,16 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AgentContextView from '../workspace/AgentContextView.vue'
+import WorkspaceManageView from '../workspace/WorkspaceManageView.vue'
+import MemberManageView from '../workspace/MemberManageView.vue'
 
 const { t } = useI18n()
 
 /** 二级菜单项 */
 const subMenuItems = [
   { key: 'agentContext', labelKey: 'workspaceMenu.agentContext' },
+  { key: 'workspaceManage', labelKey: 'workspaceMenu.workspaceManage' },
+  { key: 'memberManage', labelKey: 'workspaceMenu.memberManage' },
 ]
 
 /** 当前激活的二级菜单 */
