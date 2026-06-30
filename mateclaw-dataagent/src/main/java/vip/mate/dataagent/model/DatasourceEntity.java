@@ -20,6 +20,9 @@ public class DatasourceEntity {
     /** 所属工作区 ID */
     private Long workspaceId;
 
+    /** 数据源创建者用户 ID（权限隔离用，列表查询按此字段过滤） */
+    private Long ownerId;
+
     /** 数据源名称 */
     private String name;
 

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
@@ -32,15 +33,20 @@ public class DataAgentDatasourceController {
     private final DatasourceManageService datasourceService;
     private final AloudataEndpointService aloudataEndpointService;
     private final AloudataSemanticSyncService aloudataSyncService;
+    private final WorkspaceGuard workspaceGuard;
 
     /**
      * 数据源列表
+     * <p>
+     * 按当前登录用户 ID 过滤，仅返回该用户创建的数据源。
+     * 管理员也不可查看他人配置的数据源（第一性原理：数据源归属创建者）。
      */
     @GetMapping
-    @Operation(summary = "数据源列表", description = "获取所有数据源")
+    @Operation(summary = "数据源列表", description = "获取当前用户创建的数据源列表，按 owner_id 过滤")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     public R<List<DatasourceVO>> list() {
-        return R.ok(datasourceService.listDatasources());
+        Long userId = workspaceGuard.currentUserId();
+        return R.ok(datasourceService.listDatasources(userId));
     }
 
     /**
@@ -56,12 +62,15 @@ public class DataAgentDatasourceController {
 
     /**
      * 创建数据源
+     * <p>
+     * 创建时自动填充 ownerId 为当前登录用户 ID。
      */
     @PostMapping
-    @Operation(summary = "创建数据源", description = "新增数据源配置")
+    @Operation(summary = "创建数据源", description = "新增数据源配置，owner_id 自动填充为当前登录用户")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> create(@RequestBody DatasourceCreateRequest request) {
-        return R.ok(datasourceService.createDatasource(request));
+        Long userId = workspaceGuard.currentUserId();
+        return R.ok(datasourceService.createDatasource(request, userId));
     }
 
     /**
@@ -121,10 +130,11 @@ public class DataAgentDatasourceController {
     }
 
     /**
-     * 触发 Schema 发现
+     * 触发 Schema 发现（仅管理员可操作）
      */
     @PostMapping("/{id}/schema-discovery")
-    @Operation(summary = "触发 Schema 发现", description = "自动扫描数据源，提取表结构、字段类型、主外键关系、索引信息")
+    @Operation(summary = "触发 Schema 发现", description = "自动扫描数据源，提取表结构、字段类型、主外键关系、索引信息。仅工作区管理员可执行同步元数据操作")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> triggerSchemaDiscovery(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         return R.ok(datasourceService.triggerSchemaDiscovery(id));
@@ -163,10 +173,11 @@ public class DataAgentDatasourceController {
     }
 
     /**
-     * 同步单张表元数据
+     * 同步单张表元数据（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/tables/{tableId}/sync")
-    @Operation(summary = "同步单张表元数据", description = "重新同步指定表的字段信息，支持追加和覆盖模式")
+    @Operation(summary = "同步单张表元数据", description = "重新同步指定表的字段信息，支持追加和覆盖模式。仅工作区管理员可执行同步元数据操作")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceTableVO> syncTable(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "表 ID") @PathVariable Long tableId,
@@ -202,20 +213,22 @@ public class DataAgentDatasourceController {
     // ==================== Aloudata 指标平台相关接口 ====================
 
     /**
-     * 触发 Aloudata 语义层全量同步
+     * 触发 Aloudata 语义层全量同步（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/aloudata/sync")
-    @Operation(summary = "同步 Aloudata 语义层", description = "从 Aloudata 指标平台同步指标、维度、类目元数据到本地语义层（MySQL + ES）")
+    @Operation(summary = "同步 Aloudata 语义层", description = "从 Aloudata 指标平台同步指标、维度、类目元数据到本地语义层（MySQL + ES）。仅工作区管理员可执行同步元数据操作")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<AloudataSemanticSyncService.SyncResult> syncAloudataSemantic(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
         return R.ok(aloudataSyncService.fullSync(datasourceId));
     }
 
     /**
-     * 重建 ES 索引（仅从 MySQL 读取已同步数据写入 ES，不重新从 Aloudata API 拉取）
+     * 重建 ES 索引（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/aloudata/rebuild-es")
-    @Operation(summary = "重建 ES 索引", description = "将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引，不从 Aloudata API 重新拉取。适用于 ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景")
+    @Operation(summary = "重建 ES 索引", description = "将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引，不从 Aloudata API 重新拉取。适用于 ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景。仅工作区管理员可执行")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<AloudataSemanticSyncService.SyncResult> rebuildEsIndex(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
         return R.ok(aloudataSyncService.rebuildEsIndex(datasourceId));

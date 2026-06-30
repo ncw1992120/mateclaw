@@ -157,3 +157,46 @@ export function listSyncedCategories(datasourceId: string | number, categoryType
     params: categoryType ? { categoryType } : undefined,
   })
 }
+
+// ==================== 数据源用户查询账号 ====================
+
+const ACCOUNT_BASE_URL = '/dataagent/api/v1/datasource-accounts'
+
+/** 查询当前用户所有已绑定的查询账号 */
+export function listDatasourceAccounts() {
+  return api.get<DatasourceAccountVO[]>(ACCOUNT_BASE_URL)
+}
+
+/** 查询当前用户在指定数据源上绑定的查询账号 */
+export function getDatasourceAccount(datasourceId: string | number) {
+  return api.get<DatasourceAccountVO>(`${ACCOUNT_BASE_URL}/${datasourceId}`)
+}
+
+/** 创建或更新当前用户的查询账号绑定 */
+export function upsertDatasourceAccount(data: { datasourceId: string | number; queryUsername: string; queryPassword: string }) {
+  return api.post<DatasourceAccountVO>(ACCOUNT_BASE_URL, data)
+}
+
+/** 删除当前用户的查询账号绑定 */
+export function deleteDatasourceAccount(datasourceId: string | number) {
+  return api.delete(`${ACCOUNT_BASE_URL}/${datasourceId}`)
+}
+
+/** 测试当前用户的查询账号连接 */
+export function testDatasourceAccount(datasourceId: string | number) {
+  return api.post<boolean>(`${ACCOUNT_BASE_URL}/${datasourceId}/test`)
+}
+
+/** 数据源用户查询账号视图对象 */
+export interface DatasourceAccountVO {
+  id: number
+  datasourceId: number
+  datasourceName?: string
+  datasourceType?: string
+  queryUsername: string
+  status: number
+  lastTestTime?: string
+  lastTestOk?: boolean
+  createTime?: string
+  updateTime?: string
+}

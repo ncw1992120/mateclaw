@@ -10,7 +10,21 @@ import java.util.List;
 public interface DatasourceManageService {
 
     /**
-     * 获取所有数据源
+     * 获取数据源列表
+     * <p>
+     * 按创建者用户 ID 过滤，不同用户仅可见自己配置的数据源。
+     * 管理员也不可查看他人配置的数据源。
+     *
+     * @param ownerId 数据源创建者用户 ID，null 时不按 owner 过滤（仅供内部工具调用）
+     * @return 数据源列表
+     */
+    List<DatasourceVO> listDatasources(Long ownerId);
+
+    /**
+     * 获取数据源列表（全量，不过滤 owner）
+     * <p>
+     * 仅供内部工具调用（如 DatasourceQueryTool、ChatScopeContext 装饰器），
+     * 这些场景已通过用户勾选的白名单约束数据范围。
      *
      * @return 数据源列表
      */
@@ -31,6 +45,15 @@ public interface DatasourceManageService {
      * @return 创建后的数据源视图对象
      */
     DatasourceVO createDatasource(DatasourceCreateRequest request);
+
+    /**
+     * 创建数据源（带 ownerId）
+     *
+     * @param request 创建请求
+     * @param ownerId 数据源创建者用户 ID
+     * @return 创建后的数据源视图对象
+     */
+    DatasourceVO createDatasource(DatasourceCreateRequest request, Long ownerId);
 
     /**
      * 更新数据源

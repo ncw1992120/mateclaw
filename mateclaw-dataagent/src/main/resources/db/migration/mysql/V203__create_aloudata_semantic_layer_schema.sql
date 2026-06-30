@@ -6,9 +6,16 @@
 -- 同步来源：Aloudata API（metrics_list, metric_batch_detail,
 --           metric_all_dimensions, dimensions_list, dimension_detail,
 --           category_list）
+--
+-- 设计说明：
+--   1. 不加 workspace_id：这三张表通过 datasource_id 关联，datasource_id 已有 workspace_id，
+--      无需冗余存储 workspace_id。
+--   2. 不加 deleted 字段：全量同步采用 upsert + 逻辑替换策略（通过 sync_version 标识），
+--      不依赖软删除字段。
+-- ============================================================
 
 -- 1. Aloudata 指标元数据表
-CREATE TABLE `dataagent_aloudata_metric` (
+CREATE TABLE IF NOT EXISTS `dataagent_aloudata_metric` (
     `id` bigint NOT NULL COMMENT '主键ID',
     `datasource_id` bigint NOT NULL COMMENT '关联数据源ID',
     `metric_code` varchar(64) DEFAULT NULL COMMENT '指标编码（系统内部唯一标识）',
@@ -56,7 +63,7 @@ CREATE TABLE `dataagent_aloudata_metric` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata指标元数据表';
 
 -- 2. Aloudata 维度元数据表
-CREATE TABLE `dataagent_aloudata_dimension` (
+CREATE TABLE IF NOT EXISTS `dataagent_aloudata_dimension` (
     `id` bigint NOT NULL COMMENT '主键ID',
     `datasource_id` bigint NOT NULL COMMENT '关联数据源ID',
     `dim_name` varchar(128) NOT NULL COMMENT '维度名称（租户下唯一）',
@@ -86,7 +93,6 @@ CREATE TABLE `dataagent_aloudata_dimension` (
     KEY `idx_dataset_name` (`dataset_name`),
     KEY `idx_sync_version` (`sync_version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata维度元数据表';
-
 
 -- 3. 指标-维度关联关系表
 CREATE TABLE IF NOT EXISTS `dataagent_aloudata_metric_dimension` (

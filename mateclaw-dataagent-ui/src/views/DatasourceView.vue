@@ -105,6 +105,7 @@
                 <span class="btn-text">{{ t('datasourcePage.actionTest') }}</span>
               </button>
               <button
+                v-if="canSyncMetadata"
                 class="toolbar-btn"
                 :disabled="syncing || debouncedSyncPending"
                 :title="t('metricPlatform.syncTrigger')"
@@ -117,6 +118,14 @@
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                 </svg>
                 <span class="btn-text">{{ syncing ? t('metricPlatform.syncing') : t('metricPlatform.syncTrigger') }}</span>
+              </button>
+              <button
+                class="toolbar-btn"
+                :title="t('datasourcePage.queryAccountConfig')"
+                @click="handleOpenAccountDialog"
+              >
+                <span class="btn-icon">🔑</span>
+                <span class="btn-text">{{ t('datasourcePage.queryAccountConfig') }}</span>
               </button>
             </div>
           </div>
@@ -133,6 +142,42 @@
         </main>
       </div>
     </template>
+
+    <!-- 查询账号配置对话框 -->
+    <el-dialog
+      v-model="accountDialogVisible"
+      :title="t('datasourcePage.queryAccountDialogTitle')"
+      width="480px"
+      @close="handleAccountDialogClose"
+    >
+      <div v-if="selectedDs" class="account-dialog-body">
+        <p class="account-hint">{{ t('datasourcePage.queryAccountHint') }}</p>
+        <el-form label-width="100px" label-position="right">
+          <el-form-item v-if="!isAloudataDatasource" :label="t('datasourcePage.queryUsername')">
+            <el-input v-model="accountForm.queryUsername" :placeholder="t('datasourcePage.queryUsernamePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="isAloudataDatasource ? t('datasourcePage.aloudataAuthValue') : t('datasourcePage.queryPassword')">
+            <el-input v-model="accountForm.queryPassword" type="password" show-password :placeholder="isAloudataDatasource ? t('datasourcePage.aloudataAuthValuePlaceholder') : t('datasourcePage.queryPasswordPlaceholder')" />
+          </el-form-item>
+        </el-form>
+        <div v-if="accountLastTestOk !== null" class="account-test-result">
+          <span :class="accountLastTestOk ? 'test-ok' : 'test-fail'">
+            {{ accountLastTestOk ? t('datasourcePage.accountTestOk') : t('datasourcePage.accountTestFail') }}
+          </span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="handleTestAccountConnection" :loading="accountTesting">
+          {{ t('datasourcePage.accountTestBtn') }}
+        </el-button>
+        <el-button @click="handleDeleteAccount" type="danger" plain :disabled="!accountHasExisting">
+          {{ t('datasourcePage.accountDeleteBtn') }}
+        </el-button>
+        <el-button @click="handleSaveAccount" type="primary" :disabled="!canSaveAccount">
+          {{ t('datasourcePage.accountSaveBtn') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -142,6 +187,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
+import { useUserStore } from '@/stores/useUserStore'
 import * as datasourceApi from '@/api/datasource'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import type { Datasource } from '@/types'
@@ -150,6 +196,7 @@ import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
 
 const { t } = useI18n()
 const store = useDatasourceStore()
+const userStore = useUserStore()
 const { datasources, loading } = storeToRefs(store)
 
 /** 指标平台数据源 sourceType 标识集合 */
@@ -165,6 +212,14 @@ const panelRefreshKey = ref(0)
 const testingId = ref<string | null>(null)
 /** 同步中状态（语义层同步，工具栏同步按钮专用） */
 const syncing = ref(false)
+
+/** 当前用户是否为管理员（全局管理员或工作区 owner/admin），仅管理员可同步元数据 */
+const canSyncMetadata = computed<boolean>(() => {
+  if (userStore.isAdmin) return true
+  const ws = userStore.currentWorkspace
+  if (!ws) return false
+  return ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin'
+})
 
 /** 仅展示指标平台数据源 */
 const metricPlatformList = computed<Datasource[]>(() => {
@@ -347,6 +402,124 @@ function handleSyncMetadata(): void {
     return
   }
   debouncedInvoke()
+}
+
+// ==================== 查询账号配置 ====================
+
+const accountDialogVisible = ref(false)
+const accountForm = ref({ queryUsername: '', queryPassword: '' })
+const accountHasExisting = ref(false)
+const accountTesting = ref(false)
+const accountLastTestOk = ref<boolean | null>(null)
+
+/** 当前选中的数据源是否为 Aloudata 类型 */
+const isAloudataDatasource = computed<boolean>(() => {
+  return selectedDs.value?.sourceType?.toLowerCase() === 'aloudata'
+})
+
+/** 保存按钮是否可用：Aloudata 类型仅需认证值，JDBC 类型需要用户名和密码 */
+const canSaveAccount = computed<boolean>(() => {
+  if (isAloudataDatasource.value) {
+    return !!accountForm.value.queryPassword
+  }
+  return !!accountForm.value.queryUsername && !!accountForm.value.queryPassword
+})
+
+/** 打开查询账号配置对话框 */
+async function handleOpenAccountDialog(): Promise<void> {
+  if (!selectedDs.value) return
+  accountDialogVisible.value = true
+  accountLastTestOk.value = null
+  accountForm.value = { queryUsername: '', queryPassword: '' }
+  accountHasExisting.value = false
+
+  try {
+    const { data } = await datasourceApi.getDatasourceAccount(selectedDs.value.id)
+    if (data) {
+      accountForm.value.queryUsername = data.queryUsername || ''
+      accountForm.value.queryPassword = ''
+      accountHasExisting.value = true
+      accountLastTestOk.value = data.lastTestOk ?? null
+    }
+  } catch {
+    // 未绑定查询账号，忽略
+  }
+}
+
+/** 关闭对话框 */
+function handleAccountDialogClose(): void {
+  accountDialogVisible.value = false
+  accountForm.value = { queryUsername: '', queryPassword: '' }
+  accountHasExisting.value = false
+  accountLastTestOk.value = null
+}
+
+/** 保存查询账号 */
+async function handleSaveAccount(): Promise<void> {
+  if (!selectedDs.value) return
+  if (!canSaveAccount.value) {
+    ElMessage.warning(t('datasourcePage.queryAccountRequired'))
+    return
+  }
+  try {
+    await datasourceApi.upsertDatasourceAccount({
+      datasourceId: selectedDs.value.id,
+      queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
+      queryPassword: accountForm.value.queryPassword,
+    })
+    accountHasExisting.value = true
+    ElMessage.success(t('datasourcePage.queryAccountSaveSuccess'))
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('datasourcePage.queryAccountSaveFail'))
+  }
+}
+
+/** 删除查询账号 */
+async function handleDeleteAccount(): Promise<void> {
+  if (!selectedDs.value) return
+  try {
+    await ElMessageBox.confirm(
+      t('datasourcePage.queryAccountDeleteConfirm'),
+      t('datasourcePage.accountDeleteBtn'),
+      { type: 'warning' },
+    )
+    await datasourceApi.deleteDatasourceAccount(selectedDs.value.id)
+    accountForm.value = { queryUsername: '', queryPassword: '' }
+    accountHasExisting.value = false
+    accountLastTestOk.value = null
+    ElMessage.success(t('datasourcePage.queryAccountDeleteSuccess'))
+  } catch {
+    // 用户取消或请求失败
+  }
+}
+
+/** 测试查询账号连接 */
+async function handleTestAccountConnection(): Promise<void> {
+  if (!selectedDs.value) return
+  accountTesting.value = true
+  try {
+    // 先保存，再测试
+    if (canSaveAccount.value) {
+      await datasourceApi.upsertDatasourceAccount({
+        datasourceId: selectedDs.value.id,
+        queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
+        queryPassword: accountForm.value.queryPassword,
+      })
+      accountHasExisting.value = true
+    }
+    const { data } = await datasourceApi.testDatasourceAccount(selectedDs.value.id)
+    accountLastTestOk.value = !!data
+    if (data) {
+      ElMessage.success(t('datasourcePage.accountTestOk'))
+    } else {
+      ElMessage.error(t('datasourcePage.accountTestFail'))
+    }
+  } catch (e: any) {
+    accountLastTestOk.value = false
+    ElMessage.error(e?.message || t('datasourcePage.accountTestFail'))
+  } finally {
+    accountTesting.value = false
+  }
 }
 </script>
 
@@ -727,5 +900,31 @@ function handleSyncMetadata(): void {
   flex: 1;
   color: #c9cdd4;
   font-size: 13px;
+}
+
+.account-dialog-body {
+  padding: 0 8px;
+}
+
+.account-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #86909c;
+  line-height: 1.6;
+}
+
+.account-test-result {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.account-test-result .test-ok {
+  color: #00b42a;
+  font-weight: 500;
+}
+
+.account-test-result .test-fail {
+  color: #f53f3f;
+  font-weight: 500;
 }
 </style>

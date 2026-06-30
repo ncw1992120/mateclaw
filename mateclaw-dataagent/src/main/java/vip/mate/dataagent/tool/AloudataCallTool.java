@@ -16,6 +16,7 @@ import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.aloudata.ApiParam;
+import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceEntity;
@@ -23,6 +24,7 @@ import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.dataagent.service.BusinessTermEsService;
+import vip.mate.dataagent.service.DatasourceAccountService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.SemanticModelService;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
@@ -62,6 +64,7 @@ public class AloudataCallTool {
     private final AloudataSemanticSyncService aloudataSemanticSyncService;
     private final BusinessTermEsService businessTermEsService;
     private final DatasourceMapper datasourceMapper;
+    private final DatasourceAccountService datasourceAccountService;
     private final MateClawRuntime mateClawRuntime;
     private final DataAgentChatScopeContext scopeContext;
 
@@ -392,6 +395,19 @@ public class AloudataCallTool {
             // 解析配置
             DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
             AloudataConfigDTO config = configHelper.parseConfig(entity);
+
+            // 用户查询时必须使用自己的 Aloudata 认证值（auth-value），不允许使用数据源管理员的认证值
+            // tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值
+            Long currentUserId = UserContextHolder.getUserId();
+            if (currentUserId == null) {
+                return error("当前用户未登录，无法执行 Aloudata 查询");
+            }
+            String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
+            if (userAuthValue == null) {
+                return error("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号后再执行查询");
+            }
+            config.setAuthValue(userAuthValue);
+            log.info("用户 {} 使用自定义 Aloudata 认证值访问数据源 {}", currentUserId, datasourceId);
 
             // 构建参数 Map：从 input 中提取非 datasourceId 的参数
             Map<String, Object> params = buildParamsFromInput(endpointName, input, config);

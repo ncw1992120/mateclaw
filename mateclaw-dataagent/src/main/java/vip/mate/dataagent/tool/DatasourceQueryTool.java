@@ -9,15 +9,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.context.ChatOriginHolder;
+import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.LogicalRelationVO;
 import vip.mate.dataagent.dto.SchemaSearchRequest;
 import vip.mate.dataagent.dto.SchemaSearchResult;
 import vip.mate.dataagent.dto.SemanticModelVO;
+import vip.mate.dataagent.model.DatasourceAccountEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.BusinessTermEsService;
+import vip.mate.dataagent.service.DatasourceAccountService;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.LogicalRelationService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
@@ -64,6 +67,7 @@ public class DatasourceQueryTool {
 
     private final DatasourceManageService datasourceManageService;
     private final DatasourceMapper datasourceMapper;
+    private final DatasourceAccountService datasourceAccountService;
     private final SqlValidationService sqlValidationService;
     private final MateClawRuntime mateClawRuntime;
     private final SchemaEmbeddingService schemaEmbeddingService;
@@ -289,11 +293,24 @@ public class DatasourceQueryTool {
             return error("数据源已禁用, id=" + datasourceId);
         }
 
+        // 3. 解析查询账号：必须使用用户绑定的查询账号，不允许回退到数据源管理员账号
+        Long currentUserId = UserContextHolder.getUserId();
+        if (currentUserId == null) {
+            return error("当前用户未登录，无法执行 SQL 查询");
+        }
+        DatasourceAccountEntity account = datasourceAccountService.getByDatasourceIdAndUserId(datasourceId, currentUserId);
+        if (account == null || account.getStatus() == null || account.getStatus() != 1) {
+            return error("当前用户未绑定数据源查询账号，请先在数据源页面配置查询账号后再执行查询");
+        }
+        String queryUsername = account.getQueryUsername();
+        String queryPassword = account.getQueryPassword();
+        log.info("用户 {} 使用自定义查询账号连接数据源 {}", currentUserId, datasourceId);
+
         String jdbcUrl = JdbcUtils.buildJdbcUrl(entity);
 
-        // 3. 执行查询（只读模式）
+        // 4. 执行查询（只读模式）
         long startTime = System.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, entity.getUsername(), entity.getPassword())) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, queryUsername, queryPassword)) {
             conn.setReadOnly(true);
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(QUERY_TIMEOUT_SECONDS);

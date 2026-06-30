@@ -1,5 +1,7 @@
 -- ============================================================
--- DataAgent 帮助中心功能：帮助文档分类表 + 帮助文档表
+-- DataAgent 帮助中心功能：帮助文档分类表 + 帮助文档表 + 反馈表
+-- ============================================================
+-- workspace_id：所属工作区 ID，资源隔离用（仅帮助文档表需要）
 -- ============================================================
 
 -- 1. 帮助文档分类表
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_help_category` (
 -- 2. 帮助文档表
 CREATE TABLE IF NOT EXISTS `dataagent_help_document` (
     `id`                BIGINT       NOT NULL COMMENT '主键 ID',
+    `workspace_id`      BIGINT       NOT NULL DEFAULT 1 COMMENT '所属工作区 ID',
     `category_id`       BIGINT       NOT NULL COMMENT '所属分类 ID',
     `title`             VARCHAR(200) NOT NULL COMMENT '文档标题',
     `content`           MEDIUMTEXT            DEFAULT NULL COMMENT '文档内容（Markdown 格式）',
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_help_document` (
     `update_time`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`           INT          NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
     PRIMARY KEY (`id`),
+    KEY `idx_help_doc_workspace_id` (`workspace_id`),
     KEY `idx_help_doc_category` (`category_id`),
     KEY `idx_help_doc_status` (`status`),
     FULLTEXT KEY `ft_help_doc_search` (`title`, `content`)
@@ -40,14 +44,14 @@ CREATE TABLE IF NOT EXISTS `dataagent_help_document` (
 
 -- 3. 帮助文档反馈表
 CREATE TABLE IF NOT EXISTS `dataagent_help_feedback` (
-                                                         `id`                BIGINT       NOT NULL COMMENT '主键 ID',
-                                                         `document_id`       BIGINT       NOT NULL COMMENT '文档 ID',
-                                                         `rating`            INT                   DEFAULT NULL COMMENT '评分（1-5）',
-                                                         `suggestion`        VARCHAR(1000)         DEFAULT NULL COMMENT '改进建议',
-    `user_id`           VARCHAR(100)          DEFAULT NULL COMMENT '用户标识',
+    `id`                BIGINT       NOT NULL COMMENT '主键 ID',
+    `document_id`       BIGINT       NOT NULL COMMENT '文档 ID',
+    `rating`            INT                   DEFAULT NULL COMMENT '评分（1-5）',
+    `suggestion`        VARCHAR(1000)         DEFAULT NULL COMMENT '改进建议',
+    `user_id`           BIGINT                DEFAULT NULL COMMENT '用户 ID',
     `create_time`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`           INT          NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
     PRIMARY KEY (`id`),
     KEY `idx_help_feedback_document` (`document_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帮助文档反馈表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帮助文档反馈表';

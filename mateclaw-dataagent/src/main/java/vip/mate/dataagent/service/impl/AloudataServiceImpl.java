@@ -7,10 +7,12 @@ import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
+import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataService;
+import vip.mate.dataagent.service.DatasourceAccountService;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,6 +37,7 @@ public class AloudataServiceImpl implements AloudataService {
     private final AloudataApiClient apiClient;
     private final AloudataConfigHelper configHelper;
     private final AloudataEndpointService endpointService;
+    private final DatasourceAccountService datasourceAccountService;
 
     /** 测试连接使用的 API 端点名 */
     private static final String TEST_CONNECTION_ENDPOINT = "category_list";
@@ -69,6 +72,33 @@ public class AloudataServiceImpl implements AloudataService {
     );
 
     /**
+     * 解析数据源配置，并使用当前用户的 Aloudata 认证值替换管理员认证值（仅查询场景使用）
+     * <p>
+     * tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值。
+     * 用户必须绑定自己的 Aloudata 认证值才能执行查询，未绑定时抛出异常，不允许回退到管理员账号。
+     *
+     * @param datasourceId 数据源 ID
+     * @return 替换用户认证值后的配置
+     */
+    private AloudataConfigDTO parseConfigWithUserAuth(Long datasourceId) {
+        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+        if (entity == null) {
+            throw new RuntimeException("数据源不存在: " + datasourceId);
+        }
+        AloudataConfigDTO config = configHelper.parseConfig(entity);
+        Long currentUserId = UserContextHolder.getUserId();
+        if (currentUserId == null) {
+            throw new RuntimeException("当前用户未登录，无法执行 Aloudata 查询");
+        }
+        String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
+        if (userAuthValue == null) {
+            throw new RuntimeException("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号");
+        }
+        config.setAuthValue(userAuthValue);
+        return config;
+    }
+
+    /**
      * 测试 Aloudata 连接
      * <p>
      * 通过调用 category_list 接口验证连接和认证是否正常，
@@ -97,11 +127,7 @@ public class AloudataServiceImpl implements AloudataService {
      */
     @Override
     public List<AloudataMetricVO> listMetrics(Long datasourceId) {
-        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
-        if (entity == null) {
-            throw new RuntimeException("数据源不存在: " + datasourceId);
-        }
-        AloudataConfigDTO config = configHelper.parseConfig(entity);
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
 
         try {
             Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(METRICS_LIST_ENDPOINT, config);
@@ -137,11 +163,7 @@ public class AloudataServiceImpl implements AloudataService {
      */
     @Override
     public List<AloudataDimensionVO> listDimensions(Long datasourceId) {
-        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
-        if (entity == null) {
-            throw new RuntimeException("数据源不存在: " + datasourceId);
-        }
-        AloudataConfigDTO config = configHelper.parseConfig(entity);
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
 
         try {
             Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(DIMENSIONS_LIST_ENDPOINT, config);
@@ -177,11 +199,7 @@ public class AloudataServiceImpl implements AloudataService {
      */
     @Override
     public AloudataMetricQueryResponse queryMetrics(Long datasourceId, AloudataMetricQueryRequest request) {
-        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
-        if (entity == null) {
-            throw new RuntimeException("数据源不存在: " + datasourceId);
-        }
-        AloudataConfigDTO config = configHelper.parseConfig(entity);
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
 
         try {
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(

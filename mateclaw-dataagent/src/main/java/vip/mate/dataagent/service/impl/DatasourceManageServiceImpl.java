@@ -41,14 +41,32 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * 获取所有数据源
+     * 获取数据源列表
+     * <p>
+     * 按创建者用户 ID 过滤，不同用户仅可见自己配置的数据源。
+     *
+     * @param ownerId 数据源创建者用户 ID，null 时不按 owner 过滤（仅供内部工具调用）
+     * @return 数据源列表
+     */
+    @Override
+    public List<DatasourceVO> listDatasources(Long ownerId) {
+        LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DatasourceEntity::getDeleted, 0);
+        if (ownerId != null) {
+            wrapper.eq(DatasourceEntity::getOwnerId, ownerId);
+        }
+        List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
+        return entities.stream().map(this::toVO).collect(Collectors.toList());
+    }
+
+    /**
+     * 获取数据源列表（全量，不过滤 owner）
+     * <p>
+     * 仅供内部工具调用，这些场景已通过用户勾选白名单和查询账号绑定约束数据范围。
      */
     @Override
     public List<DatasourceVO> listDatasources() {
-        LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(DatasourceEntity::getDeleted, 0);
-        List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
-        return entities.stream().map(this::toVO).collect(Collectors.toList());
+        return listDatasources(null);
     }
 
     /**
@@ -65,12 +83,36 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
     /**
      * 创建数据源
+     * <p>
+     * ownerId 由 Controller 层从登录上下文注入，记录数据源创建者。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DatasourceVO createDatasource(DatasourceCreateRequest request) {
         DatasourceEntity entity = new DatasourceEntity();
         BeanUtils.copyProperties(request, entity);
+        entity.setSchemaStatus("pending");
+        entity.setDeleted(0);
+        if (entity.getEnabled() == null) {
+            entity.setEnabled(true);
+        }
+        datasourceMapper.insert(entity);
+        return toVO(entity);
+    }
+
+    /**
+     * 创建数据源（带 ownerId）
+     *
+     * @param request  创建请求
+     * @param ownerId  数据源创建者用户 ID
+     * @return 创建后的数据源视图对象
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public DatasourceVO createDatasource(DatasourceCreateRequest request, Long ownerId) {
+        DatasourceEntity entity = new DatasourceEntity();
+        BeanUtils.copyProperties(request, entity);
+        entity.setOwnerId(ownerId);
         entity.setSchemaStatus("pending");
         entity.setDeleted(0);
         if (entity.getEnabled() == null) {

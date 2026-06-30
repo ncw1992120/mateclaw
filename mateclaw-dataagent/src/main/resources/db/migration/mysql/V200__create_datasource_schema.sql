@@ -1,10 +1,15 @@
 -- ============================================================
 -- DataAgent 多源异构数据接入：数据源、表元数据、字段元数据
 -- ============================================================
+-- workspace_id：所属工作区 ID，资源隔离用
+-- owner_id：数据源创建者用户 ID，列表查询按此过滤（不同用户仅可见自己配置的数据源）
+-- ============================================================
 
 -- 1. 数据源主表
 CREATE TABLE IF NOT EXISTS `dataagent_datasource` (
     `id`                        BIGINT       NOT NULL COMMENT '主键 ID',
+    `workspace_id`              BIGINT       NOT NULL DEFAULT 1 COMMENT '所属工作区 ID',
+    `owner_id`                  BIGINT                DEFAULT NULL COMMENT '数据源创建者用户 ID（权限隔离用，列表查询按此过滤）',
     `name`                      VARCHAR(200) NOT NULL COMMENT '数据源名称',
     `description`               VARCHAR(500)          DEFAULT NULL COMMENT '描述',
     `source_type`               VARCHAR(50)  NOT NULL COMMENT '数据源类型：mysql/postgresql/oracle/snowflake/bigquery/redshift/clickhouse/doris/mongodb/elasticsearch/csv/excel/parquet/api/kafka',
@@ -26,6 +31,8 @@ CREATE TABLE IF NOT EXISTS `dataagent_datasource` (
     `update_time`               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`                   INT          NOT NULL DEFAULT 0 COMMENT '逻辑删除标记',
     PRIMARY KEY (`id`),
+    KEY `idx_datasource_workspace_id` (`workspace_id`),
+    KEY `idx_datasource_owner_id` (`owner_id`),
     KEY `idx_datasource_source_type` (`source_type`),
     KEY `idx_datasource_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据源主表';
