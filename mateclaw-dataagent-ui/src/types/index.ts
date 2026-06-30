@@ -247,6 +247,32 @@ export interface AloudataSyncedDimension {
   exampleValues: string
 }
 
+/** Aloudata 指标分页结果 */
+export interface AloudataMetricPage {
+  records: AloudataSyncedMetric[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}
+
+/** Aloudata 维度分页结果 */
+export interface AloudataDimensionPage {
+  records: AloudataSyncedDimension[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}
+
+/** Aloudata 类目数量统计 */
+export interface AloudataCategoryCount {
+  categoryId: string
+  categoryName: string
+  parentId?: string
+  count: number
+}
+
 /** 数据源类型选项 */
 export const SOURCE_TYPE_OPTIONS = [
   { value: 'mysql', label: 'MySQL', group: 'relational' },

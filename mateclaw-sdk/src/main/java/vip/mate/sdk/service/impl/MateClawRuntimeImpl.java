@@ -784,6 +784,15 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
         return user != null && "admin".equalsIgnoreCase(user.getRole());
     }
 
+    /**
+     * 获取用户在指定工作区的成员角色
+     */
+    @Override
+    public String getWorkspaceMemberRole(Long workspaceId, Long userId) {
+        WorkspaceMemberEntity member = workspaceService.getMembership(workspaceId, userId);
+        return member != null ? member.getRole() : null;
+    }
+
     // ==================== 工作区管理 ====================
 
     /**

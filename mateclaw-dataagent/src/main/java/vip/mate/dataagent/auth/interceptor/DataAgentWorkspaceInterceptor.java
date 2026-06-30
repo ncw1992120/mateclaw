@@ -8,17 +8,23 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import vip.mate.dataagent.auth.annotation.RequireGlobalAdmin;
+import vip.mate.dataagent.auth.annotation.RequirePermission;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.auth.context.UserContext;
 import vip.mate.dataagent.auth.context.UserContextHolder;
+import vip.mate.dataagent.auth.permission.DataAgentPermission;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.sdk.service.MateClawRuntime;
 
 /**
  * DataAgent Workspace 访问拦截器
  * <p>
- * 对标注了 {@link RequireWorkspaceRole} 或 {@link RequireGlobalAdmin} 的 Controller 方法，
- * 自动校验当前用户的工作区权限或全局管理员身份。
+ * 支持三种权限注解（优先级从高到低）：
+ * <ol>
+ *   <li>{@link RequireGlobalAdmin}：仅全局 admin（mate_user.role=admin）可访问</li>
+ *   <li>{@link RequirePermission}：按权限点-角色映射矩阵校验（细粒度）</li>
+ *   <li>{@link RequireWorkspaceRole}：按工作区角色等级校验（粗粒度）</li>
+ * </ol>
  * <p>
  * 依赖 {@link UserContextInterceptor} 先填充 {@link UserContextHolder}，
  * 本拦截器注册顺序必须在其之后。
@@ -37,8 +43,9 @@ public class DataAgentWorkspaceInterceptor implements HandlerInterceptor {
         }
 
         RequireGlobalAdmin globalAdmin = handlerMethod.getMethodAnnotation(RequireGlobalAdmin.class);
+        RequirePermission permissionAnnotation = handlerMethod.getMethodAnnotation(RequirePermission.class);
         RequireWorkspaceRole roleAnnotation = handlerMethod.getMethodAnnotation(RequireWorkspaceRole.class);
-        if (globalAdmin == null && roleAnnotation == null) {
+        if (globalAdmin == null && permissionAnnotation == null && roleAnnotation == null) {
             return true;
         }
 
@@ -48,7 +55,7 @@ public class DataAgentWorkspaceInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        // 全局管理员注解：必须是 mate_user.role=admin
+        // @RequireGlobalAdmin：必须是 mate_user.role=admin
         if (globalAdmin != null) {
             if (!userContext.isAdmin()) {
                 log.warn("Global admin access denied: user={}, path={}", userContext.getUsername(), request.getRequestURI());
@@ -58,7 +65,27 @@ public class DataAgentWorkspaceInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // @RequireWorkspaceRole 分支：全局 admin 跳过
+        // @RequirePermission：按权限点-角色映射矩阵校验
+        if (permissionAnnotation != null) {
+            String permCode = permissionAnnotation.value();
+            DataAgentPermission permission = DataAgentPermission.fromCode(permCode);
+            if (permission == null) {
+                log.error("Unknown permission code: {}, path={}", permCode, request.getRequestURI());
+                sendForbidden(response, "权限点未定义：" + permCode);
+                return false;
+            }
+            // 获取用户在工作区的生效角色（全局 admin 在 isAllowed 中自动放行）
+            String effectiveRole = resolveEffectiveRole(userContext);
+            if (!permission.isAllowed(effectiveRole, userContext.isAdmin())) {
+                log.warn("Permission denied: user={}, permission={}, role={}, path={}",
+                        userContext.getUsername(), permCode, effectiveRole, request.getRequestURI());
+                sendForbidden(response, "权限不足：需要 " + permCode + " 权限");
+                return false;
+            }
+            return true;
+        }
+
+        // @RequireWorkspaceRole：按角色等级校验，全局 admin 跳过
         if (userContext.isAdmin()) {
             return true;
         }
@@ -76,6 +103,22 @@ public class DataAgentWorkspaceInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    /**
+     * 解析当前用户在工作区的生效角色
+     * <p>
+     * 全局 admin 的生效角色为 owner（在 isAllowed 中会自动放行，此处仅为记录用）；
+     * 普通用户取工作区成员角色，无工作区上下文则返回 null。
+     */
+    private String resolveEffectiveRole(UserContext userContext) {
+        if (userContext.isAdmin()) {
+            return DataAgentConstants.WORKSPACE_ROLE_OWNER;
+        }
+        Long workspaceId = userContext.getWorkspaceId() != null
+                ? userContext.getWorkspaceId()
+                : DataAgentConstants.DEFAULT_WORKSPACE_ID;
+        return mateClawRuntime.getWorkspaceMemberRole(workspaceId, userContext.getUserId());
     }
 
     /**

@@ -225,6 +225,18 @@ public final class DataAgentConstants {
     /** Aloudata 语义检索默认相似度阈值 */
     public static final double ALOUDATA_SEARCH_DEFAULT_THRESHOLD = 0.3;
 
+    /** Aloudata 指标管理默认每页条数 */
+    public static final int ALOUDATA_METRIC_DEFAULT_PAGE_SIZE = 20;
+
+    /** Aloudata 维度管理默认每页条数 */
+    public static final int ALOUDATA_DIMENSION_DEFAULT_PAGE_SIZE = 20;
+
+    /** Aloudata 类目类型：指标类目 */
+    public static final String ALOUDATA_CATEGORY_TYPE_METRIC = "CATEGORY_METRIC";
+
+    /** Aloudata 类目类型：维度类目 */
+    public static final String ALOUDATA_CATEGORY_TYPE_DIMENSION = "CATEGORY_DIMENSION";
+
     /** 默认 Embedding 向量维度 */
     public static final int DEFAULT_EMBEDDING_DIMENSION = 1024;
 
@@ -278,6 +290,42 @@ public final class DataAgentConstants {
     /** 工作区角色：访客 */
     public static final String WORKSPACE_ROLE_VIEWER = "viewer";
 
+    // ==================== 细粒度权限点 ====================
+    // 命名约定：资源:动作
+    // 权限点与角色的映射关系见 DataAgentPermission 枚举
+
+    // 模型配置（全局 admin only，已由 @RequireGlobalAdmin 控制，此处供前端权限判断复用）
+    public static final String PERM_MODEL_VIEW = "model:view";
+    public static final String PERM_MODEL_MANAGE = "model:manage";
+
+    // 技能配置
+    public static final String PERM_SKILL_VIEW = "skill:view";
+    public static final String PERM_SKILL_MANAGE = "skill:manage";
+
+    // 数据配置
+    public static final String PERM_DATASOURCE_VIEW = "datasource:view";
+    public static final String PERM_DATASOURCE_CREATE = "datasource:create";
+    public static final String PERM_DATASOURCE_MANAGE = "datasource:manage";
+    public static final String PERM_DATASOURCE_SYNC = "datasource:sync";
+
+    // 业务词典
+    public static final String PERM_BUSINESS_TERM_VIEW = "business-term:view";
+    public static final String PERM_BUSINESS_TERM_MANAGE = "business-term:manage";
+
+    // 智能体配置
+    public static final String PERM_AGENT_VIEW = "agent:view";
+    public static final String PERM_AGENT_MANAGE = "agent:manage";
+
+    // 业务知识库
+    public static final String PERM_KNOWLEDGE_VIEW = "knowledge:view";
+    public static final String PERM_KNOWLEDGE_MANAGE = "knowledge:manage";
+
+    // 工作空间
+    public static final String PERM_WORKSPACE_VIEW = "workspace:view";
+    public static final String PERM_WORKSPACE_MANAGE = "workspace:manage";
+    public static final String PERM_WORKSPACE_MEMBER_VIEW = "workspace:member:view";
+    public static final String PERM_WORKSPACE_MEMBER_MANAGE = "workspace:member:manage";
+
     // ==================== 资源授权 ====================
 
     /** 资源类型：技能 */
@@ -304,14 +352,14 @@ public final class DataAgentConstants {
     /** 授权类型：按用户组 */
     public static final String GRANT_TYPE_GROUP = "group";
 
-    /** 权限：使用 */
+    /** 权限：查看（可看到资源的配置信息和元数据） */
+    public static final String PERMISSION_VIEW = "view";
+
+    /** 权限：使用（可用该资源发起会话、查询数据等操作） */
     public static final String PERMISSION_USE = "use";
 
-    /** 权限：管理 */
-    public static final String PERMISSION_MANAGE = "manage";
-
-    /** 权限：发布 */
-    public static final String PERMISSION_PUBLISH = "publish";
+    /** 权限：编辑（可修改资源配置、同步元数据等） */
+    public static final String PERMISSION_EDIT = "edit";
 
     /** 授权状态：已撤销 */
     public static final int GRANT_STATUS_REVOKED = 0;

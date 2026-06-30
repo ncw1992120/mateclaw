@@ -8,7 +8,7 @@
     <!-- Tab 横向栏 -->
     <nav class="config-tabs">
       <button
-        v-for="tab in tabs"
+        v-for="tab in visibleTabs"
         :key="tab.key"
         class="tab-item"
         :class="{ active: activeTab === tab.key }"
@@ -32,8 +32,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersistedRef } from '@/composables/usePersistedRef'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import SkillManage from './SkillManage.vue'
 import DataConfigView from './DataConfigView.vue'
 import BusinessDictionaryView from './BusinessDictionaryView.vue'
@@ -43,6 +45,7 @@ import KnowledgeConfigView from './KnowledgeConfigView.vue'
 import WorkspaceConfigView from './WorkspaceConfigView.vue'
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** Tab 可选取值 */
 const TAB_KEYS = ['skill', 'data', 'dictionary', 'agent', 'model', 'knowledge', 'workspace'] as const
@@ -55,37 +58,65 @@ const activeTab = usePersistedRef<TabKey>(
   (value) => (TAB_KEYS as readonly string[]).includes(value),
 )
 
-/** Tab 配置：i18n key */
-const tabs = [
+/** Tab 配置：i18n key + 所需权限点 */
+interface TabConfig {
+  key: TabKey
+  labelKey: string
+  /** 显示该 Tab 所需的权限点，未配置则对所有登录用户可见 */
+  permission?: string
+}
+
+const tabs: TabConfig[] = [
   {
-    key: 'skill' as const,
+    key: 'skill',
     labelKey: 'configCenter.tabSkill',
+    permission: PERMISSION.SKILL_VIEW,
   },
   {
-    key: 'data' as const,
+    key: 'data',
     labelKey: 'configCenter.tabData',
+    permission: PERMISSION.DATASOURCE_VIEW,
   },
   {
-    key: 'dictionary' as const,
+    key: 'dictionary',
     labelKey: 'configCenter.tabDictionary',
+    permission: PERMISSION.BUSINESS_TERM_VIEW,
   },
   {
-    key: 'agent' as const,
+    key: 'agent',
     labelKey: 'configCenter.tabAgent',
+    permission: PERMISSION.AGENT_VIEW,
   },
   {
-    key: 'model' as const,
+    key: 'model',
     labelKey: 'configCenter.tabModel',
+    permission: PERMISSION.MODEL_VIEW,
   },
   {
-    key: 'knowledge' as const,
+    key: 'knowledge',
     labelKey: 'configCenter.tabKnowledge',
+    permission: PERMISSION.KNOWLEDGE_VIEW,
   },
   {
-    key: 'workspace' as const,
+    key: 'workspace',
     labelKey: 'configCenter.tabWorkspace',
+    permission: PERMISSION.WORKSPACE_VIEW,
   },
 ]
+
+/** 按权限过滤后的可见 Tab */
+const visibleTabs = computed<TabConfig[]>(() => {
+  return tabs.filter((tab) => !tab.permission || hasPermission(tab.permission))
+})
+
+/** 当激活的 Tab 因权限不可见时，自动切换到第一个可见 Tab */
+watch(visibleTabs, (list) => {
+  if (list.length === 0) return
+  const activeVisible = list.some((tab) => tab.key === activeTab.value)
+  if (!activeVisible) {
+    activeTab.value = list[0].key
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>

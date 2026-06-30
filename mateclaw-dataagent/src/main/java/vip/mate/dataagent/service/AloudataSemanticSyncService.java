@@ -1,6 +1,10 @@
 package vip.mate.dataagent.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import vip.mate.dataagent.dto.AloudataCategoryCountDTO;
+import vip.mate.dataagent.dto.AloudataDimensionPageQuery;
 import vip.mate.dataagent.dto.AloudataDimensionSemanticDTO;
+import vip.mate.dataagent.dto.AloudataMetricPageQuery;
 import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
 import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
 import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
@@ -86,20 +90,55 @@ public interface AloudataSemanticSyncService {
     List<AloudataCategoryEntity> listSyncedCategories(Long datasourceId, String categoryType);
 
     /**
-     * 按指标类目分组查询指标列表
+     * 分页查询已同步的指标列表
      *
      * @param datasourceId 数据源 ID
+     * @param query        分页查询参数
+     * @return 分页结果
+     */
+    IPage<AloudataMetricSemanticDTO> pageMetrics(Long datasourceId, AloudataMetricPageQuery query);
+
+    /**
+     * 分页查询已同步的维度列表
+     *
+     * @param datasourceId 数据源 ID
+     * @param query        分页查询参数
+     * @return 分页结果
+     */
+    IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query);
+
+    /**
+     * 按指标类目分组查询指标列表
+     *
+     * @param datasourceId      数据源 ID
+     * @param keyword           搜索关键词（可选）
+     * @param categoryId        类目 ID 过滤（可选）
+     * @param limitPerCategory  每个类目返回的最大条数，小于等于 0 表示不限制（可选）
      * @return 按类目分组的指标列表
      */
-    List<MetricCategoryGroupDTO> listMetricsGroupByCategory(Long datasourceId);
+    List<MetricCategoryGroupDTO> listMetricsGroupByCategory(Long datasourceId, String keyword,
+                                                            String categoryId, int limitPerCategory);
 
     /**
      * 按维度类目分组查询维度列表
      *
-     * @param datasourceId 数据源 ID
+     * @param datasourceId      数据源 ID
+     * @param keyword           搜索关键词（可选）
+     * @param categoryId        类目 ID 过滤（可选）
+     * @param limitPerCategory  每个类目返回的最大条数，小于等于 0 表示不限制（可选）
      * @return 按类目分组的维度列表
      */
-    List<DimensionCategoryGroupDTO> listDimensionsGroupByCategory(Long datasourceId);
+    List<DimensionCategoryGroupDTO> listDimensionsGroupByCategory(Long datasourceId, String keyword,
+                                                                  String categoryId, int limitPerCategory);
+
+    /**
+     * 查询类目下的指标/维度数量统计
+     *
+     * @param datasourceId 数据源 ID
+     * @param categoryType 类目类型：CATEGORY_METRIC / CATEGORY_DIMENSION
+     * @return 类目统计列表
+     */
+    List<AloudataCategoryCountDTO> listCategoryCounts(Long datasourceId, String categoryType);
 
     /**
      * 将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引

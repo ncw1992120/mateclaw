@@ -647,6 +647,15 @@ public interface MateClawRuntime {
      */
     boolean isGlobalAdmin(Long userId);
 
+    /**
+     * 获取用户在指定工作区的成员角色
+     *
+     * @param workspaceId 工作区 ID
+     * @param userId      用户 ID
+     * @return 角色字符串（owner/admin/member/viewer），非成员返回 null
+     */
+    String getWorkspaceMemberRole(Long workspaceId, Long userId);
+
     // ==================== 工作区管理 ====================
 
     /**

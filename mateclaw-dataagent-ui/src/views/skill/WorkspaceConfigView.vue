@@ -4,7 +4,7 @@
     <aside class="workspace-sidebar">
       <nav class="sub-menu">
         <a
-          v-for="item in subMenuItems"
+          v-for="item in visibleSubMenuItems"
           :key="item.key"
           class="sub-menu-item"
           :class="{ active: activeSubMenu === item.key }"
@@ -20,28 +20,78 @@
       <AgentContextView v-if="activeSubMenu === 'agentContext'" />
       <WorkspaceManageView v-else-if="activeSubMenu === 'workspaceManage'" />
       <MemberManageView v-else-if="activeSubMenu === 'memberManage'" />
+      <ResourceGrantView v-else-if="activeSubMenu === 'grantManage'" />
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
+import { usePersistedRef } from '@/composables/usePersistedRef'
 import AgentContextView from '../workspace/AgentContextView.vue'
 import WorkspaceManageView from '../workspace/WorkspaceManageView.vue'
 import MemberManageView from '../workspace/MemberManageView.vue'
+import ResourceGrantView from '../workspace/ResourceGrantView.vue'
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
-/** 二级菜单项 */
-const subMenuItems = [
-  { key: 'agentContext', labelKey: 'workspaceMenu.agentContext' },
-  { key: 'workspaceManage', labelKey: 'workspaceMenu.workspaceManage' },
-  { key: 'memberManage', labelKey: 'workspaceMenu.memberManage' },
+/** 二级菜单项 key 类型 */
+type SubMenuKey = 'agentContext' | 'workspaceManage' | 'memberManage' | 'grantManage'
+
+/** 二级菜单项配置（含权限点） */
+interface SubMenuItem {
+  key: SubMenuKey
+  labelKey: string
+  /** 显示该菜单项所需的权限点 */
+  permission: string
+}
+
+const subMenuItems: SubMenuItem[] = [
+  {
+    key: 'agentContext',
+    labelKey: 'workspaceMenu.agentContext',
+    permission: PERMISSION.AGENT_VIEW,
+  },
+  {
+    key: 'workspaceManage',
+    labelKey: 'workspaceMenu.workspaceManage',
+    permission: PERMISSION.WORKSPACE_MANAGE,
+  },
+  {
+    key: 'memberManage',
+    labelKey: 'workspaceMenu.memberManage',
+    permission: PERMISSION.WORKSPACE_MEMBER_VIEW,
+  },
+  {
+    key: 'grantManage',
+    labelKey: 'workspaceMenu.grantManage',
+    permission: PERMISSION.WORKSPACE_MANAGE,
+  },
 ]
 
-/** 当前激活的二级菜单 */
-const activeSubMenu = ref('agentContext')
+/** 按权限过滤后的可见菜单项 */
+const visibleSubMenuItems = computed<SubMenuItem[]>(() => {
+  return subMenuItems.filter((item) => hasPermission(item.permission))
+})
+
+/** 当前激活的二级菜单（持久化到 localStorage，刷新后保留选中状态） */
+const activeSubMenu = usePersistedRef<SubMenuKey>(
+  'mc-workspace-active-sub-menu',
+  'agentContext',
+  (v) => subMenuItems.some((item) => item.key === v),
+)
+
+/** 当激活的菜单因权限不可见时，自动切换到第一个可见菜单 */
+watch(visibleSubMenuItems, (list) => {
+  if (list.length === 0) return
+  const activeVisible = list.some((item) => item.key === activeSubMenu.value)
+  if (!activeVisible) {
+    activeSubMenu.value = list[0].key
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>

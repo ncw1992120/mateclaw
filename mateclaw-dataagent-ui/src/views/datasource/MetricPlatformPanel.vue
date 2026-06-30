@@ -192,7 +192,7 @@
         </div>
 
         <!-- 加载状态 -->
-        <div v-if="loadingMetrics" class="loading-container">
+        <div v-if="metricPagination.loading" class="loading-container">
           <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
             <Loading />
           </el-icon>
@@ -200,7 +200,7 @@
         </div>
 
         <!-- 指标管理主容器（左侧类目树 + 右侧表格） -->
-        <div v-else-if="metricCategoryGroups.length > 0" class="metric-management-container">
+        <div v-else-if="metricCategoryTree.length > 0" class="metric-management-container">
           <!-- 左侧类目树 -->
           <div class="category-tree-panel">
             <div class="tree-header">
@@ -217,10 +217,10 @@
                   <el-icon><FolderOpened /></el-icon>
                 </span>
                 <span class="tree-node-name">全部指标</span>
-                <span class="tree-node-count">{{ metrics.length }}</span>
+                <span class="tree-node-count">{{ metricPagination.total }}</span>
               </div>
               <category-tree-node
-                v-for="group in metricCategoryGroups"
+                v-for="group in metricCategoryTree"
                 :key="group.categoryId"
                 :group="group"
                 type="metric"
@@ -239,21 +239,22 @@
               <div class="table-header-right">
                 <div class="search-wrap">
                   <el-input
-                    v-model="metricSearchKeyword"
+                    v-model="metricPagination.keyword"
                     size="small"
                     :placeholder="t('metricPlatform.searchMetrics')"
                     clearable
-                    @clear="metricSearchKeyword = ''"
+                    @input="handleMetricSearch"
+                    @clear="handleMetricSearch"
                   >
                     <template #prefix>
                       <el-icon><Search /></el-icon>
                     </template>
                   </el-input>
                 </div>
-                <span class="table-count">{{ filteredMetrics.length }} 个指标</span>
+                <span class="table-count">{{ metricPagination.total }} 个指标</span>
               </div>
             </div>
-            <el-table :data="filteredMetrics" stripe size="small" style="width: 100%" height="600" @expand-change="handleMetricExpand">
+            <el-table :data="metricPagination.list" stripe size="small" style="width: 100%" height="550" @expand-change="handleMetricExpand">
               <el-table-column type="selection" width="40" align="center" />
               <el-table-column prop="metricDisplayName" :label="t('metricPlatform.metricDisplayName')" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
@@ -306,6 +307,18 @@
                 </template>
               </el-table-column>
             </el-table>
+            <div class="pagination-wrapper">
+              <el-pagination
+                v-model:current-page="metricPagination.page"
+                v-model:page-size="metricPagination.size"
+                :total="metricPagination.total"
+                :page-sizes="[10, 20, 50, 100]"
+                layout="total, sizes, prev, pager, next"
+                size="small"
+                @current-change="handleMetricPageChange"
+                @size-change="handleMetricSizeChange"
+              />
+            </div>
           </div>
         </div>
 
@@ -335,7 +348,7 @@
         </div>
 
         <!-- 加载状态 -->
-        <div v-if="loadingDimensions" class="loading-container">
+        <div v-if="dimensionPagination.loading" class="loading-container">
           <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
             <Loading />
           </el-icon>
@@ -343,7 +356,7 @@
         </div>
 
         <!-- 维度管理主容器（左侧类目树 + 右侧表格） -->
-        <div v-else-if="dimensionCategoryGroups.length > 0" class="metric-management-container">
+        <div v-else-if="dimensionCategoryTree.length > 0" class="metric-management-container">
           <!-- 左侧类目树 -->
           <div class="category-tree-panel">
             <div class="tree-header">
@@ -360,10 +373,10 @@
                   <el-icon><FolderOpened /></el-icon>
                 </span>
                 <span class="tree-node-name">全部维度</span>
-                <span class="tree-node-count">{{ dimensions.length }}</span>
+                <span class="tree-node-count">{{ dimensionPagination.total }}</span>
               </div>
               <category-tree-node
-                v-for="group in dimensionCategoryGroups"
+                v-for="group in dimensionCategoryTree"
                 :key="group.categoryId"
                 :group="group"
                 type="dimension"
@@ -382,21 +395,22 @@
               <div class="table-header-right">
                 <div class="search-wrap">
                   <el-input
-                    v-model="dimensionSearchKeyword"
+                    v-model="dimensionPagination.keyword"
                     size="small"
                     :placeholder="t('metricPlatform.searchDimensions')"
                     clearable
-                    @clear="dimensionSearchKeyword = ''"
+                    @input="handleDimensionSearch"
+                    @clear="handleDimensionSearch"
                   >
                     <template #prefix>
                       <el-icon><Search /></el-icon>
                     </template>
                   </el-input>
                 </div>
-                <span class="table-count">{{ filteredDimensions.length }} 个维度</span>
+                <span class="table-count">{{ dimensionPagination.total }} 个维度</span>
               </div>
             </div>
-            <el-table :data="filteredDimensions" stripe size="small" style="width: 100%" height="600" @expand-change="handleDimensionExpand">
+            <el-table :data="dimensionPagination.list" stripe size="small" style="width: 100%" height="550" @expand-change="handleDimensionExpand">
               <el-table-column type="selection" width="40" align="center" />
               <el-table-column prop="dimDisplayName" :label="t('metricPlatform.dimDisplayName')" min-width="180" show-overflow-tooltip>
                 <template #default="{ row }">
@@ -450,6 +464,18 @@
                 </template>
               </el-table-column>
             </el-table>
+            <div class="pagination-wrapper">
+              <el-pagination
+                v-model:current-page="dimensionPagination.page"
+                v-model:page-size="dimensionPagination.size"
+                :total="dimensionPagination.total"
+                :page-sizes="[10, 20, 50, 100]"
+                layout="total, sizes, prev, pager, next"
+                size="small"
+                @current-change="handleDimensionPageChange"
+                @size-change="handleDimensionSizeChange"
+              />
+            </div>
           </div>
         </div>
 
@@ -468,11 +494,17 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Loading, FolderOpened, DataLine, Search } from '@element-plus/icons-vue'
 import * as datasourceApi from '@/api/datasource'
-import { listMetricsGroupedByCategory, listDimensionsGroupedByCategory, listMetricDimensionDetails, listDimensionMetricDetails } from '@/api/semantic-model'
+import {
+  pageAloudataMetrics,
+  pageAloudataDimensions,
+  listAloudataCategoryCounts,
+  listMetricDimensionDetails,
+  listDimensionMetricDetails,
+} from '@/api/semantic-model'
 import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
-import type { Datasource } from '@/types'
+import type { AloudataCategoryCount, Datasource } from '@/types'
 
 const { t } = useI18n()
 const store = useDatasourceStore()
@@ -597,21 +629,39 @@ interface DimensionCategoryGroup extends CategoryTreeNodeGroup {
   children?: DimensionCategoryGroup[]
 }
 
-/** 指标列表 */
-const metrics = ref<MetricItem[]>([])
+/** 指标分页状态 */
+const metricPagination = reactive({
+  page: 1,
+  size: 20,
+  total: 0,
+  list: [] as MetricItem[],
+  keyword: '',
+  categoryId: 'all',
+  loading: false,
+})
 
-/** 维度列表 */
-const dimensions = ref<DimensionItem[]>([])
+/** 维度分页状态 */
+const dimensionPagination = reactive({
+  page: 1,
+  size: 20,
+  total: 0,
+  list: [] as DimensionItem[],
+  keyword: '',
+  categoryId: 'all',
+  loading: false,
+})
 
-/** 指标类目分组列表（后端返回） */
-const metricCategoryGroups = ref<MetricCategoryGroup[]>([])
+/** 指标类目树 */
+const metricCategoryTree = ref<MetricCategoryGroup[]>([])
 
-/** 维度类目分组列表（后端返回） */
-const dimensionCategoryGroups = ref<DimensionCategoryGroup[]>([])
+/** 维度类目树 */
+const dimensionCategoryTree = ref<DimensionCategoryGroup[]>([])
 
-/** 加载状态 */
-const loadingMetrics = ref(false)
-const loadingDimensions = ref(false)
+/** 指标类目树加载状态 */
+const loadingMetricCategories = ref(false)
+
+/** 维度类目树加载状态 */
+const loadingDimensionCategories = ref(false)
 
 /** 指标展开行：维度详情缓存（按 metricName 索引） */
 const metricDimensionDetailMap = ref<Record<string, DimensionItem[]>>({})
@@ -691,35 +741,8 @@ const currentMetricCategoryName = computed<string>(() => {
   if (selectedCategoryId.value === 'all') {
     return '全部指标'
   }
-  const group = findMetricGroupById(metricCategoryGroups.value, selectedCategoryId.value)
+  const group = findMetricGroupById(metricCategoryTree.value, selectedCategoryId.value)
   return group?.categoryName || '全部指标'
-})
-
-/** 当前展示的指标列表（根据选中类目过滤） */
-const currentMetrics = computed<MetricItem[]>(() => {
-  if (selectedCategoryId.value === 'all') {
-    return metrics.value
-  }
-  const group = findMetricGroupById(metricCategoryGroups.value, selectedCategoryId.value)
-  return group?.metrics || []
-})
-
-/** 指标搜索关键词 */
-const metricSearchKeyword = ref('')
-
-/** 搜索过滤后的指标列表 */
-const filteredMetrics = computed<MetricItem[]>(() => {
-  const list = currentMetrics.value
-  const keyword = metricSearchKeyword.value.trim().toLowerCase()
-  if (!keyword) {
-    return list
-  }
-  return list.filter(m => {
-    return (m.metricDisplayName?.toLowerCase().includes(keyword))
-      || (m.metricName?.toLowerCase().includes(keyword))
-      || (m.metricCategoryName?.toLowerCase().includes(keyword))
-      || (m.owner?.toLowerCase().includes(keyword))
-  })
 })
 
 /** 当前选中的维度类目 ID */
@@ -730,40 +753,15 @@ const currentDimensionCategoryName = computed<string>(() => {
   if (selectedDimensionCategoryId.value === 'all') {
     return '全部维度'
   }
-  const group = findDimensionGroupById(dimensionCategoryGroups.value, selectedDimensionCategoryId.value)
+  const group = findDimensionGroupById(dimensionCategoryTree.value, selectedDimensionCategoryId.value)
   return group?.categoryName || '全部维度'
-})
-
-/** 当前展示的维度列表（根据选中类目过滤） */
-const currentDimensions = computed<DimensionItem[]>(() => {
-  if (selectedDimensionCategoryId.value === 'all') {
-    return dimensions.value
-  }
-  const group = findDimensionGroupById(dimensionCategoryGroups.value, selectedDimensionCategoryId.value)
-  return group?.dimensions || []
-})
-
-/** 维度搜索关键词 */
-const dimensionSearchKeyword = ref('')
-
-/** 搜索过滤后的维度列表 */
-const filteredDimensions = computed<DimensionItem[]>(() => {
-  const list = currentDimensions.value
-  const keyword = dimensionSearchKeyword.value.trim().toLowerCase()
-  if (!keyword) {
-    return list
-  }
-  return list.filter(d => {
-    return (d.dimDisplayName?.toLowerCase().includes(keyword))
-      || (d.dimName?.toLowerCase().includes(keyword))
-      || (d.dimDescription?.toLowerCase().includes(keyword))
-      || (d.dimCategoryName?.toLowerCase().includes(keyword))
-  })
 })
 
 /** 选择维度类目 */
 function selectDimensionCategory(categoryId: string): void {
   selectedDimensionCategoryId.value = categoryId
+  dimensionPagination.page = 1
+  loadDimensionPage()
 }
 
 /**
@@ -832,68 +830,241 @@ function toggleCategory(payload: { categoryId: string; type: 'metric' | 'dimensi
 /** 选择类目 */
 function selectCategory(categoryId: string): void {
   selectedCategoryId.value = categoryId
+  metricPagination.page = 1
+  loadMetricPage()
 }
 
 /**
- * 递归收集类目树中所有节点的 categoryId
+ * 构建类目树（支持层级父子关系）
  */
-function collectCategoryIds(groups: (MetricCategoryGroup | DimensionCategoryGroup)[]): Set<string> {
-  const ids = new Set<string>()
-  for (const group of groups) {
-    ids.add(group.categoryId)
-    if (group.children) {
-      for (const id of collectCategoryIds(group.children)) {
-        ids.add(id)
+function buildCategoryTree<T extends CategoryTreeNodeGroup>(
+  counts: AloudataCategoryCount[],
+): T[] {
+  const nodeMap = new Map<string, T>()
+  const roots: T[] = []
+  for (const item of counts) {
+    const countValue = Number(item.count) || 0
+    const node = {
+      categoryId: item.categoryId,
+      categoryName: item.categoryName,
+      parentId: item.parentId,
+      metricCount: countValue,
+      dimensionCount: countValue,
+      children: [],
+      metrics: [],
+      dimensions: [],
+    } as unknown as T
+    nodeMap.set(item.categoryId, node)
+  }
+  for (const node of nodeMap.values()) {
+    const parentId = node.parentId
+    if (parentId && nodeMap.has(parentId)) {
+      const parent = nodeMap.get(parentId)
+      if (parent && parent.children) {
+        parent.children.push(node)
       }
+    } else {
+      roots.push(node)
     }
   }
-  return ids
+  return roots
 }
 
-/** 加载指标列表（按类目分组，后端已分组） */
+/**
+ * 递归聚合子类目数量到父类目
+ */
+function aggregateCategoryCounts(groups: MetricCategoryGroup[] | DimensionCategoryGroup[]): number {
+  let total = 0
+  for (const group of groups) {
+    let count = group.metricCount ?? group.dimensionCount ?? 0
+    if (group.children && group.children.length > 0) {
+      count += aggregateCategoryCounts(group.children)
+    }
+    if ('metricCount' in group) {
+      group.metricCount = count
+    } else {
+      group.dimensionCount = count
+    }
+    total += count
+  }
+  return total
+}
+
+/**
+ * 将类目树根节点加入展开集合（默认只展开顶级类目）
+ */
+function expandRootCategories(groups: CategoryTreeNodeGroup[], expandedSet: Set<string>): void {
+  for (const group of groups) {
+    if (group.children && group.children.length > 0) {
+      expandedSet.add(group.categoryId)
+    }
+  }
+}
+
+/** 加载指标类目树 */
+async function loadMetricCategories(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  loadingMetricCategories.value = true
+  try {
+    const res = await listAloudataCategoryCounts(props.datasourceId, 'CATEGORY_METRIC')
+    const counts = (res as any) || []
+    metricCategoryTree.value = buildCategoryTree<MetricCategoryGroup>(counts)
+    aggregateCategoryCounts(metricCategoryTree.value)
+    expandedMetricCategories.value = new Set<string>()
+    expandRootCategories(metricCategoryTree.value, expandedMetricCategories.value)
+  } catch (error) {
+    console.error('Failed to load metric categories:', error)
+    metricCategoryTree.value = []
+    expandedMetricCategories.value = new Set<string>()
+  } finally {
+    loadingMetricCategories.value = false
+  }
+}
+
+/** 加载维度类目树 */
+async function loadDimensionCategories(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  loadingDimensionCategories.value = true
+  try {
+    const res = await listAloudataCategoryCounts(props.datasourceId, 'CATEGORY_DIMENSION')
+    const counts = (res as any) || []
+    dimensionCategoryTree.value = buildCategoryTree<DimensionCategoryGroup>(counts)
+    aggregateCategoryCounts(dimensionCategoryTree.value)
+    expandedDimensionCategories.value = new Set<string>()
+    expandRootCategories(dimensionCategoryTree.value, expandedDimensionCategories.value)
+  } catch (error) {
+    console.error('Failed to load dimension categories:', error)
+    dimensionCategoryTree.value = []
+    expandedDimensionCategories.value = new Set<string>()
+  } finally {
+    loadingDimensionCategories.value = false
+  }
+}
+
+/** 加载指标分页列表 */
+async function loadMetricPage(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  metricPagination.loading = true
+  try {
+    const res = await pageAloudataMetrics(props.datasourceId, {
+      pageNumber: metricPagination.page,
+      pageSize: metricPagination.size,
+      keyword: metricPagination.keyword,
+      categoryId: metricPagination.categoryId === 'all' ? undefined : metricPagination.categoryId,
+    })
+    const data = (res as any) || { records: [], total: 0 }
+    metricPagination.list = data.records || []
+    metricPagination.total = Number(data.total) || 0
+  } catch (error) {
+    console.error('Failed to load metric page:', error)
+    metricPagination.list = []
+    metricPagination.total = 0
+  } finally {
+    metricPagination.loading = false
+  }
+}
+
+/** 加载维度分页列表 */
+async function loadDimensionPage(): Promise<void> {
+  if (!props.datasourceId) {
+    return
+  }
+  dimensionPagination.loading = true
+  try {
+    const res = await pageAloudataDimensions(props.datasourceId, {
+      pageNumber: dimensionPagination.page,
+      pageSize: dimensionPagination.size,
+      keyword: dimensionPagination.keyword,
+      categoryId: dimensionPagination.categoryId === 'all' ? undefined : dimensionPagination.categoryId,
+    })
+    const data = (res as any) || { records: [], total: 0 }
+    dimensionPagination.list = data.records || []
+    dimensionPagination.total = Number(data.total) || 0
+  } catch (error) {
+    console.error('Failed to load dimension page:', error)
+    dimensionPagination.list = []
+    dimensionPagination.total = 0
+  } finally {
+    dimensionPagination.loading = false
+  }
+}
+
+/** 指标搜索防抖定时器 */
+let metricSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 指标搜索输入处理 */
+function handleMetricSearch(): void {
+  if (metricSearchTimer) {
+    clearTimeout(metricSearchTimer)
+  }
+  metricSearchTimer = setTimeout(() => {
+    metricPagination.page = 1
+    loadMetricPage()
+  }, 300)
+}
+
+/** 维度搜索防抖定时器 */
+let dimensionSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 维度搜索输入处理 */
+function handleDimensionSearch(): void {
+  if (dimensionSearchTimer) {
+    clearTimeout(dimensionSearchTimer)
+  }
+  dimensionSearchTimer = setTimeout(() => {
+    dimensionPagination.page = 1
+    loadDimensionPage()
+  }, 300)
+}
+
+/** 指标翻页 */
+function handleMetricPageChange(page: number): void {
+  metricPagination.page = page
+  loadMetricPage()
+}
+
+/** 指标每页条数变化 */
+function handleMetricSizeChange(size: number): void {
+  metricPagination.size = size
+  metricPagination.page = 1
+  loadMetricPage()
+}
+
+/** 维度翻页 */
+function handleDimensionPageChange(page: number): void {
+  dimensionPagination.page = page
+  loadDimensionPage()
+}
+
+/** 维度每页条数变化 */
+function handleDimensionSizeChange(size: number): void {
+  dimensionPagination.size = size
+  dimensionPagination.page = 1
+  loadDimensionPage()
+}
+
+/** 加载指标管理数据（类目树 + 分页列表） */
 async function loadMetrics(): Promise<void> {
   if (!props.datasourceId) {
     return
   }
-  loadingMetrics.value = true
-  try {
-    const res = await listMetricsGroupedByCategory(props.datasourceId)
-    const groups = (res as any) || []
-    metricCategoryGroups.value = groups
-    // 平铺所有指标（根节点已聚合子节点数据）
-    metrics.value = groups.flatMap(g => g.metrics)
-    // 默认展开所有类目
-    expandedMetricCategories.value = collectCategoryIds(groups)
-  } catch (error) {
-    console.error('Failed to load metrics:', error)
-    metricCategoryGroups.value = []
-    metrics.value = []
-  } finally {
-    loadingMetrics.value = false
-  }
+  await loadMetricCategories()
+  await loadMetricPage()
 }
 
-/** 加载维度列表（按类目分组，后端已分组） */
+/** 加载维度管理数据（类目树 + 分页列表） */
 async function loadDimensions(): Promise<void> {
   if (!props.datasourceId) {
     return
   }
-  loadingDimensions.value = true
-  try {
-    const res = await listDimensionsGroupedByCategory(props.datasourceId)
-    const groups = (res as any) || []
-    dimensionCategoryGroups.value = groups
-    // 平铺所有维度（根节点已聚合子节点数据）
-    dimensions.value = groups.flatMap(g => g.dimensions)
-    // 默认展开所有类目
-    expandedDimensionCategories.value = collectCategoryIds(groups)
-  } catch (error) {
-    console.error('Failed to load dimensions:', error)
-    dimensionCategoryGroups.value = []
-    dimensions.value = []
-  } finally {
-    loadingDimensions.value = false
-  }
+  await loadDimensionCategories()
+  await loadDimensionPage()
 }
 
 /** 切换选中数据源或父级强制刷新时重新加载表单数据 */
@@ -901,21 +1072,32 @@ watch(
   () => [props.datasourceId, props.refreshKey],
   ([id]) => {
     isEditing.value = false
+    // 重置分页、搜索、类目选中及展开状态
+    selectedCategoryId.value = 'all'
+    selectedDimensionCategoryId.value = 'all'
+    metricPagination.page = 1
+    metricPagination.keyword = ''
+    dimensionPagination.page = 1
+    dimensionPagination.keyword = ''
+    expandedMetricCategories.value = new Set<string>()
+    expandedDimensionCategories.value = new Set<string>()
+    metricDimensionDetailMap.value = {}
+    metricDimensionLoadingMap.value = {}
+    dimensionMetricDetailMap.value = {}
+    dimensionMetricLoadingMap.value = {}
     if (id) {
       loadDatasource(id)
-      // 加载指标、维度分组列表
+      // 加载指标、维度类目树和分页列表
       loadMetrics()
       loadDimensions()
     } else {
       // 清空指标和维度数据
-      metrics.value = []
-      dimensions.value = []
-      metricCategoryGroups.value = []
-      dimensionCategoryGroups.value = []
-      metricDimensionDetailMap.value = {}
-      metricDimensionLoadingMap.value = {}
-      dimensionMetricDetailMap.value = {}
-      dimensionMetricLoadingMap.value = {}
+      metricPagination.list = []
+      metricPagination.total = 0
+      dimensionPagination.list = []
+      dimensionPagination.total = 0
+      metricCategoryTree.value = []
+      dimensionCategoryTree.value = []
     }
   },
   { immediate: true },

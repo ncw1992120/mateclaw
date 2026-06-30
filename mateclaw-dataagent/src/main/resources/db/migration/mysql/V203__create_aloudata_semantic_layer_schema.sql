@@ -59,7 +59,10 @@ CREATE TABLE IF NOT EXISTS `dataagent_aloudata_metric` (
     KEY `idx_metric_category_id` (`metric_category_id`),
     KEY `idx_type` (`type`),
     KEY `idx_status` (`status`),
-    KEY `idx_sync_version` (`sync_version`)
+    KEY `idx_sync_version` (`sync_version`),
+    KEY `idx_metric_ds_category` (`datasource_id`, `metric_category_id`),
+    KEY `idx_metric_ds_name` (`datasource_id`, `metric_name`),
+    KEY `idx_metric_keyword` (`datasource_id`, `metric_name`, `metric_display_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata指标元数据表';
 
 -- 2. Aloudata 维度元数据表
@@ -91,7 +94,10 @@ CREATE TABLE IF NOT EXISTS `dataagent_aloudata_dimension` (
     KEY `idx_dim_name` (`dim_name`),
     KEY `idx_dim_category_id` (`dim_category_id`),
     KEY `idx_dataset_name` (`dataset_name`),
-    KEY `idx_sync_version` (`sync_version`)
+    KEY `idx_sync_version` (`sync_version`),
+    KEY `idx_dim_ds_category` (`datasource_id`, `dim_category_id`),
+    KEY `idx_dim_ds_name` (`datasource_id`, `dim_name`),
+    KEY `idx_dim_keyword` (`datasource_id`, `dim_name`, `dim_display_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata维度元数据表';
 
 -- 3. 指标-维度关联关系表
@@ -127,5 +133,6 @@ CREATE TABLE IF NOT EXISTS `dataagent_aloudata_category` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_category` (`datasource_id`, `category_id`),
     KEY `idx_category_datasource_id` (`datasource_id`),
-    KEY `idx_category_type` (`datasource_id`, `category_type`)
+    KEY `idx_category_type` (`datasource_id`, `category_type`),
+    KEY `idx_category_ds_type_id` (`datasource_id`, `category_type`, `category_id`, `parent_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Aloudata 类目元数据';

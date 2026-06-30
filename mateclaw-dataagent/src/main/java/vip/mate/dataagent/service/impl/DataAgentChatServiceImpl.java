@@ -612,11 +612,11 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         pending.add(new PendingBroadcast("content_delta", Map.of("delta", delta.content())));
                     }
                     var seg = findLastRunning("content");
-                    if (seg != null) {
+                    if (seg != null && sameDeltaFlavor(seg, delta)) {
                         seg.put("text", seg.getOrDefault("text", "") + delta.content());
                     } else {
-                        finalizeRunningSegments("thinking");
-                        var s = newSegment("content");
+                        finalizeRunningSegments("thinking", "content");
+                        var s = newSegment("content", delta);
                         s.put("text", delta.content());
                         segments.add(s);
                     }
@@ -630,10 +630,11 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         pending.add(new PendingBroadcast("thinking_delta", Map.of("delta", delta.thinking())));
                     }
                     var seg = findLastRunning("thinking");
-                    if (seg != null) {
+                    if (seg != null && sameDeltaFlavor(seg, delta)) {
                         seg.put("thinkingText", seg.getOrDefault("thinkingText", "") + delta.thinking());
                     } else {
-                        var s = newSegment("thinking");
+                        finalizeRunningSegments("thinking");
+                        var s = newSegment("thinking", delta);
                         s.put("thinkingText", delta.thinking());
                         segments.add(s);
                     }
@@ -737,11 +738,24 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         }
 
         private Map<String, Object> newSegment(String type) {
+            return newSegment(type, null);
+        }
+
+        private Map<String, Object> newSegment(String type, StreamDelta delta) {
             Map<String, Object> seg = new LinkedHashMap<>();
             seg.put("id", type.substring(0, 2) + "-" + segCounter++);
             seg.put("type", type);
             seg.put("status", "running");
+            if (delta != null) {
+                seg.put("segmentOnly", delta.segmentOnly());
+                seg.put("persistenceOnly", delta.persistenceOnly());
+            }
             return seg;
+        }
+
+        private boolean sameDeltaFlavor(Map<String, Object> seg, StreamDelta delta) {
+            return Boolean.TRUE.equals(seg.get("segmentOnly")) == delta.segmentOnly()
+                    && Boolean.TRUE.equals(seg.get("persistenceOnly")) == delta.persistenceOnly();
         }
 
         private Map<String, Object> findLastRunning(String type) {

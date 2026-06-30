@@ -9,14 +9,19 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.auth.service.PermissionChecker;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceColumnEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.model.DatasourceTableEntity;
+import vip.mate.dataagent.model.ResourceGrantEntity;
 import vip.mate.dataagent.repository.DatasourceColumnMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.repository.DatasourceTableMapper;
+import vip.mate.dataagent.repository.ResourceGrantMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
@@ -36,26 +41,76 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     private final DatasourceMapper datasourceMapper;
     private final DatasourceTableMapper datasourceTableMapper;
     private final DatasourceColumnMapper datasourceColumnMapper;
+    private final ResourceGrantMapper resourceGrantMapper;
     private final AloudataService aloudataService;
     private final AloudataConfigHelper aloudataConfigHelper;
+    private final PermissionChecker permissionChecker;
+    private final WorkspaceGuard workspaceGuard;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 获取数据源列表
      * <p>
-     * 按创建者用户 ID 过滤，不同用户仅可见自己配置的数据源。
+     * 返回当前用户可见的数据源：自己创建的 + 被授权给自己的（view/use/edit 任一权限）。
      *
      * @param ownerId 数据源创建者用户 ID，null 时不按 owner 过滤（仅供内部工具调用）
      * @return 数据源列表
      */
     @Override
     public List<DatasourceVO> listDatasources(Long ownerId) {
-        LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(DatasourceEntity::getDeleted, 0);
-        if (ownerId != null) {
-            wrapper.eq(DatasourceEntity::getOwnerId, ownerId);
+        // 内部工具调用：不过滤 owner，也不按授权表过滤
+        if (ownerId == null) {
+            LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(DatasourceEntity::getDeleted, 0);
+            List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
+            return entities.stream().map(this::toVO).collect(Collectors.toList());
         }
-        List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
+
+        Set<Long> visibleIds = new HashSet<>();
+
+        // 1. 自己创建的数据源
+        LambdaQueryWrapper<DatasourceEntity> ownWrapper = new LambdaQueryWrapper<>();
+        ownWrapper.eq(DatasourceEntity::getDeleted, 0)
+                .eq(DatasourceEntity::getOwnerId, ownerId);
+        List<DatasourceEntity> ownEntities = datasourceMapper.selectList(ownWrapper);
+        visibleIds.addAll(ownEntities.stream().map(DatasourceEntity::getId).collect(Collectors.toSet()));
+
+        // 2. 通过资源授权表获得的数据源（按用户授权 + 按角色授权）
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+        String userRole = workspaceGuard.getWorkspaceMemberRole(workspaceId, userId);
+
+        LambdaQueryWrapper<ResourceGrantEntity> grantWrapper = new LambdaQueryWrapper<>();
+        grantWrapper.eq(ResourceGrantEntity::getWorkspaceId, workspaceId)
+                .eq(ResourceGrantEntity::getResourceType, DataAgentConstants.RESOURCE_TYPE_DATASOURCE)
+                .eq(ResourceGrantEntity::getStatus, DataAgentConstants.GRANT_STATUS_ACTIVE)
+                .and(w -> w.isNull(ResourceGrantEntity::getExpireTime)
+                        .or()
+                        .gt(ResourceGrantEntity::getExpireTime, LocalDateTime.now()));
+
+        // 按用户授权 或 按角色授权
+        if (userRole != null) {
+            grantWrapper.and(w -> w.eq(ResourceGrantEntity::getGrantType, DataAgentConstants.GRANT_TYPE_USER)
+                    .eq(ResourceGrantEntity::getGranteeId, String.valueOf(userId))
+                    .or()
+                    .eq(ResourceGrantEntity::getGrantType, DataAgentConstants.GRANT_TYPE_ROLE)
+                    .eq(ResourceGrantEntity::getGranteeId, userRole));
+        } else {
+            grantWrapper.eq(ResourceGrantEntity::getGrantType, DataAgentConstants.GRANT_TYPE_USER)
+                    .eq(ResourceGrantEntity::getGranteeId, String.valueOf(userId));
+        }
+
+        List<ResourceGrantEntity> grants = resourceGrantMapper.selectList(grantWrapper);
+        visibleIds.addAll(grants.stream().map(ResourceGrantEntity::getResourceId).collect(Collectors.toSet()));
+
+        if (visibleIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<DatasourceEntity> entities = datasourceMapper.selectList(
+                new LambdaQueryWrapper<DatasourceEntity>()
+                        .eq(DatasourceEntity::getDeleted, 0)
+                        .in(DatasourceEntity::getId, visibleIds));
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
 
@@ -75,10 +130,35 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public DatasourceVO getDatasource(Long id) {
         DatasourceEntity entity = datasourceMapper.selectById(id);
-        if (entity == null) {
+        if (entity == null || entity.getDeleted() == 1) {
             return null;
         }
+        requireDatasourceAccess(entity, DataAgentConstants.PERMISSION_VIEW);
         return toVO(entity);
+    }
+
+    /**
+     * 校验当前用户对指定数据源是否具有指定权限
+     * <p>
+     * owner 本人自动放行；其余用户通过 PermissionChecker 校验（含授权表）。
+     */
+    private void requireDatasourceAccess(DatasourceEntity entity, String permission) {
+        Long currentUserId = workspaceGuard.currentUserId();
+        if (currentUserId.equals(entity.getOwnerId())) {
+            return;
+        }
+        if (!permissionChecker.hasPermission(
+                DataAgentConstants.RESOURCE_TYPE_DATASOURCE, entity.getId(), permission)) {
+            throw new BusinessException(403, "无权访问该数据源: " + entity.getName());
+        }
+    }
+
+    private void requireDatasourceAccess(Long datasourceId, String permission) {
+        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "数据源不存在: " + datasourceId);
+        }
+        requireDatasourceAccess(entity, permission);
     }
 
     /**
@@ -211,9 +291,10 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public boolean testConnection(Long id) {
         DatasourceEntity entity = datasourceMapper.selectById(id);
-        if (entity == null) {
+        if (entity == null || entity.getDeleted() == 1) {
             return false;
         }
+        requireDatasourceAccess(entity, DataAgentConstants.PERMISSION_USE);
         boolean connected = doTestConnection(entity);
         entity.setLastTestTime(LocalDateTime.now());
         entity.setLastTestOk(connected);
@@ -275,6 +356,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public List<DatasourceTableVO> listTables(Long datasourceId) {
+        requireDatasourceAccess(datasourceId, DataAgentConstants.PERMISSION_USE);
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceTableEntity::getDeleted, 0);
@@ -288,6 +370,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public DatasourceTableVO getTableDetail(Long datasourceId, Long tableId) {
+        requireDatasourceAccess(datasourceId, DataAgentConstants.PERMISSION_USE);
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getId, tableId);
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
@@ -307,6 +390,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public List<DatasourceColumnVO> listColumns(Long datasourceId, Long tableId) {
+        requireDatasourceAccess(datasourceId, DataAgentConstants.PERMISSION_USE);
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
@@ -368,9 +452,10 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             limit = DataAgentConstants.PREVIEW_MAX_LIMIT;
         }
         DatasourceEntity datasourceEntity = datasourceMapper.selectById(datasourceId);
-        if (datasourceEntity == null) {
+        if (datasourceEntity == null || datasourceEntity.getDeleted() == 1) {
             throw new RuntimeException("数据源不存在: " + datasourceId);
         }
+        requireDatasourceAccess(datasourceEntity, DataAgentConstants.PERMISSION_USE);
         DatasourceTableEntity tableEntity = datasourceTableMapper.selectById(tableId);
         if (tableEntity == null || !tableEntity.getDatasourceId().equals(datasourceId)) {
             throw new RuntimeException("表不存在或与数据源不匹配: " + tableId);

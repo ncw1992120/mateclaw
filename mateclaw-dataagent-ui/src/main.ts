@@ -8,6 +8,7 @@ import router from './router'
 import i18n from './i18n'
 import './assets/main.css'
 import { useThemeStore } from '@/stores/useThemeStore'
+import { permissionDirective } from '@/directives/permission'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -16,6 +17,9 @@ app.use(pinia)
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 app.use(i18n)
+
+// 注册全局权限指令 v-permission
+app.directive('permission', permissionDirective)
 
 // 在挂载前初始化主题，避免闪烁
 const themeStore = useThemeStore()

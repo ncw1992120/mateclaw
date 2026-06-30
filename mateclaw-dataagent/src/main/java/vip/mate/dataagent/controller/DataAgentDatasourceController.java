@@ -1,5 +1,6 @@
 package vip.mate.dataagent.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -313,23 +314,64 @@ public class DataAgentDatasourceController {
     }
 
     /**
+     * 分页查询已同步的指标列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/page")
+    @Operation(summary = "分页查询指标列表", description = "分页查询已同步的指标，支持关键词搜索和类目过滤")
+    public R<IPage<AloudataMetricSemanticDTO>> pageMetrics(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "分页查询参数") AloudataMetricPageQuery query) {
+        return R.ok(aloudataSyncService.pageMetrics(datasourceId, query));
+    }
+
+    /**
+     * 分页查询已同步的维度列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/page")
+    @Operation(summary = "分页查询维度列表", description = "分页查询已同步的维度，支持关键词搜索和类目过滤")
+    public R<IPage<AloudataDimensionSemanticDTO>> pageDimensions(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "分页查询参数") AloudataDimensionPageQuery query) {
+        return R.ok(aloudataSyncService.pageDimensions(datasourceId, query));
+    }
+
+    /**
      * 按指标类目分组查询指标列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/grouped")
-    @Operation(summary = "按类目分组指标列表", description = "获取按指标类目分组的指标列表，前端可直接按分组渲染")
+    @Operation(summary = "按类目分组指标列表",
+            description = "获取按指标类目分组的指标列表，支持关键词搜索、类目过滤和每类目数量限制")
     public R<List<MetricCategoryGroupDTO>> listMetricsGroupByCategory(
-            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
-        return R.ok(aloudataSyncService.listMetricsGroupByCategory(datasourceId));
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "搜索关键词") @RequestParam(required = false) String keyword,
+            @Parameter(description = "类目 ID 过滤") @RequestParam(required = false) String categoryId,
+            @Parameter(description = "每类目最大返回条数，小于等于 0 表示不限制") @RequestParam(required = false, defaultValue = "0") int limitPerCategory) {
+        return R.ok(aloudataSyncService.listMetricsGroupByCategory(datasourceId, keyword, categoryId, limitPerCategory));
     }
 
     /**
      * 按维度类目分组查询维度列表
      */
     @GetMapping("/{datasourceId}/aloudata/dimensions/grouped")
-    @Operation(summary = "按类目分组维度列表", description = "获取按维度类目分组的维度列表，前端可直接按分组渲染")
+    @Operation(summary = "按类目分组维度列表",
+            description = "获取按维度类目分组的维度列表，支持关键词搜索、类目过滤和每类目数量限制")
     public R<List<DimensionCategoryGroupDTO>> listDimensionsGroupByCategory(
-            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
-        return R.ok(aloudataSyncService.listDimensionsGroupByCategory(datasourceId));
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "搜索关键词") @RequestParam(required = false) String keyword,
+            @Parameter(description = "类目 ID 过滤") @RequestParam(required = false) String categoryId,
+            @Parameter(description = "每类目最大返回条数，小于等于 0 表示不限制") @RequestParam(required = false, defaultValue = "0") int limitPerCategory) {
+        return R.ok(aloudataSyncService.listDimensionsGroupByCategory(datasourceId, keyword, categoryId, limitPerCategory));
+    }
+
+    /**
+     * 查询类目下的指标/维度数量统计
+     */
+    @GetMapping("/{datasourceId}/aloudata/categories/counts")
+    @Operation(summary = "类目数量统计", description = "统计各类目下的指标或维度数量，用于前端类目树展示")
+    public R<List<AloudataCategoryCountDTO>> listCategoryCounts(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "类目类型：CATEGORY_METRIC / CATEGORY_DIMENSION") @RequestParam String categoryType) {
+        return R.ok(aloudataSyncService.listCategoryCounts(datasourceId, categoryType));
     }
 
     /**

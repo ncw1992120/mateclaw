@@ -44,6 +44,7 @@ export default {
     agentContextDesc: '管理 Agent 的上下文文件，并配置哪些文件会作为系统提示注入',
     workspaceManage: '工作区',
     memberManage: '成员管理',
+    grantManage: '资源授权',
     contextFiles: '上下文文件',
     contextFilesDesc: 'Agent 工作区内的 Markdown 文档',
     enabledPromptFiles: '已启用系统提示文件',

@@ -94,4 +94,15 @@ public class WorkspaceGuard {
         UserContext ctx = UserContextHolder.get();
         return ctx != null && ctx.isAdmin();
     }
+
+    /**
+     * 获取指定用户在工作区中的成员角色
+     *
+     * @param workspaceId 工作区 ID
+     * @param userId      用户 ID
+     * @return 角色标识（owner/admin/member/viewer），非成员返回 null
+     */
+    public String getWorkspaceMemberRole(Long workspaceId, Long userId) {
+        return mateClawRuntime.getWorkspaceMemberRole(workspaceId, userId);
+    }
 }

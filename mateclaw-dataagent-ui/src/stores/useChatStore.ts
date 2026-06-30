@@ -629,6 +629,15 @@ export const useChatStore = defineStore('chat', () => {
     return undefined
   }
 
+  /** 关闭所有 status=running 的指定类型 segment */
+  function finalizeRunningSegments(segments: Array<Record<string, unknown>>, types: string[]): void {
+    for (const seg of segments) {
+      if (seg.status === 'running' && types.includes(seg.type as string)) {
+        seg.status = 'completed'
+      }
+    }
+  }
+
   /** 关闭所有 status=running 的 segment（对话结束时调用） */
   function finalizeAllRunningSegments(segments: Array<Record<string, unknown>>): void {
     for (const seg of segments) {
@@ -653,9 +662,8 @@ export const useChatStore = defineStore('chat', () => {
           const segments = ensureSegments(targetMsgs, msgIdx)
           let contentSeg = findLastRunningSegment(segments, 'content')
           if (!contentSeg) {
-            // 关闭可能存在的 running thinking segment
-            const thinkSeg = findLastRunningSegment(segments, 'thinking')
-            if (thinkSeg) thinkSeg.status = 'completed'
+            // 关闭可能存在的 running thinking/content segment
+            finalizeRunningSegments(segments, ['thinking', 'content'])
             contentSeg = { type: 'content', status: 'running', text: '' }
             segments.push(contentSeg)
           }
@@ -664,7 +672,16 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
       case 'thinking_delta': {
-        // 前端不接受和渲染 thinking chunk，直接忽略
+        const delta = data.delta as string | undefined
+        if (delta) {
+          const segments = ensureSegments(targetMsgs, msgIdx)
+          let thinkSeg = findLastRunningSegment(segments, 'thinking')
+          if (!thinkSeg) {
+            thinkSeg = { type: 'thinking', status: 'running', thinkingText: '' }
+            segments.push(thinkSeg)
+          }
+          thinkSeg.thinkingText = (thinkSeg.thinkingText as string || '') + delta
+        }
         break
       }
       case 'tool_call_started': {
@@ -687,10 +704,9 @@ export const useChatStore = defineStore('chat', () => {
               startTime: Date.now(),
             },
           ]
-          // 关闭 running content segment，创建 running tool_call segment
+          // 关闭 running content/thinking segment，创建 running tool_call segment
           const segments = ensureSegments(targetMsgs, msgIdx)
-          const runningContent = findLastRunningSegment(segments, 'content')
-          if (runningContent) runningContent.status = 'completed'
+          finalizeRunningSegments(segments, ['content', 'thinking'])
           segments.push({
             type: 'tool_call',
             status: 'running',

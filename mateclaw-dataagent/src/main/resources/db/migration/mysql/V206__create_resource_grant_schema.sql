@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_resource_grant` (
     `workspace_id`    BIGINT       NOT NULL    DEFAULT 1       COMMENT '所属工作区 ID',
     `grant_type`      VARCHAR(32)  NOT NULL                    COMMENT '授权类型：role / user / group（按角色/用户/用户组授权）',
     `grantee_id`      VARCHAR(128) NOT NULL                    COMMENT '被授权者标识：角色名/用户ID/用户组ID',
-    `permission`      VARCHAR(32)  NOT NULL    DEFAULT 'use'   COMMENT '权限：use / manage / publish（使用/管理/发布）',
+    `permission`      VARCHAR(32)  NOT NULL    DEFAULT 'use'   COMMENT '权限：view / use / edit（查看/使用/编辑）',
     `granted_by`      BIGINT       NULL                        COMMENT '授权人用户 ID',
     `status`          TINYINT      NOT NULL    DEFAULT 1       COMMENT '状态：0-已撤销 / 1-生效中',
     `expire_time`     DATETIME     NULL                        COMMENT '过期时间（NULL 表示永久）',

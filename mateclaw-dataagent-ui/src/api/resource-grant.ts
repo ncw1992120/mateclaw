@@ -47,6 +47,13 @@ export function listGrantsByGrantee(
   })
 }
 
+/** 按工作区查询授权清单 */
+export function listGrantsByWorkspace(resourceType?: string, status?: number) {
+  return api.get<ResourceGrant[]>(`${BASE_URL}/workspace`, {
+    params: { resourceType: resourceType || undefined, status },
+  })
+}
+
 /** 授予权限 */
 export function grantResource(data: ResourceGrantRequest) {
   return api.post<ResourceGrant>(BASE_URL, data)

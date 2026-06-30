@@ -54,11 +54,37 @@
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
 
-              <!-- Segments (按时间线渲染 tool_call 与中间 content 叙述) -->
+              <!-- Segments (按时间线渲染 tool_call、thinking 与中间 content 叙述) -->
               <template v-for="(seg, segIdx) in getSegments(msg)" :key="`seg-${segIdx}`">
+                <!-- thinking 类型 -->
+                <div
+                  v-if="seg.type === 'thinking'"
+                  class="seg-narration seg-thinking"
+                >
+                  <button
+                    class="seg-narration__toggle"
+                    type="button"
+                    @click="toggleNarrationExpand(index, segIdx)"
+                  >
+                    <span class="seg-narration__icon">💭</span>
+                    <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                    <span
+                      class="seg-narration__arrow"
+                      :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
+                    >▾</span>
+                  </button>
+                  <Transition name="seg-slide">
+                    <div
+                      v-if="isNarrationExpanded(index, segIdx)"
+                      class="seg-narration__body"
+                      v-html="renderMarkdown((seg.thinkingText as string) || '')"
+                    />
+                  </Transition>
+                </div>
+
                 <!-- tool_call 类型 -->
                 <div
-                  v-if="seg.type === 'tool_call'"
+                  v-else-if="seg.type === 'tool_call'"
                   class="seg-tool"
                   :class="{
                     'is-running': seg.status === 'running',
@@ -578,39 +604,55 @@ function hasMetadata(msg: typeof chatStore.messages.value[0]): boolean {
   return false
 }
 
+/** 判断 segment 是否为可展示内容 */
+function isDisplayableSegment(seg: Record<string, unknown>): boolean {
+  if (seg.type === 'tool_call') {
+    return true
+  }
+  if (seg.type === 'thinking') {
+    return !!(seg.thinkingText as string)
+  }
+  if (seg.type === 'content') {
+    return !!(seg.text as string)
+  }
+  return false
+}
+
 /**
- * 提取 segments 数组：保留 tool_call 与 content 类型，过滤 thinking。
- * 中间 content（除最后一条外）渲染为可折叠的"执行过程"摘要，
- * 最后一条 content 作为最终答案在气泡底部以正常字号展示。
+ * 提取 segments 数组：保留 tool_call、thinking 与 content 类型。
+ * 中间 content（除最后一条持久化答案外）渲染为可折叠的"执行过程"摘要，
+ * 最后一条非 segmentOnly 的 content 作为最终答案在气泡底部以正常字号展示。
  */
 function getSegments(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
   if (!msg.metadata || typeof msg.metadata !== 'object') return []
   const meta = msg.metadata as Record<string, unknown>
   const segments = (meta.segments as Array<Record<string, unknown>>) || []
-  return segments.filter(seg => seg.type === 'tool_call' || seg.type === 'content')
+  return segments
+    .filter(seg => seg.type === 'tool_call' || seg.type === 'thinking' || seg.type === 'content')
+    .filter(isDisplayableSegment)
 }
 
-/** 找到最后一个 content 类型 segment 的索引（在 getSegments 返回数组中的索引） */
-function getLastContentSegmentIndex(msg: typeof chatStore.messages.value[0]): number {
+/** 找到最终答案 content 的索引：优先选择最后一条非 segmentOnly 的 content */
+function getFinalContentSegmentIndex(msg: typeof chatStore.messages.value[0]): number {
   const segs = getSegments(msg)
   for (let i = segs.length - 1; i >= 0; i--) {
-    if (segs[i].type === 'content') return i
+    if (segs[i].type === 'content' && segs[i].segmentOnly !== true) return i
   }
   return -1
 }
 
-/** 判断给定 segment 是否为最后一条 content（即"最终答案"） */
+/** 判断给定 segment 是否为最终答案 */
 function isFinalContentSegment(msg: typeof chatStore.messages.value[0], segIdx: number): boolean {
-  return getLastContentSegmentIndex(msg) === segIdx
+  return getFinalContentSegmentIndex(msg) === segIdx
 }
 
 /**
- * 获取最终答案文本：优先取最后一条 content segment 的 text；
- * 若 metadata.segments 缺失（历史消息或异常情况），回退到 msg.content。
+ * 获取最终答案文本：优先取最后一条非 segmentOnly 的 content segment；
+ * 若 metadata.segments 缺失或只有执行过程，回退到 msg.content。
  */
 function getFinalAnswer(msg: typeof chatStore.messages.value[0]): string {
   const segs = getSegments(msg)
-  const lastIdx = getLastContentSegmentIndex(msg)
+  const lastIdx = getFinalContentSegmentIndex(msg)
   if (lastIdx >= 0) {
     return (segs[lastIdx].text as string) || ''
   }

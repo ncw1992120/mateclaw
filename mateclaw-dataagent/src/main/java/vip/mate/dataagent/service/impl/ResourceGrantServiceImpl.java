@@ -1,6 +1,7 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,11 +39,26 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
     }
 
     @Override
-    public List<ResourceGrantEntity> listGrantsByGrantee(String grantType, String granteeId, Integer status) {
+    public List<ResourceGrantEntity> listGrantsByGrantee(Long workspaceId, String grantType, String granteeId, Integer status) {
         LambdaQueryWrapper<ResourceGrantEntity> wrapper = new LambdaQueryWrapper<ResourceGrantEntity>()
+                .eq(ResourceGrantEntity::getWorkspaceId, workspaceId)
                 .eq(ResourceGrantEntity::getGrantType, grantType)
                 .eq(ResourceGrantEntity::getGranteeId, granteeId)
                 .orderByDesc(ResourceGrantEntity::getCreateTime);
+        if (status != null) {
+            wrapper.eq(ResourceGrantEntity::getStatus, status);
+        }
+        return resourceGrantMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<ResourceGrantEntity> listGrantsByWorkspace(Long workspaceId, String resourceType, Integer status) {
+        LambdaQueryWrapper<ResourceGrantEntity> wrapper = new LambdaQueryWrapper<ResourceGrantEntity>()
+                .eq(ResourceGrantEntity::getWorkspaceId, workspaceId)
+                .orderByDesc(ResourceGrantEntity::getCreateTime);
+        if (resourceType != null && !resourceType.isBlank()) {
+            wrapper.eq(ResourceGrantEntity::getResourceType, resourceType);
+        }
         if (status != null) {
             wrapper.eq(ResourceGrantEntity::getStatus, status);
         }
@@ -77,12 +93,14 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
     @Override
     @Transactional
     public void revoke(Long id) {
-        ResourceGrantEntity entity = resourceGrantMapper.selectById(id);
-        if (entity == null) {
-            throw new IllegalArgumentException("授权记录不存在: " + id);
+        int rows = resourceGrantMapper.update(null,
+                new LambdaUpdateWrapper<ResourceGrantEntity>()
+                        .eq(ResourceGrantEntity::getId, id)
+                        .eq(ResourceGrantEntity::getStatus, DataAgentConstants.GRANT_STATUS_ACTIVE)
+                        .set(ResourceGrantEntity::getStatus, DataAgentConstants.GRANT_STATUS_REVOKED));
+        if (rows == 0) {
+            throw new IllegalArgumentException("授权记录不存在或已撤销: " + id);
         }
-        entity.setStatus(DataAgentConstants.GRANT_STATUS_REVOKED);
-        resourceGrantMapper.updateById(entity);
         log.info("Resource grant revoked: id={}, by={}", id, workspaceGuard.currentUserId());
     }
 

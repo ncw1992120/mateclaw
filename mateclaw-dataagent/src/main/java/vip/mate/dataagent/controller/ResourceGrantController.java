@@ -52,7 +52,21 @@ public class ResourceGrantController {
             @Parameter(description = "授权类型") @RequestParam String grantType,
             @Parameter(description = "被授权者标识") @RequestParam String granteeId,
             @Parameter(description = "状态过滤") @RequestParam(required = false) Integer status) {
-        return R.ok(resourceGrantService.listGrantsByGrantee(grantType, granteeId, status));
+        return R.ok(resourceGrantService.listGrantsByGrantee(
+                workspaceGuard.currentWorkspaceId(), grantType, granteeId, status));
+    }
+
+    /**
+     * 列出当前工作区的所有授权记录
+     */
+    @GetMapping("/workspace")
+    @Operation(summary = "工作区授权清单", description = "查询当前工作区下所有授权记录，支持按资源类型和状态过滤")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    public R<List<ResourceGrantEntity>> listByWorkspace(
+            @Parameter(description = "资源类型过滤") @RequestParam(required = false) String resourceType,
+            @Parameter(description = "状态过滤") @RequestParam(required = false) Integer status) {
+        return R.ok(resourceGrantService.listGrantsByWorkspace(
+                workspaceGuard.currentWorkspaceId(), resourceType, status));
     }
 
     /**

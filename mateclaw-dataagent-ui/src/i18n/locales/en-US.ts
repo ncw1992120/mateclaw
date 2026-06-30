@@ -42,6 +42,7 @@ export default {
   workspaceMenu: {
     agentContext: 'Agent Context',
     agentContextDesc: 'Manage agent context files and configure which files are injected as system prompts',
+    grantManage: 'Resource Grants',
     contextFiles: 'Context Files',
     contextFilesDesc: 'Markdown documents in the agent workspace',
     enabledPromptFiles: 'Enabled Prompt Files',

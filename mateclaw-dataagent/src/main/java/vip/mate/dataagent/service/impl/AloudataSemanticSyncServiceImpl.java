@@ -1,6 +1,8 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -119,7 +121,13 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         wrapper.last("LIMIT " + pageSize + " OFFSET " + offset);
 
         List<AloudataMetricEntity> entities = metricMapper.selectList(wrapper);
-        return entities.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList());
+        List<String> metricNames = entities.stream()
+                .map(AloudataMetricEntity::getMetricName)
+                .collect(Collectors.toList());
+        Map<String, List<String>> dimMap = batchLoadMetricDimensions(datasourceId, metricNames);
+        return entities.stream()
+                .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -179,7 +187,10 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         metricWrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
         metricWrapper.in(AloudataMetricEntity::getMetricName, metricNames);
         List<AloudataMetricEntity> entities = metricMapper.selectList(metricWrapper);
-        return entities.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList());
+        Map<String, List<String>> dimMap = batchLoadMetricDimensions(datasourceId, metricNames);
+        return entities.stream()
+                .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -209,12 +220,60 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
-    public List<MetricCategoryGroupDTO> listMetricsGroupByCategory(Long datasourceId) {
+    public IPage<AloudataMetricSemanticDTO> pageMetrics(Long datasourceId, AloudataMetricPageQuery query) {
+        Page<AloudataMetricEntity> page = new Page<>(query.getPageNumber(), query.getPageSize());
+        LambdaQueryWrapper<AloudataMetricEntity> wrapper = buildMetricQueryWrapper(datasourceId, query);
+        metricMapper.selectPage(page, wrapper);
+
+        List<String> metricNames = page.getRecords().stream()
+                .map(AloudataMetricEntity::getMetricName)
+                .collect(Collectors.toList());
+        Map<String, List<String>> dimMap = batchLoadMetricDimensions(datasourceId, metricNames);
+
+        List<AloudataMetricSemanticDTO> records = page.getRecords().stream()
+                .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
+                .collect(Collectors.toList());
+
+        Page<AloudataMetricSemanticDTO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        result.setRecords(records);
+        return result;
+    }
+
+    @Override
+    public IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query) {
+        Page<AloudataDimensionEntity> page = new Page<>(query.getPageNumber(), query.getPageSize());
+        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = buildDimensionQueryWrapper(datasourceId, query);
+        dimensionMapper.selectPage(page, wrapper);
+
+        List<AloudataDimensionSemanticDTO> records = page.getRecords().stream()
+                .map(this::toDimensionSemanticDTO)
+                .collect(Collectors.toList());
+
+        Page<AloudataDimensionSemanticDTO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        result.setRecords(records);
+        return result;
+    }
+
+    @Override
+    public List<MetricCategoryGroupDTO> listMetricsGroupByCategory(Long datasourceId, String keyword,
+                                                                   String categoryId, int limitPerCategory) {
         // 直接从指标表查询（实体表已有类目字段，无需额外查询类目表）
-        List<AloudataMetricEntity> allMetrics = metricMapper.selectList(
-                new LambdaQueryWrapper<AloudataMetricEntity>()
-                        .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
-                        .orderByAsc(AloudataMetricEntity::getMetricCategoryId));
+        LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
+        if (StringUtils.hasText(categoryId)) {
+            wrapper.eq(AloudataMetricEntity::getMetricCategoryId, categoryId);
+        }
+        if (StringUtils.hasText(keyword)) {
+            String pattern = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(AloudataMetricEntity::getMetricName, pattern)
+                    .or().like(AloudataMetricEntity::getMetricDisplayName, pattern)
+                    .or().like(AloudataMetricEntity::getBusinessCaliber, pattern)
+                    .or().like(AloudataMetricEntity::getOwner, pattern)
+                    .or().like(AloudataMetricEntity::getMetricCategoryName, pattern));
+        }
+        wrapper.orderByAsc(AloudataMetricEntity::getMetricCategoryId)
+                .orderByDesc(AloudataMetricEntity::getUpdateTime);
+        List<AloudataMetricEntity> allMetrics = metricMapper.selectList(wrapper);
 
         // 按 metricCategoryId 分组
         Map<String, List<AloudataMetricEntity>> grouped = allMetrics.stream()
@@ -223,16 +282,35 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                         LinkedHashMap::new,
                         Collectors.toList()));
 
+        // 限制每个类目返回数量
+        if (limitPerCategory > 0) {
+            grouped.replaceAll((k, v) -> v.stream()
+                    .limit(limitPerCategory)
+                    .collect(Collectors.toList()));
+        }
+
         return buildMetricCategoryTree(datasourceId, "CATEGORY_METRIC", grouped);
     }
 
     @Override
-    public List<DimensionCategoryGroupDTO> listDimensionsGroupByCategory(Long datasourceId) {
+    public List<DimensionCategoryGroupDTO> listDimensionsGroupByCategory(Long datasourceId, String keyword,
+                                                                         String categoryId, int limitPerCategory) {
         // 直接从维度表查询（实体表已有类目字段，无需额外查询类目表）
-        List<AloudataDimensionEntity> allDimensions = dimensionMapper.selectList(
-                new LambdaQueryWrapper<AloudataDimensionEntity>()
-                        .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
-                        .orderByAsc(AloudataDimensionEntity::getDimCategoryId));
+        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        if (StringUtils.hasText(categoryId)) {
+            wrapper.eq(AloudataDimensionEntity::getDimCategoryId, categoryId);
+        }
+        if (StringUtils.hasText(keyword)) {
+            String pattern = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(AloudataDimensionEntity::getDimName, pattern)
+                    .or().like(AloudataDimensionEntity::getDimDisplayName, pattern)
+                    .or().like(AloudataDimensionEntity::getDimDescription, pattern)
+                    .or().like(AloudataDimensionEntity::getDimCategoryName, pattern));
+        }
+        wrapper.orderByAsc(AloudataDimensionEntity::getDimCategoryId)
+                .orderByDesc(AloudataDimensionEntity::getUpdateTime);
+        List<AloudataDimensionEntity> allDimensions = dimensionMapper.selectList(wrapper);
 
         // 按 dimCategoryId 分组
         Map<String, List<AloudataDimensionEntity>> grouped = allDimensions.stream()
@@ -241,7 +319,73 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                         LinkedHashMap::new,
                         Collectors.toList()));
 
+        // 限制每个类目返回数量
+        if (limitPerCategory > 0) {
+            grouped.replaceAll((k, v) -> v.stream()
+                    .limit(limitPerCategory)
+                    .collect(Collectors.toList()));
+        }
+
         return buildDimensionCategoryTree(datasourceId, "CATEGORY_DIMENSION", grouped);
+    }
+
+    @Override
+    public List<AloudataCategoryCountDTO> listCategoryCounts(Long datasourceId, String categoryType) {
+        if (!"CATEGORY_METRIC".equals(categoryType) && !"CATEGORY_DIMENSION".equals(categoryType)) {
+            return Collections.emptyList();
+        }
+
+        // 查询类目元数据
+        LambdaQueryWrapper<AloudataCategoryEntity> catWrapper = new LambdaQueryWrapper<>();
+        catWrapper.eq(AloudataCategoryEntity::getDatasourceId, datasourceId)
+                .eq(AloudataCategoryEntity::getCategoryType, categoryType)
+                .orderByAsc(AloudataCategoryEntity::getCategoryName);
+        List<AloudataCategoryEntity> categories = categoryMapper.selectList(catWrapper);
+
+        // 聚合数量
+        Map<String, Long> countMap;
+        if ("CATEGORY_METRIC".equals(categoryType)) {
+            countMap = metricMapper.selectList(
+                            new LambdaQueryWrapper<AloudataMetricEntity>()
+                                    .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                                    .select(AloudataMetricEntity::getMetricCategoryId))
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.groupingBy(
+                            e -> StringUtils.hasText(e.getMetricCategoryId()) ? e.getMetricCategoryId() : "uncategorized",
+                            Collectors.counting()));
+        } else {
+            countMap = dimensionMapper.selectList(
+                            new LambdaQueryWrapper<AloudataDimensionEntity>()
+                                    .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
+                                    .select(AloudataDimensionEntity::getDimCategoryId))
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.groupingBy(
+                            e -> StringUtils.hasText(e.getDimCategoryId()) ? e.getDimCategoryId() : "uncategorized",
+                            Collectors.counting()));
+        }
+
+        List<AloudataCategoryCountDTO> result = new ArrayList<>();
+        for (AloudataCategoryEntity cat : categories) {
+            AloudataCategoryCountDTO dto = new AloudataCategoryCountDTO();
+            dto.setCategoryId(cat.getCategoryId());
+            dto.setCategoryName(cat.getCategoryName());
+            dto.setParentId(cat.getParentId());
+            dto.setCount(countMap.getOrDefault(cat.getCategoryId(), 0L));
+            result.add(dto);
+        }
+
+        // 未分类
+        Long uncategorizedCount = countMap.getOrDefault("uncategorized", 0L);
+        if (uncategorizedCount > 0) {
+            AloudataCategoryCountDTO dto = new AloudataCategoryCountDTO();
+            dto.setCategoryId("uncategorized");
+            dto.setCategoryName("未分类");
+            dto.setCount(uncategorizedCount);
+            result.add(dto);
+        }
+        return result;
     }
 
     @Override
@@ -1009,7 +1153,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         return config != null ? config.getId() : null;
     }
 
-    private AloudataMetricSemanticDTO toMetricSemanticDTO(AloudataMetricEntity entity) {
+    private AloudataMetricSemanticDTO toMetricSemanticDTO(AloudataMetricEntity entity,
+                                                          List<String> availableDimensions) {
         AloudataMetricSemanticDTO dto = new AloudataMetricSemanticDTO();
         dto.setMetricName(entity.getMetricName());
         dto.setMetricDisplayName(entity.getMetricDisplayName());
@@ -1019,11 +1164,12 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         dto.setMetricCategoryId(entity.getMetricCategoryId());
         dto.setMetricCategoryName(entity.getMetricCategoryName());
         dto.setUnit(entity.getUnit());
+        dto.setStatus(entity.getStatus());
         if (entity.getSynonyms() != null && !entity.getSynonyms().isBlank()) {
             dto.setSynonyms(Arrays.asList(entity.getSynonyms().split(",")));
         }
         // 填充可用维度
-        dto.setAvailableDimensions(listMetricDimensions(entity.getDatasourceId(), entity.getMetricName()));
+        dto.setAvailableDimensions(availableDimensions != null ? availableDimensions : Collections.emptyList());
         return dto;
     }
 
@@ -1042,6 +1188,66 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             dto.setSynonyms(Arrays.asList(entity.getSynonyms().split(",")));
         }
         return dto;
+    }
+
+    /**
+     * 批量加载指标可用维度
+     */
+    private Map<String, List<String>> batchLoadMetricDimensions(Long datasourceId, List<String> metricNames) {
+        if (metricNames == null || metricNames.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId)
+                .in(AloudataMetricDimensionEntity::getMetricName, metricNames);
+        List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
+        return relations.stream().collect(Collectors.groupingBy(
+                AloudataMetricDimensionEntity::getMetricName,
+                Collectors.mapping(AloudataMetricDimensionEntity::getDimName, Collectors.toList())
+        ));
+    }
+
+    /**
+     * 构建指标分页查询条件
+     */
+    private LambdaQueryWrapper<AloudataMetricEntity> buildMetricQueryWrapper(
+            Long datasourceId, AloudataMetricPageQuery query) {
+        LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
+        if (StringUtils.hasText(query.getCategoryId())) {
+            wrapper.eq(AloudataMetricEntity::getMetricCategoryId, query.getCategoryId());
+        }
+        if (StringUtils.hasText(query.getKeyword())) {
+            String pattern = "%" + query.getKeyword().trim() + "%";
+            wrapper.and(w -> w.like(AloudataMetricEntity::getMetricName, pattern)
+                    .or().like(AloudataMetricEntity::getMetricDisplayName, pattern)
+                    .or().like(AloudataMetricEntity::getBusinessCaliber, pattern)
+                    .or().like(AloudataMetricEntity::getOwner, pattern)
+                    .or().like(AloudataMetricEntity::getMetricCategoryName, pattern));
+        }
+        wrapper.orderByDesc(AloudataMetricEntity::getUpdateTime);
+        return wrapper;
+    }
+
+    /**
+     * 构建维度分页查询条件
+     */
+    private LambdaQueryWrapper<AloudataDimensionEntity> buildDimensionQueryWrapper(
+            Long datasourceId, AloudataDimensionPageQuery query) {
+        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        if (StringUtils.hasText(query.getCategoryId())) {
+            wrapper.eq(AloudataDimensionEntity::getDimCategoryId, query.getCategoryId());
+        }
+        if (StringUtils.hasText(query.getKeyword())) {
+            String pattern = "%" + query.getKeyword().trim() + "%";
+            wrapper.and(w -> w.like(AloudataDimensionEntity::getDimName, pattern)
+                    .or().like(AloudataDimensionEntity::getDimDisplayName, pattern)
+                    .or().like(AloudataDimensionEntity::getDimDescription, pattern)
+                    .or().like(AloudataDimensionEntity::getDimCategoryName, pattern));
+        }
+        wrapper.orderByDesc(AloudataDimensionEntity::getUpdateTime);
+        return wrapper;
     }
 
     /**
@@ -1066,10 +1272,17 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private List<MetricCategoryGroupDTO> buildMetricCategoryTree(
             Long datasourceId, String categoryType,
             Map<String, List<AloudataMetricEntity>> grouped) {
+        // 批量加载当前分组内所有指标的可用维度
+        List<String> allMetricNames = grouped.values().stream()
+                .flatMap(List::stream)
+                .map(AloudataMetricEntity::getMetricName)
+                .collect(Collectors.toList());
+        Map<String, List<String>> dimMap = batchLoadMetricDimensions(datasourceId, allMetricNames);
+
         Map<String, List<AloudataMetricSemanticDTO>> dtoGrouped = new LinkedHashMap<>();
         for (Map.Entry<String, List<AloudataMetricEntity>> entry : grouped.entrySet()) {
             dtoGrouped.put(entry.getKey(), entry.getValue().stream()
-                    .map(this::toMetricSemanticDTO)
+                    .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
                     .collect(Collectors.toList()));
         }
         List<CategoryNode<AloudataMetricSemanticDTO>> roots = buildCategoryNodeTree(
