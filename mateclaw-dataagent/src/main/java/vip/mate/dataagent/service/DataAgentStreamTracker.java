@@ -274,6 +274,10 @@ public class DataAgentStreamTracker {
         RunState state = runs.get(conversationId);
         if (state != null) {
             state.disposable = disposable;
+            if (state.stopRequested.get() && disposable != null && !disposable.isDisposed()) {
+                disposable.dispose();
+                log.info("[DataAgentStreamTracker] Pending stop applied after disposable ready: {}", conversationId);
+            }
         }
     }
 
@@ -286,6 +290,7 @@ public class DataAgentStreamTracker {
             return false;
         }
         boolean firstRequest = !state.stopRequested.getAndSet(true);
+        updateRunningTool(conversationId, null);
         Disposable d = state.disposable;
         if (d != null && !d.isDisposed()) {
             d.dispose();

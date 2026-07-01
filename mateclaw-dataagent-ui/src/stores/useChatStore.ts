@@ -148,6 +148,39 @@ export const useChatStore = defineStore('chat', () => {
     generateConversationId()
   }
 
+  /**
+   * 切换工作空间时重置与会话相关的状态。
+   * <p>
+   * 工作空间切换后，原工作空间下的会话 ID、历史消息、后台缓存等都不再适用，
+   * 需要从 localStorage / sessionStorage 及内存中全部清理，避免刷新页面后恢复脏数据。
+   */
+  function resetForWorkspaceSwitch(): void {
+    // 清理 localStorage 中持久化的聊天状态
+    localStorage.removeItem('mc-chat-current-conversation-id')
+    localStorage.removeItem('mc-chat-current-agent-id')
+    localStorage.removeItem('mc-chat-selected-model-name')
+    localStorage.removeItem('mc-chat-selected-model-provider')
+    localStorage.removeItem('mc-chat-selected-datasource-ids')
+    // 清理续连状态
+    clearPersistedReconnectState()
+
+    // 清理内存状态
+    messages.value = []
+    conversations.value = []
+    streamingConversations.value = new Set()
+    backgroundConversationMessages.clear()
+    backgroundCompletedConversations.value = new Set()
+    reconnectStates.clear()
+    lastEventId.value = null
+    seenEventIds.value.clear()
+    isStreaming.value = false
+    disconnectedBySwitch = false
+    userStopped = false
+
+    // 生成新的会话 ID，避免复用旧工作空间的会话
+    generateConversationId()
+  }
+
   async function fetchConversations(): Promise<void> {
     conversationsLoading.value = true
     try {
@@ -311,10 +344,21 @@ export const useChatStore = defineStore('chat', () => {
     } catch (e) {
       console.warn('[ChatStore] stop request failed:', e)
     }
+    const lastMsg = messages.value[messages.value.length - 1]
+    if (lastMsg?.role === 'assistant') {
+      const segments = ensureSegments(messages.value, messages.value.length - 1)
+      finalizeAllRunningSegments(segments)
+    }
     isStreaming.value = false
     markConversationStreaming(stoppedConvId, false)
+    reconnectStates.delete(stoppedConvId)
+    backgroundConversationMessages.delete(stoppedConvId)
+    const nextCompleted = new Set(backgroundCompletedConversations.value)
+    nextCompleted.delete(stoppedConvId)
+    backgroundCompletedConversations.value = nextCompleted
     // 流结束，重置 lastEventId 并清除持久化状态，避免下次刷新误触发续连
     lastEventId.value = null
+    seenEventIds.value.clear()
     clearPersistedReconnectState()
   }
 
@@ -503,13 +547,9 @@ export const useChatStore = defineStore('chat', () => {
         backgroundConversationMessages.set(convId, targetMsgs)
       } else {
         isStreaming.value = false
-        if (disconnectedBySwitch) {
-          disconnectedBySwitch = false
-          // 因切换对话而断开，保留 streamingConversations 以显示旋转图标，保留 reconnectStates 以支持切回后重连
-        } else {
-          markConversationStreaming(convId, false)
-        }
+        markConversationStreaming(convId, false)
       }
+      disconnectedBySwitch = false
     }
   }
 
@@ -887,6 +927,7 @@ export const useChatStore = defineStore('chat', () => {
     lastEventId,
     setAgent,
     clearMessages,
+    resetForWorkspaceSwitch,
     generateConversationId,
     sendMessage,
     regenerateMessage,

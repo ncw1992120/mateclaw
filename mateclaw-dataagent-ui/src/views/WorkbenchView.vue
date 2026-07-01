@@ -519,6 +519,8 @@ function handleWorkspaceCommand(command: string | number): void {
     router.push({ path: '/', query: { nav: 'workspace' } })
     return
   }
+  // 切换工作空间前清理当前会话相关缓存，避免刷新后恢复旧工作空间的脏数据
+  chatStore.resetForWorkspaceSwitch()
   userStore.setCurrentWorkspace(command)
   ElMessage.success('已切换工作区')
   window.location.reload()

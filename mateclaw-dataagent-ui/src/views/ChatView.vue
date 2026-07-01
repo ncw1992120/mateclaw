@@ -54,99 +54,122 @@
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
 
-              <!-- Segments (按时间线渲染 tool_call、thinking 与中间 content 叙述) -->
-              <template v-for="(seg, segIdx) in getSegments(msg)" :key="`seg-${segIdx}`">
-                <!-- thinking 类型 -->
-                <div
-                  v-if="seg.type === 'thinking'"
-                  class="seg-narration seg-thinking"
+              <!-- Execution Process Card: aggregates thinking + tool_call segments -->
+              <div
+                v-if="hasExecutionProcess(msg)"
+                class="seg-execution"
+                :class="{ 'is-open': isExecutionProcessExpanded(index) }"
+              >
+                <button
+                  class="seg-execution__toggle"
+                  type="button"
+                  @click="toggleExecutionProcessExpand(index)"
                 >
-                  <button
-                    class="seg-narration__toggle"
-                    type="button"
-                    @click="toggleNarrationExpand(index, segIdx)"
-                  >
-                    <span class="seg-narration__icon">💭</span>
-                    <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
-                    <span
-                      class="seg-narration__arrow"
-                      :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
-                    >▾</span>
-                  </button>
-                  <Transition name="seg-slide">
-                    <div
-                      v-if="isNarrationExpanded(index, segIdx)"
-                      class="seg-narration__body"
-                      v-html="renderMarkdown((seg.thinkingText as string) || '')"
-                    />
-                  </Transition>
-                </div>
+                  <span class="seg-execution__icon">🔧</span>
+                  <span class="seg-execution__label">{{ t('chat.executionProcess') }}</span>
+                  <span class="seg-execution__count">{{ getExecutionProcessSummary(msg) }}</span>
+                  <span
+                    class="seg-execution__arrow"
+                    :class="{ 'is-open': isExecutionProcessExpanded(index) }"
+                  >▾</span>
+                </button>
+                <Transition name="seg-slide">
+                  <div v-if="isExecutionProcessExpanded(index)" class="seg-execution__body">
+                    <template v-for="(seg, segIdx) in getExecutionProcessSegments(msg)" :key="`exec-${segIdx}`">
+                      <!-- thinking 类型 -->
+                      <div
+                        v-if="seg.type === 'thinking'"
+                        class="seg-narration seg-thinking"
+                      >
+                        <button
+                          class="seg-narration__toggle"
+                          type="button"
+                          @click="toggleNarrationExpand(index, segIdx)"
+                        >
+                          <span class="seg-narration__icon">💭</span>
+                          <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                          <span
+                            class="seg-narration__arrow"
+                            :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
+                          >▾</span>
+                        </button>
+                        <Transition name="seg-slide">
+                          <div
+                            v-if="isNarrationExpanded(index, segIdx)"
+                            class="seg-narration__body"
+                            v-html="renderMarkdown((seg.thinkingText as string) || '')"
+                          />
+                        </Transition>
+                      </div>
 
-                <!-- tool_call 类型 -->
-                <div
-                  v-else-if="seg.type === 'tool_call'"
-                  class="seg-tool"
-                  :class="{
-                    'is-running': seg.status === 'running',
-                    'is-success': seg.status === 'completed' && seg.toolSuccess !== false,
-                    'is-error': seg.status === 'error' || seg.toolSuccess === false,
-                  }"
-                >
-                  <div class="seg-tool__header" @click="toggleToolExpand(segIdx)">
-                    <span class="seg-tool__status">
-                      <span v-if="seg.status === 'running'" class="spin-icon">⟳</span>
-                      <span v-else-if="seg.status === 'completed' && seg.toolSuccess !== false">✓</span>
-                      <span v-else>✕</span>
-                    </span>
-                    <span class="seg-tool__type-icon">⚙</span>
-                    <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
-                    <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
-                    <span
-                      v-if="seg.toolArgs != null || seg.toolResult != null"
-                      class="seg-tool__arrow"
-                      :class="{ 'is-open': expandedTools.has(segIdx) }"
-                    >▾</span>
+                      <!-- tool_call 类型 -->
+                      <div
+                        v-else-if="seg.type === 'tool_call'"
+                        class="seg-tool"
+                        :class="{
+                          'is-running': seg.status === 'running',
+                          'is-success': seg.status === 'completed' && seg.toolSuccess !== false,
+                          'is-error': seg.status === 'error' || seg.toolSuccess === false,
+                        }"
+                      >
+                        <div class="seg-tool__header" @click="toggleToolExpand(segIdx)">
+                          <span class="seg-tool__status">
+                            <span v-if="seg.status === 'running'" class="spin-icon">⟳</span>
+                            <span v-else-if="seg.status === 'completed' && seg.toolSuccess !== false">✓</span>
+                            <span v-else>✕</span>
+                          </span>
+                          <span class="seg-tool__type-icon">⚙</span>
+                          <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
+                          <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
+                          <span
+                            v-if="seg.toolArgs != null || seg.toolResult != null"
+                            class="seg-tool__arrow"
+                            :class="{ 'is-open': expandedTools.has(segIdx) }"
+                          >▾</span>
+                        </div>
+                        <Transition name="seg-slide">
+                          <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null)" class="seg-tool__body">
+                            <div v-if="seg.toolArgs != null" class="seg-tool__section">
+                              <div class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</div>
+                              <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
+                            </div>
+                            <div v-if="seg.toolResult != null" class="seg-tool__section">
+                              <div class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</div>
+                              <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
+                            </div>
+                          </div>
+                        </Transition>
+                      </div>
+
+                      <!-- content 类型（中间叙述） -->
+                      <div
+                        v-else-if="seg.type === 'content' && !isFinalContentSegment(msg, segIdx)"
+                        class="seg-narration"
+                      >
+                        <button
+                          class="seg-narration__toggle"
+                          type="button"
+                          @click="toggleNarrationExpand(index, segIdx)"
+                        >
+                          <span class="seg-narration__icon">💭</span>
+                          <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                          <span
+                            class="seg-narration__arrow"
+                            :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
+                          >▾</span>
+                        </button>
+                        <Transition name="seg-slide">
+                          <div
+                            v-if="isNarrationExpanded(index, segIdx)"
+                            class="seg-narration__body"
+                            v-html="renderMarkdown((seg.text as string) || '')"
+                          />
+                        </Transition>
+                      </div>
+                    </template>
                   </div>
-                  <Transition name="seg-slide">
-                    <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null)" class="seg-tool__body">
-                      <div v-if="seg.toolArgs != null" class="seg-tool__section">
-                        <div class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</div>
-                        <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
-                      </div>
-                      <div v-if="seg.toolResult != null" class="seg-tool__section">
-                        <div class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</div>
-                        <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
-                      </div>
-                    </div>
-                  </Transition>
-                </div>
-
-                <!-- content 类型（中间叙述：默认折叠的"执行过程"摘要） -->
-                <div
-                  v-else-if="seg.type === 'content' && !isFinalContentSegment(msg, segIdx)"
-                  class="seg-narration"
-                >
-                  <button
-                    class="seg-narration__toggle"
-                    type="button"
-                    @click="toggleNarrationExpand(index, segIdx)"
-                  >
-                    <span class="seg-narration__icon">💭</span>
-                    <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
-                    <span
-                      class="seg-narration__arrow"
-                      :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
-                    >▾</span>
-                  </button>
-                  <Transition name="seg-slide">
-                    <div
-                      v-if="isNarrationExpanded(index, segIdx)"
-                      class="seg-narration__body"
-                      v-html="renderMarkdown((seg.text as string) || '')"
-                    />
-                  </Transition>
-                </div>
-              </template>
+                </Transition>
+              </div>
 
               <!-- Final answer (优先使用最后一个 content segment 作为最终答案；兼容历史消息回退到 msg.content) -->
               <div v-if="getFinalAnswer(msg)" class="msg-text" v-html="renderMarkdown(getFinalAnswer(msg))" />
@@ -524,6 +547,9 @@ const expandedTools = reactive<Set<number>>(new Set())
 /** 中间叙述（content segment）展开状态，key = `${msgIndex}-${segIdx}` */
 const expandedNarrations = ref<Set<string>>(new Set())
 
+/** "执行过程"卡片展开状态，key = `${msgIndex}` */
+const expandedExecutionProcesses = ref<Set<number>>(new Set())
+
 /** 图表实例映射 */
 const chartInstances = new Map<string, echarts.ECharts>()
 const chartRefs = new Map<string, HTMLElement>()
@@ -619,8 +645,8 @@ function isDisplayableSegment(seg: Record<string, unknown>): boolean {
 }
 
 /**
- * 提取 segments 数组：保留 tool_call、thinking 与 content 类型。
- * 中间 content（除最后一条持久化答案外）渲染为可折叠的"执行过程"摘要，
+ * 提取所有 segments 数组：保留 tool_call、thinking 与 content 类型。
+ * 中间 content（除最后一条持久化答案外）会被放入"执行过程"，
  * 最后一条非 segmentOnly 的 content 作为最终答案在气泡底部以正常字号展示。
  */
 function getSegments(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
@@ -630,6 +656,36 @@ function getSegments(msg: typeof chatStore.messages.value[0]): Array<Record<stri
   return segments
     .filter(seg => seg.type === 'tool_call' || seg.type === 'thinking' || seg.type === 'content')
     .filter(isDisplayableSegment)
+}
+
+/**
+ * 提取属于"执行过程"的 segments：thinking、tool_call、以及非最终答案的 content。
+ */
+function getExecutionProcessSegments(msg: typeof chatStore.messages.value[0]): Array<Record<string, unknown>> {
+  const finalIdx = getFinalContentSegmentIndex(msg)
+  return getSegments(msg).filter((seg, idx) => {
+    if (seg.type === 'thinking' || seg.type === 'tool_call') return true
+    if (seg.type === 'content' && idx !== finalIdx) return true
+    return false
+  })
+}
+
+/** 是否存在可展示的"执行过程"内容 */
+function hasExecutionProcess(msg: typeof chatStore.messages.value[0]): boolean {
+  return getExecutionProcessSegments(msg).length > 0
+}
+
+/** 生成"执行过程"摘要：例如"2 个思考 · 3 个工具" */
+function getExecutionProcessSummary(msg: typeof chatStore.messages.value[0]): string {
+  const segs = getExecutionProcessSegments(msg)
+  const thinkCount = segs.filter(s => s.type === 'thinking').length
+  const toolCount = segs.filter(s => s.type === 'tool_call').length
+  const contentCount = segs.filter(s => s.type === 'content').length
+  const parts: string[] = []
+  if (thinkCount > 0) parts.push(`${thinkCount} ${t('chat.executionStep').toLowerCase()}`)
+  if (toolCount > 0) parts.push(`${toolCount} ${t('chat.toolExecution').toLowerCase()}`)
+  if (contentCount > 0 && parts.length === 0) parts.push(`${contentCount} 步骤`)
+  return parts.length > 0 ? parts.join(' · ') : ''
 }
 
 /** 找到最终答案 content 的索引：优先选择最后一条非 segmentOnly 的 content */
@@ -657,6 +713,20 @@ function getFinalAnswer(msg: typeof chatStore.messages.value[0]): string {
     return (segs[lastIdx].text as string) || ''
   }
   return msg.content || ''
+}
+
+/** 展开/收起"执行过程"卡片 */
+function toggleExecutionProcessExpand(msgIdx: number): void {
+  if (expandedExecutionProcesses.value.has(msgIdx)) {
+    expandedExecutionProcesses.value.delete(msgIdx)
+  } else {
+    expandedExecutionProcesses.value.add(msgIdx)
+  }
+}
+
+/** 判断"执行过程"卡片是否处于展开状态 */
+function isExecutionProcessExpanded(msgIdx: number): boolean {
+  return expandedExecutionProcesses.value.has(msgIdx)
 }
 
 /** 展开/收起某条中间叙述。key 形如 `${msgIndex}-${segIdx}`，跨消息独立。 */
@@ -3114,6 +3184,80 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+/* seg-execution （执行过程聚合卡片） */
+.seg-execution {
+  border-left: 3px solid var(--main-orange);
+  background: var(--theme-surface-elevated);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid var(--theme-border);
+  border-left-width: 3px;
+}
+
+.seg-execution__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--theme-text);
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.seg-execution__toggle:hover {
+  color: var(--dark-orange);
+  background: var(--theme-surface-hover);
+}
+
+.seg-execution__icon {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.seg-execution__label {
+  font-weight: 600;
+}
+
+.seg-execution__count {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.seg-execution__arrow {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform 0.2s;
+}
+
+.seg-execution__arrow.is-open {
+  transform: rotate(180deg);
+}
+
+.seg-execution__body {
+  padding: 4px 10px 10px 26px;
+}
+
+.seg-execution__body .seg-narration,
+.seg-execution__body .seg-tool {
+  margin-bottom: 6px;
+}
+
+.seg-execution__body .seg-narration:last-child,
+.seg-execution__body .seg-tool:last-child {
+  margin-bottom: 0;
+}
+
 /* seg-slide transition (Vue Transition) */
 .seg-slide-enter-active,
 .seg-slide-leave-active {
@@ -3132,6 +3276,6 @@ onUnmounted(() => {
 .seg-slide-enter-to,
 .seg-slide-leave-from {
   opacity: 1;
-  max-height: 240px;
+  max-height: 600px;
 }
 </style>

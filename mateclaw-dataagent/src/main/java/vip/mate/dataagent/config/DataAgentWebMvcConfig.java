@@ -31,13 +31,13 @@ public class DataAgentWebMvcConfig implements WebMvcConfigurer {
         // 1. 用户上下文拦截器：填充 UserContextHolder（必须先于权限拦截器执行）
         registry.addInterceptor(userContextInterceptor)
                 .addPathPatterns("/v1/**")
-                .excludePathPatterns("/v1/auth/login")
+                .excludePathPatterns("/v1/auth/login", "/error")
                 .order(0);
 
         // 2. 工作区权限拦截器：校验 @RequireWorkspaceRole / @RequireGlobalAdmin 注解
         registry.addInterceptor(dataAgentWorkspaceInterceptor)
                 .addPathPatterns("/v1/**")
-                .excludePathPatterns("/v1/auth/login")
+                .excludePathPatterns("/v1/auth/login", "/error")
                 .order(1);
     }
 

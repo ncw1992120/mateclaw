@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import vip.mate.common.result.R;
 import vip.mate.dataagent.dto.ChatRequest;
 import vip.mate.dataagent.service.DataAgentChatService;
 
@@ -37,11 +38,11 @@ public class DataAgentChatController {
 
     @DeleteMapping("/stream/{conversationId}")
     @Operation(summary = "停止流式生成", description = "停止指定会话的流式生成")
-    public Map<String, Object> stop(@PathVariable String conversationId) {
+    public R<Map<String, Object>> stop(@PathVariable String conversationId) {
         boolean stopped = chatService.requestStop(conversationId);
-        return Map.of(
+        return R.ok(Map.of(
                 "conversationId", conversationId,
                 "stopped", stopped
-        );
+        ));
     }
 }
