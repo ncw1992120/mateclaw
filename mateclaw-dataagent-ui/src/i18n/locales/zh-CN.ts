@@ -405,7 +405,7 @@ export default {
   },
   metricPlatform: {
     sectionTitle: '指标平台连接',
-    sectionDesc: '将指标平台配置为数据源，按指标查询不写 SQL，不与边际指标平台',
+    sectionDesc: '将指标平台配置为数据源，按指标查询不写 SQL，不依赖边际指标平台',
     apiTitle: '指标平台 API',
     /** 新版表单字段 */
     fieldDisplayName: '显示名称',
@@ -439,7 +439,7 @@ export default {
     metadataTagPrefix: '已同步',
     metadataCountSuffix: '个指标',
     manageTitle: '指标管理',
-    manageDesc: '为「指标」设计用可调项，Agent 可按需自定义参数执行',
+    manageDesc: '管理已同步的指标，支持按类目浏览和关键词搜索',
     indicatorAumName: 'AUM — 3 个指标',
     indicatorAumTag: 'TQL',
     indicatorAumDesc: '金额类 — aum_total',
@@ -500,7 +500,7 @@ export default {
     syncDebounceHint: '同步请求过于频繁，请稍后再试',
     /** 维度管理 */
     dimensionTitle: '维度管理',
-    dimensionDesc: '为「维度」设计可调项，Agent 可按需自定义参数执行',
+    dimensionDesc: '管理已同步的维度，支持按类目浏览和关键词搜索',
     dataType: '数据类型',
     noMetrics: '暂无指标数据',
     noDimensions: '暂无维度数据',

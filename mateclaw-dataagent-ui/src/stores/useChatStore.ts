@@ -125,13 +125,19 @@ export const useChatStore = defineStore('chat', () => {
     return !!(persisted && persisted.lastEventId)
   }
 
-  function generateConversationId(): string {
-    const id = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    conversationId.value = id
+  /**
+   * 准备新对话：清空消息和流式状态，将 conversationId 置空。
+   * <p>
+   * 不再预生成 UUID——真实会话 ID 由后端在首条消息时创建并通过 SSE session 事件返回；
+   * 刷新页面后空 conversationId 不会触发对不存在会话的请求。
+   */
+  function prepareNewConversation(): void {
+    messages.value = []
+    conversationId.value = ''
     selectedDatasourceIds.value = []
+    lastEventId.value = null
+    seenEventIds.value.clear()
     clearPersistedReconnectState()
-    savePersistedReconnectState({ conversationId: id, lastEventId: lastEventId.value })
-    return id
   }
 
   function setAgent(agentId: number | string): void {
@@ -139,13 +145,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function clearMessages(): void {
-    messages.value = []
-    lastEventId.value = null
-    seenEventIds.value.clear()
-    clearPersistedReconnectState()
     // 保留已选中的模型（通过 usePersistedState 持久化到 localStorage），
     // 新建对话时继续使用用户上次选择的模型
-    generateConversationId()
+    prepareNewConversation()
   }
 
   /**
@@ -177,8 +179,8 @@ export const useChatStore = defineStore('chat', () => {
     disconnectedBySwitch = false
     userStopped = false
 
-    // 生成新的会话 ID，避免复用旧工作空间的会话
-    generateConversationId()
+    // 重置会话状态，避免复用旧工作空间的会话
+    prepareNewConversation()
   }
 
   async function fetchConversations(): Promise<void> {
@@ -192,9 +194,9 @@ export const useChatStore = defineStore('chat', () => {
         return
       }
       // 检查当前选中的会话是否仍然存在于列表中
-      // 如果不存在（比如被删除了），清除 localStorage 中的状态
+      // 如果不存在（比如被删除了，或刷新后恢复了无效的旧 ID），清除
       if (conversationId.value && !list.some(c => c.conversationId === conversationId.value)) {
-        // 如果有会话列表，选中第一个；否则生成新会话
+        // 如果有会话列表，选中第一个；否则置空等待用户新建
         if (list.length > 0) {
           // 按最后活跃时间排序，选中最新的会话
           const sorted = [...list].sort((a, b) =>
@@ -203,7 +205,8 @@ export const useChatStore = defineStore('chat', () => {
           )
           conversationId.value = sorted[0].conversationId
         } else {
-          generateConversationId()
+          conversationId.value = ''
+          messages.value = []
         }
       }
     } finally {
@@ -218,10 +221,29 @@ export const useChatStore = defineStore('chat', () => {
    *              用于菜单切换等场景下重新拉取最新数据并触发组件重新挂载图表
    */
   async function switchConversation(convId: string, force = false): Promise<void> {
+    if (!convId) return
+
     // 相同会话且消息已加载时短路，避免重复请求；
     // 刷新页面后 conversationId 会从 sessionStorage 恢复但 messages 为空，
     // 此时不能跳过，否则会出现"第一条历史点不进去"的 bug
     if (!force && conversationId.value === convId && messages.value.length > 0) return
+
+    // 若目标会话既不是已有会话，也没有后台缓存（例如刷新前 generate 的临时 UUID），
+    // 则不应请求后端 messages，直接清空前台消息即可。
+    const existsInList = conversations.value.some(c => c.conversationId === convId)
+    const hasCached = backgroundConversationMessages.has(convId)
+    if (!existsInList && !hasCached) {
+      const oldConvId = conversationId.value
+      if (oldConvId && !isStreaming.value && oldConvId !== convId) {
+        backgroundConversationMessages.delete(oldConvId)
+      }
+      conversationId.value = convId
+      messages.value = []
+      lastEventId.value = null
+      seenEventIds.value.clear()
+      clearPersistedReconnectState()
+      return
+    }
 
     const oldConvId = conversationId.value
     const isSameConversation = oldConvId === convId
@@ -439,8 +461,11 @@ export const useChatStore = defineStore('chat', () => {
   async function sendMessage(agentId: number | string, message: string): Promise<void> {
     if (isStreaming.value) return
 
+    // 新对话时生成临时 UUID 传给后端（后端 getOrCreateConversation 据此创建会话），
+    // 但不持久化到 localStorage——等 SSE session 事件返回真实 ID 后再持久化
     if (!conversationId.value) {
-      generateConversationId()
+      const tempId = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      conversationId.value = tempId
     }
 
     const convId = conversationId.value
@@ -560,6 +585,13 @@ export const useChatStore = defineStore('chat', () => {
     const convId = conversationId.value
     const savedLastEventId = lastEventId.value
 
+    // 会话不在列表中说明已被删除或 ID 无效，跳过续连
+    if (!conversations.value.some(c => c.conversationId === convId)) {
+      clearPersistedReconnectState()
+      conversationId.value = ''
+      return
+    }
+
     isStreaming.value = true
     markConversationStreaming(convId, true)
 
@@ -571,8 +603,17 @@ export const useChatStore = defineStore('chat', () => {
       messages.value = msgList
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(buildChatMessageFromVO)
-    } catch (e) {
+    } catch (e: unknown) {
       console.warn('[ChatStore] Reconnect: failed to load history messages', e)
+      // 会话不存在（404）或无权访问（403）：清理脏数据，不重连
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 404 || status === 403) {
+        clearPersistedReconnectState()
+        conversationId.value = ''
+        isStreaming.value = false
+        markConversationStreaming(convId, false)
+        return
+      }
     }
 
     // 若历史末尾不是 assistant（说明对话仍在进行中、回复尚未落库），补一条空占位，
@@ -628,8 +669,15 @@ export const useChatStore = defineStore('chat', () => {
     if (!persisted || !persisted.lastEventId) return
     if (isStreaming.value) return
 
-    // 若用户在刷新前并未真正发送过任何消息（conversationId 仅是 generate 出来的占位），
-    // 且没有 lastEventId，则不需要重连。这里 lastEventId 必存在才进入重连。
+    // 若恢复的 conversationId 不在已有会话列表中，说明会话已被删除或 ID 无效，
+    // 跳过续连并清理脏数据，避免用不存在的 ID 请求后端
+    const existsInList = conversations.value.some(c => c.conversationId === persisted.conversationId)
+    if (!existsInList) {
+      clearPersistedReconnectState()
+      conversationId.value = ''
+      return
+    }
+
     conversationId.value = persisted.conversationId
     lastEventId.value = persisted.lastEventId
     await reconnect()
@@ -858,9 +906,16 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'heartbeat':
       case 'stream_started':
-      case 'session':
       case 'message_start':
         break
+      case 'session': {
+        // 后端返回真实 conversationId（新对话首条消息时），持久化到 localStorage
+        const serverConvId = data.conversationId as string | undefined
+        if (serverConvId && serverConvId !== conversationId.value) {
+          conversationId.value = serverConvId
+        }
+        break
+      }
       default:
         break
     }
@@ -928,7 +983,7 @@ export const useChatStore = defineStore('chat', () => {
     setAgent,
     clearMessages,
     resetForWorkspaceSwitch,
-    generateConversationId,
+    prepareNewConversation,
     sendMessage,
     regenerateMessage,
     stopChat,

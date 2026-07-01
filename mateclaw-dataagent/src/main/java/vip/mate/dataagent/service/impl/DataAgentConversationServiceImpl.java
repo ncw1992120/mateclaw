@@ -41,8 +41,15 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
 
     @Override
     public List<MessageVO> listMessages(String conversationId) {
-        requireOwnership(conversationId);
-        return conversationRuntime.listMessages(conversationId);
+        // 查询消息不报错：会话不存在或无权访问时返回空列表
+        if (workspaceGuard.isCurrentAdmin()) {
+            return conversationRuntime.listMessages(conversationId);
+        }
+        String username = workspaceGuard.currentUsername();
+        if (conversationRuntime.isConversationOwner(conversationId, username)) {
+            return conversationRuntime.listMessages(conversationId);
+        }
+        return List.of();
     }
 
     @Override
@@ -72,17 +79,28 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
      * <p>
      * 全局管理员自动放行；否则调用 SDK 的 isConversationOwner 校验。
      * 定时任务产生的系统会话对所有登录用户可见。
+     * <p>
+     * 若会话不存在则抛 404；若存在但不属于当前用户则抛 403。
      *
      * @param conversationId 会话 ID
-     * @throws MateClawException 当用户不是会话拥有者时抛出 403
+     * @throws MateClawException 当会话不存在或用户不是会话拥有者时抛出
      */
     private void requireOwnership(String conversationId) {
         if (workspaceGuard.isCurrentAdmin()) {
             return;
         }
         String username = workspaceGuard.currentUsername();
-        if (!conversationRuntime.isConversationOwner(conversationId, username)) {
-            throw new MateClawException("err.conversation.forbidden", 403, "无权访问该会话");
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        if (conversationRuntime.isConversationOwner(conversationId, username)) {
+            return;
         }
+        // 区分"会话不存在"与"无权访问"
+        boolean exists = conversationRuntime.listConversations(username, workspaceId)
+                .stream()
+                .anyMatch(c -> c.getConversationId().equals(conversationId));
+        if (!exists) {
+            throw new MateClawException("err.conversation.notFound", 404, "会话不存在: " + conversationId);
+        }
+        throw new MateClawException("err.conversation.forbidden", 403, "无权访问该会话");
     }
 }

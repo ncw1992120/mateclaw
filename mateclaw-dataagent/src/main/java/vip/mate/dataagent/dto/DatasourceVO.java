@@ -64,6 +64,9 @@ public class DatasourceVO {
     /** 表数量 */
     private Integer tableCount;
 
+    /** 当前用户对该数据源的最高权限：view / use / edit */
+    private String permission;
+
     private String createTime;
 
     private String updateTime;

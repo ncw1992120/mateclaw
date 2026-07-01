@@ -149,12 +149,13 @@ function handlePageChange(page: string): void {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   agentStore.fetchAgents(1)
   modelStore.fetchEnabledModels()
   modelStore.fetchActiveModel()
   modelStore.fetchProviders()
-  chatStore.fetchConversations()
+  // 先加载会话列表，续连时才能校验 conversationId 是否有效
+  await chatStore.fetchConversations()
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
   chatStore.tryResumeStream()
 

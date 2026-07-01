@@ -1,7 +1,7 @@
 <template>
   <div class="metric-platform-panel">
-    <!-- 指标平台连接 -->
-    <section class="mp-section">
+    <!-- 指标平台连接：仅 view/edit 权限展示，use 权限隐藏连接配置 -->
+    <section v-if="currentDatasource?.permission !== 'use'" class="mp-section">
       <div class="mp-card">
         <div class="section-header">
           <div class="section-header-left">
@@ -217,7 +217,7 @@
                   <el-icon><FolderOpened /></el-icon>
                 </span>
                 <span class="tree-node-name">全部指标</span>
-                <span class="tree-node-count">{{ metricPagination.total }}</span>
+                <span class="tree-node-count">{{ metricTotalCount }}</span>
               </div>
               <category-tree-node
                 v-for="group in metricCategoryTree"
@@ -373,7 +373,7 @@
                   <el-icon><FolderOpened /></el-icon>
                 </span>
                 <span class="tree-node-name">全部维度</span>
-                <span class="tree-node-count">{{ dimensionPagination.total }}</span>
+                <span class="tree-node-count">{{ dimensionTotalCount }}</span>
               </div>
               <category-tree-node
                 v-for="group in dimensionCategoryTree"
@@ -421,6 +421,12 @@
                 </template>
               </el-table-column>
               <el-table-column prop="dimName" :label="t('metricPlatform.dimName')" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="status" :label="t('metricPlatform.metricStatus')" width="80" align="center">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="row.status === 'ONLINE' ? 'success' : 'info'">{{ row.status === 'ONLINE' ? '已发布' : '未发布' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="categoryName" :label="t('metricPlatform.categoryName')" min-width="120" show-overflow-tooltip />
               <el-table-column prop="configType" :label="t('metricPlatform.dimConfigType')" width="110" align="center">
                 <template #default="{ row }">
                   <el-tag size="small" :type="row.configType === 'COLUMN_BIND' ? 'primary' : 'info'">{{ row.configType }}</el-tag>
@@ -505,9 +511,11 @@ import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { AloudataCategoryCount, Datasource } from '@/types'
+import { storeToRefs } from 'pinia'
 
 const { t } = useI18n()
 const store = useDatasourceStore()
+const { currentDatasource } = storeToRefs(store)
 
 const props = defineProps<{
   datasourceId?: string
@@ -612,6 +620,8 @@ interface DimensionItem {
   dimDescription: string
   configType: string
   datasetName: string
+  status: string
+  categoryName: string
   synonyms?: string[]
 }
 
@@ -651,13 +661,19 @@ const dimensionPagination = reactive({
   loading: false,
 })
 
+
 /** 指标类目树 */
 const metricCategoryTree = ref<MetricCategoryGroup[]>([])
 
 /** 维度类目树 */
 const dimensionCategoryTree = ref<DimensionCategoryGroup[]>([])
 
-/** 指标类目树加载状态 */
+/** 指标总数量（用于“全部指标”节点固定展示，不随当前过滤条件变化） */
+const metricTotalCount = ref(0)
+
+/** 维度总数量（用于“全部维度”节点固定展示，不随当前过滤条件变化） */
+const dimensionTotalCount = ref(0)
+
 const loadingMetricCategories = ref(false)
 
 /** 维度类目树加载状态 */
@@ -760,6 +776,7 @@ const currentDimensionCategoryName = computed<string>(() => {
 /** 选择维度类目 */
 function selectDimensionCategory(categoryId: string): void {
   selectedDimensionCategoryId.value = categoryId
+  dimensionPagination.categoryId = categoryId
   dimensionPagination.page = 1
   loadDimensionPage()
 }
@@ -830,6 +847,7 @@ function toggleCategory(payload: { categoryId: string; type: 'metric' | 'dimensi
 /** 选择类目 */
 function selectCategory(categoryId: string): void {
   selectedCategoryId.value = categoryId
+  metricPagination.categoryId = categoryId
   metricPagination.page = 1
   loadMetricPage()
 }
@@ -961,6 +979,9 @@ async function loadMetricPage(): Promise<void> {
     const data = (res as any) || { records: [], total: 0 }
     metricPagination.list = data.records || []
     metricPagination.total = Number(data.total) || 0
+    if (metricPagination.categoryId === 'all') {
+      metricTotalCount.value = metricPagination.total
+    }
   } catch (error) {
     console.error('Failed to load metric page:', error)
     metricPagination.list = []
@@ -986,6 +1007,9 @@ async function loadDimensionPage(): Promise<void> {
     const data = (res as any) || { records: [], total: 0 }
     dimensionPagination.list = data.records || []
     dimensionPagination.total = Number(data.total) || 0
+    if (dimensionPagination.categoryId === 'all') {
+      dimensionTotalCount.value = dimensionPagination.total
+    }
   } catch (error) {
     console.error('Failed to load dimension page:', error)
     dimensionPagination.list = []
@@ -1077,8 +1101,12 @@ watch(
     selectedDimensionCategoryId.value = 'all'
     metricPagination.page = 1
     metricPagination.keyword = ''
+    metricPagination.categoryId = 'all'
+    metricTotalCount.value = 0
     dimensionPagination.page = 1
     dimensionPagination.keyword = ''
+    dimensionPagination.categoryId = 'all'
+    dimensionTotalCount.value = 0
     expandedMetricCategories.value = new Set<string>()
     expandedDimensionCategories.value = new Set<string>()
     metricDimensionDetailMap.value = {}

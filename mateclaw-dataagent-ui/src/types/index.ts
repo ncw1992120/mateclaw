@@ -170,6 +170,8 @@ export interface Datasource {
   schemaStatus: string
   lastSchemaDiscoveryTime: string
   tableCount: number
+  /** 当前用户对该数据源的最高权限：view / use / edit */
+  permission?: string
   createTime: string
   updateTime: string
 }

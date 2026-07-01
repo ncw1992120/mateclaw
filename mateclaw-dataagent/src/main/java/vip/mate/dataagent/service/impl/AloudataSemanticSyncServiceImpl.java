@@ -1182,6 +1182,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         dto.setConfigType(entity.getConfigType());
         dto.setConfigValue(entity.getConfigValue());
         dto.setDatasetName(entity.getDatasetName());
+        dto.setStatus(entity.getDisplayStatus());
         dto.setCategoryId(entity.getDimCategoryId());
         dto.setCategoryName(entity.getDimCategoryName());
         if (entity.getSynonyms() != null && !entity.getSynonyms().isBlank()) {

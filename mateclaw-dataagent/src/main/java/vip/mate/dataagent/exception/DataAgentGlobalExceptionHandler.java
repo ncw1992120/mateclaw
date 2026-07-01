@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vip.mate.common.result.R;
+import vip.mate.exception.MateClawException;
 
 /**
  * DataAgent 全局异常处理器
@@ -47,6 +48,20 @@ public class DataAgentGlobalExceptionHandler {
     public ResponseEntity<R<Void>> handleIllegalStateException(IllegalStateException e) {
         log.warn("状态异常: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(R.fail(409, e.getMessage()));
+    }
+
+    /**
+     * 处理 MateClawException（来自 mateclaw-server SDK 的异常）
+     */
+    @ExceptionHandler(MateClawException.class)
+    public ResponseEntity<R<Void>> handleMateClawException(MateClawException e) {
+        int code = e.getCode() > 0 ? e.getCode() : 500;
+        log.warn("MateClaw 异常: code={}, msg={}", code, e.getMessage());
+        HttpStatus httpStatus = HttpStatus.resolve(code);
+        if (httpStatus == null) {
+            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return ResponseEntity.status(httpStatus).body(R.fail(code, e.getMessage()));
     }
 
     /**

@@ -58,10 +58,8 @@ public class PermissionChecker {
         // 4. 资源授权表校验：按角色授权（匹配用户在工作区中的角色）
         String userRole = mateClawRuntime.getWorkspaceMemberRole(workspaceId, userId);
         if (userRole != null) {
-            if (resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
-                    DataAgentConstants.GRANT_TYPE_ROLE, userRole, permission)) {
-                return true;
-            }
+            return resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                    DataAgentConstants.GRANT_TYPE_ROLE, userRole, permission);
         }
 
         return false;
@@ -75,5 +73,65 @@ public class PermissionChecker {
             throw new AccessDeniedException(
                     "权限不足：资源 " + resourceType + "/" + resourceId + " 需要 " + permission + " 权限");
         }
+    }
+
+    /**
+     * 解析当前用户对指定资源的最高权限
+     * <p>
+     * 返回优先级：edit &gt; use &gt; view。没有任何权限返回 null。
+     * 全局管理员、工作区 owner/admin 自动返回 edit。
+     *
+     * @param resourceType 资源类型
+     * @param resourceId   资源 ID
+     * @return 最高权限：view / use / edit，无权限返回 null
+     */
+    public String resolveHighestPermission(String resourceType, Long resourceId) {
+        // 1. 全局管理员 / 工作区 owner/admin 拥有最高权限
+        if (workspaceGuard.isCurrentAdmin() || workspaceGuard.hasRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)) {
+            return DataAgentConstants.PERMISSION_EDIT;
+        }
+
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+        String userRole = mateClawRuntime.getWorkspaceMemberRole(workspaceId, userId);
+
+        // 2. 按用户授权查询
+        if (hasAnyPermission(workspaceId, resourceType, resourceId,
+                DataAgentConstants.GRANT_TYPE_USER, String.valueOf(userId))) {
+            return highestGrantedPermission(workspaceId, resourceType, resourceId,
+                    DataAgentConstants.GRANT_TYPE_USER, String.valueOf(userId));
+        }
+
+        // 3. 按角色授权查询
+        if (userRole != null && hasAnyPermission(workspaceId, resourceType, resourceId,
+                DataAgentConstants.GRANT_TYPE_ROLE, userRole)) {
+            return highestGrantedPermission(workspaceId, resourceType, resourceId,
+                    DataAgentConstants.GRANT_TYPE_ROLE, userRole);
+        }
+
+        return null;
+    }
+
+    private boolean hasAnyPermission(Long workspaceId, String resourceType, Long resourceId,
+                                     String grantType, String granteeId) {
+        return resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                        grantType, granteeId, DataAgentConstants.PERMISSION_VIEW)
+                || resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                        grantType, granteeId, DataAgentConstants.PERMISSION_USE)
+                || resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                        grantType, granteeId, DataAgentConstants.PERMISSION_EDIT);
+    }
+
+    private String highestGrantedPermission(Long workspaceId, String resourceType, Long resourceId,
+                                            String grantType, String granteeId) {
+        if (resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                grantType, granteeId, DataAgentConstants.PERMISSION_EDIT)) {
+            return DataAgentConstants.PERMISSION_EDIT;
+        }
+        if (resourceGrantService.checkPermission(workspaceId, resourceType, resourceId,
+                grantType, granteeId, DataAgentConstants.PERMISSION_USE)) {
+            return DataAgentConstants.PERMISSION_USE;
+        }
+        return DataAgentConstants.PERMISSION_VIEW;
     }
 }
