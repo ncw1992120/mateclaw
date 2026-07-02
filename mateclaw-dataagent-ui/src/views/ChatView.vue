@@ -406,6 +406,12 @@ const { t } = useI18n()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
 
+// #region debug-point H1:render-metrics
+function reportChatRenderLagDebug(hypothesisId: string, location: string, msg: string, data: Record<string, unknown> = {}): void {
+  fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'chat-render-lag', runId: 'pre-fix', hypothesisId, location, msg: `[DEBUG] ${msg}`, data, ts: Date.now() }) }).catch(() => {})
+}
+// #endregion
+
 defineEmits<{
   openDashboard: []
 }>()
@@ -605,8 +611,23 @@ function renderMarkdown(content: string): string {
   if (!content) return ''
   const cached = markdownCache.get(content)
   if (cached !== undefined) return cached
+  const start = performance.now()
   const html = markedInstance.parse(content) as string
+  const parsedAt = performance.now()
   const sanitized = DOMPurify.sanitize(html, purifyConfig)
+  const duration = performance.now() - start
+  if (duration > 16 || content.length > 5000) {
+    reportChatRenderLagDebug('H1', 'ChatView:renderMarkdown', 'markdown render cost', {
+      duration,
+      parseDuration: parsedAt - start,
+      sanitizeDuration: performance.now() - parsedAt,
+      contentLength: content.length,
+      htmlLength: html.length,
+      messageCount: chatStore.messages.length,
+      cacheSize: markdownCache.size,
+      isStreaming: chatStore.isStreaming,
+    })
+  }
   // 简单的 LRU：超过上限时丢弃最早插入项（Map 保留插入顺序）
   if (markdownCache.size >= MAX_MARKDOWN_CACHE) {
     const firstKey = markdownCache.keys().next().value
@@ -1462,11 +1483,13 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType): void
  * 参照 mateclaw-ui useEChartsRenderer 的实现模式
  */
 function scanAndMountEChartsBlocks(): void {
+  const start = performance.now()
   const container = chatAreaRef.value
   if (!container) {
     return
   }
   const blocks = container.querySelectorAll('.echarts-block:not(.echarts-error)')
+  let mountedCount = 0
   blocks.forEach((el) => {
     const htmlEl = el as HTMLElement
     if (echartsBlockInstances.has(htmlEl)) {
@@ -1562,6 +1585,7 @@ function scanAndMountEChartsBlocks(): void {
       const chart = echarts.init(htmlEl)
       chart.setOption(option)
       echartsBlockInstances.set(htmlEl, chart)
+      mountedCount += 1
 
       // 监听容器尺寸变化：解决列表明细浮层开关、窗口缩放、侧边栏折叠等场景下
       // 图表不跟着容器伸缩的问题；debounce 50ms 避免动画过程高频触发
@@ -1588,6 +1612,16 @@ function scanAndMountEChartsBlocks(): void {
       htmlEl.classList.add('echarts-error')
     }
   })
+  const duration = performance.now() - start
+  if (duration > 8 || blocks.length > 0) {
+    reportChatRenderLagDebug('H3', 'ChatView:scanAndMountEChartsBlocks', 'echarts block scan cost', {
+      duration,
+      blockCount: blocks.length,
+      mountedCount,
+      messageCount: chatStore.messages.length,
+      isStreaming: chatStore.isStreaming,
+    })
+  }
 }
 
 /** 发送消息 */
@@ -1682,8 +1716,19 @@ function scrollToBottom(force = false): void {
     if (!chatAreaRef.value) {
       return
     }
+    const start = performance.now()
     if (force || !userScrolledUp.value) {
       chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight
+    }
+    const duration = performance.now() - start
+    if (duration > 8) {
+      reportChatRenderLagDebug('H3', 'ChatView:scrollToBottom', 'scroll cost', {
+        duration,
+        force,
+        userScrolledUp: userScrolledUp.value,
+        messageCount: chatStore.messages.length,
+        scrollHeight: chatAreaRef.value.scrollHeight,
+      })
     }
   })
 }
@@ -1708,6 +1753,10 @@ function handleResize(): void {
   })
 }
 
+// #region debug-point H2:watch-metrics
+let messageWatchCount = 0
+// #endregion
+
 // 合并 messages.length 与最后一条 content 的 watch，避免同一 tick 内重复
 // 触发 scanAndMountEChartsBlocks（流式期间频率极高，重复扫描显著卡顿）。
 watch(
@@ -1716,6 +1765,16 @@ watch(
     chatStore.messages[chatStore.messages.length - 1]?.content,
   ],
   () => {
+    messageWatchCount += 1
+    if (messageWatchCount % 30 === 0) {
+      const lastContent = chatStore.messages[chatStore.messages.length - 1]?.content || ''
+      reportChatRenderLagDebug('H2', 'ChatView:messages-watch', 'messages watcher triggered', {
+        watchCount: messageWatchCount,
+        messageCount: chatStore.messages.length,
+        lastContentLength: lastContent.length,
+        isStreaming: chatStore.isStreaming,
+      })
+    }
     scrollToBottom()
     nextTick(scanAndMountEChartsBlocks)
   }

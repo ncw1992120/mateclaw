@@ -410,6 +410,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // #region debug-point H4:flush-metrics
+  function reportChatRenderLagDebug(hypothesisId: string, location: string, msg: string, data: Record<string, unknown> = {}): void {
+    fetch('http://127.0.0.1:7777/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'chat-render-lag', runId: 'pre-fix', hypothesisId, location, msg: `[DEBUG] ${msg}`, data, ts: Date.now() }) }).catch(() => {})
+  }
+  // #endregion
+
   /**
    * 流式内容批量刷新缓冲区
    * <p>
@@ -422,6 +428,8 @@ export const useChatStore = defineStore('chat', () => {
     private rafId: number | null = null
     private msgIndex: number
     private getMsgs: () => ChatMessage[]
+    private flushCount = 0
+    private appendedChars = 0
 
     constructor(msgIndex: number, getMsgs: () => ChatMessage[]) {
       this.msgIndex = msgIndex
@@ -430,6 +438,7 @@ export const useChatStore = defineStore('chat', () => {
 
     appendContent(delta: string): void {
       this.contentBuf += delta
+      this.appendedChars += delta.length
       this.scheduleFlush()
     }
 
@@ -463,8 +472,24 @@ export const useChatStore = defineStore('chat', () => {
       if (!msg || msg.role !== 'assistant') return
 
       if (this.contentBuf) {
+        const deltaLength = this.contentBuf.length
+        const beforeLength = msg.content.length
+        const start = performance.now()
         msg.content += this.contentBuf
         this.contentBuf = ''
+        this.flushCount += 1
+        const duration = performance.now() - start
+        if (duration > 8 || this.flushCount % 30 === 0) {
+          reportChatRenderLagDebug('H4', 'useChatStore:FlushBuffer.applyToMessage', 'flush content applied', {
+            duration,
+            flushCount: this.flushCount,
+            deltaLength,
+            beforeLength,
+            afterLength: msg.content.length,
+            messageCount: msgs.length,
+            appendedChars: this.appendedChars,
+          })
+        }
       }
     }
   }

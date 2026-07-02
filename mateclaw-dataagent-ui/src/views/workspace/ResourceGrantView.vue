@@ -66,8 +66,17 @@
             {{ new Date(row.createTime).toLocaleString() }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
+            <el-button
+              v-if="row.status === 1"
+              size="small"
+              link
+              type="primary"
+              @click="openEditDialog(row)"
+            >
+              编辑
+            </el-button>
             <el-button
               v-if="row.status === 1"
               size="small"
@@ -154,6 +163,37 @@
         <el-button size="small" type="primary" :loading="grantSubmitting" @click="handleGrant">确认授权</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑授权对话框 -->
+    <el-dialog v-model="editDialogVisible" title="编辑授权" width="480px" :close-on-click-modal="false">
+      <el-form :model="editForm" label-width="80px" size="small">
+        <el-form-item label="资源">
+          <span>{{ editForm.resourceLabel }}</span>
+        </el-form-item>
+        <el-form-item label="授权对象">
+          <span>{{ editForm.granteeLabel }}</span>
+        </el-form-item>
+        <el-form-item label="权限">
+          <el-select v-model="editForm.permission" placeholder="选择权限" style="width: 100%">
+            <el-option label="查看" value="view" />
+            <el-option label="使用" value="use" />
+            <el-option label="编辑" value="edit" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="过期时间">
+          <el-date-picker
+            v-model="editForm.expireTime"
+            type="datetime"
+            placeholder="留空表示永久"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button size="small" @click="editDialogVisible = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="editSubmitting" @click="handleEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -208,6 +248,17 @@ const grantForm = ref({
 
 /** 缓存各资源类型的资源列表 */
 const resourceCache = ref<Record<string, ResourceOption[]>>({})
+
+/** 编辑授权对话框 */
+const editDialogVisible = ref(false)
+const editSubmitting = ref(false)
+const editForm = ref({
+  id: '',
+  resourceLabel: '',
+  granteeLabel: '',
+  permission: 'use',
+  expireTime: null as string | null,
+})
 
 /** 前端筛选后的授权记录 */
 const filteredGrants = computed(() => {
@@ -409,6 +460,40 @@ async function handleRevoke(row: grantApi.ResourceGrant): Promise<void> {
     await loadGrants()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.msg || '撤销失败')
+  }
+}
+
+/** 打开编辑授权对话框 */
+function openEditDialog(row: grantApi.ResourceGrant): void {
+  editForm.value = {
+    id: row.id,
+    resourceLabel: `${resourceTypeLabel(row.resourceType)} - ${resolveResourceName(row.resourceType, row.resourceId)}`,
+    granteeLabel: `${grantTypeLabel(row.grantType)} - ${resolveGranteeName(row)}`,
+    permission: row.permission,
+    expireTime: row.expireTime || null,
+  }
+  editDialogVisible.value = true
+}
+
+/** 提交编辑 */
+async function handleEdit(): Promise<void> {
+  if (!editForm.value.permission) {
+    ElMessage.warning('请选择权限')
+    return
+  }
+  editSubmitting.value = true
+  try {
+    await grantApi.updateGrant(editForm.value.id, {
+      permission: editForm.value.permission,
+      expireTime: editForm.value.expireTime || null,
+    })
+    ElMessage.success('更新成功')
+    editDialogVisible.value = false
+    await loadGrants()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || '更新失败')
+  } finally {
+    editSubmitting.value = false
   }
 }
 

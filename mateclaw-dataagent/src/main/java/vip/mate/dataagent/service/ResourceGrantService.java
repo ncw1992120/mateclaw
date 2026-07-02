@@ -3,6 +3,7 @@ package vip.mate.dataagent.service;
 import vip.mate.dataagent.dto.ResourceGrantRequest;
 import vip.mate.dataagent.model.ResourceGrantEntity;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -48,6 +49,16 @@ public interface ResourceGrantService {
      * @return 创建后的授权记录
      */
     ResourceGrantEntity grant(ResourceGrantRequest request);
+
+    /**
+     * 更新授权记录（权限、过期时间）
+     *
+     * @param id          授权记录 ID
+     * @param permission  新权限
+     * @param expireTime  新过期时间（null 表示永久）
+     * @return 更新后的授权记录
+     */
+    ResourceGrantEntity updateGrant(Long id, String permission, LocalDateTime expireTime);
 
     /**
      * 撤销授权

@@ -92,6 +92,21 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
 
     @Override
     @Transactional
+    public ResourceGrantEntity updateGrant(Long id, String permission, LocalDateTime expireTime) {
+        ResourceGrantEntity entity = resourceGrantMapper.selectById(id);
+        if (entity == null || entity.getStatus() != DataAgentConstants.GRANT_STATUS_ACTIVE) {
+            throw new IllegalArgumentException("授权记录不存在或已撤销: " + id);
+        }
+        entity.setPermission(permission);
+        entity.setExpireTime(expireTime);
+        resourceGrantMapper.updateById(entity);
+        log.info("Resource grant updated: id={}, permission={}, expireTime={}, by={}",
+                id, permission, expireTime, workspaceGuard.currentUserId());
+        return entity;
+    }
+
+    @Override
+    @Transactional
     public void revoke(Long id) {
         int rows = resourceGrantMapper.update(null,
                 new LambdaUpdateWrapper<ResourceGrantEntity>()

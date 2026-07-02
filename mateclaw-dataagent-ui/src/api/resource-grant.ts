@@ -59,6 +59,11 @@ export function grantResource(data: ResourceGrantRequest) {
   return api.post<ResourceGrant>(BASE_URL, data)
 }
 
+/** 更新授权（权限、过期时间） */
+export function updateGrant(id: string, data: { permission: string; expireTime?: string | null }) {
+  return api.put<ResourceGrant>(`${BASE_URL}/${id}`, data)
+}
+
 /** 撤销授权 */
 export function revokeGrant(id: string) {
   return api.delete(`${BASE_URL}/${id}`)

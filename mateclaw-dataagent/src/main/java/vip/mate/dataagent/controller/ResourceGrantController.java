@@ -10,6 +10,7 @@ import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.ResourceGrantRequest;
+import vip.mate.dataagent.dto.ResourceGrantUpdateRequest;
 import vip.mate.dataagent.model.ResourceGrantEntity;
 import vip.mate.dataagent.service.ResourceGrantService;
 
@@ -77,6 +78,18 @@ public class ResourceGrantController {
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<ResourceGrantEntity> grant(@RequestBody ResourceGrantRequest request) {
         return R.ok(resourceGrantService.grant(request));
+    }
+
+    /**
+     * 更新授权记录（权限、过期时间）
+     */
+    @PutMapping("/{id}")
+    @Operation(summary = "更新授权", description = "修改授权记录的权限和过期时间")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    public R<ResourceGrantEntity> update(
+            @Parameter(description = "授权记录 ID") @PathVariable Long id,
+            @RequestBody ResourceGrantUpdateRequest request) {
+        return R.ok(resourceGrantService.updateGrant(id, request.getPermission(), request.getExpireTime()));
     }
 
     /**
