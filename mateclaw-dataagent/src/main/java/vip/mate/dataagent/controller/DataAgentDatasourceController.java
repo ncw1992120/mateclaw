@@ -68,7 +68,7 @@ public class DataAgentDatasourceController {
      */
     @PostMapping
     @Operation(summary = "创建数据源", description = "新增数据源配置，owner_id 自动填充为当前登录用户")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     public R<DatasourceVO> create(@RequestBody DatasourceCreateRequest request) {
         Long userId = workspaceGuard.currentUserId();
         return R.ok(datasourceService.createDatasource(request, userId));
@@ -79,7 +79,7 @@ public class DataAgentDatasourceController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新数据源", description = "更新数据源配置")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     public R<DatasourceVO> update(
             @Parameter(description = "数据源 ID") @PathVariable Long id,
             @RequestBody DatasourceUpdateRequest request) {
@@ -91,7 +91,7 @@ public class DataAgentDatasourceController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除数据源", description = "删除指定数据源及其关联的表和字段元数据")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     public R<Void> delete(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         datasourceService.deleteDatasource(id);

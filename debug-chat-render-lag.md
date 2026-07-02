@@ -25,10 +25,32 @@ chat-render-lag
 - 记录 Markdown/消息内容组件渲染耗时（若存在独立组件）。
 
 ## Evidence Log
-Instrumentation added. Waiting for reproduction.
+Pre-fix evidence (1978 events):
+
+| Hypothesis | Count | Verdict |
+|---|---|---|
+| H1 Markdown render | 536 | **CONFIRMED root cause** |
+| H3 scroll/echarts | 1249 | REJECTED (all < 8ms) |
+| H2 watcher | 97 | not bottleneck (just frequency) |
+| H4 flush | 96 | REJECTED (all 0.1ms) |
+
+H1 top durations (marked.parse):
+- 582ms (parse=579ms) contentLen=2912 msgCount=26
+- 458ms (parse=456ms) contentLen=1444 msgCount=24 streaming=True
+- 345ms (parse=341ms) contentLen=5656 msgCount=12
+- 332ms (parse=330ms) contentLen=5656 msgCount=14
+- 325ms (parse=324ms) contentLen=5656 msgCount=14
+
+Root cause: 流式输出时每个 flush 让 content 变化 → renderMarkdown(getFinalAnswer(msg)) cache miss → marked.parse() 同步阻塞主线程 300-580ms → 浏览器弹等待提示。
+
+## Fix
+流式输出期间对最后一条正在生成的消息使用轻量渲染（HTML 转义 + 换行 + 代码块边界，不调用 marked.parse / hljs），流式结束后由 Vue 响应式自动切换回完整 Markdown 渲染。
+
+- 新增 `renderStreamingText(content)`: 转义 + 换行 + 代码块边界
+- 新增 `isStreamingLastMessage(index)`: 判断是否流式中的最后一条
+- 新增 `renderMessageText(content, index)`: 按流式状态选择渲染策略
+- 模板 3 处 v-html 改为 renderMessageText（最终答案 + thinking 段 × 2）
 
 ## Changes
-- Started debug server at http://127.0.0.1:7777.
-- Added instrumentation only, no business optimization yet:
-  - `useChatStore.ts`: FlushBuffer apply frequency, delta size, content length, message count.
-  - `ChatView.vue`: Markdown parse/sanitize cost, watcher trigger frequency, scroll cost, ECharts block scan cost.
+- `ChatView.vue`: 新增轻量流式渲染函数 + 模板切换
+- Instrumentation retained for post-fix verification

@@ -97,7 +97,7 @@
                           <div
                             v-if="isNarrationExpanded(index, segIdx)"
                             class="seg-narration__body"
-                            v-html="renderMarkdown((seg.thinkingText as string) || '')"
+                            v-html="renderMessageText((seg.thinkingText as string) || '', index)"
                           />
                         </Transition>
                       </div>
@@ -162,7 +162,7 @@
                           <div
                             v-if="isNarrationExpanded(index, segIdx)"
                             class="seg-narration__body"
-                            v-html="renderMarkdown((seg.text as string) || '')"
+                            v-html="renderMessageText((seg.text as string) || '', index)"
                           />
                         </Transition>
                       </div>
@@ -172,7 +172,7 @@
               </div>
 
               <!-- Final answer (优先使用最后一个 content segment 作为最终答案；兼容历史消息回退到 msg.content) -->
-              <div v-if="getFinalAnswer(msg)" class="msg-text" v-html="renderMarkdown(getFinalAnswer(msg))" />
+              <div v-if="getFinalAnswer(msg)" class="msg-text" v-html="renderMessageText(getFinalAnswer(msg), index)" />
 
               <!-- Streaming cursor -->
               <span
@@ -607,6 +607,52 @@ const purifyConfig = {
 /** 渲染 Markdown */
 const markdownCache = new Map<string, string>()
 const MAX_MARKDOWN_CACHE = 64
+
+/** 轻量文本转义：仅做 HTML 转义与换行处理，用于流式输出期间避免 marked.parse 阻塞主线程 */
+function escapeHtmlForStreaming(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** 流式输出期间的轻量渲染：转义 + 换行 + 基础代码块边界（不高亮不解析 Markdown 语法） */
+function renderStreamingText(content: string): string {
+  if (!content) return ''
+  // 按代码围栏拆分，代码块内仅转义保留空白，块外做换行处理
+  const parts = content.split(/(```[\s\S]*?```)/g)
+  let html = ''
+  for (const part of parts) {
+    if (part.startsWith('```') && part.endsWith('```')) {
+      // 代码块：去掉围栏，提取语言标识，内容转义
+      const inner = part.slice(3, -3)
+      const nlIdx = inner.indexOf('\n')
+      const lang = nlIdx >= 0 ? inner.slice(0, nlIdx).trim() : ''
+      const code = nlIdx >= 0 ? inner.slice(nlIdx + 1) : ''
+      const langClass = lang ? ` language-${lang.split(/\s/)[0]}` : ''
+      html += `<pre><code class="hljs${langClass}">${escapeHtmlForStreaming(code)}</code></pre>\n`
+    } else {
+      html += escapeHtmlForStreaming(part).replace(/\n/g, '<br>\n')
+    }
+  }
+  return html
+}
+
+/** 判断指定索引的消息是否为正在流式输出的最后一条 */
+function isStreamingLastMessage(index: number): boolean {
+  return chatStore.isStreaming && index === chatStore.messages.length - 1
+}
+
+/** 根据是否流式选择渲染策略：流式时轻量渲染，非流式时完整 Markdown */
+function renderMessageText(content: string, index: number): string {
+  if (isStreamingLastMessage(index)) {
+    return renderStreamingText(content)
+  }
+  return renderMarkdown(content)
+}
+
 function renderMarkdown(content: string): string {
   if (!content) return ''
   const cached = markdownCache.get(content)
