@@ -1809,6 +1809,7 @@ watch(
   () => [
     chatStore.messages.length,
     chatStore.messages[chatStore.messages.length - 1]?.content,
+    chatStore.isStreaming,
   ],
   () => {
     messageWatchCount += 1
