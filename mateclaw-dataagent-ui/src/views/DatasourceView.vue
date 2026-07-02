@@ -59,7 +59,7 @@
                 <span class="item-name">{{ ds.name }}</span>
                 <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
               </div>
-              <div class="item-actions" @click.stop>
+              <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
                 <button
                   class="item-action-btn"
                   :title="t('datasourcePage.actionRename')"
