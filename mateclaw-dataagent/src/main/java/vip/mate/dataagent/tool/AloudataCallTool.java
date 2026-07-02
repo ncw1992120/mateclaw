@@ -709,7 +709,7 @@ public class AloudataCallTool {
         if (entity == null) {
             return "数据源不存在, id=" + datasourceId;
         }
-        if (entity.getEnabled() == null || !entity.getEnabled()) {
+        if (Boolean.FALSE.equals(entity.getEnabled())) {
             return "数据源已禁用, id=" + datasourceId;
         }
         return null;
@@ -728,7 +728,7 @@ public class AloudataCallTool {
         if (!"aloudata".equalsIgnoreCase(entity.getSourceType())) {
             return "数据源类型不是 aloudata, 当前类型: " + entity.getSourceType();
         }
-        if (entity.getEnabled() == null || !entity.getEnabled()) {
+        if (Boolean.FALSE.equals(entity.getEnabled())) {
             return "数据源已禁用, id=" + datasourceId;
         }
         return null;

@@ -41,6 +41,13 @@ public interface HelpCenterService {
     void deleteCategory(Long id);
 
     /**
+     * 批量排序分类
+     *
+     * @param ids 按目标顺序排列的分类 ID 列表
+     */
+    void reorderCategories(List<String> ids);
+
+    /**
      * 获取分类下的文档列表
      *
      * @param categoryId 分类 ID
@@ -79,6 +86,14 @@ public interface HelpCenterService {
      * @param id 文档 ID
      */
     void deleteDocument(Long id);
+
+    /**
+     * 批量排序分类下的文档
+     *
+     * @param categoryId    分类 ID
+     * @param documentIds 按目标顺序排列的文档 ID 列表
+     */
+    void reorderDocuments(Long categoryId, List<String> documentIds);
 
     /**
      * 发布文档

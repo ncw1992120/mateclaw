@@ -1045,6 +1045,11 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             vo.setPassword(null);
             vo.setConnectionParams(null);
             vo.setSchemaName(null);
+        } else {
+            // edit/view 权限：密码脱敏，仅返回占位符用于编辑回显
+            if (vo.getPassword() != null && !vo.getPassword().isBlank()) {
+                vo.setPassword("******");
+            }
         }
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, entity.getId());

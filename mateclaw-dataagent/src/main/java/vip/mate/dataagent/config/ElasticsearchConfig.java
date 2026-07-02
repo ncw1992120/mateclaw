@@ -12,9 +12,12 @@ import org.apache.http.message.BasicHeader;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
+
+import java.util.Base64;
 
 /**
  * Elasticsearch 客户端配置
@@ -25,6 +28,7 @@ import org.springframework.util.StringUtils;
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "spring.elasticsearch", name = "uris")
 public class ElasticsearchConfig {
 
     private final ElasticsearchProperties properties;
@@ -36,7 +40,7 @@ public class ElasticsearchConfig {
      * 创建 Elasticsearch 低级 RestClient
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(RestClient.class)
     public RestClient elasticsearchRestClient() {
         String[] uriArray = properties.getUris().split(",");
         HttpHost[] hosts = new HttpHost[uriArray.length];
@@ -50,7 +54,7 @@ public class ElasticsearchConfig {
         if (StringUtils.hasText(properties.getUsername()) && StringUtils.hasText(properties.getPassword())) {
             builder.setDefaultHeaders(new Header[]{
                     new BasicHeader("Authorization",
-                            "Basic " + java.util.Base64.getEncoder()
+                            "Basic " + Base64.getEncoder()
                                     .encodeToString((properties.getUsername() + ":" + properties.getPassword()).getBytes()))
             });
         }
@@ -70,7 +74,7 @@ public class ElasticsearchConfig {
      * 创建 Elasticsearch 高级客户端
      */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(ElasticsearchClient.class)
     public ElasticsearchClient elasticsearchClient(RestClient restClient) {
         ObjectMapper objectMapper = new ObjectMapper();
         RestClientTransport transport = new RestClientTransport(

@@ -125,6 +125,17 @@ export const useChatStore = defineStore('chat', () => {
     return !!(persisted && persisted.lastEventId)
   }
 
+  function isConversationRunningOnServer(convId: string): boolean {
+    const conv = conversations.value.find(c => c.conversationId === convId)
+    return conv?.streamStatus === 'running'
+  }
+
+  function clearReconnectState(): void {
+    lastEventId.value = null
+    seenEventIds.value.clear()
+    clearPersistedReconnectState()
+  }
+
   /**
    * 准备新对话：清空消息和流式状态，将 conversationId 置空。
    * <p>
@@ -135,9 +146,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     conversationId.value = ''
     selectedDatasourceIds.value = []
-    lastEventId.value = null
-    seenEventIds.value.clear()
-    clearPersistedReconnectState()
+    clearReconnectState()
   }
 
   function setAgent(agentId: number | string): void {
@@ -164,7 +173,7 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.removeItem('mc-chat-selected-model-provider')
     localStorage.removeItem('mc-chat-selected-datasource-ids')
     // 清理续连状态
-    clearPersistedReconnectState()
+    clearReconnectState()
 
     // 清理内存状态
     messages.value = []
@@ -189,9 +198,18 @@ export const useChatStore = defineStore('chat', () => {
       const list = await conversationApi.listConversations() as unknown as Conversation[]
       conversations.value = list
       // 重连进行中时不修改 conversationId，避免 fetchConversations 与 tryResumeStream 并发执行时
-      // 竞态修改 conversationId 导致重连使用了错误的会话 ID
-      if (isStreaming.value || hasPendingReconnect()) {
+      // 竞态修改 conversationId 导致重连使用了错误的会话 ID。
+      // 若后端已是 idle，则说明本地续连状态是残留脏数据，需要清理后继续正常加载。
+      if (isStreaming.value) {
         return
+      }
+      const pendingReconnect = loadPersistedReconnectState()
+      if (pendingReconnect?.lastEventId) {
+        const pendingConversation = list.find(c => c.conversationId === pendingReconnect.conversationId)
+        if (pendingConversation?.streamStatus === 'running') {
+          return
+        }
+        clearReconnectState()
       }
       // 检查当前选中的会话是否仍然存在于列表中
       // 如果不存在（比如被删除了，或刷新后恢复了无效的旧 ID），清除
@@ -239,9 +257,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       conversationId.value = convId
       messages.value = []
-      lastEventId.value = null
-      seenEventIds.value.clear()
-      clearPersistedReconnectState()
+      clearReconnectState()
       return
     }
 
@@ -301,7 +317,7 @@ export const useChatStore = defineStore('chat', () => {
       if (!isSameConversation) {
         // 检查目标会话是否有保存的续连状态，如果有则恢复并尝试重连
         const savedLastEventId = reconnectStates.get(convId)
-        if (savedLastEventId) {
+        if (savedLastEventId && isConversationRunningOnServer(convId)) {
           lastEventId.value = savedLastEventId
           seenEventIds.value.clear()
           reconnectStates.delete(convId)
@@ -309,11 +325,8 @@ export const useChatStore = defineStore('chat', () => {
           // 异步尝试重连，不阻塞历史消息加载
           reconnect()
         } else {
-          lastEventId.value = null
-          seenEventIds.value.clear()
-          if (!oldHadStream) {
-            clearPersistedReconnectState()
-          }
+          reconnectStates.delete(convId)
+          clearReconnectState()
         }
       }
     } finally {
@@ -378,10 +391,8 @@ export const useChatStore = defineStore('chat', () => {
     const nextCompleted = new Set(backgroundCompletedConversations.value)
     nextCompleted.delete(stoppedConvId)
     backgroundCompletedConversations.value = nextCompleted
-    // 流结束，重置 lastEventId 并清除持久化状态，避免下次刷新误触发续连
-    lastEventId.value = null
-    seenEventIds.value.clear()
-    clearPersistedReconnectState()
+    // 流结束，清除持久化状态，避免下次刷新误触发续连
+    clearReconnectState()
   }
 
   /**
@@ -458,6 +469,15 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /** 从 SSE 事件中提取后端确认的真实会话 ID。 */
+  function getSseConversationId(sse: SseEvent): string | null {
+    if (!sse.data || typeof sse.data !== 'object') {
+      return null
+    }
+    const id = sse.data.conversationId
+    return typeof id === 'string' && id ? id : null
+  }
+
   async function sendMessage(agentId: number | string, message: string): Promise<void> {
     if (isStreaming.value) return
 
@@ -468,7 +488,7 @@ export const useChatStore = defineStore('chat', () => {
       conversationId.value = tempId
     }
 
-    const convId = conversationId.value
+    let convId = conversationId.value
 
     if (streamingConversations.value.has(convId)) return
 
@@ -504,8 +524,7 @@ export const useChatStore = defineStore('chat', () => {
     const assistantIdx = targetMsgs.length - 1
     const flushBuf = new FlushBuffer(assistantIdx, () => targetMsgs)
 
-    lastEventId.value = null
-    seenEventIds.value.clear()
+    clearReconnectState()
     savePersistedReconnectState({ conversationId: convId, lastEventId: null })
 
     /** 当前会话是否已切到后台（用户切到其他会话后，本流继续运行） */
@@ -522,6 +541,18 @@ export const useChatStore = defineStore('chat', () => {
 
       let streamFinished = false
       for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value)) {
+        const eventConversationId = getSseConversationId(sse)
+        if (eventConversationId && eventConversationId !== convId) {
+          const wasActiveConversation = conversationId.value === convId
+          markConversationStreaming(convId, false)
+          convId = eventConversationId
+          markConversationStreaming(convId, true)
+          if (wasActiveConversation) {
+            conversationId.value = convId
+          }
+          savePersistedReconnectState({ conversationId: convId, lastEventId: lastEventId.value })
+        }
+
         // 检测是否切换到其他会话
         if (conversationId.value !== convId) {
           if (!isBackground) {
@@ -543,6 +574,10 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       flushBuf.flush()
+
+      if (!streamFinished && !isBackground) {
+        clearReconnectState()
+      }
 
       if (isNewConversation) {
         fetchConversations()
@@ -585,10 +620,16 @@ export const useChatStore = defineStore('chat', () => {
     const convId = conversationId.value
     const savedLastEventId = lastEventId.value
 
-    // 会话不在列表中说明已被删除或 ID 无效，跳过续连
+    // 会话不在列表中说明已被删除或 ID 无效，只清理续连状态，不修改用户选中的会话
     if (!conversations.value.some(c => c.conversationId === convId)) {
-      clearPersistedReconnectState()
-      conversationId.value = ''
+      clearReconnectState()
+      return
+    }
+
+    // 后端已标记空闲时，本地残留的 lastEventId 不应再触发续连。
+    if (!isConversationRunningOnServer(convId)) {
+      clearReconnectState()
+      markConversationStreaming(convId, false)
       return
     }
 
@@ -608,8 +649,7 @@ export const useChatStore = defineStore('chat', () => {
       // 会话不存在（404）或无权访问（403）：清理脏数据，不重连
       const status = (e as { response?: { status?: number } })?.response?.status
       if (status === 404 || status === 403) {
-        clearPersistedReconnectState()
-        conversationId.value = ''
+        clearReconnectState()
         isStreaming.value = false
         markConversationStreaming(convId, false)
         return
@@ -647,6 +687,9 @@ export const useChatStore = defineStore('chat', () => {
         if (streamFinished) break
       }
       flushBuf.flush()
+      if (!streamFinished) {
+        clearReconnectState()
+      }
     } catch (error) {
       flushBuf.flush()
       console.warn('[ChatStore] Reconnect failed:', error)
@@ -669,12 +712,19 @@ export const useChatStore = defineStore('chat', () => {
     if (!persisted || !persisted.lastEventId) return
     if (isStreaming.value) return
 
+    await fetchConversations()
+
     // 若恢复的 conversationId 不在已有会话列表中，说明会话已被删除或 ID 无效，
-    // 跳过续连并清理脏数据，避免用不存在的 ID 请求后端
+    // 只清理续连脏数据，不影响用户当前选中的会话（可能从 localStorage 恢复了另一个有效会话）
     const existsInList = conversations.value.some(c => c.conversationId === persisted.conversationId)
     if (!existsInList) {
-      clearPersistedReconnectState()
-      conversationId.value = ''
+      clearReconnectState()
+      return
+    }
+
+    if (!isConversationRunningOnServer(persisted.conversationId)) {
+      clearReconnectState()
+      markConversationStreaming(persisted.conversationId, false)
       return
     }
 
@@ -885,8 +935,7 @@ export const useChatStore = defineStore('chat', () => {
           backgroundCompletedConversations.value = nextCompleted
         } else {
           isStreaming.value = false
-          lastEventId.value = null
-          clearPersistedReconnectState()
+          clearReconnectState()
         }
         onFinished?.()
         break

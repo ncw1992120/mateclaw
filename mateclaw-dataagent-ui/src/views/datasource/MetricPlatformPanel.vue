@@ -1,7 +1,7 @@
 <template>
   <div class="metric-platform-panel">
-    <!-- 指标平台连接：仅 view/edit 权限展示，use 权限隐藏连接配置 -->
-    <section v-if="currentDatasource?.permission !== 'use'" class="mp-section">
+    <!-- 指标平台连接：use 权限隐藏连接配置，仅展示基础信息标题 -->
+    <section class="mp-section">
       <div class="mp-card">
         <div class="section-header">
           <div class="section-header-left">
@@ -18,7 +18,7 @@
               <p class="section-desc">{{ t('metricPlatform.sectionDesc') }}</p>
             </div>
           </div>
-          <div class="section-actions">
+          <div v-if="currentDatasource?.permission === 'edit'" class="section-actions">
             <template v-if="!isEditing">
               <button
                 class="section-action-btn"
@@ -52,7 +52,7 @@
           </div>
         </div>
 
-        <div class="form-grid">
+        <div v-if="currentDatasource?.permission !== 'use'" class="form-grid">
           <!-- 显示名称 -->
           <div class="form-field form-field-wide">
             <label class="form-label required">{{ t('metricPlatform.fieldDisplayName') }}</label>
@@ -590,6 +590,7 @@ async function loadDatasource(id: string): Promise<void> {
   try {
     const ds = await datasourceApi.get(id)
     fillFormFromDatasource(ds)
+    store.currentDatasource = ds as unknown as Datasource
   } catch {
     // 错误由全局 axios 拦截器统一提示
   }

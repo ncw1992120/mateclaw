@@ -54,7 +54,7 @@
             </template>
           </div>
         </div>
-        <div class="content-header-actions">
+        <div v-if="props.canManage" class="content-header-actions">
           <el-button size="small" @click="handleEditDoc(currentDocument)">
             <el-icon><Edit /></el-icon> {{ t('helpCenter.edit') }}
           </el-button>
@@ -119,6 +119,7 @@ const props = defineProps<{
   searchVisible: boolean
   searchResults: HelpSearchResult[]
   searchLoading: boolean
+  canManage: boolean
 }>()
 
 const emit = defineEmits<{

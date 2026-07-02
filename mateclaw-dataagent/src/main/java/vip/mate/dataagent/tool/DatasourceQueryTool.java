@@ -184,6 +184,9 @@ public class DatasourceQueryTool {
         var datasources = datasourceManageService.listDatasources();
         JSONArray arr = new JSONArray();
         for (var ds : datasources) {
+            if (Boolean.FALSE.equals(ds.getEnabled())) {
+                continue;
+            }
             if (!allowed.isEmpty() && (ds.getId() == null || !allowed.contains(ds.getId()))) {
                 continue;
             }

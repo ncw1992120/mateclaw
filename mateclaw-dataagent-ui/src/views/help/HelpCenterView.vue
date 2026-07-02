@@ -5,6 +5,7 @@
       :categoryTree="categoryTree"
       :currentCategoryId="currentCategoryId"
       :currentDocumentId="currentDocument?.id || null"
+      :canManage="canManageHelp"
       @selectCategory="handleCategoryClick"
       @selectDoc="handleDocClick"
       @search="handleSearch"
@@ -14,6 +15,8 @@
       @newDoc="handleNewDoc"
       @editCategory="handleEditCategory"
       @deleteCategory="handleDeleteCategory"
+      @reorderCategories="handleReorderCategories"
+      @reorderDocuments="handleReorderDocuments"
     />
 
     <!-- 右侧：文档内容区 -->
@@ -23,6 +26,7 @@
       :searchVisible="searchVisible"
       :searchResults="searchResults"
       :searchLoading="searchLoading"
+      :canManage="canManageHelp"
       @selectDoc="handleDocClick"
       @selectCategory="handleCategoryClick"
       @goHome="handleGoHome"
@@ -119,8 +123,10 @@ import HelpSidebar from './HelpSidebar.vue'
 import HelpContent from './HelpContent.vue'
 import HelpToc from './HelpToc.vue'
 import HelpDocEditor from './HelpDocEditor.vue'
+import { useUserStore } from '@/stores/useUserStore'
 
 const { t } = useI18n()
+const userStore = useUserStore()
 
 /** 分类树（含文档列表，方便一次性渲染） */
 interface CategoryWithDocs extends HelpCategory {
@@ -152,11 +158,17 @@ const docDialogVisible = ref(false)
 const editingDoc = ref<HelpDocument | null>(null)
 const docForm = ref<HelpDocumentRequest>({ title: '', categoryId: '', content: '', author: '', sortOrder: 0, status: 'draft', tags: '', summary: '' })
 
-/** 分类树选择器数据（添加根节点，递归构建） */
-const categoryTreeForSelect = computed(() => {
-  const tree = buildSelectTree(categoryTree.value)
-  return [{ id: '0', name: t('helpCenter.rootCategory'), children: tree }]
-})
+/** 当前用户是否有帮助中心管理权限（全局管理员 / 工作区 owner / 工作区 admin） */
+  const canManageHelp = computed(() => {
+    const ws = userStore.currentWorkspace
+    return userStore.isAdmin || (ws && (ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin'))
+  })
+
+  /** 分类树选择器数据（添加根节点，递归构建） */
+  const categoryTreeForSelect = computed(() => {
+    const tree = buildSelectTree(categoryTree.value)
+    return [{ id: '0', name: t('helpCenter.rootCategory'), children: tree }]
+  })
 
 /** 递归构建分类选择器数据 */
 function buildSelectTree(categories: CategoryWithDocs[]): any[] {
@@ -323,6 +335,28 @@ async function handleDeleteCategory(category: HelpCategory): Promise<void> {
     await fetchCategoryTree()
   } catch {
     // 用户取消或错误已在拦截器处理
+  }
+}
+
+/** 重排序分类 */
+async function handleReorderCategories(ids: string[]): Promise<void> {
+  try {
+    await helpApi.reorderCategories(ids)
+    ElMessage.success(t('helpCenter.reorderSuccess'))
+    await fetchCategoryTree()
+  } catch {
+    // 错误已在拦截器处理
+  }
+}
+
+/** 重排序文档 */
+async function handleReorderDocuments(categoryId: string, ids: string[]): Promise<void> {
+  try {
+    await helpApi.reorderDocuments(categoryId, ids)
+    ElMessage.success(t('helpCenter.reorderSuccess'))
+    await fetchCategoryTree()
+  } catch {
+    // 错误已在拦截器处理
   }
 }
 

@@ -127,6 +127,23 @@ public class HelpCenterServiceImpl implements HelpCenterService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reorderCategories(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < ids.size(); i++) {
+            Long id = Long.parseLong(ids.get(i));
+            HelpCategoryEntity entity = categoryMapper.selectById(id);
+            if (entity == null || entity.getDeleted() == 1) {
+                continue;
+            }
+            entity.setSortOrder(i);
+            categoryMapper.updateById(entity);
+        }
+    }
+
+    @Override
     public List<HelpDocumentVO> listDocuments(Long categoryId) {
         LambdaQueryWrapper<HelpDocumentEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HelpDocumentEntity::getCategoryId, categoryId);
@@ -222,6 +239,23 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         }
         entity.setDeleted(1);
         documentMapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reorderDocuments(Long categoryId, List<String> documentIds) {
+        if (documentIds == null || documentIds.isEmpty() || categoryId == null) {
+            return;
+        }
+        for (int i = 0; i < documentIds.size(); i++) {
+            Long id = Long.parseLong(documentIds.get(i));
+            HelpDocumentEntity entity = documentMapper.selectById(id);
+            if (entity == null || entity.getDeleted() == 1 || !categoryId.equals(entity.getCategoryId())) {
+                continue;
+            }
+            entity.setSortOrder(i);
+            documentMapper.updateById(entity);
+        }
     }
 
     @Override

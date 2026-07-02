@@ -24,6 +24,11 @@ export function deleteCategory(id: string) {
   return api.delete(`${BASE_URL}/categories/${id}`)
 }
 
+/** 批量排序分类 */
+export function reorderCategories(ids: string[]) {
+  return api.post(`${BASE_URL}/categories/reorder`, { ids })
+}
+
 /** 获取分类下的文档列表 */
 export function listDocuments(categoryId: string) {
   return api.get<HelpDocument[]>(`${BASE_URL}/categories/${categoryId}/documents`)
@@ -47,6 +52,11 @@ export function updateDocument(id: string, data: HelpDocumentRequest) {
 /** 删除文档 */
 export function deleteDocument(id: string) {
   return api.delete(`${BASE_URL}/documents/${id}`)
+}
+
+/** 批量排序分类下的文档 */
+export function reorderDocuments(categoryId: string, ids: string[]) {
+  return api.post(`${BASE_URL}/categories/${categoryId}/documents/reorder`, { ids })
 }
 
 /** 发布文档 */

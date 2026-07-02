@@ -13,9 +13,19 @@
             <el-icon><CaretTop /></el-icon>
           </el-button>
         </el-tooltip>
-        <el-tooltip :content="t('helpCenter.newCategory')" placement="bottom">
+        <el-tooltip v-if="props.canManage" :content="t('helpCenter.newCategory')" placement="bottom">
           <el-button link size="small" @click="emit('newCategory')">
             <el-icon><Plus /></el-icon>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip v-if="props.canManage && !sortMode" :content="t('helpCenter.sort')" placement="bottom">
+          <el-button link size="small" @click="sortMode = true">
+            <el-icon><Rank /></el-icon>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip v-if="props.canManage && sortMode" :content="t('helpCenter.exitSort')" placement="bottom">
+          <el-button link size="small" type="primary" @click="sortMode = false">
+            <el-icon><CloseBold /></el-icon>
           </el-button>
         </el-tooltip>
       </div>
@@ -41,14 +51,17 @@
       <div class="sidebar-tree">
         <el-tree
           ref="treeRef"
-          :data="mixedTree"
+          :data="treeData"
           :props="treeProps"
           node-key="id"
           highlight-current
-          :expand-on-click-node="true"
+          :expand-on-click-node="!sortMode"
+          :draggable="sortMode"
+          :allow-drop="allowDrop"
           :default-expanded-keys="expandedKeys"
           :current-node-key="currentNodeKey"
           @node-click="handleNodeClick"
+          @node-drop="handleDrop"
         >
           <template #default="{ node, data }">
             <div class="tree-node" :class="{ 'is-doc': data.isDoc }">
@@ -72,9 +85,13 @@
               <span v-if="data.isDoc && data.status === 'draft'" class="tree-node-status">
                 {{ t('helpCenter.draft') }}
               </span>
+              <!-- 排序模式：拖拽手柄 -->
+              <span v-if="sortMode" class="tree-node-drag-handle" :title="t('helpCenter.sortMode')">
+                <el-icon><Rank /></el-icon>
+              </span>
               <!-- 分类节点悬停操作菜单 -->
               <el-dropdown
-                v-if="!data.isDoc"
+                v-if="props.canManage && !data.isDoc && !sortMode"
                 class="tree-node-actions"
                 trigger="click"
                 @command="(cmd: string) => handleCategoryCommand(cmd, data)"
@@ -104,7 +121,7 @@
             </div>
           </template>
         </el-tree>
-        <el-empty v-if="mixedTree.length === 0" :description="t('helpCenter.emptyCategory')" :image-size="60" />
+        <el-empty v-if="treeData.length === 0" :description="t('helpCenter.emptyCategory')" :image-size="60" />
       </div>
     </el-scrollbar>
   </aside>
@@ -115,7 +132,7 @@ import { ref, watch, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Plus, Search, Document, CaretBottom, CaretTop, Edit, Delete,
-  Folder, DocumentAdd
+  Folder, DocumentAdd, Rank, CloseBold
 } from '@element-plus/icons-vue'
 import type { HelpCategory, HelpDocument } from '@/types'
 
@@ -125,6 +142,7 @@ const props = defineProps<{
   categoryTree: HelpCategory[]
   currentCategoryId: string | null
   currentDocumentId: string | null
+  canManage: boolean
 }>()
 
 const emit = defineEmits<{
@@ -137,6 +155,8 @@ const emit = defineEmits<{
   (e: 'newDoc', categoryId: string): void
   (e: 'editCategory', category: HelpCategory): void
   (e: 'deleteCategory', category: HelpCategory): void
+  (e: 'reorderCategories', ids: string[]): void
+  (e: 'reorderDocuments', categoryId: string, ids: string[]): void
 }>()
 /** 搜索关键字 */
 const searchKeyword = ref('')
@@ -144,6 +164,22 @@ const searchKeyword = ref('')
 const treeRef = ref()
 /** 展开的节点 */
 const expandedKeys = ref<string[]>([])
+/** 是否处于排序模式 */
+const sortMode = ref(false)
+
+/** 树展示数据（排序模式下使用本地副本以支持拖拽） */
+const treeData = ref<any[]>([])
+
+/** 深度克隆树数据 */
+function cloneTree(nodes: any[]): any[] {
+  return nodes.map(node => {
+    const cloned: any = { ...node }
+    if (node.children && node.children.length > 0) {
+      cloned.children = cloneTree(node.children)
+    }
+    return cloned
+  })
+}
 
 /** 树属性配置 */
 const treeProps = {
@@ -210,6 +246,9 @@ function buildMixedTree(categories: CategoryWithDocs[]): any[] {
 
 /** 处理节点点击 */
 function handleNodeClick(data: any): void {
+  if (sortMode.value) {
+    return
+  }
   if (data.isDoc) {
     emit('selectDoc', data.rawDoc)
   } else {
@@ -362,6 +401,99 @@ function getAllCategoryKeys(categories: HelpCategory[]): string[] {
     }
   }
   return keys
+}
+
+/** 监听混合树与排序模式，保持展示数据同步 */
+watch([mixedTree, sortMode], ([newTree, newSortMode], [, oldSortMode]) => {
+  if (newSortMode) {
+    if (!oldSortMode) {
+      // 进入排序模式时克隆当前树，后续拖拽直接修改该副本
+      treeData.value = cloneTree(newTree)
+    }
+  } else {
+    // 非排序模式下始终与 prop 数据保持同步
+    treeData.value = cloneTree(newTree)
+  }
+}, { immediate: true })
+
+/** 获取节点的父级分类 ID，兼容 parent 为 null 的情况 */
+function getNodeParentId(node: any): string | null {
+  const parentRawId = node.parent?.data?.rawId
+  if (parentRawId !== undefined && parentRawId !== null) {
+    return parentRawId
+  }
+  // 部分场景下 node.parent 为 null，从 treeData 中反查
+  const result = findNodeInTree(node.data?.id, treeData.value)
+  return result?.parent ? result.parent.rawId : null
+}
+
+/** 拖拽放置校验：仅允许同类型同级节点之间移动 */
+function allowDrop(draggingNode: any, dropNode: any, type: string): boolean {
+  if (!sortMode.value || !draggingNode || !dropNode) {
+    return false
+  }
+  if (type === 'inner') {
+    return false
+  }
+  if (!draggingNode.data || !dropNode.data) {
+    return false
+  }
+  if (draggingNode.data.isDoc !== dropNode.data.isDoc) {
+    return false
+  }
+  const dragParentId = getNodeParentId(draggingNode)
+  const dropParentId = getNodeParentId(dropNode)
+  return dragParentId === dropParentId
+}
+
+/** 在树数据中查找节点及其父级、同级 */
+function findNodeInTree(
+  nodeId: string,
+  nodes: any[],
+  parent: any = null
+): { node: any; parent: any; siblings: any[] } | null {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === nodeId) {
+      return { node: nodes[i], parent, siblings: nodes }
+    }
+    if (nodes[i].children && nodes[i].children.length > 0) {
+      const found = findNodeInTree(nodeId, nodes[i].children, nodes[i])
+      if (found) {
+        return found
+      }
+    }
+  }
+  return null
+}
+
+/** 处理拖拽完成，触发重排序事件 */
+function handleDrop(draggingNode: any, dropNode: any, dropType: string): void {
+  if (!sortMode.value || dropType === 'inner' || !draggingNode || !draggingNode.data) {
+    return
+  }
+  const data = draggingNode.data
+  // 从本地 treeData 中查找节点位置，避免依赖 Element Plus 内部 parent 引用
+  const result = findNodeInTree(data.id, treeData.value)
+  if (!result) {
+    return
+  }
+  const { parent, siblings } = result
+
+  if (data.isDoc) {
+    const categoryId = parent ? parent.rawId : null
+    if (!categoryId) {
+      return
+    }
+    const docIds = siblings
+      .filter((sibling: any) => sibling.isDoc)
+      .map((doc: any) => doc.rawId)
+    emit('reorderDocuments', categoryId, docIds)
+  } else {
+    const categoryIds = siblings
+      .filter((sibling: any) => !sibling.isDoc)
+      .map((category: any) => category.rawId)
+    emit('reorderCategories', categoryIds)
+  }
 }
 
 /** 监听当前选中节点，同步树高亮 */
@@ -531,6 +663,30 @@ defineExpose({ setExpandedKeys })
   padding: 1px 6px;
   margin-left: 4px;
   flex-shrink: 0;
+}
+
+/* 排序模式拖拽手柄 */
+.tree-node-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: #999;
+  cursor: grab;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.tree-node-drag-handle:active {
+  cursor: grabbing;
+}
+
+.tree-node-drag-handle:hover {
+  color: #1677ff;
+  background: #e6f7ff;
 }
 
 /* 悬停操作菜单 - 默认隐藏，悬停时显示 */

@@ -157,7 +157,11 @@ onMounted(async () => {
   // 先加载会话列表，续连时才能校验 conversationId 是否有效
   await chatStore.fetchConversations()
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
-  chatStore.tryResumeStream()
+  await chatStore.tryResumeStream()
+  // 没有进入续连时，恢复当前选中会话的历史消息，避免刷新后显示为空态
+  if (chatStore.conversationId && !chatStore.isStreaming) {
+    await chatStore.switchConversation(chatStore.conversationId, true)
+  }
 
   // 用户切回该 tab 时再次尝试续连，覆盖：刷新→离开→回来 的场景
   handleVisibilityChange = () => {

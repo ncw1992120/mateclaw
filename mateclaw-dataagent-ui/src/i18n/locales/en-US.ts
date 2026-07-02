@@ -1252,6 +1252,10 @@ export default {
     feedbackNoRating: 'No ratings yet',
     expandAll: 'Expand All',
     collapseAll: 'Collapse All',
+    sort: 'Sort',
+    exitSort: 'Exit Sort',
+    sortMode: 'Sort Mode',
+    reorderSuccess: 'Order updated',
   },
   knowledgeConfig: {
     total: 'Total',

@@ -488,6 +488,8 @@ export interface Conversation {
   modelName?: string | null
   createTime: string
   updateTime: string
+  /** 后端流状态：idle 表示空闲，running 表示仍有 SSE 流 */
+  streamStatus?: 'idle' | 'running' | string
 }
 
 /** 消息视图对象 */

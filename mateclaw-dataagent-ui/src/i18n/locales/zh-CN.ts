@@ -1309,6 +1309,10 @@ export default {
     feedbackNoRating: '暂无评分',
     expandAll: '展开全部',
     collapseAll: '收起全部',
+    sort: '排序',
+    exitSort: '退出排序',
+    sortMode: '排序模式',
+    reorderSuccess: '排序已更新',
   },
   knowledgeConfig: {
     total: '共',

@@ -105,10 +105,29 @@ class SSEParser {
 }
 
 export interface StreamOptions {
-  /** Called when the last event id is updated */
+  /** Called when a non-terminal event id is updated */
   onLastEventId?: (id: string) => void
   /** Set of already-seen event ids for dedup */
   seenEventIds?: Set<string>
+}
+
+/** 终态事件必须由业务处理完成后再清理续连状态，不能提前持久化其 id。 */
+function shouldPersistLastEventId(event: SseEvent): boolean {
+  return event.event !== 'done' && event.event !== 'error'
+}
+
+function trackSseEvent(event: SseEvent, options?: StreamOptions): boolean {
+  if (!event.id) {
+    return true
+  }
+  if (options?.seenEventIds?.has(event.id)) {
+    return false
+  }
+  options?.seenEventIds?.add(event.id)
+  if (shouldPersistLastEventId(event)) {
+    options?.onLastEventId?.(event.id)
+  }
+  return true
 }
 
 export async function* streamChat(
@@ -182,12 +201,8 @@ export async function* streamChat(
         const chunk = decoder.decode(value, { stream: true })
         const events = parser.parse(chunk)
         for (const event of events) {
-          if (event.id) {
-            if (options?.seenEventIds?.has(event.id)) {
-              continue
-            }
-            options?.seenEventIds?.add(event.id)
-            options?.onLastEventId?.(event.id)
+          if (!trackSseEvent(event, options)) {
+            continue
           }
           if (event.event === 'heartbeat') {
             resetTimeout()
@@ -201,11 +216,7 @@ export async function* streamChat(
       if (remaining) {
         const events = parser.parse(remaining)
         for (const event of events) {
-          if (event.id) {
-            if (options?.seenEventIds?.has(event.id)) continue
-            options?.seenEventIds?.add(event.id)
-            options?.onLastEventId?.(event.id)
-          }
+          if (!trackSseEvent(event, options)) continue
           if (event.event === 'heartbeat') continue
           yield event
         }
@@ -213,11 +224,7 @@ export async function* streamChat(
 
       const flushEvents = parser.flush()
       for (const event of flushEvents) {
-        if (event.id) {
-          if (options?.seenEventIds?.has(event.id)) continue
-          options?.seenEventIds?.add(event.id)
-          options?.onLastEventId?.(event.id)
-        }
+        if (!trackSseEvent(event, options)) continue
         if (event.event === 'heartbeat') continue
         yield event
       }
@@ -297,11 +304,7 @@ export async function* reconnectStream(
         const chunk = decoder.decode(value, { stream: true })
         const events = parser.parse(chunk)
         for (const event of events) {
-          if (event.id) {
-            if (options?.seenEventIds?.has(event.id)) continue
-            options?.seenEventIds?.add(event.id)
-            options?.onLastEventId?.(event.id)
-          }
+          if (!trackSseEvent(event, options)) continue
           if (event.event === 'heartbeat') {
             resetTimeout()
             continue
@@ -314,11 +317,7 @@ export async function* reconnectStream(
       if (remaining) {
         const events = parser.parse(remaining)
         for (const event of events) {
-          if (event.id) {
-            if (options?.seenEventIds?.has(event.id)) continue
-            options?.seenEventIds?.add(event.id)
-            options?.onLastEventId?.(event.id)
-          }
+          if (!trackSseEvent(event, options)) continue
           if (event.event === 'heartbeat') continue
           yield event
         }
@@ -326,11 +325,7 @@ export async function* reconnectStream(
 
       const flushEvents = parser.flush()
       for (const event of flushEvents) {
-        if (event.id) {
-          if (options?.seenEventIds?.has(event.id)) continue
-          options?.seenEventIds?.add(event.id)
-          options?.onLastEventId?.(event.id)
-        }
+        if (!trackSseEvent(event, options)) continue
         if (event.event === 'heartbeat') continue
         yield event
       }
