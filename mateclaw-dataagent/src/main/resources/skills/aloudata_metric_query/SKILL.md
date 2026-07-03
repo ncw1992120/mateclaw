@@ -64,7 +64,7 @@ templates:
 - `filters`（选填）：全局筛选，对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
 - `resultFilters`（选填）：结果筛选，对查询结果进行二次过滤
 - `metricDefinitions`（选填）：临时指标定义，用于 specifyDimension 等复杂衍生
-- `orders`（选填）：排序，格式 `[{"fieldName": "direction"}]`。fieldName：字段名称，direction：asc或者desc
+- `orders`（选填）：排序，格式 `[{"字段名": "asc或desc"}]`。键为维度名或指标名，值为 asc 或 desc。如 `[{"sales_amount": "desc"}, {"region": "asc"}]`
 - `limit`（选填）：返回条数，默认100
 - `offset`（选填）：偏移量，默认1
 - `queryResultType`（选填）：返回内容类型，`SQL_AND_DATA`（默认）/`SQL`/`DATA`
@@ -86,7 +86,7 @@ templates:
 5. 确认同环比偏移粒度不小于日期粒度
 6. 确认占比/排名的范围维度在 dimensions 中声明
 7. 确认 filters 中的维度引用使用方括号，字符串值使用双引号
-8. 确认 orders 中的 fieldName 包含在 metrics 或 dimensions 中
+8. 确认 orders 中每个键（字段名）都包含在 metrics 或 dimensions 中
 
 ### 第六步：解读结果
 

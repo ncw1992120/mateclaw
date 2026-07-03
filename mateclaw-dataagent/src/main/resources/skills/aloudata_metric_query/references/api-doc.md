@@ -306,20 +306,19 @@ resultFilters 对查询结果进行二次过滤，可以筛选指标值或维度
 
 ## orders 详解
 
-排序字段，格式为对象。
+排序字段，数组中的每个元素是一个键值对，键为维度名或指标名，值为排序方向。
 
 ```json
 [
-  {
-    "fieldName": "direction"
-  }
+  {"sales_amount": "desc"},
+  {"region": "asc"}
 ]
 ```
 
-- `fieldName`：排序字段名，可以是指标名或维度名
-- `direction`：`asc`（升序）或 `desc`（降序）
+- 键：排序字段名，可以是指标名或维度名
+- 值：`asc`（升序）或 `desc`（降序）
 
-对快速计算产生的衍生指标同样适用，如 `"fieldName": "sales_amount__sameperiod__yoy__growth"`。
+对快速计算产生的衍生指标同样适用，如 `"sales_amount__sameperiod__yoy__growth"`。
 
 ---
 
