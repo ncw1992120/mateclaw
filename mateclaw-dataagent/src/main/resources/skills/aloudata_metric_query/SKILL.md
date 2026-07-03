@@ -35,7 +35,11 @@ templates:
 
 ## 工作流程
 
-### 第一步：理解业务术语（可选但推荐）
+### 第一步：解析用户意图
+
+分析用户问题，提取查询要素：指标（想看什么）、维度（按什么角度拆解）、时间范围、筛选条件、计算需求（同环比/占比/排名）、展示偏好。
+
+### 第二步：理解业务术语（可选但推荐）
 
 当用户提问涉及业务术语、缩写或别名时，先通过 `search_business_term(keyword)` 查询术语的标准名称、定义和同义词。检索跨所有业务域进行，无需指定租户。
 
@@ -43,19 +47,19 @@ templates:
 - 用户可能说"营收"，但指标平台的标准指标名是"销售额"
 - 同义词映射帮助后续语义检索更精准
 
-### 第二步：语义检索指标和维度
+### 第三步：语义检索指标和维度
 
 调用 `aloudata_search_semantic(datasourceId, keyword)` 检索相关的指标和维度。
 
-**这一步是关键**：直接返回精确的 metricName 和 dimName，无需猜测。如果第一步查询了业务术语，可将术语名和同义词作为关键词传入以提高召回率。
+**这一步是关键**：直接返回精确的 metricName 和 dimName，无需猜测。如果第二步查询了业务术语，可将术语名和同义词作为关键词传入以提高召回率。
 
-### 第三步：确认可用维度
+### 第四步：确认可用维度
 
-根据第二步返回的指标，检查其 `availableDimensions` 字段。如需确认更多维度，调用 `aloudata_metric_available_dimensions(metricNames)`。
+根据第三步返回的指标，检查其 `availableDimensions` 字段。如需确认更多维度，调用 `aloudata_metric_available_dimensions(metricNames)`。
 
-### 第四步：构造查询请求
+### 第五步：构造查询请求
 
-使用第二步得到的 metricName/dimName 构造 `aloudata_metrics_query` 请求。可参考 [templates/query-request-template.json](templates/query-request-template.json) 中的请求模板。
+使用第三步得到的 metricName/dimName 构造 `aloudata_metrics_query` 请求。可参考 [templates/query-request-template.json](templates/query-request-template.json) 中的请求模板。
 
 **基本参数**：
 - `metrics`（必填）：指标英文名列表，如 `["sales_amount"]`。支持快速计算语法（同环比、占比、排名、时间限定）
@@ -67,7 +71,7 @@ templates:
 - `orders`（选填）：排序，格式 `[{"字段名": "asc或desc"}]`。键为维度名或指标名，值为 asc 或 desc。如 `[{"sales_amount": "desc"}, {"region": "asc"}]`
 - `limit`（选填）：返回条数，默认100
 - `offset`（选填）：偏移量，默认1
-- `queryResultType`（选填）：返回内容类型，`SQL_AND_DATA`（默认）/`SQL`/`DATA`
+- `queryResultType`（选填）：返回内容类型，默认使用 `DATA`（仅返回数据）。调试时可选用 `SQL_AND_DATA` 或 `SQL`，但含 SQL 时返回数据量极大，可能导致文件截断
 - `source`（选填）：查询来源标识
 - `isQueryTotalCount`（选填）：是否返回数据总条数
 - `specialMvConfig`（选填）：物化表加速配置
@@ -75,7 +79,7 @@ templates:
 > 详细参数说明请参考 [references/api-doc.md](references/api-doc.md)
 > 查询示例请参考 [references/best-practices.md](references/best-practices.md) 中的案例
 
-### 第五步：输出自检
+### 第六步：输出自检
 
 提交查询前，逐项确认以下检查项。也可使用 [scripts/validate_query_request.py](scripts/validate_query_request.py) 进行自动化校验：
 
@@ -88,7 +92,7 @@ templates:
 7. 确认 filters 中的维度引用使用方括号，字符串值使用双引号
 8. 确认 orders 中每个键（字段名）都包含在 metrics 或 dimensions 中
 
-### 第六步：解读结果
+### 第七步：解读结果
 
 根据查询结果向用户解读数据趋势、异常值和维度拆解差异。
 
@@ -118,13 +122,13 @@ templates:
 
 ### 占比
 
-语法：`{指标名}__proportion__{占比范围维度}`
+语法：`{指标名}__proportion__{占比范围维度}`，支持多维度逗号分隔如 `__proportion__region,province`
 
 省略占比维度则为全局占比。占比维度必须在 dimensions 中声明。
 
 ### 排名
 
-语法：`{指标名}__rank__{排名范围维度}`
+语法：`{指标名}__rank__{排名范围维度}`，支持多维度逗号分隔如 `__rank__region,province`
 
 省略排名维度则为全局排名。排名维度必须在 dimensions 中声明。
 
