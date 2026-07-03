@@ -175,3 +175,90 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--mid-grey);
 }
+
+/* 简洁的代码高亮主题，适配各主题色 */
+.hljs {
+  display: block;
+  overflow-x: auto;
+  color: var(--theme-text);
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst,
+.hljs-doctag,
+.hljs-name {
+  color: var(--main-orange);
+  font-weight: 500;
+}
+
+.hljs-string,
+.hljs-meta,
+.hljs-meta-string,
+.hljs-addition,
+.hljs-regexp,
+.hljs-link {
+  color: #0a9b6a;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-attribute {
+  color: #0066cc;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-pseudo {
+  color: var(--dark-orange);
+  font-weight: 500;
+}
+
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-class,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: #7c3aed;
+}
+
+.hljs-variable,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--theme-text-secondary);
+}
+
+.hljs-tag {
+  color: var(--theme-text-secondary);
+}
+
+.hljs-tag .hljs-name {
+  color: var(--main-orange);
+}
+
+.hljs-tag .hljs-attr {
+  color: #0066cc;
+}
+
+.hljs-deletion {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}

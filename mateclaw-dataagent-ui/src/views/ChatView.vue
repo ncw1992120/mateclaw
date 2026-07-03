@@ -65,7 +65,6 @@
                   type="button"
                   @click="toggleExecutionProcessExpand(index)"
                 >
-                  <span class="seg-execution__icon">🔧</span>
                   <span class="seg-execution__label">{{ t('chat.executionProcess') }}</span>
                   <span class="seg-execution__count">{{ getExecutionProcessSummary(msg) }}</span>
                   <span
@@ -86,7 +85,6 @@
                           type="button"
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
-                          <span class="seg-narration__icon">💭</span>
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
                           <span
                             class="seg-narration__arrow"
@@ -118,7 +116,6 @@
                             <span v-else-if="seg.status === 'completed' && seg.toolSuccess !== false">✓</span>
                             <span v-else>✕</span>
                           </span>
-                          <span class="seg-tool__type-icon">⚙</span>
                           <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
                           <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
                           <span
@@ -151,7 +148,6 @@
                           type="button"
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
-                          <span class="seg-narration__icon">💭</span>
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
                           <span
                             class="seg-narration__arrow"
@@ -1910,8 +1906,8 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 50%;
   margin-bottom: 20px;
-  background: linear-gradient(135deg, var(--very-light-orange) 0%, var(--theme-surface) 100%);
-  box-shadow: 0 8px 24px rgba(240, 90, 35, 0.14);
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
 }
 
 .avatar-bot {
@@ -1923,7 +1919,7 @@ onUnmounted(() => {
   font-size: 20px;
   color: var(--theme-text);
   margin-bottom: 28px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* 智能问数快捷菜单 */
@@ -1942,28 +1938,20 @@ onUnmounted(() => {
   gap: 6px;
   padding: 9px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(240, 90, 35, 0.25);
-  background: var(--theme-surface-elevated);
-  color: var(--dark-orange);
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(4px);
 }
 
 .smart-ask-chip:hover {
-  background: var(--main-orange);
-  color: #fff;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(240, 90, 35, 0.22);
-  border-color: var(--main-orange);
-}
-
-.smart-ask-chip:active {
-  transform: translateY(0);
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+  border-color: rgba(240, 90, 35, 0.3);
 }
 
 .chip-icon {
@@ -1978,7 +1966,7 @@ onUnmounted(() => {
 .msg {
   display: flex;
   gap: 10px;
-  max-width: 82%;
+  max-width: 86%;
 }
 
 .msg.user {
@@ -2016,11 +2004,10 @@ onUnmounted(() => {
 }
 
 .bubble {
-  border-radius: 14px;
-  padding: 12px 16px;
-  font-size: 13px;
-  line-height: 1.65;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  padding: 14px 18px;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .ai-bubble {
@@ -2030,42 +2017,162 @@ onUnmounted(() => {
 }
 
 .user-bubble {
-  background: linear-gradient(135deg, var(--very-light-orange) 0%, var(--light-orange) 100%);
-  border: 1px solid rgba(240, 90, 35, 0.18);
-  color: var(--dark-text);
+  background: var(--main-orange);
+  color: #fff;
 }
 
 .msg-text {
   color: var(--body-text);
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+}
+
+.msg-text :deep(h1),
+.msg-text :deep(h2),
+.msg-text :deep(h3),
+.msg-text :deep(h4),
+.msg-text :deep(h5),
+.msg-text :deep(h6) {
+  color: var(--theme-text);
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.6em 0 0.6em;
+}
+
+.msg-text :deep(h1) { font-size: 1.5em; }
+.msg-text :deep(h2) { font-size: 1.35em; }
+.msg-text :deep(h3) { font-size: 1.2em; }
+.msg-text :deep(h4) { font-size: 1.1em; }
+.msg-text :deep(h5) { font-size: 1em; }
+.msg-text :deep(h6) { font-size: 0.95em; color: var(--theme-text-secondary); }
+
+.msg-text :deep(h1:first-child),
+.msg-text :deep(h2:first-child),
+.msg-text :deep(h3:first-child),
+.msg-text :deep(h4:first-child),
+.msg-text :deep(h5:first-child),
+.msg-text :deep(h6:first-child) {
+  margin-top: 0;
+}
+
+.msg-text :deep(p) {
+  margin: 0.75em 0;
+}
+
+.msg-text :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.msg-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.msg-text :deep(a) {
+  color: var(--main-orange);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.msg-text :deep(a:hover) {
+  border-bottom-color: rgba(240, 90, 35, 0.4);
+}
+
+.msg-text :deep(strong) {
+  color: var(--theme-text);
+  font-weight: 600;
+}
+
+.msg-text :deep(em) {
+  font-style: italic;
+}
+
+.msg-text :deep(ul),
+.msg-text :deep(ol) {
+  padding-left: 1.6em;
+  margin: 0.75em 0;
+}
+
+.msg-text :deep(li) {
+  margin: 0.4em 0;
+}
+
+.msg-text :deep(li > ul),
+.msg-text :deep(li > ol) {
+  margin: 0.25em 0;
 }
 
 .msg-text :deep(pre) {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--near-white);
+  color: var(--body-text);
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  padding: 14px;
+  padding: 16px;
   overflow-x: auto;
   font-size: 13px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  line-height: 1.6;
+  margin: 1em 0;
+}
+
+.msg-text :deep(pre:first-child) {
+  margin-top: 0;
+}
+
+.msg-text :deep(pre:last-child) {
+  margin-bottom: 0;
 }
 
 .msg-text :deep(code) {
-  font-size: 13px;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 0.85em;
 }
 
 .msg-text :deep(:not(pre) > code) {
-  background: rgba(240, 90, 35, 0.08);
-  color: var(--dark-orange);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--theme-text);
   padding: 2px 6px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: 0.82em;
+}
+
+.msg-text :deep(blockquote) {
+  border-left: 3px solid var(--theme-border-strong);
+  margin: 1em 0;
+  padding: 8px 16px;
+  color: var(--theme-text-secondary);
+  border-radius: 0 8px 8px 0;
+}
+
+.msg-text :deep(blockquote p) {
+  margin: 0.4em 0;
+}
+
+.msg-text :deep(blockquote p:first-child) {
+  margin-top: 0;
+}
+
+.msg-text :deep(blockquote p:last-child) {
+  margin-bottom: 0;
+}
+
+.msg-text :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--theme-border);
+  margin: 1.5em 0;
+}
+
+.msg-text :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 0.5em 0;
 }
 
 .msg-text :deep(table) {
   border-collapse: collapse;
   width: 100%;
-  margin: 12px 0;
-  font-size: 12px;
+  margin: 1em 0;
+  font-size: 13px;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -2080,37 +2187,11 @@ onUnmounted(() => {
 .msg-text :deep(th) {
   background: var(--theme-surface-elevated);
   font-weight: 600;
+  color: var(--theme-text-secondary);
 }
 
 .msg-text :deep(tbody tr:nth-child(even)) {
   background: var(--theme-surface-hover);
-}
-
-.msg-text :deep(blockquote) {
-  border-left: 3px solid rgba(240, 90, 35, 0.35);
-  margin: 12px 0;
-  padding: 8px 16px;
-  color: var(--theme-text-secondary);
-  background: var(--theme-surface-hover);
-  border-radius: 0 8px 8px 0;
-}
-
-.msg-text :deep(ul),
-.msg-text :deep(ol) {
-  padding-left: 1.5rem;
-  margin: 8px 0;
-}
-
-.msg-text :deep(p) {
-  margin: 8px 0;
-}
-
-.msg-text :deep(p:first-child) {
-  margin-top: 0;
-}
-
-.msg-text :deep(p:last-child) {
-  margin-bottom: 0;
 }
 
 .streaming-cursor {
@@ -2140,25 +2221,14 @@ onUnmounted(() => {
 /* QueryPlan */
 .qp-box {
   background: var(--theme-surface);
-  border: 1px solid rgba(240, 90, 35, 0.18);
+  border: 1px solid var(--theme-border);
+  border-left: 2px solid var(--main-orange);
   border-radius: 12px;
-  padding: 14px 18px;
-  margin-left: 36px;
+  padding: 16px;
+  margin-left: 0;
   position: relative;
   align-self: flex-start;
-  max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.qp-box::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--main-orange);
-  border-radius: 12px 0 0 12px;
+  max-width: 86%;
 }
 
 .qp-accent {
@@ -2166,19 +2236,18 @@ onUnmounted(() => {
 }
 
 .qp-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--dark-orange);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
   margin-bottom: 10px;
-  padding-left: 8px;
 }
 
 .qp-row {
   display: flex;
   align-items: center;
-  padding: 5px 8px;
+  padding: 5px 0;
   font-size: 13px;
-  color: var(--dark-text);
+  color: var(--theme-text);
   border-radius: 6px;
   transition: background 0.15s;
 }
@@ -2189,23 +2258,23 @@ onUnmounted(() => {
 
 .qp-label {
   width: 40px;
-  color: var(--mid-grey);
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 500;
   flex-shrink: 0;
 }
 
 .qp-val {
   flex: 1;
-  color: var(--dark-text);
+  color: var(--theme-text);
 }
 
 .qp-modify {
   padding: 2px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(240, 90, 35, 0.3);
+  border-radius: 6px;
+  border: 1px solid var(--theme-border);
   background: var(--theme-surface-elevated);
   font-size: 11px;
-  color: var(--main-orange);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   flex-shrink: 0;
   margin-left: 4px;
@@ -2214,15 +2283,14 @@ onUnmounted(() => {
 }
 
 .qp-modify:hover {
-  background: var(--main-orange);
-  color: #fff;
-  border-color: var(--main-orange);
+  border-color: rgba(240, 90, 35, 0.35);
+  color: var(--main-orange);
 }
 
 .qp-confirm {
   float: right;
   padding: 6px 18px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: none;
   background: var(--main-orange);
   color: #fff;
@@ -2231,19 +2299,16 @@ onUnmounted(() => {
   margin-top: 10px;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
-  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.18);
+  transition: background 0.15s;
 }
 
 .qp-confirm:hover:not(:disabled) {
   background: var(--dark-orange);
-  transform: translateY(-1px);
 }
 
 .qp-confirm.confirmed {
-  background: #9ca3af;
+  background: var(--muted);
   cursor: default;
-  box-shadow: none;
 }
 
 /* Insight Bar */
@@ -2251,15 +2316,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--theme-surface-hover);
+  background: var(--theme-surface);
   border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-left: 36px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-left: 0;
   font-size: 13px;
-  color: var(--blue-grey);
+  color: var(--theme-text-secondary);
   align-self: flex-start;
-  max-width: 80%;
+  max-width: 86%;
 }
 
 /* Chart Card */
@@ -2267,18 +2332,17 @@ onUnmounted(() => {
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
-  padding: 14px;
-  margin-left: 36px;
+  padding: 16px;
+  margin-left: 0;
   align-self: flex-start;
-  max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  max-width: 86%;
 }
 
 .chart-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--body-text);
-  margin-bottom: 8px;
+  color: var(--theme-text-secondary);
+  margin-bottom: 10px;
 }
 
 .mid-chart {
@@ -2296,7 +2360,6 @@ onUnmounted(() => {
   margin: 10px 0;
   position: relative;
   padding-top: 36px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 :deep(.echarts-block.echarts-error) {
@@ -2534,17 +2597,16 @@ onUnmounted(() => {
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
-  padding: 14px;
-  margin-left: 36px;
+  padding: 16px;
+  margin-left: 0;
   align-self: flex-start;
-  max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  max-width: 86%;
 }
 
 .echarts-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--body-text);
+  color: var(--theme-text-secondary);
   margin-bottom: 10px;
 }
 
@@ -2557,39 +2619,26 @@ onUnmounted(() => {
 .clarify-card {
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
+  border-left: 2px solid var(--main-orange);
   border-radius: 12px;
-  padding: 14px 18px;
-  margin-left: 36px;
+  padding: 16px;
+  margin-left: 0;
   position: relative;
   align-self: flex-start;
-  max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.clarify-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--blue-grey);
-  border-radius: 12px 0 0 12px;
+  max-width: 86%;
 }
 
 .clarify-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--blue-grey);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
   margin-bottom: 6px;
-  padding-left: 8px;
 }
 
 .clarify-desc {
   font-size: 13px;
   color: var(--body-text);
   margin-bottom: 12px;
-  padding-left: 8px;
 }
 
 .clarify-options {
@@ -2597,7 +2646,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
-  padding-left: 8px;
 }
 
 .clarify-opt {
@@ -2609,7 +2657,7 @@ onUnmounted(() => {
   border: 1px solid var(--theme-border);
   cursor: pointer;
   font-size: 13px;
-  color: var(--dark-text);
+  color: var(--theme-text);
   transition: all 0.15s;
 }
 
@@ -2638,7 +2686,7 @@ onUnmounted(() => {
   display: block;
   margin: 0 auto;
   padding: 7px 28px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: none;
   background: var(--main-orange);
   color: #fff;
@@ -2646,37 +2694,33 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
-  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.18);
+  transition: background 0.15s;
 }
 
 .clarify-confirm:hover:not(:disabled) {
   background: var(--dark-orange);
-  transform: translateY(-1px);
 }
 
 .clarify-confirm.confirmed {
-  background: #9ca3af;
+  background: var(--muted);
   cursor: default;
-  box-shadow: none;
 }
 
 /* Dashboard Preview Card */
 .dash-card {
   background: var(--theme-surface);
-  border: 1px solid rgba(240, 90, 35, 0.12);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
-  padding: 14px 18px;
-  margin-left: 36px;
+  padding: 16px;
+  margin-left: 0;
   align-self: flex-start;
-  max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  max-width: 86%;
 }
 
 .dash-card-title {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--dark-orange);
+  font-weight: 600;
+  color: var(--theme-text-secondary);
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -2697,7 +2741,7 @@ onUnmounted(() => {
 .dash-kpi-val {
   font-size: 18px;
   font-weight: 700;
-  color: var(--dark-text);
+  color: var(--theme-text);
 }
 
 .dash-kpi-name {
@@ -2723,7 +2767,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 6px 0 0 36px;
+  padding: 6px 0 0;
   align-self: flex-start;
 }
 
@@ -2733,24 +2777,23 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid rgba(240, 90, 35, 0.2);
-  background: var(--theme-surface-elevated);
-  color: var(--dark-orange);
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   transition: all 0.15s;
 }
 
 .followup-chip:hover {
-  background: var(--main-orange);
-  color: #fff;
-  border-color: var(--main-orange);
-  transform: translateY(-1px);
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+  border-color: rgba(240, 90, 35, 0.3);
 }
 
 /* Feedback */
 .feedback {
   display: flex;
   gap: 12px;
-  padding: 8px 0 0 36px;
+  padding: 8px 0 0;
   font-size: 12px;
   color: var(--muted);
   align-self: flex-start;
@@ -2760,7 +2803,7 @@ onUnmounted(() => {
   cursor: pointer;
   padding: 5px 10px;
   border-radius: 8px;
-  transition: all 0.15s;
+  transition: background 0.15s;
 }
 
 .feedback span:hover {
@@ -2834,9 +2877,8 @@ onUnmounted(() => {
   align-items: center;
   padding: 6px 20px;
   border-top: 1px solid var(--theme-border);
-  background: var(--theme-overlay);
+  background: var(--theme-bg);
   flex-shrink: 0;
-  backdrop-filter: blur(8px);
 }
 
 .ds-trigger {
@@ -2996,16 +3038,15 @@ onUnmounted(() => {
   gap: 10px;
   padding: 14px 20px 18px;
   border-top: 1px solid var(--theme-border);
-  background: var(--theme-overlay);
+  background: var(--theme-bg);
   flex-shrink: 0;
-  backdrop-filter: blur(12px);
 }
 
 .chat-input {
   flex: 1;
   min-height: 44px;
   max-height: 140px;
-  border-radius: 22px;
+  border-radius: 12px;
   border: 1px solid var(--theme-border-strong);
   padding: 10px 18px;
   font-size: 14px;
@@ -3013,24 +3054,22 @@ onUnmounted(() => {
   font-family: inherit;
   resize: none;
   line-height: 1.5;
-  background: var(--theme-surface-elevated);
+  background: var(--theme-surface);
   color: var(--theme-text);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .chat-input:hover {
-  border-color: rgba(240, 90, 35, 0.25);
+  border-color: rgba(240, 90, 35, 0.35);
 }
 
 .chat-input:focus {
-  border-color: rgba(240, 90, 35, 0.45);
-  box-shadow: 0 2px 12px rgba(240, 90, 35, 0.12);
+  border-color: var(--main-orange);
 }
 
 .btn-send {
   height: 44px;
-  border-radius: 22px;
+  border-radius: 12px;
   border: none;
   background: var(--main-orange);
   color: #fff;
@@ -3039,28 +3078,24 @@ onUnmounted(() => {
   padding: 0 24px;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 10px rgba(240, 90, 35, 0.2);
+  transition: background 0.2s ease;
 }
 
 .btn-send:hover:not(:disabled) {
   background: var(--dark-orange);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(240, 90, 35, 0.28);
 }
 
 .btn-send:disabled {
   background: var(--light-grey);
   color: var(--muted);
   cursor: default;
-  box-shadow: none;
 }
 
 .btn-stop {
   height: 44px;
-  border-radius: 22px;
+  border-radius: 12px;
   border: 1px solid #ef4444;
-  background: rgba(239, 68, 68, 0.05);
+  background: transparent;
   color: #ef4444;
   font-size: 14px;
   font-weight: 600;
@@ -3073,8 +3108,6 @@ onUnmounted(() => {
 .btn-stop:hover {
   background: #ef4444;
   color: #fff;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
 }
 
 /* Metadata */
@@ -3094,21 +3127,15 @@ onUnmounted(() => {
   border: 1px solid var(--theme-border);
 }
 
-/* seg-tool (参考 mateclaw-ui ToolCallSegment) */
+/* seg-tool */
 .seg-tool {
-  border-left: 3px solid #b0c4de;
-  background: var(--theme-surface-elevated);
-  border-radius: 8px;
-  margin-bottom: 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--theme-border);
+  border-left: 2px solid var(--theme-border);
+  border-radius: 0;
+  margin-bottom: 0;
   overflow: hidden;
-  transition: all 0.15s ease;
-  border: 1px solid var(--theme-border);
-  border-left-width: 3px;
-}
-
-.seg-tool:hover {
-  transform: translateX(2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .seg-tool.is-running { border-left-color: #409eff; }
@@ -3118,23 +3145,28 @@ onUnmounted(() => {
 .seg-tool__header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 10px 12px;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
+  color: var(--theme-text-secondary);
+}
+
+.seg-tool__header:hover {
+  color: var(--theme-text);
 }
 
 .seg-tool__status {
   flex-shrink: 0;
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   color: #fff;
   background: #909399;
@@ -3154,27 +3186,26 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.seg-tool__type-icon {
-  font-size: 11px;
-  opacity: 0.6;
-}
-
 .seg-tool__name {
-  font-weight: 600;
-  color: var(--theme-text);
+  font-weight: 500;
+  color: var(--theme-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  max-width: 180px;
+  transition: color 0.15s;
+}
+
+.seg-tool__header:hover .seg-tool__name {
+  color: var(--theme-text);
 }
 
 .seg-tool__args {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
   flex: 1;
   min-width: 0;
 }
@@ -3192,7 +3223,7 @@ onUnmounted(() => {
 }
 
 .seg-tool__body {
-  padding: 0 12px 8px 24px;
+  padding: 0 12px 12px 36px;
 }
 
 .seg-tool__section + .seg-tool__section {
@@ -3213,7 +3244,7 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.5;
   color: var(--body-text);
-  background: var(--theme-bg);
+  background: var(--near-white);
   border: 1px solid var(--theme-border);
   border-radius: 6px;
   max-height: 300px;
@@ -3222,42 +3253,36 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
-/* seg-narration (中间叙述：非最终答案的 content segment) */
+/* seg-narration */
 .seg-narration {
-  border-left: 3px solid var(--theme-border);
-  background: var(--theme-surface-elevated);
-  border-radius: 8px;
-  margin-bottom: 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--theme-border);
+  border-left: 2px solid var(--theme-border);
+  border-radius: 0;
+  margin-bottom: 0;
   overflow: hidden;
-  border: 1px solid var(--theme-border);
-  border-left-width: 3px;
 }
 
 .seg-narration__toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   background: transparent;
   border: none;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--theme-text-secondary);
   text-align: left;
-  transition: background 0.15s;
+  transition: color 0.15s;
 }
 
 .seg-narration__toggle:hover {
   color: var(--theme-text);
-  background: var(--theme-surface-hover);
-}
-
-.seg-narration__icon {
-  font-size: 11px;
-  opacity: 0.7;
 }
 
 .seg-narration__label {
@@ -3276,8 +3301,8 @@ onUnmounted(() => {
 }
 
 .seg-narration__body {
-  padding: 0 12px 10px 30px;
-  font-size: 12px;
+  padding: 0 12px 12px 36px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--theme-text-secondary);
 }
@@ -3290,51 +3315,44 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
-/* seg-execution （执行过程聚合卡片） */
+/* seg-execution */
 .seg-execution {
-  border-left: 3px solid var(--main-orange);
-  background: var(--theme-surface-elevated);
-  border-radius: 8px;
-  margin-bottom: 10px;
-  overflow: hidden;
+  background: var(--theme-surface);
   border: 1px solid var(--theme-border);
-  border-left-width: 3px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
 }
 
 .seg-execution__toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 12px 16px;
   background: transparent;
   border: none;
   cursor: pointer;
   user-select: none;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-text);
+  color: var(--theme-text-secondary);
   text-align: left;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
 .seg-execution__toggle:hover {
-  color: var(--dark-orange);
+  color: var(--theme-text);
   background: var(--theme-surface-hover);
 }
 
-.seg-execution__icon {
-  font-size: 13px;
-  opacity: 0.85;
-}
-
 .seg-execution__label {
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .seg-execution__count {
   margin-left: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 500;
 }
@@ -3351,17 +3369,12 @@ onUnmounted(() => {
 }
 
 .seg-execution__body {
-  padding: 4px 10px 10px 26px;
+  padding: 0 16px 12px;
 }
 
-.seg-execution__body .seg-narration,
-.seg-execution__body .seg-tool {
-  margin-bottom: 6px;
-}
-
-.seg-execution__body .seg-narration:last-child,
-.seg-execution__body .seg-tool:last-child {
-  margin-bottom: 0;
+.seg-execution__body .seg-narration:first-child,
+.seg-execution__body .seg-tool:first-child {
+  border-top: 1px solid var(--theme-border);
 }
 
 /* seg-slide transition (Vue Transition) */
