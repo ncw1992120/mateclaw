@@ -5,9 +5,19 @@
       <!-- Empty State -->
       <div v-if="chatStore.messages.length === 0" class="empty-state">
         <div class="empty-avatar">
-          <span class="avatar-bot">🤖</span>
+          <svg class="empty-avatar__icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="32" y1="12" x2="32" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="32" cy="9" r="3.5" fill="white"/>
+            <rect x="14" y="20" width="36" height="28" rx="9" fill="white"/>
+            <rect x="19" y="27" width="26" height="14" rx="5" fill="var(--main-orange)"/>
+            <circle cx="26" cy="34" r="2.5" fill="white"/>
+            <circle cx="38" cy="34" r="2.5" fill="white"/>
+          </svg>
         </div>
-        <p class="empty-greeting">{{ greetingText }}</p>
+        <div class="empty-greeting">
+          <h1 class="empty-greeting__title">{{ greetingText }}</h1>
+          <p class="empty-greeting__subtitle">{{ t('chat.emptySubtitle') }}</p>
+        </div>
         <!-- 智能问数快捷菜单 -->
         <div class="smart-ask-menu">
           <span
@@ -419,6 +429,7 @@ const smartAskMenuItems = [
   { key: 'insight', label: 'smartAskMenu.insight', icon: '💡' },
   { key: 'compare', label: 'smartAskMenu.compare', icon: '📈' },
   { key: 'forecast', label: 'smartAskMenu.forecast', icon: '🔮' },
+  { key: 'anomaly', label: 'smartAskMenu.anomaly', icon: '🚨' },
 ]
 
 /** 已启用的数据源列表（用于输入框上方数据源选择器） */
@@ -1719,6 +1730,7 @@ function handleSmartAskMenu(item: { key: string; label: string }): void {
     insight: t('smartAskMenu.insightPrompt'),
     compare: t('smartAskMenu.comparePrompt'),
     forecast: t('smartAskMenu.forecastPrompt'),
+    anomaly: t('smartAskMenu.anomalyPrompt'),
   }
   const prompt = promptMap[item.key] || t('smartAskMenu.defaultPrompt')
   chatStore.sendMessage(chatStore.currentAgentId, prompt)
@@ -1895,53 +1907,64 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding-top: 40px;
+  padding: 40px 20px;
 }
 
 .empty-avatar {
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  margin-bottom: 20px;
-  background: var(--theme-surface-hover);
-  border: 1px solid var(--theme-border);
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
+  box-shadow: 0 8px 24px rgba(240, 90, 35, 0.18);
 }
 
-.avatar-bot {
-  font-size: 34px;
-  line-height: 1;
+.empty-avatar__icon {
+  width: 48px;
+  height: 48px;
 }
 
 .empty-greeting {
-  font-size: 20px;
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.empty-greeting__title {
+  font-size: 22px;
+  font-weight: 600;
   color: var(--theme-text);
-  margin-bottom: 28px;
-  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+.empty-greeting__subtitle {
+  font-size: 14px;
+  color: var(--theme-text-secondary);
+  margin: 0;
 }
 
 /* 智能问数快捷菜单 */
 .smart-ask-menu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  max-width: 580px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 420px;
   margin-bottom: 32px;
 }
 
 .smart-ask-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  border-radius: 20px;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 24px;
   border: 1px solid var(--theme-border);
   background: var(--theme-surface);
   color: var(--theme-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1951,11 +1974,11 @@ onUnmounted(() => {
 .smart-ask-chip:hover {
   background: var(--theme-surface-hover);
   color: var(--main-orange);
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: rgba(240, 90, 35, 0.35);
 }
 
 .chip-icon {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
 }
 

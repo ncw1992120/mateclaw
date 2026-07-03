@@ -162,6 +162,7 @@ export default {
     clear: 'Clear Chat',
     newConversation: 'New Conversation',
     welcome: 'Welcome to Data Insight Agent, enter your analysis question',
+    emptySubtitle: 'Start from a shortcut below or type your question directly',
     queryPlanTitle: 'Query Plan',
     executionProcess: 'Execution Process',
     executionStep: 'Thinking Process',
@@ -191,6 +192,7 @@ export default {
     insight: 'Smart Insight',
     compare: 'Compare Analysis',
     forecast: 'Trend Forecast',
+    anomaly: 'Anomaly Detection',
     morningGreeting: 'Good morning, how can I help you?',
     afternoonGreeting: 'Good afternoon, how can I help you?',
     eveningGreeting: 'Good evening, how can I help you?',
@@ -199,6 +201,7 @@ export default {
     insightPrompt: 'Please help me discover anomalies and potential business insights in the data',
     comparePrompt: 'Please help me perform multi-dimensional comparative analysis to identify key differences and causes',
     forecastPrompt: 'Please help me perform trend forecasting and analysis based on historical data',
+    anomalyPrompt: 'Please help me detect anomalies and abnormal fluctuations in the data',
     defaultPrompt: 'Please help me analyze the current data',
   },
   skillBuilder: {

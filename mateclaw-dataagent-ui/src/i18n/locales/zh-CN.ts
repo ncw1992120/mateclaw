@@ -164,6 +164,7 @@ export default {
     clear: '清空对话',
     newConversation: '新对话',
     welcome: '欢迎使用问数智能体，请输入您的分析问题',
+    emptySubtitle: '你可以从下方快捷入口开始，或直接输入问题',
     queryPlanTitle: '查询计划',
     executionProcess: '执行过程',
     executionStep: '思考过程',
@@ -193,6 +194,7 @@ export default {
     insight: '智能洞察',
     compare: '对比分析',
     forecast: '趋势预测',
+    anomaly: '异常检测',
     morningGreeting: '上午好，请问有什么可以帮您？',
     afternoonGreeting: '下午好，请问有什么可以帮您？',
     eveningGreeting: '晚上好，请问有什么可以帮您？',
@@ -201,6 +203,7 @@ export default {
     insightPrompt: '请帮我发现数据中的异常点和潜在的业务洞察',
     comparePrompt: '请帮我进行多维度对比分析，找出关键差异和原因',
     forecastPrompt: '请帮我基于历史数据进行趋势预测和分析',
+    anomalyPrompt: '请帮我检测数据中的异常情况和异常波动',
     defaultPrompt: '请帮我分析当前数据',
   },
   skillBuilder: {
