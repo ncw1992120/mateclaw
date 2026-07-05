@@ -8,6 +8,7 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
 import vip.mate.dataagent.dto.DatasourceVO;
+import vip.mate.dataagent.auth.service.AgentGuard;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
@@ -54,6 +55,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final DataAgentChatScopeContext scopeContext;
     private final DatasourceManageService datasourceManageService;
     private final WorkspaceGuard workspaceGuard;
+    private final AgentGuard agentGuard;
     private final ExecutorService sseExecutor;
 
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
@@ -62,7 +64,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     ObjectMapper objectMapper,
                                     DataAgentChatScopeContext scopeContext,
                                     DatasourceManageService datasourceManageService,
-                                    WorkspaceGuard workspaceGuard) {
+                                    WorkspaceGuard workspaceGuard,
+                                    AgentGuard agentGuard) {
         this.runtime = runtime;
         this.conversationService = conversationService;
         this.streamTracker = streamTracker;
@@ -70,6 +73,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.scopeContext = scopeContext;
         this.datasourceManageService = datasourceManageService;
         this.workspaceGuard = workspaceGuard;
+        this.agentGuard = agentGuard;
         // 有界线程池：核心 2 线程，最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
         int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
         this.sseExecutor = new ThreadPoolExecutor(
@@ -95,6 +99,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     @Override
     public SseEmitter streamChat(Long agentId, String message, String conversationId,
                                  String modelProvider, String modelName, List<String> datasourceIds) {
+        // 校验 Agent 归属当前工作区，防止跨工作区越权访问（在 HTTP 线程内执行，UserContextHolder 仍有效）
+        agentGuard.requireAgentInCurrentWorkspace(agentId);
         // 将 String 类型的数据源 ID 转换为 Long 类型
         List<Long> longIds = convertToLongIds(datasourceIds);
         // 把"用户勾选数据源"信息写入会话级上下文，供 DatasourceQueryTool 在工具执行阶段读取
@@ -256,6 +262,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     @Override
     public String chat(Long agentId, String message, String conversationId,
                        String modelProvider, String modelName, List<String> datasourceIds) {
+        // 校验 Agent 归属当前工作区，防止跨工作区越权访问
+        agentGuard.requireAgentInCurrentWorkspace(agentId);
         // 将 String 类型的数据源 ID 转换为 Long 类型
         List<Long> longIds = convertToLongIds(datasourceIds);
         scopeContext.putDatasourceIds(conversationId, longIds);

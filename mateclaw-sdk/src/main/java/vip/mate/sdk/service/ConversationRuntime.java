@@ -47,6 +47,19 @@ public interface ConversationRuntime {
     boolean isConversationOwner(String conversationId, String username);
 
     /**
+     * 校验用户是否拥有该会话，并校验会话所属工作区
+     * <p>
+     * 定时任务产生的会话（username = system）对所有登录用户可见。
+     * 同时校验会话的 workspaceId 与传入的 workspaceId 一致，防止跨工作区越权访问。
+     *
+     * @param conversationId 会话 ID
+     * @param username       用户名
+     * @param workspaceId    工作区 ID
+     * @return true 如果用户是会话拥有者或会话为系统会话，且会话属于指定工作区
+     */
+    boolean isConversationOwner(String conversationId, String username, Long workspaceId);
+
+    /**
      * 获取会话消息历史
      *
      * @param conversationId 会话 ID

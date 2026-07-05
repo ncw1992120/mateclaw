@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_datasource` (
     `password`                  VARCHAR(500)          DEFAULT NULL COMMENT '密码（AES 加密存储）',
     `connection_params`         TEXT                  DEFAULT NULL COMMENT '连接参数（JSON 格式）',
     `schema_name`               VARCHAR(200)          DEFAULT NULL COMMENT 'Schema 名称',
+    `meta_shared`               TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '元数据是否共享（1=同工作区所有用户可见，0=仅 owner 可见）',
     `enabled`                   TINYINT(1)  NOT NULL DEFAULT 1 COMMENT '是否启用',
     `last_test_time`            DATETIME              DEFAULT NULL COMMENT '最近测试时间',
     `last_test_ok`              TINYINT(1)            DEFAULT NULL COMMENT '最近测试结果',

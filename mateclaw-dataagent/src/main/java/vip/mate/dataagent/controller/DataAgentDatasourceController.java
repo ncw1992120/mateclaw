@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireGlobalAdmin;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
@@ -102,6 +103,7 @@ public class DataAgentDatasourceController {
      * 测试连接（基于已有数据源 ID）
      */
     @PostMapping("/{id}/test")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "测试连接", description = "测试数据源连接是否可用")
     public R<Boolean> testConnection(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
@@ -112,6 +114,7 @@ public class DataAgentDatasourceController {
      * 测试连接（不创建数据源记录，仅做连通性测试）
      */
     @PostMapping("/test")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "测试连接（预览）", description = "使用连接参数测试数据源连通性，不持久化数据源记录")
     public R<Boolean> testConnectionByParams(
             @RequestBody DatasourceCreateRequest request) {
@@ -123,6 +126,7 @@ public class DataAgentDatasourceController {
      */
     @PutMapping("/{id}/toggle")
     @Operation(summary = "启停切换", description = "启用或禁用数据源")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     public R<DatasourceVO> toggle(
             @Parameter(description = "数据源 ID") @PathVariable Long id,
             @RequestBody Map<String, Boolean> body) {
@@ -134,8 +138,8 @@ public class DataAgentDatasourceController {
      * 触发 Schema 发现（仅管理员可操作）
      */
     @PostMapping("/{id}/schema-discovery")
-    @Operation(summary = "触发 Schema 发现", description = "自动扫描数据源，提取表结构、字段类型、主外键关系、索引信息。仅工作区管理员可执行同步元数据操作")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "触发 Schema 发现", description = "自动扫描数据源，提取表结构、字段类型、主外键关系、索引信息。仅全局管理员可执行同步元数据操作")
+    @RequireGlobalAdmin
     public R<DatasourceVO> triggerSchemaDiscovery(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         return R.ok(datasourceService.triggerSchemaDiscovery(id));
@@ -145,6 +149,7 @@ public class DataAgentDatasourceController {
      * 获取数据源下的表列表
      */
     @GetMapping("/{datasourceId}/tables")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取表列表", description = "获取数据源下的所有表元数据")
     public R<List<DatasourceTableVO>> listTables(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
@@ -155,6 +160,7 @@ public class DataAgentDatasourceController {
      * 获取表详情（含字段列表）
      */
     @GetMapping("/{datasourceId}/tables/{tableId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取表详情", description = "获取表详情，包含字段列表、主外键关系和索引信息")
     public R<DatasourceTableVO> getTableDetail(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -166,6 +172,7 @@ public class DataAgentDatasourceController {
      * 获取表字段列表
      */
     @GetMapping("/{datasourceId}/tables/{tableId}/columns")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取字段列表", description = "获取表下的所有字段元数据")
     public R<List<DatasourceColumnVO>> listColumns(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -177,8 +184,8 @@ public class DataAgentDatasourceController {
      * 同步单张表元数据（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/tables/{tableId}/sync")
-    @Operation(summary = "同步单张表元数据", description = "重新同步指定表的字段信息，支持追加和覆盖模式。仅工作区管理员可执行同步元数据操作")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "同步单张表元数据", description = "重新同步指定表的字段信息，支持追加和覆盖模式。仅全局管理员可执行同步元数据操作")
+    @RequireGlobalAdmin
     public R<DatasourceTableVO> syncTable(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "表 ID") @PathVariable Long tableId,
@@ -191,6 +198,7 @@ public class DataAgentDatasourceController {
      * 预览表数据
      */
     @GetMapping("/{datasourceId}/tables/{tableId}/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "预览表数据", description = "获取表数据预览，默认返回前100行")
     public R<TableDataPreviewVO> previewTableData(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -203,6 +211,7 @@ public class DataAgentDatasourceController {
      * 删除数据源下的表
      */
     @DeleteMapping("/{datasourceId}/tables/{tableId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "删除表元数据", description = "删除数据源下的指定表及其字段元数据")
     public R<Void> deleteTable(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -217,8 +226,8 @@ public class DataAgentDatasourceController {
      * 触发 Aloudata 语义层全量同步（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/aloudata/sync")
-    @Operation(summary = "同步 Aloudata 语义层", description = "从 Aloudata 指标平台同步指标、维度、类目元数据到本地语义层（MySQL + ES）。仅工作区管理员可执行同步元数据操作")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "同步 Aloudata 语义层", description = "从 Aloudata 指标平台同步指标、维度、类目元数据到本地语义层（MySQL + ES）。仅全局管理员可执行同步元数据操作")
+    @RequireGlobalAdmin
     public R<AloudataSemanticSyncService.SyncResult> syncAloudataSemantic(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
         return R.ok(aloudataSyncService.fullSync(datasourceId));
@@ -228,8 +237,8 @@ public class DataAgentDatasourceController {
      * 重建 ES 索引（仅管理员可操作）
      */
     @PostMapping("/{datasourceId}/aloudata/rebuild-es")
-    @Operation(summary = "重建 ES 索引", description = "将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引，不从 Aloudata API 重新拉取。适用于 ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景。仅工作区管理员可执行")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "重建 ES 索引", description = "将已同步到 MySQL 的指标和维度数据向量化并写入 ES 索引，不从 Aloudata API 重新拉取。适用于 ES 索引损坏重建、EmbeddingModel 切换后重新向量化等场景。仅全局管理员可执行")
+    @RequireGlobalAdmin
     public R<AloudataSemanticSyncService.SyncResult> rebuildEsIndex(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
         return R.ok(aloudataSyncService.rebuildEsIndex(datasourceId));
@@ -239,6 +248,7 @@ public class DataAgentDatasourceController {
      * 查询 Aloudata 语义层同步状态
      */
     @GetMapping("/{datasourceId}/aloudata/sync-status")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "查询同步状态", description = "查询 Aloudata 语义层的同步状态和已同步数量")
     public R<AloudataSemanticSyncService.SyncResult> getAloudataSyncStatus(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
@@ -249,6 +259,7 @@ public class DataAgentDatasourceController {
      * 查询已同步的指标列表（分页）
      */
     @GetMapping("/{datasourceId}/aloudata/synced-metrics")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "已同步指标列表", description = "获取已同步到本地语义层的 Aloudata 指标列表（分页）")
     public R<List<AloudataMetricSemanticDTO>> listSyncedMetrics(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -261,6 +272,7 @@ public class DataAgentDatasourceController {
      * 查询已同步的维度列表（分页）
      */
     @GetMapping("/{datasourceId}/aloudata/synced-dimensions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "已同步维度列表", description = "获取已同步到本地语义层的 Aloudata 维度列表（分页）")
     public R<List<AloudataDimensionSemanticDTO>> listSyncedDimensions(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -273,6 +285,7 @@ public class DataAgentDatasourceController {
      * 查询指标关联的维度列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimensions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "指标可用维度", description = "查询指定指标关联的可用维度名称列表")
     public R<List<String>> listMetricDimensions(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -284,6 +297,7 @@ public class DataAgentDatasourceController {
      * 查询指标关联的维度详情列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimension-details")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "指标可用维度详情", description = "查询指定指标关联的可用维度详情列表，包含维度名称、展示名、描述等")
     public R<List<AloudataDimensionSemanticDTO>> listMetricDimensionDetails(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -295,6 +309,7 @@ public class DataAgentDatasourceController {
      * 查询维度关联的指标详情列表
      */
     @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/metric-details")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "维度关联指标详情", description = "查询指定维度关联的指标详情列表，包含指标名称、展示名、业务口径等")
     public R<List<AloudataMetricSemanticDTO>> listDimensionMetricDetails(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -306,6 +321,7 @@ public class DataAgentDatasourceController {
      * 查询已同步的类目列表
      */
     @GetMapping("/{datasourceId}/aloudata/synced-categories")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "已同步类目列表", description = "获取已同步到本地语义层的 Aloudata 类目列表，支持按类型过滤")
     public R<List<AloudataCategoryEntity>> listSyncedCategories(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -317,6 +333,7 @@ public class DataAgentDatasourceController {
      * 分页查询已同步的指标列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/page")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "分页查询指标列表", description = "分页查询已同步的指标，支持关键词搜索和类目过滤")
     public R<IPage<AloudataMetricSemanticDTO>> pageMetrics(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -328,6 +345,7 @@ public class DataAgentDatasourceController {
      * 分页查询已同步的维度列表
      */
     @GetMapping("/{datasourceId}/aloudata/dimensions/page")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "分页查询维度列表", description = "分页查询已同步的维度，支持关键词搜索和类目过滤")
     public R<IPage<AloudataDimensionSemanticDTO>> pageDimensions(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -339,6 +357,7 @@ public class DataAgentDatasourceController {
      * 按指标类目分组查询指标列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/grouped")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "按类目分组指标列表",
             description = "获取按指标类目分组的指标列表，支持关键词搜索、类目过滤和每类目数量限制")
     public R<List<MetricCategoryGroupDTO>> listMetricsGroupByCategory(
@@ -353,6 +372,7 @@ public class DataAgentDatasourceController {
      * 按维度类目分组查询维度列表
      */
     @GetMapping("/{datasourceId}/aloudata/dimensions/grouped")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "按类目分组维度列表",
             description = "获取按维度类目分组的维度列表，支持关键词搜索、类目过滤和每类目数量限制")
     public R<List<DimensionCategoryGroupDTO>> listDimensionsGroupByCategory(
@@ -367,6 +387,7 @@ public class DataAgentDatasourceController {
      * 查询类目下的指标/维度数量统计
      */
     @GetMapping("/{datasourceId}/aloudata/categories/counts")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "类目数量统计", description = "统计各类目下的指标或维度数量，用于前端类目树展示")
     public R<List<AloudataCategoryCountDTO>> listCategoryCounts(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
@@ -378,6 +399,7 @@ public class DataAgentDatasourceController {
      * 获取 Aloudata API 端点参数规范
      */
     @GetMapping("/aloudata/api-specs")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取 Aloudata API 端点参数规范",
             description = "获取所有 Aloudata API 端点的请求参数和响应参数规范定义，"
                     + "包括参数名称、类型、是否必填、默认值、传递方式和说明")

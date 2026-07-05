@@ -6,6 +6,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireGlobalAdmin;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.SemanticModelCreateRequest;
 import vip.mate.dataagent.dto.SemanticModelUpdateRequest;
 import vip.mate.dataagent.dto.SemanticModelVO;
@@ -30,6 +33,7 @@ public class DataAgentSemanticModelController {
      * 按数据源查询所有启用的语义模型
      */
     @GetMapping
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "查询语义模型列表", description = "按数据源 ID 查询所有启用的语义模型")
     public R<List<SemanticModelVO>> list(
             @Parameter(description = "数据源 ID") @RequestParam Long datasourceId,
@@ -45,6 +49,7 @@ public class DataAgentSemanticModelController {
      * 获取语义模型详情
      */
     @GetMapping("/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取语义模型详情", description = "根据 ID 获取语义模型详情")
     public R<SemanticModelVO> get(
             @Parameter(description = "语义模型 ID") @PathVariable Long id) {
@@ -55,6 +60,7 @@ public class DataAgentSemanticModelController {
      * 创建语义模型
      */
     @PostMapping
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "创建语义模型", description = "为数据源字段创建业务语义映射")
     public R<SemanticModelVO> create(@RequestBody SemanticModelCreateRequest request) {
         return R.ok(semanticModelService.create(request));
@@ -64,6 +70,7 @@ public class DataAgentSemanticModelController {
      * 更新语义模型
      */
     @PutMapping("/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "更新语义模型", description = "更新语义模型的业务语义信息")
     public R<SemanticModelVO> update(
             @Parameter(description = "语义模型 ID") @PathVariable Long id,
@@ -75,6 +82,7 @@ public class DataAgentSemanticModelController {
      * 删除语义模型
      */
     @DeleteMapping("/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "删除语义模型", description = "删除指定语义模型")
     public R<Void> delete(
             @Parameter(description = "语义模型 ID") @PathVariable Long id) {
@@ -86,6 +94,7 @@ public class DataAgentSemanticModelController {
      * 启用语义模型
      */
     @PutMapping("/{id}/enable")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "启用语义模型", description = "启用指定语义模型")
     public R<Void> enable(
             @Parameter(description = "语义模型 ID") @PathVariable Long id) {
@@ -97,6 +106,7 @@ public class DataAgentSemanticModelController {
      * 停用语义模型
      */
     @PutMapping("/{id}/disable")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     @Operation(summary = "停用语义模型", description = "停用指定语义模型")
     public R<Void> disable(
             @Parameter(description = "语义模型 ID") @PathVariable Long id) {
@@ -108,6 +118,7 @@ public class DataAgentSemanticModelController {
      * 关键词搜索语义模型
      */
     @GetMapping("/search")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "关键词搜索", description = "在表名、列名、业务名、描述、同义词等字段中搜索")
     public R<List<SemanticModelVO>> search(
             @Parameter(description = "数据源 ID") @RequestParam Long datasourceId,
@@ -119,7 +130,8 @@ public class DataAgentSemanticModelController {
      * 从物理 Schema 自动初始化语义模型
      */
     @PostMapping("/auto-init")
-    @Operation(summary = "自动初始化", description = "从物理 Schema 自动生成基础语义模型记录，仅创建不存在的记录")
+    @RequireGlobalAdmin
+    @Operation(summary = "自动初始化", description = "从物理 Schema 自动生成基础语义模型记录，仅创建不存在的记录。仅全局管理员可执行同步元数据操作")
     public R<Integer> autoInit(
             @Parameter(description = "数据源 ID") @RequestParam Long datasourceId) {
         return R.ok(semanticModelService.autoInitFromSchema(datasourceId));
@@ -129,7 +141,8 @@ public class DataAgentSemanticModelController {
      * 从 Aloudata 指标平台同步语义模型
      */
     @PostMapping("/sync-aloudata")
-    @Operation(summary = "从指标平台同步", description = "从 Aloudata 指标平台同步指标和维度的语义信息，仅创建不存在的记录，仅支持 aloudata 类型数据源")
+    @RequireGlobalAdmin
+    @Operation(summary = "从指标平台同步", description = "从 Aloudata 指标平台同步指标和维度的语义信息，仅创建不存在的记录，仅支持 aloudata 类型数据源。仅全局管理员可执行同步元数据操作")
     public R<Integer> syncFromAloudata(
             @Parameter(description = "数据源 ID（必须为 aloudata 类型）") @RequestParam Long datasourceId) {
         return R.ok(semanticModelService.syncFromAloudata(datasourceId));

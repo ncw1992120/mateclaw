@@ -6,8 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
-import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
-import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.auth.annotation.RequireGlobalAdmin;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.HelpCenterService;
 
@@ -40,7 +39,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/categories")
     @Operation(summary = "创建分类", description = "创建帮助文档分类")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpCategoryVO> createCategory(@RequestBody HelpCategoryRequest request) {
         return R.ok(helpCenterService.createCategory(request));
     }
@@ -50,7 +49,7 @@ public class DataAgentHelpCenterController {
      */
     @PutMapping("/categories/{id}")
     @Operation(summary = "更新分类", description = "更新帮助文档分类信息")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpCategoryVO> updateCategory(
             @Parameter(description = "分类 ID") @PathVariable Long id,
             @RequestBody HelpCategoryRequest request) {
@@ -62,7 +61,7 @@ public class DataAgentHelpCenterController {
      */
     @DeleteMapping("/categories/{id}")
     @Operation(summary = "删除分类", description = "删除帮助文档分类及其下的文档")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<Void> deleteCategory(
             @Parameter(description = "分类 ID") @PathVariable Long id) {
         helpCenterService.deleteCategory(id);
@@ -74,7 +73,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/categories/reorder")
     @Operation(summary = "批量排序分类", description = "根据传入的分类 ID 顺序更新排序号")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<Void> reorderCategories(@RequestBody HelpReorderRequest request) {
         helpCenterService.reorderCategories(request.getIds());
         return R.ok(null);
@@ -105,7 +104,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/documents")
     @Operation(summary = "创建文档", description = "创建帮助文档")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpDocumentVO> createDocument(@RequestBody HelpDocumentRequest request) {
         return R.ok(helpCenterService.createDocument(request));
     }
@@ -115,7 +114,7 @@ public class DataAgentHelpCenterController {
      */
     @PutMapping("/documents/{id}")
     @Operation(summary = "更新文档", description = "更新帮助文档内容")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpDocumentVO> updateDocument(
             @Parameter(description = "文档 ID") @PathVariable Long id,
             @RequestBody HelpDocumentRequest request) {
@@ -127,7 +126,7 @@ public class DataAgentHelpCenterController {
      */
     @DeleteMapping("/documents/{id}")
     @Operation(summary = "删除文档", description = "删除帮助文档")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<Void> deleteDocument(
             @Parameter(description = "文档 ID") @PathVariable Long id) {
         helpCenterService.deleteDocument(id);
@@ -139,7 +138,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/categories/{categoryId}/documents/reorder")
     @Operation(summary = "批量排序文档", description = "根据传入的文档 ID 顺序更新分类下文档排序号")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<Void> reorderDocuments(
             @Parameter(description = "分类 ID") @PathVariable Long categoryId,
             @RequestBody HelpReorderRequest request) {
@@ -152,7 +151,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/documents/{id}/publish")
     @Operation(summary = "发布文档", description = "将文档状态变更为已发布")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpDocumentVO> publishDocument(
             @Parameter(description = "文档 ID") @PathVariable Long id) {
         return R.ok(helpCenterService.publishDocument(id));
@@ -163,7 +162,7 @@ public class DataAgentHelpCenterController {
      */
     @PostMapping("/documents/{id}/unpublish")
     @Operation(summary = "取消发布文档", description = "将文档状态变更为草稿")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @RequireGlobalAdmin
     public R<HelpDocumentVO> unpublishDocument(
             @Parameter(description = "文档 ID") @PathVariable Long id) {
         return R.ok(helpCenterService.unpublishDocument(id));

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import vip.mate.sdk.service.ConversationRuntime;
 import vip.mate.workspace.conversation.ConversationService;
+import vip.mate.workspace.conversation.model.ConversationEntity;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -34,6 +35,19 @@ public class ConversationRuntimeImpl implements ConversationRuntime {
     @Override
     public boolean isConversationOwner(String conversationId, String username) {
         return conversationService.isConversationOwner(conversationId, username);
+    }
+
+    @Override
+    public boolean isConversationOwner(String conversationId, String username, Long workspaceId) {
+        ConversationEntity conv = conversationService.findByConversationId(conversationId);
+        if (conv == null) {
+            return false;
+        }
+        if (workspaceId == null || !workspaceId.equals(conv.getWorkspaceId())) {
+            return false;
+        }
+        return username.equals(conv.getUsername())
+                || ConversationService.SYSTEM_USER.equals(conv.getUsername());
     }
 
     @Override

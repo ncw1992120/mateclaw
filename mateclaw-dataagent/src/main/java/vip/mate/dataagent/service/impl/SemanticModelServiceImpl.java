@@ -7,8 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceColumnEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.model.DatasourceTableEntity;
@@ -18,6 +20,7 @@ import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.repository.DatasourceTableMapper;
 import vip.mate.dataagent.repository.SemanticModelMapper;
 import vip.mate.dataagent.service.AloudataService;
+import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.SemanticModelService;
 
 import java.util.ArrayList;
@@ -39,6 +42,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     private final DatasourceTableMapper datasourceTableMapper;
     private final DatasourceMapper datasourceMapper;
     private final AloudataService aloudataService;
+    private final WorkspaceGuard workspaceGuard;
+    private final DatasourceManageService datasourceManageService;
 
     /** Aloudata 指标在语义模型中的虚拟表名前缀 */
     private static final String ALOUDATA_METRIC_TABLE_PREFIX = "指标";
@@ -51,8 +56,10 @@ public class SemanticModelServiceImpl implements SemanticModelService {
      */
     @Override
     public List<SemanticModelVO> listByDatasourceId(Long datasourceId) {
+        datasourceManageService.checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<SemanticModelEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
+        wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         wrapper.eq(SemanticModelEntity::getDeleted, 0);
         List<SemanticModelEntity> entities = semanticModelMapper.selectList(wrapper);
@@ -67,8 +74,10 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         if (tableNames == null || tableNames.isEmpty()) {
             return new ArrayList<>();
         }
+        datasourceManageService.checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<SemanticModelEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
+        wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.in(SemanticModelEntity::getTableName, tableNames);
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         wrapper.eq(SemanticModelEntity::getDeleted, 0);
@@ -81,10 +90,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
      */
     @Override
     public SemanticModelVO getById(Long id) {
+        requireSemanticOwnership(id);
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null) {
-            return null;
-        }
         return toVO(entity);
     }
 
@@ -94,6 +101,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SemanticModelVO create(SemanticModelCreateRequest request) {
+        datasourceManageService.getDatasource(request.getDatasourceId());
         // 检查唯一约束：同一数据源下相同表名+字段名不允许重复
         LambdaQueryWrapper<SemanticModelEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SemanticModelEntity::getDatasourceId, request.getDatasourceId());
@@ -106,6 +114,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         }
         SemanticModelEntity entity = new SemanticModelEntity();
         BeanUtils.copyProperties(request, entity);
+        entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setDeleted(0);
         entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         semanticModelMapper.insert(entity);
@@ -118,10 +127,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SemanticModelVO update(Long id, SemanticModelUpdateRequest request) {
+        requireSemanticOwnership(id);
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null) {
-            return null;
-        }
         if (request.getBusinessName() != null) {
             entity.setBusinessName(request.getBusinessName());
         }
@@ -156,10 +163,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        requireSemanticOwnership(id);
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null) {
-            return;
-        }
         entity.setDeleted(1);
         semanticModelMapper.updateById(entity);
     }
@@ -170,10 +175,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void enable(Long id) {
+        requireSemanticOwnership(id);
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null) {
-            return;
-        }
         entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         semanticModelMapper.updateById(entity);
     }
@@ -184,10 +187,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void disable(Long id) {
+        requireSemanticOwnership(id);
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null) {
-            return;
-        }
         entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_DISABLED);
         semanticModelMapper.updateById(entity);
     }
@@ -202,8 +203,10 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         if (keyword == null || keyword.isBlank()) {
             return listByDatasourceId(datasourceId);
         }
+        datasourceManageService.checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<SemanticModelEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
+        wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         wrapper.eq(SemanticModelEntity::getDeleted, 0);
         String likePattern = "%" + keyword + "%";
@@ -228,6 +231,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int autoInitFromSchema(Long datasourceId) {
+        datasourceManageService.checkDatasourceReadable(datasourceId);
         // 查询该数据源下所有表
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
@@ -282,6 +286,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
             if (column.getColumnComment() != null && !column.getColumnComment().isBlank()) {
                 entity.setBusinessDescription(column.getColumnComment());
             }
+            entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
             entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
             entity.setDeleted(0);
             semanticModelMapper.insert(entity);
@@ -289,6 +294,23 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         }
         log.info("数据源 [{}] 自动初始化语义模型完成，新建 {} 条记录", datasourceId, createdCount);
         return createdCount;
+    }
+
+    /**
+     * 校验当前用户对指定语义模型是否具有访问权限
+     * <p>
+     * 校验语义模型存在性 + workspaceId 一致性，不匹配抛出 BusinessException。
+     */
+    private void requireSemanticOwnership(Long id) {
+        SemanticModelEntity entity = semanticModelMapper.selectById(id);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "语义模型不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该语义模型");
+        }
     }
 
     /**
@@ -324,7 +346,9 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int syncFromAloudata(Long datasourceId) {
-        // 校验数据源类型
+        // 校验数据源可读性（owner / meta_shared / 资源授权），写操作由 Controller @RequireGlobalAdmin 限制
+        datasourceManageService.checkDatasourceReadable(datasourceId);
+        // 取数据源类型判断（直接查 entity 避免权限校验二次执行）
         DatasourceEntity dsEntity = datasourceMapper.selectById(datasourceId);
         if (dsEntity == null) {
             throw new RuntimeException("数据源不存在: " + datasourceId);
@@ -376,6 +400,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
                 if (metric.getAvailableDimensions() != null && !metric.getAvailableDimensions().isEmpty()) {
                     entity.setExampleValues("可用维度: " + String.join(",", metric.getAvailableDimensions()));
                 }
+                entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
                 entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
                 entity.setDeleted(0);
                 semanticModelMapper.insert(entity);
@@ -412,6 +437,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
                 if (dim.getSynonyms() != null && !dim.getSynonyms().isEmpty()) {
                     entity.setSynonyms(String.join(",", dim.getSynonyms()));
                 }
+                entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
                 entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
                 entity.setDeleted(0);
                 semanticModelMapper.insert(entity);

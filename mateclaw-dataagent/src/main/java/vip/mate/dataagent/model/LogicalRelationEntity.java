@@ -21,6 +21,10 @@ public class LogicalRelationEntity {
     /** 关联数据源 ID */
     private Long datasourceId;
 
+    /** 所属工作区 ID */
+    @TableField("workspace_id")
+    private Long workspaceId;
+
     /** 源表名 */
     private String sourceTableName;
 

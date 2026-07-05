@@ -7,16 +7,19 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.LogicalRelationCreateRequest;
 import vip.mate.dataagent.dto.LogicalRelationUpdateRequest;
 import vip.mate.dataagent.dto.LogicalRelationVO;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceColumnEntity;
 import vip.mate.dataagent.model.DatasourceTableEntity;
 import vip.mate.dataagent.model.LogicalRelationEntity;
 import vip.mate.dataagent.repository.DatasourceColumnMapper;
 import vip.mate.dataagent.repository.DatasourceTableMapper;
 import vip.mate.dataagent.repository.LogicalRelationMapper;
+import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.LogicalRelationService;
 
 import java.util.ArrayList;
@@ -37,14 +40,18 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     private final LogicalRelationMapper logicalRelationMapper;
     private final DatasourceColumnMapper datasourceColumnMapper;
     private final DatasourceTableMapper datasourceTableMapper;
+    private final WorkspaceGuard workspaceGuard;
+    private final DatasourceManageService datasourceManageService;
 
     /**
      * 按数据源查询所有逻辑外键关系
      */
     @Override
     public List<LogicalRelationVO> listByDatasourceId(Long datasourceId) {
+        datasourceManageService.getDatasource(datasourceId);
         LambdaQueryWrapper<LogicalRelationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(LogicalRelationEntity::getDatasourceId, datasourceId);
+        wrapper.eq(LogicalRelationEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.eq(LogicalRelationEntity::getDeleted, 0);
         List<LogicalRelationEntity> entities = logicalRelationMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
@@ -60,8 +67,10 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         if (tableNames == null || tableNames.isEmpty()) {
             return new ArrayList<>();
         }
+        datasourceManageService.getDatasource(datasourceId);
         LambdaQueryWrapper<LogicalRelationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(LogicalRelationEntity::getDatasourceId, datasourceId);
+        wrapper.eq(LogicalRelationEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.and(w -> {
             w.in(LogicalRelationEntity::getSourceTableName, tableNames)
                     .or().in(LogicalRelationEntity::getTargetTableName, tableNames);
@@ -76,10 +85,8 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
      */
     @Override
     public LogicalRelationVO getById(Long id) {
+        requireLogicalOwnership(id);
         LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
-        if (entity == null) {
-            return null;
-        }
         return toVO(entity);
     }
 
@@ -89,6 +96,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LogicalRelationVO create(LogicalRelationCreateRequest request) {
+        datasourceManageService.getDatasource(request.getDatasourceId());
         // 检查唯一约束：同一数据源下相同源表+源字段+目标表+目标字段不允许重复
         LambdaQueryWrapper<LogicalRelationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(LogicalRelationEntity::getDatasourceId, request.getDatasourceId());
@@ -105,6 +113,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         }
         LogicalRelationEntity entity = new LogicalRelationEntity();
         BeanUtils.copyProperties(request, entity);
+        entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setDeleted(0);
         if (entity.getRelationType() == null || entity.getRelationType().isBlank()) {
             entity.setRelationType(DataAgentConstants.RELATION_TYPE_ONE_TO_MANY);
@@ -119,10 +128,8 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LogicalRelationVO update(Long id, LogicalRelationUpdateRequest request) {
+        requireLogicalOwnership(id);
         LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
-        if (entity == null) {
-            return null;
-        }
         if (request.getRelationType() != null) {
             entity.setRelationType(request.getRelationType());
         }
@@ -139,10 +146,8 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        requireLogicalOwnership(id);
         LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
-        if (entity == null) {
-            return;
-        }
         entity.setDeleted(1);
         logicalRelationMapper.updateById(entity);
     }
@@ -156,6 +161,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int autoInitFromPhysicalForeignKeys(Long datasourceId) {
+        datasourceManageService.getDatasource(datasourceId);
         // 查询该数据源下所有表
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
@@ -214,6 +220,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
             entity.setSourceColumnName(sourceColumnName);
             entity.setTargetTableName(targetTableName);
             entity.setTargetColumnName(targetColumnName);
+            entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
             entity.setRelationType(DataAgentConstants.RELATION_TYPE_MANY_TO_ONE);
             entity.setDeleted(0);
             logicalRelationMapper.insert(entity);
@@ -221,6 +228,23 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         }
         log.info("数据源 [{}] 自动初始化逻辑外键关系完成，新建 {} 条记录", datasourceId, createdCount);
         return createdCount;
+    }
+
+    /**
+     * 校验当前用户对指定逻辑外键关系是否具有访问权限
+     * <p>
+     * 校验存在性 + workspaceId 一致性，不匹配抛出 BusinessException。
+     */
+    private void requireLogicalOwnership(Long id) {
+        LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "逻辑外键关系不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该逻辑外键关系");
+        }
     }
 
     /**

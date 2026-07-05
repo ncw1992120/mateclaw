@@ -103,6 +103,15 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         List<ResourceGrantEntity> grants = resourceGrantMapper.selectList(grantWrapper);
         visibleIds.addAll(grants.stream().map(ResourceGrantEntity::getResourceId).collect(Collectors.toSet()));
 
+        // 3. 工作区内元数据共享的数据源（仅 view 权限）
+        LambdaQueryWrapper<DatasourceEntity> sharedWrapper = new LambdaQueryWrapper<>();
+        sharedWrapper.eq(DatasourceEntity::getDeleted, 0)
+                .eq(DatasourceEntity::getWorkspaceId, workspaceId)
+                .eq(DatasourceEntity::getMetaShared, true);
+        List<DatasourceEntity> sharedEntities = datasourceMapper.selectList(sharedWrapper);
+        visibleIds.addAll(sharedEntities.stream()
+                .map(DatasourceEntity::getId).collect(Collectors.toSet()));
+
         if (visibleIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -120,6 +129,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      * 解析当前用户对指定数据源的最高权限
      * <p>
      * owner 本人返回 edit，否则通过 PermissionChecker 解析授权表权限。
+     * 共享数据源（meta_shared=true）对非 owner 用户返回 view。
      */
     private String resolveDatasourcePermission(DatasourceEntity entity) {
         Long currentUserId = workspaceGuard.currentUserId();
@@ -128,7 +138,14 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         String permission = permissionChecker.resolveHighestPermission(
                 DataAgentConstants.RESOURCE_TYPE_DATASOURCE, entity.getId());
-        return permission != null ? permission : DataAgentConstants.PERMISSION_VIEW;
+        if (permission != null) {
+            return permission;
+        }
+        // 共享数据源对非 owner 用户授予 view 权限（仅元数据可读，不可编辑）
+        if (Boolean.TRUE.equals(entity.getMetaShared())) {
+            return DataAgentConstants.PERMISSION_VIEW;
+        }
+        return DataAgentConstants.PERMISSION_VIEW;
     }
 
     /**
@@ -182,6 +199,42 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     }
 
     /**
+     * 校验当前用户对指定数据源是否具有可读权限（owner / meta_shared / 资源授权）
+     * <p>
+     * 用于元数据查询场景，相比 requireDatasourceAccess 放宽：
+     * 共享数据源（meta_shared=true）对同工作区所有用户可读。
+     *
+     * @param datasourceId 数据源 ID
+     */
+    @Override
+    public void checkDatasourceReadable(Long datasourceId) {
+        DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "数据源不存在: " + datasourceId);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该数据源: " + datasourceId);
+        }
+        Long currentUserId = workspaceGuard.currentUserId();
+        // owner 自动放行
+        if (currentUserId.equals(entity.getOwnerId())) {
+            return;
+        }
+        // 共享数据源对同工作区所有用户可读
+        if (Boolean.TRUE.equals(entity.getMetaShared())) {
+            return;
+        }
+        // 资源授权校验
+        String permission = permissionChecker.resolveHighestPermission(
+                DataAgentConstants.RESOURCE_TYPE_DATASOURCE, entity.getId());
+        if (permission == null) {
+            throw new BusinessException(403, "无权访问该数据源: " + datasourceId);
+        }
+    }
+
+    /**
      * 创建数据源
      * <p>
      * ownerId 由 Controller 层从登录上下文注入，记录数据源创建者。
@@ -213,6 +266,14 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         DatasourceEntity entity = new DatasourceEntity();
         BeanUtils.copyProperties(request, entity);
         entity.setOwnerId(ownerId);
+        // 元数据共享：显式传入优先，否则 Aloudata 类型默认共享，其他类型默认不共享
+        if (request.getMetaShared() != null) {
+            entity.setMetaShared(request.getMetaShared());
+        } else if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(request.getSourceType())) {
+            entity.setMetaShared(true);
+        } else {
+            entity.setMetaShared(false);
+        }
         entity.setSchemaStatus("pending");
         entity.setDeleted(0);
         if (entity.getEnabled() == null) {
@@ -232,6 +293,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity == null) {
             return null;
         }
+        requireDatasourceAccess(entity);
         if (request.getName() != null) {
             entity.setName(request.getName());
         }
@@ -267,6 +329,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         if (request.getSchemaName() != null) {
             entity.setSchemaName(request.getSchemaName());
+        }
+        if (request.getMetaShared() != null) {
+            entity.setMetaShared(request.getMetaShared());
         }
         if (request.getEnabled() != null) {
             entity.setEnabled(request.getEnabled());
@@ -342,6 +407,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity == null) {
             return null;
         }
+        requireDatasourceAccess(entity);
         entity.setEnabled(enabled);
         datasourceMapper.updateById(entity);
         return toVO(entity);
@@ -1034,8 +1100,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity.getUpdateTime() != null) {
             vo.setUpdateTime(entity.getUpdateTime().toString());
         }
-        // use 权限仅能用数据源查数，不可查看连接配置等敏感信息
-        if (DataAgentConstants.PERMISSION_USE.equals(permission)) {
+        // use/view 权限不可查看连接配置等敏感信息（view 适用于资源授权 view 用户和共享数据源的非 owner 用户）
+        if (DataAgentConstants.PERMISSION_USE.equals(permission)
+                || DataAgentConstants.PERMISSION_VIEW.equals(permission)) {
             vo.setHost(null);
             vo.setProductHost(null);
             vo.setSemanticHost(null);
@@ -1046,7 +1113,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             vo.setConnectionParams(null);
             vo.setSchemaName(null);
         } else {
-            // edit/view 权限：密码脱敏，仅返回占位符用于编辑回显
+            // edit 权限：密码脱敏，仅返回占位符用于编辑回显
             if (vo.getPassword() != null && !vo.getPassword().isBlank()) {
                 vo.setPassword("******");
             }

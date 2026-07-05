@@ -282,6 +282,23 @@
                 </div>
               </div>
             </template>
+
+            <!-- 共享元数据开关（所有类型均显示，Aloudata 强制勾选并禁用） -->
+            <div class="form-field form-field-wide">
+              <label class="checkbox-label">
+                <label class="switch">
+                  <input v-model="form.metaShared" type="checkbox" :disabled="selectedDbId === 60" />
+                  <span class="slider"></span>
+                </label>
+                <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
+              </label>
+              <p v-if="selectedDbId === 60" class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">
+                Aloudata 指标平台默认共享元数据，由管理员同步后所有用户可见
+              </p>
+              <p v-else class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">
+                开启后，同工作区其他用户可查看该数据源的元数据（不包含连接配置）
+              </p>
+            </div>
           </div>
         </div>
 
@@ -302,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
@@ -403,6 +420,8 @@ onMounted(async () => {
           form.tenantId = ds.username || ''
           form.authValue = ds.password || ''
         }
+        // 加载元数据共享状态（Aloudata 默认 true，其他类型按存储值）
+        form.metaShared = ds.metaShared ?? (ds.sourceType === 'aloudata')
       }
     } catch {
       ElMessage.error(t('dsForm.loadFail'))
@@ -439,12 +458,22 @@ const form = reactive({
   sshEnabled: false,
   crossVpcEnabled: false,
   uploadEnabled: true,
+  // 元数据是否共享（同工作区所有用户可查看）
+  metaShared: false,
   // Aloudata 专用字段
   semanticPort: '8085',
   aloudataPort: '8083',
   tenantId: '',
   authType: 'UID',
   authValue: '',
+})
+
+/**
+ * 监听数据源类型切换，同步 metaShared 默认值：
+ * Aloudata（60）强制 true，其他类型默认 false
+ */
+watch(selectedDbId, (newId) => {
+  form.metaShared = newId === 60
 })
 
 /** 版本选项 */
@@ -541,6 +570,8 @@ function buildCreateRequest() {
     username: isAloudata ? form.tenantId : form.username,
     password: isAloudata ? form.authValue : form.password,
     enabled: true,
+    // Aloudata 强制共享元数据，其他类型按表单选择
+    metaShared: isAloudata ? true : form.metaShared,
   }
   // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {

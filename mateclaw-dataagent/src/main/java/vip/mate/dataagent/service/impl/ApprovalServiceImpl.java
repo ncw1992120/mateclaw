@@ -9,6 +9,7 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.ApprovalProcessRequest;
 import vip.mate.dataagent.dto.ApprovalSubmitRequest;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.ApprovalRecordEntity;
 import vip.mate.dataagent.repository.ApprovalRecordMapper;
 import vip.mate.dataagent.service.ApprovalService;
@@ -120,11 +121,18 @@ public class ApprovalServiceImpl implements ApprovalService {
 
     /**
      * 获取审批记录实体（不存在则抛异常）
+     * <p>
+     * 同时校验记录所属工作区与当前请求工作区一致，防止跨工作区越权访问。
      */
     private ApprovalRecordEntity getApprovalEntity(Long id) {
         ApprovalRecordEntity entity = approvalRecordMapper.selectById(id);
         if (entity == null) {
             throw new IllegalArgumentException("审批记录不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该审批记录");
         }
         return entity;
     }

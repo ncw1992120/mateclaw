@@ -10,8 +10,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.*;
 import vip.mate.dataagent.repository.*;
 import vip.mate.dataagent.service.DatasetManageService;
@@ -34,6 +36,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private final DatasourceTableMapper datasourceTableMapper;
     private final DatasourceColumnMapper datasourceColumnMapper;
     private final ObjectMapper objectMapper;
+    private final WorkspaceGuard workspaceGuard;
 
     private static final Set<String> NUMERIC_TYPES = Set.of(
             "int", "bigint", "smallint", "tinyint", "decimal", "float", "double",
@@ -46,6 +49,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     public List<DatasetVO> listDatasets() {
         LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetEntity::getDeleted, 0);
+        wrapper.eq(DatasetEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.orderByDesc(DatasetEntity::getUpdateTime);
         List<DatasetEntity> entities = datasetMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
@@ -53,10 +57,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
 
     @Override
     public DatasetVO getDataset(Long id) {
+        requireDatasetOwnership(id);
         DatasetEntity entity = datasetMapper.selectById(id);
-        if (entity == null) {
-            return null;
-        }
         DatasetVO vo = toVO(entity);
         vo.setFields(listFields(id));
         return vo;
@@ -77,6 +79,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         entity.setDatasourceName(dsEntity.getName());
         entity.setStatus(DataAgentConstants.DATASET_STATUS_DRAFT);
         entity.setDeleted(0);
+        entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        entity.setOwnerId(workspaceGuard.currentUserId());
         if (request.getTableIds() != null && !request.getTableIds().isEmpty()) {
             List<Long> tableIdLongs = request.getTableIds().stream()
                     .map(Long::parseLong)
@@ -113,10 +117,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
 
     @Override
     public DatasetVO updateDataset(Long id, DatasetUpdateRequest request) {
+        requireDatasetOwnership(id);
         DatasetEntity entity = datasetMapper.selectById(id);
-        if (entity == null) {
-            throw new RuntimeException("数据集不存在");
-        }
         if (request.getName() != null) {
             entity.setName(request.getName());
         }
@@ -130,10 +132,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteDataset(Long id) {
+        requireDatasetOwnership(id);
         DatasetEntity entity = datasetMapper.selectById(id);
-        if (entity == null) {
-            return;
-        }
         entity.setDeleted(1);
         datasetMapper.updateById(entity);
         LambdaUpdateWrapper<DatasetFieldEntity> fieldWrapper = new LambdaUpdateWrapper<>();
@@ -148,6 +148,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
 
     @Override
     public List<DatasetFieldVO> listFields(Long datasetId) {
+        requireDatasetOwnership(datasetId);
         LambdaQueryWrapper<DatasetFieldEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetFieldEntity::getDatasetId, datasetId);
         wrapper.eq(DatasetFieldEntity::getDeleted, 0);
@@ -158,10 +159,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
 
     @Override
     public DatasetDataVO getDatasetData(Long datasetId, int page, int size) {
+        requireDatasetOwnership(datasetId);
         DatasetEntity datasetEntity = datasetMapper.selectById(datasetId);
-        if (datasetEntity == null) {
-            throw new RuntimeException("数据集不存在");
-        }
         List<DatasetFieldVO> fields = listFields(datasetId);
         DatasetDataVO result = new DatasetDataVO();
         List<DatasetDataVO.DatasetColumnDef> columnDefs = new ArrayList<>();
@@ -204,6 +203,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateRow(Long datasetId, DatasetRowUpdateRequest request) {
+        requireDatasetOwnership(datasetId);
         Map<String, Object> rowKey = request.getRowKey();
         Map<String, Object> values = request.getValues();
         DatasetDataEntity targetEntity = findDataEntityByRowKey(datasetId, rowKey);
@@ -226,6 +226,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addRow(Long datasetId, DatasetRowCreateRequest request) {
+        requireDatasetOwnership(datasetId);
         try {
             String json = objectMapper.writeValueAsString(request.getValues());
             DatasetDataEntity entity = new DatasetDataEntity();
@@ -250,6 +251,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteRow(Long datasetId, Map<String, Object> rowKey) {
+        requireDatasetOwnership(datasetId);
         DatasetDataEntity targetEntity = findDataEntityByRowKey(datasetId, rowKey);
         if (targetEntity != null) {
             targetEntity.setDeleted(1);
@@ -272,6 +274,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         if (entity == null) {
             throw new RuntimeException("字段不存在");
         }
+        requireDatasetOwnership(entity.getDatasetId());
         entity.setFieldCategory(fieldCategory);
         datasetFieldMapper.updateById(entity);
         return toFieldVO(entity);
@@ -280,10 +283,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DatasetVO syncDatasetData(Long datasetId) {
+        requireDatasetOwnership(datasetId);
         DatasetEntity datasetEntity = datasetMapper.selectById(datasetId);
-        if (datasetEntity == null) {
-            throw new RuntimeException("数据集不存在");
-        }
         DatasourceEntity dsEntity = datasourceMapper.selectById(datasetEntity.getDatasourceId());
         if (dsEntity == null) {
             throw new RuntimeException("关联数据源不存在");
@@ -322,6 +323,23 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         }
         datasetMapper.updateById(datasetEntity);
         return toVO(datasetEntity);
+    }
+
+    /**
+     * 校验当前用户对指定数据集是否具有访问权限
+     * <p>
+     * 校验数据集存在性 + workspaceId 一致性，不匹配抛出 BusinessException。
+     */
+    private void requireDatasetOwnership(Long id) {
+        DatasetEntity entity = datasetMapper.selectById(id);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "数据集不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该数据集");
+        }
     }
 
     private DatasetDataEntity findDataEntityByRowKey(Long datasetId, Map<String, Object> rowKey) {

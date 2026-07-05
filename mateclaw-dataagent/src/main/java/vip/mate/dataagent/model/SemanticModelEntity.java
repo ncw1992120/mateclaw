@@ -21,6 +21,10 @@ public class SemanticModelEntity {
     /** 关联数据源 ID */
     private Long datasourceId;
 
+    /** 所属工作区 ID */
+    @TableField("workspace_id")
+    private Long workspaceId;
+
     /** 表名 */
     private String tableName;
 

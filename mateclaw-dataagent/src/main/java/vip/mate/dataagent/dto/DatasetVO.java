@@ -39,8 +39,11 @@ public class DatasetVO {
     /** 列数 */
     private Integer columnCount;
 
-    /** 所有者 */
-    private String owner;
+    /** 所属工作区 ID */
+    private Long workspaceId;
+
+    /** 所有者用户 ID */
+    private Long ownerId;
 
     /** 修改人 */
     private String modifier;

@@ -44,8 +44,13 @@ public class DatasetEntity {
     /** 列数 */
     private Integer columnCount;
 
-    /** 所有者 */
-    private String owner;
+    /** 所属工作区 ID */
+    @TableField("workspace_id")
+    private Long workspaceId;
+
+    /** 所有者用户 ID */
+    @TableField("owner_id")
+    private Long ownerId;
 
     /** 修改人 */
     private String modifier;

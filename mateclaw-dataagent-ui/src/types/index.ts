@@ -164,6 +164,8 @@ export interface Datasource {
   password: string
   connectionParams: string
   schemaName: string
+  /** 元数据是否共享（同工作区所有用户可查看） */
+  metaShared: boolean
   enabled: boolean
   lastTestTime: string
   lastTestOk: boolean
@@ -561,7 +563,8 @@ export interface Dataset {
   status: string
   rowCount: number
   columnCount: number
-  owner: string
+  ownerId: number
+  workspaceId: number
   modifier: string
   createTime: string
   updateTime: string

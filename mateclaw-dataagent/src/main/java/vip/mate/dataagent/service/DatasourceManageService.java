@@ -157,4 +157,15 @@ public interface DatasourceManageService {
      * @param tableId      表 ID
      */
     void deleteTable(Long datasourceId, Long tableId);
+
+    /**
+     * 校验当前用户对指定数据源是否具有可读权限（owner / meta_shared / 资源授权）
+     * <p>
+     * 用于元数据查询场景，相比 getDatasource 的 requireDatasourceAccess 放宽：
+     * 共享数据源（meta_shared=true）对同工作区所有用户可读。
+     * 不匹配抛出 BusinessException，不返回数据源实体。
+     *
+     * @param datasourceId 数据源 ID
+     */
+    void checkDatasourceReadable(Long datasourceId);
 }

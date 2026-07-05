@@ -57,7 +57,20 @@
               </span>
               <div class="item-info">
                 <span class="item-name">{{ ds.name }}</span>
-                <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
+                <div class="item-meta-row">
+                  <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
+                  <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
+                </div>
+              </div>
+              <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
+                <span class="badge-dot"></span>
+                <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
+                <span
+                  v-if="resolveAccountBadge(ds.id).testOk !== null"
+                  class="badge-test"
+                  :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
+                  :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
+                >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
               </div>
               <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
                 <button
@@ -85,6 +98,7 @@
               <span class="ds-status" :class="selectedDs.enabled ? 'on' : 'off'">
                 {{ selectedDs.enabled ? t('datasourcePage.statusEnabled') : t('datasourcePage.statusDisabled') }}
               </span>
+              <span v-if="selectedDs.metaShared" class="ds-shared-tag">共享元数据</span>
             </div>
             <div class="toolbar-right">
               <button
@@ -189,6 +203,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import { useUserStore } from '@/stores/useUserStore'
 import * as datasourceApi from '@/api/datasource'
+import type { DatasourceAccountVO } from '@/api/datasource'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import type { Datasource } from '@/types'
 import DatasourceForm from './datasource/DatasourceForm.vue'
@@ -212,6 +227,9 @@ const panelRefreshKey = ref(0)
 const testingId = ref<string | null>(null)
 /** 同步中状态（语义层同步，工具栏同步按钮专用） */
 const syncing = ref(false)
+
+/** 当前用户在各数据源上的查询账号绑定状态映射（key=datasourceId, value=账号 VO） */
+const accountStatusMap = ref<Map<string, DatasourceAccountVO>>(new Map())
 
 /** 当前用户是否为管理员（全局管理员或工作区 owner/admin），仅管理员可同步元数据 */
 const canSyncMetadata = computed<boolean>(() => {
@@ -242,8 +260,64 @@ watch(metricPlatformList, (list) => {
 }, { immediate: true })
 
 onMounted(() => {
+  // 并行加载数据源列表与当前用户的查询账号绑定状态
   store.fetchDatasources()
+  loadAccountStatus()
 })
+
+/** 加载当前用户所有已绑定的查询账号，构建 datasourceId → account VO 映射 */
+async function loadAccountStatus(): Promise<void> {
+  try {
+    const { data } = await datasourceApi.listDatasourceAccounts()
+    const map = new Map<string, DatasourceAccountVO>()
+    if (Array.isArray(data)) {
+      for (const acc of data) {
+        map.set(String(acc.datasourceId), acc)
+      }
+    }
+    accountStatusMap.value = map
+  } catch {
+    // 加载失败不阻塞主流程，徽标按"未绑定"显示
+  }
+}
+
+/** 单条刷新指定数据源的账号绑定状态（测试/保存后调用） */
+async function refreshAccountStatus(datasourceId: string | number): Promise<void> {
+  try {
+    const { data } = await datasourceApi.getDatasourceAccount(datasourceId)
+    const map = new Map(accountStatusMap.value)
+    if (data) {
+      map.set(String(datasourceId), data)
+    } else {
+      map.delete(String(datasourceId))
+    }
+    accountStatusMap.value = map
+  } catch {
+    // 未绑定查询账号时 API 返回 404，从映射中移除
+    const map = new Map(accountStatusMap.value)
+    map.delete(String(datasourceId))
+    accountStatusMap.value = map
+  }
+}
+
+/** 移除指定数据源的账号绑定状态（删除账号后调用） */
+function removeAccountStatus(datasourceId: string | number): void {
+  const map = new Map(accountStatusMap.value)
+  map.delete(String(datasourceId))
+  accountStatusMap.value = map
+}
+
+/** 解析数据源对应的账号绑定状态文案与样式类 */
+function resolveAccountBadge(dsId: string): { text: string; dotClass: string; testOk: boolean | null } {
+  const acc = accountStatusMap.value.get(dsId)
+  if (!acc) {
+    return { text: '未绑定', dotClass: 'dot-unbound', testOk: null }
+  }
+  if (acc.status === 1) {
+    return { text: '已绑定', dotClass: 'dot-bound', testOk: acc.lastTestOk ?? null }
+  }
+  return { text: '已停用', dotClass: 'dot-disabled', testOk: acc.lastTestOk ?? null }
+}
 
 /** 跳转到新建数据源 */
 function handleCreateDatasource(): void {
@@ -468,6 +542,8 @@ async function handleSaveAccount(): Promise<void> {
       queryPassword: accountForm.value.queryPassword,
     })
     accountHasExisting.value = true
+    // 刷新列表徽标状态
+    refreshAccountStatus(selectedDs.value.id)
     ElMessage.success(t('datasourcePage.queryAccountSaveSuccess'))
   } catch (e: any) {
     ElMessage.error(e?.message || t('datasourcePage.queryAccountSaveFail'))
@@ -487,6 +563,8 @@ async function handleDeleteAccount(): Promise<void> {
     accountForm.value = { queryUsername: '', queryPassword: '' }
     accountHasExisting.value = false
     accountLastTestOk.value = null
+    // 移除列表徽标状态
+    removeAccountStatus(selectedDs.value.id)
     ElMessage.success(t('datasourcePage.queryAccountDeleteSuccess'))
   } catch {
     // 用户取消或请求失败
@@ -519,6 +597,8 @@ async function handleTestAccountConnection(): Promise<void> {
     ElMessage.error(e?.message || t('datasourcePage.accountTestFail'))
   } finally {
     accountTesting.value = false
+    // 测试完成后刷新列表徽标状态（无论成功失败，lastTestOk 已持久化到后端）
+    refreshAccountStatus(selectedDs.value!.id)
   }
 }
 </script>
@@ -719,11 +799,87 @@ async function handleTestAccountConnection(): Promise<void> {
   text-overflow: ellipsis;
 }
 
+.item-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-shared-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8f3ff;
+  color: #165dff;
+  white-space: nowrap;
+}
+
+/* 账号绑定状态徽标 */
+.item-account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: #f7f8fa;
+}
+
+.item-account-badge .badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.item-account-badge.dot-bound .badge-dot {
+  background: #00b42a;
+}
+
+.item-account-badge.dot-disabled .badge-dot {
+  background: #ff7d00;
+}
+
+.item-account-badge.dot-unbound .badge-dot {
+  background: #c9cdd4;
+}
+
+.item-account-badge.dot-bound {
+  color: #00b42a;
+}
+
+.item-account-badge.dot-disabled {
+  color: #ff7d00;
+}
+
+.item-account-badge.dot-unbound {
+  color: #86909c;
+}
+
+.item-account-badge .badge-text {
+  white-space: nowrap;
+}
+
+.item-account-badge .badge-test {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.item-account-badge .badge-test.test-ok {
+  color: #00b42a;
+}
+
+.item-account-badge .badge-test.test-fail {
+  color: #f53f3f;
+}
+
 .item-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;
@@ -819,6 +975,14 @@ async function handleTestAccountConnection(): Promise<void> {
 .ds-status.off {
   color: #c9cdd4;
   background: #f2f3f5;
+}
+
+.ds-shared-tag {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #165dff;
+  background: #e8f3ff;
 }
 
 .toolbar-right {

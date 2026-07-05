@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.ResourceGrantRequest;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.ResourceGrantEntity;
 import vip.mate.dataagent.repository.ResourceGrantMapper;
 import vip.mate.dataagent.service.ResourceGrantService;
@@ -97,6 +98,11 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
         if (entity == null || entity.getStatus() != DataAgentConstants.GRANT_STATUS_ACTIVE) {
             throw new IllegalArgumentException("授权记录不存在或已撤销: " + id);
         }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权操作该授权记录");
+        }
         entity.setPermission(permission);
         entity.setExpireTime(expireTime);
         resourceGrantMapper.updateById(entity);
@@ -111,6 +117,7 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
         int rows = resourceGrantMapper.update(null,
                 new LambdaUpdateWrapper<ResourceGrantEntity>()
                         .eq(ResourceGrantEntity::getId, id)
+                        .eq(ResourceGrantEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId())
                         .eq(ResourceGrantEntity::getStatus, DataAgentConstants.GRANT_STATUS_ACTIVE)
                         .set(ResourceGrantEntity::getStatus, DataAgentConstants.GRANT_STATUS_REVOKED));
         if (rows == 0) {

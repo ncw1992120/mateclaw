@@ -59,6 +59,9 @@ public class DatasourceEntity {
     /** Schema 名称（PostgreSQL等使用） */
     private String schemaName;
 
+    /** 元数据是否共享（1=同工作区所有用户可见，0=仅 owner 可见） */
+    private Boolean metaShared;
+
     /** 是否启用 */
     private Boolean enabled;
 

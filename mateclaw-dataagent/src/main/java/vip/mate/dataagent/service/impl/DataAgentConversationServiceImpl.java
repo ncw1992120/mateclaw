@@ -46,7 +46,8 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
             return conversationRuntime.listMessages(conversationId);
         }
         String username = workspaceGuard.currentUsername();
-        if (conversationRuntime.isConversationOwner(conversationId, username)) {
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        if (conversationRuntime.isConversationOwner(conversationId, username, workspaceId)) {
             return conversationRuntime.listMessages(conversationId);
         }
         return List.of();
@@ -91,7 +92,7 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
         }
         String username = workspaceGuard.currentUsername();
         Long workspaceId = workspaceGuard.currentWorkspaceId();
-        if (conversationRuntime.isConversationOwner(conversationId, username)) {
+        if (conversationRuntime.isConversationOwner(conversationId, username, workspaceId)) {
             return;
         }
         // 区分"会话不存在"与"无权访问"

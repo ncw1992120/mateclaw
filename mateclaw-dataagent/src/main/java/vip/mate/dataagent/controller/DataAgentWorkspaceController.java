@@ -47,10 +47,16 @@ public class DataAgentWorkspaceController {
 
     /**
      * 获取工作区详情
+     * <p>
+     * 需要目标工作区的 viewer 权限。
      */
     @GetMapping("/{id}")
-    @Operation(summary = "工作区详情", description = "根据 ID 获取工作区详情")
+    @Operation(summary = "工作区详情", description = "根据 ID 获取工作区详情，需要目标工作区的 viewer 权限")
     public R<WorkspaceEntity> get(@Parameter(description = "工作区 ID") @PathVariable Long id) {
+        Long userId = workspaceGuard.currentUserId();
+        if (!workspaceGuard.isCurrentAdmin()) {
+            runtime.requireWorkspaceRole(id, userId, DataAgentConstants.WORKSPACE_ROLE_VIEWER);
+        }
         return R.ok(runtime.getWorkspace(id));
     }
 

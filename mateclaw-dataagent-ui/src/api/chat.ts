@@ -20,6 +20,33 @@ function handleStreamAuthFailure(status: number): void {
   }
 }
 
+/**
+ * 构建 SSE 请求头
+ * <p>
+ * fetch 不走 axios 拦截器，需手动注入 Authorization 与 X-Workspace-Id 头。
+ * 与 axios 拦截器保持一致的工作区 ID 读取逻辑。
+ */
+function getSseHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token')
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  const workspaceIdRaw = localStorage.getItem('workspaceId')
+  if (workspaceIdRaw) {
+    try {
+      const workspaceId = JSON.parse(workspaceIdRaw)
+      headers['X-Workspace-Id'] = String(workspaceId)
+    } catch {
+      // workspaceId 格式异常，忽略
+    }
+  }
+  return headers
+}
+
 export function chat(data: ChatRequest) {
   return api.post(CHAT_URL, data)
 }
@@ -139,14 +166,7 @@ export async function* streamChat(
   options?: StreamOptions,
   datasourceIds?: string[]
 ): AsyncGenerator<SseEvent> {
-  const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'text/event-stream',
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
+  const headers = getSseHeaders()
 
   const body: Record<string, unknown> = { agentId, message, conversationId }
   if (modelProvider) {
@@ -249,14 +269,7 @@ export async function* reconnectStream(
   lastEventId: string,
   options?: StreamOptions
 ): AsyncGenerator<SseEvent> {
-  const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'text/event-stream',
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
+  const headers = getSseHeaders()
 
   const body = {
     conversationId,

@@ -5,6 +5,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireGlobalAdmin;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.ModelActiveRequest;
 import vip.mate.dataagent.service.DataAgentModelService;
 import vip.mate.llm.model.*;
@@ -32,6 +35,7 @@ public class DataAgentModelController {
      * 获取 Provider 列表（仅 enabled）
      */
     @GetMapping
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "Provider 列表", description = "获取已启用的供应商列表")
     public R<List<ProviderInfoDTO>> listProviders() {
         return R.ok(runtime.listProviders());
@@ -41,6 +45,7 @@ public class DataAgentModelController {
      * 获取 Provider 全量目录（含未启用）
      */
     @GetMapping("/catalog")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "Provider 目录", description = "获取全量供应商目录（含未启用）")
     public R<List<ProviderInfoDTO>> listCatalog() {
         return R.ok(runtime.listProviderCatalog());
@@ -50,6 +55,7 @@ public class DataAgentModelController {
      * 启用 Provider
      */
     @PostMapping("/{providerId}/enable")
+    @RequireGlobalAdmin
     @Operation(summary = "启用 Provider", description = "启用指定供应商")
     public R<EnableResult> enableProvider(@PathVariable String providerId) {
         return R.ok(runtime.enableProvider(providerId));
@@ -59,6 +65,7 @@ public class DataAgentModelController {
      * 禁用 Provider
      */
     @PostMapping("/{providerId}/disable")
+    @RequireGlobalAdmin
     @Operation(summary = "禁用 Provider", description = "禁用指定供应商")
     public R<EnableResult> disableProvider(@PathVariable String providerId) {
         return R.ok(runtime.disableProvider(providerId));
@@ -68,6 +75,7 @@ public class DataAgentModelController {
      * 更新 Provider 配置
      */
     @PutMapping("/{providerId}/config")
+    @RequireGlobalAdmin
     @Operation(summary = "更新 Provider 配置", description = "更新供应商的 API Key、Base URL 等配置")
     public R<ProviderInfoDTO> updateProviderConfig(@PathVariable String providerId,
                                                    @RequestBody ProviderConfigRequest request) {
@@ -78,6 +86,7 @@ public class DataAgentModelController {
      * 创建自定义 Provider
      */
     @PostMapping("/custom-providers")
+    @RequireGlobalAdmin
     @Operation(summary = "创建自定义 Provider", description = "添加自定义模型供应商")
     public R<ProviderInfoDTO> createCustomProvider(@RequestBody CreateCustomProviderRequest request) {
         return R.ok(runtime.createCustomProvider(request));
@@ -87,6 +96,7 @@ public class DataAgentModelController {
      * 删除自定义 Provider
      */
     @DeleteMapping("/custom-providers/{providerId}")
+    @RequireGlobalAdmin
     @Operation(summary = "删除自定义 Provider", description = "删除指定自定义供应商")
     public R<Void> deleteCustomProvider(@PathVariable String providerId) {
         runtime.deleteCustomProvider(providerId);
@@ -97,6 +107,7 @@ public class DataAgentModelController {
      * 向 Provider 添加模型
      */
     @PostMapping("/{providerId}/models")
+    @RequireGlobalAdmin
     @Operation(summary = "添加模型", description = "向指定供应商添加模型")
     public R<ProviderInfoDTO> addProviderModel(@PathVariable String providerId,
                                                @RequestBody AddProviderModelRequest request) {
@@ -107,6 +118,7 @@ public class DataAgentModelController {
      * 从 Provider 删除模型
      */
     @DeleteMapping("/{providerId}/models/{modelId}")
+    @RequireGlobalAdmin
     @Operation(summary = "删除模型", description = "从指定供应商删除模型")
     public R<ProviderInfoDTO> removeProviderModel(@PathVariable String providerId,
                                                   @PathVariable String modelId) {
@@ -117,6 +129,7 @@ public class DataAgentModelController {
      * 获取启用模型列表
      */
     @GetMapping("/enabled")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "启用模型列表", description = "获取所有已启用的模型配置")
     public R<List<ModelConfigEntity>> listEnabledModels() {
         return R.ok(runtime.listEnabledModels());
@@ -126,6 +139,7 @@ public class DataAgentModelController {
      * 获取所有已启用的模型（含 chat 和 embedding 类型）
      */
     @GetMapping("/all-enabled")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "全部启用模型", description = "获取所有已启用的模型配置，包含对话和向量类型")
     public R<List<ModelConfigEntity>> listAllEnabledModels() {
         return R.ok(runtime.listAllEnabledModels());
@@ -135,6 +149,7 @@ public class DataAgentModelController {
      * 获取所有模型（含启用和禁用）
      */
     @GetMapping("/all")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "全部模型", description = "获取所有模型配置，包含启用和禁用状态")
     public R<List<ModelConfigEntity>> listAllModels() {
         return R.ok(runtime.listAllModels());
@@ -144,6 +159,7 @@ public class DataAgentModelController {
      * 获取默认模型
      */
     @GetMapping("/default")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "默认模型", description = "获取当前默认模型配置")
     public R<ModelConfigEntity> getDefaultModel() {
         return R.ok(modelService.getDefaultModelSafe());
@@ -153,6 +169,7 @@ public class DataAgentModelController {
      * 获取当前激活模型
      */
     @GetMapping("/active")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "激活模型", description = "获取当前激活的模型信息")
     public R<ActiveModelsInfo> getActiveModel() {
         return R.ok(modelService.getActiveModelSafe());
@@ -162,6 +179,7 @@ public class DataAgentModelController {
      * 设置当前激活模型
      */
     @PutMapping("/active")
+    @RequireGlobalAdmin
     @Operation(summary = "设置激活模型", description = "通过模型 ID 设置当前激活模型")
     public R<ActiveModelsInfo> setActiveModel(@RequestBody ModelActiveRequest request) {
         return R.ok(modelService.setActiveModel(request.getModelId()));
@@ -171,6 +189,7 @@ public class DataAgentModelController {
      * 获取模型详情
      */
     @GetMapping("/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "模型详情", description = "根据 ID 获取模型配置详情")
     public R<ModelConfigEntity> getModel(@PathVariable Long id) {
         return R.ok(runtime.getModel(id));
@@ -180,6 +199,7 @@ public class DataAgentModelController {
      * 创建模型
      */
     @PostMapping
+    @RequireGlobalAdmin
     @Operation(summary = "创建模型", description = "新增模型配置")
     public R<ModelConfigEntity> createModel(@RequestBody ModelConfigEntity entity) {
         return R.ok(runtime.createModel(entity));
@@ -189,6 +209,7 @@ public class DataAgentModelController {
      * 更新模型
      */
     @PutMapping("/{id}")
+    @RequireGlobalAdmin
     @Operation(summary = "更新模型", description = "更新模型配置")
     public R<ModelConfigEntity> updateModel(@PathVariable Long id, @RequestBody ModelConfigEntity entity) {
         entity.setId(id);
@@ -199,6 +220,7 @@ public class DataAgentModelController {
      * 删除模型
      */
     @DeleteMapping("/{id}")
+    @RequireGlobalAdmin
     @Operation(summary = "删除模型", description = "删除指定模型配置")
     public R<Void> deleteModel(@PathVariable Long id) {
         runtime.deleteModel(id);
@@ -209,6 +231,7 @@ public class DataAgentModelController {
      * 设置默认模型
      */
     @PostMapping("/{id}/default")
+    @RequireGlobalAdmin
     @Operation(summary = "设置默认模型", description = "将指定模型设为默认模型")
     public R<ModelConfigEntity> setDefaultModel(@PathVariable Long id) {
         return R.ok(runtime.setDefaultModel(id));
@@ -218,6 +241,7 @@ public class DataAgentModelController {
      * 发现远端模型
      */
     @PostMapping("/{providerId}/discover")
+    @RequireGlobalAdmin
     @Operation(summary = "发现模型", description = "发现指定供应商的远端可用模型")
     public R<DiscoverResult> discoverModels(@PathVariable String providerId) {
         return R.ok(runtime.discoverModels(providerId));
@@ -227,6 +251,7 @@ public class DataAgentModelController {
      * 批量添加发现的模型
      */
     @PostMapping("/{providerId}/discover/apply")
+    @RequireGlobalAdmin
     @Operation(summary = "应用发现模型", description = "批量添加发现的模型到供应商")
     public R<Map<String, Integer>> applyDiscoveredModels(@PathVariable String providerId,
                                                           @RequestBody Map<String, List<String>> body) {
@@ -237,6 +262,7 @@ public class DataAgentModelController {
      * 测试供应商连接
      */
     @PostMapping("/{providerId}/test-connection")
+    @RequireGlobalAdmin
     @Operation(summary = "测试连接", description = "测试指定供应商的连接是否可用")
     public R<TestResult> testProviderConnection(@PathVariable String providerId) {
         return R.ok(runtime.testProviderConnection(providerId));
@@ -246,6 +272,7 @@ public class DataAgentModelController {
      * 测试单个模型可用性
      */
     @PostMapping("/{providerId}/models/{modelName}/test")
+    @RequireGlobalAdmin
     @Operation(summary = "测试模型", description = "测试指定模型的可用性，modelName 为模型名称（如 gpt-4o）")
     public R<TestResult> testModel(@PathVariable String providerId, @PathVariable String modelName) {
         return R.ok(runtime.testModel(providerId, modelName));
@@ -255,6 +282,7 @@ public class DataAgentModelController {
      * 测试 Embedding 模型连通性
      */
     @PostMapping("/embedding/{modelId}/test")
+    @RequireGlobalAdmin
     @Operation(summary = "测试 Embedding 模型", description = "测试指定 Embedding 模型的连通性（嵌入短文本验证 API key）")
     public R<Map<String, Object>> testEmbeddingModel(@PathVariable Long modelId) {
         return R.ok(runtime.testEmbeddingModel(modelId));
@@ -264,6 +292,7 @@ public class DataAgentModelController {
      * 按类型筛选模型
      */
     @GetMapping("/by-type")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "按类型筛选模型", description = "按模型类型（chat/embedding）筛选，可选模态过滤")
     public R<List<ModelConfigEntity>> listModelsByType(
             @RequestParam(defaultValue = "chat") String modelType,
@@ -275,6 +304,7 @@ public class DataAgentModelController {
      * 获取默认向量模型
      */
     @GetMapping("/default-embedding")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "获取默认向量模型", description = "获取当前配置的默认向量（embedding）模型")
     public R<ModelConfigEntity> getDefaultEmbeddingModel() {
         return R.ok(runtime.getDefaultEmbeddingModel());
@@ -284,6 +314,7 @@ public class DataAgentModelController {
      * 设置默认向量模型
      */
     @PostMapping("/{id}/default-embedding")
+    @RequireGlobalAdmin
     @Operation(summary = "设置默认向量模型", description = "将指定模型设为默认向量（embedding）模型")
     public R<ModelConfigEntity> setDefaultEmbeddingModel(@PathVariable Long id) {
         return R.ok(runtime.setDefaultEmbeddingModel(id));

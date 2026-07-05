@@ -103,7 +103,7 @@
                   <span v-if="item.isNew" class="new-badge">NEW</span>
                 </div>
               </td>
-              <td class="col-owner">{{ item.owner }}</td>
+              <td class="col-owner">{{ resolveOwnerName(item.ownerId) }}</td>
               <td class="col-modifier">{{ item.modifier }}</td>
               <td class="col-modify-time">{{ item.modifyTime }}</td>
               <td class="col-datasource">{{ item.datasourceName }}</td>
@@ -181,7 +181,8 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DatasetEdit from './dataset/DatasetEdit.vue'
 import * as datasetApi from '@/api/dataset'
-import type { Dataset } from '@/types'
+import { listWorkspaceMembers } from '@/api/workspace'
+import type { Dataset, WorkspaceMember } from '@/types'
 
 const { t } = useI18n()
 
@@ -189,11 +190,27 @@ const { t } = useI18n()
 interface DatasetItem {
   id: string
   name: string
-  owner: string
+  ownerId: number
   modifier: string
   modifyTime: string
   datasourceName: string
   isNew: boolean
+}
+
+/** 工作区成员映射：userId -> username，用于将 ownerId 解析为可读用户名 */
+const memberMap = ref<Map<number, string>>(new Map())
+
+/**
+ * 解析 ownerId 为用户名
+ * <p>
+ * 后端仅返回 ownerId（Long），前端通过工作区成员列表本地映射为 username 展示。
+ * 未知用户返回空字符串，避免显示 undefined。
+ */
+function resolveOwnerName(ownerId: number): string {
+  if (!ownerId) {
+    return ''
+  }
+  return memberMap.value.get(ownerId) || ''
 }
 
 /** 首页页码 */
@@ -232,8 +249,40 @@ const editingDatasetId = ref('')
 const editMode = ref<'config' | 'preview'>('config')
 
 onMounted(async () => {
-  await loadDatasets()
+  await Promise.all([loadMemberMap(), loadDatasets()])
 })
+
+/**
+ * 加载当前工作区成员列表，构建 userId -> username 映射
+ * <p>
+ * 用于将数据集 ownerId 解析为可读用户名。失败时静默处理，memberMap 保持空映射。
+ */
+async function loadMemberMap(): Promise<void> {
+  const workspaceIdRaw = localStorage.getItem('workspaceId')
+  if (!workspaceIdRaw) {
+    return
+  }
+  let workspaceId: number
+  try {
+    workspaceId = JSON.parse(workspaceIdRaw)
+  } catch {
+    return
+  }
+  try {
+    const members = (await listWorkspaceMembers(workspaceId)) as unknown as WorkspaceMember[]
+    if (members && Array.isArray(members)) {
+      const map = new Map<number, string>()
+      for (const m of members) {
+        if (m.userId != null && m.username) {
+          map.set(Number(m.userId), m.username)
+        }
+      }
+      memberMap.value = map
+    }
+  } catch {
+    // 加载成员失败不影响数据集列表展示
+  }
+}
 
 /** 从后端加载数据集列表 */
 async function loadDatasets(): Promise<void> {
@@ -244,7 +293,7 @@ async function loadDatasets(): Promise<void> {
       datasets.value = list.map((ds: Dataset) => ({
         id: String(ds.id),
         name: ds.name || '',
-        owner: ds.owner || '',
+        ownerId: Number(ds.ownerId) || 0,
         modifier: ds.modifier || '',
         modifyTime: ds.updateTime || ds.createTime || '',
         datasourceName: ds.datasourceName || '',
@@ -268,7 +317,7 @@ const filteredData = computed((): DatasetItem[] => {
     result = result.filter(
       (item) =>
         item.name.toLowerCase().includes(keyword) ||
-        item.owner.toLowerCase().includes(keyword)
+        resolveOwnerName(item.ownerId).toLowerCase().includes(keyword)
     )
   }
   return result
