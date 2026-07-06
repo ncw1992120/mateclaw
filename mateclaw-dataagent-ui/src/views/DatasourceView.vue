@@ -442,8 +442,7 @@ async function handleTest(ds: Datasource): Promise<void> {
         // 刷新列表徽标状态（测试结果已持久化到后端）
         refreshAccountStatus(ds.id)
       } catch {
-        // 未绑定查询账号或查询账号测试失败
-        ElMessage.warning('未配置查询账号或测试失败，请先点击"查询账号"按钮配置你的查询账号')
+        // 未绑定查询账号或测试失败时，axios 拦截器已弹出后端错误消息，前端不再重复提示
       }
     }
     store.fetchDatasources()
