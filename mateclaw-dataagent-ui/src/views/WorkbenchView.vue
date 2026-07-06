@@ -801,7 +801,8 @@ onMounted(async () => {
   if (modelStore.enabledModels.length === 0) {
     await modelStore.fetchEnabledModels()
   }
-  if (modelStore.providers.length === 0) {
+  // Provider 列表仅全局管理员可访问
+  if (userStore.isAdmin && modelStore.providers.length === 0) {
     modelStore.fetchProviders()
   }
   // 点击非历史项区域时，关闭弹出的操作菜单

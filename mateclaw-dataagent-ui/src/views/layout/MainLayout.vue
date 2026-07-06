@@ -44,8 +44,8 @@
       </template>
     </div>
 
-    <!-- 模型配置弹窗 -->
-    <ModelConfigDialog v-model:visible="showModelConfig" />
+    <!-- 模型配置弹窗（仅全局管理员可见） -->
+    <ModelConfigDialog v-if="userStore.isAdmin" v-model:visible="showModelConfig" />
 
     <!-- Agent 配置弹窗 -->
     <AgentConfigDialog v-model:visible="showAgentConfig" :editing-agent="editingAgent" />
@@ -59,6 +59,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
+import { useUserStore } from '@/stores/useUserStore'
 import TopNavBar from './TopNavBar.vue'
 import SideMenu from './SideMenu.vue'
 import WorkspaceHome from '../workspace/WorkspaceHome.vue'
@@ -77,6 +78,7 @@ const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
+const userStore = useUserStore()
 
 /** 当前激活的顶部导航 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
@@ -153,7 +155,10 @@ onMounted(async () => {
   agentStore.fetchAgents(1)
   modelStore.fetchEnabledModels()
   modelStore.fetchActiveModel()
-  modelStore.fetchProviders()
+  // Provider 列表仅全局管理员可访问
+  if (userStore.isAdmin) {
+    modelStore.fetchProviders()
+  }
   // 先加载会话列表，续连时才能校验 conversationId 是否有效
   await chatStore.fetchConversations()
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）

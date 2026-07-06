@@ -33,20 +33,25 @@ public class DataAgentModelController {
 
     /**
      * 获取 Provider 列表（仅 enabled）
+     * <p>
+     * ProviderInfoDTO 含 apiKey/baseUrl 等敏感字段，仅全局管理员可访问。
+     * 普通用户如需获取可用模型列表，请使用 /enabled 或 /all-enabled 接口。
      */
     @GetMapping
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "Provider 列表", description = "获取已启用的供应商列表")
+    @RequireGlobalAdmin
+    @Operation(summary = "Provider 列表", description = "获取已启用的供应商列表（含敏感配置，仅全局管理员）")
     public R<List<ProviderInfoDTO>> listProviders() {
         return R.ok(runtime.listProviders());
     }
 
     /**
      * 获取 Provider 全量目录（含未启用）
+     * <p>
+     * ProviderInfoDTO 含 apiKey/baseUrl 等敏感字段，仅全局管理员可访问。
      */
     @GetMapping("/catalog")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "Provider 目录", description = "获取全量供应商目录（含未启用）")
+    @RequireGlobalAdmin
+    @Operation(summary = "Provider 目录", description = "获取全量供应商目录（含敏感配置，仅全局管理员）")
     public R<List<ProviderInfoDTO>> listCatalog() {
         return R.ok(runtime.listProviderCatalog());
     }
@@ -147,10 +152,13 @@ public class DataAgentModelController {
 
     /**
      * 获取所有模型（含启用和禁用）
+     * <p>
+     * 含禁用状态模型属于管理级信息，仅全局管理员可访问。
+     * 普通用户请使用 /enabled 或 /all-enabled 接口。
      */
     @GetMapping("/all")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "全部模型", description = "获取所有模型配置，包含启用和禁用状态")
+    @RequireGlobalAdmin
+    @Operation(summary = "全部模型", description = "获取所有模型配置（含禁用状态，仅全局管理员）")
     public R<List<ModelConfigEntity>> listAllModels() {
         return R.ok(runtime.listAllModels());
     }
@@ -187,10 +195,12 @@ public class DataAgentModelController {
 
     /**
      * 获取模型详情
+     * <p>
+     * 模型详情属于管理级信息，仅全局管理员可访问。
      */
     @GetMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "模型详情", description = "根据 ID 获取模型配置详情")
+    @RequireGlobalAdmin
+    @Operation(summary = "模型详情", description = "根据 ID 获取模型配置详情（仅全局管理员）")
     public R<ModelConfigEntity> getModel(@PathVariable Long id) {
         return R.ok(runtime.getModel(id));
     }
@@ -302,10 +312,12 @@ public class DataAgentModelController {
 
     /**
      * 获取默认向量模型
+     * <p>
+     * 默认向量模型配置属于管理级信息，仅全局管理员可访问。
      */
     @GetMapping("/default-embedding")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "获取默认向量模型", description = "获取当前配置的默认向量（embedding）模型")
+    @RequireGlobalAdmin
+    @Operation(summary = "获取默认向量模型", description = "获取当前配置的默认向量模型（仅全局管理员）")
     public R<ModelConfigEntity> getDefaultEmbeddingModel() {
         return R.ok(runtime.getDefaultEmbeddingModel());
     }

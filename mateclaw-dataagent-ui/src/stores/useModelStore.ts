@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ModelConfig, ModelProvider } from '@/types'
 import * as modelApi from '@/api/model'
+import { useUserStore } from '@/stores/useUserStore'
 
 /** 模型配置状态管理 */
 export const useModelStore = defineStore('model', () => {
@@ -24,19 +25,28 @@ export const useModelStore = defineStore('model', () => {
   async function fetchEnabledModels(): Promise<void> {
     loading.value = true
     try {
-      const [enabled, all] = await Promise.all([
-        modelApi.listAllEnabledModels() as unknown as ModelConfig[],
-        modelApi.listAllModels() as unknown as ModelConfig[],
-      ])
+      const enabled = await modelApi.listAllEnabledModels() as unknown as ModelConfig[]
       enabledModels.value = enabled.filter(m => m.enabled)
-      allModels.value = all
+      // 全量模型列表（含禁用）仅全局管理员可访问
+      const userStore = useUserStore()
+      if (userStore.isAdmin) {
+        const all = await modelApi.listAllModels() as unknown as ModelConfig[]
+        allModels.value = all
+      } else {
+        allModels.value = enabledModels.value
+      }
     } finally {
       loading.value = false
     }
   }
 
-  /** 获取 Provider 目录 */
+  /** 获取 Provider 目录（仅全局管理员可访问） */
   async function fetchProviders(): Promise<void> {
+    const userStore = useUserStore()
+    if (!userStore.isAdmin) {
+      providers.value = []
+      return
+    }
     loading.value = true
     try {
       const list = await modelApi.listCatalog() as unknown as Record<string, unknown>[]
@@ -214,8 +224,13 @@ export const useModelStore = defineStore('model', () => {
     await fetchEnabledModels()
   }
 
-  /** 获取默认向量模型 */
+  /** 获取默认向量模型（仅全局管理员可访问） */
   async function fetchDefaultEmbeddingModel(): Promise<void> {
+    const userStore = useUserStore()
+    if (!userStore.isAdmin) {
+      defaultEmbeddingModel.value = null
+      return
+    }
     try {
       defaultEmbeddingModel.value = await modelApi.getDefaultEmbeddingModel() as unknown as ModelConfig
     } catch {

@@ -48,8 +48,8 @@ export type PermissionCode = (typeof PERMISSION)[keyof typeof PERMISSION]
  * 全局 admin 自动放行所有权限点，此处仅定义工作区角色映射
  */
 const PERMISSION_ROLE_MAP: Record<string, string[]> = {
-  // 模型：manage 仅全局 admin（工作区角色为空数组）
-  [PERMISSION.MODEL_VIEW]: ['viewer', 'member', 'admin', 'owner'],
+  // 模型：view/manage 均仅全局 admin（模型配置为全局资源，含 API Key 等敏感信息）
+  [PERMISSION.MODEL_VIEW]: [],
   [PERMISSION.MODEL_MANAGE]: [],
   // 技能
   [PERMISSION.SKILL_VIEW]: ['viewer', 'member', 'admin', 'owner'],
