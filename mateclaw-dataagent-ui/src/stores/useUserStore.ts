@@ -50,9 +50,14 @@ export const useUserStore = defineStore('user', () => {
       localStorage.setItem('token', data.token)
     }
 
-    // 登录时默认选中第一个工作区
-    if (workspaces.value.length > 0 && !currentWorkspaceId.value) {
+    // 登录时校验 workspaceId 是否属于当前用户，不匹配则重置为第一个工作区
+    // 防止切换用户后 localStorage 残留旧 workspaceId 导致权限校验失败
+    const wsExists = workspaces.value.some((w) => w.id === currentWorkspaceId.value)
+    if (workspaces.value.length > 0 && !wsExists) {
       setCurrentWorkspace(workspaces.value[0].id)
+    } else if (workspaces.value.length === 0) {
+      currentWorkspaceId.value = null
+      localStorage.removeItem('workspaceId')
     }
   }
 
@@ -90,6 +95,20 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * 清除所有 mc- 前缀的 localStorage（聊天会话等业务状态），防止切换用户后脏数据
+   */
+  function clearMcLocalStorage(): void {
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('mc-')) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k))
+  }
+
+  /**
    * 退出登录
    */
   function logout(): void {
@@ -102,6 +121,8 @@ export const useUserStore = defineStore('user', () => {
     currentWorkspaceId.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('workspaceId')
+    // 清除所有 mc- 前缀的业务状态（聊天会话、Agent 选择、模型选择、数据源选择等）
+    clearMcLocalStorage()
   }
 
   return {

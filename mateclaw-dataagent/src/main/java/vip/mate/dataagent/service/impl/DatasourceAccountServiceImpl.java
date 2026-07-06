@@ -2,17 +2,21 @@ package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.dto.DatasourceAccountRequest;
 import vip.mate.dataagent.dto.DatasourceAccountVO;
 import vip.mate.dataagent.model.DatasourceAccountEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceAccountMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceAccountService;
 import vip.mate.dataagent.util.JdbcUtils;
 
@@ -27,7 +31,6 @@ import java.util.stream.Collectors;
  * 数据源用户查询账号服务实现
  */
 @Service
-@RequiredArgsConstructor
 public class DatasourceAccountServiceImpl implements DatasourceAccountService {
 
     private static final Logger log = LoggerFactory.getLogger(DatasourceAccountServiceImpl.class);
@@ -36,6 +39,20 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
 
     private final DatasourceAccountMapper datasourceAccountMapper;
     private final DatasourceMapper datasourceMapper;
+    /** @Lazy 打破与 AloudataServiceImpl 的循环依赖 */
+    private final AloudataService aloudataService;
+    private final AloudataConfigHelper aloudataConfigHelper;
+
+    public DatasourceAccountServiceImpl(
+            DatasourceAccountMapper datasourceAccountMapper,
+            DatasourceMapper datasourceMapper,
+            @Lazy AloudataService aloudataService,
+            AloudataConfigHelper aloudataConfigHelper) {
+        this.datasourceAccountMapper = datasourceAccountMapper;
+        this.datasourceMapper = datasourceMapper;
+        this.aloudataService = aloudataService;
+        this.aloudataConfigHelper = aloudataConfigHelper;
+    }
 
     /**
      * 查询用户在指定数据源上绑定的查询账号
@@ -124,6 +141,12 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
 
     /**
      * 测试用户查询账号连接
+     * <p>
+     * 按数据源类型区分测试方式：
+     * <ul>
+     *   <li>Aloudata 类型：用用户 auth-value 调用 Aloudata HTTP API 测试</li>
+     *   <li>JDBC 类型：用用户 username/password 走 JDBC 连接测试</li>
+     * </ul>
      */
     @Override
     public boolean testAccountConnection(Long datasourceId, Long userId) {
@@ -137,7 +160,47 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
             throw new IllegalArgumentException("数据源不存在, id=" + datasourceId);
         }
 
-        // 使用数据源的连接信息（host/port/database），但用用户自己的查询账号
+        boolean ok;
+        if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(datasource.getSourceType())) {
+            // Aloudata 类型：用用户 auth-value 调用 Aloudata HTTP API 测试
+            ok = testAloudataAccountConnection(datasource, account);
+        } else {
+            // JDBC 类型：用用户查询账号走 JDBC 连接测试
+            ok = testJdbcAccountConnection(datasource, account);
+        }
+
+        // 更新测试结果
+        account.setLastTestTime(LocalDateTime.now());
+        account.setLastTestOk(ok);
+        datasourceAccountMapper.updateById(account);
+        return ok;
+    }
+
+    /**
+     * Aloudata 类型查询账号连接测试
+     * <p>
+     * 用用户绑定的 auth-value（存于 queryPassword 字段）覆盖管理员 auth-value，
+     * 调用 Aloudata HTTP API（category_list 端点）验证连通性。
+     */
+    private boolean testAloudataAccountConnection(DatasourceEntity datasource, DatasourceAccountEntity account) {
+        try {
+            AloudataConfigDTO config = aloudataConfigHelper.parseConfig(datasource);
+            // 覆盖为用户自己的 auth-value（存于 queryPassword 字段）
+            config.setAuthValue(account.getQueryPassword());
+            return aloudataService.testConnection(config);
+        } catch (Exception e) {
+            log.warn("Aloudata 查询账号连接测试失败: datasourceId={}, userId={}, error={}",
+                    datasource.getId(), account.getUserId(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * JDBC 类型查询账号连接测试
+     * <p>
+     * 复用数据源的连接信息（host/port/database），但用用户自己的查询账号连接。
+     */
+    private boolean testJdbcAccountConnection(DatasourceEntity datasource, DatasourceAccountEntity account) {
         DatasourceEntity tempEntity = new DatasourceEntity();
         tempEntity.setSourceType(datasource.getSourceType());
         tempEntity.setHost(datasource.getHost());
@@ -149,16 +212,10 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
 
         String jdbcUrl = JdbcUtils.buildJdbcUrl(tempEntity);
         try (Connection conn = DriverManager.getConnection(jdbcUrl, account.getQueryUsername(), account.getQueryPassword())) {
-            // 更新测试结果
-            account.setLastTestTime(LocalDateTime.now());
-            account.setLastTestOk(true);
-            datasourceAccountMapper.updateById(account);
             return true;
         } catch (Exception e) {
-            log.warn("查询账号连接测试失败: datasourceId={}, userId={}, error={}", datasourceId, userId, e.getMessage());
-            account.setLastTestTime(LocalDateTime.now());
-            account.setLastTestOk(false);
-            datasourceAccountMapper.updateById(account);
+            log.warn("JDBC 查询账号连接测试失败: datasourceId={}, userId={}, error={}",
+                    datasource.getId(), account.getUserId(), e.getMessage());
             return false;
         }
     }

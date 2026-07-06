@@ -102,6 +102,7 @@
             </div>
             <div class="toolbar-right">
               <button
+                v-if="selectedDs.permission === 'edit'"
                 class="toolbar-btn"
                 :title="t('datasourcePage.actionToggle')"
                 @click="handleToggle(selectedDs)"
@@ -112,7 +113,7 @@
               <button
                 class="toolbar-btn"
                 :disabled="testingId === selectedDs.id"
-                :title="t('datasourcePage.actionTest')"
+                :title="selectedDs.permission === 'edit' ? t('datasourcePage.actionTest') : '测试你的查询账号连接（问数时使用此账号）'"
                 @click="handleTest(selectedDs)"
               >
                 <span class="btn-icon">{{ testingId === selectedDs.id ? '⏳' : '🔌' }}</span>
@@ -135,7 +136,7 @@
               </button>
               <button
                 class="toolbar-btn"
-                :title="t('datasourcePage.queryAccountConfig')"
+                :title="'配置你的查询账号（问数时使用此账号连接数据库，确保数据权限隔离）'"
                 @click="handleOpenAccountDialog"
               >
                 <span class="btn-icon">🔑</span>
@@ -268,10 +269,10 @@ onMounted(() => {
 /** 加载当前用户所有已绑定的查询账号，构建 datasourceId → account VO 映射 */
 async function loadAccountStatus(): Promise<void> {
   try {
-    const { data } = await datasourceApi.listDatasourceAccounts()
+    const accounts = await datasourceApi.listDatasourceAccounts()
     const map = new Map<string, DatasourceAccountVO>()
-    if (Array.isArray(data)) {
-      for (const acc of data) {
+    if (Array.isArray(accounts)) {
+      for (const acc of accounts) {
         map.set(String(acc.datasourceId), acc)
       }
     }
@@ -284,10 +285,10 @@ async function loadAccountStatus(): Promise<void> {
 /** 单条刷新指定数据源的账号绑定状态（测试/保存后调用） */
 async function refreshAccountStatus(datasourceId: string | number): Promise<void> {
   try {
-    const { data } = await datasourceApi.getDatasourceAccount(datasourceId)
+    const account = await datasourceApi.getDatasourceAccount(datasourceId)
     const map = new Map(accountStatusMap.value)
-    if (data) {
-      map.set(String(datasourceId), data)
+    if (account) {
+      map.set(String(datasourceId), account)
     } else {
       map.delete(String(datasourceId))
     }
@@ -412,15 +413,38 @@ function handleSelectDs(ds: Datasource): void {
   }
 }
 
-/** 测试连接 */
+/**
+ * 测试连接：按身份区分账号来源
+ * - owner（permission=edit）：用数据源配置的管理员账号测试
+ * - 非 owner（共享数据源查看者）：用当前用户的查询账号测试，未绑定时提示先配置
+ */
 async function handleTest(ds: Datasource): Promise<void> {
   testingId.value = ds.id
   try {
-    const result = await datasourceApi.testConnection(ds.id)
-    if (result) {
-      ElMessage.success(t('datasourcePage.testSuccess'))
+    const isOwner = ds.permission === 'edit'
+    if (isOwner) {
+      // owner 测试数据源本身的连接（管理员账号）
+      const result = await datasourceApi.testConnection(ds.id)
+      if (result) {
+        ElMessage.success(t('datasourcePage.testSuccess'))
+      } else {
+        ElMessage.error(t('datasourcePage.testFail'))
+      }
     } else {
-      ElMessage.error(t('datasourcePage.testFail'))
+      // 非 owner 测试当前用户的查询账号连接
+      try {
+        const result = await datasourceApi.testDatasourceAccount(ds.id)
+        if (result) {
+          ElMessage.success(t('datasourcePage.testSuccess'))
+        } else {
+          ElMessage.error(t('datasourcePage.testFail'))
+        }
+        // 刷新列表徽标状态（测试结果已持久化到后端）
+        refreshAccountStatus(ds.id)
+      } catch {
+        // 未绑定查询账号或查询账号测试失败
+        ElMessage.warning('未配置查询账号或测试失败，请先点击"查询账号"按钮配置你的查询账号')
+      }
     }
     store.fetchDatasources()
   } catch {
@@ -446,11 +470,11 @@ async function doSync(): Promise<void> {
   if (!selectedDs.value) return
   syncing.value = true
   try {
-    const { data } = await datasourceApi.syncAloudataSemantic(selectedDs.value.id)
-    if ((data as any)?.status === 'completed') {
+    const result = await datasourceApi.syncAloudataSemantic(selectedDs.value.id)
+    if (result?.status === 'completed') {
       ElMessage.success(t('metricPlatform.syncSuccess'))
     } else {
-      ElMessage.error((data as any)?.message || t('metricPlatform.syncFailed'))
+      ElMessage.error(result?.message || t('metricPlatform.syncFailed'))
     }
   } catch (e: any) {
     ElMessage.error(e?.message || t('metricPlatform.syncFailed'))
@@ -508,12 +532,12 @@ async function handleOpenAccountDialog(): Promise<void> {
   accountHasExisting.value = false
 
   try {
-    const { data } = await datasourceApi.getDatasourceAccount(selectedDs.value.id)
-    if (data) {
-      accountForm.value.queryUsername = data.queryUsername || ''
+    const account = await datasourceApi.getDatasourceAccount(selectedDs.value.id)
+    if (account) {
+      accountForm.value.queryUsername = account.queryUsername || ''
       accountForm.value.queryPassword = ''
       accountHasExisting.value = true
-      accountLastTestOk.value = data.lastTestOk ?? null
+      accountLastTestOk.value = account.lastTestOk ?? null
     }
   } catch {
     // 未绑定查询账号，忽略
@@ -585,9 +609,9 @@ async function handleTestAccountConnection(): Promise<void> {
       })
       accountHasExisting.value = true
     }
-    const { data } = await datasourceApi.testDatasourceAccount(selectedDs.value.id)
-    accountLastTestOk.value = !!data
-    if (data) {
+    const testOk = await datasourceApi.testDatasourceAccount(selectedDs.value.id)
+    accountLastTestOk.value = !!testOk
+    if (testOk) {
       ElMessage.success(t('datasourcePage.accountTestOk'))
     } else {
       ElMessage.error(t('datasourcePage.accountTestFail'))

@@ -88,6 +88,15 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('workspaceId')
+      // 清除所有 mc- 前缀的业务状态，防止下次登录脏数据
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('mc-')) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k))
       // 避免在登录页重复跳转
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'

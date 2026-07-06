@@ -103,7 +103,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         List<ResourceGrantEntity> grants = resourceGrantMapper.selectList(grantWrapper);
         visibleIds.addAll(grants.stream().map(ResourceGrantEntity::getResourceId).collect(Collectors.toSet()));
 
-        // 3. 工作区内元数据共享的数据源（仅 view 权限）
+        // 3. 工作区内元数据共享的数据源（仅 view 权限，用于元数据查询场景）
         LambdaQueryWrapper<DatasourceEntity> sharedWrapper = new LambdaQueryWrapper<>();
         sharedWrapper.eq(DatasourceEntity::getDeleted, 0)
                 .eq(DatasourceEntity::getWorkspaceId, workspaceId)
@@ -129,7 +129,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      * 解析当前用户对指定数据源的最高权限
      * <p>
      * owner 本人返回 edit，否则通过 PermissionChecker 解析授权表权限。
-     * 共享数据源（meta_shared=true）对非 owner 用户返回 view。
+     * 共享数据源（meta_shared=true）对非 owner 用户返回 view（仅元数据可读，不可编辑）。
+     * 无任何权限返回 null。
      */
     private String resolveDatasourcePermission(DatasourceEntity entity) {
         Long currentUserId = workspaceGuard.currentUserId();
@@ -145,7 +146,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (Boolean.TRUE.equals(entity.getMetaShared())) {
             return DataAgentConstants.PERMISSION_VIEW;
         }
-        return DataAgentConstants.PERMISSION_VIEW;
+        return null;
     }
 
     /**
@@ -160,6 +161,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
     /**
      * 根据 ID 获取数据源
+     * <p>
+     * 使用宽松校验（checkDatasourceReadable）：共享数据源（meta_shared=true）对同工作区非 owner 用户可读。
+     * 返回的 VO 中携带当前用户对该数据源的实际权限（owner=edit / 授权=view|use|edit / 共享=view）。
      */
     @Override
     public DatasourceVO getDatasource(Long id) {
@@ -167,7 +171,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity == null || entity.getDeleted() == 1) {
             return null;
         }
-        String permission = requireDatasourceAccess(entity);
+        // 校验工作区归属 + 可读性（owner / meta_shared / 资源授权）
+        checkDatasourceReadable(entity);
+        String permission = resolveDatasourcePermission(entity);
         return toVO(entity, permission);
     }
 
@@ -212,10 +218,19 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity == null || entity.getDeleted() == 1) {
             throw new BusinessException(404, "数据源不存在: " + datasourceId);
         }
+        checkDatasourceReadable(entity);
+    }
+
+    /**
+     * 校验当前用户对指定数据源是否具有可读权限（已持有 entity，避免重复查询）
+     * <p>
+     * 校验：存在性 + 工作区归属 + (owner / meta_shared / 资源授权) 任一条件满足。
+     */
+    private void checkDatasourceReadable(DatasourceEntity entity) {
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
         if (entity.getWorkspaceId() == null
                 || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
-            throw new BusinessException(403, "无权访问该数据源: " + datasourceId);
+            throw new BusinessException(403, "无权访问该数据源: " + entity.getName());
         }
         Long currentUserId = workspaceGuard.currentUserId();
         // owner 自动放行
@@ -230,7 +245,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         String permission = permissionChecker.resolveHighestPermission(
                 DataAgentConstants.RESOURCE_TYPE_DATASOURCE, entity.getId());
         if (permission == null) {
-            throw new BusinessException(403, "无权访问该数据源: " + datasourceId);
+            throw new BusinessException(403, "无权访问该数据源: " + entity.getName());
         }
     }
 
@@ -442,7 +457,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public List<DatasourceTableVO> listTables(Long datasourceId) {
-        requireDatasourceAccess(datasourceId);
+        checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceTableEntity::getDeleted, 0);
@@ -456,7 +471,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public DatasourceTableVO getTableDetail(Long datasourceId, Long tableId) {
-        requireDatasourceAccess(datasourceId);
+        checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getId, tableId);
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
@@ -476,7 +491,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public List<DatasourceColumnVO> listColumns(Long datasourceId, Long tableId) {
-        requireDatasourceAccess(datasourceId);
+        checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
@@ -541,7 +556,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (datasourceEntity == null || datasourceEntity.getDeleted() == 1) {
             throw new RuntimeException("数据源不存在: " + datasourceId);
         }
-        requireDatasourceAccess(datasourceEntity);
+        checkDatasourceReadable(datasourceEntity);
         DatasourceTableEntity tableEntity = datasourceTableMapper.selectById(tableId);
         if (tableEntity == null || !tableEntity.getDatasourceId().equals(datasourceId)) {
             throw new RuntimeException("表不存在或与数据源不匹配: " + tableId);
@@ -1100,7 +1115,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity.getUpdateTime() != null) {
             vo.setUpdateTime(entity.getUpdateTime().toString());
         }
-        // use/view 权限不可查看连接配置等敏感信息（view 适用于资源授权 view 用户和共享数据源的非 owner 用户）
+        // use/view 权限不可查看连接配置等敏感信息（仅适用于资源授权 view/use 用户）
         if (DataAgentConstants.PERMISSION_USE.equals(permission)
                 || DataAgentConstants.PERMISSION_VIEW.equals(permission)) {
             vo.setHost(null);

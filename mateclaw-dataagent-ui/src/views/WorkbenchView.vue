@@ -529,6 +529,8 @@ function handleWorkspaceCommand(command: string | number): void {
 /** 用户菜单命令处理 */
 function handleUserCommand(command: string): void {
   if (command === 'logout') {
+    // 先清理聊天内存状态（会话列表、流式状态等），再清除登录态，避免切换用户后脏数据
+    chatStore.resetForWorkspaceSwitch()
     userStore.logout()
     router.push('/login')
   }
