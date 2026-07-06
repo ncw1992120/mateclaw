@@ -334,7 +334,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (request.getUsername() != null) {
             entity.setUsername(request.getUsername());
         }
-        if (request.getPassword() != null) {
+        if (request.getPassword() != null && !request.getPassword().isEmpty()) {
             entity.setPassword(request.getPassword());
         }
         if (request.getConnectionParams() != null) {
@@ -1126,10 +1126,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             vo.setConnectionParams(null);
             vo.setSchemaName(null);
         } else {
-            // edit 权限：密码脱敏，仅返回占位符用于编辑回显
-            if (vo.getPassword() != null && !vo.getPassword().isBlank()) {
-                vo.setPassword("******");
-            }
+            // edit 权限：密码不再回显给前端，编辑时留空表示不修改
+            vo.setPassword(null);
         }
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, entity.getId());

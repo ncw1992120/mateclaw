@@ -136,7 +136,7 @@
                     v-model="form.authValue"
                     class="form-input"
                     :type="showPassword ? 'text' : 'password'"
-                    :placeholder="form.authType === 'UID' ? '请输入用户 ID' : form.authType === 'TOKEN' ? '请输入 TOKEN' : form.authType === 'APIKEY' ? '请输入 APIKEY' : '请输入账号'"
+                    :placeholder="isEditMode ? '请输入新认证值，留空表示不修改' : (form.authType === 'UID' ? '请输入用户 ID' : form.authType === 'TOKEN' ? '请输入 TOKEN' : form.authType === 'APIKEY' ? '请输入 APIKEY' : '请输入账号')"
                   />
                   <button
                     type="button"
@@ -201,7 +201,7 @@
                     v-model="form.password"
                     class="form-input"
                     :type="showPassword ? 'text' : 'password'"
-                    :placeholder="t('dsForm.placeholderPassword')"
+                    :placeholder="isEditMode ? '请输入新密码，留空表示不修改' : t('dsForm.placeholderPassword')"
                   />
                   <button
                     type="button"
@@ -489,6 +489,8 @@ const whitelistIps = `47.101.100.24/0,191.0.0.0/47,10.137.30/0,192.92.0/0,234.20
 /** 验证表单必填项 */
 function validateForm(): { valid: boolean; message: string } {
   const isAloudata = selectedDbId.value === 60
+  // 是否为更新已有记录（编辑模式 或 多步骤创建中已生成记录）
+  const isUpdate = isEditMode.value || createdDsId.value
   
   // 通用必填项检查
   if (!form.displayName || !form.displayName.trim()) {
@@ -512,7 +514,8 @@ function validateForm(): { valid: boolean; message: string } {
     if (!form.tenantId || !form.tenantId.trim()) {
       return { valid: false, message: '租户 ID 不能为空' }
     }
-    if (!form.authValue || !form.authValue.trim()) {
+    // 新建模式认证值必填；更新模式留空表示不修改
+    if (!isUpdate && (!form.authValue || !form.authValue.trim())) {
       return { valid: false, message: '认证值不能为空' }
     }
   } else {
@@ -529,7 +532,8 @@ function validateForm(): { valid: boolean; message: string } {
     if (!form.username || !form.username.trim()) {
       return { valid: false, message: t('dsForm.validation.usernameRequired') }
     }
-    if (!form.password || !form.password.trim()) {
+    // 新建模式密码必填；更新模式留空表示不修改
+    if (!isUpdate && (!form.password || !form.password.trim())) {
       return { valid: false, message: t('dsForm.validation.passwordRequired') }
     }
   }
@@ -567,10 +571,14 @@ function buildCreateRequest() {
     port: isAloudata ? undefined : Number(form.port) || 3306,
     databaseName: form.database,
     username: isAloudata ? form.tenantId : form.username,
-    password: isAloudata ? form.authValue : form.password,
     enabled: true,
     // 元数据是否共享（同工作区所有用户可查看）
     metaShared: form.metaShared,
+  }
+  // 编辑模式：密码/认证值留空表示不修改；新建模式需在前端校验中保证已填写
+  const pwd = isAloudata ? form.authValue : form.password
+  if (pwd && pwd.trim()) {
+    request.password = pwd
   }
   // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {

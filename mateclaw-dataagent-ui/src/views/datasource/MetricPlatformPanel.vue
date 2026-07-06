@@ -154,7 +154,7 @@
                 class="form-input"
                 :type="showPassword ? 'text' : 'password'"
                 :disabled="!isEditing"
-                :placeholder="t('metricPlatform.placeholderAuthValue')"
+                :placeholder="isEditing ? '请输入新认证值，留空表示不修改' : '********'"
               />
               <button
                 type="button"
@@ -596,7 +596,8 @@ function fillFormFromDatasource(ds: Datasource): void {
   form.semanticPort = cp.semanticPort != null ? String(cp.semanticPort) : ''
   form.tenantId = ds.username || ''
   form.authMethod = cp.authType || 'UID'
-  form.authValue = ds.password || ''
+  // 认证值不再回显，编辑时留空表示不修改密码
+  form.authValue = ''
   form.metaShared = ds.metaShared ?? false
   Object.assign(formBackup, form)
 }
@@ -1177,13 +1178,17 @@ async function handleSave(): Promise<void> {
         semanticPort: Number(form.semanticPort) || 8080,
         authType: form.authMethod,
       }
-      const updated = await datasourceApi.update(props.datasourceId, {
+      const payload: Record<string, any> = {
         name: form.displayName,
         username: form.tenantId,
-        password: form.authValue,
         connectionParams: JSON.stringify(params),
         metaShared: form.metaShared,
-      } as never)
+      }
+      // 仅当用户填写了新认证值时才提交，留空表示不修改密码
+      if (form.authValue && form.authValue.trim()) {
+        payload.password = form.authValue
+      }
+      const updated = await datasourceApi.update(props.datasourceId, payload as never)
       // 用接口返回的最新数据回填表单，保证与服务端一致
       fillFormFromDatasource(updated)
       // 刷新列表与工具栏的展示名称
