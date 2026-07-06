@@ -136,7 +136,7 @@
                     v-model="form.authValue"
                     class="form-input"
                     :type="showPassword ? 'text' : 'password'"
-                    :placeholder="isEditMode ? '请输入新认证值，留空表示不修改' : (form.authType === 'UID' ? '请输入用户 ID' : form.authType === 'TOKEN' ? '请输入 TOKEN' : form.authType === 'APIKEY' ? '请输入 APIKEY' : '请输入账号')"
+                    :placeholder="isEditMode ? '请输入新认证值，留空表示不修改' : ''"
                   />
                   <button
                     type="button"
@@ -201,7 +201,7 @@
                     v-model="form.password"
                     class="form-input"
                     :type="showPassword ? 'text' : 'password'"
-                    :placeholder="isEditMode ? '请输入新密码，留空表示不修改' : t('dsForm.placeholderPassword')"
+                    :placeholder="isEditMode ? '请输入新密码，留空表示不修改' : ''"
                   />
                   <button
                     type="button"

@@ -566,8 +566,10 @@ async function handleSaveAccount(): Promise<void> {
     })
     accountHasExisting.value = true
     // 刷新列表徽标状态
-    refreshAccountStatus(selectedDs.value.id)
+    await refreshAccountStatus(selectedDs.value.id)
     ElMessage.success(t('datasourcePage.queryAccountSaveSuccess'))
+    // 保存成功后关闭弹窗
+    accountDialogVisible.value = false
   } catch (e: any) {
     ElMessage.error(e?.message || t('datasourcePage.queryAccountSaveFail'))
   }
@@ -594,21 +596,16 @@ async function handleDeleteAccount(): Promise<void> {
   }
 }
 
-/** 测试查询账号连接 */
+/** 测试查询账号连接（仅做连通性测试，不修改数据库） */
 async function handleTestAccountConnection(): Promise<void> {
   if (!selectedDs.value) return
   accountTesting.value = true
   try {
-    // 先保存，再测试
-    if (canSaveAccount.value) {
-      await datasourceApi.upsertDatasourceAccount({
-        datasourceId: selectedDs.value.id,
-        queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
-        queryPassword: accountForm.value.queryPassword,
-      })
-      accountHasExisting.value = true
-    }
-    const testOk = await datasourceApi.testDatasourceAccount(selectedDs.value.id)
+    // 使用当前表单中的账号参数进行临时测试，不保存到数据库
+    const testOk = await datasourceApi.testDatasourceAccount(selectedDs.value.id, {
+      queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
+      queryPassword: accountForm.value.queryPassword,
+    })
     accountLastTestOk.value = !!testOk
     if (testOk) {
       ElMessage.success(t('datasourcePage.accountTestOk'))
@@ -620,8 +617,6 @@ async function handleTestAccountConnection(): Promise<void> {
     ElMessage.error(e?.message || t('datasourcePage.accountTestFail'))
   } finally {
     accountTesting.value = false
-    // 测试完成后刷新列表徽标状态（无论成功失败，lastTestOk 已持久化到后端）
-    refreshAccountStatus(selectedDs.value!.id)
   }
 }
 </script>

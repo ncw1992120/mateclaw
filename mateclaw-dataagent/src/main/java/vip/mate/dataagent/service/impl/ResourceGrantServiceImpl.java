@@ -67,10 +67,40 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ResourceGrantEntity grant(ResourceGrantRequest request) {
         Long workspaceId = workspaceGuard.currentWorkspaceId();
         Long grantedBy = workspaceGuard.currentUserId();
+
+        // 查询是否已存在相同授权记录（包含已撤销的），避免唯一索引冲突
+        ResourceGrantEntity existing = resourceGrantMapper.selectOne(
+                new LambdaQueryWrapper<ResourceGrantEntity>()
+                        .eq(ResourceGrantEntity::getWorkspaceId, workspaceId)
+                        .eq(ResourceGrantEntity::getResourceType, request.getResourceType())
+                        .eq(ResourceGrantEntity::getResourceId, request.getResourceId())
+                        .eq(ResourceGrantEntity::getGrantType, request.getGrantType())
+                        .eq(ResourceGrantEntity::getGranteeId, request.getGranteeId())
+                        .eq(ResourceGrantEntity::getPermission, request.getPermission())
+                        .eq(ResourceGrantEntity::getDeleted, 0));
+
+        if (existing != null) {
+            if (existing.getStatus() == DataAgentConstants.GRANT_STATUS_ACTIVE) {
+                throw new BusinessException(409, "该授权记录已存在");
+            }
+            // 已撤销记录直接恢复为生效状态，避免唯一键冲突
+            existing.setGrantedBy(grantedBy);
+            existing.setStatus(DataAgentConstants.GRANT_STATUS_ACTIVE);
+            if (request.getExpireTime() != null && !request.getExpireTime().isBlank()) {
+                existing.setExpireTime(LocalDateTime.parse(request.getExpireTime(), DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            } else {
+                existing.setExpireTime(null);
+            }
+            resourceGrantMapper.updateById(existing);
+            log.info("Resource grant restored: type={}, id={}, grantee={}, permission={}, by={}",
+                    request.getResourceType(), request.getResourceId(), request.getGranteeId(),
+                    request.getPermission(), grantedBy);
+            return existing;
+        }
 
         ResourceGrantEntity entity = new ResourceGrantEntity();
         entity.setResourceType(request.getResourceType());

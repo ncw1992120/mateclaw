@@ -182,9 +182,9 @@ export function deleteDatasourceAccount(datasourceId: string | number) {
   return api.delete(`${ACCOUNT_BASE_URL}/${datasourceId}`)
 }
 
-/** 测试当前用户的查询账号连接 */
-export function testDatasourceAccount(datasourceId: string | number) {
-  return api.post<boolean>(`${ACCOUNT_BASE_URL}/${datasourceId}/test`)
+/** 测试当前用户的查询账号连接（支持传入临时账号参数进行预测试，不持久化） */
+export function testDatasourceAccount(datasourceId: string | number, data?: { queryUsername: string; queryPassword: string }) {
+  return api.post<boolean>(`${ACCOUNT_BASE_URL}/${datasourceId}/test`, data || {})
 }
 
 /** 数据源用户查询账号视图对象 */

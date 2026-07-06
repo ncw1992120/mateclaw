@@ -147,25 +147,42 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
      *   <li>Aloudata 类型：用用户 auth-value 调用 Aloudata HTTP API 测试</li>
      *   <li>JDBC 类型：用用户 username/password 走 JDBC 连接测试</li>
      * </ul>
+     * <p>
+     * 支持传入临时账号参数进行预测试，此时不修改数据库；
+     * 不传参数时使用已绑定的账号测试并更新 last_test_time / last_test_ok。
      */
     @Override
-    public boolean testAccountConnection(Long datasourceId, Long userId) {
-        DatasourceAccountEntity account = getByDatasourceIdAndUserId(datasourceId, userId);
-        if (account == null) {
-            throw new IllegalArgumentException("未找到该用户在此数据源上的查询账号绑定");
-        }
-
+    public boolean testAccountConnection(Long datasourceId, Long userId, DatasourceAccountRequest request) {
         DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
         if (datasource == null) {
             throw new IllegalArgumentException("数据源不存在, id=" + datasourceId);
         }
 
         boolean ok;
+        boolean isTempTest = request != null && request.getQueryPassword() != null && !request.getQueryPassword().isEmpty();
+
+        if (isTempTest) {
+            // 临时测试：使用传入的参数，不查询数据库，不持久化
+            DatasourceAccountEntity tempAccount = new DatasourceAccountEntity();
+            tempAccount.setQueryUsername(request.getQueryUsername());
+            tempAccount.setQueryPassword(request.getQueryPassword());
+            if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(datasource.getSourceType())) {
+                ok = testAloudataAccountConnection(datasource, tempAccount);
+            } else {
+                ok = testJdbcAccountConnection(datasource, tempAccount);
+            }
+            return ok;
+        }
+
+        // 非临时测试：使用已绑定的账号
+        DatasourceAccountEntity account = getByDatasourceIdAndUserId(datasourceId, userId);
+        if (account == null) {
+            throw new IllegalArgumentException("未找到该用户在此数据源上的查询账号绑定");
+        }
+
         if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(datasource.getSourceType())) {
-            // Aloudata 类型：用用户 auth-value 调用 Aloudata HTTP API 测试
             ok = testAloudataAccountConnection(datasource, account);
         } else {
-            // JDBC 类型：用用户查询账号走 JDBC 连接测试
             ok = testJdbcAccountConnection(datasource, account);
         }
 

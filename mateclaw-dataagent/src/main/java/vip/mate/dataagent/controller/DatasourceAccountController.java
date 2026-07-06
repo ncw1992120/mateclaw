@@ -88,14 +88,15 @@ public class DatasourceAccountController {
     }
 
     /**
-     * 测试当前用户的查询账号连接
+     * 测试当前用户的查询账号连接（支持临时账号参数，不持久化）
      */
     @PostMapping("/{datasourceId}/test")
-    @Operation(summary = "测试查询账号连接", description = "测试当前用户在指定数据源上的查询账号是否可以成功连接")
+    @Operation(summary = "测试查询账号连接", description = "测试当前用户在指定数据源上的查询账号是否可以成功连接。支持传入临时账号参数进行预测试，不修改数据库；不传参数则使用已绑定的账号测试")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
     public R<Boolean> testConnection(
-            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @RequestBody(required = false) DatasourceAccountRequest request) {
         Long userId = UserContextHolder.getUserId();
-        return R.ok(datasourceAccountService.testAccountConnection(datasourceId, userId));
+        return R.ok(datasourceAccountService.testAccountConnection(datasourceId, userId, request));
     }
 }

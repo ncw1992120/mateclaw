@@ -154,7 +154,7 @@
                 class="form-input"
                 :type="showPassword ? 'text' : 'password'"
                 :disabled="!isEditing"
-                :placeholder="isEditing ? '请输入新认证值，留空表示不修改' : '********'"
+                :placeholder="isEditing ? '请输入新认证值，留空表示不修改' : ''"
               />
               <button
                 type="button"

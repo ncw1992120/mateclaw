@@ -384,9 +384,9 @@ export default {
     renameTooLong: 'Name cannot exceed 64 characters',
     deleteConfirmMessage: 'Are you sure you want to delete datasource "{name}"? This action cannot be undone',
     /** Query account configuration */
-    queryAccountConfig: 'Query Account',
-    queryAccountDialogTitle: 'Configure Datasource Query Account',
-    queryAccountHint: 'Configure your own datasource query account. Queries will use this account to connect to the database, ensuring permission isolation. For Aloudata, only the auth-value is required, assigned by the Aloudata platform.',
+    queryAccountConfig: 'Bind Aloudata Account',
+    queryAccountDialogTitle: 'Bind Aloudata Account',
+    queryAccountHint: 'After binding, your own Aloudata account will be used when querying the metric platform, ensuring data permission isolation. Please enter the auth-value assigned by the Aloudata platform.',
     aloudataAuthValue: 'Auth Value',
     aloudataAuthValuePlaceholder: 'Enter the auth-value assigned by Aloudata platform',
     queryUsername: 'Query Username',

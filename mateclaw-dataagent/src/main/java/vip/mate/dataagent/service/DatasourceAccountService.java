@@ -72,7 +72,8 @@ public interface DatasourceAccountService {
      *
      * @param datasourceId 数据源 ID
      * @param userId       用户 ID
+     * @param request      可选的临时账号参数，传入时优先使用此参数进行测试且不持久化
      * @return 连接是否成功
      */
-    boolean testAccountConnection(Long datasourceId, Long userId);
+    boolean testAccountConnection(Long datasourceId, Long userId, DatasourceAccountRequest request);
 }
