@@ -281,11 +281,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         DatasourceEntity entity = new DatasourceEntity();
         BeanUtils.copyProperties(request, entity);
         entity.setOwnerId(ownerId);
-        // 元数据共享：显式传入优先，否则 Aloudata 类型默认共享，其他类型默认不共享
+        // 元数据共享：显式传入优先，否则默认 false
         if (request.getMetaShared() != null) {
             entity.setMetaShared(request.getMetaShared());
-        } else if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(request.getSourceType())) {
-            entity.setMetaShared(true);
         } else {
             entity.setMetaShared(false);
         }

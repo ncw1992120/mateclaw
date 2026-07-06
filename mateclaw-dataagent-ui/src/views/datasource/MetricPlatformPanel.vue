@@ -167,6 +167,20 @@
               </button>
             </div>
           </div>
+
+          <!-- 共享元数据 -->
+          <div class="form-field form-field-wide">
+            <label class="checkbox-label">
+              <label class="switch">
+                <input v-model="form.metaShared" type="checkbox" :disabled="!isEditing" />
+                <span class="slider"></span>
+              </label>
+              <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
+            </label>
+            <p class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">
+              开启后，同工作区其他用户可查看该数据源的元数据（不包含连接配置）
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -542,6 +556,7 @@ const form = reactive({
   tenantId: '',
   authMethod: 'UID',
   authValue: '',
+  metaShared: false,
 })
 
 /** 编辑前的表单快照（取消时恢复） */
@@ -582,6 +597,7 @@ function fillFormFromDatasource(ds: Datasource): void {
   form.tenantId = ds.username || ''
   form.authMethod = cp.authType || 'UID'
   form.authValue = ds.password || ''
+  form.metaShared = ds.metaShared ?? false
   Object.assign(formBackup, form)
 }
 
@@ -1166,6 +1182,7 @@ async function handleSave(): Promise<void> {
         username: form.tenantId,
         password: form.authValue,
         connectionParams: JSON.stringify(params),
+        metaShared: form.metaShared,
       } as never)
       // 用接口返回的最新数据回填表单，保证与服务端一致
       fillFormFromDatasource(updated)
@@ -2019,5 +2036,70 @@ const indicators = reactive([
 .expand-empty {
   font-size: 13px;
   color: #86909c;
+}
+
+/* ========== 共享元数据开关样式（与 DatasourceForm 保持一致） ========== */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type='checkbox'] {
+  display: none;
+}
+
+.switch-text {
+  font-size: 13px;
+  color: #4e5969;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #c9cdd4;
+  border-radius: 10px;
+  transition: background 0.25s;
+}
+
+.slider::before {
+  content: '';
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.25s;
+}
+
+.switch input:checked + .slider {
+  background: #165dff;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(16px);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
