@@ -20,6 +20,17 @@ export const useDatasourceStore = defineStore('datasource', () => {
   /** Schema 发现中 */
   const discovering = ref(false)
 
+  /** 重置所有状态（用于切换用户/工作区时清理脏数据） */
+  function reset(): void {
+    datasources.value = []
+    currentDatasource.value = null
+    currentTables.value = []
+    currentTableDetail.value = null
+    currentColumns.value = []
+    loading.value = false
+    discovering.value = false
+  }
+
   /** 获取数据源列表 */
   async function fetchDatasources(): Promise<void> {
     loading.value = true
@@ -140,5 +151,6 @@ export const useDatasourceStore = defineStore('datasource', () => {
     fetchTableDetail,
     fetchColumns,
     deleteDatasourceTable,
+    reset,
   }
 })

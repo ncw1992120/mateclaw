@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
+import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { CurrentUserInfo, LoginResponse, Workspace } from '@/types'
 
 /** 用户认证状态管理 */
@@ -123,6 +124,8 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('workspaceId')
     // 清除所有 mc- 前缀的业务状态（聊天会话、Agent 选择、模型选择、数据源选择等）
     clearMcLocalStorage()
+    // 重置数据源 store，防止切换用户后残留旧用户的数据源列表导致 403
+    useDatasourceStore().reset()
   }
 
   return {
