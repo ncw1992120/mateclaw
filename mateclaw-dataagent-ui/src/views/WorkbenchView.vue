@@ -50,7 +50,7 @@
                   <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
                   <span v-if="ws.memberRole" class="ws-role">{{ ws.memberRole }}</span>
                 </el-dropdown-item>
-                <el-dropdown-item divided command="manage">
+                <el-dropdown-item v-if="canManageWorkspace" divided command="manage">
                   <span class="workspace-manage-text">{{ t('workspace.manage') }}</span>
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -75,7 +75,7 @@
                   <span class="workspace-item-name">{{ workspaceDisplayName(ws) }}</span>
                   <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
                 </el-dropdown-item>
-                <el-dropdown-item divided command="manage">{{ t('workspace.manage') }}</el-dropdown-item>
+                <el-dropdown-item v-if="canManageWorkspace" divided command="manage">{{ t('workspace.manage') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -330,13 +330,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { usePersistedRef, usePersistedState } from '@/composables/usePersistedRef'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ChatView from '@/views/ChatView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
@@ -347,11 +348,16 @@ import type { Conversation, Workspace } from '@/types'
 const SIDEBAR_ITEM_KEYS = ['qa', 'interpret', 'report', 'skill', 'help'] as const
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
 const userStore = useUserStore()
+const { hasPermission } = usePermission()
+
+/** 当前用户是否有管理工作区权限（workspace:manage） */
+const canManageWorkspace = computed<boolean>(() => hasPermission(PERMISSION.WORKSPACE_MANAGE))
 
 /** 用户头像文字 */
 const avatarText = computed(() => {
@@ -516,7 +522,14 @@ function workspaceDisplayName(ws: Workspace | null): string {
 /** 工作区下拉命令处理 */
 function handleWorkspaceCommand(command: string | number): void {
   if (command === 'manage') {
-    router.push({ path: '/', query: { nav: 'workspace' } })
+    if (!canManageWorkspace.value) {
+      ElMessage.warning(t('workspace.manageNoPermission'))
+      return
+    }
+    // 通过 localStorage 预置配置中心 Tab 和工作空间子菜单，实现直达“工作空间-工作区”
+    localStorage.setItem('mc-config-center-active-tab', 'workspace')
+    localStorage.setItem('mc-workspace-active-sub-menu', 'workspaceManage')
+    router.push({ path: '/', query: { menu: 'skill' } })
     return
   }
   // 切换工作空间前清理当前会话相关缓存，避免刷新后恢复旧工作空间的脏数据
@@ -794,10 +807,31 @@ watch(
 )
 
 /**
+ * 监听路由 query.menu，支持同页跳转（如点击“管理工作区”）。
+ * onMounted 只处理页面首次挂载；watch 处理组件已挂载后的 query 变化。
+ */
+watch(
+  () => route.query.menu as string | undefined,
+  (menuQuery) => {
+    if (menuQuery && (SIDEBAR_ITEM_KEYS as readonly string[]).includes(menuQuery)) {
+      activeSidebarItem.value = menuQuery as (typeof SIDEBAR_ITEM_KEYS)[number]
+      router.replace({ path: '/', query: {} })
+    }
+  }
+)
+
+/**
  * 挂载时确保模型数据已就绪
  * 注意：fetchActiveModel 依赖 enabledModels，需要按顺序调用
  */
 onMounted(async () => {
+  // 处理外部跳转入口：如“管理工作区”会携带 ?menu=skill，需要激活对应侧边栏菜单并清理 query
+  const menuQuery = route.query.menu as string
+  if (menuQuery && (SIDEBAR_ITEM_KEYS as readonly string[]).includes(menuQuery)) {
+    activeSidebarItem.value = menuQuery as (typeof SIDEBAR_ITEM_KEYS)[number]
+    router.replace({ path: '/', query: {} })
+  }
+
   if (modelStore.enabledModels.length === 0) {
     await modelStore.fetchEnabledModels()
   }

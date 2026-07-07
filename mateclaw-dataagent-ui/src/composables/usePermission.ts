@@ -54,10 +54,10 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   // 技能
   [PERMISSION.SKILL_VIEW]: ['viewer', 'member', 'admin', 'owner'],
   [PERMISSION.SKILL_MANAGE]: ['admin', 'owner'],
-  // 数据源
+  // 数据源：create/manage 仅管理员（数据源配置涉及连接信息等敏感数据）
   [PERMISSION.DATASOURCE_VIEW]: ['viewer', 'member', 'admin', 'owner'],
-  [PERMISSION.DATASOURCE_CREATE]: ['member', 'admin', 'owner'],
-  [PERMISSION.DATASOURCE_MANAGE]: ['member', 'admin', 'owner'],
+  [PERMISSION.DATASOURCE_CREATE]: ['admin', 'owner'],
+  [PERMISSION.DATASOURCE_MANAGE]: ['admin', 'owner'],
   [PERMISSION.DATASOURCE_SYNC]: ['admin', 'owner'],
   // 业务词典
   [PERMISSION.BUSINESS_TERM_VIEW]: ['viewer', 'member', 'admin', 'owner'],

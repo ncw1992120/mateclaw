@@ -94,7 +94,7 @@ public class DataAgentSkillController {
      * 创建技能
      */
     @PostMapping
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "创建技能", description = "新增技能配置")
     public R<SkillEntity> create(@RequestBody SkillEntity entity) {
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
@@ -105,7 +105,7 @@ public class DataAgentSkillController {
      * 更新技能
      */
     @PutMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "更新技能", description = "更新技能配置")
     public R<SkillEntity> update(@PathVariable Long id, @RequestBody SkillEntity entity) {
         skillGuard.requireSkillInCurrentWorkspace(id);
@@ -117,7 +117,7 @@ public class DataAgentSkillController {
      * 硬删除技能
      */
     @DeleteMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除技能", description = "硬删除指定技能（不可恢复）")
     public R<Void> delete(@PathVariable Long id) {
         skillGuard.requireSkillInCurrentWorkspace(id);
@@ -129,7 +129,7 @@ public class DataAgentSkillController {
      * 切换技能启停状态
      */
     @PutMapping("/{id}/toggle")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "启停切换", description = "启用或禁用指定技能")
     public R<SkillEntity> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
         skillGuard.requireSkillInCurrentWorkspace(id);
@@ -154,7 +154,7 @@ public class DataAgentSkillController {
      * 启动异步安装任务（从 URL / 市场）
      */
     @PostMapping("/install/start")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "启动技能安装", description = "根据 bundleUrl 启动一个异步安装任务，支持 GitHub 仓库或 ClawHub 市场")
     public R<InstallTask> startInstall(@RequestBody SkillInstallRequest request) {
         if (request == null || request.getBundleUrl() == null || request.getBundleUrl().isBlank()) {
@@ -188,7 +188,7 @@ public class DataAgentSkillController {
      * 取消安装任务
      */
     @PostMapping("/install/cancel/{taskId}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "取消安装任务", description = "取消正在执行的安装任务")
     public R<Void> cancelInstall(@PathVariable String taskId) {
         runtime.cancelInstallTask(taskId);
@@ -199,7 +199,7 @@ public class DataAgentSkillController {
      * 上传 ZIP 包安装
      */
     @PostMapping(value = "/install/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "上传 ZIP 安装", description = "上传 .zip 包同步安装技能")
     public R<Map<String, Object>> uploadZip(
             @RequestPart("file") MultipartFile zipFile,
@@ -233,7 +233,7 @@ public class DataAgentSkillController {
      * 按名称卸载技能
      */
     @DeleteMapping("/install/{skillName}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "卸载技能", description = "根据 skill 名称卸载（逻辑删除 + 工作区归档）")
     public R<Map<String, String>> uninstallByName(@PathVariable String skillName) {
         runtime.uninstallSkillByName(skillName, workspaceGuard.currentWorkspaceId());

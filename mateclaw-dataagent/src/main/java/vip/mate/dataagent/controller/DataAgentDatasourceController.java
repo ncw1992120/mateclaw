@@ -69,7 +69,7 @@ public class DataAgentDatasourceController {
      */
     @PostMapping
     @Operation(summary = "创建数据源", description = "新增数据源配置，owner_id 自动填充为当前登录用户")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> create(@RequestBody DatasourceCreateRequest request) {
         Long userId = workspaceGuard.currentUserId();
         return R.ok(datasourceService.createDatasource(request, userId));
@@ -80,7 +80,7 @@ public class DataAgentDatasourceController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新数据源", description = "更新数据源配置")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> update(
             @Parameter(description = "数据源 ID") @PathVariable Long id,
             @RequestBody DatasourceUpdateRequest request) {
@@ -92,7 +92,7 @@ public class DataAgentDatasourceController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除数据源", description = "删除指定数据源及其关联的表和字段元数据")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<Void> delete(
             @Parameter(description = "数据源 ID") @PathVariable Long id) {
         datasourceService.deleteDatasource(id);
@@ -126,7 +126,7 @@ public class DataAgentDatasourceController {
      */
     @PutMapping("/{id}/toggle")
     @Operation(summary = "启停切换", description = "启用或禁用数据源")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     public R<DatasourceVO> toggle(
             @Parameter(description = "数据源 ID") @PathVariable Long id,
             @RequestBody Map<String, Boolean> body) {
@@ -211,7 +211,7 @@ public class DataAgentDatasourceController {
      * 删除数据源下的表
      */
     @DeleteMapping("/{datasourceId}/tables/{tableId}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除表元数据", description = "删除数据源下的指定表及其字段元数据")
     public R<Void> deleteTable(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,

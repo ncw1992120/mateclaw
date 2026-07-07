@@ -18,7 +18,7 @@
             </svg>
             {{ loading ? t('skillManage.refreshing') : t('skillManage.refresh') }}
           </button>
-          <button class="btn-secondary" @click="openImportDialog">
+          <button v-if="hasPermission(PERMISSION.SKILL_MANAGE)" class="btn-secondary" @click="openImportDialog">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
@@ -26,7 +26,7 @@
             </svg>
             {{ t('skillManage.import') }}
           </button>
-          <button class="btn-primary" @click="openCreateModal">
+          <button v-if="hasPermission(PERMISSION.SKILL_MANAGE)" class="btn-primary" @click="openCreateModal">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -89,8 +89,8 @@
           :class="{ disabled: !!skill.enabled === false }"
           role="button"
           tabindex="0"
-          @click="openEditFromCard(skill)"
-          @keydown.enter="openEditFromCard(skill)"
+          @click="hasPermission(PERMISSION.SKILL_MANAGE) && openEditFromCard(skill)"
+          @keydown.enter="hasPermission(PERMISSION.SKILL_MANAGE) && openEditFromCard(skill)"
         >
           <div class="skill-header">
             <div class="skill-icon-wrap" :class="getSkillIconBg(skill.skillType)">
@@ -103,7 +103,7 @@
               <div v-if="hasI18nName(skill)" class="skill-slug">{{ skill.name }}</div>
             </div>
             <label
-              v-if="skill.builtin !== true"
+              v-if="skill.builtin !== true && hasPermission(PERMISSION.SKILL_MANAGE)"
               class="toggle-switch"
               :title="t('skillManage.toggleTitle')"
               @click.stop
@@ -146,6 +146,7 @@
             <span v-else class="skill-author">—</span>
             <div class="skill-actions">
               <button
+                v-if="hasPermission(PERMISSION.SKILL_MANAGE)"
                 class="skill-btn"
                 :title="t('skillManage.edit')"
                 @click.stop="openEditFromCard(skill)"
@@ -157,7 +158,7 @@
                 <span>{{ t('skillManage.edit') }}</span>
               </button>
               <button
-                v-if="skill.builtin !== true"
+                v-if="skill.builtin !== true && hasPermission(PERMISSION.SKILL_MANAGE)"
                 class="skill-btn danger"
                 :title="t('skillManage.delete')"
                 @click.stop="handleDelete(skill)"
@@ -322,10 +323,12 @@ import { ElMessage, ElMessageBox, ElPagination } from 'element-plus'
 import * as skillApi from '@/api/skill'
 import { SKILL_TYPE_OPTIONS, type Skill } from '@/types'
 import { useAgentStore } from '@/stores/useAgentStore'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ImportSkillDialog from './ImportSkillDialog.vue'
 
 const { t, locale } = useI18n()
 const agentStore = useAgentStore()
+const { hasPermission } = usePermission()
 
 /** 当前工作区 ID：优先从当前 Agent 获取，否则取列表中第一个 Agent 的，最后兜底 1 */
 const currentWorkspaceId = computed<number>(() => {

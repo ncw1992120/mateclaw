@@ -14,7 +14,7 @@
       <!-- 顶部标题栏 + 新建数据源 -->
       <div class="page-topbar">
         <h1 class="topbar-title">{{ t('datasourcePage.title') }}</h1>
-        <button class="btn-create-top" @click="handleCreateDatasource">
+        <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" class="btn-create-top" @click="handleCreateDatasource">
           ＋ {{ t('datasourcePage.createDatasource') }}
         </button>
       </div>
@@ -31,7 +31,7 @@
           <span class="empty-badge">📊</span>
         </div>
         <p class="empty-desc">{{ t('datasourcePage.emptyDesc') }}</p>
-        <button class="btn-create-empty" @click="handleCreateDatasource">
+        <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" class="btn-create-empty" @click="handleCreateDatasource">
           ＋ {{ t('datasourcePage.createDatasource') }}
         </button>
       </div>
@@ -208,6 +208,7 @@ import { useUserStore } from '@/stores/useUserStore'
 import * as datasourceApi from '@/api/datasource'
 import type { DatasourceAccountVO } from '@/api/datasource'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Datasource } from '@/types'
 import DatasourceForm from './datasource/DatasourceForm.vue'
 import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
@@ -215,6 +216,7 @@ import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
 const { t } = useI18n()
 const store = useDatasourceStore()
 const userStore = useUserStore()
+const { hasPermission } = usePermission()
 const { datasources, loading } = storeToRefs(store)
 
 /** 指标平台数据源 sourceType 标识集合 */
@@ -234,13 +236,8 @@ const syncing = ref(false)
 /** 当前用户在各数据源上的查询账号绑定状态映射（key=datasourceId, value=账号 VO） */
 const accountStatusMap = ref<Map<string, DatasourceAccountVO>>(new Map())
 
-/** 当前用户是否为管理员（全局管理员或工作区 owner/admin），仅管理员可同步元数据 */
-const canSyncMetadata = computed<boolean>(() => {
-  if (userStore.isAdmin) return true
-  const ws = userStore.currentWorkspace
-  if (!ws) return false
-  return ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin'
-})
+/** 当前用户是否可同步元数据（复用权限体系） */
+const canSyncMetadata = computed<boolean>(() => hasPermission(PERMISSION.DATASOURCE_SYNC))
 
 /** 仅展示指标平台数据源 */
 const metricPlatformList = computed<Datasource[]>(() => {
