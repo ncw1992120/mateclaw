@@ -53,6 +53,9 @@
             size="small"
             multiple
             filterable
+            remote
+            :remote-method="searchMetrics"
+            :loading="metricsLoading"
             style="width: 100%"
             @change="emitChange"
           >
@@ -73,6 +76,9 @@
             size="small"
             multiple
             filterable
+            remote
+            :remote-method="searchDimensions"
+            :loading="dimensionsLoading"
             style="width: 100%"
             @change="emitChange"
           >
@@ -142,9 +148,15 @@ const localDataSource = reactive<ComponentDataSource>({
   limit: 100,
 })
 
-/** 指标/维度选项 */
+/** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
 const dimensionsOptions = ref<Array<{ dimName: string; dimDisplayName: string }>>([])
+const metricsLoading = ref(false)
+const dimensionsLoading = ref(false)
+
+/** 搜索防抖定时器 */
+let metricsSearchTimer: ReturnType<typeof setTimeout> | null = null
+let dimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 监听外部 component 变化，同步到本地（仅在引用变化时触发，避免 emitChange 导致的循环） */
 watch(
@@ -168,7 +180,7 @@ watch(
   { immediate: true }
 )
 
-/** 加载指标和维度选项 */
+/** 加载指标和维度选项（初始加载，不带关键字） */
 async function loadMetricsAndDimensions(datasourceId: string): Promise<void> {
   if (!datasourceId) {
     metricsOptions.value = []
@@ -177,8 +189,8 @@ async function loadMetricsAndDimensions(datasourceId: string): Promise<void> {
   }
   try {
     const [metrics, dimensions] = await Promise.all([
-      datasourceApi.listSyncedMetrics(datasourceId, 1, 200),
-      datasourceApi.listSyncedDimensions(datasourceId, 1, 200),
+      datasourceApi.listSyncedMetrics(datasourceId, 1, 50),
+      datasourceApi.listSyncedDimensions(datasourceId, 1, 50),
     ])
     metricsOptions.value = (metrics as unknown as Array<{ metricName: string; metricDisplayName: string }>) ?? []
     dimensionsOptions.value = (dimensions as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
@@ -186,6 +198,50 @@ async function loadMetricsAndDimensions(datasourceId: string): Promise<void> {
     console.error('[PropertyPanel] load metrics/dimensions error:', e)
     ElMessage.error(t('insight.property.loadFailed'))
   }
+}
+
+/** 远程搜索指标（防抖 300ms） */
+function searchMetrics(query: string): void {
+  if (metricsSearchTimer) {
+    clearTimeout(metricsSearchTimer)
+  }
+  if (!localDataSource.datasourceId) {
+    return
+  }
+  metricsSearchTimer = setTimeout(async () => {
+    metricsLoading.value = true
+    try {
+      const keyword = query.trim() || undefined
+      const result = await datasourceApi.listSyncedMetrics(localDataSource.datasourceId, 1, 50, keyword)
+      metricsOptions.value = (result as unknown as Array<{ metricName: string; metricDisplayName: string }>) ?? []
+    } catch (e) {
+      console.error('[PropertyPanel] search metrics error:', e)
+    } finally {
+      metricsLoading.value = false
+    }
+  }, 300)
+}
+
+/** 远程搜索维度（防抖 300ms） */
+function searchDimensions(query: string): void {
+  if (dimensionsSearchTimer) {
+    clearTimeout(dimensionsSearchTimer)
+  }
+  if (!localDataSource.datasourceId) {
+    return
+  }
+  dimensionsSearchTimer = setTimeout(async () => {
+    dimensionsLoading.value = true
+    try {
+      const keyword = query.trim() || undefined
+      const result = await datasourceApi.listSyncedDimensions(localDataSource.datasourceId, 1, 50, keyword)
+      dimensionsOptions.value = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
+    } catch (e) {
+      console.error('[PropertyPanel] search dimensions error:', e)
+    } finally {
+      dimensionsLoading.value = false
+    }
+  }, 300)
 }
 
 /** 数据源变更时重新加载指标/维度 */

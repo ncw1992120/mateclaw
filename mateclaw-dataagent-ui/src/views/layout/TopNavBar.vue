@@ -17,7 +17,7 @@
             <polygon points="60,38 57,42 60,41 58,48 62,46 65,43" fill="white"/>
           </svg>
         </div>
-        <span class="brand-name">{{ t('nav.brandName') }}</span>
+        <span class="brand-name brand-name-gradient">{{ t('nav.brandName') }}</span>
       </div>
 
       <nav class="nav-menu">
@@ -157,10 +157,18 @@ function handleThemeCommand(command: ThemeMode): void {
 .brand-name {
   font-size: 15px;
   font-weight: 600;
-  color: var(--theme-text);
   letter-spacing: 0.3px;
   line-height: 20px;
   white-space: nowrap;
+}
+
+.brand-name-gradient {
+  background: linear-gradient(90deg, #f97316 0%, #ef4444 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+  font-size: 17px;
 }
 
 /* ========== 导航菜单 ========== */

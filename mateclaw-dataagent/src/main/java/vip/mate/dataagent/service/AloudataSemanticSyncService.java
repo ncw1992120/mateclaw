@@ -52,14 +52,24 @@ public interface AloudataSemanticSyncService {
     SyncResult fullSync(Long datasourceId);
 
     /**
-     * 查询已同步的指标列表（分页）
+     * 查询已同步的指标列表（分页，支持关键字搜索）
+     *
+     * @param datasourceId 数据源 ID
+     * @param pageNumber   页码
+     * @param pageSize     每页大小
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
      */
-    List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize);
+    List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize, String keyword);
 
     /**
-     * 查询已同步的维度列表（分页）
+     * 查询已同步的维度列表（分页，支持关键字搜索）
+     *
+     * @param datasourceId 数据源 ID
+     * @param pageNumber   页码
+     * @param pageSize     每页大小
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
      */
-    List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize);
+    List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword);
 
     /**
      * 查询指标关联的维度名称列表

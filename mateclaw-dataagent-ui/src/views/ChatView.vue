@@ -394,20 +394,8 @@
           <button class="attachment-tag__remove" type="button" @click="removeAttachment(idx)">×</button>
         </div>
       </div>
-      <div class="input-bar__row">
+      <div class="input-bar__card">
         <input ref="fileInputRef" type="file" style="display:none" @change="handleFileChange" />
-        <button class="btn-attach" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px">
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-          </svg>
-        </button>
-        <button class="btn-optimize" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
-          <span v-if="isOptimizing" class="spin-icon" style="font-size:14px">⟳</span>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px">
-            <path d="M12 20h9"/>
-            <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-        </button>
         <textarea
           v-model="inputMessage"
           class="chat-input"
@@ -416,8 +404,32 @@
           rows="1"
           @keydown="handleKeydown"
         />
-        <button v-if="chatStore.isStreaming" class="btn-stop" @click="handleStop">{{ t('chat.stop') }}</button>
-        <button v-else class="btn-send" :disabled="!canSend" @click="handleSend">{{ t('chat.send') }}</button>
+        <div class="input-actions">
+          <button class="btn-attach" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <button class="btn-optimize" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+            <span v-if="isOptimizing" class="spin-icon">⟳</span>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.2 4.8L18 9l-4.8 1.2L12 15l-1.2-4.8L6 9l4.8-1.2L12 3z"/>
+              <path d="M18 14l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z"/>
+            </svg>
+          </button>
+          <div class="input-actions__divider" />
+          <button v-if="chatStore.isStreaming" class="btn-stop" type="button" @click="handleStop">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
+          <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3172,85 +3184,161 @@ onUnmounted(() => {
 .input-bar {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 10px 20px 18px;
+  gap: 8px;
+  padding: 12px 20px 20px;
   border-top: 1px solid var(--theme-border);
   background: var(--theme-bg);
   flex-shrink: 0;
 }
 
-.input-bar__row {
+.input-bar__card {
   display: flex;
-  gap: 8px;
   align-items: flex-end;
+  gap: 12px;
+  min-height: 52px;
+  max-height: 180px;
+  padding: 8px 12px 8px 18px;
+  border-radius: 28px;
+  border: 1px solid var(--theme-border-strong);
+  background: var(--theme-surface);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-bar__card:focus-within {
+  border-color: var(--main-orange);
+  box-shadow: 0 2px 16px color-mix(in srgb, var(--main-orange) 12%, transparent);
 }
 
 .chat-input {
   flex: 1;
-  min-height: 44px;
+  min-height: 34px;
   max-height: 140px;
-  border-radius: 12px;
-  border: 1px solid var(--theme-border-strong);
-  padding: 10px 18px;
+  padding: 8px 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-text);
   font-size: 14px;
-  outline: none;
+  line-height: 1.5;
   font-family: inherit;
   resize: none;
-  line-height: 1.5;
-  background: var(--theme-surface);
-  color: var(--theme-text);
-  transition: border-color 0.2s ease;
+  outline: none;
 }
 
-.chat-input:hover {
-  border-color: rgba(240, 90, 35, 0.35);
+.chat-input::placeholder {
+  color: var(--theme-text-muted);
 }
 
-.chat-input:focus {
-  border-color: var(--main-orange);
+.chat-input:disabled {
+  opacity: 0.7;
+}
+
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-bottom: 2px;
+}
+
+.input-actions__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--theme-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.input-actions .btn-attach,
+.input-actions .btn-optimize,
+.input-actions .btn-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.input-actions .btn-optimize {
+  width: 32px;
+  height: 32px;
+}
+
+.input-actions .btn-attach svg,
+.input-actions .btn-optimize svg,
+.input-actions .btn-stop svg {
+  width: 16px;
+  height: 16px;
+}
+
+.input-actions .btn-optimize svg {
+  width: 20px;
+  height: 20px;
+}
+
+.input-actions .btn-attach:hover:not(:disabled),
+.input-actions .btn-optimize:hover:not(:disabled),
+.input-actions .btn-stop:hover:not(:disabled) {
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+}
+
+.input-actions .btn-attach:disabled,
+.input-actions .btn-optimize:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .btn-send {
-  height: 44px;
-  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: none;
+  border-radius: 50%;
   background: var(--main-orange);
   color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 0 24px;
   cursor: pointer;
-  font-family: inherit;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--main-orange) 30%, transparent);
+}
+
+.btn-send svg {
+  width: 20px;
+  height: 20px;
+  margin-left: 1px;
 }
 
 .btn-send:hover:not(:disabled) {
   background: var(--dark-orange);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--main-orange) 40%, transparent);
 }
 
 .btn-send:disabled {
   background: var(--light-grey);
   color: var(--muted);
   cursor: default;
+  box-shadow: none;
 }
 
 .btn-stop {
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid #ef4444;
-  background: transparent;
   color: #ef4444;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 0 24px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s ease;
 }
 
-.btn-stop:hover {
-  background: #ef4444;
-  color: #fff;
+.btn-stop:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.08);
 }
 
 /* Metadata */
@@ -3539,58 +3627,6 @@ onUnmounted(() => {
 .seg-slide-leave-from {
   opacity: 1;
   max-height: 600px;
-}
-
-/* 附件上传按钮 */
-.btn-attach {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.btn-attach:hover:not(:disabled) {
-  color: var(--main-orange);
-  background: var(--theme-surface-hover);
-}
-
-.btn-attach:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-/* 一键优化按钮 */
-.btn-optimize {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.btn-optimize:hover:not(:disabled) {
-  color: var(--main-orange);
-  background: var(--theme-surface-hover);
-}
-
-.btn-optimize:disabled {
-  cursor: default;
-  opacity: 0.5;
 }
 
 /* 附件预览区 */

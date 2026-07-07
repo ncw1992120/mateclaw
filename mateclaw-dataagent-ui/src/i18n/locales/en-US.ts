@@ -9,8 +9,8 @@ export default {
     switchSuccess: 'Theme switched',
   },
   nav: {
-    brandName: 'Data Insight',
-    smartAsk: 'Smart Ask',
+    brandName: 'ShuZhi',
+    smartAsk: 'Smart Analysis',
     insight: 'Insight Dashboard',
     myDashboard: 'My Dashboard',
     enterprisePortal: 'Enterprise Portal',

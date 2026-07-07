@@ -112,9 +112,16 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
-    public List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize) {
+    public List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize, String keyword) {
         LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w
+                    .like(AloudataMetricEntity::getMetricName, keyword)
+                    .or().like(AloudataMetricEntity::getMetricDisplayName, keyword)
+                    .or().like(AloudataMetricEntity::getSynonyms, keyword)
+            );
+        }
         wrapper.orderByDesc(AloudataMetricEntity::getUpdateTime);
 
         int offset = (pageNumber - 1) * pageSize;
@@ -131,9 +138,16 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
-    public List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize) {
+    public List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword) {
         LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w
+                    .like(AloudataDimensionEntity::getDimName, keyword)
+                    .or().like(AloudataDimensionEntity::getDimDisplayName, keyword)
+                    .or().like(AloudataDimensionEntity::getSynonyms, keyword)
+            );
+        }
         wrapper.orderByDesc(AloudataDimensionEntity::getUpdateTime);
 
         int offset = (pageNumber - 1) * pageSize;

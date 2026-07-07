@@ -4,7 +4,13 @@
     <div class="editor-toolbar">
       <div class="toolbar-left">
         <el-button :icon="ArrowLeft" text @click="handleBack">{{ t('common.back') }}</el-button>
-        <span class="toolbar-title">{{ dashboard?.name ?? t('insight.editor') }}</span>
+        <el-input
+          v-model="dashboardName"
+          class="toolbar-name-input"
+          size="small"
+          :placeholder="t('insight.editor')"
+          @change="handleNameChange"
+        />
       </div>
       <div class="toolbar-right">
         <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
@@ -68,6 +74,7 @@ const store = useInsightDashboardStore()
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
 const selectedComponentId = ref<string>('')
+const dashboardName = ref('')
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
@@ -86,6 +93,7 @@ const selectedComponent = computed<InsightComponent | null>(() => {
 onMounted(async () => {
   await store.selectDashboard(props.dashboardId)
   if (dashboard.value) {
+    dashboardName.value = dashboard.value.name
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
       schema.version = parsed.version ?? '1.0'
@@ -104,6 +112,7 @@ watch(
     if (newId) {
       await store.selectDashboard(newId)
       if (dashboard.value) {
+        dashboardName.value = dashboard.value.name
         try {
           const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
           schema.version = parsed.version ?? '1.0'
@@ -198,6 +207,7 @@ async function handleSave(): Promise<void> {
   saving.value = true
   try {
     await store.updateDashboard(dashboard.value.id, {
+      name: dashboardName.value,
       schemaJson: JSON.stringify(schema),
     })
     ElMessage.success(t('insight.saveSuccess'))
@@ -205,6 +215,15 @@ async function handleSave(): Promise<void> {
     ElMessage.error(t('insight.saveFailed'))
   } finally {
     saving.value = false
+  }
+}
+
+/** 名称变更时自动保存 */
+function handleNameChange(): void {
+  if (dashboard.value && dashboardName.value.trim()) {
+    store.updateDashboard(dashboard.value.id, { name: dashboardName.value.trim() }).catch(() => {
+      // 静默失败
+    })
   }
 }
 
@@ -247,10 +266,26 @@ function handleBack(): void {
   gap: 12px;
 }
 
-.toolbar-title {
+.toolbar-name-input {
+  width: 200px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--theme-text);
+
+  :deep(.el-input__wrapper) {
+    background: transparent;
+    box-shadow: none;
+    padding: 0 4px;
+  }
+
+  :deep(.el-input__wrapper:hover),
+  :deep(.el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px var(--theme-border) inset;
+  }
+
+  :deep(.el-input__inner) {
+    color: var(--theme-text);
+    font-weight: 600;
+  }
 }
 
 .toolbar-right {

@@ -111,7 +111,7 @@ export function getAloudataSyncStatus(datasourceId: string | number) {
 }
 
 /** 查询已同步的指标列表 */
-export function listSyncedMetrics(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20) {
+export function listSyncedMetrics(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20, keyword?: string) {
   return api.get<{
     metricName: string
     metricDisplayName: string
@@ -121,11 +121,11 @@ export function listSyncedMetrics(datasourceId: string | number, pageNumber: num
     metricCategoryName: string
     unit: string
     availableDimensions: string[]
-  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-metrics`, { params: { pageNumber, pageSize } })
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-metrics`, { params: { pageNumber, pageSize, keyword } })
 }
 
 /** 查询已同步的维度列表 */
-export function listSyncedDimensions(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20) {
+export function listSyncedDimensions(datasourceId: string | number, pageNumber: number = 1, pageSize: number = 20, keyword?: string) {
   return api.get<{
     dimName: string
     dimDisplayName: string
@@ -135,7 +135,7 @@ export function listSyncedDimensions(datasourceId: string | number, pageNumber: 
     configType: string
     isTimeDimension: boolean
     exampleValues: string
-  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-dimensions`, { params: { pageNumber, pageSize } })
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/synced-dimensions`, { params: { pageNumber, pageSize, keyword } })
 }
 
 /** 查询指标关联的维度列表 */

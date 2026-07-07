@@ -9,8 +9,8 @@ export default {
     switchSuccess: '主题已切换',
   },
   nav: {
-    brandName: '问数智能体',
-    smartAsk: '智能问数',
+    brandName: '数智',
+    smartAsk: '智能分析',
     insight: '洞察仪表盘',
     myDashboard: '我的看板',
     enterprisePortal: '企业门户',

@@ -260,12 +260,13 @@ public class DataAgentDatasourceController {
      */
     @GetMapping("/{datasourceId}/aloudata/synced-metrics")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "已同步指标列表", description = "获取已同步到本地语义层的 Aloudata 指标列表（分页）")
+    @Operation(summary = "已同步指标列表", description = "获取已同步到本地语义层的 Aloudata 指标列表（分页，支持关键字搜索）")
     public R<List<AloudataMetricSemanticDTO>> listSyncedMetrics(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int pageNumber,
-            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize) {
-        return R.ok(aloudataSyncService.listSyncedMetrics(datasourceId, pageNumber, pageSize));
+            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize,
+            @Parameter(description = "搜索关键字（匹配名称、展示名、同义词）") @RequestParam(required = false) String keyword) {
+        return R.ok(aloudataSyncService.listSyncedMetrics(datasourceId, pageNumber, pageSize, keyword));
     }
 
     /**
@@ -273,12 +274,13 @@ public class DataAgentDatasourceController {
      */
     @GetMapping("/{datasourceId}/aloudata/synced-dimensions")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "已同步维度列表", description = "获取已同步到本地语义层的 Aloudata 维度列表（分页）")
+    @Operation(summary = "已同步维度列表", description = "获取已同步到本地语义层的 Aloudata 维度列表（分页，支持关键字搜索）")
     public R<List<AloudataDimensionSemanticDTO>> listSyncedDimensions(
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") int pageNumber,
-            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize) {
-        return R.ok(aloudataSyncService.listSyncedDimensions(datasourceId, pageNumber, pageSize));
+            @Parameter(description = "每页大小") @RequestParam(defaultValue = "20") int pageSize,
+            @Parameter(description = "搜索关键字（匹配名称、展示名、同义词）") @RequestParam(required = false) String keyword) {
+        return R.ok(aloudataSyncService.listSyncedDimensions(datasourceId, pageNumber, pageSize, keyword));
     }
 
     /**
