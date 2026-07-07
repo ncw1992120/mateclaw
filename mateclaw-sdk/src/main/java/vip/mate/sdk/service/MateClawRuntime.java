@@ -72,6 +72,16 @@ public interface MateClawRuntime {
                                            String modelName);
 
     /**
+     * 与指定 Agent 进行同步对话，阻塞等待完整响应
+     *
+     * @param agentId        Agent ID
+     * @param message        用户消息
+     * @param conversationId 会话 ID
+     * @return Agent 完整回复文本
+     */
+    String chat(Long agentId, String message, String conversationId);
+
+    /**
      * 应用模板创建 Agent
      *
      * @param templateId  模板 ID

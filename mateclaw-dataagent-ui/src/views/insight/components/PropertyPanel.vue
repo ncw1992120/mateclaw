@@ -146,7 +146,7 @@ const localDataSource = reactive<ComponentDataSource>({
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
 const dimensionsOptions = ref<Array<{ dimName: string; dimDisplayName: string }>>([])
 
-/** 监听外部 component 变化，同步到本地 */
+/** 监听外部 component 变化，同步到本地（仅在引用变化时触发，避免 emitChange 导致的循环） */
 watch(
   () => props.component,
   (newComp) => {
@@ -165,7 +165,7 @@ watch(
       dimensionsOptions.value = []
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 )
 
 /** 加载指标和维度选项 */

@@ -122,6 +122,14 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     }
 
     /**
+     * 与指定 Agent 进行同步对话，阻塞等待完整响应
+     */
+    @Override
+    public String chat(Long agentId, String message, String conversationId) {
+        return agentService.chat(agentId, message, conversationId);
+    }
+
+    /**
      * 应用模板创建 Agent
      */
     @Override

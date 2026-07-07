@@ -159,8 +159,22 @@ function handleDrop(event: DragEvent): void {
   }
 }
 
-/** 布局更新（拖动/缩放后） */
+/** 布局更新（拖动/缩放后），仅在布局实际变化时 emit，避免无限循环 */
 function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
+  // 比较新旧布局，只有位置/尺寸真正变化才向上 emit
+  const changed = newLayout.some((item) => {
+    const comp = props.components.find((c) => c.id === item.i)
+    if (!comp) {
+      return true
+    }
+    return comp.position.x !== item.x
+      || comp.position.y !== item.y
+      || comp.position.w !== item.w
+      || comp.position.h !== item.h
+  })
+  if (!changed) {
+    return
+  }
   emit(
     'update-layout',
     newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))

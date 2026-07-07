@@ -3,8 +3,6 @@ package vip.mate.dataagent.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import vip.mate.agent.AgentService.StreamDelta;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.service.ChatOptimizeService;
@@ -32,15 +30,8 @@ public class ChatOptimizeServiceImpl implements ChatOptimizeService {
         String conversationId = DataAgentConstants.OPTIMIZE_CONVERSATION_PREFIX + UUID.randomUUID();
         String prompt = DataAgentConstants.OPTIMIZE_PROMPT_TEMPLATE.replace("{0}", input);
 
-        StringBuilder content = new StringBuilder();
-        Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, prompt, conversationId);
-        stream.doOnNext(delta -> {
-            if (!delta.isEvent() && delta.content() != null && !delta.content().isBlank()) {
-                content.append(delta.content());
-            }
-        }).blockLast();
-
-        return content.toString().trim();
+        String result = runtime.chat(agentId, prompt, conversationId);
+        return result != null ? result.trim() : "";
     }
 
     /**

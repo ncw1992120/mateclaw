@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  *   <li>加载仪表盘 Schema + 组件渲染数据</li>
  *   <li>从 classpath 读取报告模板（report-template.md）</li>
  *   <li>填充数据占位符（METRIC_NAMES / DIMENSION_NAMES / TIME_RANGE / FILTERS / ROW_COUNT / DATA_TABLE）</li>
- *   <li>调用 {@link MateClawRuntime#chatStructuredStream} 生成分析部分（TREND_ANALYSIS / KEY_FINDINGS / RECOMMENDATIONS）</li>
+ *   <li>调用 {@link MateClawRuntime#chat} 生成分析部分（TREND_ANALYSIS / KEY_FINDINGS / RECOMMENDATIONS）</li>
  * </ol>
  * <p>
  * 支持同步（blockLast 累积）和 SSE 流式两种模式。
@@ -84,15 +84,8 @@ public class InsightReportServiceImpl implements InsightReportService {
         Long agentId = resolveAgentId(dashboardId);
         String conversationId = DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + UUID.randomUUID();
 
-        StringBuilder content = new StringBuilder();
-        Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, prompt, conversationId);
-        stream.doOnNext(delta -> {
-            if (!delta.isEvent() && delta.content() != null && !delta.content().isBlank()) {
-                content.append(delta.content());
-            }
-        }).blockLast();
-
-        return content.toString().trim();
+        String result = runtime.chat(agentId, prompt, conversationId);
+        return result != null ? result.trim() : "";
     }
 
     @Override
