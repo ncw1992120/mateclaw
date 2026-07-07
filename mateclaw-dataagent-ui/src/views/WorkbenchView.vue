@@ -526,10 +526,15 @@ function handleWorkspaceCommand(command: string | number): void {
       ElMessage.warning(t('workspace.manageNoPermission'))
       return
     }
-    // 通过 localStorage 预置配置中心 Tab 和工作空间子菜单，实现直达“工作空间-工作区”
+    // 通过 localStorage 预置配置中心 Tab 和工作空间子菜单，实现直达"工作空间-工作区"
     localStorage.setItem('mc-config-center-active-tab', 'workspace')
     localStorage.setItem('mc-workspace-active-sub-menu', 'workspaceManage')
-    router.push({ path: '/', query: { menu: 'skill' } })
+    // 发送自定义事件，通知已挂载的子组件（ConfigCenter、WorkspaceConfigView）即时响应
+    window.dispatchEvent(new CustomEvent('navigate-to-workspace-manage'))
+    // 若当前不在配置中心页面，通过路由跳转触发侧边栏切换
+    if (activeSidebarItem.value !== 'skill') {
+      router.push({ path: '/', query: { menu: 'skill' } })
+    }
     return
   }
   // 切换工作空间前清理当前会话相关缓存，避免刷新后恢复旧工作空间的脏数据

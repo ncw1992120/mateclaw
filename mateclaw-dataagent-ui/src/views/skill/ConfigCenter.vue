@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersistedRef } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
@@ -117,6 +117,19 @@ watch(visibleTabs, (list) => {
     activeTab.value = list[0].key
   }
 }, { immediate: true })
+
+/** 监听自定义事件，支持从其他组件（如工作区下拉菜单）直达指定 Tab */
+function handleNavigateToWorkspaceManage(): void {
+  activeTab.value = 'workspace'
+}
+
+onMounted(() => {
+  window.addEventListener('navigate-to-workspace-manage', handleNavigateToWorkspaceManage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('navigate-to-workspace-manage', handleNavigateToWorkspaceManage)
+})
 </script>
 
 <style scoped>

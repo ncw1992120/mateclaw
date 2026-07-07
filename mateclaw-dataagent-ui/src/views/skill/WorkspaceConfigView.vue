@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { usePersistedRef } from '@/composables/usePersistedRef'
@@ -92,6 +92,19 @@ watch(visibleSubMenuItems, (list) => {
     activeSubMenu.value = list[0].key
   }
 }, { immediate: true })
+
+/** 监听自定义事件，支持从其他组件（如工作区下拉菜单）直达"工作区管理"子菜单 */
+function handleNavigateToWorkspaceManage(): void {
+  activeSubMenu.value = 'workspaceManage'
+}
+
+onMounted(() => {
+  window.addEventListener('navigate-to-workspace-manage', handleNavigateToWorkspaceManage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('navigate-to-workspace-manage', handleNavigateToWorkspaceManage)
+})
 </script>
 
 <style scoped>

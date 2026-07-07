@@ -127,8 +127,15 @@ async function handleLogin(): Promise<void> {
   min-height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 20% 20%, rgba(255, 142, 83, 0.18) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(240, 90, 35, 0.16) 0%, transparent 50%),
+    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--main-orange) 8%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, color-mix(in srgb, var(--main-orange) 6%, transparent) 0%, transparent 50%),
+    var(--theme-bg);
+}
+
+html[data-theme='dark'] .login-page {
+  background:
+    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--main-orange) 18%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, color-mix(in srgb, var(--main-orange) 16%, transparent) 0%, transparent 50%),
     linear-gradient(145deg, #1a1f2e 0%, #0f1219 100%);
 }
 
@@ -143,7 +150,7 @@ async function handleLogin(): Promise<void> {
 .glow-ring {
   position: absolute;
   border-radius: 50%;
-  border: 1px solid rgba(240, 90, 35, 0.12);
+  border: 1px solid color-mix(in srgb, var(--main-orange) 12%, transparent);
 }
 
 .ring-1 {
@@ -151,7 +158,7 @@ async function handleLogin(): Promise<void> {
   height: 600px;
   top: -180px;
   right: -120px;
-  background: radial-gradient(circle, rgba(240, 90, 35, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--main-orange) 8%, transparent) 0%, transparent 70%);
   animation: float 12s ease-in-out infinite;
 }
 
@@ -160,14 +167,14 @@ async function handleLogin(): Promise<void> {
   height: 420px;
   bottom: -100px;
   left: -80px;
-  background: radial-gradient(circle, rgba(255, 142, 83, 0.06) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--main-orange) 6%, transparent) 0%, transparent 70%);
   animation: float 14s ease-in-out infinite reverse;
 }
 
 .glow-dot {
   position: absolute;
   border-radius: 50%;
-  background: rgba(240, 90, 35, 0.35);
+  background: color-mix(in srgb, var(--main-orange) 35%, transparent);
   filter: blur(20px);
 }
 
@@ -225,13 +232,20 @@ async function handleLogin(): Promise<void> {
   width: 860px;
   max-width: 92vw;
   min-height: 500px;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--theme-surface-elevated);
   border-radius: 24px;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.12),
+    0 0 0 1px var(--theme-border) inset;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+}
+
+html[data-theme='dark'] .login-card {
+  background: rgba(30, 30, 30, 0.96);
   box-shadow:
     0 32px 80px rgba(0, 0, 0, 0.35),
     0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-  overflow: hidden;
-  backdrop-filter: blur(20px);
 }
 
 /* 品牌区域 */
@@ -243,7 +257,7 @@ async function handleLogin(): Promise<void> {
   width: 42%;
   padding: 56px 48px;
   background:
-    linear-gradient(135deg, rgba(240, 90, 35, 0.97) 0%, rgba(231, 92, 1, 0.98) 100%),
+    linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%),
     url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   color: #fff;
   text-align: center;
@@ -297,13 +311,13 @@ async function handleLogin(): Promise<void> {
 .form-title {
   font-size: 26px;
   font-weight: 700;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 8px 0;
 }
 
 .form-desc {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0;
 }
 
@@ -315,20 +329,24 @@ async function handleLogin(): Promise<void> {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin-bottom: 8px;
 }
 
 .login-input :deep(.el-input__wrapper) {
   border-radius: 10px;
-  box-shadow: 0 0 0 1px #e5e6eb inset;
-  background: #f7f8fa;
+  box-shadow: 0 0 0 1px var(--theme-border-strong) inset;
+  background: var(--theme-bg);
   transition: all 0.25s ease;
 }
 
+.login-input :deep(.el-input__inner) {
+  color: var(--theme-text);
+}
+
 .login-input :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--main-orange) inset, 0 0 0 4px rgba(240, 90, 35, 0.08);
-  background: #fff;
+  box-shadow: 0 0 0 1px var(--main-orange) inset, 0 0 0 4px color-mix(in srgb, var(--main-orange) 8%, transparent);
+  background: var(--theme-surface-elevated);
 }
 
 /* 密码显示切换图标 */
@@ -338,7 +356,7 @@ async function handleLogin(): Promise<void> {
 }
 
 .login-input :deep(.el-input__password) {
-  color: #a8abb2;
+  color: var(--theme-text-muted);
   font-size: 16px;
   cursor: pointer;
   transition: color 0.2s ease;
@@ -358,13 +376,13 @@ async function handleLogin(): Promise<void> {
   letter-spacing: 1px;
   background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
   border: none;
-  box-shadow: 0 8px 20px rgba(240, 90, 35, 0.3);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--main-orange) 30%, transparent);
   transition: all 0.25s ease;
 }
 
 .login-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 28px rgba(240, 90, 35, 0.38);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--main-orange) 38%, transparent);
 }
 
 .login-btn:active {
