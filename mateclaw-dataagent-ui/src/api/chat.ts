@@ -413,6 +413,6 @@ export interface OptimizeResult {
 
 /** 一键优化输入内容 */
 export async function optimizePrompt(input: string): Promise<OptimizeResult> {
-  const response = await api.post(OPTIMIZE_URL, { input })
-  return response.data as OptimizeResult
+  const data = await api.post(OPTIMIZE_URL, { input })
+  return data as OptimizeResult
 }
