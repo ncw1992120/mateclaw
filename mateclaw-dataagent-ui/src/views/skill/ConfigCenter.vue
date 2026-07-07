@@ -125,21 +125,21 @@ watch(visibleTabs, (list) => {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 
 /* 顶部标题区 */
 .config-topbar {
   padding: 18px 24px 14px;
-  background: #fff;
+  background: var(--theme-surface);
   flex-shrink: 0;
 }
 
 .page-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   letter-spacing: 0.5px;
 }
@@ -150,8 +150,8 @@ watch(visibleTabs, (list) => {
   align-items: center;
   gap: 4px;
   padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8ecf2;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
@@ -159,7 +159,7 @@ watch(visibleTabs, (list) => {
   position: relative;
   padding: 12px 16px;
   font-size: 14px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -175,13 +175,13 @@ watch(visibleTabs, (list) => {
   transform: translateX(-50%);
   width: 0;
   height: 3px;
-  background: #f05a23;
+  background: var(--main-orange);
   border-radius: 2px 2px 0 0;
   transition: width 0.2s;
 }
 
 .tab-item:hover {
-  color: #f05a23;
+  color: var(--main-orange);
 }
 
 .tab-item:hover::after {
@@ -189,7 +189,7 @@ watch(visibleTabs, (list) => {
 }
 
 .tab-item.active {
-  color: #f05a23;
+  color: var(--main-orange);
   font-weight: 600;
 }
 
@@ -202,6 +202,6 @@ watch(visibleTabs, (list) => {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: #f5f6f8;
+  background: var(--theme-bg);
 }
 </style>

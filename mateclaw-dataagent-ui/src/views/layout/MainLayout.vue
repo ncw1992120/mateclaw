@@ -191,7 +191,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: #f5f6f8;
+  background: var(--theme-bg);
 }
 
 .main-content {
@@ -211,20 +211,20 @@ onUnmounted(() => {
 
 .breadcrumb-bar {
   padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8ecf2;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
 .breadcrumb-path {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .page-body {
   flex: 1;
   overflow: auto;
-  background: #f5f6f8;
+  background: var(--theme-bg);
 }
 
 .placeholder-page {
@@ -242,13 +242,13 @@ onUnmounted(() => {
 
 .placeholder-page h2 {
   font-size: 20px;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
 .placeholder-page p {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0;
 }
 </style>

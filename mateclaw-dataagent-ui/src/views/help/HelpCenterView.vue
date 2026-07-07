@@ -500,7 +500,7 @@ onMounted(() => {
   width: 100% !important;
   height: 100% !important;
   min-height: 0 !important;
-  background: #fff;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 

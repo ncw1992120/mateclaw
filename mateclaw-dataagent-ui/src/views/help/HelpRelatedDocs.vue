@@ -40,7 +40,7 @@ defineEmits<{
 
 <style scoped>
 .help-related {
-  border-top: 1px solid #f0f2f5;
+  border-top: 1px solid var(--theme-border);
   padding: 20px 0 0;
   margin-top: 24px;
 }
@@ -48,7 +48,7 @@ defineEmits<{
 .related-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin-bottom: 12px;
 }
 
@@ -67,12 +67,12 @@ defineEmits<{
   cursor: pointer;
   transition: all 0.15s;
   font-size: 14px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .related-item:hover {
-  background: #f0f2f5;
-  color: #f05a23;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
 }
 
 .related-item-title {
@@ -84,7 +84,7 @@ defineEmits<{
 
 .related-item-views {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   display: flex;
   align-items: center;
   gap: 2px;
@@ -93,6 +93,6 @@ defineEmits<{
 
 .related-empty {
   font-size: 13px;
-  color: #c0c4cc;
+  color: var(--theme-text-muted);
 }
 </style>

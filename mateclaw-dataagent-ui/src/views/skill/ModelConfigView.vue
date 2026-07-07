@@ -647,7 +647,7 @@ onMounted(() => {
 <style scoped>
 .model-config-page {
   padding: 16px 24px 24px;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   min-height: 100%;
 }
 
@@ -659,10 +659,10 @@ onMounted(() => {
 }
 
 .provider-item {
-  border: 1px solid var(--light-grey);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--theme-surface);
   transition: border-color 0.2s, background-color 0.2s;
 }
 
@@ -801,9 +801,9 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border: 1px solid var(--light-grey);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--theme-surface-elevated);
 }
 
 .model-info {

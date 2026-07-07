@@ -149,7 +149,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 
@@ -158,15 +158,15 @@ async function handleRemoveTenant(code: string): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
 .topbar-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
@@ -177,7 +177,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   justify-content: center;
   flex: 1;
   padding: 80px 0;
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .empty-icon-wrapper {
@@ -194,7 +194,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
 
 .empty-desc {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0 0 20px 0;
   text-align: center;
   max-width: 320px;
@@ -206,7 +206,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   padding: 0 16px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -216,7 +216,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
 }
 
 .btn-create-empty:hover {
-  background: #0e42d2;
+  background: var(--dark-orange);
 }
 
 /* ========== 主从布局 ========== */
@@ -231,8 +231,8 @@ async function handleRemoveTenant(code: string): Promise<void> {
 .tenant-sidebar {
   width: 220px;
   min-width: 220px;
-  background: #fff;
-  border-right: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -243,13 +243,13 @@ async function handleRemoveTenant(code: string): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #f0f1f3;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .sidebar-label {
   font-size: 12px;
   font-weight: 500;
-  color: #86909c;
+  color: var(--theme-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -265,12 +265,12 @@ async function handleRemoveTenant(code: string): Promise<void> {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
-  color: #165dff;
+  color: var(--main-orange);
   transition: all 0.15s;
 }
 
 .sidebar-add-btn:hover {
-  background: #e8f3ff;
+  background: var(--theme-surface-hover);
 }
 
 .tenant-list-scroll {
@@ -290,12 +290,12 @@ async function handleRemoveTenant(code: string): Promise<void> {
 }
 
 .tenant-list-item:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .tenant-list-item.active {
-  background: #e8f3ff;
-  border-left-color: #165dff;
+  background: rgba(240, 90, 35, 0.1);
+  border-left-color: var(--main-orange);
 }
 
 .tenant-list-item .item-icon {
@@ -307,7 +307,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   flex: 1;
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -324,7 +324,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   border-radius: 4px;
   cursor: pointer;
   font-size: 10px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   opacity: 0;
   transition: all 0.15s;
   padding: 0;
@@ -344,7 +344,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
 .dictionary-detail {
   flex: 1;
   min-width: 0;
-  background: #fff;
+  background: var(--theme-surface);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -355,7 +355,7 @@ async function handleRemoveTenant(code: string): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 13px;
 }
 </style>

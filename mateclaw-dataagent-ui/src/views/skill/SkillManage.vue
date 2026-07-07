@@ -704,7 +704,7 @@ function getSourceClass(skill: Skill): string {
   flex: 1;
   min-height: 0;
   padding: 20px 24px 0;
-  background: var(--near-white);
+  background: var(--theme-bg);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -977,9 +977,9 @@ function getSourceClass(skill: Skill): string {
   justify-content: center;
   flex-shrink: 0;
 }
-.icon-bg-blue { background: #e8f3ff; }
-.icon-bg-purple { background: #f0e8ff; }
-.icon-bg-orange { background: #fff1e8; }
+.icon-bg-blue { background: rgba(64, 158, 255, 0.12); }
+.icon-bg-purple { background: rgba(146, 84, 222, 0.12); }
+.icon-bg-orange { background: rgba(240, 90, 35, 0.12); }
 .icon-bg-grey { background: var(--lighter-grey); }
 .skill-icon {
   font-size: 20px;
@@ -1169,7 +1169,7 @@ function getSourceClass(skill: Skill): string {
 .skill-btn.danger:hover {
   border-color: #f53f3f;
   color: #f53f3f;
-  background: #fff1f0;
+  background: rgba(245, 63, 63, 0.12);
 }
 
 /* 分页 */

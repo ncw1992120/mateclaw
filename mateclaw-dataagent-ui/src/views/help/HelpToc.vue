@@ -49,8 +49,8 @@ function scrollToHeading(id: string): void {
 .help-toc {
   width: 200px;
   flex-shrink: 0;
-  border-left: 1px solid #eee;
-  background: #fff;
+  border-left: 1px solid var(--theme-border);
+  background: var(--theme-surface);
   display: flex;
   flex-direction: column;
   padding: 20px 0;
@@ -63,8 +63,8 @@ function scrollToHeading(id: string): void {
   padding: 0 16px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #333;
-  border-bottom: 1px solid #eee;
+  color: var(--theme-text);
+  border-bottom: 1px solid var(--theme-border);
   margin-bottom: 8px;
 }
 
@@ -82,7 +82,7 @@ function scrollToHeading(id: string): void {
 .toc-item {
   padding: 4px 16px;
   font-size: 12px;
-  color: #666;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
   line-height: 1.6;
@@ -92,14 +92,14 @@ function scrollToHeading(id: string): void {
 }
 
 .toc-item:hover {
-  color: #1677ff;
+  color: var(--main-orange);
 }
 
 .toc-item.active {
-  color: #1677ff;
-  border-left-color: #1677ff;
+  color: var(--main-orange);
+  border-left-color: var(--main-orange);
   font-weight: 500;
-  background: #f0f7ff;
+  background: rgba(240, 90, 35, 0.08);
 }
 
 .toc-item.level-1 { padding-left: 14px; }

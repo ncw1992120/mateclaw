@@ -336,7 +336,7 @@ defineExpose({ loadFeedbackSummary })
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #fff;
+  background: var(--theme-surface);
   overflow: hidden;
 }
 
@@ -345,7 +345,7 @@ defineExpose({ loadFeedbackSummary })
   align-items: flex-start;
   justify-content: space-between;
   padding: 20px 32px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 16px;
 }
@@ -360,19 +360,19 @@ defineExpose({ loadFeedbackSummary })
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #999;
+  color: var(--theme-text-muted);
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
 .breadcrumb-link {
   cursor: pointer;
-  color: #1677ff;
+  color: var(--main-orange);
   transition: color 0.2s;
 }
 
 .breadcrumb-link:hover {
-  color: #4096ff;
+  color: var(--dark-orange);
 }
 
 .breadcrumb-item {
@@ -383,7 +383,7 @@ defineExpose({ loadFeedbackSummary })
 }
 
 .breadcrumb-current {
-  color: #333;
+  color: var(--theme-text);
   font-weight: 500;
 }
 
@@ -391,7 +391,7 @@ defineExpose({ loadFeedbackSummary })
   margin: 0 0 8px;
   font-size: 22px;
   font-weight: 600;
-  color: #111;
+  color: var(--theme-text);
   line-height: 1.3;
 }
 
@@ -400,7 +400,7 @@ defineExpose({ loadFeedbackSummary })
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #999;
+  color: var(--theme-text-muted);
   flex-wrap: wrap;
 }
 
@@ -424,14 +424,14 @@ defineExpose({ loadFeedbackSummary })
 
 .content-blank {
   flex: 1;
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .markdown-body {
   max-width: 880px;
   font-size: 14px;
   line-height: 1.8;
-  color: #333;
+  color: var(--theme-text-secondary);
 }
 
 .markdown-body :deep(h1),
@@ -440,7 +440,7 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(h4) {
   margin: 1.6em 0 0.6em;
   font-weight: 600;
-  color: #111;
+  color: var(--theme-text);
   scroll-margin-top: 16px;
 }
 
@@ -448,7 +448,7 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(h2) {
   font-size: 1.4em;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--theme-border);
 }
 .markdown-body :deep(h3) { font-size: 1.2em; }
 .markdown-body :deep(h4) { font-size: 1.1em; }
@@ -464,8 +464,8 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(li) { margin: 0.3em 0; }
 
 .markdown-body :deep(pre) {
-  background: #f5f5f5;
-  border: 1px solid #eee;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 14px;
   overflow-x: auto;
@@ -479,8 +479,8 @@ defineExpose({ loadFeedbackSummary })
 
 .markdown-body :deep(p code),
 .markdown-body :deep(li code) {
-  background: #f0f0f0;
-  color: #e51;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
   padding: 2px 5px;
   border-radius: 3px;
   font-size: 0.85em;
@@ -501,29 +501,29 @@ defineExpose({ loadFeedbackSummary })
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  border: 1px solid #eee;
+  border: 1px solid var(--theme-border);
   padding: 8px 12px;
   text-align: left;
 }
 
 .markdown-body :deep(th) {
-  background: #fafafa;
+  background: var(--theme-surface-hover);
   font-weight: 600;
 }
 
-.markdown-body :deep(tr:hover) { background: #fafafa; }
+.markdown-body :deep(tr:hover) { background: var(--theme-surface-hover); }
 
 .markdown-body :deep(blockquote) {
   margin: 1em 0;
   padding: 8px 14px;
-  border-left: 4px solid #1677ff;
-  background: #f0f5ff;
-  color: #555;
+  border-left: 4px solid var(--main-orange);
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
   border-radius: 0 4px 4px 0;
 }
 
 .markdown-body :deep(a) {
-  color: #1677ff;
+  color: var(--main-orange);
   text-decoration: none;
 }
 

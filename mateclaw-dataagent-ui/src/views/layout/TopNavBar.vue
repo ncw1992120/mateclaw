@@ -223,7 +223,7 @@ function handleThemeCommand(command: ThemeMode): void {
   border-radius: 10px;
   border: none;
   background: transparent;
-  color: #4e5969;
+  color: var(--theme-text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;

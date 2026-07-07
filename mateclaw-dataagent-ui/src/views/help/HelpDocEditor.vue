@@ -117,7 +117,7 @@ watch(() => props.modelValue, (val) => {
   align-items: center;
   justify-content: flex-end;
   padding: 8px 0;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--theme-border);
   margin-bottom: 12px;
 }
 
@@ -144,7 +144,7 @@ watch(() => props.modelValue, (val) => {
 .editor-body.split .editor-preview {
   flex: 1;
   min-width: 0;
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 16px;
   overflow: auto;
@@ -157,14 +157,14 @@ watch(() => props.modelValue, (val) => {
 }
 
 .editor-preview {
-  background: #fff;
+  background: var(--theme-surface-elevated);
 }
 
 .markdown-body {
   max-width: 880px;
   font-size: 15px;
   line-height: 1.8;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .markdown-body :deep(h1),
@@ -173,7 +173,7 @@ watch(() => props.modelValue, (val) => {
 .markdown-body :deep(h4) {
   margin: 1.6em 0 0.6em;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   scroll-margin-top: 16px;
 }
 
@@ -181,7 +181,7 @@ watch(() => props.modelValue, (val) => {
 .markdown-body :deep(h2) {
   font-size: 1.5em;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--theme-border);
 }
 .markdown-body :deep(h3) { font-size: 1.25em; }
 .markdown-body :deep(h4) { font-size: 1.1em; }
@@ -197,8 +197,8 @@ watch(() => props.modelValue, (val) => {
 .markdown-body :deep(li) { margin: 0.3em 0; }
 
 .markdown-body :deep(pre) {
-  background: #fafbfc;
-  border: 1px solid #e8ecf2;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
@@ -212,8 +212,8 @@ watch(() => props.modelValue, (val) => {
 
 .markdown-body :deep(p code),
 .markdown-body :deep(li code) {
-  background: #f2f3f5;
-  color: #d63384;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
@@ -234,29 +234,29 @@ watch(() => props.modelValue, (val) => {
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
   padding: 10px 14px;
   text-align: left;
 }
 
 .markdown-body :deep(th) {
-  background: #fafbfc;
+  background: var(--theme-surface-hover);
   font-weight: 600;
 }
 
-.markdown-body :deep(tr:hover) { background: #fafbfc; }
+.markdown-body :deep(tr:hover) { background: var(--theme-surface-hover); }
 
 .markdown-body :deep(blockquote) {
   margin: 1em 0;
   padding: 8px 16px;
-  border-left: 4px solid #f05a23;
-  background: #fff8f5;
-  color: #4e5969;
+  border-left: 4px solid var(--main-orange);
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
   border-radius: 0 4px 4px 0;
 }
 
 .markdown-body :deep(a) {
-  color: #f05a23;
+  color: var(--main-orange);
   text-decoration: none;
 }
 

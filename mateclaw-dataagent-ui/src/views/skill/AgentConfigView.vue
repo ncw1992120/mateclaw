@@ -150,7 +150,7 @@ onMounted(loadAgents)
 <style scoped>
 .agent-config-page {
   padding: 16px 24px 24px;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   min-height: 100%;
   display: flex;
   flex-direction: column;
@@ -167,30 +167,30 @@ onMounted(loadAgents)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 16px;
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
 }
 
 .agent-count {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .page-loading {
   text-align: center;
   padding: 60px 0;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .empty-state {
   text-align: center;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   padding: 60px 16px;
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
 }
 
 .empty-icon {
@@ -201,7 +201,7 @@ onMounted(loadAgents)
 
 .empty-state p {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0 0 16px 0;
 }
 
@@ -214,15 +214,15 @@ onMounted(loadAgents)
 .agent-card {
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #e8ecf2;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 14px;
   transition: all 0.2s;
 }
 
 .agent-card:hover {
-  border-color: #f05a23;
+  border-color: var(--main-orange);
   box-shadow: 0 2px 12px rgba(240, 90, 35, 0.08);
 }
 
@@ -249,13 +249,13 @@ onMounted(loadAgents)
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 6px 0;
 }
 
 .card-desc {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -270,6 +270,6 @@ onMounted(loadAgents)
   gap: 4px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px dashed #e8ecf2;
+  border-top: 1px dashed var(--theme-border);
 }
 </style>

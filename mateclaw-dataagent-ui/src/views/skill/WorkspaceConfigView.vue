@@ -99,7 +99,7 @@ watch(visibleSubMenuItems, (list) => {
   display: flex;
   width: 100%;
   height: 100%;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 
@@ -107,8 +107,8 @@ watch(visibleSubMenuItems, (list) => {
 .workspace-sidebar {
   width: 180px;
   flex-shrink: 0;
-  background: #fff;
-  border-right: 1px solid #e8ecf2;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
   padding: 16px 0;
   overflow-y: auto;
 }
@@ -125,7 +125,7 @@ watch(visibleSubMenuItems, (list) => {
   align-items: center;
   padding: 10px 12px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   border-radius: 6px;
   transition: all 0.2s;
@@ -135,12 +135,12 @@ watch(visibleSubMenuItems, (list) => {
 }
 
 .sub-menu-item:hover {
-  background: rgba(240, 90, 35, 0.06);
-  color: #f05a23;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
 }
 
 .sub-menu-item.active {
-  color: #f05a23;
+  color: var(--main-orange);
   font-weight: 600;
   background: rgba(240, 90, 35, 0.1);
 }
@@ -150,6 +150,6 @@ watch(visibleSubMenuItems, (list) => {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  background: #f5f6f8;
+  background: var(--theme-bg);
 }
 </style>

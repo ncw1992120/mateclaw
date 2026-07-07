@@ -627,7 +627,7 @@ async function handleTestAccountConnection(): Promise<void> {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 
@@ -636,15 +636,15 @@ async function handleTestAccountConnection(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
 .topbar-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
@@ -653,7 +653,7 @@ async function handleTestAccountConnection(): Promise<void> {
   padding: 0 16px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -663,7 +663,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .btn-create-top:hover {
-  background: #0e42d2;
+  background: var(--dark-orange);
 }
 
 .page-loading {
@@ -671,7 +671,7 @@ async function handleTestAccountConnection(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: #86909c;
+  color: var(--theme-text-muted);
   font-size: 14px;
 }
 
@@ -682,7 +682,7 @@ async function handleTestAccountConnection(): Promise<void> {
   justify-content: center;
   flex: 1;
   padding: 80px 0;
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .empty-icon-wrapper {
@@ -707,7 +707,7 @@ async function handleTestAccountConnection(): Promise<void> {
 
 .empty-desc {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0 0 20px 0;
   text-align: center;
   max-width: 320px;
@@ -719,7 +719,7 @@ async function handleTestAccountConnection(): Promise<void> {
   padding: 0 16px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
@@ -729,7 +729,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .btn-create-empty:hover {
-  background: #0e42d2;
+  background: var(--dark-orange);
 }
 
 /* ========== 主从布局 ========== */
@@ -744,8 +744,8 @@ async function handleTestAccountConnection(): Promise<void> {
 .ds-sidebar {
   width: 240px;
   min-width: 240px;
-  background: #fff;
-  border-right: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -768,12 +768,12 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .ds-list-item:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .ds-list-item.active {
-  background: #e8f3ff;
-  border-left-color: #165dff;
+  background: rgba(240, 90, 35, 0.1);
+  border-left-color: var(--main-orange);
 }
 
 .ds-list-item.disabled {
@@ -788,9 +788,9 @@ async function handleTestAccountConnection(): Promise<void> {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(22, 93, 255, 0.1) 0%, rgba(22, 93, 255, 0.04) 100%);
-  color: #165dff;
-  box-shadow: inset 0 0 0 1px rgba(22, 93, 255, 0.06);
+  background: linear-gradient(135deg, rgba(240, 90, 35, 0.12) 0%, rgba(240, 90, 35, 0.04) 100%);
+  color: var(--main-orange);
+  box-shadow: inset 0 0 0 1px rgba(240, 90, 35, 0.08);
 }
 
 .item-info {
@@ -803,7 +803,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .item-name {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -811,7 +811,7 @@ async function handleTestAccountConnection(): Promise<void> {
 
 .item-type {
   font-size: 11.5px;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -827,8 +827,8 @@ async function handleTestAccountConnection(): Promise<void> {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: #e8f3ff;
-  color: #165dff;
+  background: rgba(240, 90, 35, 0.1);
+  color: var(--main-orange);
   white-space: nowrap;
 }
 
@@ -842,7 +842,7 @@ async function handleTestAccountConnection(): Promise<void> {
   font-size: 10.5px;
   margin-left: auto;
   flex-shrink: 0;
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .item-account-badge .badge-dot {
@@ -861,7 +861,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-account-badge.dot-unbound .badge-dot {
-  background: #c9cdd4;
+  background: var(--theme-text-muted);
 }
 
 .item-account-badge.dot-bound {
@@ -873,7 +873,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-account-badge.dot-unbound {
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .item-account-badge .badge-text {
@@ -920,13 +920,13 @@ async function handleTestAccountConnection(): Promise<void> {
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   transition: background 0.15s, color 0.15s;
   padding: 0;
 }
 
 .item-action-btn:hover {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
 }
 
@@ -939,7 +939,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .ds-detail {
   flex: 1;
   min-width: 0;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -951,8 +951,8 @@ async function handleTestAccountConnection(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 12px;
   flex-wrap: wrap;
@@ -968,15 +968,15 @@ async function handleTestAccountConnection(): Promise<void> {
 .ds-name {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .ds-type-tag {
   font-size: 11.5px;
   padding: 2px 8px;
   border-radius: 10px;
-  color: #f05a23;
-  background: #fff2e8;
+  color: var(--main-orange);
+  background: rgba(240, 90, 35, 0.12);
 }
 
 .ds-status {
@@ -987,20 +987,20 @@ async function handleTestAccountConnection(): Promise<void> {
 
 .ds-status.on {
   color: #00b42a;
-  background: #e8ffea;
+  background: rgba(0, 180, 42, 0.12);
 }
 
 .ds-status.off {
-  color: #c9cdd4;
-  background: #f2f3f5;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
 }
 
 .ds-shared-tag {
   font-size: 11.5px;
   padding: 2px 8px;
   border-radius: 10px;
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: rgba(240, 90, 35, 0.12);
 }
 
 .toolbar-right {
@@ -1017,10 +1017,10 @@ async function handleTestAccountConnection(): Promise<void> {
   gap: 5px;
   height: 30px;
   padding: 0 12px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: #fff;
-  color: #4e5969;
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   line-height: 1;
   font-weight: 500;
@@ -1032,10 +1032,10 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
-  background: #f5f8ff;
-  box-shadow: 0 1px 3px rgba(22, 93, 255, 0.1);
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
+  box-shadow: 0 1px 3px rgba(240, 90, 35, 0.1);
 }
 
 .toolbar-btn:disabled {
@@ -1046,8 +1046,8 @@ async function handleTestAccountConnection(): Promise<void> {
 .btn-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(22, 93, 255, 0.2);
-  border-top-color: #165dff;
+  border: 2px solid rgba(240, 90, 35, 0.2);
+  border-top-color: var(--main-orange);
   border-radius: 50%;
   animation: ds-btn-spin 0.8s linear infinite;
   flex-shrink: 0;
@@ -1072,7 +1072,7 @@ async function handleTestAccountConnection(): Promise<void> {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .detail-placeholder {
@@ -1080,7 +1080,7 @@ async function handleTestAccountConnection(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 13px;
 }
 
@@ -1091,7 +1091,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .account-hint {
   margin: 0 0 16px;
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.6;
 }
 

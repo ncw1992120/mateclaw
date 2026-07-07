@@ -519,8 +519,8 @@ defineExpose({ setExpandedKeys })
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #eee;
-  background: #fff;
+  border-right: 1px solid var(--theme-border);
+  background: var(--theme-surface);
 }
 
 .sidebar-header {
@@ -528,13 +528,13 @@ defineExpose({ setExpandedKeys })
   align-items: center;
   justify-content: space-between;
   padding: 16px 16px 12px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .sidebar-title {
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--theme-text);
 }
 
 .sidebar-actions {
@@ -544,7 +544,7 @@ defineExpose({ setExpandedKeys })
 
 .sidebar-search {
   padding: 12px 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .sidebar-search :deep(.el-input-group__append) {
@@ -572,12 +572,12 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree :deep(.el-tree-node__content:hover) {
-  background: #f5f5f5;
+  background: var(--theme-surface-hover);
 }
 
 .sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: #fff2e8;
-  color: #f05a23;
+  background: rgba(240, 90, 35, 0.12);
+  color: var(--main-orange);
   font-weight: 500;
 }
 
@@ -600,7 +600,7 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree :deep(.el-tree-node__expand-icon) {
-  color: #999;
+  color: var(--theme-text-muted);
   font-size: 12px;
   padding: 2px;
 }
@@ -615,12 +615,12 @@ defineExpose({ setExpandedKeys })
   flex: 1;
   overflow: hidden;
   font-size: 13px;
-  color: #333;
+  color: var(--theme-text);
 }
 
 .tree-node.is-doc {
   font-size: 13px;
-  color: #555;
+  color: var(--theme-text-secondary);
   padding-left: 4px;
 }
 
@@ -631,11 +631,11 @@ defineExpose({ setExpandedKeys })
   margin-right: 6px;
   font-size: 14px;
   flex-shrink: 0;
-  color: #999;
+  color: var(--theme-text-muted);
 }
 
 .tree-node.is-doc .tree-node-icon {
-  color: #1677ff;
+  color: var(--main-orange);
 }
 
 .tree-node-label {
@@ -647,8 +647,8 @@ defineExpose({ setExpandedKeys })
 
 .tree-node-count {
   font-size: 11px;
-  color: #999;
-  background: #f0f0f0;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   border-radius: 10px;
   padding: 1px 6px;
   margin-left: 4px;
@@ -657,8 +657,8 @@ defineExpose({ setExpandedKeys })
 
 .tree-node-status {
   font-size: 11px;
-  color: #ff9c4d;
-  background: #fff2e8;
+  color: var(--main-orange);
+  background: rgba(240, 90, 35, 0.12);
   border-radius: 10px;
   padding: 1px 6px;
   margin-left: 4px;
@@ -674,7 +674,7 @@ defineExpose({ setExpandedKeys })
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  color: #999;
+  color: var(--theme-text-muted);
   cursor: grab;
   border-radius: 3px;
   transition: all 0.15s;
@@ -685,8 +685,8 @@ defineExpose({ setExpandedKeys })
 }
 
 .tree-node-drag-handle:hover {
-  color: #1677ff;
-  background: #e6f7ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 /* 悬停操作菜单 - 默认隐藏，悬停时显示 */
@@ -712,7 +712,7 @@ defineExpose({ setExpandedKeys })
   height: 20px;
   font-size: 13px;
   font-weight: 600;
-  color: #999;
+  color: var(--theme-text-muted);
   cursor: pointer;
   border-radius: 3px;
   transition: all 0.15s;
@@ -720,7 +720,7 @@ defineExpose({ setExpandedKeys })
 }
 
 .action-more:hover {
-  color: #1677ff;
-  background: #e6f7ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 </style>

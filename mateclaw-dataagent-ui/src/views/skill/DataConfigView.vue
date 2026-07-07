@@ -11,7 +11,7 @@ import DatasourceView from '@/views/DatasourceView.vue'
 <style scoped>
 .data-config-page {
   padding: 0;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   height: 100%;
   display: flex;
   flex-direction: column;
