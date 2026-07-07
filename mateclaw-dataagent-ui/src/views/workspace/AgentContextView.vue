@@ -29,7 +29,7 @@
       <!-- 未选择 Agent -->
       <div v-if="!selectedAgentId" class="empty-state">
         <div class="empty-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#c9cdd4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--theme-text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </div>
         <p class="empty-text">{{ t('workspaceMenu.noAgentSelected') }}</p>
       </div>
@@ -235,9 +235,9 @@ function isPromptEnabled(filename: string): boolean {
 function getFileIcon(filename: string): string {
   const lower = filename.toLowerCase()
   if (lower.endsWith('.md')) {
-    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f05a23" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--main-orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`
   }
-  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#86909c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--theme-text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`
 }
 
 /** 格式化文件大小 */
@@ -400,7 +400,7 @@ onMounted(async () => {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f5f6f8;
+  background: var(--theme-bg);
   overflow: hidden;
 }
 
@@ -409,8 +409,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e8ecf2;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
@@ -423,13 +423,13 @@ onMounted(async () => {
 .page-title {
   font-size: 20px;
   font-weight: 700;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
 .page-desc {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0;
 }
 
@@ -442,15 +442,15 @@ onMounted(async () => {
   min-height: 0;
   overflow: auto;
   padding: 20px 24px;
-  background: #f5f6f8;
+  background: var(--theme-bg);
 }
 
 .context-card {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   padding: 18px 20px;
   margin-bottom: 16px;
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
 }
 
 .card-header {
@@ -469,13 +469,13 @@ onMounted(async () => {
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
 .card-subtitle {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 /* 已启用系统提示文件 */
@@ -490,14 +490,14 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #f7f8fa;
-  border: 1px solid #e8ecf2;
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   transition: background 0.2s;
 }
 
 .prompt-item:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .prompt-order {
@@ -507,7 +507,7 @@ onMounted(async () => {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #f05a23;
+  background: var(--main-orange);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -517,7 +517,7 @@ onMounted(async () => {
 .prompt-name {
   flex: 1;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -525,7 +525,7 @@ onMounted(async () => {
 
 .prompt-size {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   flex-shrink: 0;
 }
 
@@ -549,13 +549,13 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px;
-  border: 1px solid #e8ecf2;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   transition: all 0.2s;
 }
 
 .file-item:hover {
-  border-color: #f05a23;
+  border-color: var(--main-orange);
   box-shadow: 0 2px 8px rgba(240, 90, 35, 0.08);
 }
 
@@ -597,7 +597,7 @@ onMounted(async () => {
 .file-name {
   font-size: 14px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -608,11 +608,11 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .meta-sep {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .file-actions {
@@ -629,7 +629,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: 80px 0;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .empty-icon {
@@ -647,9 +647,9 @@ onMounted(async () => {
 .empty-inline {
   text-align: center;
   padding: 30px 0;
-  color: #86909c;
+  color: var(--theme-text-muted);
   font-size: 13px;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   border-radius: 6px;
 }
 
@@ -669,12 +669,14 @@ onMounted(async () => {
 .form-label {
   font-size: 13px;
   font-weight: 600;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .content-textarea :deep(.el-textarea__inner) {
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   line-height: 1.6;
+  color: var(--theme-text);
+  background: var(--theme-surface);
 }
 </style>

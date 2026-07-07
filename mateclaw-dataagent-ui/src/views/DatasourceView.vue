@@ -56,33 +56,35 @@
                 </svg>
               </span>
               <div class="item-info">
-                <span class="item-name">{{ ds.name }}</span>
+                <div class="item-main-row">
+                  <span class="item-name">{{ ds.name }}</span>
+                  <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
+                    <button
+                      class="item-action-btn"
+                      :title="t('datasourcePage.actionRename')"
+                      @click="handleRename(ds)"
+                    >✏️</button>
+                    <button
+                      class="item-action-btn danger"
+                      :title="t('datasourcePage.actionDelete')"
+                      @click="handleDelete(ds)"
+                    >🗑️</button>
+                  </div>
+                </div>
                 <div class="item-meta-row">
                   <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
                   <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
+                  <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
+                    <span class="badge-dot"></span>
+                    <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
+                    <span
+                      v-if="resolveAccountBadge(ds.id).testOk !== null"
+                      class="badge-test"
+                      :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
+                      :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
+                    >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
+                  </div>
                 </div>
-              </div>
-              <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
-                <span class="badge-dot"></span>
-                <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
-                <span
-                  v-if="resolveAccountBadge(ds.id).testOk !== null"
-                  class="badge-test"
-                  :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
-                  :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
-                >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
-              </div>
-              <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
-                <button
-                  class="item-action-btn"
-                  :title="t('datasourcePage.actionRename')"
-                  @click="handleRename(ds)"
-                >✏️</button>
-                <button
-                  class="item-action-btn danger"
-                  :title="t('datasourcePage.actionDelete')"
-                  @click="handleDelete(ds)"
-                >🗑️</button>
               </div>
             </div>
           </div>
@@ -742,8 +744,8 @@ async function handleTestAccountConnection(): Promise<void> {
 
 /* ========== 左侧：数据源侧边栏 ========== */
 .ds-sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: 280px;
+  min-width: 280px;
   background: var(--theme-surface);
   border-right: 1px solid var(--theme-border);
   display: flex;
@@ -794,10 +796,18 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-info {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.item-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .item-name {
@@ -810,8 +820,8 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-type {
-  font-size: 11.5px;
-  color: var(--theme-text-muted);
+  font-size: 12px;
+  color: var(--theme-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -820,6 +830,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .item-meta-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -837,10 +848,9 @@ async function handleTestAccountConnection(): Promise<void> {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 8px;
-  font-size: 10.5px;
-  margin-left: auto;
+  font-size: 11px;
   flex-shrink: 0;
   background: var(--theme-surface-hover);
 }
@@ -873,7 +883,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-account-badge.dot-unbound {
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .item-account-badge .badge-text {

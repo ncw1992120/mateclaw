@@ -375,6 +375,7 @@ async function handleRebuildEs(): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
+  background: var(--theme-surface);
 }
 
 .panel-toolbar {
@@ -382,7 +383,7 @@ async function handleRebuildEs(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  border-bottom: 1px solid #e5e6eb;
+  border-bottom: 1px solid var(--theme-border);
   flex-wrap: wrap;
   gap: 10px;
 }
@@ -402,26 +403,32 @@ async function handleRebuildEs(): Promise<void> {
 .search-input {
   height: 30px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: 12px;
   outline: none;
   width: 220px;
   font-family: inherit;
+  color: var(--theme-text);
+  background: var(--theme-surface);
   transition: border-color 0.2s;
 }
 
+.search-input::placeholder {
+  color: var(--theme-text-muted);
+}
+
 .search-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .tool-btn {
   height: 30px;
   padding: 0 12px;
   border-radius: 4px;
-  border: 1px solid #e5e6eb;
-  background: #fff;
-  color: #4e5969;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
@@ -430,8 +437,8 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .tool-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .tool-btn:disabled {
@@ -440,13 +447,13 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .tool-btn.primary {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
   color: #fff;
 }
 
 .tool-btn.primary:hover:not(:disabled) {
-  background: #0e42d2;
+  background: var(--dark-orange);
 }
 
 .panel-loading {
@@ -454,7 +461,7 @@ async function handleRebuildEs(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: #86909c;
+  color: var(--theme-text-muted);
   font-size: 14px;
 }
 
@@ -464,7 +471,7 @@ async function handleRebuildEs(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 13px;
   gap: 12px;
 }
@@ -487,7 +494,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .data-grid thead tr {
-  background: #fafafa;
+  background: var(--theme-bg);
 }
 
 .data-grid th {
@@ -495,21 +502,21 @@ async function handleRebuildEs(): Promise<void> {
   text-align: left;
   font-size: 12.5px;
   font-weight: 500;
-  color: #86909c;
-  border-bottom: 1px solid #e5e6eb;
+  color: var(--theme-text-muted);
+  border-bottom: 1px solid var(--theme-border);
   white-space: nowrap;
 }
 
 .data-grid td {
   padding: 10px 16px;
   font-size: 13px;
-  color: #4e5969;
-  border-bottom: 1px solid #f2f3f5;
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-border);
   vertical-align: middle;
 }
 
 .data-grid tbody tr:hover {
-  background: #fafbfc;
+  background: var(--theme-surface-hover);
 }
 
 .col-term-name {
@@ -559,7 +566,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .term-name {
-  color: #1d2129;
+  color: var(--theme-text);
   font-weight: 500;
 }
 
@@ -568,7 +575,7 @@ async function handleRebuildEs(): Promise<void> {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #e8f7ff;
+  background: rgba(22, 93, 255, 0.1);
   color: #165dff;
   font-weight: 500;
 }
@@ -582,13 +589,13 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .status-badge.enabled {
-  background: #e8ffea;
+  background: rgba(0, 180, 42, 0.12);
   color: #00b42a;
 }
 
 .status-badge.disabled {
-  background: #f2f3f5;
-  color: #c9cdd4;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
 }
 
 .row-actions {
@@ -612,7 +619,7 @@ async function handleRebuildEs(): Promise<void> {
 
 .icon-btn:hover {
   opacity: 1;
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .pagination-bar {
@@ -620,17 +627,17 @@ async function handleRebuildEs(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  border-top: 1px solid #e5e6eb;
+  border-top: 1px solid var(--theme-border);
 }
 
 .page-info {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .page-total {
   font-weight: 600;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 /* ========== 弹窗 ========== */
@@ -648,7 +655,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .dialog-card {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   width: 560px;
   max-height: 80vh;
@@ -662,13 +669,13 @@ async function handleRebuildEs(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid #e5e6eb;
+  border-bottom: 1px solid var(--theme-border);
 }
 
 .dialog-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
 }
 
@@ -676,7 +683,7 @@ async function handleRebuildEs(): Promise<void> {
   background: none;
   border: none;
   font-size: 16px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -684,8 +691,8 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .dialog-close:hover {
-  color: #1d2129;
-  background: #f2f3f5;
+  color: var(--theme-text);
+  background: var(--theme-surface-hover);
 }
 
 .dialog-body {
@@ -712,7 +719,7 @@ async function handleRebuildEs(): Promise<void> {
   display: block;
   font-size: 12px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin-bottom: 6px;
 }
 
@@ -725,63 +732,76 @@ async function handleRebuildEs(): Promise<void> {
   width: 100%;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: 13px;
   outline: none;
   font-family: inherit;
+  color: var(--theme-text);
+  background: var(--theme-surface);
   transition: border-color 0.2s;
   box-sizing: border-box;
 }
 
+.form-input::placeholder {
+  color: var(--theme-text-muted);
+}
+
 .form-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .form-input:disabled {
-  background: #f7f8fa;
-  color: #c9cdd4;
+  background: var(--theme-bg);
+  color: var(--theme-text-muted);
 }
 
 .form-select {
   width: 100%;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: 13px;
   outline: none;
   font-family: inherit;
+  color: var(--theme-text);
   transition: border-color 0.2s;
   box-sizing: border-box;
-  background: #fff;
+  background: var(--theme-surface);
   cursor: pointer;
 }
 
 .form-select:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .form-select:disabled {
-  background: #f7f8fa;
-  color: #c9cdd4;
+  background: var(--theme-bg);
+  color: var(--theme-text-muted);
 }
 
 .form-textarea {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   font-size: 13px;
   outline: none;
   font-family: inherit;
+  color: var(--theme-text);
+  background: var(--theme-surface);
   transition: border-color 0.2s;
   resize: vertical;
   box-sizing: border-box;
 }
 
+.form-textarea::placeholder {
+  color: var(--theme-text-muted);
+}
+
 .form-textarea:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .dialog-footer {
@@ -789,16 +809,16 @@ async function handleRebuildEs(): Promise<void> {
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 20px;
-  border-top: 1px solid #e5e6eb;
+  border-top: 1px solid var(--theme-border);
 }
 
 .btn-cancel {
   height: 32px;
   padding: 0 16px;
   border-radius: 4px;
-  border: 1px solid #e5e6eb;
-  background: #fff;
-  color: #4e5969;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
@@ -806,8 +826,8 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .btn-cancel:hover {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .btn-confirm {
@@ -815,7 +835,7 @@ async function handleRebuildEs(): Promise<void> {
   padding: 0 16px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
   font-size: 13px;
   cursor: pointer;
@@ -824,7 +844,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .btn-confirm:hover:not(:disabled) {
-  background: #0e42d2;
+  background: var(--dark-orange);
 }
 
 .btn-confirm:disabled {

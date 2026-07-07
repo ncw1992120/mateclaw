@@ -177,7 +177,7 @@
               </label>
               <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
             </label>
-            <p class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">
+            <p class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: var(--theme-text-muted);">
               开启后，同工作区其他用户可查看该数据源的元数据（不包含连接配置）
             </p>
           </div>
@@ -207,7 +207,7 @@
 
         <!-- 加载状态 -->
         <div v-if="metricPagination.loading" class="loading-container">
-          <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
+          <el-icon class="is-loading" style="font-size: 24px; color: var(--main-orange);">
             <Loading />
           </el-icon>
           <span class="loading-text">{{ t('common.loading') }}</span>
@@ -293,7 +293,7 @@
                     <div class="expand-content">
                       <!-- 加载中 -->
                       <div v-if="metricDimensionLoadingMap[row.metricName]" class="expand-loading">
-                        <el-icon class="is-loading" style="font-size: 14px; color: #165dff;"><Loading /></el-icon>
+                        <el-icon class="is-loading" style="font-size: 14px; color: var(--main-orange);"><Loading /></el-icon>
                         <span>{{ t('common.loading') }}</span>
                       </div>
                       <!-- 维度详情列表 -->
@@ -363,7 +363,7 @@
 
         <!-- 加载状态 -->
         <div v-if="dimensionPagination.loading" class="loading-container">
-          <el-icon class="is-loading" style="font-size: 24px; color: #165dff;">
+          <el-icon class="is-loading" style="font-size: 24px; color: var(--main-orange);">
             <Loading />
           </el-icon>
           <span class="loading-text">{{ t('common.loading') }}</span>
@@ -454,7 +454,7 @@
                     <div class="expand-content">
                       <!-- 加载中 -->
                       <div v-if="dimensionMetricLoadingMap[row.dimName]" class="expand-loading">
-                        <el-icon class="is-loading" style="font-size: 14px; color: #165dff;"><Loading /></el-icon>
+                        <el-icon class="is-loading" style="font-size: 14px; color: var(--main-orange);"><Loading /></el-icon>
                         <span>{{ t('common.loading') }}</span>
                       </div>
                       <!-- 指标详情列表 -->
@@ -1242,7 +1242,7 @@ const indicators = reactive([
   flex-direction: column;
   gap: 20px;
   padding: 24px 32px 40px;
-  background: linear-gradient(180deg, #f7f8fa 0%, #f0f2f5 100%);
+  background: var(--theme-bg);
   min-height: 100%;
   box-sizing: border-box;
 }
@@ -1254,9 +1254,9 @@ const indicators = reactive([
 }
 
 .mp-card {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 12px;
-  border: 1px solid #ebedf0;
+  border: 1px solid var(--theme-border);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   padding: 22px 24px 24px;
   transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
@@ -1264,7 +1264,7 @@ const indicators = reactive([
 
 .mp-card:hover {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
-  border-color: #e0e3e8;
+  border-color: var(--theme-border-strong);
 }
 
 .section-header {
@@ -1313,7 +1313,7 @@ const indicators = reactive([
 .section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   letter-spacing: 0.3px;
   line-height: 1.4;
@@ -1321,7 +1321,7 @@ const indicators = reactive([
 
 .section-desc {
   font-size: 12.5px;
-  color: #8c939d;
+  color: var(--theme-text-muted);
   margin: 0;
   line-height: 1.6;
 }
@@ -1341,10 +1341,10 @@ const indicators = reactive([
   gap: 6px;
   height: 32px;
   padding: 0 14px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: #fff;
-  color: #4e5969;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1354,10 +1354,10 @@ const indicators = reactive([
 }
 
 .section-action-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
-  background: #f5f8ff;
-  box-shadow: 0 1px 3px rgba(22, 93, 255, 0.12);
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
+  box-shadow: 0 1px 3px rgba(240, 90, 35, 0.12);
 }
 
 .section-action-btn:disabled {
@@ -1368,8 +1368,8 @@ const indicators = reactive([
 .btn-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(22, 93, 255, 0.2);
-  border-top-color: #165dff;
+  border: 2px solid rgba(240, 90, 35, 0.2);
+  border-top-color: var(--main-orange);
   border-radius: 50%;
   animation: panel-btn-spin 0.8s linear infinite;
 }
@@ -1403,7 +1403,7 @@ const indicators = reactive([
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
@@ -1421,8 +1421,8 @@ const indicators = reactive([
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #e5e6eb;
-  color: #86909c;
+  background: var(--theme-border);
+  color: var(--theme-text-muted);
   font-size: 10px;
   font-weight: bold;
   cursor: help;
@@ -1430,47 +1430,47 @@ const indicators = reactive([
 }
 
 .form-tip:hover {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
 }
 
 .form-input,
 .form-select {
   height: 36px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  background: #fff;
+  background: var(--theme-surface);
   box-sizing: border-box;
   width: 100%;
 }
 
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
-  border-color: #c9cdd4;
+  border-color: var(--theme-border-strong);
 }
 
 .form-input:focus,
 .form-select:focus {
-  border-color: #165dff;
-  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+  border-color: var(--main-orange);
+  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.08);
 }
 
 .form-input:disabled,
 .form-select:disabled {
-  background: #f7f8fa;
-  color: #1d2129;
+  background: var(--theme-bg);
+  color: var(--theme-text);
   cursor: not-allowed;
-  border-color: #e5e6eb;
+  border-color: var(--theme-border);
 }
 
 .form-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .form-select {
@@ -1510,14 +1510,14 @@ const indicators = reactive([
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   border-radius: 4px;
   transition: all 0.15s;
 }
 
 .eye-btn:hover {
-  color: #165dff;
-  background: #f2f3f5;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 /* ========== 指标管理卡片网格 ========== */
@@ -1528,9 +1528,9 @@ const indicators = reactive([
 }
 
 .indicator-card {
-  border: 1px solid #ebedf0;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--theme-surface);
   padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
@@ -1547,17 +1547,17 @@ const indicators = reactive([
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #e5e6eb;
+  background: var(--theme-border);
   transition: background 0.2s;
 }
 
 .indicator-card.is-on::before {
-  background: linear-gradient(180deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(180deg, var(--main-orange) 0%, var(--dark-orange) 100%);
 }
 
 .indicator-card:hover {
-  border-color: #165dff;
-  box-shadow: 0 4px 12px rgba(22, 93, 255, 0.08);
+  border-color: var(--main-orange);
+  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1571,7 +1571,7 @@ const indicators = reactive([
 .indicator-name {
   font-size: 13.5px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .indicator-meta {
@@ -1587,7 +1587,7 @@ const indicators = reactive([
   padding: 2px 7px;
   font-size: 10.5px;
   font-weight: 700;
-  color: #f05a23;
+  color: var(--main-orange);
   background: rgba(240, 90, 35, 0.08);
   border-radius: 3px;
   letter-spacing: 0.3px;
@@ -1595,17 +1595,17 @@ const indicators = reactive([
 
 .meta-text {
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .indicator-range {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
 }
 
 :deep(.el-switch) {
-  --el-switch-on-color: #f05a23;
+  --el-switch-on-color: var(--main-orange);
 }
 
 /* ========== 维度管理卡片网格 ========== */
@@ -1616,9 +1616,9 @@ const indicators = reactive([
 }
 
 .dimension-card {
-  border: 1px solid #ebedf0;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--theme-surface);
   padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
@@ -1655,7 +1655,7 @@ const indicators = reactive([
 .dimension-name {
   font-size: 13.5px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .dimension-type-tag {
@@ -1679,18 +1679,18 @@ const indicators = reactive([
 
 .meta-label {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .meta-value {
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
 .dimension-desc {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
 }
 
@@ -1706,7 +1706,7 @@ const indicators = reactive([
 
 .loading-text {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .empty-container {
@@ -1733,7 +1733,7 @@ const indicators = reactive([
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
@@ -1741,12 +1741,12 @@ const indicators = reactive([
 }
 
 .category-header:hover {
-  background: #eef0f5;
+  background: var(--theme-surface-hover);
 }
 
 .category-arrow {
   font-size: 10px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   transition: transform 0.2s;
 }
 
@@ -1757,13 +1757,13 @@ const indicators = reactive([
 .category-name {
   font-size: 14px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .category-count {
   font-size: 12px;
-  color: #86909c;
-  background: #e8e8e8;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   border-radius: 10px;
   padding: 1px 8px;
   margin-left: auto;
@@ -1784,9 +1784,9 @@ const indicators = reactive([
 .category-tree-panel {
   width: 240px;
   flex-shrink: 0;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   border-radius: 6px;
-  border: 1px solid #ebedf0;
+  border: 1px solid var(--theme-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1794,14 +1794,14 @@ const indicators = reactive([
 
 .tree-header {
   padding: 12px 16px;
-  border-bottom: 1px solid #ebedf0;
-  background: #f0f2f5;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-surface);
 }
 
 .tree-title {
   font-size: 14px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .tree-content {
@@ -1821,11 +1821,11 @@ const indicators = reactive([
 }
 
 .tree-node:hover {
-  background: #eef0f5;
+  background: var(--theme-surface-hover);
 }
 
 .tree-node.is-active {
-  background: #e6f0ff;
+  background: rgba(240, 90, 35, 0.1);
 }
 
 .tree-node.is-active::before {
@@ -1835,12 +1835,12 @@ const indicators = reactive([
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: #165dff;
+  background: var(--main-orange);
   border-radius: 0 2px 2px 0;
 }
 
 .tree-node-all .tree-node-icon {
-  color: #165dff;
+  color: var(--main-orange);
 }
 
 .tree-node-expand {
@@ -1859,7 +1859,7 @@ const indicators = reactive([
 
 .tree-node-expand .el-icon {
   font-size: 14px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   transition: transform 0.2s;
 }
 
@@ -1870,14 +1870,14 @@ const indicators = reactive([
 .tree-node-icon {
   display: flex;
   align-items: center;
-  color: #165dff;
+  color: var(--main-orange);
   flex-shrink: 0;
 }
 
 .tree-node-name {
   flex: 1;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1885,8 +1885,8 @@ const indicators = reactive([
 
 .tree-node-count {
   font-size: 11px;
-  color: #86909c;
-  background: #e8e8e8;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   border-radius: 10px;
   padding: 1px 8px;
   flex-shrink: 0;
@@ -1895,7 +1895,7 @@ const indicators = reactive([
 }
 
 .tree-node.is-active .tree-node-count {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
 }
 
@@ -1905,9 +1905,9 @@ const indicators = reactive([
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 6px;
-  border: 1px solid #ebedf0;
+  border: 1px solid var(--theme-border);
 }
 
 .table-header {
@@ -1915,8 +1915,8 @@ const indicators = reactive([
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #ebedf0;
-  background: #fafafa;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-bg);
 }
 
 .table-header-right {
@@ -1931,22 +1931,22 @@ const indicators = reactive([
 }
 
 .search-wrap :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #e5e6eb inset;
+  box-shadow: 0 0 0 1px var(--theme-border) inset;
 }
 
 .search-wrap :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #165dff inset;
+  box-shadow: 0 0 0 1px var(--main-orange) inset;
 }
 
 .table-title {
   font-size: 14px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .table-count {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .metric-name-cell {
@@ -1956,7 +1956,7 @@ const indicators = reactive([
 }
 
 .metric-name-cell .el-icon {
-  color: #165dff;
+  color: var(--main-orange);
 }
 
 /* ========== 指标展开行：可用维度 ========== */
@@ -1964,7 +1964,7 @@ const indicators = reactive([
   display: flex;
   gap: 16px;
   padding: 12px 16px;
-  background: #f7f8fa;
+  background: var(--theme-bg);
   border-radius: 6px;
   margin: 4px 0;
 }
@@ -1972,7 +1972,7 @@ const indicators = reactive([
 .expand-label {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   white-space: nowrap;
   flex-shrink: 0;
   line-height: 24px;
@@ -1991,13 +1991,13 @@ const indicators = reactive([
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .dimension-item {
   padding: 8px 12px;
-  background: #fff;
-  border: 1px solid #ebedf0;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   display: flex;
   flex-direction: column;
@@ -2013,7 +2013,7 @@ const indicators = reactive([
 .dimension-item-name {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
 }
 
 .dimension-item-meta {
@@ -2025,22 +2025,22 @@ const indicators = reactive([
 
 .meta-pair {
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .meta-key {
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .dimension-item-desc {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
 }
 
 .expand-empty {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 /* ========== 共享元数据开关样式（与 DatasourceForm 保持一致） ========== */
@@ -2057,7 +2057,7 @@ const indicators = reactive([
 
 .switch-text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .switch {
@@ -2078,7 +2078,7 @@ const indicators = reactive([
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: #c9cdd4;
+  background: var(--theme-text-muted);
   border-radius: 10px;
   transition: background 0.25s;
 }
@@ -2090,13 +2090,13 @@ const indicators = reactive([
   width: 16px;
   left: 2px;
   bottom: 2px;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 50%;
   transition: transform 0.25s;
 }
 
 .switch input:checked + .slider {
-  background: #165dff;
+  background: var(--main-orange);
 }
 
 .switch input:checked + .slider::before {

@@ -308,8 +308,8 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 }
 
 .role-tag.admin {
-  background: rgba(22, 93, 255, 0.12);
-  color: #165dff;
+  background: rgba(240, 90, 35, 0.12);
+  color: var(--main-orange);
 }
 
 .row-actions {
