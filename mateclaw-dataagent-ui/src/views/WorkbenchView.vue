@@ -113,21 +113,31 @@
                 <span class="user-name">{{ userStore.nickname || userStore.username || '用户' }}</span>
                 <span class="user-role">{{ userStore.role }}</span>
               </div>
+              <span v-if="!sidebarCollapsed" class="user-card-arrow">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>
-                  {{ userStore.username }}（{{ userStore.role }}）
+                  <span class="dropdown-user-name">{{ userStore.nickname || userStore.username }}</span>
+                  <span class="dropdown-user-account">@{{ userStore.username }}</span>
                 </el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item divided command="logout">
+                  <span class="dropdown-logout-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                      <polyline points="16 17 21 12 16 7"/>
+                      <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span>退出登录</span>
+                  </span>
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <div v-if="!sidebarCollapsed" class="footer-actions">
-            <button class="footer-action-btn" :title="t('nav.settings')">
-              <el-icon><Setting /></el-icon>
-            </button>
-          </div>
         </div>
 
       </div>
@@ -341,7 +351,7 @@ import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ChatView from '@/views/ChatView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
-import { OfficeBuilding, Check, Setting } from '@element-plus/icons-vue'
+import { OfficeBuilding, Check } from '@element-plus/icons-vue'
 import type { Conversation, Workspace } from '@/types'
 
 /** 左侧菜单可选取值（一级菜单 key） */
@@ -1278,73 +1288,81 @@ onBeforeUnmount(() => {
 
 /* 侧边栏底部用户区 */
 .sidebar-footer {
-  padding: 10px;
+  padding: 8px 10px;
   border-top: 1px solid var(--theme-border);
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
 }
 
 .sidebar-footer :deep(.el-dropdown) {
   display: block;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .sidebar-footer.collapsed {
-  padding: 10px 8px;
+  padding: 8px;
   justify-content: center;
 }
 
 .sidebar-footer.collapsed :deep(.el-dropdown) {
-  flex: none;
+  width: auto;
 }
 
 .user-card {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 6px 5px 5px;
-  border-radius: 24px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
-  background: var(--theme-surface-elevated);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  background: transparent;
 }
 
 .user-card:hover {
-  background: var(--theme-bg);
-  border-color: rgba(240, 90, 35, 0.12);
-  box-shadow: 0 2px 6px rgba(240, 90, 35, 0.05);
+  background: var(--theme-surface-hover);
+  border-color: var(--theme-border);
 }
 
 .user-card.collapsed {
   width: 36px;
   height: 36px;
-  flex: none;
   padding: 0;
   justify-content: center;
   border-radius: 50%;
 }
 
+.user-card.collapsed:hover {
+  background: var(--theme-surface-hover);
+  border-color: transparent;
+}
+
+.user-card-arrow {
+  margin-left: auto;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+
+.user-card:hover .user-card-arrow {
+  color: var(--theme-text-secondary);
+}
+
 .user-avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.2);
-  border: 1.5px solid var(--theme-surface);
 }
 
 .user-info {
@@ -1356,8 +1374,8 @@ onBeforeUnmount(() => {
 }
 
 .user-name {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--theme-text);
   white-space: nowrap;
   overflow: hidden;
@@ -1366,36 +1384,36 @@ onBeforeUnmount(() => {
 }
 
 .user-role {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--theme-text-muted);
   line-height: 1.2;
 }
 
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+/* 下拉菜单用户信息样式 */
+.dropdown-user-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+  line-height: 1.4;
 }
 
-.footer-action-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
+.dropdown-user-account {
+  display: block;
+  font-size: 11px;
   color: var(--theme-text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  font-size: 15px;
+  line-height: 1.3;
 }
 
-.footer-action-btn:hover {
-  background: var(--theme-surface-hover);
-  color: var(--main-orange);
+.dropdown-logout-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--theme-text-secondary);
+}
+
+.dropdown-logout-item svg {
+  flex-shrink: 0;
 }
 
 .col-mid {

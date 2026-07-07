@@ -389,4 +389,45 @@ public final class DataAgentConstants {
 
     /** 审批状态：已撤回 */
     public static final String APPROVAL_STATUS_CANCELLED = "cancelled";
+
+    // ==================== 洞察仪表盘 ====================
+
+    /** 仪表盘状态：草稿 */
+    public static final String INSIGHT_DASHBOARD_STATUS_DRAFT = "draft";
+
+    /** 仪表盘状态：已发布 */
+    public static final String INSIGHT_DASHBOARD_STATUS_PUBLISHED = "published";
+
+    /** 组件渲染类型：ECharts 图表 */
+    public static final String INSIGHT_RENDER_TYPE_ECHARTS = "echarts";
+
+    /** 组件渲染类型：KPI 卡片 */
+    public static final String INSIGHT_RENDER_TYPE_KPI = "kpi";
+
+    /** 组件渲染类型：表格 */
+    public static final String INSIGHT_RENDER_TYPE_TABLE = "table";
+
+    /** 图表类型：折线图 */
+    public static final String CHART_TYPE_LINE = "line";
+
+    /** 图表类型：柱状图 */
+    public static final String CHART_TYPE_BAR = "bar";
+
+    /** 图表类型：饼图 */
+    public static final String CHART_TYPE_PIE = "pie";
+
+    /** 报告模板路径 */
+    public static final String INSIGHT_REPORT_TEMPLATE_PATH = "skills/aloudata_metric_query/templates/report-template.md";
+
+    /** AI 解读会话 ID 前缀 */
+    public static final String INSIGHT_REPORT_CONVERSATION_PREFIX = "insight-report-";
+
+    // ==================== 输入优化 ====================
+
+    /** 输入优化会话 ID 前缀 */
+    public static final String OPTIMIZE_CONVERSATION_PREFIX = "optimize-";
+
+    /** 输入优化提示词模板，{0} 为用户原始输入 */
+    public static final String OPTIMIZE_PROMPT_TEMPLATE =
+            "请对以下用户输入进行润色优化，使其更清晰、更专业、更有条理，但保持原意不变。仅返回优化后的文本，不要加任何解释。\n\n用户输入：\n{0}";
 }

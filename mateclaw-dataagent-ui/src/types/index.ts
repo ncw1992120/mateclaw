@@ -438,6 +438,15 @@ export interface ChatCard {
   data: QueryPlanData | ChartCardData | EChartsOptionData | ClarifyData | DashboardCardData | FollowupData | string
 }
 
+/** 聊天附件 */
+export interface ChatAttachment {
+  fileName: string
+  storedName: string
+  url: string
+  size: number
+  contentType: string
+}
+
 /** 聊天消息 */
 export interface ChatMessage {
   role: ChatRole
@@ -446,6 +455,8 @@ export interface ChatMessage {
   timestamp: number
   /** 后端持久化的 Agent 元数据：toolCalls、segments 等 */
   metadata?: Record<string, unknown>
+  /** 附件列表 */
+  attachments?: ChatAttachment[]
 }
 
 /** SSE 结构化事件 */
@@ -905,6 +916,120 @@ export interface HelpCategory {
   documentCount: number
   createTime: string
   updateTime: string
+}
+
+// ==================== 洞察仪表盘 ====================
+
+/** 洞察仪表盘组件类型 */
+export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter'
+
+/** 图表子类型 */
+export type ChartType = 'line' | 'bar' | 'pie'
+
+/** 栅格位置（grid-layout-plus 坐标系） */
+export interface ComponentPosition {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** 组件数据绑定配置 */
+export interface ComponentDataSource {
+  /** 数据源 ID */
+  datasourceId: string
+  /** 指标名称列表 */
+  metrics: string[]
+  /** 维度名称列表 */
+  dimensions: string[]
+  /** 过滤条件 */
+  filters: Array<Record<string, unknown>>
+  /** 返回行数限制 */
+  limit?: number
+}
+
+/** 仪表盘组件定义 */
+export interface InsightComponent {
+  /** 组件唯一 ID */
+  id: string
+  /** 组件类型 */
+  type: InsightComponentType
+  /** 组件标题 */
+  title: string
+  /** 栅格位置 */
+  position: ComponentPosition
+  /** 数据绑定配置 */
+  dataSource?: ComponentDataSource
+  /** 图表子类型（仅 chart 类型组件） */
+  chartType?: ChartType
+  /** 渲染类型：echarts / kpi / table */
+  renderType?: string
+  /** 组件扩展配置 */
+  config?: Record<string, unknown>
+}
+
+/** 仪表盘 Schema */
+export interface InsightDashboardSchema {
+  version: string
+  components: InsightComponent[]
+}
+
+/** 洞察仪表盘实体 */
+export interface InsightDashboard {
+  id: string
+  name: string
+  description: string
+  /** Schema JSON 字符串（components 数组序列化） */
+  schemaJson: string
+  status: 'draft' | 'published'
+  /** AI 解读使用的 Agent ID */
+  agentId?: string
+  workspaceId: string
+  ownerId?: string
+  modifier?: string
+  createTime: string
+  updateTime: string
+}
+
+/** 创建仪表盘输入 */
+export interface InsightDashboardCreateInput {
+  name: string
+  description?: string
+  schemaJson?: string
+  agentId?: string
+}
+
+/** 更新仪表盘输入 */
+export interface InsightDashboardUpdateInput {
+  name?: string
+  description?: string
+  schemaJson?: string
+  status?: string
+  agentId?: string
+}
+
+/** 组件渲染数据（后端取数 + 图表构建后返回） */
+export interface InsightComponentData {
+  /** 对应组件 ID */
+  componentId: string
+  /** 渲染类型：echarts / kpi / table */
+  renderType: 'echarts' | 'kpi' | 'table'
+  /** ECharts option（renderType=echarts 时） */
+  option?: Record<string, unknown>
+  /** KPI 卡片数据（renderType=kpi 时） */
+  kpi?: {
+    name: string
+    value: string
+    chg?: string
+    up?: boolean
+  }
+  /** 表格数据（renderType=table 时） */
+  table?: {
+    columns: string[]
+    rows: string[][]
+  }
+  /** 取数失败时的错误信息（前端展示降级提示） */
+  error?: string
 }
 
 /** 帮助文档分类请求 */

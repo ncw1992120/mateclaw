@@ -355,3 +355,64 @@ export async function* reconnectStream(
     }
   }
 }
+
+const UPLOAD_URL = '/dataagent/api/v1/chat/upload'
+
+/** 上传聊天附件 */
+export interface ChatUploadResult {
+  conversationId: string
+  fileName: string
+  storedName: string
+  url: string
+  size: number
+  contentType: string
+}
+
+/** 上传聊天附件 */
+export async function uploadAttachment(conversationId: string, file: File): Promise<ChatUploadResult> {
+  const formData = new FormData()
+  formData.append('conversationId', conversationId)
+  formData.append('file', file)
+
+  const token = localStorage.getItem('token')
+  const workspaceIdRaw = localStorage.getItem('workspaceId')
+
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  if (workspaceIdRaw) {
+    try {
+      const workspaceId = JSON.parse(workspaceIdRaw)
+      headers['X-Workspace-Id'] = String(workspaceId)
+    } catch {
+      // workspaceId 格式异常，忽略
+    }
+  }
+
+  const response = await fetch(UPLOAD_URL, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`)
+  }
+
+  const result = await response.json()
+  return result.data
+}
+
+const OPTIMIZE_URL = '/dataagent/api/v1/chat/optimize'
+
+/** 优化结果 */
+export interface OptimizeResult {
+  optimized: string
+}
+
+/** 一键优化输入内容 */
+export async function optimizePrompt(input: string): Promise<OptimizeResult> {
+  const response = await api.post(OPTIMIZE_URL, { input })
+  return response.data as OptimizeResult
+}

@@ -38,6 +38,12 @@
         <div v-if="msg.role === 'user'" class="msg user">
           <div class="user-content-wrapper">
             <div class="bubble user-bubble">{{ msg.content }}</div>
+            <!-- 附件展示 -->
+            <div v-if="getUserAttachments(msg)" class="msg-attachments">
+              <span v-for="(att, aIdx) in getUserAttachments(msg)" :key="aIdx" class="msg-attachment">
+                📎 {{ att.fileName }}
+              </span>
+            </div>
             <!-- 用户消息操作栏（气泡外左下角） -->
             <div class="msg-actions msg-actions--user">
               <span class="msg-time">{{ formatMsgTime(msg.timestamp) }}</span>
@@ -380,16 +386,39 @@
 
     <!-- Input Bar -->
     <div class="input-bar">
-      <textarea
-        v-model="inputMessage"
-        class="chat-input"
-        :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholder')"
-        :disabled="chatStore.isStreaming"
-        rows="1"
-        @keydown="handleKeydown"
-      />
-      <button v-if="chatStore.isStreaming" class="btn-stop" @click="handleStop">{{ t('chat.stop') }}</button>
-      <button v-else class="btn-send" :disabled="!canSend" @click="handleSend">{{ t('chat.send') }}</button>
+      <!-- 附件预览区 -->
+      <div v-if="pendingAttachments.length > 0" class="attachment-preview">
+        <div v-for="(att, idx) in pendingAttachments" :key="idx" class="attachment-tag">
+          <span class="attachment-tag__icon">📎</span>
+          <span class="attachment-tag__name">{{ att.fileName }}</span>
+          <button class="attachment-tag__remove" type="button" @click="removeAttachment(idx)">×</button>
+        </div>
+      </div>
+      <div class="input-bar__row">
+        <input ref="fileInputRef" type="file" style="display:none" @change="handleFileChange" />
+        <button class="btn-attach" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <button class="btn-optimize" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+          <span v-if="isOptimizing" class="spin-icon" style="font-size:14px">⟳</span>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+        </button>
+        <textarea
+          v-model="inputMessage"
+          class="chat-input"
+          :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholder')"
+          :disabled="chatStore.isStreaming"
+          rows="1"
+          @keydown="handleKeydown"
+        />
+        <button v-if="chatStore.isStreaming" class="btn-stop" @click="handleStop">{{ t('chat.stop') }}</button>
+        <button v-else class="btn-send" :disabled="!canSend" @click="handleSend">{{ t('chat.send') }}</button>
+      </div>
     </div>
   </div>
 </template>
@@ -406,7 +435,8 @@ import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, Datasource } from '@/types'
+import { uploadAttachment, optimizePrompt } from '@/api/chat'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, Datasource, ChatAttachment } from '@/types'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -495,6 +525,18 @@ const feedbackOptions = [
 /** 输入消息 */
 const inputMessage = ref('')
 
+/** 待发送的附件列表 */
+const pendingAttachments = ref<ChatAttachment[]>([])
+
+/** 附件上传中状态 */
+const isUploading = ref(false)
+
+/** 一键优化中状态 */
+const isOptimizing = ref(false)
+
+/** 文件选择 input 引用 */
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
 /** 聊天区域容器引用 */
 const chatAreaRef = ref<HTMLElement | null>(null)
 /** 缓存 DOM 引用用于卸载时移除滚动监听 */
@@ -572,7 +614,7 @@ const echartsInstances = new Map<string, echarts.ECharts>()
 const echartsRefs = new Map<string, HTMLElement>()
 
 /** 是否可以发送 */
-const canSend = computed(() => inputMessage.value.trim() && !chatStore.isStreaming && chatStore.currentAgentId)
+const canSend = computed(() => (inputMessage.value.trim() || pendingAttachments.value.length > 0) && !chatStore.isStreaming && chatStore.currentAgentId)
 
 /** Marked 自定义 renderer：将 ```echarts 代码块转为占位 div，供后续 ECharts 初始化 */
 const customRenderer = {
@@ -1680,11 +1722,82 @@ function scanAndMountEChartsBlocks(): void {
 /** 发送消息 */
 function handleSend(): void {
   const message = inputMessage.value.trim()
-  if (!message || chatStore.isStreaming || !chatStore.currentAgentId) return
+  if ((!message && pendingAttachments.value.length === 0) || chatStore.isStreaming || !chatStore.currentAgentId) return
   inputMessage.value = ''
   userScrolledUp.value = false
+  // 将附件信息存入消息 metadata，发送后清空
+  const attachments = [...pendingAttachments.value]
+  pendingAttachments.value = []
   chatStore.sendMessage(chatStore.currentAgentId, message)
+  // 发送后将附件附加到最后一条用户消息
+  if (attachments.length > 0) {
+    const lastMsg = chatStore.messages[chatStore.messages.length - 2]
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.attachments = attachments
+    }
+  }
   scrollToBottom(true)
+}
+
+/** 触发文件选择 */
+function handleFileSelect(): void {
+  fileInputRef.value?.click()
+}
+
+/** 处理文件选择并上传 */
+async function handleFileChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  // 重置 input 以便再次选择同一文件
+  target.value = ''
+
+  const convId = chatStore.conversationId
+  if (!convId) return
+
+  isUploading.value = true
+  try {
+    const result = await uploadAttachment(convId, file)
+    pendingAttachments.value.push({
+      fileName: result.fileName,
+      storedName: result.storedName,
+      url: result.url,
+      size: result.size,
+      contentType: result.contentType,
+    })
+  } catch (e) {
+    console.warn('[ChatView] Attachment upload failed:', e)
+  } finally {
+    isUploading.value = false
+  }
+}
+
+/** 移除待发送附件 */
+function removeAttachment(idx: number): void {
+  pendingAttachments.value.splice(idx, 1)
+}
+
+/** 一键优化输入内容 */
+async function handleOptimize(): Promise<void> {
+  const text = inputMessage.value.trim()
+  if (!text || isOptimizing.value || chatStore.isStreaming) return
+  isOptimizing.value = true
+  try {
+    const result = await optimizePrompt(text)
+    if (result.optimized) {
+      inputMessage.value = result.optimized
+    }
+  } catch (e) {
+    console.warn('[ChatView] Optimize failed:', e)
+  } finally {
+    isOptimizing.value = false
+  }
+}
+
+/** 获取用户消息的附件列表 */
+function getUserAttachments(msg: typeof chatStore.messages.value[0]): ChatAttachment[] | null {
+  if (!msg.attachments || msg.attachments.length === 0) return null
+  return msg.attachments
 }
 
 /** 键盘事件处理：Enter发送，Ctrl+Enter换行 */
@@ -3058,11 +3171,18 @@ onUnmounted(() => {
 /* Input Bar */
 .input-bar {
   display: flex;
-  gap: 10px;
-  padding: 14px 20px 18px;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 20px 18px;
   border-top: 1px solid var(--theme-border);
   background: var(--theme-bg);
   flex-shrink: 0;
+}
+
+.input-bar__row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
 }
 
 .chat-input {
@@ -3420,4 +3540,123 @@ onUnmounted(() => {
   opacity: 1;
   max-height: 600px;
 }
-</style>
+
+/* 附件上传按钮 */
+.btn-attach {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-attach:hover:not(:disabled) {
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
+}
+
+.btn-attach:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* 一键优化按钮 */
+.btn-optimize {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-optimize:hover:not(:disabled) {
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
+}
+
+.btn-optimize:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* 附件预览区 */
+.attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.attachment-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  max-width: 200px;
+}
+
+.attachment-tag__icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.attachment-tag__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.attachment-tag__remove {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-tag__remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* 用户消息附件展示 */
+.msg-attachments {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.msg-attachment {
+  font-size: 12px;
+  opacity: 0.85;
+}</style>

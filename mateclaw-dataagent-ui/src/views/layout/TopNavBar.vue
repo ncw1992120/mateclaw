@@ -82,6 +82,7 @@ const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
 /** 导航项配置 */
 const navItems = [
   { key: 'smart-ask', label: 'nav.smartAsk' },
+  { key: 'insight', label: 'nav.insight' },
 ]
 
 /** 导航点击 */
