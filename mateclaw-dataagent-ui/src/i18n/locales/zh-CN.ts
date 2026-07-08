@@ -1434,6 +1434,9 @@ export default {
       selectMetrics: '请选择指标',
       selectDimensions: '请选择维度',
       loadFailed: '加载指标/维度失败',
+      previewData: '验证数据',
+      previewChartOk: '图表数据验证通过',
+      previewTableOk: '表格数据验证通过，共 {rows} 行',
     },
     component: {
       kpi: 'KPI 卡片',

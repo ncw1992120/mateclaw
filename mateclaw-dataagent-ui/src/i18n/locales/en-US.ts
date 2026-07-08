@@ -1377,6 +1377,9 @@ export default {
       selectMetrics: 'Select metrics',
       selectDimensions: 'Select dimensions',
       loadFailed: 'Failed to load metrics/dimensions',
+      previewData: 'Verify Data',
+      previewChartOk: 'Chart data verified successfully',
+      previewTableOk: 'Table data verified, {rows} rows',
     },
     component: {
       kpi: 'KPI Card',

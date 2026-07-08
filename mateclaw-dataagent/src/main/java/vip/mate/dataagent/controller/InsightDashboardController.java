@@ -12,6 +12,7 @@ import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.InsightComponentDataDTO;
 import vip.mate.dataagent.dto.InsightDashboardCreateRequest;
+import vip.mate.dataagent.dto.InsightDashboardSchemaDTO;
 import vip.mate.dataagent.dto.InsightDashboardUpdateRequest;
 import vip.mate.dataagent.dto.InsightDashboardVO;
 import vip.mate.dataagent.service.InsightDashboardService;
@@ -101,6 +102,20 @@ public class InsightDashboardController {
     public R<List<InsightComponentDataDTO>> preview(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return R.ok(dataBindService.previewData(id));
+    }
+
+    /**
+     * 预览单个组件数据
+     * <p>
+     * 根据组件配置（含数据源、指标、维度）实时查询并生成渲染数据，
+     * 用于编辑器中配置组件后即时验证数据是否可用。
+     */
+    @PostMapping("/preview-component")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "预览组件数据", description = "根据组件配置实时查询数据，用于编辑器中即时验证")
+    public R<InsightComponentDataDTO> previewComponent(
+            @RequestBody InsightDashboardSchemaDTO.Component component) {
+        return R.ok(dataBindService.bindComponent(component));
     }
 
     /**

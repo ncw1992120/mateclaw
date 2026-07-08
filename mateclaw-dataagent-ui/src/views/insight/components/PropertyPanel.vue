@@ -102,18 +102,51 @@
             @change="emitChange"
           />
         </div>
+
+        <!-- 验证数据按钮 -->
+        <div v-if="canPreview" class="form-group preview-group">
+          <el-button
+            size="small"
+            type="primary"
+            :loading="previewLoading"
+            @click="handlePreviewData"
+          >
+            {{ t('insight.property.previewData') }}
+          </el-button>
+        </div>
+
+        <!-- 验证数据结果 -->
+        <div v-if="previewResult" class="preview-result">
+          <div v-if="previewResult.error" class="preview-error">
+            {{ previewResult.error }}
+          </div>
+          <div v-else-if="previewResult.renderType === 'kpi'" class="preview-kpi">
+            <span class="preview-kpi-name">{{ previewResult.kpi?.name }}</span>
+            <span class="preview-kpi-value">{{ previewResult.kpi?.value }}</span>
+            <span v-if="previewResult.kpi?.chg" class="preview-kpi-chg" :class="{ up: previewResult.kpi?.up }">
+              {{ previewResult.kpi?.up ? '+' : '-' }}{{ previewResult.kpi?.chg }}
+            </span>
+          </div>
+          <div v-else-if="previewResult.renderType === 'echarts'" class="preview-chart">
+            <span class="preview-label">{{ t('insight.property.previewChartOk') }}</span>
+          </div>
+          <div v-else-if="previewResult.renderType === 'table'" class="preview-table">
+            <span class="preview-label">{{ t('insight.property.previewTableOk', { rows: previewResult.table?.rows?.length ?? 0 }) }}</span>
+          </div>
+        </div>
       </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, ref } from 'vue'
+import { reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { InsightComponent, ComponentDataSource } from '@/types'
+import type { InsightComponent, ComponentDataSource, InsightComponentData } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
+import * as insightDashboardApi from '@/api/insight-dashboard'
 
 defineOptions({
   name: 'PropertyPanel',
@@ -154,6 +187,16 @@ const dimensionsOptions = ref<Array<{ dimName: string; dimDisplayName: string }>
 const metricsLoading = ref(false)
 const dimensionsLoading = ref(false)
 
+/** 验证数据相关 */
+const previewLoading = ref(false)
+const previewResult = ref<InsightComponentData | null>(null)
+
+/** 是否可以预览（数据源 + 至少一个指标已配置） */
+const canPreview = computed(() => {
+  return localDataSource.datasourceId
+    && localDataSource.metrics.length > 0
+})
+
 /** 搜索防抖定时器 */
 let metricsSearchTimer: ReturnType<typeof setTimeout> | null = null
 let dimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
@@ -165,6 +208,7 @@ watch(
     if (!newComp) {
       return
     }
+    previewResult.value = null
     Object.assign(localComponent, JSON.parse(JSON.stringify(newComp)))
     if (newComp.dataSource) {
       Object.assign(localDataSource, JSON.parse(JSON.stringify(newComp.dataSource)))
@@ -244,16 +288,42 @@ function searchDimensions(query: string): void {
   }, 300)
 }
 
+/** 验证数据：调用 preview-component 端点 */
+async function handlePreviewData(): Promise<void> {
+  if (!canPreview.value) {
+    return
+  }
+  previewLoading.value = true
+  previewResult.value = null
+  try {
+    const comp: InsightComponent = {
+      ...JSON.parse(JSON.stringify(localComponent)),
+      dataSource: JSON.parse(JSON.stringify(localDataSource)),
+    }
+    const result = await insightDashboardApi.previewComponent(comp) as unknown as InsightComponentData
+    previewResult.value = result
+    if (result.error) {
+      ElMessage.warning(result.error)
+    }
+  } catch (e: any) {
+    previewResult.value = { componentId: localComponent.id, renderType: 'table', error: e.message ?? t('insight.previewDataFailed') }
+  } finally {
+    previewLoading.value = false
+  }
+}
+
 /** 数据源变更时重新加载指标/维度 */
 function handleDatasourceChange(): void {
   localDataSource.metrics = []
   localDataSource.dimensions = []
+  previewResult.value = null
   loadMetricsAndDimensions(localDataSource.datasourceId)
   emitChange()
 }
 
 /** 触发变更事件 */
 function emitChange(): void {
+  previewResult.value = null
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),
     dataSource: localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined,
@@ -324,5 +394,52 @@ datasourceStore.fetchDatasources().catch(() => {
   font-size: 12px;
   font-weight: 500;
   color: var(--theme-text-secondary);
+}
+
+.preview-group {
+  margin-top: 4px;
+}
+
+.preview-result {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-border);
+}
+
+.preview-error {
+  color: var(--el-color-danger);
+  font-size: 13px;
+}
+
+.preview-kpi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-kpi-name {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.preview-kpi-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.preview-kpi-chg {
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.preview-kpi-chg.up {
+  color: var(--el-color-success);
+}
+
+.preview-label {
+  font-size: 13px;
+  color: var(--el-color-success);
 }
 </style>

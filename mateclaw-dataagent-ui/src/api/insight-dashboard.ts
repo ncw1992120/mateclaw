@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightComponentData } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightComponentData, InsightComponent } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
@@ -32,4 +32,9 @@ export function remove(id: string) {
 /** 预览仪表盘（获取所有组件渲染数据） */
 export function preview(id: string) {
   return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`)
+}
+
+/** 预览单个组件数据（编辑器即时验证） */
+export function previewComponent(component: InsightComponent) {
+  return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
 }

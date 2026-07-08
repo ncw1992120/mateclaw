@@ -122,9 +122,9 @@ async function loadDashboard(): Promise<void> {
     }
     // 调用预览接口获取组件渲染数据
     try {
-      const res = await preview(props.dashboardId)
+      const dataList = await preview(props.dashboardId) as unknown as InsightComponentData[]
       const dataMap: Record<string, InsightComponentData> = {}
-      for (const item of res.data ?? []) {
+      for (const item of dataList ?? []) {
         dataMap[item.componentId] = item
       }
       componentDataMap.value = dataMap
