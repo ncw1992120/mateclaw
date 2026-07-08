@@ -6,14 +6,13 @@
   >
     <GridLayout
       v-if="components.length > 0"
-      :layout="gridLayout"
+      v-model:layout="gridLayout"
       :col-num="24"
       :row-height="30"
       :is-draggable="editable"
       :is-resizable="editable"
       :vertical-compact="true"
       :margin="[8, 8]"
-      @layout-updated="handleLayoutUpdated"
     >
       <GridItem
         v-for="item in gridLayout"
@@ -67,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData } from '@/types'
@@ -109,16 +108,52 @@ interface GridLayoutItem {
   h: number
 }
 
-/** 将 InsightComponent 转为 GridLayoutItem */
-const gridLayout = computed<GridLayoutItem[]>(() => {
-  return props.components.map((c) => ({
-    i: c.id,
-    x: c.position.x,
-    y: c.position.y,
-    w: c.position.w,
-    h: c.position.h,
-  }))
-})
+/** 用 ref 管理布局，通过 v-model:layout 双向绑定给 grid-layout-plus */
+const gridLayout = ref<GridLayoutItem[]>([])
+
+/** 记录上次同步到 gridLayout 的组件 ID 串，用于检测组件增删 */
+let lastSyncedIds = ''
+
+/** 标记：是否正在从 props 同步，避免触发 layout-change 循环 */
+let isSyncingFromProps = false
+
+/** 从 props.components 同步到 gridLayout，仅在组件增删时触发 */
+watch(
+  () => props.components.map((c) => c.id).join(','),
+  (newIds) => {
+    if (newIds === lastSyncedIds) {
+      return
+    }
+    lastSyncedIds = newIds
+    isSyncingFromProps = true
+    gridLayout.value = props.components.map((c) => ({
+      i: c.id,
+      x: c.position.x,
+      y: c.position.y,
+      w: c.position.w,
+      h: c.position.h,
+    }))
+    nextTick(() => {
+      isSyncingFromProps = false
+    })
+  },
+  { immediate: true }
+)
+
+/** 监听 gridLayout 变化（由 grid-layout-plus 内部拖拽/缩放触发），向上 emit */
+watch(
+  gridLayout,
+  (newLayout) => {
+    if (isSyncingFromProps) {
+      return
+    }
+    emit(
+      'update-layout',
+      newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
+    )
+  },
+  { deep: true }
+)
 
 /** 根据 ID 获取组件 */
 function getComponent(id: string): InsightComponent | undefined {
@@ -157,28 +192,6 @@ function handleDrop(event: DragEvent): void {
   } catch (e) {
     console.error('[DashboardCanvas] drop parse error:', e)
   }
-}
-
-/** 布局更新（拖动/缩放后），仅在布局实际变化时 emit，避免无限循环 */
-function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
-  // 比较新旧布局，只有位置/尺寸真正变化才向上 emit
-  const changed = newLayout.some((item) => {
-    const comp = props.components.find((c) => c.id === item.i)
-    if (!comp) {
-      return true
-    }
-    return comp.position.x !== item.x
-      || comp.position.y !== item.y
-      || comp.position.w !== item.w
-      || comp.position.h !== item.h
-  })
-  if (!changed) {
-    return
-  }
-  emit(
-    'update-layout',
-    newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
-  )
 }
 
 /** 选中组件 */

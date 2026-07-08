@@ -26,7 +26,7 @@ import java.nio.file.Path;
 @RequestMapping("/v1/chat")
 @RequiredArgsConstructor
 @Tag(name = "DataAgent 附件", description = "数据分析 Agent 聊天附件上传与读取接口")
-public class ChatUploadController {
+public class DataAgentChatUploadController {
 
     private final ChatUploadRuntime chatUploadRuntime;
 

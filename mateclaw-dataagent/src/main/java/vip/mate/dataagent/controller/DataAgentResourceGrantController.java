@@ -25,7 +25,7 @@ import java.util.List;
 @RequestMapping("/v1/resource-grants")
 @RequiredArgsConstructor
 @Tag(name = "资源授权管理", description = "通用资源授权 CRUD 与权限查询接口")
-public class ResourceGrantController {
+public class DataAgentResourceGrantController {
 
     private final ResourceGrantService resourceGrantService;
     private final WorkspaceGuard workspaceGuard;

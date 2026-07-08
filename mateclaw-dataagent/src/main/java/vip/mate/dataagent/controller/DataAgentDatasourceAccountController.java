@@ -25,7 +25,7 @@ import java.util.List;
 @RequestMapping("/v1/datasource-accounts")
 @RequiredArgsConstructor
 @Tag(name = "数据源查询账号", description = "用户数据源查询账号绑定管理接口")
-public class DatasourceAccountController {
+public class DataAgentDatasourceAccountController {
 
     private final DatasourceAccountService datasourceAccountService;
 

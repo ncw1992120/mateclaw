@@ -191,11 +191,16 @@ function handleDeleteComponent(id: string): void {
   }
 }
 
-/** 组件属性变更 */
+/** 组件属性变更（保留画布管理的 position） */
 function handleComponentChange(updated: InsightComponent): void {
   const idx = schema.components.findIndex((c) => c.id === updated.id)
   if (idx >= 0) {
-    schema.components[idx] = updated
+    const existing = schema.components[idx]
+    schema.components[idx] = {
+      ...updated,
+      // 保留画布拖拽/缩放管理的 position，不被属性面板覆盖
+      position: existing.position,
+    }
   }
 }
 

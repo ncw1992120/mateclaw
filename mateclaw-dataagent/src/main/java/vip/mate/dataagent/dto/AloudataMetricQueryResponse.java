@@ -36,13 +36,30 @@ public class AloudataMetricQueryResponse implements Serializable {
     public static class MetricData implements Serializable {
         private static final long serialVersionUID = 1L;
 
-        /** 列定义 */
-        List<Map<String, Object>> columns;
+        /** 列式数据：key=列名，value=该列的值列表 */
+        Map<String, List<ColumnValue>> columns;
 
-        /** 数据行 */
+        /** 行式数据（部分查询可能为 null，需从 columns 转换） */
         List<Map<String, Object>> rows;
 
         /** 总行数 */
         Long total;
+    }
+
+    /**
+     * 列值单元
+     */
+    @Data
+    public static class ColumnValue implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        /** 值 */
+        private Object value;
+
+        /** 标记 */
+        private Object flag;
+
+        /** 计数 */
+        private Integer count;
     }
 }

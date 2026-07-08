@@ -19,7 +19,7 @@ import vip.mate.dataagent.service.ChatOptimizeService;
 @RequestMapping("/v1/chat")
 @RequiredArgsConstructor
 @Tag(name = "对话输入优化", description = "对话输入文本润色优化接口")
-public class ChatOptimizeController {
+public class DataAgentChatOptimizeController {
 
     private final ChatOptimizeService chatOptimizeService;
 

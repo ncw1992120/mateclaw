@@ -2,8 +2,8 @@
   <div class="login-page">
     <!-- 背景装饰 -->
     <div class="bg-decoration">
-      <div class="glow-ring ring-1" />
-      <div class="glow-ring ring-2" />
+      <div class="glow-blob blob-1" />
+      <div class="glow-blob blob-2" />
       <div class="glow-dot dot-1" />
       <div class="glow-dot dot-2" />
       <div class="glow-dot dot-3" />
@@ -126,20 +126,17 @@ async function handleLogin(): Promise<void> {
   width: 100%;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--main-orange) 8%, transparent) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, color-mix(in srgb, var(--main-orange) 6%, transparent) 0%, transparent 50%),
-    var(--theme-bg);
+  background: var(--theme-bg);
 }
 
 html[data-theme='dark'] .login-page {
   background:
-    radial-gradient(ellipse at 20% 20%, color-mix(in srgb, var(--main-orange) 18%, transparent) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, color-mix(in srgb, var(--main-orange) 16%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 15% 15%, color-mix(in srgb, var(--main-orange) 12%, transparent) 0%, transparent 45%),
+    radial-gradient(ellipse at 85% 85%, color-mix(in srgb, var(--main-orange) 10%, transparent) 0%, transparent 45%),
     linear-gradient(145deg, #1a1f2e 0%, #0f1219 100%);
 }
 
-/* 背景装饰 */
+/* 背景装饰：柔和弥散光斑，避免硬边弧线 */
 .bg-decoration {
   position: absolute;
   inset: 0;
@@ -147,58 +144,59 @@ html[data-theme='dark'] .login-page {
   overflow: hidden;
 }
 
-.glow-ring {
+.glow-blob {
   position: absolute;
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--main-orange) 12%, transparent);
+  filter: blur(80px);
+  pointer-events: none;
 }
 
-.ring-1 {
-  width: 600px;
-  height: 600px;
-  top: -180px;
-  right: -120px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--main-orange) 8%, transparent) 0%, transparent 70%);
-  animation: float 12s ease-in-out infinite;
+.blob-1 {
+  width: 520px;
+  height: 520px;
+  top: -160px;
+  right: -100px;
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+  animation: float 14s ease-in-out infinite;
 }
 
-.ring-2 {
+.blob-2 {
   width: 420px;
   height: 420px;
-  bottom: -100px;
-  left: -80px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--main-orange) 6%, transparent) 0%, transparent 70%);
-  animation: float 14s ease-in-out infinite reverse;
+  bottom: -140px;
+  left: -120px;
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  animation: float 16s ease-in-out infinite reverse;
 }
 
 .glow-dot {
   position: absolute;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--main-orange) 35%, transparent);
-  filter: blur(20px);
+  background: color-mix(in srgb, var(--main-orange) 28%, transparent);
+  filter: blur(24px);
 }
 
 .dot-1 {
-  width: 120px;
-  height: 120px;
-  top: 15%;
-  left: 12%;
+  width: 100px;
+  height: 100px;
+  top: 18%;
+  left: 14%;
   animation: pulse 8s ease-in-out infinite;
 }
 
 .dot-2 {
-  width: 80px;
-  height: 80px;
-  top: 60%;
-  right: 10%;
+  width: 70px;
+  height: 70px;
+  top: 62%;
+  right: 12%;
   animation: pulse 10s ease-in-out infinite 1s;
 }
 
 .dot-3 {
-  width: 50px;
-  height: 50px;
-  bottom: 25%;
-  left: 35%;
+  width: 44px;
+  height: 44px;
+  bottom: 28%;
+  left: 38%;
   animation: pulse 7s ease-in-out infinite 2s;
 }
 

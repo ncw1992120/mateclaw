@@ -82,6 +82,16 @@ public interface AloudataSemanticSyncService {
     List<AloudataDimensionSemanticDTO> listMetricDimensionDetails(Long datasourceId, String metricName);
 
     /**
+     * 批量查询多个指标关联的维度详情列表（去重合并，支持关键字过滤）
+     *
+     * @param datasourceId 数据源 ID
+     * @param metricNames  指标英文名列表
+     * @param keyword      搜索关键字（匹配维度名称、展示名），可为 null
+     * @return 去重后的维度详情列表
+     */
+    List<AloudataDimensionSemanticDTO> listMetricsDimensionDetails(Long datasourceId, List<String> metricNames, String keyword);
+
+    /**
      * 查询维度关联的指标详情列表
      */
     List<AloudataMetricSemanticDTO> listDimensionMetricDetails(Long datasourceId, String dimName);

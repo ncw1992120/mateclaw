@@ -143,6 +143,22 @@ export function listMetricDimensions(datasourceId: string | number, metricName: 
   return api.get<string[]>(`${BASE_URL}/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
 }
 
+/** 批量查询多个指标关联的维度详情列表（去重合并，支持关键字过滤） */
+export function listMetricsDimensionDetails(datasourceId: string | number, metricNames: string[], keyword?: string) {
+  return api.get<{
+    dimName: string
+    dimDisplayName: string
+    originDataType: string
+    dimDescription: string
+    synonyms: string[]
+    configType: string
+    isTimeDimension: boolean
+    exampleValues: string
+  }[]>(`${BASE_URL}/${datasourceId}/aloudata/metrics-dimension-details`, {
+    params: { metricNames, keyword }
+  })
+}
+
 /** 查询已同步的类目列表 */
 export function listSyncedCategories(datasourceId: string | number, categoryType?: string) {
   return api.get<{

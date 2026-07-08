@@ -16,6 +16,7 @@ import vip.mate.dataagent.service.DatasourceAccountService;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -218,13 +219,38 @@ public class AloudataServiceImpl implements AloudataService {
                 if (responseBody.get("data") != null) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> data = (Map<String, Object>) responseBody.get("data");
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> table = (Map<String, Object>) data.get("table");
                     AloudataMetricQueryResponse.MetricData metricData = new AloudataMetricQueryResponse.MetricData();
+
+                    // 解析列式 columns：Map<String, List<{value, flag, count}>>
                     @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> columns = (List<Map<String, Object>>) data.get("columns");
+                    Map<String, List<Map<String, Object>>> rawColumns =
+                            (Map<String, List<Map<String, Object>>>) table.get("columns");
+                    if (rawColumns != null) {
+                        Map<String, List<AloudataMetricQueryResponse.ColumnValue>> typedColumns = new LinkedHashMap<>();
+                        for (Map.Entry<String, List<Map<String, Object>>> entry : rawColumns.entrySet()) {
+                            List<AloudataMetricQueryResponse.ColumnValue> values = new ArrayList<>();
+                            if (entry.getValue() != null) {
+                                for (Map<String, Object> item : entry.getValue()) {
+                                    AloudataMetricQueryResponse.ColumnValue cv = new AloudataMetricQueryResponse.ColumnValue();
+                                    cv.setValue(item.get("value"));
+                                    cv.setFlag(item.get("flag"));
+                                    cv.setCount(item.get("count") instanceof Number
+                                            ? ((Number) item.get("count")).intValue() : null);
+                                    values.add(cv);
+                                }
+                            }
+                            typedColumns.put(entry.getKey(), values);
+                        }
+                        metricData.setColumns(typedColumns);
+                    }
+
+                    // 解析行式 rows（可能为 null）
                     @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> rows = (List<Map<String, Object>>) data.get("rows");
-                    metricData.setColumns(columns);
+                    List<Map<String, Object>> rows = (List<Map<String, Object>>) table.get("rows");
                     metricData.setRows(rows);
+
                     Object totalObj = data.get("total");
                     if (totalObj instanceof Number) {
                         metricData.setTotal(((Number) totalObj).longValue());

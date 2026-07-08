@@ -308,6 +308,19 @@ public class DataAgentDatasourceController {
     }
 
     /**
+     * 批量查询多个指标关联的维度详情列表（去重合并）
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics-dimension-details")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "多指标关联维度详情", description = "批量查询多个指标关联的维度详情列表（去重合并，支持关键字过滤）")
+    public R<List<AloudataDimensionSemanticDTO>> listMetricsDimensionDetails(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标英文名列表") @RequestParam List<String> metricNames,
+            @Parameter(description = "搜索关键字（匹配维度名称、展示名）") @RequestParam(required = false) String keyword) {
+        return R.ok(aloudataSyncService.listMetricsDimensionDetails(datasourceId, metricNames, keyword));
+    }
+
+    /**
      * 查询维度关联的指标详情列表
      */
     @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/metric-details")

@@ -30,7 +30,7 @@ import java.util.List;
 @RequestMapping("/v1/insight/dashboards")
 @RequiredArgsConstructor
 @Tag(name = "洞察仪表盘", description = "低代码仪表盘搭建、组件取数与 AI 解读报告接口")
-public class InsightDashboardController {
+public class DataAgentInsightDashboardController {
 
     private final InsightDashboardService dashboardService;
     private final InsightDataBindService dataBindService;

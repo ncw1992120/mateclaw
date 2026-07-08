@@ -25,7 +25,7 @@ import java.util.List;
 @RequestMapping("/v1/approvals")
 @RequiredArgsConstructor
 @Tag(name = "审批流程管理", description = "审批申请提交、审批处理与查询接口")
-public class ApprovalController {
+public class DataAgentApprovalController {
 
     private final ApprovalService approvalService;
     private final WorkspaceGuard workspaceGuard;

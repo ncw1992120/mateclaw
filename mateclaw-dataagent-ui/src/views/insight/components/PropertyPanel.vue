@@ -57,7 +57,7 @@
             :remote-method="searchMetrics"
             :loading="metricsLoading"
             style="width: 100%"
-            @change="emitChange"
+            @change="handleMetricsChange"
           >
             <el-option
               v-for="m in metricsOptions"
@@ -68,7 +68,7 @@
           </el-select>
         </div>
 
-        <div v-if="localDataSource.datasourceId" class="form-group">
+        <div v-if="localDataSource.datasourceId && localDataSource.metrics.length" class="form-group">
           <label class="form-label">{{ t('insight.property.dimensions') }}</label>
           <el-select
             v-model="localDataSource.dimensions"
@@ -212,7 +212,8 @@ watch(
     Object.assign(localComponent, JSON.parse(JSON.stringify(newComp)))
     if (newComp.dataSource) {
       Object.assign(localDataSource, JSON.parse(JSON.stringify(newComp.dataSource)))
-      loadMetricsAndDimensions(localDataSource.datasourceId)
+      loadMetrics(localDataSource.datasourceId)
+      loadDimensions(localDataSource.datasourceId, localDataSource.metrics)
     } else {
       localDataSource.datasourceId = ''
       localDataSource.metrics = []
@@ -224,23 +225,31 @@ watch(
   { immediate: true }
 )
 
-/** 加载指标和维度选项（初始加载，不带关键字） */
-async function loadMetricsAndDimensions(datasourceId: string): Promise<void> {
+/** 加载指标选项（初始加载，不带关键字） */
+async function loadMetrics(datasourceId: string): Promise<void> {
   if (!datasourceId) {
     metricsOptions.value = []
+    return
+  }
+  try {
+    const result = await datasourceApi.listSyncedMetrics(datasourceId, 1, 50)
+    metricsOptions.value = (result as unknown as Array<{ metricName: string; metricDisplayName: string }>) ?? []
+  } catch (e) {
+    console.error('[PropertyPanel] load metrics error:', e)
+  }
+}
+
+/** 加载维度选项（基于已选指标关联的维度） */
+async function loadDimensions(datasourceId: string, metricNames: string[], keyword?: string): Promise<void> {
+  if (!datasourceId || !metricNames.length) {
     dimensionsOptions.value = []
     return
   }
   try {
-    const [metrics, dimensions] = await Promise.all([
-      datasourceApi.listSyncedMetrics(datasourceId, 1, 50),
-      datasourceApi.listSyncedDimensions(datasourceId, 1, 50),
-    ])
-    metricsOptions.value = (metrics as unknown as Array<{ metricName: string; metricDisplayName: string }>) ?? []
-    dimensionsOptions.value = (dimensions as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
+    const result = await datasourceApi.listMetricsDimensionDetails(datasourceId, metricNames, keyword)
+    dimensionsOptions.value = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
   } catch (e) {
-    console.error('[PropertyPanel] load metrics/dimensions error:', e)
-    ElMessage.error(t('insight.property.loadFailed'))
+    console.error('[PropertyPanel] load dimensions error:', e)
   }
 }
 
@@ -266,20 +275,19 @@ function searchMetrics(query: string): void {
   }, 300)
 }
 
-/** 远程搜索维度（防抖 300ms） */
+/** 远程搜索维度（基于已选指标关联维度，防抖 300ms） */
 function searchDimensions(query: string): void {
   if (dimensionsSearchTimer) {
     clearTimeout(dimensionsSearchTimer)
   }
-  if (!localDataSource.datasourceId) {
+  if (!localDataSource.datasourceId || !localDataSource.metrics.length) {
     return
   }
   dimensionsSearchTimer = setTimeout(async () => {
     dimensionsLoading.value = true
     try {
       const keyword = query.trim() || undefined
-      const result = await datasourceApi.listSyncedDimensions(localDataSource.datasourceId, 1, 50, keyword)
-      dimensionsOptions.value = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
+      await loadDimensions(localDataSource.datasourceId, localDataSource.metrics, keyword)
     } catch (e) {
       console.error('[PropertyPanel] search dimensions error:', e)
     } finally {
@@ -317,17 +325,39 @@ function handleDatasourceChange(): void {
   localDataSource.metrics = []
   localDataSource.dimensions = []
   previewResult.value = null
-  loadMetricsAndDimensions(localDataSource.datasourceId)
+  dimensionsOptions.value = []
+  loadMetrics(localDataSource.datasourceId)
   emitChange()
 }
 
-/** 触发变更事件 */
+/** 指标变更时重新加载关联维度，并清除不在关联范围内的已选维度 */
+function handleMetricsChange(): void {
+  previewResult.value = null
+  if (localDataSource.datasourceId && localDataSource.metrics.length) {
+    loadDimensions(localDataSource.datasourceId, localDataSource.metrics).then(() => {
+      // 清除不在关联维度选项中的已选维度
+      const validDimNames = new Set(dimensionsOptions.value.map(d => d.dimName))
+      const filtered = localDataSource.dimensions.filter(d => validDimNames.has(d))
+      if (filtered.length !== localDataSource.dimensions.length) {
+        localDataSource.dimensions = filtered
+      }
+    })
+  } else {
+    localDataSource.dimensions = []
+    dimensionsOptions.value = []
+  }
+  emitChange()
+}
+
+/** 触发变更事件（不包含 position，position 由画布拖拽管理） */
 function emitChange(): void {
   previewResult.value = null
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),
+    // position 不 emit，由画布拖拽/缩放管理
     dataSource: localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined,
   }
+  delete (updated as any).position
   emit('change', updated)
 }
 

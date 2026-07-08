@@ -186,6 +186,36 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    public List<AloudataDimensionSemanticDTO> listMetricsDimensionDetails(Long datasourceId, List<String> metricNames, String keyword) {
+        if (metricNames == null || metricNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 直接从指标-维度关联表查询，支持关键字过滤
+        LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
+        wrapper.in(AloudataMetricDimensionEntity::getMetricName, metricNames);
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w.like(AloudataMetricDimensionEntity::getDimName, keyword)
+                    .or().like(AloudataMetricDimensionEntity::getDimDisplayName, keyword));
+        }
+        List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
+        // 按 dimName 去重
+        Map<String, AloudataMetricDimensionEntity> dedup = new LinkedHashMap<>();
+        for (AloudataMetricDimensionEntity rel : relations) {
+            dedup.putIfAbsent(rel.getDimName(), rel);
+        }
+        return dedup.values().stream()
+                .map(rel -> {
+                    AloudataDimensionSemanticDTO dto = new AloudataDimensionSemanticDTO();
+                    dto.setDimName(rel.getDimName());
+                    dto.setDimDisplayName(rel.getDimDisplayName());
+                    dto.setOriginDataType(rel.getOriginDataType());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<AloudataMetricSemanticDTO> listDimensionMetricDetails(Long datasourceId, String dimName) {
         // 先查关联的指标名称列表
         LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();

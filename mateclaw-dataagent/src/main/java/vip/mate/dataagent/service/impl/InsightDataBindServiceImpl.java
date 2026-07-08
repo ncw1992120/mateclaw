@@ -102,9 +102,22 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             return buildError(component.getId(), "查询无数据");
         }
 
-        // 3. 转换响应格式：List<Map> → List<String> + List<List<String>>
-        List<String> columns = extractColumnNames(response.getData().getColumns());
-        List<List<String>> rows = convertRows(response.getData().getRows(), columns);
+        // 3. 转换响应格式：列式 columns → 行式 List<String> + List<List<String>>
+        List<String> columns;
+        List<List<String>> rows;
+
+        AloudataMetricQueryResponse.MetricData metricData = response.getData();
+        if (metricData.getColumns() != null && !metricData.getColumns().isEmpty()) {
+            // 列式存储：从 columns 转换
+            columns = new ArrayList<>(metricData.getColumns().keySet());
+            rows = convertFromColumnar(metricData.getColumns(), columns);
+        } else if (metricData.getRows() != null && !metricData.getRows().isEmpty()) {
+            // 行式存储：兼容 rows 不为 null 的情况
+            columns = extractColumnNames(metricData.getRows().get(0));
+            rows = convertRows(metricData.getRows(), columns);
+        } else {
+            return buildError(component.getId(), "查询无数据");
+        }
 
         // 4. 按组件类型生成渲染数据
         return buildByComponentType(component, columns, rows);
@@ -186,24 +199,45 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
-     * 从 Aloudata 响应的 columns 提取列名
+     * 从列式数据转换为行式数据
      * <p>
-     * columns 结构：List&lt;Map&lt;String, Object&gt;&gt;，每个 Map 含 "name" 字段（Aloudata metas 结构）。
-     * 兼容 "fieldName" 键以适配不同 API 版本。
+     * Aloudata 返回格式：columns = {"AUM": [{value: 7726, ...}, ...], "metric_time": [{value: "2024-01-12", ...}, ...]}
+     * 转换为：rows = [["7726", "2024-01-12"], ["6747", "2024-01-11"], ...]
      */
-    private List<String> extractColumnNames(List<Map<String, Object>> columns) {
-        if (columns == null || columns.isEmpty()) {
+    private List<List<String>> convertFromColumnar(
+            Map<String, List<AloudataMetricQueryResponse.ColumnValue>> columnar,
+            List<String> columnNames) {
+        // 确定行数（取第一个列的长度）
+        int rowCount = columnar.values().stream()
+                .filter(v -> v != null && !v.isEmpty())
+                .mapToInt(List::size)
+                .findFirst()
+                .orElse(0);
+        if (rowCount == 0) {
             return Collections.emptyList();
         }
-        List<String> names = new ArrayList<>(columns.size());
-        for (Map<String, Object> col : columns) {
-            Object name = col.get("name");
-            if (name == null) {
-                name = col.get("fieldName");
+        List<List<String>> result = new ArrayList<>(rowCount);
+        for (int i = 0; i < rowCount; i++) {
+            List<String> row = new ArrayList<>(columnNames.size());
+            for (String colName : columnNames) {
+                List<AloudataMetricQueryResponse.ColumnValue> colValues = columnar.get(colName);
+                Object val = (colValues != null && i < colValues.size())
+                        ? colValues.get(i).getValue() : null;
+                row.add(val != null ? val.toString() : "");
             }
-            names.add(name != null ? name.toString() : "unknown");
+            result.add(row);
         }
-        return names;
+        return result;
+    }
+
+    /**
+     * 从行式 Map 提取列名
+     */
+    private List<String> extractColumnNames(Map<String, Object> firstRow) {
+        if (firstRow == null || firstRow.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<>(firstRow.keySet());
     }
 
     /**
