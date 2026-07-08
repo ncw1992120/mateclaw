@@ -35,7 +35,7 @@ public class UserContextInterceptor implements HandlerInterceptor {
             if (user != null && Boolean.TRUE.equals(user.getEnabled())) {
                 Long workspaceId = parseWorkspaceId(request.getHeader(DataAgentConstants.HEADER_WORKSPACE_ID));
                 UserContext context = new UserContext(
-                        user.getId(), user.getUsername(), user.getRole(), workspaceId);
+                        user.getId(), user.getUsername(), user.getNickname(), user.getRole(), workspaceId);
                 UserContextHolder.set(context);
             }
         }

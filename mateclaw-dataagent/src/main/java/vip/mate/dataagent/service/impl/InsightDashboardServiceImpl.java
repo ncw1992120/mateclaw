@@ -57,6 +57,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         entity.setAgentId(request.getAgentId());
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setOwnerId(workspaceGuard.currentUserId());
+        entity.setOwnerName(request.getOwnerName() != null ? request.getOwnerName() : workspaceGuard.currentUserNickname());
         entity.setDeleted(0);
         insightDashboardMapper.insert(entity);
         return toVO(entity);
@@ -81,7 +82,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (request.getAgentId() != null) {
             entity.setAgentId(request.getAgentId());
         }
-        entity.setModifier(workspaceGuard.currentUsername());
+        if (request.getOwnerName() != null) {
+            entity.setOwnerName(request.getOwnerName());
+        }
+        entity.setModifier(workspaceGuard.currentUserNickname());
         insightDashboardMapper.updateById(entity);
         return toVO(entity);
     }

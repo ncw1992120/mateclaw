@@ -58,6 +58,13 @@
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
                 :show-title="!editable"
+                @change="(payload) => handleFilterChange(item.i, payload)"
+              />
+              <TimeFilterWidget
+                v-else-if="getComponent(item.i)?.type === 'timeFilter'"
+                :component="getComponent(item.i)!"
+                :show-title="!editable"
+                @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
             </template>
           </div>
@@ -75,11 +82,12 @@
 import { ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
-import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData } from '@/types'
+import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
 import FilterSelectWidget from './FilterSelectWidget.vue'
+import TimeFilterWidget from './TimeFilterWidget.vue'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -103,6 +111,8 @@ const emit = defineEmits<{
   (e: 'update-layout', payload: Array<{ id: string; x: number; y: number; w: number; h: number }>): void
   (e: 'select-component', id: string): void
   (e: 'delete-component', id: string): void
+  (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
+  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */
@@ -216,6 +226,16 @@ function handleSelectComponent(id: string): void {
 /** 删除组件 */
 function handleDeleteComponent(id: string): void {
   emit('delete-component', id)
+}
+
+/** 筛选组件值变化 */
+function handleFilterChange(componentId: string, payload: { field: string; value: string }): void {
+  emit('filter-change', { componentId, field: payload.field, value: payload.value })
+}
+
+/** 时间筛选组件值变化 */
+function handleTimeFilterChange(componentId: string, payload: { field: string; timeRange: TimeRangeValue }): void {
+  emit('time-filter-change', { componentId, field: payload.field, timeRange: payload.timeRange })
 }
 </script>
 

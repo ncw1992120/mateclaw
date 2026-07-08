@@ -26,4 +26,7 @@ public class InsightDashboardUpdateRequest implements Serializable {
 
     /** AI 解读使用的 Agent ID */
     private Long agentId;
+
+    /** 负责人名称 */
+    private String ownerName;
 }

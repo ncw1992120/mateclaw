@@ -921,7 +921,7 @@ export interface HelpCategory {
 // ==================== 洞察仪表盘 ====================
 
 /** 洞察仪表盘组件类型 */
-export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter'
+export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter'
 
 /** 图表子类型 */
 export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'radar'
@@ -986,6 +986,7 @@ export interface InsightDashboard {
   agentId?: string
   workspaceId: string
   ownerId?: string
+  ownerName?: string
   modifier?: string
   createTime: string
   updateTime: string
@@ -997,6 +998,7 @@ export interface InsightDashboardCreateInput {
   description?: string
   schemaJson?: string
   agentId?: string
+  ownerName?: string
 }
 
 /** 更新仪表盘输入 */
@@ -1006,6 +1008,7 @@ export interface InsightDashboardUpdateInput {
   schemaJson?: string
   status?: string
   agentId?: string
+  ownerName?: string
 }
 
 /** 组件渲染数据（后端取数 + 图表构建后返回） */
@@ -1031,6 +1034,68 @@ export interface InsightComponentData {
   /** 取数失败时的错误信息（前端展示降级提示） */
   error?: string
 }
+
+/** 时间范围预设类型 */
+export type TimeRangePreset = 'today' | '7d' | '30d' | '90d' | 'custom'
+
+/** 时间范围筛选值 */
+export interface TimeRangeValue {
+  /** 预设类型 */
+  preset: TimeRangePreset
+  /** 自定义起始日期（preset=custom 时使用，格式 yyyy-MM-dd） */
+  start?: string
+  /** 自定义结束日期（preset=custom 时使用，格式 yyyy-MM-dd） */
+  end?: string
+}
+
+/** 维度筛选值 */
+export interface FilterValue {
+  /** 筛选字段名（对应维度名） */
+  field: string
+  /** 筛选值 */
+  value: string | string[]
+}
+
+/** 仪表盘运行时筛选上下文 */
+export interface DashboardFilterContext {
+  /** 时间范围筛选 */
+  timeRange?: TimeRangeValue
+  /** 维度筛选值列表 */
+  dimensionFilters: FilterValue[]
+}
+
+/** 筛选组件配置（InsightComponent.config 的约定结构） */
+export interface FilterComponentConfig {
+  /** 筛选字段（维度名） */
+  field: string
+  /** 选项来源：static（静态） / dynamic（动态从数据源获取） */
+  optionSource: 'static' | 'dynamic'
+  /** 静态选项（optionSource=static 时使用） */
+  staticOptions?: Array<{ label: string; value: string }>
+  /** 动态选项数据源 ID（optionSource=dynamic 时使用） */
+  datasourceId?: string
+  /** 动态选项维度名（optionSource=dynamic 时使用） */
+  dimension?: string
+  /** 影响的目标组件 ID 列表（空表示影响所有数据组件） */
+  targetComponentIds?: string[]
+}
+
+/** 时间筛选组件配置（InsightComponent.config 的约定结构） */
+export interface TimeFilterComponentConfig {
+  /** 时间维度字段名（默认 metric_time） */
+  field: string
+  /** 允许的预设选项列表 */
+  availablePresets?: TimeRangePreset[]
+}
+
+/** 时间范围预设选项 */
+export const TIME_RANGE_PRESETS: Array<{ value: TimeRangePreset; label: string }> = [
+  { value: 'today', label: 'insight.timeRange.today' },
+  { value: '7d', label: 'insight.timeRange.7d' },
+  { value: '30d', label: 'insight.timeRange.30d' },
+  { value: '90d', label: 'insight.timeRange.90d' },
+  { value: 'custom', label: 'insight.timeRange.custom' },
+]
 
 /** 帮助文档分类请求 */
 export interface HelpCategoryRequest {

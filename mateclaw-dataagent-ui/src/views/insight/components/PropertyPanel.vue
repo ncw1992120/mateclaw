@@ -128,6 +128,98 @@
           </div>
         </div>
       </template>
+
+      <!-- 筛选组件配置（仅 filter 组件） -->
+      <template v-if="component.type === 'filter'">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterField') }}</label>
+          <el-input
+            v-model="localFilterConfig.field"
+            size="small"
+            :placeholder="t('insight.property.filterFieldPlaceholder')"
+            @change="emitFilterConfigChange"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterOptions') }}</label>
+          <el-radio-group
+            v-model="localFilterConfig.optionSource"
+            size="small"
+            @change="emitFilterConfigChange"
+          >
+            <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
+            <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <!-- 静态选项编辑 -->
+        <div v-if="localFilterConfig.optionSource === 'static'" class="form-group">
+          <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
+          <div
+            v-for="(opt, idx) in localFilterConfig.staticOptions"
+            :key="idx"
+            class="static-option-row"
+          >
+            <el-input
+              v-model="opt.label"
+              size="small"
+              :placeholder="t('insight.property.optionLabel')"
+              style="flex: 1"
+              @change="emitFilterConfigChange"
+            />
+            <el-input
+              v-model="opt.value"
+              size="small"
+              :placeholder="t('insight.property.optionValue')"
+              style="flex: 1"
+              @change="emitFilterConfigChange"
+            />
+            <el-button
+              text
+              size="small"
+              @click="removeStaticOption(idx)"
+            >
+              ✕
+            </el-button>
+          </div>
+          <el-button
+            text
+            size="small"
+            @click="addStaticOption"
+          >
+            + {{ t('insight.property.addOption') }}
+          </el-button>
+        </div>
+      </template>
+
+      <!-- 时间筛选组件配置（仅 timeFilter 组件） -->
+      <template v-if="component.type === 'timeFilter'">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.timeFilterField') }}</label>
+          <el-input
+            v-model="localTimeFilterConfig.field"
+            size="small"
+            :placeholder="t('insight.property.timeFilterFieldPlaceholder')"
+            @change="emitTimeFilterConfigChange"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.timeFilterPresets') }}</label>
+          <el-checkbox-group
+            v-model="localTimeFilterPresets"
+            size="small"
+            @change="emitTimeFilterConfigChange"
+          >
+            <el-checkbox value="today">{{ t('insight.timeRange.today') }}</el-checkbox>
+            <el-checkbox value="7d">{{ t('insight.timeRange.7d') }}</el-checkbox>
+            <el-checkbox value="30d">{{ t('insight.timeRange.30d') }}</el-checkbox>
+            <el-checkbox value="90d">{{ t('insight.timeRange.90d') }}</el-checkbox>
+            <el-checkbox value="custom">{{ t('insight.timeRange.custom') }}</el-checkbox>
+          </el-checkbox-group>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -136,7 +228,7 @@
 import { reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { InsightComponent, ComponentDataSource, InsightComponentData } from '@/types'
+import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, TimeRangePreset } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -174,6 +266,19 @@ const localDataSource = reactive<ComponentDataSource>({
   filters: [],
   limit: 100,
 })
+
+/** 筛选组件配置本地副本 */
+const localFilterConfig = reactive<FilterComponentConfig>({
+  field: '',
+  optionSource: 'static',
+  staticOptions: [],
+})
+
+/** 时间筛选组件配置本地副本 */
+const localTimeFilterConfig = reactive<TimeFilterComponentConfig>({
+  field: 'metric_time',
+})
+const localTimeFilterPresets = ref<TimeRangePreset[]>(['today', '7d', '30d', '90d', 'custom'])
 
 /** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
@@ -214,6 +319,19 @@ watch(
       localDataSource.dimensions = []
       metricsOptions.value = []
       dimensionsOptions.value = []
+    }
+    // 同步筛选组件配置
+    if (newComp.type === 'filter') {
+      const config = newComp.config as FilterComponentConfig | undefined
+      localFilterConfig.field = config?.field ?? ''
+      localFilterConfig.optionSource = config?.optionSource ?? 'static'
+      localFilterConfig.staticOptions = config?.staticOptions ? JSON.parse(JSON.stringify(config.staticOptions)) : []
+    }
+    // 同步时间筛选组件配置
+    if (newComp.type === 'timeFilter') {
+      const config = newComp.config as TimeFilterComponentConfig | undefined
+      localTimeFilterConfig.field = config?.field ?? 'metric_time'
+      localTimeFilterPresets.value = config?.availablePresets ?? ['today', '7d', '30d', '90d', 'custom']
     }
   },
   { immediate: true }
@@ -361,6 +479,55 @@ function emitChange(): void {
   emit('change', updated)
 }
 
+/** 筛选配置变更时 emit（将 config 写入组件） */
+function emitFilterConfigChange(): void {
+  const config: FilterComponentConfig = {
+    field: localFilterConfig.field,
+    optionSource: localFilterConfig.optionSource,
+    staticOptions: localFilterConfig.optionSource === 'static'
+      ? JSON.parse(JSON.stringify(localFilterConfig.staticOptions))
+      : undefined,
+  }
+  const updated: InsightComponent = {
+    ...JSON.parse(JSON.stringify(localComponent)),
+    config,
+  }
+  delete (updated as any).position
+  emit('change', updated)
+}
+
+/** 添加静态选项 */
+function addStaticOption(): void {
+  if (!localFilterConfig.staticOptions) {
+    localFilterConfig.staticOptions = []
+  }
+  localFilterConfig.staticOptions.push({ label: '', value: '' })
+}
+
+/** 移除静态选项 */
+function removeStaticOption(idx: number): void {
+  if (localFilterConfig.staticOptions) {
+    localFilterConfig.staticOptions.splice(idx, 1)
+    emitFilterConfigChange()
+  }
+}
+
+/** 时间筛选配置变更时 emit（将 config 写入组件） */
+function emitTimeFilterConfigChange(): void {
+  const config: TimeFilterComponentConfig = {
+    field: localTimeFilterConfig.field || 'metric_time',
+    availablePresets: localTimeFilterPresets.value.length > 0
+      ? [...localTimeFilterPresets.value]
+      : undefined,
+  }
+  const updated: InsightComponent = {
+    ...JSON.parse(JSON.stringify(localComponent)),
+    config,
+  }
+  delete (updated as any).position
+  emit('change', updated)
+}
+
 /** 初始化：加载数据源列表 */
 datasourceStore.fetchDatasources().catch(() => {
   // 静默失败，列表可能在其他页面已加载
@@ -445,5 +612,12 @@ datasourceStore.fetchDatasources().catch(() => {
 .preview-ok {
   color: var(--el-color-success);
   font-size: 13px;
+}
+
+.static-option-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 </style>

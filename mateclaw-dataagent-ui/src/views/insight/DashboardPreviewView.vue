@@ -7,6 +7,42 @@
         <span class="toolbar-title">{{ dashboard?.name ?? t('insight.preview') }}</span>
       </div>
       <div class="toolbar-right">
+        <!-- 时间范围选择器 -->
+        <el-select
+          v-model="selectedTimePreset"
+          :placeholder="t('insight.timeRange.placeholder')"
+          size="small"
+          clearable
+          style="width: 140px"
+          @change="handleTimePresetChange"
+        >
+          <el-option
+            v-for="preset in TIME_RANGE_PRESETS"
+            :key="preset.value"
+            :label="t(preset.label)"
+            :value="preset.value"
+          />
+        </el-select>
+        <!-- 自定义日期范围 -->
+        <el-date-picker
+          v-if="selectedTimePreset === 'custom'"
+          v-model="customDateRange"
+          type="daterange"
+          size="small"
+          style="width: 240px"
+          value-format="YYYY-MM-DD"
+          :start-placeholder="t('insight.timeRange.startPlaceholder')"
+          :end-placeholder="t('insight.timeRange.endPlaceholder')"
+          @change="handleCustomDateChange"
+        />
+        <el-button
+          v-if="hasFilters"
+          text
+          size="small"
+          @click="handleResetFilters"
+        >
+          {{ t('insight.timeRange.reset') }}
+        </el-button>
         <el-button type="primary" :icon="Document" :loading="generatingReport" @click="handleAiReport">
           {{ t('insight.aiReport') }}
         </el-button>
@@ -24,6 +60,8 @@
         :components="schema.components"
         :component-data-map="componentDataMap"
         :editable="false"
+        @filter-change="handleFilterChange"
+        @time-filter-change="handleTimeFilterChange"
       />
     </div>
 
@@ -54,10 +92,18 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightDashboardSchema, InsightComponentData } from '@/types'
+import type {
+  InsightDashboardSchema,
+  InsightComponentData,
+  TimeRangePreset,
+  TimeRangeValue,
+  DashboardFilterContext,
+} from '@/types'
+import { TIME_RANGE_PRESETS } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { preview } from '@/api/insight-dashboard'
 import { streamReport } from '@/api/insight-report'
+import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 
 defineOptions({
@@ -80,11 +126,30 @@ const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', components: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
+/** 时间范围选择 */
+const selectedTimePreset = ref<TimeRangePreset | ''>('')
+const customDateRange = ref<[string, string] | null>(null)
+
 /** AI 报告相关 */
 const reportDrawerVisible = ref(false)
 const generatingReport = ref(false)
 const reportContent = ref<string>('')
 let abortController: AbortController | null = null
+
+/** 防抖定时器 */
+let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 筛选上下文管理 */
+const {
+  filterContext,
+  hasFilters,
+  setTimeRange,
+  setDimensionFilter,
+  resetFilters,
+} = useDashboardFilterContext(
+  () => schema.components,
+  (context) => scheduleReloadWithFilters(context),
+)
 
 /** 渲染 Markdown 报告（含 XSS 过滤） */
 const renderedReport = computed(() => {
@@ -120,18 +185,84 @@ async function loadDashboard(): Promise<void> {
     } catch {
       schema.components = []
     }
-    // 调用预览接口获取组件渲染数据
-    try {
-      const dataList = await preview(props.dashboardId) as unknown as InsightComponentData[]
-      const dataMap: Record<string, InsightComponentData> = {}
-      for (const item of dataList ?? []) {
-        dataMap[item.componentId] = item
-      }
-      componentDataMap.value = dataMap
-    } catch {
-      ElMessage.warning(t('insight.previewDataFailed'))
-    }
+    await reloadComponentData(filterContext.value)
   }
+}
+
+/** 带筛选条件重新加载组件数据 */
+async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
+  try {
+    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    const dataMap: Record<string, InsightComponentData> = {}
+    for (const item of dataList ?? []) {
+      dataMap[item.componentId] = item
+    }
+    componentDataMap.value = dataMap
+  } catch {
+    ElMessage.warning(t('insight.previewDataFailed'))
+  }
+}
+
+/** 防抖重载（筛选频繁变化时避免过多请求） */
+function scheduleReloadWithFilters(context: DashboardFilterContext): void {
+  if (filterReloadTimer) {
+    clearTimeout(filterReloadTimer)
+  }
+  filterReloadTimer = setTimeout(() => {
+    reloadComponentData(context)
+  }, 300)
+}
+
+/** 时间预设变化 */
+function handleTimePresetChange(preset: TimeRangePreset | ''): void {
+  if (!preset) {
+    setTimeRange(undefined)
+    return
+  }
+  if (preset === 'custom') {
+    // 等待用户选择日期范围，不立即触发
+    return
+  }
+  const range: TimeRangeValue = { preset }
+  setTimeRange(range)
+}
+
+/** 自定义日期范围变化 */
+function handleCustomDateChange(dates: [string, string] | null): void {
+  if (!dates || !dates[0] || !dates[1]) {
+    setTimeRange(undefined)
+    return
+  }
+  const range: TimeRangeValue = {
+    preset: 'custom',
+    start: dates[0],
+    end: dates[1],
+  }
+  setTimeRange(range)
+}
+
+/** 筛选组件值变化 */
+function handleFilterChange(payload: { componentId: string; field: string; value: string }): void {
+  if (!payload.field) {
+    return
+  }
+  setDimensionFilter(payload.field, payload.value)
+}
+
+/** 时间筛选组件值变化 */
+function handleTimeFilterChange(payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void {
+  if (!payload.timeRange?.preset) {
+    setTimeRange(undefined)
+    return
+  }
+  setTimeRange(payload.timeRange)
+}
+
+/** 重置所有筛选 */
+function handleResetFilters(): void {
+  selectedTimePreset.value = ''
+  customDateRange.value = null
+  resetFilters()
 }
 
 /** 生成 AI 解读报告（SSE 流式） */
@@ -204,6 +335,7 @@ function handleBack(): void {
 
 .toolbar-right {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 

@@ -34,7 +34,7 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 组件唯一 ID */
         private String id;
 
-        /** 组件类型：kpi / chart / table / filter */
+        /** 组件类型：kpi / chart / table / filter / timeFilter */
         private String type;
 
         /** 组件标题 */

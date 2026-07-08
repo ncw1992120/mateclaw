@@ -14,15 +14,19 @@ public class UserContext {
     /** 用户名 */
     private final String username;
 
+    /** 昵称 */
+    private final String nickname;
+
     /** 全局角色：admin / user */
     private final String role;
 
     /** 当前请求的工作区 ID（来自请求头，缺省为默认工作区） */
     private final Long workspaceId;
 
-    public UserContext(Long userId, String username, String role, Long workspaceId) {
+    public UserContext(Long userId, String username, String nickname, String role, Long workspaceId) {
         this.userId = userId;
         this.username = username;
+        this.nickname = nickname;
         this.role = role;
         this.workspaceId = workspaceId;
     }
@@ -33,6 +37,10 @@ public class UserContext {
 
     public String getUsername() {
         return username;
+    }
+
+    public String getNickname() {
+        return nickname;
     }
 
     public String getRole() {

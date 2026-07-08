@@ -35,6 +35,9 @@ public class InsightDashboardVO implements Serializable {
     /** 所有者用户 ID */
     private Long ownerId;
 
+    /** 负责人名称 */
+    private String ownerName;
+
     /** 修改人 */
     private String modifier;
 

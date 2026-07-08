@@ -1,7 +1,8 @@
 <template>
   <div class="kpi-card-widget">
+    <div v-if="showTitle" class="kpi-header">{{ component.title }}</div>
     <div class="kpi-value">{{ kpiData?.value ?? '--' }}</div>
-    <div v-if="showTitle" class="kpi-name">{{ kpiData?.name ?? component.title }}</div>
+    <div v-if="showTitle && kpiData?.name" class="kpi-name">{{ kpiData.name }}</div>
     <div v-if="kpiData?.chg" class="kpi-chg" :class="kpiData.up ? 'up' : 'down'">
       <span>{{ kpiData.up ? '↑' : '↓' }} {{ kpiData.chg }}</span>
     </div>
@@ -45,6 +46,16 @@ const kpiData = computed(() => props.componentData?.kpi)
   background: var(--theme-surface);
   border-radius: 8px;
   border: 1px solid var(--theme-border);
+  position: relative;
+}
+
+.kpi-header {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
 }
 
 .kpi-value {

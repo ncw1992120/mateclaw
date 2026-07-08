@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.DashboardFilterContextDTO;
 import vip.mate.dataagent.dto.InsightComponentDataDTO;
 import vip.mate.dataagent.dto.InsightDashboardCreateRequest;
 import vip.mate.dataagent.dto.InsightDashboardSchemaDTO;
@@ -95,13 +96,15 @@ public class DataAgentInsightDashboardController {
      * 预览仪表盘
      * <p>
      * 获取仪表盘所有组件的渲染数据（取数 + 图表构建），用于预览模式渲染。
+     * 支持传入运行时筛选上下文（时间范围、维度筛选），实现筛选联动取数。
      */
     @PostMapping("/{id}/preview")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "预览仪表盘", description = "获取仪表盘所有组件的渲染数据（取数 + 图表构建）")
+    @Operation(summary = "预览仪表盘", description = "获取仪表盘所有组件的渲染数据，支持运行时筛选条件（时间范围、维度筛选）")
     public R<List<InsightComponentDataDTO>> preview(
-            @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
-        return R.ok(dataBindService.previewData(id));
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id,
+            @RequestBody(required = false) DashboardFilterContextDTO filterContext) {
+        return R.ok(dataBindService.previewData(id, filterContext));
     }
 
     /**

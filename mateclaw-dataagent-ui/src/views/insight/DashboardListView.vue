@@ -29,7 +29,10 @@
               </el-tag>
             </div>
             <div class="card-desc">{{ dashboard.description || t('insight.noDescription') }}</div>
-            <div class="card-time">{{ t('insight.updatedAt') }}: {{ formatTime(dashboard.updateTime) }}</div>
+            <div class="card-meta">
+              <span class="card-owner">{{ dashboard.ownerName || '--' }}</span>
+              <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
+            </div>
             <div class="card-actions">
               <el-button text size="small" @click="handleEdit(dashboard.id)">{{ t('insight.edit') }}</el-button>
               <el-button text size="small" @click="handlePreview(dashboard.id)">{{ t('insight.preview') }}</el-button>
@@ -285,6 +288,20 @@ function handleBackToList(): void {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-owner {
+  font-size: 12px;
+  color: var(--main-orange);
+  background: rgba(255, 152, 0, 0.08);
+  padding: 1px 6px;
+  border-radius: 3px;
 }
 
 .card-time {

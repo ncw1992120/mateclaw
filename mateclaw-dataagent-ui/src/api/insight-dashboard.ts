@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightComponentData, InsightComponent } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
@@ -29,9 +29,9 @@ export function remove(id: string) {
   return api.delete(`${BASE_URL}/${id}`)
 }
 
-/** 预览仪表盘（获取所有组件渲染数据） */
-export function preview(id: string) {
-  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`)
+/** 预览仪表盘（获取所有组件渲染数据，支持运行时筛选条件） */
+export function preview(id: string, filterContext?: DashboardFilterContext) {
+  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {})
 }
 
 /** 预览单个组件数据（编辑器即时验证） */

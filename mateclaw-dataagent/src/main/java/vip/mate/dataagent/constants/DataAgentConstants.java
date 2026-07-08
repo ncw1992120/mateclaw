@@ -431,6 +431,39 @@ public final class DataAgentConstants {
     /** AI 解读会话 ID 前缀 */
     public static final String INSIGHT_REPORT_CONVERSATION_PREFIX = "insight-report-";
 
+    /** 仪表盘筛选：时间维度字段名 */
+    public static final String INSIGHT_FILTER_TIME_FIELD = "metric_time";
+
+    /** 仪表盘筛选：过滤操作符 - 区间 */
+    public static final String INSIGHT_FILTER_OP_BETWEEN = "between";
+
+    /** 仪表盘筛选：过滤操作符 - 包含 */
+    public static final String INSIGHT_FILTER_OP_IN = "in";
+
+    /** 仪表盘筛选：时间预设 - 今天 */
+    public static final String INSIGHT_TIME_PRESET_TODAY = "today";
+
+    /** 仪表盘筛选：时间预设 - 近7天 */
+    public static final String INSIGHT_TIME_PRESET_7D = "7d";
+
+    /** 仪表盘筛选：时间预设 - 近30天 */
+    public static final String INSIGHT_TIME_PRESET_30D = "30d";
+
+    /** 仪表盘筛选：时间预设 - 近90天 */
+    public static final String INSIGHT_TIME_PRESET_90D = "90d";
+
+    /** 仪表盘筛选：时间预设 - 自定义 */
+    public static final String INSIGHT_TIME_PRESET_CUSTOM = "custom";
+
+    /** 仪表盘筛选：filter 键名 */
+    public static final String INSIGHT_FILTER_KEY_FIELD = "field";
+
+    /** 仪表盘筛选：operator 键名 */
+    public static final String INSIGHT_FILTER_KEY_OPERATOR = "operator";
+
+    /** 仪表盘筛选：value 键名 */
+    public static final String INSIGHT_FILTER_KEY_VALUE = "value";
+
     // ==================== 输入优化 ====================
 
     /** 输入优化会话 ID 前缀 */

@@ -40,6 +40,10 @@ public class InsightDashboardEntity {
     @TableField("owner_id")
     private Long ownerId;
 
+    /** 负责人名称 */
+    @TableField("owner_name")
+    private String ownerName;
+
     /** 修改人 */
     private String modifier;
 

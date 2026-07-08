@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
+import vip.mate.dataagent.dto.DashboardFilterContextDTO;
+import vip.mate.dataagent.dto.DashboardFilterContextDTO.FilterValue;
+import vip.mate.dataagent.dto.DashboardFilterContextDTO.TimeRangeValue;
 import vip.mate.dataagent.dto.InsightComponentDataDTO;
 import vip.mate.dataagent.dto.InsightDashboardSchemaDTO;
 import vip.mate.dataagent.dto.InsightDashboardSchemaDTO.Component;
@@ -19,8 +22,11 @@ import vip.mate.dataagent.util.InsightChartOptionHelper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -60,8 +66,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
     @Override
     public InsightComponentDataDTO bindComponent(Component component) {
-        // filter 类型无需取数
-        if ("filter".equals(component.getType())) {
+        // filter / timeFilter 类型无需取数
+        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
             return null;
         }
         // 校验 dataSource
@@ -80,6 +86,125 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     @Override
     public List<InsightComponentDataDTO> previewData(Long dashboardId) {
         return bindDashboard(dashboardId);
+    }
+
+    @Override
+    public List<InsightComponentDataDTO> previewData(Long dashboardId, DashboardFilterContextDTO filterContext) {
+        // 无筛选上下文时退化为普通预览
+        if (filterContext == null) {
+            return previewData(dashboardId);
+        }
+        InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+        InsightDashboardSchemaDTO schema = parseSchema(dashboard.getSchemaJson());
+        if (schema == null || schema.getComponents() == null) {
+            return Collections.emptyList();
+        }
+        return schema.getComponents().stream()
+                .map(component -> bindComponentWithFilters(component, filterContext))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 绑定单个组件数据（合并运行时筛选条件）
+     * <p>
+     * 将筛选上下文中的时间范围和维度筛选值合并到组件的静态 filters 中，再执行取数。
+     */
+    private InsightComponentDataDTO bindComponentWithFilters(Component component,
+                                                              DashboardFilterContextDTO filterContext) {
+        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
+            return null;
+        }
+        DataSource ds = component.getDataSource();
+        if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
+            return buildError(component.getId(), "组件未配置数据源");
+        }
+        try {
+            Component merged = mergeFilters(component, filterContext);
+            return doBind(merged);
+        } catch (Exception e) {
+            log.warn("组件 {} 带筛选取数失败: {}", component.getId(), e.getMessage());
+            return buildError(component.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 将运行时筛选条件合并到组件的 DataSource.filters 中
+     * <p>
+     * 合并策略：保留组件静态 filters，追加时间范围筛选和维度筛选值。
+     * 使用深拷贝避免修改原始 Schema 对象。
+     */
+    private Component mergeFilters(Component component, DashboardFilterContextDTO filterContext) {
+        Component merged = JSONUtil.toBean(JSONUtil.toJsonStr(component), Component.class);
+        DataSource ds = merged.getDataSource();
+        if (ds == null) {
+            return merged;
+        }
+        List<Map<String, Object>> filters = new ArrayList<>();
+        if (ds.getFilters() != null) {
+            filters.addAll(ds.getFilters());
+        }
+        // 合并时间范围筛选
+        if (filterContext.getTimeRange() != null) {
+            Map<String, Object> timeFilter = buildTimeRangeFilter(filterContext.getTimeRange());
+            if (timeFilter != null) {
+                filters.add(timeFilter);
+            }
+        }
+        // 合并维度筛选值
+        if (filterContext.getDimensionFilters() != null) {
+            for (FilterValue fv : filterContext.getDimensionFilters()) {
+                if (fv.getField() == null || fv.getField().isBlank()) {
+                    continue;
+                }
+                Map<String, Object> dimFilter = new HashMap<>();
+                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD, fv.getField());
+                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR, DataAgentConstants.INSIGHT_FILTER_OP_IN);
+                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE, fv.getValue());
+                filters.add(dimFilter);
+            }
+        }
+        ds.setFilters(filters);
+        return merged;
+    }
+
+    /**
+     * 根据时间预设构建时间范围筛选条件
+     * <p>
+     * 返回格式：{field: "metric_time", operator: "between", value: ["2024-01-01", "2024-01-31"]}
+     * preset=custom 时使用 start/end；预设类型自动计算日期区间。
+     *
+     * @return 时间筛选条件 Map，无效预设时返回 null
+     */
+    private Map<String, Object> buildTimeRangeFilter(TimeRangeValue timeRange) {
+        String preset = timeRange.getPreset();
+        if (preset == null || preset.isBlank()) {
+            return null;
+        }
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        LocalDate end = LocalDate.now();
+        LocalDate start;
+        switch (preset) {
+            case DataAgentConstants.INSIGHT_TIME_PRESET_TODAY -> start = end;
+            case DataAgentConstants.INSIGHT_TIME_PRESET_7D -> start = end.minusDays(6);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_30D -> start = end.minusDays(29);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_90D -> start = end.minusDays(89);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_CUSTOM -> {
+                if (timeRange.getStart() == null || timeRange.getEnd() == null) {
+                    return null;
+                }
+                start = LocalDate.parse(timeRange.getStart(), fmt);
+                end = LocalDate.parse(timeRange.getEnd(), fmt);
+            }
+            default -> {
+                return null;
+            }
+        }
+        Map<String, Object> filter = new HashMap<>();
+        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD, DataAgentConstants.INSIGHT_FILTER_TIME_FIELD);
+        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR, DataAgentConstants.INSIGHT_FILTER_OP_BETWEEN);
+        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE, List.of(start.format(fmt), end.format(fmt)));
+        return filter;
     }
 
     /**

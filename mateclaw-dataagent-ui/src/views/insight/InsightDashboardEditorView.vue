@@ -11,6 +11,20 @@
           :placeholder="t('insight.editor')"
           @change="handleNameChange"
         />
+        <el-input
+          v-model="dashboardDescription"
+          class="toolbar-desc-input"
+          size="small"
+          :placeholder="t('insight.description')"
+          @change="handleDescriptionChange"
+        />
+        <el-input
+          v-model="dashboardOwnerName"
+          class="toolbar-owner-input"
+          size="small"
+          :placeholder="t('insight.ownerName')"
+          @change="handleOwnerNameChange"
+        />
       </div>
       <div class="toolbar-right">
         <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
@@ -78,6 +92,8 @@ const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
 const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
+const dashboardDescription = ref('')
+const dashboardOwnerName = ref('')
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
@@ -103,6 +119,8 @@ onMounted(async () => {
   await store.selectDashboard(props.dashboardId)
   if (dashboard.value) {
     dashboardName.value = dashboard.value.name
+    dashboardDescription.value = dashboard.value.description ?? ''
+    dashboardOwnerName.value = dashboard.value.ownerName ?? ''
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
       schema.version = parsed.version ?? '1.0'
@@ -122,6 +140,8 @@ watch(
       await store.selectDashboard(newId)
       if (dashboard.value) {
         dashboardName.value = dashboard.value.name
+        dashboardDescription.value = dashboard.value.description ?? ''
+        dashboardOwnerName.value = dashboard.value.ownerName ?? ''
         try {
           const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
           schema.version = parsed.version ?? '1.0'
@@ -151,6 +171,7 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
     'chart-radar': t('insight.component.radar'),
     table: t('insight.component.table'),
     filter: t('insight.component.filter'),
+    timeFilter: t('insight.component.timeFilter'),
   }
   const key = type === 'chart' && chartType ? `chart-${chartType}` : type
   return titleMap[key] ?? type
@@ -165,12 +186,16 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     title: getDefaultTitle(payload.type, payload.chartType),
     position: { x: 0, y: maxY, w: 6, h: 4 },
     chartType: payload.chartType,
-    dataSource: payload.type !== 'filter' ? {
+    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' ? {
       datasourceId: '',
       metrics: [],
       dimensions: [],
       filters: [],
       limit: 100,
+    } : undefined,
+    config: payload.type === 'timeFilter' ? {
+      field: 'metric_time',
+      availablePresets: ['today', '7d', '30d', '90d', 'custom'],
     } : undefined,
   }
   schema.components.push(newComponent)
@@ -238,7 +263,7 @@ function schedulePreview(): void {
 /** 为所有已配置数据源的组件获取预览数据 */
 async function previewAllConfiguredComponents(): Promise<void> {
   const tasks = schema.components
-    .filter((c) => c.type !== 'filter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
+    .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
     .map(async (c) => {
       try {
         const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
@@ -263,6 +288,8 @@ async function handleSave(): Promise<void> {
   try {
     await store.updateDashboard(dashboard.value.id, {
       name: dashboardName.value,
+      description: dashboardDescription.value,
+      ownerName: dashboardOwnerName.value,
       schemaJson: JSON.stringify(schema),
     })
     ElMessage.success(t('insight.saveSuccess'))
@@ -277,6 +304,24 @@ async function handleSave(): Promise<void> {
 function handleNameChange(): void {
   if (dashboard.value && dashboardName.value.trim()) {
     store.updateDashboard(dashboard.value.id, { name: dashboardName.value.trim() }).catch(() => {
+      // 静默失败
+    })
+  }
+}
+
+/** 描述变更时自动保存 */
+function handleDescriptionChange(): void {
+  if (dashboard.value) {
+    store.updateDashboard(dashboard.value.id, { description: dashboardDescription.value }).catch(() => {
+      // 静默失败
+    })
+  }
+}
+
+/** 负责人变更时自动保存 */
+function handleOwnerNameChange(): void {
+  if (dashboard.value) {
+    store.updateDashboard(dashboard.value.id, { ownerName: dashboardOwnerName.value }).catch(() => {
       // 静默失败
     })
   }
@@ -340,6 +385,46 @@ function handleBack(): void {
   :deep(.el-input__inner) {
     color: var(--theme-text);
     font-weight: 600;
+  }
+}
+
+.toolbar-desc-input {
+  width: 300px;
+  font-size: 13px;
+
+  :deep(.el-input__wrapper) {
+    background: transparent;
+    box-shadow: none;
+    padding: 0 4px;
+  }
+
+  :deep(.el-input__wrapper:hover),
+  :deep(.el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px var(--theme-border) inset;
+  }
+
+  :deep(.el-input__inner) {
+    color: var(--theme-text-secondary);
+  }
+}
+
+.toolbar-owner-input {
+  width: 120px;
+  font-size: 13px;
+
+  :deep(.el-input__wrapper) {
+    background: transparent;
+    box-shadow: none;
+    padding: 0 4px;
+  }
+
+  :deep(.el-input__wrapper:hover),
+  :deep(.el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px var(--theme-border) inset;
+  }
+
+  :deep(.el-input__inner) {
+    color: var(--theme-text-secondary);
   }
 }
 

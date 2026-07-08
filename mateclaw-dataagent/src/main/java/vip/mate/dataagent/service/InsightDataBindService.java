@@ -1,5 +1,6 @@
 package vip.mate.dataagent.service;
 
+import vip.mate.dataagent.dto.DashboardFilterContextDTO;
 import vip.mate.dataagent.dto.InsightComponentDataDTO;
 import vip.mate.dataagent.dto.InsightDashboardSchemaDTO;
 
@@ -35,4 +36,16 @@ public interface InsightDataBindService {
      * @return 组件渲染数据列表
      */
     List<InsightComponentDataDTO> previewData(Long dashboardId);
+
+    /**
+     * 预览模式取数（带运行时筛选条件）
+     * <p>
+     * 将筛选上下文中的时间范围和维度筛选值合并到每个组件的静态 filters 中，
+     * 实现仪表盘筛选联动取数。
+     *
+     * @param dashboardId   仪表盘 ID
+     * @param filterContext 运行时筛选上下文（可为 null，等价于无筛选）
+     * @return 组件渲染数据列表
+     */
+    List<InsightComponentDataDTO> previewData(Long dashboardId, DashboardFilterContextDTO filterContext);
 }

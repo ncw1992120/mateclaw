@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_insight_dashboard` (
     `status`         VARCHAR(20)           DEFAULT 'draft' COMMENT '状态：draft/published',
     `agent_id`       BIGINT                DEFAULT NULL COMMENT 'AI 解读使用的 Agent ID',
     `owner_id`       BIGINT                DEFAULT NULL COMMENT '所有者用户 ID',
+    `owner_name`     VARCHAR(100)          DEFAULT NULL COMMENT '负责人名称',
     `modifier`       VARCHAR(100)          DEFAULT NULL COMMENT '修改人',
     `create_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

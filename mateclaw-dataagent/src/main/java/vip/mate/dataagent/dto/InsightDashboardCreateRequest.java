@@ -23,4 +23,7 @@ public class InsightDashboardCreateRequest implements Serializable {
 
     /** AI 解读使用的 Agent ID（可选） */
     private Long agentId;
+
+    /** 负责人名称（可选，默认取当前用户） */
+    private String ownerName;
 }
