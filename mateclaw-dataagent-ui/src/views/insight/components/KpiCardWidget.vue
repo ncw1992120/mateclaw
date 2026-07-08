@@ -1,7 +1,7 @@
 <template>
   <div class="kpi-card-widget">
     <div class="kpi-value">{{ kpiData?.value ?? '--' }}</div>
-    <div class="kpi-name">{{ kpiData?.name ?? component.title }}</div>
+    <div v-if="showTitle" class="kpi-name">{{ kpiData?.name ?? component.title }}</div>
     <div v-if="kpiData?.chg" class="kpi-chg" :class="kpiData.up ? 'up' : 'down'">
       <span>{{ kpiData.up ? '↑' : '↓' }} {{ kpiData.chg }}</span>
     </div>
@@ -25,6 +25,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
+  /** 是否显示标题 */
+  showTitle?: boolean
 }>()
 
 const kpiData = computed(() => props.componentData?.kpi)

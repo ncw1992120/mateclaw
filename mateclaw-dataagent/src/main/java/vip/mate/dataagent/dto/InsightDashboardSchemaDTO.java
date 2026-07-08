@@ -46,7 +46,7 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 数据绑定配置 */
         private DataSource dataSource;
 
-        /** 图表子类型：line / bar / pie（仅 chart 类型组件） */
+        /** 图表子类型：line / bar / pie / area / scatter / radar（仅 chart 类型组件） */
         private String chartType;
 
         /** 渲染类型：echarts / kpi / table */

@@ -26,6 +26,7 @@
       <div class="editor-canvas">
         <DashboardCanvas
           :components="schema.components"
+          :component-data-map="componentDataMap"
           :editable="true"
           :selected-id="selectedComponentId"
           @add-component="handleAddComponent"
@@ -38,6 +39,7 @@
         <PropertyPanel
           :component="selectedComponent"
           @change="handleComponentChange"
+          @preview="handlePreviewResult"
         />
       </div>
     </div>
@@ -49,8 +51,9 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
+import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
@@ -81,6 +84,12 @@ const schema = reactive<InsightDashboardSchema>({
   version: '1.0',
   components: [],
 })
+
+/** 组件渲染数据映射（编辑模式自动预览） */
+const componentDataMap = ref<Record<string, InsightComponentData>>({})
+
+/** 预览防抖定时器 */
+let previewTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 当前选中的组件 */
 const selectedComponent = computed<InsightComponent | null>(() => {
@@ -137,6 +146,9 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
     'chart-line': t('insight.component.line'),
     'chart-bar': t('insight.component.bar'),
     'chart-pie': t('insight.component.pie'),
+    'chart-area': t('insight.component.area'),
+    'chart-scatter': t('insight.component.scatter'),
+    'chart-radar': t('insight.component.radar'),
     table: t('insight.component.table'),
     filter: t('insight.component.filter'),
   }
@@ -202,6 +214,44 @@ function handleComponentChange(updated: InsightComponent): void {
       position: existing.position,
     }
   }
+  // 数据源变更时触发自动预览
+  schedulePreview()
+}
+
+/** 处理属性面板验证数据结果，写入 componentDataMap 让画布组件渲染 */
+function handlePreviewResult(data: InsightComponentData): void {
+  if (data.componentId) {
+    componentDataMap.value[data.componentId] = data
+  }
+}
+
+/** 延迟预览：数据源变更后 500ms 自动获取组件数据 */
+function schedulePreview(): void {
+  if (previewTimer) {
+    clearTimeout(previewTimer)
+  }
+  previewTimer = setTimeout(() => {
+    previewAllConfiguredComponents()
+  }, 500)
+}
+
+/** 为所有已配置数据源的组件获取预览数据 */
+async function previewAllConfiguredComponents(): Promise<void> {
+  const tasks = schema.components
+    .filter((c) => c.type !== 'filter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
+    .map(async (c) => {
+      try {
+        const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+        componentDataMap.value[c.id] = result
+      } catch (e: any) {
+        componentDataMap.value[c.id] = {
+          componentId: c.id,
+          renderType: 'table',
+          error: e.message ?? '预览失败',
+        }
+      }
+    })
+  await Promise.allSettled(tasks)
 }
 
 /** 保存仪表盘 */

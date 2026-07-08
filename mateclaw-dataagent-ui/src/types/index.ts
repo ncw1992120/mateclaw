@@ -924,7 +924,7 @@ export interface HelpCategory {
 export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter'
 
 /** 图表子类型 */
-export type ChartType = 'line' | 'bar' | 'pie'
+export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'radar'
 
 /** 栅格位置（grid-layout-plus 坐标系） */
 export interface ComponentPosition {

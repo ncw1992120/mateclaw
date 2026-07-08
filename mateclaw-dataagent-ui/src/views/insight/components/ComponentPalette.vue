@@ -36,10 +36,13 @@ interface PaletteItem {
 
 /** 物料列表 */
 const paletteItems: PaletteItem[] = [
-  { type: 'kpi', icon: '📊', labelKey: 'insight.component.kpi' },
+  { type: 'kpi', icon: '🎴', labelKey: 'insight.component.kpi' },
   { type: 'chart', chartType: 'line', icon: '📈', labelKey: 'insight.component.line' },
-  { type: 'chart', chartType: 'bar', icon: '📉', labelKey: 'insight.component.bar' },
+  { type: 'chart', chartType: 'bar', icon: '📊', labelKey: 'insight.component.bar' },
   { type: 'chart', chartType: 'pie', icon: '🥧', labelKey: 'insight.component.pie' },
+  { type: 'chart', chartType: 'area', icon: '🏔️', labelKey: 'insight.component.area' },
+  { type: 'chart', chartType: 'scatter', icon: '⚫', labelKey: 'insight.component.scatter' },
+  { type: 'chart', chartType: 'radar', icon: '🕸️', labelKey: 'insight.component.radar' },
   { type: 'table', icon: '📋', labelKey: 'insight.component.table' },
   { type: 'filter', icon: '🔧', labelKey: 'insight.component.filter' },
 ]

@@ -1,6 +1,6 @@
 <template>
   <div class="chart-widget">
-    <div class="chart-title">{{ component.title }}</div>
+    <div v-if="showTitle" class="chart-title">{{ component.title }}</div>
     <div ref="chartContainerRef" class="chart-container"></div>
     <div v-if="!hasOption" class="chart-placeholder">{{ t('insight.chartNoData') }}</div>
   </div>
@@ -23,6 +23,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
+  /** 是否显示标题 */
+  showTitle?: boolean
 }>()
 
 const chartContainerRef = ref<HTMLElement | null>(null)

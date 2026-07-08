@@ -25,7 +25,7 @@
             <circle cx="28" cy="26" r="5" fill="url(#logoGradient)" />
           </svg>
         </div>
-        <h1 class="brand-title">问数智能体</h1>
+        <h1 class="brand-title">数据智能体</h1>
         <p class="brand-subtitle">数据分析 Agent 工作台</p>
       </div>
 

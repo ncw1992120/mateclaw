@@ -1,6 +1,6 @@
 <template>
   <div class="filter-select-widget">
-    <div class="filter-label">{{ component.title }}</div>
+    <div v-if="showTitle" class="filter-label">{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
@@ -33,6 +33,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 可选项（由外部联动注入） */
   options?: Array<{ label: string; value: string }>
+  /** 是否显示标题 */
+  showTitle?: boolean
 }>()
 
 const emit = defineEmits<{

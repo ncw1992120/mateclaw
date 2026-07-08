@@ -1218,7 +1218,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: 6px 10px;
-  gap: 14px;
   flex: 1;
   overflow-y: auto;
 }
@@ -1226,7 +1225,7 @@ onBeforeUnmount(() => {
 .sidebar-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .sidebar-group.collapsed {

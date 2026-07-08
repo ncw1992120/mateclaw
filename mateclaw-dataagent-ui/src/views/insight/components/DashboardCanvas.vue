@@ -6,17 +6,19 @@
   >
     <GridLayout
       v-if="components.length > 0"
-      v-model:layout="gridLayout"
+      :layout="gridLayout"
       :col-num="24"
       :row-height="30"
       :is-draggable="editable"
       :is-resizable="editable"
       :vertical-compact="true"
       :margin="[8, 8]"
+      @layout-updated="handleLayoutUpdated"
     >
       <GridItem
         v-for="item in gridLayout"
         :key="item.i"
+        :i="item.i"
         :x="item.x"
         :y="item.y"
         :w="item.w"
@@ -38,20 +40,24 @@
                 v-if="getComponent(item.i)?.type === 'kpi'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :show-title="!editable"
               />
               <ChartWidget
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :show-title="!editable"
               />
               <DataTableWidget
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :show-title="!editable"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
+                :show-title="!editable"
               />
             </template>
           </div>
@@ -108,23 +114,16 @@ interface GridLayoutItem {
   h: number
 }
 
-/** 用 ref 管理布局，通过 v-model:layout 双向绑定给 grid-layout-plus */
+/** 用 ref 管理布局，传给 grid-layout-plus 的 :layout prop */
 const gridLayout = ref<GridLayoutItem[]>([])
 
-/** 记录上次同步到 gridLayout 的组件 ID 串，用于检测组件增删 */
-let lastSyncedIds = ''
-
-/** 标记：是否正在从 props 同步，避免触发 layout-change 循环 */
+/** 标记：是否正在从 props 同步，避免 layout-updated → emit → props 变化 → watch 循环 */
 let isSyncingFromProps = false
 
 /** 从 props.components 同步到 gridLayout，仅在组件增删时触发 */
 watch(
   () => props.components.map((c) => c.id).join(','),
   (newIds) => {
-    if (newIds === lastSyncedIds) {
-      return
-    }
-    lastSyncedIds = newIds
     isSyncingFromProps = true
     gridLayout.value = props.components.map((c) => ({
       i: c.id,
@@ -133,6 +132,7 @@ watch(
       w: c.position.w,
       h: c.position.h,
     }))
+    // nextTick 后重置标记，确保 grid-layout-plus 内部 layoutUpdate 触发时标记已清除
     nextTick(() => {
       isSyncingFromProps = false
     })
@@ -140,20 +140,34 @@ watch(
   { immediate: true }
 )
 
-/** 监听 gridLayout 变化（由 grid-layout-plus 内部拖拽/缩放触发），向上 emit */
-watch(
-  gridLayout,
-  (newLayout) => {
-    if (isSyncingFromProps) {
-      return
-    }
-    emit(
-      'update-layout',
-      newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
-    )
-  },
-  { deep: true }
-)
+/** 布局更新回调（拖拽/缩放/compact 后触发） */
+function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
+  // 始终更新本地 gridLayout，让 :layout prop 与 GridLayout 内部 currentLayout 保持一致
+  // 避免重渲染时 :layout 传旧值导致位置被重置
+  gridLayout.value = newLayout
+
+  // 仅在非 props 同步时 emit 给 Editor
+  if (isSyncingFromProps) {
+    return
+  }
+
+  // 检查是否有实际变化，避免无意义 emit
+  const changed = newLayout.some((item) => {
+    const comp = props.components.find((c) => c.id === item.i)
+    if (!comp) return true
+    return comp.position.x !== item.x
+      || comp.position.y !== item.y
+      || comp.position.w !== item.w
+      || comp.position.h !== item.h
+  })
+  if (!changed) return
+
+  // 向上 emit 让 Editor 更新 schema.components 的 position
+  emit(
+    'update-layout',
+    newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
+  )
+}
 
 /** 根据 ID 获取组件 */
 function getComponent(id: string): InsightComponent | undefined {

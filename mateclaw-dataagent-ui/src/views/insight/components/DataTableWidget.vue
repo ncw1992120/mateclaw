@@ -1,6 +1,6 @@
 <template>
   <div class="data-table-widget">
-    <div class="table-title">{{ component.title }}</div>
+    <div v-if="showTitle" class="table-title">{{ component.title }}</div>
     <div class="table-wrapper">
       <el-table
         v-if="tableData && tableData.rows.length > 0"
@@ -40,6 +40,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
+  /** 是否显示标题 */
+  showTitle?: boolean
 }>()
 
 const tableData = computed(() => props.componentData?.table)

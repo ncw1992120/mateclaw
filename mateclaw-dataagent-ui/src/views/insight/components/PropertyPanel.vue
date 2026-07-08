@@ -21,6 +21,9 @@
           <el-radio-button value="line">{{ t('insight.component.line') }}</el-radio-button>
           <el-radio-button value="bar">{{ t('insight.component.bar') }}</el-radio-button>
           <el-radio-button value="pie">{{ t('insight.component.pie') }}</el-radio-button>
+          <el-radio-button value="area">{{ t('insight.component.area') }}</el-radio-button>
+          <el-radio-button value="scatter">{{ t('insight.component.scatter') }}</el-radio-button>
+          <el-radio-button value="radar">{{ t('insight.component.radar') }}</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -115,23 +118,13 @@
           </el-button>
         </div>
 
-        <!-- 验证数据结果 -->
+        <!-- 验证数据结果（简要状态） -->
         <div v-if="previewResult" class="preview-result">
           <div v-if="previewResult.error" class="preview-error">
             {{ previewResult.error }}
           </div>
-          <div v-else-if="previewResult.renderType === 'kpi'" class="preview-kpi">
-            <span class="preview-kpi-name">{{ previewResult.kpi?.name }}</span>
-            <span class="preview-kpi-value">{{ previewResult.kpi?.value }}</span>
-            <span v-if="previewResult.kpi?.chg" class="preview-kpi-chg" :class="{ up: previewResult.kpi?.up }">
-              {{ previewResult.kpi?.up ? '+' : '-' }}{{ previewResult.kpi?.chg }}
-            </span>
-          </div>
-          <div v-else-if="previewResult.renderType === 'echarts'" class="preview-chart">
-            <span class="preview-label">{{ t('insight.property.previewChartOk') }}</span>
-          </div>
-          <div v-else-if="previewResult.renderType === 'table'" class="preview-table">
-            <span class="preview-label">{{ t('insight.property.previewTableOk', { rows: previewResult.table?.rows?.length ?? 0 }) }}</span>
+          <div v-else class="preview-ok">
+            {{ t('insight.property.previewChartOk') }}
           </div>
         </div>
       </template>
@@ -161,6 +154,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void
+  (e: 'preview', data: InsightComponentData): void
 }>()
 
 const datasourceStore = useDatasourceStore()
@@ -296,7 +290,7 @@ function searchDimensions(query: string): void {
   }, 300)
 }
 
-/** 验证数据：调用 preview-component 端点 */
+/** 验证数据：调用 preview-component 端点，结果 emit 到画布渲染 */
 async function handlePreviewData(): Promise<void> {
   if (!canPreview.value) {
     return
@@ -310,11 +304,17 @@ async function handlePreviewData(): Promise<void> {
     }
     const result = await insightDashboardApi.previewComponent(comp) as unknown as InsightComponentData
     previewResult.value = result
+    // 将渲染数据 emit 给 Editor，写入 componentDataMap，画布组件自动渲染
+    emit('preview', result)
     if (result.error) {
       ElMessage.warning(result.error)
+    } else {
+      ElMessage.success(t('insight.property.previewChartOk'))
     }
   } catch (e: any) {
-    previewResult.value = { componentId: localComponent.id, renderType: 'table', error: e.message ?? t('insight.previewDataFailed') }
+    const errorData: InsightComponentData = { componentId: localComponent.id, renderType: 'table', error: e.message ?? t('insight.previewDataFailed') }
+    previewResult.value = errorData
+    emit('preview', errorData)
   } finally {
     previewLoading.value = false
   }
@@ -442,34 +442,8 @@ datasourceStore.fetchDatasources().catch(() => {
   font-size: 13px;
 }
 
-.preview-kpi {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.preview-kpi-name {
-  font-size: 12px;
-  color: var(--theme-text-secondary);
-}
-
-.preview-kpi-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--theme-text);
-}
-
-.preview-kpi-chg {
-  font-size: 12px;
-  color: var(--el-color-danger);
-}
-
-.preview-kpi-chg.up {
+.preview-ok {
   color: var(--el-color-success);
-}
-
-.preview-label {
   font-size: 13px;
-  color: var(--el-color-success);
 }
 </style>

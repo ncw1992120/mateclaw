@@ -54,13 +54,17 @@ public final class InsightChartOptionHelper {
             return null;
         }
 
-        if ("pie".equals(chartType)) {
-            return buildPie(dimensionCol, metricCols.get(0), rows, columns);
-        } else if ("bar".equals(chartType)) {
-            return buildBar(dimensionCol, metricCols, rows, columns);
-        } else {
+        if (chartType == null) {
             return buildLine(dimensionCol, metricCols, rows, columns);
         }
+        return switch (chartType) {
+            case "pie" -> buildPie(dimensionCol, metricCols.get(0), rows, columns);
+            case "bar" -> buildBar(dimensionCol, metricCols, rows, columns);
+            case "area" -> buildArea(dimensionCol, metricCols, rows, columns);
+            case "scatter" -> buildScatter(dimensionCol, metricCols, rows, columns);
+            case "radar" -> buildRadar(dimensionCol, metricCols, rows, columns);
+            default -> buildLine(dimensionCol, metricCols, rows, columns);
+        };
     }
 
     /**
@@ -191,6 +195,114 @@ public final class InsightChartOptionHelper {
                 .set("data", pieData));
         option.set("series", series);
         return option.toString();
+    }
+
+    private static String buildArea(ColumnInfo dim, List<ColumnInfo> metrics, List<List<String>> rows, List<String> columns) {
+        JSONObject option = new JSONObject(new LinkedHashMap<>());
+        option.set("title", new JSONObject().set("text", buildTitle(dim, metrics, "趋势")).set("left", "center"));
+        option.set("tooltip", new JSONObject().set("trigger", "axis"));
+
+        if (metrics.size() > 1) {
+            JSONArray legendData = new JSONArray();
+            metrics.forEach(m -> legendData.add(m.name));
+            option.set("legend", new JSONObject().set("data", legendData).set("bottom", 0));
+        }
+
+        option.set("grid", defaultGrid());
+        option.set("xAxis", new JSONObject()
+                .set("type", "category")
+                .set("boundaryGap", false)
+                .set("data", extractColumn(rows, columns.indexOf(dim.name))));
+        option.set("yAxis", new JSONObject().set("type", "value"));
+
+        JSONArray series = new JSONArray();
+        for (ColumnInfo m : metrics) {
+            series.add(new JSONObject()
+                    .set("name", m.name)
+                    .set("type", "line")
+                    .set("data", extractNumericColumn(rows, columns.indexOf(m.name)))
+                    .set("smooth", true)
+                    .set("areaStyle", new JSONObject()));
+        }
+        option.set("series", series);
+        return option.toString();
+    }
+
+    private static String buildScatter(ColumnInfo dim, List<ColumnInfo> metrics, List<List<String>> rows, List<String> columns) {
+        JSONObject option = new JSONObject(new LinkedHashMap<>());
+        option.set("title", new JSONObject().set("text", buildTitle(dim, metrics, "分布")).set("left", "center"));
+        option.set("tooltip", new JSONObject().set("trigger", "item"));
+        option.set("grid", defaultGrid());
+        option.set("xAxis", new JSONObject()
+                .set("type", "category")
+                .set("data", extractColumn(rows, columns.indexOf(dim.name))));
+        option.set("yAxis", new JSONObject().set("type", "value"));
+
+        JSONArray series = new JSONArray();
+        for (ColumnInfo m : metrics) {
+            series.add(new JSONObject()
+                    .set("name", m.name)
+                    .set("type", "scatter")
+                    .set("data", extractNumericColumn(rows, columns.indexOf(m.name))));
+        }
+        option.set("series", series);
+        return option.toString();
+    }
+
+    private static String buildRadar(ColumnInfo dim, List<ColumnInfo> metrics, List<List<String>> rows, List<String> columns) {
+        if (metrics.size() < 1) {
+            return null;
+        }
+
+        JSONObject option = new JSONObject(new LinkedHashMap<>());
+        option.set("title", new JSONObject().set("text", buildTitle(dim, metrics, "雷达")).set("left", "center"));
+        option.set("tooltip", new JSONObject().set("trigger", "item"));
+
+        int dimIdx = columns.indexOf(dim.name);
+        List<String> dimValues = new ArrayList<>();
+        for (List<String> row : rows) {
+            dimValues.add(row.get(dimIdx));
+        }
+
+        JSONArray indicator = new JSONArray();
+        for (String dimValue : dimValues) {
+            indicator.add(new JSONObject().set("name", dimValue).set("max", computeRadarMax(rows, columns, metrics)));
+        }
+        option.set("radar", new JSONObject()
+                .set("indicator", indicator)
+                .set("radius", "60%"));
+
+        JSONArray seriesData = new JSONArray();
+        for (ColumnInfo m : metrics) {
+            JSONArray values = new JSONArray();
+            for (List<String> row : rows) {
+                values.add(parseNumber(row.get(columns.indexOf(m.name))));
+            }
+            seriesData.add(new JSONObject()
+                    .set("name", m.name)
+                    .set("value", values));
+        }
+
+        JSONArray series = new JSONArray();
+        series.add(new JSONObject()
+                .set("type", "radar")
+                .set("data", seriesData));
+        option.set("series", series);
+        return option.toString();
+    }
+
+    private static Number computeRadarMax(List<List<String>> rows, List<String> columns, List<ColumnInfo> metrics) {
+        double max = 0;
+        for (ColumnInfo m : metrics) {
+            int idx = columns.indexOf(m.name);
+            for (List<String> row : rows) {
+                Object val = parseNumber(row.get(idx));
+                if (val instanceof Number num && num.doubleValue() > max) {
+                    max = num.doubleValue();
+                }
+            }
+        }
+        return Math.ceil(max * 1.2);
     }
 
     // ==================== 列分析 ====================

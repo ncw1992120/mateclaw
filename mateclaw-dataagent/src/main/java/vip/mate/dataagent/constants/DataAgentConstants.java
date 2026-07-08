@@ -416,6 +416,15 @@ public final class DataAgentConstants {
     /** 图表类型：饼图 */
     public static final String CHART_TYPE_PIE = "pie";
 
+    /** 图表类型：面积图 */
+    public static final String CHART_TYPE_AREA = "area";
+
+    /** 图表类型：散点图 */
+    public static final String CHART_TYPE_SCATTER = "scatter";
+
+    /** 图表类型：雷达图 */
+    public static final String CHART_TYPE_RADAR = "radar";
+
     /** 报告模板路径 */
     public static final String INSIGHT_REPORT_TEMPLATE_PATH = "skills/aloudata_metric_query/templates/report-template.md";
 
