@@ -1395,6 +1395,13 @@ export default {
       timeFilterField: 'Time Field',
       timeFilterFieldPlaceholder: 'Default metric_time',
       timeFilterPresets: 'Available Presets',
+      filterScope: 'Scope',
+      filterScopeGlobal: 'Global',
+      filterScopeScoped: 'Scoped',
+      filterTargetComponents: 'Target Components',
+      filterTargetComponentsPlaceholder: 'Select affected components',
+      boundFilters: 'Bound Filters',
+      boundFiltersPlaceholder: 'Select bound filters',
     },
     component: {
       kpi: 'Card',

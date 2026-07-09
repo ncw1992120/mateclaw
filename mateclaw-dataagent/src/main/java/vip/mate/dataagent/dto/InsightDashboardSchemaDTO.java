@@ -54,6 +54,9 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 组件扩展配置 */
         private Map<String, Object> config;
+
+        /** 绑定的筛选器 ID 列表（绑定后该组件仅响应专属筛选器，不再受全局筛选器影响） */
+        private List<String> boundFilterIds;
     }
 
     /**
@@ -87,8 +90,21 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 维度名称列表 */
         private List<String> dimensions;
 
-        /** 过滤条件 */
+        /**
+         * 过滤条件（结构化存储，后端构建查询时转换为表达式字符串）
+         * <p>
+         * Schema 中保留结构化格式便于前端编辑器交互，构建 AloudataMetricQueryRequest 时
+         * 转换为 API 5.4 节要求的表达式字符串数组。
+         */
         private List<Map<String, Object>> filters;
+
+        /**
+         * 指标日期范围约束（表达式字符串，可选）
+         * <p>
+         * 符合 Aloudata API 5.6 节 timeConstraint 参数规范，用于静态配置组件的时间范围。
+         * 运行时筛选上下文中的时间范围会覆盖此值。
+         */
+        private String timeConstraint;
 
         /** 返回行数限制 */
         private Integer limit;

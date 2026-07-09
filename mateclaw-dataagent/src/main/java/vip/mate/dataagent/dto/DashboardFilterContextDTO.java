@@ -22,6 +22,9 @@ public class DashboardFilterContextDTO implements Serializable {
     /** 维度筛选值列表 */
     private List<FilterValue> dimensionFilters;
 
+    /** 触发此次筛选的筛选器组件 ID（用于区分全局/组件绑定筛选） */
+    private String sourceFilterId;
+
     /**
      * 时间范围筛选值
      */

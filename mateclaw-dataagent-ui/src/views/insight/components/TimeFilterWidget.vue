@@ -1,34 +1,18 @@
 <template>
   <div class="time-filter-widget">
     <div v-if="showTitle" class="time-filter-label">{{ component.title }}</div>
-    <div class="time-filter-body">
-      <el-select
-        v-model="selectedPreset"
-        :placeholder="t('insight.timeRange.placeholder')"
-        size="small"
-        clearable
-        style="width: 100%"
-        @change="handlePresetChange"
-      >
-        <el-option
-          v-for="preset in availablePresets"
-          :key="preset.value"
-          :label="t(preset.label)"
-          :value="preset.value"
-        />
-      </el-select>
-      <el-date-picker
-        v-if="selectedPreset === 'custom'"
-        v-model="customDateRange"
-        type="daterange"
-        size="small"
-        style="width: 100%; margin-top: 4px"
-        value-format="YYYY-MM-DD"
-        :start-placeholder="t('insight.timeRange.startPlaceholder')"
-        :end-placeholder="t('insight.timeRange.endPlaceholder')"
-        @change="handleDateChange"
-      />
-    </div>
+    <el-date-picker
+      v-model="customDateRange"
+      type="daterange"
+      size="small"
+      style="width: 100%"
+      value-format="YYYY-MM-DD"
+      unlink-panels
+      :shortcuts="dateShortcuts"
+      :start-placeholder="t('insight.timeRange.startPlaceholder')"
+      :end-placeholder="t('insight.timeRange.endPlaceholder')"
+      @change="handleDateChange"
+    />
   </div>
 </template>
 
@@ -36,7 +20,6 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig } from '@/types'
-import { TIME_RANGE_PRESETS } from '@/types'
 
 defineOptions({
   name: 'TimeFilterWidget',
@@ -55,7 +38,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const selectedPreset = ref<TimeRangePreset | ''>('')
 const customDateRange = ref<[string, string] | null>(null)
 
 /** 从组件 config 提取时间筛选配置 */
@@ -63,30 +45,57 @@ const timeFilterConfig = computed<TimeFilterComponentConfig>(() => {
   return (props.component.config as TimeFilterComponentConfig) ?? { field: 'metric_time' }
 })
 
-/** 根据配置过滤可用预设 */
-const availablePresets = computed(() => {
-  if (!timeFilterConfig.value.availablePresets) {
-    return TIME_RANGE_PRESETS
-  }
-  const allowed = new Set(timeFilterConfig.value.availablePresets)
-  return TIME_RANGE_PRESETS.filter((p) => allowed.has(p.value))
+/** 所有快捷选项定义 */
+const allShortcuts: Array<{ key: TimeRangePreset; text: string; value: () => [Date, Date] }> = [
+  {
+    key: 'today',
+    text: t('insight.timeRange.today'),
+    value: () => {
+      const today = new Date()
+      return [today, today]
+    },
+  },
+  {
+    key: '7d',
+    text: t('insight.timeRange.7d'),
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 6)
+      return [start, end]
+    },
+  },
+  {
+    key: '30d',
+    text: t('insight.timeRange.30d'),
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 29)
+      return [start, end]
+    },
+  },
+  {
+    key: '90d',
+    text: t('insight.timeRange.90d'),
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 3600 * 1000 * 24 * 89)
+      return [start, end]
+    },
+  },
+]
+
+/** 根据配置过滤可用快捷选项 */
+const dateShortcuts = computed(() => {
+  const allowed = timeFilterConfig.value.availablePresets
+  if (!allowed) return allShortcuts
+  const allowedSet = new Set(allowed)
+  return allShortcuts.filter((s) => allowedSet.has(s.key))
 })
 
-/** 预设变化 */
-function handlePresetChange(preset: TimeRangePreset | ''): void {
-  if (!preset) {
-    emit('change', { field: timeFilterConfig.value.field, timeRange: undefined as unknown as TimeRangeValue })
-    return
-  }
-  if (preset === 'custom') {
-    // 等待用户选择日期范围
-    return
-  }
-  const range: TimeRangeValue = { preset }
-  emit('change', { field: timeFilterConfig.value.field, timeRange: range })
-}
-
-/** 自定义日期范围变化 */
+/** 日期范围变化（快捷选项或自定义日期都会触发） */
 function handleDateChange(dates: [string, string] | null): void {
   if (!dates || !dates[0] || !dates[1]) {
     emit('change', { field: timeFilterConfig.value.field, timeRange: undefined as unknown as TimeRangeValue })
@@ -119,11 +128,5 @@ function handleDateChange(dates: [string, string] | null): void {
   font-size: 13px;
   font-weight: 600;
   color: var(--theme-text);
-}
-
-.time-filter-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 </style>

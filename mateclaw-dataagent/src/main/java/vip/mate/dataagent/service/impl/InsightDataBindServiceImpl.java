@@ -26,7 +26,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -99,8 +98,31 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         if (schema == null || schema.getComponents() == null) {
             return Collections.emptyList();
         }
+        String sourceFilterId = filterContext.getSourceFilterId();
         return schema.getComponents().stream()
-                .map(component -> bindComponentWithFilters(component, filterContext))
+                .map(component -> {
+                    // filter/timeFilter 组件无需取数
+                    if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
+                        return null;
+                    }
+                    // 作用范围判断
+                    if (sourceFilterId != null && !sourceFilterId.isBlank()) {
+                        // 组件绑定筛选器：仅影响绑定了该筛选器的组件
+                        List<String> boundIds = component.getBoundFilterIds();
+                        if (boundIds == null || !boundIds.contains(sourceFilterId)) {
+                            // 该组件未绑定此筛选器，不受影响，返回 null（不重新取数）
+                            return null;
+                        }
+                    } else {
+                        // 全局筛选器：仅影响未绑定任何专属筛选器的组件
+                        List<String> boundIds = component.getBoundFilterIds();
+                        if (boundIds != null && !boundIds.isEmpty()) {
+                            // 该组件已绑定专属筛选器，不受全局筛选器影响
+                            return null;
+                        }
+                    }
+                    return bindComponentWithFilters(component, filterContext);
+                })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
@@ -108,7 +130,11 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     /**
      * 绑定单个组件数据（合并运行时筛选条件）
      * <p>
-     * 将筛选上下文中的时间范围和维度筛选值合并到组件的静态 filters 中，再执行取数。
+     * 运行时筛选上下文分为两类，分别对应 Aloudata API 的不同参数：
+     * <ul>
+     *   <li>时间范围（timeRange）→ 转换为 timeConstraint 表达式（API 5.6 节）</li>
+     *   <li>维度筛选（dimensionFilters）→ 转换为 filters 表达式字符串数组（API 5.4 节）</li>
+     * </ul>
      */
     private InsightComponentDataDTO bindComponentWithFilters(Component component,
                                                               DashboardFilterContextDTO filterContext) {
@@ -120,8 +146,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             return buildError(component.getId(), "组件未配置数据源");
         }
         try {
-            Component merged = mergeFilters(component, filterContext);
-            return doBind(merged);
+            return doBind(component, filterContext);
         } catch (Exception e) {
             log.warn("组件 {} 带筛选取数失败: {}", component.getId(), e.getMessage());
             return buildError(component.getId(), e.getMessage());
@@ -129,88 +154,25 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
-     * 将运行时筛选条件合并到组件的 DataSource.filters 中
-     * <p>
-     * 合并策略：保留组件静态 filters，追加时间范围筛选和维度筛选值。
-     * 使用深拷贝避免修改原始 Schema 对象。
-     */
-    private Component mergeFilters(Component component, DashboardFilterContextDTO filterContext) {
-        Component merged = JSONUtil.toBean(JSONUtil.toJsonStr(component), Component.class);
-        DataSource ds = merged.getDataSource();
-        if (ds == null) {
-            return merged;
-        }
-        List<Map<String, Object>> filters = new ArrayList<>();
-        if (ds.getFilters() != null) {
-            filters.addAll(ds.getFilters());
-        }
-        // 合并时间范围筛选
-        if (filterContext.getTimeRange() != null) {
-            Map<String, Object> timeFilter = buildTimeRangeFilter(filterContext.getTimeRange());
-            if (timeFilter != null) {
-                filters.add(timeFilter);
-            }
-        }
-        // 合并维度筛选值
-        if (filterContext.getDimensionFilters() != null) {
-            for (FilterValue fv : filterContext.getDimensionFilters()) {
-                if (fv.getField() == null || fv.getField().isBlank()) {
-                    continue;
-                }
-                Map<String, Object> dimFilter = new HashMap<>();
-                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD, fv.getField());
-                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR, DataAgentConstants.INSIGHT_FILTER_OP_IN);
-                dimFilter.put(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE, fv.getValue());
-                filters.add(dimFilter);
-            }
-        }
-        ds.setFilters(filters);
-        return merged;
-    }
-
-    /**
-     * 根据时间预设构建时间范围筛选条件
-     * <p>
-     * 返回格式：{field: "metric_time", operator: "between", value: ["2024-01-01", "2024-01-31"]}
-     * preset=custom 时使用 start/end；预设类型自动计算日期区间。
-     *
-     * @return 时间筛选条件 Map，无效预设时返回 null
-     */
-    private Map<String, Object> buildTimeRangeFilter(TimeRangeValue timeRange) {
-        String preset = timeRange.getPreset();
-        if (preset == null || preset.isBlank()) {
-            return null;
-        }
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        LocalDate end = LocalDate.now();
-        LocalDate start;
-        switch (preset) {
-            case DataAgentConstants.INSIGHT_TIME_PRESET_TODAY -> start = end;
-            case DataAgentConstants.INSIGHT_TIME_PRESET_7D -> start = end.minusDays(6);
-            case DataAgentConstants.INSIGHT_TIME_PRESET_30D -> start = end.minusDays(29);
-            case DataAgentConstants.INSIGHT_TIME_PRESET_90D -> start = end.minusDays(89);
-            case DataAgentConstants.INSIGHT_TIME_PRESET_CUSTOM -> {
-                if (timeRange.getStart() == null || timeRange.getEnd() == null) {
-                    return null;
-                }
-                start = LocalDate.parse(timeRange.getStart(), fmt);
-                end = LocalDate.parse(timeRange.getEnd(), fmt);
-            }
-            default -> {
-                return null;
-            }
-        }
-        Map<String, Object> filter = new HashMap<>();
-        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD, DataAgentConstants.INSIGHT_FILTER_TIME_FIELD);
-        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR, DataAgentConstants.INSIGHT_FILTER_OP_BETWEEN);
-        filter.put(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE, List.of(start.format(fmt), end.format(fmt)));
-        return filter;
-    }
-
-    /**
      * 执行单组件取数与渲染数据构建
      */
     private InsightComponentDataDTO doBind(Component component) {
+        return doBind(component, null);
+    }
+
+    /**
+     * 执行单组件取数与渲染数据构建（支持运行时筛选上下文）
+     * <p>
+     * 查询参数构建顺序：
+     * <ol>
+     *   <li>filters：静态 filters（Map 结构）转换为表达式字符串 + 运行时维度筛选转换为表达式字符串</li>
+     *   <li>timeConstraint：运行时时间范围优先，其次静态配置的 timeConstraint</li>
+     * </ol>
+     *
+     * @param component      组件定义
+     * @param filterContext  运行时筛选上下文（可为 null，表示无运行时筛选）
+     */
+    private InsightComponentDataDTO doBind(Component component, DashboardFilterContextDTO filterContext) {
         DataSource ds = component.getDataSource();
         Long datasourceId = Long.parseLong(ds.getDatasourceId());
 
@@ -218,10 +180,31 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         AloudataMetricQueryRequest request = new AloudataMetricQueryRequest();
         request.setMetrics(ds.getMetrics());
         request.setDimensions(ds.getDimensions());
-        request.setFilters(ds.getFilters());
         request.setLimit(ds.getLimit() != null ? ds.getLimit() : 100);
 
-        // 2. 调用 Aloudata 查询
+        // 2. 构建 filters 表达式字符串数组（API 5.4 节）
+        List<String> filterExpressions = new ArrayList<>(convertStaticFilters(ds.getFilters()));
+        if (filterContext != null && filterContext.getDimensionFilters() != null) {
+            for (FilterValue fv : filterContext.getDimensionFilters()) {
+                String expr = buildDimensionFilterExpression(fv);
+                if (expr != null) {
+                    filterExpressions.add(expr);
+                }
+            }
+        }
+        request.setFilters(filterExpressions);
+
+        // 3. 构建 timeConstraint 表达式（API 5.6 节）：运行时时间范围优先，其次静态配置
+        String timeConstraint = null;
+        if (filterContext != null && filterContext.getTimeRange() != null) {
+            timeConstraint = buildTimeConstraint(filterContext.getTimeRange());
+        }
+        if (timeConstraint == null && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
+            timeConstraint = ds.getTimeConstraint();
+        }
+        request.setTimeConstraint(timeConstraint);
+
+        // 4. 调用 Aloudata 查询
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(datasourceId, request);
         if (response == null || response.getData() == null) {
             return buildError(component.getId(), "查询无数据");
@@ -468,6 +451,174 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         dto.setRenderType(DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
         dto.setError(errorMsg);
         return dto;
+    }
+
+    /**
+     * 将静态 filters（Map 结构）转换为 Aloudata 表达式字符串列表
+     * <p>
+     * Schema 中 filters 保留结构化格式便于前端编辑器交互，构建查询请求时转换为
+     * API 5.4 节要求的表达式字符串。Map 约定结构：
+     * <ul>
+     *   <li>field: 维度名</li>
+     *   <li>operator: 操作符（in / = / != / between 等）</li>
+     *   <li>value: 单值或多值数组</li>
+     * </ul>
+     * 转换示例：
+     * <ul>
+     *   <li>{field:"province", operator:"in", value:["浙江省","江苏省"]} → [province] IN ("浙江省","江苏省")</li>
+     *   <li>{field:"product_id", operator:"=", value:13} → [product_id] = 13</li>
+     *   <li>{field:"metric_time__day", operator:"between", value:["2024-01-01","2024-01-31"]} → [metric_time__day] BETWEEN ("2024-01-01","2024-01-31")</li>
+     * </ul>
+     *
+     * @param staticFilters Schema 中结构化 filters，可为 null
+     * @return 表达式字符串列表，空列表表示无筛选
+     */
+    private List<String> convertStaticFilters(List<Map<String, Object>> staticFilters) {
+        List<String> expressions = new ArrayList<>();
+        if (staticFilters == null || staticFilters.isEmpty()) {
+            return expressions;
+        }
+        for (Map<String, Object> filter : staticFilters) {
+            String expr = buildFilterExpression(
+                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD),
+                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR),
+                    filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE)
+            );
+            if (expr != null) {
+                expressions.add(expr);
+            }
+        }
+        return expressions;
+    }
+
+    /**
+     * 构建维度筛选表达式字符串（运行时筛选值）
+     * <p>
+     * 运行时筛选值统一使用 IN 操作符（单值也用 IN，保持一致性）。
+     *
+     * @param filterValue 运行时维度筛选值
+     * @return 表达式字符串，例如 [province] IN ("浙江省","江苏省")；无效输入返回 null
+     */
+    private String buildDimensionFilterExpression(FilterValue filterValue) {
+        if (filterValue.getField() == null || filterValue.getField().isBlank()) {
+            return null;
+        }
+        return buildFilterExpression(
+                filterValue.getField(),
+                DataAgentConstants.INSIGHT_FILTER_OP_IN,
+                filterValue.getValue()
+        );
+    }
+
+    /**
+     * 构建 filters 表达式字符串
+     * <p>
+     * 根据操作符和值类型生成符合 Aloudata API 5.4 节规范的表达式：
+     * <ul>
+     *   <li>IN 操作符 + 数组值：[field] IN ("v1","v2") 或 [field] IN (1,2)</li>
+     *   <li>IN 操作符 + 单值：[field] IN ("v1")</li>
+     *   <li>= / != 操作符：[field] = "v1" 或 [field] = 13</li>
+     *   <li>between 操作符：[field] BETWEEN ("start","end")</li>
+     * </ul>
+     * 数值类型不加引号，字符串类型加双引号。
+     */
+    private String buildFilterExpression(String field, String operator, Object value) {
+        if (field == null || field.isBlank() || operator == null || value == null) {
+            return null;
+        }
+        String op = operator.toLowerCase();
+        String formattedValue = formatFilterValue(value, op);
+        if (formattedValue == null) {
+            return null;
+        }
+        // in → IN，between → BETWEEN，= / != 保持原样
+        String opUpper = op.equals("in") ? "IN" : op.equals("between") ? "BETWEEN" : op;
+        return "[" + field + "] " + opUpper + " " + formattedValue;
+    }
+
+    /**
+     * 格式化筛选值为表达式片段
+     * <p>
+     * IN 操作符：数组值 → ("v1","v2")，单值 → ("v1")
+     * between 操作符：数组值 → ("v1","v2")
+     * 其他操作符（=、!= 等）：单值 → "v1"（字符串）或 13（数值）
+     */
+    @SuppressWarnings("unchecked")
+    private String formatFilterValue(Object value, String op) {
+        if (value instanceof List) {
+            List<Object> values = (List<Object>) value;
+            if (values.isEmpty()) {
+                return null;
+            }
+            String joined = values.stream()
+                    .map(this::quoteIfNeeded)
+                    .collect(Collectors.joining(","));
+            return "(" + joined + ")";
+        }
+        // 单值
+        if ("in".equals(op) || "between".equals(op)) {
+            return "(" + quoteIfNeeded(value) + ")";
+        }
+        return quoteIfNeeded(value);
+    }
+
+    /**
+     * 数值不加引号，其他类型加双引号
+     */
+    private String quoteIfNeeded(Object value) {
+        if (value == null) {
+            return "\"\"";
+        }
+        String str = value.toString();
+        if (isNumeric(str)) {
+            return str;
+        }
+        return "\"" + str.replace("\"", "\\\"") + "\"";
+    }
+
+    /**
+     * 根据时间范围预设构建 timeConstraint 表达式（API 5.6 节）
+     * <p>
+     * 参考文档示例和生成的 SQL，timeConstraint 使用语义层表达式格式：
+     * <ul>
+     *   <li>自定义日期：使用 &gt;= 和 &lt; 字面量比较，例如
+     *       ([metric_time__day] &gt;= "2024-01-01" AND [metric_time__day] &lt; "2024-02-01")</li>
+     * </ul>
+     * <p>
+     * 注意：结束日期需要 +1 天，使用半开区间 [start, end+1)，
+     * 因为 Aloudata 的指标日期是 DATETIME 类型，"2024-01-31" 实际代表当天零点，
+     * 需要取到 &lt; "2024-02-01" 才能包含 1 月 31 日的数据。
+     *
+     * @param timeRange 时间范围筛选值
+     * @return timeConstraint 表达式字符串，无效预设时返回 null
+     */
+    private String buildTimeConstraint(TimeRangeValue timeRange) {
+        String preset = timeRange.getPreset();
+        if (preset == null || preset.isBlank()) {
+            return null;
+        }
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        LocalDate end = LocalDate.now();
+        LocalDate start;
+        switch (preset) {
+            case DataAgentConstants.INSIGHT_TIME_PRESET_TODAY -> start = end;
+            case DataAgentConstants.INSIGHT_TIME_PRESET_7D -> start = end.minusDays(6);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_30D -> start = end.minusDays(29);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_90D -> start = end.minusDays(89);
+            case DataAgentConstants.INSIGHT_TIME_PRESET_CUSTOM -> {
+                if (timeRange.getStart() == null || timeRange.getEnd() == null) {
+                    return null;
+                }
+                start = LocalDate.parse(timeRange.getStart(), fmt);
+                end = LocalDate.parse(timeRange.getEnd(), fmt);
+            }
+            default -> {
+                return null;
+            }
+        }
+        // 结束日期 +1 天，使用半开区间 [start, end+1) 以包含结束日期当天的全部数据
+        LocalDate endExclusive = end.plusDays(1);
+        return "([metric_time__day] >= \"" + start.format(fmt) + "\" AND [metric_time__day] < \"" + endExclusive.format(fmt) + "\")";
     }
 
     /**

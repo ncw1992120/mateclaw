@@ -191,6 +191,39 @@
             + {{ t('insight.property.addOption') }}
           </el-button>
         </div>
+
+        <!-- 筛选器作用范围 -->
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterScope') }}</label>
+          <el-radio-group
+            v-model="localFilterScope"
+            size="small"
+            @change="emitFilterConfigChange"
+          >
+            <el-radio-button value="global">{{ t('insight.property.filterScopeGlobal') }}</el-radio-button>
+            <el-radio-button value="scoped">{{ t('insight.property.filterScopeScoped') }}</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <!-- 作用范围=指定组件时，选择目标组件 -->
+        <div v-if="localFilterScope === 'scoped'" class="form-group">
+          <label class="form-label">{{ t('insight.property.filterTargetComponents') }}</label>
+          <el-select
+            v-model="localTargetComponentIds"
+            :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
+            size="small"
+            multiple
+            style="width: 100%"
+            @change="emitFilterConfigChange"
+          >
+            <el-option
+              v-for="c in selectableDataComponents"
+              :key="c.id"
+              :label="c.title || c.id"
+              :value="c.id"
+            />
+          </el-select>
+        </div>
       </template>
 
       <!-- 时间筛选组件配置（仅 timeFilter 组件） -->
@@ -219,6 +252,60 @@
             <el-checkbox value="custom">{{ t('insight.timeRange.custom') }}</el-checkbox>
           </el-checkbox-group>
         </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterScope') }}</label>
+          <el-radio-group
+            v-model="localFilterScope"
+            size="small"
+            @change="emitTimeFilterConfigChange"
+          >
+            <el-radio-button value="global">{{ t('insight.property.filterScopeGlobal') }}</el-radio-button>
+            <el-radio-button value="scoped">{{ t('insight.property.filterScopeScoped') }}</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <div v-if="localFilterScope === 'scoped'" class="form-group">
+          <label class="form-label">{{ t('insight.property.filterTargetComponents') }}</label>
+          <el-select
+            v-model="localTargetComponentIds"
+            :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
+            size="small"
+            multiple
+            style="width: 100%"
+            @change="emitTimeFilterConfigChange"
+          >
+            <el-option
+              v-for="c in selectableDataComponents"
+              :key="c.id"
+              :label="c.title || c.id"
+              :value="c.id"
+            />
+          </el-select>
+        </div>
+      </template>
+
+      <!-- 数据组件绑定筛选器（kpi/chart/table 组件） -->
+      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter'">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.boundFilters') }}</label>
+          <el-select
+            v-model="localBoundFilterIds"
+            :placeholder="t('insight.property.boundFiltersPlaceholder')"
+            size="small"
+            multiple
+            clearable
+            style="width: 100%"
+            @change="emitChange"
+          >
+            <el-option
+              v-for="f in selectableFilterComponents"
+              :key="f.id"
+              :label="f.title || f.id"
+              :value="f.id"
+            />
+          </el-select>
+        </div>
       </template>
     </div>
   </div>
@@ -228,7 +315,7 @@
 import { reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, TimeRangePreset } from '@/types'
+import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, TimeRangePreset, FilterScope } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -242,6 +329,8 @@ const { t } = useI18n()
 const props = defineProps<{
   /** 当前选中的组件 */
   component: InsightComponent | null
+  /** 仪表盘所有组件列表（用于筛选器绑定配置） */
+  allComponents?: InsightComponent[]
 }>()
 
 const emit = defineEmits<{
@@ -280,6 +369,12 @@ const localTimeFilterConfig = reactive<TimeFilterComponentConfig>({
 })
 const localTimeFilterPresets = ref<TimeRangePreset[]>(['today', '7d', '30d', '90d', 'custom'])
 
+/** 筛选器作用范围本地副本 */
+const localFilterScope = ref<FilterScope>('global')
+const localTargetComponentIds = ref<string[]>([])
+/** 图表组件绑定的筛选器 ID 列表 */
+const localBoundFilterIds = ref<string[]>([])
+
 /** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
 const dimensionsOptions = ref<Array<{ dimName: string; dimDisplayName: string }>>([])
@@ -294,6 +389,20 @@ const previewResult = ref<InsightComponentData | null>(null)
 const canPreview = computed(() => {
   return localDataSource.datasourceId
     && localDataSource.metrics.length > 0
+})
+
+/** 可选的目标组件列表（数据组件：kpi/chart/table，排除自身） */
+const selectableDataComponents = computed(() => {
+  return (props.allComponents ?? []).filter(c =>
+    c.type !== 'filter' && c.type !== 'timeFilter' && c.id !== localComponent.id
+  )
+})
+
+/** 可选的筛选器组件列表（filter/timeFilter，排除自身） */
+const selectableFilterComponents = computed(() => {
+  return (props.allComponents ?? []).filter(c =>
+    (c.type === 'filter' || c.type === 'timeFilter') && c.id !== localComponent.id
+  )
 })
 
 /** 搜索防抖定时器 */
@@ -332,6 +441,21 @@ watch(
       const config = newComp.config as TimeFilterComponentConfig | undefined
       localTimeFilterConfig.field = config?.field ?? 'metric_time'
       localTimeFilterPresets.value = config?.availablePresets ?? ['today', '7d', '30d', '90d', 'custom']
+    }
+    // 同步筛选器作用范围配置
+    if (newComp.type === 'filter') {
+      const config = newComp.config as FilterComponentConfig | undefined
+      localFilterScope.value = config?.scope ?? 'global'
+      localTargetComponentIds.value = config?.targetComponentIds ?? []
+    }
+    if (newComp.type === 'timeFilter') {
+      const config = newComp.config as TimeFilterComponentConfig | undefined
+      localFilterScope.value = config?.scope ?? 'global'
+      localTargetComponentIds.value = config?.targetComponentIds ?? []
+    }
+    // 同步数据组件的绑定筛选器
+    if (newComp.type !== 'filter' && newComp.type !== 'timeFilter') {
+      localBoundFilterIds.value = newComp.boundFilterIds ?? []
     }
   },
   { immediate: true }
@@ -474,6 +598,7 @@ function emitChange(): void {
     ...JSON.parse(JSON.stringify(localComponent)),
     // position 不 emit，由画布拖拽/缩放管理
     dataSource: localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined,
+    boundFilterIds: localBoundFilterIds.value.length > 0 ? [...localBoundFilterIds.value] : undefined,
   }
   delete (updated as any).position
   emit('change', updated)
@@ -487,6 +612,8 @@ function emitFilterConfigChange(): void {
     staticOptions: localFilterConfig.optionSource === 'static'
       ? JSON.parse(JSON.stringify(localFilterConfig.staticOptions))
       : undefined,
+    scope: localFilterScope.value,
+    targetComponentIds: localFilterScope.value === 'scoped' ? [...localTargetComponentIds.value] : undefined,
   }
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),
@@ -519,6 +646,8 @@ function emitTimeFilterConfigChange(): void {
     availablePresets: localTimeFilterPresets.value.length > 0
       ? [...localTimeFilterPresets.value]
       : undefined,
+    scope: localFilterScope.value,
+    targetComponentIds: localFilterScope.value === 'scoped' ? [...localTargetComponentIds.value] : undefined,
   }
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),

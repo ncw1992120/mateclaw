@@ -1452,6 +1452,13 @@ export default {
       timeFilterField: '时间字段',
       timeFilterFieldPlaceholder: '默认 metric_time',
       timeFilterPresets: '可选时间范围',
+      filterScope: '作用范围',
+      filterScopeGlobal: '全局',
+      filterScopeScoped: '指定组件',
+      filterTargetComponents: '影响组件',
+      filterTargetComponentsPlaceholder: '选择受影响的组件',
+      boundFilters: '绑定筛选器',
+      boundFiltersPlaceholder: '选择绑定的筛选器',
     },
     component: {
       kpi: '卡片',

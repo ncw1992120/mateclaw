@@ -52,6 +52,7 @@
       <div class="editor-property">
         <PropertyPanel
           :component="selectedComponent"
+          :all-components="schema.components"
           @change="handleComponentChange"
           @preview="handlePreviewResult"
         />

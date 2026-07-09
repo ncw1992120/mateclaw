@@ -923,6 +923,9 @@ export interface HelpCategory {
 /** 洞察仪表盘组件类型 */
 export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter'
 
+/** 筛选器作用范围 */
+export type FilterScope = 'global' | 'scoped'
+
 /** 图表子类型 */
 export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'radar'
 
@@ -942,8 +945,10 @@ export interface ComponentDataSource {
   metrics: string[]
   /** 维度名称列表 */
   dimensions: string[]
-  /** 过滤条件 */
+  /** 过滤条件（结构化存储，后端构建查询时转换为表达式字符串） */
   filters: Array<Record<string, unknown>>
+  /** 指标日期范围约束表达式（可选，静态配置；运行时筛选会覆盖） */
+  timeConstraint?: string
   /** 返回行数限制 */
   limit?: number
 }
@@ -966,6 +971,8 @@ export interface InsightComponent {
   renderType?: string
   /** 组件扩展配置 */
   config?: Record<string, unknown>
+  /** 绑定的筛选器 ID 列表（绑定后该组件仅响应专属筛选器，不再受全局筛选器影响） */
+  boundFilterIds?: string[]
 }
 
 /** 仪表盘 Schema */
@@ -1062,6 +1069,8 @@ export interface DashboardFilterContext {
   timeRange?: TimeRangeValue
   /** 维度筛选值列表 */
   dimensionFilters: FilterValue[]
+  /** 触发此次筛选的筛选器组件 ID（用于区分全局/组件绑定筛选） */
+  sourceFilterId?: string
 }
 
 /** 筛选组件配置（InsightComponent.config 的约定结构） */
@@ -1076,7 +1085,9 @@ export interface FilterComponentConfig {
   datasourceId?: string
   /** 动态选项维度名（optionSource=dynamic 时使用） */
   dimension?: string
-  /** 影响的目标组件 ID 列表（空表示影响所有数据组件） */
+  /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
+  scope?: FilterScope
+  /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */
   targetComponentIds?: string[]
 }
 
@@ -1086,6 +1097,10 @@ export interface TimeFilterComponentConfig {
   field: string
   /** 允许的预设选项列表 */
   availablePresets?: TimeRangePreset[]
+  /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
+  scope?: FilterScope
+  /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */
+  targetComponentIds?: string[]
 }
 
 /** 时间范围预设选项 */

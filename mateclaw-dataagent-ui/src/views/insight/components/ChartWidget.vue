@@ -28,14 +28,19 @@ const props = defineProps<{
 }>()
 
 const chartContainerRef = ref<HTMLElement | null>(null)
-const { renderECharts } = useEChartsRenderer()
+const { renderECharts, disposeChart } = useEChartsRenderer()
 
 const hasOption = computed(() => !!props.componentData?.option)
 
 /** 渲染（或重渲染）图表 */
 async function render(): Promise<void> {
   await nextTick()
-  if (!chartContainerRef.value || !props.componentData?.option) {
+  if (!chartContainerRef.value) {
+    return
+  }
+  if (!props.componentData?.option) {
+    disposeChart(chartContainerRef.value)
+    chartContainerRef.value.innerHTML = ''
     return
   }
   renderECharts(chartContainerRef.value, props.componentData.option)
@@ -46,12 +51,20 @@ onMounted(() => {
 })
 
 watch(
-  () => props.componentData,
-  () => {
-    render()
+  () => props.componentData?.option,
+  (newOption, oldOption) => {
+    if (newOption !== oldOption) {
+      render()
+    }
   },
-  { deep: true }
 )
+
+/** 容器尺寸变化时重绘 */
+watch(chartContainerRef, (el) => {
+  if (el) {
+    render()
+  }
+})
 </script>
 
 <style scoped>

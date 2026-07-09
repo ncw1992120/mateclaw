@@ -431,12 +431,6 @@ public final class DataAgentConstants {
     /** AI 解读会话 ID 前缀 */
     public static final String INSIGHT_REPORT_CONVERSATION_PREFIX = "insight-report-";
 
-    /** 仪表盘筛选：时间维度字段名 */
-    public static final String INSIGHT_FILTER_TIME_FIELD = "metric_time";
-
-    /** 仪表盘筛选：过滤操作符 - 区间 */
-    public static final String INSIGHT_FILTER_OP_BETWEEN = "between";
-
     /** 仪表盘筛选：过滤操作符 - 包含 */
     public static final String INSIGHT_FILTER_OP_IN = "in";
 
