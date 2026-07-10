@@ -68,9 +68,9 @@ public class InsightReportServiceImpl implements InsightReportService {
 
     /** LLM 指令前缀 */
     private static final String LLM_INSTRUCTION = """
-            你是一个数据分析专家。请基于以下仪表盘数据生成完整的分析报告。
-            报告模板中的数据部分已填充，请补充"趋势分析"、"关键发现"、"建议"三个部分，
-            直接输出完整的 Markdown 报告，保留已填充的数据部分：
+            你是一个数据分析专家。请基于以下仪表盘数据生成分析结论。
+            报告模板中已填充数据部分，你只需要补充"趋势分析"、"关键发现"、"建议"三个章节，
+            直接输出这三个章节的 Markdown 内容，不要重复输出数据部分：
 
             """;
 
@@ -81,12 +81,61 @@ public class InsightReportServiceImpl implements InsightReportService {
         String conversationId = DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + UUID.randomUUID();
 
         String result = runtime.chat(agentId, prompt, conversationId);
-        String report = result != null ? result.trim() : "";
+        String rawReport = result != null ? result.trim() : "";
+
+        // 清洗 LLM 输出：去掉代码块包裹，只保留分析结论部分
+        String cleanedReport = cleanLlmOutput(rawReport);
 
         // 持久化到 Schema 中所有 aiAnalysis 组件
-        saveAiAnalysisContent(dashboardId, report);
+        saveAiAnalysisContent(dashboardId, cleanedReport);
 
-        return report;
+        return cleanedReport;
+    }
+
+    /**
+     * 清洗 LLM 输出
+     * <p>
+     * LLM 可能输出：
+     * 1. 对话式前言（如"我注意到..."）
+     * 2. ````markdown ... ```` 代码块包裹
+     * 3. 完整报告（含查询概要、数据结果等不应重复的部分）
+     * <p>
+     * 本方法提取"趋势分析"、"关键发现"、"建议"、"报告解读"章节，去掉代码块包裹。
+     */
+    private String cleanLlmOutput(String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return rawOutput;
+        }
+
+        String content = rawOutput;
+
+        // 1. 去掉 ```markdown 和 ``` 包裹
+        if (content.contains("```markdown")) {
+            int start = content.indexOf("```markdown");
+            int end = content.lastIndexOf("```");
+            if (start >= 0 && end > start + 10) {
+                content = content.substring(start + 10, end).trim();
+            }
+        } else if (content.startsWith("```")) {
+            // 去掉首尾 ```
+            content = content.replaceAll("^```\\w*\\s*", "").replaceAll("\\s*```$", "").trim();
+        }
+
+        // 2. 提取分析章节（从"## 趋势分析"或"## 报告解读"开始）
+        String[] markers = {"## 趋势分析", "## 关键发现", "## 建议", "## 报告解读"};
+        int bestStart = -1;
+        for (String marker : markers) {
+            int idx = content.indexOf(marker);
+            if (idx >= 0 && (bestStart < 0 || idx < bestStart)) {
+                bestStart = idx;
+            }
+        }
+
+        if (bestStart > 0) {
+            content = content.substring(bestStart).trim();
+        }
+
+        return content;
     }
 
     @Override

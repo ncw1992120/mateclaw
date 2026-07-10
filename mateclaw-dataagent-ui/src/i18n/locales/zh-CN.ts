@@ -1478,9 +1478,9 @@ export default {
       aiAnalysis: 'AI分析',
     },
     aiAnalysis: {
-      generate: '生成分析',
+      generate: 'AI分析',
       generating: '正在生成...',
-      dataSection: '数据概览',
+      dataSection: '查询概要',
       aiSection: 'AI 分析',
       placeholder: '点击"生成分析"开始 AI 解读',
       generateFailed: 'AI 分析生成失败',

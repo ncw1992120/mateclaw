@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
+import { classifySseError, type ChatErrorInfo } from '@/types/chatError'
 
 /** 会话续连状态在 sessionStorage 的存储 key，用于刷新页面后恢复 lastEventId */
 const RECONNECT_STORAGE_KEY = 'mateclaw.chat.reconnect'
@@ -59,7 +60,14 @@ export const useChatStore = defineStore('chat', () => {
   // 使用 usePersistedState 自动持久化到 localStorage
   const conversationId = usePersistedState<string>('mc-chat-current-conversation-id', initialConversationId)
 
-  const isStreaming = ref(false)
+  /**
+   * 是否正在生成响应（派生状态）。
+   * <p>
+   * 借鉴 mateclaw-ui 的派生状态设计：从消息列表的 status 字段计算得出，
+   * 只要 assistant 消息的 status 离开 'streaming'，UI 自动回到 idle，
+   * 不存在"忘记 set false"的可能。
+   */
+  const isStreaming = computed(() => messages.value.some(m => m.status === 'streaming'))
   /** 用户在前端勾选的数据源 ID 白名单（刷新后保留）；空数组表示不限制（由 LLM 自主选择） */
   const selectedDatasourceIds = usePersistedState<string[]>('mc-chat-selected-datasource-ids', [])
   /**
@@ -100,6 +108,28 @@ export const useChatStore = defineStore('chat', () => {
   let userStopped = false
 
   /**
+   * 当前 SSE 流所属的会话 ID。
+   * 用于 isStaleEvent 判断：切会话后旧流的事件直接丢弃，防止污染新会话。
+   */
+  let streamConversationId = ''
+
+  /**
+   * 判断 SSE 事件是否属于已过期的会话（用户已切换到其他会话）。
+   * 借鉴 mateclaw-ui 的 isStaleEvent 设计。
+   */
+  function isStaleEvent(data: unknown): boolean {
+    if (typeof data !== 'object' || data === null) return false
+    const eventConvId = (data as Record<string, unknown>).conversationId as string | undefined
+    if (eventConvId && streamConversationId && eventConvId !== streamConversationId) {
+      return true
+    }
+    return false
+  }
+
+  /** stopChat 的 3 秒兜底定时器：done 事件没来时强制清理状态 */
+  let stopFallbackTimer: ReturnType<typeof setTimeout> | null = null
+
+  /**
    * 后台会话消息缓存（key: conversationId）。
    * 切换会话时，当前会话的消息会暂存于此，后台 SSE 流继续更新；
    * 切回时从此处恢复，避免历史消息丢失后台流式更新。
@@ -115,14 +145,17 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 是否存在待续连的 SSE 流。
    * <p>
-   * 通过 sessionStorage 中的 lastEventId 判断：刷新前若有正在进行的对话，
-   * SSE 接收逻辑会持续把 lastEventId 写入 sessionStorage；刷新后 MainLayout
+   * 通过 sessionStorage 中的 conversationId 判断：刷新前若发送过消息，
+   * sendMessage 会立即把 conversationId 写入 sessionStorage；刷新后 MainLayout
    * 会触发 tryResumeStream 续连。ChatView 等组件挂载时应据此跳过会破坏
    * 续连状态的强制历史拉取（见 switchConversation 的清空 lastEventId/seenEventIds）。
+   * <p>
+   * 注意：此处仅做本地标记判断，真正的"后端是否仍有活流"由 tryResumeStream
+   * 内部在 fetchConversations 之后校验 streamStatus。
    */
   function hasPendingReconnect(): boolean {
     const persisted = loadPersistedReconnectState()
-    return !!(persisted && persisted.lastEventId)
+    return !!(persisted && persisted.conversationId)
   }
 
   function isConversationRunningOnServer(convId: string): boolean {
@@ -184,9 +217,13 @@ export const useChatStore = defineStore('chat', () => {
     reconnectStates.clear()
     lastEventId.value = null
     seenEventIds.value.clear()
-    isStreaming.value = false
     disconnectedBySwitch = false
     userStopped = false
+    streamConversationId = ''
+    if (stopFallbackTimer) {
+      clearTimeout(stopFallbackTimer)
+      stopFallbackTimer = null
+    }
 
     // 重置会话状态，避免复用旧工作空间的会话
     prepareNewConversation()
@@ -204,7 +241,7 @@ export const useChatStore = defineStore('chat', () => {
         return
       }
       const pendingReconnect = loadPersistedReconnectState()
-      if (pendingReconnect?.lastEventId) {
+      if (pendingReconnect?.conversationId) {
         const pendingConversation = list.find(c => c.conversationId === pendingReconnect.conversationId)
         if (pendingConversation?.streamStatus === 'running') {
           return
@@ -266,10 +303,9 @@ export const useChatStore = defineStore('chat', () => {
 
     // 切换到不同会话时，如果当前正在流式生成，则将当前消息存入后台缓存
     // 后续 sendMessage 的 for-await 循环检测到 conversationId 变更后会自动转为后台模式
+    // 派生 isStreaming 状态会因 messages.value 被替换为新会话消息而自动变为 false
     if (!isSameConversation && isStreaming.value && oldConvId) {
       backgroundConversationMessages.set(oldConvId, messages.value)
-      // 清除前台流式状态，允许新会话正常发送消息
-      isStreaming.value = false
     }
 
     // 切换到不同会话时，保存当前会话的续连状态（如果有），以便切回后可重连
@@ -303,9 +339,13 @@ export const useChatStore = defineStore('chat', () => {
           nextCompleted.delete(convId)
           backgroundCompletedConversations.value = nextCompleted
         }
-        // 若后台会话仍在运行中，恢复前台流式状态
+        // 若后台会话仍在运行中，恢复最后一条 assistant 消息的 streaming 状态
+        // 派生 isStreaming 会自动变为 true
         if (streamingConversations.value.has(convId)) {
-          isStreaming.value = true
+          const lastCached = cachedMsgs[cachedMsgs.length - 1]
+          if (lastCached?.role === 'assistant') {
+            lastCached.status = 'streaming'
+          }
         }
       } else {
         const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
@@ -370,29 +410,51 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  /**
+   * 停止当前对话生成。
+   * <p>
+   * 借鉴 mateclaw-ui 的 stopGeneration 设计：
+   * 1. 立即设置消息状态为 'stopped'，给用户即时反馈（派生 isStreaming 自动变 false）
+   * 2. 启动 3 秒兜底定时器，防止 done 事件未到达时状态卡死
+   * 3. 发送 stop 请求到后端（fire-and-forget）
+   */
   async function stopChat(): Promise<void> {
     const stoppedConvId = conversationId.value
     if (!isStreaming.value || !stoppedConvId) return
     userStopped = true
-    try {
-      await stopStream(stoppedConvId)
-    } catch (e) {
-      console.warn('[ChatStore] stop request failed:', e)
-    }
+
+    // 立即更新消息状态，给用户即时反馈
     const lastMsg = messages.value[messages.value.length - 1]
     if (lastMsg?.role === 'assistant') {
+      lastMsg.status = 'stopped'
       const segments = ensureSegments(messages.value, messages.value.length - 1)
       finalizeAllRunningSegments(segments)
     }
-    isStreaming.value = false
     markConversationStreaming(stoppedConvId, false)
     reconnectStates.delete(stoppedConvId)
     backgroundConversationMessages.delete(stoppedConvId)
     const nextCompleted = new Set(backgroundCompletedConversations.value)
     nextCompleted.delete(stoppedConvId)
     backgroundCompletedConversations.value = nextCompleted
-    // 流结束，清除持久化状态，避免下次刷新误触发续连
     clearReconnectState()
+
+    // 3 秒兜底定时器：done 事件没来时确保状态已清理（消息状态已设置，此处为安全网）
+    if (stopFallbackTimer) clearTimeout(stopFallbackTimer)
+    stopFallbackTimer = setTimeout(() => {
+      stopFallbackTimer = null
+      console.warn('[ChatStore] Stop fallback: done event not received within 3s, force cleanup')
+      const msg = messages.value[messages.value.length - 1]
+      if (msg?.role === 'assistant' && msg.status === 'streaming') {
+        msg.status = 'stopped'
+      }
+    }, 3000)
+
+    // 发送 stop 请求到后端（fire-and-forget，不阻塞 UI）
+    try {
+      await stopStream(stoppedConvId)
+    } catch (e) {
+      console.warn('[ChatStore] stop request failed:', e)
+    }
   }
 
   /**
@@ -403,7 +465,7 @@ export const useChatStore = defineStore('chat', () => {
    */
   function disconnectStream(): void {
     disconnectedBySwitch = true
-    isStreaming.value = false
+    // 派生 isStreaming 会因 messages.value 被替换而自动变 false
     const convId = conversationId.value
     if (convId) {
       markConversationStreaming(convId, false)
@@ -515,10 +577,20 @@ export const useChatStore = defineStore('chat', () => {
 
     let convId = conversationId.value
 
-    if (streamingConversations.value.has(convId)) return
+    if (streamingConversations.value.has(convId)) {
+      console.warn('[ChatStore] 该会话已有流在运行中，请等待当前对话完成后再发送消息')
+      return
+    }
 
     // 重置用户停止标记，新消息允许正常重连
     userStopped = false
+    // 清除上一次 stopChat 的兜底定时器
+    if (stopFallbackTimer) {
+      clearTimeout(stopFallbackTimer)
+      stopFallbackTimer = null
+    }
+    // 设置当前流所属会话，用于 isStaleEvent 判断
+    streamConversationId = convId
 
     const isNewConversation = !conversations.value.some(c => c.conversationId === convId)
 
@@ -539,10 +611,11 @@ export const useChatStore = defineStore('chat', () => {
       content: '',
       timestamp: Date.now(),
       metadata: {},
+      status: 'streaming',
     }
     targetMsgs.push(assistantMessage)
 
-    isStreaming.value = true
+    // isStreaming 为派生状态，assistant 消息 status='streaming' 使其自动为 true
     markConversationStreaming(convId, true)
     currentAgentId.value = agentId
 
@@ -613,6 +686,13 @@ export const useChatStore = defineStore('chat', () => {
       // 不直接告知用户失败。常见场景：网络抖动 / SSE 临时断流。
       // 但用户主动取消、后台模式时跳过重连。
       if (lastEventId.value && convId && !userStopped && !isBackground) {
+        // 派生 isStreaming 此时仍为 true（消息 status='streaming'），
+        // reconnect 内部检查 isStreaming 会直接 return。
+        // 先将消息状态设为非 streaming，让 reconnect 能正常执行。
+        const errLastMsg = targetMsgs[targetMsgs.length - 1]
+        if (errLastMsg?.role === 'assistant') {
+          errLastMsg.status = 'completed'
+        }
         try {
           await reconnect()
           return
@@ -621,17 +701,24 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
       const lastMsg = targetMsgs[targetMsgs.length - 1]
-      if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
-        lastMsg.content = '抱歉，请求出现异常，请稍后重试。'
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.status = 'failed'
+        if (!lastMsg.content) {
+          lastMsg.content = '抱歉，请求出现异常，请稍后重试。'
+        }
       }
     } finally {
       flushBuf.destroy()
       if (isBackground) {
-        // 后台会话：不修改前台 streaming 状态；流结束后更新后台缓存
+        // 后台会话：不修改前台消息状态；流结束后更新后台缓存
         markConversationStreaming(convId, false)
         backgroundConversationMessages.set(convId, targetMsgs)
       } else {
-        isStreaming.value = false
+        // 安全网：确保消息状态不再为 'streaming'
+        const finLastMsg = messages.value[messages.value.length - 1]
+        if (finLastMsg?.role === 'assistant' && finLastMsg.status === 'streaming') {
+          finLastMsg.status = 'completed'
+        }
         markConversationStreaming(convId, false)
       }
       disconnectedBySwitch = false
@@ -639,11 +726,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function reconnect(): Promise<void> {
-    if (!conversationId.value || !lastEventId.value) return
+    if (!conversationId.value) return
     if (isStreaming.value) return
 
     const convId = conversationId.value
-    const savedLastEventId = lastEventId.value
+    const savedLastEventId = lastEventId.value || '0'
 
     // 会话不在列表中说明已被删除或 ID 无效，只清理续连状态，不修改用户选中的会话
     if (!conversations.value.some(c => c.conversationId === convId)) {
@@ -658,8 +745,9 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
-    isStreaming.value = true
+    // 派生 isStreaming 通过下方 assistant 占位消息的 status='streaming' 自动为 true
     markConversationStreaming(convId, true)
+    streamConversationId = convId
 
     // 续连前先拉取历史消息，确保 UI 上能看到完整对话上下文。
     // 后端在流终态前不会持久化 assistant 消息，因此历史里的最后一条
@@ -675,7 +763,6 @@ export const useChatStore = defineStore('chat', () => {
       const status = (e as { response?: { status?: number } })?.response?.status
       if (status === 404 || status === 403) {
         clearReconnectState()
-        isStreaming.value = false
         markConversationStreaming(convId, false)
         return
       }
@@ -691,7 +778,11 @@ export const useChatStore = defineStore('chat', () => {
         content: '',
         timestamp: Date.now(),
         metadata: {},
+        status: 'streaming',
       })
+    } else {
+      // 已有 assistant 消息，设为 streaming 以激活派生 isStreaming
+      last.status = 'streaming'
     }
 
     const streamOptions = {
@@ -718,9 +809,18 @@ export const useChatStore = defineStore('chat', () => {
     } catch (error) {
       flushBuf.flush()
       console.warn('[ChatStore] Reconnect failed:', error)
+      clearReconnectState()
+      const errMsg = messages.value[messages.value.length - 1]
+      if (errMsg?.role === 'assistant') {
+        errMsg.status = 'failed'
+      }
     } finally {
       flushBuf.destroy()
-      isStreaming.value = false
+      // 安全网：确保消息状态不再为 'streaming'
+      const finMsg = messages.value[messages.value.length - 1]
+      if (finMsg?.role === 'assistant' && finMsg.status === 'streaming') {
+        finMsg.status = 'completed'
+      }
       markConversationStreaming(convId, false)
     }
   }
@@ -728,14 +828,17 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 刷新页面 / 切回 tab 时尝试续连上一次的 SSE 流。
    * <p>
-   * 前置条件：sessionStorage 中持久化了 conversationId 和 lastEventId（由 sendMessage / reconnect
-   * 持续维护）。若不存在则直接返回，避免误触发"上一个会话的流已经结束"场景。
+   * 前置条件：sessionStorage 中持久化了 conversationId（由 sendMessage 启动时写入）。
+   * 只要 conversationId 存在且后端 streamStatus 为 running，就尝试重连；
+   * lastEventId 为空时使用 '0'，表示"回放所有 buffer 事件"（后端 attach 支持）。
    * 真正的"是否仍有活流"由后端 RunState 决定；5 分钟窗口内可重连，否则后端返回 done 事件。
+   *
+   * @returns 是否成功进入续连流程
    */
-  async function tryResumeStream(): Promise<void> {
+  async function tryResumeStream(): Promise<boolean> {
     const persisted = loadPersistedReconnectState()
-    if (!persisted || !persisted.lastEventId) return
-    if (isStreaming.value) return
+    if (!persisted?.conversationId) return false
+    if (isStreaming.value) return false
 
     await fetchConversations()
 
@@ -744,18 +847,20 @@ export const useChatStore = defineStore('chat', () => {
     const existsInList = conversations.value.some(c => c.conversationId === persisted.conversationId)
     if (!existsInList) {
       clearReconnectState()
-      return
+      return false
     }
 
     if (!isConversationRunningOnServer(persisted.conversationId)) {
       clearReconnectState()
       markConversationStreaming(persisted.conversationId, false)
-      return
+      return false
     }
 
     conversationId.value = persisted.conversationId
-    lastEventId.value = persisted.lastEventId
+    // lastEventId 为空时传 '0'，让后端回放全部 buffer
+    lastEventId.value = persisted.lastEventId || '0'
     await reconnect()
+    return true
   }
 
   /**
@@ -808,11 +913,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, targetMsgs: ChatMessage[], onFinished?: () => void): void {
+  function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, targetMsgs: ChatMessage[], convId: string, onFinished?: () => void): void {
     const evt = sse.event
     const data = sse.data
 
     if (typeof data !== 'object') return
+
+    // 过滤过期会话的事件，防止切会话后旧流事件污染新会话
+    if (isStaleEvent(data)) return
 
     const msgIdx = targetMsgs.length - 1
 
@@ -938,8 +1046,10 @@ export const useChatStore = defineStore('chat', () => {
         const status = data.status as string | undefined
         if (status === 'stopped') {
           lastMsg.content += '\n[已停止生成]'
+          lastMsg.status = 'stopped'
         } else if (status === 'failed') {
           lastMsg.content += '\n[生成失败]'
+          lastMsg.status = 'failed'
         }
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
@@ -951,7 +1061,12 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
-        // 后台会话完成：不清除前台 isStreaming/lastEventId，仅标记未读
+        // 设置消息状态为 completed（派生 isStreaming 自动变 false）
+        const doneMsg = targetMsgs[msgIdx]
+        if (doneMsg?.role === 'assistant') {
+          doneMsg.status = 'completed'
+        }
+        // 后台会话完成：标记未读
         if (conversationId.value !== convId) {
           markConversationStreaming(convId, false)
           backgroundConversationMessages.set(convId, targetMsgs)
@@ -959,8 +1074,12 @@ export const useChatStore = defineStore('chat', () => {
           nextCompleted.add(convId)
           backgroundCompletedConversations.value = nextCompleted
         } else {
-          isStreaming.value = false
           clearReconnectState()
+        }
+        // 取消 stopChat 的兜底定时器
+        if (stopFallbackTimer) {
+          clearTimeout(stopFallbackTimer)
+          stopFallbackTimer = null
         }
         onFinished?.()
         break
@@ -969,6 +1088,11 @@ export const useChatStore = defineStore('chat', () => {
         flushBuf.flush()
         const lastMsg = targetMsgs[targetMsgs.length - 1]
         if (lastMsg.role !== 'assistant') return
+        // 设置消息状态为 failed（派生 isStreaming 自动变 false）
+        lastMsg.status = 'failed'
+        // 结构化错误信息
+        const errorInfo: ChatErrorInfo = classifySseError(data as Record<string, unknown>)
+        lastMsg.errorInfo = errorInfo
         const msg = data.message as string | undefined
         if (msg) {
           lastMsg.content += `\n[错误] ${msg}`
@@ -976,6 +1100,17 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
+        // 清理流式状态
+        markConversationStreaming(convId, false)
+        if (conversationId.value === convId) {
+          clearReconnectState()
+        }
+        // 取消 stopChat 的兜底定时器
+        if (stopFallbackTimer) {
+          clearTimeout(stopFallbackTimer)
+          stopFallbackTimer = null
+        }
+        onFinished?.()
         break
       }
       case 'heartbeat':
@@ -1007,6 +1142,7 @@ export const useChatStore = defineStore('chat', () => {
       content: m.content || '',
       timestamp: new Date(m.createTime).getTime(),
       metadata: m.metadata as Record<string, unknown> | undefined,
+      status: 'completed',
     }
   }
 

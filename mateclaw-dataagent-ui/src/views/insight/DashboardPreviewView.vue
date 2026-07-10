@@ -57,8 +57,7 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, Loading } from '@element-plus/icons-vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer'
 import type {
   InsightDashboardSchema,
   InsightComponentData,
@@ -118,14 +117,9 @@ const {
   (context) => scheduleReloadWithFilters(context),
 )
 
-/** 渲染 Markdown 报告（含 XSS 过滤） */
-const renderedReport = computed(() => {
-  if (!reportContent.value) {
-    return ''
-  }
-  const raw = marked.parse(reportContent.value, { async: false }) as string
-  return DOMPurify.sanitize(raw)
-})
+/** 渲染 Markdown 报告（含 XSS 过滤 + 代码高亮） */
+const { renderMarkdown } = useMarkdownRenderer()
+const renderedReport = computed(() => renderMarkdown(reportContent.value))
 
 onMounted(async () => {
   await loadDashboard()

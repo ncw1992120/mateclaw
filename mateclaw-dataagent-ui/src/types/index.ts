@@ -447,6 +447,9 @@ export interface ChatAttachment {
   contentType: string
 }
 
+/** 聊天消息状态 */
+export type ChatMessageStatus = 'streaming' | 'completed' | 'failed' | 'stopped'
+
 /** 聊天消息 */
 export interface ChatMessage {
   role: ChatRole
@@ -457,6 +460,10 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>
   /** 附件列表 */
   attachments?: ChatAttachment[]
+  /** 消息状态：streaming(生成中) / completed(完成) / failed(失败) / stopped(已停止) */
+  status?: ChatMessageStatus
+  /** 错误信息（status=failed 时存在） */
+  errorInfo?: import('./chatError').ChatErrorInfo
 }
 
 /** SSE 结构化事件 */

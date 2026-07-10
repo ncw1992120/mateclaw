@@ -1423,7 +1423,7 @@ export default {
     aiAnalysis: {
       generate: 'Generate Analysis',
       generating: 'Generating...',
-      dataSection: 'Data Overview',
+      dataSection: 'Query Summary',
       aiSection: 'AI Analysis',
       placeholder: 'Click "Generate Analysis" to start AI insights',
       generateFailed: 'AI analysis generation failed',
