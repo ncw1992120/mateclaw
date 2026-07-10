@@ -13,6 +13,7 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.InsightComponentDataDTO;
 import vip.mate.dataagent.dto.InsightDashboardSchemaDTO;
+import vip.mate.dataagent.dto.InsightDashboardUpdateRequest;
 import vip.mate.dataagent.dto.InsightDashboardVO;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
@@ -80,7 +81,12 @@ public class InsightReportServiceImpl implements InsightReportService {
         String conversationId = DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + UUID.randomUUID();
 
         String result = runtime.chat(agentId, prompt, conversationId);
-        return result != null ? result.trim() : "";
+        String report = result != null ? result.trim() : "";
+
+        // 持久化到 Schema 中所有 aiAnalysis 组件
+        saveAiAnalysisContent(dashboardId, report);
+
+        return report;
     }
 
     @Override
@@ -180,7 +186,7 @@ public class InsightReportServiceImpl implements InsightReportService {
         for (InsightComponentDataDTO data : componentData) {
             if (data.getTable() != null && data.getTable().getRows() != null) {
                 totalRows += data.getTable().getRows().size();
-                if (dataTable.length() == 0) {
+                if (dataTable.isEmpty()) {
                     dataTable.append(buildMarkdownTable(data.getTable()));
                 }
             }
@@ -192,7 +198,7 @@ public class InsightReportServiceImpl implements InsightReportService {
                 .replace("{{TIME_RANGE}}", "全部时间")
                 .replace("{{FILTERS}}", filters.isEmpty() ? "无" : JSONUtil.toJsonStr(filters))
                 .replace("{{ROW_COUNT}}", String.valueOf(totalRows))
-                .replace("{{DATA_TABLE}}", dataTable.length() == 0 ? "无数据" : dataTable.toString());
+                .replace("{{DATA_TABLE}}", dataTable.isEmpty() ? "无数据" : dataTable.toString());
     }
 
     /**
@@ -218,6 +224,32 @@ public class InsightReportServiceImpl implements InsightReportService {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * 将 AI 分析内容持久化到 Schema 中所有 aiAnalysis 组件
+     */
+    private void saveAiAnalysisContent(Long dashboardId, String content) {
+        try {
+            InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+            InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
+            if (schema == null || schema.getComponents() == null) return;
+
+            boolean changed = false;
+            for (InsightDashboardSchemaDTO.Component comp : schema.getComponents()) {
+                if ("aiAnalysis".equals(comp.getType())) {
+                    comp.setAiAnalysisContent(content);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                InsightDashboardUpdateRequest updateReq = new InsightDashboardUpdateRequest();
+                updateReq.setSchemaJson(JSONUtil.toJsonStr(schema));
+                dashboardService.updateDashboard(dashboardId, updateReq);
+            }
+        } catch (Exception e) {
+            log.warn("AI 分析内容持久化失败: {}", e.getMessage());
+        }
     }
 
     /**

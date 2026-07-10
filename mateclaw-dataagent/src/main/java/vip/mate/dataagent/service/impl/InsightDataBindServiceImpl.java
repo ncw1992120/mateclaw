@@ -455,7 +455,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
-     * 构建 AI 分析组件数据（数据部分由模板填充，AI 分析部分由前端触发 SSE 生成）
+     * 构建 AI 分析组件数据（数据部分由模板填充，AI 分析部分从 Schema 读取已持久化内容）
      */
     private InsightComponentDataDTO buildAiAnalysisData(Component component,
                                                          InsightDashboardSchemaDTO schema,
@@ -500,6 +500,12 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
 
         aiData.setDataSection(dataSection.toString());
+
+        // 从 Schema 读取已持久化的 AI 分析内容
+        if (component.getAiAnalysisContent() != null && !component.getAiAnalysisContent().isBlank()) {
+            aiData.setAnalysisSection(component.getAiAnalysisContent());
+        }
+
         dto.setAiAnalysis(aiData);
         return dto;
     }

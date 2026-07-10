@@ -975,6 +975,8 @@ export interface InsightComponent {
   boundFilterIds?: string[]
   /** 是否启用组件级时间筛选（右上角时间选择器） */
   enableTimeFilter?: boolean
+  /** AI 分析内容（Markdown，生成后持久化到 Schema，刷新不丢失） */
+  aiAnalysisContent?: string
 }
 
 /** 仪表盘 Schema */

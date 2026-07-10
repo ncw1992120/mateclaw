@@ -60,6 +60,9 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 是否启用组件级时间筛选（右上角时间选择器） */
         private Boolean enableTimeFilter;
+
+        /** AI 分析内容（Markdown，生成后持久化到 Schema，刷新不丢失） */
+        private String aiAnalysisContent;
     }
 
     /**
