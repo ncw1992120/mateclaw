@@ -10,9 +10,9 @@ Aloudata 指标查询结果数据提取脚本
 输出: 结构化 JSON，包含 columns（列名列表）和 rows（行数据列表）
 """
 
+import argparse
 import json
 import sys
-import argparse
 
 
 def extract_data(response: dict) -> dict:

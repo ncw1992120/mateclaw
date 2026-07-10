@@ -1,13 +1,7 @@
 package vip.mate.dataagent.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import vip.mate.dataagent.dto.AloudataCategoryCountDTO;
-import vip.mate.dataagent.dto.AloudataDimensionPageQuery;
-import vip.mate.dataagent.dto.AloudataDimensionSemanticDTO;
-import vip.mate.dataagent.dto.AloudataMetricPageQuery;
-import vip.mate.dataagent.dto.AloudataMetricSemanticDTO;
-import vip.mate.dataagent.dto.DimensionCategoryGroupDTO;
-import vip.mate.dataagent.dto.MetricCategoryGroupDTO;
+import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 
 import java.util.List;

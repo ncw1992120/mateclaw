@@ -1,5 +1,7 @@
 package vip.mate.dataagent.auth.context;
 
+import vip.mate.dataagent.auth.interceptor.UserContextInterceptor;
+
 /**
  * 当前请求的用户上下文信息
  * <p>

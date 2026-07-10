@@ -8,9 +8,9 @@ Aloudata 指标查询结果格式化脚本
 输出: 格式化后的 Markdown 表格
 """
 
+import argparse
 import json
 import sys
-import argparse
 
 
 def format_query_result(response: dict) -> str:

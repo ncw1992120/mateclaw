@@ -9,11 +9,10 @@ Aloudata 指标查询请求校验脚本
 返回: 校验结果 JSON，包含 passed（是否通过）和 errors（错误列表）
 """
 
-import json
-import sys
-import re
 import argparse
-
+import json
+import re
+import sys
 
 # 日期粒度等级（从小到大）
 GRAIN_LEVEL = {

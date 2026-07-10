@@ -21,18 +21,16 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
-import vip.mate.dataagent.service.AloudataSemanticEsService;
-import vip.mate.dataagent.service.AloudataSemanticSyncService;
-import vip.mate.dataagent.service.BusinessTermEsService;
-import vip.mate.dataagent.service.DatasourceAccountService;
-import vip.mate.dataagent.service.SchemaEmbeddingService;
-import vip.mate.dataagent.service.SemanticModelService;
+import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Aloudata API 动态工具注册器

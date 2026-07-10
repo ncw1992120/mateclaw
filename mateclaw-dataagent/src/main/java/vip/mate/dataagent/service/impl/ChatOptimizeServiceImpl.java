@@ -3,10 +3,10 @@ package vip.mate.dataagent.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import vip.mate.agent.model.AgentEntity;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.service.ChatOptimizeService;
-import vip.mate.agent.model.AgentEntity;
 import vip.mate.sdk.service.MateClawRuntime;
 
 import java.util.List;
