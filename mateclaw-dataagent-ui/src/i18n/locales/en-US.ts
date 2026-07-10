@@ -1402,6 +1402,10 @@ export default {
       filterTargetComponentsPlaceholder: 'Select affected components',
       boundFilters: 'Bound Filters',
       boundFiltersPlaceholder: 'Select bound filters',
+      enableTimeFilter: 'Component Time Filter',
+      aiAnalysisPrompt: 'Analysis Prompt',
+      aiAnalysisPromptPlaceholder: 'Custom analysis direction, leave empty for default',
+      aiAnalysisAutoGenerate: 'Auto Generate',
     },
     component: {
       kpi: 'Card',
@@ -1414,6 +1418,15 @@ export default {
       table: 'Data Table',
       filter: 'Filter',
       timeFilter: 'Time Filter',
+      aiAnalysis: 'AI Analysis',
+    },
+    aiAnalysis: {
+      generate: 'Generate Analysis',
+      generating: 'Generating...',
+      dataSection: 'Data Overview',
+      aiSection: 'AI Analysis',
+      placeholder: 'Click "Generate Analysis" to start AI insights',
+      generateFailed: 'AI analysis generation failed',
     },
     status: {
       draft: 'Draft',

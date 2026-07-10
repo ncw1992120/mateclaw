@@ -1459,6 +1459,10 @@ export default {
       filterTargetComponentsPlaceholder: '选择受影响的组件',
       boundFilters: '绑定筛选器',
       boundFiltersPlaceholder: '选择绑定的筛选器',
+      enableTimeFilter: '组件级时间筛选',
+      aiAnalysisPrompt: '分析提示词',
+      aiAnalysisPromptPlaceholder: '自定义分析方向，留空使用默认',
+      aiAnalysisAutoGenerate: '自动生成',
     },
     component: {
       kpi: '卡片',
@@ -1471,6 +1475,15 @@ export default {
       table: '数据表格',
       filter: '筛选器',
       timeFilter: '时间筛选',
+      aiAnalysis: 'AI分析',
+    },
+    aiAnalysis: {
+      generate: '生成分析',
+      generating: '正在生成...',
+      dataSection: '数据概览',
+      aiSection: 'AI 分析',
+      placeholder: '点击"生成分析"开始 AI 解读',
+      generateFailed: 'AI 分析生成失败',
     },
     status: {
       draft: '草稿',

@@ -57,6 +57,9 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 绑定的筛选器 ID 列表（绑定后该组件仅响应专属筛选器，不再受全局筛选器影响） */
         private List<String> boundFilterIds;
+
+        /** 是否启用组件级时间筛选（右上角时间选择器） */
+        private Boolean enableTimeFilter;
     }
 
     /**

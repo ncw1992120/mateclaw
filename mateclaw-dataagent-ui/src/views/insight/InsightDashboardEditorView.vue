@@ -173,6 +173,7 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
     table: t('insight.component.table'),
     filter: t('insight.component.filter'),
     timeFilter: t('insight.component.timeFilter'),
+    aiAnalysis: t('insight.component.aiAnalysis'),
   }
   const key = type === 'chart' && chartType ? `chart-${chartType}` : type
   return titleMap[key] ?? type
@@ -187,7 +188,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     title: getDefaultTitle(payload.type, payload.chartType),
     position: { x: 0, y: maxY, w: 6, h: 4 },
     chartType: payload.chartType,
-    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' ? {
+    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' ? {
       datasourceId: '',
       metrics: [],
       dimensions: [],
@@ -197,6 +198,8 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     config: payload.type === 'timeFilter' ? {
       field: 'metric_time',
       availablePresets: ['today', '7d', '30d', '90d', 'custom'],
+    } : payload.type === 'aiAnalysis' ? {
+      autoGenerate: false,
     } : undefined,
   }
   schema.components.push(newComponent)

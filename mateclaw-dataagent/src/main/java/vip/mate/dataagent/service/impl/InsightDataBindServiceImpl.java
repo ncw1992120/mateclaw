@@ -29,6 +29,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -65,8 +67,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
     @Override
     public InsightComponentDataDTO bindComponent(Component component) {
-        // filter / timeFilter 类型无需取数
-        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
+        // filter / timeFilter / aiAnalysis 类型无需取数
+        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())
+                || "aiAnalysis".equals(component.getType())) {
             return null;
         }
         // 校验 dataSource
@@ -99,11 +102,30 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             return Collections.emptyList();
         }
         String sourceFilterId = filterContext.getSourceFilterId();
+
+        // 组件级时间筛选：sourceFilterId 以 "__component_" 前缀开头时，仅影响指定组件
+        String componentLevelTargetId = null;
+        if (sourceFilterId != null && sourceFilterId.startsWith("__component_")) {
+            componentLevelTargetId = sourceFilterId.substring("__component_".length());
+        }
+
+        final String targetId = componentLevelTargetId;
         return schema.getComponents().stream()
                 .map(component -> {
                     // filter/timeFilter 组件无需取数
                     if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
                         return null;
+                    }
+                    // aiAnalysis 组件：构建数据部分（模板填充），AI 分析部分由前端触发 SSE 生成
+                    if ("aiAnalysis".equals(component.getType())) {
+                        return buildAiAnalysisData(component, schema, dashboardId);
+                    }
+                    // 组件级时间筛选：仅影响指定组件
+                    if (targetId != null) {
+                        if (!targetId.equals(component.getId())) {
+                            return null;
+                        }
+                        return bindComponentWithFilters(component, filterContext);
                     }
                     // 作用范围判断
                     if (sourceFilterId != null && !sourceFilterId.isBlank()) {
@@ -138,7 +160,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
      */
     private InsightComponentDataDTO bindComponentWithFilters(Component component,
                                                               DashboardFilterContextDTO filterContext) {
-        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
+        if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())
+                || "aiAnalysis".equals(component.getType())) {
             return null;
         }
         DataSource ds = component.getDataSource();
@@ -440,6 +463,56 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         kpi.setName(metricName);
         kpi.setValue("--");
         return kpi;
+    }
+
+    /**
+     * 构建 AI 分析组件数据（数据部分由模板填充，AI 分析部分由前端触发 SSE 生成）
+     */
+    private InsightComponentDataDTO buildAiAnalysisData(Component component,
+                                                         InsightDashboardSchemaDTO schema,
+                                                         Long dashboardId) {
+        InsightComponentDataDTO dto = new InsightComponentDataDTO();
+        dto.setComponentId(component.getId());
+        dto.setRenderType("aiAnalysis");
+
+        InsightComponentDataDTO.AiAnalysisData aiData = new InsightComponentDataDTO.AiAnalysisData();
+
+        // 聚合所有组件的指标、维度信息构建数据概览
+        StringBuilder dataSection = new StringBuilder();
+        Set<String> metrics = new LinkedHashSet<>();
+        Set<String> dimensions = new LinkedHashSet<>();
+        int componentCount = 0;
+
+        if (schema.getComponents() != null) {
+            for (Component comp : schema.getComponents()) {
+                if (comp.getDataSource() != null) {
+                    if (comp.getDataSource().getMetrics() != null) {
+                        metrics.addAll(comp.getDataSource().getMetrics());
+                    }
+                    if (comp.getDataSource().getDimensions() != null) {
+                        dimensions.addAll(comp.getDataSource().getDimensions());
+                    }
+                    componentCount++;
+                }
+            }
+        }
+
+        dataSection.append("## 数据概览\n\n");
+        dataSection.append("| 项目 | 值 |\n");
+        dataSection.append("|------|----|\n");
+        dataSection.append("| 指标数量 | ").append(metrics.size()).append(" |\n");
+        dataSection.append("| 维度数量 | ").append(dimensions.size()).append(" |\n");
+        dataSection.append("| 数据组件数 | ").append(componentCount).append(" |\n");
+        if (!metrics.isEmpty()) {
+            dataSection.append("| 指标列表 | ").append(String.join("、", metrics)).append(" |\n");
+        }
+        if (!dimensions.isEmpty()) {
+            dataSection.append("| 维度列表 | ").append(String.join("、", dimensions)).append(" |\n");
+        }
+
+        aiData.setDataSection(dataSection.toString());
+        dto.setAiAnalysis(aiData);
+        return dto;
     }
 
     /**

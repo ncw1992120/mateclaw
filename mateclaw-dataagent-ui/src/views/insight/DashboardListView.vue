@@ -77,13 +77,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
+import { usePersistedState } from '@/composables/usePersistedRef'
 import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 
@@ -95,13 +96,21 @@ const { t } = useI18n()
 const store = useInsightDashboardStore()
 
 type ViewMode = 'list' | 'editor' | 'preview'
-const mode = ref<ViewMode>('list')
-const currentDashboardId = ref<string>('')
+const mode = usePersistedState<ViewMode>('mc-insight-view-mode', 'list')
+const currentDashboardId = usePersistedState<string>('mc-insight-dashboard-id', '')
 
 onMounted(() => {
   store.fetchDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
+  // 刷新后恢复编辑/预览模式时，需要加载对应仪表盘数据
+  if (mode.value !== 'list' && currentDashboardId.value) {
+    store.selectDashboard(currentDashboardId.value).catch(() => {
+      // 仪表盘可能已被删除，回退到列表
+      mode.value = 'list'
+      currentDashboardId.value = ''
+    })
+  }
 })
 
 /** 格式化时间 */
@@ -179,6 +188,7 @@ async function handleDelete(dashboard: InsightDashboard): Promise<void> {
 /** 返回列表 */
 function handleBackToList(): void {
   mode.value = 'list'
+  currentDashboardId.value = ''
   store.fetchDashboards().catch(() => {
     // 静默失败
   })

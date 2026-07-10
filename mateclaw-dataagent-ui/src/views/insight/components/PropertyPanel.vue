@@ -285,8 +285,31 @@
         </div>
       </template>
 
+      <!-- AI 分析组件配置（仅 aiAnalysis 组件） -->
+      <template v-if="component.type === 'aiAnalysis'">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.aiAnalysisPrompt') }}</label>
+          <el-input
+            v-model="localAiAnalysisPrompt"
+            type="textarea"
+            :rows="3"
+            size="small"
+            :placeholder="t('insight.property.aiAnalysisPromptPlaceholder')"
+            @change="emitAiAnalysisConfigChange"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.aiAnalysisAutoGenerate') }}</label>
+          <el-switch
+            v-model="localAiAnalysisAutoGenerate"
+            size="small"
+            @change="emitAiAnalysisConfigChange"
+          />
+        </div>
+      </template>
+
       <!-- 数据组件绑定筛选器（kpi/chart/table 组件） -->
-      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter'">
+      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter' && component.type !== 'aiAnalysis'">
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.boundFilters') }}</label>
           <el-select
@@ -306,6 +329,16 @@
             />
           </el-select>
         </div>
+
+        <!-- 组件级时间筛选开关 -->
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.enableTimeFilter') }}</label>
+          <el-switch
+            v-model="localEnableTimeFilter"
+            size="small"
+            @change="emitChange"
+          />
+        </div>
       </template>
     </div>
   </div>
@@ -315,7 +348,7 @@
 import { reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, TimeRangePreset, FilterScope } from '@/types'
+import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, AIAnalysisComponentConfig, TimeRangePreset, FilterScope } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -374,6 +407,11 @@ const localFilterScope = ref<FilterScope>('global')
 const localTargetComponentIds = ref<string[]>([])
 /** 图表组件绑定的筛选器 ID 列表 */
 const localBoundFilterIds = ref<string[]>([])
+/** 组件级时间筛选开关 */
+const localEnableTimeFilter = ref(false)
+/** AI 分析组件配置本地副本 */
+const localAiAnalysisPrompt = ref('')
+const localAiAnalysisAutoGenerate = ref(false)
 
 /** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
@@ -456,6 +494,13 @@ watch(
     // 同步数据组件的绑定筛选器
     if (newComp.type !== 'filter' && newComp.type !== 'timeFilter') {
       localBoundFilterIds.value = newComp.boundFilterIds ?? []
+      localEnableTimeFilter.value = newComp.enableTimeFilter ?? false
+    }
+    // 同步 AI 分析组件配置
+    if (newComp.type === 'aiAnalysis') {
+      const config = newComp.config as AIAnalysisComponentConfig | undefined
+      localAiAnalysisPrompt.value = config?.promptTemplate ?? ''
+      localAiAnalysisAutoGenerate.value = config?.autoGenerate ?? false
     }
   },
   { immediate: true }
@@ -599,6 +644,7 @@ function emitChange(): void {
     // position 不 emit，由画布拖拽/缩放管理
     dataSource: localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined,
     boundFilterIds: localBoundFilterIds.value.length > 0 ? [...localBoundFilterIds.value] : undefined,
+    enableTimeFilter: localEnableTimeFilter.value || undefined,
   }
   delete (updated as any).position
   emit('change', updated)
@@ -648,6 +694,20 @@ function emitTimeFilterConfigChange(): void {
       : undefined,
     scope: localFilterScope.value,
     targetComponentIds: localFilterScope.value === 'scoped' ? [...localTargetComponentIds.value] : undefined,
+  }
+  const updated: InsightComponent = {
+    ...JSON.parse(JSON.stringify(localComponent)),
+    config,
+  }
+  delete (updated as any).position
+  emit('change', updated)
+}
+
+/** AI 分析组件配置变更时 emit */
+function emitAiAnalysisConfigChange(): void {
+  const config: AIAnalysisComponentConfig = {
+    promptTemplate: localAiAnalysisPrompt.value || undefined,
+    autoGenerate: localAiAnalysisAutoGenerate.value || undefined,
   }
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),

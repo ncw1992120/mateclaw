@@ -1,5 +1,19 @@
 <template>
   <div class="kpi-card-widget">
+    <div v-if="showTimeFilter" class="kpi-time-filter">
+      <el-date-picker
+        v-model="localDateRange"
+        type="daterange"
+        size="small"
+        style="width: 220px"
+        value-format="YYYY-MM-DD"
+        unlink-panels
+        :shortcuts="dateShortcuts"
+        :start-placeholder="t('insight.timeRange.startPlaceholder')"
+        :end-placeholder="t('insight.timeRange.endPlaceholder')"
+        @change="handleDateChange"
+      />
+    </div>
     <div v-if="showTitle" class="kpi-header">{{ component.title }}</div>
     <div class="kpi-value">{{ kpiData?.value ?? '--' }}</div>
     <div v-if="showTitle && kpiData?.name" class="kpi-name">{{ kpiData.name }}</div>
@@ -11,9 +25,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue } from '@/types'
 
 defineOptions({
   name: 'KpiCardWidget',
@@ -30,7 +44,34 @@ const props = defineProps<{
   showTitle?: boolean
 }>()
 
+const emit = defineEmits<{
+  (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+}>()
+
 const kpiData = computed(() => props.componentData?.kpi)
+const showTimeFilter = computed(() => props.component.enableTimeFilter)
+
+/** 组件级时间选择器绑定值 */
+const localDateRange = ref<[string, string] | null>(null)
+
+/** 快捷选项 */
+const dateShortcuts = computed(() => [
+  { text: t('insight.timeRange.today'), value: () => { const today = new Date(); return [today, today] } },
+  { text: t('insight.timeRange.7d'), value: () => { const end = new Date(); const start = new Date(); start.setTime(start.getTime() - 3600 * 1000 * 24 * 6); return [start, end] } },
+  { text: t('insight.timeRange.30d'), value: () => { const end = new Date(); const start = new Date(); start.setTime(start.getTime() - 3600 * 1000 * 24 * 29); return [start, end] } },
+  { text: t('insight.timeRange.90d'), value: () => { const end = new Date(); const start = new Date(); start.setTime(start.getTime() - 3600 * 1000 * 24 * 89); return [start, end] } },
+])
+
+/** 日期选择变化 → 转换为 TimeRangeValue 并 emit */
+function handleDateChange(val: [string, string] | null): void {
+  if (!val) {
+    emit('component-time-range-change', { componentId: props.component.id, timeRange: undefined })
+    return
+  }
+  const [start, end] = val
+  const timeRange: TimeRangeValue = { preset: 'custom', start, end }
+  emit('component-time-range-change', { componentId: props.component.id, timeRange })
+}
 </script>
 
 <style scoped>
@@ -47,6 +88,13 @@ const kpiData = computed(() => props.componentData?.kpi)
   border-radius: 8px;
   border: 1px solid var(--theme-border);
   position: relative;
+}
+
+.kpi-time-filter {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 1;
 }
 
 .kpi-header {

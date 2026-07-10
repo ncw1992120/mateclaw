@@ -921,7 +921,7 @@ export interface HelpCategory {
 // ==================== 洞察仪表盘 ====================
 
 /** 洞察仪表盘组件类型 */
-export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter'
+export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'aiAnalysis'
 
 /** 筛选器作用范围 */
 export type FilterScope = 'global' | 'scoped'
@@ -973,6 +973,8 @@ export interface InsightComponent {
   config?: Record<string, unknown>
   /** 绑定的筛选器 ID 列表（绑定后该组件仅响应专属筛选器，不再受全局筛选器影响） */
   boundFilterIds?: string[]
+  /** 是否启用组件级时间筛选（右上角时间选择器） */
+  enableTimeFilter?: boolean
 }
 
 /** 仪表盘 Schema */
@@ -1022,8 +1024,8 @@ export interface InsightDashboardUpdateInput {
 export interface InsightComponentData {
   /** 对应组件 ID */
   componentId: string
-  /** 渲染类型：echarts / kpi / table */
-  renderType: 'echarts' | 'kpi' | 'table'
+  /** 渲染类型：echarts / kpi / table / aiAnalysis */
+  renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时） */
@@ -1037,6 +1039,13 @@ export interface InsightComponentData {
   table?: {
     columns: string[]
     rows: string[][]
+  }
+  /** AI 分析数据（renderType=aiAnalysis 时） */
+  aiAnalysis?: {
+    /** 模板填充后的数据部分（Markdown） */
+    dataSection: string
+    /** AI 生成的分析内容（Markdown，可能为空表示尚未生成） */
+    analysisSection?: string
   }
   /** 取数失败时的错误信息（前端展示降级提示） */
   error?: string
@@ -1101,6 +1110,14 @@ export interface TimeFilterComponentConfig {
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */
   targetComponentIds?: string[]
+}
+
+/** AI 分析组件配置（InsightComponent.config 的约定结构） */
+export interface AIAnalysisComponentConfig {
+  /** 分析提示词模板（可选，用于自定义分析方向） */
+  promptTemplate?: string
+  /** 是否自动生成（预览时自动触发 AI 分析） */
+  autoGenerate?: boolean
 }
 
 /** 时间范围预设选项 */

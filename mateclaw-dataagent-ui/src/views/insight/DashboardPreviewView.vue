@@ -24,8 +24,11 @@
         :components="schema.components"
         :component-data-map="componentDataMap"
         :editable="false"
+        :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
+        @component-time-range-change="handleComponentTimeRangeChange"
+        @ai-analysis-generate="handleAiAnalysisGenerate"
       />
     </div>
 
@@ -64,7 +67,7 @@ import type {
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { preview } from '@/api/insight-dashboard'
-import { streamReport } from '@/api/insight-report'
+import { streamReport, generateReport } from '@/api/insight-report'
 import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 
@@ -88,6 +91,14 @@ const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', components: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
+/** 组件级时间范围状态（componentId → TimeRangeValue） */
+const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
+
+/** 正在生成 AI 分析的组件 ID 集合 */
+const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
+
+/** AI 分析内容状态（componentId → analysisSection） */
+const aiAnalysisContents = reactive<Record<string, string>>({})
 /** AI 报告相关 */
 const reportDrawerVisible = ref(false)
 const generatingReport = ref(false)
@@ -189,6 +200,66 @@ function handleTimeFilterChange(payload: { componentId: string; field: string; t
     return
   }
   setTimeRange(payload.timeRange, payload.componentId)
+}
+
+/** 组件级时间筛选变化（图表右上角时间选择器） */
+function handleComponentTimeRangeChange(payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void {
+  if (payload.timeRange) {
+    componentTimeRanges[payload.componentId] = payload.timeRange
+  } else {
+    delete componentTimeRanges[payload.componentId]
+  }
+  reloadSingleComponentData(payload.componentId, payload.timeRange)
+}
+
+/** 重新加载单个组件数据（组件级时间筛选变化时） */
+async function reloadSingleComponentData(componentId: string, componentTimeRange?: TimeRangeValue): Promise<void> {
+  // 构建该组件专属的筛选上下文：合并全局筛选 + 组件级时间覆盖
+  const context: DashboardFilterContext = {
+    ...filterContext.value,
+    timeRange: componentTimeRange ?? filterContext.value.timeRange,
+    // 标记仅影响指定组件
+    sourceFilterId: `__component_${componentId}`,
+  }
+  try {
+    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    const dataMap = { ...componentDataMap.value }
+    for (const item of dataList ?? []) {
+      if (item.componentId === componentId) {
+        dataMap[item.componentId] = item
+      }
+    }
+    componentDataMap.value = dataMap
+  } catch {
+    ElMessage.warning(t('insight.previewDataFailed'))
+  }
+}
+
+/** AI 分析组件触发生成（同步接口） */
+async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
+  if (aiAnalysisGeneratingIds.has(componentId)) return
+  aiAnalysisGeneratingIds.add(componentId)
+
+  try {
+    const analysisMarkdown = await generateReport(props.dashboardId)
+    aiAnalysisContents[componentId] = analysisMarkdown
+    const dataMap = { ...componentDataMap.value }
+    const existing = dataMap[componentId]
+    if (existing) {
+      dataMap[componentId] = {
+        ...existing,
+        aiAnalysis: {
+          dataSection: existing.aiAnalysis?.dataSection ?? '',
+          analysisSection: analysisMarkdown,
+        },
+      }
+      componentDataMap.value = dataMap
+    }
+  } catch (err: any) {
+    ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + (err?.message || String(err)))
+  } finally {
+    aiAnalysisGeneratingIds.delete(componentId)
+  }
 }
 
 /** 生成 AI 解读报告（SSE 流式） */

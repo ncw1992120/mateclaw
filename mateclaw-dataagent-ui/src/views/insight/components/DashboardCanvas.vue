@@ -41,18 +41,21 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable"
+                @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <ChartWidget
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable"
+                @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <DataTableWidget
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable"
+                @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
@@ -65,6 +68,14 @@
                 :component="getComponent(item.i)!"
                 :show-title="!editable"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
+              />
+              <AiAnalysisWidget
+                v-else-if="getComponent(item.i)?.type === 'aiAnalysis'"
+                :component="getComponent(item.i)!"
+                :component-data="getComponentData(item.i)"
+                :show-title="!editable"
+                :generating="aiAnalysisGeneratingIds.has(item.i)"
+                @generate="(id) => emit('ai-analysis-generate', id)"
               />
             </template>
           </div>
@@ -88,6 +99,7 @@ import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
 import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
+import AiAnalysisWidget from './AiAnalysisWidget.vue'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -95,7 +107,7 @@ defineOptions({
 
 const { t } = useI18n()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** 仪表盘组件列表 */
   components: InsightComponent[]
   /** 组件渲染数据映射（componentId -> data） */
@@ -104,7 +116,11 @@ const props = defineProps<{
   editable?: boolean
   /** 当前选中的组件 ID */
   selectedId?: string
-}>()
+  /** 正在生成 AI 分析的组件 ID 集合 */
+  aiAnalysisGeneratingIds?: Set<string>
+}>(), {
+  aiAnalysisGeneratingIds: () => new Set(),
+})
 
 const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
@@ -113,6 +129,8 @@ const emit = defineEmits<{
   (e: 'delete-component', id: string): void
   (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
+  (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'ai-analysis-generate', componentId: string): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */

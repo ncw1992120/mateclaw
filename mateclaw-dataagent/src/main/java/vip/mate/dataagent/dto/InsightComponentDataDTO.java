@@ -20,7 +20,7 @@ public class InsightComponentDataDTO implements Serializable {
     /** 对应组件 ID */
     private String componentId;
 
-    /** 渲染类型：echarts / kpi / table */
+    /** 渲染类型：echarts / kpi / table / aiAnalysis */
     private String renderType;
 
     /** ECharts option（renderType=echarts 时） */
@@ -31,6 +31,9 @@ public class InsightComponentDataDTO implements Serializable {
 
     /** 表格数据（renderType=table 时） */
     private TableData table;
+
+    /** AI 分析数据（renderType=aiAnalysis 时） */
+    private AiAnalysisData aiAnalysis;
 
     /** 取数失败时的错误信息（可选，前端展示降级提示） */
     private String error;
@@ -69,5 +72,20 @@ public class InsightComponentDataDTO implements Serializable {
 
         /** 数据行（每行是字符串列表） */
         private List<List<String>> rows;
+    }
+
+    /**
+     * AI 分析数据
+     */
+    @Data
+    public static class AiAnalysisData implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** 模板填充后的数据部分（Markdown） */
+        private String dataSection;
+
+        /** AI 生成的分析内容（Markdown，可能为空表示尚未生成） */
+        private String analysisSection;
     }
 }
