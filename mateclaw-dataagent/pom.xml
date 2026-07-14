@@ -140,6 +140,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- ===== Commonmark Java (Markdown → HTML) ===== -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.22.0</version>
+        </dependency>
+
         <!-- ===== Elasticsearch Java Client ===== -->
         <dependency>
             <groupId>co.elastic.clients</groupId>

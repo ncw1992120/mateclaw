@@ -76,6 +76,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (request.getSchemaJson() != null) {
             entity.setSchemaJson(request.getSchemaJson());
         }
+        if (request.getReportContent() != null) {
+            entity.setReportContent(request.getReportContent());
+        }
         if (request.getStatus() != null) {
             entity.setStatus(request.getStatus());
         }

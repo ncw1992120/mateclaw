@@ -15,6 +15,7 @@ import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceAccountService;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Aloudata 指标平台服务实现
@@ -56,6 +57,21 @@ public class AloudataServiceImpl implements AloudataService {
 
     /** 维度详情端点名 */
     private static final String DIMENSION_DETAIL_ENDPOINT = "dimension_detail";
+
+    /** 归因校验端点名 */
+    private static final String ATTRIBUTION_CHECK_ENDPOINT = "attribution_check";
+
+    /** 多维归因端点名 */
+    private static final String ATTRIBUTION_MULTI_DIM_ENDPOINT = "attribution_multi_dim";
+
+    /** 归因下钻端点名 */
+    private static final String ATTRIBUTION_DRILLDOWN_ENDPOINT = "attribution_drilldown";
+
+    /** 指标拆解端点名 */
+    private static final String ATTRIBUTION_BREAKDOWN_ENDPOINT = "attribution_breakdown";
+
+    /** 指标树归因端点名 */
+    private static final String ATTRIBUTION_TREE_ENDPOINT = "attribution_tree";
 
     /** 指标列表响应字段 → DTO 属性别名映射（API 字段名与 DTO 属性名不一致时使用） */
     private static final Map<String, String> METRIC_FIELD_ALIASES = Map.of(
@@ -534,5 +550,352 @@ public class AloudataServiceImpl implements AloudataService {
                 return dimName;
             }
         };
+    }
+
+    @Override
+    public AttributionAnalysisResponse.CheckResult checkAttribution(Long datasourceId, String metric) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
+
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metric", metric);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ATTRIBUTION_CHECK_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(ATTRIBUTION_CHECK_ENDPOINT, config, params);
+
+            AttributionAnalysisResponse.CheckResult result = new AttributionAnalysisResponse.CheckResult();
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                result.setResult((Boolean) body.get("result"));
+                result.setErrorMsg((String) body.get("errorMsg"));
+            } else {
+                result.setResult(false);
+                result.setErrorMsg("归因校验请求失败");
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("归因校验失败: {}", e.getMessage());
+            AttributionAnalysisResponse.CheckResult result = new AttributionAnalysisResponse.CheckResult();
+            result.setResult(false);
+            result.setErrorMsg("归因校验异常: " + e.getMessage());
+            return result;
+        }
+    }
+
+    @Override
+    public AttributionAnalysisResponse.MultiDimResult queryMultiDimAttribution(AttributionAnalysisRequest request) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(request.getDatasourceId());
+
+        try {
+            Map<String, Object> input = buildAttributionInput(request);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ATTRIBUTION_MULTI_DIM_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(ATTRIBUTION_MULTI_DIM_ENDPOINT, config, params);
+            return parseMultiDimResponse(response);
+        } catch (Exception e) {
+            log.error("多维归因查询失败: {}", e.getMessage());
+            throw new RuntimeException("多维归因查询失败: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public AttributionAnalysisResponse.MultiDimResult queryDrilldownAttribution(AttributionAnalysisRequest request) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(request.getDatasourceId());
+
+        try {
+            Map<String, Object> input = buildDrilldownInput(request);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ATTRIBUTION_DRILLDOWN_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(ATTRIBUTION_DRILLDOWN_ENDPOINT, config, params);
+            return parseMultiDimResponse(response);
+        } catch (Exception e) {
+            log.error("归因下钻查询失败: {}", e.getMessage());
+            throw new RuntimeException("归因下钻查询失败: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public AttributionAnalysisResponse.MetricTreeDef breakdownMetric(Long datasourceId, String metric) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
+
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metric", metric);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ATTRIBUTION_BREAKDOWN_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(ATTRIBUTION_BREAKDOWN_ENDPOINT, config, params);
+            return parseBreakdownResponse(response);
+        } catch (Exception e) {
+            log.error("指标拆解失败: {}", e.getMessage());
+            throw new RuntimeException("指标拆解失败: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public Map<String, AttributionAnalysisResponse.TreeNodeAttribution> queryTreeAttribution(
+            Long datasourceId,
+            AttributionAnalysisResponse.MetricTreeDef metricTreeDef,
+            String currentTimeExpr,
+            String compareTimeExpr,
+            List<String> filters) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
+
+        try {
+            Map<String, Object> input = buildTreeAttributionInput(metricTreeDef, currentTimeExpr, compareTimeExpr, filters);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ATTRIBUTION_TREE_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(ATTRIBUTION_TREE_ENDPOINT, config, params);
+            return parseTreeAttributionResponse(response, metricTreeDef);
+        } catch (Exception e) {
+            log.error("指标树归因查询失败: {}", e.getMessage());
+            throw new RuntimeException("指标树归因查询失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 构建多维归因请求参数
+     */
+    private Map<String, Object> buildAttributionInput(AttributionAnalysisRequest request) {
+        Map<String, Object> input = new HashMap<>();
+        input.put("metric", request.getMetric());
+        input.put("dimensions", request.getDimensions());
+
+        Map<String, Object> attributionRange = new HashMap<>();
+        attributionRange.put("granularity", request.getGranularity());
+        attributionRange.put("comparisonType", request.getComparisonType());
+
+        Map<String, Object> currentFilter = new HashMap<>();
+        currentFilter.put("type", "EXPR");
+        currentFilter.put("expr", request.getCurrentTimeExpr());
+        attributionRange.put("currentFilter", currentFilter);
+
+        if (request.getStartDateTime() != null) {
+            attributionRange.put("startDateTime", request.getStartDateTime());
+        }
+        if (request.getEndDateTime() != null) {
+            attributionRange.put("endDateTime", request.getEndDateTime());
+        }
+        input.put("attributionRange", attributionRange);
+
+        if (request.getFilters() != null) {
+            input.put("filters", request.getFilters());
+        }
+        return input;
+    }
+
+    /**
+     * 构建归因下钻请求参数
+     */
+    private Map<String, Object> buildDrilldownInput(AttributionAnalysisRequest request) {
+        Map<String, Object> input = new HashMap<>();
+        input.put("metric", request.getMetric());
+        input.put("dimension", request.getDrillDimension());
+
+        Map<String, Object> attributionRange = new HashMap<>();
+        attributionRange.put("granularity", request.getGranularity());
+        attributionRange.put("comparisonType", request.getComparisonType());
+
+        Map<String, Object> currentFilter = new HashMap<>();
+        currentFilter.put("type", "EXPR");
+        currentFilter.put("expr", request.getCurrentTimeExpr());
+        attributionRange.put("currentFilter", currentFilter);
+
+        if (request.getStartDateTime() != null) {
+            attributionRange.put("startDateTime", request.getStartDateTime());
+        }
+        if (request.getEndDateTime() != null) {
+            attributionRange.put("endDateTime", request.getEndDateTime());
+        }
+        input.put("attributionRange", attributionRange);
+
+        List<String> allFilters = new ArrayList<>();
+        if (request.getFilters() != null) {
+            allFilters.addAll(request.getFilters());
+        }
+        if (request.getDrillFilters() != null) {
+            allFilters.addAll(request.getDrillFilters());
+        }
+        input.put("filters", allFilters);
+        return input;
+    }
+
+    /**
+     * 解析多维归因/下钻归因响应
+     */
+    @SuppressWarnings("unchecked")
+    private AttributionAnalysisResponse.MultiDimResult parseMultiDimResponse(ResponseEntity<Map> response) {
+        AttributionAnalysisResponse.MultiDimResult result = new AttributionAnalysisResponse.MultiDimResult();
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            return result;
+        }
+        Map<String, Object> body = response.getBody();
+        if (!Boolean.TRUE.equals(body.get("success")) || body.get("data") == null) {
+            return result;
+        }
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        result.setMetric((String) data.get("metric"));
+
+        if (data.get("table") != null) {
+            Map<String, Object> table = (Map<String, Object>) data.get("table");
+
+            // 解析 all 概要
+            if (table.get("all") != null) {
+                Map<String, Object> all = (Map<String, Object>) table.get("all");
+                AttributionAnalysisResponse.AllSummary allSummary = new AttributionAnalysisResponse.AllSummary();
+                allSummary.setCurrentValue(toDouble(all.get("currentValue")));
+                allSummary.setComparisonValue(toDouble(all.get("comparisonValue")));
+                allSummary.setGrowth(toDouble(all.get("growth")));
+                allSummary.setGrowthRate(toDouble(all.get("growthRate")));
+                allSummary.setOverallContributionRate(toDouble(all.get("overallContributionRate")));
+                allSummary.setRelativeContributionRate(toDouble(all.get("relativeContributionRate")));
+                result.setAll(allSummary);
+            }
+
+            // 解析 dimensions
+            if (table.get("dimensions") != null) {
+                Map<String, Object> dims = (Map<String, Object>) table.get("dimensions");
+                Map<String, AttributionAnalysisResponse.DimAttribution> dimMap = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> entry : dims.entrySet()) {
+                    Map<String, Object> dimData = (Map<String, Object>) entry.getValue();
+                    AttributionAnalysisResponse.DimAttribution dimAttr = new AttributionAnalysisResponse.DimAttribution();
+                    dimAttr.setDimensionValue(toStringList(dimData.get("dimensionValue")));
+                    dimAttr.setCurrentValue(toDoubleList(dimData.get("currentValue")));
+                    dimAttr.setComparisonValue(toDoubleList(dimData.get("comparisonValue")));
+                    dimAttr.setGrowth(toDoubleList(dimData.get("growth")));
+                    dimAttr.setGrowthRate(toDoubleList(dimData.get("growthRate")));
+                    dimAttr.setContributionRate(toDoubleList(dimData.get("contributionRate")));
+                    dimAttr.setOverallContributionRate(toDoubleList(dimData.get("overallContributionRate")));
+                    dimAttr.setRelativeContributionRate(toDoubleList(dimData.get("relativeContributionRate")));
+                    dimMap.put(entry.getKey(), dimAttr);
+                }
+                result.setDimensions(dimMap);
+            }
+        }
+        return result;
+    }
+
+    private Double toDouble(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Double> toDoubleList(Object value) {
+        if (value instanceof List) {
+            List<?> list = (List<?>) value;
+            List<Double> result = new ArrayList<>(list.size());
+            for (Object item : list) {
+                result.add(item instanceof Number ? ((Number) item).doubleValue() : null);
+            }
+            return result;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> toStringList(Object value) {
+        if (value instanceof List) {
+            return (List<String>) value;
+        }
+        return null;
+    }
+
+    /**
+     * 构建指标树归因请求参数（时间对比）
+     */
+    private Map<String, Object> buildTreeAttributionInput(
+            AttributionAnalysisResponse.MetricTreeDef metricTreeDef,
+            String currentTimeExpr,
+            String compareTimeExpr,
+            List<String> filters) {
+        Map<String, Object> input = new HashMap<>();
+
+        // metricTreeDef
+        Map<String, Object> treeDef = new HashMap<>();
+        treeDef.put("rootNode", metricTreeDef.getRootNode());
+        treeDef.put("metricTree", metricTreeDef.getMetricTree());
+        treeDef.put("metricTreeNodes", metricTreeDef.getMetricTreeNodes());
+        treeDef.put("metricDefinitions", metricTreeDef.getMetricDefinitions() != null
+                ? metricTreeDef.getMetricDefinitions() : Collections.emptyMap());
+        input.put("metricTreeDef", treeDef);
+
+        // attribution（时间对比）
+        Map<String, Object> attribution = new HashMap<>();
+        attribution.put("attributionCalculateType", "ALL");
+        attribution.put("currentTimeConstraint", currentTimeExpr);
+        attribution.put("compareTimeConstraint", compareTimeExpr);
+        attribution.put("filters", filters != null ? filters : Collections.emptyList());
+        input.put("attribution", attribution);
+
+        return input;
+    }
+
+    /**
+     * 解析指标拆解响应
+     */
+    @SuppressWarnings("unchecked")
+    private AttributionAnalysisResponse.MetricTreeDef parseBreakdownResponse(ResponseEntity<Map> response) {
+        AttributionAnalysisResponse.MetricTreeDef result = new AttributionAnalysisResponse.MetricTreeDef();
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            return result;
+        }
+        Map<String, Object> body = response.getBody();
+        if (!Boolean.TRUE.equals(body.get("success")) || body.get("data") == null) {
+            return result;
+        }
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        result.setRootNode((String) data.get("rootNode"));
+        if (data.get("metricTree") != null) {
+            result.setMetricTree((Map<String, String>) data.get("metricTree"));
+        }
+        if (data.get("metricTreeNodes") != null) {
+            result.setMetricTreeNodes((Map<String, String>) data.get("metricTreeNodes"));
+        }
+        if (data.get("metricDefinitions") != null) {
+            result.setMetricDefinitions((Map<String, Object>) data.get("metricDefinitions"));
+        }
+        return result;
+    }
+
+    /**
+     * 解析指标树归因响应
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, AttributionAnalysisResponse.TreeNodeAttribution> parseTreeAttributionResponse(
+            ResponseEntity<Map> response,
+            AttributionAnalysisResponse.MetricTreeDef metricTreeDef) {
+        Map<String, AttributionAnalysisResponse.TreeNodeAttribution> result = new LinkedHashMap<>();
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            return result;
+        }
+        Map<String, Object> body = response.getBody();
+        if (!Boolean.TRUE.equals(body.get("success")) || body.get("data") == null) {
+            return result;
+        }
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            if (entry.getValue() instanceof Map) {
+                Map<String, Object> nodeData = (Map<String, Object>) entry.getValue();
+                AttributionAnalysisResponse.TreeNodeAttribution nodeAttr = new AttributionAnalysisResponse.TreeNodeAttribution();
+                nodeAttr.setCurrentValue(toDouble(nodeData.get("@currentValue")));
+                nodeAttr.setComparisonValue(toDouble(nodeData.get("@compareValue")));
+                nodeAttr.setGrowth(toDouble(nodeData.get("@growth")));
+                nodeAttr.setGrowthRate(toDouble(nodeData.get("@growthRate")));
+                nodeAttr.setRelativeContributionRate(toDouble(nodeData.get("@relativeContributionRate")));
+                // 填充节点对应的指标名称
+                if (metricTreeDef != null && metricTreeDef.getMetricTreeNodes() != null) {
+                    nodeAttr.setMetricName(metricTreeDef.getMetricTreeNodes().get(entry.getKey()));
+                }
+                result.put(entry.getKey(), nodeAttr);
+            }
+        }
+        return result;
     }
 }

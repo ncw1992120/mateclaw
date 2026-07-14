@@ -119,14 +119,25 @@ public class DataAgentInsightDashboardController {
     /**
      * 生成 AI 报告（同步）
      * <p>
-     * 等待 LLM 完成后返回完整 Markdown 报告。
+     * 等待 LLM 完成后生成 HTML 格式报告，并持久化到仪表盘。
      */
     @PostMapping("/{id}/report")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "生成 AI 报告（同步）", description = "等待 LLM 完成后返回完整 Markdown 报告")
+    @Operation(summary = "生成 AI 报告", description = "生成 HTML 格式报告并持久化到仪表盘")
     public R<String> generateReport(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return R.ok(reportService.generateReport(id));
+    }
+
+    /**
+     * 获取已生成的 AI 报告
+     */
+    @GetMapping("/{id}/report")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "获取 AI 报告", description = "获取已生成的 HTML 格式报告内容")
+    public R<String> getReport(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
+        return R.ok(reportService.getReport(id));
     }
 
     /**
@@ -140,5 +151,19 @@ public class DataAgentInsightDashboardController {
     public SseEmitter streamReport(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return reportService.streamReport(id);
+    }
+
+    /**
+     * 归因分析
+     * <p>
+     * 基于仪表盘组件的指标和维度，调用 Aloudata 归因分析 API：
+     * 1. 校验指标是否可归因；2. 执行多维归因分析；3. 对高贡献维度自动下钻。
+     */
+    @PostMapping("/attribution")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "归因分析", description = "基于指标和维度执行归因分析，包含校验、多维归因和下钻分析")
+    public R<AttributionAnalysisResponse> attributionAnalysis(
+            @RequestBody AttributionAnalysisRequest request) {
+        return R.ok(reportService.attributionAnalysis(request));
     }
 }

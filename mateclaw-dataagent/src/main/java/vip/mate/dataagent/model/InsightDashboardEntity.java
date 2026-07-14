@@ -26,6 +26,9 @@ public class InsightDashboardEntity {
     /** 仪表盘 Schema JSON（components 数组） */
     private String schemaJson;
 
+    /** AI 分析报告内容（HTML 格式） */
+    private String reportContent;
+
     /** 状态：draft / published */
     private String status;
 

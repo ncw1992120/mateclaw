@@ -3,9 +3,103 @@ import api from './index'
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
 
-/** 同步生成报告 */
+/** 归因分析请求参数 */
+export interface AttributionAnalysisParams {
+  /** 数据源 ID */
+  datasourceId: number
+  /** 指标名称 */
+  metric: string
+  /** 分析维度列表 */
+  dimensions: string[]
+  /** 时间粒度：DAY / WEEK / MONTH / QUARTER / YEAR */
+  granularity: string
+  /** 对比类型：CUSTOM / DOD / YOY / MOM / QOQ / WOW */
+  comparisonType: string
+  /** 当前时间表达式 */
+  currentTimeExpr: string
+  /** 对比时间表达式 */
+  compareTimeExpr?: string
+  /** 自定义对比开始时间 */
+  startDateTime?: string
+  /** 自定义对比结束时间 */
+  endDateTime?: string
+  /** 筛选条件表达式列表 */
+  filters?: string[]
+}
+
+/** 归因校验结果 */
+export interface AttributionCheckResult {
+  result: boolean
+  errorMsg?: string
+}
+
+/** 整体变化概要 */
+export interface AttributionAllSummary {
+  currentValue: number | null
+  comparisonValue: number | null
+  growth: number | null
+  growthRate: number | null
+  overallContributionRate: number | null
+  relativeContributionRate: number | null
+}
+
+/** 维度归因详情 */
+export interface DimAttribution {
+  dimensionValue: string[]
+  currentValue: number[]
+  comparisonValue: number[]
+  growth: number[]
+  growthRate: number[]
+  contributionRate: number[]
+  overallContributionRate: number[]
+  relativeContributionRate: number[]
+}
+
+/** 多维归因结果 */
+export interface MultiDimResult {
+  metric: string
+  all: AttributionAllSummary
+  dimensions: Record<string, DimAttribution>
+}
+
+/** 指标树定义 */
+export interface MetricTreeDef {
+  rootNode: string
+  metricTree: Record<string, string>
+  metricTreeNodes: Record<string, string>
+  metricDefinitions: Record<string, any>
+}
+
+/** 树归因节点归因结果 */
+export interface TreeNodeAttribution {
+  currentValue: number | null
+  comparisonValue: number | null
+  growth: number | null
+  growthRate: number | null
+  relativeContributionRate: number | null
+  metricName: string | null
+}
+
+/** 归因分析响应 */
+export interface AttributionAnalysisResponse {
+  success: boolean
+  code?: string
+  errorMsg?: string
+  traceId?: string
+  checkResult?: AttributionCheckResult
+  multiDimResult?: MultiDimResult
+  metricTreeDef?: MetricTreeDef
+  treeResult?: Record<string, TreeNodeAttribution>
+}
+
+/** 同步生成报告（HTML 格式） */
 export function generateReport(dashboardId: string) {
   return api.post<string>(`${BASE_URL}/${dashboardId}/report`)
+}
+
+/** 获取已生成的报告 */
+export function getReport(dashboardId: string) {
+  return api.get<string>(`${BASE_URL}/${dashboardId}/report`)
 }
 
 /**
@@ -78,4 +172,9 @@ export function streamReport(
     })
 
   return controller
+}
+
+/** 归因分析 */
+export function attributionAnalysis(params: AttributionAnalysisParams) {
+  return api.post<AttributionAnalysisResponse>(`${BASE_URL}/attribution`, params)
 }

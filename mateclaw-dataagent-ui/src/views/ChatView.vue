@@ -86,7 +86,7 @@
                   <span
                     class="seg-execution__arrow"
                     :class="{ 'is-open': isExecutionProcessExpanded(index) }"
-                  >▾</span>
+                  >▸</span>
                 </button>
                 <Transition name="seg-slide">
                   <div v-if="isExecutionProcessExpanded(index)" class="seg-execution__body">
@@ -3548,33 +3548,36 @@ onUnmounted(() => {
 
 /* seg-execution */
 .seg-execution {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: rgba(0, 0, 0, 0.03);
   border-radius: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .seg-execution__toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 12px 16px;
+  gap: 5px;
+  padding: 5px 10px;
   background: transparent;
   border: none;
   cursor: pointer;
   user-select: none;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.4;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-muted);
   text-align: left;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 
 .seg-execution__toggle:hover {
-  color: var(--theme-text);
-  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .seg-execution__label {
@@ -3582,25 +3585,27 @@ onUnmounted(() => {
 }
 
 .seg-execution__count {
-  margin-left: 4px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .seg-execution__arrow {
-  margin-left: auto;
-  font-size: 10px;
+  margin-left: 1px;
+  font-size: 9px;
   color: var(--muted);
   transition: transform 0.2s;
 }
 
 .seg-execution__arrow.is-open {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
 
 .seg-execution__body {
-  padding: 0 16px 12px;
+  width: 100%;
+  min-width: 280px;
+  max-width: 100%;
+  padding: 0 12px 12px;
 }
 
 .seg-execution__body .seg-narration:first-child,

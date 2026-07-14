@@ -3,11 +3,12 @@ package vip.mate.dataagent.service;
 import vip.mate.dataagent.dto.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Aloudata 指标平台服务接口
  * <p>
- * 提供 Aloudata CAN 指标平台的连接管理、指标查询、维度查询、语义同步等功能。
+ * 提供 Aloudata CAN 指标平台的连接管理、指标查询、维度查询、语义同步、归因分析等功能。
  */
 public interface AloudataService {
 
@@ -63,4 +64,63 @@ public interface AloudataService {
      * @return 维度语义信息列表
      */
     List<AloudataDimensionSemanticDTO> listDimensionSemantics(Long datasourceId);
+
+    /**
+     * 校验指标是否支持归因分析
+     *
+     * @param datasourceId 数据源 ID
+     * @param metric       指标名称
+     * @return 校验结果
+     */
+    AttributionAnalysisResponse.CheckResult checkAttribution(Long datasourceId, String metric);
+
+    /**
+     * 多维归因分析查询
+     * <p>
+     * 针对指标以及维度进行多维归因结果的查询，返回不同对比日期的变化情况以及各个维度的贡献率。
+     *
+     * @param request 归因分析请求
+     * @return 多维归因结果
+     */
+    AttributionAnalysisResponse.MultiDimResult queryMultiDimAttribution(AttributionAnalysisRequest request);
+
+    /**
+     * 多维归因下钻查询
+     * <p>
+     * 对特定业务指标的变动原因进行细致分析，按单一维度下钻。
+     *
+     * @param request 归因分析请求（drillDimension 为下钻维度）
+     * @return 下钻归因结果
+     */
+    AttributionAnalysisResponse.MultiDimResult queryDrilldownAttribution(AttributionAnalysisRequest request);
+
+    /**
+     * 指标拆解
+     * <p>
+     * 对一个指标进行拆解，自动生成指标树结构，通常用于后续指标树归因。
+     *
+     * @param datasourceId 数据源 ID
+     * @param metric       指标名称
+     * @return 指标树定义
+     */
+    AttributionAnalysisResponse.MetricTreeDef breakdownMetric(Long datasourceId, String metric);
+
+    /**
+     * 指标树归因分析（时间对比）
+     * <p>
+     * 基于指标拆解返回的 metricTreeDef，分析同一指标树在两个时间范围内的变化。
+     *
+     * @param datasourceId     数据源 ID
+     * @param metricTreeDef    指标树定义（通常由 breakdownMetric 返回）
+     * @param currentTimeExpr  当前时间表达式
+     * @param compareTimeExpr  对比时间表达式
+     * @param filters          全局过滤条件
+     * @return 各节点的归因结果，key 为节点 ID
+     */
+    Map<String, AttributionAnalysisResponse.TreeNodeAttribution> queryTreeAttribution(
+            Long datasourceId,
+            AttributionAnalysisResponse.MetricTreeDef metricTreeDef,
+            String currentTimeExpr,
+            String compareTimeExpr,
+            List<String> filters);
 }

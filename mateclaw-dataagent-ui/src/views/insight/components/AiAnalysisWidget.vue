@@ -35,6 +35,9 @@
         <div class="placeholder-text">{{ t('insight.aiAnalysis.placeholder') }}</div>
       </div>
     </div>
+
+    <!-- 免责声明 -->
+    <div class="disclaimer">AI 分析仅供参考</div>
   </div>
 </template>
 
@@ -361,5 +364,15 @@ function handleGenerate(): void {
 
 .placeholder-text {
   font-size: 13px;
+}
+
+.disclaimer {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  text-align: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  flex-shrink: 0;
 }
 </style>

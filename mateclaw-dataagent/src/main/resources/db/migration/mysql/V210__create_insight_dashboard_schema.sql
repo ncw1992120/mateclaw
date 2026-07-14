@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_insight_dashboard` (
     `name`           VARCHAR(200) NOT NULL COMMENT '仪表盘名称',
     `description`    VARCHAR(500)          DEFAULT NULL COMMENT '描述',
     `schema_json`    LONGTEXT     NOT NULL COMMENT '仪表盘 Schema JSON（components 数组）',
+    `report_content` MEDIUMTEXT            DEFAULT NULL COMMENT 'AI 分析报告内容（HTML 格式）',
     `status`         VARCHAR(20)           DEFAULT 'draft' COMMENT '状态：draft/published',
     `agent_id`       BIGINT                DEFAULT NULL COMMENT 'AI 解读使用的 Agent ID',
     `owner_id`       BIGINT                DEFAULT NULL COMMENT '所有者用户 ID',
