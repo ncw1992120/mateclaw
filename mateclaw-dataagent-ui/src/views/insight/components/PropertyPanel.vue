@@ -29,104 +29,233 @@
 
       <!-- 数据绑定（kpi/chart/table 组件） -->
       <template v-if="component.type !== 'filter'">
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.property.datasource') }}</label>
-          <el-select
-            v-model="localDataSource.datasourceId"
-            :placeholder="t('insight.property.selectDatasource')"
+        <!-- 多 Tab 模式开关 -->
+        <div v-if="component.type === 'table' || component.type === 'chart' || component.type === 'kpi'" class="form-group">
+          <label class="form-label">多 Tab 模式</label>
+          <el-switch
+            v-model="tabModeEnabled"
             size="small"
-            filterable
-            style="width: 100%"
-            @change="handleDatasourceChange"
-          >
-            <el-option
-              v-for="ds in datasourceStore.datasources"
-              :key="ds.id"
-              :label="ds.name"
-              :value="ds.id"
-            />
-          </el-select>
-        </div>
-
-        <div v-if="localDataSource.datasourceId" class="form-group">
-          <label class="form-label">{{ t('insight.property.metrics') }}</label>
-          <el-select
-            v-model="localDataSource.metrics"
-            :placeholder="t('insight.property.selectMetrics')"
-            size="small"
-            multiple
-            filterable
-            remote
-            :remote-method="searchMetrics"
-            :loading="metricsLoading"
-            style="width: 100%"
-            @change="handleMetricsChange"
-          >
-            <el-option
-              v-for="m in metricsOptions"
-              :key="m.metricName"
-              :label="m.metricDisplayName || m.metricName"
-              :value="m.metricName"
-            />
-          </el-select>
-        </div>
-
-        <div v-if="localDataSource.datasourceId && localDataSource.metrics.length" class="form-group">
-          <label class="form-label">{{ t('insight.property.dimensions') }}</label>
-          <el-select
-            v-model="localDataSource.dimensions"
-            :placeholder="t('insight.property.selectDimensions')"
-            size="small"
-            multiple
-            filterable
-            remote
-            :remote-method="searchDimensions"
-            :loading="dimensionsLoading"
-            style="width: 100%"
-            @change="emitChange"
-          >
-            <el-option
-              v-for="d in dimensionsOptions"
-              :key="d.dimName"
-              :label="d.dimDisplayName || d.dimName"
-              :value="d.dimName"
-            />
-          </el-select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.property.limit') }}</label>
-          <el-input-number
-            v-model="localDataSource.limit"
-            :min="1"
-            :max="500"
-            size="small"
-            style="width: 100%"
-            @change="emitChange"
+            @change="handleTabModeToggle"
           />
+          <span class="form-hint">开启后组件支持多个 Tab 切换不同数据源</span>
         </div>
 
-        <!-- 验证数据按钮 -->
-        <div v-if="canPreview" class="form-group preview-group">
-          <el-button
-            size="small"
-            type="primary"
-            :loading="previewLoading"
-            @click="handlePreviewData"
-          >
-            {{ t('insight.property.previewData') }}
-          </el-button>
-        </div>
+        <!-- Tab 管理区域（多 Tab 模式开启时显示） -->
+        <template v-if="tabModeEnabled">
+          <div class="form-group">
+            <label class="form-label">Tab 列表</label>
+            <div class="tab-list-editor">
+              <div
+                v-for="(tab, idx) in localTabs"
+                :key="tab.id"
+                class="tab-item-row"
+                :class="{ active: activeTabIndex === idx }"
+                @click="activeTabIndex = idx"
+              >
+                <el-input
+                  v-model="tab.title"
+                  size="small"
+                  placeholder="Tab 标题"
+                  style="flex: 1"
+                  @change="emitTabChange"
+                />
+                <el-button
+                  text
+                  size="small"
+                  @click.stop="removeTab(idx)"
+                >✕</el-button>
+              </div>
+              <el-button
+                text
+                size="small"
+                @click="addTab"
+              >+ 添加 Tab</el-button>
+            </div>
+          </div>
 
-        <!-- 验证数据结果（简要状态） -->
-        <div v-if="previewResult" class="preview-result">
-          <div v-if="previewResult.error" class="preview-error">
-            {{ previewResult.error }}
+          <!-- 当前选中 Tab 的数据源配置 -->
+          <div v-if="activeTab" class="tab-datasource-section">
+            <div class="tab-datasource-title">Tab「{{ activeTab.title || '未命名' }}」数据源</div>
+            <div class="form-group">
+              <label class="form-label">{{ t('insight.property.datasource') }}</label>
+              <el-select
+                v-model="activeTab.dataSource.datasourceId"
+                :placeholder="t('insight.property.selectDatasource')"
+                size="small"
+                filterable
+                style="width: 100%"
+                @change="handleTabDatasourceChange"
+              >
+                <el-option
+                  v-for="ds in datasourceStore.datasources"
+                  :key="ds.id"
+                  :label="ds.name"
+                  :value="ds.id"
+                />
+              </el-select>
+            </div>
+
+            <div v-if="activeTab.dataSource.datasourceId" class="form-group">
+              <label class="form-label">{{ t('insight.property.metrics') }}</label>
+              <el-select
+                v-model="activeTab.dataSource.metrics"
+                :placeholder="t('insight.property.selectMetrics')"
+                size="small"
+                multiple
+                filterable
+                remote
+                :remote-method="searchMetrics"
+                :loading="metricsLoading"
+                style="width: 100%"
+                @change="emitTabChange"
+              >
+                <el-option
+                  v-for="m in metricsOptions"
+                  :key="m.metricName"
+                  :label="m.metricDisplayName || m.metricName"
+                  :value="m.metricName"
+                />
+              </el-select>
+            </div>
+
+            <div v-if="activeTab.dataSource.datasourceId && activeTab.dataSource.metrics.length" class="form-group">
+              <label class="form-label">{{ t('insight.property.dimensions') }}</label>
+              <el-select
+                v-model="activeTab.dataSource.dimensions"
+                :placeholder="t('insight.property.selectDimensions')"
+                size="small"
+                multiple
+                filterable
+                remote
+                :remote-method="searchDimensions"
+                :loading="dimensionsLoading"
+                style="width: 100%"
+                @change="emitTabChange"
+              >
+                <el-option
+                  v-for="d in dimensionsOptions"
+                  :key="d.dimName"
+                  :label="d.dimDisplayName || d.dimName"
+                  :value="d.dimName"
+                />
+              </el-select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">{{ t('insight.property.limit') }}</label>
+              <el-input-number
+                v-model="activeTab.dataSource.limit"
+                :min="1"
+                :max="500"
+                size="small"
+                style="width: 100%"
+                @change="emitTabChange"
+              />
+            </div>
           </div>
-          <div v-else class="preview-ok">
-            {{ t('insight.property.previewChartOk') }}
+        </template>
+
+        <!-- 单数据源模式（原有逻辑） -->
+        <template v-else>
+          <div class="form-group">
+            <label class="form-label">{{ t('insight.property.datasource') }}</label>
+            <el-select
+              v-model="localDataSource.datasourceId"
+              :placeholder="t('insight.property.selectDatasource')"
+              size="small"
+              filterable
+              style="width: 100%"
+              @change="handleDatasourceChange"
+            >
+              <el-option
+                v-for="ds in datasourceStore.datasources"
+                :key="ds.id"
+                :label="ds.name"
+                :value="ds.id"
+              />
+            </el-select>
           </div>
-        </div>
+
+          <div v-if="localDataSource.datasourceId" class="form-group">
+            <label class="form-label">{{ t('insight.property.metrics') }}</label>
+            <el-select
+              v-model="localDataSource.metrics"
+              :placeholder="t('insight.property.selectMetrics')"
+              size="small"
+              multiple
+              filterable
+              remote
+              :remote-method="searchMetrics"
+              :loading="metricsLoading"
+              style="width: 100%"
+              @change="handleMetricsChange"
+            >
+              <el-option
+                v-for="m in metricsOptions"
+                :key="m.metricName"
+                :label="m.metricDisplayName || m.metricName"
+                :value="m.metricName"
+              />
+            </el-select>
+          </div>
+
+          <div v-if="localDataSource.datasourceId && localDataSource.metrics.length" class="form-group">
+            <label class="form-label">{{ t('insight.property.dimensions') }}</label>
+            <el-select
+              v-model="localDataSource.dimensions"
+              :placeholder="t('insight.property.selectDimensions')"
+              size="small"
+              multiple
+              filterable
+              remote
+              :remote-method="searchDimensions"
+              :loading="dimensionsLoading"
+              style="width: 100%"
+              @change="emitChange"
+            >
+              <el-option
+                v-for="d in dimensionsOptions"
+                :key="d.dimName"
+                :label="d.dimDisplayName || d.dimName"
+                :value="d.dimName"
+              />
+            </el-select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('insight.property.limit') }}</label>
+            <el-input-number
+              v-model="localDataSource.limit"
+              :min="1"
+              :max="500"
+              size="small"
+              style="width: 100%"
+              @change="emitChange"
+            />
+          </div>
+
+          <!-- 验证数据按钮 -->
+          <div v-if="canPreview" class="form-group preview-group">
+            <el-button
+              size="small"
+              type="primary"
+              :loading="previewLoading"
+              @click="handlePreviewData"
+            >
+              {{ t('insight.property.previewData') }}
+            </el-button>
+          </div>
+
+          <!-- 验证数据结果（简要状态） -->
+          <div v-if="previewResult" class="preview-result">
+            <div v-if="previewResult.error" class="preview-error">
+              {{ previewResult.error }}
+            </div>
+            <div v-else class="preview-ok">
+              {{ t('insight.property.previewChartOk') }}
+            </div>
+          </div>
+        </template>
       </template>
 
       <!-- 筛选组件配置（仅 filter 组件） -->
@@ -348,7 +477,7 @@
 import { reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import type { InsightComponent, ComponentDataSource, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, AIAnalysisComponentConfig, TimeRangePreset, FilterScope } from '@/types'
+import type { InsightComponent, ComponentDataSource, ComponentTab, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, AIAnalysisComponentConfig, TimeRangePreset, FilterScope } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -412,6 +541,12 @@ const localEnableTimeFilter = ref(false)
 /** AI 分析组件配置本地副本 */
 const localAiAnalysisPrompt = ref('')
 const localAiAnalysisAutoGenerate = ref(false)
+
+/** 多 Tab 模式状态 */
+const tabModeEnabled = ref(false)
+const localTabs = ref<ComponentTab[]>([])
+const activeTabIndex = ref(0)
+const activeTab = computed(() => localTabs.value[activeTabIndex.value] ?? null)
 
 /** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])
@@ -501,6 +636,24 @@ watch(
       const config = newComp.config as AIAnalysisComponentConfig | undefined
       localAiAnalysisPrompt.value = config?.promptTemplate ?? ''
       localAiAnalysisAutoGenerate.value = config?.autoGenerate ?? false
+    }
+    // 同步多 Tab 配置
+    if (newComp.tabs && newComp.tabs.length > 0) {
+      tabModeEnabled.value = true
+      localTabs.value = JSON.parse(JSON.stringify(newComp.tabs))
+      activeTabIndex.value = 0
+      // 加载第一个 Tab 的指标/维度选项
+      const firstTab = localTabs.value[0]
+      if (firstTab?.dataSource?.datasourceId) {
+        loadMetrics(firstTab.dataSource.datasourceId)
+        if (firstTab.dataSource.metrics.length) {
+          loadDimensions(firstTab.dataSource.datasourceId, firstTab.dataSource.metrics)
+        }
+      }
+    } else {
+      tabModeEnabled.value = false
+      localTabs.value = []
+      activeTabIndex.value = 0
     }
   },
   { immediate: true }
@@ -717,6 +870,87 @@ function emitAiAnalysisConfigChange(): void {
   emit('change', updated)
 }
 
+/** 多 Tab 模式开关切换 */
+function handleTabModeToggle(): void {
+  if (tabModeEnabled.value) {
+    // 开启 Tab 模式：如果已有单数据源配置，迁移为第一个 Tab
+    if (localTabs.value.length === 0) {
+      const tabId = 'tab_' + Date.now()
+      localTabs.value = [{
+        id: tabId,
+        title: localComponent.title || 'Tab 1',
+        dataSource: JSON.parse(JSON.stringify(localDataSource)),
+      }]
+      activeTabIndex.value = 0
+    }
+  } else {
+    // 关闭 Tab 模式：如果只有一个 Tab，迁移回单数据源
+    if (localTabs.value.length === 1) {
+      const tab = localTabs.value[0]
+      Object.assign(localDataSource, JSON.parse(JSON.stringify(tab.dataSource)))
+    }
+    localTabs.value = []
+  }
+  emitTabChange()
+}
+
+/** 添加 Tab */
+function addTab(): void {
+  const tabId = 'tab_' + Date.now()
+  localTabs.value.push({
+    id: tabId,
+    title: `Tab ${localTabs.value.length + 1}`,
+    dataSource: {
+      datasourceId: '',
+      metrics: [],
+      dimensions: [],
+      filters: [],
+      limit: 100,
+    },
+  })
+  activeTabIndex.value = localTabs.value.length - 1
+  // 切换到新 Tab 时加载对应指标选项
+  metricsOptions.value = []
+  dimensionsOptions.value = []
+  emitTabChange()
+}
+
+/** 删除 Tab */
+function removeTab(idx: number): void {
+  localTabs.value.splice(idx, 1)
+  if (activeTabIndex.value >= localTabs.value.length) {
+    activeTabIndex.value = Math.max(0, localTabs.value.length - 1)
+  }
+  emitTabChange()
+}
+
+/** Tab 数据源变更时重新加载指标/维度 */
+function handleTabDatasourceChange(): void {
+  if (activeTab.value) {
+    activeTab.value.dataSource.metrics = []
+    activeTab.value.dataSource.dimensions = []
+    dimensionsOptions.value = []
+    loadMetrics(activeTab.value.dataSource.datasourceId)
+  }
+  emitTabChange()
+}
+
+/** Tab 配置变更时 emit */
+function emitTabChange(): void {
+  const updated: InsightComponent = {
+    ...JSON.parse(JSON.stringify(localComponent)),
+    tabs: tabModeEnabled.value && localTabs.value.length > 0
+      ? JSON.parse(JSON.stringify(localTabs.value))
+      : undefined,
+    // Tab 模式下清除主 dataSource（后端以 tabs 为准）
+    dataSource: tabModeEnabled.value ? undefined : (localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined),
+    boundFilterIds: localBoundFilterIds.value.length > 0 ? [...localBoundFilterIds.value] : undefined,
+    enableTimeFilter: localEnableTimeFilter.value || undefined,
+  }
+  delete (updated as any).position
+  emit('change', updated)
+}
+
 /** 初始化：加载数据源列表 */
 datasourceStore.fetchDatasources().catch(() => {
   // 静默失败，列表可能在其他页面已加载
@@ -801,6 +1035,49 @@ datasourceStore.fetchDatasources().catch(() => {
 .preview-ok {
   color: var(--el-color-success);
   font-size: 13px;
+}
+
+.form-hint {
+  font-size: 11px;
+  color: var(--theme-text-muted);
+  margin-top: 2px;
+}
+
+.tab-list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tab-item-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.tab-item-row.active {
+  border-color: var(--main-orange);
+  background: rgba(245, 130, 32, 0.06);
+}
+
+.tab-datasource-section {
+  border: 1px dashed var(--theme-border);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-datasource-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--main-orange);
+  margin-bottom: 4px;
 }
 
 .static-option-row {

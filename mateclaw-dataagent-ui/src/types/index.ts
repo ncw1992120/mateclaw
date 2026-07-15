@@ -984,6 +984,18 @@ export interface InsightComponent {
   enableTimeFilter?: boolean
   /** AI 分析内容（Markdown，生成后持久化到 Schema，刷新不丢失） */
   aiAnalysisContent?: string
+  /** 多 Tab 配置（可选，配置后组件渲染为多 Tab 切换模式） */
+  tabs?: ComponentTab[]
+}
+
+/** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
+export interface ComponentTab {
+  /** Tab 唯一 ID */
+  id: string
+  /** Tab 标题 */
+  title: string
+  /** Tab 数据源配置 */
+  dataSource: ComponentDataSource
 }
 
 /** 仪表盘 Schema */
@@ -1057,6 +1069,22 @@ export interface InsightComponentData {
     analysisSection?: string
   }
   /** 取数失败时的错误信息（前端展示降级提示） */
+  error?: string
+  /** 多 Tab 渲染数据（key = tabId，仅当组件配置了 tabs 时有值） */
+  tabs?: Record<string, ComponentTabData>
+}
+
+/** 单个 Tab 的渲染数据 */
+export interface ComponentTabData {
+  /** Tab 标题 */
+  title: string
+  /** ECharts option（renderType=echarts 时） */
+  option?: Record<string, unknown>
+  /** KPI 卡片数据（renderType=kpi 时） */
+  kpi?: { name: string; value: string; chg?: string; up?: boolean }
+  /** 表格数据（renderType=table 时） */
+  table?: { columns: string[]; rows: string[][] }
+  /** 取数失败时的错误信息 */
   error?: string
 }
 

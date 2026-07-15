@@ -38,6 +38,9 @@ public class InsightComponentDataDTO implements Serializable {
     /** 取数失败时的错误信息（可选，前端展示降级提示） */
     private String error;
 
+    /** 多 Tab 渲染数据（key = tabId，value = 该 Tab 的渲染数据，仅当组件配置了 tabs 时有值） */
+    private Map<String, TabData> tabs;
+
     /**
      * KPI 卡片数据
      */
@@ -87,5 +90,29 @@ public class InsightComponentDataDTO implements Serializable {
 
         /** AI 生成的分析内容（Markdown，可能为空表示尚未生成） */
         private String analysisSection;
+    }
+
+    /**
+     * 单个 Tab 的渲染数据（结构与主渲染数据一致，但不含 tabs 字段本身）
+     */
+    @Data
+    public static class TabData implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** Tab 标题 */
+        private String title;
+
+        /** ECharts option（renderType=echarts 时） */
+        private Map<String, Object> option;
+
+        /** KPI 卡片数据（renderType=kpi 时） */
+        private KpiData kpi;
+
+        /** 表格数据（renderType=table 时） */
+        private TableData table;
+
+        /** 取数失败时的错误信息 */
+        private String error;
     }
 }

@@ -17,15 +17,27 @@
         />
       </div>
     </div>
+    <!-- Tab 栏（多 Tab 模式） -->
+    <div v-if="hasTabs" class="widget-tabs">
+      <div
+        v-for="tab in tabList"
+        :key="tab.id"
+        class="widget-tab"
+        :class="{ active: activeTabId === tab.id }"
+        @click="activeTabId = tab.id"
+      >
+        {{ tab.title }}
+      </div>
+    </div>
     <div ref="chartContainerRef" class="chart-container"></div>
-    <div v-if="!hasOption" class="chart-placeholder">{{ t('insight.chartNoData') }}</div>
+    <div v-if="!hasOption" class="chart-placeholder">{{ activeTabError || t('insight.chartNoData') }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
 
 defineOptions({
@@ -50,7 +62,41 @@ const emit = defineEmits<{
 const chartContainerRef = ref<HTMLElement | null>(null)
 const { renderECharts, disposeChart } = useEChartsRenderer()
 
-const hasOption = computed(() => !!props.componentData?.option)
+/** 是否有多 Tab 数据 */
+const hasTabs = computed(() => {
+  const tabs = props.componentData?.tabs
+  return tabs && Object.keys(tabs).length > 0
+})
+
+const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+const activeTabId = ref('')
+
+watch(hasTabs, (val) => {
+  if (val && !activeTabId.value) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
+  }
+  if (!val) {
+    activeTabId.value = ''
+  }
+}, { immediate: true })
+
+/** 当前激活 Tab 的 option */
+const activeTabOption = computed(() => {
+  if (!hasTabs.value || !activeTabId.value) return null
+  return props.componentData?.tabs?.[activeTabId.value]?.option ?? null
+})
+const activeTabError = computed(() => {
+  if (!hasTabs.value || !activeTabId.value) return null
+  return props.componentData?.tabs?.[activeTabId.value]?.error ?? null
+})
+
+/** 当前生效的 option（Tab 模式取 activeTabOption，否则取主 option） */
+const effectiveOption = computed(() => {
+  if (hasTabs.value) return activeTabOption.value
+  return props.componentData?.option
+})
+
+const hasOption = computed(() => !!effectiveOption.value)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
 
 /** 组件级时间选择器绑定值 */
@@ -81,26 +127,32 @@ async function render(): Promise<void> {
   if (!chartContainerRef.value) {
     return
   }
-  if (!props.componentData?.option) {
+  if (!effectiveOption.value) {
     disposeChart(chartContainerRef.value)
     chartContainerRef.value.innerHTML = ''
     return
   }
-  renderECharts(chartContainerRef.value, props.componentData.option)
+  renderECharts(chartContainerRef.value, effectiveOption.value)
 }
 
 onMounted(() => {
   render()
 })
 
+// 主 option 变化时重绘
 watch(
-  () => props.componentData?.option,
+  () => effectiveOption.value,
   (newOption, oldOption) => {
     if (newOption !== oldOption) {
       render()
     }
   },
 )
+
+// Tab 切换时重绘
+watch(activeTabId, () => {
+  render()
+})
 
 /** 容器尺寸变化时重绘 */
 watch(chartContainerRef, (el) => {
@@ -148,6 +200,36 @@ watch(chartContainerRef, (el) => {
   flex: 1;
   min-height: 200px;
   width: 100%;
+}
+
+.widget-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.widget-tab {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.widget-tab:hover {
+  color: var(--theme-text);
+}
+
+.widget-tab.active {
+  color: var(--main-orange);
+  border-bottom-color: var(--main-orange);
+  font-weight: 600;
 }
 
 .chart-placeholder {

@@ -71,6 +71,10 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         if ("aiAnalysis".equals(component.getType())) {
             return buildAiAnalysisData(component, schema, null, Collections.emptyMap());
         }
+        // 多 Tab 模式：遍历每个 Tab 取数
+        if (component.getTabs() != null && !component.getTabs().isEmpty()) {
+            return bindTabsComponent(component, null);
+        }
         // 校验 dataSource
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
@@ -176,6 +180,10 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                 || "aiAnalysis".equals(component.getType())) {
             return null;
         }
+        // 多 Tab 模式：遍历每个 Tab 取数（带筛选上下文）
+        if (component.getTabs() != null && !component.getTabs().isEmpty()) {
+            return bindTabsComponent(component, filterContext);
+        }
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
             return buildError(component.getId(), "组件未配置数据源");
@@ -186,6 +194,71 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             log.warn("组件 {} 带筛选取数失败: {}", component.getId(), e.getMessage());
             return buildError(component.getId(), e.getMessage());
         }
+    }
+
+    /**
+     * 多 Tab 组件取数：遍历每个 Tab 的 dataSource 执行查询，结果存入 tabs Map
+     *
+     * @param component     组件定义（含 tabs 配置）
+     * @param filterContext 运行时筛选上下文（可为 null）
+     * @return 包含 tabs 数据的 DTO，主渲染数据为第一个成功取数的 Tab 数据
+     */
+    private InsightComponentDataDTO bindTabsComponent(Component component,
+                                                        DashboardFilterContextDTO filterContext) {
+        InsightComponentDataDTO dto = new InsightComponentDataDTO();
+        dto.setComponentId(component.getId());
+        dto.setRenderType(component.getType().equals("kpi")
+                ? DataAgentConstants.INSIGHT_RENDER_TYPE_KPI
+                : component.getType().equals("chart")
+                        ? DataAgentConstants.INSIGHT_RENDER_TYPE_ECHARTS
+                        : DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
+
+        Map<String, InsightComponentDataDTO.TabData> tabsMap = new LinkedHashMap<>();
+        InsightComponentDataDTO.TabData firstValidData = null;
+
+        for (InsightDashboardSchemaDTO.Tab tab : component.getTabs()) {
+            if (tab.getDataSource() == null || tab.getDataSource().getDatasourceId() == null) {
+                continue;
+            }
+            // 构建临时 Component 副本，用 tab 的 dataSource 替换主 dataSource
+            Component tabComponent = new Component();
+            tabComponent.setId(component.getId());
+            tabComponent.setType(component.getType());
+            tabComponent.setChartType(component.getChartType());
+            tabComponent.setDataSource(tab.getDataSource());
+
+            InsightComponentDataDTO.TabData tabData = new InsightComponentDataDTO.TabData();
+            tabData.setTitle(tab.getTitle());
+            try {
+                InsightComponentDataDTO tabDto = (filterContext != null)
+                        ? doBind(tabComponent, filterContext)
+                        : doBind(tabComponent);
+                if (tabDto != null) {
+                    tabData.setOption(tabDto.getOption());
+                    tabData.setKpi(tabDto.getKpi());
+                    tabData.setTable(tabDto.getTable());
+                    tabData.setError(tabDto.getError());
+                }
+            } catch (Exception e) {
+                log.warn("组件 {} Tab {} 取数失败: {}", component.getId(), tab.getId(), e.getMessage());
+                tabData.setError(e.getMessage());
+            }
+            tabsMap.put(tab.getId(), tabData);
+            if (firstValidData == null && tabData.getError() == null) {
+                firstValidData = tabData;
+            }
+        }
+
+        dto.setTabs(tabsMap);
+
+        // 主渲染数据取第一个有效 Tab（供前端默认显示 + 兼容无 Tab 渲染逻辑的组件）
+        if (firstValidData != null) {
+            dto.setOption(firstValidData.getOption());
+            dto.setKpi(firstValidData.getKpi());
+            dto.setTable(firstValidData.getTable());
+        }
+
+        return dto;
     }
 
     /**

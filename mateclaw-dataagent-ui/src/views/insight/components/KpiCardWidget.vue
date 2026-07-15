@@ -15,19 +15,33 @@
       />
     </div>
     <div v-if="showTitle" class="kpi-header">{{ component.title }}</div>
-    <div class="kpi-value">{{ kpiData?.value ?? '--' }}</div>
-    <div v-if="showTitle && kpiData?.name" class="kpi-name">{{ kpiData.name }}</div>
-    <div v-if="kpiData?.chg" class="kpi-chg" :class="kpiData.up ? 'up' : 'down'">
-      <span>{{ kpiData.up ? '↑' : '↓' }} {{ kpiData.chg }}</span>
+    <!-- Tab 栏（多 Tab 模式） -->
+    <div v-if="hasTabs" class="widget-tabs">
+      <div
+        v-for="tab in tabList"
+        :key="tab.id"
+        class="widget-tab"
+        :class="{ active: activeTabId === tab.id }"
+        @click="activeTabId = tab.id"
+      >
+        {{ tab.title }}
+      </div>
     </div>
-    <div v-else class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+    <div class="kpi-body">
+      <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
+      <div v-if="showTitle && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
+      <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
+        <span>{{ activeKpiData.up ? '↑' : '↓' }} {{ activeKpiData.chg }}</span>
+      </div>
+      <div v-else class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
 
 defineOptions({
   name: 'KpiCardWidget',
@@ -50,6 +64,29 @@ const emit = defineEmits<{
 
 const kpiData = computed(() => props.componentData?.kpi)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
+
+/** 是否有多 Tab 数据 */
+const hasTabs = computed(() => {
+  const tabs = props.componentData?.tabs
+  return tabs && Object.keys(tabs).length > 0
+})
+const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+const activeTabId = ref('')
+
+watch(hasTabs, (val) => {
+  if (val && !activeTabId.value) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
+  }
+  if (!val) {
+    activeTabId.value = ''
+  }
+}, { immediate: true })
+
+/** 当前生效的 KPI 数据（Tab 模式取 activeTab，否则取主 kpi） */
+const activeKpiData = computed(() => {
+  if (!hasTabs.value || !activeTabId.value) return kpiData.value
+  return props.componentData?.tabs?.[activeTabId.value]?.kpi ?? null
+})
 
 /** 组件级时间选择器绑定值 */
 const localDateRange = ref<[string, string] | null>(null)
@@ -104,6 +141,45 @@ function handleDateChange(val: [string, string] | null): void {
   font-size: 13px;
   font-weight: 600;
   color: var(--theme-text);
+}
+
+.widget-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+
+.widget-tab {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.widget-tab:hover {
+  color: var(--theme-text);
+}
+
+.widget-tab.active {
+  color: var(--main-orange);
+  border-bottom-color: var(--main-orange);
+  font-weight: 600;
+}
+
+.kpi-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
 }
 
 .kpi-value {

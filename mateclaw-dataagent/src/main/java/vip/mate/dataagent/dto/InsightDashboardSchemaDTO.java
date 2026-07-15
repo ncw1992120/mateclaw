@@ -63,6 +63,27 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** AI 分析内容（Markdown，生成后持久化到 Schema，刷新不丢失） */
         private String aiAnalysisContent;
+
+        /** 多 Tab 配置（可选，配置后组件渲染为多 Tab 切换模式） */
+        private List<Tab> tabs;
+    }
+
+    /**
+     * 组件 Tab 配置（每个 Tab 拥有独立的数据源配置）
+     */
+    @Data
+    public static class Tab implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** Tab 唯一 ID */
+        private String id;
+
+        /** Tab 标题 */
+        private String title;
+
+        /** Tab 数据源配置 */
+        private DataSource dataSource;
     }
 
     /**
