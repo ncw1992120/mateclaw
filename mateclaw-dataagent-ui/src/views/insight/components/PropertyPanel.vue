@@ -637,17 +637,25 @@ watch(
       localAiAnalysisPrompt.value = config?.promptTemplate ?? ''
       localAiAnalysisAutoGenerate.value = config?.autoGenerate ?? false
     }
-    // 同步多 Tab 配置
+    // 同步多 Tab 配置（仅在外部组件引用变化时同步，避免 emitTabChange 导致的循环重置）
     if (newComp.tabs && newComp.tabs.length > 0) {
       tabModeEnabled.value = true
-      localTabs.value = JSON.parse(JSON.stringify(newComp.tabs))
-      activeTabIndex.value = 0
-      // 加载第一个 Tab 的指标/维度选项
-      const firstTab = localTabs.value[0]
-      if (firstTab?.dataSource?.datasourceId) {
-        loadMetrics(firstTab.dataSource.datasourceId)
-        if (firstTab.dataSource.metrics.length) {
-          loadDimensions(firstTab.dataSource.datasourceId, firstTab.dataSource.metrics)
+      // 仅在 tabs 引用变化时才深拷贝覆盖，避免编辑中覆盖本地状态
+      const newTabsJson = JSON.stringify(newComp.tabs)
+      const localTabsJson = JSON.stringify(localTabs.value)
+      if (newTabsJson !== localTabsJson) {
+        localTabs.value = JSON.parse(JSON.stringify(newComp.tabs))
+        // 保持当前选中 Tab 不变，仅在越界时修正
+        if (activeTabIndex.value >= localTabs.value.length) {
+          activeTabIndex.value = 0
+        }
+        // 加载当前 Tab 的指标/维度选项
+        const currentTab = localTabs.value[activeTabIndex.value]
+        if (currentTab?.dataSource?.datasourceId) {
+          loadMetrics(currentTab.dataSource.datasourceId)
+          if (currentTab.dataSource.metrics.length) {
+            loadDimensions(currentTab.dataSource.datasourceId, currentTab.dataSource.metrics)
+          }
         }
       }
     } else {
@@ -687,19 +695,34 @@ async function loadDimensions(datasourceId: string, metricNames: string[], keywo
   }
 }
 
+/** 获取当前生效的数据源 ID（Tab 模式取 activeTab，否则取 localDataSource） */
+function getEffectiveDatasourceId(): string {
+  return tabModeEnabled.value && activeTab.value
+    ? activeTab.value.dataSource.datasourceId
+    : localDataSource.datasourceId
+}
+
+/** 获取当前生效的指标列表 */
+function getEffectiveMetrics(): string[] {
+  return tabModeEnabled.value && activeTab.value
+    ? activeTab.value.dataSource.metrics
+    : localDataSource.metrics
+}
+
 /** 远程搜索指标（防抖 300ms） */
 function searchMetrics(query: string): void {
   if (metricsSearchTimer) {
     clearTimeout(metricsSearchTimer)
   }
-  if (!localDataSource.datasourceId) {
+  const dsId = getEffectiveDatasourceId()
+  if (!dsId) {
     return
   }
   metricsSearchTimer = setTimeout(async () => {
     metricsLoading.value = true
     try {
       const keyword = query.trim() || undefined
-      const result = await datasourceApi.listSyncedMetrics(localDataSource.datasourceId, 1, 50, keyword)
+      const result = await datasourceApi.listSyncedMetrics(dsId, 1, 50, keyword)
       metricsOptions.value = (result as unknown as Array<{ metricName: string; metricDisplayName: string }>) ?? []
     } catch (e) {
       console.error('[PropertyPanel] search metrics error:', e)
@@ -714,14 +737,16 @@ function searchDimensions(query: string): void {
   if (dimensionsSearchTimer) {
     clearTimeout(dimensionsSearchTimer)
   }
-  if (!localDataSource.datasourceId || !localDataSource.metrics.length) {
+  const dsId = getEffectiveDatasourceId()
+  const metrics = getEffectiveMetrics()
+  if (!dsId || !metrics.length) {
     return
   }
   dimensionsSearchTimer = setTimeout(async () => {
     dimensionsLoading.value = true
     try {
       const keyword = query.trim() || undefined
-      await loadDimensions(localDataSource.datasourceId, localDataSource.metrics, keyword)
+      await loadDimensions(dsId, metrics, keyword)
     } catch (e) {
       console.error('[PropertyPanel] search dimensions error:', e)
     } finally {
@@ -923,6 +948,18 @@ function removeTab(idx: number): void {
   }
   emitTabChange()
 }
+
+/** 切换 Tab 时重新加载指标/维度选项 */
+watch(activeTabIndex, () => {
+  metricsOptions.value = []
+  dimensionsOptions.value = []
+  if (activeTab.value?.dataSource?.datasourceId) {
+    loadMetrics(activeTab.value.dataSource.datasourceId)
+    if (activeTab.value.dataSource.metrics.length) {
+      loadDimensions(activeTab.value.dataSource.datasourceId, activeTab.value.dataSource.metrics)
+    }
+  }
+})
 
 /** Tab 数据源变更时重新加载指标/维度 */
 function handleTabDatasourceChange(): void {
