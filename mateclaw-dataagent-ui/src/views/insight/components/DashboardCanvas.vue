@@ -34,7 +34,7 @@
       :row-height="30"
       :is-draggable="editable"
       :is-resizable="editable"
-      :vertical-compact="true"
+      :vertical-compact="false"
       :margin="[8, 8]"
       @layout-updated="handleLayoutUpdated"
     >
@@ -204,21 +204,41 @@ const effectiveComponents = computed<InsightComponent[]>(() => {
   return props.components.filter((c) => !globalFilterComponentIds.value.has(c.id))
 })
 
-/** 从 effectiveComponents 同步到 gridLayout（组件增删时触发） */
-watch(
-  () => effectiveComponents.value.map((c) => c.id).join(','),
-  () => {
-    isSyncingFromProps = true
-    gridLayout.value = effectiveComponents.value.map((c) => ({
+/** 构建 grid-layout-plus 所需的布局（预览态去除全局筛选器后整体向上补齐，避免顶部留白） */
+function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
+  if (components.length === 0) {
+    return []
+  }
+  if (props.editable) {
+    return components.map((c) => ({
       i: c.id,
       x: c.position.x,
       y: c.position.y,
       w: c.position.w,
       h: c.position.h,
     }))
-    // nextTick 后重置标记，确保 grid-layout-plus 内部 layoutUpdate 触发时标记已清除
+  }
+  const minY = Math.min(...components.map((c) => c.position.y))
+  return components.map((c) => ({
+    i: c.id,
+    x: c.position.x,
+    y: c.position.y - minY,
+    w: c.position.w,
+    h: c.position.h,
+  }))
+}
+
+/** 从 effectiveComponents 同步到 gridLayout */
+watch(
+  () => effectiveComponents.value.map((c) => `${c.id}:${c.position.x},${c.position.y},${c.position.w},${c.position.h}`).join('|'),
+  () => {
+    isSyncingFromProps = true
+    gridLayout.value = buildGridLayout(effectiveComponents.value)
+    // 使用双重 nextTick 确保 grid-layout-plus 内部 layout-updated 事件在标记有效期内触发
     nextTick(() => {
-      isSyncingFromProps = false
+      nextTick(() => {
+        isSyncingFromProps = false
+      })
     })
   },
   { immediate: true }
@@ -230,13 +250,14 @@ function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
   // 避免重渲染时 :layout 传旧值导致位置被重置
   gridLayout.value = newLayout
 
-  // 仅在非 props 同步时 emit 给 Editor
-  if (isSyncingFromProps) {
+  // 仅在编辑态且非 props 同步时 emit 给 Editor（预览态为 static，不应回写 schema）
+  if (isSyncingFromProps || !props.editable) {
     return
   }
 
-  // 检查是否有实际变化，避免无意义 emit
-  const changed = newLayout.some((item) => {
+  // 过滤掉非用户操作导致的位置变更（如 grid-layout-plus 内部碰撞下推产生的副作用）
+  // 只保留用户主动拖拽/缩放产生的真实变化
+  const realChanges = newLayout.filter((item) => {
     const comp = props.components.find((c) => c.id === item.i)
     if (!comp) return true
     return comp.position.x !== item.x
@@ -244,12 +265,12 @@ function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
       || comp.position.w !== item.w
       || comp.position.h !== item.h
   })
-  if (!changed) return
+  if (realChanges.length === 0) return
 
   // 向上 emit 让 Editor 更新 schema.components 的 position
   emit(
     'update-layout',
-    newLayout.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
+    realChanges.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
   )
 }
 
@@ -377,10 +398,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 2px solid transparent;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
+  background: var(--theme-surface);
 }
 
 .grid-item-content.selected {

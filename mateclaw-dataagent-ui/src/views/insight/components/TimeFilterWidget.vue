@@ -121,7 +121,6 @@ function handleDateChange(dates: [string, string] | null): void {
   box-sizing: border-box;
   background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid var(--theme-border);
 }
 
 .time-filter-label {

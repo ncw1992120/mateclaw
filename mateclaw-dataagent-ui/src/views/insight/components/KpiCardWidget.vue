@@ -150,7 +150,6 @@ function handleDateChange(val: [string, string] | null): void {
   box-sizing: border-box;
   background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid var(--theme-border);
   position: relative;
 }
 

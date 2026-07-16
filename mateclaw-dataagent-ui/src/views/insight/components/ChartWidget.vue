@@ -169,7 +169,6 @@ watch(chartContainerRef, (el) => {
   flex-direction: column;
   background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid var(--theme-border);
   overflow: hidden;
   position: relative;
 }

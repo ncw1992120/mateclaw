@@ -76,7 +76,6 @@ function handleChange(value: string): void {
   box-sizing: border-box;
   background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid var(--theme-border);
 }
 
 .filter-label {
