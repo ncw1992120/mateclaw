@@ -26,8 +26,11 @@ public class InsightComponentDataDTO implements Serializable {
     /** ECharts option（renderType=echarts 时） */
     private Map<String, Object> option;
 
-    /** KPI 卡片数据（renderType=kpi 时） */
+    /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
     private KpiData kpi;
+
+    /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时，按指标逐列展示） */
+    private List<KpiData> kpiList;
 
     /** 表格数据（renderType=table 时） */
     private TableData table;
@@ -106,8 +109,11 @@ public class InsightComponentDataDTO implements Serializable {
         /** ECharts option（renderType=echarts 时） */
         private Map<String, Object> option;
 
-        /** KPI 卡片数据（renderType=kpi 时） */
+        /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
         private KpiData kpi;
+
+        /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时） */
+        private List<KpiData> kpiList;
 
         /** 表格数据（renderType=table 时） */
         private TableData table;

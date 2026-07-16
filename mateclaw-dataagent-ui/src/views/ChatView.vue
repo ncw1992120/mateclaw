@@ -3551,7 +3551,7 @@ onUnmounted(() => {
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--very-light-orange);
   border-radius: 12px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -3577,7 +3577,7 @@ onUnmounted(() => {
 
 .seg-execution__toggle:hover {
   color: var(--theme-text-secondary);
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .seg-execution__label {

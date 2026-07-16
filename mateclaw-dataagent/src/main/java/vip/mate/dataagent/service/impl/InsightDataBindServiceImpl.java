@@ -45,10 +45,10 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     public List<InsightComponentDataDTO> bindDashboard(Long dashboardId) {
         InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
         InsightDashboardSchemaDTO schema = parseSchema(dashboard.getSchemaJson());
-        if (schema == null || schema.getComponents() == null) {
+        if (schema == null || schema.getAllComponents().isEmpty()) {
             return Collections.emptyList();
         }
-        return schema.getComponents().stream()
+        return schema.getAllComponents().stream()
                 .map(component -> bindComponent(component, schema))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -101,7 +101,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
         InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
         InsightDashboardSchemaDTO schema = parseSchema(dashboard.getSchemaJson());
-        if (schema == null || schema.getComponents() == null) {
+        if (schema == null || schema.getAllComponents().isEmpty()) {
             return Collections.emptyList();
         }
         String sourceFilterId = filterContext.getSourceFilterId();
@@ -114,7 +114,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
         // 预先计算所有非 aiAnalysis 组件的渲染数据，供 aiAnalysis 组件构建查询概要用
         final Map<String, InsightComponentDataDTO> componentDataMap = new HashMap<>();
-        for (Component component : schema.getComponents()) {
+        for (Component component : schema.getAllComponents()) {
             if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())
                     || "aiAnalysis".equals(component.getType())) {
                 continue;
@@ -126,7 +126,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
 
         final String targetId = componentLevelTargetId;
-        return schema.getComponents().stream()
+        return schema.getAllComponents().stream()
                 .map(component -> {
                     // filter/timeFilter 组件无需取数
                     if ("filter".equals(component.getType()) || "timeFilter".equals(component.getType())) {
@@ -214,12 +214,19 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                         : DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
 
         Map<String, InsightComponentDataDTO.TabData> tabsMap = new LinkedHashMap<>();
-        InsightComponentDataDTO.TabData firstValidData = null;
 
         for (InsightDashboardSchemaDTO.Tab tab : component.getTabs()) {
-            if (tab.getDataSource() == null || tab.getDataSource().getDatasourceId() == null) {
+            InsightComponentDataDTO.TabData tabData = new InsightComponentDataDTO.TabData();
+            tabData.setTitle(tab.getTitle());
+
+            if (tab.getDataSource() == null || tab.getDataSource().getDatasourceId() == null
+                    || tab.getDataSource().getDatasourceId().isBlank()) {
+                // 未配置数据源的 Tab，返回空数据
+                tabData.setError("未配置数据源");
+                tabsMap.put(tab.getId(), tabData);
                 continue;
             }
+
             // 构建临时 Component 副本，用 tab 的 dataSource 替换主 dataSource
             Component tabComponent = new Component();
             tabComponent.setId(component.getId());
@@ -227,8 +234,6 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             tabComponent.setChartType(component.getChartType());
             tabComponent.setDataSource(tab.getDataSource());
 
-            InsightComponentDataDTO.TabData tabData = new InsightComponentDataDTO.TabData();
-            tabData.setTitle(tab.getTitle());
             try {
                 InsightComponentDataDTO tabDto = (filterContext != null)
                         ? doBind(tabComponent, filterContext)
@@ -236,6 +241,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                 if (tabDto != null) {
                     tabData.setOption(tabDto.getOption());
                     tabData.setKpi(tabDto.getKpi());
+                    tabData.setKpiList(tabDto.getKpiList());
                     tabData.setTable(tabDto.getTable());
                     tabData.setError(tabDto.getError());
                 }
@@ -244,18 +250,20 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                 tabData.setError(e.getMessage());
             }
             tabsMap.put(tab.getId(), tabData);
-            if (firstValidData == null && tabData.getError() == null) {
-                firstValidData = tabData;
-            }
         }
 
         dto.setTabs(tabsMap);
 
-        // 主渲染数据取第一个有效 Tab（供前端默认显示 + 兼容无 Tab 渲染逻辑的组件）
-        if (firstValidData != null) {
-            dto.setOption(firstValidData.getOption());
-            dto.setKpi(firstValidData.getKpi());
-            dto.setTable(firstValidData.getTable());
+        // 主渲染数据取第一个 Tab（供前端默认显示），无数据时不设主渲染数据
+        if (!tabsMap.isEmpty()) {
+            Map.Entry<String, InsightComponentDataDTO.TabData> first = tabsMap.entrySet().iterator().next();
+            InsightComponentDataDTO.TabData firstData = first.getValue();
+            if (firstData.getError() == null) {
+                dto.setOption(firstData.getOption());
+                dto.setKpi(firstData.getKpi());
+                dto.setKpiList(firstData.getKpiList());
+                dto.setTable(firstData.getTable());
+            }
         }
 
         return dto;
@@ -282,6 +290,24 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
      */
     private InsightComponentDataDTO doBind(Component component, DashboardFilterContextDTO filterContext) {
         DataSource ds = component.getDataSource();
+
+        // KPI 多指标模式：每个指标分别查询
+        boolean isKpiMultiKpi = "kpi".equals(component.getType())
+                && component.getMultiKpi() != null && component.getMultiKpi()
+                && ds.getMetrics() != null && ds.getMetrics().size() > 1;
+        if (isKpiMultiKpi) {
+            InsightComponentDataDTO dto = new InsightComponentDataDTO();
+            dto.setComponentId(component.getId());
+            dto.setRenderType(DataAgentConstants.INSIGHT_RENDER_TYPE_KPI);
+            dto.setKpiList(buildKpiListDataBySeparateQuery(component, filterContext));
+            // 兼容：kpi 取第一个指标数据
+            List<InsightComponentDataDTO.KpiData> kpiList = dto.getKpiList();
+            if (kpiList != null && !kpiList.isEmpty()) {
+                dto.setKpi(kpiList.get(0));
+            }
+            return dto;
+        }
+
         Long datasourceId = Long.parseLong(ds.getDatasourceId());
 
         // 1. 构建 AloudataMetricQueryRequest
@@ -412,6 +438,55 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         kpi.setChg(change);
         kpi.setUp(up);
         return kpi;
+    }
+
+    /**
+     * 构建 KPI 多指标数据列表（每个指标分别查询）
+     * <p>
+     * 遍历 dataSource.metrics 中的每个指标，为每个指标构建独立的 Component 副本
+     * （只包含该指标），分别调用 doBind 查询取数，再通过 buildKpiData 构建 KpiData。
+     * 单个指标取数失败时不影响其他指标，降级为空卡片。
+     */
+    private List<InsightComponentDataDTO.KpiData> buildKpiListDataBySeparateQuery(Component component,
+                                                                                    DashboardFilterContextDTO filterContext) {
+        DataSource ds = component.getDataSource();
+        if (ds.getMetrics() == null || ds.getMetrics().isEmpty()) {
+            InsightComponentDataDTO.KpiData empty = buildEmptyKpi(component.getTitle());
+            return Collections.singletonList(empty);
+        }
+
+        List<InsightComponentDataDTO.KpiData> kpiList = new ArrayList<>();
+        for (String metricName : ds.getMetrics()) {
+            // 构建只包含当前指标的 Component 副本（multiKpi 置 null，避免递归）
+            Component singleMetricComp = new Component();
+            singleMetricComp.setId(component.getId());
+            singleMetricComp.setType(component.getType());
+            singleMetricComp.setTitle(component.getTitle());
+
+            DataSource singleDs = new DataSource();
+            singleDs.setDatasourceId(ds.getDatasourceId());
+            singleDs.setMetrics(Collections.singletonList(metricName));
+            singleDs.setDimensions(ds.getDimensions());
+            singleDs.setFilters(ds.getFilters());
+            singleDs.setTimeConstraint(ds.getTimeConstraint());
+            singleDs.setLimit(ds.getLimit());
+            singleMetricComp.setDataSource(singleDs);
+
+            try {
+                InsightComponentDataDTO singleDto = (filterContext != null)
+                        ? doBind(singleMetricComp, filterContext)
+                        : doBind(singleMetricComp);
+                if (singleDto.getKpi() != null) {
+                    kpiList.add(singleDto.getKpi());
+                } else {
+                    kpiList.add(buildEmptyKpi(metricName));
+                }
+            } catch (Exception e) {
+                log.warn("[KPI多指标] 指标 {} 取数失败: {}", metricName, e.getMessage());
+                kpiList.add(buildEmptyKpi(metricName));
+            }
+        }
+        return kpiList;
     }
 
     /**
@@ -586,8 +661,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         Set<String> dimensions = new LinkedHashSet<>();
         List<Map<String, Object>> filters = new ArrayList<>();
 
-        if (schema.getComponents() != null) {
-            for (Component comp : schema.getComponents()) {
+        if (!schema.getAllComponents().isEmpty()) {
+            for (Component comp : schema.getAllComponents()) {
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {
                         metrics.addAll(comp.getDataSource().getMetrics());

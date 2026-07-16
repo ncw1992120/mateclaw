@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS `dataagent_resource_grant` (
     `id`              BIGINT       NOT NULL                    COMMENT '主键（雪花ID）',
-    `resource_type`   VARCHAR(64)  NOT NULL                    COMMENT '资源类型：skill / agent / datasource / semantic_model 等',
+    `resource_type`   VARCHAR(64)  NOT NULL                    COMMENT '资源类型：skill / agent / datasource / business_term 等',
     `resource_id`     BIGINT       NOT NULL                    COMMENT '资源 ID（对应业务表的主键）',
     `workspace_id`    BIGINT       NOT NULL    DEFAULT 1       COMMENT '所属工作区 ID',
     `grant_type`      VARCHAR(32)  NOT NULL                    COMMENT '授权类型：role / user / group（按角色/用户/用户组授权）',

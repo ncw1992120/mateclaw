@@ -4,8 +4,31 @@
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
   >
+    <!-- 全局联动栏（仅预览态且有全局筛选器时显示） -->
+    <div v-if="!editable && globalFilterComponents.length > 0" class="global-filter-bar">
+      <div class="global-filter-items">
+        <template v-for="comp in globalFilterComponents" :key="comp.id">
+          <div class="global-filter-item">
+            <span class="global-filter-label">{{ comp.title }}</span>
+            <FilterSelectWidget
+              v-if="comp.type === 'filter'"
+              :component="comp"
+              :show-title="false"
+              @change="(payload) => handleFilterChange(comp.id, payload)"
+            />
+            <TimeFilterWidget
+              v-else-if="comp.type === 'timeFilter'"
+              :component="comp"
+              :show-title="false"
+              @change="(payload) => handleTimeFilterChange(comp.id, payload)"
+            />
+          </div>
+        </template>
+      </div>
+    </div>
+
     <GridLayout
-      v-if="components.length > 0"
+      v-if="gridLayout.length > 0"
       :layout="gridLayout"
       :col-num="24"
       :row-height="30"
@@ -82,7 +105,7 @@
         </div>
       </GridItem>
     </GridLayout>
-    <div v-else class="canvas-empty">
+    <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
       <div class="empty-icon">🎨</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
     </div>
@@ -90,10 +113,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
-import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue } from '@/types'
+import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -148,12 +171,45 @@ const gridLayout = ref<GridLayoutItem[]>([])
 /** 标记：是否正在从 props 同步，避免 layout-updated → emit → props 变化 → watch 循环 */
 let isSyncingFromProps = false
 
-/** 从 props.components 同步到 gridLayout，仅在组件增删时触发 */
+/** 判断筛选器组件是否为全局作用范围 */
+function isGlobalFilterComponent(c: InsightComponent): boolean {
+  if (c.type === 'filter') {
+    const config = c.config as FilterComponentConfig | undefined
+    return !config?.scope || config.scope === 'global'
+  }
+  if (c.type === 'timeFilter') {
+    const config = c.config as TimeFilterComponentConfig | undefined
+    return !config?.scope || config.scope === 'global'
+  }
+  return false
+}
+
+/** 全局筛选器组件列表（预览态下提取到顶部联动栏独立渲染） */
+const globalFilterComponents = computed<InsightComponent[]>(() => {
+  if (props.editable) return []
+  return props.components.filter((c) => isGlobalFilterComponent(c))
+})
+
+/** 全局筛选器组件 ID 集合 */
+const globalFilterComponentIds = computed<Set<string>>(() => {
+  return new Set(globalFilterComponents.value.map((c) => c.id))
+})
+
+/** 当前实际可见的组件列表（编辑态显示全部；预览态下全局筛选器提取到联动栏） */
+const effectiveComponents = computed<InsightComponent[]>(() => {
+  if (props.editable) {
+    return props.components
+  }
+  // 预览态：排除全局筛选器（它们在联动栏中渲染）
+  return props.components.filter((c) => !globalFilterComponentIds.value.has(c.id))
+})
+
+/** 从 effectiveComponents 同步到 gridLayout（组件增删时触发） */
 watch(
-  () => props.components.map((c) => c.id).join(','),
-  (newIds) => {
+  () => effectiveComponents.value.map((c) => c.id).join(','),
+  () => {
     isSyncingFromProps = true
-    gridLayout.value = props.components.map((c) => ({
+    gridLayout.value = effectiveComponents.value.map((c) => ({
       i: c.id,
       x: c.position.x,
       y: c.position.y,
@@ -265,6 +321,55 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   padding: 16px;
   box-sizing: border-box;
   background: var(--theme-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.global-filter-bar {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--theme-surface);
+  border-radius: 8px;
+  border: 1px solid var(--theme-border);
+}
+
+.global-filter-items {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.global-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.global-filter-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.global-filter-item :deep(.filter-select-widget),
+.global-filter-item :deep(.time-filter-widget) {
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-width: 180px;
+}
+
+.global-filter-item :deep(.filter-select-widget) {
+  height: auto;
+}
+
+.global-filter-item :deep(.time-filter-widget) {
+  height: auto;
 }
 
 .grid-item-content {

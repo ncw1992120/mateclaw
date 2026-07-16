@@ -81,13 +81,12 @@ const emit = defineEmits<{
 const tableData = computed(() => props.componentData?.table)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
 
-/** 是否有多 Tab 数据 */
+/** 是否有多 Tab 模式（基于组件配置判断，而非后端返回数据） */
 const hasTabs = computed(() => {
-  const tabs = props.componentData?.tabs
-  return tabs && Object.keys(tabs).length > 0
+  return !!(props.component.tabs && props.component.tabs.length > 0)
 })
 
-/** Tab 列表（从组件配置 + 渲染数据构建） */
+/** Tab 列表（从组件配置构建） */
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
 
 /** 当前激活的 Tab ID */
@@ -109,8 +108,13 @@ const activeTabData = computed(() => {
   return props.componentData?.tabs?.[activeTabId.value] ?? null
 })
 
-/** 当前 Tab 的表格数据 */
-const activeTableData = computed(() => activeTabData.value?.table ?? tableData.value)
+/** 当前 Tab 的表格数据（Tab 模式下不 fallback 到主数据，避免未配置数据源的 Tab 显示其他 Tab 数据） */
+const activeTableData = computed(() => {
+  if (hasTabs.value) {
+    return activeTabData.value?.table ?? null
+  }
+  return tableData.value
+})
 const activeTabError = computed(() => activeTabData.value?.error)
 
 /** 组件级时间选择器绑定值 */

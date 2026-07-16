@@ -32,13 +32,40 @@
 
     <!-- 仪表盘预览区 -->
     <div class="preview-body">
-      <div v-if="schema.components.length === 0" class="preview-empty">
+      <!-- 页面菜单 Tab 栏（多页面时显示） -->
+      <div v-if="schema.pages.length > 1" class="page-bar">
+        <button
+          v-for="page in topLevelPages"
+          :key="page.id"
+          class="page-tab"
+          :class="{ active: activePageId === page.id || isDescendantPage(activePageId, page.id) }"
+          @click="handlePageChange(page.id)"
+        >
+          <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
+          <span class="page-name">{{ page.name }}</span>
+        </button>
+      </div>
+      <!-- 子页面 Tab 栏（当前页面有子页面时显示） -->
+      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar">
+        <button
+          v-for="sub in activeSubPages"
+          :key="sub.id"
+          class="page-tab"
+          :class="{ active: activePageId === sub.id }"
+          @click="handlePageChange(sub.id)"
+        >
+          <span v-if="sub.icon" class="page-icon">{{ sub.icon }}</span>
+          <span class="page-name">{{ sub.name }}</span>
+        </button>
+      </div>
+
+      <div v-if="currentPageComponents.length === 0" class="preview-empty">
         <div class="empty-icon">📭</div>
         <div class="empty-text">{{ t('insight.previewEmpty') }}</div>
       </div>
       <DashboardCanvas
         v-else
-        :components="schema.components"
+        :components="currentPageComponents"
         :component-data-map="componentDataMap"
         :editable="false"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
@@ -81,8 +108,10 @@ import * as echarts from 'echarts'
 import type {
   InsightDashboardSchema,
   InsightComponentData,
+  InsightComponent,
   TimeRangeValue,
   DashboardFilterContext,
+  DashboardPage,
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { preview } from '@/api/insight-dashboard'
@@ -107,7 +136,7 @@ const { t } = useI18n()
 const store = useInsightDashboardStore()
 
 const dashboard = computed(() => store.currentDashboard)
-const schema = reactive<InsightDashboardSchema>({ version: '1.0', components: [] })
+const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
@@ -140,13 +169,89 @@ const reportChartInstances = ref<echarts.ECharts[]>([])
 /** 防抖定时器 */
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 筛选上下文管理 */
+/** 当前激活的页面 ID */
+const activePageId = ref<string>('')
+
+/** 顶级页面列表（无 parentId 的页面） */
+const topLevelPages = computed<DashboardPage[]>(() => {
+  return schema.pages
+    .filter((p) => !p.parentId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+})
+
+/** 当前顶级页面下的子页面列表 */
+const activeSubPages = computed<DashboardPage[]>(() => {
+  // 找到当前激活页面所属的顶级页面
+  const currentTopPage = findTopLevelPage(activePageId.value)
+  if (!currentTopPage) {
+    return []
+  }
+  return schema.pages
+    .filter((p) => p.parentId === currentTopPage.id)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+})
+
+/** 当前激活页面的组件列表 */
+const currentPageComponents = computed<InsightComponent[]>(() => {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  return page?.components ?? []
+})
+
+/** 查找页面所属的顶级页面 */
+function findTopLevelPage(pageId: string): DashboardPage | undefined {
+  let page = schema.pages.find((p) => p.id === pageId)
+  let depth = 0
+  while (page?.parentId && depth < 20) {
+    page = schema.pages.find((p) => p.id === page!.parentId)
+    depth++
+  }
+  return page
+}
+
+/** 判断 pageId 是否是 parentPageId 的后代 */
+function isDescendantPage(pageId: string, parentPageId: string): boolean {
+  let page = schema.pages.find((p) => p.id === pageId)
+  let depth = 0
+  while (page?.parentId && depth < 20) {
+    if (page.parentId === parentPageId) {
+      return true
+    }
+    page = schema.pages.find((p) => p.id === page!.parentId)
+    depth++
+  }
+  return false
+}
+
+/** 生成 ID */
+function generateId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** 迁移旧 Schema（单 components 数组 → pages[0]） */
+function migrateSchema(parsed: any): InsightDashboardSchema {
+  // 新格式：已有 pages 数组
+  if (parsed.pages && Array.isArray(parsed.pages)) {
+    return parsed as InsightDashboardSchema
+  }
+  // 旧格式：components + perspectives，迁移为单页面
+  const oldComponents = parsed.components ?? []
+  return {
+    version: parsed.version ?? '1.0',
+    pages: [{
+      id: generateId('page'),
+      name: '首页',
+      components: oldComponents,
+    }],
+  }
+}
+
+/** 筛选上下文管理（基于当前页面组件） */
 const {
   filterContext,
   setTimeRange,
   setDimensionFilter,
 } = useDashboardFilterContext(
-  () => schema.components,
+  () => currentPageComponents.value,
   (context) => scheduleReloadWithFilters(context),
 )
 
@@ -169,11 +274,20 @@ async function loadDashboard(): Promise<void> {
   await store.selectDashboard(props.dashboardId)
   if (dashboard.value) {
     try {
-      const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
-      schema.version = parsed.version ?? '1.0'
-      schema.components = parsed.components ?? []
+      const parsed = JSON.parse(dashboard.value.schemaJson)
+      const migrated = migrateSchema(parsed)
+      schema.version = migrated.version
+      schema.pages = migrated.pages
     } catch {
-      schema.components = []
+      schema.pages = [{
+        id: generateId('page'),
+        name: '首页',
+        components: [],
+      }]
+    }
+    // 默认选中第一个页面
+    if (schema.pages.length > 0) {
+      activePageId.value = schema.pages[0].id
     }
     await reloadComponentData(filterContext.value)
     // 加载已生成的报告
@@ -459,6 +573,16 @@ ${reportHtmlContent.value}
 function handleBack(): void {
   emit('back')
 }
+
+/** 切换页面 */
+function handlePageChange(pageId: string): void {
+  if (activePageId.value === pageId) {
+    return
+  }
+  activePageId.value = pageId
+  // 页面切换后重新加载数据（筛选上下文不变，但可见组件变化）
+  scheduleReloadWithFilters(filterContext.value)
+}
 </script>
 
 <style scoped>
@@ -595,6 +719,60 @@ function handleBack(): void {
 .preview-body {
   flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+}
+
+.sub-page-bar {
+  background: var(--theme-bg);
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.page-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.page-tab:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.page-tab.active {
+  background: var(--main-orange);
+  color: #fff;
+  border-color: var(--main-orange);
+}
+
+.page-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.page-name {
+  line-height: 1;
 }
 
 .preview-empty {

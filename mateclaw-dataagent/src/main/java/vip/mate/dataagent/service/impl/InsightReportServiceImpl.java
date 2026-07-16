@@ -283,12 +283,12 @@ public class InsightReportServiceImpl implements InsightReportService {
      */
     private String buildAttributionContext(InsightDashboardVO dashboard) {
         InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
-        if (schema == null || schema.getComponents() == null) {
+        if (schema == null || schema.getAllComponents().isEmpty()) {
             return null;
         }
 
         StringBuilder context = new StringBuilder();
-        for (InsightDashboardSchemaDTO.Component comp : schema.getComponents()) {
+        for (InsightDashboardSchemaDTO.Component comp : schema.getAllComponents()) {
             if (comp.getDataSource() == null || comp.getDataSource().getDatasourceId() == null) {
                 continue;
             }
@@ -482,8 +482,8 @@ public class InsightReportServiceImpl implements InsightReportService {
         int totalRows = 0;
         StringBuilder dataTable = new StringBuilder();
 
-        if (schema != null && schema.getComponents() != null) {
-            for (InsightDashboardSchemaDTO.Component comp : schema.getComponents()) {
+        if (schema != null && !schema.getAllComponents().isEmpty()) {
+            for (InsightDashboardSchemaDTO.Component comp : schema.getAllComponents()) {
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {
                         metrics.addAll(comp.getDataSource().getMetrics());
@@ -549,10 +549,10 @@ public class InsightReportServiceImpl implements InsightReportService {
         try {
             InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
             InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
-            if (schema == null || schema.getComponents() == null) return;
+            if (schema == null || schema.getAllComponents().isEmpty()) return;
 
             boolean changed = false;
-            for (InsightDashboardSchemaDTO.Component comp : schema.getComponents()) {
+            for (InsightDashboardSchemaDTO.Component comp : schema.getAllComponents()) {
                 if ("aiAnalysis".equals(comp.getType())) {
                     comp.setAiAnalysisContent(content);
                     changed = true;

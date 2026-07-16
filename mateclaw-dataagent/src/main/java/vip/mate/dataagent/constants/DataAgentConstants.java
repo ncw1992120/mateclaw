@@ -337,8 +337,8 @@ public final class DataAgentConstants {
     /** 资源类型：数据源 */
     public static final String RESOURCE_TYPE_DATASOURCE = "datasource";
 
-    /** 资源类型：语义模型 */
-    public static final String RESOURCE_TYPE_SEMANTIC_MODEL = "semantic_model";
+    /** 资源类型：业务词典 */
+    public static final String RESOURCE_TYPE_BUSINESS_TERM = "business_term";
 
     /** 资源类型：知识库 */
     public static final String RESOURCE_TYPE_KNOWLEDGE = "knowledge";

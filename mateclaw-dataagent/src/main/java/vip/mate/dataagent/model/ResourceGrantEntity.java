@@ -18,7 +18,7 @@ public class ResourceGrantEntity {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    /** 资源类型：skill / agent / datasource / semantic_model 等 */
+    /** 资源类型：skill / agent / datasource / business_term 等 */
     private String resourceType;
 
     /** 资源 ID（对应业务表的主键） */

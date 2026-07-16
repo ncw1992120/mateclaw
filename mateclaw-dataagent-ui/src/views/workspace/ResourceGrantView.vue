@@ -13,7 +13,7 @@
           <el-option label="知识库" value="knowledge" />
           <el-option label="技能" value="skill" />
           <el-option label="智能体" value="agent" />
-          <el-option label="语义模型" value="semantic_model" />
+          <el-option label="词典" value="business_term" />
         </el-select>
         <el-button type="primary" size="small" @click="openGrantDialog">
           新增授权
@@ -100,7 +100,7 @@
             <el-option label="知识库" value="knowledge" />
             <el-option label="技能" value="skill" />
             <el-option label="智能体" value="agent" />
-            <el-option label="语义模型" value="semantic_model" />
+            <el-option label="词典" value="business_term" />
           </el-select>
         </el-form-item>
         <el-form-item label="资源">
@@ -206,7 +206,7 @@ import { useAgentStore } from '@/stores/useAgentStore'
 import * as grantApi from '@/api/resource-grant'
 import * as knowledgeApi from '@/api/knowledge'
 import * as skillApi from '@/api/skill'
-import * as semanticModelApi from '@/api/semantic-model'
+import * as businessTermApi from '@/api/business-term'
 import { listWorkspaceMembers } from '@/api/workspace'
 import type { WorkspaceMember } from '@/types'
 
@@ -273,7 +273,7 @@ function resourceTypeLabel(type: string): string {
     knowledge: '知识库',
     skill: '技能',
     agent: '智能体',
-    semantic_model: '语义模型',
+    business_term: '业务词典',
   }
   return map[type] || type
 }
@@ -352,15 +352,10 @@ async function loadResourcesByType(type: string): Promise<void> {
         list = items.map((s: any) => ({ id: s.id, name: s.nameZh || s.name || s.slug }))
         break
       }
-      case 'semantic_model': {
-        if (datasourceStore.datasources.length === 0) {
-          await datasourceStore.fetchDatasources()
-        }
-        const dsId = datasourceStore.datasources[0]?.id
-        if (!dsId) break
-        const data = await semanticModelApi.list(String(dsId))
-        const items = Array.isArray(data) ? data : []
-        list = items.map((m: any) => ({ id: m.id, name: m.businessName || `${m.tableName}.${m.columnName}` }))
+      case 'business_term': {
+        const codes = await businessTermApi.listTenantCodes()
+        const items = (codes || []) as unknown as string[]
+        list = items.map((code: string) => ({ id: code, name: code }))
         break
       }
     }
@@ -505,6 +500,7 @@ onMounted(() => {
   loadResourcesByType('agent')
   loadResourcesByType('knowledge')
   loadResourcesByType('skill')
+  loadResourcesByType('business_term')
 })
 </script>
 

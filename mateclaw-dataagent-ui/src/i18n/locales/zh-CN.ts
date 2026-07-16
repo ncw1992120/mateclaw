@@ -1460,6 +1460,8 @@ export default {
       boundFilters: '绑定筛选器',
       boundFiltersPlaceholder: '选择绑定的筛选器',
       enableTimeFilter: '组件级时间筛选',
+      multiKpi: '多指标模式',
+      multiKpiHint: '开启后卡片同时展示多个指标，各指标并排显示',
       aiAnalysisPrompt: '分析提示词',
       aiAnalysisPromptPlaceholder: '自定义分析方向，留空使用默认',
       aiAnalysisAutoGenerate: '自动生成',

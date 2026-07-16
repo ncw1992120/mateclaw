@@ -27,7 +27,23 @@
         {{ tab.title }}
       </div>
     </div>
-    <div class="kpi-body">
+    <!-- 多指标模式 -->
+    <div v-if="isMultiKpi" class="kpi-multi-body">
+      <div
+        v-for="(item, idx) in activeKpiListData"
+        :key="idx"
+        class="kpi-multi-item"
+      >
+        <div class="kpi-value">{{ item?.value ?? '--' }}</div>
+        <div v-if="item?.name" class="kpi-name">{{ item.name }}</div>
+        <div v-if="item?.chg" class="kpi-chg" :class="item.up ? 'up' : 'down'">
+          <span>{{ item.up ? '↑' : '↓' }} {{ item.chg }}</span>
+        </div>
+      </div>
+      <div v-if="!activeKpiListData || activeKpiListData.length === 0" class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+    </div>
+    <!-- 单指标模式 -->
+    <div v-else class="kpi-body">
       <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
       <div v-if="showTitle && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
       <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
@@ -63,12 +79,15 @@ const emit = defineEmits<{
 }>()
 
 const kpiData = computed(() => props.componentData?.kpi)
+const kpiListData = computed(() => props.componentData?.kpiList)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
 
-/** 是否有多 Tab 数据 */
+/** 是否启用多指标模式 */
+const isMultiKpi = computed(() => !!props.component.multiKpi)
+
+/** 是否有多 Tab 模式（基于组件配置判断，而非后端返回数据） */
 const hasTabs = computed(() => {
-  const tabs = props.componentData?.tabs
-  return tabs && Object.keys(tabs).length > 0
+  return !!(props.component.tabs && props.component.tabs.length > 0)
 })
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
 const activeTabId = ref('')
@@ -82,10 +101,18 @@ watch(hasTabs, (val) => {
   }
 }, { immediate: true })
 
-/** 当前生效的 KPI 数据（Tab 模式取 activeTab，否则取主 kpi） */
+/** 当前生效的 KPI 数据（Tab 模式下不 fallback 到主数据） */
 const activeKpiData = computed(() => {
-  if (!hasTabs.value || !activeTabId.value) return kpiData.value
+  if (!hasTabs.value) return kpiData.value
+  if (!activeTabId.value) return null
   return props.componentData?.tabs?.[activeTabId.value]?.kpi ?? null
+})
+
+/** 当前生效的 KPI 多指标数据列表 */
+const activeKpiListData = computed(() => {
+  if (!hasTabs.value) return kpiListData.value ?? []
+  if (!activeTabId.value) return []
+  return props.componentData?.tabs?.[activeTabId.value]?.kpiList ?? []
 })
 
 /** 组件级时间选择器绑定值 */
@@ -212,5 +239,55 @@ function handleDateChange(val: [string, string] | null): void {
 .kpi-placeholder {
   font-size: 12px;
   color: var(--theme-text-muted);
+}
+
+/* 多指标模式样式 */
+.kpi-multi-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  gap: 0;
+}
+
+.kpi-multi-item {
+  flex: 1 1 0;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  box-sizing: border-box;
+}
+
+.kpi-multi-item + .kpi-multi-item {
+  border-left: 1px solid var(--theme-border);
+}
+
+.kpi-multi-item .kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--theme-text);
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.kpi-multi-item .kpi-name {
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  margin-bottom: 2px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.kpi-multi-item .kpi-chg {
+  font-size: 11px;
+  font-weight: 500;
 }
 </style>

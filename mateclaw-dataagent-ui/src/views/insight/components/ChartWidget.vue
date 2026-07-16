@@ -62,10 +62,9 @@ const emit = defineEmits<{
 const chartContainerRef = ref<HTMLElement | null>(null)
 const { renderECharts, disposeChart } = useEChartsRenderer()
 
-/** 是否有多 Tab 数据 */
+/** 是否有多 Tab 模式（基于组件配置判断，而非后端返回数据） */
 const hasTabs = computed(() => {
-  const tabs = props.componentData?.tabs
-  return tabs && Object.keys(tabs).length > 0
+  return !!(props.component.tabs && props.component.tabs.length > 0)
 })
 
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])

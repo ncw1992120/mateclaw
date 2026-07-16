@@ -32,14 +32,54 @@
       </div>
     </div>
 
-    <!-- 三栏布局 -->
+    <!-- 四栏布局：页面菜单 | 物料面板 | 画布 | 属性面板 -->
     <div class="editor-body">
+      <!-- 页面菜单树 -->
+      <div class="editor-pages">
+        <div class="pages-header">
+          <span class="pages-title">页面</span>
+          <el-button text size="small" @click="addPage">+</el-button>
+        </div>
+        <div class="pages-list">
+          <div
+            v-for="page in sortedPages"
+            :key="page.id"
+            class="page-item"
+            :class="{ active: page.id === activePageId }"
+            :style="{ paddingLeft: (getPageDepth(page.id) * 12 + 12) + 'px' }"
+            @click="handleSelectPage(page.id)"
+          >
+            <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
+            <el-input
+              v-if="editingPageId === page.id"
+              v-model="editingPageName"
+              size="small"
+              autofocus
+              class="page-name-input"
+              @blur="handlePageNameBlur"
+              @keyup.enter="handlePageNameBlur"
+            />
+            <span v-else class="page-name" @dblclick.stop="startEditPageName(page)">{{ page.name }}</span>
+            <div v-if="editingPageId !== page.id" class="page-actions">
+              <el-button text size="small" @click.stop="movePageUp(page)">↑</el-button>
+              <el-button text size="small" @click.stop="movePageDown(page)">↓</el-button>
+              <el-button text size="small" @click.stop="addSubPage(page)">+</el-button>
+              <el-button text size="small" @click.stop="startEditPageName(page)">✎</el-button>
+              <el-button text size="small" @click.stop="deletePage(page.id)">✕</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 物料面板 -->
       <div class="editor-palette">
         <ComponentPalette />
       </div>
+
+      <!-- 画布 -->
       <div class="editor-canvas">
         <DashboardCanvas
-          :components="schema.components"
+          :components="currentPageComponents"
           :component-data-map="componentDataMap"
           :editable="true"
           :selected-id="selectedComponentId"
@@ -49,10 +89,12 @@
           @delete-component="handleDeleteComponent"
         />
       </div>
+
+      <!-- 属性面板 -->
       <div class="editor-property">
         <PropertyPanel
           :component="selectedComponent"
-          :all-components="schema.components"
+          :all-components="currentPageComponents"
           @change="handleComponentChange"
           @preview="handlePreviewResult"
         />
@@ -66,7 +108,7 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
@@ -99,38 +141,60 @@ const dashboardOwnerName = ref('')
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
   version: '1.0',
-  components: [],
+  pages: [],
 })
 
 /** 组件渲染数据映射（编辑模式自动预览） */
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
+/** 当前激活的页面 ID */
+const activePageId = ref<string>('')
+
+/** 正在编辑名称的页面 ID */
+const editingPageId = ref<string>('')
+const editingPageName = ref<string>('')
+
 /** 预览防抖定时器 */
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 排序后的页面列表（按 order 排序，支持树形缩进展示） */
+const sortedPages = computed<DashboardPage[]>(() => {
+  const sorted = [...schema.pages].sort((a, b) => {
+    const orderDiff = (a.order ?? 0) - (b.order ?? 0)
+    if (orderDiff !== 0) return orderDiff
+    return a.name.localeCompare(b.name)
+  })
+  return sorted
+})
+
+/** 获取页面在树中的深度（用于缩进） */
+function getPageDepth(pageId: string): number {
+  let depth = 0
+  let page = schema.pages.find((p) => p.id === pageId)
+  while (page?.parentId) {
+    depth++
+    page = schema.pages.find((p) => p.id === page!.parentId)
+    if (depth > 20) break // 防止循环引用
+  }
+  return depth
+}
+
+/** 当前激活页面的组件列表 */
+const currentPageComponents = computed<InsightComponent[]>(() => {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  return page?.components ?? []
+})
 
 /** 当前选中的组件 */
 const selectedComponent = computed<InsightComponent | null>(() => {
   if (!selectedComponentId.value) {
     return null
   }
-  return schema.components.find((c) => c.id === selectedComponentId.value) ?? null
+  return currentPageComponents.value.find((c) => c.id === selectedComponentId.value) ?? null
 })
 
 onMounted(async () => {
-  await store.selectDashboard(props.dashboardId)
-  if (dashboard.value) {
-    dashboardName.value = dashboard.value.name
-    dashboardDescription.value = dashboard.value.description ?? ''
-    dashboardOwnerName.value = dashboard.value.ownerName ?? ''
-    try {
-      const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
-      schema.version = parsed.version ?? '1.0'
-      schema.components = parsed.components ?? []
-    } catch {
-      // Schema 解析失败时使用空 Schema
-      schema.components = []
-    }
-  }
+  await loadDashboard(props.dashboardId)
 })
 
 /** 监听 dashboardId 变化时重新加载 */
@@ -138,26 +202,59 @@ watch(
   () => props.dashboardId,
   async (newId) => {
     if (newId) {
-      await store.selectDashboard(newId)
-      if (dashboard.value) {
-        dashboardName.value = dashboard.value.name
-        dashboardDescription.value = dashboard.value.description ?? ''
-        dashboardOwnerName.value = dashboard.value.ownerName ?? ''
-        try {
-          const parsed = JSON.parse(dashboard.value.schemaJson) as InsightDashboardSchema
-          schema.version = parsed.version ?? '1.0'
-          schema.components = parsed.components ?? []
-        } catch {
-          schema.components = []
-        }
-      }
+      await loadDashboard(newId)
     }
   }
 )
 
-/** 生成组件 ID */
-function generateId(): string {
-  return `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+/** 生成 ID */
+function generateId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+}
+
+/** 迁移旧 Schema（单 components 数组 → pages[0]） */
+function migrateSchema(parsed: any): InsightDashboardSchema {
+  // 新格式：已有 pages 数组
+  if (parsed.pages && Array.isArray(parsed.pages)) {
+    return parsed as InsightDashboardSchema
+  }
+  // 旧格式：components + perspectives，迁移为单页面
+  const oldComponents = parsed.components ?? []
+  return {
+    version: parsed.version ?? '1.0',
+    pages: [{
+      id: generateId('page'),
+      name: '首页',
+      components: oldComponents,
+    }],
+  }
+}
+
+/** 加载仪表盘数据 */
+async function loadDashboard(id: string): Promise<void> {
+  await store.selectDashboard(id)
+  if (dashboard.value) {
+    dashboardName.value = dashboard.value.name
+    dashboardDescription.value = dashboard.value.description ?? ''
+    dashboardOwnerName.value = dashboard.value.ownerName ?? ''
+    try {
+      const parsed = JSON.parse(dashboard.value.schemaJson)
+      const migrated = migrateSchema(parsed)
+      schema.version = migrated.version
+      schema.pages = migrated.pages
+    } catch {
+      // Schema 解析失败时使用空 Schema（含一个默认页面）
+      schema.pages = [{
+        id: generateId('page'),
+        name: '首页',
+        components: [],
+      }]
+    }
+    // 默认选中第一个页面
+    if (schema.pages.length > 0) {
+      activePageId.value = schema.pages[0].id
+    }
+  }
 }
 
 /** 生成默认标题 */
@@ -179,11 +276,15 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
   return titleMap[key] ?? type
 }
 
-/** 添加新组件 */
+/** 添加新组件到当前页面 */
 function handleAddComponent(payload: { type: InsightComponentType; chartType?: ChartType }): void {
-  const maxY = schema.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) {
+    return
+  }
+  const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
   const newComponent: InsightComponent = {
-    id: generateId(),
+    id: generateId('comp'),
     type: payload.type,
     title: getDefaultTitle(payload.type, payload.chartType),
     position: { x: 0, y: maxY, w: 6, h: 4 },
@@ -202,14 +303,18 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
       autoGenerate: false,
     } : undefined,
   }
-  schema.components.push(newComponent)
+  page.components.push(newComponent)
   selectedComponentId.value = newComponent.id
 }
 
 /** 更新布局（拖动/缩放后） */
 function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w: number; h: number }>): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) {
+    return
+  }
   layout.forEach((item) => {
-    const comp = schema.components.find((c) => c.id === item.id)
+    const comp = page.components.find((c) => c.id === item.id)
     if (comp) {
       comp.position = { x: item.x, y: item.y, w: item.w, h: item.h }
     }
@@ -223,9 +328,13 @@ function handleSelectComponent(id: string): void {
 
 /** 删除组件 */
 function handleDeleteComponent(id: string): void {
-  const idx = schema.components.findIndex((c) => c.id === id)
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) {
+    return
+  }
+  const idx = page.components.findIndex((c) => c.id === id)
   if (idx >= 0) {
-    schema.components.splice(idx, 1)
+    page.components.splice(idx, 1)
     if (selectedComponentId.value === id) {
       selectedComponentId.value = ''
     }
@@ -234,10 +343,14 @@ function handleDeleteComponent(id: string): void {
 
 /** 组件属性变更（保留画布管理的 position） */
 function handleComponentChange(updated: InsightComponent): void {
-  const idx = schema.components.findIndex((c) => c.id === updated.id)
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) {
+    return
+  }
+  const idx = page.components.findIndex((c) => c.id === updated.id)
   if (idx >= 0) {
-    const existing = schema.components[idx]
-    schema.components[idx] = {
+    const existing = page.components[idx]
+    page.components[idx] = {
       ...updated,
       // 保留画布拖拽/缩放管理的 position，不被属性面板覆盖
       position: existing.position,
@@ -264,9 +377,13 @@ function schedulePreview(): void {
   }, 500)
 }
 
-/** 为所有已配置数据源的组件获取预览数据 */
+/** 为当前页面所有已配置数据源的组件获取预览数据 */
 async function previewAllConfiguredComponents(): Promise<void> {
-  const tasks = schema.components
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) {
+    return
+  }
+  const tasks = page.components
     .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
     .map(async (c) => {
       try {
@@ -341,6 +458,117 @@ function handlePreview(): void {
 /** 返回列表 */
 function handleBack(): void {
   emit('back')
+}
+
+/** 选中页面 */
+function handleSelectPage(pageId: string): void {
+  activePageId.value = pageId
+  selectedComponentId.value = ''
+}
+
+/** 添加顶级页面 */
+function addPage(): void {
+  const newPage: DashboardPage = {
+    id: generateId('page'),
+    name: `页面 ${schema.pages.length + 1}`,
+    components: [],
+  }
+  schema.pages.push(newPage)
+  activePageId.value = newPage.id
+  selectedComponentId.value = ''
+}
+
+/** 添加子页面 */
+function addSubPage(parent: DashboardPage): void {
+  const newPage: DashboardPage = {
+    id: generateId('page'),
+    name: `子页面 ${schema.pages.length + 1}`,
+    parentId: parent.id,
+    components: [],
+  }
+  schema.pages.push(newPage)
+  activePageId.value = newPage.id
+  selectedComponentId.value = ''
+}
+
+/** 删除页面 */
+function deletePage(pageId: string): void {
+  // 同时删除所有子页面
+  const toDelete = new Set<string>([pageId])
+  let changed = true
+  while (changed) {
+    changed = false
+    schema.pages.forEach((p) => {
+      if (p.parentId && toDelete.has(p.parentId) && !toDelete.has(p.id)) {
+        toDelete.add(p.id)
+        changed = true
+      }
+    })
+  }
+  schema.pages = schema.pages.filter((p) => !toDelete.has(p.id))
+  // 如果当前激活页面被删除，切换到第一个页面
+  if (toDelete.has(activePageId.value)) {
+    activePageId.value = schema.pages[0]?.id ?? ''
+    selectedComponentId.value = ''
+  }
+}
+
+/** 开始编辑页面名称 */
+function startEditPageName(page: DashboardPage): void {
+  editingPageId.value = page.id
+  editingPageName.value = page.name
+}
+
+/** 完成编辑页面名称 */
+function handlePageNameBlur(): void {
+  if (editingPageId.value) {
+    const page = schema.pages.find((p) => p.id === editingPageId.value)
+    if (page && editingPageName.value.trim()) {
+      page.name = editingPageName.value.trim()
+    }
+  }
+  editingPageId.value = ''
+  editingPageName.value = ''
+}
+
+/** 获取同级页面列表（同一 parentId 下的页面，按 order 排序） */
+function getSiblings(page: DashboardPage): DashboardPage[] {
+  return schema.pages
+    .filter((p) => (p.parentId ?? '') === (page.parentId ?? ''))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+}
+
+/** 重新分配同级页面的 order 值（确保连续递增，无冲突） */
+function reorderSiblings(siblings: DashboardPage[]): void {
+  siblings.forEach((p, idx) => {
+    p.order = idx
+  })
+}
+
+/** 页面上移（在同级中上移一位） */
+function movePageUp(page: DashboardPage): void {
+  const siblings = getSiblings(page)
+  const idx = siblings.findIndex((p) => p.id === page.id)
+  if (idx <= 0) return
+  // 将当前页面的 order 设为比前一个更小，然后重排
+  const prevOrder = siblings[idx - 1].order ?? (idx - 1)
+  page.order = prevOrder
+  siblings[idx - 1].order = (page.order ?? 0) + 1
+  // 重新分配 order，确保连续递增无冲突
+  reorderSiblings(siblings)
+}
+
+/** 页面下移（在同级中下移一位） */
+function movePageDown(page: DashboardPage): void {
+  const siblings = getSiblings(page)
+  const idx = siblings.findIndex((p) => p.id === page.id)
+  if (idx < 0 || idx >= siblings.length - 1) return
+  // 将当前页面的 order 设为比后一个更大，然后重排
+  const nextOrder = siblings[idx + 1].order ?? (idx + 1)
+  page.order = nextOrder
+  siblings[idx + 1].order = (page.order ?? 0) - 1
+  // 重新分配 order，确保连续递增无冲突
+  reorderSiblings(siblings)
 }
 </script>
 
@@ -441,6 +669,96 @@ function handleBack(): void {
   flex: 1;
   display: flex;
   overflow: hidden;
+}
+
+.editor-pages {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--theme-surface);
+  border-right: 1px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.pages-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+}
+
+.pages-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.pages-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.page-item:hover {
+  background: var(--theme-surface-hover);
+}
+
+.page-item.active {
+  background: var(--theme-surface-active, rgba(245, 34, 45, 0.08));
+  color: var(--main-orange);
+}
+
+.page-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.page-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-actions {
+  display: none;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.page-item:hover .page-actions {
+  display: flex;
+}
+
+.page-actions :deep(.el-button) {
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+
+.page-actions :deep(.el-button:hover) {
+  color: var(--theme-text);
 }
 
 .editor-palette {

@@ -1403,6 +1403,8 @@ export default {
       boundFilters: 'Bound Filters',
       boundFiltersPlaceholder: 'Select bound filters',
       enableTimeFilter: 'Component Time Filter',
+      multiKpi: 'Multi-Metric Mode',
+      multiKpiHint: 'Display multiple metrics side by side in the card',
       aiAnalysisPrompt: 'Analysis Prompt',
       aiAnalysisPromptPlaceholder: 'Custom analysis direction, leave empty for default',
       aiAnalysisAutoGenerate: 'Auto Generate',

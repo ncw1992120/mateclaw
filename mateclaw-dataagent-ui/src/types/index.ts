@@ -986,6 +986,10 @@ export interface InsightComponent {
   aiAnalysisContent?: string
   /** 多 Tab 配置（可选，配置后组件渲染为多 Tab 切换模式） */
   tabs?: ComponentTab[]
+  /** 组件所属视角 ID 列表（空或未配置时表示在所有视角显示） */
+  perspectiveIds?: string[]
+  /** 是否启用多指标模式（仅 kpi 类型，开启后卡片同时展示多个指标） */
+  multiKpi?: boolean
 }
 
 /** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
@@ -998,10 +1002,37 @@ export interface ComponentTab {
   dataSource: ComponentDataSource
 }
 
+/** 仪表盘视角（顶层 Tab） */
+export interface DashboardPerspective {
+  /** 视角唯一 ID */
+  id: string
+  /** 视角显示名称 */
+  name: string
+  /** 视角图标（可选，emoji 或 icon class） */
+  icon?: string
+}
+
+/** 仪表盘页面（多级菜单） */
+export interface DashboardPage {
+  /** 页面唯一 ID */
+  id: string
+  /** 页面显示名称（菜单标题） */
+  name: string
+  /** 页面图标（可选，emoji 或 icon class） */
+  icon?: string
+  /** 父页面 ID（可选，设置后形成多级菜单树） */
+  parentId?: string
+  /** 页面排序（可选，越小越靠前） */
+  order?: number
+  /** 该页面下的组件列表 */
+  components: InsightComponent[]
+}
+
 /** 仪表盘 Schema */
 export interface InsightDashboardSchema {
   version: string
-  components: InsightComponent[]
+  /** 页面列表（多级菜单，每个页面拥有独立组件列表） */
+  pages: DashboardPage[]
 }
 
 /** 洞察仪表盘实体 */
@@ -1049,13 +1080,20 @@ export interface InsightComponentData {
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
-  /** KPI 卡片数据（renderType=kpi 时） */
+  /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
   kpi?: {
     name: string
     value: string
     chg?: string
     up?: boolean
   }
+  /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时，按指标逐列展示） */
+  kpiList?: Array<{
+    name: string
+    value: string
+    chg?: string
+    up?: boolean
+  }>
   /** 表格数据（renderType=table 时） */
   table?: {
     columns: string[]
@@ -1080,8 +1118,10 @@ export interface ComponentTabData {
   title: string
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
-  /** KPI 卡片数据（renderType=kpi 时） */
+  /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
   kpi?: { name: string; value: string; chg?: string; up?: boolean }
+  /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时） */
+  kpiList?: Array<{ name: string; value: string; chg?: string; up?: boolean }>
   /** 表格数据（renderType=table 时） */
   table?: { columns: string[]; rows: string[][] }
   /** 取数失败时的错误信息 */

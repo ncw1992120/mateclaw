@@ -29,6 +29,17 @@
 
       <!-- 数据绑定（kpi/chart/table 组件） -->
       <template v-if="component.type !== 'filter'">
+        <!-- 多指标模式开关（仅 kpi 组件） -->
+        <div v-if="component.type === 'kpi'" class="form-group">
+          <label class="form-label">{{ t('insight.property.multiKpi') }}</label>
+          <el-switch
+            v-model="localMultiKpi"
+            size="small"
+            @change="emitChange"
+          />
+          <span class="form-hint">{{ t('insight.property.multiKpiHint') }}</span>
+        </div>
+
         <!-- 多 Tab 模式开关 -->
         <div v-if="component.type === 'table' || component.type === 'chart' || component.type === 'kpi'" class="form-group">
           <label class="form-label">多 Tab 模式</label>
@@ -538,6 +549,8 @@ const localTargetComponentIds = ref<string[]>([])
 const localBoundFilterIds = ref<string[]>([])
 /** 组件级时间筛选开关 */
 const localEnableTimeFilter = ref(false)
+/** 多指标模式开关（仅 kpi 组件） */
+const localMultiKpi = ref(false)
 /** AI 分析组件配置本地副本 */
 const localAiAnalysisPrompt = ref('')
 const localAiAnalysisAutoGenerate = ref(false)
@@ -630,6 +643,10 @@ watch(
     if (newComp.type !== 'filter' && newComp.type !== 'timeFilter') {
       localBoundFilterIds.value = newComp.boundFilterIds ?? []
       localEnableTimeFilter.value = newComp.enableTimeFilter ?? false
+    }
+    // 同步多指标模式配置（仅 kpi 组件）
+    if (newComp.type === 'kpi') {
+      localMultiKpi.value = newComp.multiKpi ?? false
     }
     // 同步 AI 分析组件配置
     if (newComp.type === 'aiAnalysis') {
@@ -820,9 +837,13 @@ function emitChange(): void {
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),
     // position 不 emit，由画布拖拽/缩放管理
-    dataSource: localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined,
+    dataSource: tabModeEnabled.value ? undefined : (localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined),
+    tabs: tabModeEnabled.value && localTabs.value.length > 0
+      ? JSON.parse(JSON.stringify(localTabs.value))
+      : undefined,
     boundFilterIds: localBoundFilterIds.value.length > 0 ? [...localBoundFilterIds.value] : undefined,
     enableTimeFilter: localEnableTimeFilter.value || undefined,
+    multiKpi: localComponent.type === 'kpi' ? (localMultiKpi.value || undefined) : undefined,
   }
   delete (updated as any).position
   emit('change', updated)
@@ -983,12 +1004,13 @@ function emitTabChange(): void {
     dataSource: tabModeEnabled.value ? undefined : (localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined),
     boundFilterIds: localBoundFilterIds.value.length > 0 ? [...localBoundFilterIds.value] : undefined,
     enableTimeFilter: localEnableTimeFilter.value || undefined,
+    multiKpi: localComponent.type === 'kpi' ? (localMultiKpi.value || undefined) : undefined,
   }
   delete (updated as any).position
   emit('change', updated)
 }
 
-/** 初始化：加载数据源列表 */
+/** 添加静态选项 */
 datasourceStore.fetchDatasources().catch(() => {
   // 静默失败，列表可能在其他页面已加载
 })
