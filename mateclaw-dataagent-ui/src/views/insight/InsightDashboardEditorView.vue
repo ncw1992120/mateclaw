@@ -531,7 +531,7 @@ function handlePageNameBlur(): void {
   editingPageName.value = ''
 }
 
-/** 获取同级页面列表（同一 parentId 下的页面，按 order 排序） */
+/** 获取同级页面列表（按 order 排序） */
 function getSiblings(page: DashboardPage): DashboardPage[] {
   return schema.pages
     .filter((p) => (p.parentId ?? '') === (page.parentId ?? ''))
@@ -539,7 +539,10 @@ function getSiblings(page: DashboardPage): DashboardPage[] {
 }
 
 /** 重新分配同级页面的 order 值（确保连续递增，无冲突） */
-function reorderSiblings(siblings: DashboardPage[]): void {
+function reorderSiblings(parentId: string | undefined): void {
+  const pid = parentId ?? ''
+  const siblings = schema.pages.filter((p) => (p.parentId ?? '') === pid)
+  siblings.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   siblings.forEach((p, idx) => {
     p.order = idx
   })
@@ -547,28 +550,30 @@ function reorderSiblings(siblings: DashboardPage[]): void {
 
 /** 页面上移（在同级中上移一位） */
 function movePageUp(page: DashboardPage): void {
+  reorderSiblings(page.parentId)
   const siblings = getSiblings(page)
   const idx = siblings.findIndex((p) => p.id === page.id)
-  if (idx <= 0) return
-  // 将当前页面的 order 设为比前一个更小，然后重排
-  const prevOrder = siblings[idx - 1].order ?? (idx - 1)
-  page.order = prevOrder
-  siblings[idx - 1].order = (page.order ?? 0) + 1
-  // 重新分配 order，确保连续递增无冲突
-  reorderSiblings(siblings)
+  if (idx <= 0) {
+    return
+  }
+  const prevPage = siblings[idx - 1]
+  const temp = page.order ?? 0
+  page.order = prevPage.order ?? 0
+  prevPage.order = temp
 }
 
 /** 页面下移（在同级中下移一位） */
 function movePageDown(page: DashboardPage): void {
+  reorderSiblings(page.parentId)
   const siblings = getSiblings(page)
   const idx = siblings.findIndex((p) => p.id === page.id)
-  if (idx < 0 || idx >= siblings.length - 1) return
-  // 将当前页面的 order 设为比后一个更大，然后重排
-  const nextOrder = siblings[idx + 1].order ?? (idx + 1)
-  page.order = nextOrder
-  siblings[idx + 1].order = (page.order ?? 0) - 1
-  // 重新分配 order，确保连续递增无冲突
-  reorderSiblings(siblings)
+  if (idx < 0 || idx >= siblings.length - 1) {
+    return
+  }
+  const nextPage = siblings[idx + 1]
+  const temp = page.order ?? 0
+  page.order = nextPage.order ?? 0
+  nextPage.order = temp
 }
 </script>
 
