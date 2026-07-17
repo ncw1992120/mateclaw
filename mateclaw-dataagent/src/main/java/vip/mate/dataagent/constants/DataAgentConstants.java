@@ -253,7 +253,7 @@ public final class DataAgentConstants {
 
     /** 业务术语关键词检索匹配字段 */
     public static final String[] BUSINESS_TERM_KEYWORD_SEARCH_FIELDS = {
-            "termName", "synonyms", "description", "category", "embeddingText"
+            "termName", "synonyms", "description", "calculationFormula", "dataCaliber", "businessRule", "category", "embeddingText"
     };
 
     /** 业务术语语义检索默认 Top-K */
@@ -466,4 +466,27 @@ public final class DataAgentConstants {
     /** 输入优化提示词模板，{0} 为用户原始输入 */
     public static final String OPTIMIZE_PROMPT_TEMPLATE =
             "请对以下用户输入进行润色优化，使其更清晰、更专业、更有条理，但保持原意不变。仅返回优化后的文本，不要加任何解释。\n\n用户输入：\n{0}";
+
+    // ==================== AI生成仪表盘 ====================
+
+    /** AI生成仪表盘会话ID前缀 */
+    public static final String INSIGHT_GENERATE_CONVERSATION_PREFIX = "insight-generate-";
+
+    /** AI对话修改仪表盘会话ID前缀 */
+    public static final String INSIGHT_MODIFY_CONVERSATION_PREFIX = "insight-modify-";
+
+    /** AI生成仪表盘时Schema检索默认Top-K */
+    public static final int INSIGHT_GENERATE_SCHEMA_TOP_K = 10;
+
+    /** AI生成仪表盘默认Schema版本号 */
+    public static final String INSIGHT_GENERATE_SCHEMA_VERSION = "1.0";
+
+    /** AI生成仪表盘默认组件宽度 */
+    public static final int INSIGHT_GENERATE_DEFAULT_COMPONENT_W = 6;
+
+    /** AI生成仪表盘默认组件高度 */
+    public static final int INSIGHT_GENERATE_DEFAULT_COMPONENT_H = 4;
+
+    /** AI生成仪表盘每行组件数 */
+    public static final int INSIGHT_GENERATE_COLUMNS_PER_ROW = 2;
 }

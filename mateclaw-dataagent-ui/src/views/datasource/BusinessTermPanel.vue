@@ -37,8 +37,10 @@
               <th class="col-term-name">{{ t('businessTerm.colTermName') }}</th>
               <th class="col-synonyms">{{ t('businessTerm.colSynonyms') }}</th>
               <th class="col-description">{{ t('businessTerm.colDescription') }}</th>
+              <th class="col-calculation-formula">{{ t('businessTerm.colCalculationFormula') }}</th>
+              <th class="col-data-caliber">{{ t('businessTerm.colDataCaliber') }}</th>
+              <th class="col-owner">{{ t('businessTerm.colOwner') }}</th>
               <th class="col-category">{{ t('businessTerm.colCategory') }}</th>
-              <th class="col-parent">{{ t('businessTerm.colParent') }}</th>
               <th class="col-status">{{ t('businessTerm.colStatus') }}</th>
               <th class="col-action">{{ t('datasourcePage.colAction') }}</th>
             </tr>
@@ -54,12 +56,18 @@
               <td class="col-description">
                 <span :title="term.description">{{ term.description || '-' }}</span>
               </td>
+              <td class="col-calculation-formula">
+                <span :title="term.calculationFormula">{{ term.calculationFormula || '-' }}</span>
+              </td>
+              <td class="col-data-caliber">
+                <span :title="term.dataCaliber">{{ term.dataCaliber || '-' }}</span>
+              </td>
+              <td class="col-owner">
+                {{ term.owner || '-' }}
+              </td>
               <td class="col-category">
                 <span v-if="term.category" class="category-tag">{{ term.category }}</span>
                 <span v-else>-</span>
-              </td>
-              <td class="col-parent">
-                {{ term.parentTermName || '-' }}
               </td>
               <td class="col-status">
                 <span class="status-badge" :class="term.status === 1 ? 'enabled' : 'disabled'">
@@ -89,7 +97,7 @@
 
     <!-- 新建/编辑弹窗 -->
     <div v-if="showDialog" class="dialog-overlay" @click.self="showDialog = false">
-      <div class="dialog-card">
+      <div class="dialog-card dialog-card-wide">
         <div class="dialog-header">
           <h3 class="dialog-title">{{ isEditing ? t('businessTerm.editTitle') : t('businessTerm.createTitle') }}</h3>
           <button class="dialog-close" @click="showDialog = false">✕</button>
@@ -103,27 +111,68 @@
             <label class="form-label">{{ t('businessTerm.fieldTermName') }}<span class="required">*</span></label>
             <input v-model="formData.termName" class="form-input" :placeholder="t('businessTerm.fieldTermNamePlaceholder')" />
           </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('businessTerm.fieldSynonyms') }}</label>
-            <input v-model="formData.synonyms" class="form-input" :placeholder="t('businessTerm.fieldSynonymsPlaceholder')" />
+          <div class="form-row">
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldSynonyms') }}</label>
+              <input v-model="formData.synonyms" class="form-input" :placeholder="t('businessTerm.fieldSynonymsPlaceholder')" />
+            </div>
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldCategory') }}</label>
+              <input v-model="formData.category" class="form-input" :placeholder="t('businessTerm.fieldCategoryPlaceholder')" />
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">{{ t('businessTerm.fieldDescription') }}</label>
             <textarea v-model="formData.description" class="form-textarea" :placeholder="t('businessTerm.fieldDescriptionPlaceholder')" rows="3"></textarea>
           </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('businessTerm.fieldCalculationFormula') }}</label>
+            <textarea v-model="formData.calculationFormula" class="form-textarea" :placeholder="t('businessTerm.fieldCalculationFormulaPlaceholder')" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('businessTerm.fieldDataCaliber') }}</label>
+            <textarea v-model="formData.dataCaliber" class="form-textarea" :placeholder="t('businessTerm.fieldDataCaliberPlaceholder')" rows="2"></textarea>
+          </div>
           <div class="form-row">
             <div class="form-group half">
-              <label class="form-label">{{ t('businessTerm.fieldCategory') }}</label>
-              <input v-model="formData.category" class="form-input" :placeholder="t('businessTerm.fieldCategoryPlaceholder')" />
+              <label class="form-label">{{ t('businessTerm.fieldDataSource') }}</label>
+              <input v-model="formData.dataSource" class="form-input" :placeholder="t('businessTerm.fieldDataSourcePlaceholder')" />
+            </div>
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldOwner') }}</label>
+              <input v-model="formData.owner" class="form-input" :placeholder="t('businessTerm.fieldOwnerPlaceholder')" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('businessTerm.fieldBusinessRule') }}</label>
+            <textarea v-model="formData.businessRule" class="form-textarea" :placeholder="t('businessTerm.fieldBusinessRulePlaceholder')" rows="2"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('businessTerm.fieldRelatedTerms') }}</label>
+            <input v-model="formData.relatedTerms" class="form-input" :placeholder="t('businessTerm.fieldRelatedTermsPlaceholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('businessTerm.fieldExample') }}</label>
+            <textarea v-model="formData.example" class="form-textarea" :placeholder="t('businessTerm.fieldExamplePlaceholder')" rows="2"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldSecurityLevel') }}</label>
+              <select v-model="formData.securityLevel" class="form-select">
+                <option value="">{{ t('businessTerm.fieldSecurityLevelPlaceholder') }}</option>
+                <option value="public">{{ t('businessTerm.securityLevelPublic') }}</option>
+                <option value="internal">{{ t('businessTerm.securityLevelInternal') }}</option>
+                <option value="confidential">{{ t('businessTerm.securityLevelConfidential') }}</option>
+              </select>
             </div>
             <div class="form-group half">
               <label class="form-label">{{ t('businessTerm.fieldParentId') }}</label>
               <select v-model="formData.parentId" class="form-select" @change="handleParentIdChange">
-              <option :value="null">{{ t('businessTerm.fieldParentIdPlaceholder') }}</option>
-              <option v-for="pt in parentOptions" :key="pt.id" :value="pt.id">
-                {{ pt.termName }}
-              </option>
-            </select>
+                <option :value="null">{{ t('businessTerm.fieldParentIdPlaceholder') }}</option>
+                <option v-for="pt in parentOptions" :key="pt.id" :value="pt.id">
+                  {{ pt.termName }}
+                </option>
+              </select>
             </div>
           </div>
         </div>
@@ -172,6 +221,14 @@ const formData = ref<BusinessTermCreateRequest>({
   termName: '',
   synonyms: '',
   description: '',
+  calculationFormula: '',
+  dataCaliber: '',
+  dataSource: '',
+  owner: '',
+  businessRule: '',
+  relatedTerms: '',
+  example: '',
+  securityLevel: '',
   category: '',
   parentId: null,
 })
@@ -245,6 +302,14 @@ function handleCreate(): void {
     termName: '',
     synonyms: '',
     description: '',
+    calculationFormula: '',
+    dataCaliber: '',
+    dataSource: '',
+    owner: '',
+    businessRule: '',
+    relatedTerms: '',
+    example: '',
+    securityLevel: '',
     category: '',
     parentId: null,
   }
@@ -261,6 +326,14 @@ function handleEdit(term: BusinessTerm): void {
     termName: term.termName || '',
     synonyms: term.synonyms || '',
     description: term.description || '',
+    calculationFormula: term.calculationFormula || '',
+    dataCaliber: term.dataCaliber || '',
+    dataSource: term.dataSource || '',
+    owner: term.owner || '',
+    businessRule: term.businessRule || '',
+    relatedTerms: term.relatedTerms || '',
+    example: term.example || '',
+    securityLevel: term.securityLevel || '',
     category: term.category || '',
     parentId: term.parentId || null,
   }
@@ -288,6 +361,14 @@ async function handleSubmit(): Promise<void> {
         termName: formData.value.termName,
         synonyms: formData.value.synonyms,
         description: formData.value.description,
+        calculationFormula: formData.value.calculationFormula,
+        dataCaliber: formData.value.dataCaliber,
+        dataSource: formData.value.dataSource,
+        owner: formData.value.owner,
+        businessRule: formData.value.businessRule,
+        relatedTerms: formData.value.relatedTerms,
+        example: formData.value.example,
+        securityLevel: formData.value.securityLevel,
         category: formData.value.category,
         parentId: formData.value.parentId || null,
       }
@@ -498,7 +579,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .data-grid th {
-  padding: 11px 16px;
+  padding: 11px 12px;
   text-align: left;
   font-size: 12.5px;
   font-weight: 500;
@@ -508,7 +589,7 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .data-grid td {
-  padding: 10px 16px;
+  padding: 10px 12px;
   font-size: 13px;
   color: var(--theme-text-secondary);
   border-bottom: 1px solid var(--theme-border);
@@ -520,11 +601,11 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .col-term-name {
-  width: 16%;
+  width: 13%;
 }
 
 .col-synonyms {
-  width: 18%;
+  width: 12%;
 }
 
 .col-synonyms span {
@@ -536,8 +617,8 @@ async function handleRebuildEs(): Promise<void> {
 }
 
 .col-description {
-  width: 24%;
-  max-width: 240px;
+  width: 16%;
+  max-width: 180px;
 }
 
 .col-description span {
@@ -548,20 +629,46 @@ async function handleRebuildEs(): Promise<void> {
   white-space: nowrap;
 }
 
+.col-calculation-formula {
+  width: 14%;
+  max-width: 150px;
+}
+
+.col-calculation-formula span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-data-caliber {
+  width: 14%;
+  max-width: 150px;
+}
+
+.col-data-caliber span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-owner {
+  width: 9%;
+}
+
 .col-category {
-  width: 10%;
-}
-
-.col-parent {
-  width: 10%;
-}
-
-.col-status {
   width: 8%;
 }
 
+.col-status {
+  width: 7%;
+}
+
 .col-action {
-  width: 10%;
+  width: 9%;
   text-align: right;
 }
 
@@ -662,6 +769,10 @@ async function handleRebuildEs(): Promise<void> {
   display: flex;
   flex-direction: column;
   box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+}
+
+.dialog-card-wide {
+  width: 720px;
 }
 
 .dialog-header {

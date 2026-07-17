@@ -101,6 +101,14 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("synonyms", p -> p.keyword(k -> k))
                             .properties("description", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
+                            .properties("calculationFormula", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
+                            .properties("dataCaliber", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
+                            .properties("dataSource", p -> p.keyword(k -> k))
+                            .properties("owner", p -> p.keyword(k -> k))
+                            .properties("businessRule", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
+                            .properties("relatedTerms", p -> p.keyword(k -> k))
+                            .properties("example", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
+                            .properties("securityLevel", p -> p.keyword(k -> k))
                             .properties("category", p -> p.keyword(k -> k))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
@@ -133,6 +141,14 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("synonyms", p -> p.keyword(k -> k))
                             .properties("description", p -> p.text(t -> t))
+                            .properties("calculationFormula", p -> p.text(t -> t))
+                            .properties("dataCaliber", p -> p.text(t -> t))
+                            .properties("dataSource", p -> p.keyword(k -> k))
+                            .properties("owner", p -> p.keyword(k -> k))
+                            .properties("businessRule", p -> p.text(t -> t))
+                            .properties("relatedTerms", p -> p.keyword(k -> k))
+                            .properties("example", p -> p.text(t -> t))
+                            .properties("securityLevel", p -> p.keyword(k -> k))
                             .properties("category", p -> p.keyword(k -> k))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
@@ -273,7 +289,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                         b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
                                     b.should(sh -> sh.multiMatch(mm -> mm
-                                            .fields("termName", "description", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .fields("termName", "description", "calculationFormula", "dataCaliber", "businessRule", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
                                             .query(query)));
                                     return b;
                                 }))
@@ -301,7 +317,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                         b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
                                     b.must(m -> m.multiMatch(mm -> mm
-                                            .fields("termName", "termName.keyword", "synonyms", "description", "category", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .fields("termName", "termName.keyword", "synonyms", "description", "calculationFormula", "dataCaliber", "businessRule", "category", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
                                             .query(query)));
                                     return b;
                                 })),
@@ -339,6 +355,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             th.setTermName(getString(source, "termName"));
             th.setSynonyms(getString(source, "synonyms"));
             th.setDescription(getString(source, "description"));
+            th.setCalculationFormula(getString(source, "calculationFormula"));
+            th.setDataCaliber(getString(source, "dataCaliber"));
+            th.setBusinessRule(getString(source, "businessRule"));
             th.setCategory(getString(source, "category"));
             th.setScore(score);
             th.setMatchSource(matchSource);
@@ -373,6 +392,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 .like(BusinessTermEntity::getTermName, likePattern)
                 .or().like(BusinessTermEntity::getSynonyms, likePattern)
                 .or().like(BusinessTermEntity::getDescription, likePattern)
+                .or().like(BusinessTermEntity::getCalculationFormula, likePattern)
+                .or().like(BusinessTermEntity::getDataCaliber, likePattern)
+                .or().like(BusinessTermEntity::getBusinessRule, likePattern)
                 .or().like(BusinessTermEntity::getCategory, likePattern)
         );
         wrapper.last("LIMIT " + topK);
@@ -387,6 +409,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             th.setTermName(e.getTermName());
             th.setSynonyms(e.getSynonyms());
             th.setDescription(e.getDescription());
+            th.setCalculationFormula(e.getCalculationFormula());
+            th.setDataCaliber(e.getDataCaliber());
+            th.setBusinessRule(e.getBusinessRule());
             th.setCategory(e.getCategory());
             th.setParentTermName(e.getParentId() != null ? parentNameMap.get(e.getParentId()) : null);
             th.setScore(1.0);
@@ -403,6 +428,14 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         doc.put("termName", entity.getTermName());
         doc.put("synonyms", splitToList(entity.getSynonyms()));
         doc.put("description", entity.getDescription());
+        doc.put("calculationFormula", entity.getCalculationFormula());
+        doc.put("dataCaliber", entity.getDataCaliber());
+        doc.put("dataSource", entity.getDataSource());
+        doc.put("owner", entity.getOwner());
+        doc.put("businessRule", entity.getBusinessRule());
+        doc.put("relatedTerms", splitToList(entity.getRelatedTerms()));
+        doc.put("example", entity.getExample());
+        doc.put("securityLevel", entity.getSecurityLevel());
         doc.put("category", entity.getCategory());
         doc.put(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, entity.getEmbeddingText());
         if (entity.getEmbedding() != null && entity.getEmbedding().length > 0) {

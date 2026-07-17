@@ -153,6 +153,14 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         }
         entity.setSynonyms(request.getSynonyms());
         entity.setDescription(request.getDescription());
+        entity.setCalculationFormula(request.getCalculationFormula());
+        entity.setDataCaliber(request.getDataCaliber());
+        entity.setDataSource(request.getDataSource());
+        entity.setOwner(request.getOwner());
+        entity.setBusinessRule(request.getBusinessRule());
+        entity.setRelatedTerms(request.getRelatedTerms());
+        entity.setExample(request.getExample());
+        entity.setSecurityLevel(request.getSecurityLevel());
         entity.setCategory(request.getCategory());
         entity.setParentId(request.getParentId());
         if (request.getStatus() != null) {
@@ -248,6 +256,9 @@ public class BusinessTermServiceImpl implements BusinessTermService {
             w.like(BusinessTermEntity::getTermName, likePattern)
                     .or().like(BusinessTermEntity::getSynonyms, likePattern)
                     .or().like(BusinessTermEntity::getDescription, likePattern)
+                    .or().like(BusinessTermEntity::getCalculationFormula, likePattern)
+                    .or().like(BusinessTermEntity::getDataCaliber, likePattern)
+                    .or().like(BusinessTermEntity::getBusinessRule, likePattern)
                     .or().like(BusinessTermEntity::getCategory, likePattern);
         });
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);

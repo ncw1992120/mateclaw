@@ -1,19 +1,30 @@
 <template>
   <div class="dashboard-list-view">
     <!-- 列表模式 -->
-    <div v-if="mode === 'list'" class="list-mode">
-      <div class="list-header">
+    <template v-if="mode === 'list'">
+      <div class="list-mode">
+        <div class="list-header">
         <h2 class="list-title">{{ t('insight.title') }}</h2>
-        <el-button type="primary" :icon="Plus" @click="handleCreate">
-          {{ t('insight.create') }}
-        </el-button>
+        <div class="list-header-actions">
+          <el-button :icon="MagicStick" @click="showGenerateDialog = true">
+            {{ t('insight.generate') }}
+          </el-button>
+          <el-button type="primary" :icon="Plus" @click="handleCreate">
+            {{ t('insight.create') }}
+          </el-button>
+        </div>
       </div>
 
       <div v-loading="store.loading" class="list-content">
         <div v-if="store.dashboards.length === 0 && !store.loading" class="empty-state">
           <div class="empty-icon">📊</div>
           <div class="empty-text">{{ t('insight.listEmpty') }}</div>
-          <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
+          <div class="empty-actions">
+            <el-button :icon="MagicStick" @click="showGenerateDialog = true">
+              {{ t('insight.generate') }}
+            </el-button>
+            <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
+          </div>
         </div>
 
         <div v-else class="card-grid">
@@ -60,6 +71,71 @@
       </div>
     </div>
 
+    <!-- AI生成仪表盘对话框 -->
+    <el-dialog
+      v-model="showGenerateDialog"
+      :title="t('insight.generateTitle')"
+      width="520px"
+      :close-on-click-modal="!generating"
+      :close-on-press-escape="!generating"
+      :show-close="!generating"
+      destroy-on-close
+    >
+      <el-form
+        ref="generateFormRef"
+        :model="generateForm"
+        :rules="generateRules"
+        label-width="80px"
+        label-position="top"
+        @submit.prevent
+      >
+        <el-form-item :label="t('insight.generateName')" prop="name">
+          <el-input
+            v-model="generateForm.name"
+            :placeholder="t('insight.generateNamePlaceholder')"
+            :disabled="generating"
+            maxlength="50"
+          />
+        </el-form-item>
+        <el-form-item :label="t('insight.generateDatasource')" prop="datasourceId">
+          <el-select
+            v-model="generateForm.datasourceId"
+            :placeholder="t('insight.generateDatasourcePlaceholder')"
+            :disabled="generating"
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="ds in datasources"
+              :key="ds.id"
+              :label="ds.name"
+              :value="ds.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('insight.generateDescription')" prop="description">
+          <el-input
+            v-model="generateForm.description"
+            :placeholder="t('insight.generateDescriptionPlaceholder')"
+            :disabled="generating"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="generating" @click="showGenerateDialog = false">
+          {{ t('common.cancel') }}
+        </el-button>
+        <el-button type="primary" :loading="generating" @click="handleGenerate">
+          {{ generating ? t('insight.generateLoading') : t('insight.generate') }}
+        </el-button>
+      </template>
+    </el-dialog>
+    </template>
+
     <!-- 编辑器模式 -->
     <InsightDashboardEditorView
       v-else-if="mode === 'editor'"
@@ -77,14 +153,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, MagicStick } from '@element-plus/icons-vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import type { InsightDashboard } from '@/types'
+import type { InsightDashboard, Datasource } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
+import * as datasourceApi from '@/api/datasource'
 import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 
@@ -99,9 +177,33 @@ type ViewMode = 'list' | 'editor' | 'preview'
 const mode = usePersistedState<ViewMode>('mc-insight-view-mode', 'list')
 const currentDashboardId = usePersistedState<string>('mc-insight-dashboard-id', '')
 
+/** 数据源列表 */
+const datasources = ref<Datasource[]>([])
+
+/** AI生成对话框 */
+const showGenerateDialog = ref(false)
+const generating = ref(false)
+const generateFormRef = ref<FormInstance | null>(null)
+const generateForm = reactive({
+  name: '',
+  datasourceId: '',
+  description: '',
+})
+const generateRules = reactive<FormRules>({
+  name: [{ required: true, message: t('insight.generateNamePlaceholder'), trigger: 'blur' }],
+  datasourceId: [{ required: true, message: t('insight.generateDatasourcePlaceholder'), trigger: 'change' }],
+  description: [{ required: true, message: t('insight.generateDescriptionPlaceholder'), trigger: 'blur' }],
+})
+
 onMounted(() => {
   store.fetchDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
+  })
+  // 加载数据源列表
+  datasourceApi.list().then((data) => {
+    datasources.value = (data as unknown as Datasource[]).filter((ds) => ds.enabled)
+  }).catch(() => {
+    // 静默失败
   })
   // 刷新后恢复编辑/预览模式时，需要加载对应仪表盘数据
   if (mode.value !== 'list' && currentDashboardId.value) {
@@ -132,6 +234,34 @@ async function handleCreate(): Promise<void> {
     mode.value = 'editor'
   } catch {
     ElMessage.error(t('insight.createFailed'))
+  }
+}
+
+/** AI生成仪表盘 */
+async function handleGenerate(): Promise<void> {
+  if (!generateFormRef.value) {
+    return
+  }
+  try {
+    await generateFormRef.value.validate()
+  } catch {
+    return
+  }
+  generating.value = true
+  try {
+    const created = await store.generateDashboard({
+      name: generateForm.name,
+      datasourceId: generateForm.datasourceId,
+      description: generateForm.description,
+    })
+    showGenerateDialog.value = false
+    ElMessage.success(t('insight.generateSuccess'))
+    currentDashboardId.value = created.id
+    mode.value = 'editor'
+  } catch {
+    ElMessage.error(t('insight.generateFailed'))
+  } finally {
+    generating.value = false
   }
 }
 
@@ -219,6 +349,12 @@ function handleBackToList(): void {
   flex-shrink: 0;
 }
 
+.list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .list-title {
   margin: 0;
   font-size: 18px;
@@ -241,6 +377,12 @@ function handleBackToList(): void {
   justify-content: center;
   gap: 16px;
   color: var(--theme-text-muted);
+}
+
+.empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .empty-icon {

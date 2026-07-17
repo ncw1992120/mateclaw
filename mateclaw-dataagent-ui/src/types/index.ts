@@ -862,6 +862,14 @@ export interface BusinessTerm {
   termName: string
   synonyms: string
   description: string
+  calculationFormula: string
+  dataCaliber: string
+  dataSource: string
+  owner: string
+  businessRule: string
+  relatedTerms: string
+  example: string
+  securityLevel: string
   category: string
   parentId: string | null
   parentTermName: string | null
@@ -878,6 +886,14 @@ export interface BusinessTermCreateRequest {
   termName: string
   synonyms?: string
   description?: string
+  calculationFormula?: string
+  dataCaliber?: string
+  dataSource?: string
+  owner?: string
+  businessRule?: string
+  relatedTerms?: string
+  example?: string
+  securityLevel?: string
   category?: string
   parentId?: string | null
 }
@@ -887,6 +903,14 @@ export interface BusinessTermUpdateRequest {
   termName?: string
   synonyms?: string
   description?: string
+  calculationFormula?: string
+  dataCaliber?: string
+  dataSource?: string
+  owner?: string
+  businessRule?: string
+  relatedTerms?: string
+  example?: string
+  securityLevel?: string
   category?: string
   parentId?: string | null
   status?: number
@@ -897,6 +921,9 @@ export interface BusinessTermHit {
   termName: string
   synonyms: string | null
   description: string | null
+  calculationFormula: string | null
+  dataCaliber: string | null
+  businessRule: string | null
   category: string | null
   parentTermName: string | null
   score: number
@@ -1070,6 +1097,19 @@ export interface InsightDashboardUpdateInput {
   status?: string
   agentId?: string
   ownerName?: string
+}
+
+/** AI生成仪表盘输入 */
+export interface InsightDashboardGenerateInput {
+  name: string
+  datasourceId: string
+  description: string
+}
+
+/** AI对话修改仪表盘输入 */
+export interface InsightDashboardModifyInput {
+  dashboardId: string
+  instruction: string
 }
 
 /** 组件渲染数据（后端取数 + 图表构建后返回） */

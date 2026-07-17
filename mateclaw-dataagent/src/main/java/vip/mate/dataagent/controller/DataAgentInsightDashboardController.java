@@ -64,6 +64,30 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
+     * AI生成仪表盘
+     * <p>
+     * 用户选择数据源并输入描述后，后端调用LLM生成仪表盘Schema并创建仪表盘。
+     */
+    @PostMapping("/generate")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "AI生成仪表盘", description = "根据用户选择的数据源和需求描述，AI自动生成仪表盘Schema并创建仪表盘")
+    public R<InsightDashboardVO> generate(@RequestBody InsightDashboardGenerateRequest request) {
+        return R.ok(dashboardService.generateDashboard(request));
+    }
+
+    /**
+     * AI对话修改仪表盘
+     * <p>
+     * 用户在编辑器中通过AI对话持续修改已有仪表盘，后端接收当前Schema和用户修改指令，调用LLM生成修改后的Schema。
+     */
+    @PostMapping("/modify")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "AI对话修改仪表盘", description = "根据当前仪表盘Schema和用户修改指令，AI生成修改后的Schema并更新仪表盘")
+    public R<InsightDashboardVO> modify(@RequestBody InsightDashboardModifyRequest request) {
+        return R.ok(dashboardService.modifyDashboard(request));
+    }
+
+    /**
      * 更新仪表盘
      */
     @PutMapping("/{id}")

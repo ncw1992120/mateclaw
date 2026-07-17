@@ -37,6 +37,15 @@ public class BusinessTermSearchResult {
         /** 术语定义 */
         private String description;
 
+        /** 计算公式 */
+        private String calculationFormula;
+
+        /** 数据口径 */
+        private String dataCaliber;
+
+        /** 业务规则 */
+        private String businessRule;
+
         /** 分类 */
         private String category;
 

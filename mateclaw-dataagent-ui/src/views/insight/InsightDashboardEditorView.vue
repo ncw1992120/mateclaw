@@ -27,6 +27,7 @@
         />
       </div>
       <div class="toolbar-right">
+        <el-button :icon="ChatDotRound" @click="toggleAiChat">{{ t('insight.aiChat') }}</el-button>
         <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
         <el-button @click="handlePreview" :disabled="!dashboard">{{ t('insight.preview') }}</el-button>
       </div>
@@ -99,6 +100,15 @@
           @preview="handlePreviewResult"
         />
       </div>
+
+      <!-- AI对话面板 -->
+      <div v-if="showAiChat" class="editor-ai-chat">
+        <AiChatPanel
+          :dashboard-id="dashboardId"
+          @close="toggleAiChat"
+          @schema-updated="handleAiSchemaUpdated"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -107,13 +117,14 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
+import AiChatPanel from './components/AiChatPanel.vue'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -137,6 +148,9 @@ const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
+
+/** AI对话面板可见性 */
+const showAiChat = ref(false)
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
@@ -460,6 +474,32 @@ function handleBack(): void {
   emit('back')
 }
 
+/** 切换AI对话面板 */
+function toggleAiChat(): void {
+  showAiChat.value = !showAiChat.value
+}
+
+/** AI修改后刷新Schema */
+async function handleAiSchemaUpdated(): Promise<void> {
+  if (!dashboard.value) {
+    return
+  }
+  // 重新从后端加载仪表盘数据
+  await store.selectDashboard(dashboard.value.id)
+  if (dashboard.value) {
+    try {
+      const parsed = JSON.parse(dashboard.value.schemaJson)
+      const migrated = migrateSchema(parsed)
+      schema.version = migrated.version
+      schema.pages = migrated.pages
+    } catch {
+      // Schema解析失败时保持当前状态
+    }
+    // 刷新组件预览数据
+    schedulePreview()
+  }
+}
+
 /** 选中页面 */
 function handleSelectPage(pageId: string): void {
   activePageId.value = pageId
@@ -779,6 +819,12 @@ function movePageDown(page: DashboardPage): void {
 
 .editor-property {
   width: 280px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.editor-ai-chat {
+  width: 340px;
   flex-shrink: 0;
   overflow: hidden;
 }
