@@ -418,14 +418,14 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             boolean canKnn = !queryVector.isEmpty();
 
             if (canKnn) {
-                // 混合检索：multi_match + kNN + RRF
+                // 混合检索：multi_match(带字段权重) + kNN + RRF
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
                                 .query(q -> q.bool(b -> b
                                         .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
                                         .should(sh -> sh.multiMatch(mm -> mm
-                                                .fields("metricDisplayName", "businessCaliber", "categoryName", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                                .fields("metricName^3", "metricDisplayName^2", "synonyms^2", "businessCaliber^1", "categoryName^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
                                                 .query(query)))
                                 ))
                                 .knn(knn -> knn
@@ -439,14 +439,14 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                 );
                 return extractMetricHits(response, "hybrid", threshold);
             } else {
-                // 仅关键词检索
+                // 仅关键词检索（带字段权重）
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
                                 .query(q -> q.bool(b -> b
                                         .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
                                         .must(m -> m.multiMatch(mm -> mm
-                                                .fields("metricName", "metricDisplayName", "businessCaliber", "synonyms", "categoryName", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                                .fields("metricName^3", "metricDisplayName^2", "synonyms^2", "businessCaliber^1", "categoryName^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
                                                 .query(query)))
                                 )),
                         Map.class
@@ -473,7 +473,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                 .query(q -> q.bool(b -> b
                                         .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
                                         .should(sh -> sh.multiMatch(mm -> mm
-                                                .fields("dimDisplayName", "dimDescription", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                                .fields("dimName^3", "dimDisplayName^2", "synonyms^2", "dimDescription^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
                                                 .query(query)))
                                 ))
                                 .knn(knn -> knn
@@ -493,7 +493,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                 .query(q -> q.bool(b -> b
                                         .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
                                         .must(m -> m.multiMatch(mm -> mm
-                                                .fields("dimName", "dimDisplayName", "dimDescription", "synonyms", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                                .fields("dimName^3", "dimDisplayName^2", "synonyms^2", "dimDescription^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
                                                 .query(query)))
                                 )),
                         Map.class

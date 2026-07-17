@@ -27,7 +27,12 @@
         />
       </div>
       <div class="toolbar-right">
-        <el-button :icon="ChatDotRound" @click="toggleAiChat">{{ t('insight.aiAssistant') }}</el-button>
+        <el-button @click="toggleAiChat">
+          <template #icon>
+            <RobotIcon style="width: 16px; height: 16px;" />
+          </template>
+          {{ t('insight.aiAssistant') }}
+        </el-button>
         <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
         <el-button @click="handlePreview" :disabled="!dashboard">{{ t('insight.preview') }}</el-button>
       </div>
@@ -118,6 +123,7 @@ import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
+import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'

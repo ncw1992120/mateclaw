@@ -202,10 +202,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     @Override
     public InsightDashboardVO aiChatDashboard(InsightDashboardAiChatRequest request) {
-        if (request.getDashboardId() != null) {
+        if (request.getDashboardId() != null && !request.getDashboardId().isBlank()) {
             // 修改模式：构造 ModifyRequest 委托给 modifyDashboard
             InsightDashboardModifyRequest modifyRequest = new InsightDashboardModifyRequest();
-            modifyRequest.setDashboardId(request.getDashboardId());
+            modifyRequest.setDashboardId(Long.valueOf(request.getDashboardId().trim()));
             modifyRequest.setInstruction(request.getMessage());
             return modifyDashboard(modifyRequest);
         }

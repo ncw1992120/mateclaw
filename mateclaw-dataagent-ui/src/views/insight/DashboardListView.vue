@@ -6,7 +6,12 @@
         <div class="list-header">
         <h2 class="list-title">{{ t('insight.title') }}</h2>
         <div class="list-header-actions">
-          <el-button :icon="MagicStick" @click="toggleAiPanel">{{ t('insight.aiAssistant') }}</el-button>
+          <el-button @click="toggleAiPanel">
+            <template #icon>
+              <RobotIcon style="width: 16px; height: 16px;" />
+            </template>
+            {{ t('insight.aiAssistant') }}
+          </el-button>
           <el-button type="primary" :icon="Plus" @click="handleCreate">
             {{ t('insight.create') }}
           </el-button>
@@ -19,7 +24,12 @@
             <div class="empty-icon">📊</div>
             <div class="empty-text">{{ t('insight.listEmpty') }}</div>
             <div class="empty-actions">
-              <el-button :icon="MagicStick" @click="toggleAiPanel">{{ t('insight.aiAssistant') }}</el-button>
+              <el-button @click="toggleAiPanel">
+              <template #icon>
+                <RobotIcon style="width: 16px; height: 16px;" />
+              </template>
+              {{ t('insight.aiAssistant') }}
+            </el-button>
               <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
             </div>
           </div>
@@ -99,6 +109,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick } from '@element-plus/icons-vue'
+import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'

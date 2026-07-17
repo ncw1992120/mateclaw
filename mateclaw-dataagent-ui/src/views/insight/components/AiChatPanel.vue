@@ -1,8 +1,22 @@
 <template>
   <div class="ai-chat-panel">
     <div class="ai-chat-header">
-      <span class="ai-chat-title">{{ t('insight.aiAssistantTitle') }}</span>
-      <el-button text size="small" @click="$emit('close')">✕</el-button>
+      <div class="ai-chat-header-left">
+        <div class="ai-robot-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="12" width="32" height="28" rx="8" fill="#6366F1" />
+            <rect x="14" y="20" width="8" height="8" rx="4" fill="white" fill-opacity="0.9" />
+            <rect x="26" y="20" width="8" height="8" rx="4" fill="white" fill-opacity="0.9" />
+            <rect x="20" y="32" width="8" height="3" rx="1.5" fill="white" fill-opacity="0.6" />
+            <rect x="18" y="6" width="12" height="4" rx="2" fill="#818CF8" />
+            <circle cx="24" cy="4" r="2" fill="#818CF8" />
+          </svg>
+        </div>
+        <span class="ai-chat-title">{{ t('insight.aiAssistantTitle') }}</span>
+      </div>
+      <el-button text size="small" @click="$emit('close')">
+        <el-icon><Close /></el-icon>
+      </el-button>
     </div>
 
     <!-- 生成模式：首次发送前显示配置表单 -->
@@ -42,6 +56,16 @@
 
     <div ref="messageListRef" class="ai-chat-messages">
       <div v-if="messages.length === 0 && (isModifyMode || hasStarted)" class="ai-chat-empty">
+        <div class="ai-robot-large">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="16" width="44" height="36" rx="10" fill="#6366F1" />
+            <rect x="18" y="26" width="10" height="10" rx="5" fill="white" fill-opacity="0.9" />
+            <rect x="36" y="26" width="10" height="10" rx="5" fill="white" fill-opacity="0.9" />
+            <rect x="26" y="44" width="12" height="4" rx="2" fill="white" fill-opacity="0.6" />
+            <rect x="24" y="8" width="16" height="5" rx="2.5" fill="#818CF8" />
+            <circle cx="32" cy="5" r="3" fill="#818CF8" />
+          </svg>
+        </div>
         <div class="empty-hint">{{ t('insight.aiAssistantPlaceholder') }}</div>
       </div>
       <div
@@ -50,34 +74,63 @@
         class="ai-chat-message"
         :class="msg.role"
       >
-        <div class="message-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
+        <div class="message-avatar">
+          <template v-if="msg.role === 'user'">
+            <div class="user-avatar">👤</div>
+          </template>
+          <template v-else>
+            <div class="robot-avatar-small">
+              <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="5" y="8" width="22" height="18" rx="5" fill="#6366F1" />
+                <rect x="9" y="14" width="5" height="5" rx="2.5" fill="white" fill-opacity="0.9" />
+                <rect x="18" y="14" width="5" height="5" rx="2.5" fill="white" fill-opacity="0.9" />
+                <rect x="13" y="22" width="6" height="2" rx="1" fill="white" fill-opacity="0.6" />
+              </svg>
+            </div>
+          </template>
+        </div>
         <div class="message-content">{{ msg.content }}</div>
       </div>
       <div v-if="loading" class="ai-chat-message assistant">
-        <div class="message-avatar">🤖</div>
+        <div class="message-avatar">
+          <div class="robot-avatar-small">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="5" y="8" width="22" height="18" rx="5" fill="#6366F1" />
+              <rect x="9" y="14" width="5" height="5" rx="2.5" fill="white" fill-opacity="0.9" />
+              <rect x="18" y="14" width="5" height="5" rx="2.5" fill="white" fill-opacity="0.9" />
+              <rect x="13" y="22" width="6" height="2" rx="1" fill="white" fill-opacity="0.6" />
+            </svg>
+          </div>
+        </div>
         <div class="message-content loading-dots">
           <span></span><span></span><span></span>
         </div>
       </div>
     </div>
 
-    <div class="ai-chat-input">
-      <el-input
-        v-model="inputText"
-        :placeholder="isGenerateMode && !hasStarted ? t('insight.generateDescriptionPlaceholder') : t('insight.aiAssistantPlaceholder')"
-        :disabled="loading"
-        type="textarea"
-        :rows="2"
-        resize="none"
-        @keydown.enter.exact.prevent="handleSend"
-      />
-      <el-button
-        type="primary"
-        :icon="Promotion"
-        :loading="loading"
-        :disabled="!canSend"
-        @click="handleSend"
-      />
+    <!-- 美化输入框 -->
+    <div class="ai-chat-input-wrapper">
+      <div class="ai-chat-input-box">
+        <el-input
+          v-model="inputText"
+          :placeholder="isGenerateMode && !hasStarted ? t('insight.generateDescriptionPlaceholder') : t('insight.aiAssistantPlaceholder')"
+          :disabled="loading"
+          type="textarea"
+          :rows="2"
+          resize="none"
+          @keydown.enter.exact.prevent="handleSend"
+        />
+        <el-button
+          class="send-btn"
+          type="primary"
+          circle
+          :loading="loading"
+          :disabled="!canSend"
+          @click="handleSend"
+        >
+          <el-icon><Promotion /></el-icon>
+        </el-button>
+      </div>
     </div>
   </div>
 </template>
@@ -86,7 +139,7 @@
 import { ref, computed, reactive, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Promotion } from '@element-plus/icons-vue'
+import { Promotion, Close } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { Datasource } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -252,23 +305,43 @@ async function handleSend(): Promise<void> {
   border-left: 1px solid var(--theme-border);
 }
 
+/* 头部 */
 .ai-chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--theme-surface) 0%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+.ai-chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-robot-icon {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 
+.ai-robot-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 .ai-chat-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--theme-text);
 }
 
+/* 生成模式表单 */
 .ai-chat-generate-form {
-  padding: 12px;
+  padding: 14px;
   border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   overflow-y: auto;
@@ -283,20 +356,34 @@ async function handleSend(): Promise<void> {
   padding-bottom: 4px;
 }
 
+/* 消息列表 */
 .ai-chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .ai-chat-empty {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+
+.ai-robot-large {
+  width: 64px;
+  height: 64px;
+  opacity: 0.7;
+}
+
+.ai-robot-large svg {
+  width: 100%;
+  height: 100%;
 }
 
 .empty-hint {
@@ -307,9 +394,10 @@ async function handleSend(): Promise<void> {
   padding: 0 12px;
 }
 
+/* 消息气泡 */
 .ai-chat-message {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: flex-start;
 }
 
@@ -318,43 +406,71 @@ async function handleSend(): Promise<void> {
 }
 
 .message-avatar {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   flex-shrink: 0;
-  background: var(--theme-surface-hover);
+  overflow: hidden;
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  font-size: 13px;
+}
+
+.robot-avatar-small {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+  border-radius: 50%;
+  padding: 2px;
+}
+
+.robot-avatar-small svg {
+  width: 100%;
+  height: 100%;
 }
 
 .message-content {
   max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
 }
 
 .ai-chat-message.user .message-content {
-  background: var(--main-orange);
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
   color: #fff;
-  border-bottom-right-radius: 2px;
+  border-bottom-right-radius: 4px;
 }
 
 .ai-chat-message.assistant .message-content {
   background: var(--theme-surface-hover);
   color: var(--theme-text);
-  border-bottom-left-radius: 2px;
+  border-bottom-left-radius: 4px;
 }
 
+/* 加载动画 */
 .loading-dots {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 10px 14px;
 }
 
 .loading-dots span {
@@ -382,27 +498,70 @@ async function handleSend(): Promise<void> {
   }
 }
 
-.ai-chat-input {
+/* 美化输入框 */
+.ai-chat-input-wrapper {
+  padding: 12px 14px;
+  border-top: 1px solid var(--theme-border);
+  flex-shrink: 0;
+  background: var(--theme-bg);
+}
+
+.ai-chat-input-box {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--theme-border);
-  flex-shrink: 0;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  padding: 8px 8px 8px 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.ai-chat-input :deep(.el-textarea) {
+.ai-chat-input-box:hover {
+  border-color: var(--main-orange);
+}
+
+.ai-chat-input-box:focus-within {
+  border-color: var(--main-orange);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+}
+
+.ai-chat-input-box :deep(.el-textarea) {
   flex: 1;
 }
 
-.ai-chat-input :deep(.el-textarea__inner) {
+.ai-chat-input-box :deep(.el-textarea__inner) {
   font-size: 13px;
-  min-height: 56px !important;
-  padding: 8px 12px;
+  min-height: 40px !important;
+  max-height: 120px;
+  padding: 6px 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  resize: none;
+  line-height: 1.5;
 }
 
-.ai-chat-input :deep(.el-button) {
+.ai-chat-input-box :deep(.el-textarea__inner:focus) {
+  outline: none;
+}
+
+.ai-chat-input-box :deep(.el-textarea__inner::placeholder) {
+  color: var(--theme-text-muted);
+}
+
+.send-btn {
+  width: 32px;
   height: 32px;
   flex-shrink: 0;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-btn :deep(.el-icon) {
+  font-size: 14px;
 }
 </style>

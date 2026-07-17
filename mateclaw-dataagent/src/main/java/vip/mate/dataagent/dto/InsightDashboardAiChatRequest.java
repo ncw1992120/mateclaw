@@ -20,7 +20,7 @@ public class InsightDashboardAiChatRequest implements Serializable {
 
     /** 仪表盘ID（修改模式必填，生成模式为空） */
     @Schema(description = "仪表盘ID，修改模式必填，生成模式为空", example = "1")
-    private Long dashboardId;
+    private String dashboardId;
 
     /** 仪表盘名称（仅生成模式使用） */
     @Schema(description = "仪表盘名称，仅生成模式使用", example = "销售分析仪表盘")
