@@ -296,7 +296,7 @@
                 :value="agent.id"
               >
                 <span class="agent-option">
-                  <span class="agent-option-icon">{{ agent.icon || '🤖' }}</span>
+                  <span class="agent-option-icon">{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</span>
                   <span class="agent-option-name">{{ agent.name }}</span>
                   <span class="agent-option-type">{{ agent.agentType }}</span>
                 </span>
@@ -913,9 +913,9 @@ onBeforeUnmount(() => {
 }
 
 .topbar-selector:focus-within {
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
   background: var(--theme-surface-elevated);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.06);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
 .agent-selector-header {
@@ -1072,8 +1072,8 @@ onBeforeUnmount(() => {
 }
 
 .workspace-trigger:hover {
-  border-color: rgba(240, 90, 35, 0.2);
-  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.05);
+  border-color: color-mix(in srgb, var(--main-orange) 20%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--main-orange) 5%, transparent);
 }
 
 .workspace-info {
@@ -1143,14 +1143,14 @@ onBeforeUnmount(() => {
 
 .workspace-trigger-collapsed:hover {
   background: var(--theme-surface-elevated);
-  border-color: rgba(240, 90, 35, 0.18);
+  border-color: color-mix(in srgb, var(--main-orange) 18%, transparent);
 }
 
 .workspace-icon {
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  background: rgba(240, 90, 35, 0.1);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
   display: flex;
   align-items: center;
@@ -1199,7 +1199,7 @@ onBeforeUnmount(() => {
 }
 
 .collapse-btn:hover {
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
   color: var(--main-orange);
 }
 
@@ -1280,7 +1280,7 @@ onBeforeUnmount(() => {
 .sidebar-item.active {
   color: var(--main-orange);
   font-weight: 600;
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
 }
 
 .sidebar-item.active .sidebar-icon {
@@ -1356,7 +1356,7 @@ onBeforeUnmount(() => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1476,14 +1476,14 @@ onBeforeUnmount(() => {
 
 .workspace-switcher:hover {
   background: var(--theme-surface-elevated);
-  border-color: rgba(240, 90, 35, 0.18);
+  border-color: color-mix(in srgb, var(--main-orange) 18%, transparent);
 }
 
 .workspace-icon {
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  background: rgba(240, 90, 35, 0.1);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
   display: flex;
   align-items: center;
@@ -1564,7 +1564,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   height: 30px;
   padding: 0 12px;
-  border: 1px dashed rgba(240, 90, 35, 0.4);
+  border: 1px dashed color-mix(in srgb, var(--main-orange) 40%, transparent);
   border-radius: 8px;
   background: var(--theme-surface-hover);
   color: var(--main-orange);
@@ -1647,10 +1647,10 @@ onBeforeUnmount(() => {
 
 .history-item.active {
   background: var(--theme-surface-hover);
-  border-color: rgba(240, 90, 35, 0.15);
+  border-color: color-mix(in srgb, var(--main-orange) 15%, transparent);
   color: var(--main-orange);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(240, 90, 35, 0.06);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
 .history-item-content {
@@ -1838,7 +1838,7 @@ onBeforeUnmount(() => {
   height: 28px;
   padding: 0 8px;
   font-size: 13px;
-  border: 1px solid rgba(240, 90, 35, 0.4);
+  border: 1px solid color-mix(in srgb, var(--main-orange) 40%, transparent);
   border-radius: 6px;
   background: var(--theme-surface-elevated);
   color: var(--theme-text);
@@ -1849,7 +1849,7 @@ onBeforeUnmount(() => {
 }
 
 .history-item-edit-input:focus {
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 /* 让 .history-item 作为 menu 浮层的定位锚点 */

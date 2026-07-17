@@ -6,8 +6,8 @@
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32">
             <defs>
               <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#ea580c;stop-opacity:1" />
+                <stop offset="0%" style="stop-color:var(--main-orange);stop-opacity:1" />
+                <stop offset="100%" style="stop-color:var(--dark-orange);stop-opacity:1" />
               </linearGradient>
             </defs>
             <rect width="100" height="100" rx="15" fill="url(#logoGrad)"/>
@@ -163,7 +163,7 @@ function handleThemeCommand(command: ThemeMode): void {
 }
 
 .brand-name-gradient {
-  background: linear-gradient(90deg, #f97316 0%, #ef4444 100%);
+  background: linear-gradient(90deg, var(--main-orange) 0%, var(--dark-orange) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -197,7 +197,7 @@ function handleThemeCommand(command: ThemeMode): void {
 
 .nav-item:hover {
   color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.06);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
 .nav-item.active {
@@ -241,12 +241,12 @@ function handleThemeCommand(command: ThemeMode): void {
 }
 
 .icon-btn:hover {
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
   color: var(--main-orange);
 }
 
 .icon-btn:active {
-  background: rgba(240, 90, 35, 0.12);
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
 }
 
 .nav-icon {

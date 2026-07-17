@@ -2,138 +2,80 @@
   <div class="dashboard-list-view">
     <!-- 列表模式 -->
     <template v-if="mode === 'list'">
-      <div class="list-mode">
+      <div class="list-mode" :class="{ 'with-ai-panel': showAiPanel }">
         <div class="list-header">
         <h2 class="list-title">{{ t('insight.title') }}</h2>
         <div class="list-header-actions">
-          <el-button :icon="MagicStick" @click="showGenerateDialog = true">
-            {{ t('insight.generate') }}
-          </el-button>
+          <el-button :icon="MagicStick" @click="toggleAiPanel">{{ t('insight.aiAssistant') }}</el-button>
           <el-button type="primary" :icon="Plus" @click="handleCreate">
             {{ t('insight.create') }}
           </el-button>
         </div>
       </div>
 
-      <div v-loading="store.loading" class="list-content">
-        <div v-if="store.dashboards.length === 0 && !store.loading" class="empty-state">
-          <div class="empty-icon">📊</div>
-          <div class="empty-text">{{ t('insight.listEmpty') }}</div>
-          <div class="empty-actions">
-            <el-button :icon="MagicStick" @click="showGenerateDialog = true">
-              {{ t('insight.generate') }}
-            </el-button>
-            <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
+      <div class="list-body">
+        <div v-loading="store.loading" class="list-content">
+          <div v-if="store.dashboards.length === 0 && !store.loading" class="empty-state">
+            <div class="empty-icon">📊</div>
+            <div class="empty-text">{{ t('insight.listEmpty') }}</div>
+            <div class="empty-actions">
+              <el-button :icon="MagicStick" @click="toggleAiPanel">{{ t('insight.aiAssistant') }}</el-button>
+              <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
+            </div>
+          </div>
+
+          <div v-else class="card-grid">
+            <div
+              v-for="dashboard in store.dashboards"
+              :key="dashboard.id"
+              class="dashboard-card"
+            >
+              <div class="card-header">
+                <span class="card-name">{{ dashboard.name }}</span>
+                <el-tag :type="dashboard.status === 'published' ? 'success' : 'info'" size="small">
+                  {{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}
+                </el-tag>
+              </div>
+              <div class="card-desc">{{ dashboard.description || t('insight.noDescription') }}</div>
+              <div class="card-meta">
+                <span class="card-owner">{{ dashboard.ownerName || '--' }}</span>
+                <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
+              </div>
+              <div class="card-actions">
+                <el-button text size="small" @click="handleEdit(dashboard.id)">{{ t('insight.edit') }}</el-button>
+                <el-button text size="small" @click="handlePreview(dashboard.id)">{{ t('insight.preview') }}</el-button>
+                <el-button
+                  v-if="dashboard.status === 'draft'"
+                  text
+                  size="small"
+                  type="success"
+                  @click="handlePublish(dashboard)"
+                >
+                  {{ t('insight.publish') }}
+                </el-button>
+                <el-button
+                  v-else
+                  text
+                  size="small"
+                  @click="handleUnpublish(dashboard)"
+                >
+                  {{ t('insight.unpublish') }}
+                </el-button>
+                <el-button text size="small" type="danger" @click="handleDelete(dashboard)">{{ t('insight.delete') }}</el-button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div v-else class="card-grid">
-          <div
-            v-for="dashboard in store.dashboards"
-            :key="dashboard.id"
-            class="dashboard-card"
-          >
-            <div class="card-header">
-              <span class="card-name">{{ dashboard.name }}</span>
-              <el-tag :type="dashboard.status === 'published' ? 'success' : 'info'" size="small">
-                {{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}
-              </el-tag>
-            </div>
-            <div class="card-desc">{{ dashboard.description || t('insight.noDescription') }}</div>
-            <div class="card-meta">
-              <span class="card-owner">{{ dashboard.ownerName || '--' }}</span>
-              <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
-            </div>
-            <div class="card-actions">
-              <el-button text size="small" @click="handleEdit(dashboard.id)">{{ t('insight.edit') }}</el-button>
-              <el-button text size="small" @click="handlePreview(dashboard.id)">{{ t('insight.preview') }}</el-button>
-              <el-button
-                v-if="dashboard.status === 'draft'"
-                text
-                size="small"
-                type="success"
-                @click="handlePublish(dashboard)"
-              >
-                {{ t('insight.publish') }}
-              </el-button>
-              <el-button
-                v-else
-                text
-                size="small"
-                @click="handleUnpublish(dashboard)"
-              >
-                {{ t('insight.unpublish') }}
-              </el-button>
-              <el-button text size="small" type="danger" @click="handleDelete(dashboard)">{{ t('insight.delete') }}</el-button>
-            </div>
-          </div>
+        <!-- AI助手面板 -->
+        <div v-if="showAiPanel" class="list-ai-panel">
+          <AiChatPanel
+            @close="toggleAiPanel"
+            @dashboard-updated="handleAiDashboardUpdated"
+          />
         </div>
       </div>
-    </div>
-
-    <!-- AI生成仪表盘对话框 -->
-    <el-dialog
-      v-model="showGenerateDialog"
-      :title="t('insight.generateTitle')"
-      width="520px"
-      :close-on-click-modal="!generating"
-      :close-on-press-escape="!generating"
-      :show-close="!generating"
-      destroy-on-close
-    >
-      <el-form
-        ref="generateFormRef"
-        :model="generateForm"
-        :rules="generateRules"
-        label-width="80px"
-        label-position="top"
-        @submit.prevent
-      >
-        <el-form-item :label="t('insight.generateName')" prop="name">
-          <el-input
-            v-model="generateForm.name"
-            :placeholder="t('insight.generateNamePlaceholder')"
-            :disabled="generating"
-            maxlength="50"
-          />
-        </el-form-item>
-        <el-form-item :label="t('insight.generateDatasource')" prop="datasourceId">
-          <el-select
-            v-model="generateForm.datasourceId"
-            :placeholder="t('insight.generateDatasourcePlaceholder')"
-            :disabled="generating"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="ds in datasources"
-              :key="ds.id"
-              :label="ds.name"
-              :value="ds.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('insight.generateDescription')" prop="description">
-          <el-input
-            v-model="generateForm.description"
-            :placeholder="t('insight.generateDescriptionPlaceholder')"
-            :disabled="generating"
-            type="textarea"
-            :rows="4"
-            maxlength="500"
-            show-word-limit
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button :disabled="generating" @click="showGenerateDialog = false">
-          {{ t('common.cancel') }}
-        </el-button>
-        <el-button type="primary" :loading="generating" @click="handleGenerate">
-          {{ generating ? t('insight.generateLoading') : t('insight.generate') }}
-        </el-button>
-      </template>
-    </el-dialog>
+      </div>
     </template>
 
     <!-- 编辑器模式 -->
@@ -153,18 +95,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, MagicStick } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import type { InsightDashboard, Datasource } from '@/types'
+import type { InsightDashboard } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
-import * as datasourceApi from '@/api/datasource'
 import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
+import AiChatPanel from './components/AiChatPanel.vue'
 
 defineOptions({
   name: 'DashboardListView',
@@ -177,33 +118,12 @@ type ViewMode = 'list' | 'editor' | 'preview'
 const mode = usePersistedState<ViewMode>('mc-insight-view-mode', 'list')
 const currentDashboardId = usePersistedState<string>('mc-insight-dashboard-id', '')
 
-/** 数据源列表 */
-const datasources = ref<Datasource[]>([])
-
-/** AI生成对话框 */
-const showGenerateDialog = ref(false)
-const generating = ref(false)
-const generateFormRef = ref<FormInstance | null>(null)
-const generateForm = reactive({
-  name: '',
-  datasourceId: '',
-  description: '',
-})
-const generateRules = reactive<FormRules>({
-  name: [{ required: true, message: t('insight.generateNamePlaceholder'), trigger: 'blur' }],
-  datasourceId: [{ required: true, message: t('insight.generateDatasourcePlaceholder'), trigger: 'change' }],
-  description: [{ required: true, message: t('insight.generateDescriptionPlaceholder'), trigger: 'blur' }],
-})
+/** AI助手面板可见性 */
+const showAiPanel = ref(false)
 
 onMounted(() => {
   store.fetchDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
-  })
-  // 加载数据源列表
-  datasourceApi.list().then((data) => {
-    datasources.value = (data as unknown as Datasource[]).filter((ds) => ds.enabled)
-  }).catch(() => {
-    // 静默失败
   })
   // 刷新后恢复编辑/预览模式时，需要加载对应仪表盘数据
   if (mode.value !== 'list' && currentDashboardId.value) {
@@ -223,6 +143,23 @@ function formatTime(time: string): string {
   return dayjs(time).format('YYYY-MM-DD HH:mm')
 }
 
+/** 切换AI助手面板 */
+function toggleAiPanel(): void {
+  showAiPanel.value = !showAiPanel.value
+}
+
+/** AI助手生成仪表盘成功后 */
+function handleAiDashboardUpdated(dashboardId: string): void {
+  if (dashboardId) {
+    currentDashboardId.value = dashboardId
+    mode.value = 'editor'
+  }
+  showAiPanel.value = false
+  store.fetchDashboards().catch(() => {
+    // 静默失败
+  })
+}
+
 /** 新建仪表盘 */
 async function handleCreate(): Promise<void> {
   try {
@@ -234,34 +171,6 @@ async function handleCreate(): Promise<void> {
     mode.value = 'editor'
   } catch {
     ElMessage.error(t('insight.createFailed'))
-  }
-}
-
-/** AI生成仪表盘 */
-async function handleGenerate(): Promise<void> {
-  if (!generateFormRef.value) {
-    return
-  }
-  try {
-    await generateFormRef.value.validate()
-  } catch {
-    return
-  }
-  generating.value = true
-  try {
-    const created = await store.generateDashboard({
-      name: generateForm.name,
-      datasourceId: generateForm.datasourceId,
-      description: generateForm.description,
-    })
-    showGenerateDialog.value = false
-    ElMessage.success(t('insight.generateSuccess'))
-    currentDashboardId.value = created.id
-    mode.value = 'editor'
-  } catch {
-    ElMessage.error(t('insight.generateFailed'))
-  } finally {
-    generating.value = false
   }
 }
 
@@ -338,6 +247,12 @@ function handleBackToList(): void {
   display: flex;
   flex-direction: column;
   background: var(--theme-bg);
+}
+
+.list-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
 }
 
 .list-header {
@@ -468,5 +383,11 @@ function handleBackToList(): void {
   border-top: 1px solid var(--theme-border);
   padding-top: 8px;
   margin-top: 4px;
+}
+
+.list-ai-panel {
+  width: 380px;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 </style>

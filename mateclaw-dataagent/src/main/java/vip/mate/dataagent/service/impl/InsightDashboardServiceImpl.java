@@ -39,7 +39,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final ObjectMapper objectMapper;
 
-    /** AI生成仪表盘的系统提示词 */
+    /** AI助手生成仪表盘的系统提示词 */
     private static final String GENERATE_SYSTEM_PROMPT = """
             你是一个数据可视化专家。你的任务是根据用户提供的数据源信息和需求描述，生成仪表盘的Schema JSON。
 
@@ -102,7 +102,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             11. 如果用户需求涉及筛选，添加filter或timeFilter组件
             """;
 
-    /** AI修改仪表盘的系统提示词 */
+    /** AI助手修改仪表盘的系统提示词 */
     private static final String MODIFY_SYSTEM_PROMPT = """
             你是一个数据可视化专家。你的任务是根据用户的修改指令，修改已有的仪表盘Schema JSON。
 
@@ -198,6 +198,23 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
         entity.setDeleted(1);
         insightDashboardMapper.updateById(entity);
+    }
+
+    @Override
+    public InsightDashboardVO aiChatDashboard(InsightDashboardAiChatRequest request) {
+        if (request.getDashboardId() != null) {
+            // 修改模式：构造 ModifyRequest 委托给 modifyDashboard
+            InsightDashboardModifyRequest modifyRequest = new InsightDashboardModifyRequest();
+            modifyRequest.setDashboardId(request.getDashboardId());
+            modifyRequest.setInstruction(request.getMessage());
+            return modifyDashboard(modifyRequest);
+        }
+        // 生成模式：构造 GenerateRequest 委托给 generateDashboard
+        InsightDashboardGenerateRequest generateRequest = new InsightDashboardGenerateRequest();
+        generateRequest.setName(request.getName());
+        generateRequest.setDatasourceId(request.getDatasourceId());
+        generateRequest.setDescription(request.getMessage());
+        return generateDashboard(generateRequest);
     }
 
     @Override

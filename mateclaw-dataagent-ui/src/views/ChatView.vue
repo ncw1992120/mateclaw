@@ -26,7 +26,7 @@
             class="smart-ask-chip"
             @click="handleSmartAskMenu(item)"
           >
-            <span class="chip-icon">{{ item.icon }}</span>
+            <span class="chip-icon" v-html="item.icon"></span>
             <span class="chip-label">{{ t(item.label) }}</span>
           </span>
         </div>
@@ -41,7 +41,8 @@
             <!-- 附件展示 -->
             <div v-if="getUserAttachments(msg)" class="msg-attachments">
               <span v-for="(att, aIdx) in getUserAttachments(msg)" :key="aIdx" class="msg-attachment">
-                📎 {{ att.fileName }}
+                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                {{ att.fileName }}
               </span>
             </div>
             <!-- 用户消息操作栏（气泡外左下角） -->
@@ -86,7 +87,7 @@
                   <span
                     class="seg-execution__arrow"
                     :class="{ 'is-open': isExecutionProcessExpanded(index) }"
-                  >▸</span>
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
                 </button>
                 <Transition name="seg-slide">
                   <div v-if="isExecutionProcessExpanded(index)" class="seg-execution__body">
@@ -105,7 +106,7 @@
                           <span
                             class="seg-narration__arrow"
                             :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
-                          >▾</span>
+                          ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
                         </button>
                         <Transition name="seg-slide">
                           <div
@@ -138,7 +139,7 @@
                             v-if="seg.toolArgs != null || seg.toolResult != null"
                             class="seg-tool__arrow"
                             :class="{ 'is-open': expandedTools.has(segIdx) }"
-                          >▾</span>
+                          ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
                         </div>
                         <Transition name="seg-slide">
                           <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null)" class="seg-tool__body">
@@ -168,7 +169,7 @@
                           <span
                             class="seg-narration__arrow"
                             :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
-                          >▾</span>
+                          ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
                         </button>
                         <Transition name="seg-slide">
                           <div
@@ -247,7 +248,8 @@
 
             <!-- Insight Bar -->
             <div v-else-if="card.type === 'insight'" class="insight-bar">
-              💡 AI {{ t('chat.insight') }}：{{ card.data }}
+              <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>
+              AI {{ t('chat.insight') }}：{{ card.data }}
             </div>
 
             <!-- Chart Card -->
@@ -264,7 +266,10 @@
 
             <!-- Clarify Card -->
             <div v-else-if="card.type === 'clarify'" class="clarify-card">
-              <div class="clarify-title">🔄 {{ (card.data as ClarifyData).title }}</div>
+              <div class="clarify-title">
+                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                {{ (card.data as ClarifyData).title }}
+              </div>
               <div class="clarify-desc">{{ (card.data as ClarifyData).desc }}</div>
               <div class="clarify-options">
                 <label
@@ -295,7 +300,10 @@
 
             <!-- Dashboard Preview Card -->
             <div v-else-if="card.type === 'dashboard'" class="dash-card">
-              <div class="dash-card-title">📊 {{ t('chat.dashboardGenerated') }}</div>
+              <div class="dash-card-title">
+                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="15" x2="8" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="16" y1="11" x2="16" y2="17"/></svg>
+                {{ t('chat.dashboardGenerated') }}
+              </div>
               <div class="dash-kpi-row">
                 <div v-for="(kpi, kpiIdx) in (card.data as DashboardCardData).kpis" :key="kpiIdx" class="dash-kpi">
                   <div class="dash-kpi-val">{{ kpi.val }}</div>
@@ -328,7 +336,7 @@
                 :class="{ active: feedbackState[`${index}-${cardIdx}`] === opt.key }"
                 @click="feedbackState[`${index}-${cardIdx}`] = opt.key"
               >
-                {{ opt.label }}
+                <span class="feedback-icon" v-html="opt.icon"></span>{{ opt.label }}
               </span>
             </div>
           </template>
@@ -349,7 +357,9 @@
       <el-popover :width="320" trigger="click" placement="top-start" :persistent="false" :teleported="true">
         <template #reference>
           <button class="ds-trigger" :class="{ active: chatStore.selectedDatasourceIds.length > 0 }">
-            <span class="ds-trigger-icon">⚙</span>
+            <span class="ds-trigger-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09c-.66 0-1.3.26-1.77.73-.47.47-.73 1.11-.73 1.77z"/></svg>
+            </span>
             <span class="ds-trigger-text">{{ dsTriggerLabel }}</span>
             <span class="ds-trigger-arrow">▾</span>
           </button>
@@ -389,7 +399,9 @@
       <!-- 附件预览区 -->
       <div v-if="pendingAttachments.length > 0" class="attachment-preview">
         <div v-for="(att, idx) in pendingAttachments" :key="idx" class="attachment-tag">
-          <span class="attachment-tag__icon">📎</span>
+          <span class="attachment-tag__icon">
+            <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          </span>
           <span class="attachment-tag__name">{{ att.fileName }}</span>
           <button class="attachment-tag__remove" type="button" @click="removeAttachment(idx)">×</button>
         </div>
@@ -465,13 +477,14 @@ defineEmits<{
 }>()
 
 /** 智能问数快捷菜单项配置 */
+const ICON_STROKE_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 const smartAskMenuItems = [
-  { key: 'interpret', label: 'smartAskMenu.interpret', icon: '🔍' },
-  { key: 'report', label: 'smartAskMenu.report', icon: '📊' },
-  { key: 'insight', label: 'smartAskMenu.insight', icon: '💡' },
-  { key: 'compare', label: 'smartAskMenu.compare', icon: '📈' },
-  { key: 'forecast', label: 'smartAskMenu.forecast', icon: '🔮' },
-  { key: 'anomaly', label: 'smartAskMenu.anomaly', icon: '🚨' },
+  { key: 'interpret', label: 'smartAskMenu.interpret', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>` },
+  { key: 'report', label: 'smartAskMenu.report', icon: `<svg ${ICON_STROKE_ATTRS}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>` },
+  { key: 'insight', label: 'smartAskMenu.insight', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>` },
+  { key: 'compare', label: 'smartAskMenu.compare', icon: `<svg ${ICON_STROKE_ATTRS}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>` },
+  { key: 'forecast', label: 'smartAskMenu.forecast', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>` },
+  { key: 'anomaly', label: 'smartAskMenu.anomaly', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` },
 ]
 
 /** 已启用的数据源列表（用于输入框上方数据源选择器） */
@@ -529,9 +542,9 @@ const queryPlanLabels: Record<string, string> = {
 
 /** 反馈选项 */
 const feedbackOptions = [
-  { key: 'helpful', label: '👍 有帮助' },
-  { key: 'inaccurate', label: '👎 不准确' },
-  { key: 'correct', label: '✏️ 给出正确答案' },
+  { key: 'helpful', label: '有帮助', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>` },
+  { key: 'inaccurate', label: '不准确', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2"/></svg>` },
+  { key: 'correct', label: '给出正确答案', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>` },
 ]
 
 /** 输入消息 */
@@ -1523,7 +1536,7 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType): void
   const detailBtn = document.createElement('button')
   detailBtn.type = 'button'
   detailBtn.className = 'echarts-toolbar-detail-btn'
-  detailBtn.innerHTML = '<span class="echarts-toolbar-detail-icon">📋</span><span>列表明细</span>'
+  detailBtn.innerHTML = '<span class="echarts-toolbar-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span><span>列表明细</span>'
   detailBtn.addEventListener('click', (e) => {
     e.stopPropagation()
     toggleTableOverlay(htmlEl)
@@ -2017,6 +2030,22 @@ onUnmounted(() => {
   background: var(--theme-bg);
 }
 
+/* 统一的行内 SVG 图标：随文字大小缩放，替代 emoji 作为功能图标 */
+.icon-inline {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+}
+
+.seg-tool__arrow svg,
+.seg-narration__arrow svg,
+.seg-execution__arrow svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .chat-area {
   flex: 1;
   overflow-y: auto;
@@ -2044,7 +2073,7 @@ onUnmounted(() => {
   border-radius: 50%;
   margin-bottom: 24px;
   background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
-  box-shadow: 0 8px 24px rgba(240, 90, 35, 0.18);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--main-orange) 18%, transparent);
 }
 
 .empty-avatar__icon {
@@ -2099,12 +2128,19 @@ onUnmounted(() => {
 .smart-ask-chip:hover {
   background: var(--theme-surface-hover);
   color: var(--main-orange);
-  border-color: rgba(240, 90, 35, 0.35);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
 }
 
 .chip-icon {
-  font-size: 16px;
-  line-height: 1;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.chip-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .chip-label {
@@ -2224,7 +2260,7 @@ onUnmounted(() => {
 }
 
 .msg-text :deep(a:hover) {
-  border-bottom-color: rgba(240, 90, 35, 0.4);
+  border-bottom-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
 }
 
 .msg-text :deep(strong) {
@@ -2431,7 +2467,7 @@ onUnmounted(() => {
 }
 
 .qp-modify:hover {
-  border-color: rgba(240, 90, 35, 0.35);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
   color: var(--main-orange);
 }
 
@@ -2559,7 +2595,7 @@ onUnmounted(() => {
 
 :deep(.echarts-toolbar-detail-btn:hover) {
   color: var(--main-orange);
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
   background: var(--theme-surface-hover);
 }
 
@@ -2570,8 +2606,15 @@ onUnmounted(() => {
 }
 
 :deep(.echarts-toolbar-detail-icon) {
-  font-size: 12px;
-  line-height: 1;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+:deep(.echarts-toolbar-detail-icon svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 :deep(.echarts-toolbar-trigger) {
@@ -2593,7 +2636,7 @@ onUnmounted(() => {
 :deep(.echarts-toolbar-trigger:hover),
 :deep(.echarts-toolbar-trigger.is-open) {
   color: var(--main-orange);
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
   background: var(--theme-surface-hover);
 }
 
@@ -2810,13 +2853,13 @@ onUnmounted(() => {
 }
 
 .clarify-opt:hover {
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
   background: var(--theme-surface-hover);
 }
 
 .clarify-opt.selected {
   border-color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.06);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
 .clarify-opt input[type="radio"] {
@@ -2934,7 +2977,7 @@ onUnmounted(() => {
 .followup-chip:hover {
   background: var(--theme-surface-hover);
   color: var(--main-orange);
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
 }
 
 /* Feedback */
@@ -2948,10 +2991,26 @@ onUnmounted(() => {
 }
 
 .feedback span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   cursor: pointer;
   padding: 5px 10px;
   border-radius: 8px;
   transition: background 0.15s;
+}
+
+.feedback-icon {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.feedback-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .feedback span:hover {
@@ -2959,7 +3018,7 @@ onUnmounted(() => {
 }
 
 .feedback span.active {
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
   color: var(--dark-orange);
 }
 
@@ -3047,21 +3106,28 @@ onUnmounted(() => {
 }
 
 .ds-trigger:hover {
-  border-color: rgba(240, 90, 35, 0.3);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
   color: var(--main-orange);
   background: var(--theme-surface-hover);
 }
 
 .ds-trigger.active {
-  border-color: rgba(240, 90, 35, 0.35);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
   color: var(--dark-orange);
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
   font-weight: 600;
 }
 
 .ds-trigger-icon {
-  font-size: 12px;
-  line-height: 1;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+.ds-trigger-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .ds-trigger-text {
@@ -3146,7 +3212,7 @@ onUnmounted(() => {
 }
 
 .ds-popover-item.checked {
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
   color: var(--dark-orange);
 }
 
@@ -3177,7 +3243,7 @@ onUnmounted(() => {
 
 .ds-popover-item.checked .ds-item-type {
   color: var(--dark-orange);
-  background: rgba(240, 90, 35, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
 }
 
 /* Input Bar */
@@ -3443,7 +3509,9 @@ onUnmounted(() => {
 
 .seg-tool__arrow {
   flex-shrink: 0;
-  font-size: 10px;
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
   color: var(--muted);
   transition: transform 0.2s;
   margin-left: auto;
@@ -3522,7 +3590,9 @@ onUnmounted(() => {
 
 .seg-narration__arrow {
   margin-left: auto;
-  font-size: 10px;
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
   color: var(--muted);
   transition: transform 0.2s;
 }
@@ -3592,7 +3662,9 @@ onUnmounted(() => {
 
 .seg-execution__arrow {
   margin-left: 1px;
-  font-size: 9px;
+  display: inline-flex;
+  width: 9px;
+  height: 9px;
   color: var(--muted);
   transition: transform 0.2s;
 }
@@ -3657,7 +3729,15 @@ onUnmounted(() => {
 
 .attachment-tag__icon {
   flex-shrink: 0;
-  font-size: 12px;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+.attachment-tag__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .attachment-tag__name {
@@ -3698,6 +3778,9 @@ onUnmounted(() => {
 }
 
 .msg-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   opacity: 0.85;
 }</style>

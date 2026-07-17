@@ -1,5 +1,6 @@
 package vip.mate.dataagent.service;
 
+import vip.mate.dataagent.dto.InsightDashboardAiChatRequest;
 import vip.mate.dataagent.dto.InsightDashboardCreateRequest;
 import vip.mate.dataagent.dto.InsightDashboardGenerateRequest;
 import vip.mate.dataagent.dto.InsightDashboardModifyRequest;
@@ -55,13 +56,27 @@ public interface InsightDashboardService {
     void deleteDashboard(Long id);
 
     /**
+     * AI助手对话
+     * <p>
+     * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：
+     * - dashboardId为空：AI生成模式，根据用户描述和数据源生成新仪表盘
+     * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
+     *
+     * @param request AI助手对话请求
+     * @return 生成或修改后的仪表盘视图对象
+     */
+    InsightDashboardVO aiChatDashboard(InsightDashboardAiChatRequest request);
+
+    /**
      * AI生成仪表盘
      * <p>
      * 根据用户选择的数据源和需求描述，调用LLM生成仪表盘Schema并创建仪表盘。
      *
      * @param request AI生成请求（含数据源ID和用户描述）
      * @return 创建后的仪表盘视图对象
+     * @deprecated 使用 {@link #aiChatDashboard(InsightDashboardAiChatRequest)} 替代
      */
+    @Deprecated
     InsightDashboardVO generateDashboard(InsightDashboardGenerateRequest request);
 
     /**
@@ -71,6 +86,8 @@ public interface InsightDashboardService {
      *
      * @param request AI修改请求（含仪表盘ID和用户修改指令）
      * @return 修改后的仪表盘视图对象
+     * @deprecated 使用 {@link #aiChatDashboard(InsightDashboardAiChatRequest)} 替代
      */
+    @Deprecated
     InsightDashboardVO modifyDashboard(InsightDashboardModifyRequest request);
 }

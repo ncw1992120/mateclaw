@@ -64,13 +64,30 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
+     * AI助手对话
+     * <p>
+     * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：
+     * - dashboardId为空：AI生成模式，根据用户描述和数据源生成新仪表盘
+     * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
+     */
+    @PostMapping("/ai-chat")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "AI助手对话", description = "统一AI生成和AI修改能力，dashboardId为空时生成新仪表盘，不为空时修改已有仪表盘")
+    public R<InsightDashboardVO> aiChat(@RequestBody InsightDashboardAiChatRequest request) {
+        return R.ok(dashboardService.aiChatDashboard(request));
+    }
+
+    /**
      * AI生成仪表盘
      * <p>
      * 用户选择数据源并输入描述后，后端调用LLM生成仪表盘Schema并创建仪表盘。
+     *
+     * @deprecated 使用 {@link #aiChat(InsightDashboardAiChatRequest)} 替代
      */
+    @Deprecated
     @PostMapping("/generate")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "AI生成仪表盘", description = "根据用户选择的数据源和需求描述，AI自动生成仪表盘Schema并创建仪表盘")
+    @Operation(summary = "AI生成仪表盘（已废弃，请使用AI助手对话接口）", description = "根据用户选择的数据源和需求描述，AI自动生成仪表盘Schema并创建仪表盘")
     public R<InsightDashboardVO> generate(@RequestBody InsightDashboardGenerateRequest request) {
         return R.ok(dashboardService.generateDashboard(request));
     }
@@ -79,10 +96,13 @@ public class DataAgentInsightDashboardController {
      * AI对话修改仪表盘
      * <p>
      * 用户在编辑器中通过AI对话持续修改已有仪表盘，后端接收当前Schema和用户修改指令，调用LLM生成修改后的Schema。
+     *
+     * @deprecated 使用 {@link #aiChat(InsightDashboardAiChatRequest)} 替代
      */
+    @Deprecated
     @PostMapping("/modify")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "AI对话修改仪表盘", description = "根据当前仪表盘Schema和用户修改指令，AI生成修改后的Schema并更新仪表盘")
+    @Operation(summary = "AI对话修改仪表盘（已废弃，请使用AI助手对话接口）", description = "根据当前仪表盘Schema和用户修改指令，AI生成修改后的Schema并更新仪表盘")
     public R<InsightDashboardVO> modify(@RequestBody InsightDashboardModifyRequest request) {
         return R.ok(dashboardService.modifyDashboard(request));
     }

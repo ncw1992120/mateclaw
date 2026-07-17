@@ -467,12 +467,17 @@ public final class DataAgentConstants {
     public static final String OPTIMIZE_PROMPT_TEMPLATE =
             "请对以下用户输入进行润色优化，使其更清晰、更专业、更有条理，但保持原意不变。仅返回优化后的文本，不要加任何解释。\n\n用户输入：\n{0}";
 
-    // ==================== AI生成仪表盘 ====================
+    // ==================== AI助手对话 ====================
+
+    /** AI助手对话会话ID前缀（统一生成和修改） */
+    public static final String INSIGHT_AI_CHAT_CONVERSATION_PREFIX = "insight-ai-chat-";
 
     /** AI生成仪表盘会话ID前缀 */
+    @Deprecated
     public static final String INSIGHT_GENERATE_CONVERSATION_PREFIX = "insight-generate-";
 
     /** AI对话修改仪表盘会话ID前缀 */
+    @Deprecated
     public static final String INSIGHT_MODIFY_CONVERSATION_PREFIX = "insight-modify-";
 
     /** AI生成仪表盘时Schema检索默认Top-K */

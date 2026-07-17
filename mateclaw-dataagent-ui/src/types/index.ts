@@ -1099,6 +1099,18 @@ export interface InsightDashboardUpdateInput {
   ownerName?: string
 }
 
+/** AI助手对话输入（统一AI生成和AI修改） */
+export interface InsightDashboardAiChatInput {
+  /** 仪表盘ID，修改模式必填，生成模式为空 */
+  dashboardId?: string
+  /** 仪表盘名称，仅生成模式使用 */
+  name?: string
+  /** 数据源ID，仅生成模式使用 */
+  datasourceId?: string
+  /** 用户消息/指令 */
+  message: string
+}
+
 /** AI生成仪表盘输入 */
 export interface InsightDashboardGenerateInput {
   name: string

@@ -27,7 +27,7 @@
         />
       </div>
       <div class="toolbar-right">
-        <el-button :icon="ChatDotRound" @click="toggleAiChat">{{ t('insight.aiChat') }}</el-button>
+        <el-button :icon="ChatDotRound" @click="toggleAiChat">{{ t('insight.aiAssistant') }}</el-button>
         <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
         <el-button @click="handlePreview" :disabled="!dashboard">{{ t('insight.preview') }}</el-button>
       </div>
@@ -101,12 +101,12 @@
         />
       </div>
 
-      <!-- AI对话面板 -->
+      <!-- AI助手面板 -->
       <div v-if="showAiChat" class="editor-ai-chat">
         <AiChatPanel
           :dashboard-id="dashboardId"
           @close="toggleAiChat"
-          @schema-updated="handleAiSchemaUpdated"
+          @dashboard-updated="handleAiDashboardUpdated"
         />
       </div>
     </div>
@@ -479,8 +479,8 @@ function toggleAiChat(): void {
   showAiChat.value = !showAiChat.value
 }
 
-/** AI修改后刷新Schema */
-async function handleAiSchemaUpdated(): Promise<void> {
+/** AI助手修改后刷新Schema */
+async function handleAiDashboardUpdated(): Promise<void> {
   if (!dashboard.value) {
     return
   }

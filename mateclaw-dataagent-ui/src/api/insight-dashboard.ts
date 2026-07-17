@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardGenerateInput, InsightDashboardModifyInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardGenerateInput, InsightDashboardModifyInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
@@ -37,6 +37,11 @@ export function preview(id: string, filterContext?: DashboardFilterContext) {
 /** 预览单个组件数据（编辑器即时验证） */
 export function previewComponent(component: InsightComponent) {
   return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
+}
+
+/** AI助手对话（统一AI生成和AI修改） */
+export function aiChat(data: InsightDashboardAiChatInput) {
+  return api.post<InsightDashboard>(`${BASE_URL}/ai-chat`, data)
 }
 
 /** AI生成仪表盘 */
