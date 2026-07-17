@@ -940,6 +940,12 @@ export const useChatStore = defineStore('chat', () => {
         if (toolName) {
           const prevMeta = (prev.metadata || {}) as Record<string, unknown>
           const prevToolCalls = (prevMeta.toolCalls as Array<Record<string, unknown>>) || []
+          // 防御性去重：如果已存在相同 toolCallId 且仍为 running 的 toolCall，跳过重复事件
+          const isDuplicate = prevToolCalls.some((tc: Record<string, unknown>) =>
+            tc.status === 'running'
+            && ((toolCallId && tc.toolCallId === toolCallId) || (!toolCallId && tc.name === toolName))
+          )
+          if (isDuplicate) break
           const nextToolCalls = [
             ...prevToolCalls,
             {

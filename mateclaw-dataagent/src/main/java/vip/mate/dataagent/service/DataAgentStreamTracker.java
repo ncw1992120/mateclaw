@@ -441,10 +441,19 @@ public class DataAgentStreamTracker {
      * <p>
      * 前置条件：chatStreamTracker.register(conversationId) 已调用，
      * 使 ChatStreamTracker 中存在对应的 RunState（否则 broadcast() 中 state==null 会拦截事件）。
+     * <p>
+     * 注意：tool_call_started / tool_call_completed 事件不通过 relay 转发，
+     * 因为它们已经通过 PENDING_EVENTS → StreamDelta 管道由 StreamAccumulator 广播，
+     * 若 relay 再转发一次会导致前端收到重复的 tool 事件，造成工具执行情况重复展示
+     * 以及思考过程未正确折叠到执行过程卡片中。
      */
     private void installRelay(String conversationId) {
         removeRelay(conversationId);
         Runnable cancelHandle = chatStreamTracker.addEventRelay(conversationId, (eventName, jsonData) -> {
+            // tool 事件已通过 StreamDelta 管道推送，跳过 relay 转发以避免重复
+            if ("tool_call_started".equals(eventName) || "tool_call_completed".equals(eventName)) {
+                return;
+            }
             broadcast(conversationId, eventName, jsonData);
         });
         relayCancellations.put(conversationId, cancelHandle);
