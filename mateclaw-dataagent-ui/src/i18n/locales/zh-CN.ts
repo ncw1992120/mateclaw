@@ -1437,6 +1437,7 @@ export default {
     aiChatSending: 'AI正在修改...',
     aiChatSuccess: '仪表盘已更新',
     aiChatFailed: '仪表盘修改失败',
+    aiChatTimeout: '请求超时，AI可能仍在处理中，请稍后刷新查看结果',
     edit: '编辑',
     preview: '预览',
     publish: '发布',

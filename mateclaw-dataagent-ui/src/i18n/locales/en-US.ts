@@ -1380,6 +1380,7 @@ export default {
     aiChatSending: 'AI is modifying...',
     aiChatSuccess: 'Dashboard updated',
     aiChatFailed: 'Failed to modify dashboard',
+    aiChatTimeout: 'Request timed out. AI may still be processing, please refresh later to check results',
     edit: 'Edit',
     preview: 'Preview',
     publish: 'Publish',

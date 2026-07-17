@@ -279,10 +279,11 @@ async function handleSend(): Promise<void> {
     emit('dashboard-updated', dashboardId)
 
     ElMessage.success(replyContent)
-  } catch {
-    const errorContent = isModifyMode.value
-      ? t('insight.aiChatFailed')
-      : t('insight.generateFailed')
+  } catch (err: any) {
+    const isTimeout = err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')
+    const errorContent = isTimeout
+      ? t('insight.aiChatTimeout')
+      : (isModifyMode.value ? t('insight.aiChatFailed') : t('insight.generateFailed'))
     messages.value.push({
       role: 'assistant',
       content: errorContent,

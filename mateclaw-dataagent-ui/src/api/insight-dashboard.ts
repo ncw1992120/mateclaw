@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardGenerateInput, InsightDashboardModifyInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
@@ -39,17 +39,10 @@ export function previewComponent(component: InsightComponent) {
   return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
 }
 
+/** AI助手对话超时时间（5分钟，LLM生成/修改耗时较长） */
+const AI_CHAT_TIMEOUT = 5 * 60 * 1000
+
 /** AI助手对话（统一AI生成和AI修改） */
 export function aiChat(data: InsightDashboardAiChatInput) {
-  return api.post<InsightDashboard>(`${BASE_URL}/ai-chat`, data)
-}
-
-/** AI生成仪表盘 */
-export function generate(data: InsightDashboardGenerateInput) {
-  return api.post<InsightDashboard>(`${BASE_URL}/generate`, data)
-}
-
-/** AI对话修改仪表盘 */
-export function modify(data: InsightDashboardModifyInput) {
-  return api.post<InsightDashboard>(`${BASE_URL}/modify`, data)
+  return api.post<InsightDashboard>(`${BASE_URL}/ai-chat`, data, { timeout: AI_CHAT_TIMEOUT })
 }

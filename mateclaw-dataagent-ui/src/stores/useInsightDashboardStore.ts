@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardGenerateInput, InsightDashboardAiChatInput } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 
 /** 洞察仪表盘状态管理 */
@@ -68,13 +68,6 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     return result as unknown as InsightDashboard
   }
 
-  /** AI生成仪表盘 */
-  async function generateDashboard(data: InsightDashboardGenerateInput): Promise<InsightDashboard> {
-    const created = await insightDashboardApi.generate(data)
-    await fetchDashboards()
-    return created as unknown as InsightDashboard
-  }
-
   return {
     dashboards,
     currentDashboard,
@@ -85,7 +78,6 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     updateDashboard,
     deleteDashboard,
     aiChatDashboard,
-    generateDashboard,
     reset,
   }
 })
