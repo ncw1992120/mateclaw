@@ -7,6 +7,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
+import vip.mate.dataagent.auth.context.UserContext;
+import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.auth.service.AgentGuard;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.dto.DatasourceVO;
@@ -114,6 +116,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         // 在 HTTP 线程捕获用户身份，避免 sseExecutor 线程内 ThreadLocal 上下文丢失
         final String username = workspaceGuard.currentUsername();
         final Long workspaceId = workspaceGuard.currentWorkspaceId();
+        // 捕获完整 UserContext，用于在 sseExecutor 线程中恢复 UserContextHolder，
+        // 使 Agent 工具（如 AloudataCallTool、DatasourceQueryTool）能通过 UserContextHolder.getUserId() 获取当前用户
+        final UserContext capturedUserContext = UserContextHolder.get();
 
         // Register RunState first (creates buffer + starts heartbeat), then attach emitter
         streamTracker.register(conversationId);
@@ -121,6 +126,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         registerEmitterCallbacks(emitter, conversationId, emitterDone);
 
         sseExecutor.execute(() -> {
+            // 恢复用户上下文到当前线程，使工具层 UserContextHolder.getUserId() 可用
+            if (capturedUserContext != null) {
+                UserContextHolder.set(capturedUserContext);
+            }
             StreamAccumulator accumulator = new StreamAccumulator();
             AtomicBoolean finalized = new AtomicBoolean(false);
             try {
@@ -462,6 +471,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         } catch (Exception e) {
             log.warn("[DataAgent] Stream finalize error for {}: {}", conversationId, e.getMessage());
         } finally {
+            // 清理当前线程的 UserContext，防止线程池复用导致身份串漏
+            UserContextHolder.clear();
             streamTracker.clearStopRequested(conversationId);
             // Mark done in tracker — keeps RunState for 5-min reconnect window
             streamTracker.complete(conversationId);
