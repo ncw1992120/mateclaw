@@ -59,16 +59,43 @@ import java.util.Set;
 public class McpIdentityForwardProperties {
 
     /**
+     * {@code _meta} key carrying the plaintext identity (plaintext trust model)
+     * in {@code tools/call} requests. The MCP server reads it from {@code _meta}
+     * — the caller-controlled channel — so the model cannot spoof it.
+     *
+     * @since #459 follow-up: migrated from args ({@link #USER_ARG}) to {@code _meta}.
+     */
+    public static final String META_USER_KEY = "mateclaw_user";
+
+    /**
+     * {@code _meta} key carrying the signed JWT (token trust model) in
+     * {@code tools/call} requests.
+     *
+     * @since #459 follow-up: migrated from args ({@link #TOKEN_ARG}) to {@code _meta}.
+     */
+    public static final String META_TOKEN_KEY = "mateclaw_token";
+
+    /**
      * Reserved tool-argument key carrying the plaintext username (plaintext
      * trust model). Collision-unlikely with real tool parameters; the MCP
      * server reads and strips it.
+     *
+     * @deprecated Identity is now injected via MCP {@code _meta} under
+     *             {@link #META_USER_KEY}. Retained for migration documentation
+     *             only — MCP servers should read from {@code _meta}.
      */
+    @Deprecated
     public static final String USER_ARG = "__mateclaw_user__";
 
     /**
      * Reserved tool-argument key carrying the signed JWT (token trust model).
      * The MCP server forwards it as a bearer token; the REST backend verifies.
+     *
+     * @deprecated Identity is now injected via MCP {@code _meta} under
+     *             {@link #META_TOKEN_KEY}. Retained for migration documentation
+     *             only — MCP servers should read from {@code _meta}.
      */
+    @Deprecated
     public static final String TOKEN_ARG = "__mateclaw_token__";
 
     /** Server names (as in mate_mcp_server) or numeric ids that opt in. */
@@ -111,8 +138,20 @@ public class McpIdentityForwardProperties {
      * Audience claim for a server's minted tokens: an explicit mapping (by name
      * or id) when configured, otherwise the server name (or id as string). Lets
      * the backend reject a token minted for a different server.
+     *
+     * @throws IllegalArgumentException when both {@code serverId} and
+     *         {@code serverName} are {@code null} — there is no defensible
+     *         audience for an unidentified server, and silently returning the
+     *         literal string {@code "null"} would let two distinct null/null
+     *         servers share one audience (defeating per-server isolation).
+     *         Callers reachable from the production wrap path always have at
+     *         least one of the two.
      */
     public String audienceFor(Long serverId, String serverName) {
+        if (serverId == null && (serverName == null || serverName.isBlank())) {
+            throw new IllegalArgumentException(
+                    "audienceFor requires a serverId or serverName; both were null/blank");
+        }
         Map<String, String> aud = token.getAudiences();
         if (serverName != null && aud.containsKey(serverName)) {
             return aud.get(serverName);
