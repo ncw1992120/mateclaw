@@ -694,7 +694,7 @@ public class AloudataCallTool {
     private String handleAloudataSemanticSearch(Long datasourceId, String keyword, int topK, double threshold) {
         /* 先检查是否已同步新版语义层 */
         var syncStatus = aloudataSemanticSyncService.getSyncStatus(datasourceId);
-        if (!"completed".equals(syncStatus.status())) {
+        if (!"completed".equalsIgnoreCase(syncStatus.status())) {
             /* 新版语义层未同步，降级到旧版表级检索 */
             log.info("Aloudata 数据源 [{}] 新版语义层未同步，降级到旧版表级检索", datasourceId);
             return handleGenericSemanticSearch(datasourceId, keyword, topK, threshold);

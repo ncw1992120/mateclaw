@@ -9,7 +9,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.bind.annotation.RestController;
 import vip.mate.MateClawApplication;
 import vip.mate.sdk.properties.MateClawRuntimeProperties;
-import vip.mate.sdk.service.impl.MateClawRuntimeImpl;
 
 /**
  * MateClaw 嵌入式运行时自动配置
@@ -46,7 +45,6 @@ import vip.mate.sdk.service.impl.MateClawRuntimeImpl;
 @MapperScan("vip.mate.**.repository")
 @EnableScheduling
 @EnableConfigurationProperties(MateClawRuntimeProperties.class)
-@Import(MateClawRuntimeImpl.class)
 public class MateClawRuntimeAutoConfiguration {
 
     /**
