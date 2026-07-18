@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { handleAuthFailure, updateTokenFromHeader } from '@/utils/auth'
+import { WIKI_UPLOAD_TIMEOUT_MS } from '@/utils/wikiUpload'
 import type {
   ApprovalGrant,
   ApprovalGrantPage,
@@ -187,6 +188,13 @@ export const chatApi = {
 }
 
 // ==================== Conversation ====================
+// Content calendar (read-only) — produced 公众号 / 小红书 pieces + lifecycle status.
+export const contentItemApi = {
+  list: (params?: { page?: number; size?: number; platform?: string; status?: string }) =>
+    http.get('/content-items', { params }),
+  summary: () => http.get('/content-items/summary'),
+}
+
 export const conversationApi = {
   list: () => http.get('/conversations'),
   /**
@@ -833,6 +841,7 @@ export const wikiApi = {
   uploadRaw: (kbId: number, formData: FormData, onProgress?: (pct: number) => void) =>
     http.post(`/wiki/knowledge-bases/${kbId}/raw/upload`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: WIKI_UPLOAD_TIMEOUT_MS,
       onUploadProgress: onProgress
         ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
         : undefined,
