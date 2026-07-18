@@ -365,11 +365,16 @@
             :key="attachment.storedName"
             class="message-attachment"
             type="button"
-            @click="downloadFile(attachment)"
+            @click="openFileAttachment(attachment)"
           >
             <el-icon class="message-attachment__icon"><Document /></el-icon>
             <span class="message-attachment__name">{{ attachment.name }}</span>
             <span class="message-attachment__meta">{{ formatFileSize(attachment.size) }}</span>
+            <el-icon
+              class="message-attachment__download"
+              :title="$t('chat.preview.download')"
+              @click.stop="downloadFile(attachment)"
+            ><Download /></el-icon>
           </button>
         </div>
       </div>
@@ -539,6 +544,7 @@ import {
   CloseBold,
   CopyDocument,
   Document,
+  Download,
   InfoFilled,
   Loading,
   Microphone,
@@ -557,6 +563,8 @@ import { useToolLabel } from '@/composables/useToolLabel'
 import { http } from '@/api'
 import { copyToClipboard } from '@/utils/clipboard'
 import TypingCursor from './TypingCursor.vue'
+import { previewKindOf } from './preview/previewKind'
+import { openFilePreview } from './preview/previewBus'
 import BrowserTimeline from './BrowserTimeline.vue'
 import ToolCallSegment from './ToolCallSegment.vue'
 import ThinkingSegment from './ThinkingSegment.vue'
@@ -574,6 +582,16 @@ import type { ChatErrorInfo } from '@/types/chatError'
 const { t, locale } = useI18n()
 const { getToolLabel } = useToolLabel()
 const { blobUrls, loadAllImages, loadAllVideos, loadAllAudios, loadAllModels, downloadFile, openImage, getDisplayUrl, revokeAll } = useAuthenticatedAttachment()
+
+// Document attachments: preview in the global dialog when the format is
+// supported, otherwise fall back to the legacy download behavior.
+function openFileAttachment(attachment: ChatAttachment) {
+  if (previewKindOf(attachment)) {
+    openFilePreview(attachment)
+  } else {
+    void downloadFile(attachment)
+  }
+}
 
 interface Props {
   message: Message
@@ -1064,11 +1082,19 @@ const segments = computed<MessageSegment[]>(() => {
       }
     }
 
-    // 去重：相同 toolName + toolArgs 的 tool_call segment 只保留第一个
+    // 去重 tool_call segment。优先用 LLM 提供的 toolCallId —— 它端到端稳定
+    // （live 流与持久化两侧都带，见 useChat handleToolCallStarted / 后端
+    // accumulator），既能正确识别"同一次调用被 live+reload 渲染两遍"（两侧
+    // toolArgs 序列化可能有空白/键序差异，用 toolName::toolArgs 会漏判 → 重复
+    // 显示，issue #521），又不会把"同名同参的多次真实调用"（如重试 shell/python）
+    // 误合并成一次。仅当没有 toolCallId（历史/遗留 segment）时才退回
+    // toolName::toolArgs。
     const seenToolCalls = new Set<string>()
     const deduped = segs.filter(seg => {
       if (seg.type !== 'tool_call') return true
-      const key = `${seg.toolName}::${seg.toolArgs || ''}`
+      const key = seg.toolCallId
+        ? `id::${seg.toolCallId}`
+        : `na::${seg.toolName}::${seg.toolArgs || ''}`
       if (seenToolCalls.has(key)) return false
       seenToolCalls.add(key)
       return true
@@ -2449,6 +2475,16 @@ watch(isGenerating, (generating) => {
 .message-attachment__icon {
   flex-shrink: 0;
   opacity: 0.76;
+}
+
+.message-attachment__download {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.message-attachment__download:hover {
+  opacity: 1;
 }
 
 /* ==================== Markdown 样式 ==================== */
