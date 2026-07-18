@@ -64,20 +64,6 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
-     * AI助手对话
-     * <p>
-     * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：
-     * - dashboardId为空：AI生成模式，根据用户描述和数据源生成新仪表盘
-     * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
-     */
-    @PostMapping("/ai-chat")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "AI助手对话", description = "统一AI生成和AI修改能力，dashboardId为空时生成新仪表盘，不为空时修改已有仪表盘")
-    public R<InsightDashboardVO> aiChat(@RequestBody InsightDashboardAiChatRequest request) {
-        return R.ok(dashboardService.aiChatDashboard(request));
-    }
-
-    /**
      * 更新仪表盘
      */
     @PutMapping("/{id}")
@@ -128,6 +114,20 @@ public class DataAgentInsightDashboardController {
     public R<InsightComponentDataDTO> previewComponent(
             @RequestBody InsightDashboardSchemaDTO.Component component) {
         return R.ok(dataBindService.bindComponent(component));
+    }
+
+    /**
+     * AI助手对话
+     * <p>
+     * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：
+     * - dashboardId为空：AI生成模式，根据用户描述和数据源生成新仪表盘
+     * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
+     */
+    @PostMapping("/ai-chat")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "AI助手对话", description = "统一AI生成和AI修改能力，dashboardId为空时生成新仪表盘，不为空时修改已有仪表盘")
+    public R<InsightDashboardVO> aiChat(@RequestBody InsightDashboardAiChatRequest request) {
+        return R.ok(dashboardService.aiChatDashboard(request));
     }
 
     /**

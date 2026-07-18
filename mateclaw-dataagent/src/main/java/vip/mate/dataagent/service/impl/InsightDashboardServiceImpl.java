@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import vip.mate.agent.model.AgentEntity;
+import vip.mate.dataagent.agentscope.dto.AgentCallRequest;
+import vip.mate.dataagent.agentscope.dto.AgentCallResponse;
+import vip.mate.dataagent.agentscope.service.AgentScopeService;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
@@ -17,7 +19,6 @@ import vip.mate.dataagent.repository.InsightDashboardMapper;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
-import vip.mate.sdk.service.MateClawRuntime;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -34,10 +35,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     private final InsightDashboardMapper insightDashboardMapper;
     private final WorkspaceGuard workspaceGuard;
-    private final MateClawRuntime runtime;
     private final DatasourceManageService datasourceManageService;
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final ObjectMapper objectMapper;
+    private final AgentScopeService agentScopeService;
 
     /** AI助手生成仪表盘的系统提示词 */
     private static final String GENERATE_SYSTEM_PROMPT = """
@@ -237,10 +238,17 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 request.getDescription(),
                 request.getDatasourceId());
 
-        // 5. 调用LLM生成Schema
-        Long agentId = resolveAgentId();
-        String conversationId = DataAgentConstants.INSIGHT_GENERATE_CONVERSATION_PREFIX + UUID.randomUUID();
-        String llmResponse = runtime.chat(agentId, prompt, conversationId);
+        // 5. 调用AgentScope生成Schema
+        String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
+        AgentCallRequest callRequest = new AgentCallRequest();
+        callRequest.setMessage(prompt);
+        callRequest.setSystemPrompt(GENERATE_SYSTEM_PROMPT);
+        callRequest.setSessionId(conversationId);
+        AgentCallResponse callResponse = agentScopeService.call(callRequest);
+        if (!callResponse.isSuccess()) {
+            throw new BusinessException(500, "AI生成仪表盘失败: " + callResponse.getErrorMessage());
+        }
+        String llmResponse = callResponse.getContent();
 
         // 6. 解析LLM返回的JSON
         String schemaJson = parseLlmResponse(llmResponse);
@@ -283,10 +291,17 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         String prompt = String.format(MODIFY_SYSTEM_PROMPT, currentSchemaJson, datasourceContext, request.getInstruction());
 
-        // 6. 调用LLM生成修改后的Schema
-        Long agentId = resolveAgentId();
-        String conversationId = DataAgentConstants.INSIGHT_MODIFY_CONVERSATION_PREFIX + UUID.randomUUID();
-        String llmResponse = runtime.chat(agentId, prompt, conversationId);
+        // 6. 调用AgentScope生成修改后的Schema
+        String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
+        AgentCallRequest callRequest = new AgentCallRequest();
+        callRequest.setMessage(prompt);
+        callRequest.setSystemPrompt(MODIFY_SYSTEM_PROMPT);
+        callRequest.setSessionId(conversationId);
+        AgentCallResponse callResponse = agentScopeService.call(callRequest);
+        if (!callResponse.isSuccess()) {
+            throw new BusinessException(500, "AI修改仪表盘失败: " + callResponse.getErrorMessage());
+        }
+        String llmResponse = callResponse.getContent();
 
         // 7. 解析LLM返回的JSON（复用已有的解析方法）
         String schemaJson = parseLlmResponse(llmResponse);
@@ -613,20 +628,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             case "table" -> DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE;
             default -> null;
         };
-    }
-
-    /**
-     * 解析可用的Agent ID
-     * <p>
-     * 优先使用工作区下第一个可用Agent，与InsightReportServiceImpl保持一致。
-     */
-    private Long resolveAgentId() {
-        Long workspaceId = workspaceGuard.currentWorkspaceId();
-        List<AgentEntity> agents = runtime.listAgentsByWorkspace(workspaceId, true);
-        if (agents == null || agents.isEmpty()) {
-            throw new BusinessException(500, "当前工作区下没有可用的Agent，请先创建Agent");
-        }
-        return agents.get(0).getId();
     }
 
     private void requireOwnership(Long id) {

@@ -472,14 +472,6 @@ public final class DataAgentConstants {
     /** AI助手对话会话ID前缀（统一生成和修改） */
     public static final String INSIGHT_AI_CHAT_CONVERSATION_PREFIX = "insight-ai-chat-";
 
-    /** AI生成仪表盘会话ID前缀 */
-    @Deprecated
-    public static final String INSIGHT_GENERATE_CONVERSATION_PREFIX = "insight-generate-";
-
-    /** AI对话修改仪表盘会话ID前缀 */
-    @Deprecated
-    public static final String INSIGHT_MODIFY_CONVERSATION_PREFIX = "insight-modify-";
-
     /** AI生成仪表盘时Schema检索默认Top-K */
     public static final int INSIGHT_GENERATE_SCHEMA_TOP_K = 10;
 

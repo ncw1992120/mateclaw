@@ -6,6 +6,7 @@ import cn.hutool.json.JSONUtil;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -405,10 +406,8 @@ public class AloudataCallTool {
             // datasourceId 自动注入强化：白名单为空时尝试自动查找
             if (datasourceId == null && !scopeContext.hasScope(dsConvId)) {
                 datasourceId = autoResolveDatasourceId();
-                if (datasourceId == null) {
-                    return error("需要 datasourceId 参数指定数据源");
-                }
-            } else if (datasourceId == null) {
+            }
+            if (datasourceId == null) {
                 return error("需要 datasourceId 参数指定数据源");
             }
 
@@ -439,7 +438,7 @@ public class AloudataCallTool {
             Map<String, Object> params = buildParamsFromInput(endpointName, input, config);
 
             // ====== 指标查询端点专属：校验 + 自动修正 ======
-            if (METRICS_QUERY_ENDPOINT.equals(endpointName)) {
+            if (METRICS_QUERY_ENDPOINT.equalsIgnoreCase(endpointName)) {
                 // P0: 强制 queryResultType 为 DATA，避免 SQL_AND_DATA 导致数据截断
                 params.put("queryResultType", "DATA");
 
@@ -1241,6 +1240,7 @@ public class AloudataCallTool {
             List<DatasourceEntity> aloudataSources = datasourceMapper.selectList(
                     new LambdaQueryWrapper<DatasourceEntity>()
                             .eq(DatasourceEntity::getSourceType, DataAgentConstants.SOURCE_TYPE_ALOUDATA)
+                            .eq(DatasourceEntity::getDeleted, 0)
                             .eq(DatasourceEntity::getEnabled, true)
                             .select(DatasourceEntity::getId, DatasourceEntity::getName));
             if (aloudataSources.size() == 1) {
@@ -1308,8 +1308,7 @@ public class AloudataCallTool {
         int rowCount = 0;
         String firstCol = null;
         for (Map.Entry<String, Object> entry : columns.entrySet()) {
-            if (entry.getValue() instanceof List) {
-                List<?> colValues = (List<?>) entry.getValue();
+            if (entry.getValue() instanceof List<?> colValues) {
                 if (!colValues.isEmpty()) {
                     rowCount = colValues.size();
                     firstCol = entry.getKey();
@@ -1327,8 +1326,7 @@ public class AloudataCallTool {
             Map<String, Object> row = new LinkedHashMap<>();
             for (Map.Entry<String, Object> entry : columns.entrySet()) {
                 String colName = entry.getKey();
-                if (entry.getValue() instanceof List) {
-                    List<?> colValues = (List<?>) entry.getValue();
+                if (entry.getValue() instanceof List<?> colValues) {
                     if (i < colValues.size()) {
                         Object cell = colValues.get(i);
                         // 提取 value 字段（ColumnValue 格式）
