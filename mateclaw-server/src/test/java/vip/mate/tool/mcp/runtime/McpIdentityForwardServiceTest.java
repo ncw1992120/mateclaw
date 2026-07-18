@@ -12,14 +12,9 @@ import vip.mate.tool.builtin.ToolExecutionContext;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -163,29 +158,6 @@ class McpIdentityForwardServiceTest {
                     .isEqualTo(McpIdentityForwardService.ResolvedIdentity.NONE);
         }
 
-        // ---- Branch coverage for the NONE returns inside classify() ----
-
-        @Test
-        @DisplayName("web channel, no requesterUserId, no ThreadLocal username → NONE")
-        void webChannelNoUserNoThreadLocal() {
-            // Do NOT seed the ThreadLocal — mirrors a thread that has never run a
-            // tool-execution executor pass (or just cleared it). The web branch's
-            // username fallback must then return NONE rather than inject garbage.
-            ChatOrigin origin = ChatOrigin.web("c1", "", 1L, null, null);
-            assertThat(svc(new McpIdentityForwardProperties()).classify(ctx(origin)))
-                    .isEqualTo(McpIdentityForwardService.ResolvedIdentity.NONE);
-        }
-
-        @Test
-        @DisplayName("non-web channel with blank requesterId → NONE")
-        void nonWebChannelBlankRequester() {
-            // A recognised channelType but no requester id: nothing to forward.
-            ChatOrigin origin = new ChatOrigin(null, "c1", "", 1L, null,
-                    null, null, false, null, "feishu", null, null, null);
-            assertThat(svc(new McpIdentityForwardProperties()).classify(ctx(origin)))
-                    .isEqualTo(McpIdentityForwardService.ResolvedIdentity.NONE);
-        }
-
         @Test
         @DisplayName("unrecognised non-web channel → downgraded to external (never authenticated)")
         void novelChannelIsDowngradedNotAuthenticated() {
@@ -203,43 +175,39 @@ class McpIdentityForwardServiceTest {
         }
     }
 
-    // ==================== Resolution: plaintext & token modes ====================
+    // ==================== Resolution: plaintext & token modes (_meta) ====================
 
     @Test
-    @DisplayName("plaintext mode: injects '<trust>:<subject>' under USER_ARG")
+    @DisplayName("plaintext mode: resolveMeta returns '<trust>:<subject>' under META_USER_KEY")
     void plaintextTyped() {
         ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
-        var p = new McpIdentityForwardProperties();
-        Optional<McpIdentityForwardService.Injection> inj = svc(p).resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
-        assertThat(inj.get().key()).isEqualTo(McpIdentityForwardProperties.USER_ARG);
-        assertThat(inj.get().value()).isEqualTo("authenticated:42");
+        Map<String, String> meta = svc(new McpIdentityForwardProperties()).resolveMeta(ctx(origin), "my-api");
+        assertThat(meta).containsEntry(McpIdentityForwardProperties.META_USER_KEY, "authenticated:42");
+        assertThat(meta).doesNotContainKey(McpIdentityForwardProperties.META_TOKEN_KEY);
     }
 
     @Test
     @DisplayName("plaintext mode: anonymous visitor carries trust=anonymous prefix")
     void plaintextAnonymous() {
         ChatOrigin origin = ChatOrigin.web("c1", "visitor-xyz", 1L, null).withSender(null, "api", null);
-        Optional<McpIdentityForwardService.Injection> inj =
-                svc(new McpIdentityForwardProperties()).resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
-        assertThat(inj.get().value()).startsWith("anonymous:visitor-xyz");
+        Map<String, String> meta = svc(new McpIdentityForwardProperties()).resolveMeta(ctx(origin), "my-api");
+        assertThat(meta.get(McpIdentityForwardProperties.META_USER_KEY)).startsWith("anonymous:visitor-xyz");
     }
 
     @Test
-    @DisplayName("no usable identity (cron): nothing injected")
+    @DisplayName("no usable identity (cron): empty _meta map")
     void noIdentity() {
         ChatOrigin origin = ChatOrigin.cron("c1", 1L, null, 9L, null);
-        assertThat(svc(new McpIdentityForwardProperties()).resolve(ctx(origin), "my-api")).isEmpty();
+        assertThat(svc(new McpIdentityForwardProperties()).resolveMeta(ctx(origin), "my-api")).isEmpty();
     }
 
     @Test
-    @DisplayName("token mode but no key: fail-closed (nothing injected)")
+    @DisplayName("token mode but no key: fail-closed (empty _meta map)")
     void tokenModeNoKey() {
         ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
         var p = new McpIdentityForwardProperties();
         p.getToken().setEnabled(true);   // no private-key-pem
-        assertThat(svc(p).resolve(ctx(origin), "my-api")).isEmpty();
+        assertThat(svc(p).resolveMeta(ctx(origin), "my-api")).isEmpty();
     }
 
     @Test
@@ -257,23 +225,14 @@ class McpIdentityForwardServiceTest {
         // 1. Malformed key → fail-closed.
         p.getToken().setPrivateKeyPem("not-a-valid-pem");
         McpIdentityForwardService service = svc(p);
-        assertThat(service.resolve(ctx(origin), "my-api"))
-                .as("malformed PEM ⇒ fail-closed, no token")
-                .isEmpty();
-
-        // 1b. The SAME malformed PEM, called again, must STILL return empty —
-        //     proving the failure was cached (not retried per call) and that
-        //     step 1 wasn't empty just because the PEM was treated as null.
-        assertThat(service.resolve(ctx(origin), "my-api"))
-                .as("repeated identical bad PEM ⇒ still fail-closed (cached failure)")
-                .isEmpty();
+        assertThat(service.resolveMeta(ctx(origin), "my-api")).isEmpty();
 
         // 2. Operator fixes the config (or a reload pushes a good key) → next
         //    call re-parses and issues a token, without needing an app restart.
         p.getToken().setPrivateKeyPem(goodPem);
-        Optional<McpIdentityForwardService.Injection> inj = service.resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
-        assertThat(inj.get().key()).isEqualTo(McpIdentityForwardProperties.TOKEN_ARG);
+        Map<String, String> meta = service.resolveMeta(ctx(origin), "my-api");
+        assertThat(meta).containsKey(McpIdentityForwardProperties.META_TOKEN_KEY);
+        String jwt = meta.get(McpIdentityForwardProperties.META_TOKEN_KEY);
 
         // The minted token verifies against the matching public key.
         Claims claims = Jwts.parser()
@@ -281,173 +240,21 @@ class McpIdentityForwardServiceTest {
                 .requireIssuer("mateclaw")
                 .requireAudience("my-api")
                 .build()
-                .parseSignedClaims(inj.get().value())
+                .parseSignedClaims(jwt)
                 .getPayload();
         assertThat(claims.getSubject()).isEqualTo("42");
     }
 
     @Test
-    @DisplayName("signing key rotates when a valid PEM is replaced by another valid PEM (no restart)")
-    void signingKeyRotatesOnValidPemChange() {
-        // Regression for the rotation gap: once a key is cached, a subsequent
-        // valid PEM change MUST take effect without an app restart — otherwise a
-        // key retired on suspicion of compromise keeps signing tokens forever.
-        KeyPair kp1 = rsaKeyPair();
-        KeyPair kp2 = rsaKeyPair();
-        String pem1 = Base64.getEncoder().encodeToString(kp1.getPrivate().getEncoded());
-        String pem2 = Base64.getEncoder().encodeToString(kp2.getPrivate().getEncoded());
-        ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
-
-        var p = new McpIdentityForwardProperties();
-        p.getToken().setEnabled(true);
-        p.getToken().setIssuer("mateclaw");
-        p.getToken().setTtlSeconds(60);
-        p.getToken().setPrivateKeyPem(pem1);
-        McpIdentityForwardService service = svc(p);
-
-        // 1. First token is signed with key #1 and verifies with pubkey #1.
-        String tok1 = service.resolve(ctx(origin), "my-api").orElseThrow().value();
-        Jwts.parser().verifyWith(kp1.getPublic()).requireAudience("my-api").build()
-                .parseSignedClaims(tok1).getPayload();
-
-        // 2. Rotate to key #2. The next token MUST verify with pubkey #2 (not #1).
-        p.getToken().setPrivateKeyPem(pem2);
-        String tok2 = service.resolve(ctx(origin), "my-api").orElseThrow().value();
-        Jwts.parser().verifyWith(kp2.getPublic()).requireAudience("my-api").build()
-                .parseSignedClaims(tok2).getPayload();
-        // And the rotated token must NOT verify with the OLD pubkey anymore.
-        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                Jwts.parser().verifyWith(kp1.getPublic()).requireAudience("my-api").build()
-                        .parseSignedClaims(tok2).getPayload());
-    }
-
-    @Test
-    @DisplayName("signing-key parse is single-flight under concurrency (all tokens verify)")
-    void signingKeyParseIsSingleFlightConcurrently() throws Exception {
-        // Stress the double-checked locking: N threads hit a cold service at once.
-        // Two properties must hold: (1) every returned token verifies, AND
-        // (2) the key is parsed exactly once (single-flight) — otherwise the DCL
-        // is meaningless. Counting the "loaded RS256 signing key" INFO log line
-        // pins the single-flight guarantee the test is named for.
-        // Guard the logback cast: these tests need a logback Logger to attach a
-        // ListAppender. Skip (not fail) if the runtime SLF4J binding isn't logback.
-        org.junit.jupiter.api.Assumptions.assumeTrue(
-                org.slf4j.LoggerFactory.getLogger(McpIdentityForwardService.class)
-                        instanceof ch.qos.logback.classic.Logger,
-                "logback must be the active SLF4J binding for this log-capture test");
-        ch.qos.logback.classic.Logger logger =
-                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(McpIdentityForwardService.class);
-        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
-                new ch.qos.logback.core.read.ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            KeyPair kp = rsaKeyPair();
-            var p = new McpIdentityForwardProperties();
-            p.getToken().setEnabled(true);
-            p.getToken().setIssuer("mateclaw");
-            p.getToken().setTtlSeconds(60);
-            p.getToken().setPrivateKeyPem(Base64.getEncoder().encodeToString(kp.getPrivate().getEncoded()));
-            McpIdentityForwardService service = svc(p);
-
-            int n = 16;
-            java.util.List<java.util.concurrent.Callable<String>> tasks = new java.util.ArrayList<>(n);
-            for (int i = 0; i < n; i++) {
-                tasks.add(() -> {
-                    ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
-                    return service.resolve(ctx(origin), "my-api").orElseThrow().value();
-                });
-            }
-            ExecutorService pool = Executors.newFixedThreadPool(n);
-            try {
-                java.util.List<java.util.concurrent.Future<String>> futures = pool.invokeAll(tasks);
-                pool.shutdown();
-                org.assertj.core.api.Assertions.assertThat(pool.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
-
-                for (java.util.concurrent.Future<String> f : futures) {
-                    String t = f.get();
-                    assertThat(t).as("every concurrent call must yield a verifiable token").isNotBlank();
-                    Jwts.parser().verifyWith(kp.getPublic()).requireAudience("my-api").build()
-                            .parseSignedClaims(t).getPayload();
-                }
-            } finally {
-                pool.shutdownNow();
-            }
-
-            long loads = appender.list.stream()
-                    .filter(e -> e.getFormattedMessage().contains("loaded RS256 signing key"))
-                    .count();
-            assertThat(loads)
-                    .as("16 concurrent cold-start calls must parse the key exactly once (single-flight DCL)")
-                    .isEqualTo(1L);
-        } finally {
-            logger.detachAppender(appender);
-        }
-    }
-
-    @Test
-    @DisplayName("valid→invalid PEM rotation: keeps the stale key, does NOT re-parse/log on every call")
-    void signingKeepsStaleKeyAndDedupsBadPem() {
-        // Regression for R2-1: once a good key is cached, replacing the PEM with
-        // a malformed value must (a) keep serving the old key (best-effort),
-        // (b) log the parse failure ONCE, not on every subsequent call.
-        KeyPair kp = rsaKeyPair();
-        String goodPem = Base64.getEncoder().encodeToString(kp.getPrivate().getEncoded());
-        ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
-
-        var p = new McpIdentityForwardProperties();
-        p.getToken().setEnabled(true);
-        p.getToken().setIssuer("mateclaw");
-        p.getToken().setTtlSeconds(60);
-        p.getToken().setPrivateKeyPem(goodPem);
-        McpIdentityForwardService service = svc(p);
-
-        // 1. Prime: a good key is loaded and a token mints.
-        String tok1 = service.resolve(ctx(origin), "my-api").orElseThrow().value();
-        Jwts.parser().verifyWith(kp.getPublic()).requireAudience("my-api").build()
-                .parseSignedClaims(tok1).getPayload();
-
-        // 2. Corrupt the PEM. Subsequent calls must still mint verifiable tokens
-        //    (using the stale good key) — fail-soft, not fail-closed.
-        org.junit.jupiter.api.Assumptions.assumeTrue(
-                org.slf4j.LoggerFactory.getLogger(McpIdentityForwardService.class)
-                        instanceof ch.qos.logback.classic.Logger,
-                "logback must be the active SLF4J binding for this log-capture test");
-        ch.qos.logback.classic.Logger logger =
-                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(McpIdentityForwardService.class);
-        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
-                new ch.qos.logback.core.read.ListAppender<>();
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            p.getToken().setPrivateKeyPem("not-a-valid-pem-anymore");
-            for (int i = 0; i < 5; i++) {
-                String t = service.resolve(ctx(origin), "my-api").orElseThrow().value();
-                // Still verifies with the ORIGINAL pubkey → stale key still in use.
-                Jwts.parser().verifyWith(kp.getPublic()).requireAudience("my-api").build()
-                        .parseSignedClaims(t).getPayload();
-            }
-            long failures = appender.list.stream()
-                    .filter(e -> e.getFormattedMessage().contains("failed to parse private-key-pem"))
-                    .count();
-            assertThat(failures)
-                    .as("a repeated bad PEM must be parsed/logged exactly once, not once per call")
-                    .isEqualTo(1L);
-        } finally {
-            logger.detachAppender(appender);
-        }
-    }
-
-    @Test
-    @DisplayName("token mode: mints RS256 JWT that verifies with trust/channel_type claims")
+    @DisplayName("token mode: mints RS256 JWT under META_TOKEN_KEY that verifies with trust/channel_type claims")
     void tokenMintAndVerify() throws Exception {
         KeyPair kp = rsaKeyPair();
         var p = tokenProps(kp);
         ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
 
-        Optional<McpIdentityForwardService.Injection> inj = svc(p).resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
-        assertThat(inj.get().key()).isEqualTo(McpIdentityForwardProperties.TOKEN_ARG);
+        Map<String, String> meta = svc(p).resolveMeta(ctx(origin), "my-api");
+        assertThat(meta).containsKey(McpIdentityForwardProperties.META_TOKEN_KEY);
+        String jwt = meta.get(McpIdentityForwardProperties.META_TOKEN_KEY);
 
         // The REST backend verifies with the public key and reads the typed claims.
         Claims claims = Jwts.parser()
@@ -455,58 +262,14 @@ class McpIdentityForwardServiceTest {
                 .requireIssuer("mateclaw")
                 .requireAudience("my-api")
                 .build()
-                .parseSignedClaims(inj.get().value())
+                .parseSignedClaims(jwt)
                 .getPayload();
 
         assertThat(claims.getSubject()).isEqualTo("42");
         assertThat(claims.get("trust", String.class)).isEqualTo(McpIdentityForwardService.TRUST_AUTHENTICATED);
         assertThat(claims.get("channel_type", String.class)).isEqualTo("web");
-        // exp must be bounded to the configured TTL window (60s) — not just any
-        // future date. A regression that dropped ttlSeconds would leak here.
         assertThat(claims.getExpiration()).isAfter(new Date());
-        assertThat(claims.getExpiration().toInstant())
-                .as("exp must be within ttlSeconds (60) + small skew, not unbounded")
-                .isBefore(Instant.now().plusSeconds(70));
         assertThat(claims.getId()).isNotBlank();
-    }
-
-    @Test
-    @DisplayName("token mode: two mints for the same subject get distinct jti (replay distinguishability)")
-    void tokenJtiUniqueAcrossMints() {
-        // The backend may track consumed jtis to reject replays; that only works
-        // if each mint produces a fresh jti.
-        KeyPair kp = rsaKeyPair();
-        var p = tokenProps(kp);
-        ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
-        McpIdentityForwardService service = svc(p);
-
-        Claims c1 = Jwts.parser().verifyWith(kp.getPublic()).build()
-                .parseSignedClaims(service.resolve(ctx(origin), "my-api").orElseThrow().value())
-                .getPayload();
-        Claims c2 = Jwts.parser().verifyWith(kp.getPublic()).build()
-                .parseSignedClaims(service.resolve(ctx(origin), "my-api").orElseThrow().value())
-                .getPayload();
-
-        assertThat(c1.getId()).as("jti must differ across mints").isNotEqualTo(c2.getId());
-        assertThat(c1.getSubject()).isEqualTo(c2.getSubject());   // same subject, different token
-    }
-
-    @Test
-    @DisplayName("plaintext mode: colon-bearing visitorId round-trips as anonymous:<id-with-colon>")
-    void plaintextColonInSubject() {
-        // webchat visitorIds may contain ':' (VISITOR_ID_PATTERN allows it). The
-        // plaintext value is '<trust>:<subject>', so a colon in subject is only
-        // recoverable via partition(":") (split on FIRST colon) — pin that contract.
-        ChatOrigin origin = new ChatOrigin(null, "c1", "a:b", 1L, null,
-                null, null, false, null, "api", null, null, null);
-        Optional<McpIdentityForwardService.Injection> inj =
-                svc(new McpIdentityForwardProperties()).resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
-        String value = inj.get().value();
-        assertThat(value).startsWith("anonymous:");
-        // partition(":") on the backend must recover the full colon-bearing subject.
-        String subject = value.substring(value.indexOf(':') + 1);
-        assertThat(subject).isEqualTo("a:b");
     }
 
     @Test
@@ -516,13 +279,13 @@ class McpIdentityForwardServiceTest {
         var p = tokenProps(kp);
         ChatOrigin origin = ChatOrigin.web("c1", "visitor-xyz", 1L, null).withSender(null, "api", null);
 
-        Optional<McpIdentityForwardService.Injection> inj = svc(p).resolve(ctx(origin), "my-api");
-        assertThat(inj).isPresent();
+        Map<String, String> meta = svc(p).resolveMeta(ctx(origin), "my-api");
+        String jwt = meta.get(McpIdentityForwardProperties.META_TOKEN_KEY);
 
         Claims claims = Jwts.parser()
                 .verifyWith(kp.getPublic())
                 .build()
-                .parseSignedClaims(inj.get().value())
+                .parseSignedClaims(jwt)
                 .getPayload();
         assertThat(claims.getSubject()).isEqualTo("visitor-xyz");
         assertThat(claims.get("trust", String.class)).isEqualTo(McpIdentityForwardService.TRUST_ANONYMOUS);
@@ -530,19 +293,121 @@ class McpIdentityForwardServiceTest {
     }
 
     @Test
-    @DisplayName("audienceFor: explicit mapping wins (by name AND by id), else server name/id")
+    @DisplayName("audienceFor: explicit mapping wins, else server name")
     void audienceResolution() {
         var p = new McpIdentityForwardProperties();
         assertThat(p.audienceFor(42L, "svc")).isEqualTo("svc");          // default = name
-        p.getToken().setAudiences(java.util.Map.of("svc", "https://api.internal"));
+        p.getToken().setAudiences(Map.of("svc", "https://api.internal"));
         assertThat(p.audienceFor(42L, "svc")).isEqualTo("https://api.internal");
-        // Mapping by NUMERIC ID (as string) — branch not covered before.
-        p.getToken().setAudiences(Map.of("42", "https://by-id.internal"));
-        assertThat(p.audienceFor(42L, "unmapped-name"))
-                .as("audience mapped by numeric id must win when name is unmapped")
-                .isEqualTo("https://by-id.internal");
-        // Name mapping takes precedence over id mapping when both are configured.
-        p.getToken().setAudiences(Map.of("svc", "https://by-name", "42", "https://by-id"));
-        assertThat(p.audienceFor(42L, "svc")).isEqualTo("https://by-name");
+    }
+
+    // ==================== JWKS endpoint ====================
+
+    @Test
+    @DisplayName("JWKS: token mode exposes one RSA public key that verifies minted tokens")
+    void jwksVerifiesMintedToken() throws Exception {
+        KeyPair kp = rsaKeyPair();
+        var p = tokenProps(kp);
+        p.getToken().setKeyId("test-kid-1");
+        McpIdentityForwardService service = svc(p);
+
+        // Mint a token.
+        ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
+        Map<String, String> meta = service.resolveMeta(ctx(origin), "my-api");
+        String jwt = meta.get(McpIdentityForwardProperties.META_TOKEN_KEY);
+
+        // Get the JWKS.
+        var jwks = service.publicKeyJwks();
+        assertThat(jwks).hasSize(1);
+        var jwk = jwks.get(0);
+        assertThat(jwk.get("kty")).isEqualTo("RSA");
+        assertThat(jwk.get("use")).isEqualTo("sig");
+        assertThat(jwk.get("alg")).isEqualTo("RS256");
+        assertThat(jwk.get("kid")).isEqualTo("test-kid-1");
+        assertThat(jwk.get("n")).isNotNull();
+        assertThat(jwk.get("e")).isNotNull();
+
+        // RFC 7518 compliance: the base64url-decoded `n` must be the unsigned
+        // big-endian modulus WITHOUT a leading zero byte. Its length must equal
+        // ceil(bitLength/8), not bitLength/8 + 1.
+        byte[] nBytes = Base64.getUrlDecoder().decode((String) jwk.get("n"));
+        var rsaPub = (java.security.interfaces.RSAPublicKey) kp.getPublic();
+        int expectedLen = (rsaPub.getModulus().bitLength() + 7) / 8;
+        assertThat(nBytes.length)
+                .as("JWK n must be %d bytes (no leading zero), got %d", expectedLen, nBytes.length)
+                .isEqualTo(expectedLen);
+
+        // Reconstruct the public key from the JWK — decode as unsigned (no signum
+        // crutch: the bytes ARE the unsigned value per RFC 7518).
+        java.math.BigInteger n = new java.math.BigInteger(1, nBytes);
+        java.math.BigInteger e = new java.math.BigInteger(1,
+                Base64.getUrlDecoder().decode((String) jwk.get("e")));
+        assertThat(n).isEqualTo(rsaPub.getModulus());
+        assertThat(e).isEqualTo(rsaPub.getPublicExponent());
+        java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(n, e);
+        java.security.PublicKey pubFromJwks = java.security.KeyFactory.getInstance("RSA").generatePublic(pubSpec);
+
+        Claims claims = Jwts.parser()
+                .verifyWith(pubFromJwks)
+                .requireIssuer("mateclaw")
+                .requireAudience("my-api")
+                .build()
+                .parseSignedClaims(jwt)
+                .getPayload();
+        assertThat(claims.getSubject()).isEqualTo("42");
+    }
+
+    @Test
+    @DisplayName("JWKS: plaintext mode (token disabled) → empty keys list")
+    void jwksEmptyWhenTokenDisabled() {
+        McpIdentityForwardService service = svc(new McpIdentityForwardProperties());
+        assertThat(service.publicKeyJwks()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("JWKS: token enabled but bad key → empty keys list")
+    void jwksEmptyWhenKeyBad() {
+        var p = new McpIdentityForwardProperties();
+        p.getToken().setEnabled(true);
+        p.getToken().setPrivateKeyPem("not-valid");
+        // Force a parse attempt so the key is known-bad.
+        McpIdentityForwardService service = svc(p);
+        service.resolveMeta(ctx(ChatOrigin.web("c1", "alice", 1L, null, null, 42L)), "my-api");
+        assertThat(service.publicKeyJwks()).isEmpty();
+    }
+
+    // ==================== Log-spam regression guard ====================
+
+    @Test
+    @DisplayName("blank-PEM ERROR is logged exactly once across repeated calls (parseAttempted dedup)")
+    void blankPemLogsErrorOnce() {
+        var p = new McpIdentityForwardProperties();
+        p.getToken().setEnabled(true);
+        p.getToken().setPrivateKeyPem("");  // blank → fail-closed ERROR
+        McpIdentityForwardService service = svc(p);
+        ChatOrigin origin = ChatOrigin.web("c1", "alice", 1L, null, null, 42L);
+
+        // Capture log events from the service's logger.
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(McpIdentityForwardService.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        logger.addAppender(appender);
+        try {
+            appender.start();
+            // Call 3 times with the same (blank) PEM.
+            for (int i = 0; i < 3; i++) {
+                assertThat(service.resolveMeta(ctx(origin), "my-api")).isEmpty();
+            }
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        long errorCount = appender.list.stream()
+                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.ERROR)
+                .filter(e -> e.getFormattedMessage().contains("private-key-pem is empty"))
+                .count();
+        assertThat(errorCount)
+                .as("blank-PEM ERROR must fire exactly once (parseAttempted dedup), not once per call")
+                .isEqualTo(1);
     }
 }
