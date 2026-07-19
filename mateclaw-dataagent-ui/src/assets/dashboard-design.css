@@ -1,0 +1,216 @@
+/* ===== 洞察仪表盘设计 Token =====
+ * 基于 dashboard_redesign.html 的视觉规范
+ * 仅用于洞察（insight）模块，避免覆盖全局主题变量
+ */
+:root {
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* 间距 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  /* 背景 */
+  --db-bg: #f5f5f5;
+  --db-card: #ffffff;
+  --db-hover: #f8f8f8;
+  --db-muted: #f0f0f0;
+  --db-strong: #1a1a1a;
+
+  /* 文字 */
+  --db-text: #111111;
+  --db-text-secondary: #666666;
+  --db-text-muted: #999999;
+  --db-text-quaternary: #bbbbbb;
+
+  /* 边框 */
+  --db-border: rgba(0, 0, 0, 0.06);
+  --db-border-strong: rgba(0, 0, 0, 0.12);
+
+  /* 强调色 */
+  --db-accent: #6366f1;
+  --db-accent-light: rgba(99, 102, 241, 0.08);
+  --db-accent-border: rgba(99, 102, 241, 0.2);
+
+  /* 语义色 */
+  --db-positive: #22c55e;
+  --db-positive-bg: rgba(34, 197, 94, 0.08);
+  --db-danger: #ef4444;
+  --db-danger-bg: rgba(239, 68, 68, 0.08);
+  --db-warning: #f59e0b;
+
+  /* 图表色 */
+  --db-chart-1: #6366f1;
+  --db-chart-2: #ef4444;
+  --db-chart-3: #22c55e;
+  --db-chart-4: #a855f7;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.1);
+
+  /* 动效 */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-base: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ===== 通用工具类 ===== */
+
+.mc-card {
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+
+.mc-card-hover:hover {
+  border-color: var(--db-border-strong);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.mc-toolbar {
+  height: 56px;
+  min-height: 56px;
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-xl);
+  flex-shrink: 0;
+  gap: var(--space-md);
+}
+
+.mc-toolbar-left,
+.mc-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.mc-toolbar-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--db-text);
+}
+
+/* ===== 按钮风格覆盖 ===== */
+.mc-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--db-border-strong);
+  background: var(--db-card);
+  color: var(--db-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mc-btn:hover {
+  background: var(--db-hover);
+  border-color: var(--db-text-muted);
+}
+
+.mc-btn-primary {
+  background: var(--db-text);
+  color: #fff;
+  border-color: var(--db-text);
+}
+
+.mc-btn-primary:hover {
+  background: var(--db-text-secondary);
+  border-color: var(--db-text-secondary);
+}
+
+.mc-btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--db-text-secondary);
+}
+
+.mc-btn-ghost:hover {
+  background: var(--db-hover);
+}
+
+/* ===== Tab / 模式切换 ===== */
+.mc-mode-toggle {
+  display: flex;
+  background: var(--db-muted);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.mc-mode-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mc-mode-btn.active {
+  background: var(--db-card);
+  color: var(--db-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ===== 动画关键帧 ===== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--db-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--db-text-quaternary);
+}

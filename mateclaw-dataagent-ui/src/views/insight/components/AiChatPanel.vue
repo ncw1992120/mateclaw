@@ -302,8 +302,8 @@ async function handleSend(): Promise<void> {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
-  border-left: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border-left: 1px solid var(--db-border);
 }
 
 /* 头部 */
@@ -312,9 +312,9 @@ async function handleSend(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--theme-surface) 0%, rgba(99, 102, 241, 0.04) 100%);
+  background: linear-gradient(135deg, var(--db-card) 0%, rgba(99, 102, 241, 0.04) 100%);
 }
 
 .ai-chat-header-left {
@@ -337,13 +337,13 @@ async function handleSend(): Promise<void> {
 .ai-chat-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--theme-text);
+  color: var(--db-text);
 }
 
 /* 生成模式表单 */
 .ai-chat-generate-form {
   padding: 14px;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   overflow-y: auto;
 }
@@ -389,7 +389,7 @@ async function handleSend(): Promise<void> {
 
 .empty-hint {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   text-align: center;
   line-height: 1.6;
   padding: 0 12px;
@@ -461,8 +461,8 @@ async function handleSend(): Promise<void> {
 }
 
 .ai-chat-message.assistant .message-content {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
+  background: var(--db-hover);
+  color: var(--db-text);
   border-bottom-left-radius: 4px;
 }
 
@@ -478,7 +478,7 @@ async function handleSend(): Promise<void> {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--theme-text-muted);
+  background: var(--db-text-muted);
   animation: dot-bounce 1.4s infinite ease-in-out both;
 }
 
@@ -502,29 +502,29 @@ async function handleSend(): Promise<void> {
 /* 美化输入框 */
 .ai-chat-input-wrapper {
   padding: 12px 14px;
-  border-top: 1px solid var(--theme-border);
+  border-top: 1px solid var(--db-border);
   flex-shrink: 0;
-  background: var(--theme-bg);
+  background: var(--db-bg);
 }
 
 .ai-chat-input-box {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
   border-radius: 16px;
   padding: 8px 8px 8px 14px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ai-chat-input-box:hover {
-  border-color: var(--main-orange);
+  border-color: var(--db-accent);
 }
 
 .ai-chat-input-box:focus-within {
-  border-color: var(--main-orange);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  border-color: var(--db-accent);
+  box-shadow: 0 0 0 3px var(--db-accent-light);
 }
 
 .ai-chat-input-box :deep(.el-textarea) {
@@ -548,7 +548,7 @@ async function handleSend(): Promise<void> {
 }
 
 .ai-chat-input-box :deep(.el-textarea__inner::placeholder) {
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .send-btn {

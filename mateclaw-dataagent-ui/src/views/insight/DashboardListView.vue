@@ -3,9 +3,9 @@
     <!-- 列表模式 -->
     <template v-if="mode === 'list'">
       <div class="list-mode" :class="{ 'with-ai-panel': showAiPanel }">
-        <div class="list-header">
-        <h2 class="list-title">{{ t('insight.title') }}</h2>
-        <div class="list-header-actions">
+        <div class="list-header mc-toolbar">
+        <h2 class="list-title mc-toolbar-title">{{ t('insight.title') }}</h2>
+        <div class="list-header-actions mc-toolbar-right">
           <el-button @click="toggleAiPanel">
             <template #icon>
               <RobotIcon style="width: 16px; height: 16px;" />
@@ -257,7 +257,7 @@ function handleBackToList(): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-bg);
+  background: var(--db-bg);
 }
 
 .list-body {
@@ -270,28 +270,30 @@ function handleBackToList(): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: var(--space-md) var(--space-xl);
+  min-height: 56px;
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
 .list-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .list-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--db-text);
 }
 
 .list-content {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: var(--space-xl);
 }
 
 .empty-state {
@@ -301,14 +303,14 @@ function handleBackToList(): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: var(--theme-text-muted);
+  gap: var(--space-md);
+  color: var(--db-text-muted);
 }
 
 .empty-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .empty-icon {
@@ -322,36 +324,37 @@ function handleBackToList(): void {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: var(--space-lg);
 }
 
 .dashboard-card {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: all 0.15s ease;
+  gap: var(--space-sm);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-base), border-color var(--transition-fast);
 }
 
 .dashboard-card:hover {
-  border-color: var(--main-orange);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border-color: var(--db-border-strong);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .card-name {
   font-size: 15px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-weight: 500;
+  color: var(--db-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -359,7 +362,7 @@ function handleBackToList(): void {
 
 .card-desc {
   font-size: 13px;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   min-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -371,29 +374,30 @@ function handleBackToList(): void {
 .card-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .card-owner {
   font-size: 12px;
-  color: var(--main-orange);
-  background: rgba(255, 152, 0, 0.08);
-  padding: 1px 6px;
-  border-radius: 3px;
+  font-weight: 500;
+  color: var(--db-accent);
+  background: var(--db-accent-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
 }
 
 .card-time {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  border-top: 1px solid var(--theme-border);
-  padding-top: 8px;
-  margin-top: 4px;
+  gap: var(--space-xs);
+  border-top: 1px solid var(--db-border);
+  padding-top: var(--space-sm);
+  margin-top: var(--space-xs);
 }
 
 .list-ai-panel {

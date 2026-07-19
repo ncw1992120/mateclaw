@@ -35,11 +35,11 @@
       :is-draggable="editable"
       :is-resizable="editable"
       :vertical-compact="false"
-      :margin="[8, 8]"
+      :margin="[12, 12]"
       @layout-updated="handleLayoutUpdated"
     >
       <GridItem
-        v-for="item in gridLayout"
+        v-for="(item, index) in gridLayout"
         :key="item.i"
         :i="item.i"
         :x="item.x"
@@ -49,7 +49,11 @@
         :static="!editable"
         @click.stop="handleSelectComponent(item.i)"
       >
-        <div class="grid-item-content" :class="{ selected: selectedId === item.i }">
+        <div
+          class="grid-item-content mc-card grid-item-animated"
+          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
+          :style="{ animationDelay: `${index * 40}ms` }"
+        >
           <div v-if="editable" class="grid-item-toolbar">
             <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
             <button class="grid-item-delete" @click.stop="handleDeleteComponent(item.i)">✕</button>
@@ -339,50 +343,54 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   width: 100%;
   height: 100%;
   overflow: auto;
-  padding: 16px;
+  padding: var(--space-xl);
   box-sizing: border-box;
-  background: var(--theme-bg);
+  background: var(--db-bg);
   display: flex;
   flex-direction: column;
 }
 
 .global-filter-bar {
   flex-shrink: 0;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  background: var(--theme-surface);
-  border-radius: 8px;
-  border: 1px solid var(--theme-border);
+  margin-bottom: var(--space-lg);
+  animation: fadeIn var(--transition-base) both;
 }
 
 .global-filter-items {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-end;
+  gap: var(--space-md);
   flex-wrap: wrap;
 }
 
 .global-filter-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: var(--space-xs);
   min-width: 200px;
 }
 
 .global-filter-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .global-filter-item :deep(.filter-select-widget),
 .global-filter-item :deep(.time-filter-widget) {
-  background: transparent;
-  border: none;
-  padding: 0;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-sm) var(--space-md);
   min-width: 180px;
+  transition: border-color var(--transition-fast);
+}
+
+.global-filter-item :deep(.filter-select-widget:hover),
+.global-filter-item :deep(.time-filter-widget:hover) {
+  border-color: var(--db-border-strong);
 }
 
 .global-filter-item :deep(.filter-select-widget) {
@@ -393,36 +401,62 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   height: auto;
 }
 
+.grid-item-animated {
+  opacity: 0;
+  animation: fadeIn var(--transition-base) both;
+}
+
 .grid-item-content {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--theme-surface);
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+
+.grid-item-content:hover {
+  border-color: var(--db-border-strong);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .grid-item-content.selected {
-  border-color: var(--main-orange);
+  border-color: var(--db-accent);
+  box-shadow: 0 0 0 2px var(--db-accent-light), var(--shadow-card-hover);
+}
+
+.editable .grid-item-content {
+  border-style: dashed;
+}
+
+.editable .grid-item-content:hover {
+  border-style: solid;
+  border-color: var(--db-accent);
+}
+
+.editable .grid-item-content.selected {
+  border-style: solid;
 }
 
 .grid-item-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
-  background: var(--theme-surface-elevated);
-  border-bottom: 1px solid var(--theme-border);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--db-hover);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
 .grid-item-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -431,17 +465,18 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .grid-item-delete {
   border: none;
   background: transparent;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   cursor: pointer;
   font-size: 14px;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   line-height: 1;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .grid-item-delete:hover {
-  background: rgba(245, 34, 45, 0.1);
-  color: #f5222d;
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
 }
 
 .grid-item-body {
@@ -455,10 +490,12 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  color: var(--el-color-danger);
+  padding: var(--space-md);
+  color: var(--db-danger);
   font-size: 13px;
   text-align: center;
+  background: var(--db-danger-bg);
+  border-radius: var(--radius-lg);
 }
 
 .canvas-empty {
@@ -468,15 +505,34 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  color: var(--theme-text-muted);
+  gap: var(--space-md);
+  color: var(--db-text-muted);
+  text-align: center;
 }
 
-.empty-icon {
-  font-size: 48px;
+.canvas-empty .empty-icon {
+  font-size: 56px;
+  line-height: 1;
+  opacity: 0.8;
 }
 
-.empty-text {
+.canvas-empty .empty-text {
   font-size: 14px;
+}
+
+@media (max-width: 767px) {
+  .dashboard-canvas {
+    padding: var(--space-md);
+  }
+
+  .global-filter-items {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+
+  .global-filter-item {
+    min-width: auto;
+  }
 }
 </style>

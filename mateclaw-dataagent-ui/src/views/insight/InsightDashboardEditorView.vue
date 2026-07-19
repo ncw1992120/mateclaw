@@ -1,8 +1,8 @@
 <template>
   <div class="insight-editor-view">
     <!-- 顶部工具栏 -->
-    <div class="editor-toolbar">
-      <div class="toolbar-left">
+    <div class="editor-toolbar mc-toolbar">
+      <div class="toolbar-left mc-toolbar-left">
         <el-button :icon="ArrowLeft" text @click="handleBack">{{ t('common.back') }}</el-button>
         <el-input
           v-model="dashboardName"
@@ -26,7 +26,7 @@
           @change="handleOwnerNameChange"
         />
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-right mc-toolbar-right">
         <el-button @click="toggleAiChat">
           <template #icon>
             <RobotIcon style="width: 16px; height: 16px;" />
@@ -41,7 +41,7 @@
     <!-- 四栏布局：页面菜单 | 物料面板 | 画布 | 属性面板 -->
     <div class="editor-body">
       <!-- 页面菜单树 -->
-      <div class="editor-pages">
+      <div class="editor-pages" :class="{ 'mobile-open': showMobilePages }">
         <div class="pages-header">
           <span class="pages-title">页面</span>
           <el-button text size="small" @click="addPage">+</el-button>
@@ -78,7 +78,7 @@
       </div>
 
       <!-- 物料面板 -->
-      <div class="editor-palette">
+      <div class="editor-palette" :class="{ 'mobile-open': showMobilePalette }">
         <ComponentPalette />
       </div>
 
@@ -97,7 +97,7 @@
       </div>
 
       <!-- 属性面板 -->
-      <div class="editor-property">
+      <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
         <PropertyPanel
           :component="selectedComponent"
           :all-components="currentPageComponents"
@@ -107,13 +107,36 @@
       </div>
 
       <!-- AI助手面板 -->
-      <div v-if="showAiChat" class="editor-ai-chat">
+      <div v-if="showAiChat" class="editor-ai-chat" :class="{ 'mobile-open': showAiChat }">
         <AiChatPanel
           :dashboard-id="dashboardId"
           @close="toggleAiChat"
           @dashboard-updated="handleAiDashboardUpdated"
         />
       </div>
+
+      <!-- 移动端面板切换栏 -->
+      <div class="mobile-panel-bar">
+        <el-button text size="small" @click="showMobilePages = !showMobilePages">
+          <el-icon><Folder /></el-icon>
+          <span class="mobile-bar-label">{{ t('insight.editorMobile.pages') }}</span>
+        </el-button>
+        <el-button text size="small" @click="showMobilePalette = !showMobilePalette">
+          <el-icon><Plus /></el-icon>
+          <span class="mobile-bar-label">{{ t('insight.editorMobile.components') }}</span>
+        </el-button>
+        <el-button text size="small" @click="showMobileProperty = !showMobileProperty">
+          <el-icon><Setting /></el-icon>
+          <span class="mobile-bar-label">{{ t('insight.editorMobile.properties') }}</span>
+        </el-button>
+      </div>
+
+      <!-- 移动端面板遮罩 -->
+      <div
+        v-if="showMobilePages || showMobilePalette || showMobileProperty"
+        class="mobile-panel-backdrop"
+        @click="closeAllMobilePanels"
+      />
     </div>
   </div>
 </template>
@@ -122,7 +145,7 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ChatDotRound } from '@element-plus/icons-vue'
+import { ArrowLeft, ChatDotRound, Folder, Plus, Setting } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
@@ -157,6 +180,11 @@ const dashboardOwnerName = ref('')
 
 /** AI对话面板可见性 */
 const showAiChat = ref(false)
+
+/** 移动端面板可见性 */
+const showMobilePages = ref(false)
+const showMobilePalette = ref(false)
+const showMobileProperty = ref(false)
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
@@ -244,7 +272,7 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
     version: parsed.version ?? '1.0',
     pages: [{
       id: generateId('page'),
-      name: '首页',
+      name: t('insight.firstPageName'),
       components: oldComponents,
     }],
   }
@@ -266,7 +294,7 @@ async function loadDashboard(id: string): Promise<void> {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
       schema.pages = [{
         id: generateId('page'),
-        name: '首页',
+        name: t('insight.firstPageName'),
         components: [],
       }]
     }
@@ -413,7 +441,7 @@ async function previewAllConfiguredComponents(): Promise<void> {
         componentDataMap.value[c.id] = {
           componentId: c.id,
           renderType: 'table',
-          error: e.message ?? '预览失败',
+          error: e.message ?? t('insight.previewFailed'),
         }
       }
     })
@@ -485,6 +513,13 @@ function toggleAiChat(): void {
   showAiChat.value = !showAiChat.value
 }
 
+/** 关闭所有移动端面板 */
+function closeAllMobilePanels(): void {
+  showMobilePages.value = false
+  showMobilePalette.value = false
+  showMobileProperty.value = false
+}
+
 /** AI助手修改后刷新Schema */
 async function handleAiDashboardUpdated(): Promise<void> {
   if (!dashboard.value) {
@@ -516,7 +551,7 @@ function handleSelectPage(pageId: string): void {
 function addPage(): void {
   const newPage: DashboardPage = {
     id: generateId('page'),
-    name: `页面 ${schema.pages.length + 1}`,
+    name: t('insight.pageDefaultName', { index: schema.pages.length + 1 }),
     components: [],
   }
   schema.pages.push(newPage)
@@ -528,7 +563,7 @@ function addPage(): void {
 function addSubPage(parent: DashboardPage): void {
   const newPage: DashboardPage = {
     id: generateId('page'),
-    name: `子页面 ${schema.pages.length + 1}`,
+    name: t('insight.subPageDefaultName', { index: schema.pages.length + 1 }),
     parentId: parent.id,
     components: [],
   }
@@ -629,24 +664,16 @@ function movePageDown(page: DashboardPage): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-bg);
+  background: var(--db-bg);
   overflow: hidden;
 }
 
 .editor-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
-  flex-shrink: 0;
+  min-height: 48px;
 }
 
 .toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .toolbar-name-input {
@@ -662,11 +689,11 @@ function movePageDown(page: DashboardPage): void {
 
   :deep(.el-input__wrapper:hover),
   :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--theme-border) inset;
+    box-shadow: 0 0 0 1px var(--db-border) inset;
   }
 
   :deep(.el-input__inner) {
-    color: var(--theme-text);
+    color: var(--db-text);
     font-weight: 600;
   }
 }
@@ -683,11 +710,11 @@ function movePageDown(page: DashboardPage): void {
 
   :deep(.el-input__wrapper:hover),
   :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--theme-border) inset;
+    box-shadow: 0 0 0 1px var(--db-border) inset;
   }
 
   :deep(.el-input__inner) {
-    color: var(--theme-text-secondary);
+    color: var(--db-text-secondary);
   }
 }
 
@@ -703,17 +730,16 @@ function movePageDown(page: DashboardPage): void {
 
   :deep(.el-input__wrapper:hover),
   :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--theme-border) inset;
+    box-shadow: 0 0 0 1px var(--db-border) inset;
   }
 
   :deep(.el-input__inner) {
-    color: var(--theme-text-secondary);
+    color: var(--db-text-secondary);
   }
 }
 
 .toolbar-right {
-  display: flex;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .editor-body {
@@ -726,52 +752,59 @@ function movePageDown(page: DashboardPage): void {
   width: 200px;
   flex-shrink: 0;
   overflow-y: auto;
-  background: var(--theme-surface);
-  border-right: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border-right: 1px solid var(--db-border);
   display: flex;
   flex-direction: column;
+  animation: fadeIn var(--transition-base) both;
 }
 
 .pages-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
 .pages-title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--db-text-secondary);
 }
 
 .pages-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: var(--space-xs) 0;
 }
 
 .page-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  gap: var(--space-xs);
+  margin: 0 var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
-  color: var(--theme-text-secondary);
-  transition: background 0.15s ease;
+  color: var(--db-text-secondary);
+  transition: color var(--transition-fast), background var(--transition-fast);
   white-space: nowrap;
 }
 
 .page-item:hover {
-  background: var(--theme-surface-hover);
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
 .page-item.active {
-  background: var(--theme-surface-active, rgba(245, 34, 45, 0.08));
-  color: var(--main-orange);
+  background: color-mix(in srgb, var(--db-accent) 10%, transparent);
+  color: var(--db-accent);
+  font-weight: 500;
 }
 
 .page-icon {
@@ -805,33 +838,217 @@ function movePageDown(page: DashboardPage): void {
 .page-actions :deep(.el-button) {
   padding: 2px 4px;
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .page-actions :deep(.el-button:hover) {
-  color: var(--theme-text);
+  color: var(--db-text);
 }
 
 .editor-palette {
   width: 200px;
   flex-shrink: 0;
   overflow: hidden;
+  animation: fadeIn var(--transition-base) both;
 }
 
 .editor-canvas {
   flex: 1;
   overflow: hidden;
+  background: var(--db-bg);
 }
 
 .editor-property {
   width: 280px;
   flex-shrink: 0;
   overflow: hidden;
+  animation: fadeIn var(--transition-base) both;
 }
 
 .editor-ai-chat {
   width: 340px;
   flex-shrink: 0;
   overflow: hidden;
+  border-left: 1px solid var(--db-border);
+  animation: fadeIn var(--transition-base) both;
+}
+
+@media (max-width: 1279px) {
+  .editor-pages,
+  .editor-palette {
+    width: 56px;
+  }
+
+  .pages-header {
+    justify-content: center;
+    padding: var(--space-sm);
+  }
+
+  .pages-title,
+  .page-name,
+  .page-actions {
+    display: none;
+  }
+
+  .page-item {
+    justify-content: center;
+    padding: var(--space-sm);
+  }
+
+  .editor-palette :deep(.palette-header),
+  .editor-palette :deep(.palette-label) {
+    display: none;
+  }
+
+  .editor-palette :deep(.palette-list) {
+    align-items: center;
+  }
+
+  .editor-palette :deep(.palette-item) {
+    justify-content: center;
+    padding: var(--space-sm);
+  }
+}
+
+@media (max-width: 1023px) {
+  .editor-property {
+    position: absolute;
+    right: 0;
+    top: 48px;
+    bottom: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-dropdown);
+  }
+
+  .editor-ai-chat {
+    position: absolute;
+    right: 0;
+    top: 48px;
+    bottom: 0;
+    z-index: 101;
+    box-shadow: var(--shadow-dropdown);
+  }
+}
+
+.mobile-panel-bar,
+.mobile-panel-backdrop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .editor-toolbar {
+    padding: var(--space-sm);
+    min-height: auto;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+  }
+
+  .toolbar-right {
+    justify-content: flex-end;
+  }
+
+  .toolbar-name-input,
+  .toolbar-desc-input,
+  .toolbar-owner-input {
+    width: auto;
+    flex: 1;
+  }
+
+  .editor-body {
+    position: relative;
+  }
+
+  .editor-pages,
+  .editor-palette,
+  .editor-property,
+  .editor-ai-chat {
+    position: absolute;
+    top: 0;
+    bottom: 48px;
+    z-index: 100;
+    box-shadow: var(--shadow-dropdown);
+    transition: transform var(--transition-base);
+  }
+
+  .editor-pages {
+    left: 0;
+    width: 72%;
+    transform: translateX(-100%);
+  }
+
+  .editor-pages.mobile-open {
+    transform: translateX(0);
+  }
+
+  .editor-palette {
+    left: 0;
+    width: 72%;
+    transform: translateX(-100%);
+  }
+
+  .editor-palette.mobile-open {
+    transform: translateX(0);
+  }
+
+  .editor-property {
+    right: 0;
+    width: 80%;
+    transform: translateX(100%);
+  }
+
+  .editor-property.mobile-open {
+    transform: translateX(0);
+  }
+
+  .editor-ai-chat {
+    right: 0;
+    width: 90%;
+    transform: translateX(100%);
+  }
+
+  .editor-ai-chat.mobile-open {
+    transform: translateX(0);
+  }
+
+  .mobile-panel-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: var(--space-xs) 0;
+    background: var(--db-hover);
+    border-top: 1px solid var(--db-border);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 99;
+  }
+
+  .mobile-panel-bar :deep(.el-button) {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: var(--space-xs) var(--space-sm);
+    height: auto;
+    line-height: 1.2;
+  }
+
+  .mobile-bar-label {
+    font-size: 11px;
+  }
+
+  .mobile-panel-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 95;
+    animation: fadeIn var(--transition-fast) both;
+  }
 }
 </style>

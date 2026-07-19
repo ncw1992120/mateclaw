@@ -167,8 +167,6 @@ watch(chartContainerRef, (el) => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
-  border-radius: 8px;
   overflow: hidden;
   position: relative;
 }
@@ -177,66 +175,108 @@ watch(chartContainerRef, (el) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  min-height: 32px;
+  padding: var(--space-md) var(--space-lg);
+  min-height: 48px;
   flex-shrink: 0;
+  gap: var(--space-sm);
+  border-bottom: 1px solid var(--db-border);
 }
 
 .chart-title {
-  padding: 8px 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--db-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chart-time-filter {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .chart-container {
   flex: 1;
   min-height: 200px;
   width: 100%;
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  box-sizing: border-box;
 }
 
 .widget-tabs {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--theme-border);
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-lg);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   overflow-x: auto;
 }
 
 .widget-tab {
-  padding: 6px 12px;
+  padding: var(--space-xs) var(--space-sm);
   font-size: 12px;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .widget-tab:hover {
-  color: var(--theme-text);
+  color: var(--db-text);
+  background: var(--db-hover);
 }
 
 .widget-tab.active {
-  color: var(--main-orange);
-  border-bottom-color: var(--main-orange);
+  color: var(--db-accent);
+  background: var(--db-accent-light);
   font-weight: 600;
 }
 
 .chart-placeholder {
   position: absolute;
-  top: 60%;
+  top: 55%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 12px;
-  color: var(--theme-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13px;
+  color: var(--db-text-muted);
   pointer-events: none;
+}
+
+.chart-placeholder::before {
+  content: '📊';
+  font-size: 32px;
+  opacity: 0.6;
+}
+
+@media (max-width: 767px) {
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .chart-time-filter {
+    width: 100%;
+  }
+
+  .chart-time-filter :deep(.el-date-editor) {
+    width: 100% !important;
+  }
+
+  .widget-tabs {
+    padding: var(--space-xs) var(--space-md);
+  }
+
+  .chart-container {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+  }
 }
 </style>

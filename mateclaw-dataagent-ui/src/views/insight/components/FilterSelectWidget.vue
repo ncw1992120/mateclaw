@@ -71,16 +71,24 @@ function handleChange(value: string): void {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--space-xs);
+  padding: var(--space-md);
   box-sizing: border-box;
-  background: var(--theme-surface);
-  border-radius: 8px;
+  background: var(--db-card);
+  border-radius: var(--radius-lg);
 }
 
 .filter-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
+}
+
+.filter-select-widget :deep(.el-select) {
+  width: 100%;
+}
+
+.filter-select-widget :deep(.el-input__wrapper) {
+  border-radius: var(--radius-sm);
 }
 </style>

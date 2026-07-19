@@ -160,8 +160,6 @@ const activeTableRows = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
-  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -170,63 +168,147 @@ const activeTableRows = computed(() => {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  padding: var(--space-md) var(--space-lg);
+  min-height: 48px;
+  gap: var(--space-sm);
+  border-bottom: 1px solid var(--db-border);
 }
 
 .table-title {
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
-  border-bottom: 1px solid var(--theme-border);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--db-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-time-filter {
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--theme-border);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .table-wrapper {
   flex: 1;
   overflow: hidden;
-  padding: 8px;
+  padding: 0 var(--space-lg) var(--space-lg);
 }
 
 .widget-tabs {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--theme-border);
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-lg);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   overflow-x: auto;
 }
 
 .widget-tab {
-  padding: 6px 12px;
+  padding: var(--space-xs) var(--space-sm);
   font-size: 12px;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .widget-tab:hover {
-  color: var(--theme-text);
+  color: var(--db-text);
+  background: var(--db-hover);
 }
 
 .widget-tab.active {
-  color: var(--main-orange);
-  border-bottom-color: var(--main-orange);
+  color: var(--db-accent);
+  background: var(--db-accent-light);
   font-weight: 600;
 }
 
 .table-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
+  gap: var(--space-sm);
+  font-size: 13px;
+  color: var(--db-text-muted);
+}
+
+.table-placeholder::before {
+  content: '📋';
+  font-size: 32px;
+  opacity: 0.6;
+}
+
+/* Element Plus 表格样式覆盖 */
+.table-wrapper :deep(.el-table) {
+  font-size: 13px;
+  --el-table-border-color: var(--db-border);
+  --el-table-header-bg-color: var(--db-card);
+  --el-table-row-hover-bg-color: var(--db-hover);
+}
+
+.table-wrapper :deep(.el-table th.el-table__cell) {
+  background: var(--db-card);
+  color: var(--db-text-secondary);
+  font-weight: 500;
   font-size: 12px;
-  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--db-border);
+}
+
+.table-wrapper :deep(.el-table td.el-table__cell) {
+  padding: 10px 16px;
+  color: var(--db-text);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--db-border);
+}
+
+.table-wrapper :deep(.el-table--small .el-table__cell) {
+  padding: 8px 12px;
+}
+
+.table-wrapper :deep(.el-table--border::after),
+.table-wrapper :deep(.el-table--border::before),
+.table-wrapper :deep(.el-table__border-left-patch),
+.table-wrapper :deep(.el-table--border .el-table__cell) {
+  display: none;
+}
+
+.table-wrapper :deep(.el-table__body tr:last-child td.el-table__cell) {
+  border-bottom: none;
+}
+
+.table-wrapper :deep(.el-table__body tr.current-row > td.el-table__cell) {
+  background: var(--db-accent-light);
+}
+
+@media (max-width: 767px) {
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .table-time-filter {
+    width: 100%;
+  }
+
+  .table-time-filter :deep(.el-date-editor) {
+    width: 100% !important;
+  }
+
+  .widget-tabs {
+    padding: var(--space-xs) var(--space-md);
+  }
+
+  .table-wrapper {
+    padding: 0 var(--space-md) var(--space-md);
+  }
 }
 </style>

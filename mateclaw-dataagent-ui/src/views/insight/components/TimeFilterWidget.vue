@@ -116,16 +116,24 @@ function handleDateChange(dates: [string, string] | null): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--space-xs);
+  padding: var(--space-md);
   box-sizing: border-box;
-  background: var(--theme-surface);
-  border-radius: 8px;
+  background: var(--db-card);
+  border-radius: var(--radius-lg);
 }
 
 .time-filter-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
+}
+
+.time-filter-widget :deep(.el-date-editor) {
+  width: 100%;
+}
+
+.time-filter-widget :deep(.el-input__wrapper) {
+  border-radius: var(--radius-sm);
 }
 </style>

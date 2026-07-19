@@ -1022,8 +1022,8 @@ datasourceStore.fetchDatasources().catch(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
-  border-left: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border-left: 1px solid var(--db-border);
   overflow: hidden;
 }
 
@@ -1031,8 +1031,8 @@ datasourceStore.fetchDatasources().catch(() => {
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--theme-text);
-  border-bottom: 1px solid var(--theme-border);
+  color: var(--db-text);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
@@ -1052,7 +1052,7 @@ datasourceStore.fetchDatasources().catch(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .empty-icon {
@@ -1072,7 +1072,7 @@ datasourceStore.fetchDatasources().catch(() => {
 .form-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
 }
 
 .preview-group {
@@ -1082,8 +1082,8 @@ datasourceStore.fetchDatasources().catch(() => {
 .preview-result {
   padding: 8px 12px;
   border-radius: 6px;
-  background: var(--theme-surface-elevated);
-  border: 1px solid var(--theme-border);
+  background: var(--db-hover);
+  border: 1px solid var(--db-border);
 }
 
 .preview-error {
@@ -1098,7 +1098,7 @@ datasourceStore.fetchDatasources().catch(() => {
 
 .form-hint {
   font-size: 11px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   margin-top: 2px;
 }
 
@@ -1119,12 +1119,12 @@ datasourceStore.fetchDatasources().catch(() => {
 }
 
 .tab-item-row.active {
-  border-color: var(--main-orange);
-  background: rgba(245, 130, 32, 0.06);
+  border-color: var(--db-accent);
+  background: var(--db-accent-light);
 }
 
 .tab-datasource-section {
-  border: 1px dashed var(--theme-border);
+  border: 1px dashed var(--db-border);
   border-radius: 6px;
   padding: 12px;
   display: flex;
@@ -1135,7 +1135,7 @@ datasourceStore.fetchDatasources().catch(() => {
 .tab-datasource-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--main-orange);
+  color: var(--db-accent);
   margin-bottom: 4px;
 }
 

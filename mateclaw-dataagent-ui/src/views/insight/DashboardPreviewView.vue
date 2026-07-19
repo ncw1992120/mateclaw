@@ -1,19 +1,19 @@
 <template>
   <div class="dashboard-preview-view">
     <!-- 顶部工具栏 -->
-    <div class="preview-toolbar">
-      <div class="toolbar-left">
+    <div class="preview-toolbar mc-toolbar">
+      <div class="toolbar-left mc-toolbar-left">
         <el-button :icon="ArrowLeft" text @click="handleBack">{{ t('common.back') }}</el-button>
-        <span class="toolbar-title">{{ dashboard?.name ?? t('insight.preview') }}</span>
+        <span class="toolbar-title mc-toolbar-title">{{ dashboard?.name ?? t('insight.preview') }}</span>
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-right mc-toolbar-right">
         <el-button
           v-if="!reportGenerating"
           size="small"
           :icon="Document"
           @click="handleGenerateReport"
         >
-          生成报告
+          {{ t('insight.reportGenerate') }}
         </el-button>
         <el-button
           v-if="hasReport && !reportGenerating"
@@ -21,11 +21,11 @@
           :icon="View"
           @click="handleViewReport"
         >
-          查看报告
+          {{ t('insight.reportView') }}
         </el-button>
         <div v-if="reportGenerating" class="generating-indicator">
           <el-icon class="is-loading"><Loading /></el-icon>
-          <span>报告生成中...</span>
+          <span>{{ t('insight.generatingReport') }}</span>
         </div>
       </div>
     </div>
@@ -33,11 +33,11 @@
     <!-- 仪表盘预览区 -->
     <div class="preview-body">
       <!-- 页面菜单 Tab 栏（多页面时显示） -->
-      <div v-if="schema.pages.length > 1" class="page-bar">
+      <div v-if="schema.pages.length > 1" class="page-bar mc-tabs">
         <button
           v-for="page in topLevelPages"
           :key="page.id"
-          class="page-tab"
+          class="page-tab mc-tab"
           :class="{ active: activePageId === page.id || isDescendantPage(activePageId, page.id) }"
           @click="handlePageChange(page.id)"
         >
@@ -46,11 +46,11 @@
         </button>
       </div>
       <!-- 子页面 Tab 栏（当前页面有子页面时显示） -->
-      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar">
+      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar mc-tabs">
         <button
           v-for="sub in activeSubPages"
           :key="sub.id"
-          class="page-tab"
+          class="page-tab mc-tab mc-tab-sub"
           :class="{ active: activePageId === sub.id }"
           @click="handlePageChange(sub.id)"
         >
@@ -79,7 +79,7 @@
     <!-- 报告抽屉 -->
     <el-drawer
       v-model="reportDrawerVisible"
-      title="AI 分析报告"
+      :title="t('insight.reportTitle')"
       direction="rtl"
       size="50%"
       :close-on-press-escape="true"
@@ -90,8 +90,8 @@
       </div>
       <template #footer>
         <div class="report-footer">
-          <span class="disclaimer">AI 分析仅供参考</span>
-          <el-button size="small" @click="handleDownloadReport">下载报告</el-button>
+          <span class="disclaimer">{{ t('insight.aiDisclaimer') }}</span>
+          <el-button size="small" @click="handleDownloadReport">{{ t('insight.reportDownload') }}</el-button>
         </div>
       </template>
     </el-drawer>
@@ -239,7 +239,7 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
     version: parsed.version ?? '1.0',
     pages: [{
       id: generateId('page'),
-      name: '首页',
+      name: t('insight.firstPageName'),
       components: oldComponents,
     }],
   }
@@ -281,7 +281,7 @@ async function loadDashboard(): Promise<void> {
     } catch {
       schema.pages = [{
         id: generateId('page'),
-        name: '首页',
+        name: t('insight.firstPageName'),
         components: [],
       }]
     }
@@ -420,9 +420,9 @@ async function handleGenerateReport(): Promise<void> {
   try {
     const htmlContent = await generateReport(props.dashboardId)
     reportHtmlContent.value = htmlContent
-    ElMessage.success('报告生成完成，点击"查看报告"查看')
+    ElMessage.success(t('insight.reportGenerated'))
   } catch (err: any) {
-    ElMessage.error('报告生成失败: ' + (err?.message || String(err)))
+    ElMessage.error(t('insight.reportGenerateFailed') + ': ' + (err?.message || String(err)))
   } finally {
     reportGenerating.value = false
   }
@@ -509,7 +509,7 @@ function handleDownloadReport(): void {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 分析报告 - ${dashboardName}</title>
+  <title>${t('insight.reportTitle')} - ${dashboardName}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
            max-width: 800px; margin: 0 auto; padding: 24px; color: #333; line-height: 1.8; }
@@ -532,7 +532,7 @@ function handleDownloadReport(): void {
 </head>
 <body>
 ${reportHtmlContent.value}
-  <div class="disclaimer">AI 分析仅供参考</div>
+  <div class="disclaimer">${t('insight.aiDisclaimer')}</div>
   <script>
     (function() {
       var data = ${echartsDataJson};
@@ -591,36 +591,20 @@ function handlePageChange(pageId: string): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-bg);
+  background: var(--db-bg);
   overflow: hidden;
 }
 
 .preview-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
-  flex-shrink: 0;
+  min-height: 48px;
 }
 
 .toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.toolbar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--theme-text);
+  gap: var(--space-md);
 }
 
 .toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .generating-indicator {
@@ -628,7 +612,11 @@ function handlePageChange(pageId: string): void {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--theme-text-muted);
+  font-weight: 500;
+  color: var(--db-accent);
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--db-accent-light);
 }
 
 .report-container {
@@ -639,69 +627,78 @@ function handlePageChange(pageId: string): void {
 .report-content {
   max-width: 800px;
   margin: 0 auto;
-  padding: 0 8px;
-  color: #333;
+  padding: var(--space-lg);
+  color: var(--db-text);
   line-height: 1.8;
+  animation: fadeIn var(--transition-base) both;
 }
 
 .report-content :deep(h1) {
   font-size: 24px;
-  border-bottom: 2px solid #e8e8e8;
-  padding-bottom: 8px;
+  border-bottom: 2px solid var(--db-border);
+  padding-bottom: var(--space-sm);
+  color: var(--db-text);
 }
 
 .report-content :deep(h2) {
   font-size: 20px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--db-border);
   padding-bottom: 6px;
-  margin-top: 24px;
+  margin-top: var(--space-xl);
+  color: var(--db-text);
 }
 
 .report-content :deep(h3) {
   font-size: 16px;
-  margin-top: 16px;
+  margin-top: var(--space-lg);
+  color: var(--db-text);
 }
 
 .report-content :deep(table) {
   border-collapse: collapse;
   width: 100%;
-  margin: 12px 0;
+  margin: var(--space-md) 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
 .report-content :deep(th),
 .report-content :deep(td) {
-  border: 1px solid #ddd;
+  border: 1px solid var(--db-border);
   padding: 8px 12px;
   text-align: left;
 }
 
 .report-content :deep(th) {
-  background-color: #f5f5f5;
+  background: var(--db-hover);
   font-weight: 600;
+  color: var(--db-text-secondary);
 }
 
 .report-content :deep(tr:nth-child(even)) {
-  background-color: #fafafa;
+  background: var(--db-hover);
 }
 
 .report-content :deep(code) {
-  background-color: #f0f0f0;
+  background: var(--db-hover);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 14px;
 }
 
 .report-content :deep(blockquote) {
-  border-left: 4px solid #ddd;
-  margin: 12px 0;
-  padding: 8px 16px;
-  color: #666;
+  border-left: 4px solid var(--db-border-strong);
+  margin: var(--space-md) 0;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--db-text-secondary);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--db-hover);
 }
 
 .report-content :deep(.echarts-container) {
   width: 100%;
   height: 300px;
-  margin: 16px 0;
+  margin: var(--space-md) 0;
 }
 
 .report-footer {
@@ -711,9 +708,9 @@ function handlePageChange(pageId: string): void {
   width: 100%;
 }
 
-.disclaimer {
+.report-footer .disclaimer {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .preview-body {
@@ -724,46 +721,12 @@ function handlePageChange(pageId: string): void {
 }
 
 .page-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
-  flex-shrink: 0;
+  animation: fadeIn var(--transition-base) both;
 }
 
 .sub-page-bar {
-  background: var(--theme-bg);
-  padding: 6px 16px;
-  border-bottom: 1px solid var(--theme-border);
-}
-
-.page-tab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--theme-text-secondary);
-  font-family: inherit;
-  transition: all 0.15s ease;
-}
-
-.page-tab:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
-}
-
-.page-tab.active {
-  background: var(--main-orange);
-  color: #fff;
-  border-color: var(--main-orange);
+  background: var(--db-bg);
+  border-bottom: 1px solid var(--db-border);
 }
 
 .page-icon {
@@ -782,15 +745,32 @@ function handlePageChange(pageId: string): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  color: var(--theme-text-muted);
+  gap: var(--space-md);
+  color: var(--db-text-muted);
 }
 
-.empty-icon {
-  font-size: 48px;
+.preview-empty .empty-icon {
+  font-size: 56px;
+  line-height: 1;
+  opacity: 0.8;
 }
 
-.empty-text {
+.preview-empty .empty-text {
   font-size: 14px;
+}
+
+@media (max-width: 767px) {
+  .preview-toolbar {
+    padding: var(--space-sm);
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+  }
+
+  .toolbar-right {
+    justify-content: flex-end;
+  }
 }
 </style>

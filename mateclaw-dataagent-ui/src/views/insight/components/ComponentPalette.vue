@@ -65,17 +65,19 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
-  border-right: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border-right: 1px solid var(--db-border);
   overflow: hidden;
 }
 
 .palette-header {
   padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--theme-text);
-  border-bottom: 1px solid var(--theme-border);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--db-text-secondary);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
@@ -93,17 +95,17 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: var(--theme-surface-elevated);
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
+  background: var(--db-hover);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-md);
   cursor: grab;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   user-select: none;
 }
 
 .palette-item:hover {
-  border-color: var(--main-orange);
-  background: var(--theme-surface-hover);
+  border-color: var(--db-accent);
+  background: var(--db-hover);
 }
 
 .palette-item:active {
@@ -116,7 +118,7 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   flex-shrink: 0;
 }
 
@@ -127,6 +129,6 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
 
 .palette-label {
   font-size: 13px;
-  color: var(--theme-text);
+  color: var(--db-text);
 }
 </style>

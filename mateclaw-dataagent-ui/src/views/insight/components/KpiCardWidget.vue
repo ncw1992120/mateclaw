@@ -1,55 +1,66 @@
 <template>
   <div class="kpi-card-widget">
-    <div v-if="showTimeFilter" class="kpi-time-filter">
-      <el-date-picker
-        v-model="localDateRange"
-        type="daterange"
-        size="small"
-        style="width: 220px"
-        value-format="YYYY-MM-DD"
-        unlink-panels
-        :shortcuts="dateShortcuts"
-        :start-placeholder="t('insight.timeRange.startPlaceholder')"
-        :end-placeholder="t('insight.timeRange.endPlaceholder')"
-        @change="handleDateChange"
-      />
-    </div>
-    <div v-if="showTitle" class="kpi-header">{{ component.title }}</div>
-    <!-- Tab 栏（多 Tab 模式） -->
-    <div v-if="hasTabs" class="widget-tabs">
-      <div
-        v-for="tab in tabList"
-        :key="tab.id"
-        class="widget-tab"
-        :class="{ active: activeTabId === tab.id }"
-        @click="activeTabId = tab.id"
-      >
-        {{ tab.title }}
-      </div>
-    </div>
-    <!-- 多指标模式 -->
-    <div v-if="isMultiKpi" class="kpi-multi-body">
-      <div
-        v-for="(item, idx) in activeKpiListData"
-        :key="idx"
-        class="kpi-multi-item"
-      >
-        <div class="kpi-value">{{ item?.value ?? '--' }}</div>
-        <div v-if="item?.name" class="kpi-name">{{ item.name }}</div>
-        <div v-if="item?.chg" class="kpi-chg" :class="item.up ? 'up' : 'down'">
-          <span>{{ item.up ? '↑' : '↓' }} {{ item.chg }}</span>
+    <div class="kpi-card-inner">
+      <div class="kpi-card-header">
+        <div class="kpi-title-row">
+          <span v-if="showTitle" class="kpi-header-title">{{ component.title }}</span>
+        </div>
+        <div v-if="showTimeFilter" class="kpi-time-filter">
+          <el-date-picker
+            v-model="localDateRange"
+            type="daterange"
+            size="small"
+            style="width: 200px"
+            value-format="YYYY-MM-DD"
+            unlink-panels
+            :shortcuts="dateShortcuts"
+            :start-placeholder="t('insight.timeRange.startPlaceholder')"
+            :end-placeholder="t('insight.timeRange.endPlaceholder')"
+            @change="handleDateChange"
+          />
         </div>
       </div>
-      <div v-if="!activeKpiListData || activeKpiListData.length === 0" class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
-    </div>
-    <!-- 单指标模式 -->
-    <div v-else class="kpi-body">
-      <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
-      <div v-if="showTitle && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
-      <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
-        <span>{{ activeKpiData.up ? '↑' : '↓' }} {{ activeKpiData.chg }}</span>
+
+      <!-- Tab 栏（多 Tab 模式） -->
+      <div v-if="hasTabs" class="widget-tabs">
+        <div
+          v-for="tab in tabList"
+          :key="tab.id"
+          class="widget-tab"
+          :class="{ active: activeTabId === tab.id }"
+          @click="activeTabId = tab.id"
+        >
+          {{ tab.title }}
+        </div>
       </div>
-      <div v-else class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+
+      <!-- 多指标模式 -->
+      <div v-if="isMultiKpi" class="kpi-multi-body">
+        <div
+          v-for="(item, idx) in activeKpiListData"
+          :key="idx"
+          class="kpi-multi-item"
+        >
+          <div class="kpi-value">{{ item?.value ?? '--' }}</div>
+          <div v-if="item?.name" class="kpi-name">{{ item.name }}</div>
+          <div v-if="item?.chg" class="kpi-chg" :class="item.up ? 'up' : 'down'">
+            <el-icon class="kpi-trend-icon"><component :is="item.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+            <span>{{ item.chg }}</span>
+          </div>
+        </div>
+        <div v-if="!activeKpiListData || activeKpiListData.length === 0" class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+      </div>
+
+      <!-- 单指标模式 -->
+      <div v-else class="kpi-body">
+        <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
+        <div v-if="showTitle && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
+        <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
+          <el-icon class="kpi-trend-icon"><component :is="activeKpiData.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+          <span>{{ activeKpiData.chg }}</span>
+        </div>
+        <div v-else-if="!activeKpiData?.value" class="kpi-placeholder">{{ t('insight.kpiNoData') }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -57,6 +68,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
 
 defineOptions({
@@ -142,102 +154,151 @@ function handleDateChange(val: [string, string] | null): void {
 .kpi-card-widget {
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
+}
+
+.kpi-card-inner {
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 16px;
+  padding: var(--space-lg);
   box-sizing: border-box;
-  background: var(--theme-surface);
-  border-radius: 8px;
-  position: relative;
+}
+
+.kpi-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  min-height: 24px;
+}
+
+.kpi-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.kpi-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.kpi-header-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--db-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kpi-time-filter {
-  position: absolute;
-  top: 4px;
-  right: 8px;
-  z-index: 1;
-}
-
-.kpi-header {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
+  flex-shrink: 0;
 }
 
 .widget-tabs {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: var(--space-xs);
   width: 100%;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   overflow-x: auto;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-xs);
 }
 
 .widget-tab {
-  padding: 4px 10px;
+  padding: var(--space-xs) var(--space-sm);
   font-size: 12px;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s ease;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .widget-tab:hover {
-  color: var(--theme-text);
+  color: var(--db-text);
+  background: var(--db-hover);
 }
 
 .widget-tab.active {
-  color: var(--main-orange);
-  border-bottom-color: var(--main-orange);
+  color: var(--db-accent);
+  background: var(--db-accent-light);
   font-weight: 600;
 }
 
 .kpi-body {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   flex: 1;
+  gap: var(--space-xs);
+}
+
+.kpi-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: var(--space-xs);
 }
 
 .kpi-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--theme-text);
-  line-height: 1.2;
-  margin-bottom: 6px;
+  font-size: 36px;
+  font-weight: 500;
+  color: var(--db-text);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 .kpi-name {
   font-size: 13px;
-  color: var(--theme-text-secondary);
-  margin-bottom: 4px;
+  color: var(--db-text-secondary);
+  font-weight: 500;
+  margin-bottom: 8px;
 }
 
 .kpi-chg {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 14px;
   font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
+  background: var(--db-hover);
 }
 
 .kpi-chg.up {
-  color: #52c41a;
+  color: var(--db-positive);
+  background: var(--db-positive-bg);
 }
 
 .kpi-chg.down {
-  color: #f5222d;
+  color: var(--db-danger);
+  background: var(--db-danger-bg);
+}
+
+.kpi-trend-icon {
+  font-size: 10px;
 }
 
 .kpi-placeholder {
+  font-size: 13px;
+  color: var(--db-text-muted);
+}
+
+.kpi-sub {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-quaternary);
 }
 
 /* 多指标模式样式 */
@@ -245,7 +306,6 @@ function handleDateChange(val: [string, string] | null): void {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  justify-content: center;
   flex: 1;
   width: 100%;
   gap: 0;
@@ -258,26 +318,26 @@ function handleDateChange(val: [string, string] | null): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 4px;
+  padding: var(--space-sm) var(--space-xs);
   box-sizing: border-box;
+  gap: var(--space-xs);
 }
 
 .kpi-multi-item + .kpi-multi-item {
-  border-left: 1px solid var(--theme-border);
+  border-left: 1px solid var(--db-border);
 }
 
 .kpi-multi-item .kpi-value {
   font-size: 22px;
-  font-weight: 700;
-  color: var(--theme-text);
+  font-weight: 500;
+  color: var(--db-text);
   line-height: 1.2;
-  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .kpi-multi-item .kpi-name {
   font-size: 11px;
-  color: var(--theme-text-secondary);
-  margin-bottom: 2px;
+  color: var(--db-text-secondary);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -287,6 +347,27 @@ function handleDateChange(val: [string, string] | null): void {
 
 .kpi-multi-item .kpi-chg {
   font-size: 11px;
-  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .kpi-card-inner {
+    padding: var(--space-md);
+  }
+
+  .kpi-value {
+    font-size: 28px;
+  }
+
+  .kpi-multi-item .kpi-value {
+    font-size: 18px;
+  }
+
+  .kpi-time-filter {
+    width: 100%;
+  }
+
+  .kpi-time-filter :deep(.el-date-editor) {
+    width: 100% !important;
+  }
 }
 </style>
