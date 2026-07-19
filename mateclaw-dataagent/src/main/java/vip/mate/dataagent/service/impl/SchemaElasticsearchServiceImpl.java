@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
@@ -277,6 +278,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                             .must(m -> m
                                                     .multiMatch(mm -> mm
                                                             .fields(DataAgentConstants.SCHEMA_ES_EMBEDDING_TEXT_FIELD)
+                                                            .type(TextQueryType.CrossFields)
                                                             .query(query)
                                                     )
                                             )
@@ -407,9 +409,11 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                                 .should(sh -> sh
                                                         .multiMatch(mm -> mm
                                                                 .fields(DataAgentConstants.SCHEMA_ES_EMBEDDING_TEXT_FIELD)
+                                                                .type(TextQueryType.CrossFields)
                                                                 .query(request.getQuery())
                                                         )
                                                 )
+                                                .minimumShouldMatch("1")
                                         )
                                 )
                                 .knn(knn -> knn
@@ -445,12 +449,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                 h.setMatchSource(matchSource);
             }
 
-            /* 过滤低于阈值的结果 */
-            if (hasVector) {
-                tableHits = tableHits.stream()
-                        .filter(h -> h.getScore() >= threshold)
-                        .toList();
-            }
+            /* RRF 分数尺度远小于 BM25，不适用 BM25 的 threshold 过滤 */
         } catch (IOException e) {
             log.warn("ES 混合检索失败，降级为关键词检索: {}", e.getMessage());
             tableHits = keywordSearch(request.getDatasourceId(), request.getQuery(), topK);

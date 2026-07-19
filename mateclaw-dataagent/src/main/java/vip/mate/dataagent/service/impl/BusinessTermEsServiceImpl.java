@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -280,7 +281,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             boolean canKnn = !queryVector.isEmpty();
 
             if (canKnn) {
-                // 混合检索：multi_match + kNN + RRF
+                // 混合检索：multi_match(cross_fields + 字段权重) + kNN + RRF
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
@@ -289,8 +290,10 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                         b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
                                     b.should(sh -> sh.multiMatch(mm -> mm
-                                            .fields("termName", "description", "calculationFormula", "dataCaliber", "businessRule", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .fields("termName^3", "termName.keyword^3", "synonyms^2", "description^1", "calculationFormula^1", "dataCaliber^1", "businessRule^1", "category^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
+                                            .type(TextQueryType.CrossFields)
                                             .query(query)));
+                                    b.minimumShouldMatch("1");
                                     return b;
                                 }))
                                 .knn(knn -> {
@@ -306,7 +309,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                 .rank(r -> r.rrf(rrf -> rrf.rankConstant((long) DataAgentConstants.SCHEMA_SEARCH_RRF_K))),
                         Map.class
                 );
-                return extractTermHits(response, "hybrid", threshold);
+                // RRF 分数尺度远小于 BM25，不适用 BM25 的 threshold，直接传 0 避免误过滤
+                return extractTermHits(response, "hybrid", 0);
             } else {
                 // 仅关键词检索
                 SearchResponse<Map> response = client.search(s -> s
@@ -317,7 +321,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                         b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
                                     b.must(m -> m.multiMatch(mm -> mm
-                                            .fields("termName", "termName.keyword", "synonyms", "description", "calculationFormula", "dataCaliber", "businessRule", "category", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD)
+                                            .fields("termName^3", "termName.keyword^3", "synonyms^2", "description^1", "calculationFormula^1", "dataCaliber^1", "businessRule^1", "category^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
+                                            .type(TextQueryType.CrossFields)
                                             .query(query)));
                                     return b;
                                 })),

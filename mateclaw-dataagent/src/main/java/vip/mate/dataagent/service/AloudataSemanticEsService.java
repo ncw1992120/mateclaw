@@ -69,4 +69,18 @@ public interface AloudataSemanticEsService {
      * @return 检索结果（含指标命中和维度命中）
      */
     AloudataSearchResult hybridSearch(Long datasourceId, String query, int topK, double similarityThreshold);
+
+    /**
+     * 多关键词合并混合检索指标和维度
+     * <p>
+     * 将多个扩展关键词合并为单个查询（空格分隔），在同一个 RRF 分值空间内融合，
+     * 避免逐词检索后跨查询分数不可比的问题。
+     *
+     * @param datasourceId       数据源 ID
+     * @param keywords           搜索关键词列表（第一个为原始关键词，后续为扩展词）
+     * @param topK               返回结果数量上限
+     * @param similarityThreshold 向量语义检索相似度阈值
+     * @return 检索结果（含指标命中和维度命中）
+     */
+    AloudataSearchResult hybridSearchMerged(Long datasourceId, List<String> keywords, int topK, double similarityThreshold);
 }

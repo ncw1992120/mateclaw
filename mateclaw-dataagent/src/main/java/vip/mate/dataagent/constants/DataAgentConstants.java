@@ -137,8 +137,8 @@ public final class DataAgentConstants {
     /** Schema 语义检索默认相似度阈值 */
     public static final double SCHEMA_SEARCH_DEFAULT_THRESHOLD = 0.3;
 
-    /** Schema 语义检索 RRF 融合参数 k */
-    public static final int SCHEMA_SEARCH_RRF_K = 60;
+    /** Schema 语义检索 RRF 融合参数 k（值越小，排名靠前的结果优势越明显，提升排序区分度） */
+    public static final int SCHEMA_SEARCH_RRF_K = 20;
 
     /** Schema 关键词检索匹配字段 */
     public static final String[] SCHEMA_KEYWORD_SEARCH_FIELDS = {
@@ -190,8 +190,8 @@ public final class DataAgentConstants {
     /** Schema 嵌入 ES 嵌入文本字段名 */
     public static final String SCHEMA_ES_EMBEDDING_TEXT_FIELD = "embeddingText";
 
-    /** Elasticsearch 默认向量检索候选数（numCandidates） */
-    public static final int ES_KNN_NUM_CANDIDATES = 100;
+    /** Elasticsearch 默认向量检索候选数（numCandidates），越大召回率越高但延迟越高 */
+    public static final int ES_KNN_NUM_CANDIDATES = 200;
 
     // ==================== Aloudata 语义层 ====================
 

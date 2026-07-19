@@ -703,29 +703,10 @@ public class AloudataCallTool {
         /* P1: 自动先查业务术语，扩展检索关键词 */
         List<String> expandedKeywords = expandKeywordsFromBusinessTerms(keyword);
 
-        /* 用扩展关键词分别检索，合并去重 */
-        Set<String> seenMetricNames = new LinkedHashSet<>();
-        List<AloudataSearchResult.MetricHit> mergedMetrics = new ArrayList<>();
-        Set<String> seenDimNames = new LinkedHashSet<>();
-        List<AloudataSearchResult.DimensionHit> mergedDimensions = new ArrayList<>();
-
-        for (String kw : expandedKeywords) {
-            AloudataSearchResult sr = aloudataSemanticEsService.hybridSearch(datasourceId, kw, topK, threshold);
-            if (sr.getMetricHits() != null) {
-                for (var hit : sr.getMetricHits()) {
-                    if (seenMetricNames.add(hit.getMetricName())) {
-                        mergedMetrics.add(hit);
-                    }
-                }
-            }
-            if (sr.getDimensionHits() != null) {
-                for (var hit : sr.getDimensionHits()) {
-                    if (seenDimNames.add(hit.getDimName())) {
-                        mergedDimensions.add(hit);
-                    }
-                }
-            }
-        }
+        /* 合并关键词为单次检索，避免跨查询 RRF 分数不可比 */
+        AloudataSearchResult sr = aloudataSemanticEsService.hybridSearchMerged(datasourceId, expandedKeywords, topK, threshold);
+        List<AloudataSearchResult.MetricHit> mergedMetrics = sr.getMetricHits() != null ? new ArrayList<>(sr.getMetricHits()) : new ArrayList<>();
+        List<AloudataSearchResult.DimensionHit> mergedDimensions = sr.getDimensionHits() != null ? new ArrayList<>(sr.getDimensionHits()) : new ArrayList<>();
 
         /* 按分数重排 */
         mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
@@ -902,8 +883,9 @@ public class AloudataCallTool {
      * P0: timeConstraint 自动规范化
      * <p>
      * 1. 确保外层有括号包裹
-     * 2. 替换 BETWEEN ... AND ... 为 >= AND <=
-     * 3. 确保未用方括号的 metric_time 引用加上方括号
+     * 1. 修复未用方括号的 metric_time 引用
+     * 2. 替换 BETWEEN ... AND ... 为 >= AND <=（支持双引号和单引号）
+     * 3. 确保外层括号
      */
     private void normalizeTimeConstraint(Map<String, Object> params) {
         Object tcObj = params.get("timeConstraint");
@@ -915,21 +897,26 @@ public class AloudataCallTool {
             return;
         }
 
-        // 1. 替换 BETWEEN ... AND ... 为 >= AND <=
-        // 匹配: [metric_time__day] BETWEEN "2024-01-01" AND "2024-01-31"
+        // 1. 修复未用方括号的 metric_time 引用（如 metric_time__day → [metric_time__day]）
+        // 仅在非方括号内的 metric_time 引用
+        tc = tc.replaceAll("(?<!\\[)(metric_time__(?:day|month|year|week|quarter))(?![\\]\\w])", "[$1]");
+
+        // 2. 替换 BETWEEN ... AND ... 为 >= AND <=
+        // 匹配: [metric_time__day] BETWEEN "2024-01-01" AND "2024-01-31"（双引号）
         tc = tc.replaceAll(
                 "\\[metric_time__(\\w+)\\]\\s*[Bb][Ee][Tt][Ww][Ee][Ee][Nn]\\s*\"([^\"]+)\"\\s+[Aa][Nn][Dd]\\s*\"([^\"]+)\"",
                 "[metric_time__$1]>=\"$2\" AND [metric_time__$1]<=\"$3\""
         );
+        // 匹配: [metric_time__day] BETWEEN '2024-01-01' AND '2024-01-31'（单引号）
+        tc = tc.replaceAll(
+                "\\[metric_time__(\\w+)\\]\\s*[Bb][Ee][Tt][Ww][Ee][Ee][Nn]\\s*'([^']+)'\\s+[Aa][Nn][Dd]\\s*'([^']+)'",
+                "[metric_time__$1]>=\"$2\" AND [metric_time__$1]<=\"$3\""
+        );
 
-        // 2. 确保外层括号
+        // 3. 确保外层括号
         if (!tc.startsWith("(") || !tc.endsWith(")")) {
             tc = "(" + tc + ")";
         }
-
-        // 3. 修复未用方括号的 metric_time 引用（如 metric_time__day → [metric_time__day]）
-        // 仅在非方括号内的 metric_time 引用
-        tc = tc.replaceAll("(?<!\\[)(metric_time__(?:day|month|year|week|quarter))(?![\\]\\w])", "[$1]");
 
         if (!tc.equals(tcObj.toString())) {
             log.info("timeConstraint 自动规范化: {} -> {}", tcObj, tc);
@@ -1063,6 +1050,9 @@ public class AloudataCallTool {
      * <p>
      * 检查 dimensions 中的用户维度是否在指标的可用维度集中。
      * metric_time 系列维度为系统维度，始终可用，跳过校验。
+     * <p>
+     * 校验策略：维度只要在任一指标的可用维度集中即视为合法（不同指标可拥有不同维度集），
+     * 仅当维度不在所有指标的可用集中时才报错。
      */
     private List<String> validateDimensionAvailability(Long datasourceId, List<String> metrics, List<String> dimensions) {
         List<String> errors = new ArrayList<>();
@@ -1098,11 +1088,14 @@ public class AloudataCallTool {
                             Collectors.mapping(AloudataMetricDimensionEntity::getDimName, Collectors.toSet())
                     ));
 
+            // 所有指标的可用维度并集
+            Set<String> allAvailableDims = metricDimSet.values().stream()
+                    .flatMap(Set::stream)
+                    .collect(Collectors.toSet());
+
             for (String dim : userDims) {
-                for (Map.Entry<String, Set<String>> entry : metricDimSet.entrySet()) {
-                    if (!entry.getValue().contains(dim)) {
-                        errors.add("维度 '" + dim + "' 不在指标 '" + entry.getKey() + "' 的可用维度集中，使用该维度将导致查询报错");
-                    }
+                if (!allAvailableDims.contains(dim)) {
+                    errors.add("维度 '" + dim + "' 不在任一指标的可用维度集中，使用该维度将导致查询报错");
                 }
             }
         } catch (Exception e) {
@@ -1335,6 +1328,9 @@ public class AloudataCallTool {
                         } else {
                             row.put(colName, cell);
                         }
+                    } else {
+                        // 列长度不一致时填充 null，避免行数据字段缺失
+                        row.put(colName, null);
                     }
                 }
             }
