@@ -132,17 +132,17 @@ watch(() => props.modelValue, (val) => {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .editor-body.edit .editor-pane {
   flex: 1;
-  height: 100%;
 }
 
 .editor-body.preview .editor-preview {
   flex: 1;
-  height: 100%;
 }
 
 .editor-body.split .editor-pane {
@@ -160,8 +160,9 @@ watch(() => props.modelValue, (val) => {
 }
 
 .editor-textarea {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 0;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;

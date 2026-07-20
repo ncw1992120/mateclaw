@@ -102,7 +102,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      */
     @Override
     public SseEmitter streamChat(Long agentId, String message, String conversationId,
-                                 String modelProvider, String modelName, List<String> datasourceIds) {
+                                 String modelProvider, String modelName, List<String> datasourceIds,
+                                 List<MessageContentPart> contentParts) {
         // 校验 Agent 归属当前工作区，防止跨工作区越权访问（在 HTTP 线程内执行，UserContextHolder 仍有效）
         agentGuard.requireAgentInCurrentWorkspace(agentId);
         // 将 String 类型的数据源 ID 转换为 Long 类型
@@ -112,6 +113,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
         // 注入数据源白名单提示词，并在前端展示原始 message（持久化时仍存原文）
         String llmMessage = decorateMessageWithScope(message, longIds);
+        // 将附件信息注入到发送给 LLM 的 prompt 中
+        if (contentParts != null && !contentParts.isEmpty()) {
+            log.info("[DataAgent] contentParts received: size={}, types={}", contentParts.size(),
+                    contentParts.stream().map(p -> p != null ? p.getType() : "null").collect(Collectors.joining(",")));
+        }
+        llmMessage = buildPromptText(llmMessage, contentParts);
+        final String finalLlmMessage = llmMessage;
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -143,7 +151,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         && modelName != null && !modelName.isBlank()) {
                     conversationService.updateConversationModel(conversationId, modelProvider, modelName);
                 }
-                conversationService.saveMessage(conversationId, "user", message);
+                conversationService.saveMessage(conversationId, "user", message, contentParts);
                 conversationService.updateStreamStatus(conversationId, "running");
 
                 // Broadcast initial events through tracker (buffered + reach all subscribers)
@@ -154,7 +162,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         "timestamp", System.currentTimeMillis()
                 ));
 
-                Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, llmMessage, conversationId);
+                Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, finalLlmMessage, conversationId);
 
                 Disposable disposable = stream
                         .doOnNext(delta -> {
@@ -230,12 +238,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     @Override
     public SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
                                              String modelProvider, String modelName, List<String> datasourceIds,
-                                             boolean reconnect, Long lastEventId) {
+                                             boolean reconnect, Long lastEventId,
+                                             List<MessageContentPart> contentParts) {
         String convId = conversationId != null ? conversationId : "default";
         if (reconnect) {
             return reconnect(convId, lastEventId != null ? lastEventId : 0L);
         }
-        return streamChat(agentId, message, convId, modelProvider, modelName, datasourceIds);
+        return streamChat(agentId, message, convId, modelProvider, modelName, datasourceIds, contentParts);
     }
 
     @Override
@@ -272,7 +281,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      */
     @Override
     public String chat(Long agentId, String message, String conversationId,
-                       String modelProvider, String modelName, List<String> datasourceIds) {
+                       String modelProvider, String modelName, List<String> datasourceIds,
+                       List<MessageContentPart> contentParts) {
         // 校验 Agent 归属当前工作区，防止跨工作区越权访问
         agentGuard.requireAgentInCurrentWorkspace(agentId);
         // 将 String 类型的数据源 ID 转换为 Long 类型
@@ -287,13 +297,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                     && modelName != null && !modelName.isBlank()) {
                 conversationService.updateConversationModel(conversationId, modelProvider, modelName);
             }
-            conversationService.saveMessage(conversationId, "user", message);
+            conversationService.saveMessage(conversationId, "user", message, contentParts);
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to save user message for conversation {}: {}", conversationId, e.getMessage());
         }
 
         StreamAccumulator accumulator = new StreamAccumulator();
         String llmMessage = decorateMessageWithScope(message, longIds);
+        // 将附件信息注入到发送给 LLM 的 prompt 中
+        llmMessage = buildPromptText(llmMessage, contentParts);
         Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, llmMessage, conversationId);
 
         try {
@@ -428,6 +440,52 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * 将附件信息注入到发送给 LLM 的 prompt 文本中。
+     * <p>
+     * 参考 mateclaw-server ChatController 的 buildPromptText 逻辑，
+     * 将 contentParts 中的 file/image/video 等附件以文本描述形式追加到 prompt，
+     * 使 LLM 知晓用户上传了哪些文件及其本地路径，从而能调用工具读取文件内容。
+     *
+     * @param message 原始消息文本（可能已注入数据源白名单提示词）
+     * @param parts   结构化消息内容片段，包含附件信息
+     * @return 注入附件描述后的 prompt 文本
+     */
+    private String buildPromptText(String message, List<MessageContentPart> parts) {
+        if (parts == null || parts.isEmpty()) {
+            return message != null ? message : "";
+        }
+        // 收集附件信息
+        List<String> attachmentLines = new ArrayList<>();
+        for (MessageContentPart part : parts) {
+            if (part == null || part.getType() == null) {
+                continue;
+            }
+            switch (part.getType()) {
+                case "file" -> attachmentLines.add("- 文件: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
+                case "image" -> attachmentLines.add("- 图片: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
+                case "video" -> attachmentLines.add("- 视频: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
+                default -> { /* text/thinking 等类型不重复注入 */ }
+            }
+        }
+        if (attachmentLines.isEmpty()) {
+            return message != null ? message : "";
+        }
+        StringBuilder builder = new StringBuilder();
+        if (message != null && !message.isBlank()) {
+            builder.append(message);
+        }
+        builder.append("\n\n[用户上传的附件]\n");
+        builder.append("用户上传了以下附件，请使用 readFile 或 documentExtract 工具读取附件内容后再回答问题：\n");
+        for (String line : attachmentLines) {
+            builder.append(line).append('\n');
+        }
+        String result = builder.toString().trim();
+        log.info("[DataAgent] buildPromptText: contentParts size={}, attachmentLines={}, result length={}",
+                parts.size(), attachmentLines.size(), result.length());
+        return result;
     }
 
     /**

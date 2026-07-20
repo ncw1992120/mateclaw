@@ -484,7 +484,7 @@ import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
-import { uploadAttachment, optimizePrompt } from '@/api/chat'
+import { uploadAttachment, optimizePrompt, type MessageContentPart } from '@/api/chat'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment } from '@/types'
 
 const { t } = useI18n()
@@ -1743,11 +1743,26 @@ function handleSend(): void {
   if ((!message && pendingAttachments.value.length === 0) || chatStore.isStreaming || !chatStore.currentAgentId) return
   inputMessage.value = ''
   userScrolledUp.value = false
-  // 将附件信息存入消息 metadata，发送后清空
+  // 将附件转为 contentParts 传给后端，同时保留附件信息用于前端展示
   const attachments = [...pendingAttachments.value]
   pendingAttachments.value = []
-  chatStore.sendMessage(chatStore.currentAgentId, message)
-  // 发送后将附件附加到最后一条用户消息
+  const contentParts: MessageContentPart[] = []
+  if (message) {
+    contentParts.push({ type: 'text', text: message })
+  }
+  for (const att of attachments) {
+    const isImage = att.contentType?.startsWith('image/')
+    contentParts.push({
+      type: isImage ? 'image' : 'file',
+      fileName: att.fileName,
+      storedName: att.storedName,
+      path: att.path,
+      contentType: att.contentType,
+      fileSize: att.size,
+    })
+  }
+  chatStore.sendMessage(chatStore.currentAgentId, message, contentParts)
+  // 发送后将附件附加到最后一条用户消息（前端展示用）
   if (attachments.length > 0) {
     const lastMsg = chatStore.messages[chatStore.messages.length - 2]
     if (lastMsg && lastMsg.role === 'user') {
@@ -1770,8 +1785,12 @@ async function handleFileChange(event: Event): void {
   // 重置 input 以便再次选择同一文件
   target.value = ''
 
-  const convId = chatStore.conversationId
-  if (!convId) return
+  // 新对话时 conversationId 为空，需要先生成临时 ID，否则上传接口无法正常工作
+  let convId = chatStore.conversationId
+  if (!convId) {
+    convId = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    chatStore.conversationId = convId
+  }
 
   isUploading.value = true
   try {
@@ -1780,6 +1799,7 @@ async function handleFileChange(event: Event): void {
       fileName: result.fileName,
       storedName: result.storedName,
       url: result.url,
+      path: result.path,
       size: result.size,
       contentType: result.contentType,
     })

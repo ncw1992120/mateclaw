@@ -31,8 +31,8 @@ public class ChatUploadRuntimeImpl implements ChatUploadRuntime {
     /** 附件访问 URL 前缀 */
     private static final String FILE_URL_PREFIX = "/api/v1/chat/files/";
 
-    /** 文件名安全字符替换正则 */
-    private static final String FILENAME_SANITIZE_REGEX = "[^a-zA-Z0-9._-]";
+    /** 文件名安全字符替换正则：只过滤路径分隔符和危险字符，保留中文等 Unicode 字符 */
+    private static final String FILENAME_SANITIZE_REGEX = "[/\\\\:*?\"<>|\\u0000-\\u001F]";
 
     /** 文件名安全字符替换值 */
     private static final String FILENAME_SANITIZE_REPLACEMENT = "_";

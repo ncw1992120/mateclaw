@@ -29,14 +29,14 @@ public class DataAgentChatController {
         return chatService.streamChatFromRequest(
                 req.getAgentId(), req.getMessage(), req.getConversationId(),
                 req.getModelProvider(), req.getModelName(), req.getDatasourceIds(),
-                req.isReconnect(), req.getLastEventId());
+                req.isReconnect(), req.getLastEventId(), req.getContentParts());
     }
 
     @PostMapping
     @Operation(summary = "同步对话", description = "等待 Agent 完整回复后返回，可选指定模型名称、数据源白名单")
     public String chat(@RequestBody ChatRequest req) {
         return chatService.chat(req.getAgentId(), req.getMessage(), req.getConversationId(),
-                req.getModelProvider(), req.getModelName(), req.getDatasourceIds());
+                req.getModelProvider(), req.getModelName(), req.getDatasourceIds(), req.getContentParts());
     }
 
     @DeleteMapping("/stream/{conversationId}")

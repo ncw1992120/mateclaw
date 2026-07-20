@@ -4,6 +4,8 @@ import lombok.Data;
 
 import java.util.List;
 
+import vip.mate.workspace.conversation.model.MessageContentPart;
+
 @Data
 public class ChatRequest {
     private Long agentId;
@@ -25,4 +27,6 @@ public class ChatRequest {
      * 为空或为 null 时表示不限制（由 LLM 自主选择）。
      */
     private List<String> datasourceIds;
+    /** 结构化消息内容片段，包含附件信息等 */
+    private List<MessageContentPart> contentParts;
 }

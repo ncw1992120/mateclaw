@@ -449,6 +449,8 @@ export interface ChatAttachment {
   fileName: string
   storedName: string
   url: string
+  /** 服务端本地路径，用于后端工具消费 */
+  path: string
   size: number
   contentType: string
 }

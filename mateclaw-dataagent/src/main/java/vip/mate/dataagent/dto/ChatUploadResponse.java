@@ -20,6 +20,9 @@ public class ChatUploadResponse {
     /** 访问 URL 路径 */
     private String url;
 
+    /** 服务端本地路径，用于后端工具消费 */
+    private String path;
+
     /** 文件大小（字节） */
     private Long size;
 

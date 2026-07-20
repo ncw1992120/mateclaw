@@ -157,6 +157,18 @@ function trackSseEvent(event: SseEvent, options?: StreamOptions): boolean {
   return true
 }
 
+/** 消息内容片段，用于传递附件等结构化信息 */
+export interface MessageContentPart {
+  type: string
+  text?: string
+  fileName?: string
+  storedName?: string
+  path?: string
+  contentType?: string
+  fileSize?: number
+  fileUrl?: string
+}
+
 export async function* streamChat(
   agentId: number | string,
   message: string,
@@ -164,7 +176,8 @@ export async function* streamChat(
   modelProvider?: string,
   modelName?: string,
   options?: StreamOptions,
-  datasourceIds?: string[]
+  datasourceIds?: string[],
+  contentParts?: MessageContentPart[]
 ): AsyncGenerator<SseEvent> {
   const headers = getSseHeaders()
 
@@ -177,6 +190,9 @@ export async function* streamChat(
   }
   if (datasourceIds && datasourceIds.length > 0) {
     body.datasourceIds = datasourceIds
+  }
+  if (contentParts && contentParts.length > 0) {
+    body.contentParts = contentParts
   }
 
   const abortController = new AbortController()
@@ -358,12 +374,14 @@ export async function* reconnectStream(
 
 const UPLOAD_URL = '/dataagent/api/v1/chat/upload'
 
-/** 上传聊天附件 */
+/** 上传聊天附件结果 */
 export interface ChatUploadResult {
   conversationId: string
   fileName: string
   storedName: string
   url: string
+  /** 服务端本地路径，用于后端工具消费 */
+  path: string
   size: number
   contentType: string
 }

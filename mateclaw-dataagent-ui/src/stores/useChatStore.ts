@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
-import { streamChat, stopStream, reconnectStream } from '@/api/chat'
+import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
 import { classifySseError, type ChatErrorInfo } from '@/types/chatError'
@@ -540,7 +540,7 @@ export const useChatStore = defineStore('chat', () => {
     return typeof id === 'string' && id ? id : null
   }
 
-  async function sendMessage(agentId: number | string, message: string): Promise<void> {
+  async function sendMessage(agentId: number | string, message: string, contentParts?: MessageContentPart[]): Promise<void> {
     if (isStreaming.value) return
 
     // 新对话时生成临时 UUID 传给后端（后端 getOrCreateConversation 据此创建会话），
@@ -613,7 +613,7 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       let streamFinished = false
-      for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value)) {
+      for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value, contentParts)) {
         const eventConversationId = getSseConversationId(sse)
         if (eventConversationId && eventConversationId !== convId) {
           const wasActiveConversation = conversationId.value === convId

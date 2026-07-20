@@ -4,6 +4,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
+import vip.mate.workspace.conversation.model.MessageContentPart;
+
 /**
  * DataAgent 对话服务接口
  */
@@ -21,9 +23,11 @@ public interface DataAgentChatService {
      * @param modelProvider  模型 Provider ID（可选，与 modelName 成对传入）
      * @param modelName      模型名称（可选，与 modelProvider 成对传入）
      * @param datasourceIds  数据源白名单（可选）
+     * @param contentParts   结构化消息内容片段，包含附件信息（可选）
      */
     SseEmitter streamChat(Long agentId, String message, String conversationId,
-                          String modelProvider, String modelName, List<String> datasourceIds);
+                          String modelProvider, String modelName, List<String> datasourceIds,
+                          List<MessageContentPart> contentParts);
 
     /**
      * 流式对话（从请求参数，自动处理默认值）
@@ -36,11 +40,13 @@ public interface DataAgentChatService {
      * @param datasourceIds  数据源白名单（可选）
      * @param reconnect      是否断线重连
      * @param lastEventId    上次事件ID（可选，默认0）
+     * @param contentParts   结构化消息内容片段，包含附件信息（可选）
      * @return SSE 发射器
      */
     SseEmitter streamChatFromRequest(Long agentId, String message, String conversationId,
                                       String modelProvider, String modelName, List<String> datasourceIds,
-                                      boolean reconnect, Long lastEventId);
+                                      boolean reconnect, Long lastEventId,
+                                      List<MessageContentPart> contentParts);
 
     /**
      * 断线重连：附着到已有流并回放 buffer 中 lastEventId 之后的事件
@@ -51,7 +57,8 @@ public interface DataAgentChatService {
      * 同步对话（含模型覆盖和数据源白名单）。
      */
     String chat(Long agentId, String message, String conversationId,
-                String modelProvider, String modelName, List<String> datasourceIds);
+                String modelProvider, String modelName, List<String> datasourceIds,
+                List<MessageContentPart> contentParts);
 
     boolean requestStop(String conversationId);
 

@@ -42,6 +42,7 @@ public class DataAgentChatUploadController {
         response.setFileName(result.getFileName());
         response.setStoredName(result.getStoredName());
         response.setUrl(result.getUrl());
+        response.setPath(result.getPath());
         response.setSize(result.getSize());
         response.setContentType(result.getContentType());
         return R.ok(response);
