@@ -1111,19 +1111,6 @@ export interface InsightDashboardAiChatInput {
   message: string
 }
 
-/** AI生成仪表盘输入 */
-export interface InsightDashboardGenerateInput {
-  name: string
-  datasourceId: string
-  description: string
-}
-
-/** AI对话修改仪表盘输入 */
-export interface InsightDashboardModifyInput {
-  dashboardId: string
-  instruction: string
-}
-
 /** 组件渲染数据（后端取数 + 图表构建后返回） */
 export interface InsightComponentData {
   /** 对应组件 ID */

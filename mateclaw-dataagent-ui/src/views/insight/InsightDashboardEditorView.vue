@@ -67,11 +67,34 @@
             />
             <span v-else class="page-name" @dblclick.stop="startEditPageName(page)">{{ page.name }}</span>
             <div v-if="editingPageId !== page.id" class="page-actions">
-              <el-button text size="small" @click.stop="movePageUp(page)">↑</el-button>
-              <el-button text size="small" @click.stop="movePageDown(page)">↓</el-button>
-              <el-button text size="small" @click.stop="addSubPage(page)">+</el-button>
-              <el-button text size="small" @click.stop="startEditPageName(page)">✎</el-button>
-              <el-button text size="small" @click.stop="deletePage(page.id)">✕</el-button>
+              <el-dropdown
+                trigger="click"
+                size="small"
+                @command="(cmd) => handlePageAction(cmd, page)"
+              >
+                <el-button text size="small" @click.stop>
+                  <el-icon><More /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="moveUp">
+                      <el-icon><ArrowUp /></el-icon>上移
+                    </el-dropdown-item>
+                    <el-dropdown-item command="moveDown">
+                      <el-icon><ArrowDown /></el-icon>下移
+                    </el-dropdown-item>
+                    <el-dropdown-item command="addSub">
+                      <el-icon><Plus /></el-icon>添加子页面
+                    </el-dropdown-item>
+                    <el-dropdown-item command="rename">
+                      <el-icon><Edit /></el-icon>重命名
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>
+                      <el-icon><Delete /></el-icon>删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
         </div>
@@ -96,23 +119,26 @@
         />
       </div>
 
-      <!-- 属性面板 -->
-      <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
-        <PropertyPanel
-          :component="selectedComponent"
-          :all-components="currentPageComponents"
-          @change="handleComponentChange"
-          @preview="handlePreviewResult"
-        />
-      </div>
+      <!-- 右侧边栏：属性面板 + AI助手面板上下布局 -->
+      <div class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
+        <!-- 属性面板 -->
+        <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
+          <PropertyPanel
+            :component="selectedComponent"
+            :all-components="currentPageComponents"
+            @change="handleComponentChange"
+            @preview="handlePreviewResult"
+          />
+        </div>
 
-      <!-- AI助手面板 -->
-      <div v-if="showAiChat" class="editor-ai-chat" :class="{ 'mobile-open': showAiChat }">
-        <AiChatPanel
-          :dashboard-id="dashboardId"
-          @close="toggleAiChat"
-          @dashboard-updated="handleAiDashboardUpdated"
-        />
+        <!-- AI助手面板 -->
+        <div v-if="showAiChat" class="editor-ai-chat">
+          <AiChatPanel
+            :dashboard-id="dashboardId"
+            @close="toggleAiChat"
+            @dashboard-updated="handleAiDashboardUpdated"
+          />
+        </div>
       </div>
 
       <!-- 移动端面板切换栏 -->
@@ -145,7 +171,7 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ChatDotRound, Folder, Plus, Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowUp, ArrowDown, ChatDotRound, Folder, Plus, Setting, More, Edit, Delete } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
@@ -656,6 +682,27 @@ function movePageDown(page: DashboardPage): void {
   page.order = nextPage.order ?? 0
   nextPage.order = temp
 }
+
+/** 处理页面操作下拉菜单命令 */
+function handlePageAction(cmd: string, page: DashboardPage): void {
+  switch (cmd) {
+    case 'moveUp':
+      movePageUp(page)
+      break
+    case 'moveDown':
+      movePageDown(page)
+      break
+    case 'addSub':
+      addSubPage(page)
+      break
+    case 'rename':
+      startEditPageName(page)
+      break
+    case 'delete':
+      deletePage(page.id)
+      break
+  }
+}
 </script>
 
 <style scoped>
@@ -827,7 +874,7 @@ function movePageDown(page: DashboardPage): void {
 .page-actions {
   display: none;
   align-items: center;
-  gap: 0;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -836,9 +883,11 @@ function movePageDown(page: DashboardPage): void {
 }
 
 .page-actions :deep(.el-button) {
-  padding: 2px 4px;
-  font-size: 12px;
+  padding: 2px;
+  font-size: 11px;
   color: var(--db-text-muted);
+  min-width: 20px;
+  height: 20px;
 }
 
 .page-actions :deep(.el-button:hover) {
@@ -858,17 +907,27 @@ function movePageDown(page: DashboardPage): void {
   background: var(--db-bg);
 }
 
-.editor-property {
-  width: 280px;
+.editor-right-sidebar {
+  width: 340px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn var(--transition-base) both;
+}
+
+.editor-property {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   animation: fadeIn var(--transition-base) both;
 }
 
 .editor-ai-chat {
-  width: 340px;
-  flex-shrink: 0;
+  flex: 2;
+  min-height: 0;
   overflow: hidden;
+  border-top: 1px solid var(--db-border);
   border-left: 1px solid var(--db-border);
   animation: fadeIn var(--transition-base) both;
 }
@@ -911,7 +970,7 @@ function movePageDown(page: DashboardPage): void {
 }
 
 @media (max-width: 1023px) {
-  .editor-property {
+  .editor-right-sidebar {
     position: absolute;
     right: 0;
     top: 48px;
@@ -921,12 +980,7 @@ function movePageDown(page: DashboardPage): void {
   }
 
   .editor-ai-chat {
-    position: absolute;
-    right: 0;
-    top: 48px;
-    bottom: 0;
-    z-index: 101;
-    box-shadow: var(--shadow-dropdown);
+    border-top: 1px solid var(--db-border);
   }
 }
 
@@ -965,8 +1019,7 @@ function movePageDown(page: DashboardPage): void {
 
   .editor-pages,
   .editor-palette,
-  .editor-property,
-  .editor-ai-chat {
+  .editor-right-sidebar {
     position: absolute;
     top: 0;
     bottom: 48px;
@@ -995,23 +1048,13 @@ function movePageDown(page: DashboardPage): void {
     transform: translateX(0);
   }
 
-  .editor-property {
+  .editor-right-sidebar {
     right: 0;
     width: 80%;
     transform: translateX(100%);
   }
 
-  .editor-property.mobile-open {
-    transform: translateX(0);
-  }
-
-  .editor-ai-chat {
-    right: 0;
-    width: 90%;
-    transform: translateX(100%);
-  }
-
-  .editor-ai-chat.mobile-open {
+  .editor-right-sidebar.mobile-open {
     transform: translateX(0);
   }
 

@@ -53,7 +53,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
     @Override
     public List<String> listTenantCodes() {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         wrapper.select(BusinessTermEntity::getTenantCode);
         wrapper.groupBy(BusinessTermEntity::getTenantCode);
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
@@ -72,7 +71,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
         Map<Long, String> parentNameMap = buildParentNameMap(entities);
         return entities.stream().map(e -> toVO(e, parentNameMap)).collect(Collectors.toList());
@@ -87,7 +85,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         wrapper.eq(BusinessTermEntity::getCategory, category);
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
         Map<Long, String> parentNameMap = buildParentNameMap(entities);
         return entities.stream().map(e -> toVO(e, parentNameMap)).collect(Collectors.toList());
@@ -115,7 +112,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, request.getTenantCode());
         wrapper.eq(BusinessTermEntity::getTermName, request.getTermName());
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         Long count = businessTermMapper.selectCount(wrapper);
         if (count > 0) {
             throw new RuntimeException("术语已存在: " + request.getTermName());
@@ -143,7 +139,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
             LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(BusinessTermEntity::getTenantCode, entity.getTenantCode());
             wrapper.eq(BusinessTermEntity::getTermName, request.getTermName());
-            wrapper.eq(BusinessTermEntity::getDeleted, 0);
             wrapper.ne(BusinessTermEntity::getId, id);
             Long count = businessTermMapper.selectCount(wrapper);
             if (count > 0) {
@@ -180,8 +175,7 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         if (entity == null) {
             return;
         }
-        entity.setDeleted(1);
-        businessTermMapper.updateById(entity);
+        businessTermMapper.deleteById(id);
     }
 
     /**
@@ -192,15 +186,7 @@ public class BusinessTermServiceImpl implements BusinessTermService {
     public void deleteByTenantCode(String tenantCode) {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
-        List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
-        if (entities.isEmpty()) {
-            return;
-        }
-        for (BusinessTermEntity entity : entities) {
-            entity.setDeleted(1);
-            businessTermMapper.updateById(entity);
-        }
+        businessTermMapper.delete(wrapper);
         // 同步删除 ES 索引
         try {
             businessTermEsService.deleteByTenantCode(tenantCode);
@@ -250,7 +236,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         String likePattern = "%" + keyword + "%";
         wrapper.and(w -> {
             w.like(BusinessTermEntity::getTermName, likePattern)
@@ -274,7 +259,6 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
-        wrapper.eq(BusinessTermEntity::getDeleted, 0);
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
         if (entities.isEmpty()) {
             return 0;

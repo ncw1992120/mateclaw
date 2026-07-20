@@ -1,7 +1,6 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -48,7 +47,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     public List<DatasetVO> listDatasets() {
         LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(DatasetEntity::getDeleted, 0);
         wrapper.eq(DatasetEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.orderByDesc(DatasetEntity::getUpdateTime);
         List<DatasetEntity> entities = datasetMapper.selectList(wrapper);
@@ -133,17 +131,13 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteDataset(Long id) {
         requireDatasetOwnership(id);
-        DatasetEntity entity = datasetMapper.selectById(id);
-        entity.setDeleted(1);
-        datasetMapper.updateById(entity);
-        LambdaUpdateWrapper<DatasetFieldEntity> fieldWrapper = new LambdaUpdateWrapper<>();
+        datasetMapper.deleteById(id);
+        LambdaQueryWrapper<DatasetFieldEntity> fieldWrapper = new LambdaQueryWrapper<>();
         fieldWrapper.eq(DatasetFieldEntity::getDatasetId, id);
-        fieldWrapper.set(DatasetFieldEntity::getDeleted, 1);
-        datasetFieldMapper.update(null, fieldWrapper);
-        LambdaUpdateWrapper<DatasetDataEntity> dataWrapper = new LambdaUpdateWrapper<>();
+        datasetFieldMapper.delete(fieldWrapper);
+        LambdaQueryWrapper<DatasetDataEntity> dataWrapper = new LambdaQueryWrapper<>();
         dataWrapper.eq(DatasetDataEntity::getDatasetId, id);
-        dataWrapper.set(DatasetDataEntity::getDeleted, 1);
-        datasetDataMapper.update(null, dataWrapper);
+        datasetDataMapper.delete(dataWrapper);
     }
 
     @Override
@@ -151,7 +145,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         requireDatasetOwnership(datasetId);
         LambdaQueryWrapper<DatasetFieldEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetFieldEntity::getDatasetId, datasetId);
-        wrapper.eq(DatasetFieldEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasetFieldEntity::getOrdinalPosition);
         List<DatasetFieldEntity> entities = datasetFieldMapper.selectList(wrapper);
         return entities.stream().map(this::toFieldVO).collect(Collectors.toList());
@@ -177,7 +170,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         result.setColumns(columnDefs);
         LambdaQueryWrapper<DatasetDataEntity> dataWrapper = new LambdaQueryWrapper<>();
         dataWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
-        dataWrapper.eq(DatasetDataEntity::getDeleted, 0);
         dataWrapper.orderByAsc(DatasetDataEntity::getId);
         long total = datasetDataMapper.selectCount(dataWrapper);
         result.setTotal(total);
@@ -238,7 +230,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             if (datasetEntity != null) {
                 LambdaQueryWrapper<DatasetDataEntity> countWrapper = new LambdaQueryWrapper<>();
                 countWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
-                countWrapper.eq(DatasetDataEntity::getDeleted, 0);
                 long rowCount = datasetDataMapper.selectCount(countWrapper);
                 datasetEntity.setRowCount(rowCount);
                 datasetMapper.updateById(datasetEntity);
@@ -254,14 +245,12 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         requireDatasetOwnership(datasetId);
         DatasetDataEntity targetEntity = findDataEntityByRowKey(datasetId, rowKey);
         if (targetEntity != null) {
-            targetEntity.setDeleted(1);
-            datasetDataMapper.updateById(targetEntity);
+            datasetDataMapper.deleteById(targetEntity.getId());
         }
         DatasetEntity datasetEntity = datasetMapper.selectById(datasetId);
         if (datasetEntity != null) {
             LambdaQueryWrapper<DatasetDataEntity> countWrapper = new LambdaQueryWrapper<>();
             countWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
-            countWrapper.eq(DatasetDataEntity::getDeleted, 0);
             long rowCount = datasetDataMapper.selectCount(countWrapper);
             datasetEntity.setRowCount(rowCount);
             datasetMapper.updateById(datasetEntity);
@@ -289,10 +278,9 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         if (dsEntity == null) {
             throw new RuntimeException("关联数据源不存在");
         }
-        LambdaUpdateWrapper<DatasetDataEntity> deleteWrapper = new LambdaUpdateWrapper<>();
+        LambdaQueryWrapper<DatasetDataEntity> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
-        deleteWrapper.set(DatasetDataEntity::getDeleted, 1);
-        datasetDataMapper.update(null, deleteWrapper);
+        datasetDataMapper.delete(deleteWrapper);
         String tableNamesStr = datasetEntity.getTableNames();
         if (tableNamesStr == null || tableNamesStr.isEmpty()) {
             datasetEntity.setStatus(DataAgentConstants.DATASET_STATUS_READY);
@@ -332,7 +320,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
      */
     private void requireDatasetOwnership(Long id) {
         DatasetEntity entity = datasetMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             throw new BusinessException(404, "数据集不存在: " + id);
         }
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
@@ -357,7 +345,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         }
         LambdaQueryWrapper<DatasetDataEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
-        wrapper.eq(DatasetDataEntity::getDeleted, 0);
         List<DatasetDataEntity> allRows = datasetDataMapper.selectList(wrapper);
         for (DatasetDataEntity de : allRows) {
             try {
@@ -388,7 +375,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasourceColumnEntity::getOrdinalPosition);
         List<DatasourceColumnEntity> columns = datasourceColumnMapper.selectList(wrapper);
         DatasourceTableEntity tableEntity = datasourceTableMapper.selectById(tableId);
@@ -432,7 +418,6 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private Long countFields(Long datasetId) {
         LambdaQueryWrapper<DatasetFieldEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetFieldEntity::getDatasetId, datasetId);
-        wrapper.eq(DatasetFieldEntity::getDeleted, 0);
         return datasetFieldMapper.selectCount(wrapper);
     }
 

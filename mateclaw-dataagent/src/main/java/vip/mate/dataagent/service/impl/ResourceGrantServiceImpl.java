@@ -80,8 +80,7 @@ public class ResourceGrantServiceImpl implements ResourceGrantService {
                         .eq(ResourceGrantEntity::getResourceId, request.getResourceId())
                         .eq(ResourceGrantEntity::getGrantType, request.getGrantType())
                         .eq(ResourceGrantEntity::getGranteeId, request.getGranteeId())
-                        .eq(ResourceGrantEntity::getPermission, request.getPermission())
-                        .eq(ResourceGrantEntity::getDeleted, 0));
+                        .eq(ResourceGrantEntity::getPermission, request.getPermission()));
 
         if (existing != null) {
             if (existing.getStatus() == DataAgentConstants.GRANT_STATUS_ACTIVE) {

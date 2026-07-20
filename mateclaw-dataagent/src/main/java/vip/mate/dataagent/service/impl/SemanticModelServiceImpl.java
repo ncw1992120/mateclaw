@@ -61,7 +61,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         wrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
         wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
-        wrapper.eq(SemanticModelEntity::getDeleted, 0);
         List<SemanticModelEntity> entities = semanticModelMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -80,7 +79,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.in(SemanticModelEntity::getTableName, tableNames);
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
-        wrapper.eq(SemanticModelEntity::getDeleted, 0);
         List<SemanticModelEntity> entities = semanticModelMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -107,7 +105,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         wrapper.eq(SemanticModelEntity::getDatasourceId, request.getDatasourceId());
         wrapper.eq(SemanticModelEntity::getTableName, request.getTableName());
         wrapper.eq(SemanticModelEntity::getColumnName, request.getColumnName());
-        wrapper.eq(SemanticModelEntity::getDeleted, 0);
         Long count = semanticModelMapper.selectCount(wrapper);
         if (count > 0) {
             throw new RuntimeException("语义模型已存在: " + request.getTableName() + "." + request.getColumnName());
@@ -164,9 +161,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         requireSemanticOwnership(id);
-        SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        entity.setDeleted(1);
-        semanticModelMapper.updateById(entity);
+        semanticModelMapper.deleteById(id);
     }
 
     /**
@@ -208,7 +203,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         wrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
         wrapper.eq(SemanticModelEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.eq(SemanticModelEntity::getStatus, DataAgentConstants.SEMANTIC_STATUS_ENABLED);
-        wrapper.eq(SemanticModelEntity::getDeleted, 0);
         String likePattern = "%" + keyword + "%";
         wrapper.and(w -> {
             w.like(SemanticModelEntity::getTableName, likePattern)
@@ -235,7 +229,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         // 查询该数据源下所有表
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        tableWrapper.eq(DatasourceTableEntity::getDeleted, 0);
         List<DatasourceTableEntity> tables = datasourceTableMapper.selectList(tableWrapper);
         if (tables.isEmpty()) {
             return 0;
@@ -246,7 +239,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
         colWrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         colWrapper.in(DatasourceColumnEntity::getTableId, tableIds);
-        colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         List<DatasourceColumnEntity> columns = datasourceColumnMapper.selectList(colWrapper);
         if (columns.isEmpty()) {
             return 0;
@@ -255,7 +247,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         // 查询已有的语义模型，构建已存在的 key 集合
         LambdaQueryWrapper<SemanticModelEntity> existWrapper = new LambdaQueryWrapper<>();
         existWrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
-        existWrapper.eq(SemanticModelEntity::getDeleted, 0);
         List<SemanticModelEntity> existingModels = semanticModelMapper.selectList(existWrapper);
         Set<String> existingKeys = existingModels.stream()
                 .map(e -> e.getTableName() + "." + e.getColumnName())
@@ -303,7 +294,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
      */
     private void requireSemanticOwnership(Long id) {
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             throw new BusinessException(404, "语义模型不存在: " + id);
         }
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
@@ -360,7 +351,6 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         // 查询已有的语义模型，构建已存在的 key 集合
         LambdaQueryWrapper<SemanticModelEntity> existWrapper = new LambdaQueryWrapper<>();
         existWrapper.eq(SemanticModelEntity::getDatasourceId, datasourceId);
-        existWrapper.eq(SemanticModelEntity::getDeleted, 0);
         List<SemanticModelEntity> existingModels = semanticModelMapper.selectList(existWrapper);
         Set<String> existingKeys = existingModels.stream()
                 .map(e -> e.getTableName() + "." + e.getColumnName())

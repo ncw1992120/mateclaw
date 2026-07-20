@@ -61,11 +61,29 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     await fetchDashboards()
   }
 
-  /** AI助手对话（统一生成和修改） */
-  async function aiChatDashboard(data: InsightDashboardAiChatInput): Promise<InsightDashboard> {
-    const result = await insightDashboardApi.aiChat(data)
-    await fetchDashboards()
-    return result as unknown as InsightDashboard
+  /**
+   * AI助手流式对话
+   * @param data 请求参数
+   * @param onContent 收到AI文本增量的回调
+   * @param onResult 收到最终仪表盘数据的回调
+   * @param onError 收到错误的回调
+   * @returns 关闭SSE连接的函数
+   */
+  function streamAiChatDashboard(
+    data: InsightDashboardAiChatInput,
+    onContent: (text: string) => void,
+    onResult: (dashboard: InsightDashboard) => void,
+    onError: (message: string) => void,
+  ): () => void {
+    return insightDashboardApi.streamAiChat(
+      data,
+      onContent,
+      (dashboard) => {
+        fetchDashboards()
+        onResult(dashboard)
+      },
+      onError,
+    )
   }
 
   return {
@@ -77,7 +95,7 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     createDashboard,
     updateDashboard,
     deleteDashboard,
-    aiChatDashboard,
+    streamAiChatDashboard,
     reset,
   }
 })

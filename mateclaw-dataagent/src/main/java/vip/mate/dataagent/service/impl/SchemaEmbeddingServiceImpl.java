@@ -616,7 +616,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         /* 同时在表名中直接匹配 */
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        tableWrapper.eq(DatasourceTableEntity::getDeleted, 0);
         tableWrapper.like(DatasourceTableEntity::getTableName, likePattern);
         List<DatasourceTableEntity> tableMatches = datasourceTableMapper.selectList(tableWrapper);
         for (DatasourceTableEntity table : tableMatches) {
@@ -749,7 +748,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
     private List<DatasourceTableEntity> listActiveTables(Long datasourceId) {
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasourceTableEntity::getTableName);
         return datasourceTableMapper.selectList(wrapper);
     }
@@ -761,7 +759,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceTableEntity::getTableName, tableName);
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         wrapper.last("LIMIT 1");
         DatasourceTableEntity table = datasourceTableMapper.selectOne(wrapper);
         return table != null ? table.getTableComment() : "";
@@ -774,7 +771,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceTableEntity::getTableName, tableName);
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         wrapper.last("LIMIT 1");
         return datasourceTableMapper.selectOne(wrapper);
     }
@@ -789,7 +785,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableEntity.getId());
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasourceColumnEntity::getOrdinalPosition);
         return datasourceColumnMapper.selectList(wrapper);
     }
@@ -872,7 +867,6 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         }
         LambdaQueryWrapper<LogicalRelationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(LogicalRelationEntity::getDatasourceId, datasourceId);
-        wrapper.eq(LogicalRelationEntity::getDeleted, 0);
         wrapper.and(w -> {
             w.in(LogicalRelationEntity::getSourceTableName, tableNames)
                     .or().in(LogicalRelationEntity::getTargetTableName, tableNames);

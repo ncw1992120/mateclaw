@@ -106,6 +106,12 @@ public class AloudataCallTool {
             Map.entry("qosoq", "quarter"), Map.entry("yosoy", "year")
     );
 
+    /** 消歧阈值：前两名分数差距小于此值时触发消歧追问 */
+    private static final double DISAMBIGUATION_SCORE_GAP = 0.15;
+
+    /** 消歧时展示的最大候选数量 */
+    private static final int DISAMBIGUATION_MAX_CANDIDATES = 3;
+
     /**
      * 启动时动态注册所有 Aloudata API 端点为独立 Tool
      */
@@ -113,7 +119,7 @@ public class AloudataCallTool {
     public void registerDynamicTools() {
         Map<String, ApiEndpoint> endpoints = endpointService.getEndpoints();
         if (MapUtils.isEmpty(endpoints)) {
-            log.warn("Aloudata API 端点配置为空，跳过动态 Tool 注册");
+            log.error("Aloudata API 端点配置为空，跳过动态 Tool 注册");
             return;
         }
 
@@ -375,7 +381,7 @@ public class AloudataCallTool {
                 return Double.parseDouble(defaultVal);
             }
         } catch (NumberFormatException e) {
-            log.warn("参数 [{}] 默认值 '{}' 无法按类型 {} 解析，保留字符串", param.getName(), defaultVal, type);
+            log.error("参数 [{}] 默认值 '{}' 无法按类型 {} 解析，保留字符串", param.getName(), defaultVal, type);
         }
         return defaultVal;
     }
@@ -459,7 +465,7 @@ public class AloudataCallTool {
             // 格式化响应
             return formatResponse(endpointName, response);
         } catch (IllegalArgumentException e) {
-            log.warn("Aloudata Tool [{}] 参数校验失败: {}", endpointName, e.getMessage());
+            log.error("Aloudata Tool [{}] 参数校验失败: {}", endpointName, e.getMessage());
             return error(e.getMessage());
         } catch (Exception e) {
             log.error("Aloudata Tool [{}] 调用失败: {}", endpointName, e.getMessage(), e);
@@ -760,6 +766,9 @@ public class AloudataCallTool {
             }
             sb.append("\n");
         }
+
+        /* 消歧判断：指标多义或维度多义时，附加消歧指令 */
+        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword);
 
         /* P3: 检索失败自动降级 */
         if (metricCount == 0 && dimensionCount == 0) {
@@ -1099,7 +1108,7 @@ public class AloudataCallTool {
                 }
             }
         } catch (Exception e) {
-            log.warn("维度可用性校验查询失败，跳过校验: {}", e.getMessage());
+            log.error("维度可用性校验查询失败，跳过校验: {}", e.getMessage());
         }
 
         return errors;
@@ -1187,7 +1196,7 @@ public class AloudataCallTool {
                 }
             }
         } catch (Exception e) {
-            log.debug("业务术语扩展检索失败，使用原始关键词: {}", e.getMessage());
+            log.error("业务术语扩展检索失败，使用原始关键词: {}", e.getMessage());
         }
 
         // 去重并限制最多5个关键词，避免过多检索调用
@@ -1215,7 +1224,7 @@ public class AloudataCallTool {
                     .distinct()
                     .toList();
         } catch (Exception e) {
-            log.debug("查询维度关联指标失败: {}", e.getMessage());
+            log.error("查询维度关联指标失败: {}", e.getMessage());
             return List.of();
         }
     }
@@ -1233,7 +1242,6 @@ public class AloudataCallTool {
             List<DatasourceEntity> aloudataSources = datasourceMapper.selectList(
                     new LambdaQueryWrapper<DatasourceEntity>()
                             .eq(DatasourceEntity::getSourceType, DataAgentConstants.SOURCE_TYPE_ALOUDATA)
-                            .eq(DatasourceEntity::getDeleted, 0)
                             .eq(DatasourceEntity::getEnabled, true)
                             .select(DatasourceEntity::getId, DatasourceEntity::getName));
             if (aloudataSources.size() == 1) {
@@ -1242,7 +1250,7 @@ public class AloudataCallTool {
                 return id;
             }
         } catch (Exception e) {
-            log.warn("自动查找 Aloudata 数据源失败: {}", e.getMessage());
+            log.error("自动查找 Aloudata 数据源失败: {}", e.getMessage());
         }
         return null;
     }
@@ -1337,5 +1345,143 @@ public class AloudataCallTool {
             rows.add(row);
         }
         return rows;
+    }
+
+    // ==================== 消歧追问机制 ====================
+
+    /**
+     * 消歧判断：当检索结果存在多义性时，在返回中附加消歧指令。
+     * <p>
+     * 触发条件：
+     * <ul>
+     *   <li>指标多义：≥2 个指标且前两名分数差距 < DISAMBIGUATION_SCORE_GAP</li>
+     *   <li>维度多义：≥2 个同类维度（如 region/province/city）且前两名分数差距 < DISAMBIGUATION_SCORE_GAP</li>
+     * </ul>
+     * <p>
+     * 消歧指令明确告诉 LLM "不要自行选择，必须让用户确认"，避免 LLM 随意挑选导致答非所问。
+     */
+    private void appendDisambiguationHint(StringBuilder sb,
+                                           List<AloudataSearchResult.MetricHit> metrics,
+                                           List<AloudataSearchResult.DimensionHit> dimensions,
+                                           String keyword) {
+        boolean hasMetricAmbiguity = false;
+        boolean hasDimensionAmbiguity = false;
+
+        // 指标消歧：≥2 个指标且前两名分数接近
+        if (metrics.size() >= 2) {
+            double topScore = metrics.get(0).getScore();
+            double secondScore = metrics.get(1).getScore();
+            if (topScore - secondScore < DISAMBIGUATION_SCORE_GAP) {
+                hasMetricAmbiguity = true;
+            }
+        }
+
+        // 维度消歧：≥2 个同类维度且前两名分数接近
+        // "同类"判断：维度展示名包含相同的关键词（如"区域"/"地区"/"省份"等），或维度名属于同一分组
+        if (dimensions.size() >= 2) {
+            double topScore = dimensions.get(0).getScore();
+            double secondScore = dimensions.get(1).getScore();
+            if (topScore - secondScore < DISAMBIGUATION_SCORE_GAP) {
+                hasDimensionAmbiguity = true;
+            }
+            // 额外检查：同类维度（如 region/province/city 都是地理维度）
+            if (!hasDimensionAmbiguity && areSimilarDimensions(dimensions)) {
+                hasDimensionAmbiguity = true;
+            }
+        }
+
+        if (!hasMetricAmbiguity && !hasDimensionAmbiguity) {
+            return;
+        }
+
+        sb.append("## ⚠️ 消歧提示\n\n");
+        sb.append("检索到的结果存在多义性，**请不要自行选择，必须向用户确认后再构造查询**。\n\n");
+
+        if (hasMetricAmbiguity) {
+            sb.append("**指标消歧**：用户提到的「").append(keyword).append("」可能对应以下指标，请让用户选择：\n");
+            int count = Math.min(DISAMBIGUATION_MAX_CANDIDATES, metrics.size());
+            for (int i = 0; i < count; i++) {
+                AloudataSearchResult.MetricHit hit = metrics.get(i);
+                sb.append("  ").append(i + 1).append(". **").append(hit.getMetricName()).append("**(")
+                        .append(hit.getMetricDisplayName() != null ? hit.getMetricDisplayName() : "").append(")");
+                if (hit.getBusinessCaliber() != null && !hit.getBusinessCaliber().isBlank()) {
+                    sb.append(" — ").append(hit.getBusinessCaliber());
+                }
+                sb.append("\n");
+            }
+            sb.append("追问示例：\"您说的'").append(keyword).append("'是指 ")
+                    .append(metrics.get(0).getMetricDisplayName() != null ? metrics.get(0).getMetricDisplayName() : metrics.get(0).getMetricName())
+                    .append(" 还是 ")
+                    .append(metrics.get(1).getMetricDisplayName() != null ? metrics.get(1).getMetricDisplayName() : metrics.get(1).getMetricName())
+                    .append("？\"\n\n");
+        }
+
+        if (hasDimensionAmbiguity) {
+            sb.append("**维度消歧**：检索到多个相似维度，请让用户确认具体维度：\n");
+            int count = Math.min(DISAMBIGUATION_MAX_CANDIDATES, dimensions.size());
+            for (int i = 0; i < count; i++) {
+                AloudataSearchResult.DimensionHit hit = dimensions.get(i);
+                sb.append("  ").append(i + 1).append(". **").append(hit.getDimName()).append("**(")
+                        .append(hit.getDimDisplayName() != null ? hit.getDimDisplayName() : "").append(")");
+                if (hit.getDimDescription() != null && !hit.getDimDescription().isBlank()) {
+                    sb.append(" — ").append(hit.getDimDescription());
+                }
+                sb.append("\n");
+            }
+            sb.append("追问示例：\"您想按 ")
+                    .append(dimensions.get(0).getDimDisplayName() != null ? dimensions.get(0).getDimDisplayName() : dimensions.get(0).getDimName())
+                    .append(" 还是 ")
+                    .append(dimensions.get(1).getDimDisplayName() != null ? dimensions.get(1).getDimDisplayName() : dimensions.get(1).getDimName())
+                    .append(" 查看？\"\n\n");
+        }
+    }
+
+    /**
+     * 判断维度列表中是否存在同类维度（地理层级、时间层级等）
+     * <p>
+     * 同类维度的特征：维度名属于同一分组（如 region/province/city 都是地理层级）。
+     * 检测方式：维度展示名中包含共同的关键词，或维度名属于预定义的同类分组。
+     */
+    private boolean areSimilarDimensions(List<AloudataSearchResult.DimensionHit> dimensions) {
+        if (dimensions.size() < 2) {
+            return false;
+        }
+
+        // 预定义的同类维度分组
+        List<Set<String>> dimensionGroups = List.of(
+                Set.of("region", "province", "city", "district", "area", "country"),
+                Set.of("channel", "channel_type", "channel_group", "sales_channel"),
+                Set.of("product", "product_category", "product_type", "product_line", "product_brand"),
+                Set.of("customer", "customer_type", "customer_group", "customer_level"),
+                Set.of("department", "org", "organization", "team", "business_unit")
+        );
+
+        // 收集所有维度名
+        Set<String> dimNames = dimensions.stream()
+                .map(AloudataSearchResult.DimensionHit::getDimName)
+                .collect(Collectors.toSet());
+
+        // 检查是否有 ≥2 个维度名属于同一分组
+        for (Set<String> group : dimensionGroups) {
+            long matchCount = dimNames.stream().filter(group::contains).count();
+            if (matchCount >= 2) {
+                return true;
+            }
+        }
+
+        // 补充检查：展示名中包含共同关键词（如"区域"/"地区"/"省份"）
+        Set<String> commonKeywords = Set.of("区域", "地区", "省份", "城市", "渠道", "产品", "客户", "部门", "组织");
+        long keywordMatchCount = 0;
+        for (AloudataSearchResult.DimensionHit hit : dimensions) {
+            if (hit.getDimDisplayName() != null) {
+                for (String kw : commonKeywords) {
+                    if (hit.getDimDisplayName().contains(kw)) {
+                        keywordMatchCount++;
+                        break;
+                    }
+                }
+            }
+        }
+        return keywordMatchCount >= 2;
     }
 }

@@ -37,14 +37,12 @@ public class HelpCenterServiceImpl implements HelpCenterService {
     @Override
     public List<HelpCategoryVO> listCategoryTree() {
         LambdaQueryWrapper<HelpCategoryEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(HelpCategoryEntity::getDeleted, 0);
         wrapper.orderByAsc(HelpCategoryEntity::getSortOrder);
         List<HelpCategoryEntity> entities = categoryMapper.selectList(wrapper);
 
         // 统计每个分类下的文档数量
         List<HelpDocumentEntity> allDocs = documentMapper.selectList(
                 new LambdaQueryWrapper<HelpDocumentEntity>()
-                        .eq(HelpDocumentEntity::getDeleted, 0)
                         .eq(HelpDocumentEntity::getStatus, DataAgentConstants.HELP_DOC_STATUS_PUBLISHED));
         Map<Long, Long> docCountMap = allDocs.stream()
                 .collect(Collectors.groupingBy(HelpDocumentEntity::getCategoryId, Collectors.counting()));
@@ -103,14 +101,12 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         if (entity == null) {
             return;
         }
-        entity.setDeleted(1);
-        categoryMapper.updateById(entity);
+        categoryMapper.deleteById(id);
 
         // 递归删除子分类
         List<HelpCategoryEntity> children = categoryMapper.selectList(
                 new LambdaQueryWrapper<HelpCategoryEntity>()
-                        .eq(HelpCategoryEntity::getParentId, id)
-                        .eq(HelpCategoryEntity::getDeleted, 0));
+                        .eq(HelpCategoryEntity::getParentId, id));
         for (HelpCategoryEntity child : children) {
             deleteCategory(child.getId());
         }
@@ -118,11 +114,9 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         // 删除该分类下的文档
         LambdaQueryWrapper<HelpDocumentEntity> docWrapper = new LambdaQueryWrapper<>();
         docWrapper.eq(HelpDocumentEntity::getCategoryId, id);
-        docWrapper.eq(HelpDocumentEntity::getDeleted, 0);
         List<HelpDocumentEntity> docs = documentMapper.selectList(docWrapper);
         for (HelpDocumentEntity doc : docs) {
-            doc.setDeleted(1);
-            documentMapper.updateById(doc);
+            documentMapper.deleteById(doc.getId());
         }
     }
 
@@ -135,7 +129,7 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         for (int i = 0; i < ids.size(); i++) {
             Long id = Long.parseLong(ids.get(i));
             HelpCategoryEntity entity = categoryMapper.selectById(id);
-            if (entity == null || entity.getDeleted() == 1) {
+            if (entity == null) {
                 continue;
             }
             entity.setSortOrder(i);
@@ -147,7 +141,6 @@ public class HelpCenterServiceImpl implements HelpCenterService {
     public List<HelpDocumentVO> listDocuments(Long categoryId) {
         LambdaQueryWrapper<HelpDocumentEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HelpDocumentEntity::getCategoryId, categoryId);
-        wrapper.eq(HelpDocumentEntity::getDeleted, 0);
         wrapper.orderByAsc(HelpDocumentEntity::getSortOrder);
         List<HelpDocumentEntity> entities = documentMapper.selectList(wrapper);
 
@@ -237,8 +230,7 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         if (entity == null) {
             return;
         }
-        entity.setDeleted(1);
-        documentMapper.updateById(entity);
+        documentMapper.deleteById(id);
     }
 
     @Override
@@ -250,7 +242,7 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         for (int i = 0; i < documentIds.size(); i++) {
             Long id = Long.parseLong(documentIds.get(i));
             HelpDocumentEntity entity = documentMapper.selectById(id);
-            if (entity == null || entity.getDeleted() == 1 || !categoryId.equals(entity.getCategoryId())) {
+            if (entity == null || !categoryId.equals(entity.getCategoryId())) {
                 continue;
             }
             entity.setSortOrder(i);
@@ -290,7 +282,6 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         }
         String kw = keyword.trim();
         LambdaQueryWrapper<HelpDocumentEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(HelpDocumentEntity::getDeleted, 0);
         wrapper.eq(HelpDocumentEntity::getStatus, DataAgentConstants.HELP_DOC_STATUS_PUBLISHED);
         wrapper.and(w -> w.like(HelpDocumentEntity::getTitle, kw).or().like(HelpDocumentEntity::getContent, kw));
         wrapper.orderByDesc(HelpDocumentEntity::getViewCount);
@@ -332,7 +323,6 @@ public class HelpCenterServiceImpl implements HelpCenterService {
         }
         // 基于同分类下的其他文档推荐
         LambdaQueryWrapper<HelpDocumentEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(HelpDocumentEntity::getDeleted, 0);
         wrapper.eq(HelpDocumentEntity::getStatus, DataAgentConstants.HELP_DOC_STATUS_PUBLISHED);
         wrapper.eq(HelpDocumentEntity::getCategoryId, currentDoc.getCategoryId());
         wrapper.ne(HelpDocumentEntity::getId, documentId);
@@ -345,7 +335,6 @@ public class HelpCenterServiceImpl implements HelpCenterService {
             List<Long> excludeIds = entities.stream().map(HelpDocumentEntity::getId).collect(Collectors.toList());
             excludeIds.add(documentId);
             LambdaQueryWrapper<HelpDocumentEntity> extraWrapper = new LambdaQueryWrapper<>();
-            extraWrapper.eq(HelpDocumentEntity::getDeleted, 0);
             extraWrapper.eq(HelpDocumentEntity::getStatus, DataAgentConstants.HELP_DOC_STATUS_PUBLISHED);
             extraWrapper.notIn(HelpDocumentEntity::getId, excludeIds);
             extraWrapper.orderByDesc(HelpDocumentEntity::getViewCount);
@@ -383,7 +372,6 @@ public class HelpCenterServiceImpl implements HelpCenterService {
     public HelpFeedbackSummaryVO getFeedbackSummary(Long documentId) {
         LambdaQueryWrapper<HelpFeedbackEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(HelpFeedbackEntity::getDocumentId, documentId);
-        wrapper.eq(HelpFeedbackEntity::getDeleted, 0);
         List<HelpFeedbackEntity> feedbacks = feedbackMapper.selectList(wrapper);
 
         HelpFeedbackSummaryVO summary = new HelpFeedbackSummaryVO();

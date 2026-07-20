@@ -117,17 +117,22 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
-     * AI助手对话
+     * AI助手对话（流式）
      * <p>
      * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：
      * - dashboardId为空：AI生成模式，根据用户描述和数据源生成新仪表盘
      * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
+     * <p>
+     * 通过SSE流式推送AI推理过程，事件类型：
+     * - content: AI推理文本增量
+     * - result: 最终仪表盘数据（JSON格式）
+     * - error: 错误信息
      */
-    @PostMapping("/ai-chat")
+    @PostMapping(value = "/ai-chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "AI助手对话", description = "统一AI生成和AI修改能力，dashboardId为空时生成新仪表盘，不为空时修改已有仪表盘")
-    public R<InsightDashboardVO> aiChat(@RequestBody InsightDashboardAiChatRequest request) {
-        return R.ok(dashboardService.aiChatDashboard(request));
+    @Operation(summary = "AI助手对话（流式）", description = "统一AI生成和AI修改能力，通过SSE流式推送推理过程，dashboardId为空时生成新仪表盘，不为空时修改已有仪表盘")
+    public SseEmitter streamAiChat(@RequestBody InsightDashboardAiChatRequest request) {
+        return dashboardService.streamAiChatDashboard(request);
     }
 
     /**

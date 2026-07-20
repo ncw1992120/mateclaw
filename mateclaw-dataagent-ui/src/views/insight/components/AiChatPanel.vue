@@ -89,9 +89,15 @@
             </div>
           </template>
         </div>
-        <div class="message-content">{{ msg.content }}</div>
+        <div class="message-content">
+          <template v-if="msg.role === 'assistant' && msg.streaming">
+            <span class="streaming-text">{{ msg.content }}</span>
+            <span class="cursor-blink">|</span>
+          </template>
+          <template v-else>{{ msg.content }}</template>
+        </div>
       </div>
-      <div v-if="loading" class="ai-chat-message assistant">
+      <div v-if="loading && !hasStreamingMessage" class="ai-chat-message assistant">
         <div class="message-avatar">
           <div class="robot-avatar-small">
             <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -136,12 +142,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, nextTick } from 'vue'
+import { ref, computed, reactive, nextTick, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Promotion, Close } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { Datasource } from '@/types'
+import type { Datasource, InsightDashboard } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import * as datasourceApi from '@/api/datasource'
 
@@ -171,6 +177,8 @@ const isGenerateMode = computed(() => !props.dashboardId)
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  /** 是否正在流式接收中 */
+  streaming?: boolean
 }
 
 const messages = ref<ChatMessage[]>([])
@@ -178,6 +186,12 @@ const inputText = ref('')
 const loading = ref(false)
 const hasStarted = ref(false)
 const messageListRef = ref<HTMLElement | null>(null)
+
+/** 当前SSE连接的关闭函数 */
+let closeStream: (() => void) | null = null
+
+/** 是否有正在流式接收的消息 */
+const hasStreamingMessage = computed(() => messages.value.some((m) => m.streaming))
 
 /** 生成模式表单 */
 const generateFormRef = ref<FormInstance | null>(null)
@@ -199,7 +213,6 @@ const canSend = computed(() => {
     return false
   }
   if (isGenerateMode.value && !hasStarted.value) {
-    // 生成模式首次发送：需要表单验证通过且有输入
     return inputText.value.trim() !== '' && generateForm.name !== '' && generateForm.datasourceId !== ''
   }
   return inputText.value.trim() !== ''
@@ -228,6 +241,14 @@ function scrollToBottom(): void {
   })
 }
 
+/** 组件卸载时关闭SSE连接 */
+onUnmounted(() => {
+  if (closeStream) {
+    closeStream()
+    closeStream = null
+  }
+})
+
 /** 发送消息 */
 async function handleSend(): Promise<void> {
   const message = inputText.value.trim()
@@ -253,46 +274,57 @@ async function handleSend(): Promise<void> {
   scrollToBottom()
 
   loading.value = true
-  try {
-    const result = await insightDashboardApi.aiChat({
+
+  // 添加一条空的AI消息（流式填充）
+  const assistantMsg: ChatMessage = { role: 'assistant', content: '', streaming: true }
+  messages.value.push(assistantMsg)
+  const assistantIdx = messages.value.length - 1
+
+  // 调用流式API
+  closeStream = insightDashboardApi.streamAiChat(
+    {
       dashboardId: props.dashboardId || undefined,
       name: isGenerateMode.value && !hasStarted.value ? generateForm.name : undefined,
       datasourceId: isGenerateMode.value && !hasStarted.value ? generateForm.datasourceId : undefined,
       message,
-    }) as unknown as any
+    },
+    // onContent: 流式文本增量
+    (text: string) => {
+      assistantMsg.content += text
+      scrollToBottom()
+    },
+    // onResult: 最终仪表盘数据
+    (dashboard: InsightDashboard) => {
+      hasStarted.value = true
+      assistantMsg.streaming = false
 
-    // 标记已开始对话
-    hasStarted.value = true
+      // 追加成功提示
+      const successMsg = isModifyMode.value
+        ? t('insight.aiChatSuccess')
+        : t('insight.generateSuccess')
+      assistantMsg.content = assistantMsg.content
+        ? `${assistantMsg.content}\n\n${successMsg}`
+        : successMsg
 
-    // 添加AI回复
-    const replyContent = isModifyMode.value
-      ? t('insight.aiChatSuccess')
-      : t('insight.generateSuccess')
-    messages.value.push({
-      role: 'assistant',
-      content: replyContent,
-    })
-    scrollToBottom()
+      // 通知父组件刷新，传递仪表盘ID
+      const resultId = dashboard?.id?.toString() || props.dashboardId || ''
+      emit('dashboard-updated', resultId)
 
-    // 通知父组件刷新，传递仪表盘ID
-    const dashboardId = result?.id?.toString() || props.dashboardId || ''
-    emit('dashboard-updated', dashboardId)
-
-    ElMessage.success(replyContent)
-  } catch (err: any) {
-    const isTimeout = err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')
-    const errorContent = isTimeout
-      ? t('insight.aiChatTimeout')
-      : (isModifyMode.value ? t('insight.aiChatFailed') : t('insight.generateFailed'))
-    messages.value.push({
-      role: 'assistant',
-      content: errorContent,
-    })
-    scrollToBottom()
-    ElMessage.error(errorContent)
-  } finally {
-    loading.value = false
-  }
+      ElMessage.success(successMsg)
+      loading.value = false
+      closeStream = null
+      scrollToBottom()
+    },
+    // onError: 错误
+    (errorMsg: string) => {
+      assistantMsg.streaming = false
+      assistantMsg.content = errorMsg || (isModifyMode.value ? t('insight.aiChatFailed') : t('insight.generateFailed'))
+      ElMessage.error(assistantMsg.content)
+      loading.value = false
+      closeStream = null
+      scrollToBottom()
+    },
+  )
 }
 </script>
 
@@ -303,7 +335,6 @@ async function handleSend(): Promise<void> {
   display: flex;
   flex-direction: column;
   background: var(--db-card);
-  border-left: 1px solid var(--db-border);
 }
 
 /* 头部 */
@@ -452,6 +483,7 @@ async function handleSend(): Promise<void> {
   font-size: 13px;
   line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .ai-chat-message.user .message-content {
@@ -464,6 +496,18 @@ async function handleSend(): Promise<void> {
   background: var(--db-hover);
   color: var(--db-text);
   border-bottom-left-radius: 4px;
+}
+
+/* 流式光标 */
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+  color: var(--db-accent);
+  font-weight: bold;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* 加载动画 */
@@ -501,7 +545,7 @@ async function handleSend(): Promise<void> {
 
 /* 美化输入框 */
 .ai-chat-input-wrapper {
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-top: 1px solid var(--db-border);
   flex-shrink: 0;
   background: var(--db-bg);
@@ -513,8 +557,8 @@ async function handleSend(): Promise<void> {
   gap: 8px;
   background: var(--db-card);
   border: 1px solid var(--db-border);
-  border-radius: 16px;
-  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  padding: 6px 8px 6px 12px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -533,9 +577,9 @@ async function handleSend(): Promise<void> {
 
 .ai-chat-input-box :deep(.el-textarea__inner) {
   font-size: 13px;
-  min-height: 40px !important;
+  min-height: 32px !important;
   max-height: 120px;
-  padding: 6px 0;
+  padding: 4px 0;
   background: transparent;
   border: none;
   box-shadow: none;

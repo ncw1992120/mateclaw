@@ -7,8 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.Disposable;
+import reactor.core.publisher.Flux;
 import vip.mate.dataagent.agentscope.dto.AgentCallRequest;
-import vip.mate.dataagent.agentscope.dto.AgentCallResponse;
 import vip.mate.dataagent.agentscope.service.AgentScopeService;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
@@ -19,8 +21,17 @@ import vip.mate.dataagent.repository.InsightDashboardMapper;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
+import vip.mate.dataagent.support.Utf8SseEmitter;
+
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.agent.EventType;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -30,7 +41,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     private final InsightDashboardMapper insightDashboardMapper;
@@ -39,6 +49,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     private final SchemaEmbeddingService schemaEmbeddingService;
     private final ObjectMapper objectMapper;
     private final AgentScopeService agentScopeService;
+    private final ExecutorService aiChatExecutor;
 
     /** AI助手生成仪表盘的系统提示词 */
     private static final String GENERATE_SYSTEM_PROMPT = """
@@ -129,10 +140,38 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             10. 新增组件的ID格式：comp_数字
             """;
 
+    /** SSE超时时间（10分钟） */
+    private static final long SSE_TIMEOUT_MS = 10 * 60 * 1000L;
+
+    public InsightDashboardServiceImpl(InsightDashboardMapper insightDashboardMapper,
+                                       WorkspaceGuard workspaceGuard,
+                                       DatasourceManageService datasourceManageService,
+                                       SchemaEmbeddingService schemaEmbeddingService,
+                                       ObjectMapper objectMapper,
+                                       AgentScopeService agentScopeService) {
+        this.insightDashboardMapper = insightDashboardMapper;
+        this.workspaceGuard = workspaceGuard;
+        this.datasourceManageService = datasourceManageService;
+        this.schemaEmbeddingService = schemaEmbeddingService;
+        this.objectMapper = objectMapper;
+        this.agentScopeService = agentScopeService;
+        int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
+        this.aiChatExecutor = new ThreadPoolExecutor(
+                2, maxThreads,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(256),
+                r -> {
+                    Thread t = new Thread(r, "insight-ai-chat");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
     @Override
     public List<InsightDashboardVO> listDashboards() {
         LambdaQueryWrapper<InsightDashboardEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InsightDashboardEntity::getDeleted, 0);
         wrapper.eq(InsightDashboardEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.orderByDesc(InsightDashboardEntity::getUpdateTime);
         List<InsightDashboardEntity> entities = insightDashboardMapper.selectList(wrapper);
@@ -196,81 +235,141 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteDashboard(Long id) {
         requireOwnership(id);
-        InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
-        entity.setDeleted(1);
-        insightDashboardMapper.updateById(entity);
+        int rows = insightDashboardMapper.deleteById(id);
+        log.info("删除仪表盘: id={}, 影响行数={}", id, rows);
     }
 
     @Override
-    public InsightDashboardVO aiChatDashboard(InsightDashboardAiChatRequest request) {
-        if (request.getDashboardId() != null && !request.getDashboardId().isBlank()) {
-            // 修改模式：构造 ModifyRequest 委托给 modifyDashboard
-            InsightDashboardModifyRequest modifyRequest = new InsightDashboardModifyRequest();
-            modifyRequest.setDashboardId(Long.valueOf(request.getDashboardId().trim()));
-            modifyRequest.setInstruction(request.getMessage());
-            return modifyDashboard(modifyRequest);
+    public SseEmitter streamAiChatDashboard(InsightDashboardAiChatRequest request) {
+        SseEmitter emitter = new Utf8SseEmitter(SSE_TIMEOUT_MS);
+        AtomicBoolean emitterDone = new AtomicBoolean(false);
+
+        registerEmitterCallbacks(emitter, emitterDone);
+
+        aiChatExecutor.execute(() -> {
+            try {
+                if (request.getDashboardId() != null && !request.getDashboardId().isBlank()) {
+                    streamModifyDashboard(emitter, emitterDone, request);
+                } else {
+                    streamGenerateDashboard(emitter, emitterDone, request);
+                }
+            } catch (Exception e) {
+                log.error("AI助手对话失败: {}", e.getMessage(), e);
+                if (!emitterDone.get()) {
+                    sendSseEvent(emitter, "error", e.getMessage() != null ? e.getMessage() : "AI助手对话失败");
+                    completeEmitterQuietly(emitter, emitterDone);
+                }
+            }
+        });
+
+        return emitter;
+    }
+
+    /**
+     * 流式生成仪表盘
+     */
+    private void streamGenerateDashboard(SseEmitter emitter, AtomicBoolean emitterDone,
+                                          InsightDashboardAiChatRequest request) {
+        // 参数校验
+        if (request.getDatasourceId() == null) {
+            throw new BusinessException(400, "数据源ID不能为空");
         }
-        // 生成模式：构造 GenerateRequest 委托给 generateDashboard
-        InsightDashboardGenerateRequest generateRequest = new InsightDashboardGenerateRequest();
-        generateRequest.setName(request.getName());
-        generateRequest.setDatasourceId(request.getDatasourceId());
-        generateRequest.setDescription(request.getMessage());
-        return generateDashboard(generateRequest);
-    }
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            throw new BusinessException(400, "需求描述不能为空");
+        }
 
-    @Override
-    public InsightDashboardVO generateDashboard(InsightDashboardGenerateRequest request) {
-        // 1. 参数校验
-        validateGenerateRequest(request);
+        Long datasourceId = request.getDatasourceId();
 
-        // 2. 查询数据源信息
-        DatasourceVO datasource = datasourceManageService.getDatasource(request.getDatasourceId());
+        // 查询数据源信息
+        DatasourceVO datasource = datasourceManageService.getDatasource(datasourceId);
         if (datasource == null) {
-            throw new BusinessException(404, "数据源不存在: " + request.getDatasourceId());
+            throw new BusinessException(404, "数据源不存在: " + datasourceId);
         }
 
-        // 3. 获取数据源的Schema信息（表结构、语义模型）
-        String schemaContext = buildSchemaContext(request.getDatasourceId(), request.getDescription());
+        // 获取数据源Schema信息
+        String schemaContext = buildSchemaContext(datasourceId, request.getMessage());
 
-        // 4. 构建提示词
+        // 构建提示词
         String prompt = String.format(GENERATE_SYSTEM_PROMPT,
                 schemaContext,
-                request.getDescription(),
-                request.getDatasourceId());
+                request.getMessage(),
+                String.valueOf(request.getDatasourceId()));
 
-        // 5. 调用AgentScope生成Schema
+        // 流式调用AgentScope
         String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
         AgentCallRequest callRequest = new AgentCallRequest();
         callRequest.setMessage(prompt);
         callRequest.setSystemPrompt(GENERATE_SYSTEM_PROMPT);
         callRequest.setSessionId(conversationId);
-        AgentCallResponse callResponse = agentScopeService.call(callRequest);
-        if (!callResponse.isSuccess()) {
-            throw new BusinessException(500, "AI生成仪表盘失败: " + callResponse.getErrorMessage());
-        }
-        String llmResponse = callResponse.getContent();
 
-        // 6. 解析LLM返回的JSON
-        String schemaJson = parseLlmResponse(llmResponse);
+        Flux<Event> eventFlux = agentScopeService.streamCall(callRequest);
+        StringBuilder fullContent = new StringBuilder();
 
-        // 7. 创建仪表盘
-        InsightDashboardCreateRequest createRequest = new InsightDashboardCreateRequest();
-        createRequest.setName(request.getName());
-        createRequest.setDescription(request.getDescription());
-        createRequest.setSchemaJson(schemaJson);
-        return createDashboard(createRequest);
+        Disposable disposable = eventFlux.subscribe(
+                event -> {
+                    if (emitterDone.get()) {
+                        return;
+                    }
+                    if (event.getMessage() != null && event.getMessage().getTextContent() != null
+                            && !event.getMessage().getTextContent().isEmpty()) {
+                        fullContent.append(event.getMessage().getTextContent());
+                        sendSseEvent(emitter, "content", event.getMessage().getTextContent());
+                    }
+                },
+                error -> {
+                    log.error("AI生成仪表盘流式调用失败: {}", error.getMessage());
+                    if (!emitterDone.compareAndSet(false, true)) {
+                        return;
+                    }
+                    sendSseEvent(emitter, "error", error.getMessage() != null ? error.getMessage() : "AI生成失败");
+                    completeEmitterQuietly(emitter, emitterDone);
+                },
+                () -> {
+                    if (!emitterDone.compareAndSet(false, true)) {
+                        return;
+                    }
+                    try {
+                        // 流式完成，解析完整内容并创建仪表盘
+                        String llmResponse = fullContent.toString();
+                        String schemaJson = parseLlmResponse(llmResponse);
+
+                        InsightDashboardCreateRequest createRequest = new InsightDashboardCreateRequest();
+                        createRequest.setName(request.getName());
+                        createRequest.setDescription(request.getMessage());
+                        createRequest.setSchemaJson(schemaJson);
+                        InsightDashboardVO result = createDashboard(createRequest);
+
+                        sendSseEvent(emitter, "result", objectMapper.writeValueAsString(result));
+                    } catch (Exception e) {
+                        log.error("AI生成仪表盘结果解析失败: {}", e.getMessage());
+                        sendSseEvent(emitter, "error", "AI生成仪表盘失败：无法解析生成的Schema");
+                    }
+                    completeEmitterQuietly(emitter, emitterDone);
+                }
+        );
+
+        emitter.onCompletion(disposable::dispose);
+        emitter.onTimeout(disposable::dispose);
+        emitter.onError(e -> disposable.dispose());
     }
 
-    @Override
-    public InsightDashboardVO modifyDashboard(InsightDashboardModifyRequest request) {
-        // 1. 参数校验
-        validateModifyRequest(request);
+    /**
+     * 流式修改仪表盘
+     */
+    private void streamModifyDashboard(SseEmitter emitter, AtomicBoolean emitterDone,
+                                        InsightDashboardAiChatRequest request) {
+        Long dashboardId = Long.valueOf(request.getDashboardId().trim());
 
-        // 2. 获取现有仪表盘
-        requireOwnership(request.getDashboardId());
-        InsightDashboardEntity entity = insightDashboardMapper.selectById(request.getDashboardId());
+        // 参数校验
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            throw new BusinessException(400, "修改指令不能为空");
+        }
 
-        // 3. 解析现有Schema
+        // 获取现有仪表盘
+        requireOwnership(dashboardId);
+        InsightDashboardEntity entity = insightDashboardMapper.selectById(dashboardId);
+
+        // 解析现有Schema
         InsightDashboardSchemaDTO currentSchema;
         try {
             currentSchema = objectMapper.readValue(entity.getSchemaJson(), InsightDashboardSchemaDTO.class);
@@ -278,65 +377,77 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             throw new BusinessException(500, "当前仪表盘Schema解析失败，无法进行AI修改");
         }
 
-        // 4. 从现有Schema中提取所有datasourceId，查询数据源信息
+        // 从现有Schema中提取所有datasourceId
         Set<String> datasourceIds = extractDatasourceIds(currentSchema);
         String datasourceContext = buildDatasourceContext(datasourceIds);
 
-        // 5. 构建修改提示词
+        // 构建修改提示词
         String currentSchemaJson;
         try {
             currentSchemaJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(currentSchema);
         } catch (Exception e) {
             throw new BusinessException(500, "当前仪表盘Schema序列化失败");
         }
-        String prompt = String.format(MODIFY_SYSTEM_PROMPT, currentSchemaJson, datasourceContext, request.getInstruction());
+        String prompt = String.format(MODIFY_SYSTEM_PROMPT, currentSchemaJson, datasourceContext, request.getMessage());
 
-        // 6. 调用AgentScope生成修改后的Schema
+        // 流式调用AgentScope
         String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
         AgentCallRequest callRequest = new AgentCallRequest();
         callRequest.setMessage(prompt);
         callRequest.setSystemPrompt(MODIFY_SYSTEM_PROMPT);
         callRequest.setSessionId(conversationId);
-        AgentCallResponse callResponse = agentScopeService.call(callRequest);
-        if (!callResponse.isSuccess()) {
-            throw new BusinessException(500, "AI修改仪表盘失败: " + callResponse.getErrorMessage());
-        }
-        String llmResponse = callResponse.getContent();
 
-        // 7. 解析LLM返回的JSON（复用已有的解析方法）
-        String schemaJson = parseLlmResponse(llmResponse);
+        Flux<Event> eventFlux = agentScopeService.streamCall(callRequest);
+        StringBuilder fullContent = new StringBuilder();
 
-        // 8. 更新仪表盘的schemaJson字段
-        InsightDashboardUpdateRequest updateRequest = new InsightDashboardUpdateRequest();
-        updateRequest.setSchemaJson(schemaJson);
-        return updateDashboard(request.getDashboardId(), updateRequest);
-    }
+        Disposable disposable = eventFlux.subscribe(
+                event -> {
+                    if (emitterDone.get()) {
+                        return;
+                    }
+                    if (event.getMessage() != null && event.getMessage().getTextContent() != null
+                            && !event.getMessage().getTextContent().isEmpty()) {
+                        fullContent.append(event.getMessage().getTextContent());
+                        sendSseEvent(emitter, "content", event.getMessage().getTextContent());
+                    }
+                },
+                error -> {
+                    log.error("AI修改仪表盘流式调用失败: {}", error.getMessage());
+                    if (!emitterDone.compareAndSet(false, true)) {
+                        return;
+                    }
+                    sendSseEvent(emitter, "error", error.getMessage() != null ? error.getMessage() : "AI修改失败");
+                    completeEmitterQuietly(emitter, emitterDone);
+                },
+                () -> {
+                    if (!emitterDone.compareAndSet(false, true)) {
+                        return;
+                    }
+                    try {
+                        // 流式完成，解析完整内容并更新仪表盘
+                        String llmResponse = fullContent.toString();
+                        String schemaJson = parseLlmResponse(llmResponse);
 
-    private void validateGenerateRequest(InsightDashboardGenerateRequest request) {
-        if (request.getDatasourceId() == null) {
-            throw new BusinessException(400, "数据源ID不能为空");
-        }
-        if (request.getDescription() == null || request.getDescription().isBlank()) {
-            throw new BusinessException(400, "需求描述不能为空");
-        }
-    }
+                        InsightDashboardUpdateRequest updateRequest = new InsightDashboardUpdateRequest();
+                        updateRequest.setSchemaJson(schemaJson);
+                        InsightDashboardVO result = updateDashboard(dashboardId, updateRequest);
 
-    /**
-     * 校验AI修改仪表盘请求参数
-     */
-    private void validateModifyRequest(InsightDashboardModifyRequest request) {
-        if (request.getDashboardId() == null) {
-            throw new BusinessException(400, "仪表盘ID不能为空");
-        }
-        if (request.getInstruction() == null || request.getInstruction().isBlank()) {
-            throw new BusinessException(400, "修改指令不能为空");
-        }
+                        sendSseEvent(emitter, "result", objectMapper.writeValueAsString(result));
+                    } catch (Exception e) {
+                        log.error("AI修改仪表盘结果解析失败: {}", e.getMessage());
+                        sendSseEvent(emitter, "error", "AI修改仪表盘失败：无法解析生成的Schema");
+                    }
+                    completeEmitterQuietly(emitter, emitterDone);
+                }
+        );
+
+        emitter.onCompletion(disposable::dispose);
+        emitter.onTimeout(disposable::dispose);
+        emitter.onError(e -> disposable.dispose());
     }
 
     /**
      * 从仪表盘Schema中提取所有数据源ID
-     * <p>
-     * 遍历所有pages的components，收集dataSource.datasourceId。
      */
     private Set<String> extractDatasourceIds(InsightDashboardSchemaDTO schema) {
         Set<String> datasourceIds = new LinkedHashSet<>();
@@ -352,8 +463,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     /**
      * 构建数据源上下文信息
-     * <p>
-     * 根据数据源ID列表查询数据源名称，拼接为可读的上下文描述。
      */
     private String buildDatasourceContext(Set<String> datasourceIds) {
         if (datasourceIds == null || datasourceIds.isEmpty()) {
@@ -381,14 +490,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     /**
      * 构建数据源Schema上下文信息
-     * <p>
-     * 优先使用语义检索获取与用户需求相关的表，再补充表字段详情。
-     * 如果语义检索无结果，则回退到列出所有表。
      */
     private String buildSchemaContext(Long datasourceId, String userDescription) {
         StringBuilder context = new StringBuilder();
 
-        // 通过语义检索获取相关表
         SchemaSearchRequest searchRequest = new SchemaSearchRequest();
         searchRequest.setDatasourceId(datasourceId);
         searchRequest.setQuery(userDescription);
@@ -398,13 +503,11 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         SchemaSearchResult searchResult = schemaEmbeddingService.searchSchema(searchRequest);
 
         if (searchResult.getTableHits() != null && !searchResult.getTableHits().isEmpty()) {
-            // 语义检索有结果，使用相关表
             context.append("相关数据表（基于语义检索）：\n");
             for (SchemaSearchResult.TableHit hit : searchResult.getTableHits()) {
                 appendTableInfo(context, datasourceId, hit.getTableName(), hit.getTableComment(), hit.getSemanticFields());
             }
         } else {
-            // 语义检索无结果，回退到列出所有表
             List<DatasourceTableVO> tables = datasourceManageService.listTables(datasourceId);
             if (tables == null || tables.isEmpty()) {
                 context.append("数据源下暂无表结构信息\n");
@@ -416,7 +519,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
         }
 
-        // 补充表间关联关系
         if (searchResult.getRelations() != null && !searchResult.getRelations().isEmpty()) {
             context.append("\n表间关联关系：\n");
             for (LogicalRelationVO relation : searchResult.getRelations()) {
@@ -439,7 +541,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         context.append("\n");
 
-        // 优先使用语义模型字段信息
         if (semanticFields != null && !semanticFields.isEmpty()) {
             context.append("  字段: ");
             for (SemanticModelVO field : semanticFields) {
@@ -447,7 +548,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
             context.append("\n");
         } else {
-            // 回退到查询表字段详情
             List<DatasourceTableVO> tables = datasourceManageService.listTables(datasourceId);
             DatasourceTableVO matchedTable = null;
             for (DatasourceTableVO t : tables) {
@@ -478,8 +578,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     /**
      * 解析LLM返回的JSON
-     * <p>
-     * 清洗LLM输出（去除markdown代码块包裹），并验证JSON格式。
      */
     private String parseLlmResponse(String llmResponse) {
         if (llmResponse == null || llmResponse.isBlank()) {
@@ -487,16 +585,11 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
 
         String content = llmResponse.trim();
-
-        // 去除markdown代码块包裹
         content = stripMarkdownCodeBlock(content);
 
-        // 验证JSON格式
         try {
             InsightDashboardSchemaDTO schema = objectMapper.readValue(content, InsightDashboardSchemaDTO.class);
-            // 补全组件布局信息
             patchComponentLayout(schema);
-            // 重新序列化为JSON字符串
             return objectMapper.writeValueAsString(schema);
         } catch (Exception e) {
             log.warn("AI生成仪表盘：LLM返回的JSON解析失败, response={}", content, e);
@@ -508,7 +601,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      * 去除LLM输出中的markdown代码块包裹
      */
     private String stripMarkdownCodeBlock(String content) {
-        // 处理 ```json ... ``` 包裹
         if (content.contains("```json")) {
             int start = content.indexOf("```json");
             int end = content.lastIndexOf("```");
@@ -516,12 +608,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 content = content.substring(start + 7, end).trim();
             }
         } else if (content.contains("```")) {
-            // 处理 ``` ... ``` 包裹
             int start = content.indexOf("```");
             int end = content.lastIndexOf("```");
             if (start >= 0 && end > start + 2) {
                 content = content.substring(start + 3, end).trim();
-                // 去除可能的语言标识行
                 if (content.contains("\n")) {
                     String firstLine = content.substring(0, content.indexOf("\n")).trim();
                     if (firstLine.matches("[a-zA-Z]+")) {
@@ -531,7 +621,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
         }
 
-        // 尝试提取第一个 { 到最后一个 } 之间的内容
         int firstBrace = content.indexOf('{');
         int lastBrace = content.lastIndexOf('}');
         if (firstBrace >= 0 && lastBrace > firstBrace) {
@@ -543,9 +632,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     /**
      * 补全组件布局信息
-     * <p>
-     * 对LLM生成的组件进行布局修正：确保position合理、组件ID存在、
-     * renderType与type一致、datasourceId已填充。
      */
     private void patchComponentLayout(InsightDashboardSchemaDTO schema) {
         if (schema.getPages() == null || schema.getPages().isEmpty()) {
@@ -554,7 +640,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
         int componentIndex = 0;
         for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
-            // 补全页面ID
             if (page.getId() == null || page.getId().isBlank()) {
                 page.setId("page_" + schema.getPages().indexOf(page));
             }
@@ -567,13 +652,11 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
 
             for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
-                // 补全组件ID
                 if (component.getId() == null || component.getId().isBlank()) {
                     component.setId("comp_" + componentIndex);
                 }
                 componentIndex++;
 
-                // 补全position
                 if (component.getPosition() == null) {
                     component.setPosition(new InsightDashboardSchemaDTO.Position());
                 }
@@ -593,7 +676,6 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     pos.setH(DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
                 }
 
-                // 补全renderType
                 if (component.getRenderType() == null || component.getRenderType().isBlank()) {
                     String renderType = resolveRenderType(component.getType());
                     if (renderType != null) {
@@ -601,14 +683,11 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     }
                 }
 
-                // 如果type是chart但chartType为空，默认设为bar
                 if ("chart".equals(component.getType()) && (component.getChartType() == null || component.getChartType().isBlank())) {
                     component.setChartType(DataAgentConstants.CHART_TYPE_BAR);
                 }
 
-                // 补全dataSource中的datasourceId（从pages级别继承的场景已在prompt中指定）
                 if (component.getDataSource() != null && (component.getDataSource().getDatasourceId() == null || component.getDataSource().getDatasourceId().isBlank())) {
-                    // datasourceId已在prompt中要求LLM填充，此处为兜底
                     log.warn("AI生成仪表盘：组件 {} 的dataSource缺少datasourceId", component.getId());
                 }
             }
@@ -628,6 +707,49 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             case "table" -> DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE;
             default -> null;
         };
+    }
+
+    /**
+     * 发送SSE事件
+     */
+    private void sendSseEvent(SseEmitter emitter, String eventName, String data) {
+        if (emitter == null) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+        } catch (Exception e) {
+            log.debug("SSE发送事件失败: event={}, error={}", eventName, e.getMessage());
+        }
+    }
+
+    /**
+     * 注册SSE Emitter回调
+     */
+    private void registerEmitterCallbacks(SseEmitter emitter, AtomicBoolean emitterDone) {
+        emitter.onCompletion(() -> log.debug("AI助手SSE emitter completed"));
+        emitter.onTimeout(() -> {
+            log.debug("AI助手SSE emitter timeout");
+            completeEmitterQuietly(emitter, emitterDone);
+        });
+        emitter.onError(e -> {
+            log.debug("AI助手SSE emitter error: {}", e.getMessage());
+            completeEmitterQuietly(emitter, emitterDone);
+        });
+    }
+
+    /**
+     * 安全关闭SSE Emitter
+     */
+    private void completeEmitterQuietly(SseEmitter emitter, AtomicBoolean emitterDone) {
+        if (!emitterDone.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            emitter.complete();
+        } catch (Exception e) {
+            log.debug("SSE Emitter already completed: {}", e.getMessage());
+        }
     }
 
     private void requireOwnership(Long id) {

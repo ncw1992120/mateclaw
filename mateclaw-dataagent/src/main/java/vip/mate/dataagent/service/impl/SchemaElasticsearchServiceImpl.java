@@ -20,8 +20,10 @@ import vip.mate.dataagent.service.SchemaElasticsearchService;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Schema Elasticsearch 检索服务实现
@@ -71,7 +73,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
     public void ensureIndex(int vectorDimension) {
         ElasticsearchClient client = getAvailableClient();
         if (client == null) {
-            log.warn("Elasticsearch 客户端不可用，跳过索引创建");
+            log.error("Elasticsearch 客户端不可用，跳过索引创建");
             return;
         }
 
@@ -115,7 +117,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             log.error("Elasticsearch 索引创建失败: {}", e.getMessage(), e);
         } catch (Exception e) {
             /* ik_max_word 分词器可能不存在，回退到标准分词器 */
-            log.warn("使用 ik 分词器创建索引失败，回退到标准分词器: {}", e.getMessage());
+            log.error("使用 ik 分词器创建索引失败，回退到标准分词器: {}", e.getMessage());
             tryCreateWithStandardAnalyzer(client, indexName, vectorDimension);
         }
     }
@@ -163,7 +165,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
     public void indexSchema(Long datasourceId, String tableName, String embeddingText, float[] embedding) {
         ElasticsearchClient client = getAvailableClient();
         if (client == null) {
-            log.debug("Elasticsearch 客户端不可用，跳过索引写入");
+            log.error("Elasticsearch 客户端不可用，跳过索引写入");
             return;
         }
 
@@ -194,9 +196,9 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                     .id(docId)
                     .document(doc)
             );
-            log.debug("ES 索引写入成功: {}/{}", datasourceId, tableName);
+            log.info("ES 索引写入成功: {}/{}", datasourceId, tableName);
         } catch (IOException e) {
-            log.warn("ES 索引写入失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
+            log.error("ES 索引写入失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
         }
     }
 
@@ -223,7 +225,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             );
             log.info("ES 索引删除完成，数据源: {}", datasourceId);
         } catch (IOException e) {
-            log.warn("ES 索引删除失败，数据源: {} - {}", datasourceId, e.getMessage());
+            log.error("ES 索引删除失败，数据源: {} - {}", datasourceId, e.getMessage());
         }
     }
 
@@ -244,9 +246,9 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                     .index(indexName)
                     .id(docId)
             );
-            log.debug("ES 索引删除完成: {}/{}", datasourceId, tableName);
+            log.info("ES 索引删除完成: {}/{}", datasourceId, tableName);
         } catch (IOException e) {
-            log.warn("ES 索引删除失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
+            log.error("ES 索引删除失败: {}/{} - {}", datasourceId, tableName, e.getMessage());
         }
     }
 
@@ -289,10 +291,10 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
 
             return extractTableHits(response, "keyword");
         } catch (IOException e) {
-            log.warn("ES 关键词检索失败: {}", e.getMessage());
+            log.error("ES 关键词检索失败: {}", e.getMessage());
             return List.of();
         } catch (Exception e) {
-            log.warn("ES 关键词检索异常: {}", e.getMessage());
+            log.error("ES 关键词检索异常: {}", e.getMessage());
             return List.of();
         }
     }
@@ -343,10 +345,10 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                     .toList();
             return hits;
         } catch (IOException e) {
-            log.warn("ES 向量语义检索失败: {}", e.getMessage());
+            log.error("ES 向量语义检索失败: {}", e.getMessage());
             return List.of();
         } catch (Exception e) {
-            log.warn("ES 向量语义检索异常: {}", e.getMessage());
+            log.error("ES 向量语义检索异常: {}", e.getMessage());
             return List.of();
         }
     }
@@ -389,13 +391,15 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
 
         try {
             if (hasVector) {
-                /* 混合检索：RRF 融合关键词和 kNN 向量检索 */
+                /* 混合检索：分别执行关键词查询和 kNN 查询，应用层 RRF 融合 */
+                /* （ES 内置 RRF 需要 Platinum 许可证，Basic 许可证不支持） */
                 List<Float> queryVectorList = new ArrayList<>(queryVector.length);
                 for (float v : queryVector) {
                     queryVectorList.add(v);
                 }
 
-                SearchResponse<Map> response = client.search(s -> s
+                // 1. 关键词查询
+                SearchResponse<Map> keywordResponse = client.search(s -> s
                                 .index(indexName)
                                 .size(topK)
                                 .query(q -> q
@@ -406,16 +410,22 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                                                 .value(request.getDatasourceId())
                                                         )
                                                 )
-                                                .should(sh -> sh
+                                                .must(m -> m
                                                         .multiMatch(mm -> mm
                                                                 .fields(DataAgentConstants.SCHEMA_ES_EMBEDDING_TEXT_FIELD)
                                                                 .type(TextQueryType.CrossFields)
                                                                 .query(request.getQuery())
                                                         )
                                                 )
-                                                .minimumShouldMatch("1")
                                         )
-                                )
+                                ),
+                        Map.class
+                );
+
+                // 2. kNN 向量查询
+                SearchResponse<Map> knnResponse = client.search(s -> s
+                                .index(indexName)
+                                .size(topK)
                                 .knn(knn -> knn
                                         .field(DataAgentConstants.SCHEMA_ES_EMBEDDING_FIELD)
                                         .queryVector(queryVectorList)
@@ -427,16 +437,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                                         .value(request.getDatasourceId())
                                                 )
                                         )
-                                )
-                                .rank(r -> r
-                                        .rrf(rrf -> rrf
-                                                .rankConstant((long) DataAgentConstants.SCHEMA_SEARCH_RRF_K)
-                                        )
                                 ),
                         Map.class
                 );
 
-                tableHits = extractTableHits(response, "hybrid");
+                // 3. 应用层 RRF 融合
+                tableHits = rrfMergeTableHits(keywordResponse, knnResponse);
                 matchSource = "hybrid";
             } else {
                 /* 仅关键词检索 */
@@ -448,14 +454,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             for (SchemaSearchResult.TableHit h : tableHits) {
                 h.setMatchSource(matchSource);
             }
-
-            /* RRF 分数尺度远小于 BM25，不适用 BM25 的 threshold 过滤 */
         } catch (IOException e) {
-            log.warn("ES 混合检索失败，降级为关键词检索: {}", e.getMessage());
+            log.error("ES 混合检索失败，降级为关键词检索: {}", e.getMessage());
             tableHits = keywordSearch(request.getDatasourceId(), request.getQuery(), topK);
             matchSource = "keyword";
         } catch (Exception e) {
-            log.warn("ES 混合检索异常: {}", e.getMessage());
+            log.error("ES 混合检索异常: {}", e.getMessage());
             tableHits = List.of();
             matchSource = "keyword";
         }
@@ -467,6 +471,71 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
     }
 
     // ==================== private 方法 ====================
+
+    /**
+     * 应用层 RRF 融合关键词和向量检索结果（表）
+     * <p>
+     * RRF 公式: score = Σ 1/(k + rank_i)，k 为 rankConstant
+     * 双通道同时命中的结果得分更高，自然排在前面
+     */
+    private List<SchemaSearchResult.TableHit> rrfMergeTableHits(SearchResponse<Map> keywordResponse, SearchResponse<Map> knnResponse) {
+        int rankConstant = DataAgentConstants.SCHEMA_SEARCH_RRF_K;
+        Map<String, Double> scoreMap = new LinkedHashMap<>();
+        Map<String, SchemaSearchResult.TableHit> hitMap = new LinkedHashMap<>();
+
+        if (keywordResponse != null && keywordResponse.hits() != null) {
+            List<Hit<Map>> hits = keywordResponse.hits().hits();
+            for (int i = 0; i < hits.size(); i++) {
+                Hit<Map> hit = hits.get(i);
+                String id = hit.id();
+                double rrfScore = 1.0 / (rankConstant + i + 1);
+                scoreMap.merge(id, rrfScore, Double::sum);
+                SchemaSearchResult.TableHit th = buildTableHit(hit.source(), hit.score(), "keyword");
+                if (th != null) {
+                    hitMap.putIfAbsent(id, th);
+                }
+            }
+        }
+
+        if (knnResponse != null && knnResponse.hits() != null) {
+            List<Hit<Map>> hits = knnResponse.hits().hits();
+            for (int i = 0; i < hits.size(); i++) {
+                Hit<Map> hit = hits.get(i);
+                String id = hit.id();
+                double rrfScore = 1.0 / (rankConstant + i + 1);
+                scoreMap.merge(id, rrfScore, Double::sum);
+                if (!hitMap.containsKey(id)) {
+                    SchemaSearchResult.TableHit th = buildTableHit(hit.source(), hit.score(), "vector");
+                    if (th != null) {
+                        hitMap.put(id, th);
+                    }
+                }
+            }
+        }
+
+        return scoreMap.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .map(entry -> {
+                    SchemaSearchResult.TableHit th = hitMap.get(entry.getKey());
+                    if (th != null) {
+                        th.setScore(entry.getValue());
+                    }
+                    return th;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private SchemaSearchResult.TableHit buildTableHit(Map<String, Object> source, Double score, String matchSource) {
+        if (source == null) return null;
+        SchemaSearchResult.TableHit th = new SchemaSearchResult.TableHit();
+        Object tableName = source.get("tableName");
+        th.setTableName(tableName != null ? tableName.toString() : null);
+        th.setScore(score != null ? score : 0.0);
+        th.setMatchSource(matchSource);
+        return th;
+    }
 
     /**
      * 从 ES 搜索响应中提取 TableHit 列表

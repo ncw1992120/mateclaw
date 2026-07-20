@@ -52,7 +52,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         LambdaQueryWrapper<LogicalRelationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(LogicalRelationEntity::getDatasourceId, datasourceId);
         wrapper.eq(LogicalRelationEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
-        wrapper.eq(LogicalRelationEntity::getDeleted, 0);
         List<LogicalRelationEntity> entities = logicalRelationMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -75,7 +74,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
             w.in(LogicalRelationEntity::getSourceTableName, tableNames)
                     .or().in(LogicalRelationEntity::getTargetTableName, tableNames);
         });
-        wrapper.eq(LogicalRelationEntity::getDeleted, 0);
         List<LogicalRelationEntity> entities = logicalRelationMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -104,7 +102,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         wrapper.eq(LogicalRelationEntity::getSourceColumnName, request.getSourceColumnName());
         wrapper.eq(LogicalRelationEntity::getTargetTableName, request.getTargetTableName());
         wrapper.eq(LogicalRelationEntity::getTargetColumnName, request.getTargetColumnName());
-        wrapper.eq(LogicalRelationEntity::getDeleted, 0);
         Long count = logicalRelationMapper.selectCount(wrapper);
         if (count > 0) {
             throw new RuntimeException("逻辑外键关系已存在: "
@@ -147,9 +144,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         requireLogicalOwnership(id);
-        LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
-        entity.setDeleted(1);
-        logicalRelationMapper.updateById(entity);
+        logicalRelationMapper.deleteById(id);
     }
 
     /**
@@ -165,7 +160,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         // 查询该数据源下所有表
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        tableWrapper.eq(DatasourceTableEntity::getDeleted, 0);
         List<DatasourceTableEntity> tables = datasourceTableMapper.selectList(tableWrapper);
         if (tables.isEmpty()) {
             return 0;
@@ -180,7 +174,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         colWrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         colWrapper.isNotNull(DatasourceColumnEntity::getForeignKeyTable);
         colWrapper.ne(DatasourceColumnEntity::getForeignKeyTable, "");
-        colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         List<DatasourceColumnEntity> fkColumns = datasourceColumnMapper.selectList(colWrapper);
         if (fkColumns.isEmpty()) {
             return 0;
@@ -189,7 +182,6 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         // 查询已有的逻辑外键关系，构建已存在的 key 集合
         LambdaQueryWrapper<LogicalRelationEntity> existWrapper = new LambdaQueryWrapper<>();
         existWrapper.eq(LogicalRelationEntity::getDatasourceId, datasourceId);
-        existWrapper.eq(LogicalRelationEntity::getDeleted, 0);
         List<LogicalRelationEntity> existingRelations = logicalRelationMapper.selectList(existWrapper);
         Set<String> existingKeys = existingRelations.stream()
                 .map(e -> e.getSourceTableName() + "." + e.getSourceColumnName()
@@ -237,7 +229,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
      */
     private void requireLogicalOwnership(Long id) {
         LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             throw new BusinessException(404, "逻辑外键关系不存在: " + id);
         }
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();

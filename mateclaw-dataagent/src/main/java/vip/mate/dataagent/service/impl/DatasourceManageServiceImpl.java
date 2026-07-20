@@ -61,7 +61,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         // 内部工具调用：不过滤 owner，也不按授权表过滤
         if (ownerId == null) {
             LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(DatasourceEntity::getDeleted, 0);
             List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
             return entities.stream().map(this::toVO).collect(Collectors.toList());
         }
@@ -70,8 +69,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         // 1. 自己创建的数据源
         LambdaQueryWrapper<DatasourceEntity> ownWrapper = new LambdaQueryWrapper<>();
-        ownWrapper.eq(DatasourceEntity::getDeleted, 0)
-                .eq(DatasourceEntity::getOwnerId, ownerId);
+        ownWrapper.eq(DatasourceEntity::getOwnerId, ownerId);
         List<DatasourceEntity> ownEntities = datasourceMapper.selectList(ownWrapper);
         visibleIds.addAll(ownEntities.stream().map(DatasourceEntity::getId).collect(Collectors.toSet()));
 
@@ -105,8 +103,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         // 3. 工作区内元数据共享的数据源（仅 view 权限，用于元数据查询场景）
         LambdaQueryWrapper<DatasourceEntity> sharedWrapper = new LambdaQueryWrapper<>();
-        sharedWrapper.eq(DatasourceEntity::getDeleted, 0)
-                .eq(DatasourceEntity::getWorkspaceId, workspaceId)
+        sharedWrapper.eq(DatasourceEntity::getWorkspaceId, workspaceId)
                 .eq(DatasourceEntity::getMetaShared, true);
         List<DatasourceEntity> sharedEntities = datasourceMapper.selectList(sharedWrapper);
         visibleIds.addAll(sharedEntities.stream()
@@ -118,7 +115,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         List<DatasourceEntity> entities = datasourceMapper.selectList(
                 new LambdaQueryWrapper<DatasourceEntity>()
-                        .eq(DatasourceEntity::getDeleted, 0)
                         .in(DatasourceEntity::getId, visibleIds));
         return entities.stream()
                 .map(e -> toVO(e, resolveDatasourcePermission(e)))
@@ -168,7 +164,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public DatasourceVO getDatasource(Long id) {
         DatasourceEntity entity = datasourceMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             return null;
         }
         // 校验工作区归属 + 可读性（owner / meta_shared / 资源授权）
@@ -198,7 +194,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
     private String requireDatasourceAccess(Long datasourceId) {
         DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             throw new BusinessException(404, "数据源不存在: " + datasourceId);
         }
         return requireDatasourceAccess(entity);
@@ -215,7 +211,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public void checkDatasourceReadable(Long datasourceId) {
         DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             throw new BusinessException(404, "数据源不存在: " + datasourceId);
         }
         checkDatasourceReadable(entity);
@@ -363,22 +359,17 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (entity == null) {
             return;
         }
-        entity.setDeleted(1);
-        datasourceMapper.updateById(entity);
+        datasourceMapper.deleteById(id);
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, id);
-        tableWrapper.eq(DatasourceTableEntity::getDeleted, 0);
         List<DatasourceTableEntity> tables = datasourceTableMapper.selectList(tableWrapper);
         for (DatasourceTableEntity table : tables) {
-            table.setDeleted(1);
-            datasourceTableMapper.updateById(table);
+            datasourceTableMapper.deleteById(table.getId());
             LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
             colWrapper.eq(DatasourceColumnEntity::getTableId, table.getId());
-            colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
             List<DatasourceColumnEntity> columns = datasourceColumnMapper.selectList(colWrapper);
             for (DatasourceColumnEntity column : columns) {
-                column.setDeleted(1);
-                datasourceColumnMapper.updateById(column);
+                datasourceColumnMapper.deleteById(column.getId());
             }
         }
     }
@@ -389,7 +380,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public boolean testConnection(Long id) {
         DatasourceEntity entity = datasourceMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null) {
             return false;
         }
         requireDatasourceAccess(entity);
@@ -458,7 +449,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         checkDatasourceReadable(datasourceId);
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasourceTableEntity::getTableName);
         List<DatasourceTableEntity> tables = datasourceTableMapper.selectList(wrapper);
         return tables.stream().map(this::toTableVO).collect(Collectors.toList());
@@ -473,7 +463,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getId, tableId);
         wrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         DatasourceTableEntity table = datasourceTableMapper.selectOne(wrapper);
         if (table == null) {
             return null;
@@ -493,7 +482,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         wrapper.orderByAsc(DatasourceColumnEntity::getOrdinalPosition);
         List<DatasourceColumnEntity> columns = datasourceColumnMapper.selectList(wrapper);
         return columns.stream().map(this::toColumnVO).collect(Collectors.toList());
@@ -551,7 +539,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             limit = DataAgentConstants.PREVIEW_MAX_LIMIT;
         }
         DatasourceEntity datasourceEntity = datasourceMapper.selectById(datasourceId);
-        if (datasourceEntity == null || datasourceEntity.getDeleted() == 1) {
+        if (datasourceEntity == null) {
             throw new RuntimeException("数据源不存在: " + datasourceId);
         }
         checkDatasourceReadable(datasourceEntity);
@@ -602,15 +590,12 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (table == null || !table.getDatasourceId().equals(datasourceId)) {
             return;
         }
-        table.setDeleted(1);
-        datasourceTableMapper.updateById(table);
+        datasourceTableMapper.deleteById(tableId);
         LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
         colWrapper.eq(DatasourceColumnEntity::getTableId, tableId);
-        colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         List<DatasourceColumnEntity> columns = datasourceColumnMapper.selectList(colWrapper);
         for (DatasourceColumnEntity column : columns) {
-            column.setDeleted(1);
-            datasourceColumnMapper.updateById(column);
+            datasourceColumnMapper.deleteById(column.getId());
         }
     }
 
@@ -840,12 +825,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         // 逻辑删除该表下所有旧字段
         LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
         colWrapper.eq(DatasourceColumnEntity::getTableId, tableEntity.getId());
-        colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
-        List<DatasourceColumnEntity> oldColumns = datasourceColumnMapper.selectList(colWrapper);
-        for (DatasourceColumnEntity column : oldColumns) {
-            column.setDeleted(1);
-            datasourceColumnMapper.updateById(column);
-        }
+        datasourceColumnMapper.delete(colWrapper);
         // 重新获取字段信息并插入
         try (Connection conn = DriverManager.getConnection(
                 buildJdbcUrl(datasourceEntity), datasourceEntity.getUsername(), datasourceEntity.getPassword())) {
@@ -919,7 +899,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         // 获取当前已有的字段名集合
         LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
         colWrapper.eq(DatasourceColumnEntity::getTableId, tableEntity.getId());
-        colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         List<DatasourceColumnEntity> existingColumns = datasourceColumnMapper.selectList(colWrapper);
         Set<String> existingNames = existingColumns.stream()
                 .map(DatasourceColumnEntity::getColumnName)
@@ -1002,19 +981,12 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     private void cleanSchemaData(Long datasourceId) {
         LambdaQueryWrapper<DatasourceTableEntity> tableWrapper = new LambdaQueryWrapper<>();
         tableWrapper.eq(DatasourceTableEntity::getDatasourceId, datasourceId);
-        tableWrapper.eq(DatasourceTableEntity::getDeleted, 0);
         List<DatasourceTableEntity> oldTables = datasourceTableMapper.selectList(tableWrapper);
         for (DatasourceTableEntity table : oldTables) {
             LambdaQueryWrapper<DatasourceColumnEntity> colWrapper = new LambdaQueryWrapper<>();
             colWrapper.eq(DatasourceColumnEntity::getTableId, table.getId());
-            colWrapper.eq(DatasourceColumnEntity::getDeleted, 0);
-            List<DatasourceColumnEntity> oldColumns = datasourceColumnMapper.selectList(colWrapper);
-            for (DatasourceColumnEntity column : oldColumns) {
-                column.setDeleted(1);
-                datasourceColumnMapper.updateById(column);
-            }
-            table.setDeleted(1);
-            datasourceTableMapper.updateById(table);
+            datasourceColumnMapper.delete(colWrapper);
+            datasourceTableMapper.deleteById(table.getId());
         }
     }
 
@@ -1026,7 +998,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
         wrapper.eq(DatasourceColumnEntity::getColumnName, columnName);
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         DatasourceColumnEntity col = datasourceColumnMapper.selectOne(wrapper);
         if (col != null) {
             col.setPrimaryKey(true);
@@ -1042,7 +1013,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
         wrapper.eq(DatasourceColumnEntity::getColumnName, columnName);
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         DatasourceColumnEntity col = datasourceColumnMapper.selectOne(wrapper);
         if (col != null) {
             col.setForeignKeyTable(fkTable);
@@ -1059,7 +1029,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         wrapper.eq(DatasourceColumnEntity::getDatasourceId, datasourceId);
         wrapper.eq(DatasourceColumnEntity::getTableId, tableId);
         wrapper.eq(DatasourceColumnEntity::getColumnName, columnName);
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         DatasourceColumnEntity col = datasourceColumnMapper.selectOne(wrapper);
         if (col != null) {
             col.setIndexed(true);
@@ -1131,7 +1100,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, entity.getId());
-        wrapper.eq(DatasourceTableEntity::getDeleted, 0);
         vo.setTableCount(datasourceTableMapper.selectCount(wrapper).intValue());
         vo.setPermission(permission);
         return vo;
@@ -1151,7 +1119,6 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         LambdaQueryWrapper<DatasourceColumnEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceColumnEntity::getTableId, entity.getId());
-        wrapper.eq(DatasourceColumnEntity::getDeleted, 0);
         vo.setColumnCount(datasourceColumnMapper.selectCount(wrapper).intValue());
         vo.setColumns(Collections.emptyList());
         return vo;

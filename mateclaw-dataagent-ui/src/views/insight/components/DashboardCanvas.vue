@@ -54,6 +54,13 @@
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
           :style="{ animationDelay: `${index * 40}ms` }"
         >
+          <!-- 四边拖动热区（仅编辑态） -->
+          <template v-if="editable">
+            <div class="resize-handle resize-handle-top" @mousedown.stop="startResize($event, item.i, 'top')" />
+            <div class="resize-handle resize-handle-right" @mousedown.stop="startResize($event, item.i, 'right')" />
+            <div class="resize-handle resize-handle-bottom" @mousedown.stop="startResize($event, item.i, 'bottom')" />
+            <div class="resize-handle resize-handle-left" @mousedown.stop="startResize($event, item.i, 'left')" />
+          </template>
           <div v-if="editable" class="grid-item-toolbar">
             <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
             <button class="grid-item-delete" @click.stop="handleDeleteComponent(item.i)">✕</button>
@@ -327,6 +334,88 @@ function handleDeleteComponent(id: string): void {
   emit('delete-component', id)
 }
 
+/** 自定义边缘拖动状态 */
+const resizingItem = ref<{ id: string; edge: string; startX: number; startY: number; startW: number; startH: number; startXPos: number; startYPos: number } | null>(null)
+
+/** 开始自定义边缘拖动 */
+function startResize(event: MouseEvent, id: string, edge: string): void {
+  const comp = getComponent(id)
+  if (!comp) return
+  resizingItem.value = {
+    id,
+    edge,
+    startX: event.clientX,
+    startY: event.clientY,
+    startW: comp.position.w,
+    startH: comp.position.h,
+    startXPos: comp.position.x,
+    startYPos: comp.position.y,
+  }
+  document.addEventListener('mousemove', handleResizeMove)
+  document.addEventListener('mouseup', handleResizeEnd)
+}
+
+/** 拖动中 */
+function handleResizeMove(event: MouseEvent): void {
+  if (!resizingItem.value) return
+  const comp = getComponent(resizingItem.value.id)
+  if (!comp) return
+
+  const dx = event.clientX - resizingItem.value.startX
+  const dy = event.clientY - resizingItem.value.startY
+  const colWidth = 30 // 近似列宽
+  const rowHeight = 30 // 行高
+
+  let newW = resizingItem.value.startW
+  let newH = resizingItem.value.startH
+  let newX = resizingItem.value.startXPos
+  let newY = resizingItem.value.startYPos
+
+  if (resizingItem.value.edge === 'left') {
+    const colDelta = Math.round(dx / colWidth)
+    newW = Math.max(1, resizingItem.value.startW - colDelta)
+    newX = resizingItem.value.startXPos
+  } else if (resizingItem.value.edge === 'right') {
+    const colDelta = Math.round(dx / colWidth)
+    newW = Math.max(1, resizingItem.value.startW + colDelta)
+    newX = resizingItem.value.startXPos
+  } else if (resizingItem.value.edge === 'top') {
+    const rowDelta = Math.round(dy / rowHeight)
+    newH = Math.max(1, resizingItem.value.startH - rowDelta)
+    newY = resizingItem.value.startYPos
+  } else if (resizingItem.value.edge === 'bottom') {
+    const rowDelta = Math.round(dy / rowHeight)
+    newH = Math.max(1, resizingItem.value.startH + rowDelta)
+    newY = resizingItem.value.startYPos
+  }
+
+  // 边界保护：确保组件不超出画布边界
+  if (newX < 0) {
+    newX = 0
+  }
+  if (newY < 0) {
+    newY = 0
+  }
+  if (newX + newW > 24) {
+    newW = 24 - newX
+  }
+
+  emit('update-layout', [{
+    id: resizingItem.value.id,
+    x: newX,
+    y: newY,
+    w: newW,
+    h: newH,
+  }])
+}
+
+/** 拖动结束 */
+function handleResizeEnd(): void {
+  resizingItem.value = null
+  document.removeEventListener('mousemove', handleResizeMove)
+  document.removeEventListener('mouseup', handleResizeEnd)
+}
+
 /** 筛选组件值变化 */
 function handleFilterChange(componentId: string, payload: { field: string; value: string }): void {
   emit('filter-change', { componentId, field: payload.field, value: payload.value })
@@ -418,6 +507,117 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+
+/* 扩大 resizer 热区 */
+.grid-item-content :deep(.vgl-item__resizer) {
+  width: 20px;
+  height: 20px;
+  right: 0;
+  bottom: 0;
+}
+
+.grid-item-content :deep(.vgl-item__resizer::before) {
+  inset: 0 3px 3px 0;
+  border-right-width: 3px;
+  border-bottom-width: 3px;
+}
+
+/* 自定义边缘拖动热区 */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.resize-handle-top {
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-handle-right {
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.resize-handle-bottom {
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-handle-left {
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.grid-item-content:hover .resize-handle {
+  opacity: 1;
+}
+
+/* 边缘拖动时的视觉指示 */
+.resize-handle-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  background: var(--db-accent);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.resize-handle-right::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: var(--db-accent);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.resize-handle-bottom::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  background: var(--db-accent);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.resize-handle-left::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: var(--db-accent);
+  border-radius: 2px;
+  opacity: 0.6;
 }
 
 .grid-item-content:hover {

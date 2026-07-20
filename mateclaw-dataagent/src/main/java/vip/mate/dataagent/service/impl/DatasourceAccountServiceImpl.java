@@ -1,7 +1,6 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -61,8 +60,7 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     public DatasourceAccountEntity getByDatasourceIdAndUserId(Long datasourceId, Long userId) {
         LambdaQueryWrapper<DatasourceAccountEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceAccountEntity::getDatasourceId, datasourceId)
-                .eq(DatasourceAccountEntity::getUserId, userId)
-                .eq(DatasourceAccountEntity::getDeleted, 0);
+                .eq(DatasourceAccountEntity::getUserId, userId);
         return datasourceAccountMapper.selectOne(wrapper);
     }
 
@@ -87,8 +85,7 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     @Override
     public List<DatasourceAccountVO> listByUserId(Long userId) {
         LambdaQueryWrapper<DatasourceAccountEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(DatasourceAccountEntity::getUserId, userId)
-                .eq(DatasourceAccountEntity::getDeleted, 0);
+        wrapper.eq(DatasourceAccountEntity::getUserId, userId);
         List<DatasourceAccountEntity> entities = datasourceAccountMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -126,17 +123,15 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     }
 
     /**
-     * 删除用户查询账号绑定（逻辑删除）
+     * 删除用户查询账号绑定
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteAccount(Long datasourceId, Long userId) {
-        LambdaUpdateWrapper<DatasourceAccountEntity> wrapper = new LambdaUpdateWrapper<>();
+        LambdaQueryWrapper<DatasourceAccountEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceAccountEntity::getDatasourceId, datasourceId)
-                .eq(DatasourceAccountEntity::getUserId, userId)
-                .eq(DatasourceAccountEntity::getDeleted, 0)
-                .set(DatasourceAccountEntity::getDeleted, 1);
-        datasourceAccountMapper.update(null, wrapper);
+                .eq(DatasourceAccountEntity::getUserId, userId);
+        datasourceAccountMapper.delete(wrapper);
     }
 
     /**
