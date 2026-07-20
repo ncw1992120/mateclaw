@@ -661,7 +661,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         Set<String> dimensions = new LinkedHashSet<>();
         List<Map<String, Object>> filters = new ArrayList<>();
 
-        if (!schema.getAllComponents().isEmpty()) {
+        if (schema != null && !schema.getAllComponents().isEmpty()) {
             for (Component comp : schema.getAllComponents()) {
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {

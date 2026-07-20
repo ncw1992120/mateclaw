@@ -90,11 +90,23 @@
           </template>
         </div>
         <div class="message-content">
-          <template v-if="msg.role === 'assistant' && msg.streaming">
-            <span class="streaming-text">{{ msg.content }}</span>
+          <template v-if="msg.role === 'assistant' && msg.reasoning">
+            <div class="reasoning-block">
+              <div class="reasoning-label">思考过程</div>
+              <div class="reasoning-text">{{ msg.reasoning }}<template v-if="msg.streaming && !msg.content"><span class="cursor-blink">|</span></template></div>
+            </div>
+          </template>
+          <template v-if="msg.role === 'assistant' && msg.content">
+            <template v-if="msg.streaming">
+              <span class="streaming-text">{{ msg.content }}</span>
+              <span class="cursor-blink">|</span>
+            </template>
+            <template v-else>{{ msg.content }}</template>
+          </template>
+          <template v-if="msg.role === 'assistant' && !msg.reasoning && !msg.content && msg.streaming">
             <span class="cursor-blink">|</span>
           </template>
-          <template v-else>{{ msg.content }}</template>
+          <template v-if="msg.role === 'user'">{{ msg.content }}</template>
         </div>
       </div>
       <div v-if="loading && !hasStreamingMessage" class="ai-chat-message assistant">
@@ -179,6 +191,8 @@ interface ChatMessage {
   content: string
   /** 是否正在流式接收中 */
   streaming?: boolean
+  /** 思考过程内容（reasoning事件累积） */
+  reasoning?: string
 }
 
 const messages = ref<ChatMessage[]>([])
@@ -288,41 +302,48 @@ async function handleSend(): Promise<void> {
       datasourceId: isGenerateMode.value && !hasStarted.value ? generateForm.datasourceId : undefined,
       message,
     },
-    // onContent: 流式文本增量
-    (text: string) => {
-      assistantMsg.content += text
-      scrollToBottom()
-    },
-    // onResult: 最终仪表盘数据
-    (dashboard: InsightDashboard) => {
-      hasStarted.value = true
-      assistantMsg.streaming = false
+    {
+      // onReasoning: AI思考过程增量
+      onReasoning: (text: string) => {
+        assistantMsg.reasoning = (assistantMsg.reasoning || '') + text
+        scrollToBottom()
+      },
+      // onContent: AI最终结果文本增量
+      onContent: (text: string) => {
+        assistantMsg.content += text
+        scrollToBottom()
+      },
+      // onResult: 最终仪表盘数据
+      onResult: (dashboard: InsightDashboard) => {
+        hasStarted.value = true
+        assistantMsg.streaming = false
 
-      // 追加成功提示
-      const successMsg = isModifyMode.value
-        ? t('insight.aiChatSuccess')
-        : t('insight.generateSuccess')
-      assistantMsg.content = assistantMsg.content
-        ? `${assistantMsg.content}\n\n${successMsg}`
-        : successMsg
+        // 追加成功提示
+        const successMsg = isModifyMode.value
+          ? t('insight.aiChatSuccess')
+          : t('insight.generateSuccess')
+        assistantMsg.content = assistantMsg.content
+          ? `${assistantMsg.content}\n\n${successMsg}`
+          : successMsg
 
-      // 通知父组件刷新，传递仪表盘ID
-      const resultId = dashboard?.id?.toString() || props.dashboardId || ''
-      emit('dashboard-updated', resultId)
+        // 通知父组件刷新，传递仪表盘ID
+        const resultId = dashboard?.id?.toString() || props.dashboardId || ''
+        emit('dashboard-updated', resultId)
 
-      ElMessage.success(successMsg)
-      loading.value = false
-      closeStream = null
-      scrollToBottom()
-    },
-    // onError: 错误
-    (errorMsg: string) => {
-      assistantMsg.streaming = false
-      assistantMsg.content = errorMsg || (isModifyMode.value ? t('insight.aiChatFailed') : t('insight.generateFailed'))
-      ElMessage.error(assistantMsg.content)
-      loading.value = false
-      closeStream = null
-      scrollToBottom()
+        ElMessage.success(successMsg)
+        loading.value = false
+        closeStream = null
+        scrollToBottom()
+      },
+      // onError: 错误
+      onError: (errorMsg: string) => {
+        assistantMsg.streaming = false
+        assistantMsg.content = errorMsg || (isModifyMode.value ? t('insight.aiChatFailed') : t('insight.generateFailed'))
+        ElMessage.error(assistantMsg.content)
+        loading.value = false
+        closeStream = null
+        scrollToBottom()
+      },
     },
   )
 }
@@ -508,6 +529,30 @@ async function handleSend(): Promise<void> {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* 思考过程 */
+.reasoning-block {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 3px solid var(--db-accent);
+  border-radius: 4px;
+}
+
+.reasoning-label {
+  font-size: 11px;
+  color: var(--db-accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.reasoning-text {
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* 加载动画 */

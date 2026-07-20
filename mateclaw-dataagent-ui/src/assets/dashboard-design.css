@@ -175,6 +175,50 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* ===== Tab / 页面切换 ===== */
+.mc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-sm) var(--space-xl);
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.mc-tab {
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mc-tab:hover {
+  background: var(--db-hover);
+  color: var(--db-text);
+}
+
+.mc-tab.active {
+  background: var(--db-accent-light);
+  color: var(--db-accent);
+  font-weight: 600;
+}
+
+.mc-tab-sub {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
 /* ===== 动画关键帧 ===== */
 @keyframes fadeIn {
   from { opacity: 0; }

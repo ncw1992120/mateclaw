@@ -93,6 +93,7 @@
       v-else-if="mode === 'editor'"
       :dashboard-id="currentDashboardId"
       @back="handleBackToList"
+      @preview="handlePreviewFromEditor"
     />
 
     <!-- 预览模式 -->
@@ -194,6 +195,12 @@ function handleEdit(id: string): void {
 /** 预览仪表盘 */
 function handlePreview(id: string): void {
   currentDashboardId.value = id
+  mode.value = 'preview'
+}
+
+/** 从编辑器进入预览 */
+function handlePreviewFromEditor(dashboardId: string): void {
+  currentDashboardId.value = dashboardId
   mode.value = 'preview'
 }
 

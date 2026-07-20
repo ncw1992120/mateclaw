@@ -78,33 +78,48 @@
     </el-dialog>
 
     <!-- 文档编辑弹窗 -->
-    <el-dialog v-model="docDialogVisible" :title="editingDoc ? t('helpCenter.editDocument') : t('helpCenter.newDocument')" width="960" top="5vh">
-      <el-form :model="docForm" label-width="80px">
-        <el-form-item :label="t('helpCenter.documentTitle')">
-          <el-input v-model="docForm.title" :placeholder="t('helpCenter.documentTitlePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('helpCenter.category')">
-          <el-tree-select
-            v-model="docForm.categoryId"
-            :data="categoryTreeForSelect"
-            :props="{ label: 'name', children: 'children', value: 'id' }"
-            :placeholder="t('helpCenter.selectCategory')"
-            check-strictly
-          />
-        </el-form-item>
-        <el-form-item :label="t('helpCenter.author')">
-          <el-input v-model="docForm.author" :placeholder="t('helpCenter.authorPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('helpCenter.tags')">
-          <el-input v-model="docForm.tags" :placeholder="t('helpCenter.tagsPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('helpCenter.summary')">
-          <el-input v-model="docForm.summary" :placeholder="t('helpCenter.summaryPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('helpCenter.content')">
+    <el-dialog
+      v-model="docDialogVisible"
+      :title="editingDoc ? t('helpCenter.editDocument') : t('helpCenter.newDocument')"
+      width="960"
+      top="2vh"
+      class="doc-edit-dialog"
+      destroy-on-close
+    >
+      <div class="doc-edit-layout">
+        <!-- 上方：元数据表单 -->
+        <el-form :model="docForm" label-width="80px" class="doc-meta-form">
+          <div class="meta-row">
+            <el-form-item :label="t('helpCenter.documentTitle')" class="meta-item">
+              <el-input v-model="docForm.title" :placeholder="t('helpCenter.documentTitlePlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('helpCenter.category')" class="meta-item">
+              <el-tree-select
+                v-model="docForm.categoryId"
+                :data="categoryTreeForSelect"
+                :props="{ label: 'name', children: 'children', value: 'id' }"
+                :placeholder="t('helpCenter.selectCategory')"
+                check-strictly
+              />
+            </el-form-item>
+            <el-form-item :label="t('helpCenter.author')" class="meta-item">
+              <el-input v-model="docForm.author" :placeholder="t('helpCenter.authorPlaceholder')" />
+            </el-form-item>
+          </div>
+          <div class="meta-row">
+            <el-form-item :label="t('helpCenter.tags')" class="meta-item">
+              <el-input v-model="docForm.tags" :placeholder="t('helpCenter.tagsPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('helpCenter.summary')" class="meta-item meta-item-wide">
+              <el-input v-model="docForm.summary" :placeholder="t('helpCenter.summaryPlaceholder')" />
+            </el-form-item>
+          </div>
+        </el-form>
+        <!-- 下方：内容编辑器 -->
+        <div class="doc-editor-wrapper">
           <HelpDocEditor v-model="docForm.content" />
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="docDialogVisible = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="handleSaveDoc">{{ t('common.confirm') }}</el-button>
@@ -523,5 +538,77 @@ onMounted(() => {
   min-width: 200px !important;
   max-width: 200px !important;
   height: 100% !important;
+}
+
+/* 文档编辑弹窗：让编辑器占满剩余高度 */
+.doc-edit-dialog :deep(.el-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: 96vh;
+  margin-top: 2vh !important;
+}
+
+.doc-edit-dialog :deep(.el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 20px;
+}
+
+.doc-edit-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.doc-meta-form {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--theme-border);
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.doc-meta-form :deep(.el-form-item) {
+  margin-bottom: 8px;
+  margin-right: 16px;
+}
+
+.meta-row {
+  display: flex;
+  gap: 0;
+}
+
+.meta-row + .meta-row {
+  margin-top: 0;
+}
+
+.meta-item {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0 !important;
+  margin-right: 16px;
+}
+
+.meta-item:last-child {
+  margin-right: 0;
+}
+
+.meta-item-wide {
+  flex: 2;
+}
+
+.doc-editor-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.doc-editor-wrapper :deep(.help-doc-editor) {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 </style>

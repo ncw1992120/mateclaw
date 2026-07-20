@@ -34,6 +34,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -298,31 +299,47 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         // 获取数据源Schema信息
         String schemaContext = buildSchemaContext(datasourceId, request.getMessage());
 
-        // 构建提示词
-        String prompt = String.format(GENERATE_SYSTEM_PROMPT,
+        // 构建系统提示词（格式化后）
+        String systemPrompt = String.format(GENERATE_SYSTEM_PROMPT,
                 schemaContext,
                 request.getMessage(),
-                String.valueOf(request.getDatasourceId()));
+                request.getDatasourceId());
 
         // 流式调用AgentScope
         String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
         AgentCallRequest callRequest = new AgentCallRequest();
-        callRequest.setMessage(prompt);
-        callRequest.setSystemPrompt(GENERATE_SYSTEM_PROMPT);
+        callRequest.setMessage(request.getMessage());
+        callRequest.setSystemPrompt(systemPrompt);
         callRequest.setSessionId(conversationId);
 
         Flux<Event> eventFlux = agentScopeService.streamCall(callRequest);
-        StringBuilder fullContent = new StringBuilder();
+        AtomicReference<String> lastAgentResult = new AtomicReference<>("");
 
         Disposable disposable = eventFlux.subscribe(
                 event -> {
                     if (emitterDone.get()) {
                         return;
                     }
-                    if (event.getMessage() != null && event.getMessage().getTextContent() != null
-                            && !event.getMessage().getTextContent().isEmpty()) {
-                        fullContent.append(event.getMessage().getTextContent());
-                        sendSseEvent(emitter, "content", event.getMessage().getTextContent());
+                    String textContent = event.getMessage() != null ? event.getMessage().getTextContent() : null;
+                    if (textContent == null || textContent.isEmpty()) {
+                        return;
+                    }
+                    switch (event.getType()) {
+                        case REASONING:
+                            // 思考过程，推送给用户实时查看
+                            sendSseEvent(emitter, "reasoning", textContent);
+                            break;
+                        case AGENT_RESULT:
+                            // 最终结果，只保留最后一轮的内容用于解析Schema
+                            lastAgentResult.set(textContent);
+                            sendSseEvent(emitter, "content", textContent);
+                            break;
+                        case TOOL_RESULT:
+                            // 工具调用结果，推送给用户了解进度
+                            sendSseEvent(emitter, "tool_result", textContent);
+                            break;
+                        default:
+                            break;
                     }
                 },
                 error -> {
@@ -339,8 +356,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     }
                     UserContextHolder.set(userContext);
                     try {
-                        // 流式完成，解析完整内容并创建仪表盘
-                        String llmResponse = fullContent.toString();
+                        // 流式完成，解析最后一轮Agent结果并创建仪表盘
+                        String llmResponse = lastAgentResult.get();
+                        log.info("AI生成仪表盘：LLM最终响应长度={}, 前200字符={}", llmResponse.length(),
+                                llmResponse.length() > 200 ? llmResponse.substring(0, 200) : llmResponse);
                         String schemaJson = parseLlmResponse(llmResponse);
 
                         InsightDashboardCreateRequest createRequest = new InsightDashboardCreateRequest();
@@ -401,27 +420,42 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         } catch (Exception e) {
             throw new BusinessException(500, "当前仪表盘Schema序列化失败");
         }
-        String prompt = String.format(MODIFY_SYSTEM_PROMPT, currentSchemaJson, datasourceContext, request.getMessage());
+        // 构建修改系统提示词（格式化后）
+        String systemPrompt = String.format(MODIFY_SYSTEM_PROMPT, currentSchemaJson, datasourceContext, request.getMessage());
 
         // 流式调用AgentScope
         String conversationId = DataAgentConstants.INSIGHT_AI_CHAT_CONVERSATION_PREFIX + UUID.randomUUID();
         AgentCallRequest callRequest = new AgentCallRequest();
-        callRequest.setMessage(prompt);
-        callRequest.setSystemPrompt(MODIFY_SYSTEM_PROMPT);
+        callRequest.setMessage(request.getMessage());
+        callRequest.setSystemPrompt(systemPrompt);
         callRequest.setSessionId(conversationId);
 
         Flux<Event> eventFlux = agentScopeService.streamCall(callRequest);
-        StringBuilder fullContent = new StringBuilder();
+        AtomicReference<String> lastAgentResult = new AtomicReference<>("");
 
         Disposable disposable = eventFlux.subscribe(
                 event -> {
                     if (emitterDone.get()) {
                         return;
                     }
-                    if (event.getMessage() != null && event.getMessage().getTextContent() != null
-                            && !event.getMessage().getTextContent().isEmpty()) {
-                        fullContent.append(event.getMessage().getTextContent());
-                        sendSseEvent(emitter, "content", event.getMessage().getTextContent());
+                    String textContent = event.getMessage() != null ? event.getMessage().getTextContent() : null;
+                    if (textContent == null || textContent.isEmpty()) {
+                        return;
+                    }
+                    switch (event.getType()) {
+                        case REASONING:
+                            sendSseEvent(emitter, "reasoning", textContent);
+                            break;
+                        case AGENT_RESULT:
+                            // 只保留最后一轮的内容用于解析Schema
+                            lastAgentResult.set(textContent);
+                            sendSseEvent(emitter, "content", textContent);
+                            break;
+                        case TOOL_RESULT:
+                            sendSseEvent(emitter, "tool_result", textContent);
+                            break;
+                        default:
+                            break;
                     }
                 },
                 error -> {
@@ -438,8 +472,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     }
                     UserContextHolder.set(userContext);
                     try {
-                        // 流式完成，解析完整内容并更新仪表盘
-                        String llmResponse = fullContent.toString();
+                        // 流式完成，解析最后一轮Agent结果并更新仪表盘
+                        String llmResponse = lastAgentResult.get();
+                        log.info("AI修改仪表盘：LLM最终响应长度={}, 前200字符={}", llmResponse.length(),
+                                llmResponse.length() > 200 ? llmResponse.substring(0, 200) : llmResponse);
                         String schemaJson = parseLlmResponse(llmResponse);
 
                         InsightDashboardUpdateRequest updateRequest = new InsightDashboardUpdateRequest();

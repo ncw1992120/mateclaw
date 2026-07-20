@@ -192,6 +192,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'back'): void
+  (e: 'preview', dashboardId: string): void
 }>()
 
 const { t } = useI18n()
@@ -525,7 +526,7 @@ function handleOwnerNameChange(): void {
 /** 预览 */
 function handlePreview(): void {
   handleSave().then(() => {
-    emit('back')
+    emit('preview', props.dashboardId)
   })
 }
 

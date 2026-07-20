@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
+import type { StreamAiChatCallbacks } from '@/api/insight-dashboard'
 
 /** 洞察仪表盘状态管理 */
 export const useInsightDashboardStore = defineStore('insightDashboard', () => {
@@ -64,25 +65,24 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
   /**
    * AI助手流式对话
    * @param data 请求参数
-   * @param onContent 收到AI文本增量的回调
-   * @param onResult 收到最终仪表盘数据的回调
-   * @param onError 收到错误的回调
+   * @param callbacks 事件回调
    * @returns 关闭SSE连接的函数
    */
   function streamAiChatDashboard(
     data: InsightDashboardAiChatInput,
-    onContent: (text: string) => void,
-    onResult: (dashboard: InsightDashboard) => void,
-    onError: (message: string) => void,
+    callbacks: StreamAiChatCallbacks,
   ): () => void {
     return insightDashboardApi.streamAiChat(
       data,
-      onContent,
-      (dashboard) => {
-        fetchDashboards()
-        onResult(dashboard)
+      {
+        onReasoning: callbacks.onReasoning,
+        onContent: callbacks.onContent,
+        onResult: (dashboard) => {
+          fetchDashboards()
+          callbacks.onResult(dashboard)
+        },
+        onError: callbacks.onError,
       },
-      onError,
     )
   }
 

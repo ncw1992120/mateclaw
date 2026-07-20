@@ -39,25 +39,35 @@ export function previewComponent(component: InsightComponent) {
   return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
 }
 
+/** SSE流式事件回调 */
+export interface StreamAiChatCallbacks {
+  /** 收到reasoning事件：AI思考过程增量 */
+  onReasoning?: (text: string) => void
+  /** 收到content事件：AI最终结果文本增量 */
+  onContent: (text: string) => void
+  /** 收到result事件：最终仪表盘数据 */
+  onResult: (dashboard: InsightDashboard) => void
+  /** 收到error事件 */
+  onError: (message: string) => void
+}
+
 /**
  * AI助手对话（流式SSE）
- * <p>
- * 通过EventSource接收SSE流式事件，事件类型：
- * - content: AI推理文本增量
+ *
+ * SSE事件类型：
+ * - reasoning: AI思考过程增量
+ * - content: AI最终结果文本增量
+ * - tool_result: 工具调用结果
  * - result: 最终仪表盘数据（JSON格式）
  * - error: 错误信息
  *
  * @param data 请求参数
- * @param onContent 收到content事件的回调
- * @param onResult 收到result事件的回调
- * @param onError 收到error事件的回调
+ * @param callbacks 事件回调
  * @returns 关闭SSE连接的函数
  */
 export function streamAiChat(
   data: InsightDashboardAiChatInput,
-  onContent: (text: string) => void,
-  onResult: (dashboard: InsightDashboard) => void,
-  onError: (message: string) => void,
+  callbacks: StreamAiChatCallbacks,
 ): () => void {
   const token = localStorage.getItem('token')
   const workspaceIdRaw = localStorage.getItem('workspaceId')
@@ -85,59 +95,60 @@ export function streamAiChat(
     signal: controller.signal,
   }).then(async (response) => {
     if (!response.ok) {
-      onError(`请求失败: ${response.status}`)
+      callbacks.onError(`请求失败: ${response.status}`)
       return
     }
 
     const reader = response.body?.getReader()
     if (!reader) {
-      onError('无法读取响应流')
+      callbacks.onError('无法读取响应流')
       return
     }
 
     const decoder = new TextDecoder()
     let buffer = ''
+    // SSE事件状态，需跨chunk保持
+    let currentEvent = ''
+    let currentData = ''
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) {
+        // 处理buffer中剩余内容
+        if (currentEvent && currentData) {
+          handleSseEvent(currentEvent, currentData, callbacks)
+        }
         break
       }
 
       buffer += decoder.decode(value, { stream: true })
 
-      // 解析SSE事件
-      const lines = buffer.split('\n')
-      buffer = ''
+      // 按双换行分割SSE事件（每个事件以空行结尾）
+      const events = buffer.split('\n\n')
+      // 最后一段可能不完整，保留在buffer中
+      buffer = events.pop() || ''
 
-      let currentEvent = ''
-      let currentData = ''
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i]
-
-        if (line.startsWith('event:')) {
-          currentEvent = line.substring(6).trim()
-        } else if (line.startsWith('data:')) {
-          currentData = line.substring(5).trim()
-        } else if (line === '') {
-          // 空行表示事件结束
-          if (currentEvent && currentData) {
-            handleSseEvent(currentEvent, currentData, onContent, onResult, onError)
+      for (const eventBlock of events) {
+        currentEvent = ''
+        currentData = ''
+        const lines = eventBlock.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.substring(6).trim()
+          } else if (line.startsWith('data:')) {
+            // 多行data时用换行拼接
+            const dataLine = line.substring(5)
+            currentData = currentData ? currentData + '\n' + dataLine : dataLine
           }
-          currentEvent = ''
-          currentData = ''
-        } else {
-          // 不完整的行，放回buffer
-          if (i === lines.length - 1) {
-            buffer = line
-          }
+        }
+        if (currentEvent && currentData) {
+          handleSseEvent(currentEvent, currentData, callbacks)
         }
       }
     }
   }).catch((err) => {
     if (err.name !== 'AbortError') {
-      onError(err.message || '网络异常')
+      callbacks.onError(err.message || '网络异常')
     }
   })
 
@@ -148,28 +159,31 @@ export function streamAiChat(
 function handleSseEvent(
   event: string,
   data: string,
-  onContent: (text: string) => void,
-  onResult: (dashboard: InsightDashboard) => void,
-  onError: (message: string) => void,
+  callbacks: StreamAiChatCallbacks,
 ): void {
   switch (event) {
+    case 'reasoning':
+      callbacks.onReasoning?.(data)
+      break
     case 'content':
-      onContent(data)
+      callbacks.onContent(data)
+      break
+    case 'tool_result':
+      // 工具调用结果，暂不展示
       break
     case 'result': {
       try {
         const dashboard = JSON.parse(data) as InsightDashboard
-        onResult(dashboard)
+        callbacks.onResult(dashboard)
       } catch {
-        onError('解析仪表盘数据失败')
+        callbacks.onError('解析仪表盘数据失败')
       }
       break
     }
     case 'error':
-      onError(data)
+      callbacks.onError(data)
       break
     default:
-      // 忽略其他事件
       break
   }
 }

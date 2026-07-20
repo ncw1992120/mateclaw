@@ -9,14 +9,12 @@
     </div>
     <div class="editor-body" :class="editorMode">
       <div class="editor-pane" v-show="editorMode === 'edit' || editorMode === 'split'">
-        <el-input
+        <textarea
           v-model="localContent"
-          type="textarea"
-          :rows="24"
           :placeholder="t('helpCenter.contentPlaceholder')"
           class="editor-textarea"
           @input="handleInput"
-        />
+        ></textarea>
       </div>
       <div class="editor-preview" v-show="editorMode === 'preview' || editorMode === 'split'">
         <article
@@ -116,9 +114,9 @@ watch(() => props.modelValue, (val) => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 0;
+  padding: 4px 0;
   border-bottom: 1px solid var(--theme-border);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .editor-body {
@@ -126,14 +124,25 @@ watch(() => props.modelValue, (val) => {
   display: flex;
   gap: 16px;
   min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.editor-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .editor-body.edit .editor-pane {
   flex: 1;
+  height: 100%;
 }
 
 .editor-body.preview .editor-preview {
   flex: 1;
+  height: 100%;
 }
 
 .editor-body.split .editor-pane {
@@ -150,10 +159,28 @@ watch(() => props.modelValue, (val) => {
   overflow: auto;
 }
 
-.editor-textarea :deep(.el-textarea__inner) {
+.editor-textarea {
+  width: 100%;
+  height: 100%;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;
+  padding: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text);
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.editor-textarea:focus {
+  border-color: var(--main-orange);
+}
+
+.editor-textarea::placeholder {
+  color: var(--theme-text-secondary);
 }
 
 .editor-preview {
