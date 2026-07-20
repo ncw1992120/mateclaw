@@ -432,7 +432,7 @@
         </div>
       </div>
       <div class="input-bar__card">
-        <input ref="fileInputRef" type="file" style="display:none" @change="handleFileChange" />
+        <input ref="fileInputRef" type="file" multiple style="display:none" @change="handleFileChange" />
         <textarea
           v-model="inputMessage"
           class="chat-input"
@@ -1777,11 +1777,11 @@ function handleFileSelect(): void {
   fileInputRef.value?.click()
 }
 
-/** 处理文件选择并上传 */
+/** 处理文件选择并上传（支持多文件） */
 async function handleFileChange(event: Event): void {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
+  const files = target.files
+  if (!files || files.length === 0) return
   // 重置 input 以便再次选择同一文件
   target.value = ''
 
@@ -1794,17 +1794,22 @@ async function handleFileChange(event: Event): void {
 
   isUploading.value = true
   try {
-    const result = await uploadAttachment(convId, file)
-    pendingAttachments.value.push({
-      fileName: result.fileName,
-      storedName: result.storedName,
-      url: result.url,
-      path: result.path,
-      size: result.size,
-      contentType: result.contentType,
-    })
-  } catch (e) {
-    console.warn('[ChatView] Attachment upload failed:', e)
+    const uploadPromises = Array.from(files).map(file => uploadAttachment(convId, file))
+    const results = await Promise.allSettled(uploadPromises)
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        pendingAttachments.value.push({
+          fileName: result.value.fileName,
+          storedName: result.value.storedName,
+          url: result.value.url,
+          path: result.value.path,
+          size: result.value.size,
+          contentType: result.value.contentType,
+        })
+      } else {
+        console.warn('[ChatView] Attachment upload failed:', result.reason)
+      }
+    }
   } finally {
     isUploading.value = false
   }

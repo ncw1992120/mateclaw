@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: mateclaw-dataagent
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 200MB
   elasticsearch:
     uris: ${ES_URIS:http://es.service:80}
     username: ${ES_USERNAME:elastic}
