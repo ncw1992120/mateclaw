@@ -32,8 +32,8 @@
       :layout="gridLayout"
       :col-num="24"
       :row-height="30"
-      :is-draggable="editable"
-      :is-resizable="editable"
+      :is-draggable="editable && !isCustomResizing"
+      :is-resizable="editable && !isCustomResizing"
       :vertical-compact="false"
       :margin="[12, 12]"
       @layout-updated="handleLayoutUpdated"
@@ -337,10 +337,14 @@ function handleDeleteComponent(id: string): void {
 /** 自定义边缘拖动状态 */
 const resizingItem = ref<{ id: string; edge: string; startX: number; startY: number; startW: number; startH: number; startXPos: number; startYPos: number } | null>(null)
 
+/** 是否正在自定义拉伸（期间禁用 grid-layout-plus 内置拖拽/缩放，避免碰撞检测推走位置） */
+const isCustomResizing = ref(false)
+
 /** 开始自定义边缘拖动 */
 function startResize(event: MouseEvent, id: string, edge: string): void {
   const comp = getComponent(id)
   if (!comp) return
+  isCustomResizing.value = true
   resizingItem.value = {
     id,
     edge,
