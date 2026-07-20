@@ -1,10 +1,9 @@
 package vip.mate.dataagent.agentscope.service;
 
+import io.agentscope.core.agent.Event;
 import reactor.core.publisher.Flux;
 import vip.mate.dataagent.agentscope.dto.AgentCallRequest;
 import vip.mate.dataagent.agentscope.dto.AgentCallResponse;
-
-import io.agentscope.core.agent.Event;
 
 /**
  * AgentScope Agent 调用服务接口

@@ -1,6 +1,5 @@
 package vip.mate.sdk.service.model;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import vip.mate.llm.model.*;
 
 import java.util.List;

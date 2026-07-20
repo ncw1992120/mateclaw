@@ -1,6 +1,8 @@
 package vip.mate.dataagent.agentscope.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.agent.EventType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +17,6 @@ import reactor.core.publisher.Flux;
 import vip.mate.dataagent.agentscope.dto.AgentCallRequest;
 import vip.mate.dataagent.agentscope.service.AgentScopeService;
 import vip.mate.dataagent.support.Utf8SseEmitter;
-
-import io.agentscope.core.agent.Event;
-import io.agentscope.core.agent.EventType;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

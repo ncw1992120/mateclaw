@@ -2,7 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import io.agentscope.core.agent.Event;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -25,10 +25,10 @@ import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 
-import io.agentscope.core.agent.Event;
-import io.agentscope.core.agent.EventType;
-
-import java.util.*;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;

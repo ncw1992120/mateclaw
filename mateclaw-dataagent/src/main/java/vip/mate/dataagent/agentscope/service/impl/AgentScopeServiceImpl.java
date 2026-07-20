@@ -1,5 +1,15 @@
 package vip.mate.dataagent.agentscope.service.impl;
 
+import io.agentscope.core.ReActAgent;
+import io.agentscope.core.agent.Event;
+import io.agentscope.core.agent.EventType;
+import io.agentscope.core.agent.StreamOptions;
+import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.MsgRole;
+import io.agentscope.core.model.AnthropicChatModel;
+import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.core.model.Model;
+import io.agentscope.core.model.OpenAIChatModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -15,17 +25,6 @@ import vip.mate.llm.model.ModelProtocol;
 import vip.mate.llm.model.ModelProviderEntity;
 import vip.mate.llm.service.ModelProviderService;
 import vip.mate.sdk.service.MateClawRuntime;
-
-import io.agentscope.core.ReActAgent;
-import io.agentscope.core.agent.Event;
-import io.agentscope.core.agent.EventType;
-import io.agentscope.core.agent.StreamOptions;
-import io.agentscope.core.message.Msg;
-import io.agentscope.core.message.MsgRole;
-import io.agentscope.core.model.Model;
-import io.agentscope.core.model.DashScopeChatModel;
-import io.agentscope.core.model.OpenAIChatModel;
-import io.agentscope.core.model.AnthropicChatModel;
 
 import java.util.concurrent.atomic.AtomicReference;
 
