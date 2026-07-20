@@ -12,6 +12,8 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import vip.mate.dataagent.agentscope.dto.AgentCallRequest;
 import vip.mate.dataagent.agentscope.service.AgentScopeService;
+import vip.mate.dataagent.auth.context.UserContext;
+import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
@@ -246,12 +248,16 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
         registerEmitterCallbacks(emitter, emitterDone);
 
+        // 在请求线程中捕获用户上下文，异步线程中恢复（ThreadLocal无法跨线程传递）
+        UserContext userContext = UserContextHolder.get();
+
         aiChatExecutor.execute(() -> {
+            UserContextHolder.set(userContext);
             try {
                 if (request.getDashboardId() != null && !request.getDashboardId().isBlank()) {
-                    streamModifyDashboard(emitter, emitterDone, request);
+                    streamModifyDashboard(emitter, emitterDone, request, userContext);
                 } else {
-                    streamGenerateDashboard(emitter, emitterDone, request);
+                    streamGenerateDashboard(emitter, emitterDone, request, userContext);
                 }
             } catch (Exception e) {
                 log.error("AI助手对话失败: {}", e.getMessage(), e);
@@ -259,6 +265,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     sendSseEvent(emitter, "error", e.getMessage() != null ? e.getMessage() : "AI助手对话失败");
                     completeEmitterQuietly(emitter, emitterDone);
                 }
+            } finally {
+                UserContextHolder.clear();
             }
         });
 
@@ -269,7 +277,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      * 流式生成仪表盘
      */
     private void streamGenerateDashboard(SseEmitter emitter, AtomicBoolean emitterDone,
-                                          InsightDashboardAiChatRequest request) {
+                                          InsightDashboardAiChatRequest request,
+                                          UserContext userContext) {
         // 参数校验
         if (request.getDatasourceId() == null) {
             throw new BusinessException(400, "数据源ID不能为空");
@@ -328,6 +337,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     if (!emitterDone.compareAndSet(false, true)) {
                         return;
                     }
+                    UserContextHolder.set(userContext);
                     try {
                         // 流式完成，解析完整内容并创建仪表盘
                         String llmResponse = fullContent.toString();
@@ -343,6 +353,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     } catch (Exception e) {
                         log.error("AI生成仪表盘结果解析失败: {}", e.getMessage());
                         sendSseEvent(emitter, "error", "AI生成仪表盘失败：无法解析生成的Schema");
+                    } finally {
+                        UserContextHolder.clear();
                     }
                     completeEmitterQuietly(emitter, emitterDone);
                 }
@@ -357,7 +369,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      * 流式修改仪表盘
      */
     private void streamModifyDashboard(SseEmitter emitter, AtomicBoolean emitterDone,
-                                        InsightDashboardAiChatRequest request) {
+                                        InsightDashboardAiChatRequest request,
+                                        UserContext userContext) {
         Long dashboardId = Long.valueOf(request.getDashboardId().trim());
 
         // 参数校验
@@ -423,6 +436,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     if (!emitterDone.compareAndSet(false, true)) {
                         return;
                     }
+                    UserContextHolder.set(userContext);
                     try {
                         // 流式完成，解析完整内容并更新仪表盘
                         String llmResponse = fullContent.toString();
@@ -436,6 +450,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                     } catch (Exception e) {
                         log.error("AI修改仪表盘结果解析失败: {}", e.getMessage());
                         sendSseEvent(emitter, "error", "AI修改仪表盘失败：无法解析生成的Schema");
+                    } finally {
+                        UserContextHolder.clear();
                     }
                     completeEmitterQuietly(emitter, emitterDone);
                 }

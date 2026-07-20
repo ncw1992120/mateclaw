@@ -329,10 +329,16 @@
             </div>
 
             <!-- Recommended Questions -->
-            <div v-else-if="card.type === 'recommended_questions'" class="recommended-questions">
-              <div class="recommended-questions__header">
+            <div v-else-if="card.type === 'recommended_questions'" class="recommended-questions" :class="{ 'is-collapsed': !isLatestRecommendedQuestions(index) && !expandedHistoryRecQuestions.has(`${index}-${cardIdx}`) }">
+              <div class="recommended-questions__header" @click="!isLatestRecommendedQuestions(index) && toggleHistoryRecQuestion(`${index}-${cardIdx}`)">
                 <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 {{ t('chat.recommendedQuestions') }}
+                <span v-if="!isLatestRecommendedQuestions(index) && !expandedHistoryRecQuestions.has(`${index}-${cardIdx}`)" class="recommended-questions__toggle">
+                  {{ t('chat.expandRecQuestions', { count: (card.data as RecommendedQuestionData).questions.length }) }}
+                </span>
+                <span v-else-if="!isLatestRecommendedQuestions(index)" class="recommended-questions__toggle">
+                  {{ t('chat.collapseRecQuestions') }}
+                </span>
               </div>
               <div class="recommended-questions__list">
                 <button
@@ -1840,6 +1846,29 @@ function handleStop(): void {
   chatStore.stopChat()
 }
 
+/** 历史推荐问题展开状态 */
+const expandedHistoryRecQuestions = reactive(new Set<string>())
+
+/** 判断指定消息索引是否为最后一条 assistant 消息（即最新的推荐问题应展开显示） */
+function isLatestRecommendedQuestions(msgIndex: number): boolean {
+  const msgs = chatStore.messages
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') {
+      return i === msgIndex
+    }
+  }
+  return false
+}
+
+/** 切换历史推荐问题的展开/折叠状态 */
+function toggleHistoryRecQuestion(key: string): void {
+  if (expandedHistoryRecQuestions.has(key)) {
+    expandedHistoryRecQuestions.delete(key)
+  } else {
+    expandedHistoryRecQuestions.add(key)
+  }
+}
+
 /** 追问点击 */
 function handleFollowup(text: string): void {
   if (chatStore.isStreaming || !chatStore.currentAgentId) return
@@ -3012,6 +3041,26 @@ onUnmounted(() => {
 .recommended-question-item__text {
   flex: 1;
   min-width: 0;
+}
+
+/* 折叠状态：隐藏问题列表 */
+.recommended-questions.is-collapsed .recommended-questions__list {
+  display: none;
+}
+
+.recommended-questions.is-collapsed .recommended-questions__header {
+  cursor: pointer;
+}
+
+.recommended-questions.is-collapsed .recommended-questions__header:hover {
+  opacity: 0.8;
+}
+
+.recommended-questions__toggle {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--main-orange);
+  margin-left: auto;
 }
 
 /* Feedback */

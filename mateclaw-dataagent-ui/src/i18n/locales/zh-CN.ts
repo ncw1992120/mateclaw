@@ -115,6 +115,8 @@ export default {
     uploadAttachment: '上传附件',
     optimizePrompt: '优化输入',
     recommendedQuestions: '你可能还想问',
+    expandRecQuestions: '查看{count}个推荐问题',
+    collapseRecQuestions: '收起',
   },
   smartAskMenu: {
     interpret: '数据解读',

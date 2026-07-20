@@ -1135,13 +1135,44 @@ export const useChatStore = defineStore('chat', () => {
    * @return 前端使用的 ChatMessage
    */
   function buildChatMessageFromVO(m: MessageVO): ChatMessage {
+    const meta = m.metadata as Record<string, unknown> | undefined
+    // 从 metadata 中恢复推荐问题到 cards（持久化恢复）
+    const cards = recoverCardsFromMetadata(meta, m.role)
+
     return {
       role: m.role as 'user' | 'assistant',
       content: m.content || '',
       timestamp: new Date(m.createTime).getTime(),
-      metadata: m.metadata as Record<string, unknown> | undefined,
+      metadata: meta,
       status: 'completed',
+      ...(cards.length > 0 ? { cards } : {}),
     }
+  }
+
+  /**
+   * 从后端持久化的 metadata 中恢复富内容卡片。
+   * <p>
+   * 当前仅恢复推荐问题卡片（recommendedQuestions 字段），
+   * 未来可扩展恢复其他卡片类型。
+   *
+   * @param metadata 后端返回的消息 metadata
+   * @param role     消息角色
+   * @return 恢复的卡片列表
+   */
+  function recoverCardsFromMetadata(metadata: Record<string, unknown> | undefined, role: string): import('@/types').ChatCard[] {
+    if (!metadata || role !== 'assistant') {
+      return []
+    }
+    const cards: import('@/types').ChatCard[] = []
+    // 恢复推荐问题
+    const recommendedQuestions = metadata.recommendedQuestions
+    if (Array.isArray(recommendedQuestions) && recommendedQuestions.length > 0) {
+      cards.push({
+        type: 'recommended_questions',
+        data: { questions: recommendedQuestions as string[] },
+      })
+    }
+    return cards
   }
 
   /**

@@ -113,6 +113,8 @@ export default {
     uploadAttachment: 'Upload Attachment',
     optimizePrompt: 'Optimize Input',
     recommendedQuestions: 'You might also want to ask',
+    expandRecQuestions: 'View {count} recommended questions',
+    collapseRecQuestions: 'Collapse',
   },
   smartAskMenu: {
     interpret: 'Data Interpret',

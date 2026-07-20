@@ -1,5 +1,6 @@
 package vip.mate.dataagent.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -352,7 +353,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             return parseRecommendedQuestions(result);
         } catch (Exception e) {
-            log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
+            log.warn("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
             return List.of();
         }
     }
@@ -447,6 +448,32 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     /**
+     * 构建包含推荐问题的 metadata JSON 字符串。
+     * <p>
+     * 在 StreamAccumulator 原有 metadata（toolCalls、segments）基础上，
+     * 追加 recommendedQuestions 字段，使推荐问题随消息一起持久化，
+     * 刷新页面后前端可从 metadata 中恢复推荐问题。
+     *
+     * @param accumulator  流式累积器
+     * @param recQuestions 推荐问题列表（可为 null 或空）
+     * @return metadata JSON 字符串
+     */
+    private String buildMetadataWithRecommendedQuestions(StreamAccumulator accumulator, List<String> recQuestions) {
+        String baseJson = accumulator.toMetadataJson(objectMapper);
+        if (recQuestions == null || recQuestions.isEmpty()) {
+            return baseJson;
+        }
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(baseJson, new TypeReference<LinkedHashMap<String, Object>>() {});
+            metadata.put("recommendedQuestions", recQuestions);
+            return objectMapper.writeValueAsString(metadata);
+        } catch (Exception e) {
+            log.warn("[DataAgent] Failed to append recommended questions to metadata: {}", e.getMessage());
+            return baseJson;
+        }
+    }
+
+    /**
      * 将 String 类型的数据源 ID 列表转换为 Long 类型。
      * <p>
      * 前端通过 HTTP 请求传递的 ID 为字符串，避免 JavaScript 大数精度丢失。
@@ -479,13 +506,27 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 }
             }
 
+            // 先生成推荐问题，以便持久化到 metadata
+            List<String> recQuestions = null;
+            try {
+                String summary = assistantText.length() > DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH
+                        ? assistantText.substring(0, DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH)
+                        : assistantText;
+                recQuestions = generateRecommendedQuestions(conversationId, agentId, userMessage, summary);
+            } catch (Exception e) {
+                log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
+            }
+
+            // 将推荐问题写入 metadata 以支持持久化（刷新页面后可恢复）
+            String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions);
+
             MessageEntity savedAssistant = null;
             try {
                 savedAssistant = conversationService.saveMessage(
                         conversationId, "assistant", assistantText, assistantParts, status,
                         accumulator.getPromptTokens(), accumulator.getCompletionTokens(),
                         accumulator.getRuntimeModelName(), accumulator.getRuntimeProviderId(),
-                        accumulator.toMetadataJson(objectMapper));
+                        metadataJson);
             } catch (Exception e) {
                 log.warn("[DataAgent] Failed to save assistant message for {}: {}", conversationId, e.getMessage());
             }
@@ -523,17 +564,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             donePayload.put("persisted", savedAssistant != null);
             donePayload.put("messageCount", msgCount);
 
-            // 在 done 事件广播前，生成推荐问题并广播
-            try {
-                String summary = assistantText.length() > DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH
-                        ? assistantText.substring(0, DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH)
-                        : assistantText;
-                List<String> recQuestions = generateRecommendedQuestions(conversationId, agentId, userMessage, summary);
-                if (recQuestions != null && !recQuestions.isEmpty()) {
-                    broadcastEvent(conversationId, "recommended_questions", Map.of("questions", recQuestions));
-                }
-            } catch (Exception e) {
-                log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
+            // 广播推荐问题事件
+            if (recQuestions != null && !recQuestions.isEmpty()) {
+                broadcastEvent(conversationId, "recommended_questions", Map.of("questions", recQuestions));
             }
 
             broadcastEvent(conversationId, "done", donePayload);
