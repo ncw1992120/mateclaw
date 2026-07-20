@@ -486,4 +486,19 @@ public final class DataAgentConstants {
 
     /** AI生成仪表盘每行组件数 */
     public static final int INSIGHT_GENERATE_COLUMNS_PER_ROW = 2;
+
+    // ==================== 推荐问题 ====================
+
+    /** 推荐问题会话ID前缀（避免污染用户真实会话历史） */
+    public static final String RECOMMENDED_QUESTION_CONVERSATION_PREFIX = "rec-question-";
+
+    /** 推荐问题生成数量上限 */
+    public static final int RECOMMENDED_QUESTION_MAX_COUNT = 3;
+
+    /** 推荐问题AI回答摘要截取最大长度 */
+    public static final int RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH = 500;
+
+    /** 推荐问题提示词模板，{0} 为用户问题，{1} 为AI回答摘要 */
+    public static final String RECOMMENDED_QUESTION_PROMPT_TEMPLATE =
+            "基于用户的提问''{0}''和AI的回答摘要''{1}''，请生成3个相关的追问问题，每个问题一行，不要编号。";
 }

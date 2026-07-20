@@ -114,6 +114,7 @@ export default {
     toolResponseParams: '响应参数',
     uploadAttachment: '上传附件',
     optimizePrompt: '优化输入',
+    recommendedQuestions: '你可能还想问',
   },
   smartAskMenu: {
     interpret: '数据解读',

@@ -11,6 +11,7 @@ import vip.mate.dataagent.auth.context.UserContext;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.auth.service.AgentGuard;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.DatasourceVO;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
@@ -184,7 +185,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             String persistStatus = wasStopped ? "stopped" : "completed";
                             // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
                             sseExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus, agentId, message));
                         })
                         .doOnError(e -> {
                             if (!finalized.compareAndSet(false, true)) return;
@@ -194,14 +195,14 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             log.warn("[DataAgent] Stream {} for conversation {}: {}", status, conversationId, e.getMessage());
                             // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
                             sseExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status, agentId, message));
                         })
                         .doOnCancel(() -> {
                             if (!finalized.compareAndSet(false, true)) return;
                             log.info("[DataAgent] Stream cancelled for conversation {}", conversationId);
                             // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
                             sseExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped"));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped", agentId, message));
                         })
                         .subscribe(
                                 chunk -> {},
@@ -321,6 +322,42 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     /**
+     * 基于当前对话上下文生成推荐问题。
+     * <p>
+     * 使用 MateClawRuntime 执行一个轻量级 LLM 调用，基于用户问题和AI回答摘要生成推荐追问问题。
+     * 使用独立的会话ID前缀，避免污染用户真实会话历史。
+     * 如果 LLM 调用失败，返回空列表。
+     *
+     * @param conversationId   会话ID（用于构建独立的推荐问题会话ID）
+     * @param agentId          Agent ID
+     * @param userMessage      当前用户问题
+     * @param assistantSummary AI回答内容摘要
+     * @return 推荐问题列表
+     */
+    @Override
+    public List<String> generateRecommendedQuestions(String conversationId, Long agentId,
+                                                     String userMessage, String assistantSummary) {
+        if (agentId == null || userMessage == null || userMessage.isBlank()) {
+            return List.of();
+        }
+        try {
+            String prompt = DataAgentConstants.RECOMMENDED_QUESTION_PROMPT_TEMPLATE
+                    .replace("{0}", userMessage)
+                    .replace("{1}", assistantSummary != null ? assistantSummary : "");
+            // 使用独立会话ID前缀，避免推荐问题的LLM调用污染用户真实会话历史
+            String recConversationId = DataAgentConstants.RECOMMENDED_QUESTION_CONVERSATION_PREFIX + conversationId;
+            String result = runtime.chat(agentId, prompt, recConversationId);
+            if (result == null || result.isBlank()) {
+                return List.of();
+            }
+            return parseRecommendedQuestions(result);
+        } catch (Exception e) {
+            log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * 在用户消息前注入"数据源白名单"约束提示词。
      * <p>
      * 若用户在前端勾选了具体数据源，则以系统提示的方式告知 Agent：
@@ -393,6 +430,23 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     /**
+     * 解析 LLM 返回的推荐问题文本。
+     * <p>
+     * 将 LLM 返回的文本按行分割，过滤空行，去除编号前缀，最多取指定数量的推荐问题。
+     *
+     * @param rawText LLM 返回的原始文本
+     * @return 推荐问题列表
+     */
+    private List<String> parseRecommendedQuestions(String rawText) {
+        return Arrays.stream(rawText.split("\\r?\\n"))
+                .map(String::trim)
+                .map(line -> line.replaceAll("^[\\d]+[.、)）]\\s*", ""))
+                .filter(line -> !line.isEmpty())
+                .limit(DataAgentConstants.RECOMMENDED_QUESTION_MAX_COUNT)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * 将 String 类型的数据源 ID 列表转换为 Long 类型。
      * <p>
      * 前端通过 HTTP 请求传递的 ID 为字符串，避免 JavaScript 大数精度丢失。
@@ -411,7 +465,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     private void handleStreamFinalize(SseEmitter emitter, AtomicBoolean emitterDone,
-                                       StreamAccumulator accumulator, String conversationId, String status) {
+                                       StreamAccumulator accumulator, String conversationId,
+                                       String status, Long agentId, String userMessage) {
         try {
             String assistantText = accumulator.getContent();
             List<MessageContentPart> assistantParts = accumulator.toAssistantParts();
@@ -467,6 +522,20 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             donePayload.put("persisted", savedAssistant != null);
             donePayload.put("messageCount", msgCount);
+
+            // 在 done 事件广播前，生成推荐问题并广播
+            try {
+                String summary = assistantText.length() > DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH
+                        ? assistantText.substring(0, DataAgentConstants.RECOMMENDED_QUESTION_SUMMARY_MAX_LENGTH)
+                        : assistantText;
+                List<String> recQuestions = generateRecommendedQuestions(conversationId, agentId, userMessage, summary);
+                if (recQuestions != null && !recQuestions.isEmpty()) {
+                    broadcastEvent(conversationId, "recommended_questions", Map.of("questions", recQuestions));
+                }
+            } catch (Exception e) {
+                log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
+            }
+
             broadcastEvent(conversationId, "done", donePayload);
         } catch (Exception e) {
             log.warn("[DataAgent] Stream finalize error for {}: {}", conversationId, e.getMessage());

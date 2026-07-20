@@ -367,7 +367,7 @@ export interface ModelInfo {
 export type ChatRole = 'user' | 'assistant'
 
 /** 聊天富内容卡片类型 */
-export type ChatCardType = 'text' | 'queryplan' | 'insight' | 'chart' | 'echarts' | 'clarify' | 'dashboard' | 'followup' | 'feedback'
+export type ChatCardType = 'text' | 'queryplan' | 'insight' | 'chart' | 'echarts' | 'clarify' | 'dashboard' | 'followup' | 'feedback' | 'recommended_questions'
 
 /** QueryPlan 卡片数据 */
 export interface QueryPlanData {
@@ -432,10 +432,16 @@ export interface DashboardCardData {
 /** 追问建议卡片数据 */
 export type FollowupData = string[]
 
+/** 推荐问题卡片数据 */
+export interface RecommendedQuestionData {
+  /** 推荐问题列表 */
+  questions: string[]
+}
+
 /** 聊天消息富内容卡片 */
 export interface ChatCard {
   type: ChatCardType
-  data: QueryPlanData | ChartCardData | EChartsOptionData | ClarifyData | DashboardCardData | FollowupData | string
+  data: QueryPlanData | ChartCardData | EChartsOptionData | ClarifyData | DashboardCardData | FollowupData | RecommendedQuestionData | string
 }
 
 /** 聊天附件 */

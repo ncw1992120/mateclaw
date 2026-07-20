@@ -359,16 +359,11 @@ function startResize(event: MouseEvent, id: string, edge: string): void {
   document.addEventListener('mouseup', handleResizeEnd)
 }
 
-/** 拖动中 */
-function handleResizeMove(event: MouseEvent): void {
-  if (!resizingItem.value) return
-  const comp = getComponent(resizingItem.value.id)
-  if (!comp) return
-
-  const dx = event.clientX - resizingItem.value.startX
-  const dy = event.clientY - resizingItem.value.startY
-  const colWidth = 30 // 近似列宽
-  const rowHeight = 30 // 行高
+/** 计算拉伸后的新尺寸 */
+function calcResizeResult(dx: number, dy: number): { newX: number; newY: number; newW: number; newH: number } | null {
+  if (!resizingItem.value) return null
+  const colWidth = 30
+  const rowHeight = 30
 
   let newW = resizingItem.value.startW
   let newH = resizingItem.value.startH
@@ -378,22 +373,18 @@ function handleResizeMove(event: MouseEvent): void {
   if (resizingItem.value.edge === 'left') {
     const colDelta = Math.round(dx / colWidth)
     newW = Math.max(1, resizingItem.value.startW - colDelta)
-    newX = resizingItem.value.startXPos
   } else if (resizingItem.value.edge === 'right') {
     const colDelta = Math.round(dx / colWidth)
     newW = Math.max(1, resizingItem.value.startW + colDelta)
-    newX = resizingItem.value.startXPos
   } else if (resizingItem.value.edge === 'top') {
     const rowDelta = Math.round(dy / rowHeight)
     newH = Math.max(1, resizingItem.value.startH - rowDelta)
-    newY = resizingItem.value.startYPos
   } else if (resizingItem.value.edge === 'bottom') {
     const rowDelta = Math.round(dy / rowHeight)
     newH = Math.max(1, resizingItem.value.startH + rowDelta)
-    newY = resizingItem.value.startYPos
   }
 
-  // 边界保护：确保组件不超出画布边界
+  // 边界保护
   if (newX < 0) {
     newX = 0
   }
@@ -404,18 +395,44 @@ function handleResizeMove(event: MouseEvent): void {
     newW = 24 - newX
   }
 
-  emit('update-layout', [{
-    id: resizingItem.value.id,
-    x: newX,
-    y: newY,
-    w: newW,
-    h: newH,
-  }])
+  return { newX, newY, newW, newH }
 }
 
-/** 拖动结束 */
+/** 拖动中：直接更新 gridLayout 本地数据，避免 props 往返 */
+function handleResizeMove(event: MouseEvent): void {
+  if (!resizingItem.value) return
+
+  const dx = event.clientX - resizingItem.value.startX
+  const dy = event.clientY - resizingItem.value.startY
+  const result = calcResizeResult(dx, dy)
+  if (!result) return
+
+  // 直接修改本地 gridLayout，让 grid-layout-plus 即时响应
+  const item = gridLayout.value.find((g) => g.i === resizingItem.value!.id)
+  if (item) {
+    item.x = result.newX
+    item.y = result.newY
+    item.w = result.newW
+    item.h = result.newH
+  }
+}
+
+/** 拖动结束：将最终结果 emit 给父组件持久化 */
 function handleResizeEnd(): void {
+  if (resizingItem.value) {
+    const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
+    if (item) {
+      emit('update-layout', [{
+        id: resizingItem.value.id,
+        x: item.x,
+        y: item.y,
+        w: item.w,
+        h: item.h,
+      }])
+    }
+  }
   resizingItem.value = null
+  isCustomResizing.value = false
   document.removeEventListener('mousemove', handleResizeMove)
   document.removeEventListener('mouseup', handleResizeEnd)
 }

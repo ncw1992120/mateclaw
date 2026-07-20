@@ -328,6 +328,25 @@
               </span>
             </div>
 
+            <!-- Recommended Questions -->
+            <div v-else-if="card.type === 'recommended_questions'" class="recommended-questions">
+              <div class="recommended-questions__header">
+                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                {{ t('chat.recommendedQuestions') }}
+              </div>
+              <div class="recommended-questions__list">
+                <button
+                  v-for="(question, qIdx) in (card.data as RecommendedQuestionData).questions"
+                  :key="qIdx"
+                  class="recommended-question-item"
+                  @click="handleFollowup(question)"
+                >
+                  <svg class="recommended-question-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  <span class="recommended-question-item__text">{{ question }}</span>
+                </button>
+              </div>
+            </div>
+
             <!-- Feedback -->
             <div v-else-if="card.type === 'feedback'" class="feedback">
               <span
@@ -460,7 +479,7 @@ import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import { uploadAttachment, optimizePrompt } from '@/api/chat'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, Datasource, ChatAttachment } from '@/types'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment } from '@/types'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -2921,6 +2940,78 @@ onUnmounted(() => {
   background: var(--theme-surface-hover);
   color: var(--main-orange);
   border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+}
+
+/* Recommended Questions */
+.recommended-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  align-self: flex-start;
+  max-width: 86%;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  border-left: 2px solid var(--main-orange);
+}
+
+.recommended-questions__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-secondary);
+  margin-bottom: 4px;
+}
+
+.recommended-questions__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recommended-question-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+
+.recommended-question-item:hover {
+  background: var(--theme-surface-hover);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  color: var(--main-orange);
+}
+
+.recommended-question-item__icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.recommended-question-item:hover .recommended-question-item__icon {
+  color: var(--main-orange);
+}
+
+.recommended-question-item__text {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Feedback */

@@ -112,6 +112,7 @@ export default {
     toolResponseParams: 'Response Parameters',
     uploadAttachment: 'Upload Attachment',
     optimizePrompt: 'Optimize Input',
+    recommendedQuestions: 'You might also want to ask',
   },
   smartAskMenu: {
     interpret: 'Data Interpret',

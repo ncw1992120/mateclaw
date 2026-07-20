@@ -1037,6 +1037,23 @@ export const useChatStore = defineStore('chat', () => {
         finalizeAllRunningSegments(segments)
         break
       }
+      case 'recommended_questions': {
+        flushBuf.flush()
+        const questions = data.questions as string[] | undefined
+        if (questions && questions.length > 0) {
+          const lastMsg = targetMsgs[targetMsgs.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            if (!lastMsg.cards) {
+              lastMsg.cards = []
+            }
+            lastMsg.cards.push({
+              type: 'recommended_questions',
+              data: { questions },
+            })
+          }
+        }
+        break
+      }
       case 'done': {
         flushBuf.flush()
         // 关闭所有 running segments

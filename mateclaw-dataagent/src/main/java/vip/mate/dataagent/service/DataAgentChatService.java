@@ -54,4 +54,15 @@ public interface DataAgentChatService {
                 String modelProvider, String modelName, List<String> datasourceIds);
 
     boolean requestStop(String conversationId);
+
+    /**
+     * 基于当前对话上下文生成推荐问题
+     *
+     * @param conversationId   会话ID
+     * @param agentId          Agent ID
+     * @param userMessage      当前用户问题
+     * @param assistantSummary AI回答内容摘要
+     * @return 推荐问题列表
+     */
+    List<String> generateRecommendedQuestions(String conversationId, Long agentId, String userMessage, String assistantSummary);
 }

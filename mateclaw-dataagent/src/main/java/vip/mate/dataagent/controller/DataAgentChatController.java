@@ -8,8 +8,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.dto.ChatRequest;
+import vip.mate.dataagent.dto.RecommendedQuestionRequest;
+import vip.mate.dataagent.dto.RecommendedQuestionResponse;
 import vip.mate.dataagent.service.DataAgentChatService;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -44,5 +47,14 @@ public class DataAgentChatController {
                 "conversationId", conversationId,
                 "stopped", stopped
         ));
+    }
+
+    @PostMapping("/recommended-questions")
+    @Operation(summary = "获取推荐问题", description = "基于当前对话上下文生成推荐问题")
+    public R<RecommendedQuestionResponse> recommendedQuestions(@RequestBody RecommendedQuestionRequest req) {
+        List<String> questions = chatService.generateRecommendedQuestions(
+                req.getConversationId(), req.getAgentId(),
+                req.getUserMessage(), req.getAssistantSummary());
+        return R.ok(RecommendedQuestionResponse.of(questions));
     }
 }
