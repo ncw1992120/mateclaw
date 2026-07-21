@@ -13,7 +13,9 @@ import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.auth.service.AgentGuard;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.DatasourceVO;
+import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
 import vip.mate.dataagent.service.DatasourceManageService;
@@ -58,6 +60,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final ObjectMapper objectMapper;
     private final DataAgentChatScopeContext scopeContext;
     private final DatasourceManageService datasourceManageService;
+    private final BusinessTermEsService businessTermEsService;
     private final WorkspaceGuard workspaceGuard;
     private final AgentGuard agentGuard;
     private final ExecutorService sseExecutor;
@@ -68,6 +71,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     ObjectMapper objectMapper,
                                     DataAgentChatScopeContext scopeContext,
                                     DatasourceManageService datasourceManageService,
+                                    BusinessTermEsService businessTermEsService,
                                     WorkspaceGuard workspaceGuard,
                                     AgentGuard agentGuard) {
         this.runtime = runtime;
@@ -76,6 +80,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.objectMapper = objectMapper;
         this.scopeContext = scopeContext;
         this.datasourceManageService = datasourceManageService;
+        this.businessTermEsService = businessTermEsService;
         this.workspaceGuard = workspaceGuard;
         this.agentGuard = agentGuard;
         // 有界线程池：核心 2 线程，最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
@@ -435,7 +440,59 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         }
 
         hint.append("\n[用户问题]\n").append(originalMessage);
+
+        // 注入业务术语预查结果，帮助 LLM 更准确地理解用户意图和映射术语
+        appendBusinessTermHints(hint, originalMessage);
+
         return hint.toString();
+    }
+
+    /**
+     * 基于用户问题执行业务术语预查，将匹配结果注入 Prompt。
+     * <p>
+     * 对用户原始问题做同步术语检索，将命中术语的标准名、同义词、口径等信息
+     * 以提示形式注入上下文，让 Agent 在后续调用 search_business_term 时有更精准的起点。
+     * <p>
+     * 此步骤是纯检索（非 LLM 调用），延迟可控在 50-100ms，失败时不影响主流程。
+     *
+     * @param hint  已构建的提示词 StringBuilder
+     * @param query 用户原始问题
+     */
+    private void appendBusinessTermHints(StringBuilder hint, String query) {
+        if (query == null || query.isBlank()) {
+            return;
+        }
+        try {
+            BusinessTermSearchResult result = businessTermEsService.hybridSearch(
+                    query,
+                    DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_TOP_K,
+                    DataAgentConstants.BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD);
+
+            List<BusinessTermSearchResult.TermHit> hits = result.getTermHits();
+            if (hits == null || hits.isEmpty()) {
+                return;
+            }
+
+            hint.append("\n[系统预检索-业务术语]\n");
+            hint.append("以下是从业务术语库中检索到的与用户问题相关的术语，请参考这些信息理解用户意图：\n");
+            for (BusinessTermSearchResult.TermHit hit : hits) {
+                hint.append("- 术语\"").append(hit.getTermName()).append("\"");
+                if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
+                    hint.append("（同义词: ").append(hit.getSynonyms()).append("）");
+                }
+                if (hit.getDataCaliber() != null && !hit.getDataCaliber().isBlank()) {
+                    hint.append("，口径: ").append(hit.getDataCaliber());
+                } else if (hit.getDescription() != null && !hit.getDescription().isBlank()) {
+                    hint.append("，定义: ").append(hit.getDescription());
+                }
+                if (hit.getCategory() != null && !hit.getCategory().isBlank()) {
+                    hint.append(" [分类: ").append(hit.getCategory()).append("]");
+                }
+                hint.append("\n");
+            }
+        } catch (Exception e) {
+            log.debug("[DataAgent] 业务术语预查失败，跳过: {}", e.getMessage());
+        }
     }
 
     private static String safe(String value) {
@@ -445,8 +502,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     /**
      * 将附件信息注入到发送给 LLM 的 prompt 文本中。
      * <p>
-     * 参考 mateclaw-server ChatController 的 buildPromptText 逻辑，
-     * 将 contentParts 中的 file/image/video 等附件以文本描述形式追加到 prompt，
+     * 图片和视频附件由 BaseAgent.buildUserMessageInternal() 自动以 Media 形式注入到 LLM，
+     * 此处不再重复提示。只对文件类附件（PDF、Word、Excel 等）注入路径信息，
      * 使 LLM 知晓用户上传了哪些文件及其本地路径，从而能调用工具读取文件内容。
      *
      * @param message 原始消息文本（可能已注入数据源白名单提示词）
@@ -457,7 +514,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         if (parts == null || parts.isEmpty()) {
             return message != null ? message : "";
         }
-        // 收集附件信息
+        // 只收集文件类附件（图片/视频由 BaseAgent 多模态机制自动处理，不需要文本提示）
         List<String> attachmentLines = new ArrayList<>();
         for (MessageContentPart part : parts) {
             if (part == null || part.getType() == null) {
@@ -465,8 +522,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             switch (part.getType()) {
                 case "file" -> attachmentLines.add("- 文件: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
-                case "image" -> attachmentLines.add("- 图片: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
-                case "video" -> attachmentLines.add("- 视频: " + safe(part.getFileName()) + "，路径: " + safe(part.getPath()));
+                case "image", "video" -> { /* BaseAgent 会以 Media 形式注入，不需要文本提示 */ }
                 default -> { /* text/thinking 等类型不重复注入 */ }
             }
         }
@@ -483,7 +539,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             builder.append(line).append('\n');
         }
         String result = builder.toString().trim();
-        log.info("[DataAgent] buildPromptText: contentParts size={}, attachmentLines={}, result length={}",
+        log.info("[DataAgent] buildPromptText: contentParts size={}, fileAttachmentLines={}, result length={}",
                 parts.size(), attachmentLines.size(), result.length());
         return result;
     }

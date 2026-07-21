@@ -103,6 +103,9 @@ public class AloudataDimensionEntity {
         if (Boolean.TRUE.equals(isTimeDimension)) {
             sb.append(", 时间维度");
         }
+        if (dimCategoryName != null && !dimCategoryName.isBlank()) {
+            sb.append(", 类目: ").append(dimCategoryName);
+        }
         if (exampleValues != null && !exampleValues.isBlank()) {
             sb.append(", 示例: ").append(exampleValues);
         }
@@ -112,13 +115,19 @@ public class AloudataDimensionEntity {
     /**
      * 构建 ES 索引用的嵌入文本
      * <p>
-     * 格式: "dimName dimDisplayName | 类型: originDataType, 描述: dimDescription, 同义词: synonyms"
+     * 嵌入文本越丰富，语义检索召回率越高。包含维度英文名、中文展示名、编码、
+     * 数据类型、描述、同义词、类目名称、数据集名称、是否时间维度、示例值等语义信息。
+     * <p>
+     * 修改此方法后需递增 {@code SCHEMA_EMBEDDING_TEXT_VERSION} 以触发重新嵌入。
      */
     public String buildEmbeddingText() {
         StringBuilder sb = new StringBuilder();
         sb.append(dimName != null ? dimName : "");
         if (dimDisplayName != null && !dimDisplayName.isBlank()) {
             sb.append(" ").append(dimDisplayName);
+        }
+        if (dimCode != null && !dimCode.isBlank()) {
+            sb.append(" ").append(dimCode);
         }
         sb.append(" | ");
         if (originDataType != null && !originDataType.isBlank()) {
@@ -129,6 +138,12 @@ public class AloudataDimensionEntity {
         }
         if (synonyms != null && !synonyms.isBlank()) {
             sb.append("同义词: ").append(synonyms).append(", ");
+        }
+        if (dimCategoryName != null && !dimCategoryName.isBlank()) {
+            sb.append("类目: ").append(dimCategoryName).append(", ");
+        }
+        if (datasetName != null && !datasetName.isBlank()) {
+            sb.append("数据集: ").append(datasetName).append(", ");
         }
         if (Boolean.TRUE.equals(isTimeDimension)) {
             sb.append("时间维度, ");

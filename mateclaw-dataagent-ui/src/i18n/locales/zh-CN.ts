@@ -651,6 +651,11 @@ export default {
     defaultEmbeddingModel: '默认向量模型',
     setDefaultEmbedding: '设为默认向量模型',
     currentDefaultEmbedding: '当前默认向量',
+    modalities: '多模态能力',
+    modalityVision: '图片理解',
+    modalityVideo: '视频理解',
+    modalityAudio: '音频理解',
+    modalitiesTip: '声明模型原生支持的输入模态。勾选后，上传的图片/视频/音频将直接传入模型，无需工具中转。未勾选时由系统自动推断。',
   },
   common: {
     confirm: '确定',

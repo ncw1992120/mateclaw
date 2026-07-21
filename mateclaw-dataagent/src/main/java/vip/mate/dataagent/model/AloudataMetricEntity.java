@@ -145,11 +145,16 @@ public class AloudataMetricEntity {
         if (synonyms != null && !synonyms.isBlank()) {
             sb.append(", 同义词: ").append(synonyms);
         }
-        if (unit != null && !unit.isBlank()) {
+        if (cnUnit != null && !cnUnit.isBlank()) {
+            sb.append(", 单位: ").append(cnUnit);
+        } else if (unit != null && !unit.isBlank()) {
             sb.append(", 单位: ").append(unit);
         }
         if (metricCategoryName != null && !metricCategoryName.isBlank()) {
             sb.append(", 类目: ").append(metricCategoryName);
+        }
+        if (owner != null && !owner.isBlank()) {
+            sb.append(", 负责人: ").append(owner);
         }
         return sb.toString();
     }
@@ -157,13 +162,19 @@ public class AloudataMetricEntity {
     /**
      * 构建 ES 索引用的嵌入文本
      * <p>
-     * 格式: "metricName metricDisplayName | 类型: type, 口径: businessCaliber, 同义词: synonyms, 类目: categoryName, 单位: unit"
+     * 嵌入文本越丰富，语义检索召回率越高。包含指标英文名、中文展示名、编码、
+     * 类型、业务口径、同义词、类目名称、单位、负责人等语义信息。
+     * <p>
+     * 修改此方法后需递增 {@code SCHEMA_EMBEDDING_TEXT_VERSION} 以触发重新嵌入。
      */
     public String buildEmbeddingText() {
         StringBuilder sb = new StringBuilder();
         sb.append(metricName != null ? metricName : "");
         if (metricDisplayName != null && !metricDisplayName.isBlank()) {
             sb.append(" ").append(metricDisplayName);
+        }
+        if (metricCode != null && !metricCode.isBlank()) {
+            sb.append(" ").append(metricCode);
         }
         sb.append(" | ");
         if (type != null && !type.isBlank()) {
@@ -178,8 +189,13 @@ public class AloudataMetricEntity {
         if (metricCategoryName != null && !metricCategoryName.isBlank()) {
             sb.append("类目: ").append(metricCategoryName).append(", ");
         }
-        if (unit != null && !unit.isBlank()) {
+        if (cnUnit != null && !cnUnit.isBlank()) {
+            sb.append("单位: ").append(cnUnit);
+        } else if (unit != null && !unit.isBlank()) {
             sb.append("单位: ").append(unit);
+        }
+        if (owner != null && !owner.isBlank()) {
+            sb.append(", 负责人: ").append(owner);
         }
         return sb.toString().trim();
     }

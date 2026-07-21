@@ -40,10 +40,15 @@
             <div class="bubble user-bubble">{{ msg.content }}</div>
             <!-- 附件展示 -->
             <div v-if="getUserAttachments(msg)" class="msg-attachments">
-              <span v-for="(att, aIdx) in getUserAttachments(msg)" :key="aIdx" class="msg-attachment">
-                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                {{ att.fileName }}
-              </span>
+              <template v-for="(att, aIdx) in getUserAttachments(msg)" :key="aIdx">
+                <span v-if="att.contentType?.startsWith('image/')" class="msg-attachment msg-attachment--image" @click="previewImage(att.url)">
+                  <img :src="att.url" :alt="att.fileName" class="msg-attachment__img" />
+                </span>
+                <span v-else class="msg-attachment">
+                  <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                  {{ att.fileName }}
+                </span>
+              </template>
             </div>
             <!-- 用户消息操作栏（气泡外左下角） -->
             <div class="msg-actions msg-actions--user">
@@ -424,7 +429,10 @@
       <!-- 附件预览区 -->
       <div v-if="pendingAttachments.length > 0" class="attachment-preview">
         <div v-for="(att, idx) in pendingAttachments" :key="idx" class="attachment-tag">
-          <span class="attachment-tag__icon">
+          <span v-if="att.contentType?.startsWith('image/')" class="attachment-tag__thumb">
+            <img :src="att.url" :alt="att.fileName" class="attachment-tag__img" />
+          </span>
+          <span v-else class="attachment-tag__icon">
             <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
           </span>
           <span class="attachment-tag__name">{{ att.fileName }}</span>
@@ -440,6 +448,7 @@
           :disabled="chatStore.isStreaming"
           rows="1"
           @keydown="handleKeydown"
+          @paste="handlePaste"
         />
         <div class="input-actions">
           <button class="btn-attach" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
@@ -1777,15 +1786,28 @@ function handleFileSelect(): void {
   fileInputRef.value?.click()
 }
 
-/** 处理文件选择并上传（支持多文件） */
-async function handleFileChange(event: Event): void {
-  const target = event.target as HTMLInputElement
-  const files = target.files
-  if (!files || files.length === 0) return
-  // 重置 input 以便再次选择同一文件
-  target.value = ''
+/** 处理粘贴事件，支持粘贴图片 */
+function handlePaste(event: ClipboardEvent): void {
+  const items = event.clipboardData?.items
+  if (!items) return
+  const imageFiles: File[] = []
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        imageFiles.push(file)
+      }
+    }
+  }
+  if (imageFiles.length > 0) {
+    // 阻止默认粘贴行为（避免图片以文本形式插入输入框）
+    event.preventDefault()
+    uploadFiles(imageFiles)
+  }
+}
 
-  // 新对话时 conversationId 为空，需要先生成临时 ID，否则上传接口无法正常工作
+/** 上传文件列表（供粘贴和文件选择共用） */
+async function uploadFiles(files: File[]): Promise<void> {
   let convId = chatStore.conversationId
   if (!convId) {
     convId = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -1794,7 +1816,7 @@ async function handleFileChange(event: Event): void {
 
   isUploading.value = true
   try {
-    const uploadPromises = Array.from(files).map(file => uploadAttachment(convId, file))
+    const uploadPromises = files.map(file => uploadAttachment(convId, file))
     const results = await Promise.allSettled(uploadPromises)
     for (const result of results) {
       if (result.status === 'fulfilled') {
@@ -1813,6 +1835,17 @@ async function handleFileChange(event: Event): void {
   } finally {
     isUploading.value = false
   }
+}
+
+/** 处理文件选择并上传（支持多文件） */
+async function handleFileChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  const files = target.files
+  if (!files || files.length === 0) return
+  // 重置 input 以便再次选择同一文件
+  target.value = ''
+
+  await uploadFiles(Array.from(files))
 }
 
 /** 移除待发送附件 */
@@ -1841,6 +1874,11 @@ async function handleOptimize(): Promise<void> {
 function getUserAttachments(msg: typeof chatStore.messages.value[0]): ChatAttachment[] | null {
   if (!msg.attachments || msg.attachments.length === 0) return null
   return msg.attachments
+}
+
+/** 预览图片（新窗口打开） */
+function previewImage(url: string): void {
+  window.open(url, '_blank')
 }
 
 /** 键盘事件处理：Enter发送，Ctrl+Enter换行 */
@@ -3892,4 +3930,35 @@ onUnmounted(() => {
   gap: 4px;
   font-size: 12px;
   opacity: 0.85;
+}
+
+.msg-attachment--image {
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.msg-attachment__img {
+  max-width: 200px;
+  max-height: 120px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.attachment-tag__thumb {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-tag__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }</style>

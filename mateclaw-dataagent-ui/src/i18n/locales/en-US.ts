@@ -641,6 +641,11 @@ export default {
     defaultEmbeddingModel: 'Default Embedding Model',
     setDefaultEmbedding: 'Set as Default Embedding',
     currentDefaultEmbedding: 'Default Embedding',
+    modalities: 'Multimodal Capabilities',
+    modalityVision: 'Vision',
+    modalityVideo: 'Video',
+    modalityAudio: 'Audio',
+    modalitiesTip: 'Declare the input modalities the model natively supports. When checked, uploaded images/video/audio will be passed directly to the model without tool mediation. If unchecked, the system will auto-infer from the model name.',
   },
   common: {
     confirm: 'Confirm',

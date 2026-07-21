@@ -301,6 +301,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                             .properties("metricDisplayName", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))
                                     .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
+                            .properties("metricCode", p -> p.keyword(k -> k))
                             .properties("type", p -> p.keyword(k -> k))
                             .properties("businessCaliber", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties("synonyms", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
@@ -309,6 +310,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                             .properties("categoryName", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("unit", p -> p.keyword(k -> k))
+                            .properties("cnUnit", p -> p.keyword(k -> k))
+                            .properties("owner", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
+                                    .fields("keyword", f -> f.keyword(k -> k))))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
                                     .denseVector(dv -> dv.dims(dims).index(true).similarity(DenseVectorSimilarity.Cosine)))
@@ -337,6 +341,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("metricDisplayName", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("metricCode", p -> p.keyword(k -> k))
                             .properties("type", p -> p.keyword(k -> k))
                             .properties("businessCaliber", p -> p.text(t -> t))
                             .properties("synonyms", p -> p.text(t -> t
@@ -344,6 +349,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                             .properties("categoryName", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("unit", p -> p.keyword(k -> k))
+                            .properties("cnUnit", p -> p.keyword(k -> k))
+                            .properties("owner", p -> p.text(t -> t
+                                    .fields("keyword", f -> f.keyword(k -> k))))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
                                     .denseVector(dv -> dv.dims(dims).index(true).similarity(DenseVectorSimilarity.Cosine)))
@@ -374,12 +382,17 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                             .properties("dimDisplayName", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))
                                     .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
+                            .properties("dimCode", p -> p.keyword(k -> k))
                             .properties("dimDescription", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties("synonyms", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))
                                     .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
                             .properties("originDataType", p -> p.keyword(k -> k))
                             .properties("isTimeDimension", p -> p.boolean_(b -> b))
+                            .properties("categoryName", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
+                                    .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("datasetName", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
+                                    .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("exampleValues", p -> p.keyword(k -> k))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
@@ -409,11 +422,16 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("dimDisplayName", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("dimCode", p -> p.keyword(k -> k))
                             .properties("dimDescription", p -> p.text(t -> t))
                             .properties("synonyms", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("originDataType", p -> p.keyword(k -> k))
                             .properties("isTimeDimension", p -> p.boolean_(b -> b))
+                            .properties("categoryName", p -> p.text(t -> t
+                                    .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("datasetName", p -> p.text(t -> t
+                                    .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("exampleValues", p -> p.keyword(k -> k))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
@@ -433,11 +451,14 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         doc.put("datasourceId", entity.getDatasourceId());
         doc.put("metricName", entity.getMetricName());
         doc.put("metricDisplayName", entity.getMetricDisplayName());
+        doc.put("metricCode", entity.getMetricCode());
         doc.put("type", entity.getType());
         doc.put("businessCaliber", entity.getBusinessCaliber());
         doc.put("synonyms", splitToList(entity.getSynonyms()));
         doc.put("categoryName", entity.getMetricCategoryName());
         doc.put("unit", entity.getUnit());
+        doc.put("cnUnit", entity.getCnUnit());
+        doc.put("owner", entity.getOwner());
         doc.put(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, entity.getEmbeddingText());
         if (entity.getEmbedding() != null && entity.getEmbedding().length > 0) {
             doc.put(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, bytesToFloatList(entity.getEmbedding()));
@@ -450,10 +471,13 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         doc.put("datasourceId", entity.getDatasourceId());
         doc.put("dimName", entity.getDimName());
         doc.put("dimDisplayName", entity.getDimDisplayName());
+        doc.put("dimCode", entity.getDimCode());
         doc.put("dimDescription", entity.getDimDescription());
         doc.put("synonyms", splitToList(entity.getSynonyms()));
         doc.put("originDataType", entity.getOriginDataType());
         doc.put("isTimeDimension", Boolean.TRUE.equals(entity.getIsTimeDimension()));
+        doc.put("categoryName", entity.getDimCategoryName());
+        doc.put("datasetName", entity.getDatasetName());
         doc.put("exampleValues", splitToList(entity.getExampleValues()));
         doc.put(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, entity.getEmbeddingText());
         if (entity.getEmbedding() != null && entity.getEmbedding().length > 0) {

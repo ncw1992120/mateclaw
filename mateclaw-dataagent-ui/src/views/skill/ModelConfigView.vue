@@ -298,6 +298,14 @@
         <el-form-item :label="t('modelConfig.enabled')">
           <el-switch v-model="editModelData.enabled" />
         </el-form-item>
+        <el-form-item :label="t('modelConfig.modalities')">
+          <el-checkbox-group v-model="editModalities">
+            <el-checkbox label="vision" value="vision">{{ t('modelConfig.modalityVision') }}</el-checkbox>
+            <el-checkbox label="video" value="video">{{ t('modelConfig.modalityVideo') }}</el-checkbox>
+            <el-checkbox label="audio" value="audio">{{ t('modelConfig.modalityAudio') }}</el-checkbox>
+          </el-checkbox-group>
+          <div class="form-tip">{{ t('modelConfig.modalitiesTip') }}</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditModel = false">{{ t('common.cancel') }}</el-button>
@@ -361,6 +369,23 @@ const editModelData = reactive<Partial<ModelConfig>>({
   modelType: 'chat',
   enableSearch: false,
   enabled: true,
+  modalities: '',
+})
+
+/** modalities 字符串与 checkbox-group 双向绑定 */
+const editModalities = computed({
+  get: () => {
+    const raw = editModelData.modalities
+    if (!raw) return []
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return raw.split(',').map((s: string) => s.trim()).filter(Boolean)
+    }
+  },
+  set: (val: string[]) => {
+    editModelData.modalities = val.length > 0 ? JSON.stringify(val) : ''
+  },
 })
 
 /**
@@ -584,6 +609,7 @@ function openEditModel(model: ModelConfig): void {
     modelType: model.modelType,
     enableSearch: model.enableSearch,
     enabled: model.enabled,
+    modalities: model.modalities || '',
   })
   showEditModel.value = true
 }
@@ -603,6 +629,7 @@ function openAddModel(): void {
     modelType: 'chat',
     enableSearch: false,
     enabled: true,
+    modalities: '',
   })
   showEditModel.value = true
 }
@@ -833,5 +860,12 @@ onMounted(() => {
 .add-model-section {
   margin-top: 12px;
   text-align: center;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  line-height: 1.4;
+  margin-top: 4px;
 }
 </style>
