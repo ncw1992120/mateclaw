@@ -677,6 +677,17 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             donePayload.put("persisted", savedAssistant != null);
             donePayload.put("messageCount", msgCount);
+            // 携带权威 segments 数据，前端用此覆盖实时流中缺失 segmentOnly 标记的 segments
+            List<Map<String, Object>> finalizedSegments = accumulator.getFinalizedSegments();
+            if (!finalizedSegments.isEmpty()) {
+                donePayload.put("segments", finalizedSegments);
+            }
+            // 携带权威最终答案文本：实时流的 msg.content 累积了含中间旁白的全部广播内容，
+            // 而 accumulator.getContent() 仅含最终答案（已排除 segmentOnly 旁白），与持久化一致。
+            // 仅在正常完成时携带，避免覆盖前端在 message_complete 中为 stopped/failed 追加的标记。
+            if ("completed".equals(status) && !assistantText.isBlank()) {
+                donePayload.put("content", assistantText);
+            }
 
             // 广播推荐问题事件
             if (recQuestions != null && !recQuestions.isEmpty()) {
@@ -920,6 +931,12 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             } catch (Exception e) {
                 return "{}";
             }
+        }
+
+        /** 获取已 finalize 的 segments 列表（用于 done 事件携带权威 segments 给前端） */
+        synchronized List<Map<String, Object>> getFinalizedSegments() {
+            finalizeRunningSegments("thinking", "content", "tool_call");
+            return new ArrayList<>(segments);
         }
 
         private void accumulateToolEvent(String eventType, Map<String, Object> data) {

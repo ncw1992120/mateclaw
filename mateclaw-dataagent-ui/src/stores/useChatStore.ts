@@ -1059,6 +1059,15 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
+        // 用后端权威 segments 覆盖实时流中缺失 segmentOnly 标记的 segments
+        const authoritativeSegments = data.segments as Array<Record<string, unknown>> | undefined
+        if (authoritativeSegments && authoritativeSegments.length > 0) {
+          const doneMsg2 = targetMsgs[msgIdx]
+          if (doneMsg2?.role === 'assistant' && doneMsg2.metadata) {
+            const meta = doneMsg2.metadata as Record<string, unknown>
+            meta.segments = authoritativeSegments
+          }
+        }
         // 设置消息状态为 completed（派生 isStreaming 自动变 false）
         const doneMsg = targetMsgs[msgIdx]
         if (doneMsg?.role === 'assistant') {
