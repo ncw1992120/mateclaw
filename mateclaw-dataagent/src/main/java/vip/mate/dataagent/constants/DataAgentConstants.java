@@ -225,6 +225,17 @@ public final class DataAgentConstants {
     /** Aloudata 语义检索默认相似度阈值 */
     public static final double ALOUDATA_SEARCH_DEFAULT_THRESHOLD = 0.3;
 
+    /**
+     * Aloudata 混合检索：每路（关键词 / 向量）在 RRF 融合前的候选召回倍数。
+     * <p>
+     * 混合检索必须先各路放大召回、再融合、最后才截断到 topK；若每路只召回 topK，
+     * 两路都排在 topK 之外的真实命中会永远进不了 RRF（表现为"数据存在却检索不出"）。
+     */
+    public static final int ALOUDATA_SEARCH_RETRIEVAL_POOL_FACTOR = 5;
+
+    /** Aloudata 混合检索：每路候选召回上限，避免 topK 过大时召回过多影响延迟 */
+    public static final int ALOUDATA_SEARCH_MAX_RETRIEVAL_POOL = 100;
+
     /** Aloudata 指标管理默认每页条数 */
     public static final int ALOUDATA_METRIC_DEFAULT_PAGE_SIZE = 20;
 
