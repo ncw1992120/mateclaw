@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.mapping.DenseVectorSimilarity;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
@@ -281,6 +282,9 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
 
     private List<TermHit> esSearchTerms(ElasticsearchClient client, String tenantCode, String query, int topK, double threshold) {
         String indexName = DataAgentConstants.BUSINESS_TERM_ES_INDEX;
+        // 放大候选池，融合/排序后再由调用方截断到 topK
+        int pool = retrievalPoolSize(topK);
+        Query keywordQuery = buildTermKeywordQuery(tenantCode, query);
         try {
             boolean hasVector = hasTermEmbeddings(tenantCode);
             List<Float> queryVector = hasVector ? getQueryVector(query) : List.of();
@@ -293,29 +297,20 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 // 1. 关键词查询
                 SearchResponse<Map> keywordResponse = client.search(s -> s
                                 .index(indexName)
-                                .size(topK)
-                                .query(q -> q.bool(b -> {
-                                    if (tenantCode != null) {
-                                        b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
-                                    }
-                                    b.must(m -> m.multiMatch(mm -> mm
-                                            .fields("termName^3", "termName.keyword^5", "termName.ikmax^2", "synonyms^2", "synonyms.keyword^2", "synonyms.ikmax^1", "description^1", "calculationFormula^1", "dataCaliber^1", "businessRule^1", "category^1", "category.keyword^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
-                                            .type(TextQueryType.CrossFields)
-                                            .query(query)));
-                                    return b;
-                                })),
+                                .size(pool)
+                                .query(keywordQuery),
                         Map.class
                 );
 
                 // 2. kNN 向量查询
                 SearchResponse<Map> knnResponse = client.search(s -> s
                                 .index(indexName)
-                                .size(topK)
+                                .size(pool)
                                 .knn(knn -> {
                                     knn.field(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD)
                                             .queryVector(queryVector)
-                                            .k(topK)
-                                            .numCandidates(DataAgentConstants.ES_KNN_NUM_CANDIDATES);
+                                            .k(pool)
+                                            .numCandidates(Math.max(DataAgentConstants.ES_KNN_NUM_CANDIDATES, pool));
                                     if (tenantCode != null) {
                                         knn.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
@@ -330,17 +325,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 // 仅关键词检索
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
-                                .size(topK)
-                                .query(q -> q.bool(b -> {
-                                    if (tenantCode != null) {
-                                        b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
-                                    }
-                                    b.must(m -> m.multiMatch(mm -> mm
-                                            .fields("termName^3", "termName.keyword^5", "termName.ikmax^2", "synonyms^2", "synonyms.keyword^2", "synonyms.ikmax^1", "description^1", "calculationFormula^1", "dataCaliber^1", "businessRule^1", "category^1", "category.keyword^1", DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^1")
-                                            .type(TextQueryType.CrossFields)
-                                            .query(query)));
-                                    return b;
-                                })),
+                                .size(pool)
+                                .query(keywordQuery),
                         Map.class
                 );
                 return extractTermHits(response, "keyword", 0);
@@ -349,6 +335,53 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             log.error("ES 术语检索失败，降级为 MySQL: {}", e.getMessage());
             return fallbackMySqlSearchTerms(tenantCode, query, topK);
         }
+    }
+
+    /**
+     * 构建术语关键词查询。
+     * <p>
+     * 查询结构：
+     * <ul>
+     *   <li>filter: tenantCode 精确过滤（可选）</li>
+     *   <li>must: multiMatch（BestFields + tieBreaker），只作用于 IK 分词字段</li>
+     *   <li>should: .keyword 子字段精确匹配提权，命中加分、不命中不影响召回</li>
+     * </ul>
+     * <p>
+     * .keyword 字段使用 keyword analyzer（不分词），与 IK 分词器不同组，
+     * 混入 CrossFields 会因分析器分组割裂扭曲打分；改为独立 should term 提权。
+     */
+    private Query buildTermKeywordQuery(String tenantCode, String query) {
+        return Query.of(q -> q.bool(b -> {
+            if (tenantCode != null) {
+                b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
+            }
+            // BestFields：取单个最高分字段，tieBreaker 让次高分字段也贡献部分分数
+            b.must(m -> m.multiMatch(mm -> mm
+                    .fields("termName^3", "termName.ikmax^2", "synonyms^2", "synonyms.ikmax^1",
+                            "description^1", "calculationFormula^1", "dataCaliber^1",
+                            "businessRule^1", "category^1",
+                            DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^0.5")
+                    .type(TextQueryType.BestFields)
+                    .tieBreaker(0.3)
+                    .query(query)));
+            // .keyword 精确匹配提权：命中加分，不命中不影响 must 召回
+            b.should(sh -> sh.term(t -> t.field("termName.keyword").value(query).boost(5.0f)));
+            b.should(sh -> sh.term(t -> t.field("synonyms.keyword").value(query).boost(2.0f)));
+            b.should(sh -> sh.term(t -> t.field("category.keyword").value(query).boost(1.0f)));
+            return b;
+        }));
+    }
+
+    /**
+     * 计算每路（关键词 / 向量）在 RRF 融合前的候选召回数量。
+     * <p>
+     * 混合检索必须先各路放大召回、融合后再截断到 topK；否则两路都排在 topK 之外的
+     * 真实命中会永远进不了 RRF，表现为"数据存在却检索不出"。
+     */
+    private int retrievalPoolSize(int topK) {
+        int base = Math.max(topK, 1);
+        return Math.min(base * DataAgentConstants.ALOUDATA_SEARCH_RETRIEVAL_POOL_FACTOR,
+                DataAgentConstants.ALOUDATA_SEARCH_MAX_RETRIEVAL_POOL);
     }
 
     /**
@@ -396,12 +429,15 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         }
 
         // 按 RRF 分数降序排序
+        // RRF 原始分为 Σ1/(k+rank)，量级仅 0.0x，与展示/阈值语义（0~1）不可比；
+        // 按最大值归一化到 (0,1]，使 top 命中≈1.0，展示与相似度阈值可解释。
+        double maxScore = scoreMap.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
         return scoreMap.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                 .map(entry -> {
                     TermHit th = hitMap.get(entry.getKey());
                     if (th != null) {
-                        th.setScore(entry.getValue());
+                        th.setScore(maxScore > 0 ? entry.getValue() / maxScore : entry.getValue());
                         th.setMatchSource("hybrid");
                     }
                     return th;
@@ -417,7 +453,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         }
         TermHit th = new TermHit();
         th.setTermName(getString(source, "termName"));
-        th.setSynonyms(getString(source, "synonyms"));
+        th.setSynonyms(getJoinedString(source, "synonyms"));
         th.setDescription(getString(source, "description"));
         th.setCalculationFormula(getString(source, "calculationFormula"));
         th.setDataCaliber(getString(source, "dataCaliber"));
@@ -450,7 +486,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
 
             TermHit th = new TermHit();
             th.setTermName(getString(source, "termName"));
-            th.setSynonyms(getString(source, "synonyms"));
+            th.setSynonyms(getJoinedString(source, "synonyms"));
             th.setDescription(getString(source, "description"));
             th.setCalculationFormula(getString(source, "calculationFormula"));
             th.setDataCaliber(getString(source, "dataCaliber"));
@@ -459,6 +495,11 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             th.setScore(score);
             th.setMatchSource(matchSource);
             hits.add(th);
+        }
+        // 归一化 BM25 原始分到 (0,1]，与 hybrid 路径展示口径一致
+        double max = hits.stream().mapToDouble(TermHit::getScore).max().orElse(0.0);
+        if (max > 0) {
+            hits.forEach(h -> h.setScore(h.getScore() / max));
         }
         return hits;
     }
@@ -656,5 +697,17 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
     private String getString(Map<String, Object> source, String key) {
         Object val = source.get(key);
         return val != null ? val.toString() : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getJoinedString(Map<String, Object> source, String key) {
+        Object val = source.get(key);
+        if (val == null) {
+            return null;
+        }
+        if (val instanceof List) {
+            return String.join(",", ((List<String>) val).stream().filter(Objects::nonNull).toList());
+        }
+        return val.toString();
     }
 }

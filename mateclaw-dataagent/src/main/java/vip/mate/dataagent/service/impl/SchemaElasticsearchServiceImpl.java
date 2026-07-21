@@ -260,10 +260,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
         }
 
         String indexName = DataAgentConstants.SCHEMA_ELASTICSEARCH_INDEX;
+        // 放大候选池，排序后再截断
+        int pool = retrievalPoolSize(topK);
         try {
             SearchResponse<Map> response = client.search(s -> s
                             .index(indexName)
-                            .size(topK)
+                            .size(pool)
                             .query(q -> q
                                     .bool(b -> b
                                             .filter(f -> f
@@ -275,7 +277,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                             .must(m -> m
                                                     .multiMatch(mm -> mm
                                                             .fields(DataAgentConstants.SCHEMA_ES_EMBEDDING_TEXT_FIELD)
-                                                            .type(TextQueryType.CrossFields)
+                                                            .type(TextQueryType.BestFields)
                                                             .query(query)
                                                     )
                                             )
@@ -308,6 +310,8 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
         }
 
         String indexName = DataAgentConstants.SCHEMA_ELASTICSEARCH_INDEX;
+        // 放大候选池，过滤后再截断
+        int pool = retrievalPoolSize(topK);
         try {
             /* 构建查询向量 */
             List<Float> queryVectorList = new ArrayList<>(queryVector.length);
@@ -317,12 +321,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
 
             SearchResponse<Map> response = client.search(s -> s
                             .index(indexName)
-                            .size(topK)
+                            .size(pool)
                             .knn(knn -> knn
                                     .field(DataAgentConstants.SCHEMA_ES_EMBEDDING_FIELD)
                                     .queryVector(queryVectorList)
-                                    .k(topK)
-                                    .numCandidates(DataAgentConstants.ES_KNN_NUM_CANDIDATES)
+                                    .k(pool)
+                                    .numCandidates(Math.max(DataAgentConstants.ES_KNN_NUM_CANDIDATES, pool))
                                     .filter(f -> f
                                             .term(t -> t
                                                     .field("datasourceId")
@@ -384,6 +388,9 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
 
         boolean hasVector = queryVector != null && queryVector.length > 0;
 
+        // 放大候选池，融合/排序后再截断到 topK
+        int pool = retrievalPoolSize(topK);
+
         try {
             if (hasVector) {
                 /* 混合检索：分别执行关键词查询和 kNN 查询，应用层 RRF 融合 */
@@ -396,7 +403,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                 // 1. 关键词查询
                 SearchResponse<Map> keywordResponse = client.search(s -> s
                                 .index(indexName)
-                                .size(topK)
+                                .size(pool)
                                 .query(q -> q
                                         .bool(b -> b
                                                 .filter(f -> f
@@ -408,7 +415,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                                                 .must(m -> m
                                                         .multiMatch(mm -> mm
                                                                 .fields(DataAgentConstants.SCHEMA_ES_EMBEDDING_TEXT_FIELD)
-                                                                .type(TextQueryType.CrossFields)
+                                                                .type(TextQueryType.BestFields)
                                                                 .query(request.getQuery())
                                                         )
                                                 )
@@ -420,12 +427,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                 // 2. kNN 向量查询
                 SearchResponse<Map> knnResponse = client.search(s -> s
                                 .index(indexName)
-                                .size(topK)
+                                .size(pool)
                                 .knn(knn -> knn
                                         .field(DataAgentConstants.SCHEMA_ES_EMBEDDING_FIELD)
                                         .queryVector(queryVectorList)
-                                        .k(topK)
-                                        .numCandidates(DataAgentConstants.ES_KNN_NUM_CANDIDATES)
+                                        .k(pool)
+                                        .numCandidates(Math.max(DataAgentConstants.ES_KNN_NUM_CANDIDATES, pool))
                                         .filter(f -> f
                                                 .term(t -> t
                                                         .field("datasourceId")
@@ -468,6 +475,18 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
     // ==================== private 方法 ====================
 
     /**
+     * 计算每路（关键词 / 向量）在 RRF 融合前的候选召回数量。
+     * <p>
+     * 混合检索必须先各路放大召回、融合后再截断到 topK；否则两路都排在 topK 之外的
+     * 真实命中会永远进不了 RRF，表现为"数据存在却检索不出"。
+     */
+    private int retrievalPoolSize(int topK) {
+        int base = Math.max(topK, 1);
+        return Math.min(base * DataAgentConstants.ALOUDATA_SEARCH_RETRIEVAL_POOL_FACTOR,
+                DataAgentConstants.ALOUDATA_SEARCH_MAX_RETRIEVAL_POOL);
+    }
+
+    /**
      * 应用层 RRF 融合关键词和向量检索结果（表）
      * <p>
      * RRF 公式: score = Σ 1/(k + rank_i)，k 为 rankConstant
@@ -508,12 +527,15 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             }
         }
 
+        // RRF 原始分为 Σ1/(k+rank)，量级仅 0.0x，与展示/阈值语义（0~1）不可比；
+        // 按最大值归一化到 (0,1]，使 top 命中≈1.0，展示与相似度阈值可解释。
+        double maxScore = scoreMap.values().stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
         return scoreMap.entrySet().stream()
                 .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
                 .map(entry -> {
                     SchemaSearchResult.TableHit th = hitMap.get(entry.getKey());
                     if (th != null) {
-                        th.setScore(entry.getValue());
+                        th.setScore(maxScore > 0 ? entry.getValue() / maxScore : entry.getValue());
                     }
                     return th;
                 })
@@ -534,6 +556,8 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
 
     /**
      * 从 ES 搜索响应中提取 TableHit 列表
+     * <p>
+     * BM25 原始分归一化到 (0,1]，与 hybrid 路径展示口径一致
      */
     @SuppressWarnings("unchecked")
     private List<SchemaSearchResult.TableHit> extractTableHits(SearchResponse<Map> response, String matchSource) {
@@ -556,6 +580,12 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             tableHit.setScore(hit.score() != null ? hit.score() : 0.0);
             tableHit.setMatchSource(matchSource);
             hits.add(tableHit);
+        }
+
+        // 归一化 BM25 原始分到 (0,1]，与 hybrid 路径展示口径一致
+        double max = hits.stream().mapToDouble(SchemaSearchResult.TableHit::getScore).max().orElse(0.0);
+        if (max > 0) {
+            hits.forEach(h -> h.setScore(h.getScore() / max));
         }
 
         return hits;
