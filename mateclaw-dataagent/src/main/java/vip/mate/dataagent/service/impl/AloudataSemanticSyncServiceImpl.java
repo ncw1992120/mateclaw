@@ -733,7 +733,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             List<AloudataMetricEntity> metrics = metricMapper.selectList(new LambdaQueryWrapper<AloudataMetricEntity>()
                     .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
                     .last("LIMIT " + batchSize + " OFFSET " + (metricPage * batchSize)));
-            if (metrics.isEmpty()) break;
+            if (metrics.isEmpty()) {
+                break;
+            }
 
             for (AloudataMetricEntity metric : metrics) {
                 if (metric.getEmbedding() == null && StringUtils.hasText(metric.getEmbeddingText()) && embeddingAvailable) {
@@ -748,7 +750,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                             }
                         }
                     } catch (Exception e) {
-                        log.warn("[Aloudata同步] 指标 [{}] 向量化失败: {}", metric.getMetricName(), e.getMessage());
+                        log.error("[Aloudata同步] 指标 [{}] 向量化失败: {}", metric.getMetricName(), e.getMessage());
                     }
                 }
             }
@@ -1121,7 +1123,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 .eq(AloudataCategoryEntity::getDatasourceId, datasourceId)
                 .lt(AloudataCategoryEntity::getSyncVersion, currentVersion));
 
-        log.debug("[Aloudata同步] 旧版本数据清理完成，当前版本: {}", currentVersion);
+        log.info("[Aloudata同步] 旧版本数据清理完成，当前版本: {}", currentVersion);
     }
 
     /**

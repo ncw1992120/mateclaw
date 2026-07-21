@@ -1170,6 +1170,10 @@ public class AloudataCallTool {
      * <p>
      * 将术语名和同义词作为扩展关键词，提高检索召回率。
      * 限制扩展数量避免过多检索调用。
+     * <p>
+     * 相关性校验：只保留与原始关键词有文本重叠（字符级）的术语名和同义词，
+     * 过滤掉向量检索返回的"同领域但不同义"的术语（如搜"场内交易客户数"返回"GMV"）。
+     * 无任何扩展词通过校验时，仅保留原始关键词，避免无关扩展词干扰检索。
      */
     private List<String> expandKeywordsFromBusinessTerms(String keyword) {
         List<String> keywords = new ArrayList<>();
@@ -1179,15 +1183,17 @@ public class AloudataCallTool {
             BusinessTermSearchResult termResult = businessTermEsService.hybridSearch(keyword, 3, 0.3);
             if (termResult.getTermHits() != null) {
                 for (var hit : termResult.getTermHits()) {
-                    // 添加术语标准名
-                    if (hit.getTermName() != null && !hit.getTermName().isBlank()) {
+                    // 添加术语标准名（需通过相关性校验）
+                    if (hit.getTermName() != null && !hit.getTermName().isBlank()
+                            && isRelevantExpansion(keyword, hit.getTermName())) {
                         keywords.add(hit.getTermName());
                     }
-                    // 添加同义词
+                    // 添加同义词（需通过相关性校验）
                     if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
                         for (String syn : hit.getSynonyms().split(",")) {
                             String trimmed = syn.trim();
-                            if (!trimmed.isEmpty() && !trimmed.equals(keyword)) {
+                            if (!trimmed.isEmpty() && !trimmed.equals(keyword)
+                                    && isRelevantExpansion(keyword, trimmed)) {
                                 keywords.add(trimmed);
                             }
                         }
@@ -1200,6 +1206,71 @@ public class AloudataCallTool {
 
         // 去重并限制最多5个关键词，避免过多检索调用
         return keywords.stream().distinct().limit(5).toList();
+    }
+
+    /**
+     * 判断扩展词是否与原始关键词相关（非语义漂移的同领域术语）
+     * <p>
+     * 校验规则：扩展词与原始关键词至少有一个中文字符或英文单词重叠。
+     * 例如：
+     * <ul>
+     *   <li>"保费" vs "保险费" → 重叠"保" → 相关 ✓</li>
+     *   <li>"场内交易客户数" vs "场内交易量" → 重叠"场内交易" → 相关 ✓</li>
+     *   <li>"场内交易客户数" vs "GMV" → 无重叠 → 不相关 ✗</li>
+     *   <li>"保费" vs "AUM净流入贡献率" → 无重叠 → 不相关 ✗</li>
+     * </ul>
+     */
+    private boolean isRelevantExpansion(String original, String expanded) {
+        if (original == null || expanded == null) {
+            return false;
+        }
+        // 提取中文字符集合
+        Set<String> origChars = extractChineseChars(original);
+        Set<String> expChars = extractChineseChars(expanded);
+        // 中文字符有交集则相关
+        if (!origChars.isEmpty() && !expChars.isEmpty()) {
+            origChars.retainAll(expChars);
+            if (!origChars.isEmpty()) {
+                return true;
+            }
+        }
+        // 提取英文单词集合（下划线分隔）
+        Set<String> origWords = extractEnglishWords(original);
+        Set<String> expWords = extractEnglishWords(expanded);
+        if (!origWords.isEmpty() && !expWords.isEmpty()) {
+            origWords.retainAll(expWords);
+            return !origWords.isEmpty();
+        }
+        return false;
+    }
+
+    /** 提取字符串中的所有中文字符 */
+    private Set<String> extractChineseChars(String text) {
+        Set<String> chars = new HashSet<>();
+        if (text == null) {
+            return chars;
+        }
+        for (char c : text.toCharArray()) {
+            if (c >= '\u4e00' && c <= '\u9fff') {
+                chars.add(String.valueOf(c));
+            }
+        }
+        return chars;
+    }
+
+    /** 提取字符串中的英文单词（按下划线和非字母数字分隔） */
+    private Set<String> extractEnglishWords(String text) {
+        Set<String> words = new HashSet<>();
+        if (text == null) {
+            return words;
+        }
+        String[] parts = text.split("[^a-zA-Z0-9]+");
+        for (String part : parts) {
+            if (!part.isEmpty() && part.matches(".*[a-zA-Z].*")) {
+                words.add(part.toLowerCase());
+            }
+        }
+        return words;
     }
 
     /**
