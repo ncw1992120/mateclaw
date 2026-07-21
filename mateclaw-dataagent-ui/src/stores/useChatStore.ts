@@ -705,7 +705,14 @@ export const useChatStore = defineStore('chat', () => {
     if (isStreaming.value) return
 
     const convId = conversationId.value
-    const savedLastEventId = lastEventId.value || '0'
+    // 续连时始终从头（id=0）回放整个 buffer，并清空去重集合。
+    // 原因：reconnect 会用持久化历史重建 messages（见下方 listMessages），
+    // 而流式生成中的 assistant 增量在终态前不会落库，历史里没有这些事件；
+    // 若沿用刷新前中途的 lastEventId，后端只回放该 id 之后的事件，导致刷新前
+    // 已推送的 content/thinking/tool 事件全部丢失，表现为"消息流没有回放"。
+    // 从 0 回放 + 空 seenEventIds 可在全新的占位消息上完整重建消息流。
+    const savedLastEventId = '0'
+    seenEventIds.value.clear()
 
     // 会话不在列表中说明已被删除或 ID 无效，只清理续连状态，不修改用户选中的会话
     if (!conversations.value.some(c => c.conversationId === convId)) {
