@@ -1068,6 +1068,15 @@ export const useChatStore = defineStore('chat', () => {
             meta.segments = authoritativeSegments
           }
         }
+        // 用后端权威最终答案覆盖 msg.content：实时流累积的 content 含中间旁白，
+        // 与持久化不一致（影响复制、以及无最终答案段时 getFinalAnswer 的兜底）。
+        const authoritativeContent = data.content as string | undefined
+        if (typeof authoritativeContent === 'string' && authoritativeContent.length > 0) {
+          const contentMsg = targetMsgs[msgIdx]
+          if (contentMsg?.role === 'assistant') {
+            contentMsg.content = authoritativeContent
+          }
+        }
         // 设置消息状态为 completed（派生 isStreaming 自动变 false）
         const doneMsg = targetMsgs[msgIdx]
         if (doneMsg?.role === 'assistant') {
