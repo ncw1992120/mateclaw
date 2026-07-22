@@ -1296,7 +1296,6 @@ function addProviderEntry(providerId: string) {
 function removeProviderEntry(idx: number) {
   selectedProviderPrefs.value.splice(idx, 1)
 }
-
 function moveProviderEntry(idx: number, dir: -1 | 1) {
   const next = idx + dir
   if (next < 0 || next >= selectedProviderPrefs.value.length) return
