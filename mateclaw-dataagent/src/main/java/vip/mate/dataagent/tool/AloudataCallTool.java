@@ -1479,11 +1479,11 @@ public class AloudataCallTool {
                 }
                 sb.append("\n");
             }
-            sb.append("追问示例：\"您说的'").append(keyword).append("'是指 ")
+            sb.append("追问示例：\"「").append(keyword).append("」可能对应 ")
                     .append(metrics.get(0).getMetricDisplayName() != null ? metrics.get(0).getMetricDisplayName() : metrics.get(0).getMetricName())
-                    .append(" 还是 ")
+                    .append(" 或 ")
                     .append(metrics.get(1).getMetricDisplayName() != null ? metrics.get(1).getMetricDisplayName() : metrics.get(1).getMetricName())
-                    .append("？\"\n\n");
+                    .append("，请选择具体指标\"\n\n");
         }
 
         if (hasDimensionAmbiguity) {
@@ -1498,11 +1498,11 @@ public class AloudataCallTool {
                 }
                 sb.append("\n");
             }
-            sb.append("追问示例：\"您想按 ")
+            sb.append("追问示例：\"可按 ")
                     .append(dimensions.get(0).getDimDisplayName() != null ? dimensions.get(0).getDimDisplayName() : dimensions.get(0).getDimName())
-                    .append(" 还是 ")
+                    .append(" 或 ")
                     .append(dimensions.get(1).getDimDisplayName() != null ? dimensions.get(1).getDimDisplayName() : dimensions.get(1).getDimName())
-                    .append(" 查看？\"\n\n");
+                    .append(" 查看数据，请选择具体维度\"\n\n");
         }
     }
 
