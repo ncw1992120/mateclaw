@@ -253,6 +253,85 @@
 }
 ```
 
+### 模式11：多轮追问 — 追加同环比
+
+**首轮**：用户问"股票期权新开户数4月数据"，Agent 构造并成功执行：
+
+```json
+{
+    "metrics": ["stock_option_new_account_count"],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
+}
+```
+
+**追问**：用户问"相比3月增长多少"。Agent 从历史中提取上轮请求作为基座，增量修改：
+
+```json
+{
+    "metrics": [
+        "stock_option_new_account_count",
+        "stock_option_new_account_count__sameperiod__mom__growthvalue",
+        "stock_option_new_account_count__sameperiod__mom__growth"
+    ],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
+}
+```
+
+> 关键：metricName `stock_option_new_account_count` 直接沿用上轮已验证的英文名，不重新检索；仅追加同环比衍生指标。
+
+### 模式12：多轮追问 — 调整时间 + 追加维度
+
+**首轮**：用户问"本月销售额"，Agent 构造并成功执行：
+
+```json
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
+}
+```
+
+**追问**：用户问"上月按区域拆开看看"。Agent 增量修改 timeConstraint 和 dimensions：
+
+```json
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["region", "metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(DateAdd(Today(),-1,\"MONTH\"),\"MONTH\"))"
+}
+```
+
+> 关键：`sales_amount` 和 `metric_time__month` 沿用基座；`region` 是新增维度，需确认在 availableDimensions 中（若上轮已确认则直接使用）。
+
+### 模式13：多轮追问 — 追加排名 + 结果筛选
+
+**首轮**：用户问"各城市销售额"，Agent 构造并成功执行：
+
+```json
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["city", "metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"
+}
+```
+
+**追问**：用户问"排名前10的是哪些"。Agent 增量追加排名指标和结果筛选：
+
+```json
+{
+    "metrics": [
+        "sales_amount",
+        "sales_amount__rank"
+    ],
+    "dimensions": ["city", "metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
+    "resultFilters": ["[sales_amount__rank]<=10"],
+    "orders": [{"sales_amount__rank": "asc"}]
+}
+```
+
 ---
 
 ## 跨工具协作模式
