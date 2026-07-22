@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -49,7 +48,7 @@ class KbOpenApiAuthFilterTest {
         rateLimiter = mock(KbApiKeyRateLimiter.class);
         filter = new KbOpenApiAuthFilter(keyService, rateLimiter);
         when(keyService.authenticate(KEY)).thenReturn(Optional.of(new AuthResult(CTX, LocalDateTime.now())));
-        when(rateLimiter.tryAcquire(anyLong(), anyInt(), any())).thenReturn(true);
+        when(rateLimiter.tryAcquire(anyLong(), anyInt(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
     }
 
     private MockHttpServletRequest startRequest() {
@@ -114,7 +113,7 @@ class KbOpenApiAuthFilterTest {
     void sseSkipsRateLimit() throws Exception {
         run(sseRequest());
         verify(rateLimiter, never())
-                .tryAcquire(anyLong(), anyInt(), any());
+                .tryAcquire(anyLong(), anyInt(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -122,6 +121,6 @@ class KbOpenApiAuthFilterTest {
     void nonSseHitsRateLimit() throws Exception {
         run(startRequest());
         verify(rateLimiter)
-                .tryAcquire(anyLong(), anyInt(), any());
+                .tryAcquire(anyLong(), anyInt(), org.mockito.ArgumentMatchers.any());
     }
 }
