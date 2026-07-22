@@ -1308,6 +1308,7 @@ function openSse(kbId: number) {
           raw.progressDone = 0
           raw.progressTotal = 0
         }
+<<<<<<< HEAD
       } catch { /* ignore */ }
     },
     'route.done': (ev: MessageEvent) => {

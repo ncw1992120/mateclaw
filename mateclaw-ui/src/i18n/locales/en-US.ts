@@ -2755,6 +2755,10 @@ export default {
       ENTITY_EXTRACTION_FAILED: 'Entity-graph extraction failed — the knowledge graph may be incomplete; reprocess later.',
       UNKNOWN: 'Some background processing did not finish — see details.',
     },
+    failureCenter: {
+      title: 'Knowledge base processing issues',
+      open: 'Open',
+    },
     progress: {
       preparing: 'Preparing…',
       uploading: 'Uploading {pct}%',

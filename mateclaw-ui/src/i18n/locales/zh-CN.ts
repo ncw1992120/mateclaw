@@ -2767,6 +2767,10 @@ export default {
       ENTITY_EXTRACTION_FAILED: '实体图谱抽取失败，知识图谱可能不完整，可稍后重新处理',
       UNKNOWN: '部分后台处理未完成，请查看详情',
     },
+    failureCenter: {
+      title: '知识库处理异常',
+      open: '打开',
+    },
     progress: {
       preparing: '准备中…',
       uploading: '上传 {pct}%',

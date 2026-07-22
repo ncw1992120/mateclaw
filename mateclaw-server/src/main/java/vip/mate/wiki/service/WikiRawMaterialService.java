@@ -678,7 +678,11 @@ public class WikiRawMaterialService {
     }
 
     /** Cross-KB list of materials needing operator attention, newest first (capped). */
+<<<<<<< HEAD
     public List<WikiFailureItem> listFailures(int limit) {
+=======
+    public java.util.List<vip.mate.wiki.dto.WikiFailureItem> listFailures(int limit) {
+>>>>>>> feat/wiki-failure-center
         return rawMapper.listFailures(Math.max(1, Math.min(limit, 500)));
     }
 
