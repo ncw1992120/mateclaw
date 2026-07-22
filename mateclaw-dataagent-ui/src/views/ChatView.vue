@@ -1,5 +1,7 @@
 <template>
   <div class="chat-view">
+    <!-- 消息区域（含悬浮「回到底部」按钮），高度自适应，占满输入区上方空间 -->
+    <div class="chat-main">
     <!-- Chat Area -->
     <div ref="chatAreaRef" class="chat-area">
       <!-- Empty State -->
@@ -35,7 +37,7 @@
       <!-- Messages -->
       <template v-for="(msg, index) in chatStore.messages" :key="index">
         <!-- User Message -->
-        <div v-if="msg.role === 'user'" class="msg user">
+        <div v-if="msg.role === 'user'" :ref="(el) => setUserMsgRef(el as HTMLElement | null, index)" class="msg user">
           <div class="user-content-wrapper">
             <div class="bubble user-bubble">{{ msg.content }}</div>
             <!-- 附件展示 -->
@@ -380,6 +382,41 @@
       >
         <span class="streaming-cursor-end" />
       </div>
+    </div>
+
+      <!-- 回到底部按钮 -->
+      <transition name="scroll-btn-fade">
+        <button
+          v-if="showScrollToBottom"
+          class="scroll-to-bottom"
+          type="button"
+          :title="t('chat.scrollToBottom')"
+          :aria-label="t('chat.scrollToBottom')"
+          @click="scrollToBottom(true)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+        </button>
+      </transition>
+
+      <!-- 右侧快速导航栏：列出所有用户提问，悬浮显示内容，点击跳转到对应位置 -->
+      <transition name="chat-nav-fade">
+        <nav v-if="userQuestions.length > 1" class="chat-nav" :aria-label="t('chat.questionNav')">
+          <button
+            v-for="(q, qi) in userQuestions"
+            :key="q.index"
+            class="chat-nav__item"
+            :class="{ 'is-active': activeQuestionIndex === q.index }"
+            type="button"
+            @click="scrollToMessage(q.index)"
+          >
+            <span class="chat-nav__label">
+              <span class="chat-nav__seq">{{ qi + 1 }}</span>
+              <span class="chat-nav__text">{{ q.content }}</span>
+            </span>
+            <span class="chat-nav__dot"></span>
+          </button>
+        </nav>
+      </transition>
     </div>
 
     <!-- Datasource Selector Toolbar -->
@@ -1971,6 +2008,88 @@ function handleModify(field: string): void {
 /** 用户是否已主动向上翻看历史（生成过程中不再自动下滚） */
 const userScrolledUp = ref(false)
 
+/** 是否显示「回到底部」悬浮按钮：有消息且用户已向上翻看时展示 */
+const showScrollToBottom = computed(
+  () => userScrolledUp.value && chatStore.messages.length > 0
+)
+
+/** 用户提问 DOM 引用映射，key = 消息索引（用于右侧导航跳转） */
+const userMsgRefs = new Map<number, HTMLElement>()
+
+/** 收集/移除用户消息 DOM 引用 */
+function setUserMsgRef(el: HTMLElement | null, msgIndex: number): void {
+  if (el) {
+    userMsgRefs.set(msgIndex, el)
+  } else {
+    userMsgRefs.delete(msgIndex)
+  }
+}
+
+/** 右侧导航项：所有用户提问（携带原始消息索引与内容） */
+const userQuestions = computed(() =>
+  chatStore.messages
+    .map((msg, index) => ({ msg, index }))
+    .filter(({ msg }) => msg.role === 'user')
+    .map(({ msg, index }) => ({ index, content: (msg.content || '').trim() }))
+)
+
+/** 当前视口内高亮的提问消息索引 */
+const activeQuestionIndex = ref<number>(-1)
+
+/** 跳转到指定消息（右侧导航点击） */
+function scrollToMessage(msgIndex: number): void {
+  const container = chatAreaRef.value
+  const el = userMsgRefs.get(msgIndex)
+  if (!container || !el) {
+    return
+  }
+  // 跳转到历史提问时禁用自动下滚，避免流式生成打断定位
+  userScrolledUp.value = true
+  const top = container.scrollTop + (el.getBoundingClientRect().top - container.getBoundingClientRect().top) - 16
+  container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+  activeQuestionIndex.value = msgIndex
+}
+
+/** rAF 节流句柄，避免滚动时高频计算高亮项 */
+let activeQuestionRaf = 0
+
+/** 根据滚动位置计算当前高亮的提问项 */
+function updateActiveQuestion(): void {
+  const container = chatAreaRef.value
+  if (!container) {
+    return
+  }
+  const containerTop = container.getBoundingClientRect().top
+  let active = -1
+  for (const { index } of userQuestions.value) {
+    const el = userMsgRefs.get(index)
+    if (!el) {
+      continue
+    }
+    // 提问顶部越过容器顶部一定阈值即视为“进入该段落”
+    if (el.getBoundingClientRect().top - containerTop <= 80) {
+      active = index
+    } else {
+      break
+    }
+  }
+  if (active === -1 && userQuestions.value.length > 0) {
+    active = userQuestions.value[0].index
+  }
+  activeQuestionIndex.value = active
+}
+
+/** rAF 节流包装：滚动/更新时调用 */
+function scheduleActiveQuestionUpdate(): void {
+  if (activeQuestionRaf) {
+    return
+  }
+  activeQuestionRaf = requestAnimationFrame(() => {
+    activeQuestionRaf = 0
+    updateActiveQuestion()
+  })
+}
+
 /** 判断当前滚动位置是否在底部附近 */
 function isNearBottom(): boolean {
   const el = chatAreaRef.value
@@ -2000,6 +2119,7 @@ function handleScroll(): void {
   } else {
     userScrolledUp.value = true
   }
+  scheduleActiveQuestionUpdate()
 }
 
 /** 窗口缩放处理 */
@@ -2023,7 +2143,10 @@ watch(
   ],
   () => {
     scrollToBottom()
-    nextTick(scanAndMountEChartsBlocks)
+    nextTick(() => {
+      scanAndMountEChartsBlocks()
+      updateActiveQuestion()
+    })
   }
 )
 
@@ -2053,6 +2176,10 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   chatAreaEl?.removeEventListener('scroll', handleScroll)
+  if (activeQuestionRaf) {
+    cancelAnimationFrame(activeQuestionRaf)
+    activeQuestionRaf = 0
+  }
   chartInstances.forEach(instance => instance.dispose())
   chartInstances.clear()
   echartsInstances.forEach(instance => instance.dispose())
@@ -2084,6 +2211,191 @@ onUnmounted(() => {
   background: var(--theme-bg);
 }
 
+/* 消息区容器：撑满输入区上方空间，作为悬浮按钮的定位参照 */
+.chat-main {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 回到底部悬浮按钮：锚定在消息区底部（即输入框上方）居中 */
+.scroll-to-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 50%;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.scroll-to-bottom:hover {
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+}
+
+.scroll-to-bottom svg {
+  width: 18px;
+  height: 18px;
+}
+
+.scroll-btn-fade-enter-active,
+.scroll-btn-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.scroll-btn-fade-enter-from,
+.scroll-btn-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+
+/* 右侧快速导航栏：默认竖排圆点，悬浮整条时一次性展开为完整提问列表。
+   关键：展开由容器整体 :hover 触发（而非单个标记），容器只增不减，
+   指针始终落在容器内，避免逐项悬浮时因高度变化导致的抖动。 */
+.chat-nav {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  max-height: 78%;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* 悬浮整条导航 → 变为浮层卡片 */
+.chat-nav:hover {
+  background: var(--theme-surface);
+  border-color: var(--theme-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+}
+
+.chat-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.chat-nav:hover .chat-nav__item:hover {
+  background: var(--theme-surface-hover);
+}
+
+.chat-nav:hover .chat-nav__item.is-active {
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+}
+
+/* 标记点：默认短横线，激活/悬浮所在项时加粗变色 */
+.chat-nav__dot {
+  flex-shrink: 0;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--theme-border-strong);
+  transition: width 0.15s ease, background 0.15s ease;
+}
+
+.chat-nav__item:hover .chat-nav__dot,
+.chat-nav__item.is-active .chat-nav__dot {
+  width: 22px;
+  background: var(--main-orange);
+}
+
+/* 提问内容：默认在宽、高两个方向都收起（否则文字仍会撑开行高），
+   悬浮整条导航时统一展开为列表行 */
+.chat-nav__label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 0;
+  max-height: 0;
+  min-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  text-align: left;
+  transition: width 0.18s ease, max-height 0.18s ease, opacity 0.18s ease;
+}
+
+.chat-nav:hover .chat-nav__label {
+  width: 210px;
+  max-height: 44px;
+  opacity: 1;
+}
+
+.chat-nav__seq {
+  flex-shrink: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+  color: var(--main-orange);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.chat-nav__item.is-active .chat-nav__seq {
+  background: var(--main-orange);
+  color: #fff;
+}
+
+/* 提问文本：最多显示 2 行，超出省略 */
+.chat-nav__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--theme-text);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.chat-nav-fade-enter-active,
+.chat-nav-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.chat-nav-fade-enter-from,
+.chat-nav-fade-leave-to {
+  opacity: 0;
+}
+
 /* 统一的行内 SVG 图标：随文字大小缩放，替代 emoji 作为功能图标 */
 .icon-inline {
   width: 1em;
@@ -2102,6 +2414,7 @@ onUnmounted(() => {
 
 .chat-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px 24px;
   display: flex;

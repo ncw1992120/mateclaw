@@ -104,6 +104,8 @@ export default {
     viewDashboard: '查看完整仪表盘',
     stop: '停止',
     generating: '正在生成…',
+    scrollToBottom: '回到底部',
+    questionNav: '提问导航',
     copy: '复制',
     copied: '已复制',
     regenerate: '重新生成',

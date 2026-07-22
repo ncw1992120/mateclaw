@@ -102,6 +102,8 @@ export default {
     viewDashboard: 'View Full Dashboard',
     stop: 'Stop',
     generating: 'Generating…',
+    scrollToBottom: 'Scroll to bottom',
+    questionNav: 'Question navigation',
     copy: 'Copy',
     copied: 'Copied',
     regenerate: 'Regenerate',
