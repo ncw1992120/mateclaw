@@ -10,8 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import vip.mate.agent.context.ChatOrigin;
-import vip.mate.agent.context.ChatOriginHolder;
+import vip.mate.tool.builtin.ToolExecutionContext;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
@@ -400,8 +399,10 @@ public class AloudataCallTool {
             Long datasourceId = input.getLong("datasourceId");
 
             // 解析数据源白名单（含单值自动注入、可用列表引导）
-            ChatOrigin dsOrigin = ChatOriginHolder.get();
-            String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+            // conversationId 从 ToolExecutionContext 读取：该 ThreadLocal 由 ToolExecutionExecutor
+            // 在工具执行线程本身上 set，内联与并行批（虚拟线程）路径均可靠。
+            // 不能用 ChatOriginHolder——它在并行批次的虚拟线程上是 EMPTY，会导致白名单解析落空。
+            String dsConvId = ToolExecutionContext.conversationId();
             ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
             if (dsScope.hasError()) {
                 return error(dsScope.getErrorMessage());
@@ -591,8 +592,10 @@ public class AloudataCallTool {
             Long datasourceId = input.getLong("datasourceId");
 
             // 解析数据源白名单（含单值自动注入、可用列表引导）
-            ChatOrigin dsOrigin = ChatOriginHolder.get();
-            String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+            // conversationId 从 ToolExecutionContext 读取：该 ThreadLocal 由 ToolExecutionExecutor
+            // 在工具执行线程本身上 set，内联与并行批（虚拟线程）路径均可靠。
+            // 不能用 ChatOriginHolder——它在并行批次的虚拟线程上是 EMPTY，会导致白名单解析落空。
+            String dsConvId = ToolExecutionContext.conversationId();
             ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
             if (dsScope.hasError()) {
                 return error(dsScope.getErrorMessage());

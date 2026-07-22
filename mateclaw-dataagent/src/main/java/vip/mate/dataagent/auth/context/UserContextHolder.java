@@ -8,7 +8,12 @@ package vip.mate.dataagent.auth.context;
  */
 public final class UserContextHolder {
 
-    private static final ThreadLocal<UserContext> CONTEXT = new ThreadLocal<>();
+    // 使用 InheritableThreadLocal 替代 ThreadLocal，使子线程（含虚拟线程）自动继承父线程的用户上下文。
+    // Agent 工具在 sseExecutor 线程上单工具内联执行时，ThreadLocal 即可满足；
+    // 但多个 concurrency-safe 工具并行批执行时，ToolExecutionExecutor 通过
+    // CompletableFuture.supplyAsync 派发到虚拟线程（TOOL_EXECUTOR），ThreadLocal 无法跨线程传递，
+    // InheritableThreadLocal 可在虚拟线程创建时从父线程继承值，覆盖并行批场景。
+    private static final InheritableThreadLocal<UserContext> CONTEXT = new InheritableThreadLocal<>();
 
     private UserContextHolder() {
     }

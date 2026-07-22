@@ -7,8 +7,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import vip.mate.agent.context.ChatOrigin;
-import vip.mate.agent.context.ChatOriginHolder;
+import vip.mate.tool.builtin.ToolExecutionContext;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
@@ -206,8 +205,9 @@ public class DatasourceQueryTool {
         Long datasourceId = input.getLong("datasourceId");
 
         // 解析数据源白名单（含单值自动注入、可用列表引导）
-        ChatOrigin dsOrigin = ChatOriginHolder.get();
-        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        // conversationId 从 ToolExecutionContext 读取：由 ToolExecutionExecutor 在工具执行线程本身
+        // set，内联与并行批（虚拟线程）路径均可靠。ChatOriginHolder 在并行虚拟线程上为 EMPTY，会使白名单落空。
+        String dsConvId = ToolExecutionContext.conversationId();
         ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
         if (dsScope.hasError()) {
             return error(dsScope.getErrorMessage());
@@ -253,8 +253,9 @@ public class DatasourceQueryTool {
         Long datasourceId = input.getLong("datasourceId");
 
         // 解析数据源白名单（含单值自动注入、可用列表引导）
-        ChatOrigin dsOrigin = ChatOriginHolder.get();
-        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        // conversationId 从 ToolExecutionContext 读取：由 ToolExecutionExecutor 在工具执行线程本身
+        // set，内联与并行批（虚拟线程）路径均可靠。ChatOriginHolder 在并行虚拟线程上为 EMPTY，会使白名单落空。
+        String dsConvId = ToolExecutionContext.conversationId();
         ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
         if (dsScope.hasError()) {
             return error(dsScope.getErrorMessage());
@@ -400,8 +401,9 @@ public class DatasourceQueryTool {
         Long datasourceId = input.getLong("datasourceId");
 
         // 解析数据源白名单（含单值自动注入、可用列表引导）
-        ChatOrigin dsOrigin = ChatOriginHolder.get();
-        String dsConvId = dsOrigin != null ? dsOrigin.conversationId() : null;
+        // conversationId 从 ToolExecutionContext 读取：由 ToolExecutionExecutor 在工具执行线程本身
+        // set，内联与并行批（虚拟线程）路径均可靠。ChatOriginHolder 在并行虚拟线程上为 EMPTY，会使白名单落空。
+        String dsConvId = ToolExecutionContext.conversationId();
         ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
         if (dsScope.hasError()) {
             return error(dsScope.getErrorMessage());
@@ -516,15 +518,15 @@ public class DatasourceQueryTool {
     /**
      * 读取当前会话的数据源白名单。
      * <p>
-     * 通过 {@link ChatOriginHolder} 拿到当前 conversationId，再从
+     * 通过 {@link ToolExecutionContext} 拿到当前 conversationId，再从
      * {@link DataAgentChatScopeContext} 中取出前端勾选时写入的白名单。
      * 当返回空集合时表示未配置白名单（不做约束）。
      */
     private Set<Long> currentDatasourceWhitelist() {
-        ChatOrigin origin = ChatOriginHolder.get();
-        if (origin == null || origin.conversationId() == null || origin.conversationId().isBlank()) {
+        String conversationId = ToolExecutionContext.conversationId();
+        if (conversationId == null || conversationId.isBlank()) {
             return Set.of();
         }
-        return scopeContext.getAllowedDatasourceIds(origin.conversationId());
+        return scopeContext.getAllowedDatasourceIds(conversationId);
     }
 }
