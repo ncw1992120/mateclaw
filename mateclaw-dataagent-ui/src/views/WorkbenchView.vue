@@ -173,6 +173,17 @@
           </div>
         </div>
         <template v-if="!historyCollapsed">
+          <!-- 搜索框 -->
+          <div class="history-search">
+            <el-input
+              v-model="conversationSearchKeyword"
+              :placeholder="t('conversation.searchPlaceholder')"
+              clearable
+              size="small"
+              class="history-search-input"
+              :prefix-icon="Search"
+            />
+          </div>
           <!-- 历史对话列表（仅问数页面展示） -->
           <template v-if="activeSidebarItem === 'qa'">
             <div class="history-list">
@@ -270,6 +281,9 @@
               <div v-if="chatStore.conversations.length === 0" class="history-empty">
                 {{ t('conversation.history') }}
               </div>
+              <div v-else-if="groupedConversations.length === 0 && conversationSearchKeyword" class="history-empty">
+                {{ t('conversation.noSearchResult') }}
+              </div>
             </div>
           </template>
         </template>
@@ -353,7 +367,7 @@ import ChatView from '@/views/ChatView.vue'
 import DashboardListView from '@/views/insight/DashboardListView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
-import { OfficeBuilding, Check } from '@element-plus/icons-vue'
+import { OfficeBuilding, Check, Search } from '@element-plus/icons-vue'
 import type { Conversation, Workspace } from '@/types'
 
 /** 左侧菜单可选取值（一级菜单 key） */
@@ -394,6 +408,9 @@ const editingConvId = ref<string | null>(null)
 
 /** 重命名输入框的临时值 */
 const editingTitle = ref('')
+
+/** 历史会话搜索关键词 */
+const conversationSearchKeyword = ref('')
 
 /** 当前选中的侧边栏菜单项（刷新后保留） */
 const activeSidebarItem = usePersistedRef<(typeof SIDEBAR_ITEM_KEYS)[number]>(
@@ -481,7 +498,7 @@ const availableModels = computed(() => {
   )
 })
 
-/** 按最后活跃时间分组后的历史会话列表 */
+/** 按最后活跃时间分组后的历史会话列表（支持搜索过滤） */
 const groupedConversations = computed<ConversationGroup[]>(() => {
   const groupMap = new Map<string, ConversationGroup>()
   const now = new Date()
@@ -490,7 +507,17 @@ const groupedConversations = computed<ConversationGroup[]>(() => {
   const sevenDaysStart = todayStart - 6 * DAY_MILLISECONDS
   const thirtyDaysStart = todayStart - 29 * DAY_MILLISECONDS
 
-  const sortedConversations = [...chatStore.conversations].sort((a, b) => getConversationTime(b) - getConversationTime(a))
+  let sourceConversations = [...chatStore.conversations]
+
+  // 搜索过滤：按标题关键词匹配
+  const keyword = conversationSearchKeyword.value.trim().toLowerCase()
+  if (keyword) {
+    sourceConversations = sourceConversations.filter(conv =>
+      (conv.title || '').toLowerCase().includes(keyword)
+    )
+  }
+
+  const sortedConversations = sourceConversations.sort((a, b) => getConversationTime(b) - getConversationTime(a))
   const pinnedItems = sortedConversations.filter(conv => isConversationPinned(conv))
 
   sortedConversations
@@ -1457,6 +1484,35 @@ onBeforeUnmount(() => {
 .history-sidebar.collapsed .history-header {
   padding: 10px 8px;
   justify-content: center;
+}
+
+/* 搜索框 */
+.history-search {
+  padding: 8px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.history-search-input :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  background: var(--theme-surface-hover);
+  box-shadow: none !important;
+}
+
+.history-search-input :deep(.el-input__wrapper:hover) {
+  box-shadow: none !important;
+}
+
+.history-search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--main-orange) 40%, transparent) !important;
+}
+
+.history-search-input :deep(.el-input__prefix) {
+  color: var(--muted);
+}
+
+.history-search-input :deep(.el-input__clear) {
+  color: var(--muted);
 }
 
 /* 工作区切换器 */

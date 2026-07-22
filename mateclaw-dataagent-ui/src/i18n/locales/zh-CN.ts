@@ -705,6 +705,8 @@ export default {
   conversation: {
     newChat: '新对话',
     history: '历史对话',
+    searchPlaceholder: '搜索对话',
+    noSearchResult: '未找到相关对话',
     untitled: '未命名对话',
     messages: '条消息',
     delete: '删除对话',
