@@ -2570,6 +2570,9 @@ onUnmounted(() => {
 .user-bubble {
   background: var(--main-orange);
   color: #fff;
+  /* 保留用户输入中的换行（Ctrl+Enter），同时正常自动折行 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .msg-text {

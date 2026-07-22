@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
@@ -91,6 +91,22 @@ export const useChatStore = defineStore('chat', () => {
     if (active) next.add(convId)
     else next.delete(convId)
     streamingConversations.value = next
+  }
+
+  /**
+   * 将会话的最后活跃时间刷新为当前时间，使左侧会话列表按更新时间即时重新排序。
+   * 仅更新本地已存在的会话；新会话由 fetchConversations 拉取后自动置顶。
+   */
+  function touchConversationActiveTime(convId: string): void {
+    if (!convId) return
+    const idx = conversations.value.findIndex(c => c.conversationId === convId)
+    if (idx !== -1) {
+      // 用新对象替换该项：既更新时间，又通过数组变更确保依赖此列表的计算属性一定重算
+      conversations.value.splice(idx, 1, {
+        ...conversations.value[idx],
+        lastActiveTime: new Date().toISOString(),
+      })
+    }
   }
 
   /** Last SSE event id seen on this connection — used for reconnect dedup */
@@ -580,6 +596,9 @@ export const useChatStore = defineStore('chat', () => {
       content: message,
       timestamp: Date.now(),
     })
+
+    // 发送后立即刷新会话活跃时间，使左侧列表按更新时间即时置顶（新会话由末尾 fetchConversations 处理）
+    touchConversationActiveTime(convId)
 
     const assistantMessage: ChatMessage = {
       role: 'assistant',
@@ -1263,3 +1282,8 @@ export const useChatStore = defineStore('chat', () => {
     isConversationStreaming: (convId: string): boolean => streamingConversations.value.has(convId),
   }
 })
+
+// 开发环境下让本 store 的改动可热更新，避免 store 逻辑修改后仍运行旧实例（需手动整页刷新才生效）
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useChatStore, import.meta.hot))
+}
