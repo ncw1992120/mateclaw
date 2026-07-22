@@ -234,6 +234,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 scopeContext.clear(conversationId);
                 conversationService.updateStreamStatus(conversationId, "idle");
                 completeEmitterQuietly(emitter, emitterDone);
+            } finally {
+                // sseExecutor 线程池复用线程，必须清理 InheritableThreadLocal 防止下一个请求继承到上一个用户的身份
+                UserContextHolder.clear();
             }
         });
 
