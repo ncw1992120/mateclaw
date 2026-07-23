@@ -304,8 +304,7 @@ class WebChatStreamE2ETest {
         assertThat(err.data).contains("Invalid API Key");
 
         // No conversation was created → no rows anywhere. The bogus key never
-        // resolves a channel, so the channelId passed here is irrelevant; we just
-        // need a conversationId that maps to no persisted row.
+        // resolves a channel, so the channelId passed here is irrelevant.
         assertThat(countAssistantMessages(
                 WebChatController.deriveConversationId(-1L, "vBad", null))).isZero();
     }
