@@ -170,7 +170,7 @@ public class WebChatController {
             sendErrorAndComplete(emitter, ex.getMessage());
             return emitter;
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, effectiveSessionId);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, effectiveSessionId);
         // Server-issued, unforgeable proof that this caller owns this visitorId. Returned in the
         // meta event below; the session-management endpoints require it back (see verifyVisitorToken).
         final String visitorToken = computeVisitorToken(visitorTokenSecret, channel.getId(), visitorId);
@@ -201,7 +201,7 @@ public class WebChatController {
                 Long webWsId = webAgent != null ? webAgent.getWorkspaceId() : 1L;
                 var conv = conversationService.getOrCreateWebchatConversation(
                         conversationId, resolvedAgentId, webchatUsername(visitorId), webWsId,
-                        effectiveSessionId, null, channel.getId());
+                        effectiveSessionId);
 
                 // 保存用户消息（含访客本轮引用的附件）。附件元数据一律服务端按 fileId 回查，
                 // 不信客户端传入；path 用于 Agent 侧工具读取，对外消息视图会被剥离。
@@ -633,7 +633,7 @@ public class WebChatController {
             return R.fail(400, "title 不合法（1-100 字）");
         }
 
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sessionId);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sessionId);
         String owner = webchatUsername(visitorId);
 
         // Idempotency: existing thread is returned as-is. Title and every other
@@ -648,7 +648,7 @@ public class WebChatController {
 
         // Quota: count empty threads this visitor already holds on this channel.
         // loadVisitorSessions already scopes to (channel prefix ∩ visitor owner).
-        long emptyCount = loadVisitorSessions(channel.getId(), apiKey, visitorId).stream()
+        long emptyCount = loadVisitorSessions(channel.getId(), visitorId).stream()
                 .filter(s -> s.getMessageCount() == null || s.getMessageCount() == 0)
                 .count();
         if (emptyCount >= MAX_EMPTY_SESSIONS_PER_VISITOR) {
@@ -657,7 +657,7 @@ public class WebChatController {
         }
 
         ConversationEntity conv = conversationService.getOrCreateWebchatConversation(
-                conversationId, agentId, owner, channel.getWorkspaceId(), sessionId, title, channel.getId());
+                conversationId, agentId, owner, channel.getWorkspaceId(), sessionId, title);
         audit(channel, visitorId, "webchat.create-session", conversationId,
                 "{\"sessionId\":\"" + sessionId + "\",\"idempotent\":false}");
         return R.ok(buildCreateSessionResponse(conv, sessionId, channel.getId(), visitorId));
@@ -710,7 +710,7 @@ public class WebChatController {
         if (!verifyVisitorToken(visitorTokenSecret, channel.getId(), visitorId, visitorToken)) {
             return R.fail(401, "Invalid or missing visitor token");
         }
-        return R.ok(loadVisitorSessions(channel.getId(), apiKey, visitorId, includeArchived));
+        return R.ok(loadVisitorSessions(channel.getId(), visitorId, includeArchived));
     }
 
     /**
@@ -783,7 +783,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -822,7 +822,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -861,7 +861,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -880,15 +880,15 @@ public class WebChatController {
      * compact view. Sorted as {@code listConversations} returns them (pinned
      * desc, last-active desc). Shared by the list and paginated endpoints.
      * <p>
-     * Enumeration is keyed by the visitor's username plus the channel prefix
-     * ({@code webchat:<key8>:}) rather than the full conversationId prefix, so it
-     * still catches threads whose conversationId hashed (long visitorId +
-     * sessionId). The sessionId is read from the persisted {@code webchatSessionId}
-     * column (set on creation) and only falls back to parsing the conversationId
+     * Enumeration is keyed by the visitor's username plus the channel-scoped
+     * prefix ({@code webchat:<channelId>:}), so it isolates this channel's
+     * threads from other channels sharing the same visitorId (#558). The
+     * sessionId is read from the persisted {@code webchatSessionId} column
+     * (set on creation) and only falls back to parsing the conversationId
      * for legacy rows created before that column existed.
      */
-    private List<WebChatSessionView> loadVisitorSessions(Long channelId, String apiKey, String visitorId) {
-        return loadVisitorSessions(channelId, apiKey, visitorId, false);
+    private List<WebChatSessionView> loadVisitorSessions(Long channelId, String visitorId) {
+        return loadVisitorSessions(channelId, visitorId, false);
     }
 
     /**
@@ -899,40 +899,23 @@ public class WebChatController {
      * against the "≤ 5 empty threads" quota (the visitor already declared
      * they're done with them).
      */
-    private List<WebChatSessionView> loadVisitorSessions(Long channelId, String apiKey, String visitorId,
+    private List<WebChatSessionView> loadVisitorSessions(Long channelId, String visitorId,
                                                          boolean includeArchived) {
         String base = deriveConversationId(channelId, visitorId, null);
-        String legacyBase = legacyConversationId(apiKey, visitorId, null);
         String channelPrefix = "webchat:" + channelId + ":";
         String owner = webchatUsername(visitorId);
-        // Channel isolation (#558): the DB query returns rows whose channel_id
-        // matches exactly (fully isolated) PLUS rows where channel_id IS NULL
-        // (pre-fix rows whose channel could not be reconstructed). The NULL rows
-        // are inherently shared across channels that collided under the old key8
-        // derivation and cannot be split retroactively, so they are kept visible
-        // by a literal startsWith against this visitor's own legacy base — they
-        // don't leak the *new* (channel-scoped) rows, which the DB already gated.
-        return conversationService.listWebchatConversations(owner, channelId).stream()
-                .filter(c -> {
-                    if (c.getConversationId() == null) {
-                        return false;
-                    }
-                    // channel_id present → already channel-scoped by the query; accept.
-                    if (c.getChannelId() != null) {
-                        return true;
-                    }
-                    // pre-fix row (channel_id NULL): accept only if it belongs to this
-                    // visitor's namespace under either the current or legacy derivation.
-                    return c.getConversationId().startsWith(channelPrefix)
-                            || c.getConversationId().startsWith(legacyBase + ":")
-                            || c.getConversationId().equals(legacyBase)
-                            || c.getConversationId().equals(base);
-                })
+        // Query is scoped to this visitor's own rows only (no system rows), so
+        // listing a visitor's threads doesn't load every IM/cron conversation.
+        // The channel prefix is matched in-memory with a literal startsWith so a
+        // '_' / '%' in the channelId can't act as a LIKE wildcard.
+        return conversationService.listWebchatConversations(owner).stream()
+                .filter(c -> c.getConversationId() != null
+                        && c.getConversationId().startsWith(channelPrefix))
                 .filter(c -> includeArchived
                         || c.getArchived() == null
                         || c.getArchived() == 0)
                 .map(c -> {
-                    String sid = recoverSessionId(c, base, legacyBase);
+                    String sid = recoverSessionId(c, base);
                     return new WebChatSessionView(sid, c.getTitle(), c.getLastActiveTime(),
                             c.getMessageCount(),
                             c.getPinned() != null ? c.getPinned() : 0,
@@ -944,25 +927,21 @@ public class WebChatController {
 
     /**
      * Recover a thread's sessionId. Prefers the persisted column; for legacy
-     * rows (column null) falls back to parsing the non-hashed conversationId
-     * against both the current (channel-scoped) and legacy (apiKey-prefix) bases.
+     * rows (column null) falls back to parsing the non-hashed conversationId.
      * Returns null for the default (no-session) thread and for legacy hashed rows
      * whose sessionId can no longer be reconstructed.
      */
-    private String recoverSessionId(vip.mate.workspace.conversation.model.ConversationEntity c,
-                                    String base, String legacyBase) {
+    private String recoverSessionId(vip.mate.workspace.conversation.model.ConversationEntity c, String base) {
         if (c.getWebchatSessionId() != null) {
             return c.getWebchatSessionId();
         }
         String cid = c.getConversationId();
-        if (cid.equals(base) || cid.equals(legacyBase)) {
+        if (cid.equals(base)) {
             return null;
         }
-        for (String b : new String[]{base, legacyBase}) {
-            String prefix = b + ":";
-            if (cid.startsWith(prefix)) {
-                return cid.substring(prefix.length());
-            }
+        String prefix = base + ":";
+        if (cid.startsWith(prefix)) {
+            return cid.substring(prefix.length());
         }
         return null;
     }
@@ -994,7 +973,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -1048,7 +1027,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -1093,7 +1072,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         // ownsConversation is the existence + ownership guard: an unknown sessionId
         // maps to a conversationId that either doesn't exist or belongs to someone
         // else — both return 404 so the caller can't probe the namespace.
@@ -1169,7 +1148,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return R.fail(404, "Session not found");
         }
@@ -1237,7 +1216,7 @@ public class WebChatController {
             sendErrorAndComplete(emitter, ex.getMessage());
             return emitter;
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             sendErrorAndComplete(emitter, "Session not found");
             return emitter;
@@ -1452,7 +1431,7 @@ public class WebChatController {
             sendErrorAndComplete(emitter, ex.getMessage());
             return emitter;
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             sendErrorAndComplete(emitter, "Session not found");
             return emitter;
@@ -1519,7 +1498,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return R.fail(400, ex.getMessage());
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, vid, sid);
+        String conversationId = deriveConversationId(channel.getId(), vid, sid);
         try {
             WebChatFileService.StagedFile stored = fileService.store(conversationId, file);
             audit(channel, vid, "webchat.upload-file", conversationId,
@@ -1568,7 +1547,7 @@ public class WebChatController {
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().build();
         }
-        String conversationId = resolveSessionConversationId(channel.getId(), apiKey, visitorId, sid);
+        String conversationId = deriveConversationId(channel.getId(), visitorId, sid);
         if (!ownsConversation(conversationId, visitorId)) {
             return ResponseEntity.status(404).build();
         }
@@ -1646,8 +1625,7 @@ public class WebChatController {
         String conversationId = null;
         if (sessionId != null && !sessionId.isBlank()) {
             try {
-                conversationId = resolveSessionConversationId(channel.getId(), apiKey,
-                        normalizeVisitorId(visitorId), normalizeSessionId(sessionId));
+                conversationId = deriveConversationId(channel.getId(),                         normalizeVisitorId(visitorId), normalizeSessionId(sessionId));
             } catch (IllegalArgumentException ex) {
                 return R.fail(400, ex.getMessage());
             }
@@ -1890,57 +1868,15 @@ public class WebChatController {
     /**
      * 由服务端拼装 conversationId，始终钳在 channel + visitor 命名空间内。
      * 绝不接受调用方传入的裸 conversationId。
-     * <p>渠道身份用 {@code channel.getId()}（稳定唯一的 DB 主键）体现。不能用 apiKey 前缀：
-     * 所有生成的 key 共享 11 位前缀 {@code mc_webchat_}，截取短于它的子串（旧实现取前 8 位）
-     * 对每个渠道都是同一个常量 {@code mc_webch}，渠道维度隔离完全失效（#558）。
-     * <p>conversation_id 列为 VARCHAR(64)；当 channelId + visitorId + sessionId 过长导致超出
-     * 列宽时，把可变部分折叠为稳定哈希，并按 channelId 长度自适应截断哈希，保证 id 唯一且有界
-     * （否则 INSERT 会在 /stream 处 500）。
+     * <p>渠道身份用 {@code channelId}（稳定唯一的 DB 主键）体现，与 IM 渠道的
+     * {@code {channelType}:{channelId}:{identifier}} 模式同构（#558）。不能用 apiKey 前缀：
+     * 所有生成的 key 共享 11 位前缀 {@code mc_webchat_}，截取短于它的子串对每个渠道都是
+     * 同一个常量 {@code mc_webch}，渠道维度隔离完全失效。
+     * <p>{@code conversation_id} 列已拓宽为 VARCHAR(128)（V171），{@code webchat:<channelId>:<visitor>[:<session>]}
+     * 在实际输入下不会超限，故不再需要哈希折叠。
      */
     static String deriveConversationId(Long channelId, String visitorId, String sessionId) {
-        String chan = String.valueOf(channelId);
-        String full = "webchat:" + chan + ":" + visitorId + (sessionId != null ? ":" + sessionId : "");
-        if (full.length() <= 64) {
-            return full;
-        }
-        int hashLen = 64 - ("webchat:".length() + chan.length() + ":#".length());
-        String digest = sha256Hex(visitorId + "\0" + (sessionId == null ? "" : sessionId));
-        return "webchat:" + chan + ":#"
-                + digest.substring(0, Math.max(8, Math.min(hashLen, digest.length())));
-    }
-
-    /**
-     * 修复前（#558 之前）的 conversationId 派生规则：取 apiKey 前 8 位当渠道标识。
-     * <p><b>仅为读时兼容保留</b>——用于识别修复前已落盘的 {@code webchat:mc_webch:...} 遗留会话，
-     * 使其仍可被列出与操作（{@link #resolveSessionConversationId} / {@link #loadVisitorSessions}）。
-     * 新会话一律走 {@link #deriveConversationId(Long, String, String)}，切勿用本方法生成新 id。
-     */
-    static String legacyConversationId(String apiKey, String visitorId, String sessionId) {
-        String key8 = apiKey.substring(0, Math.min(8, apiKey.length()));
-        String full = "webchat:" + key8 + ":" + visitorId + (sessionId != null ? ":" + sessionId : "");
-        if (full.length() <= 64) {
-            return full;
-        }
-        return "webchat:" + key8 + ":#"
-                + sha256Hex(visitorId + "\0" + (sessionId == null ? "" : sessionId)).substring(0, 40);
-    }
-
-    /**
-     * 解析会话线程的 conversationId：优先当前（channel 维度）格式；若不存在则回退到修复前的
-     * 遗留格式（{@link #legacyConversationId}）；两者都不存在时返回当前格式（新建会话走新格式）。
-     * <p>这样修复前已落盘的遗留会话仍可被读取/续接而不会「消失」；新会话则按渠道正确隔离。
-     * 遗留的撞键会话（同 visitorId 跨渠道已合并为同一行）无法回溯拆分，维持原状（#558）。
-     */
-    private String resolveSessionConversationId(Long channelId, String apiKey, String visitorId, String sessionId) {
-        String current = deriveConversationId(channelId, visitorId, sessionId);
-        if (conversationService.conversationExists(current)) {
-            return current;
-        }
-        String legacy = legacyConversationId(apiKey, visitorId, sessionId);
-        if (!legacy.equals(current) && conversationService.conversationExists(legacy)) {
-            return legacy;
-        }
-        return current;
+        return "webchat:" + channelId + ":" + visitorId + (sessionId != null ? ":" + sessionId : "");
     }
 
     /**

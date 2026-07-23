@@ -120,15 +120,14 @@ class WebChatVisitorTokenTest {
         assertFalse(WebChatController.verifyVisitorTokenSignature(SECRET, CHANNEL, VISITOR, tampered));
     }
 
-    // ============ conversationId / username 边界（避免溢出 VARCHAR(64) → /stream 500）============
+    // ============ conversationId / username 边界（conversation_id 已拓宽为 VARCHAR(128)，#558）============
 
     @Test
-    void deriveConversationId_staysWithin64_forLongInputs() {
-        String id = WebChatController.deriveConversationId(9147001L, "v".repeat(120), "s".repeat(64));
-        assertTrue(id.length() <= 64, "conversationId must fit VARCHAR(64), got " + id.length());
-        // a legitimate 64-char sessionId alone already overflows the old scheme
-        String id2 = WebChatController.deriveConversationId(9147001L, "alice", "s".repeat(64));
-        assertTrue(id2.length() <= 64, "conversationId must fit VARCHAR(64), got " + id2.length());
+    void deriveConversationId_fits128_forLongInputs() {
+        // V171 widened conversation_id to VARCHAR(128); the channel-scoped format
+        // webchat:<channelId>:<visitor>[:<session>] no longer hashes.
+        String id = WebChatController.deriveConversationId(9147001L, "v".repeat(60), "s".repeat(50));
+        assertTrue(id.length() <= 128, "conversationId must fit VARCHAR(128), got " + id.length());
     }
 
     @Test

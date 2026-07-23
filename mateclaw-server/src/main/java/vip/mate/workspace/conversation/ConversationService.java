@@ -347,8 +347,22 @@ public class ConversationService {
             conv.setMessageCount(0);
             conv.setLastActiveTime(LocalDateTime.now());
             conversationMapper.insert(conv);
-        } else if (!conv.getUsername().equals(username)) {
-            throw new IllegalArgumentException("无权操作该会话");
+        } else {
+            // Defense-in-depth workspace isolation: an existing row whose owning
+            // workspace differs from the caller's means two workspaces resolved to
+            // the same conversationId. With channel-scoped ids this should no longer
+            // happen for channel traffic; refuse rather than silently write the
+            // caller's message into another workspace's conversation. Also closes the
+            // web-console bare-"default" cross-workspace edge case.
+            if (workspaceId != null && conv.getWorkspaceId() != null
+                    && !conv.getWorkspaceId().equals(workspaceId)) {
+                log.warn("[Conversation] Cross-workspace conversationId collision: id={} owner={} requested={}",
+                        conversationId, conv.getWorkspaceId(), workspaceId);
+                throw new IllegalArgumentException("会话不属于当前工作区");
+            }
+            if (!conv.getUsername().equals(username)) {
+                throw new IllegalArgumentException("无权操作该会话");
+            }
         }
         return conv;
     }
@@ -363,7 +377,7 @@ public class ConversationService {
     public ConversationEntity getOrCreateWebchatConversation(String conversationId, Long agentId,
                                                              String username, Long workspaceId,
                                                              String sessionId) {
-        return getOrCreateWebchatConversation(conversationId, agentId, username, workspaceId, sessionId, null, null);
+        return getOrCreateWebchatConversation(conversationId, agentId, username, workspaceId, sessionId, null);
     }
 
     /**
@@ -381,22 +395,6 @@ public class ConversationService {
     public ConversationEntity getOrCreateWebchatConversation(String conversationId, Long agentId,
                                                              String username, Long workspaceId,
                                                              String sessionId, String title) {
-        return getOrCreateWebchatConversation(conversationId, agentId, username, workspaceId, sessionId, title, null);
-    }
-
-    /**
-     * WebChat get-or-create that also persists the owning {@code channelId} on
-     * insert (see V171, #558), so /sessions can filter by channel exactly
-     * instead of matching the collision-prone conversationId prefix.
-     * <p>
-     * {@code channelId} is written only when the row is first created; an
-     * existing row is left as-is (its channel, or lack of one for pre-fix
-     * rows, is never retroactively rewritten here).
-     */
-    @Transactional
-    public ConversationEntity getOrCreateWebchatConversation(String conversationId, Long agentId,
-                                                             String username, Long workspaceId,
-                                                             String sessionId, String title, Long channelId) {
         boolean existed = conversationMapper.selectOne(new LambdaQueryWrapper<ConversationEntity>()
                 .eq(ConversationEntity::getConversationId, conversationId)) != null;
         ConversationEntity conv = getOrCreateConversation(conversationId, agentId, username, workspaceId);
@@ -408,10 +406,6 @@ public class ConversationService {
             }
             if (title != null && !title.isBlank()) {
                 conv.setTitle(title.trim());
-                dirty = true;
-            }
-            if (channelId != null && conv.getChannelId() == null) {
-                conv.setChannelId(channelId);
                 dirty = true;
             }
             if (dirty) {
@@ -435,25 +429,6 @@ public class ConversationService {
         return conversationMapper.selectList(new LambdaQueryWrapper<ConversationEntity>()
                 .eq(ConversationEntity::getUsername, username)
                 .isNull(ConversationEntity::getParentConversationId)
-                .orderByDesc(ConversationEntity::getPinned)
-                .orderByDesc(ConversationEntity::getLastActiveTime));
-    }
-
-    /**
-     * Channel-scoped variant of {@link #listWebchatConversations(String)} (#558).
-     * Returns rows for this visitor whose {@code channel_id} matches exactly,
-     * <em>plus</em> pre-fix rows where {@code channel_id IS NULL} (which could
-     * not be reconstructed). The caller must still apply a legacy-prefix
-     * {@code startsWith} filter in-memory on those NULL rows, since their
-     * channel can no longer be determined and they are inherently shared across
-     * channels that collided under the old key8 derivation.
-     */
-    public List<ConversationEntity> listWebchatConversations(String username, Long channelId) {
-        return conversationMapper.selectList(new LambdaQueryWrapper<ConversationEntity>()
-                .eq(ConversationEntity::getUsername, username)
-                .isNull(ConversationEntity::getParentConversationId)
-                .and(w -> w.eq(ConversationEntity::getChannelId, channelId)
-                        .or().isNull(ConversationEntity::getChannelId))
                 .orderByDesc(ConversationEntity::getPinned)
                 .orderByDesc(ConversationEntity::getLastActiveTime));
     }

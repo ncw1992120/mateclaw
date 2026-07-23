@@ -23,21 +23,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * characters of its apiKey. All generated keys share the 11-char prefix
  * {@code mc_webchat_}, so the 8-char slice was the constant {@code mc_webch} for
  * every channel — two channels with the same visitorId derived the SAME
- * conversationId, and their sessions collided / cross-leaked in
- * {@code listSessions}.
+ * conversationId, and their sessions cross-leaked in {@code listSessions}.
  * <p>
- * The fix (V171 {@code channel_id} column) persists the owning channel on each
- * webchat row, so {@code listSessions} filters by {@code channel_id} exactly.
- * <p>
- * Two isolation dimensions are covered:
- * <ol>
- *   <li><b>Channel-scoped rows</b> (channel_id persisted): strictly isolated —
- *       channel A never sees channel B's sessions. This is the regression that
- *       the pre-fix code failed.</li>
- *   <li><b>Pre-fix collided rows</b> (channel_id NULL, shared legacy cid): these
- *       cannot be split retroactively and remain visible across channels that
- *       collided. This is an explicitly documented limitation, not a bug.</li>
- * </ol>
+ * The fix scopes the conversationId by {@code channel.getId()} (the stable DB
+ * primary key), mirroring the IM-channel fix in {@code e294b325}. Two channels
+ * sharing an apiKey prefix now derive distinct ids.
  */
 @SpringBootTest(
         classes = MateClawApplication.class,
@@ -79,23 +69,13 @@ class WebChatChannelIsolationTest {
         seedChannel(CHANNEL_B, API_KEY_B);
 
         String owner = WebChatController.webchatUsername(VISITOR);
-        // Channel-scoped rows (channel_id persisted) — the new, correctly-isolated path.
-        // Seeded through the channelId-aware overload exactly like createSession/chatStream do.
+        // Channel A gets two sessions; Channel B gets one — all under the same visitor.
         conversationService.getOrCreateWebchatConversation(
-                WebChatController.deriveConversationId(CHANNEL_A, VISITOR, "a-s1"),
-                null, owner, 1L, "a-s1", null, CHANNEL_A);
+                WebChatController.deriveConversationId(CHANNEL_A, VISITOR, "a-s1"), null, owner, 1L, "a-s1");
         conversationService.getOrCreateWebchatConversation(
-                WebChatController.deriveConversationId(CHANNEL_A, VISITOR, "a-s2"),
-                null, owner, 1L, "a-s2", null, CHANNEL_A);
+                WebChatController.deriveConversationId(CHANNEL_A, VISITOR, "a-s2"), null, owner, 1L, "a-s2");
         conversationService.getOrCreateWebchatConversation(
-                WebChatController.deriveConversationId(CHANNEL_B, VISITOR, "b-s1"),
-                null, owner, 1L, "b-s1", null, CHANNEL_B);
-
-        // One pre-fix collided row: a legacy cid (webchat:mc_webch:...) with channel_id
-        // left NULL. Both channels derive the SAME legacy cid for this visitor, so this
-        // single row is shared — it must stay visible to both (cannot be split).
-        String legacyCid = WebChatController.legacyConversationId(API_KEY_A, VISITOR, "shared-legacy");
-        conversationService.getOrCreateWebchatConversation(legacyCid, null, owner, 1L, null);
+                WebChatController.deriveConversationId(CHANNEL_B, VISITOR, "b-s1"), null, owner, 1L, "b-s1");
     }
 
     private void seedChannel(long id, String apiKey) {
@@ -110,25 +90,25 @@ class WebChatChannelIsolationTest {
     }
 
     @Test
-    @DisplayName("channel-scoped rows are strictly isolated across channels (#558)")
+    @DisplayName("two channels sharing an apiKey prefix isolate their sessions (#558)")
     @SuppressWarnings("unchecked")
-    void channelScopedRowsAreIsolated() {
-        // Channel A lists only its own channel-scoped sessions + the shared legacy row.
+    void channelsWithSharedKeyPrefixAreIsolated() {
+        // Channel A lists only its own sessions.
         R<List<WebChatSessionView>> ra = (R<List<WebChatSessionView>>) (R<?>)
                 controller.listSessions(API_KEY_A, tokenFor(CHANNEL_A), VISITOR, false);
         assertThat(ra.getCode()).isEqualTo(200);
         assertThat(ra.getData()).extracting(WebChatSessionView::getSessionId)
-                .containsExactlyInAnyOrder("a-s1", "a-s2", "shared-legacy");
-        // Critically: channel B's b-s1 does NOT leak into channel A.
+                .containsExactlyInAnyOrder("a-s1", "a-s2");
+        // Critically: channel B's session does NOT leak into channel A.
         assertThat(ra.getData()).extracting(WebChatSessionView::getSessionId)
                 .doesNotContain("b-s1");
 
-        // Channel B lists only its own + the same shared legacy row.
+        // Channel B lists only its own.
         R<List<WebChatSessionView>> rb = (R<List<WebChatSessionView>>) (R<?>)
                 controller.listSessions(API_KEY_B, tokenFor(CHANNEL_B), VISITOR, false);
         assertThat(rb.getCode()).isEqualTo(200);
         assertThat(rb.getData()).extracting(WebChatSessionView::getSessionId)
-                .containsExactlyInAnyOrder("b-s1", "shared-legacy");
+                .containsExactly("b-s1");
         assertThat(rb.getData()).extracting(WebChatSessionView::getSessionId)
                 .doesNotContain("a-s1", "a-s2");
     }
@@ -142,20 +122,5 @@ class WebChatChannelIsolationTest {
         assertThat(cidA).isNotEqualTo(cidB);
         assertThat(cidA).startsWith("webchat:" + CHANNEL_A + ":");
         assertThat(cidB).startsWith("webchat:" + CHANNEL_B + ":");
-    }
-
-    @Test
-    @DisplayName("persisted channel_id is recorded on creation")
-    void channelIdIsPersisted() {
-        // Direct DB check: the channel-scoped rows carry the right channel_id.
-        Long aChannel = jdbc.queryForObject(
-                "SELECT channel_id FROM mate_conversation WHERE conversation_id = ?",
-                Long.class, WebChatController.deriveConversationId(CHANNEL_A, VISITOR, "a-s1"));
-        assertThat(aChannel).isEqualTo(CHANNEL_A);
-        Long legacyChannel = jdbc.queryForObject(
-                "SELECT channel_id FROM mate_conversation WHERE conversation_id = ?",
-                Long.class,
-                WebChatController.legacyConversationId(API_KEY_A, VISITOR, "shared-legacy"));
-        assertThat(legacyChannel).isNull(); // pre-fix row, not backfilled
     }
 }
