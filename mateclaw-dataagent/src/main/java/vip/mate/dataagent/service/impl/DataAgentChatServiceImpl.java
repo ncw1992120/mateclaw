@@ -115,6 +115,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         List<Long> longIds = convertToLongIds(datasourceIds);
         // 把"用户勾选数据源"信息写入会话级上下文，供 DatasourceQueryTool 在工具执行阶段读取
         scopeContext.putDatasourceIds(conversationId, longIds);
+        // 将用户原始消息写入会话级上下文，供 Tool 层检索时作为补充关键词，防止 LLM 精简丢失关键信息
+        scopeContext.putOriginalMessage(conversationId, message);
 
         // 注入数据源白名单提示词，并在前端展示原始 message（持久化时仍存原文）
         String llmMessage = decorateMessageWithScope(message, longIds);
@@ -296,6 +298,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         // 将 String 类型的数据源 ID 转换为 Long 类型
         List<Long> longIds = convertToLongIds(datasourceIds);
         scopeContext.putDatasourceIds(conversationId, longIds);
+        // 将用户原始消息写入会话级上下文，供 Tool 层检索时作为补充关键词，防止 LLM 精简丢失关键信息
+        scopeContext.putOriginalMessage(conversationId, message);
         // 同步对话在 HTTP 线程内执行，可直接获取用户上下文
         final String username = workspaceGuard.currentUsername();
         final Long workspaceId = workspaceGuard.currentWorkspaceId();

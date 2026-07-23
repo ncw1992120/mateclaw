@@ -711,6 +711,17 @@ public class AloudataCallTool {
         /* P1: 自动先查业务术语，扩展检索关键词 */
         List<String> expandedKeywords = expandKeywordsFromBusinessTerms(keyword);
 
+        /* 补充用户原话中未被 LLM keyword 覆盖的差集片段，防止 LLM 精简丢失关键限定信息（如括号内的"整体""汇总"等）。
+         * 仅在 keyword 是原话子串时注入差集，避免多指标提问时跨检索串味（如"对比整体和个人"不应同时给两者加分），
+         * 也避免整句废话词污染 should 打分。 */
+        String originalMessage = getOriginalMessage();
+        if (originalMessage != null && !originalMessage.equals(keyword)) {
+            String complement = extractKeywordComplement(originalMessage, keyword);
+            if (complement != null && !complement.isEmpty() && !expandedKeywords.contains(complement)) {
+                expandedKeywords.add(complement);
+            }
+        }
+
         /* 合并关键词为单次检索，避免跨查询 RRF 分数不可比 */
         AloudataSearchResult sr = aloudataSemanticEsService.hybridSearchMerged(datasourceId, expandedKeywords, topK, threshold);
         List<AloudataSearchResult.MetricHit> mergedMetrics = sr.getMetricHits() != null ? new ArrayList<>(sr.getMetricHits()) : new ArrayList<>();
@@ -1208,7 +1219,7 @@ public class AloudataCallTool {
         }
 
         // 去重并限制最多5个关键词，避免过多检索调用
-        return keywords.stream().distinct().limit(5).toList();
+        return keywords.stream().distinct().limit(5).collect(Collectors.toCollection(ArrayList::new));
     }
 
     /**
@@ -1274,6 +1285,45 @@ public class AloudataCallTool {
             }
         }
         return words;
+    }
+
+    /**
+     * 获取当前会话的用户原始消息。
+     * <p>
+     * 通过 ToolExecutionContext 获取 conversationId，再从 scopeContext 读取用户原始消息。
+     * 用于补充检索关键词，防止 LLM 精简丢失关键限定信息。
+     */
+    private String getOriginalMessage() {
+        String conversationId = ToolExecutionContext.conversationId();
+        if (conversationId == null || conversationId.isBlank()) {
+            return null;
+        }
+        return scopeContext.getOriginalMessage(conversationId);
+    }
+
+    /**
+     * 提取用户原话中未被 LLM keyword 覆盖的差集片段。
+     * <p>
+     * 策略：仅在 keyword 是原话子串时生效，从原话中移除 keyword 部分，剩余即为差集。
+     * 差集保留了"整体""汇总"等 LLM 丢弃的限定词，同时避免注入整句导致多指标提问串味。
+     * <p>
+     * 示例：
+     * <ul>
+     *   <li>原话="交易市占率（整体）", keyword="交易市占率" → 差集="（整体）" → IK 分词后 "整体" 参与 should 加分</li>
+     *   <li>原话="对比交易市占率的整体和个人", keyword="交易市占率" → 差集="对比…的整体和个人" → 整体/个人均加分，并列未打破（预期行为，消歧由后续消歧层处理）</li>
+     *   <li>原话="帮我看下保费收入", keyword="场内交易客户数" → keyword 非子串，不注入（避免跨检索串味）</li>
+     * </ul>
+     *
+     * @param originalMessage 用户原始消息
+     * @param keyword         LLM 传入的检索关键词
+     * @return 差集片段；keyword 非原话子串时返回 null
+     */
+    private String extractKeywordComplement(String originalMessage, String keyword) {
+        if (!originalMessage.contains(keyword)) {
+            return null;
+        }
+        String complement = originalMessage.replace(keyword, "").trim();
+        return complement.isEmpty() ? null : complement;
     }
 
     /**

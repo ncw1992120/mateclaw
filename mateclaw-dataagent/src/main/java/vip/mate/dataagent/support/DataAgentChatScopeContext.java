@@ -28,6 +28,12 @@ public class DataAgentChatScopeContext {
     /** conversationId -> allowed datasourceId 集合（不可变） */
     private final Map<String, Set<Long>> datasourceIdScopes = new ConcurrentHashMap<>();
 
+    /** conversationId -> 用户原始消息（用于检索时补充关键词，防止 LLM 精简丢失关键信息） */
+    private final Map<String, String> originalMessages = new ConcurrentHashMap<>();
+
+    /** originalMessages 大小上限，防止异常中断的会话泄漏导致内存膨胀 */
+    private static final int ORIGINAL_MESSAGES_MAX_SIZE = 1000;
+
     /**
      * 写入或更新会话级数据源白名单。
      *
@@ -107,6 +113,40 @@ public class DataAgentChatScopeContext {
     }
 
     /**
+     * 写入用户原始消息，供 Tool 层检索时作为补充关键词。
+     *
+     * @param conversationId 会话 ID
+     * @param message        用户原始消息；为空或 null 表示清除
+     */
+    public void putOriginalMessage(String conversationId, String message) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return;
+        }
+        if (message == null || message.isBlank()) {
+            originalMessages.remove(conversationId);
+            return;
+        }
+        // 超过上限时清空，防止异常中断的会话泄漏导致内存膨胀
+        if (originalMessages.size() >= ORIGINAL_MESSAGES_MAX_SIZE) {
+            originalMessages.clear();
+        }
+        originalMessages.put(conversationId, message);
+    }
+
+    /**
+     * 获取用户原始消息。
+     *
+     * @param conversationId 会话 ID
+     * @return 用户原始消息；未设置时返回 null
+     */
+    public String getOriginalMessage(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return null;
+        }
+        return originalMessages.get(conversationId);
+    }
+
+    /**
      * 清理会话白名单。流终止时调用，避免内存泄漏。
      *
      * @param conversationId 会话 ID
@@ -116,6 +156,7 @@ public class DataAgentChatScopeContext {
             return;
         }
         datasourceIdScopes.remove(conversationId);
+        originalMessages.remove(conversationId);
     }
 
     /**
