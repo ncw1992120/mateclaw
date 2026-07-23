@@ -89,31 +89,27 @@
       <div class="doc-edit-layout">
         <!-- 上方：元数据表单 -->
         <el-form :model="docForm" label-width="72px" class="doc-meta-form">
-          <div class="meta-row">
-            <el-form-item :label="t('helpCenter.documentTitle')" class="meta-item">
-              <el-input v-model="docForm.title" :placeholder="t('helpCenter.documentTitlePlaceholder')" />
-            </el-form-item>
-            <el-form-item :label="t('helpCenter.category')" class="meta-item">
-              <el-tree-select
-                v-model="docForm.categoryId"
-                :data="categoryTreeForSelect"
-                :props="{ label: 'name', children: 'children', value: 'id' }"
-                :placeholder="t('helpCenter.selectCategory')"
-                check-strictly
-              />
-            </el-form-item>
-            <el-form-item :label="t('helpCenter.author')" class="meta-item">
-              <el-input v-model="docForm.author" :placeholder="t('helpCenter.authorPlaceholder')" />
-            </el-form-item>
-          </div>
-          <div class="meta-row">
-            <el-form-item :label="t('helpCenter.tags')" class="meta-item">
-              <el-input v-model="docForm.tags" :placeholder="t('helpCenter.tagsPlaceholder')" />
-            </el-form-item>
-            <el-form-item :label="t('helpCenter.summary')" class="meta-item meta-item-wide">
-              <el-input v-model="docForm.summary" :placeholder="t('helpCenter.summaryPlaceholder')" />
-            </el-form-item>
-          </div>
+          <el-form-item :label="t('helpCenter.documentTitle')" class="meta-item">
+            <el-input v-model="docForm.title" :placeholder="t('helpCenter.documentTitlePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('helpCenter.category')" class="meta-item">
+            <el-tree-select
+              v-model="docForm.categoryId"
+              :data="categoryTreeForSelect"
+              :props="{ label: 'name', children: 'children', value: 'id' }"
+              :placeholder="t('helpCenter.selectCategory')"
+              check-strictly
+            />
+          </el-form-item>
+          <el-form-item :label="t('helpCenter.author')" class="meta-item">
+            <el-input v-model="docForm.author" :placeholder="t('helpCenter.authorPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('helpCenter.tags')" class="meta-item">
+            <el-input v-model="docForm.tags" :placeholder="t('helpCenter.tagsPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('helpCenter.summary')" class="meta-item meta-item-summary">
+            <el-input v-model="docForm.summary" :placeholder="t('helpCenter.summaryPlaceholder')" />
+          </el-form-item>
         </el-form>
         <!-- 下方：内容编辑器 -->
         <div class="doc-editor-wrapper">
@@ -540,21 +536,6 @@ onMounted(() => {
   height: 100% !important;
 }
 
-/* 文档编辑弹窗：让编辑器占满剩余高度 */
-.doc-edit-dialog :deep(.el-dialog) {
-  display: flex;
-  flex-direction: column;
-  max-height: 96vh;
-  margin-top: 2vh !important;
-}
-
-.doc-edit-dialog :deep(.el-dialog__body) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  padding: 12px 20px;
-}
-
 .doc-edit-layout {
   display: flex;
   flex-direction: column;
@@ -563,40 +544,37 @@ onMounted(() => {
 
 .doc-meta-form {
   flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 20px;
   background: var(--theme-surface-elevated);
   border: 1px solid var(--theme-border);
   border-radius: 8px;
-  padding: 16px 16px 8px;
+  padding: 16px 20px 4px;
   margin-bottom: 12px;
 }
 
 .doc-meta-form :deep(.el-form-item) {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .doc-meta-form :deep(.el-form-item__label) {
   color: var(--theme-text-secondary);
   font-weight: 500;
-  padding-right: 8px;
-}
-
-.meta-row {
-  display: flex;
-  gap: 16px;
-}
-
-.meta-row + .meta-row {
-  margin-top: 8px;
+  padding-right: 12px;
 }
 
 .meta-item {
-  flex: 1;
   min-width: 0;
-  margin-bottom: 0 !important;
 }
 
-.meta-item-wide {
-  flex: 2;
+.meta-item :deep(.el-form-item__content) {
+  min-width: 0;
+}
+
+/* 摘要占满整行 */
+.meta-item-summary {
+  grid-column: 1 / -1;
 }
 
 .doc-editor-wrapper {
@@ -612,5 +590,24 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   height: auto;
+}
+</style>
+
+<style>
+/* 文档编辑弹窗：el-dialog 会被 teleport 到 body，且传入的 class 落在 .el-dialog 元素本身，
+   scoped + :deep 的后代选择器无法命中，故用类名限定的全局样式让弹窗成为定高的 flex 列，
+   编辑器（textarea/预览）才能撑满元数据表单以下的剩余高度。 */
+.el-dialog.doc-edit-dialog {
+  display: flex;
+  flex-direction: column;
+  height: 90vh;
+  overflow: hidden;
+}
+
+.el-dialog.doc-edit-dialog .el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 20px;
 }
 </style>

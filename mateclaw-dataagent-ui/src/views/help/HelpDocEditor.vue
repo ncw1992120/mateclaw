@@ -141,18 +141,16 @@ watch(() => props.modelValue, (val) => {
   flex: 1;
 }
 
-.editor-body.preview .editor-preview {
-  flex: 1;
-}
-
 .editor-body.split .editor-pane {
   flex: 1;
   min-width: 0;
 }
 
-.editor-body.split .editor-preview {
+.editor-body.split .editor-preview,
+.editor-body.preview .editor-preview {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 16px;
