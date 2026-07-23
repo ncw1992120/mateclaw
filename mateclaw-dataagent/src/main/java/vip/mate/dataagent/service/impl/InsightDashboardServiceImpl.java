@@ -25,8 +25,10 @@ import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -240,6 +242,167 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         requireOwnership(id);
         int rows = insightDashboardMapper.deleteById(id);
         log.info("删除仪表盘: id={}, 影响行数={}", id, rows);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InsightDashboardVO copyDashboard(Long id) {
+        requireOwnership(id);
+        InsightDashboardEntity source = insightDashboardMapper.selectById(id);
+        if (source == null || source.getDeleted() == 1) {
+            throw new BusinessException(404, "仪表盘不存在: " + id);
+        }
+
+        InsightDashboardEntity copy = new InsightDashboardEntity();
+        BeanUtils.copyProperties(source, copy);
+        copy.setId(null);
+        copy.setName(generateCopyName(source.getName()));
+        copy.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        copy.setOwnerId(workspaceGuard.currentUserId());
+        copy.setOwnerName(workspaceGuard.currentUserNickname());
+        copy.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        copy.setSchemaJson(remapSchemaIds(source.getSchemaJson()));
+        copy.setModifier(null);
+        copy.setCreateTime(null);
+        copy.setUpdateTime(null);
+        copy.setDeleted(0);
+
+        insightDashboardMapper.insert(copy);
+        log.info("复制仪表盘: sourceId={}, newId={}, name={}", id, copy.getId(), copy.getName());
+        return toVO(copy);
+    }
+
+    /**
+     * 生成复制后的仪表盘名称
+     */
+    private String generateCopyName(String originalName) {
+        String suffix = DataAgentConstants.INSIGHT_DASHBOARD_COPY_SUFFIX;
+        String baseName = originalName != null ? originalName : "";
+        String copyName = baseName + suffix;
+        if (copyName.length() > 200) {
+            copyName = baseName.substring(0, Math.max(0, baseName.length() - suffix.length())) + suffix;
+        }
+        return copyName;
+    }
+
+    /**
+     * 重新映射 Schema 中的页面、组件、视角等 ID，避免复制后 ID 冲突
+     */
+    private String remapSchemaIds(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return schemaJson;
+        }
+        try {
+            InsightDashboardSchemaDTO schema = objectMapper.readValue(schemaJson, InsightDashboardSchemaDTO.class);
+            Map<String, String> pageIdMap = new HashMap<>();
+            Map<String, String> componentIdMap = new HashMap<>();
+            Map<String, String> perspectiveIdMap = new HashMap<>();
+
+            if (schema.getPages() != null) {
+                for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
+                    String oldPageId = page.getId();
+                    String newPageId = generateSchemaId("page");
+                    pageIdMap.put(oldPageId, newPageId);
+                    page.setId(newPageId);
+
+                    if (page.getComponents() != null) {
+                        for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
+                            remapComponentIds(component, componentIdMap);
+                        }
+                    }
+                }
+            }
+
+            if (schema.getComponents() != null) {
+                for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
+                    remapComponentIds(component, componentIdMap);
+                }
+            }
+
+            if (schema.getPerspectives() != null) {
+                for (InsightDashboardSchemaDTO.Perspective perspective : schema.getPerspectives()) {
+                    String oldPerspectiveId = perspective.getId();
+                    String newPerspectiveId = generateSchemaId("persp");
+                    perspectiveIdMap.put(oldPerspectiveId, newPerspectiveId);
+                    perspective.setId(newPerspectiveId);
+                }
+            }
+
+            updateSchemaReferences(schema, pageIdMap, componentIdMap, perspectiveIdMap);
+            return objectMapper.writeValueAsString(schema);
+        } catch (Exception e) {
+            log.warn("复制仪表盘时 Schema ID 重映射失败，保留原始 Schema: {}", e.getMessage());
+            return schemaJson;
+        }
+    }
+
+    /**
+     * 重新映射单个组件及其 Tab 的 ID
+     */
+    private void remapComponentIds(InsightDashboardSchemaDTO.Component component, Map<String, String> componentIdMap) {
+        String oldComponentId = component.getId();
+        String newComponentId = generateSchemaId("comp");
+        componentIdMap.put(oldComponentId, newComponentId);
+        component.setId(newComponentId);
+
+        if (component.getTabs() != null) {
+            for (InsightDashboardSchemaDTO.Tab tab : component.getTabs()) {
+                tab.setId(generateSchemaId("tab"));
+            }
+        }
+    }
+
+    /**
+     * 更新 Schema 中页面 parentId、组件 boundFilterIds 与 perspectiveIds 等引用
+     */
+    private void updateSchemaReferences(InsightDashboardSchemaDTO schema,
+                                        Map<String, String> pageIdMap,
+                                        Map<String, String> componentIdMap,
+                                        Map<String, String> perspectiveIdMap) {
+        if (schema.getPages() != null) {
+            for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
+                if (page.getParentId() != null && !page.getParentId().isBlank()) {
+                    page.setParentId(pageIdMap.getOrDefault(page.getParentId(), page.getParentId()));
+                }
+                if (page.getComponents() != null) {
+                    for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
+                        updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+                    }
+                }
+            }
+        }
+        if (schema.getComponents() != null) {
+            for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
+                updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+            }
+        }
+    }
+
+    /**
+     * 更新组件内部的 ID 引用（boundFilterIds、perspectiveIds）
+     */
+    private void updateComponentReferences(InsightDashboardSchemaDTO.Component component,
+                                           Map<String, String> componentIdMap,
+                                           Map<String, String> perspectiveIdMap) {
+        if (component.getBoundFilterIds() != null) {
+            List<String> newBoundFilterIds = component.getBoundFilterIds().stream()
+                    .map(oldId -> componentIdMap.getOrDefault(oldId, oldId))
+                    .collect(Collectors.toList());
+            component.setBoundFilterIds(newBoundFilterIds);
+        }
+        if (component.getPerspectiveIds() != null) {
+            List<String> newPerspectiveIds = component.getPerspectiveIds().stream()
+                    .map(oldId -> perspectiveIdMap.getOrDefault(oldId, oldId))
+                    .collect(Collectors.toList());
+            component.setPerspectiveIds(newPerspectiveIds);
+        }
+    }
+
+    /**
+     * 生成 Schema 元素唯一 ID
+     */
+    private String generateSchemaId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }
 
     @Override

@@ -62,6 +62,13 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     await fetchDashboards()
   }
 
+  /** 复制仪表盘 */
+  async function copyDashboard(id: string): Promise<InsightDashboard> {
+    const copied = await insightDashboardApi.copy(id)
+    await fetchDashboards()
+    return copied as unknown as InsightDashboard
+  }
+
   /**
    * AI助手流式对话
    * @param data 请求参数
@@ -95,6 +102,7 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     createDashboard,
     updateDashboard,
     deleteDashboard,
+    copyDashboard,
     streamAiChatDashboard,
     reset,
   }

@@ -70,7 +70,7 @@
         </div>
 
         <!-- AI Message -->
-        <div v-else class="msg ai">
+        <div v-else class="msg ai" :data-msg-index="index">
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble">
               <!-- Token & model info (右上角) -->
@@ -530,7 +530,7 @@ import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
-import { uploadAttachment, optimizePrompt, type MessageContentPart } from '@/api/chat'
+import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment } from '@/types'
 
 const { t } = useI18n()
@@ -1104,6 +1104,15 @@ const echartsBlockVisibleTable = new Map<HTMLElement, boolean>()
 /** 每个 ECharts 块关联的 ResizeObserver 映射，用于在容器尺寸变化时自动 resize */
 const echartsBlockObservers = new Map<HTMLElement, ResizeObserver>()
 
+/** 每个 ECharts 块关联的「指标查看」请求载荷（在挂载时从所属消息的 metrics_query 工具入参解析；null 表示无指标信息，不显示按钮） */
+const echartsBlockMetricPayload = new Map<HTMLElement, ChartMetricMetaPayload | null>()
+
+/** 「指标查看」解析结果缓存（避免重复请求） */
+const echartsBlockMetricMeta = new Map<HTMLElement, ChartMetricMeta>()
+
+/** 「解读」结果缓存（避免重复请求） */
+const echartsBlockInterpret = new Map<HTMLElement, string>()
+
 /** 支持切换的图表类型（不含表格，表格由独立按钮触发的浮层展示） */
 const ECHARTS_CHART_TYPES = [
   { key: 'bar', label: '柱状图' },
@@ -1547,8 +1556,11 @@ function toggleTableOverlay(htmlEl: HTMLElement): void {
     }
     echartsBlockVisibleTable.set(htmlEl, false)
   } else {
+    // 同一图表内的浮层互斥：打开列表明细前先关闭「指标查看/解读」浮层
+    closeAllChartOverlays(htmlEl, 'table')
     const overlay = document.createElement('div')
     overlay.className = 'echarts-table-overlay'
+    overlay.setAttribute('data-kind', 'table')
     overlay.innerHTML = `
       <div class="echarts-table-overlay-header">
         <span class="echarts-table-overlay-title">列表明细</span>
@@ -1569,9 +1581,10 @@ function toggleTableOverlay(htmlEl: HTMLElement): void {
 }
 
 /**
- * 渲染 ECharts 块顶部的下拉式类型选择器（并附加"列表明细"独立按钮）
+ * 渲染 ECharts 块顶部的下拉式类型选择器（并附加"指标查看/解读/列表明细"独立按钮）
+ * @param hasMetric 该图表是否有可查看的指标信息（来自所属消息的 metrics_query 工具入参）
  */
-function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType): void {
+function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType, hasMetric = false): void {
   // 工具栏已存在则仅更新高亮
   const existing = htmlEl.querySelector('.echarts-toolbar')
   if (existing) {
@@ -1581,6 +1594,30 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType): void
 
   const toolbar = document.createElement('div')
   toolbar.className = 'echarts-toolbar'
+
+  // "指标查看"按钮（仅当图表有关联指标信息时显示）
+  if (hasMetric) {
+    const metricBtn = document.createElement('button')
+    metricBtn.type = 'button'
+    metricBtn.className = 'echarts-toolbar-detail-btn echarts-toolbar-metric-btn'
+    metricBtn.innerHTML = `<span class="echarts-toolbar-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span><span>${escAuxHtml(t('chart.viewMetric'))}</span>`
+    metricBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      void toggleMetricOverlay(htmlEl)
+    })
+    toolbar.appendChild(metricBtn)
+  }
+
+  // "解读"按钮（所有图表都提供）
+  const interpretBtn = document.createElement('button')
+  interpretBtn.type = 'button'
+  interpretBtn.className = 'echarts-toolbar-detail-btn echarts-toolbar-interpret-btn'
+  interpretBtn.innerHTML = `<span class="echarts-toolbar-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg></span><span>${escAuxHtml(t('chart.interpret'))}</span>`
+  interpretBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    void toggleInterpretOverlay(htmlEl)
+  })
+  toolbar.appendChild(interpretBtn)
 
   // "列表明细"独立按钮（在工具栏最左侧，与下拉同级）
   const detailBtn = document.createElement('button')
@@ -1645,6 +1682,286 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType): void
       document.querySelectorAll('.echarts-toolbar-trigger.is-open').forEach((t) => t.classList.remove('is-open'))
     }
     document.addEventListener('click', dropdownOutsideHandler)
+  }
+}
+
+/** 转义 HTML 特殊字符，用于把后端/查询文本安全注入 innerHTML */
+function escAuxHtml(text: unknown): string {
+  const s = text == null ? '' : String(text)
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** 把工具入参归一为对象：已是对象直接用，是 JSON 字符串则解析，失败返回 null */
+function coerceArgs(raw: unknown): Record<string, any> | null {
+  if (raw && typeof raw === 'object') {
+    return raw as Record<string, any>
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const v = JSON.parse(raw)
+      return v && typeof v === 'object' ? (v as Record<string, any>) : null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** 关闭同一图表内除指定 kind 外的所有浮层，并同步按钮高亮 */
+function closeAllChartOverlays(htmlEl: HTMLElement, except?: 'table' | 'metric' | 'interpret'): void {
+  if (except !== 'table') {
+    htmlEl.querySelector('.echarts-table-overlay[data-kind="table"]')?.remove()
+    echartsBlockVisibleTable.set(htmlEl, false)
+    htmlEl.querySelector<HTMLElement>('.echarts-toolbar-detail-btn:not(.echarts-toolbar-metric-btn):not(.echarts-toolbar-interpret-btn)')?.classList.remove('is-active')
+  }
+  if (except !== 'metric') {
+    htmlEl.querySelector('.echarts-aux-overlay[data-kind="metric"]')?.remove()
+    htmlEl.querySelector<HTMLElement>('.echarts-toolbar-metric-btn')?.classList.remove('is-active')
+  }
+  if (except !== 'interpret') {
+    htmlEl.querySelector('.echarts-aux-overlay[data-kind="interpret"]')?.remove()
+    htmlEl.querySelector<HTMLElement>('.echarts-toolbar-interpret-btn')?.classList.remove('is-active')
+  }
+}
+
+/** 从图表元素反查所属 AI 消息的索引 */
+function findMessageIndexForChart(htmlEl: HTMLElement): number | null {
+  const msgEl = htmlEl.closest('.msg.ai') as HTMLElement | null
+  if (!msgEl) {
+    return null
+  }
+  const idx = Number(msgEl.dataset.msgIndex)
+  return Number.isNaN(idx) ? null : idx
+}
+
+/**
+ * 挂载时解析图表「指标查看」请求载荷：
+ * 从所属消息的 metrics_query 工具调用（toolCalls 优先，回退 segments）合并 metrics/dimensions/filters/timeConstraint/datasourceId。
+ * 无 metrics_query 时返回 null（不显示「指标查看」按钮）。
+ */
+function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload | null {
+  const idx = findMessageIndexForChart(htmlEl)
+  if (idx == null) {
+    return null
+  }
+  const msg = chatStore.messages[idx]
+  const meta = (msg?.metadata || {}) as Record<string, any>
+
+  // 收集该消息里全部工具调用的入参（toolCalls 与 segments 两处来源，入参可能是字符串或对象）
+  const candidates: Record<string, any>[] = []
+  const toolCalls = Array.isArray(meta.toolCalls) ? meta.toolCalls : []
+  for (const tc of toolCalls) {
+    const a = coerceArgs(tc?.arguments)
+    if (a) candidates.push(a)
+  }
+  const segments = Array.isArray(meta.segments) ? meta.segments : []
+  for (const seg of segments) {
+    if (seg && seg.type === 'tool_call') {
+      const a = coerceArgs(seg.toolArgs)
+      if (a) candidates.push(a)
+    }
+  }
+
+  // 结构化识别指标查询：入参含非空 metrics 数组即视为指标查询（不强依赖工具名，兼容命名/持久化差异）
+  const argsList = candidates.filter((a) => Array.isArray(a.metrics) && a.metrics.length > 0)
+  if (argsList.length === 0) {
+    return null
+  }
+
+  const metrics: string[] = []
+  const dimensions: string[] = []
+  const filters: string[] = []
+  let timeConstraint: string | null = null
+  let datasourceId: number | null = null
+  for (const a of argsList) {
+    if (Array.isArray(a.metrics)) {
+      for (const m of a.metrics) if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
+    }
+    if (Array.isArray(a.dimensions)) {
+      for (const d of a.dimensions) if (typeof d === 'string' && !dimensions.includes(d)) dimensions.push(d)
+    }
+    if (Array.isArray(a.filters)) {
+      for (const f of a.filters) if (typeof f === 'string' && !filters.includes(f)) filters.push(f)
+    }
+    if (!timeConstraint && typeof a.timeConstraint === 'string' && a.timeConstraint) {
+      timeConstraint = a.timeConstraint
+    }
+    if (datasourceId == null && a.datasourceId != null) {
+      datasourceId = Number(a.datasourceId)
+    }
+  }
+  if (metrics.length === 0) {
+    return null
+  }
+  return { datasourceId, metrics, dimensions, filters, timeConstraint }
+}
+
+/** 反查触发该图表的最近一条用户问题（用于增强解读上下文） */
+function getNearestUserQuestion(htmlEl: HTMLElement): string | undefined {
+  const idx = findMessageIndexForChart(htmlEl)
+  if (idx == null) {
+    return undefined
+  }
+  for (let i = idx - 1; i >= 0; i--) {
+    const m = chatStore.messages[i]
+    if (m && m.role === 'user' && m.content) {
+      return m.content
+    }
+  }
+  return undefined
+}
+
+/** 构建「指标查看」面板内容 HTML（值均经转义） */
+function buildMetricMetaHtml(meta: ChartMetricMeta): string {
+  const dash = '—'
+  const metricsHtml = (meta.metrics || []).map((m) => {
+    const sub: string[] = []
+    if (m.unit) sub.push(`${escAuxHtml(t('chart.fieldUnit'))}：${escAuxHtml(m.unit)}`)
+    if (m.category) sub.push(`${escAuxHtml(t('chart.fieldCategory'))}：${escAuxHtml(m.category)}`)
+    return `
+      <div class="metric-meta__item">
+        <div class="metric-meta__name">${escAuxHtml(m.displayName || m.name)}<span class="metric-meta__en">${escAuxHtml(m.name)}</span></div>
+        <div class="metric-meta__caliber"><span class="metric-meta__k">${escAuxHtml(t('chart.fieldCaliber'))}</span>${m.caliber ? escAuxHtml(m.caliber) : dash}</div>
+        ${sub.length ? `<div class="metric-meta__extra">${sub.join(' ｜ ')}</div>` : ''}
+      </div>`
+  }).join('')
+
+  const dimsText = (meta.dimensions || []).length
+    ? (meta.dimensions || []).map((d) => escAuxHtml(d.displayName || d.name)).join('、')
+    : dash
+  const timeText = meta.timeRange ? escAuxHtml(meta.timeRange) : dash
+  const filtersText = (meta.filters || []).length
+    ? (meta.filters || []).map((f) => escAuxHtml(f)).join('<br/>')
+    : dash
+
+  return `
+    <div class="metric-meta">
+      <div class="metric-meta__group">
+        <div class="metric-meta__label">${escAuxHtml(t('chart.fieldMetric'))}</div>
+        <div class="metric-meta__value">${metricsHtml || dash}</div>
+      </div>
+      <div class="metric-meta__group">
+        <div class="metric-meta__label">${escAuxHtml(t('chart.fieldDimensions'))}</div>
+        <div class="metric-meta__value">${dimsText}</div>
+      </div>
+      <div class="metric-meta__group">
+        <div class="metric-meta__label">${escAuxHtml(t('chart.fieldTimeRange'))}</div>
+        <div class="metric-meta__value">${timeText}</div>
+      </div>
+      <div class="metric-meta__group">
+        <div class="metric-meta__label">${escAuxHtml(t('chart.fieldFilters'))}</div>
+        <div class="metric-meta__value">${filtersText}</div>
+      </div>
+    </div>`
+}
+
+/** 构建通用浮层骨架（头部标题 + 关闭按钮 + 加载态 body），返回 overlay 元素 */
+function buildAuxOverlay(kind: 'metric' | 'interpret', title: string, onClose: () => void): HTMLElement {
+  const overlay = document.createElement('div')
+  overlay.className = 'echarts-table-overlay echarts-aux-overlay'
+  overlay.setAttribute('data-kind', kind)
+  overlay.innerHTML = `
+    <div class="echarts-table-overlay-header">
+      <span class="echarts-table-overlay-title">${escAuxHtml(title)}</span>
+      <button type="button" class="echarts-table-overlay-close" aria-label="关闭">×</button>
+    </div>
+    <div class="echarts-table-overlay-body echarts-aux-body"><div class="echarts-aux-loading">${escAuxHtml(t('chart.loading'))}</div></div>
+  `
+  overlay.querySelector('.echarts-table-overlay-close')?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClose()
+  })
+  return overlay
+}
+
+/** 切换「指标查看」浮层 */
+async function toggleMetricOverlay(htmlEl: HTMLElement): Promise<void> {
+  const existing = htmlEl.querySelector('.echarts-aux-overlay[data-kind="metric"]')
+  if (existing) {
+    existing.remove()
+    htmlEl.querySelector<HTMLElement>('.echarts-toolbar-metric-btn')?.classList.remove('is-active')
+    return
+  }
+  closeAllChartOverlays(htmlEl, 'metric')
+
+  const overlay = buildAuxOverlay('metric', t('chart.viewMetric'), () => { void toggleMetricOverlay(htmlEl) })
+  htmlEl.appendChild(overlay)
+  htmlEl.querySelector<HTMLElement>('.echarts-toolbar-metric-btn')?.classList.add('is-active')
+  const body = overlay.querySelector('.echarts-aux-body') as HTMLElement
+
+  try {
+    let data = echartsBlockMetricMeta.get(htmlEl)
+    if (!data) {
+      const payload = echartsBlockMetricPayload.get(htmlEl)
+      if (!payload) {
+        body.innerHTML = `<div class="echarts-aux-empty">${escAuxHtml(t('chart.noMetric'))}</div>`
+        return
+      }
+      data = await resolveChartMetricMeta(payload)
+      echartsBlockMetricMeta.set(htmlEl, data)
+    }
+    if (!overlay.isConnected) {
+      return
+    }
+    body.innerHTML = buildMetricMetaHtml(data)
+  } catch (e) {
+    console.error('[ChatView] 指标查看解析失败:', e)
+    if (overlay.isConnected) {
+      body.innerHTML = `<div class="echarts-aux-empty">${escAuxHtml(t('chart.metricError'))}</div>`
+    }
+  }
+}
+
+/** 切换「解读」浮层 */
+async function toggleInterpretOverlay(htmlEl: HTMLElement): Promise<void> {
+  const existing = htmlEl.querySelector('.echarts-aux-overlay[data-kind="interpret"]')
+  if (existing) {
+    existing.remove()
+    htmlEl.querySelector<HTMLElement>('.echarts-toolbar-interpret-btn')?.classList.remove('is-active')
+    return
+  }
+  closeAllChartOverlays(htmlEl, 'interpret')
+
+  const overlay = buildAuxOverlay('interpret', t('chart.interpret'), () => { void toggleInterpretOverlay(htmlEl) })
+  htmlEl.appendChild(overlay)
+  htmlEl.querySelector<HTMLElement>('.echarts-toolbar-interpret-btn')?.classList.add('is-active')
+  const body = overlay.querySelector('.echarts-aux-body') as HTMLElement
+
+  try {
+    let text = echartsBlockInterpret.get(htmlEl)
+    if (!text) {
+      const option = echartsBlockOptions.get(htmlEl)
+      if (!option) {
+        body.innerHTML = `<div class="echarts-aux-empty">${escAuxHtml(t('chart.noChartData'))}</div>`
+        return
+      }
+      const agentId = chatStore.currentAgentId
+      if (!agentId) {
+        body.innerHTML = `<div class="echarts-aux-empty">${escAuxHtml(t('chart.interpretError'))}</div>`
+        return
+      }
+      text = await interpretChart({
+        agentId,
+        conversationId: chatStore.conversationId || '',
+        echartsOption: JSON.stringify(option),
+        question: getNearestUserQuestion(htmlEl),
+      })
+      echartsBlockInterpret.set(htmlEl, text)
+    }
+    if (!overlay.isConnected) {
+      return
+    }
+    body.innerHTML = `<div class="echarts-interpret">${renderMarkdown(text)}</div>`
+  } catch (e) {
+    console.error('[ChatView] 图表解读失败:', e)
+    if (overlay.isConnected) {
+      body.innerHTML = `<div class="echarts-aux-empty">${escAuxHtml(t('chart.interpretError'))}</div>`
+    }
   }
 }
 
@@ -1773,8 +2090,12 @@ function scanAndMountEChartsBlocks(): void {
       observer.observe(htmlEl)
       echartsBlockObservers.set(htmlEl, observer)
 
-      // 渲染图表类型切换工具栏
-      renderEchartsToolbar(htmlEl, initialType)
+      // 解析该图表的「指标查看」载荷（来自所属消息的 metrics_query 工具入参）
+      const metricPayload = buildMetricPayloadForChart(htmlEl)
+      echartsBlockMetricPayload.set(htmlEl, metricPayload)
+
+      // 渲染图表类型切换工具栏（含指标查看/解读/列表明细按钮）
+      renderEchartsToolbar(htmlEl, initialType, !!metricPayload)
     } catch (e) {
       console.error('[ChatView] ECharts block mount error:', e)
       htmlEl.textContent = 'Chart render error'
@@ -2195,6 +2516,9 @@ onUnmounted(() => {
   echartsBlockVisibleTable.clear()
   echartsBlockObservers.forEach(observer => observer.disconnect())
   echartsBlockObservers.clear()
+  echartsBlockMetricPayload.clear()
+  echartsBlockMetricMeta.clear()
+  echartsBlockInterpret.clear()
   if (dropdownOutsideHandler) {
     document.removeEventListener('click', dropdownOutsideHandler)
     dropdownOutsideHandler = null
@@ -3151,6 +3475,109 @@ onUnmounted(() => {
 
 :deep(.echarts-table tbody tr:hover) {
   background: var(--theme-surface-hover);
+}
+
+/* ===== 指标查看 / 解读 浮层内容 ===== */
+:deep(.echarts-aux-body) {
+  padding: 14px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--theme-text);
+}
+
+:deep(.echarts-aux-loading),
+:deep(.echarts-aux-empty) {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 指标查看：字段定义列表 */
+:deep(.metric-meta) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+:deep(.metric-meta__group) {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+:deep(.metric-meta__label) {
+  color: var(--muted);
+  font-size: 12px;
+  padding-top: 1px;
+}
+
+:deep(.metric-meta__value) {
+  color: var(--theme-text);
+  word-break: break-word;
+}
+
+:deep(.metric-meta__item) {
+  padding: 6px 0;
+}
+
+:deep(.metric-meta__item + .metric-meta__item) {
+  border-top: 1px dashed var(--theme-border);
+}
+
+:deep(.metric-meta__name) {
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+:deep(.metric-meta__en) {
+  margin-left: 6px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+:deep(.metric-meta__caliber) {
+  margin-top: 3px;
+  color: var(--theme-text-secondary);
+}
+
+:deep(.metric-meta__k) {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+  color: var(--main-orange);
+  font-size: 11px;
+}
+
+:deep(.metric-meta__extra) {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 解读：Markdown 正文 */
+:deep(.echarts-interpret) {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--theme-text);
+}
+
+:deep(.echarts-interpret) p {
+  margin: 0 0 8px;
+}
+
+:deep(.echarts-interpret) ul,
+:deep(.echarts-interpret) ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+:deep(.echarts-interpret) strong {
+  color: var(--theme-text);
 }
 
 /* ECharts Option Card（后端返回标准 ECharts option 时直接渲染） */

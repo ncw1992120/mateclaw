@@ -409,6 +409,9 @@ public final class DataAgentConstants {
     /** 仪表盘状态：已发布 */
     public static final String INSIGHT_DASHBOARD_STATUS_PUBLISHED = "published";
 
+    /** 仪表盘复制名称后缀 */
+    public static final String INSIGHT_DASHBOARD_COPY_SUFFIX = " 副本";
+
     /** 组件渲染类型：ECharts 图表 */
     public static final String INSIGHT_RENDER_TYPE_ECHARTS = "echarts";
 
@@ -515,4 +518,24 @@ public final class DataAgentConstants {
             + "要求：问题必须是用户可以直接点击的推荐问题，以陈述句或祈使句表达，不要使用疑问句式。"
             + "例如：用「查询订单金额」「按时间趋势查看」「近7天的数据」这样的直接表述，"
             + "而不是「您想查询订单金额吗？」「您希望按时间趋势查看吗？」「您需要查询近7天的数据吗？」这样的质问式语气。";
+
+    // ==================== 图表解读 ====================
+
+    /** 图表解读会话ID前缀（避免污染用户真实会话历史） */
+    public static final String CHART_INTERPRET_CONVERSATION_PREFIX = "chart-interpret-";
+
+    /** 图表 option JSON 注入提示词前的最大截断长度，避免过长上下文 */
+    public static final int CHART_INTERPRET_OPTION_MAX_LENGTH = 2000;
+
+    /** 图表解读提示词模板，{0} 为原始问题（可为空），{1} 为图表 option JSON */
+    public static final String CHART_INTERPRET_PROMPT_TEMPLATE =
+            "你是一名资深数据分析师。下面是一张图表的 ECharts 配置（含数据），"
+            + "用户的原始问题是：{0}。\n\n"
+            + "图表配置：\n```json\n{1}\n```\n\n"
+            + "请仅依据图表中的真实数据，用简洁中文对这张图表做一段解读，覆盖："
+            + "1) 核心数据概述（总量/均值/极值）；2) 趋势判断（上升/下降/波动/平稳）；"
+            + "3) 异常识别（突增/突降/明显偏离）；4) 维度差异（若有分组/多类别）；"
+            + "最后给出一句结论或行动建议。"
+            + "要求：不要编造数据、不要复述配置字段、不要输出图表代码，直接给分析文字，"
+            + "可用简短小标题或短句分点，总长控制在 300 字以内。";
 }

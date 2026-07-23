@@ -110,6 +110,20 @@ public class AloudataCallTool {
     /** 消歧时展示的最大候选数量 */
     private static final int DISAMBIGUATION_MAX_CANDIDATES = 3;
 
+    /** 匹配指标展示名尾部的口径后缀（全角/半角括号），用于剥离得到基名 */
+    private static final Pattern TRAILING_CALIBER_PATTERN =
+            Pattern.compile("[（(][^（）()]*[）)]\\s*$");
+
+    /** 提取指标展示名尾部口径后缀的括号内内容 */
+    private static final Pattern TRAILING_CALIBER_CONTENT_PATTERN =
+            Pattern.compile("[（(]([^（）()]*)[）)]\\s*$");
+
+    /** 族级兜底：同基名指标族的最大捞取数量，防止极端前缀导致捞取过多（配合 ORDER BY 保证截断确定） */
+    private static final int FAMILY_LOOKUP_MAX = 200;
+
+    /** 通用口径重排：当用户原话与展示名的字符重叠度超过此阈值时，视为强相关并提升排序 */
+    private static final double GENERIC_RERANK_THRESHOLD = 0.5;
+
     /**
      * 启动时动态注册所有 Aloudata API 端点为独立 Tool
      */
@@ -591,18 +605,19 @@ public class AloudataCallTool {
             JSONObject input = JSONUtil.parseObj(toolInput);
             Long datasourceId = input.getLong("datasourceId");
 
-            // 解析数据源白名单（含单值自动注入、可用列表引导）
+            // 解析数据源：确定性优先（白名单 > 唯一 Aloudata 源 > 校验 LLM 传值 > 列表引导），
+            // 不盲信 LLM 猜测的 datasourceId（避免无白名单时用一个幻觉出的 id=1 静默跑错源）。
             // conversationId 从 ToolExecutionContext 读取：该 ThreadLocal 由 ToolExecutionExecutor
             // 在工具执行线程本身上 set，内联与并行批（虚拟线程）路径均可靠。
             // 不能用 ChatOriginHolder——它在并行批次的虚拟线程上是 EMPTY，会导致白名单解析落空。
             String dsConvId = ToolExecutionContext.conversationId();
-            ScopeResolveResult<Long> dsScope = scopeContext.resolveDatasourceId(dsConvId, datasourceId);
+            ScopeResolveResult<Long> dsScope = resolveAloudataDatasourceId(dsConvId, datasourceId);
             if (dsScope.hasError()) {
                 return error(dsScope.getErrorMessage());
             }
             datasourceId = dsScope.getResolvedValue();
             if (datasourceId == null) {
-                return error("需要 datasourceId 参数");
+                return error(buildDatasourceGuide());
             }
             String keyword = input.getStr("keyword");
             if (keyword == null || keyword.isBlank()) {
@@ -731,12 +746,23 @@ public class AloudataCallTool {
         mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
         mergedDimensions.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
 
-        /* 限制总数 */
+        /* 限制总数（转为独立可变列表，便于后续族级兜底注入缺失成员） */
         if (mergedMetrics.size() > topK) {
-            mergedMetrics = mergedMetrics.subList(0, topK);
+            mergedMetrics = new ArrayList<>(mergedMetrics.subList(0, topK));
         }
         if (mergedDimensions.size() > topK) {
-            mergedDimensions = mergedDimensions.subList(0, topK);
+            mergedDimensions = new ArrayList<>(mergedDimensions.subList(0, topK));
+        }
+
+        /* 确定性族级兜底：同基名多口径指标族（如 交易市占率（整体/个人/机构））时，ES 打分 + TopK
+         * 截断可能把用户真正想要的口径挤出结果。此处按基名确定性捞全整族、补入缺失成员，并用原始用户
+         * 消息精确匹配口径，保证目标口径指标必然出现在结果中（详见 backfillMetricFamily 注释）。 */
+        FamilyBackfillResult family = backfillMetricFamily(datasourceId, keyword, originalMessage, mergedMetrics);
+
+        /* 通用口径重排：当族级兜底未触发（非括号口径形态，如前缀式"个人交易市占率"、修饰词式"华东区销售额"），
+         * 用"用户原话 vs 展示名"的字符重叠度做通用重排，将用户原话中信息量覆盖最充分的指标提权到首位。 */
+        if (!family.triggered()) {
+            applyGenericCaliberRerank(originalMessage, keyword, mergedMetrics);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -780,8 +806,11 @@ public class AloudataCallTool {
             sb.append("\n");
         }
 
-        /* 消歧判断：指标多义或维度多义时，附加消歧指令 */
-        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword);
+        /* 确定性族级口径提示：优先于通用消歧，提供不受排序 / TopK 影响的权威口径信息 */
+        appendFamilyHint(sb, family, keyword);
+
+        /* 消歧判断：指标多义或维度多义时，附加消歧指令；族级已权威处理指标口径时抑制指标消歧，避免重复 */
+        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
 
         /* P3: 检索失败自动降级 */
         if (metricCount == 0 && dimensionCount == 0) {
@@ -1259,7 +1288,7 @@ public class AloudataCallTool {
     }
 
     /** 提取字符串中的所有中文字符 */
-    private Set<String> extractChineseChars(String text) {
+    private static Set<String> extractChineseChars(String text) {
         Set<String> chars = new HashSet<>();
         if (text == null) {
             return chars;
@@ -1273,7 +1302,7 @@ public class AloudataCallTool {
     }
 
     /** 提取字符串中的英文单词（按下划线和非字母数字分隔） */
-    private Set<String> extractEnglishWords(String text) {
+    private static Set<String> extractEnglishWords(String text) {
         Set<String> words = new HashSet<>();
         if (text == null) {
             return words;
@@ -1318,7 +1347,7 @@ public class AloudataCallTool {
      * @param keyword         LLM 传入的检索关键词
      * @return 差集片段；keyword 非原话子串时返回 null
      */
-    private String extractKeywordComplement(String originalMessage, String keyword) {
+    private static String extractKeywordComplement(String originalMessage, String keyword) {
         if (!originalMessage.contains(keyword)) {
             return null;
         }
@@ -1376,6 +1405,76 @@ public class AloudataCallTool {
             log.error("自动查找 Aloudata 数据源失败: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * 语义检索的数据源解析：确定性优先，不盲信 LLM 猜测的 datasourceId。
+     * <p>
+     * 顺序：
+     * <ol>
+     *   <li>用户已勾选数据源（白名单）→ 白名单权威（单值自动注入 / 多值校验），直接采用；</li>
+     *   <li>无白名单 + 全局唯一启用的 Aloudata 源 → 确定性采用该源，忽略 LLM 猜测值
+     *       （本工具面向 Aloudata，唯一源时无需也不应让 LLM 猜 datasourceId）；</li>
+     *   <li>无白名单 + 多个 / 零个 Aloudata 源 → 校验 LLM 传值确为"存在且启用"的数据源，合法则采用，
+     *       非法（不存在 / 已禁用 / 为空）则返回可用数据源列表，引导 LLM 从中重选，而非静默用错。</li>
+     * </ol>
+     */
+    private ScopeResolveResult<Long> resolveAloudataDatasourceId(String convId, Long llmId) {
+        ScopeResolveResult<Long> scope = scopeContext.resolveDatasourceId(convId, llmId);
+        if (scope.hasError()) {
+            return scope;
+        }
+        // 用户已勾选 → 白名单权威
+        if (scopeContext.hasScope(convId)) {
+            return scope;
+        }
+        Long resolved = scope.getResolvedValue();
+        // 无白名单：唯一启用的 Aloudata 源 → 确定性采用，忽略 LLM 猜测值
+        Long onlyAloudata = autoResolveDatasourceId();
+        if (onlyAloudata != null) {
+            if (resolved != null && !resolved.equals(onlyAloudata)) {
+                log.info("语义检索：忽略 LLM 猜测的 datasourceId={}，采用唯一 Aloudata 数据源 {}", resolved, onlyAloudata);
+            }
+            return ScopeResolveResult.ok(onlyAloudata);
+        }
+        // 多个 / 零个 Aloudata 源：校验 LLM 传值是否为存在且启用的数据源
+        if (resolved != null) {
+            DatasourceEntity entity = datasourceMapper.selectById(resolved);
+            if (entity != null && !Boolean.FALSE.equals(entity.getEnabled())) {
+                return ScopeResolveResult.ok(resolved);
+            }
+            log.info("语义检索：LLM 传入的 datasourceId={} 不存在或已禁用，返回可用数据源列表引导重选", resolved);
+        }
+        return ScopeResolveResult.fail(buildDatasourceGuide());
+    }
+
+    /**
+     * 构建"可用数据源列表"引导文本，供无法确定 datasourceId 时返回给 LLM 重选。
+     */
+    private String buildDatasourceGuide() {
+        try {
+            List<DatasourceEntity> sources = datasourceMapper.selectList(
+                    new LambdaQueryWrapper<DatasourceEntity>()
+                            .eq(DatasourceEntity::getEnabled, true)
+                            .select(DatasourceEntity::getId, DatasourceEntity::getName,
+                                    DatasourceEntity::getSourceType)
+                            .last("LIMIT 50"));
+            if (sources.isEmpty()) {
+                return "未找到可用数据源，请先在数据源页面配置后再检索。";
+            }
+            StringBuilder sb = new StringBuilder("需要指定有效的 datasourceId（请勿猜测）。当前可用数据源：\n");
+            for (DatasourceEntity s : sources) {
+                sb.append("- datasourceId=").append(s.getId())
+                        .append(", name=").append(s.getName() != null ? s.getName() : "")
+                        .append(", type=").append(s.getSourceType() != null ? s.getSourceType() : "")
+                        .append("\n");
+            }
+            sb.append("请从上述列表中选择与用户问题匹配的 datasourceId 后重新调用。");
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("构建可用数据源列表失败: {}", e.getMessage());
+            return "需要指定有效的 datasourceId（请勿猜测）。";
+        }
     }
 
     // ==================== API 错误智能解析 ====================
@@ -1470,6 +1569,398 @@ public class AloudataCallTool {
         return rows;
     }
 
+    // ==================== 确定性族级口径兜底 ====================
+
+    /**
+     * 确定性族级兜底（①②③）。
+     * <p>
+     * 背景：形如「交易市占率（整体）/（个人）/（机构）」的同基名多口径指标族，当 LLM 把 keyword
+     * 精简为基名「交易市占率」时，ES 打分会让全族并列、再被 TopK 截断，用户真正想要的口径可能被挤出
+     * 结果（偶现检索不到）。此方法用确定性手段兜底，不依赖 ES 排序：
+     * <ol>
+     *   <li>① 按基名（keyword 剥离尾部括号口径）精确捞全整族（LIKE 基名% + 剥离后精确等于基名的校验，
+     *       排除仅前缀相同的其它指标如「交易市占率排名（整体）」），并把结果中缺失的族成员补入
+     *       mergedMetrics，保证整族必然出现、不受 TopK 影响；</li>
+     *   <li>② 用「原始用户消息 + keyword」精确匹配各成员的口径后缀：唯一命中则判定为目标口径，置为
+     *       最高分使其稳居首位；</li>
+     *   <li>③ 0 或多命中时不自行选择，返回族信息由 {@link #appendFamilyHint} 提示消歧。</li>
+     * </ol>
+     * 仅当基名对应 ≥2 个口径成员时才视为「指标族」并生效；单指标场景直接返回、不干扰原有流程。
+     * <p>
+     * 局限：基名从 keyword（通常中文）剥离得到，若 LLM 直接传英文 metricName 则不触发族兜底（英文名
+     * 通常已是精确命中，不属于本 bug 的失败模式）；口径后缀仅识别「尾部括号」这一常见命名约定。
+     *
+     * @param datasourceId    数据源 ID
+     * @param keyword         LLM 传入的检索关键词
+     * @param originalMessage 用户原始消息（可能为 null）
+     * @param mergedMetrics   当前指标命中列表（可变，方法内可能注入缺失族成员并重排）
+     * @return 族兜底结果；未触发时 triggered() 为 false
+     */
+    private FamilyBackfillResult backfillMetricFamily(Long datasourceId, String keyword,
+                                                      String originalMessage,
+                                                      List<AloudataSearchResult.MetricHit> mergedMetrics) {
+        FamilyBackfillResult none = new FamilyBackfillResult(null, List.of(), List.of());
+        if (datasourceId == null || keyword == null || keyword.isBlank()) {
+            return none;
+        }
+        String base = stripTrailingCaliber(keyword);
+        if (base.isEmpty()) {
+            return none;
+        }
+        try {
+            // ① 按基名捞候选，再用「剥离口径后精确等于基名」过滤掉仅前缀相同的其它指标
+            List<AloudataMetricEntity> candidates = metricMapper.selectList(
+                    new LambdaQueryWrapper<AloudataMetricEntity>()
+                            .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                            .likeRight(AloudataMetricEntity::getMetricDisplayName, base)
+                            .select(AloudataMetricEntity::getMetricName,
+                                    AloudataMetricEntity::getMetricDisplayName,
+                                    AloudataMetricEntity::getType,
+                                    AloudataMetricEntity::getBusinessCaliber,
+                                    AloudataMetricEntity::getMetricCategoryName,
+                                    AloudataMetricEntity::getUnit,
+                                    AloudataMetricEntity::getSynonyms)
+                            // ORDER BY 保证 LIMIT 截断确定（极端前缀 >200 时才可能漏，真实指标族远小于此）
+                            .orderByAsc(AloudataMetricEntity::getMetricDisplayName)
+                            .last("LIMIT " + FAMILY_LOOKUP_MAX));
+            List<AloudataMetricEntity> familyMembers = candidates.stream()
+                    .filter(m -> base.equals(stripTrailingCaliber(m.getMetricDisplayName())))
+                    .toList();
+
+            // 少于 2 个口径成员：不是「多口径族」，无歧义，交给原有 ES 流程
+            if (familyMembers.size() < 2) {
+                return none;
+            }
+
+            // ② 口径识别：用「原话 + keyword」匹配各成员口径后缀。
+            // 优先"强匹配"（原话含完整展示名 / base+口径 / 括号包裹口径），可精确区分互为子串的口径
+            // （如"个人"vs"个人及机构"，括号形式"（个人）"不会命中"（个人及机构）"）；无强匹配时用"弱匹配"
+            // （口径 token 出现在原话任意处）兜底，再用子串去重（longest-wins）收敛。
+            String probe = (originalMessage != null ? originalMessage : "") + " " + keyword;
+            List<AloudataMetricEntity> strong = new ArrayList<>();
+            List<AloudataMetricEntity> loose = new ArrayList<>();
+            for (AloudataMetricEntity m : familyMembers) {
+                String caliber = extractTrailingCaliber(m.getMetricDisplayName());
+                if (caliber.isEmpty()) {
+                    continue;
+                }
+                String display = m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "";
+                boolean strongHit = (!display.isEmpty() && probe.contains(display))
+                        || probe.contains(base + caliber)
+                        || probe.contains("（" + caliber + "）")
+                        || probe.contains("(" + caliber + ")");
+                if (strongHit) {
+                    strong.add(m);
+                }
+                if (probe.contains(caliber)) {
+                    loose.add(m);
+                }
+            }
+            List<AloudataMetricEntity> matched = dropSubstringDominatedCalibers(strong.isEmpty() ? loose : strong);
+            // 保证整族都在结果中：补入缺失成员（不受 TopK 影响）
+            Set<String> present = mergedMetrics.stream()
+                    .map(AloudataSearchResult.MetricHit::getMetricName)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            double maxScore = mergedMetrics.stream()
+                    .mapToDouble(AloudataSearchResult.MetricHit::getScore)
+                    .max().orElse(1.0);
+            for (AloudataMetricEntity m : familyMembers) {
+                if (m.getMetricName() != null && !present.contains(m.getMetricName())) {
+                    mergedMetrics.add(toMetricHit(m, maxScore));
+                    present.add(m.getMetricName());
+                }
+            }
+
+            // 为补入的族成员补充可用维度（ES 命中项已在检索层补充；补入项否则会缺失"可用维度"，
+            // 而被唯一命中的目标口径往往正是补入项，缺维度会让 LLM 误判其无可用维度或多一次工具调用）
+            enrichBackfilledDimensions(datasourceId, mergedMetrics);
+
+            // 命中口径（唯一命中或多选，如"对比整体和个人"）：置为最高分，稳居前列
+            if (!matched.isEmpty()) {
+                double dominant = maxScore + 1.0;
+                Set<String> matchedNames = matched.stream()
+                        .map(AloudataMetricEntity::getMetricName)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                for (AloudataSearchResult.MetricHit hit : mergedMetrics) {
+                    if (matchedNames.contains(hit.getMetricName())) {
+                        hit.setScore(dominant);
+                    }
+                }
+            }
+
+            // 注入 / 改分后重排
+            mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+
+            return new FamilyBackfillResult(base, familyMembers, matched);
+        } catch (Exception e) {
+            log.error("族级兜底失败，跳过（不影响原有检索）: {}", e.getMessage());
+            return none;
+        }
+    }
+
+    /**
+     * 追加确定性族级口径提示。
+     * <ul>
+     *   <li>唯一命中：明确告知目标 metricName，指示直接使用；</li>
+     *   <li>未唯一命中：列出整族全部口径，指示向用户确认、禁止自行选择。</li>
+     * </ul>
+     * 该信息来自元数据精确查询，不受检索排序 / TopK 影响。
+     */
+    private void appendFamilyHint(StringBuilder sb, FamilyBackfillResult family, String keyword) {
+        if (family == null || !family.triggered()) {
+            return;
+        }
+        List<AloudataMetricEntity> matched = family.matched();
+
+        // 唯一命中：明确目标 metricName，指示直接使用
+        if (matched.size() == 1) {
+            AloudataMetricEntity r = matched.get(0);
+            String caliber = extractTrailingCaliber(r.getMetricDisplayName());
+            sb.append("## ✅ 指标口径确定性识别\n\n");
+            sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配口径")
+                    .append(caliber.isEmpty() ? "" : "「" + caliber + "」")
+                    .append("，目标指标：**").append(r.getMetricName()).append("**(")
+                    .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+            sb.append("> 该结果来自元数据精确匹配，不受检索排序 / TopK 影响。请直接使用此 metricName 构造查询；若与用户意图不符再追问。\n\n");
+            return;
+        }
+
+        // 多命中：用户显式提到多个口径（如"对比整体和个人"），全部为目标，无需追问
+        if (matched.size() >= 2) {
+            sb.append("## ✅ 指标口径确定性识别（多口径）\n\n");
+            sb.append("「").append(family.baseName()).append("」是多口径指标族，用户原话提到多个口径，以下均为目标口径（可分别查询或对比）：\n");
+            for (AloudataMetricEntity m : matched) {
+                sb.append("  - **").append(m.getMetricName()).append("**(")
+                        .append(m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "").append(")\n");
+            }
+            sb.append("> 以上来自元数据精确匹配，不受检索排序 / TopK 影响。请直接使用这些 metricName。\n\n");
+            return;
+        }
+
+        // 0 命中：无法唯一确定口径，列出整族让用户确认
+        sb.append("## ⚠️ 指标口径消歧（确定性）\n\n");
+        sb.append("「").append(family.baseName())
+                .append("」是多口径指标族，无法从用户输入唯一确定口径，**请勿自行选择，向用户确认后再查询**。")
+                .append("全部可选口径（来自元数据精确查询，不受检索排序影响）：\n");
+        for (AloudataMetricEntity m : family.family()) {
+            sb.append("  - **").append(m.getMetricName()).append("**(")
+                    .append(m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "").append(")");
+            if (m.getBusinessCaliber() != null && !m.getBusinessCaliber().isBlank()) {
+                sb.append(" — ").append(m.getBusinessCaliber());
+            }
+            sb.append("\n");
+        }
+        sb.append("\n");
+    }
+
+    /**
+     * 为族级兜底补入的成员补充可用维度。
+     * <p>
+     * ES 命中项的 availableDimensions 已由检索层填充（可能为空列表），补入项则为 null；此处仅处理
+     * availableDimensions 为 null 的补入项，一次批量查询指标-维度关联表，避免逐个查询。
+     */
+    private void enrichBackfilledDimensions(Long datasourceId, List<AloudataSearchResult.MetricHit> hits) {
+        List<String> names = hits.stream()
+                .filter(h -> h.getAvailableDimensions() == null && h.getMetricName() != null)
+                .map(AloudataSearchResult.MetricHit::getMetricName)
+                .distinct()
+                .toList();
+        if (names.isEmpty()) {
+            return;
+        }
+        try {
+            List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(
+                    new LambdaQueryWrapper<AloudataMetricDimensionEntity>()
+                            .eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId)
+                            .in(AloudataMetricDimensionEntity::getMetricName, names)
+                            .select(AloudataMetricDimensionEntity::getMetricName,
+                                    AloudataMetricDimensionEntity::getDimName));
+            Map<String, List<String>> dimMap = relations.stream()
+                    .collect(Collectors.groupingBy(
+                            AloudataMetricDimensionEntity::getMetricName,
+                            Collectors.mapping(AloudataMetricDimensionEntity::getDimName, Collectors.toList())));
+            for (AloudataSearchResult.MetricHit h : hits) {
+                if (h.getAvailableDimensions() == null && h.getMetricName() != null) {
+                    h.setAvailableDimensions(dimMap.getOrDefault(h.getMetricName(), List.of()));
+                }
+            }
+        } catch (Exception e) {
+            log.error("族级兜底补入成员的维度补充失败，跳过: {}", e.getMessage());
+        }
+    }
+
+    /** 由指标实体构造检索命中项（用于族级兜底补入缺失成员） */
+    private AloudataSearchResult.MetricHit toMetricHit(AloudataMetricEntity m, double score) {
+        AloudataSearchResult.MetricHit hit = new AloudataSearchResult.MetricHit();
+        hit.setMetricName(m.getMetricName());
+        hit.setMetricDisplayName(m.getMetricDisplayName());
+        hit.setType(m.getType());
+        hit.setBusinessCaliber(m.getBusinessCaliber());
+        hit.setSynonyms(m.getSynonyms());
+        hit.setCategoryName(m.getMetricCategoryName());
+        hit.setUnit(m.getUnit());
+        hit.setScore(score);
+        hit.setMatchSource("family_backfill");
+        return hit;
+    }
+
+    /** 剥离指标展示名尾部的口径后缀（如「交易市占率（整体）」→「交易市占率」） */
+    private static String stripTrailingCaliber(String name) {
+        if (name == null) {
+            return "";
+        }
+        return TRAILING_CALIBER_PATTERN.matcher(name.trim()).replaceAll("").trim();
+    }
+
+    /** 提取指标展示名尾部口径后缀内容（如「交易市占率（整体）」→「整体」），无则返回空串 */
+    private static String extractTrailingCaliber(String name) {
+        if (name == null) {
+            return "";
+        }
+        Matcher matcher = TRAILING_CALIBER_CONTENT_PATTERN.matcher(name.trim());
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    /**
+     * 口径去重（longest-wins）：去掉口径是另一命中口径真子串的成员。
+     * <p>
+     * 例：同时命中「个人」与「个人及机构」时，「个人」仅因是「个人及机构」的子串而命中，保留更具体的
+     * 「个人及机构」。用于弱匹配兜底后收敛，避免互为子串的口径造成误判为多口径。
+     */
+    private List<AloudataMetricEntity> dropSubstringDominatedCalibers(List<AloudataMetricEntity> matched) {
+        if (matched.size() <= 1) {
+            return matched;
+        }
+        List<AloudataMetricEntity> result = new ArrayList<>();
+        for (AloudataMetricEntity m : matched) {
+            String cal = extractTrailingCaliber(m.getMetricDisplayName());
+            boolean dominated = false;
+            for (AloudataMetricEntity other : matched) {
+                if (other == m) {
+                    continue;
+                }
+                String otherCal = extractTrailingCaliber(other.getMetricDisplayName());
+                if (!cal.equals(otherCal) && otherCal.contains(cal)) {
+                    dominated = true;
+                    break;
+                }
+            }
+            if (!dominated) {
+                result.add(m);
+            }
+        }
+        return result;
+    }
+
+    // ==================== 通用口径重排 ====================
+
+    /**
+     * 通用口径重排：当族级括号兜底未触发时，用"用户原话 vs 展示名"的字符重叠度做排序调整。
+     * <p>
+     * 覆盖括号族兜底无法处理的形态：
+     * <ul>
+     *   <li>前缀式：个人交易市占率 / 机构交易市占率（口径词在基名前面）</li>
+     *   <li>修饰词式：华东区销售额 / 华南区销售额（地域等修饰词嵌入名称）</li>
+     *   <li>换序式：交易市占率整体（无括号包裹）</li>
+     * </ul>
+     * <p>
+     * 算法：
+     * <ol>
+     *   <li>对每个候选指标，计算 overlap(用户原话, 展示名) = 两者中文字符交集大小 / 展示名中文字符总数；</li>
+     *   <li>找到重叠度最高的候选（bestOverlap），若 bestOverlap > 阈值 且 比当前首名的重叠度高出 0.1 以上
+     *       （避免微小差距导致频繁重排），则将其分数提升到首名之上、并重排。</li>
+     * </ol>
+     * <p>
+     * 安全性：只在原话与 keyword 不同时生效（原话 == keyword 说明 LLM 未丢失信息，无需重排）；
+     * 重排只改变分数和顺序，不增删结果项，不影响原有 ES 召回。
+     *
+     * @param originalMessage 用户原始消息（可能为 null）
+     * @param keyword         LLM 传入的检索关键词
+     * @param mergedMetrics   当前指标命中列表（可变，方法内可能调整分数和顺序）
+     */
+    private void applyGenericCaliberRerank(String originalMessage, String keyword,
+                                            List<AloudataSearchResult.MetricHit> mergedMetrics) {
+        if (originalMessage == null || originalMessage.equals(keyword) || mergedMetrics.size() < 2) {
+            return;
+        }
+        try {
+            // 计算每个候选与用户原话的字符重叠度
+            Set<String> origChars = extractChineseChars(originalMessage);
+            if (origChars.isEmpty()) {
+                return;
+            }
+            double bestOverlap = 0;
+            int bestIndex = -1;
+            double topOverlap = 0;
+            for (int i = 0; i < mergedMetrics.size(); i++) {
+                String displayName = mergedMetrics.get(i).getMetricDisplayName();
+                if (displayName == null || displayName.isBlank()) {
+                    continue;
+                }
+                Set<String> nameChars = extractChineseChars(displayName);
+                if (nameChars.isEmpty()) {
+                    continue;
+                }
+                double overlap = computeCharOverlap(origChars, nameChars);
+                if (i == 0) {
+                    topOverlap = overlap;
+                }
+                if (overlap > bestOverlap) {
+                    bestOverlap = overlap;
+                    bestIndex = i;
+                }
+            }
+
+            // 重排条件：最佳重叠度超过阈值，且比当前首名高出 0.1 以上（避免微弱差距导致频繁重排）
+            if (bestIndex > 0 && bestOverlap >= GENERIC_RERANK_THRESHOLD
+                    && bestOverlap - topOverlap >= 0.1) {
+                double dominant = mergedMetrics.get(0).getScore() + 0.5;
+                mergedMetrics.get(bestIndex).setScore(dominant);
+                mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+                log.info("通用口径重排：'{}' 与展示名重叠度 {} 高于首名 {}，已提权到首位",
+                        originalMessage, String.format("%.2f", bestOverlap), String.format("%.2f", topOverlap));
+            }
+        } catch (Exception e) {
+            log.error("通用口径重排失败，跳过（不影响原有检索）: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 计算两个中文字符集合的重叠度 = 交集大小 / nameChars 大小。
+     * <p>
+     * 语义：展示名中有多少比例的字符出现在用户原话中。
+     * 值域 [0, 1]，1 表示展示名的每个字符都在原话中出现。
+     *
+     * @param origChars 用户原话的中文字符集合
+     * @param nameChars 展示名的中文字符集合
+     * @return 重叠度
+     */
+    private static double computeCharOverlap(Set<String> origChars, Set<String> nameChars) {
+        if (nameChars.isEmpty()) {
+            return 0;
+        }
+        Set<String> intersection = new HashSet<>(nameChars);
+        intersection.retainAll(origChars);
+        return (double) intersection.size() / nameChars.size();
+    }
+
+    /**
+     * 族级兜底结果。
+     *
+     * @param baseName 指标族基名；未触发时为 null
+     * @param family   整族成员（≥2 个口径）；未触发时为空
+     * @param resolved 由用户原话唯一确定的目标口径指标；未唯一确定时为 null
+     */
+    private record FamilyBackfillResult(String baseName,
+                                        List<AloudataMetricEntity> family,
+                                        List<AloudataMetricEntity> matched) {
+        boolean triggered() {
+            return family != null && family.size() >= 2;
+        }
+    }
+
     // ==================== 消歧追问机制 ====================
 
     /**
@@ -1486,12 +1977,13 @@ public class AloudataCallTool {
     private void appendDisambiguationHint(StringBuilder sb,
                                            List<AloudataSearchResult.MetricHit> metrics,
                                            List<AloudataSearchResult.DimensionHit> dimensions,
-                                           String keyword) {
+                                           String keyword,
+                                           boolean suppressMetric) {
         boolean hasMetricAmbiguity = false;
         boolean hasDimensionAmbiguity = false;
 
-        // 指标消歧：≥2 个指标且前两名分数接近
-        if (metrics.size() >= 2) {
+        // 指标消歧：≥2 个指标且前两名分数接近（族级已权威处理时跳过，避免与族级口径消歧重复）
+        if (!suppressMetric && metrics.size() >= 2) {
             double topScore = metrics.get(0).getScore();
             double secondScore = metrics.get(1).getScore();
             if (topScore - secondScore < DISAMBIGUATION_SCORE_GAP) {

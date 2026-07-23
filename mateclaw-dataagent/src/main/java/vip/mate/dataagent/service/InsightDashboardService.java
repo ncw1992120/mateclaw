@@ -55,6 +55,14 @@ public interface InsightDashboardService {
     void deleteDashboard(Long id);
 
     /**
+     * 复制仪表盘
+     *
+     * @param id 被复制的仪表盘 ID
+     * @return 复制后的新仪表盘视图对象
+     */
+    InsightDashboardVO copyDashboard(Long id);
+
+    /**
      * AI助手对话（流式）
      * <p>
      * 统一AI生成和AI修改能力，通过dashboardId是否为空区分模式：

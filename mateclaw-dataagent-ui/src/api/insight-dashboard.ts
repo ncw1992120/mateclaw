@@ -29,6 +29,11 @@ export function remove(id: string) {
   return api.delete(`${BASE_URL}/${id}`)
 }
 
+/** 复制仪表盘 */
+export function copy(id: string) {
+  return api.post<InsightDashboard>(`${BASE_URL}/${id}/copy`)
+}
+
 /** 预览仪表盘（获取所有组件渲染数据，支持运行时筛选条件） */
 export function preview(id: string, filterContext?: DashboardFilterContext) {
   return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {})

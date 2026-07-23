@@ -86,6 +86,9 @@
                     <el-dropdown-item command="addSub">
                       <el-icon><Plus /></el-icon>添加子页面
                     </el-dropdown-item>
+                    <el-dropdown-item command="copy">
+                      <el-icon><DocumentCopy /></el-icon>复制页面
+                    </el-dropdown-item>
                     <el-dropdown-item command="rename">
                       <el-icon><Edit /></el-icon>重命名
                     </el-dropdown-item>
@@ -171,7 +174,7 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowUp, ArrowDown, ChatDotRound, Folder, Plus, Setting, More, Edit, Delete } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
@@ -684,6 +687,51 @@ function movePageDown(page: DashboardPage): void {
   nextPage.order = temp
 }
 
+/** 复制页面（复制为同级页面，不复制子页面） */
+function copyPage(page: DashboardPage): void {
+  const cloned: DashboardPage = JSON.parse(JSON.stringify(page))
+  const oldPageId = page.id
+  const newPageId = generateId('page')
+  cloned.id = newPageId
+  cloned.name = (page.name || '') + t('insight.pageCopySuffix')
+  cloned.parentId = undefined
+
+  const componentIdMap = new Map<string, string>()
+  if (cloned.components) {
+    cloned.components.forEach((component) => {
+      const oldComponentId = component.id
+      const newComponentId = generateId('comp')
+      componentIdMap.set(oldComponentId, newComponentId)
+      component.id = newComponentId
+
+      if (component.tabs) {
+        component.tabs.forEach((tab) => {
+          tab.id = generateId('tab')
+        })
+      }
+    })
+
+    cloned.components.forEach((component) => {
+      if (component.boundFilterIds && component.boundFilterIds.length > 0) {
+        component.boundFilterIds = component.boundFilterIds.map((oldId) => {
+          return componentIdMap.get(oldId) || oldId
+        })
+      }
+    })
+  }
+
+  const originalIndex = schema.pages.findIndex((p) => p.id === oldPageId)
+  if (originalIndex >= 0) {
+    schema.pages.splice(originalIndex + 1, 0, cloned)
+  } else {
+    schema.pages.push(cloned)
+  }
+
+  reorderSiblings(cloned.parentId)
+  activePageId.value = newPageId
+  selectedComponentId.value = ''
+}
+
 /** 处理页面操作下拉菜单命令 */
 function handlePageAction(cmd: string, page: DashboardPage): void {
   switch (cmd) {
@@ -695,6 +743,9 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
       break
     case 'addSub':
       addSubPage(page)
+      break
+    case 'copy':
+      copyPage(page)
       break
     case 'rename':
       startEditPageName(page)

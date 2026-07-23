@@ -88,6 +88,17 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
+     * 复制仪表盘
+     */
+    @PostMapping("/{id}/copy")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "复制仪表盘", description = "复制指定仪表盘及其 Schema，生成新的草稿仪表盘")
+    public R<InsightDashboardVO> copy(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
+        return R.ok(dashboardService.copyDashboard(id));
+    }
+
+    /**
      * 预览仪表盘
      * <p>
      * 获取仪表盘所有组件的渲染数据（取数 + 图表构建），用于预览模式渲染。

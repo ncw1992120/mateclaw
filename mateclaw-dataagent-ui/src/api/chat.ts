@@ -434,3 +434,58 @@ export async function optimizePrompt(input: string): Promise<OptimizeResult> {
   const data = await api.post(OPTIMIZE_URL, { input })
   return data as OptimizeResult
 }
+
+const CHART_METRIC_META_URL = '/dataagent/api/v1/chat/chart/metric-meta'
+const CHART_INTERPRET_URL = '/dataagent/api/v1/chat/chart/interpret'
+
+/** 图表「指标查看」请求：从图表所属消息的 metrics_query 工具入参提取 */
+export interface ChartMetricMetaPayload {
+  datasourceId?: number | null
+  metrics: string[]
+  dimensions: string[]
+  timeConstraint?: string | null
+  filters: string[]
+}
+
+/** 单个指标元数据 */
+export interface ChartMetricItem {
+  name: string
+  displayName: string
+  caliber?: string | null
+  unit?: string | null
+  category?: string | null
+}
+
+/** 单个维度元数据 */
+export interface ChartDimItem {
+  name: string
+  displayName: string
+}
+
+/** 图表「指标查看」响应 */
+export interface ChartMetricMeta {
+  metrics: ChartMetricItem[]
+  dimensions: ChartDimItem[]
+  timeRange?: string | null
+  filters: string[]
+}
+
+/** 图表「解读」请求 */
+export interface ChartInterpretPayload {
+  agentId: number | string
+  conversationId: string
+  echartsOption: string
+  question?: string
+}
+
+/** 解析图表背后的指标元数据（指标名/口径/维度/时间范围/业务限定） */
+export async function resolveChartMetricMeta(payload: ChartMetricMetaPayload): Promise<ChartMetricMeta> {
+  const data = await api.post(CHART_METRIC_META_URL, payload)
+  return data as ChartMetricMeta
+}
+
+/** 对单张图表数据做一次性 AI 解读，返回解读文字 */
+export async function interpretChart(payload: ChartInterpretPayload): Promise<string> {
+  const data = await api.post(CHART_INTERPRET_URL, payload)
+  return (data as string) || ''
+}

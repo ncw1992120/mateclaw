@@ -71,6 +71,7 @@
                 >
                   {{ t('insight.unpublish') }}
                 </el-button>
+                <el-button text size="small" @click="handleCopy(dashboard)">{{ t('insight.copy') }}</el-button>
                 <el-button text size="small" type="danger" @click="handleDelete(dashboard)">{{ t('insight.delete') }}</el-button>
               </div>
             </div>
@@ -221,6 +222,16 @@ async function handleUnpublish(dashboard: InsightDashboard): Promise<void> {
     ElMessage.success(t('insight.unpublishSuccess'))
   } catch {
     ElMessage.error(t('insight.unpublishFailed'))
+  }
+}
+
+/** 复制仪表盘 */
+async function handleCopy(dashboard: InsightDashboard): Promise<void> {
+  try {
+    await store.copyDashboard(dashboard.id)
+    ElMessage.success(t('insight.copySuccess'))
+  } catch {
+    ElMessage.error(t('insight.copyFailed'))
   }
 }
 

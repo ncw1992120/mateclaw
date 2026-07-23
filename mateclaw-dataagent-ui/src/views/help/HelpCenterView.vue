@@ -88,7 +88,7 @@
     >
       <div class="doc-edit-layout">
         <!-- 上方：元数据表单 -->
-        <el-form :model="docForm" label-width="80px" class="doc-meta-form">
+        <el-form :model="docForm" label-width="72px" class="doc-meta-form">
           <div class="meta-row">
             <el-form-item :label="t('helpCenter.documentTitle')" class="meta-item">
               <el-input v-model="docForm.title" :placeholder="t('helpCenter.documentTitlePlaceholder')" />
@@ -563,34 +563,36 @@ onMounted(() => {
 
 .doc-meta-form {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--theme-border);
-  padding-bottom: 4px;
-  margin-bottom: 8px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  padding: 16px 16px 8px;
+  margin-bottom: 12px;
 }
 
 .doc-meta-form :deep(.el-form-item) {
   margin-bottom: 8px;
-  margin-right: 16px;
+}
+
+.doc-meta-form :deep(.el-form-item__label) {
+  color: var(--theme-text-secondary);
+  font-weight: 500;
+  padding-right: 8px;
 }
 
 .meta-row {
   display: flex;
-  gap: 0;
+  gap: 16px;
 }
 
 .meta-row + .meta-row {
-  margin-top: 0;
+  margin-top: 8px;
 }
 
 .meta-item {
   flex: 1;
   min-width: 0;
   margin-bottom: 0 !important;
-  margin-right: 16px;
-}
-
-.meta-item:last-child {
-  margin-right: 0;
 }
 
 .meta-item-wide {
