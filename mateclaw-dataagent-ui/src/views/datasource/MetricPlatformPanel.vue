@@ -257,7 +257,7 @@
                     size="small"
                     :placeholder="t('metricPlatform.searchMetrics')"
                     clearable
-                    @input="handleMetricSearch"
+                    @change="handleMetricSearch"
                     @clear="handleMetricSearch"
                   >
                     <template #prefix>
@@ -413,7 +413,7 @@
                     size="small"
                     :placeholder="t('metricPlatform.searchDimensions')"
                     clearable
-                    @input="handleDimensionSearch"
+                    @change="handleDimensionSearch"
                     @clear="handleDimensionSearch"
                   >
                     <template #prefix>
@@ -1037,32 +1037,16 @@ async function loadDimensionPage(): Promise<void> {
   }
 }
 
-/** 指标搜索防抖定时器 */
-let metricSearchTimer: ReturnType<typeof setTimeout> | null = null
-
 /** 指标搜索输入处理 */
 function handleMetricSearch(): void {
-  if (metricSearchTimer) {
-    clearTimeout(metricSearchTimer)
-  }
-  metricSearchTimer = setTimeout(() => {
-    metricPagination.page = 1
-    loadMetricPage()
-  }, 300)
+  metricPagination.page = 1
+  loadMetricPage()
 }
-
-/** 维度搜索防抖定时器 */
-let dimensionSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 维度搜索输入处理 */
 function handleDimensionSearch(): void {
-  if (dimensionSearchTimer) {
-    clearTimeout(dimensionSearchTimer)
-  }
-  dimensionSearchTimer = setTimeout(() => {
-    dimensionPagination.page = 1
-    loadDimensionPage()
-  }, 300)
+  dimensionPagination.page = 1
+  loadDimensionPage()
 }
 
 /** 指标翻页 */
