@@ -341,39 +341,6 @@ async function loadProviderCatalog() {
   }
 }
 
-const providerCatalog = ref<SearchProviderCatalog>({ providers: [], resolvedId: null, resolvedSource: null })
-const expandedProviderId = ref<string | null>(null)
-const catalogError = ref(false)
-
-// Pass the saved provider id so it stays selectable even when the catalog
-// doesn't contain it (fetch failure / owning plugin disabled) — otherwise the
-// select renders blank and a save would silently rewrite the value to ''.
-const providerOptions = computed(() =>
-  buildProviderOptions(providerCatalog.value, t('settings.fields.searchProviderAuto'), settings.searchProvider))
-
-function isExpanded(id: string) {
-  return expandedProviderId.value === id
-}
-function toggleExpanded(id: string) {
-  expandedProviderId.value = isExpanded(id) ? null : id
-}
-
-async function loadProviderCatalog() {
-  try {
-    const res: any = await settingsApi.getSearchProviders()
-    providerCatalog.value = res.data || { providers: [], resolvedId: null, resolvedSource: null }
-    catalogError.value = false
-    expandedProviderId.value = resolveDefaultExpandedId(providerCatalog.value)
-  } catch {
-    // Catalog outage must not hide the search config: fall back to the four
-    // built-in providers (their forms bind to plain settings fields and never
-    // needed the catalog) and surface a visible warning instead.
-    catalogError.value = true
-    providerCatalog.value = builtinFallbackCatalog()
-    expandedProviderId.value = null
-  }
-}
-
 const settings = reactive<SystemSettings>({
   language: 'zh-CN',
   streamEnabled: true,
