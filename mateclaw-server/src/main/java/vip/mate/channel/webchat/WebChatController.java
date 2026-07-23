@@ -1646,7 +1646,7 @@ public class WebChatController {
         String conversationId = null;
         if (sessionId != null && !sessionId.isBlank()) {
             try {
-                conversationId = deriveConversationId(apiKey,
+                conversationId = resolveSessionConversationId(channel.getId(), apiKey,
                         normalizeVisitorId(visitorId), normalizeSessionId(sessionId));
             } catch (IllegalArgumentException ex) {
                 return R.fail(400, ex.getMessage());
