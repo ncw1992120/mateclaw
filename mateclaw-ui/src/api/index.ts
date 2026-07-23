@@ -212,6 +212,9 @@ export const conversationApi = {
     http.delete(`/conversations/${encId(conversationId)}`),
   clearMessages: (conversationId: string) =>
     http.delete(`/conversations/${encId(conversationId)}/messages`),
+  // messageId is a snowflake ID — keep it a string end-to-end (never Number()).
+  rewindMessage: (conversationId: string, messageId: string) =>
+    http.post(`/conversations/${encId(conversationId)}/messages/${messageId}/rewind`),
   rename: (conversationId: string, title: string) =>
     http.put(`/conversations/${encId(conversationId)}/title`, { title }),
   setPinned: (conversationId: string, pinned: boolean) =>
@@ -262,6 +265,18 @@ export const skillApi = {
   refreshRuntime: () => http.post('/skills/runtime/refresh'),
   exportWorkspace: (id: string | number) => http.post(`/skills/${id}/export-workspace`),
   getWorkspaceInfo: (id: string | number) => http.get(`/skills/${id}/workspace`),
+  /**
+   * Bundle files (scripts/ + references/ + templates/) — canonical rows in
+   * mate_skill_file; writes also materialize the workspace cache and
+   * re-resolve the skill.
+   */
+  listFiles: (id: string | number) => http.get(`/skills/${id}/files`),
+  getFileContent: (id: string | number, path: string) =>
+    http.get(`/skills/${id}/files/content`, { params: { path } }),
+  saveFileContent: (id: string | number, path: string, content: string) =>
+    http.put(`/skills/${id}/files/content`, { path, content }),
+  deleteFile: (id: string | number, path: string) =>
+    http.delete(`/skills/${id}/files`, { params: { path } }),
   // RFC-090 §7 + §11.4 — pre-flight requirements + LESSONS.md + reverse lookup
   requirements: (id: string | number) => http.get(`/skills/${id}/requirements`),
   getLessons: (id: string | number) => http.get(`/skills/${id}/lessons`),
@@ -792,6 +807,22 @@ export const cronJobApi = {
 }
 
 // ==================== Wiki Knowledge Base ====================
+// One row in the cross-KB failure center. ids are strings (global Long→String
+// Jackson config) to avoid Snowflake precision loss.
+export interface WikiFailureItem {
+  rawId: string
+  kbId: string
+  kbName: string
+  workspaceId: string | null
+  title: string
+  processingStatus: string
+  errorCode: string | null
+  errorMessage: string | null
+  warningCode: string | null
+  warningMessage: string | null
+  updateTime: string | null
+}
+
 export const wikiApi = {
   // Knowledge Base
   listKBs: () => http.get('/wiki/knowledge-bases'),
@@ -811,6 +842,9 @@ export const wikiApi = {
   setSourceDirectory: (id: string | number, path: string) =>
     http.put(`/wiki/knowledge-bases/${id}/source-directory`, { path }),
   scanDirectory: (id: number) => http.post(`/wiki/knowledge-bases/${id}/scan`),
+
+  // Centralized cross-KB failure center (admin only)
+  listFailures: (limit = 100) => http.get<{ data: WikiFailureItem[] }>(`/wiki/admin/failures?limit=${limit}`),
 
   // Raw Materials
   listRaw: (

@@ -80,13 +80,16 @@ public class SkillFileService {
         Map<String, String> incoming = newFiles == null ? Map.of() : newFiles;
         boolean newHasScripts = bucketHasEntries(incoming, "scripts/");
         boolean newHasRefs = bucketHasEntries(incoming, "references/");
+        boolean newHasTemplates = bucketHasEntries(incoming, "templates/");
 
         List<SkillFileEntity> existing = listBySkillId(skillId);
         boolean existingHasScripts = existing.stream().anyMatch(e -> e.getFilePath() != null && e.getFilePath().startsWith("scripts/"));
         boolean existingHasRefs = existing.stream().anyMatch(e -> e.getFilePath() != null && e.getFilePath().startsWith("references/"));
+        boolean existingHasTemplates = existing.stream().anyMatch(e -> e.getFilePath() != null && e.getFilePath().startsWith("templates/"));
 
         boolean preserveScripts = !newHasScripts && existingHasScripts && !force;
         boolean preserveRefs = !newHasRefs && existingHasRefs && !force;
+        boolean preserveTemplates = !newHasTemplates && existingHasTemplates && !force;
 
         Map<String, SkillFileEntity> existingByPath = new HashMap<>();
         for (SkillFileEntity e : existing) existingByPath.put(e.getFilePath(), e);
@@ -106,13 +109,20 @@ public class SkillFileService {
                 }
             }
         }
+        if (preserveTemplates) {
+            for (SkillFileEntity e : existing) {
+                if (e.getFilePath() != null && e.getFilePath().startsWith("templates/")) {
+                    keepPaths.add(e.getFilePath());
+                }
+            }
+        }
         keepPaths.addAll(incoming.keySet());
 
         int written = 0;
         LocalDateTime now = LocalDateTime.now();
         for (var entry : incoming.entrySet()) {
             String path = entry.getKey();
-            String content = entry.getValue() == null ? "" : entry.getValue();
+            String content = stripNul(entry.getValue() == null ? "" : entry.getValue(), path, skillId);
             String hash = sha256Hex(content);
             int size = content.getBytes(StandardCharsets.UTF_8).length;
 
@@ -152,6 +162,9 @@ public class SkillFileService {
         if (preserveRefs) {
             log.warn("Refused to prune references/ for skill_id={} — new bundle is empty. Pass force=true to override.", skillId);
         }
+        if (preserveTemplates) {
+            log.warn("Refused to prune templates/ for skill_id={} — new bundle is empty. Pass force=true to override.", skillId);
+        }
 
         return new ApplyResult(written, pruned, preserveScripts, preserveRefs);
     }
@@ -161,6 +174,89 @@ public class SkillFileService {
     public int deleteAllForSkill(Long skillId) {
         if (skillId == null) return 0;
         return mapper.deleteBySkillId(skillId);
+    }
+
+    /**
+     * Strip NUL characters ({@code \u0000}) from bundle content before it is
+     * persisted.
+     *
+     * <p>This is the universal backstop for the PostgreSQL text contract:
+     * PG rejects {@code 0x00} in {@code text}/{@code jsonb} columns
+     * ("invalid byte sequence for encoding UTF8: 0x00"), whereas MySQL
+     * ({@code utf8mb4 TEXT}) and H2 ({@code CLOB}) silently tolerate it — so
+     * this corruption never surfaces on the default dev database and must be
+     * caught here. {@code applyBundleFiles} is the single write chokepoint for
+     * {@code mate_skill_file}, covering the Zip installer, the Git installer
+     * <em>and</em> the disk→DB reverse flow in {@code SkillFileSyncer}, so the
+     * guard belongs here rather than at any one fetch boundary.
+     *
+     * <p>The fetchers reject genuinely-binary entries up front (see
+     * {@code ZipSkillFetcher.isLikelyBinary} / the equivalent in
+     * {@code GitSkillFetcher}); this only ever fires for otherwise-text content
+     * that carries a stray NUL, so stripping (rather than aborting the whole
+     * install) is the least-surprising recovery.
+     */
+    private static String stripNul(String content, String path, Long skillId) {
+        if (content == null || content.indexOf('\0') < 0) {
+            return content;
+        }
+        log.warn("Stripping NUL byte(s) from skill file content before persist: skill_id={} path={}", skillId, path);
+        return content.replace("\u0000", "");
+    }
+
+    /** One file row by exact path, or {@code null}. */
+    public SkillFileEntity getFile(Long skillId, String filePath) {
+        if (skillId == null || filePath == null || filePath.isBlank()) return null;
+        QueryWrapper<SkillFileEntity> q = new QueryWrapper<>();
+        q.eq("skill_id", skillId).eq("file_path", filePath);
+        return mapper.selectOne(q);
+    }
+
+    /**
+     * Create or update a single file row. Content hash and size are
+     * recomputed; a same-hash write is a no-op so idempotent saves don't
+     * churn {@code update_time}.
+     *
+     * @return the persisted row (existing row instance on no-op)
+     */
+    @Transactional
+    public SkillFileEntity upsertFile(Long skillId, String filePath, String content) {
+        String safeContent = content == null ? "" : content;
+        String hash = sha256Hex(safeContent);
+        LocalDateTime now = LocalDateTime.now();
+
+        SkillFileEntity existing = getFile(skillId, filePath);
+        if (existing != null) {
+            if (hash.equals(existing.getSha256())) {
+                return existing;
+            }
+            existing.setContent(safeContent);
+            existing.setContentSize(safeContent.getBytes(StandardCharsets.UTF_8).length);
+            existing.setSha256(hash);
+            existing.setUpdateTime(now);
+            mapper.updateById(existing);
+            return existing;
+        }
+
+        SkillFileEntity row = new SkillFileEntity();
+        row.setSkillId(skillId);
+        row.setFilePath(filePath);
+        row.setContent(safeContent);
+        row.setContentSize(safeContent.getBytes(StandardCharsets.UTF_8).length);
+        row.setSha256(hash);
+        row.setCreateTime(now);
+        row.setUpdateTime(now);
+        mapper.insert(row);
+        return row;
+    }
+
+    /** Delete a single file row. Returns {@code true} when a row was removed. */
+    @Transactional
+    public boolean deleteFile(Long skillId, String filePath) {
+        SkillFileEntity existing = getFile(skillId, filePath);
+        if (existing == null) return false;
+        mapper.deleteById(existing.getId());
+        return true;
     }
 
     private boolean bucketHasEntries(Map<String, String> files, String prefix) {
