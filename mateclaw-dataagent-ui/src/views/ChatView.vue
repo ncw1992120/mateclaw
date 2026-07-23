@@ -1113,6 +1113,10 @@ const echartsBlockMetricMeta = new Map<HTMLElement, ChartMetricMeta>()
 /** 「解读」结果缓存（避免重复请求） */
 const echartsBlockInterpret = new Map<HTMLElement, string>()
 
+/** 图表初始渲染的原生完整 option 与初始类型（AI 输出的原始样式：如自定义标记/标签/面积/坐标轴箭头等）。
+ *  切换图表类型会重建为标准样式，切回初始类型时用此原生 option 还原，避免丢失 AI 原始呈现。 */
+const echartsBlockPristine = new Map<HTMLElement, { option: Record<string, any>; type: ChartType }>()
+
 /** 支持切换的图表类型（不含表格，表格由独立按钮触发的浮层展示） */
 const ECHARTS_CHART_TYPES = [
   { key: 'bar', label: '柱状图' },
@@ -1510,7 +1514,13 @@ function switchEchartsBlockType(htmlEl: HTMLElement, type: ChartType): void {
     chart = echarts.init(htmlEl)
     echartsBlockInstances.set(htmlEl, chart)
   }
-  const newOption = buildEchartsOption(original, type)
+
+  // 切回图表初始类型时，还原 AI 原生完整 option（保留自定义标记/标签/面积/坐标轴箭头等原始样式），
+  // 而非用 buildEchartsOption 重建的标准样式
+  const pristine = echartsBlockPristine.get(htmlEl)
+  const newOption = pristine && pristine.type === type
+    ? JSON.parse(JSON.stringify(pristine.option)) // 克隆，避免多次切换时被 ECharts 内部引用污染缓存
+    : buildEchartsOption(original, type)
   chart.setOption(newOption, true)
 
   // 漏斗图按层高切分，层数多时容器高度需要扩展，避免物理挤压
@@ -2068,6 +2078,17 @@ function scanAndMountEChartsBlocks(): void {
       })
       echartsBlockTypes.set(htmlEl, initialType)
 
+      // 缓存 AI 原生完整 option（含布局修正后的最终形态），供切回初始类型时原样还原。
+      // option 源自 JSON 解析 + 函数剥离，可安全深拷贝。
+      try {
+        echartsBlockPristine.set(htmlEl, {
+          option: JSON.parse(JSON.stringify(option)),
+          type: initialType,
+        })
+      } catch {
+        // 深拷贝失败则跳过还原能力，不影响主流程
+      }
+
       const chart = echarts.init(htmlEl)
       chart.setOption(option)
       echartsBlockInstances.set(htmlEl, chart)
@@ -2519,6 +2540,7 @@ onUnmounted(() => {
   echartsBlockMetricPayload.clear()
   echartsBlockMetricMeta.clear()
   echartsBlockInterpret.clear()
+  echartsBlockPristine.clear()
   if (dropdownOutsideHandler) {
     document.removeEventListener('click', dropdownOutsideHandler)
     dropdownOutsideHandler = null
