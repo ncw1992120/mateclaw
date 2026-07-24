@@ -1,6 +1,6 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
+import type { ChatAttachment, ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
@@ -8,6 +8,9 @@ import { classifySseError, type ChatErrorInfo } from '@/types/chatError'
 
 /** 会话续连状态在 sessionStorage 的存储 key，用于刷新页面后恢复 lastEventId */
 const RECONNECT_STORAGE_KEY = 'mateclaw.chat.reconnect'
+
+/** 聊天附件文件访问地址前缀（与后端 ChatUploadRuntime.FILE_URL_PREFIX 保持一致） */
+const CHAT_FILE_URL_PREFIX = '/dataagent/api/v1/chat/files/'
 
 interface PersistedReconnectState {
   conversationId: string
@@ -1183,14 +1186,64 @@ export const useChatStore = defineStore('chat', () => {
     // 从 metadata 中恢复推荐问题到 cards（持久化恢复）
     const cards = recoverCardsFromMetadata(meta, m.role)
 
+    // 从持久化的 contentParts 恢复用户上传的附件（图片/文件），用于历史消息回显。
+    const attachments = m.role === 'user' ? reconstructAttachmentsFromVO(m) : []
+
+    // 后端 renderMessageContent 会把附件渲染成 "[图片]/[附件] xxx（路径: yyy）" 文本标记，
+    // 前端有独立的附件展示区，故当存在附件时改用纯文本片段作为气泡内容，剥离这些标记避免重复。
+    let content = m.content || ''
+    if (attachments.length > 0) {
+      const parts = (m.contentParts as MessageContentPart[] | null | undefined) || []
+      content = parts
+        .filter((p) => p && p.type === 'text' && p.text)
+        .map((p) => p.text as string)
+        .join('\n')
+        .trim()
+    }
+
     return {
       role: m.role as 'user' | 'assistant',
-      content: m.content || '',
+      content,
       timestamp: new Date(m.createTime).getTime(),
       metadata: meta,
       status: 'completed',
       ...(cards.length > 0 ? { cards } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
     }
+  }
+
+  /**
+   * 从消息 VO 的 contentParts 重建前端附件列表。
+   * <p>
+   * 用户上传时前端只持久化了 storedName/path/contentType 等（未存可访问 URL），
+   * 这里按「会话 ID + storedName」重建后端文件访问地址（与后端 ChatUploadRuntime 一致），
+   * 使刷新页面 / 切换历史会话后仍能展示图片缩略图与附件卡片。
+   *
+   * @param m 后端返回的消息 VO
+   * @return 重建的附件列表（无附件时为空数组）
+   */
+  function reconstructAttachmentsFromVO(m: MessageVO): ChatAttachment[] {
+    const parts = m.contentParts as MessageContentPart[] | null | undefined
+    if (!parts || parts.length === 0) return []
+    const result: ChatAttachment[] = []
+    for (const p of parts) {
+      if (!p || (p.type !== 'image' && p.type !== 'file' && p.type !== 'video' && p.type !== 'audio')) {
+        continue
+      }
+      const storedName = p.storedName || ''
+      // 优先用可公开访问的 fileUrl（如 IM 渠道），否则按会话目录重建本地文件访问地址
+      const url = p.fileUrl || (storedName ? `${CHAT_FILE_URL_PREFIX}${m.conversationId}/${storedName}` : '')
+      if (!url) continue
+      result.push({
+        fileName: p.fileName || storedName || '附件',
+        storedName,
+        url,
+        path: p.path || '',
+        size: p.fileSize || 0,
+        contentType: p.contentType || '',
+      })
+    }
+    return result
   }
 
   /**

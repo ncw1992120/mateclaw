@@ -39,16 +39,16 @@
         <!-- User Message -->
         <div v-if="msg.role === 'user'" :ref="(el) => setUserMsgRef(el as HTMLElement | null, index)" class="msg user">
           <div class="user-content-wrapper">
-            <div class="bubble user-bubble">{{ msg.content }}</div>
+            <div v-if="msg.content" class="bubble user-bubble">{{ msg.content }}</div>
             <!-- 附件展示 -->
             <div v-if="getUserAttachments(msg)" class="msg-attachments">
               <template v-for="(att, aIdx) in getUserAttachments(msg)" :key="aIdx">
-                <span v-if="att.contentType?.startsWith('image/')" class="msg-attachment msg-attachment--image" @click="previewImage(att.url)">
-                  <img :src="att.url" :alt="att.fileName" class="msg-attachment__img" />
+                <span v-if="att.contentType?.startsWith('image/')" class="msg-attachment msg-attachment--image" :title="att.fileName" @click="previewImage(att.url)">
+                  <img :src="buildFileUrl(att.url)" :alt="att.fileName" class="msg-attachment__img" />
                 </span>
-                <span v-else class="msg-attachment">
+                <span v-else class="msg-attachment msg-attachment--file" :title="att.fileName" @click="openAttachment(att)">
                   <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-                  {{ att.fileName }}
+                  <span class="msg-attachment__name">{{ att.fileName }}</span>
                 </span>
               </template>
             </div>
@@ -467,7 +467,7 @@
       <div v-if="pendingAttachments.length > 0" class="attachment-preview">
         <div v-for="(att, idx) in pendingAttachments" :key="idx" class="attachment-tag">
           <span v-if="att.contentType?.startsWith('image/')" class="attachment-tag__thumb">
-            <img :src="att.url" :alt="att.fileName" class="attachment-tag__img" />
+            <img :src="buildFileUrl(att.url)" :alt="att.fileName" class="attachment-tag__img" />
           </span>
           <span v-else class="attachment-tag__icon">
             <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
@@ -2255,9 +2255,30 @@ function getUserAttachments(msg: typeof chatStore.messages.value[0]): ChatAttach
   return msg.attachments
 }
 
+/**
+ * 为受 JWT 保护的附件访问地址追加 token 查询参数。
+ * <p>
+ * 附件端点 `/dataagent/api/v1/chat/files/**` 需要鉴权，而 `<img>` 标签与
+ * `window.open` 无法携带 Authorization 头；后端 JwtAuthFilter 支持通过
+ * `?token=` 传参（与 SSE 一致），故此处在渲染层为文件地址补上 token。
+ */
+function buildFileUrl(url: string | undefined): string {
+  if (!url) return ''
+  const token = localStorage.getItem('token')
+  if (!token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}token=${encodeURIComponent(token)}`
+}
+
 /** 预览图片（新窗口打开） */
 function previewImage(url: string): void {
-  window.open(url, '_blank')
+  window.open(buildFileUrl(url), '_blank')
+}
+
+/** 打开 / 下载非图片附件（新窗口打开，后端以 inline 方式返回，浏览器可直接预览或下载） */
+function openAttachment(att: ChatAttachment): void {
+  if (!att?.url) return
+  window.open(buildFileUrl(att.url), '_blank')
 }
 
 /** 键盘事件处理：Enter发送，Ctrl+Enter换行 */
@@ -4702,6 +4723,37 @@ onUnmounted(() => {
   padding: 2px;
   border-radius: 6px;
   overflow: hidden;
+}
+
+.msg-attachment--file {
+  cursor: pointer;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+  max-width: 240px;
+  opacity: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.msg-attachment--file:hover {
+  background: var(--theme-border);
+  border-color: var(--theme-primary);
+}
+
+.msg-attachment--file .icon-inline {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.msg-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .msg-attachment__img {
