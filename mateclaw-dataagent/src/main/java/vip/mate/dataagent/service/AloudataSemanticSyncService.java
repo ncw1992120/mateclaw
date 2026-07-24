@@ -91,6 +91,19 @@ public interface AloudataSemanticSyncService {
     List<AloudataMetricSemanticDTO> listDimensionMetricDetails(Long datasourceId, String dimName);
 
     /**
+     * 查询维度的可选值列表
+     * <p>
+     * 通过维度关联的指标调用 Aloudata 指标查询 API，获取该维度的去重值列表。
+     *
+     * @param datasourceId 数据源 ID
+     * @param dimName      维度英文名
+     * @param keyword      搜索关键字（匹配维度值），可为 null
+     * @param limit        最大返回条数
+     * @return 维度值列表
+     */
+    List<String> listDimensionValues(Long datasourceId, String dimName, String keyword, int limit);
+
+    /**
      * 查询同步状态
      */
     SyncResult getSyncStatus(Long datasourceId);

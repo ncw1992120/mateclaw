@@ -1214,9 +1214,9 @@ export interface FilterComponentConfig {
   optionSource: 'static' | 'dynamic'
   /** 静态选项（optionSource=static 时使用） */
   staticOptions?: Array<{ label: string; value: string }>
-  /** 动态选项数据源 ID（optionSource=dynamic 时使用） */
+  /** 数据源 ID（用于加载维度列表和动态获取维度值） */
   datasourceId?: string
-  /** 动态选项维度名（optionSource=dynamic 时使用） */
+  /** 动态选项维度名（optionSource=dynamic 时使用，已废弃，直接使用 field） */
   dimension?: string
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope

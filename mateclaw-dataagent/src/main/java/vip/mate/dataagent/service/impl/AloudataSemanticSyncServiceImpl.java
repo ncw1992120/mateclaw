@@ -19,6 +19,7 @@ import vip.mate.dataagent.model.*;
 import vip.mate.dataagent.repository.*;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
+import vip.mate.dataagent.service.AloudataService;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -48,6 +49,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private final AloudataEndpointService endpointService;
     private final AloudataSemanticEsService esService;
     private final ModelConfigService modelConfigService;
+    private final AloudataService aloudataService;
 
     @Autowired(required = false)
     private EmbeddingModelFactory embeddingModelFactory;
@@ -235,6 +237,60 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         return entities.stream()
                 .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> listDimensionValues(Long datasourceId, String dimName, String keyword, int limit) {
+        // 查询维度关联的指标，取第一个指标作为查询载体
+        LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
+        wrapper.eq(AloudataMetricDimensionEntity::getDimName, dimName);
+        wrapper.last("LIMIT 1");
+        AloudataMetricDimensionEntity relation = metricDimensionMapper.selectOne(wrapper);
+        if (relation == null) {
+            log.warn("维度 {} 在数据源 {} 下无关联指标，无法获取维度值", dimName, datasourceId);
+            return Collections.emptyList();
+        }
+
+        // 构建查询请求：通过关联指标 + 目标维度获取维度值列表
+        AloudataMetricQueryRequest request = new AloudataMetricQueryRequest();
+        request.setMetrics(List.of(relation.getMetricName()));
+        request.setDimensions(List.of(dimName));
+        request.setLimit(limit > 0 ? limit : 200);
+
+        // 如果有搜索关键字，构建维度值过滤表达式
+        if (keyword != null && !keyword.isBlank()) {
+            String filterExpr = "[" + dimName + "] LIKE (\"%" + keyword + "%\")";
+            request.setFilters(List.of(filterExpr));
+        }
+
+        // 调用 Aloudata 指标查询 API
+        AloudataMetricQueryResponse response = aloudataService.queryMetrics(datasourceId, request);
+        if (response == null || response.getData() == null) {
+            return Collections.emptyList();
+        }
+
+        // 从结果中提取维度列的去重值
+        AloudataMetricQueryResponse.MetricData metricData = response.getData();
+        Set<String> values = new LinkedHashSet<>();
+        if (metricData.getColumns() != null && metricData.getColumns().containsKey(dimName)) {
+            List<AloudataMetricQueryResponse.ColumnValue> columnValues = metricData.getColumns().get(dimName);
+            if (columnValues != null) {
+                for (AloudataMetricQueryResponse.ColumnValue cv : columnValues) {
+                    if (cv.getValue() != null) {
+                        values.add(String.valueOf(cv.getValue()));
+                    }
+                }
+            }
+        } else if (metricData.getRows() != null) {
+            for (Map<String, Object> row : metricData.getRows()) {
+                Object val = row.get(dimName);
+                if (val != null) {
+                    values.add(String.valueOf(val));
+                }
+            }
+        }
+        return new ArrayList<>(values);
     }
 
     @Override

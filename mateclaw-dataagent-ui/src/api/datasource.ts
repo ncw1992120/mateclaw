@@ -159,6 +159,13 @@ export function listMetricsDimensionDetails(datasourceId: string | number, metri
   })
 }
 
+/** 查询维度可选值列表（用于筛选器动态加载选项） */
+export function listDimensionValues(datasourceId: string | number, dimName: string, keyword?: string, limit: number = 200) {
+  return api.get<string[]>(`${BASE_URL}/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/values`, {
+    params: { keyword, limit }
+  })
+}
+
 /** 查询已同步的类目列表 */
 export function listSyncedCategories(datasourceId: string | number, categoryType?: string) {
   return api.get<{

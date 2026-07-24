@@ -333,6 +333,20 @@ public class DataAgentDatasourceController {
     }
 
     /**
+     * 查询维度可选值列表
+     */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/values")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "维度可选值列表", description = "查询指定维度的可选值列表，用于筛选器动态加载选项")
+    public R<List<String>> listDimensionValues(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "维度英文名") @PathVariable String dimName,
+            @Parameter(description = "搜索关键字") @RequestParam(required = false) String keyword,
+            @Parameter(description = "最大返回条数") @RequestParam(required = false, defaultValue = "200") int limit) {
+        return R.ok(aloudataSyncService.listDimensionValues(datasourceId, dimName, keyword, limit));
+    }
+
+    /**
      * 查询已同步的类目列表
      */
     @GetMapping("/{datasourceId}/aloudata/synced-categories")
