@@ -72,6 +72,9 @@ public class AloudataServiceImpl implements AloudataService {
     /** 指标树归因端点名 */
     private static final String ATTRIBUTION_TREE_ENDPOINT = "attribution_tree";
 
+    /** 维度值查询端点 */
+    private static final String DIMENSION_VALUES_ENDPOINT = "dimension_values";
+
     /** 指标列表响应字段 → DTO 属性别名映射（API 字段名与 DTO 属性名不一致时使用） */
     private static final Map<String, String> METRIC_FIELD_ALIASES = Map.of(
             "id", "metricId",
@@ -273,6 +276,50 @@ public class AloudataServiceImpl implements AloudataService {
         } catch (Exception e) {
             log.error("执行 Aloudata 指标查询失败: {}", e.getMessage());
             throw new RuntimeException("执行指标查询失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 查询维度可选值列表
+     * <p>
+     * 通过 Aloudata dimension_values 端点获取指定维度的可选值列表。
+     */
+    @Override
+    public List<String> queryDimensionValues(Long datasourceId, String dimName, String keyword, int limit) {
+        AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
+
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("dimName", dimName);
+            if (keyword != null && !keyword.isBlank()) {
+                input.put("keyword", keyword);
+            }
+            if (limit > 0) {
+                input.put("limit", limit);
+            }
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    DIMENSION_VALUES_ENDPOINT, config, input);
+
+            ResponseEntity<Map> response = apiClient.callWithParams(DIMENSION_VALUES_ENDPOINT, config, params);
+
+            List<String> values = new ArrayList<>();
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                if (Boolean.TRUE.equals(body.get("success")) && body.get("data") != null) {
+                    Object dataObj = body.get("data");
+                    if (dataObj instanceof List) {
+                        for (Object item : (List<?>) dataObj) {
+                            if (item != null) {
+                                values.add(String.valueOf(item));
+                            }
+                        }
+                    }
+                }
+            }
+            return values;
+        } catch (Exception e) {
+            log.error("查询维度值失败: dimName={}, error={}", dimName, e.getMessage());
+            throw new RuntimeException("查询维度值失败: " + e.getMessage(), e);
         }
     }
 

@@ -46,6 +46,19 @@ public interface AloudataService {
     AloudataMetricQueryResponse queryMetrics(Long datasourceId, AloudataMetricQueryRequest request);
 
     /**
+     * 查询维度可选值列表
+     * <p>
+     * 通过 Aloudata dimension_values 端点获取指定维度的可选值列表，用于筛选器动态加载选项。
+     *
+     * @param datasourceId 数据源 ID
+     * @param dimName      维度英文名
+     * @param keyword      搜索关键字（匹配维度值），可为 null
+     * @param limit        最大返回条数
+     * @return 维度值列表
+     */
+    List<String> queryDimensionValues(Long datasourceId, String dimName, String keyword, int limit);
+
+    /**
      * 查询指标语义信息列表（含同义词、业务口径、可用维度）
      * <p>
      * 用于同步指标平台的语义定义到本地语义模型，避免用户手动填写。
