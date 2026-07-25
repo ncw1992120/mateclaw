@@ -419,48 +419,6 @@
       </transition>
     </div>
 
-    <!-- Datasource Selector Toolbar -->
-    <div v-if="enabledDatasources.length > 0" class="ds-toolbar">
-      <el-popover :width="320" trigger="click" placement="top-start" :persistent="false" :teleported="true">
-        <template #reference>
-          <button class="ds-trigger" :class="{ active: chatStore.selectedDatasourceIds.length > 0 }">
-            <span class="ds-trigger-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09c-.66 0-1.3.26-1.77.73-.47.47-.73 1.11-.73 1.77z"/></svg>
-            </span>
-            <span class="ds-trigger-text">{{ dsTriggerLabel }}</span>
-            <span class="ds-trigger-arrow">▾</span>
-          </button>
-        </template>
-        <div class="ds-popover">
-          <div class="ds-popover-header">
-            <span>{{ t('chat.datasourceScope') }}</span>
-            <span
-              v-if="chatStore.selectedDatasourceIds.length > 0"
-              class="ds-popover-clear"
-              @click="chatStore.selectedDatasourceIds = []"
-            >{{ t('chat.clearDatasourceScope') }}</span>
-          </div>
-          <div class="ds-popover-list">
-            <label
-              v-for="ds in enabledDatasources"
-              :key="ds.id"
-              class="ds-popover-item"
-              :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
-              :title="ds.name"
-            >
-              <input
-                type="checkbox"
-                :checked="chatStore.selectedDatasourceIds.includes(ds.id)"
-                @change="toggleDatasource(ds.id)"
-              />
-              <span class="ds-item-name">{{ ds.name }}</span>
-              <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
-            </label>
-          </div>
-        </div>
-      </el-popover>
-    </div>
-
     <!-- Input Bar -->
     <div class="input-bar">
       <!-- 附件预览区 -->
@@ -478,40 +436,134 @@
       </div>
       <div class="input-bar__card">
         <input ref="fileInputRef" type="file" multiple style="display:none" @change="handleFileChange" />
-        <textarea
-          v-model="inputMessage"
-          class="chat-input"
-          :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholder')"
-          :disabled="chatStore.isStreaming"
-          rows="1"
-          @keydown="handleKeydown"
-          @paste="handlePaste"
-        />
-        <div class="input-actions">
-          <button class="btn-attach" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
-            </svg>
-          </button>
-          <button class="btn-optimize" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
-            <span v-if="isOptimizing" class="spin-icon">⟳</span>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3l1.2 4.8L18 9l-4.8 1.2L12 15l-1.2-4.8L6 9l4.8-1.2L12 3z"/>
-              <path d="M18 14l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z"/>
-            </svg>
-          </button>
-          <div class="input-actions__divider" />
-          <button v-if="chatStore.isStreaming" class="btn-stop" type="button" @click="handleStop">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2"/>
-            </svg>
-          </button>
-          <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
+
+        <!-- 当前智能体标签 -->
+        <div class="composer-agent">
+          <el-popover :width="240" trigger="click" placement="top-start" :persistent="false" :teleported="true">
+            <template #reference>
+              <button class="agent-tag" :disabled="chatStore.isStreaming" type="button">
+                <span class="agent-tag-icon">@</span>
+                <span class="agent-tag-name">{{ currentAgentName }}</span>
+              </button>
+            </template>
+            <div class="agent-popover-list">
+              <button
+                v-for="agent in enabledAgents"
+                :key="agent.id"
+                class="agent-popover-item"
+                :class="{ active: chatStore.currentAgentId === agent.id }"
+                type="button"
+                @click="handleAgentChange(agent.id)"
+              >
+                <span class="agent-option-icon">{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</span>
+                <span class="agent-option-name">{{ agent.name }}</span>
+              </button>
+            </div>
+          </el-popover>
+        </div>
+
+        <div class="composer-body">
+          <textarea
+            v-model="inputMessage"
+            class="chat-input"
+            :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholderWithAgent', { agent: currentAgentName })"
+            :disabled="chatStore.isStreaming"
+            rows="1"
+            @keydown="handleKeydown"
+            @paste="handlePaste"
+          />
+        </div>
+
+        <div class="composer-footer">
+          <div class="footer-tools">
+            <el-popover :width="280" trigger="click" placement="top-start" :persistent="false" :teleported="true">
+              <template #reference>
+                <button class="tool-btn" :class="{ active: composerSettingsActive }" :disabled="chatStore.isStreaming" type="button" :title="t('chat.datasourceScope')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                  </svg>
+                </button>
+              </template>
+              <div class="composer-settings">
+                <div v-if="enabledDatasources.length > 0" class="settings-section">
+                  <div class="settings-header">
+                    <span class="settings-label">{{ t('chat.datasourceScope') }}</span>
+                    <span
+                      v-if="chatStore.selectedDatasourceIds.length > 0"
+                      class="settings-clear"
+                      @click="chatStore.selectedDatasourceIds = []"
+                    >{{ t('chat.clearDatasourceScope') }}</span>
+                  </div>
+                  <div class="settings-ds-list">
+                    <label
+                      v-for="ds in enabledDatasources"
+                      :key="ds.id"
+                      class="settings-ds-item"
+                      :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
+                      :title="ds.name"
+                    >
+                      <input
+                        type="checkbox"
+                        :checked="chatStore.selectedDatasourceIds.includes(ds.id)"
+                        @change="toggleDatasource(ds.id)"
+                      />
+                      <span class="ds-item-name">{{ ds.name }}</span>
+                      <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </el-popover>
+            <button class="tool-btn" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <button class="tool-btn optimize-btn" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+              <span v-if="isOptimizing" class="spin-icon">⟳</span>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.2 4.8L18 9l-4.8 1.2L12 15l-1.2-4.8L6 9l4.8-1.2L12 3z"/>
+                <path d="M18 14l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="footer-send">
+            <el-select
+              v-model="selectedModelId"
+              size="small"
+              :placeholder="availableModels.length ? t('modelConfig.selectModel') : t('modelConfig.configureFirst')"
+              :loading="modelStore.loading"
+              :no-data-text="t('modelConfig.noAvailableModels')"
+              class="model-select-footer"
+              @change="handleModelChange"
+            >
+              <el-option
+                v-for="model in availableModels"
+                :key="model.id"
+                :label="model.name"
+                :value="model.id"
+              >
+                <span class="model-option">
+                  <span class="model-option-name">{{ model.name }}</span>
+                  <span class="model-option-provider">{{ model.provider }}</span>
+                </span>
+              </el-option>
+            </el-select>
+            <button v-if="chatStore.isStreaming" class="btn-stop" type="button" @click="handleStop">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+            </button>
+            <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -523,6 +575,9 @@ import { ref, reactive, computed, nextTick, watch, onMounted, onUnmounted } from
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
+import { useAgentStore } from '@/stores/useAgentStore'
+import { useUserStore } from '@/stores/useUserStore'
+import { usePersistedState } from '@/composables/usePersistedRef'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
@@ -536,6 +591,106 @@ import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, Dash
 const { t } = useI18n()
 const chatStore = useChatStore()
 const modelStore = useModelStore()
+const agentStore = useAgentStore()
+const userStore = useUserStore()
+
+/** 当前选中的模型 ID（刷新后保留） */
+const selectedModelId = usePersistedState<number | undefined>('mc-workbench-selected-model-id', undefined)
+
+/** 已启用的 Agent 列表 */
+const enabledAgents = computed(() => agentStore.agents.filter(a => a.enabled))
+
+/** 当前选中的智能体名称 */
+const currentAgentName = computed(() => {
+  const agent = enabledAgents.value.find(a => a.id === chatStore.currentAgentId)
+  return agent?.name || t('agentConfig.selectAgent')
+})
+
+/** 可用模型列表：仅展示已启用的对话模型 */
+const availableModels = computed(() => {
+  const enabledProviderIds = new Set(
+    modelStore.providers.filter(p => p.enabled).map(p => p.providerId)
+  )
+  return modelStore.enabledModels.filter(m => {
+    const isChatModel = !m.modelType || m.modelType === 'chat'
+    // 当 Provider 列表已加载时，仅展示启用 Provider 下的模型；
+    // 未加载（如普通用户无权限）时，直接展示所有启用模型。
+    const providerOk = enabledProviderIds.size === 0 || enabledProviderIds.has(m.provider)
+    return isChatModel && providerOk
+  })
+})
+
+/** 模型切换（仅更新前端选择状态） */
+function handleModelChange(modelId: number): void {
+  selectedModelId.value = modelId
+  const model = availableModels.value.find(m => m.id === modelId)
+  chatStore.selectedModelName = model?.modelName ?? ''
+  chatStore.selectedModelProvider = model?.provider ?? ''
+}
+
+/** Agent 切换 */
+async function handleAgentChange(agentId: number | string): Promise<void> {
+  chatStore.setAgent(agentId)
+  await agentStore.selectAgent(agentId)
+}
+
+/** 初始化默认选中 */
+function initDefaultSelection(): void {
+  if (!chatStore.currentAgentId && enabledAgents.value.length > 0) {
+    const firstAgent = enabledAgents.value[0]
+    chatStore.setAgent(firstAgent.id)
+  }
+}
+
+/** 监听 agents 加载完成，自动初始化选择 */
+watch(() => enabledAgents.value.length, (len) => {
+  if (len > 0) {
+    initDefaultSelection()
+  }
+})
+
+/** 监听可用模型列表，保证下拉框始终展示一个模型值 */
+watch(availableModels, (models) => {
+  if (models.length === 0) return
+  if (chatStore.selectedModelProvider && chatStore.selectedModelName) {
+    const matched = models.find(m =>
+      m.provider === chatStore.selectedModelProvider && m.modelName === chatStore.selectedModelName
+    )
+    if (matched) {
+      selectedModelId.value = matched.id
+      return
+    }
+  }
+  if (selectedModelId.value) {
+    const model = models.find(m => m.id === selectedModelId.value)
+    if (model) {
+      chatStore.selectedModelName = model.modelName
+      chatStore.selectedModelProvider = model.provider
+      return
+    }
+  }
+  const def = models.find(m => m.isDefault) ?? models[0]
+  selectedModelId.value = def.id
+  chatStore.selectedModelName = def.modelName
+  chatStore.selectedModelProvider = def.provider
+})
+
+/** 切换会话/新建对话时，反向同步 selectedModelId */
+watch(
+  () => [chatStore.selectedModelProvider, chatStore.selectedModelName] as const,
+  ([provider, modelName]) => {
+    if (!provider || !modelName) {
+      selectedModelId.value = undefined
+      return
+    }
+    const matched = availableModels.value.find(m =>
+      m.provider === provider && m.modelName === modelName
+    )
+    if (matched) {
+      selectedModelId.value = matched.id
+    }
+  }
+)
 
 defineEmits<{
   openDashboard: []
@@ -544,12 +699,12 @@ defineEmits<{
 /** 智能问数快捷菜单项配置 */
 const ICON_STROKE_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 const smartAskMenuItems = [
-  { key: 'interpret', label: 'smartAskMenu.interpret', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>` },
-  { key: 'report', label: 'smartAskMenu.report', icon: `<svg ${ICON_STROKE_ATTRS}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>` },
-  { key: 'insight', label: 'smartAskMenu.insight', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>` },
-  { key: 'compare', label: 'smartAskMenu.compare', icon: `<svg ${ICON_STROKE_ATTRS}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>` },
-  { key: 'forecast', label: 'smartAskMenu.forecast', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>` },
-  { key: 'anomaly', label: 'smartAskMenu.anomaly', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` },
+  { key: 'aumTrend', label: 'smartAskMenu.aumTrend', icon: `<svg ${ICON_STROKE_ATTRS}><polyline points="3 17 9 11 15 15 21 7"/></svg>` },
+  { key: 'gmvRatio', label: 'smartAskMenu.gmvRatio', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>` },
+  { key: 'orderCompare', label: 'smartAskMenu.orderCompare', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>` },
+  { key: 'consumeTrend', label: 'smartAskMenu.consumeTrend', icon: `<svg ${ICON_STROKE_ATTRS}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>` },
+  { key: 'monthlyReport', label: 'smartAskMenu.monthlyReport', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>` },
+  { key: 'anomalyDetect', label: 'smartAskMenu.anomalyDetect', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` },
 ]
 
 /** 已启用的数据源列表（用于输入框上方数据源选择器） */
@@ -626,6 +781,11 @@ const isOptimizing = ref(false)
 
 /** 文件选择 input 引用 */
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+/** 当前选择器是否激活（有智能体/模型/数据源被选中时高亮） */
+const composerSettingsActive = computed(() => {
+  return !!chatStore.currentAgentId || !!selectedModelId.value || chatStore.selectedDatasourceIds.length > 0
+})
 
 /** 聊天区域容器引用 */
 const chatAreaRef = ref<HTMLElement | null>(null)
@@ -2342,12 +2502,12 @@ function handleFollowup(text: string): void {
 function handleSmartAskMenu(item: { key: string; label: string }): void {
   if (chatStore.isStreaming || !chatStore.currentAgentId) return
   const promptMap: Record<string, string> = {
-    interpret: t('smartAskMenu.interpretPrompt'),
-    report: t('smartAskMenu.reportPrompt'),
-    insight: t('smartAskMenu.insightPrompt'),
-    compare: t('smartAskMenu.comparePrompt'),
-    forecast: t('smartAskMenu.forecastPrompt'),
-    anomaly: t('smartAskMenu.anomalyPrompt'),
+    aumTrend: t('smartAskMenu.aumTrendPrompt'),
+    gmvRatio: t('smartAskMenu.gmvRatioPrompt'),
+    orderCompare: t('smartAskMenu.orderComparePrompt'),
+    consumeTrend: t('smartAskMenu.consumeTrendPrompt'),
+    monthlyReport: t('smartAskMenu.monthlyReportPrompt'),
+    anomalyDetect: t('smartAskMenu.anomalyDetectPrompt'),
   }
   const prompt = promptMap[item.key] || t('smartAskMenu.defaultPrompt')
   chatStore.sendMessage(chatStore.currentAgentId, prompt)
@@ -2517,8 +2677,18 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   chatAreaEl = chatAreaRef.value
   chatAreaEl?.addEventListener('scroll', handleScroll)
-  // 加载数据源列表（用于输入框上方数据源选择器）
+  // 加载数据源列表（用于输入框设置面板中的数据源选择）
   loadDatasources()
+  // 加载模型和 Provider 列表（用于输入框设置面板中的模型选择）
+  if (agentStore.agents.length === 0) {
+    agentStore.fetchAgents()
+  }
+  if (modelStore.enabledModels.length === 0) {
+    modelStore.fetchEnabledModels()
+  }
+  if (userStore.isAdmin && modelStore.providers.length === 0) {
+    modelStore.fetchProviders()
+  }
   // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载。
   // 但若 sessionStorage 中存在 reconnect 状态（lastEventId 已持久化），
   // 说明 MainLayout 正在/即将发起 SSE 续连，此时再 force=true 拉历史会：
@@ -4012,12 +4182,7 @@ onUnmounted(() => {
 
 /* Datasource Selector Toolbar */
 .ds-toolbar {
-  display: flex;
-  align-items: center;
-  padding: 6px 20px;
-  border-top: 1px solid var(--theme-border);
-  background: var(--theme-bg);
-  flex-shrink: 0;
+  display: none;
 }
 
 .ds-trigger {
@@ -4191,35 +4356,137 @@ onUnmounted(() => {
 
 .input-bar__card {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  min-height: 52px;
-  max-height: 180px;
-  padding: 8px 12px 8px 18px;
-  border-radius: 28px;
-  border: 1px solid var(--theme-border-strong);
+  flex-direction: column;
+  gap: 6px;
+  min-height: 120px;
+  max-height: 260px;
+  padding: 10px 14px 10px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   background: var(--theme-surface);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .input-bar__card:focus-within {
-  border-color: var(--main-orange);
-  box-shadow: 0 2px 16px color-mix(in srgb, var(--main-orange) 12%, transparent);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+.composer-agent {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--dark-orange);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-tag:hover {
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+}
+
+.agent-tag-icon {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.agent-tag-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+
+.agent-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--theme-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.agent-popover-item:hover {
+  background: var(--theme-surface-hover);
+}
+
+.agent-popover-item.active {
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--dark-orange);
+}
+
+.agent-option,
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-option-icon {
+  font-size: 14px;
+}
+
+.agent-option-name,
+.model-option-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-option-type,
+.model-option-provider {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.composer-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  flex: 1;
 }
 
 .chat-input {
-  flex: 1;
-  min-height: 34px;
+  width: 100%;
+  min-height: 48px;
   max-height: 140px;
-  padding: 8px 0;
+  padding: 4px 0 0;
   margin: 0;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--theme-text);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   font-family: inherit;
   resize: none;
   outline: none;
@@ -4233,30 +4500,26 @@ onUnmounted(() => {
   opacity: 0.7;
 }
 
-.input-actions {
+.composer-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding-bottom: 2px;
-}
-
-.input-actions__divider {
-  width: 1px;
-  height: 20px;
-  background: var(--theme-border);
-  margin: 0 4px;
+  justify-content: space-between;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.input-actions .btn-attach,
-.input-actions .btn-optimize,
-.input-actions .btn-stop {
+.footer-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footer-tools .tool-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -4266,34 +4529,140 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.input-actions .btn-optimize {
-  width: 32px;
-  height: 32px;
-}
-
-.input-actions .btn-attach svg,
-.input-actions .btn-optimize svg,
-.input-actions .btn-stop svg {
-  width: 16px;
-  height: 16px;
-}
-
-.input-actions .btn-optimize svg {
+.footer-tools .tool-btn svg {
   width: 20px;
   height: 20px;
 }
 
-.input-actions .btn-attach:hover:not(:disabled),
-.input-actions .btn-optimize:hover:not(:disabled),
-.input-actions .btn-stop:hover:not(:disabled) {
-  background: var(--theme-surface-hover);
-  color: var(--main-orange);
+.footer-tools .tool-btn.optimize-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
-.input-actions .btn-attach:disabled,
-.input-actions .btn-optimize:disabled {
+.footer-tools .tool-btn:hover:not(:disabled) {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.footer-tools .tool-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.footer-tools .tool-btn.active {
+  color: var(--theme-text);
+  background: var(--theme-surface-hover);
+}
+
+.footer-send {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select-footer {
+  width: auto;
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.model-select-footer :deep(.el-input__wrapper) {
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none !important;
+  border: 1px solid transparent;
+  padding: 0 8px;
+}
+
+.model-select-footer :deep(.el-input__wrapper:hover) {
+  background: var(--theme-surface-hover);
+  border-color: var(--theme-border);
+}
+
+.model-select-footer :deep(.el-input__inner) {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-text-muted);
+}
+
+.model-select-footer :deep(.el-select__caret) {
+  color: var(--theme-text-muted);
+}
+
+.model-select-footer :deep(.el-input__inner)::placeholder {
+  color: var(--theme-text-muted);
+}
+
+/** 输入框设置面板 */
+.composer-settings {
+  padding: 8px 4px;
+}
+
+.settings-section + .settings-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--theme-border);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.settings-clear {
+  font-size: 11px;
+  color: var(--main-orange);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.settings-clear:hover {
+  color: var(--dark-orange);
+}
+
+.settings-ds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-ds-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-elevated);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13px;
+  color: var(--theme-text);
+}
+
+.settings-ds-item:hover {
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 4%, transparent);
+}
+
+.settings-ds-item.checked {
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--dark-orange);
+}
+
+.settings-ds-item input[type="checkbox"] {
+  accent-color: var(--main-orange);
 }
 
 .btn-send {
@@ -4331,11 +4700,27 @@ onUnmounted(() => {
   box-shadow: none;
 }
 
-.btn-stop {
+.footer-send .btn-stop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--theme-surface-elevated);
   color: #ef4444;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.btn-stop:hover:not(:disabled) {
+.footer-send .btn-stop svg {
+  width: 20px;
+  height: 20px;
+}
+
+.footer-send .btn-stop:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.08);
 }
 

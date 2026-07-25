@@ -291,58 +291,6 @@
 
       <!-- 中间聊天区域 -->
       <div class="col-mid">
-        <!-- 智能体/模型选择器（顶部并排） -->
-        <div v-if="showSelectorPanel" class="mid-topbar">
-          <div class="topbar-selector">
-            <span class="selector-label">{{ t('agent.title') }}</span>
-            <el-select
-              v-model="chatStore.currentAgentId"
-              size="small"
-              :placeholder="t('agentConfig.selectAgent')"
-              :loading="agentStore.loading"
-              class="agent-select-header"
-              @change="handleAgentChange"
-            >
-              <el-option
-                v-for="agent in enabledAgents"
-                :key="agent.id"
-                :label="agent.name"
-                :value="agent.id"
-              >
-                <span class="agent-option">
-                  <span class="agent-option-icon">{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</span>
-                  <span class="agent-option-name">{{ agent.name }}</span>
-                  <span class="agent-option-type">{{ agent.agentType }}</span>
-                </span>
-              </el-option>
-            </el-select>
-          </div>
-          <div class="topbar-selector">
-            <span class="selector-label">{{ t('modelConfig.model') }}</span>
-            <el-select
-              v-model="selectedModelId"
-              size="small"
-              :placeholder="availableModels.length ? t('modelConfig.selectModel') : t('modelConfig.configureFirst')"
-              :loading="modelStore.loading"
-              :no-data-text="t('modelConfig.noAvailableModels')"
-              class="model-select"
-              @change="handleModelChange"
-            >
-              <el-option
-                v-for="model in availableModels"
-                :key="model.id"
-                :label="model.name"
-                :value="model.id"
-              >
-                <span class="model-option">
-                  <span class="model-option-name">{{ model.name }}</span>
-                  <span class="model-option-provider">{{ model.provider }}</span>
-                  <el-tag v-if="model.isDefault" type="warning" size="small">{{ t('modelConfig.default') }}</el-tag>
-                </span>
-              </el-option>
-            </el-select>
-          </div>
-        </div>
         <ChatView v-if="activeSidebarItem === 'qa'" class="chat-container" />
         <DashboardListView v-else-if="activeSidebarItem === 'interpret'" class="chat-container" />
         <ConfigCenter v-else-if="activeSidebarItem === 'skill'" class="chat-container" />
@@ -357,11 +305,9 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
-import { useModelStore } from '@/stores/useModelStore'
 import { useUserStore } from '@/stores/useUserStore'
-import { usePersistedRef, usePersistedState } from '@/composables/usePersistedRef'
+import { usePersistedRef } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ChatView from '@/views/ChatView.vue'
 import DashboardListView from '@/views/insight/DashboardListView.vue'
@@ -376,9 +322,7 @@ const SIDEBAR_ITEM_KEYS = ['qa', 'interpret', 'report', 'skill', 'help'] as cons
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const agentStore = useAgentStore()
 const chatStore = useChatStore()
-const modelStore = useModelStore()
 const userStore = useUserStore()
 const { hasPermission } = usePermission()
 
@@ -390,9 +334,6 @@ const avatarText = computed(() => {
   const name = userStore.nickname || userStore.username || '用'
   return name.charAt(0).toUpperCase()
 })
-
-/** 当前选中的模型 ID（刷新后保留） */
-const selectedModelId = usePersistedState<number | undefined>('mc-workbench-selected-model-id', undefined)
 
 /** 左侧菜单是否折叠 */
 const sidebarCollapsed = ref(false)
@@ -481,23 +422,6 @@ const sidebarGroups = [
   },
 ]
 
-/** 已启用的 Agent 列表 */
-const enabledAgents = computed(() => agentStore.agents.filter(a => a.enabled))
-
-/** 可用模型列表：仅来自已启用且已配置的 Provider，且仅展示对话模型
- * 未配置 Provider 的模型不展示在顶部选择器中
- */
-const availableModels = computed(() => {
-  const configuredProviderIds = new Set(
-    modelStore.providers
-      .filter(p => p.enabled && (p.apiKey || p.baseUrl))
-      .map(p => p.providerId)
-  )
-  return modelStore.enabledModels.filter(m =>
-    configuredProviderIds.has(m.provider) && (!m.modelType || m.modelType === 'chat')
-  )
-})
-
 /** 按最后活跃时间分组后的历史会话列表（支持搜索过滤） */
 const groupedConversations = computed<ConversationGroup[]>(() => {
   const groupMap = new Map<string, ConversationGroup>()
@@ -536,19 +460,6 @@ const groupedConversations = computed<ConversationGroup[]>(() => {
   }
   return groups
 })
-
-/** 模型切换（仅更新前端选择状态，不调用后端 API） */
-function handleModelChange(modelId: number): void {
-  selectedModelId.value = modelId
-  const model = availableModels.value.find(m => m.id === modelId)
-  chatStore.selectedModelName = model?.modelName ?? ''
-  chatStore.selectedModelProvider = model?.provider ?? ''
-}
-
-/** Agent 切换 */
-async function handleAgentChange(agentId: number | string): Promise<void> {
-  await agentStore.selectAgent(agentId)
-}
 
 /** 工作区显示名称：优先使用 name，空则回退 description */
 function workspaceDisplayName(ws: Workspace | null): string {
@@ -772,85 +683,6 @@ function formatRelativeTime(value: string | undefined): string {
 }
 
 /**
- * 初始化默认选择：
- * 1. 如果当前未选中 Agent，自动选中第一个启用的 Agent
- * 2. 如果当前未选中模型，自动选中标记为"默认"的模型
- */
-function initDefaultSelection(): void {
-  // Agent：自动选中第一个
-  if (!chatStore.currentAgentId && enabledAgents.value.length > 0) {
-    const firstAgent = enabledAgents.value[0]
-    chatStore.setAgent(firstAgent.id)
-    // 静默选中（不触发 API 调用）
-    if (firstAgent.id) {
-      chatStore.currentAgentId = firstAgent.id
-    }
-  }
-  // Model 默认选择由 currentModelId 计算属性自动派生，无需手动初始化
-}
-
-/** 监听 agents 加载完成，自动初始化选择 */
-watch(() => enabledAgents.value.length, (len) => {
-  if (len > 0) {
-    initDefaultSelection()
-  }
-}, { immediate: true })
-
-/**
- * 模型列表加载完成后，自动选中默认模型（优先 isDefault，否则第一个）
- * 保证下拉框始终展示一个模型值
- */
-watch(availableModels, (models) => {
-  if (models.length === 0) return
-  // 如果 chatStore 已有模型信息（切换会话恢复的），根据 provider+modelName 反查 modelId
-  if (chatStore.selectedModelProvider && chatStore.selectedModelName) {
-    const matched = models.find(m =>
-      m.provider === chatStore.selectedModelProvider && m.modelName === chatStore.selectedModelName
-    )
-    if (matched) {
-      selectedModelId.value = matched.id
-      return
-    }
-  }
-  // 如果已有选中 ID（localStorage 恢复），同步恢复 modelName 和 provider
-  if (selectedModelId.value) {
-    const model = models.find(m => m.id === selectedModelId.value)
-    if (model) {
-      chatStore.selectedModelName = model.modelName
-      chatStore.selectedModelProvider = model.provider
-      return
-    }
-  }
-  // 否则选中默认/第一个模型
-  const def = models.find(m => m.isDefault) ?? models[0]
-  selectedModelId.value = def.id
-  chatStore.selectedModelName = def.modelName
-  chatStore.selectedModelProvider = def.provider
-}, { immediate: true })
-
-/**
- * 监听 chatStore 中模型状态变化（切换会话/新建对话时），反向同步 selectedModelId
- * 确保下拉框显示与 chatStore 一致的模型
- */
-watch(
-  () => [chatStore.selectedModelProvider, chatStore.selectedModelName] as const,
-  ([provider, modelName]) => {
-    if (!provider || !modelName) {
-      // 模型被清空（如切换至无 pinned model 的会话），重置 selectedModelId 让上面的 watch 重新选择默认模型
-      selectedModelId.value = undefined
-      return
-    }
-    // 根据 provider+modelName 反查 modelId
-    const matched = availableModels.value.find(m =>
-      m.provider === provider && m.modelName === modelName
-    )
-    if (matched && matched.id !== selectedModelId.value) {
-      selectedModelId.value = matched.id
-    }
-  }
-)
-
-/**
  * 监听路由 query.menu，支持同页跳转（如点击“管理工作区”）。
  * onMounted 只处理页面首次挂载；watch 处理组件已挂载后的 query 变化。
  */
@@ -864,11 +696,7 @@ watch(
   }
 )
 
-/**
- * 挂载时确保模型数据已就绪
- * 注意：fetchActiveModel 依赖 enabledModels，需要按顺序调用
- */
-onMounted(async () => {
+onMounted(() => {
   // 处理外部跳转入口：如“管理工作区”会携带 ?menu=skill，需要激活对应侧边栏菜单并清理 query
   const menuQuery = route.query.menu as string
   if (menuQuery && (SIDEBAR_ITEM_KEYS as readonly string[]).includes(menuQuery)) {
@@ -876,13 +704,6 @@ onMounted(async () => {
     router.replace({ path: '/', query: {} })
   }
 
-  if (modelStore.enabledModels.length === 0) {
-    await modelStore.fetchEnabledModels()
-  }
-  // Provider 列表仅全局管理员可访问
-  if (userStore.isAdmin && modelStore.providers.length === 0) {
-    modelStore.fetchProviders()
-  }
   // 点击非历史项区域时，关闭弹出的操作菜单
   document.addEventListener('click', handleDocumentClick)
 })
@@ -909,114 +730,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   width: 100%;
-}
-
-/** 中间内容区顶部工具栏（智能体/模型选择器） */
-.mid-topbar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  height: 56px;
-  padding: 0 24px;
-  background: var(--theme-overlay);
-  border-bottom: 1px solid var(--theme-border);
-  flex-shrink: 0;
-  backdrop-filter: blur(12px);
-}
-
-.topbar-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  background: var(--theme-surface-hover);
-  border-radius: 20px;
-  border: 1px solid transparent;
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.topbar-selector:hover {
-  background: var(--theme-border);
-}
-
-.topbar-selector:focus-within {
-  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
-  background: var(--theme-surface-elevated);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 6%, transparent);
-}
-
-.agent-selector-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.agent-select-header {
-  width: 180px;
-}
-
-.agent-select-header :deep(.el-input__wrapper) {
-  border-radius: 16px;
-  background: transparent;
-  box-shadow: none !important;
-}
-
-.agent-select-header :deep(.el-input__inner) {
-  font-weight: 500;
-}
-
-.model-selector {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.selector-label {
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.model-select {
-  width: 200px;
-  min-width: 200px;
-}
-
-.model-select :deep(.el-input__wrapper) {
-  border-radius: 16px;
-  background: transparent;
-  box-shadow: none !important;
-}
-
-.model-select :deep(.el-input__inner) {
-  font-weight: 500;
-}
-
-.model-select :deep(.el-select__selected-item) {
-  max-width: 100%;
-}
-
-.model-select :deep(.el-input__inner) {
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.model-option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.model-option-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.model-option-provider {
-  font-size: 10px;
-  color: var(--muted);
 }
 
 .main {
@@ -1918,26 +1631,6 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--muted);
   text-align: center;
-}
-
-.agent-option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.agent-option-icon {
-  font-size: 14px;
-}
-
-.agent-option-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.agent-option-type {
-  font-size: 10px;
-  color: var(--muted);
 }
 
 .chat-container {
