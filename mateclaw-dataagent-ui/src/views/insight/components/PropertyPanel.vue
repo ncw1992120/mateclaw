@@ -27,8 +27,8 @@
         </el-radio-group>
       </div>
 
-      <!-- 数据绑定（kpi/chart/table 组件） -->
-      <template v-if="component.type !== 'filter'">
+      <!-- 数据绑定（kpi/chart/table 组件；筛选器与时间筛选无需数据源/指标） -->
+      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter'">
         <!-- 多指标模式开关（仅 kpi 组件） -->
         <div v-if="component.type === 'kpi'" class="form-group">
           <label class="form-label">{{ t('insight.property.multiKpi') }}</label>
@@ -271,7 +271,7 @@
 
       <!-- 筛选组件配置（仅 filter 组件） -->
       <template v-if="component.type === 'filter'">
-        <!-- 筛选器数据源选择 -->
+        <!-- 数据源（用于加载筛选字段维度列表）-->
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.datasource') }}</label>
           <el-select
@@ -291,7 +291,7 @@
           </el-select>
         </div>
 
-        <!-- 筛选字段（从维度列表下拉选择） -->
+        <!-- 筛选字段（从维度下拉选择）-->
         <div v-if="localFilterDatasourceId" class="form-group">
           <label class="form-label">{{ t('insight.property.filterField') }}</label>
           <el-select
@@ -299,9 +299,11 @@
             :placeholder="t('insight.property.selectDimensions')"
             size="small"
             filterable
+            remote
+            :remote-method="searchFilterDimensions"
             :loading="filterDimensionsLoading"
             style="width: 100%"
-            @change="handleFilterFieldChange"
+            @change="emitFilterConfigChange"
           >
             <el-option
               v-for="d in filterDimensionsOptions"
@@ -312,6 +314,7 @@
           </el-select>
         </div>
 
+        <!-- 选项来源：静态手填 / 动态自动取值 -->
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.filterOptions') }}</label>
           <el-radio-group
@@ -322,10 +325,14 @@
             <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
             <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
           </el-radio-group>
-          <span v-if="localFilterConfig.optionSource === 'dynamic'" class="form-hint">预览时自动从数据源加载维度可选值</span>
+          <span class="form-hint">
+            {{ localFilterConfig.optionSource === 'dynamic'
+              ? t('insight.property.filterOptionDynamicHint')
+              : t('insight.property.filterOptionStaticHint') }}
+          </span>
         </div>
 
-        <!-- 静态选项编辑 -->
+        <!-- 静态选项编辑（仅静态来源）-->
         <div v-if="localFilterConfig.optionSource === 'static'" class="form-group">
           <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
           <div
@@ -398,18 +405,8 @@
         </div>
       </template>
 
-      <!-- 时间筛选组件配置（仅 timeFilter 组件） -->
+      <!-- 时间筛选组件配置（仅 timeFilter 组件；时间字段固定 metric_time，无需数据源/指标） -->
       <template v-if="component.type === 'timeFilter'">
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.property.timeFilterField') }}</label>
-          <el-input
-            v-model="localTimeFilterConfig.field"
-            size="small"
-            :placeholder="t('insight.property.timeFilterFieldPlaceholder')"
-            @change="emitTimeFilterConfigChange"
-          />
-        </div>
-
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.timeFilterPresets') }}</label>
           <el-checkbox-group
@@ -631,6 +628,7 @@ const selectableFilterComponents = computed(() => {
 /** 搜索防抖定时器 */
 let metricsSearchTimer: ReturnType<typeof setTimeout> | null = null
 let dimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
+let filterDimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
 
 /** 监听外部 component 变化，同步到本地（仅在引用变化时触发，避免 emitChange 导致的循环） */
 watch(
@@ -893,10 +891,9 @@ function emitChange(): void {
   emit('change', updated)
 }
 
-/** 筛选器数据源变更时重新加载维度列表 */
+/** 筛选器数据源变更时清空已选字段并重新加载维度列表 */
 function handleFilterDatasourceChange(): void {
   localFilterConfig.field = ''
-  localFilterConfig.staticOptions = []
   filterDimensionsOptions.value = []
   if (localFilterDatasourceId.value) {
     loadFilterDimensions(localFilterDatasourceId.value)
@@ -904,22 +901,23 @@ function handleFilterDatasourceChange(): void {
   emitFilterConfigChange()
 }
 
-/** 筛选字段变更时清空静态选项（维度变了，值也应该重新填） */
-function handleFilterFieldChange(): void {
-  localFilterConfig.staticOptions = []
-  emitFilterConfigChange()
-}
-
-/** 加载筛选器维度选项（基于数据源同步的维度列表） */
-async function loadFilterDimensions(datasourceId: string): Promise<void> {
+/** 加载筛选器维度选项（复用已同步维度列表接口，支持关键字服务端搜索）*/
+async function loadFilterDimensions(datasourceId: string, keyword?: string): Promise<void> {
   if (!datasourceId) {
     filterDimensionsOptions.value = []
     return
   }
   filterDimensionsLoading.value = true
   try {
-    const result = await datasourceApi.listSyncedDimensions(datasourceId, 1, 200)
-    filterDimensionsOptions.value = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
+    const result = await datasourceApi.listSyncedDimensions(datasourceId, 1, 200, keyword)
+    const list = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
+    // 按 dimName 去重（独立维度表可能存在同名多行，见 listSyncedDimensions 无 DISTINCT）
+    const seen = new Set<string>()
+    filterDimensionsOptions.value = list.filter((d) => {
+      if (!d.dimName || seen.has(d.dimName)) return false
+      seen.add(d.dimName)
+      return true
+    })
   } catch (e) {
     console.error('[PropertyPanel] load filter dimensions error:', e)
   } finally {
@@ -927,11 +925,25 @@ async function loadFilterDimensions(datasourceId: string): Promise<void> {
   }
 }
 
+/** 筛选字段维度远程搜索（服务端关键字，防抖 300ms，避免 >200 维度被前端截断）*/
+function searchFilterDimensions(query: string): void {
+  if (filterDimensionsSearchTimer) {
+    clearTimeout(filterDimensionsSearchTimer)
+  }
+  if (!localFilterDatasourceId.value) {
+    return
+  }
+  filterDimensionsSearchTimer = setTimeout(() => {
+    loadFilterDimensions(localFilterDatasourceId.value, query.trim() || undefined)
+  }, 300)
+}
+
 /** 筛选配置变更时 emit（将 config 写入组件） */
 function emitFilterConfigChange(): void {
   const config: FilterComponentConfig = {
     field: localFilterConfig.field,
     optionSource: localFilterConfig.optionSource,
+    // 两种模式都需要数据源来加载筛选字段维度列表
     datasourceId: localFilterDatasourceId.value || undefined,
     staticOptions: localFilterConfig.optionSource === 'static'
       ? JSON.parse(JSON.stringify(localFilterConfig.staticOptions))

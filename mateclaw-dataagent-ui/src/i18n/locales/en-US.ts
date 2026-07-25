@@ -1470,6 +1470,8 @@ export default {
       filterOptions: 'Option Source',
       filterOptionStatic: 'Static',
       filterOptionDynamic: 'Dynamic',
+      filterOptionStaticHint: 'Manually enter the filter field and options; no data source needed',
+      filterOptionDynamicHint: 'Pick a data source and dimension; values load automatically at runtime',
       filterStaticOptions: 'Options',
       optionLabel: 'Label',
       optionValue: 'Value',

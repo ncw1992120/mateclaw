@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
  *   <li>register() + attach() 生产者-消费者解耦，支持重连回放</li>
  *   <li>心跳保活防止代理/Nginx idle timeout 中断长连接</li>
  *   <li>markFirstTokenReceived 自动调整心跳频率</li>
- *   <li>handleStreamFinalize 提交到 sseExecutor 执行，避免阻塞 Reactor 线程</li>
+ *   <li>handleStreamFinalize 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与 sseExecutor 隔离</li>
  *   <li>有界线程池防止线程泄漏</li>
  * </ul>
  */
@@ -64,6 +64,12 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final WorkspaceGuard workspaceGuard;
     private final AgentGuard agentGuard;
     private final ExecutorService sseExecutor;
+
+    /**
+     * 专用于流终态收尾任务（含 generateRecommendedQuestions 同步 LLM 调用）的独立线程池，
+     * 与 sseExecutor 隔离，避免收尾任务占用订阅处理线程导致新请求延迟。
+     */
+    private final ExecutorService finalizeExecutor;
 
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
                                     ConversationService conversationService,
@@ -91,6 +97,20 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 new LinkedBlockingQueue<>(256),
                 r -> {
                     Thread t = new Thread(r, "dataagent-sse");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        // finalize 线程池：专用于流终态收尾任务（含 generateRecommendedQuestions 同步 LLM 调用），
+        // 与 sseExecutor 隔离避免收尾任务占用订阅处理线程导致新请求处理延迟
+        int finalizeMaxThreads = Math.max(4, Runtime.getRuntime().availableProcessors());
+        this.finalizeExecutor = new ThreadPoolExecutor(
+                2, finalizeMaxThreads,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(128),
+                r -> {
+                    Thread t = new Thread(r, "dataagent-finalize");
                     t.setDaemon(true);
                     return t;
                 },
@@ -199,8 +219,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             if (!finalized.compareAndSet(false, true)) return;
                             boolean wasStopped = streamTracker.isStopRequested(conversationId);
                             String persistStatus = wasStopped ? "stopped" : "completed";
-                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
-                            sseExecutor.execute(() ->
+                            // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
+                            finalizeExecutor.execute(() ->
                                 handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus, agentId, message));
                         })
                         .doOnError(e -> {
@@ -209,15 +229,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     || (e.getCause() instanceof java.util.concurrent.CancellationException);
                             String status = isUserStop ? "stopped" : "failed";
                             log.warn("[DataAgent] Stream {} for conversation {}: {}", status, conversationId, e.getMessage());
-                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
-                            sseExecutor.execute(() ->
+                            // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
+                            finalizeExecutor.execute(() ->
                                 handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status, agentId, message));
                         })
                         .doOnCancel(() -> {
                             if (!finalized.compareAndSet(false, true)) return;
                             log.info("[DataAgent] Stream cancelled for conversation {}", conversationId);
-                            // 提交到 sseExecutor 执行，避免阻塞 Reactor 线程
-                            sseExecutor.execute(() ->
+                            // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
+                            finalizeExecutor.execute(() ->
                                 handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped", agentId, message));
                         })
                         .subscribe(

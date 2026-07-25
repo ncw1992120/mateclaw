@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
@@ -55,6 +56,8 @@ public class DataAgentStreamTracker {
     public DataAgentStreamTracker(ObjectMapper objectMapper, ChatStreamTracker chatStreamTracker) {
         this.objectMapper = objectMapper;
         this.chatStreamTracker = chatStreamTracker;
+        // 启动 buffer trim 定时任务：每 30s 扫描并清理超限 buffer
+        trimScheduler.scheduleAtFixedRate(this::trimAllBuffers, 30, 30, TimeUnit.SECONDS);
     }
 
     record SseEvent(long id, String name, String json) {}
@@ -75,6 +78,9 @@ public class DataAgentStreamTracker {
         final long createdAt = System.currentTimeMillis();
         volatile long lastEventAt = System.currentTimeMillis();
 
+        /** 异步 trim 标记：buffer 超限时置位，由 trimScheduler 异步清理 */
+        volatile boolean needsTrim;
+
         RunState(String conversationId) {
             this.conversationId = conversationId;
         }
@@ -85,9 +91,18 @@ public class DataAgentStreamTracker {
     /** ChatStreamTracker event relay 取消句柄：conversationId -> Runnable */
     private final ConcurrentHashMap<String, Runnable> relayCancellations = new ConcurrentHashMap<>();
 
+    /** 心跳调度线程池：4 线程，避免单线程在高并发会话下成为心跳瓶颈 */
     private final ScheduledExecutorService heartbeatScheduler =
-            Executors.newSingleThreadScheduledExecutor(r -> {
+            Executors.newScheduledThreadPool(4, r -> {
                 Thread t = new Thread(r, "dataagent-stream-heartbeat");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** 异步 trim 调度器：定期扫描所有 RunState，清理超限 buffer，避免在 broadcast hot path 中持锁过长 */
+    private final ScheduledExecutorService trimScheduler =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "dataagent-buffer-trim");
                 t.setDaemon(true);
                 return t;
             });
@@ -192,6 +207,10 @@ public class DataAgentStreamTracker {
      * done / async_task 事件允许在 state.done=true 后广播，
      * heartbeat 事件跳过 buffer 直推，
      * 普通事件在 state.done 后丢弃。
+     * <p>
+     * 锁内仅做 buffer 累积 + 订阅者快照拷贝；网络 I/O（emitter.send）在锁外执行，
+     * 避免慢客户端拖累同一会话的后续事件推送。
+     * buffer 超限时仅置位 needsTrim 标记，由 trimScheduler 异步清理。
      */
     public void broadcast(String conversationId, String eventName, String jsonData) {
         RunState state = runs.get(conversationId);
@@ -205,41 +224,28 @@ public class DataAgentStreamTracker {
 
         if (isDone) {
             if (state == null) return;
+            List<SseEmitter> snapshot;
+            long id;
             synchronized (state.lock) {
-                long id = ++state.nextEventId;
+                id = ++state.nextEventId;
                 SseEvent ev = new SseEvent(id, eventName, jsonData);
                 state.buffer.add(ev);
                 if (state.buffer.size() > MAX_BUFFER_SIZE) {
-                    trimBuffer(state.buffer);
+                    state.needsTrim = true;
                 }
-                Iterator<SseEmitter> it = state.subscribers.iterator();
-                while (it.hasNext()) {
-                    SseEmitter emitter = it.next();
-                    try {
-                        emitter.send(SseEmitter.event().id(String.valueOf(id)).name(eventName).data(jsonData));
-                    } catch (IOException | IllegalStateException e) {
-                        log.debug("[DataAgentStreamTracker] Removing dead subscriber for {}: {}", conversationId, e.getMessage());
-                        it.remove();
-                    }
-                }
+                snapshot = new ArrayList<>(state.subscribers);
             }
+            sendToSubscribers(conversationId, state, snapshot, id, eventName, jsonData);
             return;
         }
 
         if (isHeartbeat) {
             if (state == null) return;
+            List<SseEmitter> snapshot;
             synchronized (state.lock) {
-                Iterator<SseEmitter> it = state.subscribers.iterator();
-                while (it.hasNext()) {
-                    SseEmitter emitter = it.next();
-                    try {
-                        emitter.send(SseEmitter.event().name(eventName).data(jsonData));
-                    } catch (IOException | IllegalStateException e) {
-                        log.debug("[DataAgentStreamTracker] Removing dead subscriber (heartbeat) for {}: {}", conversationId, e.getMessage());
-                        it.remove();
-                    }
-                }
+                snapshot = new ArrayList<>(state.subscribers);
             }
+            sendToSubscribers(conversationId, state, snapshot, -1L, eventName, jsonData);
             return;
         }
 
@@ -247,22 +253,58 @@ public class DataAgentStreamTracker {
             return;
         }
 
+        List<SseEmitter> snapshot;
+        long id;
         synchronized (state.lock) {
-            long id = ++state.nextEventId;
+            if (state.done) {
+                return;
+            }
+            id = ++state.nextEventId;
             SseEvent event = new SseEvent(id, eventName, jsonData);
             state.buffer.add(event);
             if (state.buffer.size() > MAX_BUFFER_SIZE) {
-                trimBuffer(state.buffer);
+                state.needsTrim = true;
             }
-            Iterator<SseEmitter> it = state.subscribers.iterator();
-            while (it.hasNext()) {
-                SseEmitter emitter = it.next();
-                try {
-                    emitter.send(SseEmitter.event().id(String.valueOf(id)).name(eventName).data(jsonData));
-                } catch (IOException | IllegalStateException e) {
-                    log.debug("[DataAgentStreamTracker] Removing dead subscriber for {}: {}", conversationId, e.getMessage());
-                    it.remove();
+            snapshot = new ArrayList<>(state.subscribers);
+        }
+        sendToSubscribers(conversationId, state, snapshot, id, eventName, jsonData);
+    }
+
+    /**
+     * 在锁外执行 SSE 推送，避免网络 I/O 阻塞同一会话的其它事件广播。
+     * <p>
+     * 推送失败的 emitter（客户端断连等）会先收集到 dead 列表，
+     * 在所有 send 完成后短暂重入 lock 批量移除，避免与 attach 的迭代冲突。
+     *
+     * @param conversationId 会话 ID
+     * @param state          RunState
+     * @param snapshot       在锁内拷贝的订阅者快照
+     * @param id             事件 ID；负值表示不携带 id（如 heartbeat）
+     * @param eventName      事件名
+     * @param jsonData       事件 JSON 数据
+     */
+    private void sendToSubscribers(String conversationId, RunState state,
+                                   List<SseEmitter> snapshot, long id,
+                                   String eventName, String jsonData) {
+        List<SseEmitter> dead = null;
+        for (SseEmitter emitter : snapshot) {
+            try {
+                SseEmitter.SseEventBuilder builder = SseEmitter.event().name(eventName).data(jsonData);
+                if (id >= 0) {
+                    builder.id(String.valueOf(id));
                 }
+                emitter.send(builder);
+            } catch (IOException | IllegalStateException e) {
+                if (dead == null) {
+                    dead = new ArrayList<>();
+                }
+                dead.add(emitter);
+                log.debug("[DataAgentStreamTracker] Removing dead subscriber for {}: {}", conversationId, e.getMessage());
+            }
+        }
+        if (dead != null && !dead.isEmpty()) {
+            synchronized (state.lock) {
+                state.subscribers.removeAll(dead);
             }
         }
     }
@@ -503,9 +545,36 @@ public class DataAgentStreamTracker {
         log.debug("[DataAgentStreamTracker] Buffer trimmed: {} events remain", buffer.size());
     }
 
+    /**
+     * 异步扫描所有 RunState，清理超限 buffer。
+     * <p>
+     * 由 trimScheduler 每 30s 触发一次。trimBuffer 本身是 O(n) 扫描，
+     * 在 broadcast hot path 中改为只标记 needsTrim，由本方法在锁内同步执行 trim，
+     * 避免锁持有时间过长影响推送。
+     */
+    private void trimAllBuffers() {
+        for (RunState state : runs.values()) {
+            if (!state.needsTrim) {
+                continue;
+            }
+            try {
+                synchronized (state.lock) {
+                    if (!state.needsTrim) {
+                        continue;
+                    }
+                    trimBuffer(state.buffer);
+                    state.needsTrim = false;
+                }
+            } catch (Exception e) {
+                log.debug("[DataAgentStreamTracker] Buffer trim error for {}: {}",
+                        state.conversationId, e.getMessage());
+            }
+        }
+    }
+
     // ===== Stale RunState cleanup =====
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 600_000)
+    @Scheduled(fixedRate = 600_000)
     public void cleanupStaleRuns() {
         long now = System.currentTimeMillis();
         int evicted = 0;
@@ -547,6 +616,9 @@ public class DataAgentStreamTracker {
 
     @PreDestroy
     public void onShutdown() {
+        // 关闭调度器，释放线程，避免容器 shutdown 时线程泄漏
+        heartbeatScheduler.shutdownNow();
+        trimScheduler.shutdownNow();
         int active = (int) runs.values().stream().filter(s -> !s.done).count();
         if (active == 0) {
             log.info("[DataAgentStreamTracker] Shutdown: no active runs");

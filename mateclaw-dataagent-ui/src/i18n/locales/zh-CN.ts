@@ -1529,6 +1529,8 @@ export default {
       filterOptions: '选项来源',
       filterOptionStatic: '静态选项',
       filterOptionDynamic: '动态获取',
+      filterOptionStaticHint: '手动填写筛选字段与可选项，无需数据源',
+      filterOptionDynamicHint: '选择数据源与维度，运行时自动加载可选值',
       filterStaticOptions: '选项列表',
       optionLabel: '显示名称',
       optionValue: '选项值',

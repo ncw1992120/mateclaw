@@ -90,13 +90,13 @@ CREATE TABLE IF NOT EXISTS `dataagent_aloudata_dimension` (
     `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_dim_ds_name` (`datasource_id`, `dim_name`),
     KEY `idx_datasource_id` (`datasource_id`),
     KEY `idx_dim_name` (`dim_name`),
     KEY `idx_dim_category_id` (`dim_category_id`),
     KEY `idx_dataset_name` (`dataset_name`),
     KEY `idx_sync_version` (`sync_version`),
     KEY `idx_dim_ds_category` (`datasource_id`, `dim_category_id`),
-    KEY `idx_dim_ds_name` (`datasource_id`, `dim_name`),
     KEY `idx_dim_keyword` (`datasource_id`, `dim_name`, `dim_display_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata维度元数据表';
 

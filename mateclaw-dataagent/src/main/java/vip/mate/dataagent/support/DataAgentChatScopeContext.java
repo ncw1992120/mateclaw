@@ -3,6 +3,7 @@ package vip.mate.dataagent.support;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,8 +29,20 @@ public class DataAgentChatScopeContext {
     /** conversationId -> allowed datasourceId 集合（不可变） */
     private final Map<String, Set<Long>> datasourceIdScopes = new ConcurrentHashMap<>();
 
-    /** conversationId -> 用户原始消息（用于检索时补充关键词，防止 LLM 精简丢失关键信息） */
-    private final Map<String, String> originalMessages = new ConcurrentHashMap<>();
+    /**
+     * conversationId -> 用户原始消息（用于检索时补充关键词，防止 LLM 精简丢失关键信息）
+     * <p>
+     * 使用 accessOrder=true 的 LinkedHashMap + synchronized 包装实现 LRU：
+     * 超过 {@link #ORIGINAL_MESSAGES_MAX_SIZE} 时自动淘汰最久未访问的条目，
+     * 避免原 clear() 全量清空导致正在使用会话的原始消息被误删。
+     */
+    private final Map<String, String> originalMessages =
+            Collections.synchronizedMap(new LinkedHashMap<String, String>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                    return size() > ORIGINAL_MESSAGES_MAX_SIZE;
+                }
+            });
 
     /** originalMessages 大小上限，防止异常中断的会话泄漏导致内存膨胀 */
     private static final int ORIGINAL_MESSAGES_MAX_SIZE = 1000;
@@ -126,10 +139,8 @@ public class DataAgentChatScopeContext {
             originalMessages.remove(conversationId);
             return;
         }
-        // 超过上限时清空，防止异常中断的会话泄漏导致内存膨胀
-        if (originalMessages.size() >= ORIGINAL_MESSAGES_MAX_SIZE) {
-            originalMessages.clear();
-        }
+        // LinkedHashMap.removeEldestEntry 在 put 时自动按 LRU 淘汰最旧条目，
+        // 不再需要 clear() 全量清空，避免误删正在使用会话的原始消息
         originalMessages.put(conversationId, message);
     }
 

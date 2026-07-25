@@ -65,6 +65,7 @@ public class DatasourceQueryTool {
     private final LogicalRelationService logicalRelationService;
     private final BusinessTermEsService businessTermEsService;
     private final DataAgentChatScopeContext scopeContext;
+    private final DatasourceConnectionPoolService datasourceConnectionPoolService;
 
     private static final String TOOL_NAME = "data_query";
 
@@ -303,10 +304,9 @@ public class DatasourceQueryTool {
 
         String jdbcUrl = JdbcUtils.buildJdbcUrl(entity);
 
-        // 4. 执行查询（只读模式）
+        // 4. 执行查询（只读模式，通过连接池获取连接避免每次建连开销）
         long startTime = System.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, queryUsername, queryPassword)) {
-            conn.setReadOnly(true);
+        try (Connection conn = datasourceConnectionPoolService.getReadOnlyConnection(jdbcUrl, queryUsername, queryPassword)) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
                 stmt.setMaxRows(MAX_ROWS);
