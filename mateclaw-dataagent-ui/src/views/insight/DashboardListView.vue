@@ -52,27 +52,28 @@
                 <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
               </div>
               <div class="card-actions">
-                <el-button text size="small" @click="handleEdit(dashboard.id)">{{ t('insight.edit') }}</el-button>
-                <el-button text size="small" @click="handlePreview(dashboard.id)">{{ t('insight.preview') }}</el-button>
-                <el-button
+                <el-tooltip :content="t('insight.edit')" placement="top">
+                  <el-button text size="small" :icon="Edit" @click="handleEdit(dashboard.id)" />
+                </el-tooltip>
+                <el-tooltip :content="t('insight.preview')" placement="top">
+                  <el-button text size="small" :icon="View" @click="handlePreview(dashboard.id)" />
+                </el-tooltip>
+                <el-tooltip
                   v-if="dashboard.status === 'draft'"
-                  text
-                  size="small"
-                  type="success"
-                  @click="handlePublish(dashboard)"
+                  :content="t('insight.publish')"
+                  placement="top"
                 >
-                  {{ t('insight.publish') }}
-                </el-button>
-                <el-button
-                  v-else
-                  text
-                  size="small"
-                  @click="handleUnpublish(dashboard)"
-                >
-                  {{ t('insight.unpublish') }}
-                </el-button>
-                <el-button text size="small" @click="handleCopy(dashboard)">{{ t('insight.copy') }}</el-button>
-                <el-button text size="small" type="danger" @click="handleDelete(dashboard)">{{ t('insight.delete') }}</el-button>
+                  <el-button text size="small" type="success" :icon="VideoPlay" @click="handlePublish(dashboard)" />
+                </el-tooltip>
+                <el-tooltip v-else :content="t('insight.unpublish')" placement="top">
+                  <el-button text size="small" :icon="VideoPause" @click="handleUnpublish(dashboard)" />
+                </el-tooltip>
+                <el-tooltip :content="t('insight.copy')" placement="top">
+                  <el-button text size="small" :icon="DocumentCopy" @click="handleCopy(dashboard)" />
+                </el-tooltip>
+                <el-tooltip :content="t('insight.delete')" placement="top">
+                  <el-button text size="small" type="danger" :icon="Delete" @click="handleDelete(dashboard)" />
+                </el-tooltip>
               </div>
             </div>
           </div>
@@ -110,7 +111,7 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
@@ -411,7 +412,7 @@ function handleBackToList(): void {
 
 .card-actions {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-xs);
   border-top: 1px solid var(--db-border);
   padding-top: var(--space-sm);

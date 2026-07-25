@@ -13,16 +13,18 @@
       <!-- 品牌区域 -->
       <div class="brand-section">
         <div class="brand-logo">
-          <svg viewBox="0 0 64 64" class="logo-svg">
+          <svg viewBox="0 0 100 100" class="logo-svg">
             <defs>
               <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stop-color="#fff" stop-opacity="0.95" />
                 <stop offset="100%" stop-color="#ffe4d6" stop-opacity="0.9" />
               </linearGradient>
             </defs>
-            <circle cx="28" cy="26" r="16" fill="none" stroke="url(#logoGradient)" stroke-width="3" />
-            <path d="M40 38 L54 52" stroke="url(#logoGradient)" stroke-width="4" stroke-linecap="round" />
-            <circle cx="28" cy="26" r="5" fill="url(#logoGradient)" />
+            <rect x="5" y="5" width="90" height="90" rx="15" fill="none" stroke="url(#logoGradient)" stroke-width="4" />
+            <circle cx="50" cy="45" r="25" fill="none" stroke="url(#logoGradient)" stroke-width="4" />
+            <line x1="68" y1="62" x2="85" y2="79" stroke="url(#logoGradient)" stroke-width="6" stroke-linecap="round" />
+            <polyline points="38,52 45,45 52,48 60,38" fill="none" stroke="url(#logoGradient)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <polygon points="60,38 57,42 60,41 58,48 62,46 65,43" fill="url(#logoGradient)" />
           </svg>
         </div>
         <h1 class="brand-title">数据智能体</h1>

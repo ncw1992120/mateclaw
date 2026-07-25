@@ -86,6 +86,14 @@ api.interceptors.response.use(
 
     // 401：Token 过期或无效，清除登录状态并跳转登录页
     if (status === 401) {
+      // 登录接口返回 401 表示用户名或密码错误，需要提示用户而非跳转
+      const isLoginRequest = error.config?.url?.includes('/auth/login')
+      if (isLoginRequest) {
+        const errData = error.response?.data
+        const message = errData?.msg || errData?.message || '用户名或密码错误'
+        ElMessage.error(message)
+        return Promise.reject(error)
+      }
       localStorage.removeItem('token')
       localStorage.removeItem('workspaceId')
       // 清除所有 mc- 前缀的业务状态，防止下次登录脏数据
