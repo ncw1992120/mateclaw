@@ -30,10 +30,10 @@ import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { usePersistedRef } from '@/composables/usePersistedRef'
-import AgentContextView from '../workspace/AgentContextView.vue'
-import WorkspaceManageView from '../workspace/WorkspaceManageView.vue'
-import MemberManageView from '../workspace/MemberManageView.vue'
-import ResourceGrantView from '../workspace/ResourceGrantView.vue'
+import AgentContextView from '@/views/workspace/AgentContextView.vue'
+import WorkspaceManageView from '@/views/workspace/WorkspaceManageView.vue'
+import MemberManageView from '@/views/workspace/MemberManageView.vue'
+import ResourceGrantView from '@/views/workspace/ResourceGrantView.vue'
 
 const { t } = useI18n()
 const { hasPermission } = usePermission()
