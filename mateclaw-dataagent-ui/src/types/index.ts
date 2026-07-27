@@ -489,6 +489,35 @@ export interface R<T> {
   data: T
 }
 
+/** 上下文使用分类 */
+export interface ContextUsageCategory {
+  name: string
+  label: string
+  tokens: number
+  color?: string
+}
+
+/** 上下文压缩状态 */
+export interface ContextCompressionStatus {
+  status: 'none' | 'compacted' | 'failed'
+  preTokens?: number | null
+  postTokens?: number | null
+  messagesSummarized?: number | null
+  tailKept?: number | null
+  summaryId?: number | null
+}
+
+/** 上下文使用情况 */
+export interface ContextUsage {
+  contextWindow: number
+  usedTokens: number
+  usedPercent: number
+  categories: ContextUsageCategory[]
+  compression: ContextCompressionStatus
+  conversationId: string
+  timestamp: number
+}
+
 /** 聊天请求参数 */
 export interface ChatRequest {
   agentId: number | string

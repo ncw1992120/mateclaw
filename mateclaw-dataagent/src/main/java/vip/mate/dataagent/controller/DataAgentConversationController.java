@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.service.DataAgentConversationService;
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -76,5 +77,14 @@ public class DataAgentConversationController {
     public R<Void> setPinned(@PathVariable String conversationId, @RequestBody Map<String, Boolean> body) {
         conversationService.setPinned(conversationId, Boolean.TRUE.equals(body.get("pinned")));
         return R.ok();
+    }
+
+    /**
+     * 获取会话上下文使用情况
+     */
+    @GetMapping("/{conversationId}/context-usage")
+    @Operation(summary = "获取会话上下文使用情况", description = "返回指定会话的上下文窗口占用明细与压缩状态")
+    public R<ContextUsageVO> getContextUsage(@PathVariable String conversationId) {
+        return R.ok(conversationService.getContextUsage(conversationId));
     }
 }

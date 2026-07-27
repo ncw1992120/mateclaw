@@ -1,6 +1,5 @@
 package vip.mate.agent.context;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -13,12 +12,18 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.tool.ToolCallback;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import vip.mate.agent.graph.executor.ToolResultStorage;
 import vip.mate.agent.prompt.PromptLoader;
+import vip.mate.channel.web.ChatStreamTracker;
 import vip.mate.config.ConversationWindowProperties;
 import vip.mate.memory.spi.MemoryManager;
 import vip.mate.workspace.conversation.ConversationService;
+import vip.mate.workspace.conversation.ContextUsageService;
+import vip.mate.workspace.conversation.vo.ContextCompressionStatusVO;
+import vip.mate.workspace.conversation.vo.ContextUsageCategoryVO;
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +56,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ConversationWindowManager {
 
     // ==================== Prompt 模板 ====================
@@ -117,6 +121,7 @@ public class ConversationWindowManager {
     private final ConversationWindowProperties properties;
     private final MemoryManager memoryManager;
     private final ConversationService conversationService;
+    private final ContextUsageService contextUsageService;
 
     /**
      * Optional spill store, injected via setter so unit tests and the two
@@ -127,7 +132,7 @@ public class ConversationWindowManager {
      */
     private ToolResultStorage toolResultStorage;
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Autowired(required = false)
     public void setToolResultStorage(ToolResultStorage toolResultStorage) {
         this.toolResultStorage = toolResultStorage;
     }
@@ -140,11 +145,35 @@ public class ConversationWindowManager {
      * frontend can render a boundary card and a status line in real
      * time.
      */
-    private vip.mate.channel.web.ChatStreamTracker streamTracker;
+    private ChatStreamTracker streamTracker;
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void setStreamTracker(vip.mate.channel.web.ChatStreamTracker streamTracker) {
+    @Autowired(required = false)
+    public void setStreamTracker(ChatStreamTracker streamTracker) {
         this.streamTracker = streamTracker;
+    }
+
+    /**
+     * 主构造函数，供 Spring 自动装配使用。
+     */
+    @Autowired
+    public ConversationWindowManager(ConversationWindowProperties properties,
+                                     MemoryManager memoryManager,
+                                     ConversationService conversationService,
+                                     ContextUsageService contextUsageService) {
+        this.properties = properties;
+        this.memoryManager = memoryManager;
+        this.conversationService = conversationService;
+        this.contextUsageService = contextUsageService;
+    }
+
+    /**
+     * 向后兼容的3参数构造函数，供现有单元测试使用。
+     * ContextUsageService 为空表示不记录上下文使用情况。
+     */
+    public ConversationWindowManager(ConversationWindowProperties properties,
+                                     MemoryManager memoryManager,
+                                     ConversationService conversationService) {
+        this(properties, memoryManager, conversationService, null);
     }
 
     // ==================== 状态 ====================
@@ -260,6 +289,8 @@ public class ConversationWindowManager {
         int totalTokens = systemTokens + currentMsgTokens + historyTokens + toolsTokens;
 
         if (totalTokens <= triggerThreshold) {
+            recordContextUsage(conversationId, effectiveMax, systemTokens, toolsTokens,
+                    historyTokens + currentMsgTokens, ContextCompressionStatusVO.none());
             return messages;
         }
 
@@ -286,8 +317,14 @@ public class ConversationWindowManager {
         // 尾部保护 token 预算：阈值的 20%
         int tailTokenBudget = (int) (triggerThreshold * 0.20);
 
-        return compactMessages(messages, historyBudget, tailTokenBudget, chatModel,
+        List<Message> compacted = compactMessages(messages, historyBudget, tailTokenBudget, chatModel,
                 conversationId, agentId, totalTokens, spillsAtEntry, "token_threshold");
+        int compactedHistoryTokens = TokenEstimator.estimateTokens(compacted);
+        int postTokens = systemTokens + toolsTokens + compactedHistoryTokens + currentMsgTokens;
+        recordContextUsage(conversationId, effectiveMax, systemTokens, toolsTokens,
+                compactedHistoryTokens + currentMsgTokens, ContextCompressionStatusVO.compacted(totalTokens,
+                        postTokens, null, null, null));
+        return compacted;
     }
 
     /**
@@ -316,6 +353,40 @@ public class ConversationWindowManager {
             streamTracker.broadcastObject(conversationId, "compact_status", payload);
         } catch (Exception e) {
             log.debug("[ConversationWindow] broadcast compact_status failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 记录并广播当前上下文使用情况。
+     * <p>
+     * 将 token 占用写入 {@link ContextUsageService} 缓存，并通过 SSE 推送 context_usage 事件，
+     * 让前端实时刷新上下文使用面板。
+     */
+    private void recordContextUsage(String conversationId, int contextWindow,
+                                    int systemTokens, int toolsTokens, int conversationTokens,
+                                    ContextCompressionStatusVO compression) {
+        if (contextUsageService == null || conversationId == null || conversationId.isBlank()) {
+            return;
+        }
+        try {
+            int usedTokens = systemTokens + toolsTokens + conversationTokens;
+            double usedPercent = contextWindow > 0 ? Math.min(1.0, (double) usedTokens / contextWindow) : 0.0;
+            ContextUsageVO usage = new ContextUsageVO();
+            usage.setContextWindow(contextWindow);
+            usage.setUsedTokens(usedTokens);
+            usage.setUsedPercent(usedPercent);
+            usage.setCategories(List.of(
+                    ContextUsageCategoryVO.of("system_prompt", "System prompt", systemTokens, "#9ca3af"),
+                    ContextUsageCategoryVO.of("tool_definitions", "Tool definitions", toolsTokens, "#8b5cf6"),
+                    ContextUsageCategoryVO.of("conversation", "Conversation", conversationTokens, "#f87171")));
+            usage.setCompression(compression != null ? compression : ContextCompressionStatusVO.none());
+            contextUsageService.recordContextUsage(conversationId, usage);
+
+            if (streamTracker != null) {
+                streamTracker.broadcastObject(conversationId, "context_usage", usage);
+            }
+        } catch (Exception e) {
+            log.debug("[ConversationWindow] record context usage failed: {}", e.getMessage());
         }
     }
 

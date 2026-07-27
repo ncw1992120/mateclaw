@@ -419,6 +419,13 @@
       </transition>
     </div>
 
+    <!-- Context Usage 详情面板 -->
+    <ContextUsagePanel
+      v-if="chatStore.contextUsagePanelOpen"
+      :usage="chatStore.contextUsage"
+      @close="chatStore.toggleContextUsagePanel"
+    />
+
     <!-- Input Bar -->
     <div class="input-bar">
       <!-- 附件预览区 -->
@@ -529,6 +536,7 @@
                 <path d="M18 14l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z"/>
               </svg>
             </button>
+
           </div>
 
           <div class="footer-send">
@@ -571,6 +579,32 @@
           </div>
         </div>
       </div>
+
+      <!-- Context Usage 圆圈指示器 -->
+      <button
+        class="context-usage-ring"
+        type="button"
+        :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
+        @click="chatStore.toggleContextUsagePanel"
+      >
+        <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
+          <circle class="ring-bg" cx="18" cy="18" r="14" />
+          <circle
+            class="ring-fill"
+            cx="18" cy="18" r="14"
+            :stroke-dasharray="ringDasharray"
+            :stroke="ringColor"
+          />
+        </svg>
+        <span class="context-usage-ring__label">{{ ringPercent }}</span>
+        <el-tooltip
+          :content="ringTooltip"
+          placement="top-end"
+          :show-after="300"
+        >
+          <span class="context-usage-ring__hit" />
+        </el-tooltip>
+      </button>
     </div>
 
     <!-- 数据源指标/维度浏览抽屉 -->
@@ -799,6 +833,7 @@ import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
+import ContextUsagePanel from './ContextUsagePanel.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
@@ -1159,6 +1194,35 @@ const isUploading = ref(false)
 /** 一键优化中状态 */
 const isOptimizing = ref(false)
 
+/** 上下文使用圆圈指示器计算属性 */
+const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 14
+const ringPercent = computed(() => {
+  const usage = chatStore.contextUsage
+  if (!usage) return '0%'
+  return `${Math.round(usage.usedPercent * 100)}%`
+})
+const ringDasharray = computed(() => {
+  const usage = chatStore.contextUsage
+  const pct = usage ? usage.usedPercent : 0
+  const filled = CIRCLE_CIRCUMFERENCE * Math.min(pct, 1)
+  return `${filled} ${CIRCLE_CIRCUMFERENCE}`
+})
+const ringColor = computed(() => {
+  const usage = chatStore.contextUsage
+  const pct = usage ? usage.usedPercent : 0
+  if (pct >= 0.9) return '#ef4444'
+  if (pct >= 0.75) return '#f59e0b'
+  return '#22c55e'
+})
+const ringTooltip = computed(() => {
+  const usage = chatStore.contextUsage
+  if (!usage) return '上下文使用情况'
+  const pct = Math.round(usage.usedPercent * 100)
+  const used = usage.usedTokens >= 1000 ? `${(usage.usedTokens / 1000).toFixed(1)}K` : String(usage.usedTokens)
+  const total = usage.contextWindow >= 1000 ? `${(usage.contextWindow / 1000).toFixed(0)}K` : String(usage.contextWindow)
+  return `上下文占用 ${pct}%（${used} / ${total} tokens）`
+})
+
 /** 文件选择 input 引用 */
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -1268,6 +1332,11 @@ const customRenderer = {
     const langClass = hasLanguage ? ` language-${detectedLang}` : ''
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>\n`
   },
+  /** 链接在新窗口打开 */
+  link({ href, title, text }: { href: string; title?: string; text: string }): string {
+    const titleAttr = title ? ` title="${title}"` : ''
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer"${titleAttr}>${text}</a>`
+  },
 }
 
 /** Marked 实例（不接入 markedHighlight，由自定义 renderer 自行处理高亮） */
@@ -1277,9 +1346,9 @@ const markedInstance = new Marked({
   renderer: customRenderer,
 })
 
-/** DOMPurify 配置：允许 echarts 占位 div 所需的属性 */
+/** DOMPurify 配置：允许 echarts 占位 div 所需的属性，允许链接 target 属性 */
 const purifyConfig = {
-  ADD_ATTR: ['data-echarts-option', 'class', 'style'],
+  ADD_ATTR: ['data-echarts-option', 'class', 'style', 'target', 'rel'],
   ADD_TAGS: ['div', 'span', 'pre', 'code'],
 }
 
@@ -4739,6 +4808,7 @@ onUnmounted(() => {
 
 /* Input Bar */
 .input-bar {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -5969,4 +6039,73 @@ onUnmounted(() => {
 
 .browse-pagination :deep(.el-pagination button:disabled) {
   color: var(--theme-text-muted);
+}
+
+/* ===== 上下文使用圆圈指示器 ===== */
+.context-usage-ring {
+  position: absolute;
+  right: 26px;
+  bottom: 22px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--theme-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.context-usage-ring:hover {
+  transform: scale(1.08);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.context-usage-ring--active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 50%, transparent), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.context-usage-ring--active:hover {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 70%, transparent), 0 3px 12px rgba(0, 0, 0, 0.18);
+}
+
+.context-usage-ring__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring-bg {
+  fill: none;
+  stroke: var(--theme-border, #333);
+  stroke-width: 3.5;
+  opacity: 0.45;
+}
+
+.ring-fill {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s ease, stroke 0.3s ease;
+}
+
+.context-usage-ring__label {
+  font-size: 7px;
+  font-weight: 700;
+  color: var(--theme-text);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.context-usage-ring__hit {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
 }</style>

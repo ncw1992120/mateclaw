@@ -1,5 +1,6 @@
 package vip.mate.sdk.service;
 
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -89,4 +90,12 @@ public interface ConversationRuntime {
      * @param pinned         是否置顶
      */
     void setPinned(String conversationId, boolean pinned);
+
+    /**
+     * 获取会话上下文使用情况
+     *
+     * @param conversationId 会话 ID
+     * @return 上下文使用视图对象
+     */
+    ContextUsageVO getContextUsage(String conversationId);
 }

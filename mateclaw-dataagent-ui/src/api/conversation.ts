@@ -1,5 +1,5 @@
 import api from './index'
-import type { Conversation, MessageVO } from '@/types'
+import type { Conversation, MessageVO, ContextUsage } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/conversations'
@@ -27,4 +27,9 @@ export function renameConversation(conversationId: string, title: string) {
 /** 置顶或取消置顶会话 */
 export function setPinned(conversationId: string, pinned: boolean) {
   return api.put(`${BASE_URL}/${conversationId}/pin`, { pinned })
+}
+
+/** 获取会话上下文使用情况 */
+export function getContextUsage(conversationId: string) {
+  return api.get<ContextUsage>(`${BASE_URL}/${conversationId}/context-usage`)
 }

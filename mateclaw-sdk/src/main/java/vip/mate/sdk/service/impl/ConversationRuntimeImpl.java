@@ -3,8 +3,10 @@ package vip.mate.sdk.service.impl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import vip.mate.sdk.service.ConversationRuntime;
+import vip.mate.workspace.conversation.ContextUsageService;
 import vip.mate.workspace.conversation.ConversationService;
 import vip.mate.workspace.conversation.model.ConversationEntity;
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -21,6 +23,7 @@ import java.util.List;
 public class ConversationRuntimeImpl implements ConversationRuntime {
 
     private final ConversationService conversationService;
+    private final ContextUsageService contextUsageService;
 
     @Override
     public List<ConversationVO> listConversations(String appType) {
@@ -68,5 +71,10 @@ public class ConversationRuntimeImpl implements ConversationRuntime {
     @Override
     public void setPinned(String conversationId, boolean pinned) {
         conversationService.setPinned(conversationId, pinned);
+    }
+
+    @Override
+    public ContextUsageVO getContextUsage(String conversationId) {
+        return contextUsageService.getContextUsage(conversationId);
     }
 }

@@ -7,9 +7,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.channel.web.ChatStreamTracker;
+import vip.mate.workspace.conversation.ContextUsageService;
 import vip.mate.workspace.conversation.ConversationService;
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 import vip.mate.workspace.conversation.vo.ConversationVO;
-import vip.mate.workspace.conversation.vo.MessageVO;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +27,7 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final ContextUsageService contextUsageService;
     private final ChatStreamTracker streamTracker;
 
     /**
@@ -155,6 +157,22 @@ public class ConversationController {
         }
         conversationService.setPinned(conversationId, Boolean.TRUE.equals(body.get("pinned")));
         return R.ok();
+    }
+
+    /**
+     * 获取当前会话的上下文使用情况
+     * <p>
+     * 返回系统提示词、工具定义、历史对话等分项 token 占用，以及当前压缩状态。
+     * 若该会话近期未进行过对话，则返回基于历史消息的兜底估算值。
+     */
+    @Operation(summary = "获取会话上下文使用情况", description = "返回当前会话上下文窗口占用明细与压缩状态")
+    @GetMapping("/{conversationId}/context-usage")
+    public R<ContextUsageVO> getContextUsage(@PathVariable String conversationId, Authentication auth) {
+        String username = auth != null ? auth.getName() : "anonymous";
+        if (!conversationService.isConversationOwner(conversationId, username)) {
+            return R.fail(403, "无权访问该会话");
+        }
+        return R.ok(contextUsageService.getContextUsage(conversationId));
     }
 
     /**

@@ -1,6 +1,6 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ChatAttachment, ChatMessage, Conversation, MessageVO, SseEvent } from '@/types'
+import type { ChatAttachment, ChatMessage, ContextUsage, Conversation, MessageVO, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
@@ -83,6 +83,19 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const conversationsLoading = ref(false)
   const historyLoading = ref(false)
+  /** 当前会话的上下文使用情况 */
+  const contextUsage = ref<ContextUsage | null>(null)
+  /** 上下文使用面板是否展开 */
+  const contextUsagePanelOpen = ref(false)
+
+  /**
+   * 调试日志辅助函数，仅在开发环境输出。
+   */
+  function logDebug(message: string, ...args: unknown[]): void {
+    if (import.meta.env.DEV) {
+      console.debug(`[chatStore] ${message}`, ...args)
+    }
+  }
 
   /**
    * 把指定会话标记为"正在生成"。同一时间通常只有一个会话在生成，但用 Set 跟踪
@@ -388,6 +401,8 @@ export const useChatStore = defineStore('chat', () => {
           clearReconnectState()
         }
       }
+      // 切换会话后刷新上下文使用情况（圆圈指示器需要实时展示占用百分比）
+      fetchContextUsage()
     } finally {
       historyLoading.value = false
     }
@@ -1083,6 +1098,13 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
       }
+      case 'context_usage': {
+        const usage = data as Record<string, unknown>
+        if (usage.conversationId === conversationId.value) {
+          updateContextUsage(usage as ContextUsage)
+        }
+        break
+      }
       case 'done': {
         flushBuf.flush()
         // 关闭所有 running segments
@@ -1302,6 +1324,43 @@ export const useChatStore = defineStore('chat', () => {
     await sendMessage(agentId, userContent)
   }
 
+  /**
+   * 拉取当前会话的上下文使用情况
+   */
+  async function fetchContextUsage(): Promise<void> {
+    const convId = conversationId.value
+    if (!convId) {
+      contextUsage.value = null
+      return
+    }
+    try {
+      const res = await conversationApi.getContextUsage(convId)
+      contextUsage.value = res as unknown as ContextUsage
+    } catch (e) {
+      // 静默失败，不阻塞聊天主流程
+      logDebug('fetchContextUsage failed', e)
+    }
+  }
+
+  /**
+   * 更新当前会话的上下文使用情况（来自 SSE context_usage 事件）
+   */
+  function updateContextUsage(usage: ContextUsage): void {
+    if (!usage || !usage.conversationId) return
+    if (usage.conversationId !== conversationId.value) return
+    contextUsage.value = usage
+  }
+
+  /**
+   * 切换上下文使用面板展开状态
+   */
+  function toggleContextUsagePanel(): void {
+    contextUsagePanelOpen.value = !contextUsagePanelOpen.value
+    if (contextUsagePanelOpen.value) {
+      fetchContextUsage()
+    }
+  }
+
   return {
     messages,
     currentAgentId,
@@ -1315,6 +1374,8 @@ export const useChatStore = defineStore('chat', () => {
     conversations,
     conversationsLoading,
     historyLoading,
+    contextUsage,
+    contextUsagePanelOpen,
     lastEventId,
     setAgent,
     clearMessages,
@@ -1332,6 +1393,9 @@ export const useChatStore = defineStore('chat', () => {
     deleteConversation,
     renameConversation,
     setConversationPinned,
+    fetchContextUsage,
+    updateContextUsage,
+    toggleContextUsagePanel,
     isConversationStreaming: (convId: string): boolean => streamingConversations.value.has(convId),
   }
 })

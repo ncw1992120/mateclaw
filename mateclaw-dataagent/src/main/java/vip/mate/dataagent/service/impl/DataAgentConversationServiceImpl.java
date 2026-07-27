@@ -6,6 +6,7 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.service.DataAgentConversationService;
 import vip.mate.exception.MateClawException;
 import vip.mate.sdk.service.ConversationRuntime;
+import vip.mate.workspace.conversation.vo.ContextUsageVO;
 import vip.mate.workspace.conversation.vo.ConversationVO;
 import vip.mate.workspace.conversation.vo.MessageVO;
 
@@ -73,6 +74,27 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
     public void setPinned(String conversationId, boolean pinned) {
         requireOwnership(conversationId);
         conversationRuntime.setPinned(conversationId, pinned);
+    }
+
+    @Override
+    public ContextUsageVO getContextUsage(String conversationId) {
+        // 非管理员需要校验会话归属
+        if (!workspaceGuard.isCurrentAdmin()) {
+            String username = workspaceGuard.currentUsername();
+            Long workspaceId = workspaceGuard.currentWorkspaceId();
+            if (!conversationRuntime.isConversationOwner(conversationId, username, workspaceId)) {
+                boolean exists = conversationRuntime.listConversations(username, workspaceId)
+                        .stream()
+                        .anyMatch(c -> c.getConversationId().equals(conversationId));
+                if (!exists) {
+                    throw new MateClawException("err.conversation.notFound", 404,
+                            "会话不存在: " + conversationId);
+                }
+                throw new MateClawException("err.conversation.forbidden", 403,
+                        "无权访问该会话");
+            }
+        }
+        return conversationRuntime.getContextUsage(conversationId);
     }
 
     /**
