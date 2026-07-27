@@ -451,6 +451,12 @@ public final class DataAgentConstants {
     /** AI 解读会话 ID 前缀 */
     public static final String INSIGHT_REPORT_CONVERSATION_PREFIX = "insight-report-";
 
+    /** 报告订阅：逻辑删除标记 - 已删除 */
+    public static final int INSIGHT_REPORT_SUBSCRIPTION_DELETED = 1;
+
+    /** 报告订阅：逻辑删除标记 - 未删除 */
+    public static final int INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED = 0;
+
     /** 仪表盘筛选：过滤操作符 - 包含 */
     public static final String INSIGHT_FILTER_OP_IN = "in";
 

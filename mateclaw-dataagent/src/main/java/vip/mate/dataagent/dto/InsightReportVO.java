@@ -44,4 +44,7 @@ public class InsightReportVO implements Serializable {
     private String createTime;
 
     private String updateTime;
+
+    /** 当前用户是否已订阅该报告 */
+    private Boolean subscribed;
 }

@@ -4951,7 +4951,7 @@ onUnmounted(() => {
 .footer-send {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 18px;
 }
 
 .model-select-footer {
@@ -5150,8 +5150,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border: none;
   border-radius: 50%;
   background: var(--main-orange);
@@ -5163,8 +5163,8 @@ onUnmounted(() => {
 }
 
 .btn-send svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   margin-left: 1px;
 }
 
@@ -5185,8 +5185,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border: none;
   border-radius: 50%;
   background: var(--theme-surface-elevated);
@@ -5197,8 +5197,8 @@ onUnmounted(() => {
 }
 
 .footer-send .btn-stop svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 
 .footer-send .btn-stop:hover:not(:disabled) {

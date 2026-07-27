@@ -20,7 +20,9 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.InsightReportEntity;
+import vip.mate.dataagent.model.InsightReportSubscriptionEntity;
 import vip.mate.dataagent.repository.InsightReportMapper;
+import vip.mate.dataagent.repository.InsightReportSubscriptionMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
@@ -68,6 +70,7 @@ public class InsightReportServiceImpl implements InsightReportService {
     private final WorkspaceGuard workspaceGuard;
     private final AloudataService aloudataService;
     private final InsightReportMapper insightReportMapper;
+    private final InsightReportSubscriptionMapper insightReportSubscriptionMapper;
 
     /** SSE 报告生成线程池（报告生成频率低，2-4 个线程足够） */
     private final ExecutorService reportExecutor = new ThreadPoolExecutor(
@@ -859,23 +862,125 @@ public class InsightReportServiceImpl implements InsightReportService {
         insightReportMapper.insert(entity);
 
         log.info("发布报告: id={}, dashboardId={}, name={}", entity.getId(), dashboardId, entity.getName());
-        return toReportVO(entity);
+        return toReportVO(entity, null);
     }
 
     @Override
     public List<InsightReportVO> listReports() {
+        return listAllReports();
+    }
+
+    @Override
+    public List<InsightReportVO> listAllReports() {
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
         LambdaQueryWrapper<InsightReportEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InsightReportEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
+        wrapper.eq(InsightReportEntity::getWorkspaceId, workspaceId);
         wrapper.orderByDesc(InsightReportEntity::getUpdateTime);
         List<InsightReportEntity> entities = insightReportMapper.selectList(wrapper);
-        return entities.stream().map(this::toReportVO).collect(Collectors.toList());
+
+        // 查询当前用户已订阅的报告 ID 集合，用于标记 subscribed 字段
+        Set<Long> subscribedReportIds = findSubscribedReportIds(workspaceId, workspaceGuard.currentUserId());
+        return entities.stream()
+                .map(entity -> toReportVO(entity, subscribedReportIds.contains(entity.getId())))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<InsightReportVO> listMyReports() {
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+        LambdaQueryWrapper<InsightReportEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightReportEntity::getWorkspaceId, workspaceId);
+        wrapper.eq(InsightReportEntity::getOwnerId, userId);
+        wrapper.orderByDesc(InsightReportEntity::getUpdateTime);
+        List<InsightReportEntity> entities = insightReportMapper.selectList(wrapper);
+        return entities.stream()
+                .map(entity -> toReportVO(entity, null))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<InsightReportVO> listSubscribedReports() {
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+
+        // 查询当前用户订阅的报告 ID 列表
+        LambdaQueryWrapper<InsightReportSubscriptionEntity> subWrapper = new LambdaQueryWrapper<>();
+        subWrapper.eq(InsightReportSubscriptionEntity::getWorkspaceId, workspaceId);
+        subWrapper.eq(InsightReportSubscriptionEntity::getUserId, userId);
+        subWrapper.eq(InsightReportSubscriptionEntity::getDeleted, DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED);
+        List<InsightReportSubscriptionEntity> subscriptions = insightReportSubscriptionMapper.selectList(subWrapper);
+
+        if (subscriptions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 批量查询报告详情
+        List<Long> reportIds = subscriptions.stream()
+                .map(InsightReportSubscriptionEntity::getReportId)
+                .collect(Collectors.toList());
+        List<InsightReportEntity> reports = insightReportMapper.selectBatchIds(reportIds);
+
+        // 过滤已删除的报告，按 updateTime 降序排列
+        return reports.stream()
+                .filter(entity -> entity.getDeleted() == 0)
+                .sorted(Comparator.comparing(InsightReportEntity::getUpdateTime).reversed())
+                .map(entity -> toReportVO(entity, true))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void subscribeReport(Long reportId) {
+        requireReportOwnership(reportId);
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+
+        // 检查是否已订阅，防止重复
+        if (existsSubscription(reportId, userId)) {
+            throw new BusinessException(400, "已订阅该报告，请勿重复订阅");
+        }
+
+        InsightReportSubscriptionEntity entity = new InsightReportSubscriptionEntity();
+        entity.setReportId(reportId);
+        entity.setUserId(userId);
+        entity.setWorkspaceId(workspaceId);
+        entity.setDeleted(DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED);
+        insightReportSubscriptionMapper.insert(entity);
+
+        log.info("订阅报告: reportId={}, userId={}", reportId, userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unsubscribeReport(Long reportId) {
+        Long workspaceId = workspaceGuard.currentWorkspaceId();
+        Long userId = workspaceGuard.currentUserId();
+
+        // 查询订阅记录
+        LambdaQueryWrapper<InsightReportSubscriptionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightReportSubscriptionEntity::getReportId, reportId);
+        wrapper.eq(InsightReportSubscriptionEntity::getUserId, userId);
+        wrapper.eq(InsightReportSubscriptionEntity::getWorkspaceId, workspaceId);
+        wrapper.eq(InsightReportSubscriptionEntity::getDeleted, DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED);
+        InsightReportSubscriptionEntity entity = insightReportSubscriptionMapper.selectOne(wrapper);
+
+        if (entity == null) {
+            throw new BusinessException(404, "未找到订阅记录");
+        }
+
+        // 逻辑删除
+        entity.setDeleted(DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_DELETED);
+        insightReportSubscriptionMapper.updateById(entity);
+
+        log.info("取消订阅报告: reportId={}, userId={}", reportId, userId);
     }
 
     @Override
     public InsightReportVO getReportDetail(Long id) {
         requireReportOwnership(id);
         InsightReportEntity entity = insightReportMapper.selectById(id);
-        return toReportVO(entity);
+        return toReportVO(entity, null);
     }
 
     @Override
@@ -905,8 +1010,11 @@ public class InsightReportServiceImpl implements InsightReportService {
 
     /**
      * 报告实体转视图对象
+     *
+     * @param entity     报告实体
+     * @param subscribed 当前用户是否已订阅该报告，null 表示不设置
      */
-    private InsightReportVO toReportVO(InsightReportEntity entity) {
+    private InsightReportVO toReportVO(InsightReportEntity entity, Boolean subscribed) {
         InsightReportVO vo = new InsightReportVO();
         BeanUtils.copyProperties(entity, vo);
         if (entity.getCreateTime() != null) {
@@ -915,6 +1023,41 @@ public class InsightReportServiceImpl implements InsightReportService {
         if (entity.getUpdateTime() != null) {
             vo.setUpdateTime(entity.getUpdateTime().toString());
         }
+        vo.setSubscribed(subscribed);
         return vo;
+    }
+
+    /**
+     * 查询指定用户在指定工作区已订阅的报告 ID 集合
+     *
+     * @param workspaceId 工作区 ID
+     * @param userId      用户 ID
+     * @return 已订阅的报告 ID 集合
+     */
+    private Set<Long> findSubscribedReportIds(Long workspaceId, Long userId) {
+        LambdaQueryWrapper<InsightReportSubscriptionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightReportSubscriptionEntity::getWorkspaceId, workspaceId);
+        wrapper.eq(InsightReportSubscriptionEntity::getUserId, userId);
+        wrapper.eq(InsightReportSubscriptionEntity::getDeleted, DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED);
+        wrapper.select(InsightReportSubscriptionEntity::getReportId);
+        List<InsightReportSubscriptionEntity> subscriptions = insightReportSubscriptionMapper.selectList(wrapper);
+        return subscriptions.stream()
+                .map(InsightReportSubscriptionEntity::getReportId)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * 检查指定用户是否已订阅指定报告
+     *
+     * @param reportId 报告 ID
+     * @param userId   用户 ID
+     * @return true 如果已订阅
+     */
+    private boolean existsSubscription(Long reportId, Long userId) {
+        LambdaQueryWrapper<InsightReportSubscriptionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightReportSubscriptionEntity::getReportId, reportId);
+        wrapper.eq(InsightReportSubscriptionEntity::getUserId, userId);
+        wrapper.eq(InsightReportSubscriptionEntity::getDeleted, DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_NOT_DELETED);
+        return insightReportSubscriptionMapper.selectCount(wrapper) > 0;
     }
 }

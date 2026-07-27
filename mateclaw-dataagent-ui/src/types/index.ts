@@ -1255,6 +1255,8 @@ export interface InsightReport {
   /** ECharts option 数据（JSON 格式，供报告页渲染图表） */
   echartsOptions?: string
   status: 'draft' | 'published'
+  /** 当前用户是否已订阅该报告 */
+  subscribed?: boolean
   ownerId?: string
   ownerName?: string
   modifier?: string

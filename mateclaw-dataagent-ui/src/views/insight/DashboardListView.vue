@@ -6,6 +6,14 @@
         <div class="list-header mc-toolbar">
         <h2 class="list-title mc-toolbar-title">{{ t('insight.title') }}</h2>
         <div class="list-header-actions mc-toolbar-right">
+          <el-input
+            v-model="searchKeyword"
+            :placeholder="t('insight.searchPlaceholder')"
+            :prefix-icon="Search"
+            clearable
+            size="default"
+            class="search-input"
+          />
           <el-button @click="toggleAiPanel">
             <template #icon>
               <RobotIcon style="width: 16px; height: 16px;" />
@@ -20,9 +28,9 @@
 
       <div class="list-body">
         <div v-loading="store.loading" class="list-content">
-          <div v-if="store.dashboards.length === 0 && !store.loading" class="empty-state">
+          <div v-if="filteredDashboards.length === 0 && !store.loading" class="empty-state">
             <div class="empty-icon">📊</div>
-            <div class="empty-text">{{ t('insight.listEmpty') }}</div>
+            <div class="empty-text">{{ searchKeyword ? t('insight.searchNoResult') : t('insight.listEmpty') }}</div>
             <div class="empty-actions">
               <el-button @click="toggleAiPanel">
               <template #icon>
@@ -36,7 +44,7 @@
 
           <div v-else class="card-grid">
             <div
-              v-for="dashboard in store.dashboards"
+              v-for="dashboard in filteredDashboards"
               :key="dashboard.id"
               class="dashboard-card"
             >
@@ -108,10 +116,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause } from '@element-plus/icons-vue'
+import { Plus, MagicStick, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
@@ -134,6 +142,22 @@ const currentDashboardId = usePersistedState<string>('mc-insight-dashboard-id', 
 
 /** AI助手面板可见性 */
 const showAiPanel = ref(false)
+
+/** 搜索关键词 */
+const searchKeyword = ref('')
+
+/** 按关键词过滤仪表盘列表 */
+const filteredDashboards = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return store.dashboards
+  }
+  return store.dashboards.filter((d) => {
+    return d.name?.toLowerCase().includes(keyword)
+      || d.description?.toLowerCase().includes(keyword)
+      || d.ownerName?.toLowerCase().includes(keyword)
+  })
+})
 
 onMounted(() => {
   store.fetchDashboards().catch(() => {
@@ -300,6 +324,10 @@ function handleBackToList(): void {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.search-input {
+  width: 200px;
 }
 
 .list-title {

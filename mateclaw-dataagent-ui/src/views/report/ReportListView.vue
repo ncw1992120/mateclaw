@@ -3,18 +3,39 @@
     <!-- 顶部工具栏 -->
     <div class="list-header mc-toolbar">
       <h2 class="list-title mc-toolbar-title">{{ t('insight.reportList') }}</h2>
+      <el-input
+        v-model="searchKeyword"
+        :placeholder="t('insight.reportSearchPlaceholder')"
+        :prefix-icon="Search"
+        clearable
+        size="default"
+        class="search-input"
+      />
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="tab-bar">
+      <button
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="tab-btn"
+        :class="{ active: activeTab === tab.key }"
+        @click="switchTab(tab.key)"
+      >
+        {{ t(tab.label) }}
+      </button>
     </div>
 
     <!-- 报告列表 -->
     <div v-loading="loading" class="list-content">
-      <div v-if="reports.length === 0 && !loading" class="empty-state">
+      <div v-if="filteredReports.length === 0 && !loading" class="empty-state">
         <div class="empty-icon">📋</div>
-        <div class="empty-text">{{ t('insight.reportListEmpty') }}</div>
+        <div class="empty-text">{{ searchKeyword ? t('insight.searchNoResult') : emptyText }}</div>
       </div>
 
       <div v-else class="card-grid">
         <div
-          v-for="report in reports"
+          v-for="report in filteredReports"
           :key="report.id"
           class="report-card"
         >
@@ -33,8 +54,27 @@
             <el-tooltip :content="t('insight.reportViewDetail')" placement="top">
               <el-button text size="small" :icon="View" @click="handleViewReport(report)" />
             </el-tooltip>
-            <el-tooltip :content="t('insight.reportDelete')" placement="top">
+            <!-- 我的洞察：可删除 -->
+            <el-tooltip v-if="activeTab === 'mine'" :content="t('insight.reportDelete')" placement="top">
               <el-button text size="small" type="danger" :icon="Delete" @click="handleDeleteReport(report)" />
+            </el-tooltip>
+            <!-- 洞察广场：可订阅/取消订阅（非自己发布的报告） -->
+            <el-tooltip
+              v-if="activeTab === 'square' && !isOwner(report)"
+              :content="report.subscribed ? t('insight.reportUnsubscribe') : t('insight.reportSubscribe')"
+              placement="top"
+            >
+              <el-button
+                text
+                size="small"
+                :type="report.subscribed ? 'warning' : 'primary'"
+                :icon="report.subscribed ? StarFilled : Star"
+                @click="handleToggleSubscribe(report)"
+              />
+            </el-tooltip>
+            <!-- 我的订阅：可取消订阅 -->
+            <el-tooltip v-if="activeTab === 'subscribed'" :content="t('insight.reportUnsubscribe')" placement="top">
+              <el-button text size="small" type="warning" :icon="StarFilled" @click="handleUnsubscribe(report)" />
             </el-tooltip>
           </div>
         </div>
@@ -64,14 +104,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { View, Delete } from '@element-plus/icons-vue'
+import { View, Delete, Star, StarFilled, Search } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 import type { InsightReport } from '@/types'
-import { listReports, getReportDetail, deleteReport } from '@/api/insight-report'
+import {
+  listMyReports,
+  listReports,
+  listSubscribedReports,
+  getReportDetail,
+  deleteReport,
+  subscribeReport,
+  unsubscribeReport,
+} from '@/api/insight-report'
 
 defineOptions({
   name: 'ReportListView',
@@ -79,8 +127,36 @@ defineOptions({
 
 const { t } = useI18n()
 
+/** Tab 定义 */
+const tabs = [
+  { key: 'mine', label: 'insight.reportTabMine' },
+  { key: 'square', label: 'insight.reportTabSquare' },
+  { key: 'subscribed', label: 'insight.reportTabSubscribed' },
+] as const
+
+type TabKey = (typeof tabs)[number]['key']
+
+/** 当前激活的 Tab */
+const activeTab = ref<TabKey>('mine')
+
 /** 报告列表数据 */
 const reports = ref<InsightReport[]>([])
+
+/** 搜索关键词 */
+const searchKeyword = ref('')
+
+/** 按关键词过滤报告列表 */
+const filteredReports = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return reports.value
+  }
+  return reports.value.filter((r) => {
+    return r.name?.toLowerCase().includes(keyword)
+      || r.description?.toLowerCase().includes(keyword)
+      || r.ownerName?.toLowerCase().includes(keyword)
+  })
+})
 
 /** 加载状态 */
 const loading = ref(false)
@@ -100,21 +176,54 @@ const reportContentRef = ref<HTMLElement | null>(null)
 /** 报告中的 ECharts 实例列表 */
 const reportChartInstances = ref<echarts.ECharts[]>([])
 
+/** 空状态文案 */
+const emptyText = computed(() => {
+  if (activeTab.value === 'mine') {
+    return t('insight.reportListEmptyMine')
+  }
+  if (activeTab.value === 'square') {
+    return t('insight.reportListEmptySquare')
+  }
+  return t('insight.reportListEmptySubscribed')
+})
+
 onMounted(() => {
   loadReports()
 })
+
+/** 切换 Tab */
+function switchTab(key: TabKey): void {
+  if (activeTab.value === key) {
+    return
+  }
+  activeTab.value = key
+  loadReports()
+}
 
 /** 加载报告列表 */
 async function loadReports(): Promise<void> {
   loading.value = true
   try {
-    const data = await listReports()
+    let data: InsightReport[] | null = null
+    if (activeTab.value === 'mine') {
+      data = await listMyReports()
+    } else if (activeTab.value === 'square') {
+      data = await listReports()
+    } else {
+      data = await listSubscribedReports()
+    }
     reports.value = data ?? []
   } catch {
     ElMessage.error(t('insight.loadFailed'))
   } finally {
     loading.value = false
   }
+}
+
+/** 判断是否为当前用户发布的报告 */
+function isOwner(report: InsightReport): boolean {
+  // 洞察广场中，自己发布的报告不显示订阅按钮
+  return false // 后端已通过 subscribed 字段标记，自己的报告不需要订阅
 }
 
 /** 格式化时间 */
@@ -132,9 +241,9 @@ async function handleViewReport(report: InsightReport): Promise<void> {
     currentReport.value = detail
     currentReportHtml.value = detail.reportContent || ''
     reportDrawerVisible.value = true
-    nextTick(() => {
+    setTimeout(() => {
       renderReportCharts()
-    })
+    }, 300)
   } catch {
     ElMessage.error(t('insight.loadFailed'))
   }
@@ -295,6 +404,33 @@ async function handleDeleteReport(report: InsightReport): Promise<void> {
     }
   }
 }
+
+/** 切换订阅状态（洞察广场） */
+async function handleToggleSubscribe(report: InsightReport): Promise<void> {
+  try {
+    if (report.subscribed) {
+      await unsubscribeReport(report.id)
+      ElMessage.success(t('insight.reportUnsubscribeSuccess'))
+    } else {
+      await subscribeReport(report.id)
+      ElMessage.success(t('insight.reportSubscribeSuccess'))
+    }
+    await loadReports()
+  } catch {
+    ElMessage.error(t('insight.reportSubscribeFailed'))
+  }
+}
+
+/** 取消订阅（我的订阅） */
+async function handleUnsubscribe(report: InsightReport): Promise<void> {
+  try {
+    await unsubscribeReport(report.id)
+    ElMessage.success(t('insight.reportUnsubscribeSuccess'))
+    await loadReports()
+  } catch {
+    ElMessage.error(t('insight.reportSubscribeFailed'))
+  }
+}
 </script>
 
 <style scoped>
@@ -323,6 +459,43 @@ async function handleDeleteReport(report: InsightReport): Promise<void> {
   font-size: 16px;
   font-weight: 500;
   color: var(--db-text);
+}
+
+.search-input {
+  width: 200px;
+}
+
+/* Tab 栏 */
+.tab-bar {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-xl);
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--db-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 22px;
+}
+
+.tab-btn:hover {
+  background: var(--db-hover);
+  color: var(--db-text);
+}
+
+.tab-btn.active {
+  background: var(--db-accent-light);
+  color: var(--db-accent);
 }
 
 .list-content {

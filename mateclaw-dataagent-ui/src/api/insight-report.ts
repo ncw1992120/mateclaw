@@ -188,9 +188,29 @@ export function publishReport(data: InsightReportPublishInput) {
   return api.post<InsightReport>(REPORT_BASE_URL, data)
 }
 
-/** 查询报告列表 */
+/** 查询报告列表（洞察广场 - 所有报告） */
 export function listReports() {
   return api.get<InsightReport[]>(REPORT_BASE_URL)
+}
+
+/** 查询我的洞察报告列表 */
+export function listMyReports() {
+  return api.get<InsightReport[]>(`${REPORT_BASE_URL}/mine`)
+}
+
+/** 查询我的订阅报告列表 */
+export function listSubscribedReports() {
+  return api.get<InsightReport[]>(`${REPORT_BASE_URL}/subscribed`)
+}
+
+/** 订阅报告 */
+export function subscribeReport(id: string) {
+  return api.post(`${REPORT_BASE_URL}/${id}/subscribe`)
+}
+
+/** 取消订阅报告 */
+export function unsubscribeReport(id: string) {
+  return api.delete(`${REPORT_BASE_URL}/${id}/subscribe`)
 }
 
 /** 获取报告详情 */

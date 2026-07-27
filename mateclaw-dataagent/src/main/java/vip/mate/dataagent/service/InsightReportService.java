@@ -77,10 +77,56 @@ public interface InsightReportService {
      * 查询当前工作区的报告列表
      * <p>
      * 按工作区隔离，按 updateTime 降序排列。
+     * 内部委托给 {@link #listAllReports()}，保持向后兼容。
      *
      * @return 报告视图对象列表
      */
     List<InsightReportVO> listReports();
+
+    /**
+     * 查询当前工作区所有已发布报告（洞察广场）
+     * <p>
+     * 按工作区隔离，按 updateTime 降序排列，并标记当前用户是否已订阅。
+     *
+     * @return 报告视图对象列表
+     */
+    List<InsightReportVO> listAllReports();
+
+    /**
+     * 查询当前用户发布的报告列表（我的洞察）
+     * <p>
+     * 按工作区 + 当前用户 ID 过滤，按 updateTime 降序排列。
+     *
+     * @return 报告视图对象列表
+     */
+    List<InsightReportVO> listMyReports();
+
+    /**
+     * 查询当前用户订阅的报告列表（我的订阅）
+     * <p>
+     * 先查询当前用户的订阅记录，再批量获取报告详情。
+     *
+     * @return 报告视图对象列表
+     */
+    List<InsightReportVO> listSubscribedReports();
+
+    /**
+     * 订阅报告
+     * <p>
+     * 校验报告存在性及工作区归属，防止重复订阅。
+     *
+     * @param reportId 报告 ID
+     */
+    void subscribeReport(Long reportId);
+
+    /**
+     * 取消订阅报告
+     * <p>
+     * 逻辑删除订阅记录。
+     *
+     * @param reportId 报告 ID
+     */
+    void unsubscribeReport(Long reportId);
 
     /**
      * 获取报告详情
