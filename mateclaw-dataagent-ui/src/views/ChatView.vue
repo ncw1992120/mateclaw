@@ -539,10 +539,11 @@
               :loading="modelStore.loading"
               :no-data-text="t('modelConfig.noAvailableModels')"
               class="model-select-footer"
+              popper-class="model-select-popper"
               @change="handleModelChange"
             >
-              <template #prefix>
-                <span class="model-select-prefix">{{ t('modelConfig.model') }}</span>
+              <template #header>
+                <span class="model-select-header">{{ t('modelConfig.model') }}</span>
               </template>
               <el-option
                 v-for="model in availableModels"
@@ -4959,10 +4960,54 @@ onUnmounted(() => {
   max-width: 220px;
 }
 
-.model-select-prefix {
+.model-select-popper {
+  border-radius: 8px;
+  padding: 4px 0;
+}
+
+.model-select-popper .el-select-dropdown__header {
+  padding: 6px 12px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.model-select-popper .model-select-header {
+  display: block;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  line-height: 1.4;
+}
+
+.model-select-popper .el-select-dropdown__list {
+  padding: 2px 0;
+  margin: 0;
+}
+
+.model-select-popper .el-select-dropdown__item {
+  margin: 0 4px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--theme-text);
+}
+
+.model-select-popper .el-select-dropdown__item:hover {
+  background: var(--theme-surface-hover);
+}
+
+.model-select-popper .el-select-dropdown__item.is-selected {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--dark-orange);
+  font-weight: 600;
+}
+
+.model-select-popper .el-select-dropdown__empty {
+  padding: 12px 8px;
   font-size: 12px;
   color: var(--theme-text-muted);
-  white-space: nowrap;
 }
 
 .model-select-footer :deep(.el-input__wrapper) {

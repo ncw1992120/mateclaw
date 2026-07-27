@@ -665,8 +665,10 @@ async function handleToggleModelEnabled(model: ModelConfig, enabled: boolean): P
   ElMessage.success(t('common.success'))
 }
 
-/** 组件挂载时加载默认向量模型 */
-onMounted(() => {
+/** 组件挂载时加载模型配置数据 */
+onMounted(async () => {
+  await modelStore.fetchEnabledModels()
+  await modelStore.fetchProviders()
   modelStore.fetchDefaultEmbeddingModel()
 })
 </script>
