@@ -90,8 +90,8 @@ function formatTokens(tokens: number): string {
 <style scoped>
 .context-usage-panel {
   position: fixed;
-  right: 26px;
-  bottom: 54px;
+  right: 20px;
+  bottom: 42px;
   width: 320px;
   background: var(--bg-color, #1f1f1f);
   border: 1px solid var(--border-color, #333);

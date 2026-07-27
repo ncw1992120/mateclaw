@@ -1586,6 +1586,7 @@ export default {
     kpiNoData: '暂无数据',
     chartNoData: '暂无图表数据',
     tableNoData: '暂无表格数据',
+    tableExportCsv: '导出 CSV',
     filterPlaceholder: '请选择',
     generatingReport: '正在生成报告...',
     reportPlaceholder: '点击"AI 解读报告"按钮生成分析报告',

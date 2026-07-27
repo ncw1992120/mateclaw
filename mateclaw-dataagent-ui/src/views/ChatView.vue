@@ -578,33 +578,33 @@
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- Context Usage 圆圈指示器 -->
-      <button
-        class="context-usage-ring"
-        type="button"
-        :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
-        @click="chatStore.toggleContextUsagePanel"
-      >
-        <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
-          <circle class="ring-bg" cx="18" cy="18" r="14" />
-          <circle
-            class="ring-fill"
-            cx="18" cy="18" r="14"
-            :stroke-dasharray="ringDasharray"
-            :stroke="ringColor"
-          />
-        </svg>
-        <span class="context-usage-ring__label">{{ ringPercent }}</span>
-        <el-tooltip
-          :content="ringTooltip"
-          placement="top-end"
-          :show-after="300"
+        <!-- Context Usage 圆圈指示器 -->
+        <button
+          class="context-usage-ring"
+          type="button"
+          :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
+          @click="chatStore.toggleContextUsagePanel"
         >
-          <span class="context-usage-ring__hit" />
-        </el-tooltip>
-      </button>
+          <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
+            <circle class="ring-bg" cx="18" cy="18" r="14" />
+            <circle
+              class="ring-fill"
+              cx="18" cy="18" r="14"
+              :stroke-dasharray="ringDasharray"
+              :stroke="ringColor"
+            />
+          </svg>
+          <span class="context-usage-ring__label">{{ ringPercent }}</span>
+          <el-tooltip
+            :content="ringTooltip"
+            placement="top-end"
+            :show-after="300"
+          >
+            <span class="context-usage-ring__hit" />
+          </el-tooltip>
+        </button>
+      </div>
     </div>
 
     <!-- 数据源指标/维度浏览抽屉 -->
@@ -4819,6 +4819,7 @@ onUnmounted(() => {
 }
 
 .input-bar__card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -6044,15 +6045,15 @@ onUnmounted(() => {
 /* ===== 上下文使用圆圈指示器 ===== */
 .context-usage-ring {
   position: absolute;
-  right: 26px;
-  bottom: 22px;
-  width: 26px;
-  height: 26px;
+  right: -8px;
+  bottom: -8px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: var(--theme-surface);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   z-index: 10;
   display: flex;
@@ -6085,13 +6086,13 @@ onUnmounted(() => {
 .ring-bg {
   fill: none;
   stroke: var(--theme-border, #333);
-  stroke-width: 3.5;
-  opacity: 0.45;
+  stroke-width: 2.8;
+  opacity: 0.4;
 }
 
 .ring-fill {
   fill: none;
-  stroke-width: 3.5;
+  stroke-width: 2.8;
   stroke-linecap: round;
   transition: stroke-dasharray 0.4s ease, stroke 0.3s ease;
 }
