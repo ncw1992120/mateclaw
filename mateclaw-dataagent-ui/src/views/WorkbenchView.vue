@@ -293,6 +293,7 @@
       <div class="col-mid">
         <ChatView v-if="activeSidebarItem === 'qa'" class="chat-container" />
         <DashboardListView v-else-if="activeSidebarItem === 'interpret'" class="chat-container" />
+        <ReportListView v-else-if="activeSidebarItem === 'report'" class="chat-container" />
         <ConfigCenter v-else-if="activeSidebarItem === 'skill'" class="chat-container" />
         <HelpCenterView v-else-if="activeSidebarItem === 'help'" class="chat-container" />
       </div>
@@ -311,6 +312,7 @@ import { usePersistedRef } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ChatView from '@/views/ChatView.vue'
 import DashboardListView from '@/views/insight/DashboardListView.vue'
+import ReportListView from '@/views/report/ReportListView.vue'
 import ConfigCenter from '@/views/skill/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
 import { OfficeBuilding, Check, Search } from '@element-plus/icons-vue'
@@ -360,8 +362,8 @@ const activeSidebarItem = usePersistedRef<(typeof SIDEBAR_ITEM_KEYS)[number]>(
   (value) => (SIDEBAR_ITEM_KEYS as readonly string[]).includes(value),
 )
 
-/** 是否显示选择器面板（问数、报告页面展示历史会话） */
-const showSelectorPanel = computed(() => ['qa', 'report'].includes(activeSidebarItem.value))
+/** 是否显示选择器面板（问数页面展示历史会话） */
+const showSelectorPanel = computed(() => activeSidebarItem.value === 'qa')
 
 /** 历史会话分组 */
 interface ConversationGroup {

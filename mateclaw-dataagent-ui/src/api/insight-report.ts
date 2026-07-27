@@ -1,7 +1,11 @@
 import api from './index'
+import type { InsightReport, InsightReportPublishInput } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
+
+/** 报告 API 路径常量 */
+const REPORT_BASE_URL = '/dataagent/api/v1/insight/reports'
 
 /** 归因分析请求参数 */
 export interface AttributionAnalysisParams {
@@ -177,4 +181,24 @@ export function streamReport(
 /** 归因分析 */
 export function attributionAnalysis(params: AttributionAnalysisParams) {
   return api.post<AttributionAnalysisResponse>(`${BASE_URL}/attribution`, params)
+}
+
+/** 发布报告 */
+export function publishReport(data: InsightReportPublishInput) {
+  return api.post<InsightReport>(REPORT_BASE_URL, data)
+}
+
+/** 查询报告列表 */
+export function listReports() {
+  return api.get<InsightReport[]>(REPORT_BASE_URL)
+}
+
+/** 获取报告详情 */
+export function getReportDetail(id: string) {
+  return api.get<InsightReport>(`${REPORT_BASE_URL}/${id}`)
+}
+
+/** 删除报告 */
+export function deleteReport(id: string) {
+  return api.delete(`${REPORT_BASE_URL}/${id}`)
 }

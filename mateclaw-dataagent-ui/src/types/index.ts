@@ -1244,6 +1244,31 @@ export interface AIAnalysisComponentConfig {
   autoGenerate?: boolean
 }
 
+/** 洞察报告 */
+export interface InsightReport {
+  id: string
+  dashboardId: string
+  name: string
+  description: string
+  /** 报告HTML内容 */
+  reportContent: string
+  /** ECharts option 数据（JSON 格式，供报告页渲染图表） */
+  echartsOptions?: string
+  status: 'draft' | 'published'
+  ownerId?: string
+  ownerName?: string
+  modifier?: string
+  createTime: string
+  updateTime: string
+}
+
+/** 发布报告请求 */
+export interface InsightReportPublishInput {
+  dashboardId: string
+  name?: string
+  description?: string
+}
+
 /** 时间范围预设选项 */
 export const TIME_RANGE_PRESETS: Array<{ value: TimeRangePreset; label: string }> = [
   { value: 'today', label: 'insight.timeRange.today' },

@@ -23,6 +23,14 @@
         >
           {{ t('insight.reportView') }}
         </el-button>
+        <el-button
+          v-if="hasReport && !reportGenerating"
+          size="small"
+          :icon="Upload"
+          @click="handlePublishReport"
+        >
+          {{ t('insight.reportPublish') }}
+        </el-button>
         <div v-if="reportGenerating" class="generating-indicator">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>{{ t('insight.generatingReport') }}</span>
@@ -102,7 +110,7 @@
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document, View, Loading } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, View, Loading, Upload } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
 import type {
@@ -115,7 +123,7 @@ import type {
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { preview } from '@/api/insight-dashboard'
-import { generateReport, getReport } from '@/api/insight-report'
+import { generateReport, getReport, publishReport } from '@/api/insight-report'
 import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 
@@ -432,6 +440,19 @@ async function handleGenerateReport(): Promise<void> {
 function handleViewReport(): void {
   reportDrawerVisible.value = true
   nextTick(() => renderReportCharts())
+}
+
+/** 发布报告 */
+async function handlePublishReport(): Promise<void> {
+  try {
+    await publishReport({
+      dashboardId: props.dashboardId,
+      name: dashboard.value?.name,
+    })
+    ElMessage.success(t('insight.reportPublishSuccess'))
+  } catch (err: any) {
+    ElMessage.error(t('insight.reportPublishFailed') + ': ' + (err?.message || String(err)))
+  }
 }
 
 /** 渲染报告中的 ECharts 图表 */

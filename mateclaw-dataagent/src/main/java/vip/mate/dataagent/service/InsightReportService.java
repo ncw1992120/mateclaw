@@ -3,6 +3,10 @@ package vip.mate.dataagent.service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.dataagent.dto.AttributionAnalysisRequest;
 import vip.mate.dataagent.dto.AttributionAnalysisResponse;
+import vip.mate.dataagent.dto.InsightReportPublishRequest;
+import vip.mate.dataagent.dto.InsightReportVO;
+
+import java.util.List;
 
 /**
  * 洞察仪表盘 AI 解读报告服务接口
@@ -10,6 +14,8 @@ import vip.mate.dataagent.dto.AttributionAnalysisResponse;
  * 基于仪表盘组件数据，加载报告模板并填充数据占位符，
  * 再调用 LLM 生成结构化分析报告（趋势分析、关键发现、建议），
  * 以及基于 Aloudata 归因分析 API 的指标归因分析能力。
+ * <p>
+ * 同时提供报告发布管理能力，支持将仪表盘报告内容发布为独立报告记录。
  */
 public interface InsightReportService {
 
@@ -55,4 +61,43 @@ public interface InsightReportService {
      * @return 归因分析响应
      */
     AttributionAnalysisResponse attributionAnalysis(AttributionAnalysisRequest request);
+
+    /**
+     * 发布报告
+     * <p>
+     * 从仪表盘获取 reportContent，创建独立的报告记录，状态设为 published。
+     * 报告名称默认取仪表盘名称，也可通过 request 自定义。
+     *
+     * @param request 发布报告请求（包含 dashboardId、可选 name 和 description）
+     * @return 发布后的报告视图对象
+     */
+    InsightReportVO publishReport(InsightReportPublishRequest request);
+
+    /**
+     * 查询当前工作区的报告列表
+     * <p>
+     * 按工作区隔离，按 updateTime 降序排列。
+     *
+     * @return 报告视图对象列表
+     */
+    List<InsightReportVO> listReports();
+
+    /**
+     * 获取报告详情
+     * <p>
+     * 查询报告详情，校验工作区归属权限。
+     *
+     * @param id 报告 ID
+     * @return 报告视图对象
+     */
+    InsightReportVO getReportDetail(Long id);
+
+    /**
+     * 删除报告
+     * <p>
+     * 逻辑删除，校验工作区归属权限。
+     *
+     * @param id 报告 ID
+     */
+    void deleteReport(Long id);
 }

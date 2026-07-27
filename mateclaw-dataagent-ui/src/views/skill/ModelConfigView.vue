@@ -421,8 +421,8 @@ const hasConfiguredProviders = computed(() => configuredProviders.value.length >
  * 可用模型列表（来自已配置的 Provider，含启用和禁用）
  */
 const availableModels = computed(() => {
-  const configuredIds = new Set(configuredProviders.value.map(p => p.providerId))
-  return modelStore.allModels.filter(m => configuredIds.has(m.provider))
+  const configuredIds = new Set<string>(configuredProviders.value.map(p => String(p.providerId)))
+  return modelStore.allModels.filter(m => configuredIds.has(String(m.provider)))
 })
 
 /**

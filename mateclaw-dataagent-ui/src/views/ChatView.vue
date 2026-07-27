@@ -478,7 +478,7 @@
           <div class="footer-tools">
             <el-popover :width="280" trigger="click" placement="top-start" :persistent="false" :teleported="true">
               <template #reference>
-                <button class="tool-btn" :class="{ active: composerSettingsActive }" :disabled="chatStore.isStreaming" type="button" :title="t('chat.datasourceScope')">
+                <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('chat.datasourceScope')">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <ellipse cx="12" cy="5" rx="9" ry="3"/>
                     <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
@@ -511,6 +511,7 @@
                       />
                       <span class="ds-item-name">{{ ds.name }}</span>
                       <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
+                      <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
                     </label>
                   </div>
                 </div>
@@ -540,6 +541,9 @@
               class="model-select-footer"
               @change="handleModelChange"
             >
+              <template #prefix>
+                <span class="model-select-prefix">{{ t('modelConfig.model') }}</span>
+              </template>
               <el-option
                 v-for="model in availableModels"
                 :key="model.id"
@@ -567,6 +571,217 @@
         </div>
       </div>
     </div>
+
+    <!-- 数据源指标/维度浏览抽屉 -->
+    <el-drawer
+      v-model="browseDrawerVisible"
+      :title="browseDatasource?.name"
+      direction="rtl"
+      size="480px"
+      :close-on-press-escape="true"
+      class="datasource-browse-drawer"
+    >
+      <div class="browse-drawer-body">
+        <!-- Tab 切换 -->
+        <div class="browse-tabs">
+          <button
+            class="browse-tab"
+            :class="{ active: browseActiveTab === 'metrics' }"
+            @click="browseActiveTab = 'metrics'"
+          >
+            {{ t('metricPlatform.manageTitle') }}
+            <span v-if="!browseLoading" class="browse-tab-count">{{ browseMetricPagination.total }}</span>
+          </button>
+          <button
+            class="browse-tab"
+            :class="{ active: browseActiveTab === 'dimensions' }"
+            @click="browseActiveTab = 'dimensions'"
+          >
+            {{ t('metricPlatform.dimensionTitle') }}
+            <span v-if="!browseLoading" class="browse-tab-count">{{ browseDimensionPagination.total }}</span>
+          </button>
+        </div>
+
+        <!-- 加载状态 -->
+        <div v-if="browseLoading" class="browse-loading">
+          <el-icon class="is-loading" style="font-size: 24px; color: var(--main-orange);">
+            <Loading />
+          </el-icon>
+          <span>{{ t('common.loading') }}</span>
+        </div>
+
+        <!-- 指标列表 -->
+        <div v-else-if="browseActiveTab === 'metrics'" class="browse-panel">
+          <div class="browse-search">
+            <el-input
+              v-model="browseMetricKeyword"
+              size="small"
+              :placeholder="t('metricPlatform.searchMetrics')"
+              clearable
+              @keyup.enter="handleMetricSearch"
+              @clear="handleMetricSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </div>
+          <div class="browse-scroll-area">
+            <div v-if="browseMetrics.length === 0" class="browse-empty">
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 3v18h18"/>
+                <path d="M18 17V9"/>
+                <path d="M13 17V5"/>
+                <path d="M8 17v-3"/>
+              </svg>
+              <p>{{ browseMetricKeyword.trim() ? '暂无匹配结果' : t('metricPlatform.noMetrics') }}</p>
+            </div>
+            <div
+              v-for="item in browseMetrics"
+              :key="item.metricName"
+              class="browse-card"
+            >
+              <div class="browse-card-header">
+                <span class="browse-card-title">{{ item.metricDisplayName || item.metricName }}</span>
+                <div class="browse-card-header-right">
+                  <span v-if="item.unit" class="browse-card-tag">{{ item.unit }}</span>
+                  <button
+                    class="browse-copy-btn"
+                    :class="{ copied: copiedMetricName === item.metricName }"
+                    :title="copiedMetricName === item.metricName ? '已复制' : '复制指标名+展示名'"
+                    @click.stop="handleCopyMetric(item.metricName, item.metricDisplayName)"
+                  >
+                    <svg v-if="copiedMetricName === item.metricName" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="browse-card-name">{{ item.metricName }}</div>
+              <div class="browse-card-meta">
+                <span v-if="item.type" class="browse-card-meta-item">
+                  <label>{{ t('metricPlatform.metricType') }}:</label>
+                  <span>{{ item.type }}</span>
+                </span>
+                <span v-if="item.metricCategoryName" class="browse-card-meta-item">
+                  <label>{{ t('metricPlatform.categoryName') }}:</label>
+                  <span>{{ item.metricCategoryName }}</span>
+                </span>
+              </div>
+              <div v-if="item.businessCaliber" class="browse-card-desc">
+                <label>{{ t('metricPlatform.businessCaliber') }}:</label>
+                <span>{{ item.businessCaliber }}</span>
+              </div>
+              <div v-if="item.availableDimensions?.length" class="browse-card-dimensions">
+                <label>{{ t('metricPlatform.availableDimensions') }}:</label>
+                <div class="browse-card-tags">
+                  <span v-for="dim in item.availableDimensions" :key="dim" class="browse-chip">{{ dim }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="browseMetricPagination.total > 0" class="browse-pagination">
+            <el-pagination
+              v-model:current-page="browseMetricPagination.pageNumber"
+              v-model:page-size="browseMetricPagination.pageSize"
+              :total="browseMetricPagination.total"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              size="small"
+              background
+              @current-change="handleMetricPageChange"
+              @size-change="handleMetricSizeChange"
+            />
+          </div>
+        </div>
+
+        <!-- 维度列表 -->
+        <div v-else class="browse-panel">
+          <div class="browse-search">
+            <el-input
+              v-model="browseDimensionKeyword"
+              size="small"
+              :placeholder="t('metricPlatform.searchDimensions')"
+              clearable
+              @keyup.enter="handleDimensionSearch"
+              @clear="handleDimensionSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </div>
+          <div class="browse-scroll-area">
+            <div v-if="browseDimensions.length === 0" class="browse-empty">
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="9" y1="21" x2="9" y2="9"/>
+              </svg>
+              <p>{{ browseDimensionKeyword.trim() ? '暂无匹配结果' : t('metricPlatform.noDimensions') }}</p>
+            </div>
+            <div
+              v-for="item in browseDimensions"
+              :key="item.dimName"
+              class="browse-card"
+            >
+              <div class="browse-card-header">
+                <span class="browse-card-title">{{ item.dimDisplayName || item.dimName }}</span>
+                <div class="browse-card-header-right">
+                  <span v-if="item.isTimeDimension" class="browse-card-tag time">{{ t('metricPlatform.timeDimensionYes') }}</span>
+                  <button
+                    class="browse-copy-btn"
+                    :class="{ copied: copiedDimName === item.dimName }"
+                    :title="copiedDimName === item.dimName ? '已复制' : '复制维度名+展示名'"
+                    @click.stop="handleCopyDimension(item.dimName, item.dimDisplayName)"
+                  >
+                    <svg v-if="copiedDimName === item.dimName" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="browse-card-name">{{ item.dimName }}</div>
+              <div class="browse-card-meta">
+                <span v-if="item.originDataType" class="browse-card-meta-item">
+                  <label>{{ t('metricPlatform.dimDataType') }}:</label>
+                  <span>{{ item.originDataType }}</span>
+                </span>
+                <span v-if="item.configType" class="browse-card-meta-item">
+                  <label>{{ t('metricPlatform.dimConfigType') }}:</label>
+                  <span>{{ item.configType }}</span>
+                </span>
+              </div>
+              <div v-if="item.dimDescription" class="browse-card-desc">
+                <label>{{ t('metricPlatform.dimDescription') }}:</label>
+                <span>{{ item.dimDescription }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="browseDimensionPagination.total > 0" class="browse-pagination">
+            <el-pagination
+              v-model:current-page="browseDimensionPagination.pageNumber"
+              v-model:page-size="browseDimensionPagination.pageSize"
+              :total="browseDimensionPagination.total"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              size="small"
+              background
+              @current-change="handleDimensionPageChange"
+              @size-change="handleDimensionSizeChange"
+            />
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -582,11 +797,12 @@ import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
-import { CopyDocument, Select, RefreshRight } from '@element-plus/icons-vue'
+import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
+import * as semanticModelApi from '@/api/semantic-model'
 import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment } from '@/types'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension } from '@/types'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -608,14 +824,14 @@ const currentAgentName = computed(() => {
 
 /** 可用模型列表：仅展示已启用的对话模型 */
 const availableModels = computed(() => {
-  const enabledProviderIds = new Set(
-    modelStore.providers.filter(p => p.enabled).map(p => p.providerId)
+  const enabledProviderIds = new Set<string>(
+    modelStore.providers.filter(p => p.enabled).map(p => String(p.providerId))
   )
   return modelStore.enabledModels.filter(m => {
     const isChatModel = !m.modelType || m.modelType === 'chat'
     // 当 Provider 列表已加载时，仅展示启用 Provider 下的模型；
     // 未加载（如普通用户无权限）时，直接展示所有启用模型。
-    const providerOk = enabledProviderIds.size === 0 || enabledProviderIds.has(m.provider)
+    const providerOk = enabledProviderIds.size === 0 || enabledProviderIds.has(String(m.provider))
     return isChatModel && providerOk
   })
 })
@@ -737,6 +953,169 @@ const dsTriggerLabel = computed(() => {
   if (count === 0) return t('chat.datasourceScope')
   return `${t('chat.datasourceScope')} (${count})`
 })
+
+/** 数据源浏览抽屉 */
+const browseDrawerVisible = ref(false)
+const browseDatasource = ref<Datasource | null>(null)
+const browseActiveTab = ref<'metrics' | 'dimensions'>('metrics')
+const browseLoading = ref(false)
+const browseMetrics = ref<AloudataSyncedMetric[]>([])
+const browseDimensions = ref<AloudataSyncedDimension[]>([])
+
+/** 指标/维度搜索关键词 */
+const browseMetricKeyword = ref('')
+const browseDimensionKeyword = ref('')
+
+/** 指标分页状态 */
+const browseMetricPagination = reactive({
+  pageNumber: 1,
+  pageSize: 20,
+  total: 0,
+})
+
+/** 维度分页状态 */
+const browseDimensionPagination = reactive({
+  pageNumber: 1,
+  pageSize: 20,
+  total: 0,
+})
+
+/** 搜索防抖定时器 */
+
+
+/** 刚完成复制的指标名（用于临时展示复制成功状态） */
+const copiedMetricName = ref<string | null>(null)
+
+/** 刚完成复制的维度名（用于临时展示复制成功状态） */
+const copiedDimName = ref<string | null>(null)
+
+/** 打开数据源浏览抽屉并加载指标维度 */
+async function openBrowseDrawer(ds: Datasource): Promise<void> {
+  browseDatasource.value = ds
+  browseActiveTab.value = 'metrics'
+  browseMetricKeyword.value = ''
+  browseDimensionKeyword.value = ''
+  browseMetricPagination.pageNumber = 1
+  browseMetricPagination.total = 0
+  browseDimensionPagination.pageNumber = 1
+  browseDimensionPagination.total = 0
+  copiedMetricName.value = null
+  copiedDimName.value = null
+  browseDrawerVisible.value = true
+  await loadBrowseData()
+}
+
+/** 复制指标英文名和中文名到剪贴板 */
+function handleCopyMetric(metricName: string, metricDisplayName: string): void {
+  const text = metricDisplayName ? `${metricName}（${metricDisplayName}）` : metricName
+  copyToClipboard(text).then(() => {
+    copiedMetricName.value = metricName
+    setTimeout(() => {
+      if (copiedMetricName.value === metricName) {
+        copiedMetricName.value = null
+      }
+    }, 2000)
+  }).catch(() => {})
+}
+
+/** 复制维度英文名和中文名到剪贴板 */
+function handleCopyDimension(dimName: string, dimDisplayName: string): void {
+  const text = dimDisplayName ? `${dimName}（${dimDisplayName}）` : dimName
+  copyToClipboard(text).then(() => {
+    copiedDimName.value = dimName
+    setTimeout(() => {
+      if (copiedDimName.value === dimName) {
+        copiedDimName.value = null
+      }
+    }, 2000)
+  }).catch(() => {})
+}
+
+/** 加载当前数据源的指标和维度列表（带分页） */
+async function loadBrowseData(): Promise<void> {
+  await loadBrowseMetrics()
+  await loadBrowseDimensions()
+}
+
+/** 加载指标分页数据 */
+async function loadBrowseMetrics(): Promise<void> {
+  if (!browseDatasource.value) return
+  browseLoading.value = true
+  try {
+    const res = await semanticModelApi.pageAloudataMetrics(browseDatasource.value.id, {
+      pageNumber: browseMetricPagination.pageNumber,
+      pageSize: browseMetricPagination.pageSize,
+      keyword: browseMetricKeyword.value.trim() || undefined,
+    })
+    const data = (res as any) || { records: [], total: 0 }
+    browseMetrics.value = data.records || []
+    browseMetricPagination.total = Number(data.total) || 0
+  } catch {
+    browseMetrics.value = []
+    browseMetricPagination.total = 0
+  } finally {
+    browseLoading.value = false
+  }
+}
+
+/** 加载维度分页数据 */
+async function loadBrowseDimensions(): Promise<void> {
+  if (!browseDatasource.value) return
+  browseLoading.value = true
+  try {
+    const res = await semanticModelApi.pageAloudataDimensions(browseDatasource.value.id, {
+      pageNumber: browseDimensionPagination.pageNumber,
+      pageSize: browseDimensionPagination.pageSize,
+      keyword: browseDimensionKeyword.value.trim() || undefined,
+    })
+    const data = (res as any) || { records: [], total: 0 }
+    browseDimensions.value = data.records || []
+    browseDimensionPagination.total = Number(data.total) || 0
+  } catch {
+    browseDimensions.value = []
+    browseDimensionPagination.total = 0
+  } finally {
+    browseLoading.value = false
+  }
+}
+
+/** 指标搜索回车或清除触发 */
+function handleMetricSearch(): void {
+  browseMetricPagination.pageNumber = 1
+  loadBrowseMetrics()
+}
+
+/** 维度搜索回车或清除触发 */
+function handleDimensionSearch(): void {
+  browseDimensionPagination.pageNumber = 1
+  loadBrowseDimensions()
+}
+
+/** 指标分页变化 */
+function handleMetricPageChange(page: number): void {
+  browseMetricPagination.pageNumber = page
+  loadBrowseMetrics()
+}
+
+/** 维度分页变化 */
+function handleDimensionPageChange(page: number): void {
+  browseDimensionPagination.pageNumber = page
+  loadBrowseDimensions()
+}
+
+/** 指标每页条数变化 */
+function handleMetricSizeChange(size: number): void {
+  browseMetricPagination.pageSize = size
+  browseMetricPagination.pageNumber = 1
+  loadBrowseMetrics()
+}
+
+/** 维度每页条数变化 */
+function handleDimensionSizeChange(size: number): void {
+  browseDimensionPagination.pageSize = size
+  browseDimensionPagination.pageNumber = 1
+  loadBrowseDimensions()
+}
 
 /** 根据时间段生成问候语 */
 const greetingText = computed(() => {
@@ -1300,7 +1679,18 @@ const ECHARTS_ALLOWED_KEYS = new Set([
 const ECHARTS_MAX_OPTION_SIZE = 100 * 1024
 
 /**
- * 递归剥离 ECharts option 中的函数值，防止 XSS
+ * ECharts option 中只能为函数的回调类型字段名集合。
+ * JSON 反序列化后这些字段可能残留为字符串或其他非函数类型，
+ * ECharts 内部会尝试调用，若非函数则抛出 TypeError，因此必须清除。
+ * 注意：formatter 字段可以是字符串模板，不在此集合中，由通用逻辑处理。
+ */
+const ECHARTS_CALLBACK_ONLY_KEYS = new Set([
+  'valueFormatter',
+])
+
+/**
+ * 递归剥离 ECharts option 中的函数值，防止 XSS；
+ * 同时清除只能为函数的回调字段中残留的非函数值，避免 ECharts 调用时 TypeError。
  */
 function sanitizeEchartsOption(obj: Record<string, any>): void {
   for (const key of Object.keys(obj)) {
@@ -1308,6 +1698,9 @@ function sanitizeEchartsOption(obj: Record<string, any>): void {
     if (typeof val === 'string' && val.trimStart().startsWith('function')) {
       delete obj[key]
     } else if (typeof val === 'function') {
+      delete obj[key]
+    } else if (ECHARTS_CALLBACK_ONLY_KEYS.has(key) && typeof val !== 'function') {
+      // 只能为函数的回调字段在 JSON 反序列化后不是函数，ECharts 无法调用，直接删除
       delete obj[key]
     } else if (val && typeof val === 'object') {
       if (Array.isArray(val)) {
@@ -1681,12 +2074,12 @@ function switchEchartsBlockType(htmlEl: HTMLElement, type: ChartType): void {
   const newOption = pristine && pristine.type === type
     ? JSON.parse(JSON.stringify(pristine.option)) // 克隆，避免多次切换时被 ECharts 内部引用污染缓存
     : buildEchartsOption(original, type)
-  chart.setOption(newOption, true)
-
-  // 漏斗图按层高切分，层数多时容器高度需要扩展，避免物理挤压
-  adjustContainerHeightForType(htmlEl, type, newOption)
-
-  syncEchartsToolbarActive(htmlEl, type)
+  nextTick(() => {
+    chart.setOption(newOption, true)
+    // 漏斗图按层高切分，层数多时容器高度需要扩展，避免物理挤压
+    adjustContainerHeightForType(htmlEl, type, newOption)
+    syncEchartsToolbarActive(htmlEl, type)
+  })
 }
 
 /** 同步工具栏当前选中状态 */
@@ -4566,6 +4959,12 @@ onUnmounted(() => {
   max-width: 220px;
 }
 
+.model-select-prefix {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+}
+
 .model-select-footer :deep(.el-input__wrapper) {
   border-radius: 14px;
   background: transparent;
@@ -4663,6 +5062,43 @@ onUnmounted(() => {
 
 .settings-ds-item input[type="checkbox"] {
   accent-color: var(--main-orange);
+}
+
+.settings-ds-item .ds-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.settings-ds-item .ds-item-type {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--theme-surface-hover);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.settings-ds-item .ds-item-browse {
+  font-size: 12px;
+  color: var(--main-orange);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: transparent;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.settings-ds-item:hover .ds-item-browse {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  opacity: 1;
+}
+
+.settings-ds-item.checked .ds-item-browse {
+  color: var(--dark-orange);
 }
 
 .btn-send {
@@ -5163,4 +5599,329 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 数据源浏览抽屉 */
+.datasource-browse-drawer :deep(.el-drawer__header) {
+  margin-bottom: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.datasource-browse-drawer :deep(.el-drawer__title) {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.datasource-browse-drawer :deep(.el-drawer__body) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.browse-drawer-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--theme-bg);
+}
+
+.browse-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  flex-shrink: 0;
+}
+
+.browse-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.browse-tab:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.browse-tab.active {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--dark-orange);
+  font-weight: 500;
+}
+
+.browse-tab-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--theme-border);
+  color: var(--theme-text-secondary);
+}
+
+.browse-tab.active .browse-tab-count {
+  background: color-mix(in srgb, var(--main-orange) 20%, transparent);
+  color: var(--dark-orange);
+}
+
+.browse-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  color: var(--theme-text-secondary);
+  font-size: 14px;
+}
+
+.browse-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--theme-bg);
+}
+
+.browse-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.browse-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--theme-text-muted);
+  text-align: center;
+}
+
+.browse-empty svg {
+  color: var(--theme-border-strong);
+  opacity: 0.7;
+}
+
+.browse-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.browse-card {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: all 0.15s ease;
+}
+
+.browse-card:hover {
+  border-color: color-mix(in srgb, var(--main-orange) 25%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--theme-shadow) 40%, transparent);
+}
+
+.browse-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.browse-card-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.browse-card-tag {
+  font-size: 11px;
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  padding: 2px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.browse-card-tag.time {
+  color: #1890ff;
+  background: color-mix(in srgb, #1890ff 10%, transparent);
+}
+
+.browse-card-name {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.browse-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.browse-card-meta-item {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.browse-card-meta-item label {
+  color: var(--theme-text-muted);
+  margin-right: 4px;
+}
+
+.browse-card-desc {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  line-height: 1.6;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--theme-border);
+}
+
+.browse-card-desc label {
+  display: block;
+  color: var(--theme-text-muted);
+  margin-bottom: 4px;
+}
+
+.browse-card-dimensions {
+  margin-top: 10px;
+}
+
+.browse-card-dimensions label {
+  display: block;
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  margin-bottom: 6px;
+}
+
+.browse-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.browse-chip {
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-hover);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--theme-border);
+}
+
+.browse-search {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+}
+
+.browse-search :deep(.el-input__wrapper) {
+  background: var(--theme-bg);
+  box-shadow: 0 0 0 1px var(--theme-border) inset;
+}
+
+.browse-search :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--main-orange) inset;
+}
+
+.browse-search :deep(.el-input__inner) {
+  color: var(--theme-text);
+}
+
+.browse-search :deep(.el-input__inner::placeholder) {
+  color: var(--theme-text-muted);
+}
+
+.browse-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.browse-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.browse-copy-btn:hover {
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+}
+
+.browse-copy-btn.copied {
+  color: #52c41a;
+  background: color-mix(in srgb, #52c41a 10%, transparent);
+}
+
+.browse-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--theme-border);
+}
+
+.browse-pagination :deep(.el-pagination__total) {
+  color: var(--theme-text-secondary);
+}
+
+.browse-pagination :deep(.el-pagination__sizes) {
+  color: var(--theme-text-secondary);
+}
+
+.browse-pagination :deep(.el-pager li) {
+  color: var(--theme-text);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+}
+
+.browse-pagination :deep(.el-pager li.is-active) {
+  color: #fff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+}
+
+.browse-pagination :deep(.el-pagination button) {
+  color: var(--theme-text);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+}
+
+.browse-pagination :deep(.el-pagination button:disabled) {
+  color: var(--theme-text-muted);
 }</style>

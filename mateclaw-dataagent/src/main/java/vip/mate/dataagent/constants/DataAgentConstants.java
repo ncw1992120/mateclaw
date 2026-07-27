@@ -442,6 +442,12 @@ public final class DataAgentConstants {
     /** 报告模板路径 */
     public static final String INSIGHT_REPORT_TEMPLATE_PATH = "skills/aloudata_metric_query/templates/report-template.md";
 
+    /** 报告状态：草稿 */
+    public static final String INSIGHT_REPORT_STATUS_DRAFT = "draft";
+
+    /** 报告状态：已发布 */
+    public static final String INSIGHT_REPORT_STATUS_PUBLISHED = "published";
+
     /** AI 解读会话 ID 前缀 */
     public static final String INSIGHT_REPORT_CONVERSATION_PREFIX = "insight-report-";
 

@@ -1,13 +1,16 @@
 package vip.mate.dataagent.service.impl;
 
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.commonmark.node.Node;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
+import org.springframework.beans.BeanUtils;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
 import vip.mate.agent.AgentService.StreamDelta;
@@ -15,6 +18,9 @@ import vip.mate.agent.model.AgentEntity;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
+import vip.mate.dataagent.model.InsightReportEntity;
+import vip.mate.dataagent.repository.InsightReportMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
@@ -61,6 +67,7 @@ public class InsightReportServiceImpl implements InsightReportService {
     private final MateClawRuntime runtime;
     private final WorkspaceGuard workspaceGuard;
     private final AloudataService aloudataService;
+    private final InsightReportMapper insightReportMapper;
 
     /** SSE 报告生成线程池（报告生成频率低，2-4 个线程足够） */
     private final ExecutorService reportExecutor = new ThreadPoolExecutor(
@@ -591,7 +598,7 @@ public class InsightReportServiceImpl implements InsightReportService {
             return "";
         }
         try {
-            // 先将 echarts 占位符替换为 HTML 标记
+            // 先将 echarts 占位符替换为仅含 data-chart-id 的 HTML 标记
             String processed = markdown;
             for (Map.Entry<String, String> entry : echartsOptions.entrySet()) {
                 String placeholder = "[echarts:" + entry.getKey() + "]";
@@ -617,6 +624,8 @@ public class InsightReportServiceImpl implements InsightReportService {
 
     /**
      * 还原被 commonmark 转义的 echarts div 标签
+     * <p>
+     * commonmark 会将 HTML 标签转义为 &lt;div class=&quot;...&quot;&gt;，需要还原为真实标签。
      */
     private String restoreEchartsDivs(String html) {
         return html.replaceAll(
@@ -814,5 +823,98 @@ public class InsightReportServiceImpl implements InsightReportService {
         response.setSuccess(true);
         response.setCode("200");
         return response;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InsightReportVO publishReport(InsightReportPublishRequest request) {
+        Long dashboardId = request.getDashboardId();
+        InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+        if (dashboard == null) {
+            throw new BusinessException(404, "仪表盘不存在: " + dashboardId);
+        }
+
+        String reportContent = dashboard.getReportContent();
+        if (reportContent == null || reportContent.isBlank()) {
+            throw new BusinessException(400, "仪表盘尚未生成报告，请先生成报告后再发布");
+        }
+
+        // 收集当前仪表盘组件的 echarts option 数据，供报告页渲染图表
+        List<InsightComponentDataDTO> componentData = dataBindService.previewData(dashboardId);
+        Map<String, String> echartsOptionsMap = collectEchartsOptions(componentData);
+        String echartsOptionsJson = echartsOptionsMap.isEmpty() ? null : JSONUtil.toJsonStr(echartsOptionsMap);
+
+        InsightReportEntity entity = new InsightReportEntity();
+        entity.setDashboardId(dashboardId);
+        entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        entity.setName(request.getName() != null ? request.getName() : dashboard.getName());
+        entity.setDescription(request.getDescription());
+        entity.setReportContent(reportContent);
+        entity.setEchartsOptions(echartsOptionsJson);
+        entity.setStatus(DataAgentConstants.INSIGHT_REPORT_STATUS_PUBLISHED);
+        entity.setOwnerId(workspaceGuard.currentUserId());
+        entity.setOwnerName(workspaceGuard.currentUserNickname());
+        entity.setModifier(workspaceGuard.currentUserNickname());
+        entity.setDeleted(0);
+        insightReportMapper.insert(entity);
+
+        log.info("发布报告: id={}, dashboardId={}, name={}", entity.getId(), dashboardId, entity.getName());
+        return toReportVO(entity);
+    }
+
+    @Override
+    public List<InsightReportVO> listReports() {
+        LambdaQueryWrapper<InsightReportEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightReportEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
+        wrapper.orderByDesc(InsightReportEntity::getUpdateTime);
+        List<InsightReportEntity> entities = insightReportMapper.selectList(wrapper);
+        return entities.stream().map(this::toReportVO).collect(Collectors.toList());
+    }
+
+    @Override
+    public InsightReportVO getReportDetail(Long id) {
+        requireReportOwnership(id);
+        InsightReportEntity entity = insightReportMapper.selectById(id);
+        return toReportVO(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteReport(Long id) {
+        requireReportOwnership(id);
+        int rows = insightReportMapper.deleteById(id);
+        log.info("删除报告: id={}, 影响行数={}", id, rows);
+    }
+
+    /**
+     * 校验报告归属权限
+     * <p>
+     * 校验报告是否存在且属于当前工作区。
+     */
+    private void requireReportOwnership(Long id) {
+        InsightReportEntity entity = insightReportMapper.selectById(id);
+        if (entity == null || entity.getDeleted() == 1) {
+            throw new BusinessException(404, "报告不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该报告");
+        }
+    }
+
+    /**
+     * 报告实体转视图对象
+     */
+    private InsightReportVO toReportVO(InsightReportEntity entity) {
+        InsightReportVO vo = new InsightReportVO();
+        BeanUtils.copyProperties(entity, vo);
+        if (entity.getCreateTime() != null) {
+            vo.setCreateTime(entity.getCreateTime().toString());
+        }
+        if (entity.getUpdateTime() != null) {
+            vo.setUpdateTime(entity.getUpdateTime().toString());
+        }
+        return vo;
     }
 }
