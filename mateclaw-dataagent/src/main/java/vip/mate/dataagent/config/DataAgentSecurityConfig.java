@@ -46,6 +46,8 @@ public class DataAgentSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 .requestMatchers(DataAgentConstants.AUTH_LOGIN_PATH).permitAll()
+                // 工具生成文件下载端点，UUID 即为访问凭证，无需认证
+                .requestMatchers("/v1/files/generated/**").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
