@@ -2844,10 +2844,13 @@ async function handleFileChange(event: Event): void {
   const target = event.target as HTMLInputElement
   const files = target.files
   if (!files || files.length === 0) return
-  // 重置 input 以便再次选择同一文件
+  // 先将 FileList 快照为普通数组，再重置 input
+  // Chrome 的 FileList 是 live 对象，重置 input.value 会原地清空 FileList，
+  // 导致后续 Array.from(files) 产生空数组
+  const fileArray = Array.from(files)
   target.value = ''
 
-  await uploadFiles(Array.from(files))
+  await uploadFiles(fileArray)
 }
 
 /** 移除待发送附件 */
