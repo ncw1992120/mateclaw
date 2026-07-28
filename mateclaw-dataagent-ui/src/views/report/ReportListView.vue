@@ -322,6 +322,24 @@ function handleDownloadReport(): void {
   const reportName = currentReport.value.name || 'report'
   const timestamp = new Date().toISOString().slice(0, 10)
 
+  // 从报告的 echartsOptions 字段收集图表数据，内联到 HTML 中供离线渲染
+  const echartsData: Record<string, Record<string, unknown>> = {}
+  if (currentReport.value.echartsOptions) {
+    try {
+      const parsed = JSON.parse(currentReport.value.echartsOptions)
+      for (const [key, val] of Object.entries(parsed)) {
+        if (typeof val === 'string') {
+          echartsData[key] = JSON.parse(val)
+        } else {
+          echartsData[key] = val as Record<string, unknown>
+        }
+      }
+    } catch (e) {
+      console.error('[Report] Parse echartsOptions error:', e)
+    }
+  }
+  const echartsDataJson = JSON.stringify(echartsData)
+
   const fullHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -353,21 +371,22 @@ ${currentReportHtml.value}
   <div class="disclaimer">${t('insight.aiDisclaimer')}</div>
   <script>
     (function() {
+      var data = ${echartsDataJson};
       var containers = document.querySelectorAll('.echarts-container');
       containers.forEach(function(el) {
-        var optionStr = el.getAttribute('data-option');
-        if (optionStr && typeof echarts !== 'undefined') {
-          try {
-            var option = JSON.parse(optionStr);
-            var chart = echarts.init(el);
-            chart.setOption(option);
-          } catch(e) { console.error(e); }
+        var chartId = el.getAttribute('data-chart-id');
+        if (chartId && data[chartId] && typeof echarts !== 'undefined') {
+          var chart = echarts.init(el);
+          chart.setOption(data[chartId]);
         }
       });
       window.addEventListener('resize', function() {
         containers.forEach(function(el) {
-          var instance = echarts.getInstanceByDom(el);
-          if (instance) instance.resize();
+          var chartId = el.getAttribute('data-chart-id');
+          if (chartId && data[chartId]) {
+            var instance = echarts.getInstanceByDom(el);
+            if (instance) instance.resize();
+          }
         });
       });
     })();
