@@ -2821,19 +2821,19 @@ function handleFileSelect(): void {
 function handlePaste(event: ClipboardEvent): void {
   const items = event.clipboardData?.items
   if (!items) return
-  const imageFiles: File[] = []
+  const pasteFiles: File[] = []
   for (const item of items) {
-    if (item.type.startsWith('image/')) {
+    if (item.kind === 'file') {
       const file = item.getAsFile()
       if (file) {
-        imageFiles.push(file)
+        pasteFiles.push(file)
       }
     }
   }
-  if (imageFiles.length > 0) {
+  if (pasteFiles.length > 0) {
     // 阻止默认粘贴行为（避免图片以文本形式插入输入框）
     event.preventDefault()
-    uploadFiles(imageFiles)
+    uploadFiles(pasteFiles)
   }
 }
 
