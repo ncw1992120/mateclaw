@@ -72,7 +72,7 @@
         <!-- AI Message -->
         <div v-else class="msg ai" :data-msg-index="index">
           <div class="ai-content-wrapper">
-            <div class="bubble ai-bubble">
+            <div class="bubble ai-bubble" @click="handleCodeCopyClick">
               <!-- Token & model info (右上角) -->
               <div v-if="getTokenInfo(msg)" class="meta-header">
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
@@ -193,6 +193,13 @@
 
               <!-- Final answer (优先使用最后一个 content segment 作为最终答案；兼容历史消息回退到 msg.content) -->
               <div v-if="getFinalAnswer(msg)" class="msg-text" v-html="renderMessageText(getFinalAnswer(msg), index)" />
+
+              <!-- 结构化错误提示 -->
+              <div v-if="msg.status === 'failed' && msg.errorInfo" class="msg-error">
+                <span class="msg-error__icon">⚠</span>
+                <span class="msg-error__text">{{ getErrorDisplayMessage(msg.errorInfo as ChatErrorInfo) }}</span>
+                <button v-if="msg.errorInfo.retryable" class="msg-error__retry" type="button" @click="handleRegenerate(index)">{{ t('chat.regenerate') }}</button>
+              </div>
 
               <!-- Streaming cursor -->
               <span
@@ -711,12 +718,6 @@
                 <label>{{ t('metricPlatform.businessCaliber') }}:</label>
                 <span>{{ item.businessCaliber }}</span>
               </div>
-              <div v-if="item.availableDimensions?.length" class="browse-card-dimensions">
-                <label>{{ t('metricPlatform.availableDimensions') }}:</label>
-                <div class="browse-card-tags">
-                  <span v-for="dim in item.availableDimensions" :key="dim" class="browse-chip">{{ dim }}</span>
-                </div>
-              </div>
             </div>
           </div>
           <div v-if="browseMetricPagination.total > 0" class="browse-pagination">
@@ -839,6 +840,7 @@ import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension } from '@/types'
+import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -1285,6 +1287,25 @@ function handleCopy(msgIndex: number, content: string): void {
   }).catch(() => {})
 }
 
+/** 处理代码块内复制按钮点击 */
+function handleCodeCopyClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const btn = target.closest('.code-copy-btn') as HTMLElement | null
+  if (!btn) return
+  event.stopPropagation()
+  const wrapper = btn.closest('.code-block-wrapper') as HTMLElement | null
+  const pre = wrapper?.querySelector('pre[data-code]') as HTMLElement | null
+  const encodedCode = pre?.getAttribute('data-code')
+  if (!encodedCode) return
+  copyToClipboard(decodeURIComponent(encodedCode)).then(() => {
+    btn.classList.add('copied')
+    setTimeout(() => {
+      btn.classList.remove('copied')
+    }, 2000)
+  }).catch(() => {})
+}
+
 /** 重新生成 AI 消息 */
 function handleRegenerate(msgIndex: number): void {
   chatStore.regenerateMessage(msgIndex)
@@ -1318,7 +1339,7 @@ const customRenderer = {
       // 转成占位 div，ECharts 实例由 scanAndMountEChartsBlocks 在 nextTick 后挂载
       return `<div class="echarts-block" data-echarts-option="${encodeURIComponent(text || '')}"></div>\n`
     }
-    // 非 echarts 代码块：使用 highlight.js 高亮处理
+    // 非 echarts 代码块：使用 highlight.js 高亮处理，并包装复制按钮
     const detectedLang = infoStr
     const hasLanguage = !!detectedLang && !!hljs.getLanguage(detectedLang)
     let highlighted: string
@@ -1327,10 +1348,12 @@ const customRenderer = {
         ? hljs.highlight(text, { language: detectedLang }).value
         : hljs.highlightAuto(text).value
     } catch {
-      highlighted = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      highlighted = escapeHtmlForStreaming(text)
     }
     const langClass = hasLanguage ? ` language-${detectedLang}` : ''
-    return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>\n`
+    const encodedCode = encodeURIComponent(text || '')
+    const copyTitle = escapeHtmlForStreaming(t('chat.copy'))
+    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="${copyTitle}" aria-label="${copyTitle}"><svg class="code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="code-copied-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button><pre data-code="${encodedCode}"><code class="hljs${langClass}">${highlighted}</code></pre></div>\n`
   },
   /** 链接在新窗口打开；指向本站 API 的链接自动追加 token 以通过 JWT 认证 */
   link({ href, title, text }: { href: string; title?: string; text: string }): string {
@@ -1352,9 +1375,9 @@ const markedInstance = new Marked({
   renderer: customRenderer,
 })
 
-/** DOMPurify 配置：允许 echarts 占位 div 所需的属性，允许链接 target 属性 */
+/** DOMPurify 配置：允许 echarts 占位 div 与代码块复制所需的属性，允许链接 target 属性 */
 const purifyConfig = {
-  ADD_ATTR: ['data-echarts-option', 'class', 'style', 'target', 'rel'],
+  ADD_ATTR: ['data-echarts-option', 'data-code', 'class', 'style', 'target', 'rel', 'aria-label'],
   ADD_TAGS: ['div', 'span', 'pre', 'code'],
 }
 
@@ -3592,6 +3615,46 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
+.msg-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(245, 108, 108, 0.08);
+  border: 1px solid rgba(245, 108, 108, 0.3);
+}
+
+.msg-error__icon {
+  color: #f56c6c;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.msg-error__text {
+  color: #f56c6c;
+  font-size: 13px;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.msg-error__retry {
+  border: 1px solid rgba(245, 108, 108, 0.4);
+  background: transparent;
+  color: #f56c6c;
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.msg-error__retry:hover {
+  background: rgba(245, 108, 108, 0.1);
+}
+
 .msg-text {
   color: var(--body-text);
   font-size: 15px;
@@ -5502,6 +5565,63 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+/* 代码块容器：用于定位右上角复制按钮（:deep 穿透 v-html） */
+:deep(.code-block-wrapper) {
+  position: relative;
+}
+
+:deep(.code-block-wrapper pre) {
+  margin-top: 0;
+}
+
+/* 代码块右上角复制按钮 */
+:deep(.code-copy-btn) {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+:deep(.code-copy-btn:hover) {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+  border-color: var(--theme-text-muted);
+}
+
+:deep(.code-copy-btn svg) {
+  width: 14px;
+  height: 14px;
+}
+
+:deep(.code-copy-btn .code-copied-icon) {
+  display: none;
+}
+
+:deep(.code-copy-btn.copied) {
+  color: var(--el-color-success, #67c23a);
+  border-color: var(--el-color-success, #67c23a);
+}
+
+:deep(.code-copy-btn.copied .code-copy-icon) {
+  display: none;
+}
+
+:deep(.code-copy-btn.copied .code-copied-icon) {
+  display: inline-block;
+}
+
 /* seg-execution */
 .seg-execution {
   display: inline-flex;
@@ -5938,32 +6058,6 @@ onUnmounted(() => {
   display: block;
   color: var(--theme-text-muted);
   margin-bottom: 4px;
-}
-
-.browse-card-dimensions {
-  margin-top: 10px;
-}
-
-.browse-card-dimensions label {
-  display: block;
-  font-size: 12px;
-  color: var(--theme-text-muted);
-  margin-bottom: 6px;
-}
-
-.browse-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.browse-chip {
-  font-size: 11px;
-  color: var(--theme-text-secondary);
-  background: var(--theme-surface-hover);
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--theme-border);
 }
 
 .browse-search {

@@ -1073,8 +1073,11 @@ export const useChatStore = defineStore('chat', () => {
           lastMsg.content += '\n[已停止生成]'
           lastMsg.status = 'stopped'
         } else if (status === 'failed') {
-          lastMsg.content += '\n[生成失败]'
           lastMsg.status = 'failed'
+          // 若尚无 errorInfo（后端未发送 error 事件），补充默认错误信息
+          if (!lastMsg.errorInfo) {
+            lastMsg.errorInfo = { category: 'unknown', rawMessage: '生成失败', retryable: true, timestamp: Date.now() }
+          }
         }
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
@@ -1160,10 +1163,8 @@ export const useChatStore = defineStore('chat', () => {
         // 结构化错误信息
         const errorInfo: ChatErrorInfo = classifySseError(data as Record<string, unknown>)
         lastMsg.errorInfo = errorInfo
-        const msg = data.message as string | undefined
-        if (msg) {
-          lastMsg.content += `\n[错误] ${msg}`
-        }
+        // 不再将原始错误追加到 msg.content，避免错误原文出现在历史摘要中
+        // 结构化错误提示由 ChatView 中的 errorInfo 渲染组件展示
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)

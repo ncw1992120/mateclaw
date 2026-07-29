@@ -683,6 +683,8 @@ export default {
     back: '返回',
     create: '创建',
     save: '保存',
+    edit: '编辑',
+    delete: '删除',
     loading: '加载中…',
     success: '操作成功',
     error: '操作失败',

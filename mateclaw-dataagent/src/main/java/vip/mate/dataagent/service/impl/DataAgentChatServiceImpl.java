@@ -249,8 +249,19 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 streamTracker.setDisposable(conversationId, disposable);
             } catch (Exception e) {
                 log.error("[DataAgent] SSE setup error for {}: {}", conversationId, e.getMessage());
+                String errorMsg = e.getMessage() != null ? e.getMessage() : "unknown error";
                 try {
-                    broadcastEvent(conversationId, "error", Map.of("message", e.getMessage() != null ? e.getMessage() : "unknown error"));
+                    broadcastEvent(conversationId, "error", Map.of("message", errorMsg));
+                } catch (Exception ignored) {}
+                // 保存一条 failed 状态的 assistant 消息，避免刷新后丢失
+                try {
+                    conversationService.saveMessage(conversationId, "assistant", errorMsg, null, "failed");
+                } catch (Exception ignored) {}
+                try {
+                    broadcastEvent(conversationId, "message_complete", Map.of("status", "failed", "hasThinking", false, "hasContent", false));
+                } catch (Exception ignored) {}
+                try {
+                    broadcastEvent(conversationId, "done", Map.of("conversationId", conversationId, "status", "failed"));
                 } catch (Exception ignored) {}
                 streamTracker.complete(conversationId);
                 scopeContext.clear(conversationId);

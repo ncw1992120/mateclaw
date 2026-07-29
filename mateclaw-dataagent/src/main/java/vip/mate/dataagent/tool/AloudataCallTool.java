@@ -84,12 +84,6 @@ public class AloudataCallTool {
     /** 语义搜索 Tool 名称 */
     private static final String SEARCH_SEMANTIC_TOOL_NAME = "aloudata_search_semantic";
 
-    /** Markdown 表格展示阈值 */
-    private static final int MARKDOWN_TABLE_THRESHOLD = 20;
-
-    /** Markdown 表格最大列数 */
-    private static final int MAX_COLUMNS_FOR_TABLE = 10;
-
     /** 日期粒度等级（从小到大），用于同环比偏移粒度校验 */
     private static final Map<String, Integer> GRAIN_LEVEL = Map.of(
             "day", 1, "week", 2, "month", 3, "quarter", 4, "year", 5

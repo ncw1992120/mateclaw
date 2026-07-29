@@ -172,11 +172,14 @@ public class NodeStreamingChatHelper {
      * Record a single primary-model outcome to the health tracker. No-op when
      * either the tracker bean isn't wired or the primary's providerId is
      * unknown (e.g., tests, legacy callers built without the full constructor).
+     *
+     * @param success     whether the call succeeded
+     * @param errorType   error type on failure (null when {@code success} is true)
      */
-    private void recordPrimary(boolean success) {
+    private void recordPrimary(boolean success, ErrorType errorType) {
         if (healthTracker == null || primaryProviderId == null) return;
         if (success) healthTracker.recordSuccess(primaryProviderId);
-        else healthTracker.recordFailure(primaryProviderId);
+        else healthTracker.recordFailure(primaryProviderId, errorType == ErrorType.RATE_LIMIT);
     }
 
     /**
@@ -565,7 +568,7 @@ public class NodeStreamingChatHelper {
                 // 不会静默吞错。
                 if (lastResult.errorType() == ErrorType.AUTH_ERROR) {
                     log.warn("[{}] Primary auth failed — skipping same-model retries, handing off to fallback chain", phase);
-                    recordPrimary(false);
+                    recordPrimary(false, ErrorType.AUTH_ERROR);
                     removeFromPool(primaryProviderId, ErrorType.AUTH_ERROR, lastResult.errorMessage());
                     break;
                 }
@@ -574,7 +577,7 @@ public class NodeStreamingChatHelper {
                 // hand off to the fallback chain (a different provider may have credits).
                 if (lastResult.errorType() == ErrorType.BILLING) {
                     log.warn("[{}] Primary billing failure — skipping same-model retries, handing off to fallback chain", phase);
-                    recordPrimary(false);
+                    recordPrimary(false, ErrorType.BILLING);
                     removeFromPool(primaryProviderId, ErrorType.BILLING, lastResult.errorMessage());
                     break;
                 }
@@ -606,12 +609,12 @@ public class NodeStreamingChatHelper {
                 // productive; a different provider has a better chance of succeeding.
                 if (lastResult.errorType() == ErrorType.EMPTY_RESPONSE) {
                     log.warn("[{}] Primary returned empty response — skipping same-model retries, handing off to fallback chain", phase);
-                    recordPrimary(false);
+                    recordPrimary(false, ErrorType.EMPTY_RESPONSE);
                     break;
                 }
                 // 成功
                 if (lastResult.errorMessage() == null || lastResult.errorType() == ErrorType.NONE) {
-                    recordPrimary(true);
+                    recordPrimary(true, null);
                     addToPool(primaryProviderId);
                     logPerfSummary(phase, conversationId, callStartMs, llmCallCount, retryCount, failoverCount);
                     return lastResult;
@@ -632,7 +635,7 @@ public class NodeStreamingChatHelper {
                 // chose NOT to retry must exit — otherwise we silently spin through
                 // attempts and waste seconds per turn on unrecoverable errors like
                 // DashScope's "url error" / unknown model.
-                recordPrimary(false);
+                recordPrimary(false, lastResult.errorType());
                 logPerfSummary(phase, conversationId, callStartMs, llmCallCount, retryCount, failoverCount);
                 return lastResult;
             }
@@ -642,7 +645,7 @@ public class NodeStreamingChatHelper {
         // failed. Only count it against provider health for provider-level errors —
         // a MODEL_NOT_FOUND break above must not nudge the provider toward cooldown.
         if (!primarySkipped && lastResult != null && isProviderLevelFailure(lastResult.errorType())) {
-            recordPrimary(false);
+            recordPrimary(false, lastResult.errorType());
         }
 
         // Primary exhausted retries — walk the fallback chain in priority order.
@@ -696,7 +699,8 @@ public class NodeStreamingChatHelper {
             // model-scoped and must not penalise an otherwise-healthy provider.
             if (healthTracker != null
                     && (fallbackResult == null || isProviderLevelFailure(fallbackResult.errorType()))) {
-                healthTracker.recordFailure(entry.providerId());
+                boolean isRateLimit = fallbackResult != null && fallbackResult.errorType() == ErrorType.RATE_LIMIT;
+                healthTracker.recordFailure(entry.providerId(), isRateLimit);
             }
             if (fallbackResult != null) {
                 // HARD errors (auth / billing) evict the provider from the pool so

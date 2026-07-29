@@ -67,14 +67,28 @@ public class ProviderHealthTracker {
      * reaches the configured threshold, the provider enters cooldown.
      */
     public void recordFailure(String providerId) {
+        recordFailure(providerId, false);
+    }
+
+    /**
+     * Record a single failure against {@code providerId} with rate-limit distinction.
+     * Rate-limit failures use a shorter cooldown window since they are typically
+     * transient and resolve within seconds, whereas auth/billing/server errors
+     * need the longer default cooldown.
+     *
+     * @param providerId   provider identifier
+     * @param isRateLimit  true if the failure is a rate-limit (429) error
+     */
+    public void recordFailure(String providerId, boolean isRateLimit) {
         if (!props.isEnabled() || providerId == null) return;
         AtomicLong counter = consecutiveFailures.computeIfAbsent(providerId, k -> new AtomicLong());
         long failures = counter.incrementAndGet();
         if (failures >= props.getFailureThreshold()) {
-            long cooldownEnd = System.currentTimeMillis() + props.getCooldownMs();
+            long cooldownMs = isRateLimit ? props.getRateLimitCooldownMs() : props.getCooldownMs();
+            long cooldownEnd = System.currentTimeMillis() + cooldownMs;
             cooldownUntilMs.put(providerId, cooldownEnd);
-            log.warn("[ProviderHealth] provider={} hit {} consecutive failures, entering cooldown for {}s",
-                    providerId, failures, props.getCooldownMs() / 1000);
+            log.warn("[ProviderHealth] provider={} hit {} consecutive failures (rateLimit={}), entering cooldown for {}s",
+                    providerId, failures, isRateLimit, cooldownMs / 1000);
         }
     }
 
