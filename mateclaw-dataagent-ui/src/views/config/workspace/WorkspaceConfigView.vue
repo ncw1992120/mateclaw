@@ -21,6 +21,7 @@
       <WorkspaceManageView v-else-if="activeSubMenu === 'workspaceManage'" />
       <MemberManageView v-else-if="activeSubMenu === 'memberManage'" />
       <ResourceGrantView v-else-if="activeSubMenu === 'grantManage'" />
+      <CronJobView v-else-if="activeSubMenu === 'cronJob'" />
     </section>
   </div>
 </template>
@@ -34,12 +35,13 @@ import AgentContextView from '@/views/workspace/AgentContextView.vue'
 import WorkspaceManageView from '@/views/workspace/WorkspaceManageView.vue'
 import MemberManageView from '@/views/workspace/MemberManageView.vue'
 import ResourceGrantView from '@/views/workspace/ResourceGrantView.vue'
+import CronJobView from '@/views/workspace/CronJobView.vue'
 
 const { t } = useI18n()
 const { hasPermission } = usePermission()
 
 /** 二级菜单项 key 类型 */
-type SubMenuKey = 'agentContext' | 'workspaceManage' | 'memberManage' | 'grantManage'
+type SubMenuKey = 'agentContext' | 'workspaceManage' | 'memberManage' | 'grantManage' | 'cronJob'
 
 /** 二级菜单项配置（含权限点） */
 interface SubMenuItem {
@@ -69,6 +71,11 @@ const subMenuItems: SubMenuItem[] = [
     key: 'grantManage',
     labelKey: 'workspaceMenu.grantManage',
     permission: PERMISSION.WORKSPACE_MANAGE,
+  },
+  {
+    key: 'cronJob',
+    labelKey: 'workspaceMenu.cronJob',
+    permission: PERMISSION.CRON_JOB_VIEW,
   },
 ]
 

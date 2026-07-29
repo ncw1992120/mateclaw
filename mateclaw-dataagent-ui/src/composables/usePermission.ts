@@ -39,6 +39,9 @@ export const PERMISSION = {
   WORKSPACE_MANAGE: 'workspace:manage',
   WORKSPACE_MEMBER_VIEW: 'workspace:member:view',
   WORKSPACE_MEMBER_MANAGE: 'workspace:member:manage',
+  // 定时任务
+  CRON_JOB_VIEW: 'cron-job:view',
+  CRON_JOB_MANAGE: 'cron-job:manage',
 } as const
 
 export type PermissionCode = (typeof PERMISSION)[keyof typeof PERMISSION]
@@ -73,6 +76,9 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   [PERMISSION.WORKSPACE_MANAGE]: ['admin', 'owner'],
   [PERMISSION.WORKSPACE_MEMBER_VIEW]: ['member', 'admin', 'owner'],
   [PERMISSION.WORKSPACE_MEMBER_MANAGE]: ['admin', 'owner'],
+  // 定时任务
+  [PERMISSION.CRON_JOB_VIEW]: ['viewer', 'member', 'admin', 'owner'],
+  [PERMISSION.CRON_JOB_MANAGE]: ['admin', 'owner'],
 }
 
 /**

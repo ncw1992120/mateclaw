@@ -13,10 +13,12 @@ import vip.mate.agent.binding.model.AgentSkillBinding;
 import vip.mate.agent.binding.model.AgentToolBinding;
 import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.model.AgentEntity;
+import vip.mate.cron.model.CronJobDTO;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.llm.model.*;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.sdk.service.agent.AgentRuntime;
+import vip.mate.sdk.service.cron.CronJobRuntime;
 import vip.mate.sdk.service.datasource.DatasourceRuntime;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
@@ -52,6 +54,7 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     private final ModelRuntime modelRuntime;
     private final SkillRuntime skillRuntime;
     private final WorkspaceRuntime workspaceRuntime;
+    private final CronJobRuntime cronJobRuntime;
 
     // ==================== Agent ====================
 
@@ -490,5 +493,42 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public Long findUserIdByUsername(String username) {
         return workspaceRuntime.findUserIdByUsername(username);
+    }
+
+    // ==================== 定时任务 ====================
+
+    @Override
+    public List<CronJobDTO> listCronJobs(Long workspaceId) {
+        return cronJobRuntime.listCronJobs(workspaceId);
+    }
+
+    @Override
+    public CronJobDTO getCronJob(Long id, Long workspaceId) {
+        return cronJobRuntime.getCronJob(id, workspaceId);
+    }
+
+    @Override
+    public CronJobDTO createCronJob(CronJobDTO dto, Long workspaceId) {
+        return cronJobRuntime.createCronJob(dto, workspaceId);
+    }
+
+    @Override
+    public CronJobDTO updateCronJob(Long id, CronJobDTO dto, Long workspaceId) {
+        return cronJobRuntime.updateCronJob(id, dto, workspaceId);
+    }
+
+    @Override
+    public void deleteCronJob(Long id, Long workspaceId) {
+        cronJobRuntime.deleteCronJob(id, workspaceId);
+    }
+
+    @Override
+    public void toggleCronJob(Long id, boolean enabled, Long workspaceId) {
+        cronJobRuntime.toggleCronJob(id, enabled, workspaceId);
+    }
+
+    @Override
+    public void runCronJobNow(Long id, Long workspaceId) {
+        cronJobRuntime.runCronJobNow(id, workspaceId);
     }
 }

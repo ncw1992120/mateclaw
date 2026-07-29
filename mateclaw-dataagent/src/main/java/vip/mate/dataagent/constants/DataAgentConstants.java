@@ -337,6 +337,10 @@ public final class DataAgentConstants {
     public static final String PERM_WORKSPACE_MEMBER_VIEW = "workspace:member:view";
     public static final String PERM_WORKSPACE_MEMBER_MANAGE = "workspace:member:manage";
 
+    // 定时任务
+    public static final String PERM_CRON_JOB_VIEW = "cron-job:view";
+    public static final String PERM_CRON_JOB_MANAGE = "cron-job:manage";
+
     // ==================== 资源授权 ====================
 
     /** 资源类型：技能 */

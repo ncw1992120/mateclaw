@@ -1,6 +1,7 @@
 package vip.mate.sdk.service;
 
 import vip.mate.sdk.service.agent.AgentRuntime;
+import vip.mate.sdk.service.cron.CronJobRuntime;
 import vip.mate.sdk.service.datasource.DatasourceRuntime;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
@@ -22,8 +23,9 @@ import vip.mate.sdk.service.workspace.WorkspaceRuntime;
  *   <li>{@link ModelRuntime} — Provider/模型管理、发现、测试</li>
  *   <li>{@link SkillRuntime} — 技能 CRUD、导入安装</li>
  *   <li>{@link WorkspaceRuntime} — 工作区管理、权限、成员</li>
+ *   <li>{@link CronJobRuntime} — 定时任务 CRUD、启停、立即执行</li>
  * </ul>
  */
 public interface MateClawRuntime extends AgentRuntime, DatasourceRuntime, ToolRuntime,
-        ModelRuntime, SkillRuntime, WorkspaceRuntime {
+        ModelRuntime, SkillRuntime, WorkspaceRuntime, CronJobRuntime {
 }
