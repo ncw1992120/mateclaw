@@ -13,7 +13,14 @@
 #
 # See https://docs.searxng.org/admin/settings/ for all knobs.
 
-use_default_settings: true
+use_default_settings:
+  engines:
+    keep_only:
+      - sogou
+      - 360search
+      - quark
+      - bilibili
+      - sogou-weixin
 
 general:
   # Cosmetic only; shown in the UI title.
@@ -37,25 +44,44 @@ server:
   # Trust Docker's internal network — the reverse-proxy / rate-limit plugin
   # uses this to know the caller's real IP.
   limiter: false
+  public_instance: false
   image_proxy: false
   # Bind address matches the container default.
   bind_address: "0.0.0.0"
   port: 8080
+  base_url: "http://searxng:8080"
+  method: "POST"
 
 ui:
   static_use_hash: true
 
-# The default engine list is huge; keep a tight set of reliable ones.
+# The default engine list is huge; keep_only above discards everything except
+# the engines listed.  Baidu is excluded because it triggers CAPTCHA on server
+# IPs (suspended for 3600s per occurrence).  Instead, we use sogou, 360search,
+# and quark which have much lighter anti-bot policies.  Overseas engines
+# (Google / Bing / Brave / Startpage / Wikipedia / Wikidata) are also excluded
+# — they are blocked in mainland China and would time out on every request.
 engines:
-  - name: duckduckgo
+  - name: sogou
+    engine: sogou
+    shortcut: sg
     disabled: false
-  - name: bing
+    timeout: 6.0
+  - name: 360search
+    engine: 360search
+    shortcut: "360"
     disabled: false
-  - name: brave
+  - name: quark
+    engine: quark
+    shortcut: qk
     disabled: false
-  - name: wikipedia
+  - name: bilibili
+    engine: bilibili
+    shortcut: bil
     disabled: false
-  - name: google
+    categories: [videos]
+  - name: sogou-weixin
+    engine: sogou-weixin
+    shortcut: wx
     disabled: false
-  - name: startpage
-    disabled: false
+    categories: ["social media"]

@@ -26,13 +26,7 @@ _time_range_map = {
 }
 
 base_url = "https://news.google.com/rss/search"
-proxy_url = "http://mihomo.zeabur.internal:10808"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-
-
-def _make_opener():
-    proxy = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
-    return urllib.request.build_opener(proxy)
 
 
 def request(query, params):
@@ -49,10 +43,9 @@ def response(resp):
     results = []
 
     url = str(resp.url)
-    opener = _make_opener()
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
-        with opener.open(req, timeout=15) as r:
+        with urllib.request.urlopen(req, timeout=15) as r:
             xml_text = r.read().decode("utf-8")
     except Exception:
         return results
