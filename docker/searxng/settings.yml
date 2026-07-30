@@ -18,7 +18,6 @@ use_default_settings:
     keep_only:
       - sogou
       - 360search
-      - quark
       - bilibili
       - sogou-weixin
 
@@ -56,11 +55,9 @@ ui:
   static_use_hash: true
 
 # The default engine list is huge; keep_only above discards everything except
-# the engines listed.  Baidu is excluded because it triggers CAPTCHA on server
-# IPs (suspended for 3600s per occurrence).  Instead, we use sogou, 360search,
-# and quark which have much lighter anti-bot policies.  Overseas engines
-# (Google / Bing / Brave / Startpage / Wikipedia / Wikidata) are also excluded
-# — they are blocked in mainland China and would time out on every request.
+# the engines listed.  Baidu and Quark are excluded because they trigger CAPTCHA
+# on server IPs.  Overseas engines (Google / Bing / Brave / Startpage /
+# Wikipedia / Wikidata) are also excluded — they are blocked in mainland China.
 engines:
   - name: sogou
     engine: sogou
@@ -70,10 +67,6 @@ engines:
   - name: 360search
     engine: 360search
     shortcut: "360"
-    disabled: false
-  - name: quark
-    engine: quark
-    shortcut: qk
     disabled: false
   - name: bilibili
     engine: bilibili
