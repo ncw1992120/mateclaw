@@ -96,7 +96,7 @@
               @click="activeSidebarItem = item.key"
               :title="sidebarCollapsed ? t(item.label) : ''"
             >
-              <span class="sidebar-icon" v-html="item.icon"></span>
+              <span class="sidebar-icon"><component :is="item.icon" /></span>
               <span v-if="!sidebarCollapsed" class="sidebar-label">{{ t(item.label) }}</span>
             </a>
           </div>
@@ -315,7 +315,16 @@ import DashboardListView from '@/views/insight/DashboardListView.vue'
 import ReportListView from '@/views/report/ReportListView.vue'
 import ConfigCenter from '@/views/config/ConfigCenter.vue'
 import HelpCenterView from '@/views/help/HelpCenterView.vue'
-import { OfficeBuilding, Check, Search } from '@element-plus/icons-vue'
+import {
+  OfficeBuilding,
+  Check,
+  Search,
+  ChatDotRound,
+  DataLine,
+  Document,
+  Setting,
+  QuestionFilled,
+} from '@element-plus/icons-vue'
 import type { Conversation, Workspace } from '@/types'
 
 /** 左侧菜单可选取值（一级菜单 key） */
@@ -388,20 +397,20 @@ const sidebarGroups = [
       {
         key: 'qa',
         label: 'nav.subQa',
-        // 问数：对话气泡 + 问号
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        // 问数：与登录页一致的对话图标
+        icon: ChatDotRound,
       },
       {
         key: 'interpret',
         label: 'nav.subInterpret',
-        // 洞察：灯泡
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a6 6 0 0 0 1.41-8.94 6 6 0 0 0-9.5 7.94"/><path d="M9.5 14h5"/></svg>`,
+        // 洞察：与登录页一致的数据折线图标
+        icon: DataLine,
       },
       {
         key: 'report',
         label: 'nav.subReport',
-        // 报告：文档 + 柱状图
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="15" x2="8" y2="17"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="16" y1="11" x2="16" y2="17"/></svg>`,
+        // 报告：与登录页一致的文档图标
+        icon: Document,
       },
     ],
   },
@@ -411,14 +420,14 @@ const sidebarGroups = [
       {
         key: 'skill',
         label: 'nav.subSkill',
-        // 配置：齿轮
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.26 1.3.73 1.77.47.47 1.11.73 1.77.73H21a2 2 0 1 1 0 4h-.09c-.66 0-1.3.26-1.77.73-.47.47-.73 1.11-.73 1.77z"/></svg>`,
+        // 配置：Element Plus 风格设置图标
+        icon: Setting,
       },
       {
         key: 'help',
         label: 'nav.subHelp',
-        // 帮助：书本 + 问号
-        icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        // 帮助：Element Plus 风格问号图标
+        icon: QuestionFilled,
       },
     ],
   },
@@ -974,6 +983,11 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 
+.sidebar-group.collapsed .sidebar-item {
+  justify-content: center;
+  padding: 9px 8px;
+}
+
 .sidebar-item {
   display: flex;
   align-items: center;
@@ -991,18 +1005,20 @@ onBeforeUnmount(() => {
 
 .sidebar-icon {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--theme-text-muted);
-  transition: color 0.2s ease;
+  background: transparent;
+  transition: all 0.2s ease;
 }
 
 .sidebar-icon :deep(svg) {
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
   display: block;
 }
 
@@ -1017,6 +1033,8 @@ onBeforeUnmount(() => {
 
 .sidebar-item:hover .sidebar-icon {
   color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  transform: scale(1.05);
 }
 
 .sidebar-item.active {
@@ -1027,6 +1045,7 @@ onBeforeUnmount(() => {
 
 .sidebar-item.active .sidebar-icon {
   color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
 }
 
 /* 侧边栏底部用户区 */
