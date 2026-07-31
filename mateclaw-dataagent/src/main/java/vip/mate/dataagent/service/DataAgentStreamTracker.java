@@ -324,7 +324,11 @@ public class DataAgentStreamTracker {
     }
 
     /**
-     * 请求停止指定会话的流式生成
+     * 请求停止指定会话的流式生成。
+     * <p>
+     * 同时在 ChatStreamTracker 上设置停止标志，使 Agent 节点
+     * （ActionNode / ReasoningNode / NodeStreamingChatHelper 等）
+     * 能通过 ChatStreamTracker.isStopRequested 感知到停止信号并中止执行。
      */
     public boolean requestStop(String conversationId) {
         RunState state = runs.get(conversationId);
@@ -332,6 +336,8 @@ public class DataAgentStreamTracker {
             return false;
         }
         boolean firstRequest = !state.stopRequested.getAndSet(true);
+        // 同步停止标志到 ChatStreamTracker，使 Agent 图节点能感知取消
+        chatStreamTracker.requestStop(conversationId);
         updateRunningTool(conversationId, null);
         Disposable d = state.disposable;
         if (d != null && !d.isDisposed()) {

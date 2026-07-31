@@ -437,6 +437,17 @@ public class ToolExecutionExecutor {
         ApprovalBarrier barrier = null;
 
         for (int i = 0; i < effectiveCalls.size(); i++) {
+            // 检查停止标志：用户取消后不再执行后续工具
+            if (streamTracker != null && streamTracker.isStopRequested(conversationId)) {
+                log.info("[ToolExecutor] Stop requested, skipping remaining {} tool(s): conversationId={}",
+                        effectiveCalls.size() - i, conversationId);
+                for (int j = i; j < effectiveCalls.size(); j++) {
+                    AssistantMessage.ToolCall remaining = effectiveCalls.get(j);
+                    allResponses.add(new ToolResponseMessage.ToolResponse(
+                            remaining.id(), remaining.name(), "[已停止] 用户取消了本次对话。"));
+                }
+                break;
+            }
             AssistantMessage.ToolCall toolCall = effectiveCalls.get(i);
             // Resolve LLM-emitted name to canonical BEFORE guard / lookup so a
             // mangled name (Read_File, web_search_tool, BrowserUseTool) can't
@@ -724,6 +735,17 @@ public class ToolExecutionExecutor {
         List<List<PreparedToolCall>> batches = buildExecutionBatches(preparedCalls);
 
         for (List<PreparedToolCall> batch : batches) {
+            // 检查停止标志：批次间隙中止后续工具执行
+            if (streamTracker != null && !batch.isEmpty()
+                    && streamTracker.isStopRequested(batch.get(0).conversationId)) {
+                log.info("[ToolExecutor] Stop requested between batches, skipping {} remaining batch(es)",
+                        batches.size() - batches.indexOf(batch));
+                for (PreparedToolCall pc : batch) {
+                    allResponses.set(pc.resultIndex, new ToolResponseMessage.ToolResponse(
+                            pc.toolCall.id(), pc.toolCall.name(), "[已停止] 用户取消了本次对话。"));
+                }
+                continue;
+            }
             if (batch.size() == 1) {
                 // 单个工具（safe 或 unsafe），直接执行
                 PreparedToolCall pc = batch.get(0);

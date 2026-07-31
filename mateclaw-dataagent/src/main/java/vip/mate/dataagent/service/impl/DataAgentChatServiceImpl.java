@@ -374,6 +374,25 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     public boolean requestStop(String conversationId) {
         boolean stopped = streamTracker.requestStop(conversationId);
         log.info("[DataAgent] Stop requested: conversationId={}, stopped={}", conversationId, stopped);
+        if (stopped) {
+            // 防御性兜底：dispose 后 Reactor 回调（doOnCancel/doOnError）可能因
+            // 节点同步阻塞未及时触发，导致 stream_status 残留 running。
+            // 延迟 5 秒后检查，若仍为 running 则强制重置为 idle。
+            finalizeExecutor.execute(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                String status = conversationService.getStreamStatus(conversationId);
+                if ("running".equals(status)) {
+                    log.warn("[DataAgent] stream_status still running 5s after stop, force resetting to idle: conversationId={}",
+                            conversationId);
+                    conversationService.updateStreamStatus(conversationId, "idle");
+                }
+            });
+        }
         return stopped;
     }
 
