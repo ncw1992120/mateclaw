@@ -150,18 +150,15 @@ function truncateResult(text: string, max: number): string {
   align-items: flex-start;
   width: fit-content;
   max-width: min(400px, 100%);
-  background: #f6fcfb;
-  border: 1px solid #dff0ee;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
   margin-bottom: 10px;
   overflow: hidden;
   transition: border-color 0.3s;
 }
-.plan-panel.is-done {
-  border-color: var(--el-color-success-light-3, #95d475);
-}
 .plan-panel.is-failed {
-  border-color: var(--el-color-warning-light-3, #eebe77);
+  border-color: var(--el-color-warning-light-5, #f0c78a);
 }
 
 .plan-panel__toggle {
@@ -181,19 +178,19 @@ function truncateResult(text: string, max: number): string {
 }
 .plan-panel__toggle:hover {
   color: var(--theme-text-secondary);
-  background: #ecf6f5;
+  background: var(--theme-border);
 }
 
 .plan-panel__icon {
   display: flex;
   align-items: center;
-  color: #5cbfb8;
+  color: var(--muted);
 }
 .plan-panel.is-done .plan-panel__icon {
-  color: var(--el-color-success-light-3, #95d475);
+  color: var(--el-color-success, #67c23a);
 }
 .plan-panel.is-failed .plan-panel__icon {
-  color: var(--el-color-warning-light-3, #eebe77);
+  color: var(--el-color-warning, #e6a23c);
 }
 
 .spin-icon {
@@ -207,12 +204,12 @@ function truncateResult(text: string, max: number): string {
 }
 
 .icon-done {
-  color: var(--el-color-success-light-3, #95d475);
+  color: var(--el-color-success, #67c23a);
   font-size: 12px;
   font-weight: 700;
 }
 .icon-failed {
-  color: var(--el-color-warning-light-3, #eebe77);
+  color: var(--el-color-warning, #e6a23c);
   font-size: 12px;
   font-weight: 700;
 }
@@ -236,10 +233,10 @@ function truncateResult(text: string, max: number): string {
   line-height: 1.5;
 }
 .plan-panel__badge.completed {
-  background: var(--el-color-success, #67c23a);
+  background: var(--el-color-success-light-5, #a4da89);
 }
 .plan-panel__badge.failed {
-  background: var(--el-color-warning-light-3, #eebe77);
+  background: var(--el-color-warning-light-5, #f0c78a);
 }
 
 .plan-panel__arrow {
@@ -263,13 +260,13 @@ function truncateResult(text: string, max: number): string {
 .plan-step {
   transition: background 0.15s;
   cursor: pointer;
-  border-top: 1px solid #dff0ee;
+  border-top: 1px solid var(--theme-border);
 }
 .plan-step:first-child {
   border-top: none;
 }
 .plan-step:hover {
-  background: #ecf6f5;
+  background: var(--theme-border);
 }
 
 .plan-step__header {
@@ -288,16 +285,16 @@ function truncateResult(text: string, max: number): string {
   width: 14px;
   flex-shrink: 0;
 }
-.is-completed .plan-step__status { color: var(--el-color-success-light-3, #95d475); }
-.is-running .plan-step__status { color: #5cbfb8; }
-.is-failed .plan-step__status { color: var(--el-color-warning-light-3, #eebe77); }
+.is-completed .plan-step__status { color: var(--el-color-success, #67c23a); }
+.is-running .plan-step__status { color: var(--muted); }
+.is-failed .plan-step__status { color: var(--el-color-warning, #e6a23c); }
 
 .plan-step__dot {
   display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1.5px solid #a8d8d4;
+  border: 1.5px solid var(--muted);
   background: transparent;
 }
 
@@ -324,7 +321,7 @@ function truncateResult(text: string, max: number): string {
   color: var(--muted);
 }
 .is-failed .plan-step__text {
-  color: var(--el-color-warning-light-3, #eebe77);
+  color: var(--el-color-warning, #e6a23c);
   font-weight: 500;
 }
 
@@ -346,9 +343,9 @@ function truncateResult(text: string, max: number): string {
 .plan-step__result pre {
   margin: 0;
   padding: 4px 6px;
-  background: #ecf6f5;
+  background: var(--theme-bg);
   border-radius: 4px;
-  border: 1px solid #dff0ee;
+  border: 1px solid var(--theme-border);
   font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
   font-size: 11px;
   line-height: 1.4;
@@ -359,7 +356,7 @@ function truncateResult(text: string, max: number): string {
   word-break: break-all;
 }
 .is-failed .plan-step__result pre {
-  border-color: var(--el-color-warning-light-5, #fdf0e0);
+  border-color: var(--el-color-warning-light-7, #f5dab1);
   background: var(--el-color-warning-light-9, #fdf6ec);
 }
 
