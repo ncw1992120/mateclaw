@@ -78,6 +78,13 @@
                 <span class="meta-token">{{ getTokenInfo(msg) }}</span>
               </div>
 
+              <!-- Plan Steps Panel (Plan-Execute 模式) -->
+              <PlanStepsPanel
+                v-if="getPlanMeta(msg)"
+                :plan="getPlanMeta(msg)!"
+                :is-generating="chatStore.isStreaming && index === chatStore.messages.length - 1"
+              />
+
               <!-- Execution Process Card: aggregates thinking + tool_call segments -->
               <div
                 v-if="hasExecutionProcess(msg)"
@@ -835,11 +842,12 @@ import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
 import ContextUsagePanel from './ContextUsagePanel.vue'
+import PlanStepsPanel from '@/components/PlanStepsPanel.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension } from '@/types'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension, PlanMeta } from '@/types'
 import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
 const { t } = useI18n()
@@ -1500,6 +1508,15 @@ function getExecutionProcessSegments(msg: typeof chatStore.messages.value[0]): A
 }
 
 /** 是否存在可展示的"执行过程"内容 */
+/** 提取消息中的计划进度元数据 */
+function getPlanMeta(msg: typeof chatStore.messages.value[0]): PlanMeta | undefined {
+  if (!msg.metadata || typeof msg.metadata !== 'object') return undefined
+  const meta = msg.metadata as Record<string, unknown>
+  const plan = meta.plan
+  if (!plan || typeof plan !== 'object') return undefined
+  return plan as PlanMeta
+}
+
 function hasExecutionProcess(msg: typeof chatStore.messages.value[0]): boolean {
   return getExecutionProcessSegments(msg).length > 0
 }
@@ -5624,15 +5641,16 @@ onUnmounted(() => {
 
 /* seg-execution */
 .seg-execution {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
+  width: fit-content;
+  max-width: min(400px, 100%);
   background: var(--theme-surface-hover);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
   margin-bottom: 10px;
   overflow: hidden;
-  max-width: 100%;
 }
 
 .seg-execution__toggle {
@@ -5682,7 +5700,6 @@ onUnmounted(() => {
 
 .seg-execution__body {
   width: 100%;
-  min-width: 280px;
   max-width: 100%;
   padding: 0 12px 12px;
 }

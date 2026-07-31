@@ -1,6 +1,6 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ChatAttachment, ChatMessage, ContextUsage, Conversation, MessageVO, SseEvent } from '@/types'
+import type { ChatAttachment, ChatMessage, ContextUsage, Conversation, MessageVO, PlanMeta, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
@@ -1193,6 +1193,89 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
       }
+
+      // ---- Plan-Execute 模式事件 ----
+      case 'plan_created': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const planId = data.planId as string | number | undefined
+        const steps = data.steps as string[] | undefined
+        if (planId !== undefined && steps) {
+          const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+          const plan: PlanMeta = { planId, steps, currentStep: 0, stepResults: [], planStatus: 'running' }
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan } }
+        }
+        break
+      }
+      case 'plan_step_started': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const index = data.index as number | undefined
+        if (index === undefined) break
+        const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+        const plan = prevMeta.plan as PlanMeta | undefined
+        if (plan) {
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan: { ...plan, currentStep: index } } }
+        }
+        break
+      }
+      case 'plan_step_completed': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const index = data.index as number | undefined
+        const result = data.result as string | undefined
+        if (index === undefined) break
+        const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+        const plan = prevMeta.plan as PlanMeta | undefined
+        if (plan) {
+          const stepResults = [...(plan.stepResults || [])]
+          stepResults[index] = { result: result ?? '', status: 'completed' }
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan: { ...plan, stepResults } } }
+        }
+        break
+      }
+      case 'plan_step_failed': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const index = data.index as number | undefined
+        const error = data.error as string | undefined
+        if (index === undefined) break
+        const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+        const plan = prevMeta.plan as PlanMeta | undefined
+        if (plan) {
+          const stepResults = [...(plan.stepResults || [])]
+          stepResults[index] = { result: error ?? '', status: 'failed' }
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan: { ...plan, stepResults } } }
+        }
+        break
+      }
+      case 'plan_completed': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+        const plan = prevMeta.plan as PlanMeta | undefined
+        if (plan) {
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan: { ...plan, planStatus: 'completed' } } }
+        }
+        break
+      }
+      case 'plan_failed': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const prevMeta = (prev.metadata || {}) as Record<string, unknown>
+        const plan = prevMeta.plan as PlanMeta | undefined
+        if (plan) {
+          targetMsgs[msgIdx] = { ...prev, metadata: { ...prevMeta, plan: { ...plan, planStatus: 'failed' } } }
+        }
+        break
+      }
+
       default:
         break
     }

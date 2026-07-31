@@ -458,6 +458,16 @@ export interface ChatAttachment {
 /** 聊天消息状态 */
 export type ChatMessageStatus = 'streaming' | 'completed' | 'failed' | 'stopped'
 
+/** 计划执行进度元数据（Plan-Execute 模式） */
+export interface PlanMeta {
+  planId: string | number
+  steps: string[]
+  currentStep: number
+  stepResults?: { result: string; status: 'completed' | 'failed' }[]
+  /** 计划整体状态：running / completed / failed */
+  planStatus?: 'running' | 'completed' | 'failed'
+}
+
 /** 聊天消息 */
 export interface ChatMessage {
   role: ChatRole

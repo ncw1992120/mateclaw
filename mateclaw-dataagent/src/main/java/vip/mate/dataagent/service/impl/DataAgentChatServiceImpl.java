@@ -833,6 +833,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         /** Whether markFirstTokenReceived has been called for this accumulator */
         boolean firstTokenMarked = false;
 
+        /** Plan-Execute 模式的计划进度状态（用于持久化到消息 metadata） */
+        private Map<String, Object> planState = null;
+
         /**
          * 接受流式增量数据，累积到内部缓冲区，并收集需要广播的事件。
          * <p>
@@ -872,6 +875,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                     if ("finish_reason".equals(delta.eventType())) {
                         return List.of();
                     }
+                    // 累积 Plan-Execute 模式的计划进度状态（用于持久化到 metadata）
+                    accumulatePlanEvent(delta.eventType(), delta.eventData());
                     accumulateToolEvent(delta.eventType(), delta.eventData());
                     if (conversationId != null) {
                         pending.add(new PendingBroadcast(delta.eventType(), delta.eventData()));
@@ -962,6 +967,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 if (!segments.isEmpty()) {
                     metadata.put("segments", segments);
                 }
+                if (planState != null) {
+                    metadata.put("plan", planState);
+                }
                 if (metadata.isEmpty()) {
                     return "{}";
                 }
@@ -975,6 +983,88 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         synchronized List<Map<String, Object>> getFinalizedSegments() {
             finalizeRunningSegments("thinking", "content", "tool_call");
             return new ArrayList<>(segments);
+        }
+
+        /** 累积 Plan-Execute 模式的计划进度事件，更新 planState 以便持久化到消息 metadata */
+        private void accumulatePlanEvent(String eventType, Map<String, Object> data) {
+            if (data == null) {
+                return;
+            }
+            switch (eventType) {
+                case "plan_created": {
+                    Map<String, Object> plan = new LinkedHashMap<>();
+                    plan.put("planId", data.getOrDefault("planId", ""));
+                    plan.put("steps", data.getOrDefault("steps", List.of()));
+                    plan.put("currentStep", 0);
+                    plan.put("stepResults", new ArrayList<>());
+                    plan.put("planStatus", "running");
+                    planState = plan;
+                    break;
+                }
+                case "plan_step_started": {
+                    if (planState == null) {
+                        break;
+                    }
+                    planState.put("currentStep", data.getOrDefault("index", 0));
+                    break;
+                }
+                case "plan_step_completed": {
+                    if (planState == null) {
+                        break;
+                    }
+                    int index = ((Number) data.getOrDefault("index", -1)).intValue();
+                    String result = String.valueOf(data.getOrDefault("result", ""));
+                    if (index >= 0) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> stepResults = (List<Map<String, Object>>) planState.getOrDefault("stepResults", new ArrayList<>());
+                        while (stepResults.size() <= index) {
+                            stepResults.add(new LinkedHashMap<>());
+                        }
+                        Map<String, Object> sr = new LinkedHashMap<>();
+                        sr.put("result", result);
+                        sr.put("status", "completed");
+                        stepResults.set(index, sr);
+                        planState.put("stepResults", stepResults);
+                    }
+                    break;
+                }
+                case "plan_step_failed": {
+                    if (planState == null) {
+                        break;
+                    }
+                    int index = ((Number) data.getOrDefault("index", -1)).intValue();
+                    String error = String.valueOf(data.getOrDefault("error", ""));
+                    if (index >= 0) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> stepResults = (List<Map<String, Object>>) planState.getOrDefault("stepResults", new ArrayList<>());
+                        while (stepResults.size() <= index) {
+                            stepResults.add(new LinkedHashMap<>());
+                        }
+                        Map<String, Object> sr = new LinkedHashMap<>();
+                        sr.put("result", error);
+                        sr.put("status", "failed");
+                        stepResults.set(index, sr);
+                        planState.put("stepResults", stepResults);
+                    }
+                    break;
+                }
+                case "plan_completed": {
+                    if (planState == null) {
+                        break;
+                    }
+                    planState.put("planStatus", "completed");
+                    break;
+                }
+                case "plan_failed": {
+                    if (planState == null) {
+                        break;
+                    }
+                    planState.put("planStatus", "failed");
+                    break;
+                }
+                default:
+                    break;
+            }
         }
 
         private void accumulateToolEvent(String eventType, Map<String, Object> data) {
