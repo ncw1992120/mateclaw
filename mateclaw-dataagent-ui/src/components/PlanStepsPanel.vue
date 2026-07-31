@@ -94,7 +94,7 @@ function truncateResult(text: string, max: number): string {
         {{ $t('chat.planStatusFailed') }}
       </span>
       <span class="plan-panel__arrow" :class="{ 'is-open': !collapsed }">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
       </span>
     </div>
 
@@ -150,8 +150,8 @@ function truncateResult(text: string, max: number): string {
   align-items: flex-start;
   width: fit-content;
   max-width: min(400px, 100%);
-  background: #f0f9f8;
-  border: 1px solid #cfe8e6;
+  background: #f6fcfb;
+  border: 1px solid #dff0ee;
   border-radius: 12px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -181,13 +181,13 @@ function truncateResult(text: string, max: number): string {
 }
 .plan-panel__toggle:hover {
   color: var(--theme-text-secondary);
-  background: #e4f2f1;
+  background: #ecf6f5;
 }
 
 .plan-panel__icon {
   display: flex;
   align-items: center;
-  color: #2aa8a0;
+  color: #5cbfb8;
 }
 .plan-panel.is-done .plan-panel__icon {
   color: var(--el-color-success-light-3, #95d475);
@@ -263,13 +263,13 @@ function truncateResult(text: string, max: number): string {
 .plan-step {
   transition: background 0.15s;
   cursor: pointer;
-  border-top: 1px solid #cfe8e6;
+  border-top: 1px solid #dff0ee;
 }
 .plan-step:first-child {
   border-top: none;
 }
 .plan-step:hover {
-  background: #e4f2f1;
+  background: #ecf6f5;
 }
 
 .plan-step__header {
@@ -289,7 +289,7 @@ function truncateResult(text: string, max: number): string {
   flex-shrink: 0;
 }
 .is-completed .plan-step__status { color: var(--el-color-success-light-3, #95d475); }
-.is-running .plan-step__status { color: #2aa8a0; }
+.is-running .plan-step__status { color: #5cbfb8; }
 .is-failed .plan-step__status { color: var(--el-color-warning-light-3, #eebe77); }
 
 .plan-step__dot {
@@ -297,7 +297,7 @@ function truncateResult(text: string, max: number): string {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1.5px solid #8ec5c1;
+  border: 1.5px solid #a8d8d4;
   background: transparent;
 }
 
@@ -346,9 +346,9 @@ function truncateResult(text: string, max: number): string {
 .plan-step__result pre {
   margin: 0;
   padding: 4px 6px;
-  background: #e4f2f1;
+  background: #ecf6f5;
   border-radius: 4px;
-  border: 1px solid #cfe8e6;
+  border: 1px solid #dff0ee;
   font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
   font-size: 11px;
   line-height: 1.4;
