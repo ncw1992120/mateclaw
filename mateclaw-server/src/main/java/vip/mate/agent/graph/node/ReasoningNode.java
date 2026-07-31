@@ -893,7 +893,7 @@ public class ReasoningNode implements NodeAction {
                     .currentPhase("reasoning")
                     .streamedContent(evidenceInsufficient ? (content != null ? content : "") : "")
                     .finishReason(evidenceInsufficient ? FinishReason.EVIDENCE_INSUFFICIENT : FinishReason.NORMAL)
-                    .contentStreamed(!evidenceInsufficient)
+                    .contentStreamed(!evidenceInsufficient && content != null && !content.isBlank())
                     .thinkingStreamed(!result.thinking().isEmpty())
                     .llmCallCount(nextLlmCallCount)
                     .mergeUsage(state, result)

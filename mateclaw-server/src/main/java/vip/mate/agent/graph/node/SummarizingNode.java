@@ -112,8 +112,10 @@ public class SummarizingNode implements NodeAction {
         // defaults, causing 100+ second delays for a task that needs no deep reasoning.
         Prompt summarizePrompt = buildNoThinkingPrompt(promptMessages);
 
-        // 流式调用 LLM，实时推送 content/thinking
-        NodeStreamingChatHelper.StreamResult result = streamingHelper.streamCall(
+        // 摘要文本不是最终回答，不应直接广播给用户（否则用户只看到摘要后流就结束，
+        // 看起来像是最终结果）。改用 silent 调用，仅通过 progress 事件提示用户"正在总结"。
+        streamingHelper.broadcastProgress(conversationId, "正在总结工具观察结果…");
+        NodeStreamingChatHelper.StreamResult result = streamingHelper.streamCallSilent(
                 chatModel, summarizePrompt, conversationId, "summarizing");
 
         // 错误处理：摘要失败时用原始观察的前 500 字符作为 fallback
@@ -125,11 +127,14 @@ public class SummarizingNode implements NodeAction {
                             + "\n...[摘要生成失败，仅保留原始观察的前部片段；数据不完整，请勿编造、补全或重新编号缺失内容]"
                     : observationText.toString();
             AssistantMessage fallbackMsg = new AssistantMessage("[工具观察摘要(降级)]\n" + fallback);
+            UserMessage continuePrompt = new UserMessage(
+                    "以上是之前工具调用的观察摘要（降级版本）。请根据摘要内容继续推理并完成用户任务，" +
+                    "如果信息不足可以继续调用工具，如果信息充分请直接给出最终回答。");
             return MateClawStateAccessor.output()
                     .summarizedContext(fallback)
                     .shouldSummarize(false)
                     .put(OBSERVATION_HISTORY, List.of())
-                    .messages(List.of((Message) fallbackMsg))
+                    .messages(List.of((Message) fallbackMsg, (Message) continuePrompt))
                     .contentStreamed(true)
                     .thinkingStreamed(true)
                     .mergeUsage(state, result)
@@ -169,18 +174,23 @@ public class SummarizingNode implements NodeAction {
                         "clearing observation history and injecting into messages for next reasoning iteration",
                 summarized != null ? summarized.length() : 0);
 
-        // 将摘要注入 messages，让下一轮 ReasoningNode 能看到之前的工具调用结论
+        // 将摘要注入 messages，让下一轮 ReasoningNode 能看到之前的工具调用结论。
+        // 必须追加一条 UserMessage 引导 LLM 继续推理 —— 部分模型（Claude / DeepSeek）
+        // 在收到末尾为 AssistantMessage 的消息序列时会返回空内容，导致图终止。
         String summaryContent = summarized != null ? summarized : "";
         AssistantMessage summaryMessage = new AssistantMessage(
                 "[工具观察摘要]\n" + summaryContent);
+        UserMessage continuePrompt = new UserMessage(
+                "以上是之前工具调用的观察摘要。请根据摘要内容继续推理并完成用户任务，" +
+                "如果信息不足可以继续调用工具，如果信息充分请直接给出最终回答。");
 
         return MateClawStateAccessor.output()
                 .summarizedContext(summaryContent)
                 .shouldSummarize(false)
                 // 清空观察历史（REPLACE 策略），防止下一轮立刻再次触发 summarize
                 .put(OBSERVATION_HISTORY, List.of())
-                // 注入摘要消息，让 ReasoningNode 的 LLM 继续推理
-                .messages(List.of((Message) summaryMessage))
+                // 注入摘要消息 + UserMessage 引导，让 ReasoningNode 的 LLM 继续推理
+                .messages(List.of((Message) summaryMessage, (Message) continuePrompt))
                 .currentThinking(result.thinking())
                 // 摘要的 content 已流式推送，但它不是最终回答，标记防重即可
                 .contentStreamed(true)

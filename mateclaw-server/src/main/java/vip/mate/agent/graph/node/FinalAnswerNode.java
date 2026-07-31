@@ -188,20 +188,18 @@ public class FinalAnswerNode implements NodeAction {
                     List.of("retry", "regenerate", "report")));
         }
 
-        // 不重置 CONTENT_STREAMED/THINKING_STREAMED，保留上游节点的标志
+        // 不重置 CONTENT_STREAMED/THINKING_STREAMED，保留上游节点的标志。
+        // 例外：SUMMARIZED 兜底分支的 finalAnswer 来自 summarizedContext，上游
+        // ReasoningNode 空完成时可能已将 CONTENT_STREAMED 置 true，导致
+        // StateGraphReActAgent 以 persistOnly 方式处理（不广播给前端），用户看不到回答。
+        // 此处强制为 false，确保兜底回答正常广播。
         var builder = MateClawStateAccessor.output()
                 .finalAnswer(finalAnswer)
                 .finishReason(finishReason)
-                // Emit the resolved FinishReason as a GraphEvent so it rides
-                // the PENDING_EVENTS → StreamDelta pipeline that the channel-
-                // side accumulator subscribes to. A sibling SSE broadcast (e.g.
-                // streamTracker.broadcastObject) reaches the browser but never
-                // touches the accumulator, so toMetadataJson() would not see
-                // it and MemorySummarizationGate would lose the structured
-                // signal. APPEND-strategy on PENDING_EVENTS means this
-                // composes safely with any earlier events upstream nodes
-                // attached.
                 .events(events);
+        if (finishReason == FinishReason.SUMMARIZED) {
+            builder.contentStreamed(false);
+        }
 
         if (!finalThinking.isEmpty()) {
             builder.finalThinking(finalThinking);

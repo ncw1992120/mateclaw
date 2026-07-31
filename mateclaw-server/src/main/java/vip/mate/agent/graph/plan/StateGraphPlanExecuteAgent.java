@@ -20,6 +20,7 @@ import vip.mate.planning.service.PlanningService;
 import vip.mate.workspace.conversation.ConversationService;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -147,6 +148,9 @@ public class StateGraphPlanExecuteAgent extends BaseAgent implements StructuredS
         // 去重：记录上一次已持久化的 step 结果和 thinking，防止 PlanSummaryNode 重复 emit 上一步内容
         AtomicReference<String> lastPersistedStepResult = new AtomicReference<>("");
         AtomicReference<String> lastPersistedStepThinking = new AtomicReference<>("");
+        // CAS 去重：确保 FINAL_SUMMARY 只 emit 一次到 accumulator.content，
+        // 防止 GoalEvaluation followup → re-plan → 二次 PlanSummary 导致重复回答
+        AtomicBoolean finalSummaryEmitted = new AtomicBoolean(false);
 
         return BaseAgent.routingStartupDelta(inputs).concatWith(compiledGraph.stream(inputs, config)
                 .flatMapIterable(output -> {
@@ -169,13 +173,14 @@ public class StateGraphPlanExecuteAgent extends BaseAgent implements StructuredS
                             .value(MateClawStateKeys.THINKING_STREAMED, false);
 
                     // 2a. 各步骤执行结果（StepExecutionNode 已通过 NodeStreamingChatHelper 直推 SSE，
-                    //     这里仅作为 persistOnly 送入 Accumulator，确保写入 mate_message）
+                    //     这里仅作为 segmentOnly 送入 Accumulator segments，确保刷新页面仍可看到步骤内容，
+                    //     但不追加到顶层 content —— content 只应包含最终汇总，而非中间步骤堆叠。
                     //     利用内容本身去重，避免 PlanSummaryNode 输出时重复 emit 上一步残留在 state 的值
                     output.state().<String>value(PlanStateKeys.CURRENT_STEP_RESULT)
                             .filter(s -> !s.isEmpty())
                             .filter(s -> !s.equals(lastPersistedStepResult.get()))
                             .ifPresent(stepContent -> {
-                                deltas.add(AgentService.StreamDelta.persistOnly(stepContent, null));
+                                deltas.add(AgentService.StreamDelta.segmentOnly(stepContent, null));
                                 lastPersistedStepResult.set(stepContent);
                             });
 
@@ -183,13 +188,14 @@ public class StateGraphPlanExecuteAgent extends BaseAgent implements StructuredS
                             .filter(s -> !s.isEmpty())
                             .filter(s -> !s.equals(lastPersistedStepThinking.get()))
                             .ifPresent(stepThinking -> {
-                                deltas.add(AgentService.StreamDelta.persistOnly(null, stepThinking));
+                                deltas.add(AgentService.StreamDelta.segmentOnly(null, stepThinking));
                                 lastPersistedStepThinking.set(stepThinking);
                             });
 
-                    // 2b. 最终汇总
+                    // 2b. 最终汇总 —— CAS 去重，确保只 emit 一次
                     output.state().<String>value(PlanStateKeys.FINAL_SUMMARY)
                             .filter(s -> !s.isEmpty())
+                            .filter(s -> finalSummaryEmitted.compareAndSet(false, true))
                             .ifPresent(summary -> deltas.add(contentAlreadyStreamed
                                     ? AgentService.StreamDelta.persistOnly(summary, null)
                                     : new AgentService.StreamDelta(summary, null)));
