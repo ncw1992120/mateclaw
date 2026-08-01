@@ -396,6 +396,8 @@
       >
         <span class="streaming-cursor-end" />
       </div>
+      <!-- 底部哨兵元素：IntersectionObserver 监测其可见性以判断用户是否在底部附近 -->
+      <div ref="bottomSentinelRef" class="bottom-sentinel" />
     </div>
 
       <!-- 回到底部按钮 -->
@@ -1245,6 +1247,13 @@ const composerSettingsActive = computed(() => {
 const chatAreaRef = ref<HTMLElement | null>(null)
 /** 缓存 DOM 引用用于卸载时移除滚动监听 */
 let chatAreaEl: HTMLElement | null = null
+
+/** 底部哨兵元素引用：用于 IntersectionObserver 判断用户是否在底部附近 */
+const bottomSentinelRef = ref<HTMLElement | null>(null)
+/** 底部哨兵是否可见（用户是否在底部附近） */
+const bottomVisible = ref(true)
+/** IntersectionObserver 实例 */
+let bottomObserver: IntersectionObserver | null = null
 
 /** QueryPlan 确认状态 */
 const queryPlanConfirmed = reactive<Record<string, boolean>>({})
@@ -3133,19 +3142,17 @@ function scheduleActiveQuestionUpdate(): void {
   })
 }
 
-/** 判断当前滚动位置是否在底部附近 */
+/** 判断当前滚动位置是否在底部附近（基于 IntersectionObserver 维护的 bottomVisible 状态） */
 function isNearBottom(): boolean {
-  const el = chatAreaRef.value
-  if (!el) {
-    return true
-  }
-  const threshold = 50
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+  return bottomVisible.value
 }
 
-/** 滚动到底部（仅在用户未主动上翻时执行） */
+/** 滚动到底部（仅在用户未主动上翻时执行）
+ *  使用 rAF 替代 nextTick：Vue 的 watch 在 FlushBuffer 更新 content 后触发，
+ *  DOM patch 在微任务中完成，rAF 时浏览器已完成 layout，scrollHeight 为最新值。
+ */
 function scrollToBottom(force = false): void {
-  nextTick(() => {
+  requestAnimationFrame(() => {
     if (!chatAreaRef.value) {
       return
     }
@@ -3155,9 +3162,12 @@ function scrollToBottom(force = false): void {
   })
 }
 
-/** 监听聊天区域滚动，检测用户是否主动向上翻看 */
+/** 监听聊天区域滚动，检测用户是否主动向上翻看
+ *  基于 IntersectionObserver 维护的 bottomVisible 状态判断是否在底部附近，
+ *  不依赖 scrollHeight 计算，避免流式场景下程序滚动 + content 增长导致的时序竞争。
+ */
 function handleScroll(): void {
-  if (isNearBottom()) {
+  if (bottomVisible.value) {
     userScrolledUp.value = false
   } else {
     userScrolledUp.value = true
@@ -3197,6 +3207,25 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   chatAreaEl = chatAreaRef.value
   chatAreaEl?.addEventListener('scroll', handleScroll)
+  // 初始化底部哨兵的 IntersectionObserver：监测用户是否滚动到底部附近
+  // 相比 scrollHeight 计算方案，IntersectionObserver 不受程序滚动与内容增长的时序竞争影响
+  if (bottomSentinelRef.value && chatAreaEl) {
+    bottomObserver = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry) {
+          bottomVisible.value = entry.isIntersecting
+        }
+      },
+      {
+        root: chatAreaEl,
+        // 当哨兵元素距视口底部 80px 以内时即视为"在底部附近"，给自动跟随留出缓冲
+        rootMargin: '0px 0px 80px 0px',
+        threshold: 0,
+      }
+    )
+    bottomObserver.observe(bottomSentinelRef.value)
+  }
   // 加载数据源列表（用于输入框设置面板中的数据源选择）
   loadDatasources()
   // 加载模型和 Provider 列表（用于输入框设置面板中的模型选择）
@@ -3229,6 +3258,11 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   chatAreaEl?.removeEventListener('scroll', handleScroll)
+  // 清理底部哨兵的 IntersectionObserver
+  if (bottomObserver) {
+    bottomObserver.disconnect()
+    bottomObserver = null
+  }
   if (activeQuestionRaf) {
     cancelAnimationFrame(activeQuestionRaf)
     activeQuestionRaf = 0
@@ -3477,6 +3511,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* 底部哨兵元素：1px 高度，不可见但参与布局，供 IntersectionObserver 监测 */
+.bottom-sentinel {
+  height: 1px;
+  flex-shrink: 0;
 }
 
 .empty-state {
@@ -5645,7 +5685,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-start;
   width: fit-content;
-  max-width: min(400px, 100%);
+  max-width: 100%;
   background: var(--theme-surface-hover);
   border: 1px solid var(--theme-border);
   border-radius: 12px;

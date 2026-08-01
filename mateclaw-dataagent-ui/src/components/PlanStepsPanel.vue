@@ -121,7 +121,7 @@ function truncateResult(text: string, max: number): string {
               <span v-else class="plan-step__dot"></span>
             </span>
             <span class="plan-step__index">{{ i + 1 }}.</span>
-            <span class="plan-step__text">{{ step }}</span>
+            <span class="plan-step__text" :title="step">{{ step }}</span>
             <span
               v-if="plan.stepResults?.[i]?.result"
               class="plan-step__arrow"
@@ -149,7 +149,7 @@ function truncateResult(text: string, max: number): string {
   flex-direction: column;
   align-items: flex-start;
   width: fit-content;
-  max-width: min(400px, 100%);
+  max-width: 100%;
   background: var(--theme-surface-hover);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
