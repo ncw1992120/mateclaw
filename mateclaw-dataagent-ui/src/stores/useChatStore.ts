@@ -333,11 +333,16 @@ export const useChatStore = defineStore('chat', () => {
     const oldConvId = conversationId.value
     const isSameConversation = oldConvId === convId
 
-    // 切换到不同会话时，如果当前正在流式生成，则将当前消息存入后台缓存
-    // 后续 sendMessage 的 for-await 循环检测到 conversationId 变更后会自动转为后台模式
+    // 切换到不同会话时，将当前消息存入后台缓存
+    // - 流式生成中切换：直接引用 messages.value，sendMessage 的 for-await 循环会继续更新同一数组
+    // - 对话完成后切换：浅拷贝消息数组，切回时可直接恢复，避免因后端 listMessages 延迟或异常导致空白
     // 派生 isStreaming 状态会因 messages.value 被替换为新会话消息而自动变为 false
-    if (!isSameConversation && isStreaming.value && oldConvId) {
-      backgroundConversationMessages.set(oldConvId, messages.value)
+    if (!isSameConversation && oldConvId && messages.value.length > 0) {
+      if (isStreaming.value) {
+        backgroundConversationMessages.set(oldConvId, messages.value)
+      } else {
+        backgroundConversationMessages.set(oldConvId, [...messages.value])
+      }
     }
 
     // 切换到不同会话时，保存当前会话的续连状态（如果有），以便切回后可重连
@@ -380,11 +385,19 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
       } else {
-        const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+        // 先设置 conversationId，避免 await 期间短路逻辑失效或 fetchConversations 竞态修改
         conversationId.value = convId
-        messages.value = msgList
-          .filter(m => m.role === 'user' || m.role === 'assistant')
-          .map(buildChatMessageFromVO)
+        try {
+          const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+          messages.value = msgList
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(buildChatMessageFromVO)
+        } catch (e) {
+          // listMessages 失败时恢复 conversationId，避免停留在不一致状态
+          logDebug('switchConversation: listMessages failed, restoring conversationId', e)
+          conversationId.value = oldConvId
+          throw e
+        }
       }
       if (!isSameConversation) {
         // 检查目标会话是否有保存的续连状态，如果有则恢复并尝试重连
@@ -650,7 +663,17 @@ export const useChatStore = defineStore('chat', () => {
       }
 
       let streamFinished = false
+      /** 新会话是否已触发列表刷新（避免重复调用 fetchConversations） */
+      let listRefreshedForNewConv = false
       for await (const sse of streamChat(agentId, message, convId, modelProvider, modelName, streamOptions, selectedDatasourceIds.value, contentParts)) {
+        // 收到首个事件后立即刷新会话列表，使新会话出现在侧栏中。
+        // 后端在 SSE 端点入口处 getOrCreateConversation 已创建会话记录，
+        // 此时刷新可让用户在流式生成中切换到其他会话后，仍能在侧栏看到并切回新会话。
+        if (isNewConversation && !listRefreshedForNewConv) {
+          listRefreshedForNewConv = true
+          fetchConversations()
+        }
+
         const eventConversationId = getSseConversationId(sse)
         if (eventConversationId && eventConversationId !== convId) {
           const wasActiveConversation = conversationId.value === convId
