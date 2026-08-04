@@ -2,6 +2,8 @@ package vip.mate.dataagent.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -28,6 +30,7 @@ import vip.mate.workspace.conversation.model.MessageEntity;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -71,6 +74,17 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      */
     private final ExecutorService finalizeExecutor;
 
+    /**
+     * 数据源列表本地缓存（Caffeine，30s TTL）。
+     * <p>
+     * 数据源列表变化频率低，每次对话请求都查 DB 浪费。缓存 30 秒后自动失效，
+     * 新增/修改数据源最多延迟 30s 生效，对提示词注入场景可接受。
+     */
+    private final Cache<String, List<DatasourceVO>> datasourceListCache = Caffeine.newBuilder()
+            .expireAfterWrite(30, TimeUnit.SECONDS)
+            .maximumSize(10)
+            .build();
+
     public DataAgentChatServiceImpl(MateClawRuntime runtime,
                                     ConversationService conversationService,
                                     DataAgentStreamTracker streamTracker,
@@ -89,10 +103,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.businessTermEsService = businessTermEsService;
         this.workspaceGuard = workspaceGuard;
         this.agentGuard = agentGuard;
-        // 有界线程池：核心 2 线程，最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
+        // 有界线程池：核心 4 线程（提高首次调度响应），最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
         int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
         this.sseExecutor = new ThreadPoolExecutor(
-                2, maxThreads,
+                4, maxThreads,
                 60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(256),
                 r -> {
@@ -138,15 +152,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         // 将用户原始消息写入会话级上下文，供 Tool 层检索时作为补充关键词，防止 LLM 精简丢失关键信息
         scopeContext.putOriginalMessage(conversationId, message);
 
-        // 注入数据源白名单提示词，并在前端展示原始 message（持久化时仍存原文）
-        String llmMessage = decorateMessageWithScope(message, longIds);
-        // 将附件信息注入到发送给 LLM 的 prompt 中
-        if (contentParts != null && !contentParts.isEmpty()) {
-            log.info("[DataAgent] contentParts received: size={}, types={}", contentParts.size(),
-                    contentParts.stream().map(p -> p != null ? p.getType() : "null").collect(Collectors.joining(",")));
-        }
-        llmMessage = buildPromptText(llmMessage, contentParts);
-        final String finalLlmMessage = llmMessage;
+        // 注入数据源白名单提示词 + 业务术语预查 + 附件信息，移到 sseExecutor 内部执行，
+        // 避免在 HTTP 线程中阻塞（ES 检索 + embedding 向量生成延迟 50-200ms）
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -170,16 +177,42 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             StreamAccumulator accumulator = new StreamAccumulator();
             AtomicBoolean finalized = new AtomicBoolean(false);
             try {
+                // 1. 同步：创建/获取会话（LLM 调用需要 conversationId）
                 conversationService.getOrCreateConversation(conversationId, agentId, username, workspaceId);
-                // Pin 模型到 conversation 级别，与 ChatController 保持一致。
-                // AgentService.getOrBuildAgentForConversation 从 conversation 表读取 pinned model，
-                // 按 (agentId, modelKey) 缓存不同模型变体，无需 updateAgent + refreshAgent。
+                // 2. 同步：Pin 模型到 conversation 级别（影响 Agent 模型选择，必须在 LLM 调用前完成）
                 if (modelProvider != null && !modelProvider.isBlank()
                         && modelName != null && !modelName.isBlank()) {
                     conversationService.updateConversationModel(conversationId, modelProvider, modelName);
                 }
-                conversationService.saveMessage(conversationId, "user", message, contentParts);
-                conversationService.updateStreamStatus(conversationId, "running");
+
+                // 3. 并行执行：保存用户消息 + 更新流状态 ‖ 构建提示词（含数据源注入 + 业务术语预查 + 附件处理）
+                //    两者互不依赖，并行执行可节省 50-200ms
+                final String finalMessage = message;
+                final List<MessageContentPart> finalContentParts = contentParts;
+                final UserContext dbWriteUserContext = UserContextHolder.get();
+                CompletableFuture<Void> dbWriteFuture = CompletableFuture.runAsync(() -> {
+                    try {
+                        // 恢复用户上下文到 DB 写入线程
+                        if (dbWriteUserContext != null) {
+                            UserContextHolder.set(dbWriteUserContext);
+                        }
+                        conversationService.saveMessage(conversationId, "user", finalMessage, finalContentParts);
+                        conversationService.updateStreamStatus(conversationId, "running");
+                    } catch (Exception e) {
+                        log.warn("[DataAgent] Async save user message failed for {}: {}", conversationId, e.getMessage());
+                    } finally {
+                        UserContextHolder.clear();
+                    }
+                }, sseExecutor);
+
+                // 构建提示词（含数据源白名单注入 + 业务术语 ES 预查 + 附件处理）
+                String llmMessage = decorateMessageWithScope(message, longIds);
+                if (contentParts != null && !contentParts.isEmpty()) {
+                    log.info("[DataAgent] contentParts received: size={}, types={}", contentParts.size(),
+                            contentParts.stream().map(p -> p != null ? p.getType() : "null").collect(Collectors.joining(",")));
+                }
+                llmMessage = buildPromptText(llmMessage, contentParts);
+                final String finalLlmMessage = llmMessage;
 
                 // Broadcast initial events through tracker (buffered + reach all subscribers)
                 broadcastEvent(conversationId, "session", Map.of("conversationId", conversationId, "agentId", agentId));
@@ -188,6 +221,14 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         "conversationId", conversationId,
                         "timestamp", System.currentTimeMillis()
                 ));
+
+                // 等待 DB 写入完成（确保用户消息已持久化后再开始 LLM 调用，
+                // 避免流中断时用户消息丢失）
+                try {
+                    dbWriteFuture.get(5, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    log.warn("[DataAgent] Timeout waiting for DB write, proceeding with LLM call: {}", e.getMessage());
+                }
 
                 Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, finalLlmMessage, conversationId);
 
@@ -290,6 +331,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     @Override
     public SseEmitter reconnect(String conversationId, long lastEventId) {
+        log.info("[DataAgent] Reconnect request: conversationId={}, lastEventId={}, running={}, done={}",
+                conversationId, lastEventId, streamTracker.isRunning(conversationId), !streamTracker.isRunning(conversationId));
         SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -298,6 +341,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         boolean attached = streamTracker.attach(conversationId, emitter, lastEventId);
         if (!attached) {
             // Stream not found — either completed-and-cleaned or never existed
+            log.warn("[DataAgent] Reconnect: attach failed (no RunState) for {}, sending stream_not_local", conversationId);
             try {
                 broadcastEvent(conversationId, "done", Map.of(
                         "conversationId", conversationId,
@@ -449,7 +493,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private String decorateMessageWithScope(String originalMessage, List<Long> datasourceIds) {
         List<DatasourceVO> allDatasources;
         try {
-            allDatasources = datasourceManageService.listDatasources();
+            // 使用 Caffeine 本地缓存，避免每次请求都查 DB；30s TTL，数据源变更最多延迟 30s 生效
+            allDatasources = datasourceListCache.get("all", key -> datasourceManageService.listDatasources());
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to load datasources for scope hint: {}", e.getMessage());
             allDatasources = List.of();
@@ -787,6 +832,17 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     }
 
     private void registerEmitterCallbacks(SseEmitter emitter, String conversationId, AtomicBoolean emitterDone) {
+        // 关键：onError / onTimeout 只 detach，不调用 completeEmitterQuietly，
+        // 因此不置位 emitterDone。
+        // 原因：emitterDone 被 doOnNext 用作短路条件（见 streamChat 的
+        // `if (emitterDone.get()) return`），一旦在客户端断连（刷新页面）时置位，
+        // 后续的 content_delta 将不再进入 accumulator.accept，导致流仍在后端继续
+        // 生成、但累加器冻结——最终 handleStreamFinalize 持久化的 assistant 消息
+        // 只有断连前的不完整内容，刷新后用户看到"剩余内容没回答"。
+        // detach 已把该 emitter 从订阅者列表移除，broadcastEvent 不会再向它推送
+        // （死连接由 sendToSubscribers 的 IOException 兜底移除），事件继续写入
+        // buffer 供重连回放，accumulator 也继续累积供最终完整持久化。
+        // 这与 mateclaw-server ChatController.registerEmitterCallbacks 的处理一致。
         emitter.onCompletion(() -> {
             log.debug("[DataAgent] SSE emitter completed: conversationId={}", conversationId);
             streamTracker.detach(conversationId, emitter);
@@ -794,7 +850,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         emitter.onTimeout(() -> {
             log.debug("[DataAgent] SSE emitter timeout: conversationId={}", conversationId);
             streamTracker.detach(conversationId, emitter);
-            completeEmitterQuietly(emitter, emitterDone);
+            // 超时后显式 complete，防止 servlet 容器再抛 AsyncRequestTimeoutException；
+            // 不走 completeEmitterQuietly 以避免置位 emitterDone（见上方注释）。
+            try {
+                emitter.complete();
+            } catch (Exception e) {
+                log.debug("[DataAgent] Emitter complete after timeout failed: {}", e.getMessage());
+            }
         });
         emitter.onError(e -> {
             if (isClientDisconnect(e)) {
@@ -802,8 +864,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             } else {
                 log.warn("[DataAgent] SSE emitter error: conversationId={}, cause={}", conversationId, e.getMessage());
             }
+            // 仅 detach，不 completeEmitterQuietly——保持 emitterDone=false，
+            // 使 doOnNext 继续向 accumulator 累积后续内容。
             streamTracker.detach(conversationId, emitter);
-            completeEmitterQuietly(emitter, emitterDone);
         });
     }
 

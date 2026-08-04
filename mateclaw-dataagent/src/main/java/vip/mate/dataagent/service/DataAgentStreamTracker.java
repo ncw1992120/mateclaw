@@ -176,15 +176,13 @@ public class DataAgentStreamTracker {
                         conversationId, skipped, replayed);
             }
             state.subscribers.add(emitter);
+            log.info("[DataAgentStreamTracker] Client attached for conversation={}, buffer size={}, replayed={}, done={}",
+                    conversationId, state.buffer.size(), replayed, state.done);
             if (state.done) {
-                log.info("[DataAgentStreamTracker] Replayed {} events; emitter stays subscribed for late events: {}",
-                        state.buffer.size(), conversationId);
                 startHeartbeat(conversationId);
                 return true;
             }
         }
-        log.info("[DataAgentStreamTracker] Client attached for conversation={}, buffer size={}",
-                conversationId, state.buffer.size());
         return true;
     }
 

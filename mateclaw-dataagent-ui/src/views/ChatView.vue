@@ -3245,8 +3245,16 @@ onMounted(() => {
   //   2) 整体替换 messages 数组导致 reconnect 中 FlushBuffer 持有的 msgIndex 错位；
   //   3) 抢占浏览器并发额度延迟 SSE 重连。
   // 此场景下跳过 force 拉取，让 reconnect 流式完成；仅当无续连状态时才 force 重拉。
+  // 切回对话菜单时，强制重拉当前会话历史消息以触发 ECharts 重新挂载。
+  // 但页面刷新场景下，ChatView（子组件）onMounted 早于 MainLayout（父组件），
+  // 此时 fetchConversations 尚未完成、conversations 为空，若此处调 switchConversation
+  // 会走 listMessages-only 路径——流生成中 assistant 未落库时只拿到 user 消息，显示为空，
+  // 且与 MainLayout 的 tryResumeStream→reconnect 并发改 messages 产生竞态。
+  // 因此 onMounted 只负责 ECharts 扫描；历史加载/续连统一交由 MainLayout.onMounted
+  // 的 tryResumeStream（覆盖 persisted=null+running）及 switchConversation fallback 处理。
   const hasPendingReconnect = chatStore.hasPendingReconnect()
-  if (chatStore.conversationId && !chatStore.isStreaming && !hasPendingReconnect) {
+  // 仅当 conversations 已加载（非页面刷新首次挂载，而是菜单切回）且无续连时才重拉历史
+  if (chatStore.conversations.length > 0 && chatStore.conversationId && !chatStore.isStreaming && !hasPendingReconnect) {
     chatStore.switchConversation(chatStore.conversationId, true).finally(() => {
       nextTick(scanAndMountEChartsBlocks)
     })

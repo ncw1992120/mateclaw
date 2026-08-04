@@ -65,9 +65,35 @@ public class AloudataSearchResult {
         private String matchSource;
 
         /**
-         * 构建 Prompt 信息
+         * 构建 Prompt 信息（精简模式）。
+         * <p>
+         * 只保留构造 metrics_query 必需的核心字段：metricName、displayName、type、availableDimensions。
+         * 精简输出大幅减少体积，避免检索结果超过 spill 阈值后 LLM 只看到 800 字符 preview
+         * 而遗漏关键信息（消歧提示、后排指标、族级口径等）。
+         * <p>
+         * 预计单条约 80-150 字符，10 条指标 + 10 条维度 ≈ 2000-3000 字符，远低于 8000 字符 spill 阈值。
          */
         public String getPromptInfo() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(metricName);
+            if (metricDisplayName != null && !metricDisplayName.isBlank()) {
+                sb.append("(").append(metricDisplayName).append(")");
+            }
+            if (type != null && !type.isBlank()) {
+                sb.append(" [").append(type).append("]");
+            }
+            if (availableDimensions != null && !availableDimensions.isEmpty()) {
+                sb.append(", 可用维度: ").append(String.join(", ", availableDimensions));
+            }
+            return sb.toString();
+        }
+
+        /**
+         * 构建详情信息（完整模式）。
+         * <p>
+         * 保留所有字段，用于需要完整信息的场景（如指标详情查看、调试等）。
+         */
+        public String getDetailInfo() {
             StringBuilder sb = new StringBuilder();
             sb.append(metricName);
             if (metricDisplayName != null && !metricDisplayName.isBlank()) {
@@ -129,9 +155,33 @@ public class AloudataSearchResult {
         private String matchSource;
 
         /**
-         * 构建 Prompt 信息
+         * 构建 Prompt 信息（精简模式）。
+         * <p>
+         * 只保留构造 metrics_query 必需的核心字段：dimName、displayName、dataType、timeDimension。
+         * 精简输出大幅减少体积，避免检索结果超过 spill 阈值后 LLM 只看到 800 字符 preview
+         * 而遗漏关键信息。
          */
         public String getPromptInfo() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(dimName);
+            if (dimDisplayName != null && !dimDisplayName.isBlank()) {
+                sb.append("(").append(dimDisplayName).append(")");
+            }
+            if (originDataType != null && !originDataType.isBlank()) {
+                sb.append(" [").append(originDataType).append("]");
+            }
+            if (timeDimension) {
+                sb.append(", 时间维度");
+            }
+            return sb.toString();
+        }
+
+        /**
+         * 构建详情信息（完整模式）。
+         * <p>
+         * 保留所有字段，用于需要完整信息的场景。
+         */
+        public String getDetailInfo() {
             StringBuilder sb = new StringBuilder();
             sb.append(dimName);
             if (dimDisplayName != null && !dimDisplayName.isBlank()) {

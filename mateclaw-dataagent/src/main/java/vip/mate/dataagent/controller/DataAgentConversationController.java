@@ -87,4 +87,17 @@ public class DataAgentConversationController {
     public R<ContextUsageVO> getContextUsage(@PathVariable String conversationId) {
         return R.ok(conversationService.getContextUsage(conversationId));
     }
+
+    /**
+     * 获取会话实时流状态
+     * <p>
+     * 页面刷新后前端据此判断是否需要 reconnect 接入仍在运行的流，
+     * 兜底列表快照过期（fetchConversations 与实际流状态不同步）的竞态。
+     */
+    @GetMapping("/{conversationId}/status")
+    @Operation(summary = "获取会话流状态", description = "返回指定会话的实时流状态：running/idle")
+    public R<Map<String, String>> getStatus(@PathVariable String conversationId) {
+        String streamStatus = conversationService.getStreamStatus(conversationId);
+        return R.ok(Map.of("streamStatus", streamStatus != null ? streamStatus : "idle"));
+    }
 }

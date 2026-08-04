@@ -5,7 +5,10 @@ const CHAT_URL = '/dataagent/api/v1/chat'
 const STREAM_URL = '/dataagent/api/v1/chat/stream'
 const STOP_URL = '/dataagent/api/v1/chat/stream'
 
-const STREAM_TIMEOUT_MS = 120_000
+// 5min：后端 DataAgentStreamTracker 心跳最长 10s（streaming 阶段），
+// 300s 可容忍连续 30 个心跳丢失，排除网络抖动 / 代理缓冲 SSE 导致的误断。
+// 真断连由 reconnectPoll 退避轮询兜底接回。
+const STREAM_TIMEOUT_MS = 300_000
 
 /**
  * 处理 SSE 请求的 401 响应：清除登录状态并跳转登录页

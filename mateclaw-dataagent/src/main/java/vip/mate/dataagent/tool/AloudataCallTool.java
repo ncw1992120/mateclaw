@@ -178,7 +178,7 @@ public class AloudataCallTool {
                     },
                     "keyword": {
                       "type": "string",
-                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等"
+                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等。重要：请保留用户原话中的所有限定词和括号内容（如「整体」「个人」「汇总」等），不要改写或精简同义词。例如用户说「交易市占率（整体）」，keyword 应传「交易市占率（整体）」而非「交易市占率」。"
                     },
                     "topK": {
                       "type": "integer",
@@ -771,6 +771,11 @@ public class AloudataCallTool {
         int dimensionCount = mergedDimensions.size();
         sb.append("**匹配结果**: ").append(metricCount).append(" 个指标 + ").append(dimensionCount).append(" 个维度\n\n");
 
+        /* 确定性族级口径提示 + 消歧判断：前置到指标/维度列表之前，确保即使结果超长触发 spill，
+         * LLM 也能在 preview 中看到消歧和族级口径信息（这些是检索结果中最重要的决策依据）。 */
+        appendFamilyHint(sb, family, keyword);
+        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
+
         /* 展示指标命中 */
         if (!mergedMetrics.isEmpty()) {
             sb.append("## 指标\n\n");
@@ -799,12 +804,6 @@ public class AloudataCallTool {
             }
             sb.append("\n");
         }
-
-        /* 确定性族级口径提示：优先于通用消歧，提供不受排序 / TopK 影响的权威口径信息 */
-        appendFamilyHint(sb, family, keyword);
-
-        /* 消歧判断：指标多义或维度多义时，附加消歧指令；族级已权威处理指标口径时抑制指标消歧，避免重复 */
-        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
 
         /* P3: 检索失败自动降级 */
         if (metricCount == 0 && dimensionCount == 0) {
@@ -1327,26 +1326,69 @@ public class AloudataCallTool {
     /**
      * 提取用户原话中未被 LLM keyword 覆盖的差集片段。
      * <p>
-     * 策略：仅在 keyword 是原话子串时生效，从原话中移除 keyword 部分，剩余即为差集。
+     * 策略一（子串匹配）：仅在 keyword 是原话子串时生效，从原话中移除 keyword 部分，剩余即为差集。
      * 差集保留了"整体""汇总"等 LLM 丢弃的限定词，同时避免注入整句导致多指标提问串味。
+     * <p>
+     * 策略二（分词级匹配）：当子串匹配失败时（如 LLM 改写了同义词"市场占有率"→"市占率"），
+     * 降级为中文字符集合的子集判断：如果 keyword 的中文字符集合是原话中文字符集合的子集
+     * （覆盖率 > 60%），则认为 keyword 是原话的改写，提取差集中文字符重组为差集片段。
      * <p>
      * 示例：
      * <ul>
-     *   <li>原话="交易市占率（整体）", keyword="交易市占率" → 差集="（整体）" → IK 分词后 "整体" 参与 should 加分</li>
-     *   <li>原话="对比交易市占率的整体和个人", keyword="交易市占率" → 差集="对比…的整体和个人" → 整体/个人均加分，并列未打破（预期行为，消歧由后续消歧层处理）</li>
-     *   <li>原话="帮我看下保费收入", keyword="场内交易客户数" → keyword 非子串，不注入（避免跨检索串味）</li>
+     *   <li>原话="交易市占率（整体）", keyword="交易市占率" → 子串匹配 → 差集="（整体）"</li>
+     *   <li>原话="市场占有率（整体）", keyword="市占率" → 子串不匹配 → 分词级：keyword 字符{市,占,率}⊂{市,场,占,有,率,整,体} 覆盖率 3/7=43%<60% → 不触发（避免误匹配）</li>
+     *   <li>原话="保费收入（汇总）", keyword="保费收入" → 子串匹配 → 差集="（汇总）"</li>
+     *   <li>原话="帮我看下保费收入", keyword="场内交易客户数" → 子串不匹配 → 分词级：keyword 字符{场,内,交,易,客,户,数} 与原话{帮,我,看,下,保,费,收,入} 无交集 → 不触发</li>
      * </ul>
      *
      * @param originalMessage 用户原始消息
      * @param keyword         LLM 传入的检索关键词
-     * @return 差集片段；keyword 非原话子串时返回 null
+     * @return 差集片段；无法提取时返回 null
      */
     private static String extractKeywordComplement(String originalMessage, String keyword) {
-        if (!originalMessage.contains(keyword)) {
+        // 策略一：子串匹配（原逻辑）
+        if (originalMessage.contains(keyword)) {
+            String complement = originalMessage.replace(keyword, "").trim();
+            return complement.isEmpty() ? null : complement;
+        }
+
+        // 策略二：分词级匹配（中文字符集合子集判断）
+        Set<String> origChars = extractChineseChars(originalMessage);
+        Set<String> kwChars = extractChineseChars(keyword);
+
+        if (origChars.isEmpty() || kwChars.isEmpty()) {
             return null;
         }
-        String complement = originalMessage.replace(keyword, "").trim();
-        return complement.isEmpty() ? null : complement;
+
+        // 计算 keyword 中文字符在原话中的覆盖率
+        Set<String> kwCharsCopy = new HashSet<>(kwChars);
+        kwCharsCopy.retainAll(origChars);
+        double coverage = (double) kwCharsCopy.size() / kwChars.size();
+
+        // 覆盖率阈值：keyword 的中文字符至少 60% 出现在原话中，才认为是改写而非完全不相关
+        if (coverage < 0.6) {
+            return null;
+        }
+
+        // 提取差集：原话中不在 keyword 字符集合中的中文字符
+        Set<String> diffChars = new HashSet<>(origChars);
+        diffChars.removeAll(kwChars);
+
+        if (diffChars.isEmpty()) {
+            return null;
+        }
+
+        // 从原话中按顺序提取差集字符，保持原始语序
+        StringBuilder diff = new StringBuilder();
+        for (char c : originalMessage.toCharArray()) {
+            String ch = String.valueOf(c);
+            if (diffChars.contains(ch)) {
+                diff.append(c);
+            }
+        }
+
+        String result = diff.toString().trim();
+        return result.isEmpty() ? null : result;
     }
 
     /**

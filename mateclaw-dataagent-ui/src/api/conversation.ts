@@ -33,3 +33,8 @@ export function setPinned(conversationId: string, pinned: boolean) {
 export function getContextUsage(conversationId: string) {
   return api.get<ContextUsage>(`${BASE_URL}/${conversationId}/context-usage`)
 }
+
+/** 获取会话实时流状态（兜底探测，对齐 mateclaw-ui 两层判断） */
+export function getStatus(conversationId: string) {
+  return api.get<{ streamStatus: string }>(`${BASE_URL}/${conversationId}/status`)
+}

@@ -77,4 +77,9 @@ public class ConversationRuntimeImpl implements ConversationRuntime {
     public ContextUsageVO getContextUsage(String conversationId) {
         return contextUsageService.getContextUsage(conversationId);
     }
+
+    @Override
+    public String getStreamStatus(String conversationId) {
+        return conversationService.getStreamStatus(conversationId);
+    }
 }

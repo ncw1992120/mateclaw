@@ -89,12 +89,11 @@ export const useChatStore = defineStore('chat', () => {
   const contextUsagePanelOpen = ref(false)
 
   /**
-   * 调试日志辅助函数，仅在开发环境输出。
+   * 调试日志辅助函数（已禁用，不再输出）。
+   * 保留空函数体避免散布各处的调用点报错；如需重新启用调试，恢复 console.log 即可。
    */
-  function logDebug(message: string, ...args: unknown[]): void {
-    if (import.meta.env.DEV) {
-      console.debug(`[chatStore] ${message}`, ...args)
-    }
+  function logDebug(_message: string, ..._args: unknown[]): void {
+    // no-op
   }
 
   /**
@@ -138,6 +137,105 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 用户是否主动点击了停止按钮（取消后禁止自动重连） */
   let userStopped = false
+
+  /**
+   * 断连后自动重连的退避轮询状态机。
+   * <p>
+   * SSE 连接断开但后端可能仍在运行时启动：定时探 /status，
+   * running → reconnect 接回流；idle → listMessages 对齐终态；
+   * 探测失败 → 退避重试。带重试次数上限，达上限停止并提示用户手动重试，
+   * 不无限刷后端。
+   */
+  let reconnectPollTimer: ReturnType<typeof setTimeout> | null = null
+  let reconnectPollAttempt = 0
+  const RECONNECT_POLL_MAX = 15
+  const RECONNECT_POLL_BASE_MS = 5000
+  const RECONNECT_POLL_MAX_MS = 30000
+
+  /** 第 attempt 次轮询的退避间隔（5→30s，×1.5 递增，封顶 30s） */
+  function reconnectPollDelay(attempt: number): number {
+    return Math.min(RECONNECT_POLL_BASE_MS * Math.pow(1.5, attempt), RECONNECT_POLL_MAX_MS)
+  }
+
+  /** 拉取后端历史消息对齐终态（轮询发现流已结束时调用） */
+  async function refreshMessagesFromBackend(convId: string): Promise<void> {
+    try {
+      const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+      if (conversationId.value !== convId) return
+      const parsed = msgList
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(buildChatMessageFromVO)
+      if (parsed.length > 0) {
+        messages.value = parsed
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'assistant' && last.content) {
+          last.status = 'completed'
+        }
+      }
+      markConversationStreaming(convId, false)
+      clearReconnectState()
+    } catch (e) {
+      logDebug('refreshMessagesFromBackend failed', e)
+    }
+  }
+
+  /** 启动断连轮询：定时探 /status，running 就 reconnect 接回 */
+  function startReconnectPoll(convId: string): void {
+    stopReconnectPoll()
+    reconnectPollAttempt = 0
+    scheduleReconnectPoll(convId)
+  }
+
+  function scheduleReconnectPoll(convId: string): void {
+    if (reconnectPollAttempt >= RECONNECT_POLL_MAX) {
+      // 达上限：停止轮询，标记失败提示用户手动重试
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg?.role === 'assistant' && lastMsg.status === 'streaming') {
+        lastMsg.status = 'failed'
+        if (!lastMsg.content) lastMsg.content = '连接已断开，请刷新页面或重新发送消息。'
+      }
+      markConversationStreaming(convId, false)
+      logDebug('reconnectPoll: max attempts reached, giving up. convId=', convId)
+      return
+    }
+    const delay = reconnectPollDelay(reconnectPollAttempt)
+    logDebug('reconnectPoll: scheduling attempt', reconnectPollAttempt, 'in', delay, 'ms, convId=', convId)
+    reconnectPollTimer = setTimeout(() => void pollReconnectOnce(convId), delay)
+  }
+
+  async function pollReconnectOnce(convId: string): Promise<void> {
+    // 会话已切走 / 已在生成 / 页面隐藏 → 停止轮询
+    if (conversationId.value !== convId || isStreaming.value ||
+        (typeof document !== 'undefined' && document.hidden)) {
+      stopReconnectPoll()
+      return
+    }
+    try {
+      const res = await conversationApi.getStatus(convId) as { streamStatus?: string } | undefined
+      if (conversationId.value !== convId) return  // 探测期间切走了
+      if (res?.streamStatus === 'running') {
+        // 后端仍在跑 → 接回流
+        stopReconnectPoll()
+        await reconnect()
+      } else {
+        // 后端已结束 → 停止轮询，拉一次 listMessages 对齐终态
+        stopReconnectPoll()
+        await refreshMessagesFromBackend(convId)
+      }
+    } catch {
+      // 探测失败 → 退避后重试
+      reconnectPollAttempt++
+      scheduleReconnectPoll(convId)
+    }
+  }
+
+  function stopReconnectPoll(): void {
+    if (reconnectPollTimer) {
+      clearTimeout(reconnectPollTimer)
+      reconnectPollTimer = null
+    }
+    reconnectPollAttempt = 0
+  }
 
   /**
    * 当前 SSE 流所属的会话 ID。
@@ -276,6 +374,7 @@ export const useChatStore = defineStore('chat', () => {
       if (pendingReconnect?.conversationId) {
         const pendingConversation = list.find(c => c.conversationId === pendingReconnect.conversationId)
         if (pendingConversation?.streamStatus === 'running') {
+          // 后端仍在运行，保留 reconnect 状态等 tryResumeStream 接管
           return
         }
         clearReconnectState()
@@ -315,8 +414,9 @@ export const useChatStore = defineStore('chat', () => {
     // 此时不能跳过，否则会出现"第一条历史点不进去"的 bug
     if (!force && conversationId.value === convId && messages.value.length > 0) return
 
-    // 若目标会话既不是已有会话，也没有后台缓存（例如刷新前 generate 的临时 UUID），
-    // 则不应请求后端 messages，直接清空前台消息即可。
+    // 若目标会话既不是已有会话，也没有后台缓存，仍尝试 listMessages ——
+    // 会话可能已在后端创建但尚未反映到本地列表（fetchConversations 竞态）。
+    // 只有 listMessages 也失败/返回空时，才清空前台消息。
     const existsInList = conversations.value.some(c => c.conversationId === convId)
     const hasCached = backgroundConversationMessages.has(convId)
     if (!existsInList && !hasCached) {
@@ -325,6 +425,22 @@ export const useChatStore = defineStore('chat', () => {
         backgroundConversationMessages.delete(oldConvId)
       }
       conversationId.value = convId
+      // Try listMessages anyway — the conversation may exist server-side
+      // but not yet be in the local conversations list (race condition).
+      try {
+        const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+        const parsed = msgList
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(buildChatMessageFromVO)
+        if (parsed.length > 0) {
+          messages.value = parsed
+          clearReconnectState()
+          fetchContextUsage()
+          return
+        }
+      } catch (e) {
+        logDebug('switchConversation: listMessages failed for conv not in list', e)
+      }
       messages.value = []
       clearReconnectState()
       return
@@ -469,6 +585,8 @@ export const useChatStore = defineStore('chat', () => {
     const stoppedConvId = conversationId.value
     if (!isStreaming.value || !stoppedConvId) return
     userStopped = true
+    // 用户主动停止：禁止断连轮询重连
+    stopReconnectPoll()
 
     // 立即更新消息状态，给用户即时反馈
     const lastMsg = messages.value[messages.value.length - 1]
@@ -512,6 +630,8 @@ export const useChatStore = defineStore('chat', () => {
    */
   function disconnectStream(): void {
     disconnectedBySwitch = true
+    // 切走会话：停止对该会话的断连轮询（不轮询非当前会话）
+    stopReconnectPoll()
     // 派生 isStreaming 会因 messages.value 被替换而自动变 false
     const convId = conversationId.value
     if (convId) {
@@ -699,7 +819,9 @@ export const useChatStore = defineStore('chat', () => {
         if (isBackground) {
           if (userStopped) break
         } else {
-          if (!isStreaming.value) break
+          if (!isStreaming.value) {
+            break
+          }
         }
 
         handleSseEvent(sse, flushBuf, targetMsgs, convId, () => { streamFinished = true })
@@ -717,23 +839,17 @@ export const useChatStore = defineStore('chat', () => {
       }
     } catch (error) {
       flushBuf.flush()
-      // 流式连接中途断开：若后端仍有活流（已有 lastEventId），自动续连，
-      // 不直接告知用户失败。常见场景：网络抖动 / SSE 临时断流。
-      // 但用户主动取消、后台模式时跳过重连。
-      if (lastEventId.value && convId && !userStopped && !isBackground) {
-        // 派生 isStreaming 此时仍为 true（消息 status='streaming'），
-        // reconnect 内部检查 isStreaming 会直接 return。
-        // 先将消息状态设为非 streaming，让 reconnect 能正常执行。
+      // 流式连接中途断开：若非用户主动取消、非后台模式，启动退避轮询重连。
+      // 不立即 reconnect——复用同一 STREAM_TIMEOUT_MS 容易再断，改为退避轮询更稳。
+      // 常见场景：网络抖动 / SSE 临时断流 / 长任务心跳未到达前端。
+      if (convId && !userStopped && !isBackground) {
+        // pollReconnectOnce 内 isStreaming 检查会拦截，先把占位消息设为非 streaming
         const errLastMsg = targetMsgs[targetMsgs.length - 1]
-        if (errLastMsg?.role === 'assistant') {
+        if (errLastMsg?.role === 'assistant' && errLastMsg.status === 'streaming') {
           errLastMsg.status = 'completed'
         }
-        try {
-          await reconnect()
-          return
-        } catch (reconnectErr) {
-          console.warn('[ChatStore] Auto-reconnect after stream error failed:', reconnectErr)
-        }
+        startReconnectPoll(convId)
+        return
       }
       const lastMsg = targetMsgs[targetMsgs.length - 1]
       if (lastMsg && lastMsg.role === 'assistant') {
@@ -761,10 +877,19 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function reconnect(): Promise<void> {
+    logDebug('reconnect: entry, conversationId=', conversationId.value, 'isStreaming=', isStreaming.value)
     if (!conversationId.value) return
     if (isStreaming.value) return
 
     const convId = conversationId.value
+
+    // 会话不在列表中说明已被删除或 ID 无效，只清理续连状态，不修改用户选中的会话
+    if (!conversations.value.some(c => c.conversationId === convId)) {
+      logDebug('reconnect: conversation not in list, clearing state')
+      clearReconnectState()
+      return
+    }
+
     // 续连时始终从头（id=0）回放整个 buffer，并清空去重集合。
     // 原因：reconnect 会用持久化历史重建 messages（见下方 listMessages），
     // 而流式生成中的 assistant 增量在终态前不会落库，历史里没有这些事件；
@@ -774,19 +899,6 @@ export const useChatStore = defineStore('chat', () => {
     const savedLastEventId = '0'
     seenEventIds.value.clear()
 
-    // 会话不在列表中说明已被删除或 ID 无效，只清理续连状态，不修改用户选中的会话
-    if (!conversations.value.some(c => c.conversationId === convId)) {
-      clearReconnectState()
-      return
-    }
-
-    // 后端已标记空闲时，本地残留的 lastEventId 不应再触发续连。
-    if (!isConversationRunningOnServer(convId)) {
-      clearReconnectState()
-      markConversationStreaming(convId, false)
-      return
-    }
-
     // 派生 isStreaming 通过下方 assistant 占位消息的 status='streaming' 自动为 true
     markConversationStreaming(convId, true)
     streamConversationId = convId
@@ -794,11 +906,15 @@ export const useChatStore = defineStore('chat', () => {
     // 续连前先拉取历史消息，确保 UI 上能看到完整对话上下文。
     // 后端在流终态前不会持久化 assistant 消息，因此历史里的最后一条
     // 通常是 user；下面会补一条 assistant 占位用于承接回放的 content_delta。
+    let hasPersistedAssistant = false
     try {
       const msgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
       messages.value = msgList
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(buildChatMessageFromVO)
+      // 检查历史末尾是否已有 assistant 消息（说明后端已持久化）
+      const lastMsg = messages.value[messages.value.length - 1]
+      hasPersistedAssistant = lastMsg?.role === 'assistant' && !!lastMsg.content
     } catch (e: unknown) {
       console.warn('[ChatStore] Reconnect: failed to load history messages', e)
       // 会话不存在（404）或无权访问（403）：清理脏数据，不重连
@@ -809,6 +925,27 @@ export const useChatStore = defineStore('chat', () => {
         return
       }
     }
+
+    // 关键判断：如果 listMessages 已返回有内容的 assistant 消息，
+    // 且后端已不再运行（streamStatus !== 'running'），说明对话已完成，
+    // 不需要走 SSE buffer 回放——直接渲染 listMessages 的结果即可。
+    // 必须同时满足两个条件：有持久化内容 + 后端已空闲，避免对话进行中误判。
+    if (hasPersistedAssistant && !isConversationRunningOnServer(convId)) {
+      // 已有持久化的 assistant 消息，直接标记为 completed
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.status = 'completed'
+      }
+      markConversationStreaming(convId, false)
+      clearReconnectState()
+      logDebug('Reconnect: SHORT-CIRCUIT (assistant persisted + stream idle), skipping SSE replay')
+      return
+    }
+
+    // ---- 以下为 SSE 回放逻辑 ----
+    // 两种情况会走到这里：
+    // A. listMessages 没有 assistant（对话进行中，未落库）→ 补空占位
+    // B. listMessages 有 assistant 且对话仍在运行 → 清空 content 让 SSE 重建，避免重复追加
 
     // 若历史末尾不是 assistant（说明对话仍在进行中、回复尚未落库），补一条空占位，
     // 让回放的 content_delta 有正确目标可写入；否则 FlushBuffer
@@ -823,7 +960,19 @@ export const useChatStore = defineStore('chat', () => {
         status: 'streaming',
       })
     } else {
-      // 已有 assistant 消息，设为 streaming 以激活派生 isStreaming
+      // 已有 assistant 消息：清空 content，让 SSE 回放从头构建。
+      // 不清空会导致 content_delta 追加到已有内容上，造成"双重内容"。
+      // SSE 回放完成后，done 事件的 authoritativeContent 会覆盖为正确内容。
+      // 同时清空 segments，让 SSE 事件重建执行过程。
+      if (hasPersistedAssistant) {
+        last.content = ''
+        if (last.metadata) {
+          const meta = last.metadata as Record<string, unknown>
+          delete meta.segments
+          delete meta.toolCalls
+        }
+        logDebug('Reconnect: cleared persisted assistant content for SSE replay rebuild')
+      }
       last.status = 'streaming'
     }
 
@@ -839,19 +988,129 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       let streamFinished = false
+      let gotDoneWithStatus = ''
+      // 回放模式下批量消费 buffer 中的高频事件，避免逐帧渲染导致"重新打字"的视觉效果。
+      // 累积 content_delta 到一定量后一次性 flush，或遇到低频事件（tool_call/done 等）时立即 flush。
+      let replayBatchCount = 0
+      const REPLAY_BATCH_SIZE = 20
+
+      let reconnectEventCount = 0
       for await (const sse of reconnectStream(convId, savedLastEventId, streamOptions)) {
-        if (!isStreaming.value) break
+        reconnectEventCount++
+        if (reconnectEventCount === 1) {
+          logDebug('Reconnect: first SSE event received, evt=', sse.event, 'id=', sse.id)
+        }
+        if (!isStreaming.value) {
+          logDebug('Reconnect: isStreaming became false, breaking loop at event count=', reconnectEventCount)
+          break
+        }
+
+        const evt = sse.event
+        // 低频事件：先 flush 累积的 content，再处理
+        if (evt !== 'content_delta' && evt !== 'thinking_delta' && evt !== 'heartbeat') {
+          flushBuf.flush()
+          replayBatchCount = 0
+        }
+
         handleSseEvent(sse, flushBuf, messages.value, convId, () => { streamFinished = true })
+
+        // 高频事件：批量累积后 flush
+        if (evt === 'content_delta' || evt === 'thinking_delta') {
+          replayBatchCount++
+          if (replayBatchCount >= REPLAY_BATCH_SIZE) {
+            flushBuf.flush()
+            replayBatchCount = 0
+          }
+        }
+
+        // 捕获 done 事件中的 status，用于判断对话是否真正完成
+        if (evt === 'done' && sse.data && typeof sse.data === 'object') {
+          gotDoneWithStatus = (sse.data as Record<string, unknown>).status as string || ''
+        }
+
         if (streamFinished) break
       }
       flushBuf.flush()
-      if (!streamFinished) {
-        clearReconnectState()
+      logDebug('Reconnect: loop ended, total events=', reconnectEventCount, 'streamFinished=', streamFinished, 'gotDoneWithStatus=', gotDoneWithStatus)
+      // 流未结束、也没收到 done（SSE 连接断开）时，保留 sessionStorage 的 reconnect state
+      // 让新页面 tryResumeStream 能读到 conversationId 并重新 reconnect 回放 buffer。
+      // 同时启动退避轮询：覆盖"非刷新的网络断连"场景（刷新场景下旧 store 随页面销毁，
+      // timer 自然失效，新页面的 tryResumeStream 会接管）。
+      if (!streamFinished && !gotDoneWithStatus) {
+        logDebug('Reconnect: SSE connection closed before stream finished, starting reconnect poll')
+        startReconnectPoll(convId)
+      }
+
+      // 对话完成后，如果 assistant 消息内容仍为空（可能 SSE 回放的 done 事件
+      // 没有携带 authoritativeContent，或 listMessages 返回时后端还没持久化），
+      // 再请求一次 listMessages 拿到后端已落库的完整内容，避免"空消息"或"只有执行过程"。
+      if (gotDoneWithStatus || streamFinished) {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg?.role === 'assistant' && !lastMsg.content) {
+          try {
+            const refreshedMsgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+            const refreshedAssistant = refreshedMsgList
+              .filter(m => m.role === 'assistant')
+              .map(buildChatMessageFromVO)
+              .pop()
+            if (refreshedAssistant && refreshedAssistant.content) {
+              // 用后端持久化的完整内容替换空占位
+              lastMsg.content = refreshedAssistant.content
+              if (refreshedAssistant.metadata) {
+                lastMsg.metadata = refreshedAssistant.metadata
+              }
+              if (refreshedAssistant.cards) {
+                lastMsg.cards = refreshedAssistant.cards
+              }
+              logDebug('Reconnect: backfilled assistant content from listMessages after done')
+            }
+          } catch (e) {
+            logDebug('Reconnect: failed to backfill assistant content after done', e)
+          }
+        }
+      }
+      // When stream_not_local is received and content is still empty,
+      // the backend RunState has expired. Fall back to listMessages
+      // with a short delay to load the persisted history. If the assistant
+      // is still not persisted, clear the reconnect state so the next refresh
+      // will use switchConversation instead.
+      if (gotDoneWithStatus === 'stream_not_local') {
+        const lastMsg = messages.value[messages.value.length - 1]
+        if (lastMsg?.role === 'assistant' && !lastMsg.content) {
+          logDebug('Reconnect: stream_not_local with empty content, retrying listMessages with delay')
+          try {
+            await new Promise(r => setTimeout(r, 500))
+            const refreshedMsgList = await conversationApi.listMessages(convId) as unknown as MessageVO[]
+            const refreshed = refreshedMsgList
+              .filter(m => m.role === 'user' || m.role === 'assistant')
+              .map(buildChatMessageFromVO)
+            if (refreshed.length > 0) {
+              const lastRefreshed = refreshed[refreshed.length - 1]
+              if (lastRefreshed?.role === 'assistant' && lastRefreshed.content) {
+                messages.value = refreshed
+                lastRefreshed.status = 'completed'
+                logDebug('Reconnect: stream_not_local fallback loaded persisted messages')
+              } else {
+                // Assistant still not persisted — clear reconnect state
+                // so the next refresh uses switchConversation's listMessages
+                clearReconnectState()
+                logDebug('Reconnect: stream_not_local fallback: assistant still not persisted, cleared reconnect state')
+              }
+            }
+          } catch (e) {
+            logDebug('Reconnect: stream_not_local fallback listMessages failed', e)
+            clearReconnectState()
+          }
+        }
       }
     } catch (error) {
       flushBuf.flush()
-      console.warn('[ChatStore] Reconnect failed:', error)
-      clearReconnectState()
+      const isAbort = error instanceof Error && error.name === 'AbortError'
+      console.warn('[ChatStore] Reconnect failed (isAbort=' + isAbort + '):', error)
+      // AbortError 通常是页面卸载/刷新导致 fetch 被取消，保留 sessionStorage 让新页面能重连
+      if (!isAbort) {
+        clearReconnectState()
+      }
       const errMsg = messages.value[messages.value.length - 1]
       if (errMsg?.role === 'assistant') {
         errMsg.status = 'failed'
@@ -861,7 +1120,7 @@ export const useChatStore = defineStore('chat', () => {
       // 安全网：确保消息状态不再为 'streaming'
       const finMsg = messages.value[messages.value.length - 1]
       if (finMsg?.role === 'assistant' && finMsg.status === 'streaming') {
-        finMsg.status = 'completed'
+        finMsg.status = finMsg.content ? 'completed' : 'failed'
       }
       markConversationStreaming(convId, false)
     }
@@ -871,36 +1130,67 @@ export const useChatStore = defineStore('chat', () => {
    * 刷新页面 / 切回 tab 时尝试续连上一次的 SSE 流。
    * <p>
    * 前置条件：sessionStorage 中持久化了 conversationId（由 sendMessage 启动时写入）。
-   * 只要 conversationId 存在且后端 streamStatus 为 running，就尝试重连；
-   * lastEventId 为空时使用 '0'，表示"回放所有 buffer 事件"（后端 attach 支持）。
-   * 真正的"是否仍有活流"由后端 RunState 决定；5 分钟窗口内可重连，否则后端返回 done 事件。
-   *
-   * @returns 是否成功进入续连流程
+   * <p>
+   * 工作流程：始终调用 reconnect()，由其统一处理——
+   * <ul>
+   *   <li>后端 RunState 仍存在 → SSE buffer 回放（含进行中和已完成但 5 分钟保留期内的对话）</li>
+   *   <li>后端 RunState 不存在 → 返回 stream_not_local / completed 的 done 事件，
+   *       reconnect 内部收到后清理状态，listMessages 已渲染完整内容</li>
+   * </ul>
+   * 不再在入口处用 streamStatus 短路，避免竞态导致进行中的对话被误判为已完成。
    */
   async function tryResumeStream(): Promise<boolean> {
+    // 刷新/切回续连接管：停止可能残留的断连轮询，避免与 reconnect 叠加
+    stopReconnectPoll()
     const persisted = loadPersistedReconnectState()
-    if (!persisted?.conversationId) return false
+    logDebug('tryResumeStream: persisted=', persisted, 'isStreaming=', isStreaming.value)
     if (isStreaming.value) return false
 
     await fetchConversations()
 
-    // 若恢复的 conversationId 不在已有会话列表中，说明会话已被删除或 ID 无效，
-    // 只清理续连脏数据，不影响用户当前选中的会话（可能从 localStorage 恢复了另一个有效会话）
-    const existsInList = conversations.value.some(c => c.conversationId === persisted.conversationId)
+    // 续连候选 conversationId：优先 sessionStorage 里的 reconnect 状态，
+    // 没有时回退到 localStorage 恢复的当前选中会话（场景：流生成中刷新，
+    // 但 sessionStorage 被上一次 done 清掉 / 新会话刚发消息还没写 sessionStorage）。
+    const candidateConvId = persisted?.conversationId || conversationId.value
+    if (!candidateConvId) return false
+
+    // 若候选 conversationId 不在已有会话列表中，说明会话已被删除或 ID 无效，
+    // 只清理续连脏数据，不影响用户当前选中的会话
+    const existsInList = conversations.value.some(c => c.conversationId === candidateConvId)
+    const convInList = conversations.value.find(c => c.conversationId === candidateConvId)
+    logDebug('tryResumeStream: candidateConvId=', candidateConvId, 'existsInList=', existsInList, 'streamStatus=', convInList?.streamStatus)
     if (!existsInList) {
-      clearReconnectState()
+      if (persisted?.conversationId) {
+        clearReconnectState()
+      }
       return false
     }
 
-    if (!isConversationRunningOnServer(persisted.conversationId)) {
-      clearReconnectState()
-      markConversationStreaming(persisted.conversationId, false)
+    // 列表快照判断 + 实时探测兜底（对齐 mateclaw-ui ChatConsole.vue 两层判断）：
+    // fetchConversations 拿到的 streamStatus 是快照，可能与实际流状态不同步
+    // （流在快照之后结束/开始）。快照 ≠ running 时再实时 getStatus 探测一次。
+    let shouldReconnect = convInList?.streamStatus === 'running'
+    if (!shouldReconnect) {
+      try {
+        const statusRes = await conversationApi.getStatus(candidateConvId) as { streamStatus?: string } | undefined
+        shouldReconnect = statusRes?.streamStatus === 'running'
+      } catch {
+        // 探测失败不阻断，按快照结果走
+      }
+    }
+    if (!shouldReconnect) {
+      logDebug('tryResumeStream: stream not running, skipping reconnect')
       return false
     }
 
-    conversationId.value = persisted.conversationId
-    // lastEventId 为空时传 '0'，让后端回放全部 buffer
-    lastEventId.value = persisted.lastEventId || '0'
+    conversationId.value = candidateConvId
+    // 从头（id=0）回放整个 buffer：流生成中 assistant 未落库，历史里没有这些事件，
+    // 若沿用 lastEventId 会只回放该 id 之后的事件，导致刷新前已推送的内容丢失。
+    lastEventId.value = '0'
+    // 同步写 sessionStorage，保证后续再次刷新仍能走 reconnect 路径
+    savePersistedReconnectState({ conversationId: candidateConvId, lastEventId: null })
+
+    // 统一走 reconnect：由 SSE 请求判断后端是否仍有 buffer 可回放
     await reconnect()
     return true
   }
@@ -1133,6 +1423,8 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'done': {
         flushBuf.flush()
+        // 流真正结束：停止断连轮询
+        stopReconnectPoll()
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
@@ -1167,7 +1459,16 @@ export const useChatStore = defineStore('chat', () => {
           nextCompleted.add(convId)
           backgroundCompletedConversations.value = nextCompleted
         } else {
-          clearReconnectState()
+          // Only clear reconnect state if the assistant message has content.
+          // If content is empty (e.g. stream_not_local where RunState expired),
+          // keep reconnect state so the next refresh can retry via switchConversation's
+          // listMessages fallback, rather than leaving an empty completed message.
+          const doneLastMsg = targetMsgs[targetMsgs.length - 1]
+          if (doneLastMsg?.role === 'assistant' && doneLastMsg.content) {
+            clearReconnectState()
+          } else {
+            logDebug('Reconnect: keeping reconnect state (assistant content empty on done)')
+          }
         }
         // 取消 stopChat 的兜底定时器
         if (stopFallbackTimer) {

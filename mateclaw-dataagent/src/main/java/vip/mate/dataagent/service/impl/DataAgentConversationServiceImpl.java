@@ -97,6 +97,27 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
         return conversationRuntime.getContextUsage(conversationId);
     }
 
+    @Override
+    public String getStreamStatus(String conversationId) {
+        // 非管理员需要校验会话归属（与 getContextUsage 一致）
+        if (!workspaceGuard.isCurrentAdmin()) {
+            String username = workspaceGuard.currentUsername();
+            Long workspaceId = workspaceGuard.currentWorkspaceId();
+            if (!conversationRuntime.isConversationOwner(conversationId, username, workspaceId)) {
+                boolean exists = conversationRuntime.listConversations(username, workspaceId)
+                        .stream()
+                        .anyMatch(c -> c.getConversationId().equals(conversationId));
+                if (!exists) {
+                    throw new MateClawException("err.conversation.notFound", 404,
+                            "会话不存在: " + conversationId);
+                }
+                throw new MateClawException("err.conversation.forbidden", 403,
+                        "无权访问该会话");
+            }
+        }
+        return conversationRuntime.getStreamStatus(conversationId);
+    }
+
     /**
      * 校验当前用户是否拥有该会话
      * <p>

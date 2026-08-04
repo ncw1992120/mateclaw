@@ -98,4 +98,14 @@ public interface ConversationRuntime {
      * @return 上下文使用视图对象
      */
     ContextUsageVO getContextUsage(String conversationId);
+
+    /**
+     * 获取会话实时流状态
+     * <p>
+     * 用于页面刷新后判断是否需要 reconnect 接入仍在运行的流。
+     *
+     * @param conversationId 会话 ID
+     * @return "running" / "idle"；会话不存在时返回 null
+     */
+    String getStreamStatus(String conversationId);
 }

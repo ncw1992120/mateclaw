@@ -69,18 +69,20 @@ const editingAgent = ref<Agent | null>(null)
 let handleVisibilityChange: (() => void) | null = null
 
 onMounted(async () => {
-  agentStore.fetchAgents(1)
-  modelStore.fetchEnabledModels()
+  // 并行加载：agents、models、会话列表互不依赖，同时发起减少白屏时间
+  const [, , ,] = await Promise.all([
+    agentStore.fetchAgents(1),
+    modelStore.fetchEnabledModels(),
+    chatStore.fetchConversations(),
+    userStore.isAdmin ? modelStore.fetchProviders() : Promise.resolve(),
+  ])
   modelStore.fetchActiveModel()
-  // Provider 列表仅全局管理员可访问
-  if (userStore.isAdmin) {
-    modelStore.fetchProviders()
-  }
-  // 先加载会话列表，续连时才能校验 conversationId 是否有效
-  await chatStore.fetchConversations()
+
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
+  // tryResumeStream 内部对已完成对话会直接用 listMessages 渲染（不走 SSE 回放），
+  // 对仍在运行的对话走 SSE buffer 回放；返回 true 时 MainLayout 无需再 switchConversation
   const resumed = await chatStore.tryResumeStream()
-  // 没有进入续连时，恢复当前选中会话的历史消息，避免刷新后显示为空态
+  // 没有进入续连/恢复流程时，恢复当前选中会话的历史消息，避免刷新后显示为空态
   if (!resumed && chatStore.conversationId && !chatStore.isStreaming) {
     await chatStore.switchConversation(chatStore.conversationId, true)
   }
