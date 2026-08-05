@@ -14,13 +14,15 @@ import json
 import re
 import sys
 
-# 日期粒度等级（从小到大）
+# 日期粒度等级（从小到大），含 metric_time 支持的全部粒度
 GRAIN_LEVEL = {
-    "day": 1,
-    "week": 2,
-    "month": 3,
-    "quarter": 4,
-    "year": 5
+    "minute": 0,
+    "hour": 1,
+    "day": 2,
+    "week": 3,
+    "month": 4,
+    "quarter": 5,
+    "year": 6
 }
 
 # 偏移粒度到日期粒度等级的映射
@@ -72,11 +74,17 @@ def extract_proportion_rank_dims(metric_name: str, calc_type: str) -> list:
 
 
 def get_time_grain_from_dimensions(dimensions: list) -> str:
-    """从 dimensions 列表中提取时间粒度"""
+    """从 dimensions 列表中提取时间粒度，规范化为 GRAIN_LEVEL 中的标准粒度名"""
     for dim in dimensions:
         if dim.startswith("metric_time__"):
             grain = dim.replace("metric_time__", "")
-            return grain
+            # 处理 {N}hour / {N}minute 粒度，如 metric_time__2hour -> hour
+            grain = re.sub(r"^\d+", "", grain)
+            # 处理自定义日历粒度，如 metric_time__FY_MONTH -> month（取末尾标准粒度）
+            m = re.search(r"(minute|hour|day|week|month|quarter|year)$", grain, re.IGNORECASE)
+            if m:
+                return m.group(1).lower()
+            return grain.lower()
         if dim == "metric_time":
             return "day"  # 默认日粒度
     return None

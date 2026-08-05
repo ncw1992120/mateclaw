@@ -472,14 +472,18 @@ public class SkillRuntimeService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n## Skills\n");
-        sb.append("This is a compact catalog. If a listed skill matches the task, ");
+        sb.append("This is a compact catalog. When a listed skill matches the task, ");
         if (loadSkillToolEnabled) {
-            sb.append("first call `load_skill(skillName=<name>)` to pull its SKILL.md into the conversation, ");
-            sb.append("then follow its instructions. Once loaded, the skill stays available in the conversation — ");
-            sb.append("do not load it again. ");
+            sb.append("you MUST first call `load_skill(skillName=<name>)` to pull its SKILL.md into the conversation ");
+            sb.append("BEFORE invoking any tool the skill governs — do not shortcut by calling the skill's tools directly. ");
+            sb.append("Once loaded, the SKILL.md content (workflow steps, hard constraints, self-check tables) ");
+            sb.append("is the AUTHORITATIVE spec for this task: follow its workflow in order, obey every ");
+            sb.append("\"必须/禁止/硬约束\" rule, and run its self-check before producing output. ");
+            sb.append("Do not skip steps, do not deviate, do not improvise around its rules even if a shortcut seems faster. ");
+            sb.append("The skill stays loaded for the whole conversation — do not load it again. ");
         } else {
-            sb.append("first call `readSkillFile(skillName=<name>, filePath=\"SKILL.md\")` to read its instructions, ");
-            sb.append("then follow them. ");
+            sb.append("you MUST first call `readSkillFile(skillName=<name>, filePath=\"SKILL.md\")` to read its instructions ");
+            sb.append("BEFORE invoking any tool the skill governs, then follow them as the authoritative spec. ");
         }
         sb.append("If none of these skills match, call `listAvailableSkills()` to inspect the broader catalog ");
         sb.append("(it accepts `keyword=<part of name>` and `limit=` up to 50 — use them to search by topic ");

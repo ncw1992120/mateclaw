@@ -30,11 +30,11 @@
 |------|------|------|---------------------|
 | `metrics` | 必填 | 查询指标，支持已定义指标、metricDefinitions 临时指标、快速计算语法 | Array[String]       |
 | `metricDefinitions` | 选填 | 临时指标定义，基于已定义指标临时生成 | Map<String, Object> |
-| `dimensions` | 选填 | 查询维度，支持已定义维度，日期维度支持粒度切换 | Array[String]       |
-| `filters` | 选填 | 全局筛选，对全部指标进行维度过滤 | Array[String]       |
+| `dimensions` | 选填 | 查询维度，支持已定义维度；日期维度（`metric_time`）支持粒度切换（year/quarter/month/week/day/hour/minute）。默认按指标日期查询，用户指定其他维度另说。详见 [dimensions 详解](#dimensions-详解) | Array[String]       |
+| `filters` | 选填 | 全局筛选，对全部指标进行维度过滤（支持文本/数值/日期/JSON 维度，含业务日期维度如 `dim_order_date`） | Array[String]       |
 | `specialMvConfig` | 选填 | 物化表加速配置，控制是否启用指定物化表加速及未命中处理 | Map                 |
 | `resultFilters` | 选填 | 结果筛选，对查询结果进行二次过滤（按指标值或维度值） | Array[String]       |
-| `timeConstraint` | 选填 | 指标日期范围 | String              |
+| `timeConstraint` | 选填 | 指标日期范围，**仅支持使用 `metric_time` 维度**（业务日期维度筛选请用 `filters`）。详见 [timeConstraint 详解](#timeconstraint-详解) | String              |
 | `orders` | 选填 | 排序，排序字段需包含在 metrics 或 dimensions 中 | Array[Map]          |
 | `limit` | 选填 | 返回条数，默认100 | int                 |
 | `offset` | 选填 | 偏移量，默认1（如 offset=100 时从第100条开始返回） | int                 |
@@ -43,6 +43,54 @@
 | `isQueryTotalCount` | 选填 | 是否返回数据总条数 | Boolean             |
 
 ---
+
+## dimensions 详解
+
+查询维度，使用维度的英文名（或编码，取决于指标平台配置）。多个维度之间用逗号分隔。
+
+```json
+"dimensions": ["metric_time__day", "province", "city"]
+```
+
+### 默认行为：按指标日期查询
+
+一般情况下，dimensions 都根据**指标日期**（`metric_time`）进行查询。`metric_time` 是指标平台内建的时间维度，几乎所有查询都应包含它来限定数据的时间粒度。用户若未指定其他业务维度（如区域、产品、渠道），dimensions 只放 `metric_time` 的某个粒度即可。
+
+### metric_time 粒度切换
+
+`metric_time` 支持以下粒度的快速切换（在维度名后加 `__粒度`）：
+
+| 粒度 | 维度名 | 含义 |
+|------|--------|------|
+| year | `metric_time__year` | 年 |
+| quarter | `metric_time__quarter` | 季 |
+| month | `metric_time__month` | 月 |
+| week | `metric_time__week` | 周 |
+| day | `metric_time__day` | 日 |
+| hour | `metric_time__hour` | 小时 |
+| minute | `metric_time__minute` | 分钟 |
+
+### N 倍粒度（仅 hour/minute）
+
+`metric_time` 额外支持 `{N}hour` 和 `{N}minute` 粒度，用于按 N 小时/N 分钟聚合：
+
+```json
+"dimensions": ["metric_time__2hour"]   // 以 2 小时为粒度
+```
+
+### 自定义日历粒度
+
+若指标平台配置了自定义日历（如财年），可用 `metric_time__{自定义日历名称}_粒度`：
+
+```json
+"dimensions": ["metric_time__FY_MONTH"]   // 财年月
+```
+
+自定义日历名称在「管理设置」->「自定义日历」中维护。
+
+### 与 timeConstraint 的粒度独立原则
+
+dimensions 决定**显示粒度**，timeConstraint 决定**筛选范围**，两者可以使用不同的时间粒度。例如 dimensions 用 `metric_time__day` 展示每日数据，timeConstraint 用 `([metric_time__month]="2024-03")` 限定只查 3 月。详见 [timeConstraint 详解](#timeconstraint-详解)。
 
 ## metrics 快速计算语法
 
@@ -150,9 +198,18 @@
 
 ## timeConstraint 详解
 
-timeConstraint 用于指定指标日期范围，使用表达式语法。
+timeConstraint 用于指定**指标日期范围**，使用表达式语法。
 
-**格式要求**：整个表达式**必须用 `()` 包裹**。
+### 核心约束
+
+> ⚠️ **timeConstraint 仅支持使用 `metric_time` 维度**。业务日期维度（如 `dim_order_date`）的日期筛选请用 `filters`，不能放在 timeConstraint 中。
+
+**格式要求**：
+
+1. 整个表达式**必须用 `()` 包裹**
+2. **不支持 BETWEEN 语法**，日期区间用 `AND` 连接两个边界条件
+3. 日期字符串值必须用双引号包裹（JSON 中转义为 `\"`）
+4. 维度引用用方括号 `[metric_time]` 或 `['metric_time']`（两种写法均可）
 
 ### 两种引用模式
 
@@ -170,36 +227,70 @@ timeConstraint 用于指定指标日期范围，使用表达式语法。
 | 近7天 | `([metric_time__day]>=DateAdd(Today(),-7,\"DAY\"))` |
 | 近30天 | `([metric_time__day]>=DateAdd(Today(),-30,\"DAY\"))` |
 | 今年 | `(DateTrunc([metric_time],\"YEAR\")=DateTrunc(Today(),\"YEAR\"))` |
+| 去年同期 | `(DateTrunc([metric_time],\"YEAR\")=DateTrunc(DateAdd(Today(),-1,\"YEAR\"),\"YEAR\"))` |
+| 今天 | `([metric_time__day]=Today())` |
+| 指定某一天 | `([metric_time__day]=\"2025-01-15\")` |
 | 指定日期范围 | `([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")` |
 | 指定月份 | `([metric_time__month]=\"2024-03\")` |
-| 今天 | `([metric_time__day]=Today())` |
+| 指定年份 | `([metric_time__year]=\"2025\")` |
 
 ### 表达式函数
 
 | 函数 | 说明 | 示例 |
 |------|------|------|
-| `Today()` | 当前日期 | `Today()` |
-| `DateAdd(date, N, unit)` | 日期偏移，N 为整数（负数=向前） | `DateAdd(Today(),-7,"DAY")` |
-| `DateTrunc(date, unit)` | 日期截断到指定粒度 | `DateTrunc(Today(),"MONTH")` |
+| `Today()` / `Now()` | 当前日期/时间（两者均可，函数名大小写不敏感） | `Today()`、`Now()` |
+| `DateAdd(date, N, unit)` | 日期偏移，N 为整数（负数=向前） | `DateAdd(Today(),-7,\"DAY\")` |
+| `DateTrunc(date, unit)` | 日期截断到指定粒度 | `DateTrunc(Today(),\"MONTH\")` |
+| `date(string)` | 字符串转日期 | `date(\"2024-03-01\")` |
 
-unit 取值：`"DAY"` / `"MONTH"` / `"YEAR"`（注意 JSON 中需转义为 `\"DAY\"`）
+unit 取值：`"DAY"` / `"WEEK"` / `"MONTH"` / `"QUARTER"` / `"YEAR"`（注意 JSON 中需转义为 `\"DAY\"`）。自定义日历还支持 `"FY_YEAR"` / `"FY_MONTH"` 等。
 
 ### 维度引用
 
-在表达式中使用方括号引用时间维度，支持两种粒度：
+在表达式中用方括号引用 `metric_time` 维度，支持基础维度和各粒度：
 
-- `[metric_time]` — 基础时间维度，配合 DateTrunc 函数进行截断比较
-- `[metric_time__day]` — 日粒度，用于直接比较或范围筛选
-- `[metric_time__month]` — 月粒度，用于直接比较
-- `[metric_time__year]` — 年粒度，用于直接比较
+| 引用 | 用途 |
+|------|------|
+| `[metric_time]` | 基础时间维度，**配合 DateTrunc 函数**进行截断比较 |
+| `[metric_time__day]` | 日粒度，用于直接比较或范围筛选 |
+| `[metric_time__week]` | 周粒度 |
+| `[metric_time__month]` | 月粒度，用于直接比较 |
+| `[metric_time__quarter]` | 季粒度 |
+| `[metric_time__year]` | 年粒度 |
+| `[metric_time__{自定义日历}_粒度]` | 自定义日历粒度（如 `[metric_time__FY_MONTH]`） |
+
+### 自定义日历（财年等）
+
+若指标平台配置了自定义日历，timeConstraint 可使用自定义日历粒度：
+
+```json
+// 本财年
+"timeConstraint": "DateTrunc(['metric_time'], \"FY_YEAR\") = DateTrunc(Now(), \"FY_YEAR\")"
+
+// 指定 2025 财年
+"timeConstraint": "['metric_time__FY_YEAR'] = \"FY2025\""
+```
 
 ### 与 dimensions 的配合
 
 timeConstraint 和 dimensions 协同工作，遵循以下规则：
 
-1. **dimensions 决定显示粒度**：在 dimensions 中指定 `metric_time__day`/`metric_time__month`/`metric_time__year`
+1. **dimensions 决定显示粒度**：在 dimensions 中指定 `metric_time__day`/`metric_time__month`/`metric_time__year` 等粒度
 2. **timeConstraint 决定筛选范围**：在 timeConstraint 中指定日期条件
 3. **粒度独立原则**：dimensions 和 timeConstraint 可以使用不同的时间粒度。例如 dimensions 用 `metric_time__day` 展示每日数据，timeConstraint 用 `([metric_time__month]="2024-03")` 限定只查 3 月
+
+### 同环比场景的单值筛选约束
+
+当 metrics 中使用同环比快速计算（`__sameperiod__`）时，timeConstraint 有额外硬约束：
+
+1. **metric_time 必须被使用**：metric_time 维度必须在 dimensions 或 timeConstraint 中被使用
+2. **若在 timeConstraint 中，必须是单值筛选**：引擎需要确定**唯一的时间锚点**来偏移。范围筛选（如 `([metric_time__day]>="2024-01-01" AND ...)`）不满足单值要求
+3. **偏移粒度不可小于日期粒度**：如同环比偏移为 `yoy`（年），dimensions 中的 metric_time 粒度不可大于年；月粒度数据下不可用日环比 `dod`
+
+**单值筛选示例**（✓）：`([metric_time__month]="2025-04")`——唯一月份锚点
+**非单值示例**（✗）：`([metric_time__day]>="2025-04-01" AND [metric_time__day]<="2025-04-30")`——范围，无法确定唯一锚点
+
+> 同环比若需单值锚点又想展示多日数据，可把单值筛选放 timeConstraint，多日粒度放 dimensions（粒度独立原则）。
 
 ### 正确 vs 错误对照
 
@@ -208,6 +299,7 @@ timeConstraint 和 dimensions 协同工作，遵循以下规则：
 | `(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))` | `DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\")` | 缺少外层括号 |
 | `([metric_time__day]>=DateAdd(Today(),-7,\"DAY\"))` | `[metric_time__day]>=DateAdd(Today(),-7,\"DAY\")` | 缺少外层括号 |
 | `([metric_time__day]>=\"2024-01-01\" AND [metric_time__day]<=\"2024-01-31\")` | `([metric_time__day] between \"2024-01-01\" and \"2024-01-31\")` | 不支持 BETWEEN，用 AND 连接 |
+| `([metric_time__month]=\"2024-03\")` | `([some_other_date]=\"2024-03\")` | timeConstraint 仅支持 metric_time，业务日期用 filters |
 
 ---
 

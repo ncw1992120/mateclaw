@@ -1,7 +1,7 @@
 ---
 name: aloudata_metric_query
 version: "1.0.0"
-description: "通过 Aloudata 指标平台查询指标数据，支持语义检索、同环比/占比/排名快速计算、时间限定、结果筛选等。当用户需要查询指标数据、查看维度信息、进行指标分析时调用。"
+description: "Aloudata 指标平台查询的唯一入口。凡涉及指标数值、趋势、对比、排名、占比、按维度拆解的问数请求，必须先 load_skill('aloudata_metric_query') 加载完整工作流，再按流程执行，禁止跳过流程直接调用 aloudata_metrics_query。硬约束：禁止凭猜测构造 metricName/dimName，必须先 aloudata_search_semantic 检索获得英文名；timeConstraint 仅支持 metric_time 维度且必须用 () 包裹；同环比须 metric_time 单值锚点。"
 dependencies:
   tools:
     - search_business_term
@@ -164,15 +164,21 @@ templates:
 
 根据第三步返回的指标，检查其 `availableDimensions` 字段。如需确认更多维度，调用 `aloudata_metric_available_dimensions(metricNames)`。
 
+**指标-维度配对（硬约束）**：
+- 每个指标的 `availableDimensions` 是该指标**唯一合法**的维度来源。构造 `dimensions` 时只能从所选指标的可用维度中选取，**禁止混入其他指标的维度**或凭印象选维度。
+- 查询多个指标时，`dimensions` 中每个维度必须**同时属于所有被查指标的可用维度集**（取交集），否则查询报错。
+- 向用户展示候选维度时，必须标注每个维度属于哪个指标（如「销售额可用维度：区域/省份/城市」），**禁止脱离指标单独列维度让用户选**——这会导致用户选了不属于该指标的维度。
+- 构造查询前自检：对 `dimensions` 中每个 dimName，确认它出现在所选指标的 `availableDimensions` 中。
+
 ### 第五步：构造查询请求
 
 使用第三步得到的 metricName/dimName 构造 `aloudata_metrics_query` 请求。可参考 [templates/query-request-template.json](templates/query-request-template.json) 中的请求模板。
 
 **基本参数**：
 - `metrics`（必填）：指标英文名列表，如 `["sales_amount"]`。支持快速计算语法（同环比、占比、排名、时间限定）
-- `dimensions`（选填）：维度英文名列表，如 `["region", "metric_time__month"]`。日期维度支持粒度切换（`metric_time__day`/`metric_time__month`/`metric_time__year`）
-- `timeConstraint`（选填）：指标日期范围，表达式语法。**必须用 `()` 包裹整个表达式**。如 `"(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"`
-- `filters`（选填）：全局筛选，对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
+- `dimensions`（选填）：维度英文名列表。**默认按指标日期查询**，即 `metric_time` 的某个粒度（支持 year/quarter/month/week/day/hour/minute，如 `metric_time__month`）；用户指定其他维度另说。详见 [references/api-doc.md](references/api-doc.md) 的 dimensions 详解
+- `timeConstraint`（选填）：指标日期范围，**仅支持 `metric_time` 维度**（业务日期维度用 filters）。表达式语法，**必须用 `()` 包裹**，不支持 BETWEEN。如 `"(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"`。详见 [references/api-doc.md](references/api-doc.md) 的 timeConstraint 详解
+- `filters`（选填）：全局筛选（含业务日期维度如 `dim_order_date`），对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
 - `resultFilters`（选填）：结果筛选，对查询结果进行二次过滤
 - `metricDefinitions`（选填）：临时指标定义，用于 specifyDimension 等复杂衍生
 - `orders`（选填）：排序，格式 `[{"字段名": "asc或desc"}]`。键为维度名或指标名，值为 asc 或 desc。如 `[{"sales_amount": "desc"}, {"region": "asc"}]`

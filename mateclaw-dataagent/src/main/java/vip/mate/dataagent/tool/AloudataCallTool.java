@@ -805,6 +805,19 @@ public class AloudataCallTool {
             sb.append("\n");
         }
 
+        /* 指标-维度配对约束：强制 LLM 按映射关系选维度，禁止跨指标错配 */
+        if (!mergedMetrics.isEmpty()) {
+            sb.append("## ⚠️ 指标-维度配对规则（硬约束）\n\n");
+            sb.append("- 每个指标的「可用维度」是该指标**唯一合法**的维度来源，构造 dimensions 时");
+            sb.append("只能从所选指标的 availableDimensions 中选取，禁止混入其他指标的维度。\n");
+            sb.append("- 当查询多个指标时，dimensions 中的每个维度必须**同时**属于所有被查指标的可用维度集");
+            sb.append("（取交集），否则查询会报错。\n");
+            sb.append("- 向用户展示候选维度时，必须标注每个维度属于哪个指标，例如");
+            sb.append("「销售额可用维度：区域/省份/城市」，禁止脱离指标单独列维度让用户选。\n");
+            sb.append("- 构造查询前自检：对 dimensions 中的每个 dimName，确认它出现在所选指标的");
+            sb.append("availableDimensions 列表中；若不在，移除或换用该指标的可用维度。\n\n");
+        }
+
         /* P3: 检索失败自动降级 */
         if (metricCount == 0 && dimensionCount == 0) {
             sb.append("语义检索未命中。");
