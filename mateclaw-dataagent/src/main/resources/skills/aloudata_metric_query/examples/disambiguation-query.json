@@ -1,0 +1,19 @@
+/**
+ * 示例15：消歧追问 — 检索出多口径时的交互
+ * 用户问"销售总金额"，平台存在多个口径（Bruce / 华北区域）。
+ * Agent 不应自行选择，应列出口径供用户确认。
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=2064392106658045954, keyword="销售总金额")
+ *    → 返回包含「⚠️ 指标口径消歧」提示，列出：
+ *      - 销售总金额（Bruce）— Brucetest1
+ *      - 销售总金额（华北区域）— Sumprice
+ * 2. 第三点五步触发：Agent 追问用户选择口径
+ * 3. 用户回复"华北区域"后 → 使用 metricName=Sumprice 构造请求
+ */
+{
+    "metrics": ["Sumprice"],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
+    "limit": 10
+}

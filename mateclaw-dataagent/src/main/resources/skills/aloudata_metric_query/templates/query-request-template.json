@@ -6,5 +6,5 @@
     "orders": [{"{{ORDER_FIELD}}": "{{ORDER_DIRECTION}}"}],
     "limit": {{LIMIT}},
     "offset": 1,
-    "queryResultType": "SQL_AND_DATA"
+    "queryResultType": "DATA"
 }

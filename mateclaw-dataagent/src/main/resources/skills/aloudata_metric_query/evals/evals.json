@@ -48,6 +48,54 @@
             "prompt": "销售额排名前10的城市",
             "expected_output": "应使用 sales_amount__rank 快速计算，并通过 resultFilters 筛选排名<=10，按排名升序排序",
             "files": []
+        },
+        {
+            "id": 9,
+            "prompt": "看看销售情况",
+            "expected_output": "触发第一点二五步意图完整性确认：指标不明确（金额？单量？客户数？），应直接追问用户选择，不应调用 search_business_term 或 aloudata_search_semantic",
+            "files": []
+        },
+        {
+            "id": 10,
+            "prompt": "最近的情况怎么样",
+            "expected_output": "触发第一点二五步意图完整性确认：指标缺失、时间范围不明确，应直接追问用户明确指标和时间范围，不应进入检索",
+            "files": []
+        },
+        {
+            "id": 11,
+            "prompt": "各区域表现",
+            "expected_output": "触发第一点二五步意图完整性确认：业务限定不清（看哪个指标？），应直接追问用户选择具体指标，不应直接检索",
+            "files": []
+        },
+        {
+            "id": 12,
+            "prompt": "做个对比",
+            "expected_output": "触发第一点二五步意图完整性确认：计算需求模糊（同比还是环比？和什么时期比？），应直接追问用户明确对比方式，不应进入检索",
+            "files": []
+        },
+        {
+            "id": 13,
+            "prompt": "上月呢",
+            "expected_output": "前提：上一轮已成功查询'本月销售额'。应判定为追问（第一点五步），提取上一轮基座请求，仅将 timeConstraint 从当月改为上月，其他参数沿用，不重新检索指标名",
+            "files": []
+        },
+        {
+            "id": 14,
+            "prompt": "相比3月增长多少",
+            "expected_output": "前提：上一轮已成功查询'股票期权新开户数4月数据'。应判定为追问（第一点五步），复用 metricName=stock_option_new_account_count，在 metrics 中追加环比增长快速计算（sameperiod__mom__growthvalue 和 sameperiod__mom__growth），不重新检索指标名",
+            "files": []
+        },
+        {
+            "id": 15,
+            "prompt": "销售总金额",
+            "expected_output": "前提：平台存在'销售总金额（Bruce）'和'销售总金额（华北区域）'两个口径。检索后触发第三点五步消歧：检索结果包含多口径消歧提示，应列出两个口径让用户选择，禁止自行选择",
+            "files": []
+        },
+        {
+            "id": 16,
+            "prompt": "按区域分",
+            "expected_output": "前提：上一轮已成功查询某指标。维度拆解不清，若平台有 region/province/city 多个区域层级，应触发第三点五步消歧或追问确认具体层级",
+            "files": []
         }
     ]
 }

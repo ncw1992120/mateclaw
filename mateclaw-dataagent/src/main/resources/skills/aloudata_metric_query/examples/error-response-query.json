@@ -1,0 +1,27 @@
+/**
+ * 示例17：查询失败 — 引擎返回错误
+ * 指标平台报错时的响应格式和处理策略。
+ * Agent 应检查错误消息，根据第七步结果自检表对应策略修复后重试（最多 1 次）。
+ *
+ * 常见错误码及处理：
+ * - "指标不存在" → 重新调用 aloudata_search_semantic 获取正确 metricName
+ * - "维度不可用" → 检查指标 availableDimensions，使用可用维度替换
+ * - "语法错误" → 检查 timeConstraint/filters 格式，对照第六步自检表逐项修正
+ * - "租户无权限" → 提示用户该数据源无访问权限，终止重试
+ */
+
+/* ========== 错误响应（API 返回） ========== */
+{
+    "data": null,
+    "success": false,
+    "code": "METRIC_NOT_FOUND",
+    "message": "指标 'sales' 不存在，请检查指标名称",
+    "traceId": "trace-error-demo-001"
+}
+
+/* ========== 修复策略示例 ========== */
+/* 1. 检查错误消息：指标 'sales' 不存在 — 可能用了简写或错误英文名
+ * 2. 重新调用 aloudata_search_semantic(datasourceId=..., keyword="销售额") 获取正确 metricName
+ * 3. 使用正确名 sales_amount 重试
+ * 4. 若重试仍失败，提示用户并终止（最多重试 1 次）
+ */

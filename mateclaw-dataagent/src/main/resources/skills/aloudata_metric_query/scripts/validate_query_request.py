@@ -41,15 +41,24 @@ OFFSET_GRAIN_MAP = {
 }
 
 
+# 同环比方法名（用于排除，避免被误识别为偏移粒度）
+SAME_PERIOD_METHODS = {"value", "growthvalue", "growth", "decrease", "decreaserate"}
+
+
 def extract_offset_grain(metric_name: str) -> str:
     """从同环比快速计算语法中提取偏移粒度"""
-    match = re.search(r"__sameperiod__.*?__(\w+)$", metric_name)
-    if not match:
-        # 尝试匹配带日期标识的格式: __sameperiod__{offset}__{flag}__{method}
-        match = re.search(r"__sameperiod__(?:-\d+_)?(\w+?)(?:__\w+)?__(?:value|growthvalue|growth|decrease|decreaserate)$", metric_name)
+    # 格式1: __sameperiod__{偏移粒度}__{方法}   e.g. sales_amount__sameperiod__yoy__growth
+    # 格式2: __sameperiod__{N_偏移粒度}__{日期标识}__{方法}
+    # 策略：在 __sameperiod__ 之后找到所有 __ 分隔的段，取第一个非方法名的段作为偏移粒度
+    match = re.search(r"__sameperiod__(.+)$", metric_name)
     if match:
-        grain = match.group(1)
-        return OFFSET_GRAIN_MAP.get(grain, grain)
+        rest = match.group(1)
+        parts = rest.split("__")
+        for part in parts:
+            # 去数字前缀（如 -2_dod -> dod）
+            stripped = re.sub(r"^-?\d+_", "", part)
+            if stripped not in SAME_PERIOD_METHODS:
+                return OFFSET_GRAIN_MAP.get(stripped, stripped)
     return None
 
 

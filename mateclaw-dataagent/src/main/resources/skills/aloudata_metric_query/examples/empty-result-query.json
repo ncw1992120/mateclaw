@@ -1,0 +1,34 @@
+/**
+ * 示例16：空结果处理
+ * 查询返回成功但数据为空（指标名错误或时间范围无数据）。
+ * Agent 应按第七步结果自检表处理：检查 metricName/dimName，重新检索后重试。
+ *
+ * 工具调用流程:
+ * 1. aloudata_metrics_query → 返回 success=true 但 data.columns 为空
+ * 2. 第七步结果自检：检查指标名是否正确 → 发现用了展示名而非英文名
+ * 3. 重新调用 aloudata_search_semantic 获取正确英文名
+ * 4. 使用正确英文名重试，最多重试 1 次
+ */
+
+/* ========== 错误响应（API 返回） ========== */
+{
+    "data": {
+        "queryId": "err-demo-001",
+        "table": {
+            "columns": {}
+        },
+        "metas": []
+    },
+    "success": true,
+    "code": null,
+    "message": null,
+    "traceId": "trace-empty-result-demo"
+}
+
+/* ========== 正确修复后的请求 ========== */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["metric_time__month"],
+    "timeConstraint": "(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))",
+    "limit": 10
+}

@@ -89,3 +89,19 @@ springdoc:
     path: /v1/api-docs
   swagger-ui:
     path: /v1/swagger-ui.html
+
+# MateClaw Agent 配置（DataAgent 侧扩展）
+# tool-result.excluded-tools 在此完整声明：Spring Boot 对 List 属性是整体覆盖
+# 而非追加，故须包含 server 默认的通用检索工具 + DataAgent 业务检索工具。
+# aloudata_search_semantic / search_business_term 的输出（指标/维度命中、族级
+# 口径提示、消歧提示）是 LLM 构造 metrics_query 的核心决策依据，spill 到磁盘
+# 会迫使 LLM 读 800 字符 preview 再 read_file（浪费 tool-call 槽位）或在残缺
+# 数据上决策，故纳入排除列表，极端超预算时走 excludedToolInlineChars 内联压缩。
+mate:
+  agent:
+    tool-result:
+      excluded-tools:
+        - read_file
+        - read_workspace_memory_file
+        - aloudata_search_semantic
+        - search_business_term
