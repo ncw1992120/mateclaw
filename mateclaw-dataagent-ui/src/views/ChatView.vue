@@ -487,6 +487,7 @@
 
         <div class="composer-body">
           <textarea
+            ref="chatInputRef"
             v-model="inputMessage"
             class="chat-input"
             :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholderWithAgent', { agent: currentAgentName })"
@@ -699,7 +700,7 @@
                   <button
                     class="browse-copy-btn"
                     :class="{ copied: copiedMetricName === item.metricName }"
-                    :title="copiedMetricName === item.metricName ? '已复制' : '复制指标名+展示名'"
+                    :title="copiedMetricName === item.metricName ? '已复制并填入提问框' : '复制并填入提问框'"
                     @click.stop="handleCopyMetric(item.metricName, item.metricDisplayName)"
                   >
                     <svg v-if="copiedMetricName === item.metricName" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -781,7 +782,7 @@
                   <button
                     class="browse-copy-btn"
                     :class="{ copied: copiedDimName === item.dimName }"
-                    :title="copiedDimName === item.dimName ? '已复制' : '复制维度名+展示名'"
+                    :title="copiedDimName === item.dimName ? '已复制并填入提问框' : '复制并填入提问框'"
                     @click.stop="handleCopyDimension(item.dimName, item.dimDisplayName)"
                   >
                     <svg v-if="copiedDimName === item.dimName" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1053,11 +1054,12 @@ async function openBrowseDrawer(ds: Datasource): Promise<void> {
   await loadBrowseData()
 }
 
-/** 复制指标英文名和中文名到剪贴板 */
+/** 复制指标英文名和中文名到剪贴板，并自动追加到提问框 */
 function handleCopyMetric(metricName: string, metricDisplayName: string): void {
   const text = metricDisplayName ? `${metricName}（${metricDisplayName}）` : metricName
   copyToClipboard(text).then(() => {
     copiedMetricName.value = metricName
+    appendToInputMessage(text)
     setTimeout(() => {
       if (copiedMetricName.value === metricName) {
         copiedMetricName.value = null
@@ -1066,17 +1068,31 @@ function handleCopyMetric(metricName: string, metricDisplayName: string): void {
   }).catch(() => {})
 }
 
-/** 复制维度英文名和中文名到剪贴板 */
+/** 复制维度英文名和中文名到剪贴板，并自动追加到提问框 */
 function handleCopyDimension(dimName: string, dimDisplayName: string): void {
   const text = dimDisplayName ? `${dimName}（${dimDisplayName}）` : dimName
   copyToClipboard(text).then(() => {
     copiedDimName.value = dimName
+    appendToInputMessage(text)
     setTimeout(() => {
       if (copiedDimName.value === dimName) {
         copiedDimName.value = null
       }
     }, 2000)
   }).catch(() => {})
+}
+
+/**
+ * 将复制的指标/维度文本追加到提问框。
+ * 提问框为空时直接填入；已有内容时换行追加，便于连续复制多个指标/维度组合提问。
+ */
+function appendToInputMessage(text: string): void {
+  const current = inputMessage.value
+  if (!current.trim()) {
+    inputMessage.value = text
+  } else {
+    inputMessage.value = `${current}\n${text}`
+  }
 }
 
 /** 加载当前数据源的指标和维度列表（带分页） */
@@ -1196,6 +1212,28 @@ const feedbackOptions = [
 
 /** 输入消息 */
 const inputMessage = ref('')
+
+/** 提问框 textarea DOM 引用（用于自适应高度） */
+const chatInputRef = ref<HTMLTextAreaElement | null>(null)
+
+/**
+ * 根据内容自适应调整提问框高度。
+ * 高度在 min-height（48px，单行）与 max-height（140px，约 6 行）之间随换行增长，
+ * 超出上限后出现滚动条；内容清空时回到默认单行高度。
+ * 刷新页面后 inputMessage 重置为空，高度自然回到默认——不持久化高度状态。
+ */
+function autoResizeChatInput(): void {
+  const el = chatInputRef.value
+  if (!el) return
+  // 先重置为 auto 以便重新计算 scrollHeight（否则缩小时 scrollHeight 仍是上次的）
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+// inputMessage 变化时自适应高度（覆盖手动输入、复制追加、优化改写、发送清空等所有路径）
+watch(inputMessage, () => {
+  nextTick(autoResizeChatInput)
+})
 
 /** 待发送的附件列表 */
 const pendingAttachments = ref<ChatAttachment[]>([])
