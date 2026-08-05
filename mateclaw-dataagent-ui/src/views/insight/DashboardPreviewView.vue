@@ -67,7 +67,11 @@
         </button>
       </div>
 
-      <div v-if="currentPageComponents.length === 0" class="preview-empty">
+      <div v-if="dataLoading" class="preview-loading">
+        <el-icon class="loading-icon is-loading"><Loading /></el-icon>
+        <div class="loading-text">{{ t('insight.loadingData') }}</div>
+      </div>
+      <div v-else-if="currentPageComponents.length === 0" class="preview-empty">
         <div class="empty-icon">📭</div>
         <div class="empty-text">{{ t('insight.previewEmpty') }}</div>
       </div>
@@ -155,6 +159,9 @@ const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
 
 /** AI 分析内容状态（componentId → analysisSection） */
 const aiAnalysisContents = reactive<Record<string, string>>({})
+
+/** 组件数据加载中状态（预览/筛选刷新时） */
+const dataLoading = ref(false)
 
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
@@ -317,6 +324,7 @@ async function loadReport(): Promise<void> {
 
 /** 带筛选条件重新加载组件数据（全量替换） */
 async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
+  dataLoading.value = true
   try {
     const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
     const dataMap: Record<string, InsightComponentData> = {}
@@ -326,6 +334,8 @@ async function reloadComponentData(context: DashboardFilterContext): Promise<voi
     componentDataMap.value = dataMap
   } catch {
     ElMessage.warning(t('insight.previewDataFailed'))
+  } finally {
+    dataLoading.value = false
   }
 }
 
@@ -757,6 +767,26 @@ function handlePageChange(pageId: string): void {
 
 .page-name {
   line-height: 1;
+}
+
+.preview-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  color: var(--db-text-muted);
+}
+
+.preview-loading .loading-icon {
+  font-size: 36px;
+  color: var(--db-accent);
+}
+
+.preview-loading .loading-text {
+  font-size: 14px;
 }
 
 .preview-empty {

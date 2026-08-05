@@ -1641,6 +1641,7 @@ export default {
     tableNoData: '暂无表格数据',
     tableExportCsv: '导出 CSV',
     filterPlaceholder: '请选择',
+    loadingData: '正在获取数据...',
     generatingReport: '正在生成报告...',
     reportPlaceholder: '点击"AI 解读报告"按钮生成分析报告',
     reportNotAvailable: 'AI 解读报告功能即将上线',

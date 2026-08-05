@@ -1628,6 +1628,7 @@ export default {
     chartNoData: 'No chart data',
     tableNoData: 'No table data',
     filterPlaceholder: 'Select',
+    loadingData: 'Loading data...',
     generatingReport: 'Generating report...',
     reportPlaceholder: 'Click "AI Report" button to generate analysis report',
     reportNotAvailable: 'AI report feature coming soon',
