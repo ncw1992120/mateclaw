@@ -137,8 +137,14 @@ public final class DataAgentConstants {
     /** Schema 语义检索默认相似度阈值 */
     public static final double SCHEMA_SEARCH_DEFAULT_THRESHOLD = 0.3;
 
-    /** Schema 语义检索 RRF 融合参数 k（值越小，排名靠前的结果优势越明显，提升排序区分度） */
-    public static final int SCHEMA_SEARCH_RRF_K = 20;
+    /**
+     * Schema 语义检索 RRF 融合参数 k（值越小，排名靠前的结果优势越明显，提升排序区分度）。
+     * <p>
+     * 原 k=20 在小候选池（pool≈50）时区分度不足：rank1 与 rank10 仅差 0.015，
+     * 双通道提权优势被稀释。k=10 时 rank1=0.091、rank10=0.050（差 0.041），
+     * 双通道命中（2×0.091=0.18）显著高于单通道 rank1，RRF 排序信号更陡峭。
+     */
+    public static final int SCHEMA_SEARCH_RRF_K = 10;
 
     /** Schema 关键词检索匹配字段 */
     public static final String[] SCHEMA_KEYWORD_SEARCH_FIELDS = {

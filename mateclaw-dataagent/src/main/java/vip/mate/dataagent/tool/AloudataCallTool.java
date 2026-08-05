@@ -1245,16 +1245,21 @@ public class AloudataCallTool {
     }
 
     /**
-     * 判断扩展词是否与原始关键词相关（非语义漂移的同领域术语）
+     * 判断扩展词是否与原始关键词相关（非语义漂移的同领域术语）。
      * <p>
-     * 校验规则：扩展词与原始关键词至少有一个中文字符或英文单词重叠。
+     * 校验规则：扩展词与原始关键词的字符重叠率 ≥ 0.4 才认为相关。
+     * 重叠率 = 交集大小 / min(原词字符数, 扩展词字符数)，取 min 分母避免短词被长词轻易覆盖。
+     * <p>
      * 例如：
      * <ul>
-     *   <li>"保费" vs "保险费" → 重叠"保" → 相关 ✓</li>
-     *   <li>"场内交易客户数" vs "场内交易量" → 重叠"场内交易" → 相关 ✓</li>
-     *   <li>"场内交易客户数" vs "GMV" → 无重叠 → 不相关 ✗</li>
-     *   <li>"保费" vs "AUM净流入贡献率" → 无重叠 → 不相关 ✗</li>
+     *   <li>"保费" vs "保险费" → 交集{保}=1, min(2,3)=2, 0.5 ≥ 0.4 → 相关 ✓</li>
+     *   <li>"保费" vs "保费收入" → 交集{保,费}=2, min(2,4)=2, 1.0 ≥ 0.4 → 相关 ✓</li>
+     *   <li>"保费" vs "场内交易客户数" → 交集=0 → 不相关 ✗</li>
+     *   <li>"保费" vs "AUM净流入贡献率" → 无中文重叠 → 不相关 ✗</li>
      * </ul>
+     * <p>
+     * 旧逻辑仅判断"是否有任意一个字符重叠"，单字重叠（如"保"）即通过，导致同领域但不同义的
+     * 术语被过度扩展，should 子句加分稀释了原始关键词的精确匹配优势。
      */
     private boolean isRelevantExpansion(String original, String expanded) {
         if (original == null || expanded == null) {
@@ -1263,11 +1268,14 @@ public class AloudataCallTool {
         // 提取中文字符集合
         Set<String> origChars = extractChineseChars(original);
         Set<String> expChars = extractChineseChars(expanded);
-        // 中文字符有交集则相关
+        // 中文字符重叠率 ≥ 0.4 才认为相关
         if (!origChars.isEmpty() && !expChars.isEmpty()) {
-            origChars.retainAll(expChars);
-            if (!origChars.isEmpty()) {
-                return true;
+            Set<String> intersection = new HashSet<>(origChars);
+            intersection.retainAll(expChars);
+            if (!intersection.isEmpty()) {
+                int denominator = Math.min(origChars.size(), expChars.size());
+                double overlapRatio = (double) intersection.size() / denominator;
+                return overlapRatio >= 0.4;
             }
         }
         // 提取英文单词集合（下划线分隔）
