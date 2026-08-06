@@ -100,6 +100,8 @@ export default {
     planFailed: '已失败',
     planStatusCompleted: '已完成',
     planStatusFailed: '已失败',
+    subagentAsync: '异步委派，后台运行中',
+    subagentStalled: '子 Agent 长时间无进展',
     toolExecution: '工具执行',
     modify: '修改',
     confirm: '确认',

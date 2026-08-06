@@ -468,6 +468,44 @@ export interface PlanMeta {
   planStatus?: 'running' | 'completed' | 'failed'
 }
 
+/** 委派子 agent 执行的工具条目（delegation_progress 累积） */
+export interface DelegationToolEntry {
+  name: string
+  status: 'running' | 'completed' | 'error'
+}
+
+/**
+ * 委派调用树中的单个子 agent 节点（depth >= 2）。
+ * depth-1 的子 agent 复用 MessageSegment（type='tool_call'），其 childTimeline.children 即此节点列表。
+ * 由 delegation_* 事件流按 subagentId/parentSubagentId 重建。
+ */
+export interface DelegationNode {
+  subagentId: string
+  agentName: string
+  status: 'running' | 'completed' | 'error'
+  depth: number
+  task?: string
+  result?: string
+  durationMs?: number
+  /** 心跳看门狗标记：子 agent 长时间无进展 */
+  stale?: boolean
+  /** 异步委派（delegateAsync）：父 agent 不阻塞，结果通过 task_output 取回 */
+  async?: boolean
+  plan?: PlanMeta
+  tools?: DelegationToolEntry[]
+  children?: DelegationNode[]
+}
+
+/**
+ * depth-1 委派 segment 携带的子 agent 时间线容器。
+ * 挂在 MessageSegment.childTimeline 上，记录该子 agent 自身的 plan/tools/嵌套子节点。
+ */
+export interface DelegationTimeline {
+  tools?: DelegationToolEntry[]
+  children?: DelegationNode[]
+  plan?: PlanMeta
+}
+
 /** 聊天消息 */
 export interface ChatMessage {
   role: ChatRole

@@ -12,7 +12,9 @@ import vip.mate.channel.web.ChatStreamTracker;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -62,6 +64,9 @@ public class DataAgentStreamTracker {
 
     record SseEvent(long id, String name, String json) {}
 
+    /** 一个委派事件（事件名 + 解析后的载荷），用于持久化到消息 metadata 供前端重建委派树。 */
+    public record DelegationEvent(String event, Map<String, Object> data) {}
+
     static final class RunState {
         final String conversationId;
         final List<SseEmitter> subscribers = new ArrayList<>();
@@ -91,6 +96,17 @@ public class DataAgentStreamTracker {
     /** ChatStreamTracker event relay 取消句柄：conversationId -> Runnable */
     private final ConcurrentHashMap<String, Runnable> relayCancellations = new ConcurrentHashMap<>();
 
+    /**
+     * 委派事件累积缓存：conversationId -> 有序事件列表。
+     * <p>
+     * relay 从 ChatStreamTracker 转发 delegation_* 事件时，除了推 SSE，
+     * 同步累积到这里。流终态时由 DataAgentChatServiceImpl 取回并持久化到消息 metadata，
+     * 使刷新页面 / 重新打开对话后前端能从 metadata.delegationEvents 重建委派树。
+     * <p>
+     * 用 synchronized list 保证跨线程（relay 线程追加 / finalize 线程读取）的事件顺序。
+     */
+    private final ConcurrentHashMap<String, List<DelegationEvent>> delegationEvents = new ConcurrentHashMap<>();
+
     /** 心跳调度线程池：4 线程，避免单线程在高并发会话下成为心跳瓶颈 */
     private final ScheduledExecutorService heartbeatScheduler =
             Executors.newScheduledThreadPool(4, r -> {
@@ -115,6 +131,8 @@ public class DataAgentStreamTracker {
      * 通过 relay 转发到本 tracker，DataAgent 的 SSE 连接也能收到真正的流式增量事件。
      */
     public void register(String conversationId) {
+        // 清理上次流残留的 delegation 事件累积（如上次异常中断未 drain），避免新流污染
+        delegationEvents.remove(conversationId);
         runs.computeIfAbsent(conversationId, RunState::new);
         RunState state = runs.get(conversationId);
         if (state != null && state.done) {
@@ -501,6 +519,11 @@ public class DataAgentStreamTracker {
                 return;
             }
             broadcast(conversationId, eventName, jsonData);
+            // 委派事件额外累积到缓存，供流终态持久化到消息 metadata，
+            // 使刷新/重开对话后前端能重建委派树（实时流已构建，但后端权威 segments 不含委派数据）。
+            if (eventName != null && eventName.startsWith("delegation_")) {
+                appendDelegationEvent(conversationId, eventName, jsonData);
+            }
         });
         relayCancellations.put(conversationId, cancelHandle);
         log.debug("[DataAgentStreamTracker] Event relay installed for {}", conversationId);
@@ -514,6 +537,38 @@ public class DataAgentStreamTracker {
         if (cancelHandle != null) {
             cancelHandle.run();
             log.debug("[DataAgentStreamTracker] Event relay removed for {}", conversationId);
+        }
+    }
+
+    /**
+     * 累积一个 delegation 事件到 per-conversation 缓存（relay 线程调用）。
+     * jsonData 解析为 Map；解析失败时存原始字符串到 {@code _raw} 字段以免丢失。
+     */
+    private void appendDelegationEvent(String conversationId, String eventName, String jsonData) {
+        List<DelegationEvent> list = delegationEvents.computeIfAbsent(conversationId, k -> Collections.synchronizedList(new ArrayList<>()));
+        Map<String, Object> data;
+        try {
+            data = objectMapper.readValue(jsonData, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            // 解析失败兜底：保留原始 JSON 字符串，前端重建时跳过解析失败的条目
+            data = new LinkedHashMap<>();
+            data.put("_raw", jsonData);
+            data.put("_parseError", e.getMessage());
+        }
+        list.add(new DelegationEvent(eventName, data));
+    }
+
+    /**
+     * 取回并清空指定会话累积的 delegation 事件列表（流终态时由 chatService 调用以持久化）。
+     * 返回事件的浅拷贝快照，避免 finalize 线程遍历时 relay 线程并发修改。
+     */
+    public List<DelegationEvent> drainDelegationEvents(String conversationId) {
+        List<DelegationEvent> list = delegationEvents.remove(conversationId);
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
+        synchronized (list) {
+            return new ArrayList<>(list);
         }
     }
 
@@ -603,6 +658,7 @@ public class DataAgentStreamTracker {
             if (shouldEvict) {
                 stopHeartbeat(entry.getKey());
                 removeRelay(entry.getKey());
+                delegationEvents.remove(entry.getKey());
                 Disposable d = state.disposable;
                 if (d != null && !d.isDisposed()) {
                     d.dispose();

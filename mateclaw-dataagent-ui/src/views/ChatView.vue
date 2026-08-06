@@ -150,13 +150,13 @@
                           <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
                           <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
                           <span
-                            v-if="seg.toolArgs != null || seg.toolResult != null"
+                            v-if="seg.toolArgs != null || seg.toolResult != null || hasDelegationTimeline(seg)"
                             class="seg-tool__arrow"
                             :class="{ 'is-open': expandedTools.has(segIdx) }"
                           ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
                         </div>
                         <Transition name="seg-slide">
-                          <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null)" class="seg-tool__body">
+                          <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null || hasDelegationTimeline(seg))" class="seg-tool__body">
                             <div v-if="seg.toolArgs != null" class="seg-tool__section">
                               <div class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</div>
                               <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
@@ -164,6 +164,14 @@
                             <div v-if="seg.toolResult != null" class="seg-tool__section">
                               <div class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</div>
                               <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
+                            </div>
+                            <!-- 委派子 agent 调用树：depth-1 segment 的 childTimeline.children -->
+                            <div v-if="hasDelegationTimeline(seg)" class="seg-tool__delegation">
+                              <DelegationNodeView
+                                v-for="c in getDelegationChildren(seg)"
+                                :key="c.subagentId"
+                                :node="c"
+                              />
                             </div>
                           </div>
                         </Transition>
@@ -846,11 +854,12 @@ import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
 import ContextUsagePanel from './ContextUsagePanel.vue'
 import PlanStepsPanel from '@/components/PlanStepsPanel.vue'
+import DelegationNodeView from '@/components/DelegationNodeView.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
-import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension, PlanMeta } from '@/types'
+import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension, PlanMeta, DelegationNode, DelegationTimeline } from '@/types'
 import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
 const { t } = useI18n()
@@ -1552,6 +1561,22 @@ function getExecutionProcessSegments(msg: typeof chatStore.messages.value[0]): A
     if (seg.type === 'content' && idx !== finalIdx) return true
     return false
   })
+}
+
+/**
+ * 判断一个 tool_call segment 是否携带委派子 agent 时间线（childTimeline 含 children/tools/plan）。
+ * 委派 segment 的 toolName 形如 "→ Agent名"；普通工具调用无 childTimeline。
+ */
+function hasDelegationTimeline(seg: Record<string, unknown>): boolean {
+  const t = seg.childTimeline as DelegationTimeline | undefined
+  if (!t) return false
+  return !!(t.children?.length || t.tools?.length || t.plan)
+}
+
+/** 取 depth-1 委派 segment 的直接子 agent 节点列表（用于 DelegationNodeView 渲染） */
+function getDelegationChildren(seg: Record<string, unknown>): DelegationNode[] {
+  const t = seg.childTimeline as DelegationTimeline | undefined
+  return t?.children || []
 }
 
 /** 是否存在可展示的"执行过程"内容 */
@@ -5586,6 +5611,15 @@ onUnmounted(() => {
   color: var(--muted);
   margin-bottom: 4px;
   font-weight: 500;
+}
+
+/* 委派子 agent 调用树容器：嵌套在 tool_call segment body 内 */
+.seg-tool__delegation {
+  margin-top: 8px;
+  padding-left: 4px;
+}
+.seg-tool__section + .seg-tool__delegation {
+  margin-top: 8px;
 }
 
 .seg-tool__body pre {

@@ -142,10 +142,13 @@
         </dependency>
 
         <!-- ===== Commonmark Java (Markdown → HTML) ===== -->
+        <!-- 版本须与 mateclaw-server 经 SDK 传递的 commonmark-ext-* (0.28.0) 保持一致，
+             否则 core 与扩展 API 不匹配会触发
+             BlockStart.replaceParagraphLines NoSuchMethodError。 -->
         <dependency>
             <groupId>org.commonmark</groupId>
             <artifactId>commonmark</artifactId>
-            <version>0.22.0</version>
+            <version>${commonmark.version}</version>
         </dependency>
 
         <!-- ===== Elasticsearch Java Client ===== -->

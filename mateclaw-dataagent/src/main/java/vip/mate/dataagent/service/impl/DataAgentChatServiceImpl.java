@@ -674,17 +674,35 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      * @param recQuestions 推荐问题列表（可为 null 或空）
      * @return metadata JSON 字符串
      */
-    private String buildMetadataWithRecommendedQuestions(StreamAccumulator accumulator, List<String> recQuestions) {
+    private String buildMetadataWithRecommendedQuestions(StreamAccumulator accumulator, List<String> recQuestions,
+                                                         List<DataAgentStreamTracker.DelegationEvent> delegationEvents) {
         String baseJson = accumulator.toMetadataJson(objectMapper);
-        if (recQuestions == null || recQuestions.isEmpty()) {
+        boolean hasRecQuestions = recQuestions != null && !recQuestions.isEmpty();
+        boolean hasDelegationEvents = delegationEvents != null && !delegationEvents.isEmpty();
+        if (!hasRecQuestions && !hasDelegationEvents) {
             return baseJson;
         }
         try {
             Map<String, Object> metadata = objectMapper.readValue(baseJson, new TypeReference<LinkedHashMap<String, Object>>() {});
-            metadata.put("recommendedQuestions", recQuestions);
+            if (hasRecQuestions) {
+                metadata.put("recommendedQuestions", recQuestions);
+            }
+            if (hasDelegationEvents) {
+                // 持久化委派事件流（有序），前端刷新/重开对话后据此重建委派树。
+                // 只序列化 event + data，忽略 DelegateEvent 的其它字段。
+                List<Map<String, Object>> evtList = delegationEvents.stream()
+                        .map(ev -> {
+                            Map<String, Object> m = new LinkedHashMap<>();
+                            m.put("event", ev.event());
+                            m.put("data", ev.data());
+                            return m;
+                        })
+                        .toList();
+                metadata.put("delegationEvents", evtList);
+            }
             return objectMapper.writeValueAsString(metadata);
         } catch (Exception e) {
-            log.warn("[DataAgent] Failed to append recommended questions to metadata: {}", e.getMessage());
+            log.warn("[DataAgent] Failed to append metadata: {}", e.getMessage());
             return baseJson;
         }
     }
@@ -734,7 +752,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
 
             // 将推荐问题写入 metadata 以支持持久化（刷新页面后可恢复）
-            String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions);
+            List<DataAgentStreamTracker.DelegationEvent> delegEvents = streamTracker.drainDelegationEvents(conversationId);
+            String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions, delegEvents);
 
             MessageEntity savedAssistant = null;
             try {

@@ -1,6 +1,6 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ChatAttachment, ChatMessage, ContextUsage, Conversation, MessageVO, PlanMeta, SseEvent } from '@/types'
+import type { ChatAttachment, ChatMessage, ContextUsage, Conversation, DelegationNode, DelegationTimeline, DelegationToolEntry, MessageVO, PlanMeta, SseEvent } from '@/types'
 import { streamChat, stopStream, reconnectStream, type MessageContentPart } from '@/api/chat'
 import * as conversationApi from '@/api/conversation'
 import { usePersistedState } from '@/composables/usePersistedRef'
@@ -319,6 +319,22 @@ export const useChatStore = defineStore('chat', () => {
   function clearMessages(): void {
     // 保留已选中的模型（通过 usePersistedState 持久化到 localStorage），
     // 新建对话时继续使用用户上次选择的模型
+
+    // 流式生成中点"新对话"：与切换历史会话同理，将当前流转入后台继续生成，
+    // 而不是 stopChat 终止后端流。直接引用 messages.value 数组，sendMessage
+    // 的 for-await 循环会继续更新同一数组；保留 streamingConversations 标记
+    // 使侧栏持续转圈。仅停止对该会话的断连轮询（不轮询非当前会话），
+    // prepareNewConversation 会把 conversationId 置空，SSE 循环据此自动进入后台。
+    const oldConvId = conversationId.value
+    if (isStreaming.value && oldConvId && messages.value.length > 0) {
+      backgroundConversationMessages.set(oldConvId, messages.value)
+      // 保存续连状态，切回时可重连
+      if (lastEventId.value) {
+        reconnectStates.set(oldConvId, lastEventId.value)
+      }
+      stopReconnectPoll()
+    }
+
     prepareNewConversation()
   }
 
@@ -1245,6 +1261,148 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // ===== Agent delegation tree helpers =====
+  // 委派事件形成一棵树：depth-1 子 agent 复用 type='tool_call' segment（id=subagentId），
+  // depth-2+ 子 agent 是 DelegationNode，通过 parentSubagentId 挂到祖先的 childTimeline.children。
+  // 每个 delegation_* 事件携带 subagentId/parentSubagentId/depth，扁平事件流据此重建为树。
+  // 逻辑移植自 mateclaw-ui useChat.ts:942-1021，适配 dataagent-ui 的 Record<string, unknown> segment。
+
+  type DelegContainer = { plan?: PlanMeta; tools?: DelegationToolEntry[]; children?: DelegationNode[] }
+
+  /** 生成 segment/node 的兜底 id（subagentId 缺失时使用） */
+  function genSegId(): string {
+    return 'seg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+  }
+
+  /** 按 subagentId 或 childConversationId 查找 depth-1 委派 segment */
+  function findDelegSegment(segs: Array<Record<string, unknown>>, subagentId?: string, childConvId?: string): Record<string, unknown> | undefined {
+    if (subagentId) {
+      const byId = segs.find(s => s.type === 'tool_call' && s.id === subagentId)
+      if (byId) return byId
+    }
+    if (childConvId) return segs.find(s => s.type === 'tool_call' && s.id === childConvId)
+    return undefined
+  }
+
+  /** 递归查找嵌套 DelegationNode by subagentId */
+  function findDelegNode(nodes: DelegationNode[] | undefined, subagentId: string): DelegationNode | undefined {
+    if (!nodes) return undefined
+    for (const n of nodes) {
+      if (n.subagentId === subagentId) return n
+      const deep = findDelegNode(n.children, subagentId)
+      if (deep) return deep
+    }
+    return undefined
+  }
+
+  /** 懒初始化 depth-1 segment 的 childTimeline 容器 */
+  function ensureTimeline(seg: Record<string, unknown>): DelegContainer {
+    let t = seg.childTimeline as DelegationTimeline | undefined
+    if (!t) {
+      t = { tools: [], children: [] }
+      seg.childTimeline = t
+    }
+    if (!t.tools) t.tools = []
+    if (!t.children) t.children = []
+    return t
+  }
+
+  /** 懒初始化嵌套 DelegationNode 的 tools/children */
+  function ensureNodeContainer(node: DelegationNode): DelegContainer {
+    if (!node.tools) node.tools = []
+    if (!node.children) node.children = []
+    return node
+  }
+
+  /** 解析任意深度子 agent 的进度容器（segment 的 childTimeline 或嵌套 node） */
+  function resolveContainer(segs: Array<Record<string, unknown>>, subagentId?: string, childConvId?: string): DelegContainer | undefined {
+    const seg = findDelegSegment(segs, subagentId, childConvId)
+    if (seg) return ensureTimeline(seg)
+    if (subagentId) {
+      for (const s of segs) {
+        const node = findDelegNode((s.childTimeline as DelegationTimeline | undefined)?.children, subagentId)
+        if (node) return ensureNodeContainer(node)
+      }
+    }
+    return undefined
+  }
+
+  /** 标记子 agent（segment 或嵌套 node）完成 */
+  function markDelegComplete(segs: Array<Record<string, unknown>>, subagentId: string | undefined, childConvId: string | undefined,
+                             success: boolean, resultPreview?: string, durationMs?: number): boolean {
+    const seg = findDelegSegment(segs, subagentId, childConvId)
+    if (seg) {
+      seg.status = success ? 'completed' : 'error'
+      seg.toolSuccess = success
+      if (resultPreview) seg.toolResult = resultPreview
+      if (durationMs) seg.toolArgs = ((seg.toolArgs as string) || '').trimEnd() + ` (${Math.round(durationMs / 1000)}s)`
+      return true
+    }
+    if (subagentId) {
+      for (const s of segs) {
+        const node = findDelegNode((s.childTimeline as DelegationTimeline | undefined)?.children, subagentId)
+        if (node) {
+          node.status = success ? 'completed' : 'error'
+          if (resultPreview) node.result = resultPreview
+          if (durationMs) node.durationMs = durationMs
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /** 创建 depth-1 segment（树顶）或嵌套 DelegationNode（更深层） */
+  function addDelegation(segs: Array<Record<string, unknown>>, info: Record<string, unknown>, opts: { async?: boolean } = {}) {
+    const subagentId = info.subagentId as string | undefined
+    const parentSubagentId = info.parentSubagentId as string | undefined
+    const agentName = (info.childAgentName as string) || 'Agent'
+    const depth = (info.depth as number) || 1
+    const task = (info.task as string) || ''
+
+    if (parentSubagentId) {
+      // depth-2+：挂到父 subagent 的容器
+      const parent = resolveContainer(segs, parentSubagentId)
+      if (!parent) return
+      if (!findDelegNode(parent.children, subagentId || '')) {
+        parent.children!.push({
+          subagentId: subagentId || genSegId(),
+          agentName, status: 'running', depth, task,
+          tools: [], children: [],
+          ...(opts.async ? { async: true } : {})
+        })
+      }
+      return
+    }
+    // depth-1：顶层 segment，id=subagentId 用于稳定查找。去重防止 SSE 回放重复创建。
+    const segId = subagentId || (info.childConversationId as string) || genSegId()
+    if (segs.some(s => s.type === 'tool_call' && s.id === segId)) return
+    segs.push({
+      id: segId,
+      type: 'tool_call',
+      status: 'running',
+      toolName: `→ ${agentName}`,
+      toolArgs: task,
+      childTimeline: { tools: [], children: [] },
+      timestamp: Date.now(),
+      ...(opts.async ? { delegationAsync: true } : {})
+    })
+  }
+
+  /** 递归关闭所有嵌套 DelegationNode 中 status=running 的节点（流结束时调用） */
+  function finalizeDelegNodes(nodes: DelegationNode[] | undefined): void {
+    if (!nodes) return
+    for (const n of nodes) {
+      if (n.status === 'running') n.status = 'completed'
+      if (n.tools) {
+        for (const t of n.tools) {
+          if (t.status === 'running') t.status = 'completed'
+        }
+      }
+      finalizeDelegNodes(n.children)
+    }
+  }
+
   function handleSseEvent(sse: SseEvent, flushBuf: FlushBuffer, targetMsgs: ChatMessage[], convId: string, onFinished?: () => void): void {
     const evt = sse.event
     const data = sse.data
@@ -1395,6 +1553,10 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
+        // 递归关闭委派子树中仍 running 的嵌套 DelegationNode / tool 条目
+        for (const s of segments) {
+          finalizeDelegNodes((s.childTimeline as DelegationTimeline | undefined)?.children)
+        }
         break
       }
       case 'recommended_questions': {
@@ -1428,13 +1590,32 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
+        // 递归关闭委派子树中仍 running 的嵌套 DelegationNode / tool 条目
+        for (const s of segments) {
+          finalizeDelegNodes((s.childTimeline as DelegationTimeline | undefined)?.children)
+        }
         // 用后端权威 segments 覆盖实时流中缺失 segmentOnly 标记的 segments
         const authoritativeSegments = data.segments as Array<Record<string, unknown>> | undefined
         if (authoritativeSegments && authoritativeSegments.length > 0) {
           const doneMsg2 = targetMsgs[msgIdx]
           if (doneMsg2?.role === 'assistant' && doneMsg2.metadata) {
             const meta = doneMsg2.metadata as Record<string, unknown>
-            meta.segments = authoritativeSegments
+            // 委派树（→ Agent名 segment 及其 childTimeline）由前端实时构建，
+            // 后端 StreamAccumulator 不持久化 delegation 事件为 segment，
+            // 权威覆盖会丢失整棵委派树。这里先提取实时 segments 中的委派 segment，
+            // 覆盖后再按原顺序回填，使运行结束 / 刷新后委派树仍可见。
+            const prevSegments = (meta.segments as Array<Record<string, unknown>>) || []
+            const delegSegs = prevSegments.filter(s =>
+              s.type === 'tool_call'
+              && (s.childTimeline != null || (s.toolName as string)?.startsWith('→'))
+            )
+            if (delegSegs.length > 0) {
+              // 权威 segments 不含委派 segment，直接追加到末尾；
+              // 顺序上委派发生在 delegateToAgent 工具调用之后，末尾追加符合时序。
+              meta.segments = [...authoritativeSegments, ...delegSegs]
+            } else {
+              meta.segments = authoritativeSegments
+            }
           }
         }
         // 用后端权威最终答案覆盖 msg.content：实时流累积的 content 含中间旁白，
@@ -1492,6 +1673,10 @@ export const useChatStore = defineStore('chat', () => {
         // 关闭所有 running segments
         const segments = ensureSegments(targetMsgs, msgIdx)
         finalizeAllRunningSegments(segments)
+        // 递归关闭委派子树中仍 running 的嵌套 DelegationNode / tool 条目
+        for (const s of segments) {
+          finalizeDelegNodes((s.childTimeline as DelegationTimeline | undefined)?.children)
+        }
         // 清理流式状态
         markConversationStreaming(convId, false)
         if (conversationId.value === convId) {
@@ -1600,6 +1785,194 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
 
+      // ===== Agent delegation events =====
+      // 委派形成一棵树：depth-1 子 agent 是顶层 tool_call segment（id=subagentId）；
+      // depth-2+ 子 agent 是 DelegationNode，通过 parentSubagentId 嵌到祖先 childTimeline.children。
+      // 移植自 mateclaw-ui useChat.ts:1061-1210，适配动态 Record segment。
+      case 'delegation_start': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        if (data.parallel && Array.isArray(data.children)) {
+          // 仅当存在 depth-1（无 parentSubagentId）委派时关闭根级 running content/thinking
+          const topLevel = (data.children as Array<Record<string, unknown>>).some(c => !c.parentSubagentId)
+          if (topLevel) {
+            finalizeRunningSegments(segments, ['content', 'thinking'])
+          }
+          for (const child of data.children as Array<Record<string, unknown>>) {
+            addDelegation(segments, child)
+          }
+        } else {
+          if (!data.parentSubagentId) {
+            finalizeRunningSegments(segments, ['content', 'thinking'])
+          }
+          addDelegation(segments, data as Record<string, unknown>)
+        }
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+            currentPhase: 'executing_tool',
+          },
+        }
+        break
+      }
+      case 'delegation_async_spawned': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        // 异步委派：父 agent 继续运行，不关闭父级 running content/thinking segment
+        addDelegation(segments, data as Record<string, unknown>, { async: true })
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+          },
+        }
+        break
+      }
+      case 'delegation_progress': {
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        const container = resolveContainer(segments, data.subagentId as string, data.childConversationId as string)
+        if (!container) break
+        if (!container.tools) container.tools = []
+
+        // data.data 是子 agent 原始事件载荷（对象或 JSON 字符串），兼容旧后端
+        const rawPayload = (data as Record<string, unknown>).data
+        const childData: Record<string, any> = rawPayload && typeof rawPayload === 'object'
+          ? rawPayload as Record<string, unknown>
+          : (() => { try { return JSON.parse(String(rawPayload || '{}')) } catch { return {} } })()
+
+        switch (data.originalEvent) {
+          case 'tool_call_started': {
+            const name = childData?.toolName || ''
+            if (name) container.tools.push({ name, status: 'running' })
+            break
+          }
+          case 'tool_call_completed': {
+            const name = childData?.toolName || ''
+            const ok = childData?.success !== false
+            const entry = [...container.tools].reverse().find(t => t.name === name && t.status === 'running')
+            if (entry) entry.status = ok ? 'completed' : 'error'
+            break
+          }
+          case 'plan_created': {
+            const steps = childData?.steps
+            if (Array.isArray(steps)) {
+              container.plan = { planId: childData?.planId ?? '', steps, currentStep: 0, stepResults: [] }
+            }
+            break
+          }
+          case 'plan_step_started': {
+            if (container.plan && typeof childData?.index === 'number') {
+              container.plan.currentStep = childData.index
+            }
+            break
+          }
+          case 'plan_step_completed': {
+            if (container.plan && typeof childData?.index === 'number') {
+              const results = [...(container.plan.stepResults || [])]
+              results[childData.index] = { result: childData.result ?? '', status: 'completed' }
+              container.plan.stepResults = results
+            }
+            break
+          }
+          default:
+            break
+        }
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+          },
+        }
+        break
+      }
+      case 'delegation_child_complete': {
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        markDelegComplete(segments, data.subagentId as string, data.childConversationId as string,
+          !!data.success, data.resultPreview as string | undefined, data.durationMs as number | undefined)
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+          },
+        }
+        break
+      }
+      case 'delegation_end': {
+        flushBuf.flush()
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        if (data.parallel) {
+          const childResults = data.childResults as Array<Record<string, unknown>> | undefined
+          if (childResults && childResults.length > 0) {
+            for (const cr of childResults) {
+              // delegation_child_complete 通常已关闭各子项；这里仅补齐仍 running 的（如超时未触发 child_complete）
+              const seg = findDelegSegment(segments, cr.subagentId as string, cr.childConversationId as string)
+              const stillRunning = seg
+                ? seg.status === 'running'
+                : !!((cr.subagentId as string) && findDelegNode(
+                    segments.flatMap(s => (s.childTimeline as DelegationTimeline | undefined)?.children || []), cr.subagentId as string)?.status === 'running')
+              if (stillRunning) {
+                markDelegComplete(segments, cr.subagentId as string, cr.childConversationId as string,
+                  !!cr.success, (cr.error as string) || undefined, cr.durationMs as number | undefined)
+              }
+            }
+          } else {
+            // 旧版兜底：标记所有仍 running 的顶层委派 segment
+            segments
+              .filter(s => s.type === 'tool_call' && s.status === 'running' && (s.toolName as string)?.startsWith('→'))
+              .forEach(s => { s.status = data.success ? 'completed' : 'error' })
+          }
+        } else {
+          markDelegComplete(segments, data.subagentId as string, data.childConversationId as string,
+            !!data.success, data.resultPreview as string | undefined, data.durationMs as number | undefined)
+        }
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+          },
+        }
+        break
+      }
+      case 'subagent_stale': {
+        const prev = targetMsgs[msgIdx]
+        if (!prev || prev.role !== 'assistant') break
+        if (!data.subagentId) break
+        const segments = ensureSegments(targetMsgs, msgIdx)
+        const seg = findDelegSegment(segments, data.subagentId as string)
+        if (seg) {
+          seg.delegationStale = true
+        } else {
+          for (const s of segments) {
+            const node = findDelegNode((s.childTimeline as DelegationTimeline | undefined)?.children, data.subagentId as string)
+            if (node) { node.stale = true; break }
+          }
+        }
+        targetMsgs[msgIdx] = {
+          ...prev,
+          metadata: {
+            ...((prev.metadata || {}) as Record<string, unknown>),
+            segments,
+          },
+        }
+        break
+      }
+
       default:
         break
     }
@@ -1629,6 +2002,91 @@ export const useChatStore = defineStore('chat', () => {
         .map((p) => p.text as string)
         .join('\n')
         .trim()
+    }
+
+    // 从持久化的 delegationEvents 重建委派树到 segments。
+    // 后端在流终态时将 delegation_* 事件流序列化到 metadata.delegationEvents，
+    // 前端在加载历史消息时回放这些事件，复用 addDelegation/markDelegComplete 等函数重建委派树。
+    if (meta && m.role === 'assistant') {
+      const delegEvents = meta.delegationEvents as Array<Record<string, unknown>> | undefined
+      if (delegEvents && delegEvents.length > 0) {
+        if (!Array.isArray(meta.segments)) meta.segments = []
+        const segments = meta.segments as Array<Record<string, unknown>>
+        // 闭环所有已有 segments（历史消息不应有 running 状态）
+        finalizeAllRunningSegments(segments)
+        for (const ev of delegEvents) {
+          const evt = ev.event as string
+          const evData = ev.data as Record<string, unknown> | undefined
+          if (!evt || !evData) continue
+          // 复用 delegation 事件处理逻辑，但跳过 SSE 特有操作（flushBuf、targetMsgs 更新等）
+          switch (evt) {
+            case 'delegation_start': {
+              if (evData.parallel && Array.isArray(evData.children)) {
+                for (const child of evData.children as Array<Record<string, unknown>>) {
+                  addDelegation(segments, child)
+                }
+              } else {
+                addDelegation(segments, evData)
+              }
+              break
+            }
+            case 'delegation_async_spawned': {
+              addDelegation(segments, evData, { async: true })
+              break
+            }
+            case 'delegation_progress': {
+              const container = resolveContainer(segments, evData.subagentId as string, evData.childConversationId as string)
+              if (!container) break
+              if (!container.tools) container.tools = []
+              const rawPayload = evData.data
+              const childData: Record<string, any> = rawPayload && typeof rawPayload === 'object'
+                ? rawPayload as Record<string, unknown>
+                : (() => { try { return JSON.parse(String(rawPayload || '{}')) } catch { return {} } })()
+              switch (evData.originalEvent) {
+                case 'tool_call_started': {
+                  const name = childData?.toolName || ''
+                  if (name) container.tools.push({ name, status: 'completed' })
+                  break
+                }
+                case 'tool_call_completed': {
+                  const name = childData?.toolName || ''
+                  const entry = [...container.tools].reverse().find(t => t.name === name && t.status === 'running')
+                  if (entry) entry.status = 'completed'
+                  break
+                }
+                case 'plan_created': {
+                  const steps = childData?.steps
+                  if (Array.isArray(steps)) {
+                    const stepResults = childData?.steps?.map((_: unknown) => ({ result: '', status: 'completed' as const })) || []
+                    container.plan = { planId: childData?.planId ?? '', steps, currentStep: steps.length - 1, stepResults, planStatus: 'completed' }
+                  }
+                  break
+                }
+              }
+              break
+            }
+            case 'delegation_child_complete':
+            case 'delegation_end': {
+              // delegation_end 可能含 childResults（并行委派）
+              const childResults = evData.childResults as Array<Record<string, unknown>> | undefined
+              if (childResults && childResults.length > 0) {
+                for (const cr of childResults) {
+                  markDelegComplete(segments, cr.subagentId as string, cr.childConversationId as string,
+                    !!cr.success, undefined, cr.durationMs as number | undefined)
+                }
+              } else {
+                markDelegComplete(segments, evData.subagentId as string, evData.childConversationId as string,
+                  !!evData.success, evData.resultPreview as string | undefined, evData.durationMs as number | undefined)
+              }
+              break
+            }
+          }
+        }
+        // 递归闭环所有委派树节点（历史消息不应有 running 状态）
+        for (const s of segments) {
+          finalizeDelegNodes((s.childTimeline as DelegationTimeline | undefined)?.children)
+        }
+      }
     }
 
     return {

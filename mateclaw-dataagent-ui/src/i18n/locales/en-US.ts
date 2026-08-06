@@ -100,6 +100,8 @@ export default {
     planFailed: 'failed',
     planStatusCompleted: 'Completed',
     planStatusFailed: 'Failed',
+    subagentAsync: 'Async delegation, running in background',
+    subagentStalled: 'Sub-agent stalled, no recent progress',
     toolExecution: 'Tool Execution',
     modify: 'Modify',
     confirm: 'Confirm',

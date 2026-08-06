@@ -517,12 +517,9 @@ function handleUserCommand(command: string): void {
 
 /**
  * 新对话：清空当前消息并生成新的会话 ID
- * 若当前正在流式输出，则先停止
+ * 若当前正在流式输出，则将其转入后台继续生成（切回可恢复），而非终止
  */
 async function handleNewChat(): Promise<void> {
-  if (chatStore.isStreaming) {
-    await chatStore.stopChat()
-  }
   chatStore.clearMessages()
   openMenuConvId.value = null
   editingConvId.value = null
