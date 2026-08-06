@@ -479,7 +479,7 @@ public class ToolExecutionExecutor {
                                     toolName, auditEx.getMessage());
                         }
                     }
-                    events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false));
+                    events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false, 0));
                     allResponses.add(new org.springframework.ai.chat.messages.ToolResponseMessage.ToolResponse(
                             toolCall.id(), toolName, msg));
                     continue;
@@ -494,7 +494,7 @@ public class ToolExecutionExecutor {
                     log.warn("[ToolExecutor] Tool {} arguments invalid/truncated JSON (len={}): {}",
                             toolName, arguments.length(), jsonEx.getMessage());
                     String truncationError = normalizeToolExecutionError(jsonEx);
-                    events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, truncationError, false));
+                    events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, truncationError, false, 0));
                     allResponses.add(new ToolResponseMessage.ToolResponse(
                             toolCall.id(), toolName, truncationError));
                     continue;
@@ -544,14 +544,14 @@ public class ToolExecutionExecutor {
                     // model treats the SKILL.md content as the answer to a different,
                     // valid question (rather than as another failed call to recover from).
                     events.add(GraphEventPublisher.toolComplete(
-                            toolCall.id(), toolName, redirect.response(), true));
+                            toolCall.id(), toolName, redirect.response(), true, 0));
                     allResponses.add(new ToolResponseMessage.ToolResponse(
                             toolCall.id(), toolName, redirect.response()));
                     continue;
                 }
                 String msg = skillAwareNotFoundMessage(toolName);
                 log.warn("[ToolExecutor] {}", msg);
-                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false));
+                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false, 0));
                 allResponses.add(new ToolResponseMessage.ToolResponse(
                         toolCall.id(), toolName, msg));
                 continue;
@@ -641,10 +641,11 @@ public class ToolExecutionExecutor {
             }
             String msg = skillAwareNotFoundMessage(toolName);
             log.warn("[ToolExecutor] Pre-approved {}", msg);
-            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false));
+            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false, 0));
             return new ToolResponseMessage.ToolResponse(toolCall.id(), toolName, msg);
         }
 
+        long t0 = System.nanoTime();
         try {
             log.info("[ToolExecutor] Executing pre-approved tool: {}", toolName);
             // RFC-063r §2.5: forward ToolContext so the pre-approved tool can
@@ -685,7 +686,8 @@ public class ToolExecutionExecutor {
                     result, toolName, toolCall.id(), conversationId, workspaceBasePath);
             log.info("[ToolExecutor] Pre-approved tool {} returned {} chars{}", toolName, rawLen,
                     result != null && result.length() < rawLen ? " (now " + result.length() + " after spill/truncate)" : "");
-            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, result, true));
+            long durMs = Math.max(0, (System.nanoTime() - t0) / 1_000_000L);
+            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, result, true, durMs));
             return new ToolResponseMessage.ToolResponse(
                     toolCall.id(), toolName, result != null ? result : "");
         } catch (Exception e) {
@@ -693,7 +695,9 @@ public class ToolExecutionExecutor {
             String safeError = isReturnDirect(callback)
                     ? "Tool execution failed (details withheld per returnDirect policy)"
                     : "Tool execution failed: " + e.getMessage();
-            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, safeError, false));
+            // t0 在 try 之前声明，catch 可直接计算耗时
+            long durMs = Math.max(0, (System.nanoTime() - t0) / 1_000_000L);
+            events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, safeError, false, durMs));
             return new ToolResponseMessage.ToolResponse(toolCall.id(), toolName, safeError);
         }
     }
@@ -840,6 +844,7 @@ public class ToolExecutionExecutor {
                                                                 List<GraphEventPublisher.GraphEvent> events,
                                                                 List<DirectToolOutput> directOutputs) {
         String toolName = pc.toolCall.name();
+        long t0 = System.nanoTime();
         try {
             if (streamTracker != null) {
                 streamTracker.updateRunningTool(pc.conversationId, toolName);
@@ -921,10 +926,11 @@ public class ToolExecutionExecutor {
                     result, toolName, pc.toolCall.id(), pc.conversationId, pc.workspaceBasePath);
             log.info("[ToolExecutor] Tool {} returned {} chars{}", toolName, rawLen,
                     result != null && result.length() < rawLen ? " (now " + result.length() + " after spill/truncate)" : "");
-            events.add(GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, result, true));
+            long durMs = Math.max(0, (System.nanoTime() - t0) / 1_000_000L);
+            events.add(GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, result, true, durMs));
             if (streamTracker != null) {
                 streamTracker.broadcastObject(pc.conversationId, GraphEventPublisher.EVENT_TOOL_COMPLETE,
-                        GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, result, true).data());
+                        GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, result, true, durMs).data());
                 streamTracker.updateRunningTool(pc.conversationId, null);
             }
             return new ToolResponseMessage.ToolResponse(
@@ -939,10 +945,11 @@ public class ToolExecutionExecutor {
             String reportedError = isReturnDirect(pc.callback)
                     ? "Tool execution failed (details withheld per returnDirect policy)"
                     : normalizeToolExecutionError(e);
-            events.add(GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, reportedError, false));
+            long durMs = Math.max(0, (System.nanoTime() - t0) / 1_000_000L);
+            events.add(GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, reportedError, false, durMs));
             if (streamTracker != null) {
                 streamTracker.broadcastObject(pc.conversationId, GraphEventPublisher.EVENT_TOOL_COMPLETE,
-                        GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, reportedError, false).data());
+                        GraphEventPublisher.toolComplete(pc.toolCall.id(), toolName, reportedError, false, durMs).data());
                 streamTracker.updateRunningTool(pc.conversationId, null);
             }
             return new ToolResponseMessage.ToolResponse(
@@ -975,7 +982,7 @@ public class ToolExecutionExecutor {
 
             if (evaluation.shouldBlock()) {
                 log.warn("[ToolExecutor] Tool call BLOCKED: tool={}, summary={}", toolName, evaluation.summary());
-                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, evaluation.summary(), false));
+                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, evaluation.summary(), false, 0));
                 return GuardDecision.blocked(
                         "[安全拦截] " + evaluation.summary() + "。请使用更安全的替代方案。");
             }
@@ -992,7 +999,7 @@ public class ToolExecutionExecutor {
                                 + " — this command cannot be executed even with approval. "
                                 + "Please use a safer alternative.";
                         log.warn("[ToolExecutor] Auto-grant HARD_BLOCK: tool={}, reason={}", toolName, auto.reason());
-                        events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false));
+                        events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false, 0));
                         return GuardDecision.blocked(msg);
                     }
                     if (auto.isApproved()) {
@@ -1022,7 +1029,7 @@ public class ToolExecutionExecutor {
 
             if (guardResult.isBlocked()) {
                 log.warn("[ToolExecutor] Tool call BLOCKED by ToolGuard: tool={}, reason={}", toolName, guardResult.reason());
-                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, guardResult.reason(), false));
+                events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, guardResult.reason(), false, 0));
                 return GuardDecision.blocked(
                         "[安全拦截] " + guardResult.reason() + "。请使用更安全的替代方案。");
             }
@@ -1055,7 +1062,7 @@ public class ToolExecutionExecutor {
                 + "或跳过该步骤并说明原因，不要反复重试同一命令。";
         log.info("[ToolExecutor] NON_INTERACTIVE_DENY: tool={} needs approval but origin is non-interactive (cron); "
                 + "denying to avoid an unresolvable pending", toolName);
-        events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false));
+        events.add(GraphEventPublisher.toolComplete(toolCall.id(), toolName, msg, false, 0));
         return GuardDecision.blocked(msg);
     }
 

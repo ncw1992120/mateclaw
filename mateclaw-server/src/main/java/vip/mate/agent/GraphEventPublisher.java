@@ -110,23 +110,36 @@ public final class GraphEventPublisher {
     }
 
     public static GraphEvent toolComplete(String toolName, String result, boolean success) {
-        return toolComplete(null, toolName, result, success);
+        return toolComplete(null, toolName, result, success, -1);
     }
 
     public static GraphEvent toolComplete(String toolCallId, String toolName, String result, boolean success) {
+        return toolComplete(toolCallId, toolName, result, success, -1);
+    }
+
+    /**
+     * Emit a tool_call_completed event carrying the tool's execution duration.
+     *
+     * @param durationMs wall-clock time spent executing the tool, in milliseconds.
+     *                  Pass {@code -1} when unknown (e.g. guard rejection before execution);
+     *                  the frontend falls back to {@code complete.timestamp - start.timestamp}.
+     */
+    public static GraphEvent toolComplete(String toolCallId, String toolName, String result,
+                                          boolean success, long durationMs) {
         long ts = System.currentTimeMillis();
         // Carry the full tool result; transport-layer chunking lives in
         // ChatStreamTracker.broadcastChunked, which splits oversize payloads
         // into ordered tool_result_chunk events when they exceed the 8 KB
         // single-event budget. The previous unconditional 500-char truncation
         // here destroyed data that the front-end could otherwise render in full.
-        return new GraphEvent(EVENT_TOOL_COMPLETE, Map.of(
-                "toolCallId", toolCallId != null ? toolCallId : "",
-                "toolName", toolName,
-                "result", result != null ? result : "",
-                "success", success,
-                "timestamp", ts
-        ), ts);
+        java.util.Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("toolCallId", toolCallId != null ? toolCallId : "");
+        data.put("toolName", toolName);
+        data.put("result", result != null ? result : "");
+        data.put("success", success);
+        data.put("durationMs", durationMs);
+        data.put("timestamp", ts);
+        return new GraphEvent(EVENT_TOOL_COMPLETE, Map.copyOf(data), ts);
     }
 
     public static GraphEvent planCreated(Long planId, List<String> steps) {

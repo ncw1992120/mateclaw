@@ -1245,11 +1245,12 @@ export const useChatStore = defineStore('chat', () => {
     return undefined
   }
 
-  /** 关闭所有 status=running 的指定类型 segment */
+  /** 关闭所有 status=running 的指定类型 segment，并计算耗时（仅对有 startTime 且无 durationMs 的 segment） */
   function finalizeRunningSegments(segments: Array<Record<string, unknown>>, types: string[]): void {
     for (const seg of segments) {
       if (seg.status === 'running' && types.includes(seg.type as string)) {
         seg.status = 'completed'
+        finalizeDuration(seg)
       }
     }
   }
@@ -1257,8 +1258,37 @@ export const useChatStore = defineStore('chat', () => {
   /** 关闭所有 status=running 的 segment（对话结束时调用） */
   function finalizeAllRunningSegments(segments: Array<Record<string, unknown>>): void {
     for (const seg of segments) {
-      if (seg.status === 'running') seg.status = 'completed'
+      if (seg.status === 'running') {
+        seg.status = 'completed'
+        finalizeDuration(seg)
+      }
     }
+  }
+
+  /**
+   * 为已完成的 segment 计算耗时（毫秒）。
+   * thinking / content segment 由前端在创建时记 startTime，finalize 时据此算 durationMs；
+   * tool_call segment 的 durationMs 由 tool_call_completed 事件携带（后端精确值），此处不覆盖。
+   */
+  function finalizeDuration(seg: Record<string, unknown>): void {
+    if (seg.durationMs != null) return
+    const start = seg.startTime as number | undefined
+    if (!start) return
+    seg.durationMs = Math.max(0, Date.now() - start)
+  }
+
+  /**
+   * 解析工具耗时（毫秒）。
+   * 优先后端精确值 backendDur（≥0）；否则用 eventTs - startTime 回退；都无法确定返回 undefined。
+   * backendDur = -1 表示后端未知（如 guard 拦截未执行），按未知处理。
+   */
+  function resolveDuration(backendDur: number | undefined, eventTs: number | undefined,
+                            startTime: number | undefined): number | undefined {
+    if (typeof backendDur === 'number' && backendDur >= 0) return backendDur
+    if (typeof eventTs === 'number' && typeof startTime === 'number' && eventTs > startTime) {
+      return eventTs - startTime
+    }
+    return undefined
   }
 
   // ===== Agent delegation tree helpers =====
@@ -1425,7 +1455,7 @@ export const useChatStore = defineStore('chat', () => {
           if (!contentSeg) {
             // 关闭可能存在的 running thinking/content segment
             finalizeRunningSegments(segments, ['thinking', 'content'])
-            contentSeg = { type: 'content', status: 'running', text: '' }
+            contentSeg = { type: 'content', status: 'running', text: '', startTime: Date.now() }
             segments.push(contentSeg)
           }
           contentSeg.text = (contentSeg.text as string || '') + delta
@@ -1438,7 +1468,7 @@ export const useChatStore = defineStore('chat', () => {
           const segments = ensureSegments(targetMsgs, msgIdx)
           let thinkSeg = findLastRunningSegment(segments, 'thinking')
           if (!thinkSeg) {
-            thinkSeg = { type: 'thinking', status: 'running', thinkingText: '' }
+            thinkSeg = { type: 'thinking', status: 'running', thinkingText: '', startTime: Date.now() }
             segments.push(thinkSeg)
           }
           thinkSeg.thinkingText = (thinkSeg.thinkingText as string || '') + delta
@@ -1480,6 +1510,7 @@ export const useChatStore = defineStore('chat', () => {
             toolName,
             toolCallId: toolCallId || '',
             toolArgs: toolArgs || '',
+            startTime: Date.now(),
           })
           targetMsgs[msgIdx] = {
             ...prev,
@@ -1501,6 +1532,9 @@ export const useChatStore = defineStore('chat', () => {
         const toolCallId = data.toolCallId as string | undefined
         const success = data.success as boolean | undefined
         const result = data.result as string | undefined
+        // 工具耗时：优先后端精确值（durationMs），回退到 timestamp 差值
+        const backendDur = data.durationMs as number | undefined
+        const eventTs = data.timestamp as number | undefined
         if (toolName && prev.metadata) {
           const prevMeta = prev.metadata as Record<string, unknown>
           const prevToolCalls = (prevMeta.toolCalls as Array<Record<string, unknown>>) || []
@@ -1508,7 +1542,14 @@ export const useChatStore = defineStore('chat', () => {
             const isMatch = (tc.toolCallId && tc.toolCallId === toolCallId)
               || (!tc.toolCallId && tc.name === toolName && tc.status === 'running')
             if (isMatch) {
-              return { ...tc, status: 'completed', success: success !== false, ...(result ? { result } : {}) }
+              const dur = resolveDuration(backendDur, eventTs, tc.startTime as number | undefined)
+              return {
+                ...tc,
+                status: 'completed',
+                success: success !== false,
+                ...(result ? { result } : {}),
+                ...(dur != null ? { durationMs: dur } : {}),
+              }
             }
             return tc
           })
@@ -1521,6 +1562,8 @@ export const useChatStore = defineStore('chat', () => {
               seg.status = 'completed'
               seg.toolSuccess = success !== false
               if (result) seg.toolResult = result
+              const dur = resolveDuration(backendDur, eventTs, seg.startTime as number | undefined)
+              if (dur != null) seg.durationMs = dur
               break
             }
           }

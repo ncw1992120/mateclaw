@@ -1197,6 +1197,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         tc.put("result", data.getOrDefault("result", ""));
                         tc.put("success", data.getOrDefault("success", true));
                         tc.put("status", "completed");
+                        Object dur = data.get("durationMs");
+                        if (dur != null) {
+                            tc.put("durationMs", dur);
+                        }
                         break;
                     }
                 }
@@ -1212,6 +1216,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         seg.put("status", "completed");
                         seg.put("toolResult", data.getOrDefault("result", ""));
                         seg.put("toolSuccess", data.getOrDefault("success", true));
+                        Object dur = data.get("durationMs");
+                        if (dur != null) {
+                            seg.put("durationMs", dur);
+                        }
                         break;
                     }
                 }
@@ -1227,6 +1235,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             seg.put("id", type.substring(0, 2) + "-" + segCounter++);
             seg.put("type", type);
             seg.put("status", "running");
+            // 记录起始时间，finalize 时据此计算 durationMs（thinking/content 耗时持久化）
+            seg.put("startTime", System.currentTimeMillis());
             if (delta != null) {
                 seg.put("segmentOnly", delta.segmentOnly());
                 seg.put("persistenceOnly", delta.persistenceOnly());
@@ -1249,9 +1259,17 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
         private void finalizeRunningSegments(String... types) {
             var typeSet = java.util.Set.of(types);
+            long now = System.currentTimeMillis();
             for (var seg : segments) {
                 if ("running".equals(seg.get("status")) && typeSet.contains(seg.get("type"))) {
                     seg.put("status", "completed");
+                    // 计算耗时：不覆盖已有 durationMs（tool_call 由 tool_call_completed 事件精确写入）
+                    if (!seg.containsKey("durationMs")) {
+                        Object start = seg.get("startTime");
+                        if (start instanceof Long s && now > s) {
+                            seg.put("durationMs", now - s);
+                        }
+                    }
                 }
             }
         }

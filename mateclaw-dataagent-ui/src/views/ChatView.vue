@@ -117,6 +117,7 @@
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                          <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
                           <span
                             class="seg-narration__arrow"
                             :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
@@ -148,6 +149,7 @@
                             <span v-else>✕</span>
                           </span>
                           <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
+                          <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
                           <span v-if="truncateArgs(seg.toolArgs as string)" class="seg-tool__args">{{ truncateArgs(seg.toolArgs as string) }}</span>
                           <span
                             v-if="seg.toolArgs != null || seg.toolResult != null || hasDelegationTimeline(seg)"
@@ -188,6 +190,7 @@
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
+                          <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
                           <span
                             class="seg-narration__arrow"
                             :class="{ 'is-open': isNarrationExpanded(index, segIdx) }"
@@ -1693,6 +1696,21 @@ function toggleToolExpand(toolIdx: number): void {
   } else {
     expandedTools.add(toolIdx)
   }
+}
+
+/**
+ * 格式化 segment 耗时。< 1s 显示毫秒，≥ 1s 显示秒（1 位小数），≥ 60s 显示分秒。
+ * 仅在 segment 已完成且有 durationMs 时返回非空字符串。
+ */
+function formatDuration(seg: Record<string, unknown> | undefined): string {
+  if (!seg) return ''
+  const ms = seg.durationMs as number | undefined
+  if (ms == null || ms < 0) return ''
+  if (ms < 1000) return `${ms} ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`
+  const m = Math.floor(ms / 60_000)
+  const s = Math.round((ms % 60_000) / 1000)
+  return `${m}m ${s}s`
 }
 
 /** 截断工具参数（显示在 header 行） */
@@ -5572,6 +5590,14 @@ onUnmounted(() => {
 
 .seg-tool__header:hover .seg-tool__name {
   color: var(--theme-text);
+}
+
+/* segment 耗时标记（工具/思考/叙述卡片通用） */
+.seg-duration {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .seg-tool__args {

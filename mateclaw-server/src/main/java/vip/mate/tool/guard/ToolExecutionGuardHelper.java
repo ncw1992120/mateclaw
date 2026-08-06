@@ -37,8 +37,8 @@ public final class ToolExecutionGuardHelper {
 
         if (approvalService == null) {
             log.warn("[GuardHelper] ApprovalService not available, falling back to BLOCK for tool={}", toolName);
-            events.add(GraphEventPublisher.toolComplete(toolName,
-                    evaluation.summary() != null ? evaluation.summary() : "需要审批", false));
+            events.add(GraphEventPublisher.toolComplete(null, toolName,
+                    evaluation.summary() != null ? evaluation.summary() : "需要审批", false, 0));
             return "[安全拦截] " + (evaluation.summary() != null ? evaluation.summary() : "需要审批")
                     + "。审批服务不可用，请联系管理员。";
         }
@@ -94,7 +94,7 @@ public final class ToolExecutionGuardHelper {
 
         if (approvalService == null) {
             log.warn("[GuardHelper] ApprovalService not available, falling back to BLOCK for tool={}", toolName);
-            events.add(GraphEventPublisher.toolComplete(toolName, guardResult.reason(), false));
+            events.add(GraphEventPublisher.toolComplete(null, toolName, guardResult.reason(), false, 0));
             return "[安全拦截] " + guardResult.reason() + "。审批服务不可用，请联系管理员。";
         }
 
