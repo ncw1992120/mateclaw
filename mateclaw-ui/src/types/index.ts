@@ -208,6 +208,12 @@ export interface MessageSegment {
   id: string
   type: 'thinking' | 'tool_call' | 'content' | 'phase' | 'approval' | 'plan'
   status: 'running' | 'completed' | 'error'
+  /**
+   * Producer-assigned emission index, monotonic within a turn. Present on
+   * persisted segments; absent on live ones, which are already appended in
+   * event order. Renderers sort by it instead of relocating segments by type.
+   */
+  seq?: number
   /** type=thinking */
   thinkingText?: string
   /** type=tool_call */
@@ -250,6 +256,9 @@ export interface MessageSegment {
   delegationAsync?: boolean
   /** 时间戳 */
   timestamp?: number
+  /** Wall-clock end of the segment (set when status flips to completed); with
+   *  timestamp it yields the real duration for history replays. */
+  endTimestamp?: number
   /**
    * Iteration index this segment belongs to (0-based). Set by iteration_start —
    * lets MessageBubble group thinking/tool/content segments per iteration so
@@ -262,6 +271,14 @@ export interface MessageSegment {
   repetitionWarning?: 'char_pattern' | 'sentence_repetition'
   /** Number of trailing characters dropped when the repetition guard fired. */
   truncatedChars?: number
+  /**
+   * Producer-assigned content semantics from the backend agent graph:
+   * 'pre_tool_narration' (provisional — text emitted alongside tool calls
+   * before any observation this turn), 'grounded_narration', or
+   * 'final_answer'. Delivered live via the segment_kind SSE event and
+   * persisted in metadata.segments; absent on legacy messages.
+   */
+  kind?: string
   /** Backend marked this model-predicted tool result as replaced by a later actual tool result. */
   superseded?: boolean
   /** Segment ID that replaced this pre-tool prediction. */
@@ -284,6 +301,10 @@ export interface GeneratedFile {
 }
 
 export interface MessageMetadata {
+  /** Internal note discriminator, e.g. 'compression_summary' | 'team_announce' | 'team_announce_reply' */
+  type?: string
+  /** type=team_announce: number of settled team tasks carried by this note */
+  taskCount?: number
   currentPhase?: string
   toolCalls?: ToolCallMeta[]
   plan?: PlanMeta
@@ -774,6 +795,10 @@ export interface WorkspaceFile {
   fileSize: number
   enabled: boolean
   sortOrder: number
+  /** Memory subject for PERSONAL rows ("user:42", "feishu:ou_xxx"); empty/null for shared rows */
+  ownerKey?: string | null
+  /** Visibility scope: PERSONAL / TEAM / GLOBAL */
+  scope?: string
   createTime: string
   updateTime: string
 }
@@ -808,6 +833,11 @@ export interface SystemSettings {
   language: 'zh-CN' | 'en-US'
   streamEnabled: boolean
   debugMode: boolean
+  // Whether chat renders the model's reasoning ("thinking") blocks; default true
+  showThinking: boolean
+  // Whether chat renders every iteration's reasoning or only the span that
+  // produced the answer; default true. Only meaningful while showThinking is on.
+  thinkingFull: boolean
   // Default workspace storage root; '' = use the server-side default
   workspaceStorageRoot?: string
   // 搜索服务配置
@@ -875,6 +905,12 @@ export interface ProviderModelInfo {
    * toggle should gate on.
    */
   supportsThinking?: boolean
+  /** Explicit input window in tokens; null/undefined when the operator set none. */
+  maxInputTokens?: number | null
+  /** Window budgeting would use right now: configured, built-in table, or global default. */
+  effectiveMaxInputTokens?: number | null
+  /** Where `effectiveMaxInputTokens` comes from. */
+  maxInputTokensSource?: 'configured' | 'catalog' | 'default'
 }
 
 /**
@@ -1075,9 +1111,19 @@ export interface CronJob {
   // channelId / deliveryConfig: round-trippable on create/update.
   // lastDeliveryStatus / lastDeliveryError: read-only, populated by
   // selectListWithDeliveryStatus / selectByIdWithDeliveryStatus on the backend.
-  channelId?: number | null
+  // Runtime is always a string (global Long→String serialization); keep the
+  // union so pre-existing number literals in callers still type-check.
+  channelId?: string | number | null
   channelName?: string | null
-  deliveryConfig?: { targetId?: string | null; threadId?: string | null; accountId?: string | null } | null
+  deliveryConfig?: {
+    targetId?: string | null
+    threadId?: string | null
+    accountId?: string | null
+    /** IM senderId of the delivery target user — used for session matching. */
+    userId?: string | null
+    /** True = run the job but don't push the result to the channel. */
+    suppressAgentReply?: boolean | null
+  } | null
   lastDeliveryStatus?: 'NONE' | 'PENDING' | 'DELIVERED' | 'NOT_DELIVERED'
   lastDeliveryError?: string | null
 }

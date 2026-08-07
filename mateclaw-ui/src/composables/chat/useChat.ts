@@ -13,6 +13,7 @@ import { ref, computed } from 'vue'
 import { useMessages } from './useMessages'
 import { useStream } from './useStream'
 import { useMessageQueue } from './useMessageQueue'
+import { supersedesProvisionalNarration, markSuperseded } from './supersede'
 import { useGoalStore } from '@/stores/useGoalStore'
 import { useSystemSettingsStore } from '@/stores/useSystemSettingsStore'
 import { storeToRefs } from 'pinia'
@@ -233,6 +234,16 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   const genSegId = () => `seg-${Date.now()}-${segIdCounter.value++}`
 
   /**
+   * Tool observations completed so far this turn, and the count each content
+   * segment was opened at. A provisional narration is only replaced once an
+   * observation actually landed after it, so the live collapse needs both the
+   * running total and each span's mark — the same bookkeeping the backend
+   * tracker does. Turn-scoped: reset with the rest of the streaming state.
+   */
+  let observationCount = 0
+  const segmentObservationMark = new Map<string, number>()
+
+  /**
    * Fine-grained lifecycle stage exposed to the UI for the "connecting → started
    * → context_prepared → llm_request_sent → streaming" loading bar. Reset on
    * every new turn; transitions to `streaming` implicitly when the first
@@ -268,6 +279,8 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   function resetCurrentTurnState() {
     currentSegments.value = []
     segIdCounter.value = 0
+    observationCount = 0
+    segmentObservationMark.clear()
     bufferedText = ''
     bufferedThinking = ''
     activeTurnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -495,12 +508,41 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         // Close any running thinking segment first
         const thinkingSeg = segs.findLast((s: MessageSegment) => s.type === 'thinking' && s.status === 'running')
         if (thinkingSeg) thinkingSeg.status = 'completed'
+        // The content span that precedes the one about to open — the only
+        // candidate this span can replace.
+        const prevContent = segs.findLast((s: MessageSegment) => s.type === 'content')
         contentSeg = { id: genSegId(), type: 'content', status: 'running', text: '', timestamp: Date.now() }
         applyIterationTags(contentSeg)
+        segmentObservationMark.set(String(contentSeg.id), observationCount)
+        // Later content supersedes an earlier provisional narration — collapse
+        // it in place, live, instead of waiting for the persisted-metadata
+        // annotations in the done payload. Rule and guards live in
+        // supersede.ts, mirroring the backend tracker.
+        const prevMark = prevContent ? (segmentObservationMark.get(String(prevContent.id)) ?? 0) : 0
+        if (prevContent && supersedesProvisionalNarration(prevContent, observationCount, prevMark)) {
+          markSuperseded(prevContent, String(contentSeg.id))
+        }
         segs.push(contentSeg)
         flushSegmentsToMessage() // sync once when a new content segment is created
       }
       contentSeg.text = (contentSeg.text || '') + (data.delta || '')
+    }
+  })
+
+  stream.on('segment_kind', (data) => {
+    if (isStaleEvent(data)) return
+    // Producer-assigned semantics of the content span that just closed its
+    // completion. Text streams live before the backend knows whether the
+    // completion carries tool calls, so the kind arrives as this follow-up
+    // event; tag the newest content segment (still running at this point —
+    // tool_call_started closes it afterwards). First writer wins, matching
+    // the persistence side.
+    const kind = typeof data?.kind === 'string' ? data.kind : ''
+    if (!kind) return
+    const seg = currentSegments.value.findLast((s: MessageSegment) => s.type === 'content')
+    if (seg && !seg.kind) {
+      seg.kind = kind
+      flushSegmentsToMessage()
     }
   })
 
@@ -731,6 +773,20 @@ export function useChat(options: UseChatOptions): UseChatReturn {
                 if (remote.supersededReason !== undefined) {
                   next.supersededReason = remote.supersededReason
                 }
+                if (next.kind == null && remote.kind != null) {
+                  next.kind = remote.kind
+                }
+                // Server wall-clock bounds are authoritative for durations
+                // ("thought for Ns"). Local segments often miss endTimestamp:
+                // round-boundary closes flip status without stamping an end,
+                // and a re-grouped segment list remounts the component so its
+                // local freeze is lost. Fill whichever side is missing.
+                if (next.timestamp == null && remote.timestamp != null) {
+                  next.timestamp = remote.timestamp
+                }
+                if (next.endTimestamp == null && remote.endTimestamp != null) {
+                  next.endTimestamp = remote.endTimestamp
+                }
                 return next
               })
               ;(msg as any).metadata = { ...(metadata || {}), segments: merged }
@@ -895,6 +951,11 @@ export function useChat(options: UseChatOptions): UseChatReturn {
   // Body of tool_call_completed — see handleToolCallStarted.
   function handleToolCallCompleted(data: any) {
     if (isStaleEvent(data)) return
+    // Counted regardless of success: a failed tool still produces an
+    // observation, and the content written after it is grounded in that
+    // failure. Counted before the segment work below so a content span opened
+    // later in this turn sees the higher mark.
+    observationCount++
     if (currentAssistantId.value) {
       const msg = getMessage(currentAssistantId.value)
       if (msg) {
@@ -2192,14 +2253,14 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     try {
       // reconnectStream always rebuilds from an EMPTY placeholder (above), so it
       // needs the server to replay the WHOLE buffer — not just events newer than
-      // a previously-acked lastEventId. Clearing it forces connect() to omit
-      // lastEventId so the backend full-replays and the placeholder repaints.
-      // Without this, a reconnect into the same conversation (poll-detected
-      // running stream after a switch-away, window refocus) dedup-skips the
-      // buffer and the bubble stays blank until a hard refresh resets this ref —
-      // the "switch conversations mid-stream → blank, refresh fixes it" bug.
-      // Setting null (not a foreign id) right before connect can't leak or race.
-      stream.lastEventId.value = null
+      // a previously-acked lastEventId — AND the client to accept that replay.
+      // resetDedup() clears both halves atomically: lastEventId (so connect()
+      // omits it and the backend full-replays) and seenEventIds (so emit()
+      // doesn't silently drop the replayed ids it already saw before the
+      // switch-away). Clearing only lastEventId reintroduces the "switch
+      // conversations mid-stream → blank bubble, refresh fixes it" bug: the
+      // server replays everything and the client discards everything.
+      stream.resetDedup()
       await stream.connect({
         conversationId,
         reconnect: true,

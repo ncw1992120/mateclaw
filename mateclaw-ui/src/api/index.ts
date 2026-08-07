@@ -324,6 +324,43 @@ export const skillApi = {
   curatorReports: () => http.get('/skills/curator/reports'),
   /** Read one curator run report (parsed run.json). */
   curatorReport: (runId: string) => http.get(`/skills/curator/reports/${runId}`),
+
+  // ---- Curator restore points ----
+  /** List recent skill-library restore points (newest first). */
+  /** Skills currently under autonomous curation — the set that can be released. */
+  curatorManaged: () => http.get('/skills/curator/managed'),
+  /** Skills outside autonomous curation, with the reason each one is out. */
+  curatorUnmanaged: () => http.get('/skills/curator/unmanaged'),
+  /**
+   * Hand skills over to autonomous curation. Ids stay strings — 19-digit
+   * snowflake ids lose precision through the JS Number type.
+   */
+  curatorAdopt: (skillIds: string[]) => http.post('/skills/curator/adopt', skillIds),
+  /** Take skills back from autonomous curation. */
+  curatorRelease: (skillIds: string[]) => http.post('/skills/curator/release', skillIds),
+  curatorSnapshots: () => http.get('/skills/curator/snapshots'),
+  /** Capture a restore point on demand. */
+  curatorSnapshotCapture: (reason?: string) =>
+    http.post('/skills/curator/snapshots', null, { params: reason ? { reason } : {} }),
+  /**
+   * Roll the skill library back to a restore point. The id stays a string —
+   * 19-digit snowflake ids lose precision as a JS number.
+   */
+  curatorSnapshotRestore: (snapshotId: string) =>
+    http.post(`/skills/curator/snapshots/${snapshotId}/restore`),
+
+  // ---- Routine mining ----
+  /** Mined recurring-request candidates plus the promotion thresholds. */
+  routines: (status?: string) =>
+    http.get('/skills/routines', { params: status ? { status } : {} }),
+  /** Run a mining sweep now instead of waiting for the nightly job. */
+  routineMine: () => http.post('/skills/routines/mine'),
+  /** Reject a candidate so later sweeps stop re-detecting it. */
+  routineDismiss: (id: string) => http.post(`/skills/routines/${id}/dismiss`),
+  /** Put a dismissed candidate back under observation. */
+  routineReopen: (id: string) => http.post(`/skills/routines/${id}/reopen`),
+  /** Synthesize the skill now, bypassing the recurrence thresholds. */
+  routinePromote: (id: string) => http.post(`/skills/routines/${id}/promote`),
 }
 
 /** Shape returned by GET /skills/{id}/secrets. */
@@ -517,6 +554,12 @@ export const channelApi = {
   /** Batch health for all channels in current workspace. */
   healthAll: () => http.get('/channels/health'),
   /**
+   * List a channel's known conversations (proactive-push targets). Used by
+   * the cron delivery-target picker; a conversation appears here once the
+   * bot has received at least one inbound message in it.
+   */
+  listSessions: (id: string | number) => http.get(`/channels/${id}/sessions`),
+  /**
    * Wizard Step 2 — validate a draft config without persisting.
    * Returns a VerificationResult: { ok, skipped, durationMs, headline,
    * identity, invalidField, hint }.
@@ -571,6 +614,10 @@ export const planApi = {
 // ==================== Model ====================
 export const modelApi = {
   listProviders: () => http.get('/models'),
+  // Provider id + name only. /models carries connection settings and is
+  // admin-only, so anything a workspace member can reach (the agent's
+  // preferred-provider picker) has to read the choices from here.
+  listProviderOptions: () => http.get('/models/options'),
   listEnabled: () => http.get('/models/enabled'),
   get: (id: string | number) => http.get(`/models/${id}`),
   getDefault: () => http.get('/models/default'),
@@ -594,6 +641,9 @@ export const modelApi = {
     http.post(`/models/${providerId}/models`, data),
   removeProviderModel: (providerId: string, modelId: string) =>
     http.delete(`/models/${providerId}/models`, { params: { modelId } }),
+  /** Per-model input context window. Pass null to clear the override. */
+  updateModelContextWindow: (providerId: string, modelId: string, maxInputTokens: number | null) =>
+    http.put(`/models/${providerId}/models/context-window`, { modelId, maxInputTokens }),
   getActive: () => http.get('/models/active'),
   setActive: (data: { providerId: string; model: string }) =>
     http.put('/models/active', data),
@@ -722,6 +772,12 @@ export const agentContextApi = {
     http.put(`/agents/${agentId}/workspace/files/${encodeFilePath(filename)}`, { content }),
   deleteFile: (agentId: string | number, filename: string) =>
     http.delete(`/agents/${agentId}/workspace/files/${encodeFilePath(filename)}`),
+  // Per-owner PERSONAL memory copies written by agents during conversations.
+  // Admin-only on the backend; callers should treat a 403 as "hide the section".
+  listPersonalFiles: (agentId: string | number) =>
+    http.get(`/agents/${agentId}/workspace/memory/personal-files`),
+  getPersonalFile: (agentId: string | number, filename: string, ownerKey: string) =>
+    http.get(`/agents/${agentId}/workspace/memory/personal-file`, { params: { filename, ownerKey } }),
   getPromptFiles: (agentId: string | number) =>
     http.get(`/agents/${agentId}/workspace/prompt-files`),
   setPromptFiles: (agentId: string | number, files: string[]) =>

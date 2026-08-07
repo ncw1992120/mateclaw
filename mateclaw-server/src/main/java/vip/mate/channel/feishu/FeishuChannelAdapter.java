@@ -85,21 +85,6 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
     /** 定时 Token 刷新任务 */
     private ScheduledFuture<?> tokenRefreshFuture;
 
-    /** 消息去重：最近处理过的 message_id（实例级，处理重连回放和 SDK 双投递） */
-    private final Set<String> processedMessageIds = ConcurrentHashMap.newKeySet();
-
-    /**
-     * 跨 adapter 全局去重：同一 app_id 的多个渠道实例共享此映射。
-     * <p>飞书 WS 长连接会把消息广播给同一 app 的所有活跃连接，当多个 adapter 使用相同
-     * app_id（例如同一个 bot 配置了多个渠道）时，每个 adapter 都会收到同一条消息。
-     * 全局去重确保一条消息只被一个 adapter 处理。
-     * <p>Key: app_id；Value: 已处理的 message_id 集合（大小超过 {@link #GLOBAL_DEDUP_MAX} 时半数淘汰）。
-     */
-    private static final ConcurrentHashMap<String, Set<String>> GLOBAL_PROCESSED_IDS_BY_APP =
-            new ConcurrentHashMap<>();
-
-    private static final int GLOBAL_DEDUP_MAX = 10_000;
-
     /**
      * 群内 bot 别名缓存：chatId → 学到的别名集合（openId / unionId / userId / name）。
      * <p>飞书 SDK 投递的 mention 里，bot 的标识可能是群内自定义别名（{@code ou_357e...} / 自定义名称），
@@ -255,19 +240,6 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
      * {@link #chatUploadsRoot} field applies.
      */
     vip.mate.workspace.core.service.ChatUploadLocationResolver chatUploadLocationResolver;
-
-    /**
-     * Resolve the upload root for a conversation, preferring the wired resolver
-     * (workspace/agent-aware) and falling back to the legacy field. Read paths
-     * should use {@link #candidateChatUploadRoots(String)} to probe both the
-     * workspace-scoped root and the legacy root.
-     */
-    private java.nio.file.Path chatUploadRootFor(String conversationId) {
-        if (chatUploadLocationResolver != null) {
-            return chatUploadLocationResolver.resolveUploadRoot(conversationId);
-        }
-        return chatUploadsRoot;
-    }
 
     /**
      * Ordered candidate upload roots for a conversation: workspace-scoped first
@@ -473,7 +445,6 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
             this.botName = null;
             this.botOpenIdLastFailureMs = 0L;
         }
-        this.processedMessageIds.clear();
         this.chatBotAliases.clear();
         this.mentionTracker.clear();
         this.nicknameCache.clear();
@@ -1260,26 +1231,6 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
             }
         }
 
-        // 实例级消息去重（处理 SDK 双投递和重连回放）
-        if (messageId != null && !processedMessageIds.add(messageId)) {
-            log.info("[feishu] Duplicate message_id (instance dedup): {}, skipping", messageId);
-            return;
-        }
-        cleanupProcessedIds();
-
-        // 跨 adapter 全局去重：同一 app_id 的多个渠道实例共享，防止同一条消息被多个 adapter 重复处理。
-        // 在实例级 dedup 之后，确保通过实例级 dedup 的事件只有一个 adapter 继续处理。
-        String appId = getConfigString("app_id", "");
-        if (messageId != null && !appId.isEmpty()) {
-            Set<String> globalIds = GLOBAL_PROCESSED_IDS_BY_APP.computeIfAbsent(
-                    appId, k -> ConcurrentHashMap.newKeySet());
-            if (!globalIds.add(messageId)) {
-                log.info("[feishu] Duplicate message_id (cross-adapter dedup): {}, skipping", messageId);
-                return;
-            }
-            cleanupGlobalProcessedIds(appId, globalIds);
-        }
-
         // require_mention 群聊过滤：群聊中必须 @机器人才响应。
         // 当 botOpenId 为 null 时（API 抖动 / 尚未拉取成功），失败回退到放行 —
         // 避免飞书 /open-apis/bot/v3/info 短暂不可用时整个群机器人变哑巴。
@@ -1291,6 +1242,15 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
         if (isGroup && requireMention && !isBotMentioned) {
             // botOpenId is null here — identity unknown, gate falls open.
             log.warn("[feishu] require_mention=true but bot open_id unavailable; allowing messageId={}", messageId);
+        }
+
+        // Early duplicate gate. The authoritative claim happens once, in
+        // ChannelMessageRouter.enqueue; this peek only spares a redelivery the
+        // side effects below (the "received" reaction, media downloads) that
+        // would otherwise fire again before the router ever sees the message.
+        if (messageRouter.isDuplicateInbound(channelEntity.getId(), messageId)) {
+            log.debug("[feishu] Duplicate message_id: {}, skipping", messageId);
+            return;
         }
 
         // 添加消息反应（非阻塞，表示"已收到"）
@@ -1360,36 +1320,6 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
                 channelMessage.getContent() != null ? channelMessage.getContent().substring(0, Math.min(50, channelMessage.getContent().length())) : "null");
 
         onMessage(channelMessage);
-    }
-
-    /**
-     * 清理实例级去重记录：超过 1000 条时保留最近添加的（移除最早的一半）
-     */
-    private void cleanupProcessedIds() {
-        if (processedMessageIds.size() > 1000) {
-            int toRemove = processedMessageIds.size() / 2;
-            var iterator = processedMessageIds.iterator();
-            while (iterator.hasNext() && toRemove > 0) {
-                iterator.next();
-                iterator.remove();
-                toRemove--;
-            }
-        }
-    }
-
-    /**
-     * 清理全局跨 adapter 去重记录：超过 {@link #GLOBAL_DEDUP_MAX} 条时移除最早的一半
-     */
-    private static void cleanupGlobalProcessedIds(String appId, Set<String> ids) {
-        if (ids.size() > GLOBAL_DEDUP_MAX) {
-            int toRemove = ids.size() / 2;
-            var iterator = ids.iterator();
-            while (iterator.hasNext() && toRemove > 0) {
-                iterator.next();
-                iterator.remove();
-                toRemove--;
-            }
-        }
     }
 
     // ==================== 消息反应 ====================
@@ -1886,11 +1816,13 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
                     : maybeDownloadResource(messageId, fileKey, type, fileName);
             if (dl == null) return null;
 
-            // Save under the workspace/agent-aware upload root ({convId}/ subdir).
-            // Sanitize the id for the path segment — IM ids like "feishu:xxx"
+            // Save under the workspace/agent-aware upload root ({convId}/ subdir,
+            // plus the per-day sub-directory when date folders are enabled).
+            // The id is sanitized for the path segment — IM ids like "feishu:xxx"
             // carry a ':' that is illegal in a Windows filename.
-            Path uploadDir = chatUploadRootFor(conversationId)
-                    .resolve(ChatUploadLocationResolver.sanitizeSegment(conversationId));
+            Path uploadDir = (chatUploadLocationResolver != null)
+                    ? chatUploadLocationResolver.resolveWriteDir(conversationId)
+                    : chatUploadsRoot.resolve(ChatUploadLocationResolver.sanitizeSegment(conversationId));
             Files.createDirectories(uploadDir);
             String rawName = (dl.fileName() != null && !dl.fileName().isBlank())
                     ? dl.fileName() : fileKey;
@@ -1984,7 +1916,11 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
         long cutoff = System.currentTimeMillis() - RECENT_FILE_TTL_MINUTES * 60_000L;
         List<RecentFileEntry> merged = new java.util.ArrayList<>();
         for (Path dir : candidateChatUploadDirs(conversationId)) {
-            merged.addAll(loadRecentFilesFromDisk(dir, cutoff));
+            // Scan the flat conversation dir plus each yyyy-MM-dd sub-directory
+            // so staged copies written under either layout are recovered.
+            for (Path scanDir : ChatUploadLocationResolver.dateScanDirs(dir)) {
+                merged.addAll(loadRecentFilesFromDisk(scanDir, cutoff));
+            }
         }
         return merged;
     }
@@ -2742,7 +2678,10 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
         StringBuilder accumulator = new StringBuilder();
         try {
             stream.doOnNext(delta -> {
-                        if (delta.content() != null) {
+                        // segmentOnly narration is skipped: appending every
+                        // ReAct iteration's "我来查一下…" into the card text is
+                        // what makes the answer read as if it were sent twice.
+                        if (StreamingChannelAdapter.contributesToFinalContent(delta)) {
                             accumulator.append(delta.content());
                             streamingCardManager.appendContent(sessionKey, delta.content(), false);
                         }
@@ -2755,8 +2694,12 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
                     .blockLast(Duration.ofMinutes(5));
 
             String finalContent = accumulator.toString();
-            if (finalContent.isBlank()) {
-                finalContent = "（无回复内容）";
+            // Card streaming never touches renderAndSend, so the channel's
+            // message-filter config has to be applied here — otherwise
+            // filter_thinking / filter_tool_messages are inert on this path.
+            String cardContent = filterOutboundContent(finalContent);
+            if (cardContent.isBlank()) {
+                cardContent = "（无回复内容）";
             }
             // Strip any /api/v1/files/generated/{id} URLs out of the card
             // text (replacing each with a "📎 filename" marker) AND send
@@ -2765,11 +2708,11 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
             // the user sees a broken-looking download link instead of the
             // actual file. Cache-miss URLs fall back to the user-facing
             // retry hint that GeneratedFileScrubber emits.
-            String renderedContent = scrubAndSendAttachments(receiveId, finalContent);
+            String renderedContent = scrubAndSendAttachments(receiveId, cardContent);
             streamingCardManager.finishCard(sessionKey, renderedContent);
             log.info("[feishu-stream] Card streaming completed: sessionKey={}, contentLen={}",
                     sessionKey, renderedContent.length());
-            return finalContent;
+            return finalContent.isBlank() ? cardContent : finalContent;
 
         } catch (Exception e) {
             log.error("[feishu-stream] Card streaming failed: sessionKey={}, err={}",
@@ -2800,13 +2743,17 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
     private String processStreamAsText(Flux<StreamDelta> stream, ChannelMessage message) {
         StringBuilder accumulator = new StringBuilder();
         stream.doOnNext(delta -> {
-                    if (delta.content() != null) {
+                    if (StreamingChannelAdapter.contributesToFinalContent(delta)) {
                         accumulator.append(delta.content());
                     }
                 })
                 .blockLast(Duration.ofMinutes(5));
         String finalContent = accumulator.toString();
-        if (!finalContent.isBlank()) {
+        // sendMessage is called directly (rather than renderAndSend) because
+        // Feishu does its own card/text split and chunking, so the channel's
+        // message-filter config is applied explicitly here.
+        String outbound = filterOutboundContent(finalContent);
+        if (!outbound.isBlank()) {
             String replyTarget = message.getReplyToken() != null
                     ? message.getReplyToken()
                     : (message.getChatId() != null ? message.getChatId() : message.getSenderId());
@@ -2814,7 +2761,7 @@ public class FeishuChannelAdapter extends AbstractChannelAdapter implements Stre
                 // Same scrub-and-upload hop as the streaming card finish path —
                 // a generated-file URL in plain text would otherwise reach the
                 // user as a markdown link that opens to nothing useful in IM.
-                String renderedContent = scrubAndSendAttachments(replyTarget, finalContent);
+                String renderedContent = scrubAndSendAttachments(replyTarget, outbound);
                 sendMessage(replyTarget, renderedContent);
             }
         }

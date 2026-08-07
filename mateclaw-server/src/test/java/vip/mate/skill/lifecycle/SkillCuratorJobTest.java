@@ -55,6 +55,8 @@ class SkillCuratorJobTest {
     private CuratorRunNotifier notifier;
     @Mock
     private SkillConsolidationService consolidationService;
+    @Mock
+    private SkillSnapshotService snapshotService;
 
     private SkillLifecycleProperties properties;
     private SkillCuratorJob job;
@@ -72,7 +74,8 @@ class SkillCuratorJobTest {
     void setUp() {
         properties = new SkillLifecycleProperties();
         job = new SkillCuratorJob(lifecycleService, skillMapper, reportStore, properties,
-                systemSettingService, agentBindingService, workspaceManager, notifier, consolidationService);
+                systemSettingService, agentBindingService, workspaceManager, notifier, consolidationService,
+                snapshotService);
     }
 
     private SkillEntity candidate(long id, String state, LocalDateTime lastActivity) {
@@ -194,6 +197,54 @@ class SkillCuratorJobTest {
         verify(reportStore).write(cap.capture());
         assertEquals(1, cap.getValue().getPlanned().stale());
         assertEquals(1, cap.getValue().getApplied().stale());
+    }
+
+    /** A candidate curation has never seen: no activity, no observation stamp. */
+    private SkillEntity unobservedCandidate(long id, LocalDateTime createdAt) {
+        SkillEntity s = candidate(id, "active", null);
+        s.setCreateTime(createdAt);
+        return s;
+    }
+
+    @Test
+    void unobservedCandidateIsSeededAndNotJudged() {
+        when(systemSettingService.getBool(eq(SkillCuratorJob.PAUSED_KEY), anyBoolean())).thenReturn(false);
+        when(systemSettingService.getBool(eq(SkillCuratorJob.FIRST_RUN_KEY), anyBoolean())).thenReturn(true);
+        stubSweep(List.of(unobservedCandidate(1L, now.minusDays(900))));
+
+        job.run();
+
+        // Stamped so the next sweep has a real anchor, but never judged this time.
+        verify(lifecycleService).markObserved(any(), any());
+        verify(lifecycleService, never()).planTransition(any(), any());
+        verify(lifecycleService, never()).apply(any(), any(), any());
+
+        ArgumentCaptor<SkillCuratorReport> cap = ArgumentCaptor.forClass(SkillCuratorReport.class);
+        verify(reportStore).write(cap.capture());
+        assertEquals(1, cap.getValue().getNewlyObserved());
+        assertEquals(0, cap.getValue().getPlanned().archived());
+    }
+
+    @Test
+    void dryRunDoesNotSeedButReachesTheSameVerdict() {
+        // The preview is what an operator reads before widening the scope, so
+        // it must not predict archives that a real run would defer — while
+        // still writing nothing.
+        when(systemSettingService.getBool(eq(SkillCuratorJob.PAUSED_KEY), anyBoolean())).thenReturn(false);
+        when(systemSettingService.getBool(eq(SkillCuratorJob.FIRST_RUN_KEY), anyBoolean())).thenReturn(false);
+        when(systemSettingService.getString(eq(SkillCuratorJob.LAST_OBSERVED_KEY), any()))
+                .thenReturn(now.minusDays(2).toString());
+        stubSweep(List.of(unobservedCandidate(1L, now.minusDays(900))));
+
+        job.run();
+
+        verify(lifecycleService, never()).markObserved(any(), any());
+        verify(lifecycleService, never()).planTransition(any(), any());
+
+        ArgumentCaptor<SkillCuratorReport> cap = ArgumentCaptor.forClass(SkillCuratorReport.class);
+        verify(reportStore).write(cap.capture());
+        assertEquals(1, cap.getValue().getNewlyObserved());
+        assertEquals(0, cap.getValue().getPlanned().archived());
     }
 
     @Test
