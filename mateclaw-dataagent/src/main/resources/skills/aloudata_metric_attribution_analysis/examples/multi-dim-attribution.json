@@ -1,0 +1,64 @@
+/**
+ * 示例1：多维归因 — 销售额环比为什么下降
+ * 用户: "上月销售额为什么下降了"
+ *
+ * 工具调用流程:
+ * 1. aloudata_search_semantic(datasourceId=..., keyword="销售额") → metricName="sales_amount"
+ * 2. aloudata_metric_available_dimensions(metricNames=["sales_amount"]) → 可用维度含 region/product/channel
+ * 3. LLM 自动选维度：region、product、channel（排除 metric_time*，选 3 个业务维度）
+ * 4. attribution_check → 校验通过（result=true）
+ * 5. attribution_multi_dim → 各维度贡献率
+ * 6. attribution_drilldown(dimension="region") → 对主因维度下钻
+ */
+
+/* ========== 步骤4: 归因校验请求 ========== */
+{
+    "analysisRange": {
+        "current": {"type": "EXPR", "expr": "DateTrunc([metric_time],\"MONTH\")=\"2025-06\""},
+        "comparison": {"type": "EXPR", "expr": "DateTrunc([metric_time],\"MONTH\")=\"2025-05\""}
+    },
+    "metric": "sales_amount",
+    "dimensions": ["region", "product", "channel"]
+}
+
+/* ========== 步骤5: 多维归因请求 ========== */
+{
+    "attributionRange": {
+        "granularity": "MONTH",
+        "comparisonType": "MOM",
+        "currentFilter": {"type": "EXPR", "expr": "DateTrunc([metric_time],\"MONTH\")=\"2025-06\""}
+    },
+    "metric": "sales_amount",
+    "dimensions": ["region", "product", "channel"]
+}
+
+/* ========== 步骤5 响应（节选）========== */
+{
+    "data": {
+        "metric": "sales_amount",
+        "all": {
+            "currentValue": 95000, "comparisonValue": 120000,
+            "growth": -25000, "growthRate": -0.208
+        },
+        "dimensions": {
+            "region": {
+                "dimensionValue": ["华东","华南","华北"],
+                "contributionRate": [-0.72, -0.18, -0.10]
+            }
+        }
+    }
+}
+
+/* ========== 步骤6: 下钻主因维度（region 贡献率最大）========== */
+{
+    "attributionRange": {
+        "granularity": "MONTH",
+        "comparisonType": "MOM",
+        "currentFilter": {"type": "EXPR", "expr": "DateTrunc([metric_time],\"MONTH\")=\"2025-06\""}
+    },
+    "metric": "sales_amount",
+    "dimension": "region"
+}
+
+/* 解读：销售额环比下降 25000（-20.8%），华东区域贡献率 -0.72（下拉 72%），
+   为主因；建议对华东区域进一步排查产品/渠道细分。 */

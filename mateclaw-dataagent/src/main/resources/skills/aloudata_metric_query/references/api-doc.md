@@ -467,3 +467,161 @@ resultFilters 对查询结果进行二次过滤，可以筛选指标值或维度
     "traceId": "add22b18f1524199941fc83ce26dda33.576.16940932763920003"
 }
 ```
+
+---
+
+## 指标归因分析 API
+
+归因分析用于解释**指标为什么变化**——在两个时间点之间，各维度值对指标变化的贡献率是多少。共 5 个 endpoint，构成"校验 → 多维归因 → 下钻归因"的流程，外加指标树归因（指标拆解关系）。
+
+### 归因流程
+
+```
+attribution_check（校验指标能否归因）
+  → attribution_multi_dim（多维归因，看各维度贡献率）
+  → attribution_drilldown（对主因维度下钻，看具体维度值贡献）
+```
+
+指标树归因是独立路径：直接调 `attribution_tree`（传入 `metricTree` + `metrics` + `attributionRange`），按指标的拆解树归因各因子。
+
+### attribution_check — 归因校验
+
+**用途**：校验指标是否支持归因分析（先决条件，避免直接调归因查询报错）。
+
+**请求参数**（BODY）：
+
+| 参数 | 必填 | 描述 |
+|------|------|------|
+| `analysisRange` | 是 | 归因分析范围，结构见下方 |
+| `metric` | 是 | 指标英文名 |
+| `dimensions` | 是 | 分析维度英文名列表 |
+| `timeConstraint` | 否 | 时间筛选器表达式 |
+| `filters` | 否 | 筛选器 |
+| `displayFilters` | 否 | 结果筛选器（having 语义） |
+| `limit` | 否 | 返回行数，默认 200 |
+
+**analysisRange 结构**：
+
+```json
+{
+  "current": "2024-05-11",
+  "comparison": "2024-05-10"
+}
+```
+
+- `current`：当前分析日期（字符串，如 `"2024-05-11"`）
+- `comparison`：对比分析日期（同格式）
+
+**响应**：`data` 为布尔数组，`true` 表示对应指标+维度组合可归因，`false` 表示不可归因。
+
+### attribution_multi_dim — 多维归因
+
+**用途**：对指标在多个维度上做归因，返回各维度的贡献率（哪个维度拉动了指标变化）。
+
+**请求参数**（BODY）：
+
+| 参数 | 必填 | 描述 |
+|------|------|------|
+| `attributionRange` | 是 | 归因范围，结构见下方 |
+| `metric` | 是 | 指标英文名 |
+| `dimensions` | 是 | 分析维度英文名列表（多维度同时归因） |
+| `filters` | 否 | 筛选器 |
+| `orders` | 否 | 排序，默认按 contributionRate 倒排。格式 `[{"column":"overallContributionRate","type":"DESC"}]`，可排序字段：currentValue/comparisonValue/growth/growthRate/contributionRate |
+| `limit` | 否 | 返回行数，默认 200 |
+
+**attributionRange 结构**：
+
+```json
+{
+  "granularity": "DAY",
+  "comparisonType": "MOM",
+  "currentFilter": {"type": "EXPR", "expr": "DateTrunc([metric_time],\"DAY\")=\"2025-07-07\""},
+  "startDateTime": "2025-07-01",
+  "endDateTime": "2025-07-06"
+}
+```
+
+- `granularity`：时间粒度，`DAY`/`WEEK`/`MONTH`/`QUARTER`/`YEAR`
+- `comparisonType`：对比类型，`CUSTOM`/`DOD`/`YOY`/`MOM`/`QOQ`/`WOW`
+- `currentFilter`：当前时间筛选对象（type=EXPR, expr=时间表达式）
+- `startDateTime`/`endDateTime`：当 comparisonType=CUSTOM 时指定对比区间
+
+**响应 data 结构**：
+
+```json
+{
+  "metric": "sales_amount",
+  "all": {
+    "currentValue": 10000, "comparisonValue": 8000,
+    "growth": 2000, "growthRate": 0.25,
+    "overallContributionRate": 1.0, "relativeContributionRate": 1.0
+  },
+  "dimensions": {
+    "region": {
+      "dimensionValue": ["华东","华南","华北"],
+      "currentValue": [5000,3000,2000],
+      "comparisonValue": [4000,2500,1500],
+      "growth": [1000,500,500],
+      "growthRate": [0.25,0.2,0.33],
+      "contributionRate": [0.5,0.25,0.25],
+      "overallContributionRate": [0.5,0.25,0.25],
+      "relativeContributionRate": [0.5,0.25,0.25]
+    }
+  }
+}
+```
+
+- `all`：整体变化概要（当前值/对比值/增长值/增长率/贡献率）
+- `dimensions`：各维度归因详情，key 为维度名，value 中所有列表**按维度值对齐**（dimensionValue[i] 对应 currentValue[i]、contributionRate[i] 等）
+- `contributionRate`：贡献率，正值表示该维度值推动指标同向变化，负值表示反向
+
+### attribution_drilldown — 下钻归因
+
+**用途**：对**单一维度**细查变动原因（通常在 multi_dim 找出主因维度后，对其下钻）。
+
+**请求参数**与 multi_dim 的差异：
+
+| 参数 | 描述 |
+|------|------|
+| `dimension`（单数） | 下钻维度英文名，**单个**（multi_dim 是 `dimensions` 复数） |
+| `filters` | 可追加 `drillFilters`（下钻维度值筛选） |
+
+其余参数（attributionRange、metric、orders、limit）与 multi_dim 一致。响应结构同 multi_dim。
+
+### attribution_tree — 指标树归因
+
+**用途**：按指标拆解树做归因（如总销售额 = 销售额 + 退货额，分别归因各因子的贡献）。
+
+**请求参数**（BODY）：
+
+| 参数 | 必填 | 描述 |
+|------|------|------|
+| `metricTree` | 是 | 指标树层级关系，key 为节点名，value 含 expr 和 refId |
+| `metrics` | 是 | 指标定义详情，key 为指标 ID，value 含 id 和 code |
+| `attributionRange` | 是 | 归因范围，结构同 [attribution_multi_dim 的 attributionRange](#attribution_multi_dim--多维归因) |
+| `filters` | 否 | 筛选器 |
+
+**请求示例**：
+
+```json
+{
+  "metricTree": {
+    "RootNode": {"expr": "[MetricA]+[MetricB]", "refId": "METRIC_001"},
+    "MetricA": {"expr": "", "refId": "METRIC_002"},
+    "MetricB": {"expr": "", "refId": "METRIC_003"}
+  },
+  "metrics": {
+    "METRIC_001": {"id": "METRIC_001", "code": "TotalSales"},
+    "METRIC_002": {"id": "METRIC_002", "code": "Sales"},
+    "METRIC_003": {"id": "METRIC_003", "code": "Returns"}
+  },
+  "filters": ["IN(['dim'],\"a\")"],
+  "attributionRange": {
+    "granularity": "DAY",
+    "comparisonType": "DOD",
+    "currentFilter": {"type": "EXPR", "expr": "DateTrunc([metric_time], 'DAY') = '2024-11-30'"}
+  }
+}
+```
+
+**响应 data**：含 `metricTree`（树结构）、`metrics`（各节点指标值）、`all`（整体变化）、`dimensions`（各节点归因）。
