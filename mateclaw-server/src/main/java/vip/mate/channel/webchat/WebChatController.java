@@ -114,6 +114,20 @@ public class WebChatController {
     @Value("${mateclaw.jwt.secret:MateClaw-JWT-Secret-Key-2024-Please-Change-In-Production}")
     private String visitorTokenSecret;
 
+    /**
+     * SseEmitter timeout (minutes) for WebChat SSE streams. Previously
+     * hardcoded to 10 minutes across three {@code new Utf8SseEmitter(...)} call
+     * sites; downstream integrators were forced to reason about a constant
+     * living in someone else's repo (issue #586). Configurable so operators
+     * have a documented knob, defaulting to the historical 10 minutes.
+     */
+    @Value("${mateclaw.webchat.sse-timeout-minutes:10}")
+    private int webchatSseTimeoutMinutes;
+
+    private long sseTimeoutMillis() {
+        return (long) webchatSseTimeoutMinutes * 60_000L;
+    }
+
     private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
 
     /**
@@ -126,7 +140,7 @@ public class WebChatController {
             @RequestBody WebChatRequest request) {
 
         // RFC-058 PR-1: Utf8SseEmitter 显式 charset=UTF-8，防止中文 SSE 乱码
-        SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
+        SseEmitter emitter = new Utf8SseEmitter(sseTimeoutMillis());
 
         // 验证 API Key 并获取关联的 Channel 配置
         ChannelEntity channel = resolveChannel(apiKey);
@@ -305,12 +319,21 @@ public class WebChatController {
                                         persistErr.getMessage());
                             }
                             streamTracker.broadcast(conversationId, "done", "{\"status\":\"completed\"}");
+                            // WebChat is a pure-backend SSE channel with no re-attach
+                            // endpoint: for third-party integrators reading until the
+                            // server closes, `done` IS the end of the stream. Close the
+                            // subscriber connections so a 5-second answer doesn't hold
+                            // a downstream connection-pool slot for the full SseEmitter
+                            // timeout (issue #586). The in-house web channel does NOT
+                            // do this — it keeps emitters open for reconnect + replay.
+                            streamTracker.closeSubscribers(conversationId);
                             streamTracker.complete(conversationId);
                         })
                         .doOnError(e -> {
                             log.error("[WebChat] Stream error: {}", e.getMessage());
                             streamTracker.broadcast(conversationId, "error",
                                     "{\"message\":" + escapeJson(e.getMessage()) + "}");
+                            streamTracker.closeSubscribers(conversationId);
                             streamTracker.complete(conversationId);
                         })
                         .subscribe();
@@ -1210,7 +1233,7 @@ public class WebChatController {
             @RequestParam String visitorId,
             @RequestParam(required = false) String sessionId,
             @RequestParam String pendingId) {
-        SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
+        SseEmitter emitter = new Utf8SseEmitter(sseTimeoutMillis());
         ChannelEntity channel = resolveChannel(apiKey);
         if (channel == null) {
             sendErrorAndComplete(emitter, "Invalid API Key");
@@ -1275,6 +1298,7 @@ public class WebChatController {
                     broadcastApprovalResolved(conversationId, consumed);
                     streamTracker.broadcast(conversationId, "done",
                             "{\"status\":\"already_resolved\"}");
+                    streamTracker.closeSubscribers(conversationId);
                     return;
                 }
 
@@ -1290,6 +1314,7 @@ public class WebChatController {
                             pendingId);
                     streamTracker.broadcast(conversationId, "done",
                             "{\"status\":\"error\",\"message\":\"No agent bound to approval\"}");
+                    streamTracker.closeSubscribers(conversationId);
                     return;
                 }
 
@@ -1360,12 +1385,16 @@ public class WebChatController {
                             }
                             streamTracker.broadcast(conversationId, "done",
                                     "{\"status\":\"completed\"}");
+                            // Close the WebChat SSE connection on the logical end of
+                            // the replay stream — same rationale as /stream (issue #586).
+                            streamTracker.closeSubscribers(conversationId);
                             streamTracker.complete(conversationId);
                         })
                         .doOnError(e -> {
                             log.error("[WebChat] approve replay stream error: {}", e.getMessage());
                             streamTracker.broadcast(conversationId, "error",
                                     "{\"message\":" + escapeJson(e.getMessage()) + "}");
+                            streamTracker.closeSubscribers(conversationId);
                             streamTracker.complete(conversationId);
                         })
                         .subscribe();
@@ -1376,6 +1405,7 @@ public class WebChatController {
                     streamTracker.broadcast(conversationId, "error",
                             "{\"message\":" + escapeJson(e.getMessage()) + "}");
                 } catch (Exception ignored) {}
+                streamTracker.closeSubscribers(conversationId);
                 streamTracker.complete(conversationId);
             }
         });
@@ -1431,7 +1461,7 @@ public class WebChatController {
             @RequestHeader(value = "X-MC-Visitor-Token", required = false) String visitorToken,
             @RequestParam String visitorId,
             @RequestParam(required = false) String sessionId) {
-        SseEmitter emitter = new Utf8SseEmitter(10 * 60 * 1000L);
+        SseEmitter emitter = new Utf8SseEmitter(sseTimeoutMillis());
         ChannelEntity channel = resolveChannel(apiKey);
         if (channel == null) {
             sendErrorAndComplete(emitter, "Invalid API Key");
