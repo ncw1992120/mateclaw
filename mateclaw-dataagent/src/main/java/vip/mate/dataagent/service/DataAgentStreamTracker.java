@@ -83,6 +83,13 @@ public class DataAgentStreamTracker {
         final long createdAt = System.currentTimeMillis();
         volatile long lastEventAt = System.currentTimeMillis();
 
+        /** 第一个 thinking_delta 经 relay 到达的时刻（≈ LLM 开始吐思考 T_think_start）。
+         *  StreamAccumulator 收到的 thinking 是 persistOnly 整段（graph output 处理时刻 ≈ T_think_end），
+         *  无法据此算准思考耗时；用此字段修正 thinking segment 的 startTime。 */
+        volatile Long thinkingStartTime;
+        /** 第一个 content_delta 经 relay 到达的时刻（≈ LLM 开始吐正文 T_content_start），同理用于 content segment。 */
+        volatile Long contentStartTime;
+
         /** 异步 trim 标记：buffer 超限时置位，由 trimScheduler 异步清理 */
         volatile boolean needsTrim;
 
@@ -519,6 +526,21 @@ public class DataAgentStreamTracker {
                 return;
             }
             broadcast(conversationId, eventName, jsonData);
+            // 记录第一个 thinking_delta / content_delta 的到达时刻，
+            // 供 StreamAccumulator 修正 segment 的 startTime（默认是 graph output 处理时刻，
+            // 即 T_think_end/T_content_end，会导致 durationMs 包含工具执行时间）。
+            // 用首个 delta 的到达时刻（≈ T_think_start/T_content_start）才能算准耗时。
+            if ("thinking_delta".equals(eventName) || "content_delta".equals(eventName)) {
+                RunState st = runs.get(conversationId);
+                if (st != null) {
+                    long now = System.currentTimeMillis();
+                    if ("thinking_delta".equals(eventName) && st.thinkingStartTime == null) {
+                        st.thinkingStartTime = now;
+                    } else if ("content_delta".equals(eventName) && st.contentStartTime == null) {
+                        st.contentStartTime = now;
+                    }
+                }
+            }
             // 委派事件额外累积到缓存，供流终态持久化到消息 metadata，
             // 使刷新/重开对话后前端能重建委派树（实时流已构建，但后端权威 segments 不含委派数据）。
             if (eventName != null && eventName.startsWith("delegation_")) {
@@ -570,6 +592,18 @@ public class DataAgentStreamTracker {
         synchronized (list) {
             return new ArrayList<>(list);
         }
+    }
+
+    /** 第一个 thinking_delta 到达时刻（≈ T_think_start），null 表示未收到过 thinking。 */
+    public Long getThinkingStartTime(String conversationId) {
+        RunState st = runs.get(conversationId);
+        return st != null ? st.thinkingStartTime : null;
+    }
+
+    /** 第一个 content_delta 到达时刻（≈ T_content_start），null 表示未收到过 content。 */
+    public Long getContentStartTime(String conversationId) {
+        RunState st = runs.get(conversationId);
+        return st != null ? st.contentStartTime : null;
     }
 
     private static String safe(String s) {

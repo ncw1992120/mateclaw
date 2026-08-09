@@ -798,6 +798,19 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             donePayload.put("persisted", savedAssistant != null);
             donePayload.put("messageCount", msgCount);
+            // 修正 thinking/content segment 的 startTime：StreamAccumulator 默认用 graph output
+            // 处理时刻（≈ T_think_end/T_content_end），而 relay 在首个 thinking_delta/content_delta
+            // 到达时记录的时刻（≈ T_think_start/T_content_start）更准确。修正后由
+            // getFinalizedSegments 用 endTime（tool_call_started 的 T_tool_start）重算 durationMs，
+            // 使思考耗时严格不含工具执行时间。
+            Long thinkingStart = streamTracker.getThinkingStartTime(conversationId);
+            if (thinkingStart != null) {
+                accumulator.updateSegmentStartTime("thinking", thinkingStart);
+            }
+            Long contentStart = streamTracker.getContentStartTime(conversationId);
+            if (contentStart != null) {
+                accumulator.updateSegmentStartTime("content", contentStart);
+            }
             // 携带权威 segments 数据，前端用此覆盖实时流中缺失 segmentOnly 标记的 segments
             List<Map<String, Object>> finalizedSegments = accumulator.getFinalizedSegments();
             if (!finalizedSegments.isEmpty()) {
@@ -1083,6 +1096,24 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         /** 获取已 finalize 的 segments 列表（用于 done 事件携带权威 segments 给前端） */
         synchronized List<Map<String, Object>> getFinalizedSegments() {
             finalizeRunningSegments("thinking", "content", "tool_call");
+            // 重算已 finalized 但尚无 durationMs 的 segment 的耗时。
+            // 仅对 startTimeCorrected=true 的 segment（即 updateSegmentStartTime 用 relay
+            // 记录的首个 delta 到达时刻修正过 startTime）重算，这些 segment 的 startTime
+            // 是 T_think_start/T_content_start，endTime 是 tool_call_started 的 T_tool_start，
+            // 算出的 durationMs 严格不含工具执行时间。
+            // 未被修正的 segment（多轮 ReAct 的后续 thinking/content）startTime 不准，
+            // 不在后端计算，留给前端 done 事件合并实时流的正确值。
+            for (var seg : segments) {
+                if ("completed".equals(seg.get("status"))
+                        && !seg.containsKey("durationMs")
+                        && Boolean.TRUE.equals(seg.get("startTimeCorrected"))) {
+                    Object start = seg.get("startTime");
+                    Object end = seg.get("endTime");
+                    if (start instanceof Long s && end instanceof Long e && e > s) {
+                        seg.put("durationMs", e - s);
+                    }
+                }
+            }
             return new ArrayList<>(segments);
         }
 
@@ -1177,7 +1208,13 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 tc.put("status", "running");
                 toolCalls.add(tc);
 
-                finalizeRunningSegments("thinking", "content");
+                // 用事件携带的 timestamp（T_tool_start = 工具开始执行时刻，由
+                // GraphEventPublisher.toolStart 在 ToolExecutionExecutor 执行工具前生成）
+                // 来 finalize thinking/content segment，而非 System.currentTimeMillis()。
+                // 后者因 tool_call_started 经 PENDING_EVENTS→ACTION_NODE output 才到达，
+                // 已延迟到 T_tool_end，会把工具执行时间计入思考耗时。
+                long endTs = extractEventTs(data);
+                finalizeRunningSegments(endTs, "thinking", "content");
                 var seg = newSegment("tool_call");
                 seg.put("toolCallId", String.valueOf(data.getOrDefault("toolCallId", "")));
                 seg.put("toolName", data.getOrDefault("toolName", ""));
@@ -1257,17 +1294,65 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             return null;
         }
 
+        /**
+         * 从事件 data 中提取 timestamp（毫秒）。tool_call_started/tool_call_completed 事件
+         * 的 timestamp 由 GraphEventPublisher 在事件生成时设置（工具执行前/后），比
+         * StreamAccumulator 处理事件的 wall-clock 更准确。
+         */
+        private long extractEventTs(Map<String, Object> data) {
+            if (data == null) return System.currentTimeMillis();
+            Object ts = data.get("timestamp");
+            if (ts instanceof Number n && n.longValue() > 0) return n.longValue();
+            return System.currentTimeMillis();
+        }
+
+        /** 更新指定类型首个已 finalize 但尚无 durationMs 且未被修正过的 segment 的 startTime。
+         *  <p>用于在 handleStreamFinalize 中，用 relay 记录的首个 thinking_delta/content_delta
+         *  到达时刻（T_think_start/T_content_start）修正 StreamAccumulator 默认的 startTime
+         *  （graph output 处理时刻 ≈ T_think_end），使后续 getFinalizedSegments 重算 durationMs 准确。
+         *  <p>thinkingStartTime/contentStartTime 全程只记录首轮首个 delta 到达时刻（见
+         *  DataAgentStreamTracker.installRelay 的 if==null 守卫），因此只能用来修正首轮 segment。
+         *  多轮 ReAct 的后续 segment startTime 不准，不在此修正，留给前端 done 事件合并实时流的正确值。
+         *  <p>从前往后找首个匹配项（与 thinkingStartTime 的首轮语义对齐）。原实现从后往前找，
+         *  多轮下会错配到末轮 segment，用首轮起点重算末轮 durationMs，得到横跨多轮的错误大值，
+         *  导致"思考耗时≈工具耗时"。 */
+        synchronized void updateSegmentStartTime(String type, long startTime) {
+            for (int i = 0; i < segments.size(); i++) {
+                var seg = segments.get(i);
+                if (type.equals(seg.get("type"))
+                        && "completed".equals(seg.get("status"))
+                        && !seg.containsKey("durationMs")
+                        && !Boolean.TRUE.equals(seg.get("startTimeCorrected"))) {
+                    seg.put("startTime", startTime);
+                    seg.put("startTimeCorrected", true);
+                    return;
+                }
+            }
+        }
+
         private void finalizeRunningSegments(String... types) {
+            finalizeRunningSegments(System.currentTimeMillis(), types);
+        }
+
+        /** 用指定的 endTs finalize running segments 并计算 durationMs。
+         *  endTs 应为事件携带的 timestamp（如 tool_call_started.timestamp = T_tool_start），
+         *  而非 System.currentTimeMillis()（处理时刻 ≈ T_tool_end），避免把工具执行时间计入思考耗时。
+         *  无论 durationMs 是否写入，都记录 endTime，以便 updateSegmentStartTime 修正 startTime
+         *  后由 getFinalizedSegments 重算。
+         *  注意：thinking/content 的 durationMs 不在此处写入——它们的 startTime 默认是 graph output
+         *  处理时刻（不准），需经 updateSegmentStartTime 修正后由 getFinalizedSegments 重算。
+         *  仅 tool_call 在此兜底计算（tool_call_completed 事件精确写入的兜底）。 */
+        private void finalizeRunningSegments(long endTs, String... types) {
             var typeSet = java.util.Set.of(types);
-            long now = System.currentTimeMillis();
             for (var seg : segments) {
                 if ("running".equals(seg.get("status")) && typeSet.contains(seg.get("type"))) {
                     seg.put("status", "completed");
-                    // 计算耗时：不覆盖已有 durationMs（tool_call 由 tool_call_completed 事件精确写入）
-                    if (!seg.containsKey("durationMs")) {
+                    seg.put("endTime", endTs);
+                    // 仅 tool_call 在此兜底计算 durationMs；thinking/content 留给 getFinalizedSegments
+                    if ("tool_call".equals(seg.get("type")) && !seg.containsKey("durationMs")) {
                         Object start = seg.get("startTime");
-                        if (start instanceof Long s && now > s) {
-                            seg.put("durationMs", now - s);
+                        if (start instanceof Long s && endTs > s) {
+                            seg.put("durationMs", endTs - s);
                         }
                     }
                 }
