@@ -514,8 +514,8 @@ public final class DataAgentConstants {
     /** AI生成仪表盘默认Schema版本号 */
     public static final String INSIGHT_GENERATE_SCHEMA_VERSION = "1.0";
 
-    /** AI生成仪表盘默认组件宽度 */
-    public static final int INSIGHT_GENERATE_DEFAULT_COMPONENT_W = 6;
+    /** AI生成仪表盘默认组件宽度（24列栅格下半宽，与前端 col-num=24 一致） */
+    public static final int INSIGHT_GENERATE_DEFAULT_COMPONENT_W = 12;
 
     /** AI生成仪表盘默认组件高度 */
     public static final int INSIGHT_GENERATE_DEFAULT_COMPONENT_H = 4;

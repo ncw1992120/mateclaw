@@ -550,25 +550,112 @@ function closeAllMobilePanels(): void {
   showMobileProperty.value = false
 }
 
-/** AI助手修改后刷新Schema */
+/** AI助手修改后刷新Schema（增量预览：只对新增/数据源变更的组件重新取数） */
 async function handleAiDashboardUpdated(): Promise<void> {
   if (!dashboard.value) {
     return
   }
-  // 重新从后端加载仪表盘数据
-  await store.selectDashboard(dashboard.value.id)
-  if (dashboard.value) {
-    try {
-      const parsed = JSON.parse(dashboard.value.schemaJson)
-      const migrated = migrateSchema(parsed)
-      schema.version = migrated.version
-      schema.pages = migrated.pages
-    } catch {
-      // Schema解析失败时保持当前状态
+
+  // 1. 替换 schema 前快照所有组件签名，用于增量对比
+  const oldSignatures = new Map<string, string>()
+  for (const page of schema.pages) {
+    for (const c of page.components ?? []) {
+      oldSignatures.set(c.id, componentSignature(c))
     }
-    // 刷新组件预览数据
-    schedulePreview()
   }
+
+  // 2. 重新从后端加载仪表盘数据
+  await store.selectDashboard(dashboard.value.id)
+  if (!dashboard.value) {
+    return
+  }
+
+  let newSchema: InsightDashboardSchema | null = null
+  try {
+    const parsed = JSON.parse(dashboard.value.schemaJson)
+    newSchema = migrateSchema(parsed)
+  } catch {
+    // Schema解析失败时保持当前状态
+    return
+  }
+
+  // 3. 清理已删除组件的预览数据
+  const newIds = new Set<string>()
+  for (const page of newSchema.pages) {
+    for (const c of page.components ?? []) {
+      newIds.add(c.id)
+    }
+  }
+  for (const oldId of oldSignatures.keys()) {
+    if (!newIds.has(oldId)) {
+      delete componentDataMap.value[oldId]
+    }
+  }
+
+  // 4. 应用新 schema
+  schema.version = newSchema.version
+  schema.pages = newSchema.pages
+
+  // 5. 增量预览：只对新增或签名变化的组件重新取数，未变组件保留已有数据
+  scheduleIncrementalPreview(oldSignatures)
+}
+
+/** 计算组件数据签名（用于判断是否需要重新取数） */
+function componentSignature(c: InsightComponent): string {
+  const ds = c.dataSource
+  return [
+    ds?.datasourceId ?? '',
+    (ds?.metrics ?? []).join(','),
+    (ds?.dimensions ?? []).join(','),
+    c.chartType ?? '',
+    c.type,
+    JSON.stringify(ds?.filters ?? []),
+    ds?.timeConstraint ?? '',
+  ].join('|')
+}
+
+/** 增量预览：对比旧签名，只对新增/变更的组件取数 */
+function scheduleIncrementalPreview(oldSignatures: Map<string, string>): void {
+  if (previewTimer) {
+    clearTimeout(previewTimer)
+  }
+  previewTimer = setTimeout(() => {
+    previewChangedComponents(oldSignatures)
+  }, 500)
+}
+
+/** 为所有页面中新增或数据源变更的组件获取预览数据 */
+async function previewChangedComponents(oldSignatures: Map<string, string>): Promise<void> {
+  const tasks: Array<Promise<void>> = []
+  for (const page of schema.pages) {
+    for (const c of page.components ?? []) {
+      if (c.type === 'filter' || c.type === 'timeFilter' || c.type === 'aiAnalysis') {
+        continue
+      }
+      if (!c.dataSource?.datasourceId || !c.dataSource?.metrics?.length) {
+        continue
+      }
+      const oldSig = oldSignatures.get(c.id)
+      const newSig = componentSignature(c)
+      // 未变化则跳过，保留已有预览数据
+      if (oldSig !== undefined && oldSig === newSig) {
+        continue
+      }
+      tasks.push((async () => {
+        try {
+          const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+          componentDataMap.value[c.id] = result
+        } catch (e: any) {
+          componentDataMap.value[c.id] = {
+            componentId: c.id,
+            renderType: 'table',
+            error: e.message ?? t('insight.previewFailed'),
+          }
+        }
+      })())
+    }
+  }
+  await Promise.allSettled(tasks)
 }
 
 /** 选中页面 */

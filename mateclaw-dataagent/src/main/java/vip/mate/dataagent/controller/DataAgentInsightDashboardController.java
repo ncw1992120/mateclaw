@@ -135,8 +135,11 @@ public class DataAgentInsightDashboardController {
      * - dashboardId不为空：AI修改模式，根据用户指令修改已有仪表盘
      * <p>
      * 通过SSE流式推送AI推理过程，事件类型：
-     * - content: AI推理文本增量
-     * - result: 最终仪表盘数据（JSON格式）
+     * - reasoning: AI思考过程增量（展示给用户）
+     * - tool_call: 工具调用信息
+     * - tool_result: 工具调用结果
+     * - hint: RAG/记忆/规划系统提示信息
+     * - result: 仪表盘生成/修改成功（JSON直接更新到数据库，前端展示成功提示）
      * - error: 错误信息
      */
     @PostMapping(value = "/ai-chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

@@ -1506,6 +1506,7 @@ export default {
     aiAssistant: 'AI Assistant',
     aiAssistantTitle: 'AI Assistant',
     aiAssistantPlaceholder: 'Enter instruction, e.g.: Generate a sales analysis dashboard / Change the first chart to pie',
+    aiReasoning: 'Reasoning',
     aiChat: 'AI Modify',
     aiChatTitle: 'AI Modify Dashboard',
     aiChatPlaceholder: 'Enter modification instruction, e.g.: Change the first chart to pie, add a sales KPI card',

@@ -120,6 +120,7 @@ import {
   subscribeReport,
   unsubscribeReport,
 } from '@/api/insight-report'
+import { usePersistedRef } from '@/composables/usePersistedRef'
 
 defineOptions({
   name: 'ReportListView',
@@ -136,8 +137,12 @@ const tabs = [
 
 type TabKey = (typeof tabs)[number]['key']
 
-/** 当前激活的 Tab */
-const activeTab = ref<TabKey>('mine')
+/** 当前激活的 Tab（刷新后保留） */
+const activeTab = usePersistedRef<TabKey>(
+  'mc-report-active-tab',
+  'mine',
+  (value) => tabs.map((t) => t.key).includes(value as TabKey),
+)
 
 /** 报告列表数据 */
 const reports = ref<InsightReport[]>([])

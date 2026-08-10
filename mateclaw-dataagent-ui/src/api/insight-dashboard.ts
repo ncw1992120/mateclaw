@@ -47,10 +47,13 @@ export function previewComponent(component: InsightComponent) {
 /** SSE流式事件回调 */
 export interface StreamAiChatCallbacks {
   /** 收到reasoning事件：AI思考过程增量 */
+  onConversationId?: (id: string) => void
   onReasoning?: (text: string) => void
-  /** 收到content事件：AI最终结果文本增量 */
-  onContent: (text: string) => void
-  /** 收到result事件：最终仪表盘数据 */
+  /** 收到content事件：LLM返回的JSON结果（直接更新到数据库，前端无需展示） */
+  onContent?: (text: string) => void
+  /** 收到tool_call事件：工具调用信息（含toolCallId、toolName、args） */
+  onToolCall?: (info: { toolCallId: string; toolName: string; args?: unknown }) => void
+  /** 收到result事件：仪表盘生成/修改成功 */
   onResult: (dashboard: InsightDashboard) => void
   /** 收到error事件 */
   onError: (message: string) => void
@@ -60,10 +63,12 @@ export interface StreamAiChatCallbacks {
  * AI助手对话（流式SSE）
  *
  * SSE事件类型：
- * - reasoning: AI思考过程增量
- * - content: AI最终结果文本增量
+ * - reasoning: AI思考过程增量（展示给用户）
+ * - content: LLM返回的JSON结果（直接更新到数据库，前端无需展示）
+ * - tool_call: 工具调用信息（JSON格式，含toolCallId、toolName、args）
  * - tool_result: 工具调用结果
- * - result: 最终仪表盘数据（JSON格式）
+ * - hint: RAG/记忆/规划系统提示信息
+ * - result: 仪表盘生成/修改成功（前端展示成功提示）
  * - error: 错误信息
  *
  * @param data 请求参数
@@ -167,14 +172,33 @@ function handleSseEvent(
   callbacks: StreamAiChatCallbacks,
 ): void {
   switch (event) {
+    case 'conversation_id':
+      callbacks.onConversationId?.(data)
+      break
     case 'reasoning':
       callbacks.onReasoning?.(data)
       break
     case 'content':
-      callbacks.onContent(data)
+      callbacks.onContent?.(data)
       break
+    case 'tool_call': {
+      // 工具调用信息，解析JSON后回调
+      try {
+        const info = JSON.parse(data) as { toolCallId: string; toolName: string; args?: unknown }
+        callbacks.onToolCall?.(info)
+      } catch {
+        // 解析失败时忽略
+      }
+      break
+    }
     case 'tool_result':
       // 工具调用结果，暂不展示
+      break
+    case 'hint':
+      // RAG/记忆/规划系统提示信息，暂不展示
+      break
+    case 'ping':
+      // 后端SSE心跳保活事件，无需处理
       break
     case 'result': {
       try {

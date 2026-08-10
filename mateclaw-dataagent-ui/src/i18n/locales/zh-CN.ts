@@ -1516,6 +1516,7 @@ export default {
     aiAssistant: 'AI助手',
     aiAssistantTitle: 'AI助手',
     aiAssistantPlaceholder: '输入指令，例如：帮我生成一个销售分析仪表盘 / 把第一个图表改成饼图',
+    aiReasoning: '思考过程',
     aiChat: 'AI修改',
     aiChatTitle: 'AI修改仪表盘',
     aiChatPlaceholder: '输入修改指令，例如：把第一个图表改成饼图，再添加一个销售额的KPI卡片',

@@ -34,4 +34,20 @@ public class AgentCallRequest {
 
     /** 工具定义列表（可选，AgentScope ToolSpec 格式） */
     private List<Map<String, Object>> tools;
+
+    /** 历史对话消息（用于多轮对话上下文，可选） */
+    private List<HistoryMessage> historyMessages;
+
+    /**
+     * 历史对话消息
+     */
+    @Data
+    public static class HistoryMessage {
+
+        /** 角色：user 或 assistant */
+        private String role;
+
+        /** 消息内容 */
+        private String content;
+    }
 }

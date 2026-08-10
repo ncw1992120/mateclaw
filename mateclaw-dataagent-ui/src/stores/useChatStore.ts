@@ -1245,12 +1245,16 @@ export const useChatStore = defineStore('chat', () => {
     return undefined
   }
 
-  /** 关闭所有 status=running 的指定类型 segment，并计算耗时（仅对有 startTime 且无 durationMs 的 segment） */
-  function finalizeRunningSegments(segments: Array<Record<string, unknown>>, types: string[]): void {
+  /** 关闭所有 status=running 的指定类型 segment，并计算耗时（仅对有 startTime 且无 durationMs 的 segment）。
+   *  endTs 为可选的结束时刻：优先用事件携带的 timestamp（如 tool_call_started.timestamp，
+   *  即工具开始执行时刻 T_tool_start），而非 Date.now()（事件到达时刻 ≈ T_tool_end）。
+   *  这样 thinking segment 的 durationMs = T_tool_start - T_think_start，严格不含工具执行时间。 */
+  function finalizeRunningSegments(segments: Array<Record<string, unknown>>, types: string[], endTs?: number): void {
+    const end = typeof endTs === 'number' && endTs > 0 ? endTs : Date.now()
     for (const seg of segments) {
       if (seg.status === 'running' && types.includes(seg.type as string)) {
         seg.status = 'completed'
-        finalizeDuration(seg)
+        finalizeDuration(seg, end)
       }
     }
   }
@@ -1269,12 +1273,14 @@ export const useChatStore = defineStore('chat', () => {
    * 为已完成的 segment 计算耗时（毫秒）。
    * thinking / content segment 由前端在创建时记 startTime，finalize 时据此算 durationMs；
    * tool_call segment 的 durationMs 由 tool_call_completed 事件携带（后端精确值），此处不覆盖。
+   * endTs 为可选结束时刻，默认 Date.now()。
    */
-  function finalizeDuration(seg: Record<string, unknown>): void {
+  function finalizeDuration(seg: Record<string, unknown>, endTs?: number): void {
     if (seg.durationMs != null) return
     const start = seg.startTime as number | undefined
     if (!start) return
-    seg.durationMs = Math.max(0, Date.now() - start)
+    const end = typeof endTs === 'number' && endTs > 0 ? endTs : Date.now()
+    seg.durationMs = Math.max(0, end - start)
   }
 
   /**
@@ -1289,6 +1295,20 @@ export const useChatStore = defineStore('chat', () => {
       return eventTs - startTime
     }
     return undefined
+  }
+
+  /**
+   * 判断后端权威 segment 的 durationMs 是否合理可信。
+   * 后端 thinking/content 的 durationMs 仅对首轮被 startTimeCorrected 修正（准确）；
+   * 若值 ≤0（空转/时钟回拨）或超出整流 wall-clock（修正错配到错误 segment 产生的横跨多轮大值），
+   * 视为不可信，回退到前端实时流同类型同顺序的值。
+   * tool_call 的 durationMs 由后端精确测量（nanoTime 差值），不在此校验。
+   */
+  function isPlausibleDuration(seg: Record<string, unknown>, streamWallMs: number): boolean {
+    const t = String(seg.type ?? '')
+    if (t !== 'thinking' && t !== 'content') return true
+    const d = seg.durationMs
+    return typeof d === 'number' && d > 0 && d <= streamWallMs + 2000
   }
 
   // ===== Agent delegation tree helpers =====
@@ -1482,6 +1502,12 @@ export const useChatStore = defineStore('chat', () => {
         const toolName = data.toolName as string | undefined
         const toolCallId = data.toolCallId as string | undefined
         const toolArgs = data.arguments as string | undefined
+        // 事件携带的 timestamp = 工具开始执行时刻（GraphEventPublisher.toolStart 在
+        // ToolExecutionExecutor 执行工具前生成），即 T_tool_start = T_think_end。
+        // 用它 finalize thinking/content segment，使 durationMs = T_tool_start - startTime，
+        // 严格不含工具执行时间（若用 Date.now()，事件经 ACTION_NODE output 转发已延迟到
+        // T_tool_end，会把工具执行时间计入思考耗时，导致思考耗时 ≈ 工具耗时）。
+        const toolStartTs = data.timestamp as number | undefined
         if (toolName) {
           const prevMeta = (prev.metadata || {}) as Record<string, unknown>
           const prevToolCalls = (prevMeta.toolCalls as Array<Record<string, unknown>>) || []
@@ -1498,19 +1524,19 @@ export const useChatStore = defineStore('chat', () => {
               name: toolName,
               arguments: toolArgs,
               status: 'running',
-              startTime: Date.now(),
+              startTime: toolStartTs ?? Date.now(),
             },
           ]
-          // 关闭 running content/thinking segment，创建 running tool_call segment
+          // 关闭 running content/thinking segment（用 T_tool_start 而非 Date.now()），创建 running tool_call segment
           const segments = ensureSegments(targetMsgs, msgIdx)
-          finalizeRunningSegments(segments, ['content', 'thinking'])
+          finalizeRunningSegments(segments, ['content', 'thinking'], toolStartTs)
           segments.push({
             type: 'tool_call',
             status: 'running',
             toolName,
             toolCallId: toolCallId || '',
             toolArgs: toolArgs || '',
-            startTime: Date.now(),
+            startTime: toolStartTs ?? Date.now(),
           })
           targetMsgs[msgIdx] = {
             ...prev,
@@ -1643,6 +1669,10 @@ export const useChatStore = defineStore('chat', () => {
           const doneMsg2 = targetMsgs[msgIdx]
           if (doneMsg2?.role === 'assistant' && doneMsg2.metadata) {
             const meta = doneMsg2.metadata as Record<string, unknown>
+            // 整流 wall-clock：用于校验后端 thinking/content durationMs 是否合理。
+            // assistant 消息的 timestamp 是流起始时刻（消息创建时 Date.now()）。
+            const streamWallMs = typeof doneMsg2.timestamp === 'number'
+              ? Math.max(0, Date.now() - doneMsg2.timestamp) : Number.MAX_SAFE_INTEGER
             // 委派树（→ Agent名 segment 及其 childTimeline）由前端实时构建，
             // 后端 StreamAccumulator 不持久化 delegation 事件为 segment，
             // 权威覆盖会丢失整棵委派树。这里先提取实时 segments 中的委派 segment，
@@ -1652,6 +1682,38 @@ export const useChatStore = defineStore('chat', () => {
               s.type === 'tool_call'
               && (s.childTimeline != null || (s.toolName as string)?.startsWith('→'))
             )
+            // 合并前端实时流的 durationMs：后端权威 segments 中 thinking/content 的
+            // durationMs 仅对首轮被修正（多轮 ReAct 的后续 segment 后端 startTime 不准，
+            // 不在后端计算 durationMs）。前端实时流用 tool_call_started.timestamp
+            // （T_tool_start）finalize 每轮 thinking，durationMs 严格不含工具执行时间。
+            // 对后端缺少 durationMs 的 segment，按同类型同顺序从前端补充。
+            const prevByType = new Map<string, Array<number | undefined>>()
+            for (const ps of prevSegments) {
+              const t = String(ps.type ?? '')
+              if (!prevByType.has(t)) prevByType.set(t, [])
+              prevByType.get(t)!.push(ps.durationMs as number | undefined)
+            }
+            const typeCursors = new Map<string, number>()
+            for (const as of authoritativeSegments) {
+              // 后端 thinking/content 的 durationMs 若异常（≤0 或超出整流时长，例如
+              // 修正逻辑错配到错误 segment 产生的横跨多轮大值），视为不可信并清空，
+              // 让下方"同类型同顺序补充"逻辑用前端实时流的准确值填入。
+              if (as.durationMs != null && !isPlausibleDuration(as, streamWallMs)) {
+                delete as.durationMs
+              }
+              if (as.durationMs != null) continue
+              const t = String(as.type ?? '')
+              const bucket = prevByType.get(t)
+              if (!bucket) continue
+              const cursor = typeCursors.get(t) ?? 0
+              for (let i = cursor; i < bucket.length; i++) {
+                if (bucket[i] != null) {
+                  as.durationMs = bucket[i]
+                  typeCursors.set(t, i + 1)
+                  break
+                }
+              }
+            }
             if (delegSegs.length > 0) {
               // 权威 segments 不含委派 segment，直接追加到末尾；
               // 顺序上委派发生在 delegateToAgent 工具调用之后，末尾追加符合时序。

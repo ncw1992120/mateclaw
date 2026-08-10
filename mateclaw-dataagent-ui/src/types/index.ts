@@ -1194,6 +1194,16 @@ export interface InsightDashboardAiChatInput {
   datasourceId?: string
   /** 用户消息/指令 */
   message: string
+  /** 历史对话消息（用于多轮对话上下文，刷新页面后丢失） */
+  historyMessages?: ChatHistoryMessage[]
+}
+
+/** 历史对话消息（用于多轮对话上下文传递） */
+export interface ChatHistoryMessage {
+  /** 角色：user 或 assistant */
+  role: 'user' | 'assistant'
+  /** 消息内容 */
+  content: string
 }
 
 /** 组件渲染数据（后端取数 + 图表构建后返回） */
