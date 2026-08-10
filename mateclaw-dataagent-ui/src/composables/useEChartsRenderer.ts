@@ -6,6 +6,8 @@ const ECHARTS_ALLOWED_KEYS = new Set([
   'title', 'tooltip', 'legend', 'xAxis', 'yAxis', 'series',
   'grid', 'color', 'dataset', 'graphic', 'radar', 'polar',
   'angleAxis', 'radiusAxis', 'visualMap',
+  'parallel', 'parallelAxis', 'singleAxis', 'calendar',
+  'geo', 'brush', 'toolbox', 'dataZoom', 'timeline',
 ])
 
 /** ECharts option 最大尺寸（100KB） */

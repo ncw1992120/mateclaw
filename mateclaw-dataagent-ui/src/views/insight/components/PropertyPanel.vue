@@ -17,14 +17,30 @@
       <!-- 图表类型（仅 chart 组件） -->
       <div v-if="component.type === 'chart'" class="form-group">
         <label class="form-label">{{ t('insight.property.chartType') }}</label>
-        <el-radio-group v-model="localComponent.chartType" size="small" @change="emitChange">
-          <el-radio-button value="line">{{ t('insight.component.line') }}</el-radio-button>
-          <el-radio-button value="bar">{{ t('insight.component.bar') }}</el-radio-button>
-          <el-radio-button value="pie">{{ t('insight.component.pie') }}</el-radio-button>
-          <el-radio-button value="area">{{ t('insight.component.area') }}</el-radio-button>
-          <el-radio-button value="scatter">{{ t('insight.component.scatter') }}</el-radio-button>
-          <el-radio-button value="radar">{{ t('insight.component.radar') }}</el-radio-button>
-        </el-radio-group>
+        <el-select v-model="localComponent.chartType" size="small" filterable style="width: 100%" @change="emitChange">
+          <el-option value="line" :label="t('insight.component.line')" />
+          <el-option value="bar" :label="t('insight.component.bar')" />
+          <el-option value="pie" :label="t('insight.component.pie')" />
+          <el-option value="area" :label="t('insight.component.area')" />
+          <el-option value="scatter" :label="t('insight.component.scatter')" />
+          <el-option value="effectScatter" :label="t('insight.component.effectScatter')" />
+          <el-option value="candlestick" :label="t('insight.component.candlestick')" />
+          <el-option value="radar" :label="t('insight.component.radar')" />
+          <el-option value="heatmap" :label="t('insight.component.heatmap')" />
+          <el-option value="boxplot" :label="t('insight.component.boxplot')" />
+          <el-option value="map" :label="t('insight.component.map')" />
+          <el-option value="lines" :label="t('insight.component.lines')" />
+          <el-option value="graph" :label="t('insight.component.graph')" />
+          <el-option value="tree" :label="t('insight.component.tree')" />
+          <el-option value="treemap" :label="t('insight.component.treemap')" />
+          <el-option value="sunburst" :label="t('insight.component.sunburst')" />
+          <el-option value="parallel" :label="t('insight.component.parallel')" />
+          <el-option value="gauge" :label="t('insight.component.gauge')" />
+          <el-option value="funnel" :label="t('insight.component.funnel')" />
+          <el-option value="sankey" :label="t('insight.component.sankey')" />
+          <el-option value="themeRiver" :label="t('insight.component.themeRiver')" />
+          <el-option value="pictorialBar" :label="t('insight.component.pictorialBar')" />
+        </el-select>
       </div>
 
       <!-- 数据绑定（kpi/chart/table 组件；筛选器与时间筛选无需数据源/指标） -->

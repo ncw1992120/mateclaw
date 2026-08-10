@@ -1868,8 +1868,23 @@ const ECHARTS_CHART_TYPES = [
   { key: 'line', label: '折线图' },
   { key: 'pie', label: '饼图' },
   { key: 'scatter', label: '散点图' },
+  { key: 'effectScatter', label: '涟漪特效散点图' },
+  { key: 'candlestick', label: 'K线图' },
+  { key: 'radar', label: '雷达图' },
+  { key: 'heatmap', label: '热力图' },
+  { key: 'boxplot', label: '箱线图' },
+  { key: 'map', label: '地图' },
+  { key: 'lines', label: '线图（流向图）' },
+  { key: 'graph', label: '关系图' },
+  { key: 'tree', label: '树图' },
+  { key: 'treemap', label: '矩形树图' },
+  { key: 'sunburst', label: '旭日图' },
+  { key: 'parallel', label: '平行坐标系' },
+  { key: 'gauge', label: '仪表盘' },
   { key: 'funnel', label: '漏斗图' },
-  { key: 'gauge', label: '仪表盘/指标卡片' },
+  { key: 'sankey', label: '桑基图' },
+  { key: 'themeRiver', label: '主题河流图' },
+  { key: 'pictorialBar', label: '象形柱图' },
 ] as const
 
 type ChartType = (typeof ECHARTS_CHART_TYPES)[number]['key']
@@ -1879,6 +1894,8 @@ const ECHARTS_ALLOWED_KEYS = new Set([
   'title', 'tooltip', 'legend', 'xAxis', 'yAxis', 'series',
   'grid', 'color', 'dataset', 'graphic', 'radar', 'polar',
   'angleAxis', 'radiusAxis', 'visualMap',
+  'parallel', 'parallelAxis', 'singleAxis', 'calendar',
+  'geo', 'brush', 'toolbox', 'dataZoom', 'timeline',
 ])
 
 /** ECharts option 最大尺寸（100KB） */
@@ -2215,6 +2232,368 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
     }
   }
 
+  // 涟漪特效散点图：每个 series 转为 [xIndex, y] 二维数组，带涟漪特效
+  if (type === 'effectScatter') {
+    const maxLen = Math.max(0, ...seriesList.map((s) => s.data.length))
+    const xCats = categories.length > 0
+      ? categories
+      : Array.from({ length: maxLen }, (_, i) => String(i + 1))
+    const effectSeries = seriesList.map((s) => ({
+      name: s.name,
+      type: 'effectScatter',
+      symbolSize: xCats.length > 30 ? 8 : xCats.length > 15 ? 10 : 12,
+      rippleEffect: { brushType: 'stroke', scale: 3 },
+      data: s.data.map((v, i) => [i, v]),
+    }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item', formatter: (p: any) => `${p.seriesName}<br/>${xCats[p.value[0]] ?? p.value[0]}: ${p.value[1]}` },
+      xAxis: buildAdaptiveXAxis(xCats),
+      yAxis: { type: 'value' },
+      series: effectSeries,
+    }
+  }
+
+  // K线图：每个 series 需要四值数据 [open, close, lowest, highest]
+  // 从原始数据推断 OHLC：若原始 series.data 已为四元数组则直接使用，否则用相邻点构造模拟 K 线
+  if (type === 'candlestick') {
+    const rawSeries: any[] = Array.isArray(original.series) ? original.series : []
+    const candleSeries: any[] = []
+    seriesList.forEach((s, idx) => {
+      const raw = rawSeries[idx]
+      if (raw && Array.isArray(raw.data) && raw.data.length > 0 && Array.isArray(raw.data[0]) && raw.data[0].length >= 4) {
+        candleSeries.push({
+          name: s.name,
+          type: 'candlestick',
+          data: raw.data.map((d: any) => [d[0], d[1], d[2], d[3]]),
+        })
+      } else {
+        // 用相邻点差值模拟 OHLC
+        const ohlc = s.data.map((v, i) => {
+          const prev = i > 0 ? s.data[i - 1] : v
+          const high = Math.max(v, prev)
+          const low = Math.min(v, prev)
+          return [prev, v, low, high]
+        })
+        candleSeries.push({ name: s.name, type: 'candlestick', data: ohlc })
+      }
+    })
+    return {
+      ...base,
+      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      xAxis: buildAdaptiveXAxis(categories),
+      yAxis: { type: 'value', scale: true },
+      series: candleSeries,
+    }
+  }
+
+  // 雷达图：每个 category 作为维度指示器，每个 series 的一行数据作为一组
+  if (type === 'radar') {
+    const indicator = categories.map((c) => ({ name: c, max: 100 }))
+    const radarSeries = seriesList.map((s) => ({
+      name: s.name,
+      type: 'radar',
+      data: [{ value: s.data, name: s.name }],
+    }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      radar: {
+        indicator: indicator.length > 0 ? indicator : [{ name: '指标', max: 100 }],
+        radius: '60%',
+      },
+      series: radarSeries,
+    }
+  }
+
+  // 热力图：categories 作为 x 轴，seriesList 名称作为 y 轴，值为热力值
+  if (type === 'heatmap') {
+    const yCats = seriesList.map((s) => s.name || '系列')
+    const heatData: [number, number, number][] = []
+    seriesList.forEach((s, yIdx) => {
+      s.data.forEach((v, xIdx) => {
+        heatData.push([xIdx, yIdx, v])
+      })
+    })
+    const allValues = flattenValues(seriesList)
+    const minVal = allValues.length > 0 ? Math.min(...allValues) : 0
+    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 100
+    return {
+      ...base,
+      tooltip: { position: 'top' },
+      grid: { left: 60, right: 24, top: 56, bottom: 48, containLabel: true },
+      xAxis: { type: 'category', data: categories, splitArea: { show: true } },
+      yAxis: { type: 'category', data: yCats, splitArea: { show: true } },
+      visualMap: {
+        min: minVal, max: maxVal, calculable: true, orient: 'horizontal',
+        left: 'center', bottom: 8,
+      },
+      series: [{
+        name: '热力图', type: 'heatmap', data: heatData,
+        label: { show: categories.length <= 12 },
+        emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } },
+      }],
+    }
+  }
+
+  // 箱线图：从原始数据提取或用统计方法构造
+  if (type === 'boxplot') {
+    const rawSeries: any[] = Array.isArray(original.series) ? original.series : []
+    const boxData: any[] = []
+    const xCats: string[] = []
+    seriesList.forEach((s, sIdx) => {
+      const raw = rawSeries[sIdx]
+      if (raw && Array.isArray(raw.data) && raw.data.length > 0 && Array.isArray(raw.data[0]) && raw.data[0].length >= 5) {
+        raw.data.forEach((d: any, i: number) => {
+          boxData.push([d[0], d[1], d[2], d[3], d[4]])
+          xCats.push(categories[i] ?? `${s.name}-${i}`)
+        })
+      } else {
+        // 用 series 自身数据构造单组箱线图
+        const sorted = [...s.data].sort((a, b) => a - b)
+        if (sorted.length > 0) {
+          const q1 = sorted[Math.floor(sorted.length * 0.25)]
+          const q3 = sorted[Math.floor(sorted.length * 0.75)]
+          boxData.push([sorted[0], q1, sorted[Math.floor(sorted.length / 2)], q3, sorted[sorted.length - 1]])
+          xCats.push(s.name || `系列${sIdx + 1}`)
+        }
+      }
+    })
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      xAxis: buildAdaptiveXAxis(xCats),
+      yAxis: { type: 'value', scale: true },
+      series: [{ name: '箱线图', type: 'boxplot', data: boxData }],
+    }
+  }
+
+  // 地图：将 categories 作为地区名，取首个 series 的值映射到地图
+  if (type === 'map') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const mapData = first.data.map((v, i) => ({
+      name: categories[i] ?? String(i),
+      value: v,
+    }))
+    // 检查是否已注册 'china' 地图数据，未注册时降级为带颜色映射的柱状图，避免 setOption 抛出异常
+    const hasMap = !!(echarts as any).getMap && (echarts as any).getMap('china')
+    if (!hasMap) {
+      // 降级：用柱状图 + visualMap 模拟地图的颜色映射效果
+      return {
+        ...base,
+        tooltip: { trigger: 'axis' },
+        visualMap: {
+          min: Math.min(...first.data, 0),
+          max: Math.max(...first.data, 100),
+          left: 'left', top: 'bottom', text: ['高', '低'],
+          calculable: true,
+          inRange: { color: ['#e0ffff', '#006edd'] },
+        },
+        xAxis: buildAdaptiveXAxis(categories),
+        yAxis: { type: 'value' },
+        series: [{
+          name: first.name, type: 'bar', data: first.data,
+          ...(categories.length > 20 ? { barMaxWidth: 12 } : {}),
+        }],
+      }
+    }
+    return {
+      ...base,
+      tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+      visualMap: {
+        min: Math.min(...first.data, 0),
+        max: Math.max(...first.data, 100),
+        left: 'left', top: 'bottom', text: ['高', '低'],
+        calculable: true,
+      },
+      series: [{
+        name: first.name, type: 'map', map: 'china',
+        roam: true, data: mapData,
+        emphasis: { label: { show: true } },
+      }],
+    }
+  }
+
+  // 线图（流向图）：将数据转为坐标对，模拟流向
+  if (type === 'lines') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const maxVal = Math.max(...first.data, 1)
+    const lineData = first.data.map((v, i) => ({
+      coords: [
+        [i / Math.max(first.data.length - 1, 1) * 100, 50 - v / maxVal * 40],
+        [(i + 1) / Math.max(first.data.length - 1, 1) * 100, 50 - (first.data[i + 1] ?? v) / maxVal * 40],
+      ],
+      value: v,
+    })).filter((d) => d.coords[1])
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      xAxis: { type: 'value', min: 0, max: 100, show: false },
+      yAxis: { type: 'value', min: 0, max: 100, show: false },
+      series: [{
+        name: first.name, type: 'lines', data: lineData,
+        polyline: false,
+        lineStyle: { width: 2, opacity: 0.6, curveness: 0.3 },
+        emphasis: { lineStyle: { width: 4 } },
+      }],
+    }
+  }
+
+  // 关系图：将 categories 作为节点，取首个 series 构建边
+  if (type === 'graph') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const nodes = categories.map((c, i) => ({
+      name: c,
+      value: first.data[i] ?? 0,
+      symbolSize: 20 + (first.data[i] ?? 0) / Math.max(...first.data, 1) * 30,
+    }))
+    const links = nodes.slice(1).map((n, i) => ({
+      source: nodes[i].name, target: n.name, value: first.data[i] ?? 0,
+    }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      series: [{
+        name: first.name, type: 'graph', data: nodes, links,
+        layout: 'force',
+        force: { repulsion: 200, edgeLength: 100 },
+        roam: true, draggable: true,
+        label: { show: true, position: 'right' },
+        edgeLabel: { show: false },
+        emphasis: { focus: 'adjacency' },
+      }],
+    }
+  }
+
+  // 树图：将 categories + series 构建为层级数据
+  if (type === 'tree') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const children = categories.map((c, i) => ({ name: c, value: first.data[i] ?? 0 }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+      series: [{
+        name: first.name, type: 'tree',
+        data: [{ name: first.name || '根节点', children }],
+        layout: 'orthogonal', orient: 'LR',
+        label: { position: 'left', verticalAlign: 'middle', align: 'right' },
+        leaves: { label: { position: 'right', align: 'left' } },
+        roam: true,
+        emphasis: { focus: 'descendant' },
+      }],
+    }
+  }
+
+  // 矩形树图：将 categories 作为子项，值决定面积
+  if (type === 'treemap') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const treeData = categories.map((c, i) => ({ name: c, value: first.data[i] ?? 0 }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+      series: [{
+        name: first.name, type: 'treemap', data: treeData,
+        roam: false, nodeClick: 'zoomToNode',
+        label: { show: true, formatter: '{b}' },
+        upperLabel: { show: true, height: 22 },
+        breadcrumb: { show: true, bottom: 8 },
+      }],
+    }
+  }
+
+  // 旭日图：将 categories + series 构建为层级
+  if (type === 'sunburst') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const sunData = categories.map((c, i) => ({ name: c, value: first.data[i] ?? 0 }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+      series: [{
+        name: first.name, type: 'sunburst', data: sunData,
+        radius: ['15%', '90%'],
+        label: { rotate: 'radial' },
+      }],
+    }
+  }
+
+  // 平行坐标系：每个 series 对应一条数据线，categories 为各维度名
+  if (type === 'parallel') {
+    const dims = categories.length > 0 ? categories : seriesList.map((_, i) => `维度${i + 1}`)
+    const parallelData = seriesList.map((s) => ({
+      name: s.name,
+      value: s.data.length > 0 ? s.data : dims.map(() => 0),
+    }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      parallelAxis: dims.map((d, i) => ({ dim: i, name: d })),
+      series: [{ name: '平行坐标', type: 'parallel', data: parallelData.map((p) => p.value) }],
+    }
+  }
+
+  // 桑基图：将 categories 作为节点，相邻项构建链接
+  if (type === 'sankey') {
+    const first = seriesList[0] || { name: '', data: [] }
+    const nodes = categories.map((c) => ({ name: c }))
+    const links = categories.slice(1).map((c, i) => ({
+      source: categories[i], target: c, value: Math.abs(first.data[i] ?? 0) || 1,
+    }))
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      series: [{
+        name: first.name, type: 'sankey', data: nodes, links,
+        emphasis: { focus: 'adjacency' },
+        label: { show: true },
+        lineStyle: { color: 'gradient', curveness: 0.5 },
+      }],
+    }
+  }
+
+  // 主题河流图：将各 series 转为 [time, value, name] 三元组
+  if (type === 'themeRiver') {
+    const riverData: [string, number, string][] = []
+    seriesList.forEach((s) => {
+      s.data.forEach((v, i) => {
+        riverData.push([categories[i] ?? `T${i}`, v, s.name])
+      })
+    })
+    return {
+      ...base,
+      tooltip: { trigger: 'item' },
+      singleAxis: {
+        type: 'category', boundaryGap: false,
+        data: categories, top: 50, bottom: 50,
+        axisTick: {}, axisLabel: {}, axisLine: {},
+      },
+      series: [{
+        name: '主题河流', type: 'themeRiver', data: riverData,
+        emphasis: { focus: 'self' },
+      }],
+    }
+  }
+
+  // 象形柱图：用图形化方式展示柱状数据
+  if (type === 'pictorialBar') {
+    const pictorialSeries = seriesList.map((s) => ({
+      name: s.name,
+      type: 'pictorialBar',
+      data: s.data,
+      symbol: 'rect',
+      symbolRepeat: true,
+      symbolSize: ['80%', 6],
+      symbolMargin: 2,
+      ...(categories.length > 20 ? { barMaxWidth: 24 } : {}),
+    }))
+    return {
+      ...base,
+      tooltip: base.tooltip || { trigger: 'axis' },
+      xAxis: buildAdaptiveXAxis(categories),
+      yAxis: { type: 'value' },
+      series: pictorialSeries,
+    }
+  }
+
   // 柱状图 / 折线图
   const series = seriesList.map((s: { name: string; data: number[] }) => ({
     name: s.name,
@@ -2238,6 +2617,7 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
 /**
  * 根据图表类型与数据规模自适应调整容器高度，避免物理挤压
  * 漏斗图按层高切分，层数多时容器需要更高
+ * 桑基图、树图等也需要更高容器
  */
 function adjustContainerHeightForType(htmlEl: HTMLElement, type: ChartType, option: Record<string, any>): void {
   if (type === 'funnel' && Array.isArray(option.series) && option.series[0]) {
@@ -2248,6 +2628,11 @@ function adjustContainerHeightForType(htmlEl: HTMLElement, type: ChartType, opti
     if (currentHeight < minHeight) {
       htmlEl.style.height = `${minHeight}px`
     }
+  } else if (type === 'sankey' || type === 'tree' || type === 'themeRiver') {
+    // 桑基图、树图、主题河流图需要更高容器
+    htmlEl.style.height = '450px'
+  } else if (type === 'gauge') {
+    htmlEl.style.height = '300px'
   } else {
     htmlEl.style.height = '350px'
   }
@@ -2281,7 +2666,11 @@ function switchEchartsBlockType(htmlEl: HTMLElement, type: ChartType): void {
     ? JSON.parse(JSON.stringify(pristine.option)) // 克隆，避免多次切换时被 ECharts 内部引用污染缓存
     : buildEchartsOption(original, type)
   nextTick(() => {
-    chart.setOption(newOption, true)
+    try {
+      chart.setOption(newOption, true)
+    } catch (e) {
+      console.error('[switchEchartsBlockType] setOption error:', e)
+    }
     // 漏斗图按层高切分，层数多时容器高度需要扩展，避免物理挤压
     adjustContainerHeightForType(htmlEl, type, newOption)
     syncEchartsToolbarActive(htmlEl, type)

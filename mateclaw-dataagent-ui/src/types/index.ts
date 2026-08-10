@@ -1046,7 +1046,12 @@ export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeF
 export type FilterScope = 'global' | 'scoped'
 
 /** 图表子类型 */
-export type ChartType = 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'radar'
+export type ChartType =
+  | 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'radar'
+  | 'effectScatter' | 'candlestick' | 'heatmap' | 'boxplot'
+  | 'map' | 'lines' | 'graph' | 'tree' | 'treemap'
+  | 'sunburst' | 'parallel' | 'gauge' | 'funnel'
+  | 'sankey' | 'themeRiver' | 'pictorialBar'
 
 /** 栅格位置（grid-layout-plus 坐标系） */
 export interface ComponentPosition {
