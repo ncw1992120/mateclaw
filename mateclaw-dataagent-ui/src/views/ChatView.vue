@@ -607,32 +607,34 @@
           </div>
         </div>
 
-        <!-- Context Usage 圆圈指示器 -->
-        <button
-          class="context-usage-ring"
-          type="button"
-          :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
-          @click="chatStore.toggleContextUsagePanel"
-        >
-          <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
-            <circle class="ring-bg" cx="18" cy="18" r="14" />
-            <circle
-              class="ring-fill"
-              cx="18" cy="18" r="14"
-              :stroke-dasharray="ringDasharray"
-              :stroke="ringColor"
-            />
-          </svg>
-          <span class="context-usage-ring__label">{{ ringPercent }}</span>
-          <el-tooltip
-            :content="ringTooltip"
-            placement="top-end"
-            :show-after="300"
-          >
-            <span class="context-usage-ring__hit" />
-          </el-tooltip>
-        </button>
+        <!-- Context Usage 圆圈指示器（移至提问框右上角外侧，见 .input-bar 层级） -->
       </div>
+
+      <!-- Context Usage 圆圈指示器 -->
+      <button
+        class="context-usage-ring"
+        type="button"
+        :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
+        @click="chatStore.toggleContextUsagePanel"
+      >
+        <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
+          <circle class="ring-bg" cx="18" cy="18" r="14" />
+          <circle
+            class="ring-fill"
+            cx="18" cy="18" r="14"
+            :stroke-dasharray="ringDasharray"
+            :stroke="ringColor"
+          />
+        </svg>
+        <span class="context-usage-ring__label">{{ ringPercent }}</span>
+        <el-tooltip
+          :content="ringTooltip"
+          placement="top-end"
+          :show-after="300"
+        >
+          <span class="context-usage-ring__hit" />
+        </el-tooltip>
+      </button>
     </div>
 
     <!-- 数据源指标/维度浏览抽屉 -->
@@ -6708,8 +6710,8 @@ onUnmounted(() => {
 /* ===== 上下文使用圆圈指示器 ===== */
 .context-usage-ring {
   position: absolute;
-  right: -8px;
-  bottom: -8px;
+  right: 20px;
+  top: -12px;
   width: 24px;
   height: 24px;
   padding: 0;
