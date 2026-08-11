@@ -16,6 +16,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
+import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
 import java.util.List;
@@ -35,6 +36,7 @@ public class DataAgentDatasourceController {
     private final DatasourceManageService datasourceService;
     private final AloudataEndpointService aloudataEndpointService;
     private final AloudataSemanticSyncService aloudataSyncService;
+    private final AloudataService aloudataService;
     private final WorkspaceGuard workspaceGuard;
 
     /**
@@ -434,5 +436,25 @@ public class DataAgentDatasourceController {
                     + "包括参数名称、类型、是否必填、默认值、传递方式和说明")
     public R<Map<String, ApiEndpoint>> getAloudataApiSpecs() {
         return R.ok(aloudataEndpointService.getEndpoints());
+    }
+
+    /**
+     * 执行指标数据查询
+     * <p>
+     * 直接调用 Aloudata 指标查询 API，根据用户指定的指标、维度、时间范围、业务限定等条件查询指标数据。
+     * 用于图表「指标查看」浮层中的自定义查询功能。
+     *
+     * @param datasourceId 数据源 ID
+     * @param request      查询请求（指标、维度、时间约束、筛选条件、排序、分页）
+     * @return 查询结果（列式数据 + 行式数据 + 总行数）
+     */
+    @PostMapping("/{datasourceId}/aloudata/metrics/query")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "执行指标数据查询",
+            description = "根据指标、维度、时间范围、业务限定等条件直接查询 Aloudata 指标数据，返回列式和行式数据")
+    public R<AloudataMetricQueryResponse> queryMetricData(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标查询请求") @RequestBody AloudataMetricQueryRequest request) {
+        return R.ok(aloudataService.queryMetrics(datasourceId, request));
     }
 }

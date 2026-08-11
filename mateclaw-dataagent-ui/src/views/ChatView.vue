@@ -557,6 +557,14 @@
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
               </svg>
             </button>
+            <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('metricQuery.title')" @click="openMetricQueryDrawer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </button>
             <button class="tool-btn optimize-btn" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
               <span v-if="isOptimizing" class="spin-icon">⟳</span>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -636,6 +644,21 @@
         </el-tooltip>
       </button>
     </div>
+
+    <!-- 指标自定义查询抽屉 -->
+    <MetricQueryDrawer
+      v-model:visible="metricQueryDrawerVisible"
+      :datasources="enabledDatasources"
+      :initial-datasource-id="metricQueryInitialDatasourceId"
+      @query="handleMetricQuery"
+    />
+
+    <!-- 图表指标自定义查询抽屉 -->
+    <ChartMetricQueryDrawer
+      v-model:visible="chartMetricQueryDrawerVisible"
+      :datasource-id="chartMetricQueryPayload.datasourceId"
+      :metrics="chartMetricQueryPayload.metrics"
+    />
 
     <!-- 数据源指标/维度浏览抽屉 -->
     <el-drawer
@@ -858,12 +881,14 @@ import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
 import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
 import ContextUsagePanel from './ContextUsagePanel.vue'
+import MetricQueryDrawer from './MetricQueryDrawer.vue'
+import ChartMetricQueryDrawer from './ChartMetricQueryDrawer.vue'
 import PlanStepsPanel from '@/components/PlanStepsPanel.vue'
 import DelegationNodeView from '@/components/DelegationNodeView.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
-import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload } from '@/api/chat'
+import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload, type ChartMetricItem } from '@/api/chat'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension, PlanMeta, DelegationNode, DelegationTimeline } from '@/types'
 import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
@@ -1019,6 +1044,18 @@ const dsTriggerLabel = computed(() => {
 
 /** 数据源浏览抽屉 */
 const browseDrawerVisible = ref(false)
+
+/** 指标自定义查询抽屉 */
+const metricQueryDrawerVisible = ref(false)
+const metricQueryInitialDatasourceId = ref('')
+
+/** 图表指标自定义查询抽屉 */
+const chartMetricQueryDrawerVisible = ref(false)
+const chartMetricQueryPayload = ref<{
+  datasourceId: string | null
+  metrics: ChartMetricItem[]
+}>({ datasourceId: null, metrics: [] })
+
 const browseDatasource = ref<Datasource | null>(null)
 const browseActiveTab = ref<'metrics' | 'dimensions'>('metrics')
 const browseLoading = ref(false)
@@ -1053,6 +1090,44 @@ const copiedMetricName = ref<string | null>(null)
 const copiedDimName = ref<string | null>(null)
 
 /** 打开数据源浏览抽屉并加载指标维度 */
+/** 打开指标自定义查询抽屉 */
+function openMetricQueryDrawer(): void {
+  // 从当前已选数据源中取第一个作为初始值
+  const dsIds = chatStore.selectedDatasourceIds
+  metricQueryInitialDatasourceId.value = dsIds.length > 0 ? dsIds[0] : ''
+  metricQueryDrawerVisible.value = true
+}
+
+/** 打开图表指标自定义查询抽屉（从图表工具栏触发） */
+async function openChartMetricQueryDrawer(htmlEl: HTMLElement): Promise<void> {
+  const payload = echartsBlockMetricPayload.get(htmlEl)
+  if (!payload || !payload.datasourceId || payload.metrics.length === 0) {
+    return
+  }
+
+  // 尝试获取已缓存的指标元数据，用于展示中文名
+  let meta = echartsBlockMetricMeta.get(htmlEl)
+  if (!meta) {
+    meta = await resolveChartMetricMeta(payload)
+    echartsBlockMetricMeta.set(htmlEl, meta)
+  }
+
+  chartMetricQueryPayload.value = {
+    datasourceId: payload.datasourceId,
+    metrics: meta.metrics,
+  }
+  chartMetricQueryDrawerVisible.value = true
+}
+
+/** 处理指标自定义查询结果 */
+function handleMetricQuery(message: string): void {
+  if (!message || chatStore.isStreaming || !chatStore.currentAgentId) {
+    return
+  }
+  chatStore.sendMessage(chatStore.currentAgentId, message)
+  scrollToBottom(true)
+}
+
 async function openBrowseDrawer(ds: Datasource): Promise<void> {
   browseDatasource.value = ds
   browseActiveTab.value = 'metrics'
@@ -2766,6 +2841,17 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType, hasMe
       void toggleMetricOverlay(htmlEl)
     })
     toolbar.appendChild(metricBtn)
+
+    // "自定义查询"按钮（与指标查看同级，在右侧抽屉展开查询）
+    const queryBtn = document.createElement('button')
+    queryBtn.type = 'button'
+    queryBtn.className = 'echarts-toolbar-detail-btn echarts-toolbar-query-btn'
+    queryBtn.innerHTML = `<span class="echarts-toolbar-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><span>${escAuxHtml(t('chart.customQuery'))}</span>`
+    queryBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      openChartMetricQueryDrawer(htmlEl)
+    })
+    toolbar.appendChild(queryBtn)
   }
 
   // "解读"按钮（所有图表都提供）
@@ -2864,7 +2950,16 @@ function coerceArgs(raw: unknown): Record<string, any> | null {
   if (typeof raw === 'string' && raw.trim()) {
     try {
       const v = JSON.parse(raw)
-      return v && typeof v === 'object' ? (v as Record<string, any>) : null
+      if (v && typeof v === 'object') {
+        const obj = v as Record<string, any>
+        // JSON.parse 对大整数会丢失精度，用正则从原始字符串中提取 datasourceId 的精确值
+        const m = raw.match(/"datasourceId"\s*:\s*(\d+)/)
+        if (m) {
+          obj.datasourceId = m[1]
+        }
+        return obj
+      }
+      return null
     } catch {
       return null
     }
@@ -2937,7 +3032,7 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
   const dimensions: string[] = []
   const filters: string[] = []
   let timeConstraint: string | null = null
-  let datasourceId: number | null = null
+  let datasourceId: string | null = null
   for (const a of argsList) {
     if (Array.isArray(a.metrics)) {
       for (const m of a.metrics) if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
@@ -2952,7 +3047,8 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
       timeConstraint = a.timeConstraint
     }
     if (datasourceId == null && a.datasourceId != null) {
-      datasourceId = Number(a.datasourceId)
+      // 保留原始值，不做 Number 转换，避免大整数精度丢失
+      datasourceId = String(a.datasourceId)
     }
   }
   if (metrics.length === 0) {
@@ -2976,7 +3072,7 @@ function getNearestUserQuestion(htmlEl: HTMLElement): string | undefined {
   return undefined
 }
 
-/** 构建「指标查看」面板内容 HTML（值均经转义） */
+/** 构建「指标查看」面板内容 HTML（值均经转义），含自定义查询表单 */
 function buildMetricMetaHtml(meta: ChartMetricMeta): string {
   const dash = '—'
   const metricsHtml = (meta.metrics || []).map((m) => {
@@ -3156,7 +3252,18 @@ function scanAndMountEChartsBlocks(): void {
 
     try {
       const raw = decodeURIComponent(encoded)
-      let option = JSON.parse(raw)
+      let option: Record<string, any> | null = null
+      try {
+        option = JSON.parse(raw)
+      } catch {
+        // LLM 可能生成含 function(){} 的非标准 JSON，回退到 JS 表达式求值
+        // sanitizeEchartsOption 会清理掉函数字段，确保 ECharts 安全渲染
+        try {
+          option = new Function('return (' + raw + ')')()
+        } catch {
+          option = null
+        }
+      }
 
       if (!option || typeof option !== 'object' || !option.series) {
         htmlEl.textContent = 'Invalid chart option'

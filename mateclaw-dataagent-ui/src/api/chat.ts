@@ -443,7 +443,7 @@ const CHART_INTERPRET_URL = '/dataagent/api/v1/chat/chart/interpret'
 
 /** 图表「指标查看」请求：从图表所属消息的 metrics_query 工具入参提取 */
 export interface ChartMetricMetaPayload {
-  datasourceId?: number | null
+  datasourceId?: string | number | null
   metrics: string[]
   dimensions: string[]
   timeConstraint?: string | null

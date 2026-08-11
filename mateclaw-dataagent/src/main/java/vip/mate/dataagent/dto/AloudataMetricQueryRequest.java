@@ -46,8 +46,18 @@ public class AloudataMetricQueryRequest implements Serializable {
      */
     private String timeConstraint;
 
-    /** 排序条件 */
-    private List<Map<String, Object>> orderBy;
+    /**
+     * 排序条件
+     * <p>
+     * 符合 Aloudata API 5.7 节 orders 参数规范，每个元素为 Map，key=列名，value=排序方向（"asc" 或 "desc"），
+     * 排序字段必须包含在 metrics 或 dimensions 中。例如：
+     * <ul>
+     *   <li>按指标升序：[{"order_count": "asc"}]</li>
+     *   <li>按维度降序：[{"metric_time__day": "desc"}]</li>
+     *   <li>多字段排序：[{"province": "asc"}, {"order_count": "desc"}]</li>
+     * </ul>
+     */
+    private List<Map<String, String>> orders;
 
     /** 限制返回行数 */
     private Integer limit;

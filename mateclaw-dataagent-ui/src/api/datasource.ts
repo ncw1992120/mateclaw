@@ -166,6 +166,36 @@ export function listDimensionValues(datasourceId: string | number, dimName: stri
   })
 }
 
+/** 指标数据查询请求参数 */
+export interface MetricQueryRequest {
+  metrics: string[]
+  dimensions?: string[]
+  filters?: string[]
+  timeConstraint?: string
+  /** 排序条件，元素为 { 列名: 'asc' | 'desc' }，排序列必须包含在 metrics 或 dimensions 中 */
+  orders?: Array<Record<string, 'asc' | 'desc'>>
+  limit?: number
+  offset?: number
+}
+
+/** 指标数据查询响应 */
+export interface MetricQueryResponse {
+  success: boolean
+  code: string
+  errorMsg: string
+  data: {
+    columns: Record<string, Array<{ value: unknown; flag: unknown; count: number | null }>>
+    rows: Array<Record<string, unknown>> | null
+    total: number | null
+  } | null
+  traceId: string
+}
+
+/** 执行指标数据查询（直接调用 Aloudata 指标查询 API） */
+export function queryMetricData(datasourceId: string | number, request: MetricQueryRequest) {
+  return api.post<MetricQueryResponse>(`${BASE_URL}/${datasourceId}/aloudata/metrics/query`, request)
+}
+
 /** 查询已同步的类目列表 */
 export function listSyncedCategories(datasourceId: string | number, categoryType?: string) {
   return api.get<{
