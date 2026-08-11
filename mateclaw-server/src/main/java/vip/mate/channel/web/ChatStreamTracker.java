@@ -1897,11 +1897,6 @@ public class ChatStreamTracker {
                 }
             }
             state.subscribers.clear();
-            // This is an intentional close (done/error/eviction), not a
-            // subscriber silently dropping off — clear the orphan clock so the
-            // grace-period eviction does not double-fire on a run that's about
-            // to be (or already is) finalized via the normal done path.
-            state.subscribersZeroSince = null;
         }
     }
 

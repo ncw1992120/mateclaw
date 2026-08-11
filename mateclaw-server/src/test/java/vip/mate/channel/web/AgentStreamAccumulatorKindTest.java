@@ -98,4 +98,44 @@ class AgentStreamAccumulatorKindTest {
         JsonNode segments = segmentsOf(acc, mapper);
         assertEquals("grounded_narration", segments.get(0).path("kind").asText());
     }
+
+    @Test
+    @DisplayName("started-only tool calls persist as interrupted, never completed")
+    void startedOnlyToolCallRemainsInterrupted() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentStreamAccumulator acc = new AgentStreamAccumulator(mapper, NOOP_SINK);
+
+        acc.accept(StreamDelta.event("tool_call_started",
+                Map.of("toolCallId", "orphan-1", "toolName", "schedule_meeting",
+                        "arguments", "{\"title\":\"review\"}")), "conv-interrupted");
+
+        JsonNode metadata = mapper.readTree(acc.toMetadataJson());
+        JsonNode call = metadata.path("toolCalls").get(0);
+        JsonNode segment = metadata.path("segments").get(0);
+
+        assertEquals("interrupted", call.path("status").asText());
+        assertFalse(call.has("result"), "no completion event means there is no tool result");
+        assertEquals("interrupted", segment.path("status").asText());
+        assertFalse(segment.has("toolResult"), "timeline must not manufacture a result");
+    }
+
+    @Test
+    @DisplayName("Plan step result stays in plan metadata while final summary exclusively owns message content")
+    void planStepResultDoesNotDuplicateFinalSummary() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        AgentStreamAccumulator acc = new AgentStreamAccumulator(mapper, NOOP_SINK);
+        String cid = "conv-plan";
+
+        acc.accept(StreamDelta.event("plan_created",
+                Map.of("planId", 7L, "steps", java.util.List.of("answer once"))), cid);
+        acc.accept(StreamDelta.event("plan_step_completed",
+                Map.of("index", 0, "result", "TP-01")), cid);
+        acc.accept(StreamDelta.finalAnswer("TP-01", true), cid);
+
+        JsonNode metadata = mapper.readTree(acc.toMetadataJson());
+        assertEquals("TP-01", metadata.path("plan").path("stepResults")
+                .get(0).path("result").asText());
+        assertEquals("TP-01", acc.getContent(),
+                "the canonical body must contain FINAL_SUMMARY exactly once");
+    }
 }
