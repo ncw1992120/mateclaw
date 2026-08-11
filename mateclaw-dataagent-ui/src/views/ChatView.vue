@@ -5807,21 +5807,28 @@ onUnmounted(() => {
 
 .model-select-footer :deep(.el-input__wrapper) {
   border-radius: 14px;
-  background: transparent;
+  background: var(--theme-surface-hover);
   box-shadow: none !important;
-  border: 1px solid transparent;
+  border: 1px solid var(--theme-border);
   padding: 0 8px;
+  transition: background 0.18s ease, border-color 0.18s ease;
 }
 
 .model-select-footer :deep(.el-input__wrapper:hover) {
-  background: var(--theme-surface-hover);
-  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+  border-color: var(--theme-border-strong);
+}
+
+.model-select-footer :deep(.el-input.is-focus .el-input__wrapper),
+.model-select-footer :deep(.el-input__wrapper.is-focus) {
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
 }
 
 .model-select-footer :deep(.el-input__inner) {
   font-size: 12px;
   font-weight: 500;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .model-select-footer :deep(.el-select__caret) {
