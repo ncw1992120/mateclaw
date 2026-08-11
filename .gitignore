@@ -78,6 +78,9 @@ pom.xml.versionsBackup
 # mateclaw static build output (do not commit)
 mateclaw-server/src/main/resources/static/
 
+# Maven must not materialize an unresolved property as a literal directory.
+**/${project.build.directory}/
+
 # mateclaw local runtime data (H2 DB, logs, etc. - do not commit)
 mateclaw-server/data/
 /data/
@@ -135,3 +138,16 @@ yarn.lock
 # are executed. Never commit or sync these.
 __pycache__/
 *.pyc
+
+# ZCode client local state (plans, session artifacts; do not commit)
+.zcode/
+
+# Local frontend build outputs not covered by the rules above.
+# webchat ships its bundle via the server static dir; this dist/ is a local pack artifact.
+mateclaw-webchat/dist/
+
+# pnpm per-project workspace placeholders. The repo has no root pnpm-workspace.yaml;
+# these files are pnpm-generated templates ("set this to true or false") with no real
+# config value, produced locally when running pnpm inside the subprojects.
+mateclaw-desktop/pnpm-workspace.yaml
+mateclaw-webchat/pnpm-workspace.yaml

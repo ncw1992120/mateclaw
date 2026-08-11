@@ -13,6 +13,7 @@ import vip.mate.agent.context.ChatOrigin;
 import vip.mate.agent.context.ChatOriginHolder;
 import vip.mate.agent.event.AgentLifecycleEvent;
 import vip.mate.agent.model.AgentEntity;
+import vip.mate.agent.progress.ProgressLedgerService;
 import vip.mate.agent.repository.AgentMapper;
 import vip.mate.exception.MateClawException;
 import vip.mate.llm.chatmodel.ThinkingLevelHolder;
@@ -21,8 +22,10 @@ import vip.mate.memory.MemoryProperties;
 import vip.mate.memory.lifecycle.MemoryLifecycleMediator;
 import vip.mate.memory.lifecycle.TurnContext;
 import vip.mate.memory.service.MemoryRecallTracker;
+import vip.mate.team.event.TeamChangedEvent;
 import vip.mate.workspace.conversation.model.ConversationEntity;
 import vip.mate.workspace.conversation.repository.ConversationMapper;
+import vip.mate.workspace.core.service.WorkspaceService;
 
 import java.util.List;
 import java.time.Duration;
@@ -69,6 +72,14 @@ public class AgentService {
     private vip.mate.agent.runtime.RunningConversationRegistry runningConversationRegistry;
 
     /**
+     * Optional — clears leftover auto-recorded ledger entries when a new
+     * user turn starts. Field-injected so existing test constructors of
+     * {@code AgentService} don't need to supply it.
+     */
+    @Autowired(required = false)
+    private ProgressLedgerService progressLedgerService;
+
+    /**
      * Runtime Agent instance cache. Keyed first by agentId, then by a model
      * key, so a conversation that pins a non-default model gets its own graph
      * variant instead of mutating the one every other conversation shares.
@@ -101,8 +112,13 @@ public class AgentService {
      *                disabled rows visible for re-enabling.
      */
     public List<AgentEntity> listAgentsByWorkspace(Long workspaceId, Boolean enabled) {
+        // 全局共享预置 Agent（workspace_id = 0）对本工作区只读可见，故与本工作区
+        // Agent 一并返回。用 .and(...) 嵌套包裹 OR，确保后续 enabled 条件以 AND
+        // 作用于整个 (workspace_id = wsId OR workspace_id = 0) 分组，而非仅后者。
         LambdaQueryWrapper<AgentEntity> q = new LambdaQueryWrapper<AgentEntity>()
-                .eq(AgentEntity::getWorkspaceId, workspaceId);
+                .and(w -> w.eq(AgentEntity::getWorkspaceId, workspaceId)
+                        .or()
+                        .eq(AgentEntity::getWorkspaceId, WorkspaceService.GLOBAL_WORKSPACE_ID));
         if (enabled != null) {
             q.eq(AgentEntity::getEnabled, enabled);
         }
@@ -118,6 +134,13 @@ public class AgentService {
     }
 
     public AgentEntity createAgent(AgentEntity agent) {
+        // workspace_id = 0 保留给全局共享预置（系统维护），用户路径不得创建——
+        // 堵住 AgentController.create 直接取 X-Workspace-Id 头可能传入 0 的漏洞。
+        if (agent.getWorkspaceId() != null
+                && agent.getWorkspaceId() == WorkspaceService.GLOBAL_WORKSPACE_ID) {
+            throw new MateClawException("err.agent.global_preset_readonly", 403,
+                    "全局预置 Agent 由系统维护，不可创建");
+        }
         agent.setEnabled(true);
         if (agent.getAgentType() == null) {
             agent.setAgentType("react");
@@ -133,6 +156,7 @@ public class AgentService {
         // intent rather than every metadata edit. Reading the prior row
         // is cheap and gives us a clean diff source.
         AgentEntity prior = agentMapper.selectById(agent.getId());
+        requireMutable(prior);
         // Only re-validate uniqueness when the name actually changes —
         // a pure metadata edit (icon, prompt, ...) shouldn't pay the
         // SELECT cost or risk a false positive against the row itself.
@@ -190,8 +214,24 @@ public class AgentService {
         }
     }
 
+    /**
+     * 拒绝任何用户态写路径作用于全局共享预置 Agent（{@code workspace_id = 0}）。
+     *
+     * <p>预置由产品统一维护（单一事实源），对所有工作区只读可见；若允许用户修改
+     * 或删除，会污染每个工作区看到的版本。镜像 {@link #requireUniqueName} 的
+     * {@code requireX} 约定，在 mutator 顶部调用。{@code agent == null} 时无可保护
+     * 的记录，直接放行（后续操作至多是 no-op）。
+     */
+    private void requireMutable(AgentEntity agent) {
+        if (agent != null && agent.isGlobalPreset()) {
+            throw new MateClawException("err.agent.global_preset_readonly", 403,
+                    "全局预置 Agent 由系统维护，不可修改或删除: " + agent.getName());
+        }
+    }
+
     public void deleteAgent(Long id) {
         AgentEntity prior = agentMapper.selectById(id);
+        requireMutable(prior);
         agentMapper.deleteById(id);
         agentInstances.remove(id);
         if (prior != null) publishLifecycle(prior, "terminated");
@@ -239,7 +279,45 @@ public class AgentService {
         }
     }
 
+    /**
+     * Invalidate cached agents whenever their team's composition or settings
+     * change. The team context block is baked into the system prompt at build
+     * time, so membership edits would otherwise stay invisible until restart.
+     */
+    @EventListener
+    public void onTeamChanged(TeamChangedEvent event) {
+        if (event.agentIds() != null) {
+            event.agentIds().forEach(agentInstances::remove);
+        }
+    }
+
     // ==================== 运行时入口 ====================
+
+    /**
+     * New-user-turn housekeeping: drop auto-recorded ledger entries left
+     * over from the previous turn. They mark past tool calls as DONE, and
+     * the ledger snapshot's "已完成的步骤不要重复执行" instruction would
+     * otherwise stop the agent from re-running status-query tools when the
+     * user repeats a question that needs fresh data.
+     *
+     * <p>Only the fresh-turn entries ({@code chat} / {@code chatStream} /
+     * {@code chatStructuredStream} / {@code execute}) call this. The
+     * approval-replay entries ({@code chatWithReplay*}) resume the SAME
+     * logical turn after a tool approval and must keep the safety net for
+     * work already done before the pause.
+     */
+    private void clearAutoRecordedForNewTurn(String conversationId) {
+        if (progressLedgerService == null || conversationId == null || conversationId.isBlank()) {
+            return;
+        }
+        try {
+            progressLedgerService.clearAutoRecorded(conversationId);
+        } catch (Exception e) {
+            // Ledger housekeeping must never block the chat itself.
+            log.warn("Failed to clear auto-recorded ledger entries for {}: {}",
+                    conversationId, e.getMessage());
+        }
+    }
 
     public String chat(Long agentId, String message, String conversationId) {
         return chat(agentId, message, conversationId, ChatOrigin.EMPTY);
@@ -251,6 +329,7 @@ public class AgentService {
      * down to {@code @Tool} methods via Spring AI {@link org.springframework.ai.chat.model.ToolContext}.
      */
     public String chat(Long agentId, String message, String conversationId, ChatOrigin origin) {
+        clearAutoRecordedForNewTurn(conversationId);
         memoryRecallTracker.trackRecalls(agentId, message);
         BaseAgent agent = getOrBuildAgentForConversation(agentId, conversationId);
         ChatOriginHolder.set(origin != null ? origin : ChatOrigin.EMPTY);
@@ -287,6 +366,7 @@ public class AgentService {
     }
 
     public Flux<String> chatStream(Long agentId, String message, String conversationId, ChatOrigin origin) {
+        clearAutoRecordedForNewTurn(conversationId);
         memoryRecallTracker.trackRecalls(agentId, message);
         BaseAgent agent = getOrBuildAgentForConversation(agentId, conversationId);
         // Capture the origin into a request-scoped holder; cleared on Flux
@@ -323,6 +403,7 @@ public class AgentService {
     public Flux<StreamDelta> chatStructuredStream(Long agentId, String message, String conversationId,
                                                    String requesterId, String thinkingLevel,
                                                    ChatOrigin origin) {
+        clearAutoRecordedForNewTurn(conversationId);
         memoryRecallTracker.trackRecalls(agentId, message);
         BaseAgent agent = getOrBuildAgentForConversation(agentId, conversationId);
 
@@ -369,6 +450,7 @@ public class AgentService {
     }
 
     public String execute(Long agentId, String goal, String conversationId, ChatOrigin origin) {
+        clearAutoRecordedForNewTurn(conversationId);
         memoryRecallTracker.trackRecalls(agentId, goal);
         BaseAgent agent = getOrBuildAgentForConversation(agentId, conversationId);
         ChatOriginHolder.set(origin != null ? origin : ChatOrigin.EMPTY);
@@ -712,22 +794,42 @@ public class AgentService {
     // ==================== StreamDelta ====================
 
     public record StreamDelta(String content, String thinking, String eventType, Map<String, Object> eventData,
-                              boolean persistenceOnly, boolean segmentOnly) {
+                              boolean persistenceOnly, boolean segmentOnly, ContentKind kind) {
 
         // 兼容构造器（广播+持久化）
         public StreamDelta(String content, String thinking) {
-            this(content, thinking, null, null, false, false);
+            this(content, thinking, null, null, false, false, null);
         }
 
         // 显式 5-参构造器：保留旧调用点对 (content, thinking, eventType, eventData, persistenceOnly) 的兼容
         public StreamDelta(String content, String thinking, String eventType,
                            Map<String, Object> eventData, boolean persistenceOnly) {
-            this(content, thinking, eventType, eventData, persistenceOnly, false);
+            this(content, thinking, eventType, eventData, persistenceOnly, false, null);
+        }
+
+        // 兼容构造器：kind 出现之前的 6 参 canonical 形态
+        public StreamDelta(String content, String thinking, String eventType,
+                           Map<String, Object> eventData, boolean persistenceOnly, boolean segmentOnly) {
+            this(content, thinking, eventType, eventData, persistenceOnly, segmentOnly, null);
         }
 
         /** 仅用于持久化，不再广播（内容已由 NodeStreamingChatHelper 实时广播过） */
         public static StreamDelta persistOnly(String content, String thinking) {
-            return new StreamDelta(content, thinking, null, null, true, false);
+            return new StreamDelta(content, thinking, null, null, true, false, null);
+        }
+
+        /** {@link #persistOnly(String, String)} 带内容语义标注的变体。 */
+        public static StreamDelta persistOnly(String content, String thinking, ContentKind kind) {
+            return new StreamDelta(content, thinking, null, null, true, false, kind);
+        }
+
+        /**
+         * Final-answer content of the terminal turn. {@code alreadyStreamed}
+         * decides broadcast suppression exactly like the persistOnly/plain
+         * split at the emission sites did before the kind tag existed.
+         */
+        public static StreamDelta finalAnswer(String content, boolean alreadyStreamed) {
+            return new StreamDelta(content, null, null, null, alreadyStreamed, false, ContentKind.FINAL_ANSWER);
         }
 
         /**
@@ -751,15 +853,20 @@ public class AgentService {
          * persisted content field via this flavor.
          */
         public static StreamDelta segmentOnly(String content, String thinking) {
-            return new StreamDelta(content, thinking, null, null, true, true);
+            return new StreamDelta(content, thinking, null, null, true, true, null);
+        }
+
+        /** {@link #segmentOnly(String, String)} 带内容语义标注的变体。 */
+        public static StreamDelta segmentOnly(String content, String thinking, ContentKind kind) {
+            return new StreamDelta(content, thinking, null, null, true, true, kind);
         }
 
         public static StreamDelta empty() {
-            return new StreamDelta(null, null, null, null, false, false);
+            return new StreamDelta(null, null, null, null, false, false, null);
         }
 
         public static StreamDelta event(String type, Map<String, Object> data) {
-            return new StreamDelta(null, null, type, data, false, false);
+            return new StreamDelta(null, null, type, data, false, false, null);
         }
 
         public boolean isEvent() {
