@@ -25,6 +25,7 @@ import vip.mate.approval.PendingApproval;
 import vip.mate.approval.ResolveOutcome;
 import vip.mate.memory.event.ConversationCompletionPublisher;
 import vip.mate.workspace.conversation.ConversationService;
+import vip.mate.workspace.conversation.MessageMetadataJson;
 import vip.mate.workspace.conversation.model.MessageContentPart;
 import vip.mate.workspace.conversation.model.MessageEntity;
 
@@ -1144,12 +1145,12 @@ public class ChatController {
         String safeFilename = Path.of(originalFilename).getFileName().toString().replaceAll("[^a-zA-Z0-9._-]", "_");
         String storedName = System.currentTimeMillis() + "_" + safeFilename;
         Path uploadRoot = uploadLocationResolver.resolveUploadRoot(conversationId);
-        // Sanitize the id before using it as a path segment — IM-channel ids like
-        // "wecom:XXXX" carry a ':' that is illegal in a Windows filename and would
-        // throw InvalidPathException here. Reads use the same sanitization.
-        Path conversationDir = uploadRoot.resolve(ChatUploadLocationResolver.sanitizeSegment(conversationId));
-        Files.createDirectories(conversationDir);
-        Path target = conversationDir.resolve(storedName);
+        // resolveWriteDir sanitizes the id (IM-channel ids like "wecom:XXXX"
+        // carry a ':' illegal on Windows) and appends the per-day sub-directory
+        // when date folders are enabled. Reads probe both layouts.
+        Path writeDir = uploadLocationResolver.resolveWriteDir(conversationId);
+        Files.createDirectories(writeDir);
+        Path target = writeDir.resolve(storedName);
         file.transferTo(target);
 
         log.info("Chat attachment uploaded: conversationId={}, user={}, file={}", conversationId, username, target);
@@ -1160,7 +1161,7 @@ public class ChatController {
         response.setStoredName(storedName);
         response.setUrl("/api/v1/chat/files/" + conversationId + "/" + storedName);
         // 用 root 相对路径，避免暴露服务端绝对路径（uploadRoot 现在恒为绝对路径）。
-        response.setPath(toRelativeUploadPath(uploadRoot, conversationId, storedName));
+        response.setPath(toRelativeUploadPath(uploadRoot, target));
         response.setSize(file.getSize());
         response.setContentType(file.getContentType());
         return R.ok(response);
@@ -1248,18 +1249,12 @@ public class ChatController {
     /**
      * Resolve an uploaded attachment to its on-disk path, probing every
      * candidate conversation dir (workspace-scoped + legacy default, sanitized +
-     * raw id) with a per-candidate path-traversal guard. Returns {@code null}
-     * when no candidate holds the file.
+     * raw id) and both layouts (flat + date sub-directories) with a
+     * path-traversal guard. Returns {@code null} when no candidate holds the
+     * file.
      */
     private Path resolveUploadedFile(String conversationId, String storedName) {
-        for (Path conversationDir : uploadLocationResolver.resolveCandidateConversationDirs(conversationId)) {
-            Path normDir = conversationDir.normalize();
-            Path candidate = normDir.resolve(storedName).normalize();
-            if (Files.exists(candidate) && candidate.startsWith(normDir)) {
-                return candidate;
-            }
-        }
-        return null;
+        return uploadLocationResolver.resolveExistingFile(conversationId, storedName);
     }
 
     /**
@@ -1662,8 +1657,7 @@ public class ChatController {
      * upload sub-directory name is preserved (e.g. {@code chat-uploads/...}), and
      * separators are normalized to {@code /} so the value is stable across OSes.
      */
-    static String toRelativeUploadPath(Path uploadRoot, String conversationId, String storedName) {
-        Path target = uploadRoot.resolve(ChatUploadLocationResolver.sanitizeSegment(conversationId)).resolve(storedName);
+    static String toRelativeUploadPath(Path uploadRoot, Path target) {
         Path base = uploadRoot.getParent();
         Path relative = base != null ? base.relativize(target) : target;
         return relative.toString().replace('\\', '/');
@@ -1714,7 +1708,12 @@ public class ChatController {
             String rawMetadata = savedAssistant.getMetadata();
             if (rawMetadata != null && !rawMetadata.isBlank()) {
                 try {
-                    Map<String, Object> parsed = objectMapper.readValue(rawMetadata,
+                    // Without the unwrap this readValue throws on the H2 profile
+                    // and the catch below swallows it, so the superseded markers
+                    // never ride the done payload and every client waits for a
+                    // reload instead — a degradation with no symptom in the log.
+                    Map<String, Object> parsed = objectMapper.readValue(
+                            MessageMetadataJson.normalize(rawMetadata),
                             new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                     Object segs = parsed.get("segments");
                     if (segs instanceof java.util.List<?> list && !list.isEmpty()) {
