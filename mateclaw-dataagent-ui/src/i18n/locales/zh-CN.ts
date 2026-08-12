@@ -749,6 +749,8 @@ export default {
     defaultEmbeddingModel: '默认向量模型',
     setDefaultEmbedding: '设为默认向量模型',
     currentDefaultEmbedding: '当前默认向量',
+    defaultRerank: '默认重排模型',
+    setDefaultRerank: '设为默认重排模型',
     modalities: '多模态能力',
     modalityVision: '图片理解',
     modalityVideo: '视频理解',

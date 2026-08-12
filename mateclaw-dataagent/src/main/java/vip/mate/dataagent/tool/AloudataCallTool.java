@@ -71,6 +71,7 @@ public class AloudataCallTool {
     private final AloudataMetricMapper metricMapper;
     private final MateClawRuntime mateClawRuntime;
     private final DataAgentChatScopeContext scopeContext;
+    private final SemanticRerankService semanticRerankService;
 
     /** 指标查询端点名，需要 ECharts 图表生成等增值逻辑 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
@@ -757,6 +758,16 @@ public class AloudataCallTool {
          * 用"用户原话 vs 展示名"的字符重叠度做通用重排，将用户原话中信息量覆盖最充分的指标提权到首位。 */
         if (!family.triggered()) {
             applyGenericCaliberRerank(originalMessage, keyword, mergedMetrics);
+        }
+
+        /* Rerank 精排分支：由系统配置 dataagent.search.rerank.enabled 控制（默认关闭）。
+         * 开启且配置了默认 rerank 模型时，对 TopK 截断后的指标/维度候选按与用户原话的
+         * 相关度二次精排，提升命中项排序准确度；开关关闭或调用失败时静默降级为原始排序。 */
+        SemanticRerankOutput rerankOutput = semanticRerankService.rerankSemanticHits(
+                mergedMetrics, mergedDimensions, originalMessage != null ? originalMessage : keyword);
+        if (rerankOutput.isReranked()) {
+            mergedMetrics = rerankOutput.getMetricHits();
+            mergedDimensions = rerankOutput.getDimensionHits();
         }
 
         StringBuilder sb = new StringBuilder();

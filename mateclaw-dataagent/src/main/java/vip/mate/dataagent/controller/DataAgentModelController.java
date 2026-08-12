@@ -331,4 +331,36 @@ public class DataAgentModelController {
     public R<ModelConfigEntity> setDefaultEmbeddingModel(@PathVariable Long id) {
         return R.ok(runtime.setDefaultEmbeddingModel(id));
     }
+
+    /**
+     * 测试 Rerank 模型连通性
+     */
+    @PostMapping("/rerank/{modelId}/test")
+    @RequireGlobalAdmin
+    @Operation(summary = "测试 Rerank 模型", description = "测试指定 Rerank 模型的连通性（对短文本对打分验证 API key）")
+    public R<Map<String, Object>> testRerankModel(@PathVariable Long modelId) {
+        return R.ok(runtime.testRerankModel(modelId));
+    }
+
+    /**
+     * 获取默认 Rerank 模型
+     * <p>
+     * 默认 Rerank 模型配置属于管理级信息，仅全局管理员可访问。
+     */
+    @GetMapping("/rerank/default")
+    @RequireGlobalAdmin
+    @Operation(summary = "获取默认 Rerank 模型", description = "获取当前配置的默认 Rerank 模型（仅全局管理员）")
+    public R<ModelConfigEntity> getDefaultRerankModel() {
+        return R.ok(runtime.getDefaultRerankModel());
+    }
+
+    /**
+     * 设置默认 Rerank 模型
+     */
+    @PostMapping("/{id}/default-rerank")
+    @RequireGlobalAdmin
+    @Operation(summary = "设置默认 Rerank 模型", description = "将指定模型设为默认 Rerank 模型")
+    public R<ModelConfigEntity> setDefaultRerankModel(@PathVariable Long id) {
+        return R.ok(runtime.setDefaultRerankModel(id));
+    }
 }

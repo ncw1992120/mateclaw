@@ -116,6 +116,20 @@ public class ModelConfigService {
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 查找第一个启用的 rerank 模型（语义检索重排分支的 fallback 路径）
+     *
+     * @return 第一个启用的 rerank 模型配置，未配置时返回 null
+     */
+    public ModelConfigEntity findFirstEnabledRerank() {
+        return modelConfigMapper.selectOne(new LambdaQueryWrapper<ModelConfigEntity>()
+                .eq(ModelConfigEntity::getModelType, "rerank")
+                .eq(ModelConfigEntity::getEnabled, true)
+                .orderByDesc(ModelConfigEntity::getIsDefault)
+                .orderByAsc(ModelConfigEntity::getName)
+                .last("LIMIT 1"));
+    }
+
     public ModelConfigEntity getModel(Long id) {
         ModelConfigEntity entity = modelConfigMapper.selectById(id);
         if (entity == null) {

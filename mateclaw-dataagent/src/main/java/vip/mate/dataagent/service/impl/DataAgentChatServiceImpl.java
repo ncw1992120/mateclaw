@@ -751,6 +751,21 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 log.debug("[DataAgent] Failed to generate recommended questions: {}", e.getMessage());
             }
 
+            // 修正 thinking/content segment 的 startTime：StreamAccumulator 默认用 graph output
+            // 处理时刻（≈ T_think_end/T_content_end），而 relay 在首个 thinking_delta/content_delta
+            // 到达时记录的时刻（≈ T_think_start/T_content_start）更准确。修正后由
+            // toMetadataJson / getFinalizedSegments 用 endTime（tool_call_started 的 T_tool_start）
+            // 重算 durationMs，使思考耗时严格不含工具执行时间。
+            // 注意：必须在持久化（buildMetadataWithRecommendedQuestions → toMetadataJson）之前执行，
+            // 否则入库的 metadata 中 thinking/content segment 缺失 durationMs，刷新页面后耗时丢失。
+            Long thinkingStart = streamTracker.getThinkingStartTime(conversationId);
+            if (thinkingStart != null) {
+                accumulator.updateSegmentStartTime("thinking", thinkingStart);
+            }
+            Long contentStart = streamTracker.getContentStartTime(conversationId);
+            if (contentStart != null) {
+                accumulator.updateSegmentStartTime("content", contentStart);
+            }
             // 将推荐问题写入 metadata 以支持持久化（刷新页面后可恢复）
             List<DataAgentStreamTracker.DelegationEvent> delegEvents = streamTracker.drainDelegationEvents(conversationId);
             String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions, delegEvents);
@@ -798,20 +813,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             donePayload.put("persisted", savedAssistant != null);
             donePayload.put("messageCount", msgCount);
-            // 修正 thinking/content segment 的 startTime：StreamAccumulator 默认用 graph output
-            // 处理时刻（≈ T_think_end/T_content_end），而 relay 在首个 thinking_delta/content_delta
-            // 到达时记录的时刻（≈ T_think_start/T_content_start）更准确。修正后由
-            // getFinalizedSegments 用 endTime（tool_call_started 的 T_tool_start）重算 durationMs，
-            // 使思考耗时严格不含工具执行时间。
-            Long thinkingStart = streamTracker.getThinkingStartTime(conversationId);
-            if (thinkingStart != null) {
-                accumulator.updateSegmentStartTime("thinking", thinkingStart);
-            }
-            Long contentStart = streamTracker.getContentStartTime(conversationId);
-            if (contentStart != null) {
-                accumulator.updateSegmentStartTime("content", contentStart);
-            }
-            // 携带权威 segments 数据，前端用此覆盖实时流中缺失 segmentOnly 标记的 segments
+            // 携带权威 segments 数据，前端用此覆盖实时流中缺失 segmentOnly 标记的 segments。
+            // 首轮 thinking/content 的 startTime 已在持久化前修正（见上方 updateSegmentStartTime），
+            // 此处 getFinalizedSegments 重算 durationMs，与持久化 metadata 保持一致。
             List<Map<String, Object>> finalizedSegments = accumulator.getFinalizedSegments();
             if (!finalizedSegments.isEmpty()) {
                 donePayload.put("segments", finalizedSegments);
@@ -1073,6 +1077,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
         synchronized String toMetadataJson(ObjectMapper objectMapper) {
             finalizeRunningSegments("thinking", "content", "tool_call");
+            recomputeCorrectedSegmentDurations();
             try {
                 Map<String, Object> metadata = new LinkedHashMap<>();
                 if (!toolCalls.isEmpty()) {
@@ -1096,13 +1101,22 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         /** 获取已 finalize 的 segments 列表（用于 done 事件携带权威 segments 给前端） */
         synchronized List<Map<String, Object>> getFinalizedSegments() {
             finalizeRunningSegments("thinking", "content", "tool_call");
-            // 重算已 finalized 但尚无 durationMs 的 segment 的耗时。
-            // 仅对 startTimeCorrected=true 的 segment（即 updateSegmentStartTime 用 relay
-            // 记录的首个 delta 到达时刻修正过 startTime）重算，这些 segment 的 startTime
-            // 是 T_think_start/T_content_start，endTime 是 tool_call_started 的 T_tool_start，
-            // 算出的 durationMs 严格不含工具执行时间。
-            // 未被修正的 segment（多轮 ReAct 的后续 thinking/content）startTime 不准，
-            // 不在后端计算，留给前端 done 事件合并实时流的正确值。
+            recomputeCorrectedSegmentDurations();
+            return new ArrayList<>(segments);
+        }
+
+        /**
+         * 重算已 finalize 但尚无 durationMs 的 segment 的耗时。
+         * 仅对 startTimeCorrected=true 的 segment（即 updateSegmentStartTime 用 relay
+         * 记录的首个 delta 到达时刻修正过 startTime）重算，这些 segment 的 startTime
+         * 是 T_think_start/T_content_start，endTime 是 tool_call_started 的 T_tool_start，
+         * 算出的 durationMs 严格不含工具执行时间。
+         * 未被修正的 segment（多轮 ReAct 的后续 thinking/content）startTime 不准，
+         * 不在后端计算，留给前端 done 事件合并实时流的正确值。
+         * <p>toMetadataJson（持久化）与 getFinalizedSegments（done 事件）共用此逻辑，
+         * 保证入库的 metadata 与实时权威 segments 的 durationMs 一致。
+         */
+        private void recomputeCorrectedSegmentDurations() {
             for (var seg : segments) {
                 if ("completed".equals(seg.get("status"))
                         && !seg.containsKey("durationMs")
@@ -1114,7 +1128,6 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                     }
                 }
             }
-            return new ArrayList<>(segments);
         }
 
         /** 累积 Plan-Execute 模式的计划进度事件，更新 planState 以便持久化到消息 metadata */

@@ -875,6 +875,7 @@ import { useModelStore } from '@/stores/useModelStore'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
+import { CHART_TYPES_CHAT as ECHARTS_CHART_TYPES } from '@/constants/chartTypes'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
@@ -1939,31 +1940,7 @@ const echartsBlockInterpret = new Map<HTMLElement, string>()
  *  切换图表类型会重建为标准样式，切回初始类型时用此原生 option 还原，避免丢失 AI 原始呈现。 */
 const echartsBlockPristine = new Map<HTMLElement, { option: Record<string, any>; type: ChartType }>()
 
-/** 支持切换的图表类型（不含表格，表格由独立按钮触发的浮层展示） */
-const ECHARTS_CHART_TYPES = [
-  { key: 'bar', label: '柱状图' },
-  { key: 'line', label: '折线图' },
-  { key: 'pie', label: '饼图' },
-  { key: 'scatter', label: '散点图' },
-  { key: 'effectScatter', label: '涟漪特效散点图' },
-  { key: 'candlestick', label: 'K线图' },
-  { key: 'radar', label: '雷达图' },
-  { key: 'heatmap', label: '热力图' },
-  { key: 'boxplot', label: '箱线图' },
-  { key: 'map', label: '地图' },
-  { key: 'lines', label: '线图（流向图）' },
-  { key: 'graph', label: '关系图' },
-  { key: 'tree', label: '树图' },
-  { key: 'treemap', label: '矩形树图' },
-  { key: 'sunburst', label: '旭日图' },
-  { key: 'parallel', label: '平行坐标系' },
-  { key: 'gauge', label: '仪表盘' },
-  { key: 'funnel', label: '漏斗图' },
-  { key: 'sankey', label: '桑基图' },
-  { key: 'themeRiver', label: '主题河流图' },
-  { key: 'pictorialBar', label: '象形柱图' },
-] as const
-
+/** 图表类型 key（取自公共定义的问数子集，见 @/constants/chartTypes） */
 type ChartType = (typeof ECHARTS_CHART_TYPES)[number]['key']
 
 /** ECharts option 顶层 key 白名单（安全过滤） */
@@ -2668,6 +2645,28 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
       xAxis: buildAdaptiveXAxis(categories),
       yAxis: { type: 'value' },
       series: pictorialSeries,
+    }
+  }
+
+  // 面积图：折线图 + 半透明渐变面积
+  if (type === 'area') {
+    const areaSeries = seriesList.map((s: { name: string; data: number[] }) => ({
+      name: s.name,
+      type: 'line',
+      data: s.data,
+      smooth: true,
+      // 数据点多时关掉 symbol 强调连线
+      ...(categories.length > 30 ? { showSymbol: false } : {}),
+      areaStyle: {
+        color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(240,90,35,0.25)' }, { offset: 1, color: 'rgba(240,90,35,0.02)' }] },
+      },
+    }))
+    return {
+      ...base,
+      tooltip: base.tooltip || { trigger: 'axis' },
+      xAxis: buildAdaptiveXAxis(categories),
+      yAxis: { type: 'value' },
+      series: areaSeries,
     }
   }
 
@@ -4744,6 +4743,8 @@ onUnmounted(() => {
   top: 30px;
   right: 0;
   min-width: 130px;
+  max-height: 264px;
+  overflow-y: auto;
   margin: 0;
   padding: 4px 0;
   list-style: none;
@@ -4753,6 +4754,24 @@ onUnmounted(() => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   display: none;
   z-index: 10;
+}
+
+/* 下拉面板滚动条（WebKit 内核） */
+:deep(.echarts-toolbar-panel::-webkit-scrollbar) {
+  width: 6px;
+}
+
+:deep(.echarts-toolbar-panel::-webkit-scrollbar-thumb) {
+  background: var(--theme-border);
+  border-radius: 3px;
+}
+
+:deep(.echarts-toolbar-panel::-webkit-scrollbar-thumb:hover) {
+  background: var(--main-orange);
+}
+
+:deep(.echarts-toolbar-panel::-webkit-scrollbar-track) {
+  background: transparent;
 }
 
 :deep(.echarts-toolbar-panel.is-open) {

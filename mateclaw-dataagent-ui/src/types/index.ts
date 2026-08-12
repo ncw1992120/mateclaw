@@ -717,6 +717,7 @@ export interface DatasetData {
 export const MODEL_TYPES = [
   { value: 'chat', label: '对话' },
   { value: 'embedding', label: '向量' },
+  { value: 'rerank', label: '重排' },
 ] as const
 
 /** 技能实体（代理 mateclaw-server） */

@@ -11,6 +11,10 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
+import vip.mate.llm.rerank.RerankModel;
+import vip.mate.llm.rerank.RerankModelFactory;
+import vip.mate.llm.rerank.RerankRequest;
+import vip.mate.llm.rerank.RerankResult;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.llm.service.ModelDiscoveryService;
 import vip.mate.llm.service.ModelProviderService;
@@ -35,9 +39,12 @@ public class ModelConfigController {
     private final ModelProviderService modelProviderService;
     private final ModelDiscoveryService modelDiscoveryService;
     private final EmbeddingModelFactory embeddingModelFactory;
+    private final RerankModelFactory rerankModelFactory;
     private final SystemSettingMapper systemSettingMapper;
 
     private static final String SYSTEM_SETTING_DEFAULT_EMBEDDING_ID = "embedding.default.model.id";
+
+    private static final String SYSTEM_SETTING_DEFAULT_RERANK_ID = "rerank.default.model.id";
 
     @Operation(summary = "获取 Provider 列表（仅 enabled）")
     @GetMapping
@@ -311,6 +318,76 @@ public class ModelConfigController {
             fresh.setSettingKey(SYSTEM_SETTING_DEFAULT_EMBEDDING_ID);
             fresh.setSettingValue(value);
             fresh.setDescription("Default embedding model id for wiki semantic search");
+            systemSettingMapper.insert(fresh);
+        }
+        return R.ok();
+    }
+
+    // ==================== Rerank 模型管理 ====================
+
+    @Operation(summary = "测试 Rerank 模型连通性（用一个查询 + 两个文档验证 API key）")
+    @PostMapping("/rerank/{modelId}/test")
+    @RequireGlobalAdmin
+    public R<Map<String, Object>> testRerank(@PathVariable Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            ModelConfigEntity config = modelConfigService.getModel(modelId);
+            if (!"rerank".equals(config.getModelType())) {
+                result.put("success", false);
+                result.put("message", "模型类型不是 rerank: " + config.getModelType());
+                return R.ok(result);
+            }
+            // 清除缓存，确保本次测试用最新的 API key
+            rerankModelFactory.evict(modelId);
+            RerankModel model = rerankModelFactory.build(config);
+            RerankRequest request = new RerankRequest(
+                    "连通性测试", List.of("测试文档一", "测试文档二"), 2);
+            List<RerankResult> results = model.rerank(request);
+            result.put("success", true);
+            result.put("results", results);
+            result.put("model", config.getModelName());
+            result.put("message", "连通性测试成功");
+        } catch (Exception e) {
+            log.warn("[RerankTest] modelId={} test failed", modelId, e);
+            result.put("success", false);
+            result.put("message", e.getMessage());
+        }
+        return R.ok(result);
+    }
+
+    @Operation(summary = "获取系统默认 Rerank 模型 ID")
+    @GetMapping("/rerank/default")
+    @RequireGlobalAdmin
+    public R<Map<String, Object>> getDefaultRerank() {
+        SystemSettingEntity entity = systemSettingMapper.selectOne(
+                new LambdaQueryWrapper<SystemSettingEntity>()
+                        .eq(SystemSettingEntity::getSettingKey, SYSTEM_SETTING_DEFAULT_RERANK_ID)
+                        .last("LIMIT 1"));
+        if (entity == null || entity.getSettingValue() == null || entity.getSettingValue().isBlank()) {
+            return R.ok(Map.of("defaultModelId", ""));
+        }
+        return R.ok(Map.of("defaultModelId", entity.getSettingValue()));
+    }
+
+    @Operation(summary = "设置系统默认 Rerank 模型")
+    @PostMapping("/rerank/default")
+    @RequireGlobalAdmin
+    public R<Void> setDefaultRerank(@RequestBody Map<String, Object> body) {
+        Object v = body.get("modelId");
+        String value = v == null ? "" : v.toString();
+
+        SystemSettingEntity existing = systemSettingMapper.selectOne(
+                new LambdaQueryWrapper<SystemSettingEntity>()
+                        .eq(SystemSettingEntity::getSettingKey, SYSTEM_SETTING_DEFAULT_RERANK_ID)
+                        .last("LIMIT 1"));
+        if (existing != null) {
+            existing.setSettingValue(value);
+            systemSettingMapper.updateById(existing);
+        } else {
+            SystemSettingEntity fresh = new SystemSettingEntity();
+            fresh.setSettingKey(SYSTEM_SETTING_DEFAULT_RERANK_ID);
+            fresh.setSettingValue(value);
+            fresh.setDescription("Default rerank model id for semantic search rerank");
             systemSettingMapper.insert(fresh);
         }
         return R.ok();

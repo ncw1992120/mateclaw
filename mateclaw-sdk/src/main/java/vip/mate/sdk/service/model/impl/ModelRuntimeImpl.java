@@ -9,6 +9,10 @@ import org.springframework.stereotype.Service;
 import vip.mate.exception.MateClawException;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.*;
+import vip.mate.llm.rerank.RerankModel;
+import vip.mate.llm.rerank.RerankModelFactory;
+import vip.mate.llm.rerank.RerankRequest;
+import vip.mate.llm.rerank.RerankResult;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.llm.service.ModelDiscoveryService;
 import vip.mate.llm.service.ModelProviderService;
@@ -30,6 +34,7 @@ public class ModelRuntimeImpl implements ModelRuntime {
     private final ModelProviderService modelProviderService;
     private final ModelDiscoveryService modelDiscoveryService;
     private final EmbeddingModelFactory embeddingModelFactory;
+    private final RerankModelFactory rerankModelFactory;
 
     @Override
     public List<ProviderInfoDTO> listProviders() {
@@ -227,6 +232,87 @@ public class ModelRuntimeImpl implements ModelRuntime {
             result.put("message", "连通性测试成功");
         } catch (Exception e) {
             log.warn("[EmbeddingTest] modelId={} test failed", modelId, e);
+            result.put("success", false);
+            result.put("message", e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 获取默认重排（rerank）模型
+     * <p>
+     * 优先取 is_default=1 的 rerank 模型，未配置时回退到第一个启用的 rerank 模型。
+     */
+    @Override
+    public ModelConfigEntity getDefaultRerankModel() {
+        ModelConfigEntity marked = modelConfigService.listModels()
+                .stream()
+                .filter(modelConfigEntity -> Boolean.TRUE.equals(modelConfigEntity.getEnabled())
+                        && "rerank".equals(modelConfigEntity.getModelType())
+                        && Boolean.TRUE.equals(modelConfigEntity.getIsDefault()))
+                .findFirst()
+                .orElse(null);
+        if (marked != null) {
+            return marked;
+        }
+        return modelConfigService.findFirstEnabledRerank();
+    }
+
+    @Override
+    public ModelConfigEntity setDefaultRerankModel(Long id) {
+        ModelConfigEntity model = modelConfigService.getModel(id);
+        if (!Boolean.TRUE.equals(model.getEnabled())) {
+            throw new MateClawException("err.llm.only_enabled_default",
+                    "只有启用状态的模型才能设为默认重排模型");
+        }
+        if (!"rerank".equals(model.getModelType())) {
+            throw new MateClawException("err.llm.not_rerank_model",
+                    "只有重排（rerank）类型的模型才能设为默认重排模型");
+        }
+        // 通过 is_default 字段设置，统一存储；setDefaultModel 内部已实现按类型分类清旗
+        return modelConfigService.setDefaultModel(id);
+    }
+
+    /**
+     * 执行 Rerank 重排
+     */
+    @Override
+    public List<RerankResult> rerank(Long modelId, String query, List<String> documents, Integer topN) {
+        ModelConfigEntity config = modelConfigService.getModel(modelId);
+        if (!"rerank".equals(config.getModelType())) {
+            throw new MateClawException("err.llm.not_rerank_model",
+                    "只有重排（rerank）类型的模型才能执行 Rerank");
+        }
+        RerankModel model = rerankModelFactory.build(config);
+        RerankRequest request = new RerankRequest(query, documents, topN);
+        return model.rerank(request);
+    }
+
+    /**
+     * 测试 Rerank 模型连通性
+     */
+    @Override
+    public Map<String, Object> testRerankModel(Long modelId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            ModelConfigEntity config = modelConfigService.getModel(modelId);
+            if (!"rerank".equals(config.getModelType())) {
+                result.put("success", false);
+                result.put("message", "模型类型不是 rerank: " + config.getModelType());
+                return result;
+            }
+            // 清除缓存，确保本次测试用最新的 API key
+            rerankModelFactory.evict(modelId);
+            RerankModel model = rerankModelFactory.build(config);
+            RerankRequest request = new RerankRequest(
+                    "连通性测试", List.of("测试文档一", "测试文档二"), 2);
+            List<RerankResult> results = model.rerank(request);
+            result.put("success", true);
+            result.put("results", results);
+            result.put("model", config.getModelName());
+            result.put("message", "连通性测试成功");
+        } catch (Exception e) {
+            log.warn("[RerankTest] modelId={} test failed", modelId, e);
             result.put("success", false);
             result.put("message", e.getMessage());
         }

@@ -285,6 +285,7 @@
             <el-select v-model="editModelData.modelType">
               <el-option label="对话 (chat)" value="chat" />
               <el-option label="向量 (embedding)" value="embedding" />
+              <el-option label="重排 (rerank)" value="rerank" />
             </el-select>
           </el-form-item>
           <el-form-item :label="t('modelConfig.enableSearch')">
@@ -477,6 +478,13 @@ async function handleTestModel(model: ModelConfig): Promise<void> {
       if (result.success) {
         const dimInfo = result.dimensions != null ? ` (${t('modelConfig.embeddingDimensions', { dim: result.dimensions })})` : ''
         ElMessage.success((result.message || t('modelConfig.connectionOk')) + dimInfo)
+      } else {
+        ElMessage.error(result.message || t('modelConfig.connectionFail'))
+      }
+    } else if (model.modelType === 'rerank') {
+      const result = await modelStore.testRerankModelAvailability(model.id)
+      if (result.success) {
+        ElMessage.success(result.message || t('modelConfig.connectionOk'))
       } else {
         ElMessage.error(result.message || t('modelConfig.connectionFail'))
       }

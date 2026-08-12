@@ -1,6 +1,7 @@
 package vip.mate.sdk.service.model;
 
 import vip.mate.llm.model.*;
+import vip.mate.llm.rerank.RerankResult;
 
 import java.util.List;
 import java.util.Map;
@@ -231,4 +232,40 @@ public interface ModelRuntime {
      * @return 测试结果（含 success、dimensions、model、message 等字段）
      */
     Map<String, Object> testEmbeddingModel(Long modelId);
+
+    /**
+     * 获取默认重排（rerank）模型
+     *
+     * @return 默认重排模型配置实体，未配置时返回 null
+     */
+    ModelConfigEntity getDefaultRerankModel();
+
+    /**
+     * 设置默认重排（rerank）模型
+     *
+     * @param id 模型 ID
+     * @return 更新后的模型配置实体
+     */
+    ModelConfigEntity setDefaultRerankModel(Long id);
+
+    /**
+     * 执行 Rerank 重排
+     * <p>
+     * 对 query 与候选文档列表做交叉编码相关性重排，返回按相关性降序的结果。
+     *
+     * @param modelId   重排模型配置 ID（modelType='rerank'）
+     * @param query     检索查询
+     * @param documents 候选文档列表
+     * @param topN      返回 TopN 条结果（null 或小于 1 时全部返回）
+     * @return 重排结果（按相关性降序）
+     */
+    List<RerankResult> rerank(Long modelId, String query, List<String> documents, Integer topN);
+
+    /**
+     * 测试 Rerank 模型连通性
+     *
+     * @param modelId 模型 ID
+     * @return 测试结果（含 success、results、model、message 等字段）
+     */
+    Map<String, Object> testRerankModel(Long modelId);
 }

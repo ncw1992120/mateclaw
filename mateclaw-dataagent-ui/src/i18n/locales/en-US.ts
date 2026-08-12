@@ -741,6 +741,8 @@ export default {
     defaultEmbeddingModel: 'Default Embedding Model',
     setDefaultEmbedding: 'Set as Default Embedding',
     currentDefaultEmbedding: 'Default Embedding',
+    defaultRerank: 'Default Rerank Model',
+    setDefaultRerank: 'Set as Default Rerank',
     modalities: 'Multimodal Capabilities',
     modalityVision: 'Vision',
     modalityVideo: 'Video',

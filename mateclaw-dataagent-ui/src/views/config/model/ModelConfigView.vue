@@ -191,6 +191,7 @@
               <el-tag size="small">{{ getProviderName(model.provider) }}</el-tag>
               <el-tag v-if="model.isDefault" type="warning" size="small">{{ t('modelConfig.default') }}</el-tag>
               <el-tag v-if="model.modelType === 'embedding' && model.isDefault" type="success" size="small">{{ t('modelConfig.defaultEmbedding') }}</el-tag>
+              <el-tag v-if="model.modelType === 'rerank' && model.isDefault" type="success" size="small">{{ t('modelConfig.defaultRerank') }}</el-tag>
               <el-tag v-if="model.builtin" size="small" type="info">{{ t('modelConfig.builtin') }}</el-tag>
               <el-tag v-if="!model.enabled" type="danger" size="small">{{ t('modelConfig.statusDisabled') }}</el-tag>
             </div>
@@ -227,6 +228,15 @@
                 @click="handleSetDefaultEmbedding(model.id)"
               >
                 {{ t('modelConfig.setDefaultEmbedding') }}
+              </el-button>
+              <!-- 重排模型：设为默认 Rerank 模型（与对话/向量模型共用 is_default 字段） -->
+              <el-button
+                v-if="model.modelType === 'rerank' && !model.isDefault"
+                size="small"
+                type="success"
+                @click="handleSetDefaultRerank(model.id)"
+              >
+                {{ t('modelConfig.setDefaultRerank') }}
               </el-button>
               <el-button size="small" @click="openEditModel(model)">
                 {{ t('modelConfig.edit') }}
@@ -290,6 +300,7 @@
           <el-select v-model="editModelData.modelType">
             <el-option label="对话 (chat)" value="chat" />
             <el-option label="向量 (embedding)" value="embedding" />
+            <el-option label="重排 (rerank)" value="rerank" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('modelConfig.enableSearch')">
@@ -440,6 +451,14 @@ async function handleSetDefaultEmbedding(id: number): Promise<void> {
   ElMessage.success(t('common.success'))
 }
 
+/**
+ * 设置默认 Rerank 模型
+ */
+async function handleSetDefaultRerank(id: number): Promise<void> {
+  await modelStore.setDefaultRerankModelById(id)
+  ElMessage.success(t('common.success'))
+}
+
 function getProviderName(providerId: string): string {
   const p = modelStore.providers.find(x => x.providerId === providerId)
   return p?.name || providerId
@@ -496,6 +515,13 @@ async function handleTestModel(model: ModelConfig): Promise<void> {
       if (result.success) {
         const dimInfo = result.dimensions != null ? ` (${t('modelConfig.embeddingDimensions', { dim: result.dimensions })})` : ''
         ElMessage.success((result.message || t('modelConfig.connectionOk')) + dimInfo)
+      } else {
+        ElMessage.error(result.message || t('modelConfig.connectionFail'))
+      }
+    } else if (model.modelType === 'rerank') {
+      const result = await modelStore.testRerankModelAvailability(model.id)
+      if (result.success) {
+        ElMessage.success(result.message || t('modelConfig.connectionOk'))
       } else {
         ElMessage.error(result.message || t('modelConfig.connectionFail'))
       }
@@ -670,6 +696,7 @@ onMounted(async () => {
   await modelStore.fetchEnabledModels()
   await modelStore.fetchProviders()
   modelStore.fetchDefaultEmbeddingModel()
+  modelStore.fetchDefaultRerankModel()
 })
 </script>
 

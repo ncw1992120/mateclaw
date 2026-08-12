@@ -16,6 +16,7 @@ import vip.mate.agent.model.AgentEntity;
 import vip.mate.cron.model.CronJobDTO;
 import vip.mate.datasource.model.DatasourceEntity;
 import vip.mate.llm.model.*;
+import vip.mate.llm.rerank.RerankResult;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.sdk.service.agent.AgentRuntime;
 import vip.mate.sdk.service.cron.CronJobRuntime;
@@ -345,6 +346,26 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public Map<String, Object> testEmbeddingModel(Long modelId) {
         return modelRuntime.testEmbeddingModel(modelId);
+    }
+
+    @Override
+    public ModelConfigEntity getDefaultRerankModel() {
+        return modelRuntime.getDefaultRerankModel();
+    }
+
+    @Override
+    public ModelConfigEntity setDefaultRerankModel(Long id) {
+        return modelRuntime.setDefaultRerankModel(id);
+    }
+
+    @Override
+    public List<RerankResult> rerank(Long modelId, String query, List<String> documents, Integer topN) {
+        return modelRuntime.rerank(modelId, query, documents, topN);
+    }
+
+    @Override
+    public Map<String, Object> testRerankModel(Long modelId) {
+        return modelRuntime.testRerankModel(modelId);
     }
 
     // ==================== 技能 ====================

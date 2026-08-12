@@ -18,6 +18,8 @@ export const useModelStore = defineStore('model', () => {
   const defaultModel = ref<ModelConfig | null>(null)
   /** 默认向量模型 */
   const defaultEmbeddingModel = ref<ModelConfig | null>(null)
+  /** 默认 Rerank 模型 */
+  const defaultRerankModel = ref<ModelConfig | null>(null)
   /** 加载状态 */
   const loading = ref(false)
 
@@ -204,6 +206,20 @@ export const useModelStore = defineStore('model', () => {
     }
   }
 
+  /** 测试 Rerank 模型连通性，返回 { success, message } */
+  async function testRerankModelAvailability(modelId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const result = await modelApi.testRerankModel(modelId) as { success: boolean; message?: string }
+      return {
+        success: result.success,
+        message: result.message,
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, message: msg }
+    }
+  }
+
   /** 创建自定义 Provider */
   async function createCustomProvider(data: Record<string, unknown>): Promise<void> {
     await modelApi.createCustomProvider(data as Partial<ModelProvider>)
@@ -245,6 +261,27 @@ export const useModelStore = defineStore('model', () => {
     await fetchEnabledModels()
   }
 
+  /** 获取默认 Rerank 模型（仅全局管理员可访问） */
+  async function fetchDefaultRerankModel(): Promise<void> {
+    const userStore = useUserStore()
+    if (!userStore.isAdmin) {
+      defaultRerankModel.value = null
+      return
+    }
+    try {
+      defaultRerankModel.value = await modelApi.getDefaultRerankModel() as unknown as ModelConfig
+    } catch {
+      defaultRerankModel.value = null
+    }
+  }
+
+  /** 设置默认 Rerank 模型 */
+  async function setDefaultRerankModelById(id: number): Promise<void> {
+    await modelApi.setDefaultRerankModel(id)
+    await fetchDefaultRerankModel()
+    await fetchEnabledModels()
+  }
+
   return {
     enabledModels,
     allModels,
@@ -252,6 +289,7 @@ export const useModelStore = defineStore('model', () => {
     activeModel,
     defaultModel,
     defaultEmbeddingModel,
+    defaultRerankModel,
     loading,
     fetchEnabledModels,
     fetchProviders,
@@ -269,10 +307,13 @@ export const useModelStore = defineStore('model', () => {
     testConnection,
     testModelAvailability,
     testEmbeddingModelAvailability,
+    testRerankModelAvailability,
     createCustomProvider,
     deleteProvider,
     discoverModels,
     fetchDefaultEmbeddingModel,
     setDefaultEmbeddingModelById,
+    fetchDefaultRerankModel,
+    setDefaultRerankModelById,
   }
 })

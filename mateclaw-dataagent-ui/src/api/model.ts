@@ -146,3 +146,21 @@ export function getDefaultEmbeddingModel() {
 export function setDefaultEmbeddingModel(id: number) {
   return api.post<ModelConfig>(`${BASE_URL}/${id}/default-embedding`)
 }
+
+/** 测试 Rerank 模型连通性 */
+export function testRerankModel(modelId: number) {
+  return api.post(`${BASE_URL}/rerank/${modelId}/test`)
+}
+
+/** 获取默认 Rerank 模型 */
+export function getDefaultRerankModel() {
+  return api.get<ModelConfig>(`${BASE_URL}/rerank/default`)
+}
+
+/**
+ * 设置默认 Rerank 模型
+ * 后端走 is_default 字段统一管理，通过 model_type 区分互斥。
+ */
+export function setDefaultRerankModel(id: number) {
+  return api.post<ModelConfig>(`${BASE_URL}/${id}/default-rerank`)
+}

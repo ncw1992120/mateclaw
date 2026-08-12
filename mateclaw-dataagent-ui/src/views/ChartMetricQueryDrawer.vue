@@ -319,6 +319,7 @@ import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import type { ChartMetricItem } from '@/api/chat'
 import type { AloudataSyncedDimension } from '@/types'
+import { CHART_TYPES_METRIC_QUERY as CHART_TYPES } from '@/constants/chartTypes'
 
 echarts.use([
   BarChart, LineChart, PieChart, ScatterChart, EffectScatterChart,
@@ -332,30 +333,7 @@ echarts.use([
   CanvasRenderer,
 ])
 
-/** 支持的图表类型列表（与问数展示一致） */
-const CHART_TYPES = [
-  { key: 'bar', label: '柱状图' },
-  { key: 'line', label: '折线图' },
-  { key: 'pie', label: '饼图' },
-  { key: 'area', label: '面积图' },
-  { key: 'scatter', label: '散点图' },
-  { key: 'effectScatter', label: '涟漪特效散点图' },
-  { key: 'candlestick', label: 'K线图' },
-  { key: 'radar', label: '雷达图' },
-  { key: 'heatmap', label: '热力图' },
-  { key: 'boxplot', label: '箱线图' },
-  { key: 'funnel', label: '漏斗图' },
-  { key: 'gauge', label: '仪表盘' },
-  { key: 'sankey', label: '桑基图' },
-  { key: 'themeRiver', label: '主题河流图' },
-  { key: 'pictorialBar', label: '象形柱图' },
-  { key: 'graph', label: '关系图' },
-  { key: 'treemap', label: '矩形树图' },
-  { key: 'sunburst', label: '旭日图' },
-  { key: 'parallel', label: '平行坐标系' },
-  { key: 'tree', label: '树图' },
-] as const
-
+/** 图表类型 key（取自公共定义的指标查询子集，见 @/constants/chartTypes） */
 type ChartTypeKey = (typeof CHART_TYPES)[number]['key']
 
 /** 默认每页条数 */
