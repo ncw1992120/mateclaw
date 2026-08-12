@@ -83,4 +83,26 @@ public interface AloudataSemanticEsService {
      * @return 检索结果（含指标命中和维度命中）
      */
     AloudataSearchResult hybridSearchMerged(Long datasourceId, List<String> keywords, int topK, double similarityThreshold);
+
+    /**
+     * 增强混合检索：在多关键词合并检索基础上，引入用户原话作为并行检索路径。
+     * <p>
+     * 相比 {@link #hybridSearchMerged}，本方法额外利用用户原始消息：
+     * <ul>
+     *   <li>向量路：对原始关键词和用户原话分别生成向量，kNN 结果取并集（max score 去重），
+     *       解决 LLM 压缩 keyword 后与指标展示名 embedding 空间不一致的问题</li>
+     *   <li>维度路：用户原话通常包含维度上下文（如"各区域"），用原话作为维度 kNN 的主向量，
+     *       缓解指标/维度共用 keyword 导致的语义污染</li>
+     * </ul>
+     * originalMessage 为 null 或与首关键词相同时，退化为 {@link #hybridSearchMerged} 行为。
+     *
+     * @param datasourceId       数据源 ID
+     * @param keywords           搜索关键词列表（第一个为原始关键词，后续为扩展词）
+     * @param originalMessage    用户原始消息（可为 null）
+     * @param topK               返回结果数量上限
+     * @param similarityThreshold 向量语义检索相似度阈值
+     * @return 检索结果（含指标命中和维度命中）
+     */
+    AloudataSearchResult hybridSearchEnhanced(Long datasourceId, List<String> keywords,
+                                              String originalMessage, int topK, double similarityThreshold);
 }

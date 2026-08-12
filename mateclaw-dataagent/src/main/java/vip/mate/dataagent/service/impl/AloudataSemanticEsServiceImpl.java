@@ -235,8 +235,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         ensureIndicesIfNeeded(null);
 
         // 单关键词检索：无扩展词，BM25 与向量使用同一查询串
-        List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, query, List.of(), topK, similarityThreshold);
-        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, query, List.of(), topK, similarityThreshold);
+        List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, query, List.of(), null, topK, similarityThreshold);
+        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, query, List.of(), null, topK, similarityThreshold);
 
         // 为指标补充可用维度列表
         enrichMetricDimensions(metricHits, datasourceId);
@@ -274,8 +274,53 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
 
         ensureIndicesIfNeeded(null);
 
-        List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, primaryQuery, expandedWords, topK, similarityThreshold);
-        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, primaryQuery, expandedWords, topK, similarityThreshold);
+        List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, primaryQuery, expandedWords, null, topK, similarityThreshold);
+        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, primaryQuery, expandedWords, null, topK, similarityThreshold);
+
+        // 为指标补充可用维度列表
+        enrichMetricDimensions(metricHits, datasourceId);
+
+        result.setMetricHits(metricHits);
+        result.setDimensionHits(dimensionHits);
+        result.setElapsedMs(System.currentTimeMillis() - startTime);
+        return result;
+    }
+
+    @Override
+    public AloudataSearchResult hybridSearchEnhanced(Long datasourceId, List<String> keywords,
+                                                      String originalMessage, int topK, double similarityThreshold) {
+        long startTime = System.currentTimeMillis();
+        AloudataSearchResult result = new AloudataSearchResult();
+        String primaryQuery = keywords == null || keywords.isEmpty() ? "" : keywords.getFirst();
+        List<String> expandedWords = keywords == null || keywords.size() <= 1
+                ? List.of() : keywords.subList(1, keywords.size());
+        result.setQuery(primaryQuery + (expandedWords.isEmpty() ? "" : " (扩展: " + String.join(", ", expandedWords) + ")"));
+        result.setDatasourceId(datasourceId);
+
+        if (datasourceId == null || !StringUtils.hasText(primaryQuery)) {
+            result.setMetricHits(List.of());
+            result.setDimensionHits(List.of());
+            result.setElapsedMs(System.currentTimeMillis() - startTime);
+            return result;
+        }
+
+        // originalMessage 为 null 或与首关键词相同时，退化为 hybridSearchMerged 行为
+        String effectiveOriginalMessage = (originalMessage != null
+                && !originalMessage.isBlank()
+                && !originalMessage.equals(primaryQuery)) ? originalMessage : null;
+
+        ElasticsearchClient client = getAvailableClient();
+        if (client == null) {
+            log.error("ES 不可用，降级为 MySQL LIKE 查询");
+            return fallbackMySqlSearch(datasourceId, keywords, topK, startTime);
+        }
+
+        ensureIndicesIfNeeded(null);
+
+        List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, primaryQuery, expandedWords,
+                effectiveOriginalMessage, topK, similarityThreshold);
+        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, primaryQuery, expandedWords,
+                effectiveOriginalMessage, topK, similarityThreshold);
 
         // 为指标补充可用维度列表
         enrichMetricDimensions(metricHits, datasourceId);
@@ -497,22 +542,21 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     // ==================== ES 混合检索 ====================
 
     private List<MetricHit> esSearchMetrics(ElasticsearchClient client, Long datasourceId,
-                                            String primaryQuery, List<String> expandedWords, int topK, double threshold) {
+                                            String primaryQuery, List<String> expandedWords,
+                                            String originalMessage, int topK, double threshold) {
         String indexName = DataAgentConstants.ALOUDATA_METRIC_ES_INDEX;
         // 每路先放大候选池，融合/排序后再由调用方截断到 topK
         int pool = retrievalPoolSize(topK);
         Query keywordQuery = buildMetricKeywordQuery(datasourceId, primaryQuery, expandedWords);
         try {
-            // 判断是否需要向量检索（向量只用原始关键词，避免扩展词稀释语义）
             boolean hasVector = hasMetricEmbeddings(datasourceId);
             List<Float> queryVector = hasVector ? getQueryVector(datasourceId, primaryQuery) : List.of();
             boolean canKnn = !queryVector.isEmpty();
 
             if (canKnn) {
-                // 混合检索：分别执行关键词查询和 kNN 查询，应用层 RRF 融合
-                // （ES 内置 RRF 需要 Platinum 许可证，Basic 许可证不支持）
+                // 混合检索：关键词查询 + 多向量 kNN，应用层 RRF 融合
 
-                // 1. 关键词查询（BM25，原始关键词 must + 扩展词 should OR 拓宽召回）
+                // 1. 关键词查询（BM25，should 组 + minimum_should_match=1）
                 SearchResponse<Map> keywordResponse = client.search(s -> s
                                 .index(indexName)
                                 .size(pool)
@@ -520,10 +564,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                         Map.class
                 );
 
-                // 2. kNN 向量查询（只用原始关键词的向量）
-                // 加 similarity 预过滤：ES dense_vector+cosine 的 _score=(1+cosine)/2，
-                // 用换算后的阈值在向量检索阶段就丢弃低质量命中，避免其进入 RRF 池干扰排序
-                // threshold=0 时 knnSimilarityThreshold 返回 null，不在 ES 端过滤，靠应用层后过滤兜底
+                // 2. kNN 向量查询（原始关键词向量）
                 Float knnSimilarity = knnSimilarityThreshold(threshold);
                 SearchResponse<Map> knnResponse = client.search(s -> s
                                 .index(indexName)
@@ -534,8 +575,32 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                         Map.class
                 );
 
+                // 2b. 用户原话向量 kNN（如果与原始关键词不同，额外做一路 kNN 扩大向量召回）
+                // 解决 LLM 压缩 keyword 后与指标展示名 embedding 空间不一致的问题：
+                // 如 keyword="营收" 但展示名="营业收入"，两词 embedding 可能差异较大
+                List<Hit<Map>> mergedKnnHits;
+                if (originalMessage != null && !originalMessage.isBlank()
+                        && !originalMessage.equals(primaryQuery)) {
+                    List<Float> origMsgVector = getQueryVector(datasourceId, originalMessage);
+                    if (!origMsgVector.isEmpty()) {
+                        SearchResponse<Map> origMsgKnnResponse = client.search(s -> s
+                                        .index(indexName)
+                                        .size(pool)
+                                        .knn(knn -> buildKnnQuery(knn,
+                                                DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD,
+                                                origMsgVector, pool, knnSimilarity, datasourceId)),
+                                Map.class
+                        );
+                        mergedKnnHits = mergeKnnHits(List.of(knnResponse, origMsgKnnResponse));
+                    } else {
+                        mergedKnnHits = mergeKnnHits(List.of(knnResponse));
+                    }
+                } else {
+                    mergedKnnHits = mergeKnnHits(List.of(knnResponse));
+                }
+
                 // 3. 应用层 RRF 融合
-                return rrfMergeMetricHits(keywordResponse, knnResponse, threshold);
+                return rrfMergeMetricHits(keywordResponse, mergedKnnHits, threshold);
             } else {
                 // 仅关键词检索（带字段权重）
                 SearchResponse<Map> response = client.search(s -> s
@@ -544,7 +609,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                 .query(keywordQuery),
                         Map.class
                 );
-                return extractMetricHits(response, "keyword", 0);
+                return extractMetricHits(response, "keyword", threshold);
             }
         } catch (Exception e) {
             log.error("ES 指标检索失败，降级为 MySQL: {}", e.getMessage());
@@ -563,26 +628,26 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
      * 查询结构：
      * <ul>
      *   <li>filter: datasourceId 精确过滤</li>
-     *   <li>must: 原始关键词的 multiMatch（BestFields + tieBreaker），保证核心召回的字面相关硬约束</li>
-     *   <li>should: 扩展词的 multiMatch（BestFields），OR 语义拓宽召回，命中任一即加分</li>
+     *   <li>should 组（原始关键词 + 扩展词）：multiMatch（BestFields + tieBreaker），
+     *       minimum_should_match=1 保证至少命中一个 should 子句即召回</li>
      *   <li>should: .keyword 子字段精确匹配提权，命中加分、不命中不影响召回</li>
      * </ul>
      * <p>
-     * 关键设计：原始关键词用 must 而非 should。must 是"字面相关"的硬约束 ——
-     * 原始关键词必须 BM25 命中，避免扩展词单独命中引入"扩展词匹配但原始关键词不匹配"的低精度结果。
+     * 关键设计：原始关键词和扩展词统一用 should + minimum_should_match("1")，
+     * 而非原始关键词用 must。must 要求原始关键词必须 BM25 命中，当 LLM 提取的 keyword
+     * 为口语化表达（如"卖了多少"）时 must 完全失配，导致扩展词（如业务术语"销售额"）
+     * 在关键词路上零贡献——should 子句在 must 不命中时不会参与召回。
      * <p>
-     * 纯语义查询（如"上个月卖得怎么样"）时 must 可能失配，关键词路返回空，但 kNN 路仍完整工作，
-     * RRF 退化为纯向量排序 —— 这对纯语义查询是正确行为（本来就不该有 BM25 加成）。
-     * <p>
-     * 扩展词用 should 而非拼入 must，避免 CrossFields/BestFields 多词变 AND
-     * 导致"扩展越多召回越差"的问题。should 子句命中任一即可为文档加分，不命中也不影响
-     * 原始关键词的 must 召回。
+     * 改为 should 组后，原始关键词或任一扩展词命中即可召回。精确匹配提权（.keyword boost）
+     * 仍保留：精确匹配的文档获得更高 BM25 分数，在 RRF 排名中占据优势，确保字面精确匹配
+     * 优先于扩展词模糊匹配。纯语义查询（所有 should 均未命中）时关键词路返回空，
+     * kNN 路仍完整工作，RRF 退化为纯向量排序。
      */
     private Query buildMetricKeywordQuery(Long datasourceId, String primaryQuery, List<String> expandedWords) {
         return Query.of(q -> q.bool(b -> {
             b.filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)));
-            // 原始关键词 must：BestFields 取最高分字段，tieBreaker 让次高分字段也贡献部分分数
-            b.must(m -> m.multiMatch(mm -> mm
+            // 原始关键词 should：BestFields 取最高分字段，tieBreaker 让次高分字段也贡献部分分数
+            b.should(m -> m.multiMatch(mm -> mm
                     .fields("metricName^3", "metricName.ikmax^2", "metricDisplayName^2",
                             "metricDisplayName.ikmax^1", "synonyms^2", "synonyms.ikmax^1",
                             "businessCaliber^1", "categoryName^1",
@@ -604,10 +669,12 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                     }
                 }
             }
-            // .keyword 精确匹配提权：命中加分，不命中不影响 must 召回
+            // .keyword 精确匹配提权：命中加分，不命中不影响召回
             b.should(sh -> sh.term(t -> t.field("metricName.keyword").value(primaryQuery).boost(5.0f)));
             b.should(sh -> sh.term(t -> t.field("metricDisplayName.keyword").value(primaryQuery).boost(3.0f)));
             b.should(sh -> sh.term(t -> t.field("synonyms.keyword").value(primaryQuery).boost(2.0f)));
+            // 至少命中一个 should 子句才召回，避免无匹配时返回全量
+            b.minimumShouldMatch("1");
             return b;
         }));
     }
@@ -668,6 +735,44 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             knn.similarity(similarity);
         }
         return knn;
+    }
+
+    /**
+     * 合并多个 kNN 搜索响应，按 doc id 去重取最高分，按分数降序排列。
+     * <p>
+     * 用于多向量 kNN 场景：对原始关键词和用户原话分别生成向量、各自 kNN 检索后，
+     * 合并为单一 hit 列表再传入 RRF 融合，避免同一文档被多次计入 RRF 排名分。
+     *
+     * @param knnResponses kNN 搜索响应列表（可为 null 或空）
+     * @return 合并去重后的 hit 列表，按分数降序排列
+     */
+    private List<Hit<Map>> mergeKnnHits(List<SearchResponse<Map>> knnResponses) {
+        if (knnResponses == null || knnResponses.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Hit<Map>> mergedById = new LinkedHashMap<>();
+        Map<String, Double> maxScoreById = new LinkedHashMap<>();
+
+        for (SearchResponse<Map> response : knnResponses) {
+            if (response == null || response.hits() == null) {
+                continue;
+            }
+            for (Hit<Map> hit : response.hits().hits()) {
+                String id = hit.id();
+                double score = hit.score() != null ? hit.score() : 0.0;
+                if (!maxScoreById.containsKey(id) || score > maxScoreById.get(id)) {
+                    maxScoreById.put(id, score);
+                    mergedById.put(id, hit);
+                }
+            }
+        }
+
+        List<Hit<Map>> sorted = new ArrayList<>(mergedById.values());
+        sorted.sort((a, b) -> Double.compare(
+                maxScoreById.getOrDefault(b.id(), 0.0),
+                maxScoreById.getOrDefault(a.id(), 0.0)
+        ));
+        return sorted;
     }
 
     /** 查询向量缓存：相同 query 短时间内重复检索时跳过 embedding API 调用，降低 P99 延迟 */
@@ -732,7 +837,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     }
 
     private List<DimensionHit> esSearchDimensions(ElasticsearchClient client, Long datasourceId,
-                                                  String primaryQuery, List<String> expandedWords, int topK, double threshold) {
+                                                  String primaryQuery, List<String> expandedWords,
+                                                  String originalMessage, int topK, double threshold) {
         String indexName = DataAgentConstants.ALOUDATA_DIMENSION_ES_INDEX;
         // 每路先放大候选池，融合/排序后再由调用方截断到 topK
         int pool = retrievalPoolSize(topK);
@@ -743,9 +849,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             boolean canKnn = !queryVector.isEmpty();
 
             if (canKnn) {
-                // 混合检索：分别执行关键词查询和 kNN 查询，应用层 RRF 融合
+                // 混合检索：关键词查询 + 多向量 kNN，应用层 RRF 融合
 
-                // 1. 关键词查询（BM25，原始关键词 must + 扩展词 should OR 拓宽召回）
+                // 1. 关键词查询（BM25，should 组 + minimum_should_match=1）
                 SearchResponse<Map> keywordResponse = client.search(s -> s
                                 .index(indexName)
                                 .size(pool)
@@ -753,9 +859,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                         Map.class
                 );
 
-                // 2. kNN 向量查询（只用原始关键词的向量）
-                // 加 similarity 预过滤：丢弃低质量向量命中，避免其进入 RRF 池干扰排序
-                // threshold=0 时 knnSimilarityThreshold 返回 null，不在 ES 端过滤，靠应用层后过滤兜底
+                // 2. kNN 向量查询（原始关键词向量）
                 Float knnSimilarity = knnSimilarityThreshold(threshold);
                 SearchResponse<Map> knnResponse = client.search(s -> s
                                 .index(indexName)
@@ -766,8 +870,32 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                         Map.class
                 );
 
+                // 2b. 用户原话向量 kNN（维度检索尤其受益：LLM 提取的 keyword 偏向指标语义，
+                // 而用户原话通常包含维度上下文如"各区域""按省份"，用原话做额外 kNN
+                // 可以召回 keyword 遗漏的维度，缓解指标/维度共用 keyword 的语义污染问题）
+                List<Hit<Map>> mergedKnnHits;
+                if (originalMessage != null && !originalMessage.isBlank()
+                        && !originalMessage.equals(primaryQuery)) {
+                    List<Float> origMsgVector = getQueryVector(datasourceId, originalMessage);
+                    if (!origMsgVector.isEmpty()) {
+                        SearchResponse<Map> origMsgKnnResponse = client.search(s -> s
+                                        .index(indexName)
+                                        .size(pool)
+                                        .knn(knn -> buildKnnQuery(knn,
+                                                DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD,
+                                                origMsgVector, pool, knnSimilarity, datasourceId)),
+                                Map.class
+                        );
+                        mergedKnnHits = mergeKnnHits(List.of(knnResponse, origMsgKnnResponse));
+                    } else {
+                        mergedKnnHits = mergeKnnHits(List.of(knnResponse));
+                    }
+                } else {
+                    mergedKnnHits = mergeKnnHits(List.of(knnResponse));
+                }
+
                 // 3. 应用层 RRF 融合
-                return rrfMergeDimensionHits(keywordResponse, knnResponse, threshold);
+                return rrfMergeDimensionHits(keywordResponse, mergedKnnHits, threshold);
             } else {
                 SearchResponse<Map> response = client.search(s -> s
                                 .index(indexName)
@@ -775,7 +903,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                 .query(keywordQuery),
                         Map.class
                 );
-                return extractDimensionHits(response, "keyword", 0);
+                return extractDimensionHits(response, "keyword", threshold);
             }
         } catch (Exception e) {
             log.error("ES 维度检索失败，降级为 MySQL: {}", e.getMessage());
@@ -789,15 +917,14 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     }
 
     /**
-     * 构建维度关键词查询。逻辑同 {@link #buildMetricKeywordQuery}：原始关键词 must
-     * (BestFields + tieBreaker)，扩展词 should (BestFields OR 语义)，.keyword 精确匹配
-     * 改为独立 should term 提权。
+     * 构建维度关键词查询。逻辑同 {@link #buildMetricKeywordQuery}：原始关键词和扩展词
+     * 统一用 should + minimum_should_match("1")，.keyword 精确匹配独立 should term 提权。
      */
     private Query buildDimensionKeywordQuery(Long datasourceId, String primaryQuery, List<String> expandedWords) {
         return Query.of(q -> q.bool(b -> {
             b.filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)));
-            // 原始关键词 must：BestFields 取最高分字段，tieBreaker 让次高分字段也贡献部分分数
-            b.must(m -> m.multiMatch(mm -> mm
+            // 原始关键词 should：BestFields 取最高分字段，tieBreaker 让次高分字段也贡献部分分数
+            b.should(m -> m.multiMatch(mm -> mm
                     .fields("dimName^3", "dimName.ikmax^2", "dimDisplayName^2",
                             "dimDisplayName.ikmax^1", "synonyms^2", "synonyms.ikmax^1",
                             "dimDescription^1",
@@ -819,10 +946,12 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                     }
                 }
             }
-            // .keyword 精确匹配提权：命中加分，不命中不影响 must 召回
+            // .keyword 精确匹配提权：命中加分，不命中不影响召回
             b.should(sh -> sh.term(t -> t.field("dimName.keyword").value(primaryQuery).boost(5.0f)));
             b.should(sh -> sh.term(t -> t.field("dimDisplayName.keyword").value(primaryQuery).boost(3.0f)));
             b.should(sh -> sh.term(t -> t.field("synonyms.keyword").value(primaryQuery).boost(2.0f)));
+            // 至少命中一个 should 子句才召回，避免无匹配时返回全量
+            b.minimumShouldMatch("1");
             return b;
         }));
     }
@@ -874,6 +1003,23 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     private List<MetricHit> rrfMergeMetricHits(SearchResponse<Map> keywordResponse,
                                                 SearchResponse<Map> knnResponse,
                                                 double threshold) {
+        List<Hit<Map>> knnHits = (knnResponse != null && knnResponse.hits() != null)
+                ? knnResponse.hits().hits() : List.of();
+        return rrfMergeMetricHits(keywordResponse, knnHits, threshold);
+    }
+
+    /**
+     * 应用层加权 RRF 融合（指标），kNN 路接受预合并的 hit 列表。
+     * <p>
+     * 支持多向量 kNN 场景：调用方将多个 kNN 搜索响应通过 {@link #mergeKnnHits} 合并后传入。
+     *
+     * @param keywordResponse BM25 关键词搜索响应
+     * @param knnHits         预合并的 kNN hit 列表（已按分数降序排列、去重）
+     * @param threshold       用户传入的 cosine 语义阈值（0~1），用于后过滤
+     */
+    private List<MetricHit> rrfMergeMetricHits(SearchResponse<Map> keywordResponse,
+                                                List<Hit<Map>> knnHits,
+                                                double threshold) {
         int rankConstant = DataAgentConstants.SCHEMA_SEARCH_RRF_K;
         Map<String, Double> scoreMap = new LinkedHashMap<>();
         Map<String, MetricHit> hitMap = new LinkedHashMap<>();
@@ -896,10 +1042,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             }
         }
 
-        if (knnResponse != null && knnResponse.hits() != null) {
-            List<Hit<Map>> hits = knnResponse.hits().hits();
-            for (int i = 0; i < hits.size(); i++) {
-                Hit<Map> hit = hits.get(i);
+        if (knnHits != null) {
+            for (int i = 0; i < knnHits.size(); i++) {
+                Hit<Map> hit = knnHits.get(i);
                 String id = hit.id();
                 double rrfScore = 1.0 / (rankConstant + i + 1);
                 scoreMap.merge(id, rrfScore, Double::sum);
@@ -986,6 +1131,18 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     private List<DimensionHit> rrfMergeDimensionHits(SearchResponse<Map> keywordResponse,
                                                      SearchResponse<Map> knnResponse,
                                                      double threshold) {
+        List<Hit<Map>> knnHits = (knnResponse != null && knnResponse.hits() != null)
+                ? knnResponse.hits().hits() : List.of();
+        return rrfMergeDimensionHits(keywordResponse, knnHits, threshold);
+    }
+
+    /**
+     * 应用层加权 RRF 融合（维度），kNN 路接受预合并的 hit 列表。
+     * 逻辑同 {@link #rrfMergeMetricHits(SearchResponse, List, double)}。
+     */
+    private List<DimensionHit> rrfMergeDimensionHits(SearchResponse<Map> keywordResponse,
+                                                     List<Hit<Map>> knnHits,
+                                                     double threshold) {
         int rankConstant = DataAgentConstants.SCHEMA_SEARCH_RRF_K;
         Map<String, Double> scoreMap = new LinkedHashMap<>();
         Map<String, DimensionHit> hitMap = new LinkedHashMap<>();
@@ -1007,10 +1164,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             }
         }
 
-        if (knnResponse != null && knnResponse.hits() != null) {
-            List<Hit<Map>> hits = knnResponse.hits().hits();
-            for (int i = 0; i < hits.size(); i++) {
-                Hit<Map> hit = hits.get(i);
+        if (knnHits != null) {
+            for (int i = 0; i < knnHits.size(); i++) {
+                Hit<Map> hit = knnHits.get(i);
                 String id = hit.id();
                 double rrfScore = 1.0 / (rankConstant + i + 1);
                 scoreMap.merge(id, rrfScore, Double::sum);
@@ -1124,7 +1280,6 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             if (source == null) continue;
 
             double score = hit.score() != null ? hit.score() : 0.0;
-            if (threshold > 0 && score < threshold) continue;
 
             MetricHit mh = new MetricHit();
             mh.setMetricName(getString(source, "metricName"));
@@ -1143,6 +1298,13 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         if (max > 0) {
             hits.forEach(h -> h.setScore(h.getScore() / max));
         }
+        // 相关性阈值闸门：归一化后再过滤，与 hybrid 路径阈值语义一致
+        // （BM25 原始分量级 5~30，归一化前过滤形同虚设）
+        if (threshold > 0) {
+            hits = hits.stream()
+                    .filter(h -> h.getScore() >= threshold)
+                    .collect(Collectors.toList());
+        }
         return hits;
     }
 
@@ -1156,7 +1318,6 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
             if (source == null) continue;
 
             double score = hit.score() != null ? hit.score() : 0.0;
-            if (threshold > 0 && score < threshold) continue;
 
             DimensionHit dh = new DimensionHit();
             dh.setDimName(getString(source, "dimName"));
@@ -1174,6 +1335,13 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         double max = hits.stream().mapToDouble(DimensionHit::getScore).max().orElse(0.0);
         if (max > 0) {
             hits.forEach(h -> h.setScore(h.getScore() / max));
+        }
+        // 相关性阈值闸门：归一化后再过滤，与 hybrid 路径阈值语义一致
+        // （BM25 原始分量级 5~30，归一化前过滤形同虚设）
+        if (threshold > 0) {
+            hits = hits.stream()
+                    .filter(h -> h.getScore() >= threshold)
+                    .collect(Collectors.toList());
         }
         return hits;
     }

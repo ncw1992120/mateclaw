@@ -319,8 +319,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                         Map.class
                 );
 
-                // 3. 应用层 RRF 融合
-                return rrfMergeTermHits(keywordResponse, knnResponse);
+                // 3. 应用层 RRF 融合（按相关性阈值过滤，杜绝金融属性词等宽泛词的低相关噪声）
+                return rrfMergeTermHits(keywordResponse, knnResponse, threshold);
             } else {
                 // 仅关键词检索
                 SearchResponse<Map> response = client.search(s -> s
@@ -329,7 +329,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                 .query(keywordQuery),
                         Map.class
                 );
-                return extractTermHits(response, "keyword", 0);
+                return extractTermHits(response, "keyword", threshold);
             }
         } catch (Exception e) {
             log.error("ES 术语检索失败，降级为 MySQL: {}", e.getMessage());
@@ -343,8 +343,11 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
      * 查询结构：
      * <ul>
      *   <li>filter: tenantCode 精确过滤（可选）</li>
-     *   <li>must: multiMatch（BestFields + tieBreaker），只作用于 IK 分词字段</li>
-     *   <li>should: .keyword 子字段精确匹配提权，命中加分、不命中不影响召回</li>
+     *   <li>must: multiMatch（BestFields + tieBreaker）只作用于核心语义字段
+     *       termName/synonyms，保证"名称/同义词命中"强制召回；描述、口径、规则等
+     *       外围字段不再参与 must，避免输入金融属性词（如"金融""利率"）时，
+     *       仅描述里碰巧提及该词的弱相关术语被强制拉入结果产生噪声</li>
+     *   <li>should: 外围字段与 .keyword 精确匹配仅提权，命中加分、不命中不影响 must 召回</li>
      * </ul>
      * <p>
      * .keyword 字段使用 keyword analyzer（不分词），与 IK 分词器不同组，
@@ -356,11 +359,18 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
             }
             // BestFields：取单个最高分字段，tieBreaker 让次高分字段也贡献部分分数
+            // 核心语义字段走 must：名称/同义词强制召回，杜绝描述命中弱相关噪声
             b.must(m -> m.multiMatch(mm -> mm
-                    .fields("termName^3", "termName.ikmax^2", "synonyms^2", "synonyms.ikmax^1",
-                            "description^1", "calculationFormula^1", "dataCaliber^1",
-                            "businessRule^1", "category^1",
-                            DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^0.5")
+                    .fields("termName^3", "termName.ikmax^2", "synonyms^2", "synonyms.ikmax^1")
+                    .type(TextQueryType.BestFields)
+                    .tieBreaker(0.3)
+                    .query(query)));
+            // 外围字段仅提权（低权重）：描述、口径、规则里碰巧提及查询词的术语
+            // 不再被强制召回，命中仅适度加分、不命中不影响召回
+            b.should(sh -> sh.multiMatch(mm -> mm
+                    .fields("description^0.5", "calculationFormula^0.3", "dataCaliber^0.3",
+                            "businessRule^0.3", "category^0.5",
+                            DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD + "^0.3")
                     .type(TextQueryType.BestFields)
                     .tieBreaker(0.3)
                     .query(query)));
@@ -389,8 +399,17 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
      * <p>
      * RRF 公式: score = Σ 1/(k + rank_i)，k 为 rankConstant
      * 双通道同时命中的结果得分更高，自然排在前面
+     * <p>
+     * 融合后按归一化相关分与 threshold 过滤：归一化分低于阈值的低相关候选直接丢弃，
+     * 防止金融属性词等宽泛词双通道命中导致噪声术语 RRF 分被抬高后混入结果。
+     *
+     * @param keywordResponse 关键词检索响应
+     * @param knnResponse     向量检索响应
+     * @param threshold       相关性过滤阈值（<=0 表示不过滤）
      */
-    private List<TermHit> rrfMergeTermHits(SearchResponse<Map> keywordResponse, SearchResponse<Map> knnResponse) {
+    private List<TermHit> rrfMergeTermHits(SearchResponse<Map> keywordResponse,
+                                           SearchResponse<Map> knnResponse,
+                                           double threshold) {
         int rankConstant = DataAgentConstants.SCHEMA_SEARCH_RRF_K;
 
         // 关键词结果按排名计算 RRF 分数
@@ -443,6 +462,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                     return th;
                 })
                 .filter(Objects::nonNull)
+                // 相关性阈值闸门：归一化分低于阈值的弱相关候选直接丢弃
+                .filter(th -> threshold <= 0 || th.getScore() >= threshold)
                 .toList();
     }
 
@@ -480,9 +501,6 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             }
 
             double score = hit.score() != null ? hit.score() : 0.0;
-            if (threshold > 0 && score < threshold) {
-                continue;
-            }
 
             TermHit th = new TermHit();
             th.setTermName(getString(source, "termName"));
@@ -500,6 +518,13 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         double max = hits.stream().mapToDouble(TermHit::getScore).max().orElse(0.0);
         if (max > 0) {
             hits.forEach(h -> h.setScore(h.getScore() / max));
+        }
+        // 相关性阈值闸门：归一化后再过滤，与 hybrid 路径阈值语义一致
+        // （BM25 原始分量级 5~30，归一化前过滤形同虚设）
+        if (threshold > 0) {
+            hits = hits.stream()
+                    .filter(h -> h.getScore() >= threshold)
+                    .collect(Collectors.toList());
         }
         return hits;
     }

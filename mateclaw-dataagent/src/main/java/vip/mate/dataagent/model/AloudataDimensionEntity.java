@@ -122,9 +122,16 @@ public class AloudataDimensionEntity {
      */
     public String buildEmbeddingText() {
         StringBuilder sb = new StringBuilder();
-        sb.append(dimName != null ? dimName : "");
+        // 核心语义层：展示名 + 同义词优先，用户自然语言最直接的对应物
         if (dimDisplayName != null && !dimDisplayName.isBlank()) {
-            sb.append(" ").append(dimDisplayName);
+            sb.append(dimDisplayName);
+        }
+        if (synonyms != null && !synonyms.isBlank()) {
+            sb.append(" ").append(synonyms);
+        }
+        // 英文名和编码作为辅助语义（后置）
+        if (dimName != null && !dimName.isBlank()) {
+            sb.append(" ").append(dimName);
         }
         if (dimCode != null && !dimCode.isBlank()) {
             sb.append(" ").append(dimCode);
@@ -133,11 +140,11 @@ public class AloudataDimensionEntity {
         if (originDataType != null && !originDataType.isBlank()) {
             sb.append("类型: ").append(originDataType).append(", ");
         }
+        // 描述截断：长文本描述会稀释展示名的核心语义向量
         if (dimDescription != null && !dimDescription.isBlank()) {
-            sb.append("描述: ").append(dimDescription).append(", ");
-        }
-        if (synonyms != null && !synonyms.isBlank()) {
-            sb.append("同义词: ").append(synonyms).append(", ");
+            String desc = dimDescription.length() > 80
+                    ? dimDescription.substring(0, 80) : dimDescription;
+            sb.append("描述: ").append(desc).append(", ");
         }
         if (dimCategoryName != null && !dimCategoryName.isBlank()) {
             sb.append("类目: ").append(dimCategoryName).append(", ");

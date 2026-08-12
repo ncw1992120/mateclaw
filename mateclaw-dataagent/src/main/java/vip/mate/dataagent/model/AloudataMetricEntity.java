@@ -169,9 +169,16 @@ public class AloudataMetricEntity {
      */
     public String buildEmbeddingText() {
         StringBuilder sb = new StringBuilder();
-        sb.append(metricName != null ? metricName : "");
+        // 核心语义层：展示名 + 同义词优先，这是用户自然语言最直接的对应物
         if (metricDisplayName != null && !metricDisplayName.isBlank()) {
-            sb.append(" ").append(metricDisplayName);
+            sb.append(metricDisplayName);
+        }
+        if (synonyms != null && !synonyms.isBlank()) {
+            sb.append(" ").append(synonyms);
+        }
+        // 英文名和编码作为辅助语义（中文 embedding 模型对英文编码能力弱，后置）
+        if (metricName != null && !metricName.isBlank()) {
+            sb.append(" ").append(metricName);
         }
         if (metricCode != null && !metricCode.isBlank()) {
             sb.append(" ").append(metricCode);
@@ -180,11 +187,11 @@ public class AloudataMetricEntity {
         if (type != null && !type.isBlank()) {
             sb.append("类型: ").append(type).append(", ");
         }
+        // 口径描述截断：长文本口径会稀释展示名的核心语义向量
         if (businessCaliber != null && !businessCaliber.isBlank()) {
-            sb.append("口径: ").append(businessCaliber).append(", ");
-        }
-        if (synonyms != null && !synonyms.isBlank()) {
-            sb.append("同义词: ").append(synonyms).append(", ");
+            String caliber = businessCaliber.length() > 80
+                    ? businessCaliber.substring(0, 80) : businessCaliber;
+            sb.append("口径: ").append(caliber).append(", ");
         }
         if (metricCategoryName != null && !metricCategoryName.isBlank()) {
             sb.append("类目: ").append(metricCategoryName).append(", ");
@@ -193,9 +200,6 @@ public class AloudataMetricEntity {
             sb.append("单位: ").append(cnUnit);
         } else if (unit != null && !unit.isBlank()) {
             sb.append("单位: ").append(unit);
-        }
-        if (owner != null && !owner.isBlank()) {
-            sb.append(", 负责人: ").append(owner);
         }
         return sb.toString().trim();
     }

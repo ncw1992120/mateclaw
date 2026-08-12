@@ -732,8 +732,9 @@ public class AloudataCallTool {
             }
         }
 
-        /* 合并关键词为单次检索，避免跨查询 RRF 分数不可比 */
-        AloudataSearchResult sr = aloudataSemanticEsService.hybridSearchMerged(datasourceId, expandedKeywords, topK, threshold);
+        /* 增强混合检索：传入用户原话作为并行向量检索路径，降低对 LLM keyword 压缩质量的敏感度 */
+        AloudataSearchResult sr = aloudataSemanticEsService.hybridSearchEnhanced(
+                datasourceId, expandedKeywords, originalMessage, topK, threshold);
         List<AloudataSearchResult.MetricHit> mergedMetrics = sr.getMetricHits() != null ? new ArrayList<>(sr.getMetricHits()) : new ArrayList<>();
         List<AloudataSearchResult.DimensionHit> mergedDimensions = sr.getDimensionHits() != null ? new ArrayList<>(sr.getDimensionHits()) : new ArrayList<>();
 
@@ -749,14 +750,21 @@ public class AloudataCallTool {
             mergedDimensions = new ArrayList<>(mergedDimensions.subList(0, topK));
         }
 
-        /* 确定性族级兜底：同基名多口径指标族（如 交易市占率（整体/个人/机构））时，ES 打分 + TopK
-         * 截断可能把用户真正想要的口径挤出结果。此处按基名确定性捞全整族、补入缺失成员，并用原始用户
-         * 消息精确匹配口径，保证目标口径指标必然出现在结果中（详见 backfillMetricFamily 注释）。 */
-        FamilyBackfillResult family = backfillMetricFamily(datasourceId, keyword, originalMessage, mergedMetrics);
+        /* 确定性族级兜底 + 宽泛查询族级聚合：仅当检索结果打满 topK 时触发。
+         * 打满说明候选池/截断边界处仍有大量候选（用户输入宽泛词时尤其常见），
+         * 目标指标可能因 topK 截断被排除；按基名确定性捞全整族、补入缺失成员，
+         * 保证目标指标族必然出现在结果中（详见 backfillMetricFamily 注释）。
+         * 结果未打满（<topK）时不存在截断风险，跳过兜底。 */
+        FamilyBackfillResult family = (mergedMetrics.size() >= topK)
+                ? backfillMetricFamily(datasourceId, keyword, originalMessage, mergedMetrics)
+                : new FamilyBackfillResult(null, List.of(), List.of());
 
-        /* 通用口径重排：当族级兜底未触发（非括号口径形态，如前缀式"个人交易市占率"、修饰词式"华东区销售额"），
-         * 用"用户原话 vs 展示名"的字符重叠度做通用重排，将用户原话中信息量覆盖最充分的指标提权到首位。 */
-        if (!family.triggered()) {
+        /* 通用口径重排：用"用户原话 vs 展示名"的字符重叠度做通用重排，将用户原话中信息量覆盖最充分的指标提权到首位。
+         * 仅当族级兜底已解析出确定性目标（matched 非空，dominant 分已置位）时跳过——避免覆盖权威排序；
+         * 族级已触发但 matched 为空（如宽泛词聚合多成员无括号口径，无法唯一确定）时仍执行重排，
+         * 借助原话重叠度把最匹配的指标（如原话"我想看保费收入"、keyword="保费"时）提权首位，减少 LLM 额外确认。 */
+        boolean familyResolved = family.triggered() && !family.matched().isEmpty();
+        if (!familyResolved) {
             applyGenericCaliberRerank(originalMessage, keyword, mergedMetrics);
         }
 
@@ -1676,7 +1684,7 @@ public class AloudataCallTool {
             return none;
         }
         try {
-            // ① 按基名捞候选，再用「剥离口径后精确等于基名」过滤掉仅前缀相同的其它指标
+            // ① 按基名捞候选
             List<AloudataMetricEntity> candidates = metricMapper.selectList(
                     new LambdaQueryWrapper<AloudataMetricEntity>()
                             .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
@@ -1691,12 +1699,27 @@ public class AloudataCallTool {
                             // ORDER BY 保证 LIMIT 截断确定（极端前缀 >200 时才可能漏，真实指标族远小于此）
                             .orderByAsc(AloudataMetricEntity::getMetricDisplayName)
                             .last("LIMIT " + FAMILY_LOOKUP_MAX));
+            // ② 聚合族成员。keyword 自带口径后缀（如"交易市占率（整体）"）时只收"基名+口径"精确族
+            //    （原逻辑，避免"交易市占率分析"等前缀相似的指标混入）；keyword 为宽泛词（如"保费"）时
+            //    按前缀聚合（保费收入/保费支出/人均保费...），解决宽泛查询下目标指标被 topK 截断排除的问题
+            boolean keywordHasCaliber = !base.equals(keyword);
+            // 宽泛词聚合防御：基名过短（如单字"保"）时前缀匹配面过宽，族列表可能爆炸，
+            // 交给原有 ES 流程而非聚合兜底
+            if (!keywordHasCaliber && base.length() < 2) {
+                return none;
+            }
             List<AloudataMetricEntity> familyMembers = candidates.stream()
-                    .filter(m -> base.equals(stripTrailingCaliber(m.getMetricDisplayName())))
+                    .filter(m -> {
+                        String stripped = stripTrailingCaliber(m.getMetricDisplayName());
+                        return keywordHasCaliber ? base.equals(stripped) : stripped.startsWith(base);
+                    })
                     .toList();
 
-            // 少于 2 个口径成员：不是「多口径族」，无歧义，交给原有 ES 流程
-            if (familyMembers.size() < 2) {
+            // ③ 触发条件：
+            //    口径族（keyword 带口径后缀）：少于 2 个成员不是"多口径族"，无歧义，交给原有 ES 流程
+            //    宽泛词聚合（keyword 无口径后缀）：至少有 1 个前缀族成员即触发，唯一成员也补入，
+            //    防止该成员被 ES 打分 + topK 截断排除
+            if (keywordHasCaliber ? familyMembers.size() < 2 : familyMembers.isEmpty()) {
                 return none;
             }
 
@@ -1725,6 +1748,10 @@ public class AloudataCallTool {
                 }
             }
             List<AloudataMetricEntity> matched = dropSubstringDominatedCalibers(strong.isEmpty() ? loose : strong);
+            // 宽泛词聚合且整族唯一：成员无括号口径，口径匹配必然落空；唯一成员即目标，直接视为命中
+            if (matched.isEmpty() && familyMembers.size() == 1) {
+                matched = familyMembers;
+            }
             // 保证整族都在结果中：补入缺失成员（不受 TopK 影响）
             Set<String> present = mergedMetrics.stream()
                     .map(AloudataSearchResult.MetricHit::getMetricName)
@@ -1786,11 +1813,20 @@ public class AloudataCallTool {
         if (matched.size() == 1) {
             AloudataMetricEntity r = matched.get(0);
             String caliber = extractTrailingCaliber(r.getMetricDisplayName());
+            boolean isFamily = family.family().size() >= 2;
             sb.append("## ✅ 指标口径确定性识别\n\n");
-            sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配口径")
-                    .append(caliber.isEmpty() ? "" : "「" + caliber + "」")
-                    .append("，目标指标：**").append(r.getMetricName()).append("**(")
-                    .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+            if (isFamily) {
+                // 多口径族场景：按用户原话精确匹配到唯一口径
+                sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配口径")
+                        .append(caliber.isEmpty() ? "" : "「" + caliber + "」")
+                        .append("，目标指标：**").append(r.getMetricName()).append("**(")
+                        .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+            } else {
+                // 宽泛词聚合场景：基名下仅有 1 个指标，直接视为目标
+                sb.append("「").append(family.baseName()).append("」相关指标仅有 1 个，目标指标：**")
+                        .append(r.getMetricName()).append("**(")
+                        .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+            }
             sb.append("> 该结果来自元数据精确匹配，不受检索排序 / TopK 影响。请直接使用此 metricName 构造查询；若与用户意图不符再追问。\n\n");
             return;
         }
@@ -1807,11 +1843,11 @@ public class AloudataCallTool {
             return;
         }
 
-        // 0 命中：无法唯一确定口径，列出整族让用户确认
-        sb.append("## ⚠️ 指标口径消歧（确定性）\n\n");
+        // 0 命中：无法唯一确定目标（多口径族无匹配，或宽泛词聚合场景），列出全部候选让用户确认
+        sb.append("## ⚠️ 指标消歧（确定性）\n\n");
         sb.append("「").append(family.baseName())
-                .append("」是多口径指标族，无法从用户输入唯一确定口径，**请勿自行选择，向用户确认后再查询**。")
-                .append("全部可选口径（来自元数据精确查询，不受检索排序影响）：\n");
+                .append("」相关指标较多，无法从用户输入唯一确定目标，**请勿自行选择，向用户确认后再查询**。")
+                .append("相关指标（来自元数据精确查询，不受检索排序影响）：\n");
         for (AloudataMetricEntity m : family.family()) {
             sb.append("  - **").append(m.getMetricName()).append("**(")
                     .append(m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "").append(")");
@@ -2018,14 +2054,22 @@ public class AloudataCallTool {
      * 族级兜底结果。
      *
      * @param baseName 指标族基名；未触发时为 null
-     * @param family   整族成员（≥2 个口径）；未触发时为空
-     * @param resolved 由用户原话唯一确定的目标口径指标；未唯一确定时为 null
+     * @param family   整族成员；未触发时为空。
+     *                 口径族场景 ≥2；宽泛词聚合场景可能 =1（唯一前缀成员即目标）。
+     * @param resolved 由用户原话唯一确定的目标口径指标；未唯一确定时为空
      */
     private record FamilyBackfillResult(String baseName,
                                         List<AloudataMetricEntity> family,
                                         List<AloudataMetricEntity> matched) {
+        /**
+         * 是否触发族级兜底。
+         * <p>
+         * family 非空即触发：宽泛词聚合场景下 family 可能只有 1 个成员，
+         * 此时该成员是目标指标、已设置 dominant 分排首位，需要 appendFamilyHint
+         * 输出"✅ 唯一命中"提示，并抑制通用口径重排和分数消歧。
+         */
         boolean triggered() {
-            return family != null && family.size() >= 2;
+            return family != null && !family.isEmpty();
         }
     }
 
@@ -2051,10 +2095,16 @@ public class AloudataCallTool {
         boolean hasDimensionAmbiguity = false;
 
         // 指标消歧：≥2 个指标且前两名分数接近（族级已权威处理时跳过，避免与族级口径消歧重复）
+        // 额外：同族不同口径指标（如"交易市占率（整体）"vs"（个人）"）无论分数差距如何都强制消歧，
+        // 因为同族指标的语义差异是业务口径差异，与分数无关
         if (!suppressMetric && metrics.size() >= 2) {
             double topScore = metrics.get(0).getScore();
             double secondScore = metrics.get(1).getScore();
             if (topScore - secondScore < DISAMBIGUATION_SCORE_GAP) {
+                hasMetricAmbiguity = true;
+            }
+            // 同族不同口径检测：剥离尾部口径后比较基名
+            if (!hasMetricAmbiguity && areSameFamilyMetrics(metrics.get(0), metrics.get(1))) {
                 hasMetricAmbiguity = true;
             }
         }
@@ -2117,6 +2167,30 @@ public class AloudataCallTool {
                     .append(dimensions.get(1).getDimDisplayName() != null ? dimensions.get(1).getDimDisplayName() : dimensions.get(1).getDimName())
                     .append(" 查看数据，请选择具体维度\"\n\n");
         }
+    }
+
+    /**
+     * 判断两个指标是否属于同一指标族（相同基名、不同口径）。
+     * <p>
+     * 剥离展示名尾部的口径后缀后比较基名：基名相同则视为同族。
+     * 例如"交易市占率（整体）"和"交易市占率（个人）"剥离后基名均为"交易市占率"→同族。
+     * <p>
+     * 用于消歧判断：同族不同口径指标无论分数差距如何都应消歧，
+     * 因为口径差异是业务语义差异，不是检索排序能解决的。
+     */
+    private boolean areSameFamilyMetrics(AloudataSearchResult.MetricHit m1, AloudataSearchResult.MetricHit m2) {
+        if (m1 == null || m2 == null) {
+            return false;
+        }
+        String name1 = m1.getMetricDisplayName();
+        String name2 = m2.getMetricDisplayName();
+        if (name1 == null || name2 == null || name1.isBlank() || name2.isBlank()) {
+            return false;
+        }
+        String base1 = stripTrailingCaliber(name1);
+        String base2 = stripTrailingCaliber(name2);
+        // 基名相同且至少有一个原始展示名不同于基名（即至少有一个带口径后缀）
+        return base1.equals(base2) && (!base1.equals(name1) || !base2.equals(name2));
     }
 
     /**
