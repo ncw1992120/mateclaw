@@ -14,6 +14,9 @@ import vip.mate.tool.model.ToolEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Aggregator behind {@code GET /api/v1/tools/available}.
@@ -33,17 +36,16 @@ import java.util.List;
  * this, the user could save a {@code mate_agent_tool.tool_name} that
  * resolves to nothing at chat time.
  *
- * <p><b>Scope</b>: this aggregator covers the two tool sources users can
- * bind from the agent edit screen — built-in {@code @Tool} beans
- * (persisted in {@code mate_tool}) and MCP-discovered tools (cached on
- * the server row). Plugin-registered {@code ToolCallback} beans surfaced
- * by other parts of the runtime are intentionally NOT listed here: those
- * are not user-bindable from the agent picker today, and the picker's
- * "saved name == runtime callback key" contract only needs to hold for
- * the rows the picker actually emits. If plugin tools later become
- * user-bindable, extend this aggregator (or accept that they go through
- * a separate config path) — see {@code AgentBindingService}'s
- * {@code SYSTEM_LEVEL_TOOLS} carve-out for the same reasoning.
+ * <p><b>Scope</b>: this aggregator covers the tool sources users can bind
+ * from the agent edit screen — built-in {@code @Tool} beans (persisted in
+ * {@code mate_tool}), MCP-discovered tools (cached on the server row), and
+ * any tools contributed by registered {@link AvailableToolContributor}
+ * beans (e.g. the SDK's plugin-tool contributor surfaces tools registered
+ * by the host app via {@code ToolRegistry.registerPluginTool}, so
+ * dataagent-registered tools like {@code query_dataset} /
+ * {@code data_query} become bindable too). Contributed rows must carry the
+ * same "saved name == runtime callback key" contract as the built-in rows
+ * so the picker and the {@code AgentToolSet} stay in sync.
  */
 @Slf4j
 @Service
@@ -52,11 +54,17 @@ public class AvailableToolService {
 
     private final ToolService toolService;
     private final McpServerService mcpServerService;
+    /**
+     * 可绑定工具贡献者集合。宿主应用（如 dataagent）通过 SDK 提供的贡献者
+     * 实现将插件注册的工具纳入 picker；无任何贡献者时注入空列表，行为不变。
+     */
+    private final List<AvailableToolContributor> contributors;
 
     public List<AvailableToolDTO> listAvailable() {
         List<AvailableToolDTO> out = new ArrayList<>();
         appendBuiltinTools(out);
         appendMcpTools(out);
+        appendContributorTools(out);
         return out;
     }
 
@@ -89,6 +97,39 @@ public class AvailableToolService {
             } catch (Exception e) {
                 log.warn("AvailableToolService: skipping MCP server {} due to: {}",
                         s.getId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * 追加宿主应用贡献的可绑定工具（插件工具等）。
+     * <p>
+     * 与运行时 {@code AgentToolSet} 的“首个同名回调保留”规则保持一致：
+     * name 已出现（内置/MCP）的工具不再重复贡献，避免 picker 出现同名但
+     * 运行时无法解析到该回调的行。
+     */
+    private void appendContributorTools(List<AvailableToolDTO> out) {
+        Set<String> seen = out.stream()
+                .map(AvailableToolDTO::getName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (AvailableToolContributor contributor : contributors) {
+            try {
+                List<AvailableToolDTO> contributed = contributor.contributeAvailableTools();
+                if (contributed == null) {
+                    continue;
+                }
+                for (AvailableToolDTO dto : contributed) {
+                    if (dto == null || dto.getName() == null || dto.getName().isBlank()) {
+                        continue;
+                    }
+                    if (seen.add(dto.getName())) {
+                        out.add(dto);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("AvailableToolService: contributor {} failed: {}",
+                        contributor.getClass().getSimpleName(), e.getMessage());
             }
         }
     }

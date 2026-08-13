@@ -215,7 +215,7 @@
                     :disabled="formData.toolsDisabled || !tool.available"
                     @change="(checked: boolean | string | number) => onToolToggle(tool.name, !!checked)"
                   />
-                  <div class="binding-icon">{{ tool.source === 'mcp' ? '🔌' : '🔧' }}</div>
+                  <div class="binding-icon">{{ tool.source === 'mcp' ? '🔌' : tool.source === 'plugin' ? '🧩' : '🔧' }}</div>
                   <div class="binding-info">
                     <div class="binding-name">{{ tool.rawName || tool.name }}</div>
                     <div v-if="tool.description" class="binding-desc">{{ tool.description }}</div>

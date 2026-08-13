@@ -969,9 +969,9 @@ public class InsightReportServiceImpl implements InsightReportService {
             throw new BusinessException(404, "未找到订阅记录");
         }
 
-        // 逻辑删除
-        entity.setDeleted(DataAgentConstants.INSIGHT_REPORT_SUBSCRIPTION_DELETED);
-        insightReportSubscriptionMapper.updateById(entity);
+        // 物理删除订阅记录：表唯一索引 uk_report_user(report_id, user_id) 不含 deleted 列，
+        // 若改为软删残留行，用户取消后重新订阅会撞唯一索引抛重复异常，因此直接物理删除。
+        insightReportSubscriptionMapper.delete(wrapper);
 
         log.info("取消订阅报告: reportId={}, userId={}", reportId, userId);
     }

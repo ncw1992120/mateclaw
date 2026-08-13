@@ -32,7 +32,7 @@ class AvailableToolServiceTest {
     void setUp() {
         toolService = mock(ToolService.class);
         mcpServerService = mock(McpServerService.class);
-        service = new AvailableToolService(toolService, mcpServerService);
+        service = new AvailableToolService(toolService, mcpServerService, List.of());
         when(toolService.listEnabledTools()).thenReturn(List.of());
         when(mcpServerService.listEnabled()).thenReturn(List.of());
     }
@@ -191,6 +191,59 @@ class AvailableToolServiceTest {
         List<AvailableToolDTO> out = service.listAvailable();
         assertNotNull(out);
         assertEquals(0, out.size());
+    }
+
+    @Test
+    @DisplayName("contributor tools are appended under the plugin source and group")
+    void contributorToolsAppended() {
+        AvailableToolContributor contributor = mock(AvailableToolContributor.class);
+        when(contributor.contributeAvailableTools()).thenReturn(List.of(
+                AvailableToolDTO.fromPlugin("query_dataset", "Query a dataset", true),
+                AvailableToolDTO.fromPlugin("python_analysis", "Run python analysis", true)));
+        service = new AvailableToolService(toolService, mcpServerService, List.of(contributor));
+
+        List<AvailableToolDTO> out = service.listAvailable();
+
+        assertEquals(2, out.size());
+        assertEquals("plugin", out.get(0).getSource());
+        assertEquals("插件工具", out.get(0).getGroup());
+        assertEquals("plugin", out.get(0).getGroupId());
+        assertEquals("query_dataset", out.get(0).getName());
+        assertTrue(out.get(0).isAvailable());
+    }
+
+    @Test
+    @DisplayName("contributor tool whose name collides with a builtin row is dropped")
+    void contributorNameCollisionDropped() {
+        when(toolService.listEnabledTools()).thenReturn(List.of(builtin("web_search", "Search the web")));
+        AvailableToolContributor contributor = mock(AvailableToolContributor.class);
+        when(contributor.contributeAvailableTools()).thenReturn(List.of(
+                AvailableToolDTO.fromPlugin("web_search", "Plugin version", true),
+                AvailableToolDTO.fromPlugin("data_query", "Query data", true)));
+        service = new AvailableToolService(toolService, mcpServerService, List.of(contributor));
+
+        List<AvailableToolDTO> out = service.listAvailable();
+
+        Set<String> names = out.stream().map(AvailableToolDTO::getName).collect(Collectors.toSet());
+        assertEquals(Set.of("web_search", "data_query"), names);
+        // the colliding plugin row was dropped; only data_query survives from the contributor
+        assertEquals(1, out.stream().filter(d -> "plugin".equals(d.getSource())).count());
+    }
+
+    @Test
+    @DisplayName("a failing contributor is skipped without breaking the picker")
+    void failingContributorSkipped() {
+        AvailableToolContributor broken = mock(AvailableToolContributor.class);
+        when(broken.contributeAvailableTools()).thenThrow(new RuntimeException("boom"));
+        AvailableToolContributor good = mock(AvailableToolContributor.class);
+        when(good.contributeAvailableTools()).thenReturn(List.of(
+                AvailableToolDTO.fromPlugin("data_query", "Query data", true)));
+        service = new AvailableToolService(toolService, mcpServerService, List.of(broken, good));
+
+        List<AvailableToolDTO> out = service.listAvailable();
+
+        assertEquals(1, out.size());
+        assertEquals("data_query", out.get(0).getName());
     }
 
     private static ToolEntity builtin(String name, String description) {

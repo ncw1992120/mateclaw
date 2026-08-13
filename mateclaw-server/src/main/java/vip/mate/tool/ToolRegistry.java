@@ -286,6 +286,34 @@ public class ToolRegistry {
     }
 
     /**
+     * 列出所有插件注册的工具（含可用性检查评估），供“可绑定工具”聚合使用。
+     * <p>
+     * 与 {@link #getEnabledToolSet()} 的惰性可用性评估保持一致：availabilityCheck
+     * 在每次调用时求值，检查失败（异常或返回 false）的工具仍会列出但标记为不可用，
+     * 供前端置灰展示与绑定保存校验拒绝。
+     */
+    public List<PluginToolDescriptor> listPluginTools() {
+        List<PluginToolDescriptor> out = new ArrayList<>();
+        for (PluginToolEntry entry : pluginTools) {
+            try {
+                ToolCallback cb = entry.callback();
+                boolean available = Boolean.TRUE.equals(entry.availabilityCheck().get());
+                out.add(new PluginToolDescriptor(
+                        cb.getToolDefinition().name(),
+                        cb.getToolDefinition().description(),
+                        available));
+            } catch (Exception e) {
+                log.warn("Plugin tool metadata unavailable for {}: {}",
+                        entry.callback().getToolDefinition().name(), e.getMessage());
+            }
+        }
+        return out;
+    }
+
+    /** 插件工具描述（绑定选择器展示与校验用） */
+    public record PluginToolDescriptor(String name, String description, boolean available) {}
+
+    /**
      * 获取数据库中的工具配置列表（全部）
      */
     public List<ToolEntity> listToolEntities() {
