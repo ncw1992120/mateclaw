@@ -52,6 +52,12 @@ public class BusinessTermSearchResult {
         /** 父术语名称 */
         private String parentTermName;
 
+        /** 关联指标名称列表（metricName） */
+        private List<String> relatedMetricNames;
+
+        /** 关联维度名称列表（dimName） */
+        private List<String> relatedDimensionNames;
+
         /** 匹配得分 */
         private double score;
 

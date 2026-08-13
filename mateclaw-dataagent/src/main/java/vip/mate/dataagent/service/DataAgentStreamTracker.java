@@ -83,12 +83,18 @@ public class DataAgentStreamTracker {
         final long createdAt = System.currentTimeMillis();
         volatile long lastEventAt = System.currentTimeMillis();
 
-        /** 第一个 thinking_delta 经 relay 到达的时刻（≈ LLM 开始吐思考 T_think_start）。
+        /** 每一轮 thinking_delta 首个片段经 relay 到达的时刻列表（≈ 该轮 LLM 开始吐思考 T_think_start）。
          *  StreamAccumulator 收到的 thinking 是 persistOnly 整段（graph output 处理时刻 ≈ T_think_end），
-         *  无法据此算准思考耗时；用此字段修正 thinking segment 的 startTime。 */
-        volatile Long thinkingStartTime;
-        /** 第一个 content_delta 经 relay 到达的时刻（≈ LLM 开始吐正文 T_content_start），同理用于 content segment。 */
-        volatile Long contentStartTime;
+         *  无法据此算准思考耗时；用此列表逐轮修正 thinking segment 的 startTime。
+         *  多轮 ReAct 下每轮 thinking 首个 delta 到达时追加一个时刻，tool_call_started 标志一轮结束。 */
+        final List<Long> thinkingStartTimes = Collections.synchronizedList(new ArrayList<>());
+        /** 每一轮 content_delta 首个片段经 relay 到达的时刻列表，同理用于逐轮修正 content segment 的 startTime。 */
+        final List<Long> contentStartTimes = Collections.synchronizedList(new ArrayList<>());
+        /** 是否期待下一轮 thinking 的首个 delta（true 时下一个 thinking_delta 记录为新一轮起点）。
+         *  初始 true，收到 thinking_delta 后置 false，收到 tool_call_started 后重置 true。 */
+        volatile boolean expectingThinkingStart = true;
+        /** 是否期待下一轮 content 的首个 delta，逻辑同 expectingThinkingStart。 */
+        volatile boolean expectingContentStart = true;
 
         /** 异步 trim 标记：buffer 超限时置位，由 trimScheduler 异步清理 */
         volatile boolean needsTrim;
@@ -146,6 +152,11 @@ public class DataAgentStreamTracker {
             stopHeartbeat(conversationId);
             runs.put(conversationId, new RunState(conversationId));
         } else if (state != null) {
+            // 清理上一轮流残留的逐轮 delta 到达时刻，避免新流污染
+            state.thinkingStartTimes.clear();
+            state.contentStartTimes.clear();
+            state.expectingThinkingStart = true;
+            state.expectingContentStart = true;
             if (state.stopRequested.compareAndSet(true, false)) {
                 log.info("[DataAgentStreamTracker] Reset stale stopRequested on register: {}", conversationId);
             }
@@ -517,27 +528,43 @@ public class DataAgentStreamTracker {
      * 因为它们已经通过 PENDING_EVENTS → StreamDelta 管道由 StreamAccumulator 广播，
      * 若 relay 再转发一次会导致前端收到重复的 tool 事件，造成工具执行情况重复展示
      * 以及思考过程未正确折叠到执行过程卡片中。
+     * 但 tool_call_started 会被截获用于标记一轮 thinking/content 结束（重置 expecting 标志），
+     * 使下一轮首个 thinking_delta / content_delta 被记录为新一轮的起点时刻。
      */
     private void installRelay(String conversationId) {
         removeRelay(conversationId);
         Runnable cancelHandle = chatStreamTracker.addEventRelay(conversationId, (eventName, jsonData) -> {
-            // tool 事件已通过 StreamDelta 管道推送，跳过 relay 转发以避免重复
-            if ("tool_call_started".equals(eventName) || "tool_call_completed".equals(eventName)) {
+            // tool_call_started 标志一轮 thinking/content 结束，下一轮 delta 是新的开始；
+            // 仍不转发 tool 事件（已通过 StreamDelta 管道推送，转发会导致前端收到重复 tool 事件，
+            // 造成工具执行情况重复展示以及思考过程未正确折叠到执行过程卡片中）
+            if ("tool_call_started".equals(eventName)) {
+                RunState st = runs.get(conversationId);
+                if (st != null) {
+                    st.expectingThinkingStart = true;
+                    st.expectingContentStart = true;
+                }
+                return;
+            }
+            if ("tool_call_completed".equals(eventName)) {
                 return;
             }
             broadcast(conversationId, eventName, jsonData);
-            // 记录第一个 thinking_delta / content_delta 的到达时刻，
-            // 供 StreamAccumulator 修正 segment 的 startTime（默认是 graph output 处理时刻，
-            // 即 T_think_end/T_content_end，会导致 durationMs 包含工具执行时间）。
-            // 用首个 delta 的到达时刻（≈ T_think_start/T_content_start）才能算准耗时。
+            // 记录每一轮 thinking_delta / content_delta 首个片段的到达时刻，
+            // 供 StreamAccumulator 逐轮修正 segment 的 startTime（默认是 graph output 处理时刻，
+            // 即 T_think_end/T_content_end，会导致 durationMs 包含工具执行时间或为 0）。
+            // 用每轮首个 delta 的到达时刻（≈ T_think_start/T_content_start）才能算准耗时。
+            // expectingThinkingStart/expectingContentStart 在 tool_call_started 时重置为 true，
+            // 由此区分多轮 ReAct 中每一轮的首个 delta。
             if ("thinking_delta".equals(eventName) || "content_delta".equals(eventName)) {
                 RunState st = runs.get(conversationId);
                 if (st != null) {
                     long now = System.currentTimeMillis();
-                    if ("thinking_delta".equals(eventName) && st.thinkingStartTime == null) {
-                        st.thinkingStartTime = now;
-                    } else if ("content_delta".equals(eventName) && st.contentStartTime == null) {
-                        st.contentStartTime = now;
+                    if ("thinking_delta".equals(eventName) && st.expectingThinkingStart) {
+                        st.thinkingStartTimes.add(now);
+                        st.expectingThinkingStart = false;
+                    } else if ("content_delta".equals(eventName) && st.expectingContentStart) {
+                        st.contentStartTimes.add(now);
+                        st.expectingContentStart = false;
                     }
                 }
             }
@@ -594,16 +621,26 @@ public class DataAgentStreamTracker {
         }
     }
 
-    /** 第一个 thinking_delta 到达时刻（≈ T_think_start），null 表示未收到过 thinking。 */
-    public Long getThinkingStartTime(String conversationId) {
+    /** 每一轮 thinking_delta 首个片段到达时刻列表（≈ 各轮 T_think_start），空列表表示未收到过 thinking。 */
+    public List<Long> getThinkingStartTimes(String conversationId) {
         RunState st = runs.get(conversationId);
-        return st != null ? st.thinkingStartTime : null;
+        if (st == null) {
+            return List.of();
+        }
+        synchronized (st.thinkingStartTimes) {
+            return new ArrayList<>(st.thinkingStartTimes);
+        }
     }
 
-    /** 第一个 content_delta 到达时刻（≈ T_content_start），null 表示未收到过 content。 */
-    public Long getContentStartTime(String conversationId) {
+    /** 每一轮 content_delta 首个片段到达时刻列表（≈ 各轮 T_content_start），空列表表示未收到过 content。 */
+    public List<Long> getContentStartTimes(String conversationId) {
         RunState st = runs.get(conversationId);
-        return st != null ? st.contentStartTime : null;
+        if (st == null) {
+            return List.of();
+        }
+        synchronized (st.contentStartTimes) {
+            return new ArrayList<>(st.contentStartTimes);
+        }
     }
 
     private static String safe(String s) {

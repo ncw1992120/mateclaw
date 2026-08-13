@@ -942,6 +942,20 @@ export interface SchemaSearchResult {
 }
 
 /** 业务术语 */
+/** 业务术语关联引用（指标/维度） */
+export interface BusinessTermRef {
+  /** 指标/维度记录 ID（同步快照，仅辅助展示） */
+  id?: string | number | null
+  /** 关联数据源 ID */
+  datasourceId: string | number
+  /** 数据源名称 */
+  datasourceName?: string
+  /** 指标英文名 / 维度英文名（稳定标识） */
+  name: string
+  /** 指标展示名 / 维度中文名 */
+  displayName?: string
+}
+
 export interface BusinessTerm {
   id: string
   tenantCode: string
@@ -954,6 +968,8 @@ export interface BusinessTerm {
   owner: string
   businessRule: string
   relatedTerms: string
+  relatedMetrics: BusinessTermRef[]
+  relatedDimensions: BusinessTermRef[]
   example: string
   securityLevel: string
   category: string
@@ -978,6 +994,8 @@ export interface BusinessTermCreateRequest {
   owner?: string
   businessRule?: string
   relatedTerms?: string
+  relatedMetrics?: BusinessTermRef[]
+  relatedDimensions?: BusinessTermRef[]
   example?: string
   securityLevel?: string
   category?: string
@@ -995,6 +1013,8 @@ export interface BusinessTermUpdateRequest {
   owner?: string
   businessRule?: string
   relatedTerms?: string
+  relatedMetrics?: BusinessTermRef[]
+  relatedDimensions?: BusinessTermRef[]
   example?: string
   securityLevel?: string
   category?: string
@@ -1012,6 +1032,8 @@ export interface BusinessTermHit {
   businessRule: string | null
   category: string | null
   parentTermName: string | null
+  relatedMetricNames: string[] | null
+  relatedDimensionNames: string[] | null
   score: number
   matchSource: string
 }
@@ -1022,6 +1044,12 @@ export interface BusinessTermSearchResult {
   tenantCode: string
   termHits: BusinessTermHit[]
   elapsedMs: number
+}
+
+/** 业务术语关联引用候选 */
+export interface BusinessTermReferenceOptions {
+  metrics: BusinessTermRef[]
+  dimensions: BusinessTermRef[]
 }
 
 /** 帮助文档分类 */

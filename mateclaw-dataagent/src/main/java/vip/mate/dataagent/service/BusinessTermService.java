@@ -1,6 +1,7 @@
 package vip.mate.dataagent.service;
 
 import vip.mate.dataagent.dto.BusinessTermCreateRequest;
+import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.BusinessTermUpdateRequest;
 import vip.mate.dataagent.dto.BusinessTermVO;
@@ -128,4 +129,16 @@ public interface BusinessTermService {
      * @return 检索结果
      */
     BusinessTermSearchResult semanticSearch(String query, int topK, double threshold);
+
+    /**
+     * 查询关联引用候选（跨数据源的指标 / 维度）
+     * <p>
+     * 供业务术语编辑界面选择关联指标 / 维度使用，
+     * 按名称 / 展示名 / 同义词模糊匹配，返回最新同步的数据。
+     *
+     * @param keyword 搜索关键词（可选，空则返回最新一批）
+     * @param limit   返回数量上限
+     * @return 指标 / 维度候选
+     */
+    BusinessTermReferenceOptions listReferenceOptions(String keyword, int limit);
 }

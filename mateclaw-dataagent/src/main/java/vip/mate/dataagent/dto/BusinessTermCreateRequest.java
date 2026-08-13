@@ -2,6 +2,8 @@ package vip.mate.dataagent.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 创建业务术语请求
  */
@@ -37,6 +39,12 @@ public class BusinessTermCreateRequest {
 
     /** 关联术语ID（逗号分隔） */
     private String relatedTerms;
+
+    /** 关联指标引用列表 */
+    private List<BusinessTermRef> relatedMetrics;
+
+    /** 关联维度引用列表 */
+    private List<BusinessTermRef> relatedDimensions;
 
     /** 示例/用例 */
     private String example;

@@ -151,6 +151,40 @@
             <label class="form-label">{{ t('businessTerm.fieldRelatedTerms') }}</label>
             <input v-model="formData.relatedTerms" class="form-input" :placeholder="t('businessTerm.fieldRelatedTermsPlaceholder')" />
           </div>
+          <div class="form-row">
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldRelatedMetrics') }}</label>
+              <el-select
+                v-model="selectedMetricKeys"
+                multiple
+                filterable
+                remote
+                :remote-method="handleMetricRemoteSearch"
+                :loading="metricLoading"
+                :placeholder="t('businessTerm.fieldRelatedMetricsPlaceholder')"
+                class="ref-select"
+                @change="handleMetricChange"
+              >
+                <el-option v-for="opt in metricOptions" :key="opt.key" :label="opt.label" :value="opt.key" />
+              </el-select>
+            </div>
+            <div class="form-group half">
+              <label class="form-label">{{ t('businessTerm.fieldRelatedDimensions') }}</label>
+              <el-select
+                v-model="selectedDimensionKeys"
+                multiple
+                filterable
+                remote
+                :remote-method="handleDimensionRemoteSearch"
+                :loading="dimensionLoading"
+                :placeholder="t('businessTerm.fieldRelatedDimensionsPlaceholder')"
+                class="ref-select"
+                @change="handleDimensionChange"
+              >
+                <el-option v-for="opt in dimensionOptions" :key="opt.key" :label="opt.label" :value="opt.key" />
+              </el-select>
+            </div>
+          </div>
           <div class="form-group">
             <label class="form-label">{{ t('businessTerm.fieldExample') }}</label>
             <textarea v-model="formData.example" class="form-textarea" :placeholder="t('businessTerm.fieldExamplePlaceholder')" rows="2"></textarea>
@@ -192,7 +226,7 @@ import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as businessTermApi from '@/api/business-term'
-import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermUpdateRequest } from '@/types'
+import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermRef, BusinessTermUpdateRequest } from '@/types'
 
 const props = defineProps<{
   tenantCode: string
@@ -215,6 +249,28 @@ const submitting = ref(false)
 /** 父术语下拉选项 */
 const parentOptions = ref<BusinessTerm[]>([])
 
+/** 关联引用候选选项（key = datasourceId:name） */
+interface RefOption {
+  key: string
+  label: string
+  ref: BusinessTermRef
+}
+
+/** 关联指标候选 */
+const metricOptions = ref<RefOption[]>([])
+const metricLoading = ref(false)
+/** 关联维度候选 */
+const dimensionOptions = ref<RefOption[]>([])
+const dimensionLoading = ref(false)
+/** 已选关联指标 key 列表 */
+const selectedMetricKeys = ref<string[]>([])
+/** 已选关联维度 key 列表 */
+const selectedDimensionKeys = ref<string[]>([])
+/** key → 指标引用对象映射（回显与提交用） */
+const metricKeyRefMap = ref<Record<string, BusinessTermRef>>({})
+/** key → 维度引用对象映射（回显与提交用） */
+const dimensionKeyRefMap = ref<Record<string, BusinessTermRef>>({})
+
 /** 表单数据 */
 const formData = ref<BusinessTermCreateRequest>({
   tenantCode: '',
@@ -231,6 +287,8 @@ const formData = ref<BusinessTermCreateRequest>({
   securityLevel: '',
   category: '',
   parentId: null,
+  relatedMetrics: [],
+  relatedDimensions: [],
 })
 
 onMounted(() => {
@@ -312,7 +370,10 @@ function handleCreate(): void {
     securityLevel: '',
     category: '',
     parentId: null,
+    relatedMetrics: [],
+    relatedDimensions: [],
   }
+  resetRefSelects()
   loadParentOptions()
   showDialog.value = true
 }
@@ -321,6 +382,8 @@ function handleCreate(): void {
 function handleEdit(term: BusinessTerm): void {
   isEditing.value = true
   editingId.value = term.id
+  const relatedMetrics = term.relatedMetrics || []
+  const relatedDimensions = term.relatedDimensions || []
   formData.value = {
     tenantCode: term.tenantCode,
     termName: term.termName || '',
@@ -336,7 +399,10 @@ function handleEdit(term: BusinessTerm): void {
     securityLevel: term.securityLevel || '',
     category: term.category || '',
     parentId: term.parentId || null,
+    relatedMetrics,
+    relatedDimensions,
   }
+  initRefSelects(relatedMetrics, relatedDimensions)
   loadParentOptions()
   showDialog.value = true
 }
@@ -346,6 +412,101 @@ function handleParentIdChange(): void {
   if (formData.value.parentId === '' || formData.value.parentId === undefined) {
     formData.value.parentId = null
   }
+}
+
+/** 构造关联引用下拉 key（datasourceId:name，name 为稳定标识） */
+function buildRefKey(ref: BusinessTermRef): string {
+  return `${ref.datasourceId}:${ref.name}`
+}
+
+/** 构造关联引用下拉展示文案 */
+function buildRefLabel(ref: BusinessTermRef): string {
+  const dataSourceSuffix = ref.datasourceName ? ` [${ref.datasourceName}]` : ''
+  if (ref.displayName && ref.displayName !== ref.name) {
+    return `${ref.displayName}(${ref.name})${dataSourceSuffix}`
+  }
+  return `${ref.name}${dataSourceSuffix}`
+}
+
+/** 将引用对象转为下拉选项 */
+function toRefOption(ref: BusinessTermRef): RefOption {
+  return {
+    key: buildRefKey(ref),
+    label: buildRefLabel(ref),
+    ref,
+  }
+}
+
+/** 重置关联引用选择状态（新建时调用） */
+function resetRefSelects(): void {
+  selectedMetricKeys.value = []
+  selectedDimensionKeys.value = []
+  metricKeyRefMap.value = {}
+  dimensionKeyRefMap.value = {}
+  metricOptions.value = []
+  dimensionOptions.value = []
+}
+
+/** 编辑回显：按已有关联引用初始化选择状态与选项 */
+function initRefSelects(metrics: BusinessTermRef[], dimensions: BusinessTermRef[]): void {
+  metricKeyRefMap.value = {}
+  dimensionKeyRefMap.value = {}
+  metricOptions.value = (metrics || []).map(toRefOption)
+  dimensionOptions.value = (dimensions || []).map(toRefOption)
+  metricOptions.value.forEach((opt) => {
+    metricKeyRefMap.value[opt.key] = opt.ref
+  })
+  dimensionOptions.value.forEach((opt) => {
+    dimensionKeyRefMap.value[opt.key] = opt.ref
+  })
+  selectedMetricKeys.value = (metrics || []).map(buildRefKey)
+  selectedDimensionKeys.value = (dimensions || []).map(buildRefKey)
+}
+
+/** 远程搜索关联指标候选 */
+async function handleMetricRemoteSearch(keyword: string): Promise<void> {
+  metricLoading.value = true
+  try {
+    const data = await businessTermApi.referenceOptions(keyword || '', 20)
+    metricOptions.value = (data?.metrics || []).map(toRefOption)
+    metricOptions.value.forEach((opt) => {
+      metricKeyRefMap.value[opt.key] = opt.ref
+    })
+  } catch {
+    metricOptions.value = []
+  } finally {
+    metricLoading.value = false
+  }
+}
+
+/** 远程搜索关联维度候选 */
+async function handleDimensionRemoteSearch(keyword: string): Promise<void> {
+  dimensionLoading.value = true
+  try {
+    const data = await businessTermApi.referenceOptions(keyword || '', 20)
+    dimensionOptions.value = (data?.dimensions || []).map(toRefOption)
+    dimensionOptions.value.forEach((opt) => {
+      dimensionKeyRefMap.value[opt.key] = opt.ref
+    })
+  } catch {
+    dimensionOptions.value = []
+  } finally {
+    dimensionLoading.value = false
+  }
+}
+
+/** 指标选择变化：将已选 key 还原为引用对象写入表单 */
+function handleMetricChange(): void {
+  formData.value.relatedMetrics = selectedMetricKeys.value
+    .map((key) => metricKeyRefMap.value[key])
+    .filter((ref): ref is BusinessTermRef => !!ref)
+}
+
+/** 维度选择变化：将已选 key 还原为引用对象写入表单 */
+function handleDimensionChange(): void {
+  formData.value.relatedDimensions = selectedDimensionKeys.value
+    .map((key) => dimensionKeyRefMap.value[key])
+    .filter((ref): ref is BusinessTermRef => !!ref)
 }
 
 /** 提交表单 */
@@ -371,6 +532,8 @@ async function handleSubmit(): Promise<void> {
         securityLevel: formData.value.securityLevel,
         category: formData.value.category,
         parentId: formData.value.parentId || null,
+        relatedMetrics: formData.value.relatedMetrics,
+        relatedDimensions: formData.value.relatedDimensions,
       }
       await businessTermApi.update(editingId.value, updateData)
       ElMessage.success(t('businessTerm.updateSuccess'))
@@ -889,6 +1052,30 @@ async function handleRebuildEs(): Promise<void> {
 
 .form-select:disabled {
   background: var(--theme-bg);
+  color: var(--theme-text-muted);
+}
+
+/* 关联指标/维度远程搜索多选 */
+.ref-select {
+  width: 100%;
+}
+
+.ref-select :deep(.el-select__wrapper) {
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--theme-border) inset;
+  background: var(--theme-surface);
+  min-height: 32px;
+}
+
+.ref-select :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--main-orange) inset;
+}
+
+.ref-select :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--main-orange) inset;
+}
+
+.ref-select :deep(.el-select__placeholder) {
   color: var(--theme-text-muted);
 }
 

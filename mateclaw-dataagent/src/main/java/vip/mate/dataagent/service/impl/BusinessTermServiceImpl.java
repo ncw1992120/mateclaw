@@ -1,6 +1,7 @@
 package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,11 +14,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermCreateRequest;
+import vip.mate.dataagent.dto.BusinessTermRef;
+import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.BusinessTermUpdateRequest;
 import vip.mate.dataagent.dto.BusinessTermVO;
+import vip.mate.dataagent.model.AloudataDimensionEntity;
+import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.BusinessTermEntity;
+import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.BusinessTermMapper;
+import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.BusinessTermService;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
@@ -25,9 +33,11 @@ import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.wiki.service.WikiEmbeddingService;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -39,9 +49,14 @@ public class BusinessTermServiceImpl implements BusinessTermService {
 
     private static final Logger log = LoggerFactory.getLogger(BusinessTermServiceImpl.class);
 
+    /** JSON 序列化器 */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final BusinessTermMapper businessTermMapper;
     private final BusinessTermEsService businessTermEsService;
     private final ModelConfigService modelConfigService;
+    private final AloudataSemanticSyncService aloudataSemanticSyncService;
+    private final DatasourceMapper datasourceMapper;
 
     /** 可选依赖：Embedding 模型工厂 */
     @Autowired(required = false)
@@ -118,6 +133,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         }
         BusinessTermEntity entity = new BusinessTermEntity();
         BeanUtils.copyProperties(request, entity);
+        entity.setRelatedMetricsJson(toRefsJson(request.getRelatedMetrics()));
+        entity.setRelatedDimensionsJson(toRefsJson(request.getRelatedDimensions()));
         entity.setDeleted(0);
         entity.setStatus(DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
         businessTermMapper.insert(entity);
@@ -154,6 +171,10 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         entity.setOwner(request.getOwner());
         entity.setBusinessRule(request.getBusinessRule());
         entity.setRelatedTerms(request.getRelatedTerms());
+        entity.setRelatedMetricsJson(toRefsJson(request.getRelatedMetrics()));
+        entity.setRelatedDimensionsJson(toRefsJson(request.getRelatedDimensions()));
+        entity.setRelatedMetrics(request.getRelatedMetrics());
+        entity.setRelatedDimensions(request.getRelatedDimensions());
         entity.setExample(request.getExample());
         entity.setSecurityLevel(request.getSecurityLevel());
         entity.setCategory(request.getCategory());
@@ -324,6 +345,88 @@ public class BusinessTermServiceImpl implements BusinessTermService {
     }
 
     /**
+     * 查询关联引用候选（跨数据源的指标 / 维度）
+     */
+    @Override
+    public BusinessTermReferenceOptions listReferenceOptions(String keyword, int limit) {
+        int max = Math.min(Math.max(limit, 1), DataAgentConstants.BUSINESS_TERM_REF_OPTIONS_LIMIT_MAX);
+
+        // 复用语义层公共查询：跨数据源检索指标 / 维度候选（datasourceId 传 null）
+        List<AloudataMetricEntity> metrics = aloudataSemanticSyncService.pageMetricEntities(null, keyword, 0, max);
+        List<AloudataDimensionEntity> dimensions = aloudataSemanticSyncService.pageDimensionEntities(null, keyword, 0, max);
+
+        // 批量构建数据源名称映射
+        Map<Long, String> datasourceNameMap = buildDatasourceNameMap(buildDatasourceIds(metrics, dimensions));
+
+        BusinessTermReferenceOptions options = new BusinessTermReferenceOptions();
+        options.setMetrics(metrics.stream()
+                .map(m -> toRef(m.getId(), m.getDatasourceId(), datasourceNameMap,
+                        m.getMetricName(), m.getMetricDisplayName()))
+                .collect(Collectors.toList()));
+        options.setDimensions(dimensions.stream()
+                .map(d -> toRef(d.getId(), d.getDatasourceId(), datasourceNameMap,
+                        d.getDimName(), d.getDimDisplayName()))
+                .collect(Collectors.toList()));
+        return options;
+    }
+
+    /**
+     * 序列化关联引用列表为 JSON 字符串
+     */
+    private String toRefsJson(List<BusinessTermRef> refs) {
+        if (refs == null || refs.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(refs);
+        } catch (Exception e) {
+            log.warn("序列化关联引用失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 收集指标 / 维度引用的数据源 ID 集合
+     */
+    private Collection<Long> buildDatasourceIds(List<AloudataMetricEntity> metrics, List<AloudataDimensionEntity> dimensions) {
+        Collection<Long> ids = new java.util.HashSet<>();
+        if (metrics != null) {
+            metrics.forEach(m -> ids.add(m.getDatasourceId()));
+        }
+        if (dimensions != null) {
+            dimensions.forEach(d -> ids.add(d.getDatasourceId()));
+        }
+        return ids;
+    }
+
+    /**
+     * 构建数据源 ID → 名称映射
+     */
+    private Map<Long, String> buildDatasourceNameMap(Collection<Long> datasourceIds) {
+        List<Long> ids = datasourceIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (ids.isEmpty()) {
+            return new HashMap<>();
+        }
+        return datasourceMapper.selectBatchIds(ids).stream()
+                .collect(Collectors.toMap(DatasourceEntity::getId,
+                        d -> d.getName() == null ? "" : d.getName()));
+    }
+
+    /**
+     * 构造关联引用对象
+     */
+    private BusinessTermRef toRef(Long id, Long datasourceId, Map<Long, String> datasourceNameMap,
+                                  String name, String displayName) {
+        BusinessTermRef ref = new BusinessTermRef();
+        ref.setId(id);
+        ref.setDatasourceId(datasourceId);
+        ref.setDatasourceName(datasourceNameMap.get(datasourceId));
+        ref.setName(name);
+        ref.setDisplayName(displayName);
+        return ref;
+    }
+
+    /**
      * 解析可用的 EmbeddingModel 实例
      */
     private EmbeddingModel resolveEmbeddingModel() {
@@ -389,6 +492,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         BusinessTermVO vo = new BusinessTermVO();
         BeanUtils.copyProperties(entity, vo);
         vo.setPromptInfo(entity.getPromptInfo());
+        vo.setRelatedMetrics(entity.parseRelatedMetrics());
+        vo.setRelatedDimensions(entity.parseRelatedDimensions());
         if (entity.getParentId() != null) {
             vo.setParentTermName(parentNameMap.get(entity.getParentId()));
         }

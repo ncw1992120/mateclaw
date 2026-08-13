@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.dto.BusinessTermCreateRequest;
+import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.BusinessTermUpdateRequest;
 import vip.mate.dataagent.dto.BusinessTermVO;
@@ -145,6 +146,17 @@ public class DataAgentBusinessTermController {
             @Parameter(description = "返回结果数量上限") @RequestParam(defaultValue = "10") int topK,
             @Parameter(description = "向量语义检索相似度阈值") @RequestParam(defaultValue = "0.3") double threshold) {
         return R.ok(businessTermService.semanticSearch(query, topK, threshold));
+    }
+
+    /**
+     * 查询关联引用候选（跨数据源的指标 / 维度）
+     */
+    @GetMapping("/reference-options")
+    @Operation(summary = "查询关联引用候选", description = "跨数据源检索指标/维度候选列表，供术语关联指标/维度时选择")
+    public R<BusinessTermReferenceOptions> referenceOptions(
+            @Parameter(description = "搜索关键词（可选，按名称/展示名/同义词模糊匹配）") @RequestParam(required = false) String keyword,
+            @Parameter(description = "返回数量上限") @RequestParam(defaultValue = "20") int limit) {
+        return R.ok(businessTermService.listReferenceOptions(keyword, limit));
     }
 
     /**

@@ -1,5 +1,5 @@
 import api from './index'
-import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermSearchResult, BusinessTermUpdateRequest } from '@/types'
+import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermReferenceOptions, BusinessTermSearchResult, BusinessTermUpdateRequest } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/business-terms'
@@ -64,6 +64,13 @@ export function search(tenantCode: string, keyword: string) {
 export function semanticSearch(tenantCode: string, query: string, topK = 10, threshold = 0.3) {
   return api.get<BusinessTermSearchResult>(`${BASE_URL}/semantic-search`, {
     params: { tenantCode, query, topK, threshold },
+  })
+}
+
+/** 查询关联引用候选（跨数据源的指标/维度） */
+export function referenceOptions(keyword?: string, limit = 20) {
+  return api.get<BusinessTermReferenceOptions>(`${BASE_URL}/reference-options`, {
+    params: { keyword, limit },
   })
 }
 

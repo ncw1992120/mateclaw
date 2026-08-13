@@ -115,21 +115,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
 
     @Override
     public List<AloudataMetricSemanticDTO> listSyncedMetrics(Long datasourceId, int pageNumber, int pageSize, String keyword) {
-        LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
-        if (keyword != null && !keyword.isBlank()) {
-            wrapper.and(w -> w
-                    .like(AloudataMetricEntity::getMetricName, keyword)
-                    .or().like(AloudataMetricEntity::getMetricDisplayName, keyword)
-                    .or().like(AloudataMetricEntity::getSynonyms, keyword)
-            );
-        }
-        wrapper.orderByDesc(AloudataMetricEntity::getUpdateTime);
-
         int offset = (pageNumber - 1) * pageSize;
-        wrapper.last("LIMIT " + pageSize + " OFFSET " + offset);
-
-        List<AloudataMetricEntity> entities = metricMapper.selectList(wrapper);
+        List<AloudataMetricEntity> entities = pageMetricEntities(datasourceId, keyword, offset, pageSize);
         List<String> metricNames = entities.stream()
                 .map(AloudataMetricEntity::getMetricName)
                 .collect(Collectors.toList());
@@ -140,22 +127,19 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    public List<AloudataMetricEntity> pageMetricEntities(Long datasourceId, String keyword, int offset, int limit) {
+        return metricMapper.selectList(buildMetricSearchWrapper(datasourceId, keyword, offset, limit));
+    }
+
+    @Override
+    public List<AloudataDimensionEntity> pageDimensionEntities(Long datasourceId, String keyword, int offset, int limit) {
+        return dimensionMapper.selectList(buildDimensionSearchWrapper(datasourceId, keyword, offset, limit));
+    }
+
+    @Override
     public List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword) {
-        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
-        if (keyword != null && !keyword.isBlank()) {
-            wrapper.and(w -> w
-                    .like(AloudataDimensionEntity::getDimName, keyword)
-                    .or().like(AloudataDimensionEntity::getDimDisplayName, keyword)
-                    .or().like(AloudataDimensionEntity::getSynonyms, keyword)
-            );
-        }
-        wrapper.orderByDesc(AloudataDimensionEntity::getUpdateTime);
-
         int offset = (pageNumber - 1) * pageSize;
-        wrapper.last("LIMIT " + pageSize + " OFFSET " + offset);
-
-        List<AloudataDimensionEntity> entities = dimensionMapper.selectList(wrapper);
+        List<AloudataDimensionEntity> entities = pageDimensionEntities(datasourceId, keyword, offset, pageSize);
         return entities.stream().map(this::toDimensionSemanticDTO).collect(Collectors.toList());
     }
 
@@ -1204,6 +1188,62 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private Long resolveEmbeddingModelId() {
         ModelConfigEntity config = resolveEmbeddingModelConfig();
         return config != null ? config.getId() : null;
+    }
+
+    /**
+     * 构建指标关键词查询条件
+     * <p>
+     * datasourceId 为空时表示跨数据源查询（如业务词典关联引用候选选择）。
+     *
+     * @param datasourceId 数据源 ID，为空表示跨数据源
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
+     * @param offset       偏移量
+     * @param limit        返回条数上限
+     */
+    private LambdaQueryWrapper<AloudataMetricEntity> buildMetricSearchWrapper(
+            Long datasourceId, String keyword, int offset, int limit) {
+        LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
+        if (datasourceId != null) {
+            wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w
+                    .like(AloudataMetricEntity::getMetricName, keyword)
+                    .or().like(AloudataMetricEntity::getMetricDisplayName, keyword)
+                    .or().like(AloudataMetricEntity::getSynonyms, keyword)
+            );
+        }
+        wrapper.orderByDesc(AloudataMetricEntity::getUpdateTime);
+        wrapper.last("LIMIT " + limit + " OFFSET " + offset);
+        return wrapper;
+    }
+
+    /**
+     * 构建维度关键词查询条件
+     * <p>
+     * datasourceId 为空时表示跨数据源查询（如业务词典关联引用候选选择）。
+     *
+     * @param datasourceId 数据源 ID，为空表示跨数据源
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
+     * @param offset       偏移量
+     * @param limit        返回条数上限
+     */
+    private LambdaQueryWrapper<AloudataDimensionEntity> buildDimensionSearchWrapper(
+            Long datasourceId, String keyword, int offset, int limit) {
+        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        if (datasourceId != null) {
+            wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.and(w -> w
+                    .like(AloudataDimensionEntity::getDimName, keyword)
+                    .or().like(AloudataDimensionEntity::getDimDisplayName, keyword)
+                    .or().like(AloudataDimensionEntity::getSynonyms, keyword)
+            );
+        }
+        wrapper.orderByDesc(AloudataDimensionEntity::getUpdateTime);
+        wrapper.last("LIMIT " + limit + " OFFSET " + offset);
+        return wrapper;
     }
 
     private AloudataMetricSemanticDTO toMetricSemanticDTO(AloudataMetricEntity entity,

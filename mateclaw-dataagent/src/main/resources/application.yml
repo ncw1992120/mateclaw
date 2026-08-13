@@ -38,10 +38,8 @@ spring:
 # MyBatis Plus
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
-  global-config:
-    db-config:
-      # 不使用全局逻辑删除：逻辑删除改为在需要软删语义的实体上显式声明 @TableLogic，
-      # 避免宿主应用配置污染 server 层实体的删除行为（如绑定表软删残留撞唯一索引）
+  # 不使用全局逻辑删除：逻辑删除改为在需要软删语义的实体上显式声明 @TableLogic，
+  # 避免宿主应用配置污染 server 层实体的删除行为（如绑定表软删残留撞唯一索引）
 
 mateclaw:
   jwt:

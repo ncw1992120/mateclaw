@@ -679,6 +679,12 @@ public class AloudataCallTool {
                     if (hit.getCategory() != null && !hit.getCategory().isBlank()) {
                         sb.append(" [分类: ").append(hit.getCategory()).append("]");
                     }
+                    if (hit.getRelatedMetricNames() != null && !hit.getRelatedMetricNames().isEmpty()) {
+                        sb.append(" [关联指标: ").append(String.join(", ", hit.getRelatedMetricNames())).append("]");
+                    }
+                    if (hit.getRelatedDimensionNames() != null && !hit.getRelatedDimensionNames().isEmpty()) {
+                        sb.append(" [关联维度: ").append(String.join(", ", hit.getRelatedDimensionNames())).append("]");
+                    }
                     sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
                     sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
                 }

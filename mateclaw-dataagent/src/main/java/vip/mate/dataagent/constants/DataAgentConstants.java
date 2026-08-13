@@ -279,6 +279,9 @@ public final class DataAgentConstants {
     /** 业务术语语义检索默认相似度阈值 */
     public static final double BUSINESS_TERM_SEARCH_DEFAULT_THRESHOLD = 0.3;
 
+    /** 业务术语关联引用候选返回数量上限 */
+    public static final int BUSINESS_TERM_REF_OPTIONS_LIMIT_MAX = 100;
+
     // ==================== 认证与权限 ====================
 
     /** 工作区 ID 请求头名称 */

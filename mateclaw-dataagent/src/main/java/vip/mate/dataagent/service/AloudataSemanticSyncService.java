@@ -3,6 +3,8 @@ package vip.mate.dataagent.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
+import vip.mate.dataagent.model.AloudataDimensionEntity;
+import vip.mate.dataagent.model.AloudataMetricEntity;
 
 import java.util.List;
 
@@ -64,6 +66,34 @@ public interface AloudataSemanticSyncService {
      * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
      */
     List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword);
+
+    /**
+     * 按关键词分页查询指标实体
+     * <p>
+     * 复用公共的 LIKE 查询逻辑，供同数据源分页查询与跨数据源候选查询使用；
+     * datasourceId 为空时表示跨数据源查询（如业务词典关联引用候选选择）。
+     *
+     * @param datasourceId 数据源 ID，为空表示跨数据源
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
+     * @param offset       偏移量
+     * @param limit        返回条数上限
+     * @return 指标实体列表
+     */
+    List<AloudataMetricEntity> pageMetricEntities(Long datasourceId, String keyword, int offset, int limit);
+
+    /**
+     * 按关键词分页查询维度实体
+     * <p>
+     * 复用公共的 LIKE 查询逻辑，供同数据源分页查询与跨数据源候选查询使用；
+     * datasourceId 为空时表示跨数据源查询（如业务词典关联引用候选选择）。
+     *
+     * @param datasourceId 数据源 ID，为空表示跨数据源
+     * @param keyword      搜索关键字（匹配名称、展示名、同义词），可为 null
+     * @param offset       偏移量
+     * @param limit        返回条数上限
+     * @return 维度实体列表
+     */
+    List<AloudataDimensionEntity> pageDimensionEntities(Long datasourceId, String keyword, int offset, int limit);
 
     /**
      * 查询指标关联的维度名称列表

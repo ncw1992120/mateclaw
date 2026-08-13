@@ -2,8 +2,10 @@ package vip.mate.dataagent.model;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import vip.mate.dataagent.dto.BusinessTermRef;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 业务术语实体
@@ -51,6 +53,20 @@ public class BusinessTermEntity {
     /** 关联术语ID（逗号分隔，如"101,102"） */
     private String relatedTerms;
 
+    /** 关联指标引用 JSON（[{"id":1,"datasourceId":1,"datasourceName":"CRM","name":"sales_amount","displayName":"销售额"}]） */
+    private String relatedMetricsJson;
+
+    /** 关联维度引用 JSON（[{"id":1,"datasourceId":1,"datasourceName":"CRM","name":"province","displayName":"省份"}]） */
+    private String relatedDimensionsJson;
+
+    /** 关联指标引用（非持久化，由 Service 解析 relatedMetricsJson 填充，供 Prompt/嵌入文本使用） */
+    @TableField(exist = false)
+    private List<BusinessTermRef> relatedMetrics;
+
+    /** 关联维度引用（非持久化，由 Service 解析 relatedDimensionsJson 填充，供 Prompt/嵌入文本使用） */
+    @TableField(exist = false)
+    private List<BusinessTermRef> relatedDimensions;
+
     /** 示例/用例（该术语在实际业务中的使用示例） */
     private String example;
 
@@ -84,6 +100,75 @@ public class BusinessTermEntity {
 
     private Integer deleted;
 
+    /** JSON 解析器（线程安全，可重复使用） */
+    private static final com.fasterxml.jackson.databind.ObjectMapper OBJECT_MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /**
+     * 解析关联指标引用 JSON 到列表（并缓存到瞬态字段）
+     *
+     * @return 关联指标引用列表（解析失败返回空列表）
+     */
+    public List<BusinessTermRef> parseRelatedMetrics() {
+        if (relatedMetrics == null) {
+            relatedMetrics = parseRefs(relatedMetricsJson);
+        }
+        return relatedMetrics;
+    }
+
+    /**
+     * 解析关联维度引用 JSON 到列表（并缓存到瞬态字段）
+     *
+     * @return 关联维度引用列表（解析失败返回空列表）
+     */
+    public List<BusinessTermRef> parseRelatedDimensions() {
+        if (relatedDimensions == null) {
+            relatedDimensions = parseRefs(relatedDimensionsJson);
+        }
+        return relatedDimensions;
+    }
+
+    /**
+     * 将引用 JSON 解析为引用列表
+     *
+     * @param json 引用 JSON 字符串
+     * @return 引用列表（null/空/解析失败返回空列表）
+     */
+    @SuppressWarnings("unchecked")
+    private List<BusinessTermRef> parseRefs(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json,
+                    OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, BusinessTermRef.class));
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * 将引用列表格式化为"展示名(英文名)"逗号分隔文本
+     *
+     * @param refs 引用列表
+     * @return 格式化文本（空列表返回 null）
+     */
+    private String formatRefs(List<BusinessTermRef> refs) {
+        if (refs == null || refs.isEmpty()) {
+            return null;
+        }
+        return refs.stream()
+                .map(r -> {
+                    String name = r.getName();
+                    String displayName = r.getDisplayName();
+                    if (displayName != null && !displayName.isBlank() && !displayName.equals(name)) {
+                        return displayName + "(" + name + ")";
+                    }
+                    return name;
+                })
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
     /**
      * 获取用于 Prompt 的术语信息文本
      * <p>
@@ -109,6 +194,14 @@ public class BusinessTermEntity {
         }
         if (businessRule != null && !businessRule.isBlank()) {
             sb.append(", 业务规则: ").append(businessRule);
+        }
+        String refText = formatRefs(parseRelatedMetrics());
+        if (refText != null) {
+            sb.append(", 关联指标: ").append(refText);
+        }
+        String dimRefText = formatRefs(parseRelatedDimensions());
+        if (dimRefText != null) {
+            sb.append(", 关联维度: ").append(dimRefText);
         }
         return sb.toString();
     }
@@ -138,6 +231,14 @@ public class BusinessTermEntity {
         }
         if (businessRule != null && !businessRule.isBlank()) {
             sb.append(" 业务规则: ").append(businessRule);
+        }
+        String refText = formatRefs(parseRelatedMetrics());
+        if (refText != null) {
+            sb.append(" 关联指标: ").append(refText);
+        }
+        String dimRefText = formatRefs(parseRelatedDimensions());
+        if (dimRefText != null) {
+            sb.append(" 关联维度: ").append(dimRefText);
         }
         return sb.toString();
     }

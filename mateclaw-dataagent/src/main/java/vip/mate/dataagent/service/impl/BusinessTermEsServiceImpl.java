@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.BusinessTermRef;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.BusinessTermSearchResult.TermHit;
 import vip.mate.dataagent.model.BusinessTermEntity;
@@ -116,6 +117,10 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                             .properties("securityLevel", p -> p.keyword(k -> k))
                             .properties("category", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("relatedMetricNames", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
+                                    .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
+                            .properties("relatedDimensionNames", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
+                                    .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
                                     .denseVector(dv -> dv.dims(dims).index(true).similarity(DenseVectorSimilarity.Cosine)))
@@ -158,6 +163,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                             .properties("securityLevel", p -> p.keyword(k -> k))
                             .properties("category", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
+                            .properties("relatedMetricNames", p -> p.text(t -> t))
+                            .properties("relatedDimensionNames", p -> p.text(t -> t))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, p -> p.text(t -> t))
                             .properties(DataAgentConstants.ALOUDATA_ES_EMBEDDING_FIELD, p -> p
                                     .denseVector(dv -> dv.dims(dims).index(true).similarity(DenseVectorSimilarity.Cosine)))
@@ -480,6 +487,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         th.setDataCaliber(getString(source, "dataCaliber"));
         th.setBusinessRule(getString(source, "businessRule"));
         th.setCategory(getString(source, "category"));
+        th.setRelatedMetricNames(getStringList(source, "relatedMetricNames"));
+        th.setRelatedDimensionNames(getStringList(source, "relatedDimensionNames"));
         th.setScore(score != null ? score : 0.0);
         th.setMatchSource(matchSource);
         return th;
@@ -510,6 +519,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             th.setDataCaliber(getString(source, "dataCaliber"));
             th.setBusinessRule(getString(source, "businessRule"));
             th.setCategory(getString(source, "category"));
+            th.setRelatedMetricNames(getStringList(source, "relatedMetricNames"));
+            th.setRelatedDimensionNames(getStringList(source, "relatedDimensionNames"));
             th.setScore(score);
             th.setMatchSource(matchSource);
             hits.add(th);
@@ -558,6 +569,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                 .or().like(BusinessTermEntity::getDataCaliber, likePattern)
                 .or().like(BusinessTermEntity::getBusinessRule, likePattern)
                 .or().like(BusinessTermEntity::getCategory, likePattern)
+                .or().like(BusinessTermEntity::getRelatedMetricsJson, likePattern)
+                .or().like(BusinessTermEntity::getRelatedDimensionsJson, likePattern)
         );
         wrapper.last("LIMIT " + topK);
 
@@ -575,6 +588,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             th.setDataCaliber(e.getDataCaliber());
             th.setBusinessRule(e.getBusinessRule());
             th.setCategory(e.getCategory());
+            th.setRelatedMetricNames(toRefNames(e.parseRelatedMetrics()));
+            th.setRelatedDimensionNames(toRefNames(e.parseRelatedDimensions()));
             th.setParentTermName(e.getParentId() != null ? parentNameMap.get(e.getParentId()) : null);
             th.setScore(1.0);
             th.setMatchSource("keyword");
@@ -596,6 +611,8 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         doc.put("owner", entity.getOwner());
         doc.put("businessRule", entity.getBusinessRule());
         doc.put("relatedTerms", splitToList(entity.getRelatedTerms()));
+        doc.put("relatedMetricNames", toRefNames(entity.parseRelatedMetrics()));
+        doc.put("relatedDimensionNames", toRefNames(entity.parseRelatedDimensions()));
         doc.put("example", entity.getExample());
         doc.put("securityLevel", entity.getSecurityLevel());
         doc.put("category", entity.getCategory());
@@ -734,5 +751,30 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             return String.join(",", ((List<String>) val).stream().filter(Objects::nonNull).toList());
         }
         return val.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getStringList(Map<String, Object> source, String key) {
+        Object val = source.get(key);
+        if (val instanceof List) {
+            return ((List<Object>) val).stream().map(String::valueOf).filter(Objects::nonNull).toList();
+        }
+        if (val != null) {
+            return List.of(val.toString());
+        }
+        return null;
+    }
+
+    /**
+     * 提取引用列表中的名称（metricName / dimName）
+     */
+    private List<String> toRefNames(List<BusinessTermRef> refs) {
+        if (refs == null || refs.isEmpty()) {
+            return List.of();
+        }
+        return refs.stream()
+                .map(BusinessTermRef::getName)
+                .filter(Objects::nonNull)
+                .toList();
     }
 }
