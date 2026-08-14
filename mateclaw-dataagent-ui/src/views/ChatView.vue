@@ -3115,21 +3115,48 @@ function buildMetricMetaHtml(meta: ChartMetricMeta): string {
     </div>`
 }
 
-/** 构建通用浮层骨架（头部标题 + 关闭按钮 + 加载态 body），返回 overlay 元素 */
-function buildAuxOverlay(kind: 'metric' | 'interpret', title: string, onClose: () => void): HTMLElement {
+/** 构建通用浮层骨架（头部标题 + 关闭按钮 + 加载态 body），返回 overlay 元素。
+ *  copyText 为可选的复制内容 getter：提供时在头部渲染"复制"按钮，
+ *  点击复制 getter 当前返回的文本（解读/指标内容异步生成后仍可读取最新值）。 */
+function buildAuxOverlay(kind: 'metric' | 'interpret', title: string, onClose: () => void,
+                         copyText?: () => string | undefined): HTMLElement {
   const overlay = document.createElement('div')
   overlay.className = 'echarts-table-overlay echarts-aux-overlay'
   overlay.setAttribute('data-kind', kind)
+  const copyBtnHtml = copyText
+    ? `<button type="button" class="echarts-aux-copy-btn">${escAuxHtml(t('chart.copyInterpret'))}</button>`
+    : ''
   overlay.innerHTML = `
     <div class="echarts-table-overlay-header">
       <span class="echarts-table-overlay-title">${escAuxHtml(title)}</span>
-      <button type="button" class="echarts-table-overlay-close" aria-label="关闭">×</button>
+      <div class="echarts-table-overlay-actions">
+        ${copyBtnHtml}
+        <button type="button" class="echarts-table-overlay-close" aria-label="关闭">×</button>
+      </div>
     </div>
     <div class="echarts-table-overlay-body echarts-aux-body"><div class="echarts-aux-loading">${escAuxHtml(t('chart.loading'))}</div></div>
   `
   overlay.querySelector('.echarts-table-overlay-close')?.addEventListener('click', (e) => {
     e.stopPropagation()
     onClose()
+  })
+  const copyBtn = overlay.querySelector<HTMLElement>('.echarts-aux-copy-btn')
+  copyBtn?.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    if (!copyText) return
+    const text = copyText()
+    if (!text) return
+    try {
+      await copyToClipboard(text)
+      copyBtn.textContent = t('chart.interpretCopied')
+      copyBtn.classList.add('is-copied')
+      setTimeout(() => {
+        copyBtn.textContent = t('chart.copyInterpret')
+        copyBtn.classList.remove('is-copied')
+      }, 2000)
+    } catch {
+      // 复制失败静默处理，按钮保持原状
+    }
   })
   return overlay
 }
@@ -3182,13 +3209,18 @@ async function toggleInterpretOverlay(htmlEl: HTMLElement): Promise<void> {
   }
   closeAllChartOverlays(htmlEl, 'interpret')
 
-  const overlay = buildAuxOverlay('interpret', t('chart.interpret'), () => { void toggleInterpretOverlay(htmlEl) })
+  // 解读文本（含缓存值），提升到函数级作用域供复制按钮 getter 读取
+  let text = echartsBlockInterpret.get(htmlEl)
+
+  const overlay = buildAuxOverlay('interpret', t('chart.interpret'),
+    () => { void toggleInterpretOverlay(htmlEl) },
+    // 复制解读文本：getter 读取最新值，解读异步生成完成后即可复制
+    () => text)
   htmlEl.appendChild(overlay)
   htmlEl.querySelector<HTMLElement>('.echarts-toolbar-interpret-btn')?.classList.add('is-active')
   const body = overlay.querySelector('.echarts-aux-body') as HTMLElement
 
   try {
-    let text = echartsBlockInterpret.get(htmlEl)
     if (!text) {
       const option = echartsBlockOptions.get(htmlEl)
       if (!option) {
@@ -4834,6 +4866,37 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--theme-text);
+}
+
+:deep(.echarts-table-overlay-actions) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 浮层头部"复制"按钮（解读内容复制） */
+:deep(.echarts-aux-copy-btn) {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+:deep(.echarts-aux-copy-btn:hover) {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+:deep(.echarts-aux-copy-btn.is-copied) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+  color: var(--main-orange);
 }
 
 :deep(.echarts-table-overlay-close) {

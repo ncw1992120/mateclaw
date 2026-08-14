@@ -185,6 +185,8 @@ export default {
     metricError: 'Failed to load metric info, please retry',
     noChartData: 'No chart data',
     interpretError: 'Failed to generate interpretation, please retry',
+    copyInterpret: 'Copy',
+    interpretCopied: 'Copied',
     fieldMetric: 'Metric',
     fieldCaliber: 'Caliber',
     fieldDimensions: 'Dimensions',

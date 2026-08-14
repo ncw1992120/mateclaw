@@ -185,6 +185,8 @@ export default {
     metricError: '指标信息加载失败，请稍后重试',
     noChartData: '暂无图表数据',
     interpretError: '解读生成失败，请稍后重试',
+    copyInterpret: '复制',
+    interpretCopied: '已复制',
     fieldMetric: '指标',
     fieldCaliber: '口径',
     fieldDimensions: '维度',
