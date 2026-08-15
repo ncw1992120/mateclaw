@@ -48,22 +48,22 @@
           <tbody>
             <tr v-for="term in terms" :key="term.id">
               <td class="col-term-name">
-                <span class="term-name">{{ term.termName }}</span>
+                <span class="term-name cell-text" :title="term.termName">{{ term.termName }}</span>
               </td>
               <td class="col-synonyms">
-                <span :title="term.synonyms">{{ term.synonyms || '-' }}</span>
+                <span class="cell-text" :title="term.synonyms">{{ term.synonyms || '-' }}</span>
               </td>
               <td class="col-description">
-                <span :title="term.description">{{ term.description || '-' }}</span>
+                <span class="cell-text" :title="term.description">{{ term.description || '-' }}</span>
               </td>
               <td class="col-calculation-formula">
-                <span :title="term.calculationFormula">{{ term.calculationFormula || '-' }}</span>
+                <span class="cell-text" :title="term.calculationFormula">{{ term.calculationFormula || '-' }}</span>
               </td>
               <td class="col-data-caliber">
-                <span :title="term.dataCaliber">{{ term.dataCaliber || '-' }}</span>
+                <span class="cell-text" :title="term.dataCaliber">{{ term.dataCaliber || '-' }}</span>
               </td>
               <td class="col-owner">
-                {{ term.owner || '-' }}
+                <span class="cell-text" :title="term.owner">{{ term.owner || '-' }}</span>
               </td>
               <td class="col-category">
                 <span v-if="term.category" class="category-tag">{{ term.category }}</span>
@@ -730,11 +730,13 @@ async function handleRebuildEs(): Promise<void> {
 .table-grid-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .data-grid {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .data-grid thead tr {
@@ -771,12 +773,14 @@ async function handleRebuildEs(): Promise<void> {
   width: 12%;
 }
 
-.col-synonyms span {
+/* 单元格文本省略：超长内容以省略号截断，防止撑开列宽导致布局变形 */
+.cell-text {
   display: inline-block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .col-description {
@@ -784,38 +788,14 @@ async function handleRebuildEs(): Promise<void> {
   max-width: 180px;
 }
 
-.col-description span {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .col-calculation-formula {
   width: 14%;
   max-width: 150px;
 }
 
-.col-calculation-formula span {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .col-data-caliber {
   width: 14%;
   max-width: 150px;
-}
-
-.col-data-caliber span {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .col-owner {
@@ -848,6 +828,11 @@ async function handleRebuildEs(): Promise<void> {
   background: rgba(22, 93, 255, 0.1);
   color: #165dff;
   font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .status-badge {
@@ -1077,6 +1062,20 @@ async function handleRebuildEs(): Promise<void> {
 
 .ref-select :deep(.el-select__placeholder) {
   color: var(--theme-text-muted);
+}
+
+/* 关联指标/维度选中标签过长时省略号截断，防止选择器布局变形 */
+.ref-select :deep(.el-tag) {
+  max-width: 100%;
+}
+
+.ref-select :deep(.el-select__tags-text) {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .form-textarea {
