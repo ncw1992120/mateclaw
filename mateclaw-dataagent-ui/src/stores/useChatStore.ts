@@ -309,6 +309,10 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     conversationId.value = ''
     selectedDatasourceIds.value = []
+    // 新会话没有上下文使用数据：清空旧会话残留的占比，并收起展开面板，
+    // 避免「上下文按钮」子元素展示上一个会话的占比
+    contextUsage.value = null
+    contextUsagePanelOpen.value = false
     clearReconnectState()
   }
 
@@ -441,6 +445,9 @@ export const useChatStore = defineStore('chat', () => {
         backgroundConversationMessages.delete(oldConvId)
       }
       conversationId.value = convId
+      // 切换会话时清空上下文使用数据并收起面板，避免展示上个会话的占比
+      contextUsage.value = null
+      contextUsagePanelOpen.value = false
       // Try listMessages anyway — the conversation may exist server-side
       // but not yet be in the local conversations list (race condition).
       try {
@@ -464,6 +471,13 @@ export const useChatStore = defineStore('chat', () => {
 
     const oldConvId = conversationId.value
     const isSameConversation = oldConvId === convId
+
+    // 切换到不同会话时，清空上下文使用数据并收起面板，避免展示上一个会话的占比；
+    // 下文 fetchContextUsage() 会重新拉取目标会话的数据
+    if (!isSameConversation) {
+      contextUsage.value = null
+      contextUsagePanelOpen.value = false
+    }
 
     // 切换到不同会话时，将当前消息存入后台缓存
     // - 流式生成中切换：直接引用 messages.value，sendMessage 的 for-await 循环会继续更新同一数组

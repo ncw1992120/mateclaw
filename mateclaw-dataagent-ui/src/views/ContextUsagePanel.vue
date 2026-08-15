@@ -1,23 +1,16 @@
 <template>
   <div class="context-usage-panel">
-    <div class="context-usage-header">
-      <span class="context-usage-title">Context Usage</span>
-      <button class="context-usage-close" type="button" @click="emit('close')">×</button>
-    </div>
-
     <div v-if="!usage" class="context-usage-empty">
       暂无上下文使用数据
     </div>
 
     <template v-else>
-      <div class="context-usage-summary">
-        <div class="context-usage-percent">
-          <span class="percent-value">{{ percentText }}</span>
-          <span class="percent-label">Full</span>
-        </div>
-        <div class="context-usage-total">
-          ~{{ formatTokens(usage.usedTokens) }} / {{ formatTokens(usage.contextWindow) }} Tokens
-        </div>
+      <!-- DSH ContextMeter 头部：headline + 大百分比 + figures（纯数字，无单位词） -->
+      <div class="context-usage-headline">
+        <span class="headline-first">上下文已使用</span>
+        <span class="percent">{{ percentText }}</span>
+        <span class="headline-last">，共</span>
+        <span class="figures">~{{ formatTokens(usage.usedTokens) }} / {{ formatTokens(usage.contextWindow) }}</span>
       </div>
 
       <div class="context-usage-bar">
@@ -25,16 +18,16 @@
           <div
             v-if="cat.tokens > 0"
             class="context-usage-segment"
-            :style="{ width: `${(cat.tokens / usage.contextWindow) * 100}%`, backgroundColor: cat.color }"
-            :title="`${cat.label}: ${formatTokens(cat.tokens)} tokens`"
+            :style="{ width: `${(cat.tokens / usage.contextWindow) * 100}%`, backgroundColor: categoryColor(cat) }"
+            :title="`${categoryLabel(cat)}：${formatTokens(cat.tokens)} tokens`"
           />
         </template>
       </div>
 
       <div class="context-usage-categories">
         <div v-for="cat in usage.categories" :key="cat.name" class="context-usage-category">
-          <span class="category-dot" :style="{ backgroundColor: cat.color }" />
-          <span class="category-label">{{ cat.label }}</span>
+          <span class="category-dot" :style="{ backgroundColor: categoryColor(cat) }" />
+          <span class="category-label">{{ categoryLabel(cat) }}</span>
           <span class="category-tokens">{{ formatTokens(cat.tokens) }}</span>
         </div>
       </div>
@@ -64,20 +57,44 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ContextUsage } from '@/types'
+import type { ContextUsage, ContextUsageCategory } from '@/types'
 
 const props = defineProps<{
   usage: ContextUsage | null
-}>()
-
-const emit = defineEmits<{
-  (e: 'close'): void
 }>()
 
 const percentText = computed(() => {
   if (!props.usage) return '0%'
   return `${Math.round(props.usage.usedPercent * 100)}%`
 })
+
+/**
+ * DSH ContextMeter 分类配色（参考 packages/client/ui-conversation ——
+ * ContextMeter.module.css：system=蓝灰 neutral-bluish-400、tools=紫 violet-400、
+ * messages=蓝 blue-450）。键名与后端字段一致（ContextUsageServiceImpl：
+ * system_prompt / tool_definitions / conversation）。
+ */
+const DSH_CATEGORY_TINTS: Record<string, string> = {
+  system_prompt: '#5A6472',
+  tool_definitions: 'rgb(167, 139, 250)',
+  conversation: '#3B82F6',
+}
+
+/** 分类中文标签（对应 DSH 的 context.system / context.tools / context.messages），
+    未命中则回退后端下发的 label。 */
+const CATEGORY_LABELS_ZH: Record<string, string> = {
+  system_prompt: '系统提示词',
+  tool_definitions: '工具',
+  conversation: '对话消息',
+}
+
+function categoryColor(cat: ContextUsageCategory): string {
+  return DSH_CATEGORY_TINTS[cat.name] ?? (cat.color ?? 'var(--theme-text-muted)')
+}
+
+function categoryLabel(cat: ContextUsageCategory): string {
+  return CATEGORY_LABELS_ZH[cat.name] ?? (cat.label || cat.name)
+}
 
 function formatTokens(tokens: number): string {
   if (tokens >= 1000) {
@@ -88,133 +105,123 @@ function formatTokens(tokens: number): string {
 </script>
 
 <style scoped>
+/* 参考 DSH ContextMeter 面板（ContextMeter.module.css：锚定在触发按钮上方的菜单表面
+   r12 + 反白描边 + shadow-lv3），适配 mateclaw 主题变量，随浅色/深色主题切换。 */
 .context-usage-panel {
-  position: fixed;
-  right: 20px;
-  bottom: 42px;
-  width: 320px;
-  background: var(--bg-color, #1f1f1f);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  color: var(--text-color, #e5e5e5);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
   z-index: 100;
+  box-sizing: border-box;
+  width: 264px;
+  background: var(--theme-surface-elevated, #fff);
+  border: 1px solid var(--theme-border-strong, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  color: var(--theme-text-secondary, #555);
+  font-size: 12px;
+  line-height: 20px;
 }
 
-.context-usage-header {
+.context-usage-headline {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  align-items: baseline;
+  gap: 2px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
-.context-usage-title {
-  font-size: 14px;
-  font-weight: 600;
+.headline-first,
+.headline-last {
+  color: var(--theme-text-muted, #999);
 }
 
-.context-usage-close {
-  background: none;
-  border: none;
-  color: var(--text-color-secondary, #999);
-  font-size: 18px;
-  cursor: pointer;
+.percent {
+  font-weight: 500;
+  color: var(--theme-text, #333);
+  font-variant-numeric: tabular-nums;
+}
+
+.figures {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--theme-text, #333);
+  font-variant-numeric: tabular-nums;
 }
 
 .context-usage-empty {
   text-align: center;
-  color: var(--text-color-secondary, #999);
-  padding: 20px 0;
-}
-
-.context-usage-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 12px;
-}
-
-.context-usage-percent {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.percent-value {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.percent-label {
-  font-size: 12px;
-  color: var(--text-color-secondary, #999);
-}
-
-.context-usage-total {
-  font-size: 12px;
-  color: var(--text-color-secondary, #999);
+  color: var(--theme-text-muted, #999);
+  padding: 16px 0;
 }
 
 .context-usage-bar {
   display: flex;
-  height: 6px;
-  background: var(--bar-bg, #333);
-  border-radius: 3px;
+  gap: 1px;
+  height: 4px;
+  margin: 10px 0 12px;
+  border-radius: 999px;
+  background: var(--theme-surface-hover);
   overflow: hidden;
-  margin-bottom: 16px;
 }
 
 .context-usage-segment {
   height: 100%;
+  border-radius: 1px;
   transition: width 0.3s ease;
 }
 
 .context-usage-categories {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .context-usage-category {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+  color: var(--theme-text-secondary, #555);
 }
 
 .category-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
   flex-shrink: 0;
 }
 
 .category-label {
   flex: 1;
-  color: var(--text-color-secondary, #bbb);
 }
 
 .category-tokens {
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
+  color: var(--theme-text, #333);
 }
 
 .context-usage-compression {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-color, #333);
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--theme-border, rgba(0, 0, 0, 0.06));
 }
 
 .compression-title {
-  font-size: 12px;
-  color: var(--text-color-secondary, #999);
-  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-text-muted, #999);
+  margin-bottom: 6px;
 }
 
 .compression-row {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  color: var(--theme-text-secondary, #555);
 }
 </style>

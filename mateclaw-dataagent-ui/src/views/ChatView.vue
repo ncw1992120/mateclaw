@@ -446,13 +446,6 @@
       </transition>
     </div>
 
-    <!-- Context Usage 详情面板 -->
-    <ContextUsagePanel
-      v-if="chatStore.contextUsagePanelOpen"
-      :usage="chatStore.contextUsage"
-      @close="chatStore.toggleContextUsagePanel"
-    />
-
     <!-- Input Bar -->
     <div class="input-bar">
       <!-- 附件预览区 -->
@@ -601,48 +594,57 @@
                 </span>
               </el-option>
             </el-select>
+            <!-- 上下文使用指示（参考 DSH ContextMeter：锚定在按钮上方的 popover，位于发送按钮左侧）。
+                 仅在有当前会话时展示——新会话 conversationId 为空，不渲染该按钮（避免展示上个会话占比）。 -->
+            <span
+              ref="contextMeterRef"
+              v-if="chatStore.conversationId"
+              class="context-meter"
+              @keydown.esc="closeContextUsagePanel"
+            >
+              <button
+                class="context-usage-ring"
+                type="button"
+                :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
+                @click="chatStore.toggleContextUsagePanel"
+              >
+                <svg class="context-usage-ring__svg" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                  <circle class="ring-bg" cx="7" cy="7" r="5.5" />
+                  <circle
+                    class="ring-fill"
+                    cx="7" cy="7" r="5.5"
+                    :stroke-dasharray="ringDasharray"
+                  />
+                </svg>
+                <el-tooltip
+                  :content="ringTooltip"
+                  placement="top-end"
+                  :show-after="300"
+                >
+                  <span class="context-usage-ring__hit" />
+                </el-tooltip>
+              </button>
+              <ContextUsagePanel
+                v-if="chatStore.contextUsagePanelOpen"
+                :usage="chatStore.contextUsage"
+              />
+            </span>
             <button v-if="chatStore.isStreaming" class="btn-stop" type="button" @click="handleStop">
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="6" width="12" height="12" rx="2"/>
               </svg>
             </button>
             <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z"/>
               </svg>
             </button>
           </div>
         </div>
 
-        <!-- Context Usage 圆圈指示器（移至提问框右上角外侧，见 .input-bar 层级） -->
+        <!-- Context Usage 圆圈指示器（已移至 footer-send，见 DSH ContextMeter 布局） -->
       </div>
 
-      <!-- Context Usage 圆圈指示器 -->
-      <button
-        class="context-usage-ring"
-        type="button"
-        :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
-        @click="chatStore.toggleContextUsagePanel"
-      >
-        <svg class="context-usage-ring__svg" viewBox="0 0 36 36">
-          <circle class="ring-bg" cx="18" cy="18" r="14" />
-          <circle
-            class="ring-fill"
-            cx="18" cy="18" r="14"
-            :stroke-dasharray="ringDasharray"
-            :stroke="ringColor"
-          />
-        </svg>
-        <span class="context-usage-ring__label">{{ ringPercent }}</span>
-        <el-tooltip
-          :content="ringTooltip"
-          placement="top-end"
-          :show-after="300"
-        >
-          <span class="context-usage-ring__hit" />
-        </el-tooltip>
-      </button>
     </div>
 
     <!-- 指标自定义查询抽屉 -->
@@ -1334,25 +1336,13 @@ const isUploading = ref(false)
 /** 一键优化中状态 */
 const isOptimizing = ref(false)
 
-/** 上下文使用圆圈指示器计算属性 */
-const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 14
-const ringPercent = computed(() => {
-  const usage = chatStore.contextUsage
-  if (!usage) return '0%'
-  return `${Math.round(usage.usedPercent * 100)}%`
-})
+/** 上下文使用圆圈指示器计算属性（参考 DSH ContextMeter：14 viewBox / r=5.5 / 2px 环） */
+const CIRCLE_CIRCUMFERENCE = 2 * Math.PI * 5.5
 const ringDasharray = computed(() => {
   const usage = chatStore.contextUsage
   const pct = usage ? usage.usedPercent : 0
   const filled = CIRCLE_CIRCUMFERENCE * Math.min(pct, 1)
   return `${filled} ${CIRCLE_CIRCUMFERENCE}`
-})
-const ringColor = computed(() => {
-  const usage = chatStore.contextUsage
-  const pct = usage ? usage.usedPercent : 0
-  if (pct >= 0.9) return '#ef4444'
-  if (pct >= 0.75) return '#f59e0b'
-  return '#22c55e'
 })
 const ringTooltip = computed(() => {
   const usage = chatStore.contextUsage
@@ -1362,6 +1352,29 @@ const ringTooltip = computed(() => {
   const total = usage.contextWindow >= 1000 ? `${(usage.contextWindow / 1000).toFixed(0)}K` : String(usage.contextWindow)
   return `上下文占用 ${pct}%（${used} / ${total} tokens）`
 })
+
+/** 上下文菜单锚点容器引用（用于点击外部关闭判断） */
+const contextMeterRef = ref<HTMLElement | null>(null)
+
+/** 关闭上下文使用面板（参考 DSH ContextMeter：点击外部 / Escape 关闭） */
+function closeContextUsagePanel(): void {
+  chatStore.contextUsagePanelOpen = false
+}
+
+/** 点击外部关闭：当面板打开且点击落在锚点容器外时关闭 */
+function onContextOutsideClick(e: MouseEvent): void {
+  if (!chatStore.contextUsagePanelOpen) return
+  const el = contextMeterRef.value
+  if (el && e.target instanceof Node && el.contains(e.target)) return
+  chatStore.contextUsagePanelOpen = false
+}
+
+/** Escape 关闭：面板打开时按 Esc 关闭 */
+function onContextEscape(e: KeyboardEvent): void {
+  if (e.key === 'Escape' && chatStore.contextUsagePanelOpen) {
+    chatStore.contextUsagePanelOpen = false
+  }
+}
 
 /** 文件选择 input 引用 */
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -3815,6 +3828,8 @@ watch(
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  document.addEventListener('mousedown', onContextOutsideClick)
+  document.addEventListener('keydown', onContextEscape)
   chatAreaEl = chatAreaRef.value
   chatAreaEl?.addEventListener('scroll', handleScroll)
   // 初始化底部哨兵的 IntersectionObserver：监测用户是否滚动到底部附近
@@ -3875,6 +3890,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('mousedown', onContextOutsideClick)
+  document.removeEventListener('keydown', onContextEscape)
   chatAreaEl?.removeEventListener('scroll', handleScroll)
   // 清理底部哨兵的 IntersectionObserver
   if (bottomObserver) {
@@ -5828,33 +5845,41 @@ onUnmounted(() => {
 .footer-send {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .model-select-footer {
   width: auto;
   min-width: 140px;
-  max-width: 220px;
+  max-width: none;
 }
 
-.model-select-popper {
-  border-radius: 8px;
-  padding: 4px 0;
+/* 模型选择弹窗（参考 DSH 菜单表面：r12、菜单底色、shadow-lv3、中性文字，去掉高饱和高亮） */
+.model-select-popper.el-select__popper {
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
 }
 
 .model-select-popper .el-select-dropdown__header {
-  padding: 6px 12px;
-  margin-bottom: 2px;
+  padding: 6px 10px 8px;
   border-bottom: 1px solid var(--theme-border);
 }
 
 .model-select-popper .model-select-header {
   display: block;
   padding: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--theme-text-muted);
   line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .model-select-popper .el-select-dropdown__list {
@@ -5863,62 +5888,115 @@ onUnmounted(() => {
 }
 
 .model-select-popper .el-select-dropdown__item {
-  margin: 0 4px;
-  padding: 7px 8px;
-  border-radius: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
   font-size: 12px;
-  line-height: 1.4;
-  color: var(--theme-text);
+  line-height: 1.5;
+  color: var(--theme-text-secondary);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .model-select-popper .el-select-dropdown__item:hover {
   background: var(--theme-surface-hover);
+  color: var(--theme-text);
 }
 
 .model-select-popper .el-select-dropdown__item.is-selected {
-  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
-  color: var(--dark-orange);
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
   font-weight: 600;
 }
 
 .model-select-popper .el-select-dropdown__empty {
-  padding: 12px 8px;
+  padding: 12px 10px;
   font-size: 12px;
   color: var(--theme-text-muted);
 }
 
-.model-select-footer :deep(.el-input__wrapper) {
-  border-radius: 14px;
-  background: var(--theme-surface-hover);
+/* 模型选择（完全参考 DSH InputBar .select：无边框原生 select chip + 自定义 chevron 箭头）。
+   EP 2.14 的 el-select 边框画在 .el-select__wrapper（inset box-shadow），须清除它；
+   同时隐藏 EP 默认 caret，改用 DSH 的 SVG chevron data-uri 作为背景箭头。 */
+.model-select-footer :deep(.el-select__wrapper) {
+  appearance: none;
+  border: none !important;
+  border-radius: 8px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 20px 0 8px;
+  gap: 6px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 12px 12px;
   box-shadow: none !important;
-  border: 1px solid var(--theme-border);
-  padding: 0 8px;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  white-space: nowrap;
+  transition: background-color 120ms ease;
 }
 
-.model-select-footer :deep(.el-input__wrapper:hover) {
-  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
-  border-color: var(--theme-border-strong);
+.model-select-footer :deep(.el-select__wrapper.is-hovering),
+.model-select-footer :deep(.el-select:hover .el-select__wrapper),
+.model-select-footer :deep(.el-select__wrapper:hover) {
+  background-color: var(--theme-surface-hover);
+  box-shadow: none !important;
 }
 
-.model-select-footer :deep(.el-input.is-focus .el-input__wrapper),
-.model-select-footer :deep(.el-input__wrapper.is-focus) {
-  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
-  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+.model-select-footer :deep(.el-select__wrapper.is-focused),
+.model-select-footer :deep(.is-focus .el-select__wrapper),
+.model-select-footer :deep(.el-select.is-focus .el-select__wrapper) {
+  background-color: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  box-shadow: none !important;
 }
 
-.model-select-footer :deep(.el-input__inner) {
-  font-size: 12px;
+.model-select-footer :deep(.el-select.is-disabled .el-select__wrapper) {
+  background-color: transparent;
+  border: none !important;
+  box-shadow: none !important;
+  opacity: 0.5;
+}
+
+/* 隐藏 Element Plus 默认的 caret 图标，改用上面背景 chevron */
+.model-select-footer :deep(.el-select__caret) {
+  display: none;
+}
+
+.model-select-footer :deep(.el-select__placeholder) {
+  font-size: 13px;
+  color: var(--theme-text-muted);
+}
+
+.model-select-footer :deep(.el-select__selected-item) {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--theme-text-secondary);
+  /* 按模型名称实际长度完整展示，不做省略截断；禁止 flex 压缩导致展示不全 */
+  flex-shrink: 0;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+/* 选择容器与内部输入框同样完整展示模型名称 */
+.model-select-footer :deep(.el-select__selection) {
+  min-width: max-content;
+}
+
+.model-select-footer :deep(.el-select__wrapper .el-input__inner) {
+  font-size: 13px;
   font-weight: 500;
   color: var(--theme-text-secondary);
+  overflow: visible;
+  text-overflow: clip;
 }
 
-.model-select-footer :deep(.el-select__caret) {
-  color: var(--theme-text-muted);
-}
-
-.model-select-footer :deep(.el-input__inner)::placeholder {
-  color: var(--theme-text-muted);
+/* 兼容旧结构：内部 el-input 也清除边框 */
+.model-select-footer :deep(.el-input__wrapper),
+.model-select-footer :deep(.el-input__wrapper:hover),
+.model-select-footer :deep(.el-input__wrapper.is-focus) {
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /** 输入框设置面板 */
@@ -6030,6 +6108,7 @@ onUnmounted(() => {
   color: var(--dark-orange);
 }
 
+/* --- 发送按钮（参考 DSH ui-conversation .primary：纯色圆钮 + 快速微过渡） --- */
 .btn-send {
   display: flex;
   align-items: center;
@@ -6037,34 +6116,41 @@ onUnmounted(() => {
   width: 34px;
   height: 34px;
   border: none;
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease, opacity 120ms ease;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--main-orange) 30%, transparent);
 }
 
 .btn-send svg {
   width: 16px;
   height: 16px;
-  margin-left: 1px;
+  transition: transform 120ms ease;
 }
 
 .btn-send:hover:not(:disabled) {
   background: var(--dark-orange);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--main-orange) 40%, transparent);
+}
+
+.btn-send:hover:not(:disabled) svg {
+  transform: scale(1.08);
+}
+
+.btn-send:active:not(:disabled) {
+  background: var(--dark-orange);
+  transform: scale(0.96);
 }
 
 .btn-send:disabled {
   background: var(--light-grey);
-  color: var(--muted);
+  color: var(--theme-text-muted);
   cursor: default;
-  box-shadow: none;
+  opacity: 1;
 }
 
+/* --- 停止按钮（参考 DSH `.primary` 的 Stop 态：圆形 + 红色纯色） --- */
 .footer-send .btn-stop {
   display: flex;
   align-items: center;
@@ -6072,21 +6158,27 @@ onUnmounted(() => {
   width: 34px;
   height: 34px;
   border: none;
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--theme-surface-elevated);
   color: #ef4444;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease;
   flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px var(--theme-border);
 }
 
 .footer-send .btn-stop svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .footer-send .btn-stop:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.08);
+}
+
+.footer-send .btn-stop:active:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
+  transform: scale(0.96);
 }
 
 /* Metadata */
@@ -6903,71 +6995,69 @@ onUnmounted(() => {
   color: var(--theme-text-muted);
 }
 
-/* ===== 上下文使用圆圈指示器 ===== */
+/* ===== 上下文使用圆圈指示器（参考 DSH ContextMeter：22px 透明圆 + 细环，位于发送按钮左侧） ===== */
+.context-meter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
 .context-usage-ring {
-  position: absolute;
-  right: 20px;
-  top: -12px;
-  width: 24px;
-  height: 24px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
-  border-radius: 50%;
-  background: var(--theme-surface);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
   cursor: pointer;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 120ms ease;
 }
 
 .context-usage-ring:hover {
-  transform: scale(1.08);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  background: var(--theme-surface-hover);
+}
+
+.context-usage-ring:active {
+  background: var(--theme-surface-hover);
 }
 
 .context-usage-ring--active {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 50%, transparent), 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 .context-usage-ring--active:hover {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 70%, transparent), 0 3px 12px rgba(0, 0, 0, 0.18);
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
 }
 
 .context-usage-ring__svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  display: block;
+  width: 13px;
+  height: 13px;
   transform: rotate(-90deg);
 }
 
 .ring-bg {
   fill: none;
-  stroke: var(--theme-border, #333);
-  stroke-width: 2.8;
-  opacity: 0.4;
+  stroke: var(--theme-border-strong);
+  stroke-width: 1.5;
 }
 
 .ring-fill {
   fill: none;
-  stroke-width: 2.8;
+  stroke: var(--theme-text-muted);
+  stroke-width: 1.5;
   stroke-linecap: round;
-  transition: stroke-dasharray 0.4s ease, stroke 0.3s ease;
-}
-
-.context-usage-ring__label {
-  font-size: 7px;
-  font-weight: 700;
-  color: var(--theme-text);
-  line-height: 1;
-  pointer-events: none;
+  transition: stroke-dasharray 0.3s ease, stroke 0.25s ease;
 }
 
 .context-usage-ring__hit {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
+  border-radius: 999px;
 }</style>
