@@ -50,15 +50,16 @@ export const useAgentStore = defineStore('agent', () => {
     return updated
   }
 
-  /** 删除 Agent */
-  async function deleteAgent(id: number | string): Promise<void> {
-    const workspaceId = currentAgent.value?.workspaceId
+  /** 删除 Agent（workspaceId 缺省时从列表或当前选中项兜底获取，确保删除后列表刷新） */
+  async function deleteAgent(id: number | string, workspaceId?: number): Promise<void> {
+    const target = agents.value.find((agent) => agent.id === id)
+    const wsId = workspaceId ?? target?.workspaceId ?? currentAgent.value?.workspaceId
     await agentApi.remove(id)
     if (currentAgent.value?.id === id) {
       currentAgent.value = null
     }
-    if (workspaceId) {
-      await fetchAgents(workspaceId)
+    if (wsId) {
+      await fetchAgents(wsId)
     }
   }
 

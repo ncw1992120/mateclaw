@@ -137,7 +137,7 @@ async function handleDelete(agent: Agent): Promise<void> {
       t('skillManage.deleteTitle'),
       { type: 'warning' },
     )
-    await agentStore.deleteAgent(agent.id)
+    await agentStore.deleteAgent(agent.id, agent.workspaceId)
     ElMessage.success(t('skillManage.deleteSuccess'))
   } catch {
     // 用户取消或失败

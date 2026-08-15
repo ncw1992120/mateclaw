@@ -139,7 +139,7 @@ async function handleDelete(agent: Agent): Promise<void> {
     return
   }
   try {
-    await agentStore.deleteAgent(agent.id)
+    await agentStore.deleteAgent(agent.id, agent.workspaceId)
     ElMessage.success(t('agent.deleteSuccess'))
   } catch {
     ElMessage.error(t('common.error'))
