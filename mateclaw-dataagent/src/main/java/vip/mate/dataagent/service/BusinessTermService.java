@@ -23,21 +23,23 @@ public interface BusinessTermService {
     List<String> listTenantCodes();
 
     /**
-     * 按租户查询所有启用的术语
+     * 按租户查询术语
      *
-     * @param tenantCode 租户编码
+     * @param tenantCode      租户编码
+     * @param includeDisabled 是否包含停用术语（管理界面传 true 以展示停用项）
      * @return 术语列表
      */
-    List<BusinessTermVO> listByTenantCode(String tenantCode);
+    List<BusinessTermVO> listByTenantCode(String tenantCode, boolean includeDisabled);
 
     /**
-     * 按租户和类目查询启用的术语
+     * 按租户和类目查询术语
      *
-     * @param tenantCode 租户编码
-     * @param category   类目
+     * @param tenantCode      租户编码
+     * @param category        类目
+     * @param includeDisabled 是否包含停用术语
      * @return 术语列表
      */
-    List<BusinessTermVO> listByTenantCodeAndCategory(String tenantCode, String category);
+    List<BusinessTermVO> listByTenantCodeAndCategory(String tenantCode, String category, boolean includeDisabled);
 
     /**
      * 根据 ID 获取术语

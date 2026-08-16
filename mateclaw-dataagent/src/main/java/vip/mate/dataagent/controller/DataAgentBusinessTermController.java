@@ -38,17 +38,18 @@ public class DataAgentBusinessTermController {
     }
 
     /**
-     * 按租户查询所有启用的术语
+     * 按租户查询术语（默认仅启用；includeDisabled=true 时包含停用术语，供管理界面展示）
      */
     @GetMapping
-    @Operation(summary = "查询术语列表", description = "按租户编码查询所有启用的术语，可按类目筛选")
+    @Operation(summary = "查询术语列表", description = "按租户编码查询术语，可按类目筛选；includeDisabled=true 时包含停用术语")
     public R<List<BusinessTermVO>> list(
             @Parameter(description = "租户编码") @RequestParam String tenantCode,
-            @Parameter(description = "类目（可选）") @RequestParam(required = false) String category) {
+            @Parameter(description = "类目（可选）") @RequestParam(required = false) String category,
+            @Parameter(description = "是否包含停用术语") @RequestParam(defaultValue = "false") boolean includeDisabled) {
         if (category != null && !category.isBlank()) {
-            return R.ok(businessTermService.listByTenantCodeAndCategory(tenantCode, category));
+            return R.ok(businessTermService.listByTenantCodeAndCategory(tenantCode, category, includeDisabled));
         }
-        return R.ok(businessTermService.listByTenantCode(tenantCode));
+        return R.ok(businessTermService.listByTenantCode(tenantCode, includeDisabled));
     }
 
     /**

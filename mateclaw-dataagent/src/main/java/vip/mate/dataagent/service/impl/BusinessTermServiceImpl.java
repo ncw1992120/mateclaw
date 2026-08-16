@@ -79,27 +79,31 @@ public class BusinessTermServiceImpl implements BusinessTermService {
     }
 
     /**
-     * 按租户查询所有启用的术语
+     * 按租户查询术语（includeDisabled=true 时包含停用术语，供管理界面展示）
      */
     @Override
-    public List<BusinessTermVO> listByTenantCode(String tenantCode) {
+    public List<BusinessTermVO> listByTenantCode(String tenantCode, boolean includeDisabled) {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
-        wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
+        if (!includeDisabled) {
+            wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
+        }
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
         Map<Long, String> parentNameMap = buildParentNameMap(entities);
         return entities.stream().map(e -> toVO(e, parentNameMap)).collect(Collectors.toList());
     }
 
     /**
-     * 按租户和类目查询启用的术语
+     * 按租户和类目查询术语（includeDisabled=true 时包含停用术语）
      */
     @Override
-    public List<BusinessTermVO> listByTenantCodeAndCategory(String tenantCode, String category) {
+    public List<BusinessTermVO> listByTenantCodeAndCategory(String tenantCode, String category, boolean includeDisabled) {
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         wrapper.eq(BusinessTermEntity::getCategory, category);
-        wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
+        if (!includeDisabled) {
+            wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
+        }
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
         Map<Long, String> parentNameMap = buildParentNameMap(entities);
         return entities.stream().map(e -> toVO(e, parentNameMap)).collect(Collectors.toList());
@@ -252,7 +256,7 @@ public class BusinessTermServiceImpl implements BusinessTermService {
     @Override
     public List<BusinessTermVO> searchByKeyword(String tenantCode, String keyword) {
         if (keyword == null || keyword.isBlank()) {
-            return listByTenantCode(tenantCode);
+            return listByTenantCode(tenantCode, false);
         }
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
