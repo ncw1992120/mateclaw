@@ -631,12 +631,12 @@ watch(() => props.visible, (v) => {
 }
 
 .import-tab:hover:not(:disabled) {
-  color: var(--main-orange, #f05a23);
+  color: var(--main-orange, #4176E6);
 }
 
 .import-tab.active {
-  color: var(--main-orange, #f05a23);
-  border-bottom-color: var(--main-orange, #f05a23);
+  color: var(--main-orange, #4176E6);
+  border-bottom-color: var(--main-orange, #4176E6);
 }
 
 .import-tab:disabled {
@@ -693,8 +693,8 @@ watch(() => props.visible, (v) => {
 }
 
 .form-input:focus {
-  border-color: var(--main-orange, #f05a23);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
+  border-color: var(--main-orange, #4176E6);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.1);
 }
 
 .form-input:disabled {
@@ -778,7 +778,7 @@ watch(() => props.visible, (v) => {
 }
 
 .market-item:hover {
-  border-color: var(--main-orange, #f05a23);
+  border-color: var(--main-orange, #4176E6);
 }
 
 .market-item.installing {
@@ -847,8 +847,8 @@ watch(() => props.visible, (v) => {
 
 .dropzone:hover,
 .dropzone.active {
-  border-color: var(--main-orange, #f05a23);
-  background: rgba(240, 90, 35, 0.04);
+  border-color: var(--main-orange, #4176E6);
+  background: rgba(65, 118, 230, 0.04);
 }
 
 .dropzone.disabled {
@@ -890,7 +890,7 @@ watch(() => props.visible, (v) => {
   margin-top: 6px;
   background: transparent;
   border: none;
-  color: var(--main-orange, #f05a23);
+  color: var(--main-orange, #4176E6);
   font-size: 12px;
   cursor: pointer;
   font-family: inherit;
@@ -942,7 +942,7 @@ watch(() => props.visible, (v) => {
   align-items: center;
   gap: 6px;
   padding: 9px 16px;
-  background: var(--main-orange, #f05a23);
+  background: var(--main-orange, #4176E6);
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -979,8 +979,8 @@ watch(() => props.visible, (v) => {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--main-orange, #f05a23);
-  color: var(--main-orange, #f05a23);
+  border-color: var(--main-orange, #4176E6);
+  color: var(--main-orange, #4176E6);
 }
 
 .btn-secondary:disabled {

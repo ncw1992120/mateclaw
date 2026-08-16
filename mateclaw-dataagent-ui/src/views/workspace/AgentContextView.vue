@@ -556,12 +556,12 @@ onMounted(async () => {
 
 .file-item:hover {
   border-color: var(--main-orange);
-  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 2px 8px rgba(65, 118, 230, 0.08);
 }
 
 .file-item.is-prompt {
-  background: rgba(240, 90, 35, 0.04);
-  border-color: rgba(240, 90, 35, 0.2);
+  background: rgba(65, 118, 230, 0.04);
+  border-color: rgba(65, 118, 230, 0.2);
 }
 
 .file-main {

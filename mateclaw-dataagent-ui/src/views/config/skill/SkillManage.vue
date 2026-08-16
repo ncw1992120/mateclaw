@@ -869,7 +869,7 @@ function getSourceClass(skill: Skill): string {
   font-weight: 600;
 }
 .cat-tab.active .cat-count {
-  background: rgba(240, 90, 35, 0.18);
+  background: rgba(65, 118, 230, 0.18);
   color: var(--main-orange);
 }
 
@@ -905,7 +905,7 @@ function getSourceClass(skill: Skill): string {
 .skill-search-input:focus,
 .skill-status-filter:focus {
   border-color: var(--main-orange);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.1);
 }
 
 /* 段（已启用 / 未启用） */
@@ -954,12 +954,12 @@ function getSourceClass(skill: Skill): string {
 }
 .skill-card:hover {
   border-color: var(--main-orange);
-  box-shadow: 0 4px 14px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 4px 14px rgba(65, 118, 230, 0.08);
   transform: translateY(-1px);
 }
 .skill-card:focus-visible {
   border-color: var(--main-orange);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.12);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.12);
 }
 .skill-card.disabled {
   opacity: 0.62;
@@ -982,7 +982,7 @@ function getSourceClass(skill: Skill): string {
 }
 .icon-bg-blue { background: rgba(64, 158, 255, 0.12); }
 .icon-bg-purple { background: rgba(146, 84, 222, 0.12); }
-.icon-bg-orange { background: rgba(240, 90, 35, 0.12); }
+.icon-bg-orange { background: rgba(65, 118, 230, 0.12); }
 .icon-bg-grey { background: var(--lighter-grey); }
 .skill-icon {
   font-size: 20px;
@@ -1330,7 +1330,7 @@ function getSourceClass(skill: Skill): string {
 .form-input:focus,
 .form-textarea:focus {
   border-color: var(--main-orange);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.1);
 }
 .form-input:disabled,
 .form-textarea:disabled {

@@ -612,7 +612,7 @@ function applySkill(): void {
   font-size: 14px;
   font-weight: 700;
   margin-top: 16px;
-  box-shadow: 0 2px 8px rgba(240, 90, 35, 0.3);
+  box-shadow: 0 2px 8px rgba(65, 118, 230, 0.3);
   cursor: pointer;
   font-family: inherit;
   flex-shrink: 0;

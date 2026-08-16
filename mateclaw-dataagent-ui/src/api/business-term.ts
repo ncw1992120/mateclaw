@@ -9,10 +9,10 @@ export function listTenantCodes() {
   return api.get<string[]>(`${BASE_URL}/tenants`)
 }
 
-/** 查询术语列表 */
-export function list(tenantCode: string, category?: string) {
+/** 查询术语列表（管理界面传 includeDisabled=true 以展示停用术语） */
+export function list(tenantCode: string, category?: string, includeDisabled = false) {
   return api.get<BusinessTerm[]>(BASE_URL, {
-    params: { tenantCode, category },
+    params: { tenantCode, category, includeDisabled },
   })
 }
 

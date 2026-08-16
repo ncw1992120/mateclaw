@@ -233,9 +233,9 @@ function setChartOption(type: string): void {
       yAxis: { type: 'value', axisLabel: { fontSize: 9, color: '#aaa' }, splitLine: { lineStyle: { color: '#eee' } } },
       series: [{
         type: 'line', smooth: true, data: lineData,
-        lineStyle: { color: '#F05A23', width: 2 },
-        itemStyle: { color: '#F05A23' },
-        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(240,90,35,0.2)' }, { offset: 1, color: 'rgba(240,90,35,0)' }] } }
+        lineStyle: { color: '#4176E6', width: 2 },
+        itemStyle: { color: '#4176E6' },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(65,118,230,0.2)' }, { offset: 1, color: 'rgba(65,118,230,0)' }] } }
       }]
     }, true)
   } else if (type === 'bar') {
@@ -245,7 +245,7 @@ function setChartOption(type: string): void {
       xAxis: { type: 'category', data: days, axisLabel: { fontSize: 9, color: '#aaa' } },
       yAxis: { type: 'value', axisLabel: { fontSize: 9, color: '#aaa' }, splitLine: { lineStyle: { color: '#eee' } } },
       series: [
-        { type: 'bar', data: barData, barWidth: 20, itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#F05A23' }, { offset: 1, color: '#FECEAF' }] }, borderRadius: [4, 4, 0, 0] } },
+        { type: 'bar', data: barData, barWidth: 20, itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#4176E6' }, { offset: 1, color: '#B7C8FE' }] }, borderRadius: [4, 4, 0, 0] } },
         { type: 'line', smooth: true, data: lineData, lineStyle: { color: '#7F7F7F', width: 2, type: 'dashed' }, itemStyle: { color: '#7F7F7F' }, symbol: 'none' }
       ]
     }, true)
@@ -257,7 +257,7 @@ function setChartOption(type: string): void {
       yAxis: { type: 'value', axisLabel: { fontSize: 9, color: '#aaa' }, splitLine: { lineStyle: { color: '#eee' } } },
       series: [{
         type: 'bar', barWidth: 20,
-        data: barData.map(v => ({ value: v, itemStyle: { color: v > 120 ? '#E75C01' : v > 100 ? '#F05A23' : '#FECEAF' } })),
+        data: barData.map(v => ({ value: v, itemStyle: { color: v > 120 ? '#4868B2' : v > 100 ? '#4176E6' : '#B7C8FE' } })),
         itemStyle: { borderRadius: [4, 4, 0, 0] }
       }]
     }, true)

@@ -279,12 +279,12 @@ async function handleDelete(row: Workspace): Promise<void> {
 }
 
 .role-tag.owner {
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
   color: var(--main-orange);
 }
 
 .role-tag.admin {
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
   color: var(--main-orange);
 }
 

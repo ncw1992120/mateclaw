@@ -409,7 +409,7 @@ function describe(expr: string): string {
 }
 .cron-input:focus {
   border-color: var(--main-orange);
-  box-shadow: 0 0 0 2px rgba(240, 90, 35, 0.1);
+  box-shadow: 0 0 0 2px rgba(65, 118, 230, 0.1);
 }
 .cron-input.mono,
 .mono {
@@ -600,7 +600,7 @@ function describe(expr: string): string {
 }
 .cron-type-opt.active {
   border-color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.1);
   color: var(--main-orange);
 }
 .cron-type-opt input {

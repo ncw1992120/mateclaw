@@ -48,7 +48,7 @@ const { t } = useI18n()
 const { hasPermission } = usePermission()
 
 /** Tab 可选取值 */
-const TAB_KEYS = ['skill', 'data', 'dictionary', 'agent', 'model', 'knowledge', 'workspace'] as const
+const TAB_KEYS = ['skill', 'data', 'dictionary', 'knowledge', 'agent', 'model', 'workspace'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 
 /** 当前激活的 Tab（刷新后保留） */
@@ -83,6 +83,11 @@ const tabs: TabConfig[] = [
     permission: PERMISSION.BUSINESS_TERM_VIEW,
   },
   {
+    key: 'knowledge',
+    labelKey: 'configCenter.tabKnowledge',
+    permission: PERMISSION.KNOWLEDGE_VIEW,
+  },
+  {
     key: 'agent',
     labelKey: 'configCenter.tabAgent',
     permission: PERMISSION.AGENT_VIEW,
@@ -91,11 +96,6 @@ const tabs: TabConfig[] = [
     key: 'model',
     labelKey: 'configCenter.tabModel',
     permission: PERMISSION.MODEL_VIEW,
-  },
-  {
-    key: 'knowledge',
-    labelKey: 'configCenter.tabKnowledge',
-    permission: PERMISSION.KNOWLEDGE_VIEW,
   },
   {
     key: 'workspace',

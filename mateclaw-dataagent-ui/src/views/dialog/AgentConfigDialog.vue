@@ -242,7 +242,7 @@ async function handleToggleEnable(agent: Agent, val: boolean): Promise<void> {
 }
 
 .agent-row:hover {
-  border-color: #d0d5dd;
+  border-color: var(--theme-border-strong);
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
 
@@ -322,7 +322,7 @@ async function handleToggleEnable(agent: Agent, val: boolean): Promise<void> {
 }
 
 .edit-btn:hover {
-  background: rgba(240, 90, 35, 0.04);
+  background: rgba(65, 118, 230, 0.04);
 }
 
 .delete-btn:hover {

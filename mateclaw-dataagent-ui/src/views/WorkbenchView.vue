@@ -13,11 +13,10 @@
             @click="sidebarCollapsed = !sidebarCollapsed"
           >
             <span class="collapse-btn-svg" aria-hidden="true">
-              <svg v-if="sidebarCollapsed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"/>
+              <!-- 参考 DSH IconPanelLeftOutline16：面板左栏图标 -->
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2"/>
+                <line x1="5.4" y1="1.4" x2="5.4" y2="14.6"/>
               </svg>
             </span>
           </button>
@@ -159,14 +158,11 @@
           <!-- 操作按钮行 -->
           <div class="history-actions">
             <button class="history-collapse-btn" :title="historyCollapsed ? t('conversation.expand') : t('conversation.collapse')" @click="historyCollapsed = !historyCollapsed">
-              <span v-if="historyCollapsed" class="collapse-svg" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-              </span>
-              <span v-else class="collapse-svg" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 18 9 12 15 6"/>
+              <span class="collapse-svg" aria-hidden="true">
+                <!-- 参考 DSH IconPanelLeftOutline16：面板左栏图标 -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2"/>
+                  <line x1="5.4" y1="1.4" x2="5.4" y2="14.6"/>
                 </svg>
               </span>
             </button>
@@ -790,7 +786,7 @@ onBeforeUnmount(() => {
 .top-collapse-btn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 50%;
 }
 
 /* 工作区切换器 */
@@ -934,21 +930,25 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
-  font-size: 12px;
-  color: var(--muted);
+  color: var(--theme-text-secondary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .collapse-btn:hover {
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--main-orange);
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.collapse-btn:active {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
 }
 
 .collapse-btn-svg {
@@ -1321,16 +1321,21 @@ onBeforeUnmount(() => {
   height: 28px;
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   flex-shrink: 0;
-  border-radius: 8px;
-  transition: all 0.2s ease;
+  border-radius: 50%;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .history-collapse-btn:hover {
-  color: var(--main-orange);
   background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.history-collapse-btn:active {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
 }
 
 .collapse-svg {

@@ -20,12 +20,12 @@
           <svg viewBox="0 0 240 80" preserveAspectRatio="none">
             <defs>
               <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="#f05a23" stop-opacity="0.35" />
-                <stop offset="100%" stop-color="#f05a23" stop-opacity="0" />
+                <stop offset="0%" stop-color="#4176E6" stop-opacity="0.35" />
+                <stop offset="100%" stop-color="#4176E6" stop-opacity="0" />
               </linearGradient>
             </defs>
             <path d="M0,60 Q30,55 60,45 T120,35 T180,42 T240,20 L240,80 L0,80 Z" fill="url(#chartGradient)" />
-            <path d="M0,60 Q30,55 60,45 T120,35 T180,42 T240,20" fill="none" stroke="#f05a23" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M0,60 Q30,55 60,45 T120,35 T180,42 T240,20" fill="none" stroke="#4176E6" stroke-width="2.5" stroke-linecap="round" />
           </svg>
         </div>
         <div class="chart-bars">
@@ -98,7 +98,7 @@ const barHeights = [45, 62, 38, 78, 55, 88, 70]
   font-size: 8px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
 }
 
 .metric-row {
@@ -153,7 +153,7 @@ const barHeights = [45, 62, 38, 78, 55, 88, 70]
 .chart-bar {
   flex: 1;
   border-radius: 2px 2px 0 0;
-  background: linear-gradient(180deg, #f05a23 0%, #ffab7e 100%);
+  background: linear-gradient(180deg, #4176E6 0%, #ffab7e 100%);
   opacity: 0.85;
   animation: grow-bar 1.2s ease-out forwards;
   transform-origin: bottom;

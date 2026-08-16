@@ -125,6 +125,9 @@ export default {
     toolResponseParams: '响应参数',
     uploadAttachment: '上传附件',
     optimizePrompt: '优化输入',
+    quickAsk: '快捷提问',
+    zoomChart: '放大图表',
+    close: '关闭',
     settings: '设置',
     recommendedQuestions: '你可能还想问',
     expandRecQuestions: '查看{count}个推荐问题',
@@ -149,7 +152,7 @@ export default {
     defaultPrompt: '请帮我分析当前数据',
   },
   metricQuery: {
-    title: '指标查询',
+    title: '快捷提问',
     datasource: '数据源',
     selectDatasource: '请选择数据源',
     metrics: '指标',
@@ -175,7 +178,7 @@ export default {
     queryTimeRange: '时间范围',
     queryFilters: '筛选条件',
     cancel: '取消',
-    query: '查询',
+    query: '提交',
   },
   chart: {
     viewMetric: '指标查看',

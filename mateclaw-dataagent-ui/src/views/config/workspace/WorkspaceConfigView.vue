@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
 .sub-menu-item.active {
   color: var(--main-orange);
   font-weight: 600;
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.1);
 }
 
 /* 右侧内容区 */

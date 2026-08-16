@@ -906,10 +906,10 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-input:disabled {
-  background: #f7f8fa;
-  color: #1d2129;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
   cursor: not-allowed;
-  border-color: #e5e6eb;
+  border-color: var(--theme-border);
 }
 
 .form-input::placeholder {

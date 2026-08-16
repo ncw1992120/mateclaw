@@ -16,7 +16,7 @@
             <path
               d="M0,40 Q30,35 60,25 T120,20 T200,10"
               fill="none"
-              stroke="#f05a23"
+              stroke="#4176E6"
               stroke-width="2.5"
               stroke-linecap="round"
               stroke-dasharray="260"
@@ -70,7 +70,7 @@ defineOptions({
 .report-cover {
   position: relative;
   padding: 14px 16px;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
   color: #fff;
 }
 
@@ -143,7 +143,7 @@ defineOptions({
   border-radius: 10px;
   font-size: 10px;
   font-weight: 500;
-  color: #f05a23;
-  background: rgba(240, 90, 35, 0.1);
+  color: #4176E6;
+  background: rgba(65, 118, 230, 0.1);
 }
 </style>

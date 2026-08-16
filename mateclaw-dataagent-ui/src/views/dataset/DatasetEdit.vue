@@ -1147,9 +1147,9 @@ function handleMore(): void {}
 }
 
 .cancel-btn {
-  background: #fff;
-  color: #4e5969;
-  border-color: #dcdfe6;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
+  border-color: var(--theme-border-strong);
 }
 
 .cancel-btn:hover {

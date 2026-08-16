@@ -1341,7 +1341,7 @@ const indicators = reactive([
   border-color: var(--main-orange);
   color: var(--main-orange);
   background: var(--theme-surface-hover);
-  box-shadow: 0 1px 3px rgba(240, 90, 35, 0.12);
+  box-shadow: 0 1px 3px rgba(65, 118, 230, 0.12);
 }
 
 .section-action-btn:disabled {
@@ -1352,7 +1352,7 @@ const indicators = reactive([
 .btn-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(240, 90, 35, 0.2);
+  border: 2px solid rgba(65, 118, 230, 0.2);
   border-top-color: var(--main-orange);
   border-radius: 50%;
   animation: panel-btn-spin 0.8s linear infinite;
@@ -1442,7 +1442,7 @@ const indicators = reactive([
 .form-input:focus,
 .form-select:focus {
   border-color: var(--main-orange);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.08);
 }
 
 .form-input:disabled,
@@ -1541,7 +1541,7 @@ const indicators = reactive([
 
 .indicator-card:hover {
   border-color: var(--main-orange);
-  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 4px 12px rgba(65, 118, 230, 0.08);
   transform: translateY(-1px);
 }
 
@@ -1572,7 +1572,7 @@ const indicators = reactive([
   font-size: 10.5px;
   font-weight: 700;
   color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
   border-radius: 3px;
   letter-spacing: 0.3px;
 }
@@ -1809,7 +1809,7 @@ const indicators = reactive([
 }
 
 .tree-node.is-active {
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.1);
 }
 
 .tree-node.is-active::before {

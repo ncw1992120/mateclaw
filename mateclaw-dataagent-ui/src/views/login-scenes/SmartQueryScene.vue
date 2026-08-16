@@ -59,7 +59,7 @@ defineOptions({
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
 }
 
 .chat-dot {
@@ -106,7 +106,7 @@ defineOptions({
   font-size: 9px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
   flex-shrink: 0;
 }
 
@@ -119,7 +119,7 @@ defineOptions({
 }
 
 .message.user .bubble {
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
   color: #fff;
   border-bottom-right-radius: 4px;
 }

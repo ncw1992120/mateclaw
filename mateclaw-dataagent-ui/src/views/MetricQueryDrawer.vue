@@ -798,7 +798,7 @@ function handleClose(): void {
   font-size: 10px;
   line-height: 16px;
   border-radius: 3px;
-  background: var(--main-orange, #f05a23);
+  background: var(--main-orange, #4176E6);
   color: #fff;
   opacity: 0.8;
 }

@@ -99,7 +99,7 @@ function scrollToHeading(id: string): void {
   color: var(--main-orange);
   border-left-color: var(--main-orange);
   font-weight: 500;
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
 }
 
 .toc-item.level-1 { padding-left: 14px; }

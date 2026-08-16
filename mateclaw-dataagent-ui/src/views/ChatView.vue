@@ -126,9 +126,20 @@
                         <Transition name="seg-slide">
                           <div
                             v-if="isNarrationExpanded(index, segIdx)"
-                            class="seg-narration__body"
-                            v-html="renderMessageText((seg.thinkingText as string) || '', index)"
-                          />
+                            class="seg-copy-wrap"
+                          >
+                            <button
+                              class="seg-copy-btn"
+                              type="button"
+                              :class="{ copied: execSegCopyState[`${index}-${segIdx}`] === 'copied' }"
+                              :title="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                              @click="handleCopySegment((seg.thinkingText as string) || '', `${index}-${segIdx}`)"
+                            >
+                              <svg v-if="execSegCopyState[`${index}-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                              <svg v-else viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </button>
+                            <div class="seg-narration__body" v-html="renderMessageText((seg.thinkingText as string) || '', index)" />
+                          </div>
                         </Transition>
                       </div>
 
@@ -160,12 +171,40 @@
                         <Transition name="seg-slide">
                           <div v-if="expandedTools.has(segIdx) && (seg.toolArgs != null || seg.toolResult != null || hasDelegationTimeline(seg))" class="seg-tool__body">
                             <div v-if="seg.toolArgs != null" class="seg-tool__section">
-                              <div class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</div>
-                              <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
+                              <div class="seg-tool__section-header">
+                                <span class="seg-tool__section-title">{{ t('chat.toolRequestParams') }}</span>
+                              </div>
+                              <div class="seg-tool__code">
+                                <pre>{{ formatToolBody(seg.toolArgs as string) }}</pre>
+                                <button
+                                  class="seg-copy-btn"
+                                  type="button"
+                                  :class="{ copied: execSegCopyState[`${index}-req-${segIdx}`] === 'copied' }"
+                                  :title="execSegCopyState[`${index}-req-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                                  @click="handleCopySegment((seg.toolArgs as string) || '', `${index}-req-${segIdx}`)"
+                                >
+                                  <svg v-if="execSegCopyState[`${index}-req-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                  <svg v-else viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </button>
+                              </div>
                             </div>
                             <div v-if="seg.toolResult != null" class="seg-tool__section">
-                              <div class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</div>
-                              <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
+                              <div class="seg-tool__section-header">
+                                <span class="seg-tool__section-title">{{ t('chat.toolResponseParams') }}</span>
+                              </div>
+                              <div class="seg-tool__code">
+                                <pre>{{ formatToolBody(seg.toolResult as string) }}</pre>
+                                <button
+                                  class="seg-copy-btn"
+                                  type="button"
+                                  :class="{ copied: execSegCopyState[`${index}-res-${segIdx}`] === 'copied' }"
+                                  :title="execSegCopyState[`${index}-res-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                                  @click="handleCopySegment((seg.toolResult as string) || '', `${index}-res-${segIdx}`)"
+                                >
+                                  <svg v-if="execSegCopyState[`${index}-res-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                  <svg v-else viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </button>
+                              </div>
                             </div>
                             <!-- 委派子 agent 调用树：depth-1 segment 的 childTimeline.children -->
                             <div v-if="hasDelegationTimeline(seg)" class="seg-tool__delegation">
@@ -199,9 +238,20 @@
                         <Transition name="seg-slide">
                           <div
                             v-if="isNarrationExpanded(index, segIdx)"
-                            class="seg-narration__body"
-                            v-html="renderMessageText((seg.text as string) || '', index)"
-                          />
+                            class="seg-copy-wrap"
+                          >
+                            <button
+                              class="seg-copy-btn"
+                              type="button"
+                              :class="{ copied: execSegCopyState[`${index}-${segIdx}`] === 'copied' }"
+                              :title="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                              @click="handleCopySegment((seg.text as string) || '', `${index}-${segIdx}`)"
+                            >
+                              <svg v-if="execSegCopyState[`${index}-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                              <svg v-else viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </button>
+                            <div class="seg-narration__body" v-html="renderMessageText((seg.text as string) || '', index)" />
+                          </div>
                         </Transition>
                       </div>
                     </template>
@@ -285,15 +335,21 @@
             </div>
 
             <!-- Chart Card -->
-            <div v-else-if="card.type === 'chart'" class="chart-box">
+            <div v-else-if="card.type === 'chart'" class="chart-box" @click="openChartLightbox(index, cardIdx)">
               <div class="chart-title">{{ (card.data as ChartCardData).title }}</div>
               <div :ref="(el) => setChartRef(el as HTMLElement, index, cardIdx)" class="mid-chart"></div>
+              <span class="chart-zoom-hint" :title="t('chat.zoomChart')">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </span>
             </div>
 
             <!-- ECharts Option Card（后端返回标准 ECharts option 时直接渲染） -->
-            <div v-else-if="card.type === 'echarts'" class="echarts-box">
+            <div v-else-if="card.type === 'echarts'" class="echarts-box" @click="openChartLightbox(index, cardIdx)">
               <div v-if="(card.data as EChartsOptionData).title" class="echarts-title">{{ (card.data as EChartsOptionData).title }}</div>
               <div :ref="(el) => setEChartsRef(el as HTMLElement, index, cardIdx)" class="echarts-chart"></div>
+              <span class="chart-zoom-hint" :title="t('chat.zoomChart')">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </span>
             </div>
 
             <!-- Clarify Card -->
@@ -550,7 +606,7 @@
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
               </svg>
             </button>
-            <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('metricQuery.title')" @click="openMetricQueryDrawer">
+            <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -620,6 +676,7 @@
                   :content="ringTooltip"
                   placement="top-end"
                   :show-after="300"
+                  :disabled="chatStore.contextUsagePanelOpen"
                 >
                   <span class="context-usage-ring__hit" />
                 </el-tooltip>
@@ -646,6 +703,28 @@
       </div>
 
     </div>
+
+    <!-- 图表放大弹窗 -->
+    <Teleport to="body">
+      <Transition name="chart-lightbox-fade">
+        <div
+          v-if="chartLightbox"
+          class="chart-lightbox"
+          @click.self="closeChartLightbox"
+        >
+          <div class="chart-lightbox-card" role="dialog" aria-modal="true">
+            <div class="chart-lightbox-header">
+              <span class="chart-lightbox-title">{{ chartLightboxTitle }}</span>
+              <button class="chart-lightbox-close" type="button" :title="t('chat.close')" @click="closeChartLightbox">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <!-- 无类型切换：放大展示消息内图表当前选择的类型 -->
+            <div ref="chartLightboxBodyRef" class="chart-lightbox-body"></div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- 指标自定义查询抽屉 -->
     <MetricQueryDrawer
@@ -1687,17 +1766,29 @@ function hasExecutionProcess(msg: typeof chatStore.messages.value[0]): boolean {
   return getExecutionProcessSegments(msg).length > 0
 }
 
-/** 生成"执行过程"摘要：例如"2 个思考 · 3 个工具" */
+/** 生成"执行过程"摘要：例如"2 思考过程 · 3 工具执行"（思考段与中间叙述段均以"思考过程"行展示，需合并计数） */
 function getExecutionProcessSummary(msg: typeof chatStore.messages.value[0]): string {
   const segs = getExecutionProcessSegments(msg)
-  const thinkCount = segs.filter(s => s.type === 'thinking').length
+  const stepCount = segs.filter(s => s.type === 'thinking' || s.type === 'content').length
   const toolCount = segs.filter(s => s.type === 'tool_call').length
-  const contentCount = segs.filter(s => s.type === 'content').length
   const parts: string[] = []
-  if (thinkCount > 0) parts.push(`${thinkCount} ${t('chat.executionStep').toLowerCase()}`)
+  if (stepCount > 0) parts.push(`${stepCount} ${t('chat.executionStep').toLowerCase()}`)
   if (toolCount > 0) parts.push(`${toolCount} ${t('chat.toolExecution').toLowerCase()}`)
-  if (contentCount > 0 && parts.length === 0) parts.push(`${contentCount} 步骤`)
   return parts.length > 0 ? parts.join(' · ') : ''
+}
+
+/** 执行过程各段复制状态（key：`${msgIndex}-${segIdx}` 或 `${msgIndex}-req/res-${segIdx}`） */
+const execSegCopyState = reactive<Record<string, 'idle' | 'copied'>>({})
+
+/** 复制执行过程某一段的文本 */
+function handleCopySegment(text: string, key: string): void {
+  if (!text) return
+  copyToClipboard(text).then(() => {
+    execSegCopyState[key] = 'copied'
+    setTimeout(() => {
+      execSegCopyState[key] = 'idle'
+    }, 2000)
+  }).catch(() => {})
 }
 
 /** 找到最终答案 content 的索引：优先选择最后一条非 segmentOnly 的 content */
@@ -1872,9 +1963,9 @@ function initChart(key: string, msgIndex: number, cardIndex: number): void {
       type: s.type || 'line',
       smooth: !isBar,
       data: s.data,
-      lineStyle: { color: '#F05A23', width: 2 },
-      itemStyle: { color: '#F05A23' },
-      areaStyle: s.type !== 'bar' ? { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(240,90,35,0.2)' }, { offset: 1, color: 'rgba(240,90,35,0)' }] } } : undefined,
+      lineStyle: { color: '#4176E6', width: 2 },
+      itemStyle: { color: '#4176E6' },
+      areaStyle: s.type !== 'bar' ? { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(65,118,230,0.2)' }, { offset: 1, color: 'rgba(65,118,230,0)' }] } } : undefined,
       barWidth: isBar ? 24 : undefined,
     }))
   })
@@ -1924,6 +2015,184 @@ function initEChartsChart(key: string, msgIndex: number, cardIndex: number): voi
 
   instance.setOption(mergedOption)
 }
+
+/* ===== 图表放大弹窗（点击图表卡片或内嵌图表弹出大图查看） ===== */
+
+/** 弹窗中待展示的图表信息：card 来源（消息内卡片）或 block 来源（Markdown 内嵌 echarts 块） */
+interface ChartLightboxPayload {
+  msgIndex?: number
+  cardIndex?: number
+  /** Markdown 内嵌 echarts 块的原始 option（已去除前端布局覆盖字段） */
+  blockOption?: Record<string, any>
+  /** 当前图表类型（block 来源支持类型切换） */
+  blockType?: ChartType
+  /** 弹窗标题 */
+  title?: string
+}
+const chartLightbox = ref<ChartLightboxPayload | null>(null)
+
+/** 弹窗标题 */
+const chartLightboxTitle = computed(() => {
+  const box = chartLightbox.value
+  if (!box) return ''
+  if (box.title) return box.title
+  if (box.msgIndex !== undefined && box.cardIndex !== undefined) {
+    const msg = chatStore.messages[box.msgIndex]
+    const card = msg?.cards?.[box.cardIndex]
+    if (!card) return ''
+    if (card.type === 'chart') return (card.data as ChartCardData).title || ''
+    if (card.type === 'echarts') return (card.data as EChartsOptionData).title || ''
+  }
+  return ''
+})
+
+/** 弹窗图表容器引用 */
+const chartLightboxBodyRef = ref<HTMLElement | null>(null)
+
+/** 弹窗内 ECharts 实例（打开时创建，关闭时销毁） */
+let chartLightboxInstance: echarts.ECharts | null = null
+
+/** 打开图表放大弹窗（card 来源：消息内图表卡片） */
+function openChartLightbox(msgIndex: number, cardIndex: number): void {
+  const msg = chatStore.messages[msgIndex]
+  const card = msg?.cards?.[cardIndex]
+  if (!card || (card.type !== 'chart' && card.type !== 'echarts')) return
+  chartLightbox.value = { msgIndex, cardIndex }
+}
+
+/** 打开图表放大弹窗（block 来源：Markdown 内嵌 echarts 块） */
+function openChartBlockLightbox(htmlEl: HTMLElement): void {
+  const option = echartsBlockOptions.get(htmlEl)
+  if (!option) return
+  let title = ''
+  const rawOption = option.title as Record<string, unknown> | undefined
+  if (rawOption && typeof rawOption.text === 'string') {
+    title = rawOption.text
+  }
+  const type = echartsBlockTypes.get(htmlEl) ?? 'bar'
+  // 与消息内图表当前显示保持一致：初始类型用 AI 原生 option，切换过的类型用重建的标准 option
+  const pristine = echartsBlockPristine.get(htmlEl)
+  const displayOption = pristine && pristine.type === type
+    ? JSON.parse(JSON.stringify(pristine.option))
+    : buildEchartsOption(option, type)
+  chartLightbox.value = {
+    blockOption: displayOption,
+    blockType: type,
+    title,
+  }
+}
+
+/** 渲染弹窗内大图表（根据当前 payload 与类型） */
+async function renderChartLightbox(): Promise<void> {
+  const box = chartLightbox.value
+  if (!box) return
+  await nextTick()
+  const el = chartLightboxBodyRef.value
+  if (!el) return
+  const option = buildLightboxOption(box)
+  if (!option) return
+  if (chartLightboxInstance) {
+    chartLightboxInstance.dispose()
+  }
+  const instance = echarts.init(el)
+  instance.setOption(option)
+  chartLightboxInstance = instance
+  requestAnimationFrame(() => instance.resize())
+}
+
+/** 关闭图表放大弹窗 */
+function closeChartLightbox(): void {
+  if (chartLightboxInstance) {
+    chartLightboxInstance.dispose()
+    chartLightboxInstance = null
+  }
+  chartLightbox.value = null
+}
+
+/** 构建弹窗内大图表的 option（与消息内图表同源数据，放大字号） */
+function buildLightboxOption(box: ChartLightboxPayload): Record<string, unknown> | null {
+  // 来源一：Markdown 内嵌 echarts 块（blockOption 已是与消息内一致的最终显示形态）
+  if (box.blockOption) {
+    const option = JSON.parse(JSON.stringify(box.blockOption)) as Record<string, any>
+    const hasTitle = !!option.title
+    const hasLegend = !!option.legend
+    option.grid = {
+      left: 56,
+      right: 32,
+      top: hasTitle ? (hasLegend ? 72 : 52) : (hasLegend ? 56 : 28),
+      bottom: hasLegend ? 48 : 24,
+      containLabel: true,
+      ...(typeof option.grid === 'object' && option.grid ? option.grid : {}),
+    }
+    return option
+  }
+
+  // 来源二：消息内卡片
+  if (box.msgIndex === undefined || box.cardIndex === undefined) return null
+  const msg = chatStore.messages[box.msgIndex]
+  const card = msg?.cards?.[box.cardIndex]
+  if (!card) return null
+
+  if (card.type === 'chart') {
+    const chartData = card.data as ChartCardData
+    const isBar = chartData.series[0]?.type === 'bar'
+    return {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 56, right: 24, top: 32, bottom: 32 },
+      xAxis: { type: 'category', data: chartData.xData, axisLabel: { fontSize: 12, color: '#999' } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 12, color: '#999' }, splitLine: { lineStyle: { color: '#eee' } } },
+      series: chartData.series.map(s => ({
+        name: s.name,
+        type: s.type || 'line',
+        smooth: !isBar,
+        data: s.data,
+        lineStyle: { color: '#4176E6', width: 2.5 },
+        itemStyle: { color: '#4176E6' },
+        areaStyle: s.type !== 'bar' ? { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(65,118,230,0.2)' }, { offset: 1, color: 'rgba(65,118,230,0)' }] } } : undefined,
+        barWidth: isBar ? 32 : undefined,
+      })),
+    }
+  }
+
+  if (card.type === 'echarts') {
+    const echartsData = card.data as EChartsOptionData
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        ...((echartsData.option.tooltip || {}) as Record<string, unknown>),
+      },
+      grid: {
+        left: 56,
+        right: 24,
+        top: echartsData.title ? 44 : 28,
+        bottom: 32,
+        ...((echartsData.option.grid || {}) as Record<string, unknown>),
+      },
+      ...echartsData.option,
+    }
+  }
+
+  return null
+}
+
+/** 弹窗打开后渲染大图表 */
+watch(chartLightbox, (box) => {
+  if (box) {
+    void renderChartLightbox()
+  }
+})
+
+/** 弹窗打开时监听 Esc 关闭，关闭时移除监听 */
+watch(chartLightbox, (box) => {
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') closeChartLightbox()
+  }
+  if (box) {
+    document.addEventListener('keydown', onKey)
+  } else {
+    document.removeEventListener('keydown', onKey)
+  }
+})
 
 /** ECharts 代码块实例映射（Markdown 内嵌的 ```echarts 占位块） */
 const echartsBlockInstances = new Map<HTMLElement, echarts.ECharts>()
@@ -2671,7 +2940,7 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
       // 数据点多时关掉 symbol 强调连线
       ...(categories.length > 30 ? { showSymbol: false } : {}),
       areaStyle: {
-        color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(240,90,35,0.25)' }, { offset: 1, color: 'rgba(240,90,35,0.02)' }] },
+        color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(65,118,230,0.25)' }, { offset: 1, color: 'rgba(65,118,230,0.02)' }] },
       },
     }))
     return {
@@ -3418,6 +3687,13 @@ function scanAndMountEChartsBlocks(): void {
 
       // 渲染图表类型切换工具栏（含指标查看/解读/列表明细按钮）
       renderEchartsToolbar(htmlEl, initialType, !!metricPayload)
+
+      // 点击图表主体区域放大查看（避开工具栏与浮层按钮）
+      htmlEl.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement
+        if (target.closest('.echarts-toolbar, .echarts-aux-overlay, .echarts-aux-btn')) return
+        openChartBlockLightbox(htmlEl)
+      })
     } catch (e) {
       console.error('[ChatView] ECharts block mount error:', e)
       htmlEl.textContent = 'Chart render error'
@@ -3925,6 +4201,11 @@ onUnmounted(() => {
     document.removeEventListener('click', dropdownOutsideHandler)
     dropdownOutsideHandler = null
   }
+  // 卸载时销毁图表放大弹窗实例
+  if (chartLightboxInstance) {
+    chartLightboxInstance.dispose()
+    chartLightboxInstance = null
+  }
 })
 </script>
 
@@ -3935,6 +4216,17 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   background: var(--theme-bg);
+}
+
+/* 参考 DSH 对话页背景（ui-conversation ConversationRoot .root → --dsw-alias-bg-base）：
+   浅色用微蓝灰近白（neutral-bluish-50 #EDF3FE）作为页面底色，与浮起的白色输入卡片形成层次；
+   暗色用 DSH 的 near-black（neutral-bluish-950 rgb(21,21,23)）。 */
+:global(html[data-theme='light']) .chat-view {
+  background: #EDF3FE;
+}
+
+:global(html[data-theme='dark']) .chat-view {
+  background: #151517;
 }
 
 /* 消息区容器：撑满输入区上方空间，作为悬浮按钮的定位参照 */
@@ -4249,16 +4541,20 @@ onUnmounted(() => {
 .msg {
   display: flex;
   gap: 10px;
-  max-width: 86%;
+  max-width: 100%;
 }
 
+/* 用户消息：保持紧凑聊天式宽度 */
 .msg.user {
   align-self: flex-end;
   flex-direction: row-reverse;
+  max-width: min(720px, 88%);
 }
 
+/* AI 消息：最大化展示宽度，提升长文/表格/图表阅读体验 */
 .msg.ai {
   align-self: flex-start;
+  max-width: 100%;
 }
 
 .ai-content-wrapper {
@@ -4287,24 +4583,33 @@ onUnmounted(() => {
 }
 
 .bubble {
-  border-radius: 16px;
-  padding: 14px 18px;
-  font-size: 14px;
-  line-height: 1.7;
+  border-radius: 22px;
+  padding: 10px 16px;
+  font-size: 16px;
+  line-height: 24px;
 }
 
+/* AI 消息：参考 DSH 无背景气泡（直接文字排版），内部卡片自带表面 */
 .ai-bubble {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
+  background: transparent;
+  border: none;
   color: var(--body-text);
 }
 
+/* 用户气泡：参考 DSH .bubble（浅色底 + 深色文字 + 22px 大圆角，无橙色）。
+   浅色系主题统一用 DSH 的 deepseek-50 浅蓝 rgb(237,243,254)；
+   暗色主题用 bluish-850 深灰 rgb(44,44,46)。 */
 .user-bubble {
-  background: var(--main-orange);
-  color: #fff;
+  background: rgb(237, 243, 254);
+  color: #111;
   /* 保留用户输入中的换行（Ctrl+Enter），同时正常自动折行 */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+:global(html[data-theme='dark']) .user-bubble {
+  background: rgb(44, 44, 46);
+  color: var(--theme-text);
 }
 
 .msg-error {
@@ -4349,8 +4654,8 @@ onUnmounted(() => {
 
 .msg-text {
   color: var(--body-text);
-  font-size: 15px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.6;
   letter-spacing: 0.01em;
 }
 
@@ -4517,7 +4822,8 @@ onUnmounted(() => {
 }
 
 .msg-text :deep(tbody tr:nth-child(even)) {
-  background: var(--theme-surface-hover);
+  /* 中性交替行背景（文字色淡化），不使用带橙色色调的主题 hover 色 */
+  background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
 .streaming-cursor {
@@ -4554,7 +4860,7 @@ onUnmounted(() => {
   margin-left: 0;
   position: relative;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 .qp-accent {
@@ -4650,7 +4956,7 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--theme-text-secondary);
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 /* Chart Card */
@@ -4661,7 +4967,7 @@ onUnmounted(() => {
   padding: 16px;
   margin-left: 0;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 .chart-title {
@@ -4676,6 +4982,116 @@ onUnmounted(() => {
   height: 160px;
 }
 
+/* 图表卡片 hover 显示放大提示 */
+.chart-box,
+.echarts-box {
+  position: relative;
+  cursor: pointer;
+}
+
+.chart-zoom-hint {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--theme-surface-elevated);
+  color: var(--theme-text-muted);
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  pointer-events: none;
+}
+
+.chart-box:hover .chart-zoom-hint,
+.echarts-box:hover .chart-zoom-hint {
+  opacity: 1;
+  color: var(--main-orange);
+}
+
+/* ===== 图表放大弹窗 ===== */
+.chart-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.chart-lightbox-card {
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 100%);
+  max-height: calc(100vh - 96px);
+  background: var(--theme-surface);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.chart-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--theme-border);
+  flex-shrink: 0;
+}
+
+.chart-lightbox-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+  padding: 0;
+}
+
+.chart-lightbox-close:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.chart-lightbox-body {
+  flex: 1;
+  min-height: 420px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.chart-lightbox-fade-enter-active,
+.chart-lightbox-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.chart-lightbox-fade-enter-from,
+.chart-lightbox-fade-leave-to {
+  opacity: 0;
+}
+
 /* ECharts Markdown 内嵌代码块占位元素 */
 :deep(.echarts-block) {
   width: 100%;
@@ -4686,6 +5102,7 @@ onUnmounted(() => {
   margin: 10px 0;
   position: relative;
   padding-top: 36px;
+  cursor: pointer;
 }
 
 :deep(.echarts-block.echarts-error) {
@@ -5087,7 +5504,7 @@ onUnmounted(() => {
   padding: 16px;
   margin-left: 0;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 .echarts-title {
@@ -5112,7 +5529,7 @@ onUnmounted(() => {
   margin-left: 0;
   position: relative;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 .clarify-title {
@@ -5201,7 +5618,7 @@ onUnmounted(() => {
   padding: 16px;
   margin-left: 0;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
 }
 
 .dash-card-title {
@@ -5283,7 +5700,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 12px 16px;
   align-self: flex-start;
-  max-width: 86%;
+  max-width: 100%;
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
@@ -5637,7 +6054,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 12px 20px 20px;
   border-top: 1px solid var(--theme-border);
-  background: var(--theme-bg);
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -5650,14 +6067,14 @@ onUnmounted(() => {
   max-height: 260px;
   padding: 10px 14px 10px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--theme-border);
   background: var(--theme-surface);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .input-bar__card:focus-within {
-  border-color: rgba(0, 0, 0, 0.08);
+  border-color: var(--theme-border-strong);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
 }
 
@@ -6329,7 +6746,7 @@ onUnmounted(() => {
 
 .seg-tool__body pre {
   margin: 0;
-  padding: 10px 12px;
+  padding: 12px 44px 12px 12px;
   font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -6393,7 +6810,7 @@ onUnmounted(() => {
 }
 
 .seg-narration__body {
-  padding: 0 12px 12px 36px;
+  padding: 0 44px 12px 36px;
   font-size: 13px;
   line-height: 1.6;
   color: var(--theme-text-secondary);
@@ -6471,7 +6888,8 @@ onUnmounted(() => {
   align-items: flex-start;
   width: fit-content;
   max-width: 100%;
-  background: var(--theme-surface-hover);
+  /* 中性浅背景（文字色淡化），避免主题表面 hover 的橙色色调 */
+  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
   margin-bottom: 10px;
@@ -6521,6 +6939,66 @@ onUnmounted(() => {
 
 .seg-execution__arrow.is-open {
   transform: rotate(90deg);
+}
+
+/* 叙述段（思考/说明）内容区：保持原有扁平结构，仅作复制按钮定位容器 */
+.seg-copy-wrap {
+  position: relative;
+}
+
+/* 内容区右上角复制按钮（常显） */
+.seg-copy-wrap .seg-copy-btn {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 2;
+}
+
+.seg-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+  padding: 0;
+}
+
+.seg-copy-btn:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.seg-copy-btn.copied {
+  color: var(--main-orange);
+}
+
+/* 工具调用请求/响应：保持原结构，pre 文本盒内右上角放复制按钮 */
+.seg-tool__section {
+  position: relative;
+}
+
+.seg-tool__code {
+  position: relative;
+}
+
+.seg-tool__code .seg-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+/* 工具段标题行 */
+.seg-tool__section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .seg-execution__body {

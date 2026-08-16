@@ -15,8 +15,8 @@
             <svg viewBox="0 0 100 100" class="logo-svg">
               <defs>
                 <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#fff" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="#ffe4d6" stop-opacity="0.9" />
+                  <stop offset="0%" stop-color="#4176e6" stop-opacity="1" />
+                  <stop offset="100%" stop-color="#4868b2" stop-opacity="1" />
                 </linearGradient>
               </defs>
               <rect x="5" y="5" width="90" height="90" rx="15" fill="none" stroke="url(#logoGradient)" stroke-width="4" />
@@ -260,9 +260,9 @@ async function handleLogin(): Promise<void> {
   min-height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 20% 20%, rgba(240, 90, 35, 0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(240, 90, 35, 0.04) 0%, transparent 50%),
-    #f8f9fb;
+    radial-gradient(ellipse at 20% 20%, rgba(65, 118, 230, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(65, 118, 230, 0.03) 0%, transparent 50%),
+    #fbfcfe;
 }
 
 /* 动态背景 */
@@ -270,8 +270,8 @@ async function handleLogin(): Promise<void> {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
@@ -281,16 +281,16 @@ async function handleLogin(): Promise<void> {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 20% 20%, rgba(240, 90, 35, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(240, 90, 35, 0.06) 0%, transparent 50%);
+    radial-gradient(ellipse at 20% 20%, rgba(65, 118, 230, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(65, 118, 230, 0.04) 0%, transparent 50%);
 }
 
 .bg-orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.3;
-  background: #f05a23;
+  opacity: 0.18;
+  background: #4176E6;
   animation: float 12s ease-in-out infinite;
 }
 
@@ -338,7 +338,7 @@ async function handleLogin(): Promise<void> {
   flex-direction: column;
   width: 48%;
   padding: 48px 40px;
-  color: #fff;
+  color: var(--theme-text);
   overflow: hidden;
 }
 
@@ -346,8 +346,8 @@ async function handleLogin(): Promise<void> {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(135deg, #f05a23 0%, #e75c01 100%),
-    url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    linear-gradient(135deg, #EDF3FE 0%, #DCE8FC 100%),
+    url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234176e6' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
 .brand-content {
@@ -363,16 +363,16 @@ async function handleLogin(): Promise<void> {
   height: 72px;
   margin-bottom: 20px;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.7);
   border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 32px rgba(65, 118, 230, 0.12);
   backdrop-filter: blur(8px);
 }
 
 .logo-svg {
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
+  filter: drop-shadow(0 2px 8px rgba(65, 118, 230, 0.15));
 }
 
 .brand-title {
@@ -380,12 +380,13 @@ async function handleLogin(): Promise<void> {
   font-weight: 700;
   margin: 0 0 6px 0;
   letter-spacing: 0.5px;
+  color: #1a1d23;
 }
 
 .brand-subtitle {
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: #6b84ad;
   margin: 0 0 32px 0;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -408,17 +409,17 @@ async function handleLogin(): Promise<void> {
   height: 36px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(65, 118, 230, 0.25);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .scene-arrow:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.45);
-  color: #fff;
+  background: #fff;
+  border-color: rgba(65, 118, 230, 0.5);
+  color: var(--main-orange);
   transform: scale(1.08);
 }
 
@@ -426,8 +427,8 @@ async function handleLogin(): Promise<void> {
   width: 280px;
   height: 200px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(65, 118, 230, 0.12);
   backdrop-filter: blur(12px);
   overflow: hidden;
 }
@@ -456,6 +457,7 @@ async function handleLogin(): Promise<void> {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 8px;
+  color: #1a1d23;
 }
 
 .scene-desc {
@@ -463,7 +465,7 @@ async function handleLogin(): Promise<void> {
   max-width: 320px;
   font-size: 13px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.8);
+  color: #5a6b8c;
 }
 
 .scene-dots {
@@ -478,7 +480,7 @@ async function handleLogin(): Promise<void> {
   height: 8px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(65, 118, 230, 0.3);
   cursor: pointer;
   transition: all 0.25s ease;
 }
@@ -486,7 +488,7 @@ async function handleLogin(): Promise<void> {
 .scene-dot.active {
   width: 24px;
   border-radius: 4px;
-  background: #fff;
+  background: var(--main-orange);
 }
 
 /* 场景切换动画 */
@@ -538,7 +540,7 @@ async function handleLogin(): Promise<void> {
 
 .form-desc {
   font-size: 14px;
-  color: #888;
+  color: #8896b0;
   margin: 0;
 }
 
@@ -550,23 +552,32 @@ async function handleLogin(): Promise<void> {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #555;
+  color: #5a6b8c;
   margin-bottom: 8px;
 }
 
 .login-input :deep(.el-input__wrapper) {
   border-radius: 12px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
-  background: #f8f9fb;
+  box-shadow: 0 0 0 1px rgba(65, 118, 230, 0.14) inset;
+  background: #f4f7fd;
   transition: all 0.25s ease;
+}
+
+.login-input :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px rgba(65, 118, 230, 0.3) inset;
+  background: #f6f9fe;
 }
 
 .login-input :deep(.el-input__inner) {
   color: #333;
 }
 
+.login-input :deep(.el-input__prefix) {
+  color: #8fa8d9;
+}
+
 .login-input :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #f05a23 inset, 0 0 0 4px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 0 0 1px #4176E6 inset, 0 0 0 4px rgba(65, 118, 230, 0.1);
   background: #fff;
 }
 
@@ -583,7 +594,7 @@ async function handleLogin(): Promise<void> {
 }
 
 .login-input :deep(.el-input__password:hover) {
-  color: #f05a23;
+  color: #4176E6;
 }
 
 .login-btn {
@@ -594,15 +605,15 @@ async function handleLogin(): Promise<void> {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 1px;
-  background: linear-gradient(135deg, #f05a23 0%, #e75c01 100%);
+  background: linear-gradient(135deg, #4176E6 0%, #4868B2 100%);
   border: none;
-  box-shadow: 0 8px 24px rgba(240, 90, 35, 0.28);
+  box-shadow: 0 8px 24px rgba(65, 118, 230, 0.28);
   transition: all 0.25s ease;
 }
 
 .login-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(240, 90, 35, 0.38);
+  box-shadow: 0 12px 32px rgba(65, 118, 230, 0.38);
 }
 
 .login-btn:active {
@@ -625,7 +636,7 @@ async function handleLogin(): Promise<void> {
   gap: 12px;
   margin-top: 36px;
   padding-top: 28px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid rgba(65, 118, 230, 0.12);
 }
 
 .feature-tag {
@@ -634,8 +645,8 @@ async function handleLogin(): Promise<void> {
   gap: 6px;
   padding: 6px 12px;
   border-radius: 20px;
-  background: rgba(240, 90, 35, 0.08);
-  color: #f05a23;
+  background: rgba(65, 118, 230, 0.07);
+  color: #4176E6;
   font-size: 12px;
   font-weight: 500;
 }

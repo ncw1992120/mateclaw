@@ -29,9 +29,9 @@
   --db-text-muted: #999999;
   --db-text-quaternary: #bbbbbb;
 
-  /* 边框 */
-  --db-border: rgba(0, 0, 0, 0.06);
-  --db-border-strong: rgba(0, 0, 0, 0.12);
+  /* 边框（跟随主题变量，随主题切换自动变化） */
+  --db-border: var(--theme-border);
+  --db-border-strong: var(--theme-border-strong);
 
   /* 强调色 */
   --db-accent: #6366f1;

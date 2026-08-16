@@ -1342,7 +1342,7 @@ function buildGraphData() {
   graphAvailableTypes.value = Array.from(new Set(allPages.map(p => p.pageType).filter(Boolean) as string[])).sort()
 
   const TYPE_COLORS: Record<string, string> = {
-    concept: '#f05a23', technology: '#409eff', process: '#67c23a',
+    concept: '#4176E6', technology: '#409eff', process: '#67c23a',
     person: '#e6a23c', organization: '#909399', product: '#9254de',
     place: '#36cfc9', event: '#ff4d4f', term: '#ff9c6e', other: '#b37feb',
   }
@@ -1905,7 +1905,7 @@ watch(activeTab, (tab) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
   border-radius: 8px;
   color: var(--main-orange);
 }
@@ -2106,14 +2106,14 @@ watch(activeTab, (tab) => {
 
 .upload-zone:hover {
   border-color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
   color: var(--main-orange);
 }
 
 .upload-zone.is-dragging {
   border-color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.08);
-  box-shadow: 0 0 0 3px rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.08);
+  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.1);
 }
 
 .upload-text {
@@ -2189,7 +2189,7 @@ watch(activeTab, (tab) => {
 
 .raw-item--active {
   border-color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
 }
 
 .raw-item-row {
@@ -2548,7 +2548,7 @@ watch(activeTab, (tab) => {
 }
 
 .sidebar-page-item.active {
-  background: rgba(240, 90, 35, 0.08);
+  background: rgba(65, 118, 230, 0.08);
   color: var(--main-orange);
   font-weight: 500;
 }

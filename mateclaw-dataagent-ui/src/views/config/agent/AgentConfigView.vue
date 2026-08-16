@@ -223,7 +223,7 @@ onMounted(loadAgents)
 
 .agent-card:hover {
   border-color: var(--main-orange);
-  box-shadow: 0 2px 12px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 2px 12px rgba(65, 118, 230, 0.08);
 }
 
 .agent-card.disabled {

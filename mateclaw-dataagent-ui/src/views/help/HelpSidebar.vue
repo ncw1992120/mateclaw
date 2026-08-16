@@ -576,7 +576,7 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
   color: var(--main-orange);
   font-weight: 500;
 }
@@ -658,7 +658,7 @@ defineExpose({ setExpandedKeys })
 .tree-node-status {
   font-size: 11px;
   color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
   border-radius: 10px;
   padding: 1px 6px;
   margin-left: 4px;

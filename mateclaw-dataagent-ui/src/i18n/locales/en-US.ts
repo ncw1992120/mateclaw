@@ -125,6 +125,9 @@ export default {
     toolResponseParams: 'Response Parameters',
     uploadAttachment: 'Upload Attachment',
     optimizePrompt: 'Optimize Input',
+    quickAsk: 'Quick Ask',
+    zoomChart: 'Zoom chart',
+    close: 'Close',
     settings: 'Settings',
     recommendedQuestions: 'You might also want to ask',
     expandRecQuestions: 'View {count} recommended questions',
@@ -149,7 +152,7 @@ export default {
     defaultPrompt: 'Please help me analyze the current data',
   },
   metricQuery: {
-    title: 'Metric Query',
+    title: 'Quick Ask',
     datasource: 'Datasource',
     selectDatasource: 'Select datasource',
     metrics: 'Metrics',
@@ -175,7 +178,7 @@ export default {
     queryTimeRange: 'Time range',
     queryFilters: 'Filters',
     cancel: 'Cancel',
-    query: 'Query',
+    query: 'Submit',
   },
   chart: {
     viewMetric: 'Metrics',

@@ -76,11 +76,29 @@
               </td>
               <td class="col-action">
                 <div class="row-actions">
-                  <button class="icon-btn" :title="t('businessTerm.actionEdit')" @click="handleEdit(term)">✏️</button>
-                  <button class="icon-btn" :title="term.status === 1 ? t('businessTerm.actionDisable') : t('businessTerm.actionEnable')" @click="handleToggle(term)">
-                    {{ term.status === 1 ? '⏸️' : '▶️' }}
+                  <button class="icon-btn" :title="t('businessTerm.actionEdit')" @click="handleEdit(term)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
                   </button>
-                  <button class="icon-btn" :title="t('businessTerm.actionDelete')" @click="handleDelete(term)">🗑️</button>
+                  <button class="icon-btn" :title="term.status === 1 ? t('businessTerm.actionDisable') : t('businessTerm.actionEnable')" @click="handleToggle(term)">
+                    <svg v-if="term.status === 1" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="6" y="4" width="4" height="16" rx="1.5"/>
+                      <rect x="14" y="4" width="4" height="16" rx="1.5"/>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn danger" :title="t('businessTerm.actionDelete')" @click="handleDelete(term)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -100,7 +118,12 @@
       <div class="dialog-card dialog-card-wide">
         <div class="dialog-header">
           <h3 class="dialog-title">{{ isEditing ? t('businessTerm.editTitle') : t('businessTerm.createTitle') }}</h3>
-          <button class="dialog-close" @click="showDialog = false">✕</button>
+          <button class="dialog-close" @click="showDialog = false">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
         <div class="dialog-body">
           <div class="form-group">
@@ -301,14 +324,14 @@ watch(() => props.tenantCode, () => {
   loadTerms()
 })
 
-/** 加载术语列表 */
+/** 加载术语列表（管理界面展示全部，含停用项） */
 async function loadTerms(): Promise<void> {
   if (!props.tenantCode) {
     return
   }
   loading.value = true
   try {
-    const data = await businessTermApi.list(props.tenantCode)
+    const data = await businessTermApi.list(props.tenantCode, undefined, true)
     terms.value = (data || []) as unknown as BusinessTerm[]
   } catch {
     terms.value = []
@@ -317,7 +340,7 @@ async function loadTerms(): Promise<void> {
   }
 }
 
-/** 关键词搜索 */
+/** 关键词搜索（空关键词时同样展示全部含停用项） */
 async function handleSearch(): Promise<void> {
   if (!props.tenantCode) {
     return
@@ -857,24 +880,36 @@ async function handleRebuildEs(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 2px;
 }
 
+/* 行内操作按钮：参考 DSH 图标按钮（28px 圆形、中性 hover 浅填充） */
 .icon-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--theme-text-secondary);
   opacity: 0.65;
-  padding: 2px 4px;
-  border-radius: 3px;
-  transition: all 0.15s;
+  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
   line-height: 1;
 }
 
 .icon-btn:hover {
   opacity: 1;
   background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.icon-btn.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
 }
 
 .pagination-bar {
@@ -941,12 +976,16 @@ async function handleRebuildEs(): Promise<void> {
 .dialog-close {
   background: none;
   border: none;
-  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   color: var(--theme-text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.15s;
+  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .dialog-close:hover {

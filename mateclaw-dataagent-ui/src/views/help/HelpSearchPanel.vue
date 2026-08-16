@@ -112,7 +112,7 @@ defineEmits<{
 
 .search-item:hover {
   border-color: var(--main-orange);
-  box-shadow: 0 4px 12px rgba(240, 90, 35, 0.08);
+  box-shadow: 0 4px 12px rgba(65, 118, 230, 0.08);
   transform: translateY(-1px);
 }
 
@@ -145,7 +145,7 @@ defineEmits<{
 }
 
 .search-item-content :deep(mark) {
-  background: rgba(240, 90, 35, 0.2);
+  background: rgba(65, 118, 230, 0.2);
   color: var(--main-orange);
   padding: 0 2px;
   border-radius: 2px;

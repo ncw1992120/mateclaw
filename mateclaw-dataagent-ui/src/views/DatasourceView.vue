@@ -63,12 +63,24 @@
                       class="item-action-btn"
                       :title="t('datasourcePage.actionRename')"
                       @click="handleRename(ds)"
-                    >✏️</button>
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
                     <button
                       class="item-action-btn danger"
                       :title="t('datasourcePage.actionDelete')"
                       @click="handleDelete(ds)"
-                    >🗑️</button>
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <line x1="10" y1="11" x2="10" y2="17"/>
+                        <line x1="14" y1="11" x2="14" y2="17"/>
+                      </svg>
+                    </button>
                   </div>
                 </div>
                 <div class="item-meta-row">
@@ -771,7 +783,7 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .ds-list-item.active {
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.1);
   border-left-color: var(--main-orange);
 }
 
@@ -787,9 +799,9 @@ async function handleTestAccountConnection(): Promise<void> {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(240, 90, 35, 0.12) 0%, rgba(240, 90, 35, 0.04) 100%);
+  background: linear-gradient(135deg, rgba(65, 118, 230, 0.12) 0%, rgba(65, 118, 230, 0.04) 100%);
   color: var(--main-orange);
-  box-shadow: inset 0 0 0 1px rgba(240, 90, 35, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(65, 118, 230, 0.08);
 }
 
 .item-info {
@@ -835,7 +847,7 @@ async function handleTestAccountConnection(): Promise<void> {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: rgba(240, 90, 35, 0.1);
+  background: rgba(65, 118, 230, 0.1);
   color: var(--main-orange);
   white-space: nowrap;
 }
@@ -915,31 +927,30 @@ async function handleTestAccountConnection(): Promise<void> {
   opacity: 1;
 }
 
+/* 编辑/删除按钮：参考 DSH 图标按钮（28px 圆形、中性 hover 浅填充、次要文字色） */
 .item-action-btn {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 4px;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
   color: var(--theme-text-secondary);
-  transition: background 0.15s, color 0.15s;
+  transition: background-color 120ms ease, color 120ms ease;
   padding: 0;
 }
 
 .item-action-btn:hover {
-  background: var(--main-orange);
-  color: #fff;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
 }
 
 .item-action-btn.danger:hover {
-  background: #f53f3f;
-  color: #fff;
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
 }
 
 /* ========== 右侧：数据源详情 ========== */
@@ -983,7 +994,7 @@ async function handleTestAccountConnection(): Promise<void> {
   padding: 2px 8px;
   border-radius: 10px;
   color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
 }
 
 .ds-status {
@@ -1007,7 +1018,7 @@ async function handleTestAccountConnection(): Promise<void> {
   padding: 2px 8px;
   border-radius: 10px;
   color: var(--main-orange);
-  background: rgba(240, 90, 35, 0.12);
+  background: rgba(65, 118, 230, 0.12);
 }
 
 .toolbar-right {
@@ -1042,7 +1053,7 @@ async function handleTestAccountConnection(): Promise<void> {
   border-color: var(--main-orange);
   color: var(--main-orange);
   background: var(--theme-surface-hover);
-  box-shadow: 0 1px 3px rgba(240, 90, 35, 0.1);
+  box-shadow: 0 1px 3px rgba(65, 118, 230, 0.1);
 }
 
 .toolbar-btn:disabled {
@@ -1053,7 +1064,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .btn-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(240, 90, 35, 0.2);
+  border: 2px solid rgba(65, 118, 230, 0.2);
   border-top-color: var(--main-orange);
   border-radius: 50%;
   animation: ds-btn-spin 0.8s linear infinite;

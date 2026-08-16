@@ -688,7 +688,7 @@ async function handleSend(): Promise<void> {
 }
 
 .ai-chat-message.user .message-content {
-  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+  background: linear-gradient(135deg, #4176e6 0%, #4868b2 100%);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
