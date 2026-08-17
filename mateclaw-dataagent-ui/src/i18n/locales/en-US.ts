@@ -132,6 +132,8 @@ export default {
     recommendedQuestions: 'You might also want to ask',
     expandRecQuestions: 'View {count} recommended questions',
     collapseRecQuestions: 'Collapse',
+    newConversationHint: 'This conversation has reached {count} rounds. To keep answer quality, we recommend starting a new conversation',
+    newConversationHintAction: 'New Conversation',
   },
   smartAskMenu: {
     aumTrend: 'AUM Trend',

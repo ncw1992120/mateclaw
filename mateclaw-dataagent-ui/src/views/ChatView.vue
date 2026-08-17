@@ -504,6 +504,19 @@
 
     <!-- Input Bar -->
     <div class="input-bar">
+      <!-- 多轮对话提示条：达到阈值后建议用户开启新对话，避免上下文膨胀影响回答质量 -->
+      <Transition name="hint-fade">
+        <div v-if="showNewConversationHint" class="new-conversation-hint" role="status">
+          <span class="new-conversation-hint__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </span>
+          <span class="new-conversation-hint__text">{{ t('chat.newConversationHint', { count: NEW_CONVERSATION_HINT_THRESHOLD }) }}</span>
+          <button class="new-conversation-hint__action" type="button" @click="handleNewConversationHintAction">{{ t('chat.newConversationHintAction') }}</button>
+          <button class="new-conversation-hint__close" type="button" :title="t('chat.close')" @click="chatStore.newConversationHintDismissed = true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </Transition>
       <!-- 附件预览区 -->
       <div v-if="pendingAttachments.length > 0" class="attachment-preview">
         <div v-for="(att, idx) in pendingAttachments" :key="idx" class="attachment-tag">
@@ -688,7 +701,7 @@
             </span>
             <button v-if="chatStore.isStreaming" class="btn-stop" type="button" @click="handleStop">
               <svg viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2"/>
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
               </svg>
             </button>
             <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
@@ -3288,24 +3301,26 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
   const msg = chatStore.messages[idx]
   const meta = (msg?.metadata || {}) as Record<string, any>
 
-  // 收集该消息里全部工具调用的入参（toolCalls 与 segments 两处来源，入参可能是字符串或对象）
-  const candidates: Record<string, any>[] = []
+  // 收集该消息里全部工具调用（带入参与是否成功标记；入参可能是字符串或对象）
+  // 优先取「最后一次成功」的指标查询的 datasourceId——若 LLM 曾用错误 id（如幻觉出的 1）再纠正成功，
+  // 自定义查询应沿用纠正后的，而不是第一次（错误）的
+  const candidates: { args: Record<string, any>; success: boolean }[] = []
   const toolCalls = Array.isArray(meta.toolCalls) ? meta.toolCalls : []
   for (const tc of toolCalls) {
     const a = coerceArgs(tc?.arguments)
-    if (a) candidates.push(a)
+    if (a) candidates.push({ args: a, success: tc?.status === 'completed' && tc?.toolSuccess !== false })
   }
   const segments = Array.isArray(meta.segments) ? meta.segments : []
   for (const seg of segments) {
     if (seg && seg.type === 'tool_call') {
       const a = coerceArgs(seg.toolArgs)
-      if (a) candidates.push(a)
+      if (a) candidates.push({ args: a, success: seg.status === 'completed' && seg.toolSuccess !== false })
     }
   }
 
   // 结构化识别指标查询：入参含非空 metrics 数组即视为指标查询（不强依赖工具名，兼容命名/持久化差异）
-  const argsList = candidates.filter((a) => Array.isArray(a.metrics) && a.metrics.length > 0)
-  if (argsList.length === 0) {
+  const queryCalls = candidates.filter((c) => Array.isArray(c.args.metrics) && c.args.metrics.length > 0)
+  if (queryCalls.length === 0) {
     return null
   }
 
@@ -3314,27 +3329,33 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
   const filters: string[] = []
   let timeConstraint: string | null = null
   let datasourceId: string | null = null
-  for (const a of argsList) {
-    if (Array.isArray(a.metrics)) {
-      for (const m of a.metrics) if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
+  // 记录最近一次携带有效 datasourceId 的是否成功；若最近一次成功则优先，否则回退到最近一次非空
+  let lastSuccessId: string | null = null
+  let lastNonEmptyId: string | null = null
+  for (const { args, success } of queryCalls) {
+    if (Array.isArray(args.metrics)) {
+      for (const m of args.metrics) if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
     }
-    if (Array.isArray(a.dimensions)) {
-      for (const d of a.dimensions) if (typeof d === 'string' && !dimensions.includes(d)) dimensions.push(d)
+    if (Array.isArray(args.dimensions)) {
+      for (const d of args.dimensions) if (typeof d === 'string' && !dimensions.includes(d)) dimensions.push(d)
     }
-    if (Array.isArray(a.filters)) {
-      for (const f of a.filters) if (typeof f === 'string' && !filters.includes(f)) filters.push(f)
+    if (Array.isArray(args.filters)) {
+      for (const f of args.filters) if (typeof f === 'string' && !filters.includes(f)) filters.push(f)
     }
-    if (!timeConstraint && typeof a.timeConstraint === 'string' && a.timeConstraint) {
-      timeConstraint = a.timeConstraint
+    if (!timeConstraint && typeof args.timeConstraint === 'string' && args.timeConstraint) {
+      timeConstraint = args.timeConstraint
     }
-    if (datasourceId == null && a.datasourceId != null) {
-      // 保留原始值，不做 Number 转换，避免大整数精度丢失
-      datasourceId = String(a.datasourceId)
+    if (args.datasourceId != null) {
+      const id = String(args.datasourceId)
+      lastNonEmptyId = id
+      if (success) lastSuccessId = id
     }
   }
   if (metrics.length === 0) {
     return null
   }
+  // 优先用最后一次成功的；其次用最后一次非空的
+  datasourceId = lastSuccessId ?? lastNonEmptyId
   return { datasourceId, metrics, dimensions, filters, timeConstraint }
 }
 
@@ -3983,6 +4004,32 @@ const userQuestions = computed(() =>
     .filter(({ msg }) => msg.role === 'user')
     .map(({ msg, index }) => ({ index, content: (msg.content || '').trim() }))
 )
+
+/**
+ * 建议新开对话的轮次阈值（轮 = 用户提一个问题）。
+ * 多轮对话后上下文不断膨胀，达到该阈值即在输入框上方提示用户开启新对话，
+ * 以保证后续回答质量。
+ */
+const NEW_CONVERSATION_HINT_THRESHOLD = 30
+
+/**
+ * 是否展示「建议新开对话」提示条：
+ * - 当前会话已有对话（非空状态）
+ * - 轮次达到阈值（对话轮次 = 用户消息条数）
+ * - 用户未在当前会话中手动关闭该提示
+ */
+const showNewConversationHint = computed(() =>
+  chatStore.messages.length > 0
+  && chatStore.dialogueRoundCount >= NEW_CONVERSATION_HINT_THRESHOLD
+  && !chatStore.newConversationHintDismissed
+)
+
+/** 点击「开启新对话」：清空当前消息与会话 ID，从头开始新一轮对话 */
+function handleNewConversationHintAction(): void {
+  chatStore.clearMessages()
+  inputMessage.value = ''
+  pendingAttachments.value = []
+}
 
 /** 当前视口内高亮的提问消息索引 */
 const activeQuestionIndex = ref<number>(-1)
@@ -6076,6 +6123,84 @@ onUnmounted(() => {
 .input-bar__card:focus-within {
   border-color: var(--theme-border-strong);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* 多轮对话提示条：输入框上方，达到轮次阈值后展示 */
+.new-conversation-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--theme-text-secondary, #555);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.new-conversation-hint__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--main-orange);
+}
+
+.new-conversation-hint__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.new-conversation-hint__text {
+  flex: 1;
+}
+
+.new-conversation-hint__action {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--main-orange);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.new-conversation-hint__action:hover {
+  opacity: 0.88;
+}
+
+.new-conversation-hint__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--theme-text-muted, #999);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.new-conversation-hint__close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--theme-text, #333);
+}
+
+.hint-fade-enter-active,
+.hint-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.hint-fade-enter-from,
+.hint-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .composer-agent {

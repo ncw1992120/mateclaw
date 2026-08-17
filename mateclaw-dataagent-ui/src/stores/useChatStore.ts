@@ -87,6 +87,21 @@ export const useChatStore = defineStore('chat', () => {
   const contextUsage = ref<ContextUsage | null>(null)
   /** 上下文使用面板是否展开 */
   const contextUsagePanelOpen = ref(false)
+  /**
+   * 当前会话已进行的对话轮数（= 用户提问条数）。
+   * <p>
+   * 用于「多轮对话后建议新开对话窗口」提示：随消息列表派生，
+   * 重开对话 / 切换会话时自动归零，无需额外维护计数器。
+   */
+  const dialogueRoundCount = computed(() =>
+    messages.value.filter(m => m.role === 'user').length
+  )
+  /**
+   * 当前会话中「建议新开对话」提示是否已被用户手动关闭。
+   * <p>
+   * 只影响当前会话内的一次性关闭；新建/切换会话时重置，保证每个长对话都会重新提示。
+   */
+  const newConversationHintDismissed = ref(false)
 
   /**
    * 调试日志辅助函数（已禁用，不再输出）。
@@ -313,6 +328,8 @@ export const useChatStore = defineStore('chat', () => {
     // 避免「上下文按钮」子元素展示上一个会话的占比
     contextUsage.value = null
     contextUsagePanelOpen.value = false
+    // 新的会话从头开始计数，重新启用「建议新开对话」提示
+    newConversationHintDismissed.value = false
     clearReconnectState()
   }
 
@@ -410,6 +427,8 @@ export const useChatStore = defineStore('chat', () => {
             new Date(a.lastActiveTime || a.updateTime || a.createTime).getTime()
           )
           conversationId.value = sorted[0].conversationId
+          // 自动落到其他会话后，重新启用「建议新开对话」提示
+          newConversationHintDismissed.value = false
         } else {
           conversationId.value = ''
           messages.value = []
@@ -448,6 +467,8 @@ export const useChatStore = defineStore('chat', () => {
       // 切换会话时清空上下文使用数据并收起面板，避免展示上个会话的占比
       contextUsage.value = null
       contextUsagePanelOpen.value = false
+      // 新会话从头计数，重新启用「建议新开对话」提示
+      newConversationHintDismissed.value = false
       // Try listMessages anyway — the conversation may exist server-side
       // but not yet be in the local conversations list (race condition).
       try {
@@ -477,6 +498,8 @@ export const useChatStore = defineStore('chat', () => {
     if (!isSameConversation) {
       contextUsage.value = null
       contextUsagePanelOpen.value = false
+      // 目标会话从头计数，重新启用「建议新开对话」提示
+      newConversationHintDismissed.value = false
     }
 
     // 切换到不同会话时，将当前消息存入后台缓存
@@ -2361,6 +2384,8 @@ export const useChatStore = defineStore('chat', () => {
     historyLoading,
     contextUsage,
     contextUsagePanelOpen,
+    dialogueRoundCount,
+    newConversationHintDismissed,
     lastEventId,
     setAgent,
     clearMessages,

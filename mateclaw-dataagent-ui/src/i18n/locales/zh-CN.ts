@@ -132,6 +132,8 @@ export default {
     recommendedQuestions: '你可能还想问',
     expandRecQuestions: '查看{count}个推荐问题',
     collapseRecQuestions: '收起',
+    newConversationHint: '当前对话已达 {count} 轮，为避免上下文过长影响回答质量，建议开启新对话',
+    newConversationHintAction: '开启新对话',
   },
   smartAskMenu: {
     aumTrend: 'AUM 趋势',
