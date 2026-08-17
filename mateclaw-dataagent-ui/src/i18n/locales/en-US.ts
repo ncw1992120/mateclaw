@@ -127,6 +127,7 @@ export default {
     optimizePrompt: 'Optimize Input',
     quickAsk: 'Quick Ask',
     zoomChart: 'Zoom chart',
+    fullscreen: 'Full screen',
     close: 'Close',
     settings: 'Settings',
     recommendedQuestions: 'You might also want to ask',

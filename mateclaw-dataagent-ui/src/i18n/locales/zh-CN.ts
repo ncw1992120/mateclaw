@@ -127,6 +127,7 @@ export default {
     optimizePrompt: '优化输入',
     quickAsk: '快捷提问',
     zoomChart: '放大图表',
+    fullscreen: '全屏',
     close: '关闭',
     settings: '设置',
     recommendedQuestions: '你可能还想问',

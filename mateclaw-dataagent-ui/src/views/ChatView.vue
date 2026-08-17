@@ -335,21 +335,21 @@
             </div>
 
             <!-- Chart Card -->
-            <div v-else-if="card.type === 'chart'" class="chart-box" @click="openChartLightbox(index, cardIdx)">
+            <div v-else-if="card.type === 'chart'" class="chart-box">
               <div class="chart-title">{{ (card.data as ChartCardData).title }}</div>
               <div :ref="(el) => setChartRef(el as HTMLElement, index, cardIdx)" class="mid-chart"></div>
-              <span class="chart-zoom-hint" :title="t('chat.zoomChart')">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              </span>
+              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+              </button>
             </div>
 
             <!-- ECharts Option Card（后端返回标准 ECharts option 时直接渲染） -->
-            <div v-else-if="card.type === 'echarts'" class="echarts-box" @click="openChartLightbox(index, cardIdx)">
+            <div v-else-if="card.type === 'echarts'" class="echarts-box">
               <div v-if="(card.data as EChartsOptionData).title" class="echarts-title">{{ (card.data as EChartsOptionData).title }}</div>
               <div :ref="(el) => setEChartsRef(el as HTMLElement, index, cardIdx)" class="echarts-chart"></div>
-              <span class="chart-zoom-hint" :title="t('chat.zoomChart')">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              </span>
+              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+              </button>
             </div>
 
             <!-- Clarify Card -->
@@ -3170,6 +3170,17 @@ function renderEchartsToolbar(htmlEl: HTMLElement, currentType: ChartType, hasMe
   })
   toolbar.appendChild(detailBtn)
 
+  // "全屏展示"独立按钮（右上角工具栏最右侧）
+  const fullscreenBtn = document.createElement('button')
+  fullscreenBtn.type = 'button'
+  fullscreenBtn.className = 'echarts-toolbar-detail-btn echarts-toolbar-fullscreen-btn'
+  fullscreenBtn.innerHTML = `<span class="echarts-toolbar-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></span><span>${escAuxHtml(t('chat.fullscreen'))}</span>`
+  fullscreenBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    openChartBlockLightbox(htmlEl)
+  })
+  toolbar.appendChild(fullscreenBtn)
+
   // 下拉触发器
   const trigger = document.createElement('div')
   trigger.className = 'echarts-toolbar-trigger'
@@ -3706,15 +3717,8 @@ function scanAndMountEChartsBlocks(): void {
       const metricPayload = buildMetricPayloadForChart(htmlEl)
       echartsBlockMetricPayload.set(htmlEl, metricPayload)
 
-      // 渲染图表类型切换工具栏（含指标查看/解读/列表明细按钮）
+      // 渲染图表类型切换工具栏（含指标查看/解读/列表明细/全屏展示按钮）
       renderEchartsToolbar(htmlEl, initialType, !!metricPayload)
-
-      // 点击图表主体区域放大查看（避开工具栏与浮层按钮）
-      htmlEl.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement
-        if (target.closest('.echarts-toolbar, .echarts-aux-overlay, .echarts-aux-btn')) return
-        openChartBlockLightbox(htmlEl)
-      })
     } catch (e) {
       console.error('[ChatView] ECharts block mount error:', e)
       htmlEl.textContent = 'Chart render error'
@@ -5029,13 +5033,13 @@ onUnmounted(() => {
   height: 160px;
 }
 
-/* 图表卡片 hover 显示放大提示 */
+/* 图表卡片（无整体点击放大，仅右上角全屏按钮可交互） */
 .chart-box,
 .echarts-box {
   position: relative;
-  cursor: pointer;
 }
 
+/* 右上角"全屏展示"按钮（常显） */
 .chart-zoom-hint {
   position: absolute;
   top: 10px;
@@ -5043,20 +5047,21 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
   background: var(--theme-surface-elevated);
   color: var(--theme-text-muted);
-  opacity: 0;
-  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-  pointer-events: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.chart-box:hover .chart-zoom-hint,
-.echarts-box:hover .chart-zoom-hint {
-  opacity: 1;
+.chart-zoom-hint:hover {
   color: var(--main-orange);
+  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  background: var(--theme-surface-hover);
 }
 
 /* ===== 图表放大弹窗 ===== */
@@ -5065,20 +5070,17 @@ onUnmounted(() => {
   inset: 0;
   z-index: 3000;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px;
-  background: rgba(0, 0, 0, 0.45);
+  align-items: stretch;
+  justify-content: stretch;
+  background: var(--theme-surface);
 }
 
 .chart-lightbox-card {
   display: flex;
   flex-direction: column;
-  width: min(1080px, 100%);
-  max-height: calc(100vh - 96px);
+  width: 100vw;
+  height: 100vh;
   background: var(--theme-surface);
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
   overflow: hidden;
 }
 
@@ -5149,7 +5151,6 @@ onUnmounted(() => {
   margin: 10px 0;
   position: relative;
   padding-top: 36px;
-  cursor: pointer;
 }
 
 :deep(.echarts-block.echarts-error) {
