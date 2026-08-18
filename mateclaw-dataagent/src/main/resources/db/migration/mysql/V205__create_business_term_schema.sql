@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS `dataagent_business_term` (
     `owner`             VARCHAR(128)          DEFAULT NULL COMMENT '责任人/归属部门（负责维护该术语定义的准确性）',
     `business_rule`     TEXT                  DEFAULT NULL COMMENT '业务规则（约束条件/业务逻辑规则）',
     `related_terms`     VARCHAR(500)          DEFAULT NULL COMMENT '关联术语ID（逗号分隔，如"101,102"）',
+    `related_metrics_json`    TEXT COMMENT '关联指标引用JSON（[{"id":1,"datasourceId":1,"datasourceName":"CRM","name":"sales_amount","displayName":"销售额"}]）',
+    `related_dimensions_json` TEXT COMMENT '关联维度引用JSON（[{"id":1,"datasourceId":1,"datasourceName":"CRM","name":"province","displayName":"省份"}]）',
     `example`           TEXT                  DEFAULT NULL COMMENT '示例/用例（该术语在实际业务中的使用示例）',
     `security_level`    VARCHAR(32)           DEFAULT NULL COMMENT '安全分级（公开/内部/机密）',
     `category`          VARCHAR(64)           DEFAULT NULL COMMENT '分类（如：财务类、客户类）',

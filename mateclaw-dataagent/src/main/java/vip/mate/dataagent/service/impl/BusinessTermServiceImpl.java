@@ -12,6 +12,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermCreateRequest;
 import vip.mate.dataagent.dto.BusinessTermRef;
@@ -38,6 +39,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
@@ -51,6 +54,16 @@ public class BusinessTermServiceImpl implements BusinessTermService {
 
     /** JSON 序列化器 */
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /**
+     * 术语 ES 异步同步执行器：写操作（增/删/改/启停用）后局部重索引或删除，
+     * 保证词典变更立即对语义检索生效，同时不阻塞管理请求。
+     */
+    private static final ExecutorService TERM_ES_SYNC_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "dataagent-term-es-sync");
+        t.setDaemon(true);
+        return t;
+    });
 
     private final BusinessTermMapper businessTermMapper;
     private final BusinessTermEsService businessTermEsService;
@@ -142,6 +155,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         entity.setDeleted(0);
         entity.setStatus(DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
         businessTermMapper.insert(entity);
+        // 写操作后异步同步 ES（重建嵌入文本/向量并索引），保证新术语立即对语义检索生效
+        asyncIndexTermToEs(entity);
         return toVO(entity, buildParentNameMap(List.of(entity)));
     }
 
@@ -187,6 +202,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
             entity.setStatus(request.getStatus());
         }
         businessTermMapper.updateById(entity);
+        // 写操作后异步同步 ES，保证修改立即对语义检索生效（含启停用状态）
+        asyncIndexTermToEs(entity);
         return toVO(entity, buildParentNameMap(List.of(entity)));
     }
 
@@ -201,6 +218,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
             return;
         }
         businessTermMapper.deleteById(id);
+        // 同步从 ES 删除文档，保证已删除术语不再出现在检索结果中
+        asyncDeleteTermFromEs(entity);
     }
 
     /**
@@ -232,6 +251,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         }
         entity.setStatus(DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
         businessTermMapper.updateById(entity);
+        // 同步 ES 状态，启用后立即恢复可检索
+        asyncIndexTermToEs(entity);
     }
 
     /**
@@ -246,6 +267,8 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         }
         entity.setStatus(DataAgentConstants.BUSINESS_TERM_STATUS_DISABLED);
         businessTermMapper.updateById(entity);
+        // 同步 ES 状态，停用后立即从检索结果中剔除
+        asyncIndexTermToEs(entity);
     }
 
     /**
@@ -338,6 +361,80 @@ public class BusinessTermServiceImpl implements BusinessTermService {
         businessTermEsService.deleteByTenantCode(tenantCode);
         // 重新嵌入和索引
         return embedAndIndexAll(tenantCode);
+    }
+
+    // ==================== 写操作后 ES 异步同步 ====================
+
+    /**
+     * 写操作后异步重索引单个术语到 ES（重建嵌入文本/向量并写入，含启用状态）。
+     * 失败不影响 MySQL 写操作的返回，仅记录日志；下次全量重索引可自愈。
+     */
+    private void asyncIndexTermToEs(BusinessTermEntity entity) {
+        try {
+            TERM_ES_SYNC_EXECUTOR.submit(() -> {
+                try {
+                    indexTermToEs(entity);
+                } catch (Exception e) {
+                    log.warn("术语 [{}] ES 异步重索引失败: {}", entity.getTermName(), e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("提交术语 [{}] ES 异步重索引任务失败: {}", entity.getTermName(), e.getMessage());
+        }
+    }
+
+    /**
+     * 删除后异步从 ES 移除单个术语文档。
+     */
+    private void asyncDeleteTermFromEs(BusinessTermEntity entity) {
+        try {
+            TERM_ES_SYNC_EXECUTOR.submit(() -> {
+                try {
+                    businessTermEsService.deleteTerm(entity);
+                } catch (Exception e) {
+                    log.warn("术语 [{}] ES 文档删除失败: {}", entity.getTermName(), e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.warn("提交术语 [{}] ES 文档删除任务失败: {}", entity.getTermName(), e.getMessage());
+        }
+    }
+
+    /**
+     * 重建术语嵌入文本与向量并索引到 ES，同时回写 MySQL 保持两端一致。
+     * 向量化失败时仅索引关键词字段（向量路降级，不影响关键词检索）。
+     */
+    private void indexTermToEs(BusinessTermEntity entity) {
+        String embeddingText = entity.buildEmbeddingText();
+        entity.setEmbeddingText(embeddingText);
+        try {
+            float[] vector = generateEmbedding(embeddingText);
+            if (vector != null && vector.length > 0) {
+                entity.setEmbedding(WikiEmbeddingService.floatsToBytes(vector));
+                entity.setEmbeddingModelId(resolveEmbeddingModelId());
+            }
+        } catch (Exception e) {
+            log.warn("术语 [{}] 向量化失败，仅索引关键词字段: {}", entity.getTermName(), e.getMessage());
+        }
+        // 回写 MySQL，保证嵌入文本/向量与 ES 一致（embedAndIndexAll 同样会持久化）
+        businessTermMapper.updateById(entity);
+        businessTermEsService.indexTerm(entity);
+    }
+
+    /**
+     * 生成单条文本的嵌入向量；Embedding 模型不可用或调用失败时返回 null。
+     */
+    private float[] generateEmbedding(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        EmbeddingModel embeddingModel = resolveEmbeddingModel();
+        if (embeddingModel == null) {
+            return null;
+        }
+        EmbeddingResponse resp = embeddingModel.call(new EmbeddingRequest(List.of(text), null));
+        float[] vector = resp.getResults().get(0).getOutput();
+        return (vector == null || vector.length == 0) ? null : vector;
     }
 
     /**

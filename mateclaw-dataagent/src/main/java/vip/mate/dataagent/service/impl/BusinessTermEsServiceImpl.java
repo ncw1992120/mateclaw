@@ -90,6 +90,14 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         try {
             boolean exists = client.indices().exists(ExistsRequest.of(e -> e.index(indexName))).value();
             if (exists) {
+                // 存量索引补充 status 字段映射（putMapping 幂等合并），保证状态过滤对新旧文档语义一致
+                try {
+                    client.indices().putMapping(p -> p
+                            .index(indexName)
+                            .properties("status", pp -> pp.keyword(k -> k)));
+                } catch (Exception e) {
+                    log.warn("术语索引 [{}] 补充 status 字段映射失败: {}", indexName, e.getMessage());
+                }
                 cachedVectorDimension = vectorDimension;
                 indexInitialized = true;
                 return;
@@ -115,6 +123,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                             .properties("relatedTerms", p -> p.keyword(k -> k))
                             .properties("example", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties("securityLevel", p -> p.keyword(k -> k))
+                            .properties("status", p -> p.keyword(k -> k))
                             .properties("category", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("relatedMetricNames", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
@@ -161,6 +170,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                             .properties("relatedTerms", p -> p.keyword(k -> k))
                             .properties("example", p -> p.text(t -> t))
                             .properties("securityLevel", p -> p.keyword(k -> k))
+                            .properties("status", p -> p.keyword(k -> k))
                             .properties("category", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("relatedMetricNames", p -> p.text(t -> t))
@@ -321,6 +331,10 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
                                     if (tenantCode != null) {
                                         knn.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
                                     }
+                                    // 启用状态过滤（与关键词路一致）：剔除停用术语，存量文档（无 status 字段）保留
+                                    knn.filter(f -> f.bool(bb -> bb
+                                            .mustNot(mn -> mn.term(t -> t.field("status")
+                                                    .value(String.valueOf(DataAgentConstants.BUSINESS_TERM_STATUS_DISABLED))))));
                                     return knn;
                                 }),
                         Map.class
@@ -365,6 +379,10 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
             if (tenantCode != null) {
                 b.filter(f -> f.term(t -> t.field("tenantCode").value(tenantCode)));
             }
+            // 启用状态过滤：显式剔除停用术语（status="0"）；存量文档（无 status 字段）与启用术语均保留
+            b.filter(f -> f.bool(bb -> bb
+                    .mustNot(mn -> mn.term(t -> t.field("status")
+                            .value(String.valueOf(DataAgentConstants.BUSINESS_TERM_STATUS_DISABLED))))));
             // BestFields：取单个最高分字段，tieBreaker 让次高分字段也贡献部分分数
             // 核心语义字段走 must：名称/同义词强制召回，杜绝描述命中弱相关噪声
             b.must(m -> m.multiMatch(mm -> mm
@@ -615,6 +633,10 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         doc.put("relatedDimensionNames", toRefNames(entity.parseRelatedDimensions()));
         doc.put("example", entity.getExample());
         doc.put("securityLevel", entity.getSecurityLevel());
+        // 启用状态（keyword），供检索侧状态过滤使用；null 视为启用（兼容旧数据）
+        doc.put("status", entity.getStatus() != null
+                ? String.valueOf(entity.getStatus())
+                : String.valueOf(DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED));
         doc.put("category", entity.getCategory());
         doc.put(DataAgentConstants.ALOUDATA_ES_EMBEDDING_TEXT_FIELD, entity.getEmbeddingText());
         if (entity.getEmbedding() != null && entity.getEmbedding().length > 0) {
