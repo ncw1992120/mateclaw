@@ -167,6 +167,12 @@ export interface Datasource {
   /** 元数据是否共享（同工作区所有用户可查看） */
   metaShared: boolean
   enabled: boolean
+  /** Aloudata 语义层定时同步开关 */
+  aloudataSyncEnabled?: boolean
+  /** Aloudata 语义层定时同步 cron 表达式（Spring 6 段） */
+  aloudataSyncCron?: string
+  /** 最近一次 Aloudata 语义层同步完成时间 */
+  lastAloudataSyncTime?: string
   lastTestTime: string
   lastTestOk: boolean
   schemaStatus: string

@@ -181,6 +181,45 @@
               开启后，同工作区其他用户可查看该数据源的元数据（不包含连接配置）
             </p>
           </div>
+
+          <!-- 定时同步（仅 Aloudata 指标平台数据源） -->
+          <template v-if="isAloudata">
+            <div class="form-field form-field-wide">
+              <label class="checkbox-label">
+                <label class="switch">
+                  <input v-model="form.aloudataSyncEnabled" type="checkbox" :disabled="!isEditing" />
+                  <span class="slider"></span>
+                </label>
+                <span class="switch-text">{{ t('metricPlatform.syncScheduleEnabled') }}</span>
+              </label>
+              <p class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: var(--theme-text-muted);">
+                {{ t('metricPlatform.syncScheduleDesc') }}
+              </p>
+            </div>
+
+            <div v-if="form.aloudataSyncEnabled" class="form-field form-field-wide">
+              <label class="form-label">
+                <span>{{ t('metricPlatform.syncScheduleCron') }}</span>
+                <el-tooltip :content="t('metricPlatform.syncScheduleCronTip')" placement="top">
+                  <span class="form-tip">?</span>
+                </el-tooltip>
+              </label>
+
+              <!-- 可视化 cron 编辑器：复用现有 5 段组件（分 时 日 月 周），编辑态可配置、非编辑态只读展示 -->
+              <CronExpressionField v-if="isEditing" v-model="form.aloudataSyncCron" />
+              <input
+                v-else
+                :value="form.aloudataSyncCron"
+                class="form-input mono"
+                readonly
+                :placeholder="t('metricPlatform.syncScheduleCronPlaceholder')"
+              />
+
+              <p v-if="form.lastAloudataSyncTime" class="field-desc" style="margin: 6px 0 0; font-size: 12px; color: var(--theme-text-muted);">
+                {{ t('metricPlatform.syncScheduleLastTime') }}：{{ formatSyncTime(form.lastAloudataSyncTime) }}
+              </p>
+            </div>
+          </template>
         </div>
       </div>
     </section>
@@ -523,6 +562,7 @@ import {
 } from '@/api/semantic-model'
 import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
+import CronExpressionField from '@/components/CronExpressionField.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { AloudataCategoryCount, Datasource } from '@/types'
 import { storeToRefs } from 'pinia'
@@ -557,7 +597,18 @@ const form = reactive({
   authMethod: 'UID',
   authValue: '',
   metaShared: false,
+  aloudataSyncEnabled: false,
+  aloudataSyncCron: '',
+  lastAloudataSyncTime: '',
 })
+
+/** 是否 Aloudata 指标平台数据源（仅此类支持语义层定时同步配置） */
+const isAloudata = computed(() => currentDatasource.value?.sourceType === 'aloudata')
+
+/** 格式化最近同步时间（后端 LocalDateTime.toString，替换 T 为空格便于阅读） */
+function formatSyncTime(time: string): string {
+  return time ? time.replace('T', ' ') : ''
+}
 
 /** 编辑前的表单快照（取消时恢复） */
 const formBackup = reactive({ ...form })
@@ -599,6 +650,9 @@ function fillFormFromDatasource(ds: Datasource): void {
   // 认证值不再回显，编辑时留空表示不修改密码
   form.authValue = ''
   form.metaShared = ds.metaShared ?? false
+  form.aloudataSyncEnabled = ds.aloudataSyncEnabled ?? false
+  form.aloudataSyncCron = ds.aloudataSyncCron || ''
+  form.lastAloudataSyncTime = ds.lastAloudataSyncTime || ''
   Object.assign(formBackup, form)
 }
 
@@ -1150,6 +1204,15 @@ async function handleSave(): Promise<void> {
   if (saving.value) {
     return
   }
+  // 定时同步强制校验：开启定时同步后必须填写 cron 表达式，否则不允许保存
+  if (
+    isAloudata.value &&
+    form.aloudataSyncEnabled &&
+    (!form.aloudataSyncCron || !form.aloudataSyncCron.trim())
+  ) {
+    ElMessage.warning(t('metricPlatform.syncScheduleCronRequired'))
+    return
+  }
   saving.value = true
   try {
     if (props.datasourceId) {
@@ -1167,6 +1230,11 @@ async function handleSave(): Promise<void> {
         username: form.tenantId,
         connectionParams: JSON.stringify(params),
         metaShared: form.metaShared,
+      }
+      // 定时同步配置（仅 Aloudata 数据源提交；关闭时清空 cron）
+      if (isAloudata.value) {
+        payload.aloudataSyncEnabled = form.aloudataSyncEnabled
+        payload.aloudataSyncCron = form.aloudataSyncEnabled ? form.aloudataSyncCron : ''
       }
       // 仅当用户填写了新认证值时才提交，留空表示不修改密码
       if (form.authValue && form.authValue.trim()) {

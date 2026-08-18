@@ -52,6 +52,15 @@ public class DatasourceVO {
     /** 是否启用 */
     private Boolean enabled;
 
+    /** Aloudata 语义层定时同步开关（1=开启，0=关闭） */
+    private Boolean aloudataSyncEnabled;
+
+    /** Aloudata 语义层定时同步 cron 表达式（5 段：分 时 日 月 周） */
+    private String aloudataSyncCron;
+
+    /** 最近一次 Aloudata 语义层同步完成时间 */
+    private String lastAloudataSyncTime;
+
     /** 最近测试时间 */
     private String lastTestTime;
 

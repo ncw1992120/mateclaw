@@ -29,6 +29,7 @@ import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.scheduling.support.CronExpression;
 
 /**
  * 数据源管理服务实现
@@ -344,6 +345,32 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         if (request.getEnabled() != null) {
             entity.setEnabled(request.getEnabled());
+        }
+        // Aloudata 语义层定时同步配置：仅 Aloudata 数据源允许设置，cron 必须合法
+        if (request.getAloudataSyncEnabled() != null || request.getAloudataSyncCron() != null) {
+            if (!DataAgentConstants.SOURCE_TYPE_ALOUDATA.equalsIgnoreCase(entity.getSourceType())) {
+                throw new BusinessException(400, "仅 Aloudata 指标平台数据源支持语义层定时同步");
+            }
+            if (request.getAloudataSyncEnabled() != null) {
+                entity.setAloudataSyncEnabled(request.getAloudataSyncEnabled());
+            }
+            if (request.getAloudataSyncCron() != null) {
+                String cron = request.getAloudataSyncCron().trim();
+                if (!cron.isEmpty()) {
+                    try {
+                        // 页面使用 5 段 cron（分 时 日 月 周），补秒段构成 Spring 6 段后校验
+                        CronExpression.parse("0 " + cron);
+                    } catch (IllegalArgumentException e) {
+                        throw new BusinessException(400, "定时同步 cron 表达式不合法: " + cron);
+                    }
+                }
+                entity.setAloudataSyncCron(cron.isEmpty() ? null : cron);
+            }
+            // 兜底校验：开启定时同步后必须配置 cron 表达式，避免"开启但无定时"的无效状态
+            if (Boolean.TRUE.equals(entity.getAloudataSyncEnabled())
+                    && !org.springframework.util.StringUtils.hasText(entity.getAloudataSyncCron())) {
+                throw new BusinessException(400, "开启定时同步后必须填写 cron 表达式");
+            }
         }
         datasourceMapper.updateById(entity);
         return toVO(entity);
@@ -1072,6 +1099,9 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         BeanUtils.copyProperties(entity, vo);
         if (entity.getLastTestTime() != null) {
             vo.setLastTestTime(entity.getLastTestTime().toString());
+        }
+        if (entity.getLastAloudataSyncTime() != null) {
+            vo.setLastAloudataSyncTime(entity.getLastAloudataSyncTime().toString());
         }
         if (entity.getLastSchemaDiscoveryTime() != null) {
             vo.setLastSchemaDiscoveryTime(entity.getLastSchemaDiscoveryTime().toString());

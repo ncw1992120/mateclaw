@@ -25,6 +25,7 @@ import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
 import vip.mate.wiki.service.WikiEmbeddingService;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -104,12 +105,29 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             log.info("[Aloudata同步] 完成，指标: {}, 维度: {}, 关联: {}, 耗时: {}ms",
                     metricCount, dimensionCount, metricDimensionCount, elapsed);
 
+            // 更新数据源最近同步时间（页面展示 + 运维观测，手动/定时入口均生效）
+            markLastSyncTime(datasourceId);
+
             return new SyncResult(metricCount, dimensionCount, metricDimensionCount,
                     categoryCount, elapsed, "completed", "同步成功");
         } catch (Exception e) {
             long elapsed = System.currentTimeMillis() - startTime;
             log.error("[Aloudata同步] 失败: {}", e.getMessage(), e);
             return new SyncResult(0, 0, 0, 0, elapsed, "failed", "同步失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 更新数据源最近一次 Aloudata 语义层同步完成时间。
+     */
+    private void markLastSyncTime(Long datasourceId) {
+        try {
+            DatasourceEntity ds = new DatasourceEntity();
+            ds.setId(datasourceId);
+            ds.setLastAloudataSyncTime(LocalDateTime.now());
+            datasourceMapper.updateById(ds);
+        } catch (Exception e) {
+            log.warn("[Aloudata同步] 更新数据源 [{}] 最近同步时间失败: {}", datasourceId, e.getMessage());
         }
     }
 
