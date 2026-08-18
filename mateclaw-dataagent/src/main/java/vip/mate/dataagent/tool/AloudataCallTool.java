@@ -314,9 +314,21 @@ public class AloudataCallTool {
                 }
                 // 数组类型补充 items
                 if (param.getType() != null && param.getType().startsWith("Array")) {
+                    String itemType = extractArrayItemType(param.getType());
+                    // 兼容配置中仅写 "Array" 未声明元素类型的对象数组参数（如 orders）：
+                    // 若不识别为对象数组，schema 会把 items 声明为 string，误导 LLM 传字符串数组
+                    // （如 ["{\"metric_time__day\": \"asc\"}"]），进而触发参数类型异常
+                    if ("string".equals(itemType) && isObjectArrayParam(param)) {
+                        itemType = "object";
+                    }
                     JSONObject items = new JSONObject(new LinkedHashMap<>());
-                    items.set("type", extractArrayItemType(param.getType()));
+                    items.set("type", itemType);
                     prop.set("items", items);
+                    if ("object".equals(itemType)) {
+                        String desc = prop.getStr("description", "");
+                        desc += "。注意：数组每个元素必须是对象（键值对），禁止传字符串数组或整体 JSON 字符串，示例 [{\"metric_time__day\": \"asc\"}]";
+                        prop.set("description", desc);
+                    }
                 }
 
                 // 参数名中的连字符转为下划线，避免 JSON Schema 兼容问题
@@ -363,12 +375,25 @@ public class AloudataCallTool {
         // Array[String] -> string, Array[Object] -> object
         if (apiType.contains("[String]")) {
             return "string";
-        } else if (apiType.contains("[Object]")) {
+        } else if (apiType.contains("[Object]") || apiType.contains("[Map]")) {
             return "object";
         } else if (apiType.contains("[Integer]")) {
             return "integer";
         }
         return "string";
+    }
+
+    /**
+     * 判断数组参数的元素是否为对象（Map）。
+     * <p>
+     * 端点配置里 orders 等参数类型仅写 "Array"、未声明元素类型，但真实 API 契约是对象数组。
+     * 这里按参数名/类型声明兜底识别，避免生成的 JSON Schema 把 items 写成 string 误导 LLM
+     * 传字符串数组（历史线上出现过 "orders 参数构造异常" 的根因）。
+     */
+    private boolean isObjectArrayParam(ApiParam param) {
+        String type = param.getType() != null ? param.getType() : "";
+        String name = param.getName() != null ? param.getName() : "";
+        return type.contains("Map") || type.contains("Object") || "orders".equalsIgnoreCase(name);
     }
 
     /**
@@ -460,6 +485,13 @@ public class AloudataCallTool {
                 // P0: timeConstraint 自动规范化
                 normalizeTimeConstraint(params);
 
+                // P0: orders 参数形态归一化——兼容字符串数组/整体JSON字符串等 LLM 常见错误写法，
+                // 统一转为对象数组；无法解析时返回可读错误，而不是抛 ClassCastException
+                String ordersError = normalizeOrders(params);
+                if (ordersError != null) {
+                    return error(ordersError);
+                }
+
                 // P0+P1: 查询请求校验（中文展示名、同环比约束、占比/排名维度、维度可用性）
                 List<String> validationErrors = validateMetricsQueryRequest(datasourceId, params);
                 if (!validationErrors.isEmpty()) {
@@ -476,6 +508,12 @@ public class AloudataCallTool {
         } catch (IllegalArgumentException e) {
             log.error("Aloudata Tool [{}] 参数校验失败: {}", endpointName, e.getMessage());
             return error(e.getMessage());
+        } catch (ClassCastException e) {
+            // 防御：任何参数类型强转失败都给出可读指引，避免 LLM 拿到晦涩的 JVM 异常信息
+            log.error("Aloudata Tool [{}] 参数类型错误: {}", endpointName, e.getMessage());
+            return error("参数类型错误: " + e.getMessage()
+                    + "。请检查参数结构是否符合 API 契约：orders 必须为对象数组（如 [{\"metric_time__day\": \"asc\"}]），"
+                    + "metrics/dimensions/filters 必须为字符串数组。");
         } catch (Exception e) {
             log.error("Aloudata Tool [{}] 调用失败: {}", endpointName, e.getMessage(), e);
             return error("调用失败: " + e.getMessage());
@@ -528,9 +566,18 @@ public class AloudataCallTool {
         Boolean success = (Boolean) responseBody.get("success");
 
         if (!Boolean.TRUE.equals(success)) {
-            String errorMsg = (String) responseBody.get("errorMsg");
-            String detailErrorMsg = (String) responseBody.get("detailErrorMsg");
-            String combinedMsg = errorMsg != null ? errorMsg : detailErrorMsg;
+            // 远程 API 错误字段不统一，尝试从多个常见字段提取；都为空时转储完整响应体兜底，
+            // 避免 LLM 拿到 "返回错误: null" 后只能盲目变换参数重试
+            String combinedMsg = extractApiErrorMessage(responseBody);
+            if (combinedMsg == null) {
+                log.error("Aloudata API [{}] 返回失败且无错误明细，完整响应: {}", endpointName, JSONUtil.toJsonStr(responseBody));
+                String bodyPreview = JSONUtil.toJsonStr(responseBody);
+                if (bodyPreview.length() > 600) {
+                    bodyPreview = bodyPreview.substring(0, 600) + "...(截断)";
+                }
+                return error("API: " + endpointName + " 返回失败（success=false），但未携带错误信息。完整响应: " + bodyPreview
+                        + "\n提示: 此类错误多为数据源查询通道/查询引擎问题而非参数格式问题，请检查数据源（指标应用→API集成）的查询服务地址与认证配置；若连续 2 次返回相同错误，请停止重试并向用户说明。");
+            }
 
             // P1: API 错误智能解析，附加修正建议
             String suggestion = matchErrorSuggestion(combinedMsg);
@@ -599,6 +646,8 @@ public class AloudataCallTool {
         try {
             JSONObject input = JSONUtil.parseObj(toolInput);
             Long datasourceId = input.getLong("datasourceId");
+            // 记录 LLM 原始传值：确定性解析可能将其重定向到唯一可用源，需在结果中显式告知
+            Long requestedId = datasourceId;
 
             // 解析数据源：确定性优先（白名单 > 唯一 Aloudata 源 > 校验 LLM 传值 > 列表引导），
             // 不盲信 LLM 猜测的 datasourceId（避免无白名单时用一个幻觉出的 id=1 静默跑错源）。
@@ -631,10 +680,12 @@ public class AloudataCallTool {
 
             if ("aloudata".equalsIgnoreCase(entity.getSourceType())) {
                 // Aloudata 数据源：指标+维度级语义检索
-                return handleAloudataSemanticSearch(datasourceId, keyword, topK, threshold);
+                String result = handleAloudataSemanticSearch(datasourceId, keyword, topK, threshold);
+                return prependDatasourceRedirectNote(requestedId, datasourceId, result);
             } else {
                 // 非 Aloudata 数据源：保持原有表级检索
-                return handleGenericSemanticSearch(datasourceId, keyword, topK, threshold);
+                String result = handleGenericSemanticSearch(datasourceId, keyword, topK, threshold);
+                return prependDatasourceRedirectNote(requestedId, datasourceId, result);
             }
         } catch (Exception e) {
             log.error("语义搜索失败: {}", e.getMessage(), e);
@@ -1007,6 +1058,136 @@ public class AloudataCallTool {
     }
 
     /**
+     * P0: orders 参数形态归一化
+     * <p>
+     * LLM 构造请求时常见的错误形态：
+     * <ul>
+     *   <li>字符串数组：["{\"metric_time__day\": \"asc\"}"]——每个元素是 JSON 字符串而非对象</li>
+     *   <li>整体 JSON 字符串："[{\"metric_time__day\": \"asc\"}]"</li>
+     *   <li>单个对象而非数组：{"metric_time__day": "asc"}</li>
+     * </ul>
+     * 统一归一化为 {@code List<Map<String, String>>}；无法解析时返回可读错误消息
+     * （而不是让后续强转抛 ClassCastException）。
+     *
+     * @return null 表示成功（已写回 params），否则为错误消息
+     */
+    private String normalizeOrders(Map<String, Object> params) {
+        Object value = params.get("orders");
+        if (value == null) {
+            return null;
+        }
+        List<Map<String, String>> normalized = new ArrayList<>();
+        List<?> items;
+        if (value instanceof List<?> list) {
+            items = list;
+        } else if (value instanceof String s) {
+            try {
+                items = JSONUtil.parseArray(s);
+            } catch (Exception e) {
+                // 可能传成了单个对象 {"字段": "asc"}，尝试按单元素解析
+                try {
+                    normalized.add(toOrderMap(JSONUtil.parseObj(s)));
+                    params.put("orders", normalized);
+                    return null;
+                } catch (Exception e2) {
+                    return "orders 参数格式错误：应为对象数组，如 [{\"metric_time__day\": \"asc\"}]，实际传入: " + truncateForError(s);
+                }
+            }
+        } else if (value instanceof Map<?, ?> map) {
+            params.put("orders", List.of(toOrderMap(map)));
+            return null;
+        } else {
+            return "orders 参数格式错误：应为对象数组，如 [{\"metric_time__day\": \"asc\"}]，实际为 " + describeType(value);
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            Object item = items.get(i);
+            if (item instanceof Map<?, ?> map) {
+                normalized.add(toOrderMap(map));
+            } else if (item instanceof String s) {
+                try {
+                    normalized.add(toOrderMap(JSONUtil.parseObj(s)));
+                    log.info("orders 第 {} 个元素为 JSON 字符串，已自动解析为对象", i + 1);
+                } catch (Exception e) {
+                    return "orders 第 " + (i + 1) + " 个元素不是合法的排序对象，应为 {\"字段名\": \"asc|desc\"}（如 {\"metric_time__day\": \"asc\"}），实际为: " + truncateForError(s);
+                }
+            } else {
+                return "orders 第 " + (i + 1) + " 个元素应为对象 {\"字段名\": \"asc|desc\"}，实际为 " + describeType(item);
+            }
+        }
+        params.put("orders", normalized);
+        return null;
+    }
+
+    /** 将任意 Map 转为 {@code Map<String, String>} 排序项 */
+    private Map<String, String> toOrderMap(Map<?, ?> map) {
+        Map<String, String> order = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            order.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+        }
+        return order;
+    }
+
+    /**
+     * 类型安全地从参数中提取字符串列表。
+     * <p>
+     * 元素类型不正确或整体是非法 JSON 字符串时，向 errors 收集可读错误，
+     * 而不是让后续 for 循环强转抛 ClassCastException。
+     */
+    private List<String> extractStringList(Map<String, Object> params, String key, List<String> errors) {
+        Object value = params.get(key);
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof List<?> list) {
+            List<String> result = new ArrayList<>(list.size());
+            for (int i = 0; i < list.size(); i++) {
+                Object item = list.get(i);
+                if (item instanceof String s) {
+                    result.add(s);
+                } else {
+                    errors.add(key + " 第 " + (i + 1) + " 个元素应为字符串，实际为 " + describeType(item)
+                            + "（" + key + " 应为字符串数组，如 [\"metric_time__day\"]）");
+                }
+            }
+            return result;
+        }
+        if (value instanceof String s) {
+            try {
+                JSONArray arr = JSONUtil.parseArray(s);
+                List<String> result = new ArrayList<>(arr.size());
+                for (int i = 0; i < arr.size(); i++) {
+                    Object item = arr.get(i);
+                    if (item instanceof String str) {
+                        result.add(str);
+                    } else {
+                        errors.add(key + " 第 " + (i + 1) + " 个元素应为字符串，实际为 " + describeType(item));
+                    }
+                }
+                return result;
+            } catch (Exception e) {
+                errors.add(key + " 应为字符串数组，实际传入了无法解析的字符串: " + truncateForError(s));
+                return List.of();
+            }
+        }
+        errors.add(key + " 应为字符串数组，实际为 " + describeType(value));
+        return List.of();
+    }
+
+    /** 描述对象类型，用于可读错误消息 */
+    private String describeType(Object o) {
+        if (o == null) {
+            return "null";
+        }
+        return o.getClass().getSimpleName();
+    }
+
+    /** 截断超长字符串，避免错误消息撑爆上下文 */
+    private String truncateForError(String s) {
+        return s.length() <= 200 ? s : s.substring(0, 200) + "...(截断)";
+    }
+
+    /**
      * P0+P1: 指标查询请求校验
      * <p>
      * 校验项：中文展示名、同环比约束、占比/排名维度声明、维度可用性、filters格式、orders字段。
@@ -1020,10 +1201,8 @@ public class AloudataCallTool {
     private List<String> validateMetricsQueryRequest(Long datasourceId, Map<String, Object> params) {
         List<String> errors = new ArrayList<>();
 
-        List<String> metrics = params.get("metrics") instanceof List
-                ? (List<String>) params.get("metrics") : List.of();
-        List<String> dimensions = params.get("dimensions") instanceof List
-                ? (List<String>) params.get("dimensions") : List.of();
+        List<String> metrics = extractStringList(params, "metrics", errors);
+        List<String> dimensions = extractStringList(params, "dimensions", errors);
         String tc = params.get("timeConstraint") instanceof String
                 ? (String) params.get("timeConstraint") : "";
 
@@ -1098,15 +1277,14 @@ public class AloudataCallTool {
         }
 
         // 7. filters 维度引用格式检查
-        List<String> filters = params.get("filters") instanceof List
-                ? (List<String>) params.get("filters") : List.of();
+        List<String> filters = extractStringList(params, "filters", errors);
         for (String f : filters) {
             if (!f.startsWith("[")) {
                 errors.add("筛选条件 '" + f + "' 格式不正确，维度引用应使用方括号，如 [region] IN (\"华东\")");
             }
         }
 
-        // 8. orders 字段检查
+        // 8. orders 字段检查（normalizeOrders 已保证元素为 Map<String,String>，此处做最终防御）
         List<Map<String, String>> orders = params.get("orders") instanceof List
                 ? (List<Map<String, String>>) params.get("orders") : List.of();
         Set<String> validOrderFields = new HashSet<>();
@@ -1559,7 +1737,50 @@ public class AloudataCallTool {
         }
     }
 
+    /**
+     * 当 LLM 传入的 datasourceId 被确定性解析重定向到其他数据源时，在结果前附加提示。
+     * <p>
+     * 背景：无白名单且全局唯一 Aloudata 源时，工具会忽略 LLM 猜测的 datasourceId 并静默改用唯一源，
+     * 但返回结果中只出现实际使用的 ID。LLM 会误以为自己在"另一个数据源上做对照测试"（metadata
+     * 观测中该误判出现 3 次），浪费大量检索调用。显式告知可消除歧义。
+     */
+    private String prependDatasourceRedirectNote(Long requestedId, Long resolvedId, String result) {
+        if (requestedId == null || requestedId.equals(resolvedId) || result == null) {
+            return result;
+        }
+        DatasourceEntity entity = datasourceMapper.selectById(resolvedId);
+        String name = entity != null && entity.getName() != null ? entity.getName() : String.valueOf(resolvedId);
+        return "⚠️ 你传入的 datasourceId=" + requestedId + " 已自动重定向到唯一可用 Aloudata 数据源（datasourceId="
+                + resolvedId + "，名称: " + name + "），以下检索结果均来自该数据源。\n" + result;
+    }
+
     // ==================== API 错误智能解析 ====================
+
+    /**
+     * 从失败响应体中提取错误消息。
+     * <p>
+     * 远程 API 的错误字段不统一（errorMsg/detailErrorMsg/message/msg/error/errorMessage/code 等），
+     * 逐个尝试常见字段，全部为空时返回 null（由调用方转储完整响应体）。
+     */
+    private String extractApiErrorMessage(Map<String, Object> body) {
+        if (body == null) {
+            return null;
+        }
+        String[] candidateKeys = {"errorMsg", "detailErrorMsg", "message", "msg",
+                "error", "errorMessage", "error_desc", "desc"};
+        for (String key : candidateKeys) {
+            Object v = body.get(key);
+            if (v != null && !String.valueOf(v).isBlank() && !"null".equalsIgnoreCase(String.valueOf(v))) {
+                return String.valueOf(v);
+            }
+        }
+        // code 字段兜底：部分版本仅用 code 表达错误
+        Object code = body.get("code");
+        if (code != null && !String.valueOf(code).isBlank() && !"null".equalsIgnoreCase(String.valueOf(code))) {
+            return "code=" + code;
+        }
+        return null;
+    }
 
     /**
      * P1: API 错误智能解析，匹配常见错误模式并返回修正建议
