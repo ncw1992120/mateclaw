@@ -67,6 +67,7 @@ public class AloudataCallTool {
     private final BusinessTermEsService businessTermEsService;
     private final DatasourceMapper datasourceMapper;
     private final DatasourceAccountService datasourceAccountService;
+    private final DatasourceManageService datasourceManageService;
     private final AloudataMetricDimensionMapper metricDimensionMapper;
     private final AloudataMetricMapper metricMapper;
     private final MateClawRuntime mateClawRuntime;
@@ -102,8 +103,8 @@ public class AloudataCallTool {
     /** 消歧阈值：前两名分数差距小于此值时触发消歧追问 */
     private static final double DISAMBIGUATION_SCORE_GAP = 0.15;
 
-    /** 消歧时展示的最大候选数量 */
-    private static final int DISAMBIGUATION_MAX_CANDIDATES = 3;
+    /** 指标列表展示中可用维度的最大截断数：保留足够维度供构造查询，同时防止结果超长触发 spill 截断 */
+    private static final int PROMPT_MAX_AVAILABLE_DIMENSIONS = 15;
 
     /** 匹配指标展示名尾部的口径后缀（全角/半角括号），用于剥离得到基名 */
     private static final Pattern TRAILING_CALIBER_PATTERN =
@@ -251,6 +252,13 @@ public class AloudataCallTool {
     private String buildDescription(String endpointName, ApiEndpoint endpoint) {
         StringBuilder sb = new StringBuilder();
         sb.append(endpoint.getDescription() != null ? endpoint.getDescription() : endpointName);
+
+        // 指标查询端点：注入最高优先级查询规则，让 LLM 在工具调用时刻始终可见
+        if (METRICS_QUERY_ENDPOINT.equalsIgnoreCase(endpointName)) {
+            sb.append("。硬性规则：1) 指标名称与用户问题完全匹配（=metricName或展示名）时直接查询，"
+                    + "不要向用户做消歧确认；2) 用户未指定维度时，dimensions 默认使用指标日期（metric_time，"
+                    + "常规用 metric_time__month，趋势/近N天用 metric_time__day），不要追问维度、不要凭空选维度。");
+        }
 
         // 附加响应参数摘要，帮助 Agent 理解返回结构
         if (endpoint.getResponseParams() != null && !endpoint.getResponseParams().isEmpty()) {
@@ -753,6 +761,130 @@ public class AloudataCallTool {
         }
     }
 
+    /** 指标名称精确匹配结果：用户问题与某个指标名称完全匹配时 resolved()==true */
+    private record ExactMetricMatch(boolean resolved, AloudataMetricEntity metric) {
+        static ExactMetricMatch none() {
+            return new ExactMetricMatch(false, null);
+        }
+    }
+
+    /**
+     * P0: 指标名称精确匹配解析。
+     * <p>
+     * 当用户问题/关键词与某指标的 metricName 或 metricDisplayName **完全相等**（去首尾空白，
+     * 英文不区分大小写）时，说明用户已明确指明指标，应当**直接查询**，不再触发任何消歧判断。
+     * 多个指标同名（如不同数据集都叫「订单量」）时仍返回未解析，交由原有消歧流程。
+     * 该解析走元数据表精确查询，不受 ES 打分 / TopK 截断影响。
+     */
+    private ExactMetricMatch resolveExactMetricMatch(Long datasourceId, String keyword, String originalMessage) {
+        if (datasourceId == null) {
+            return ExactMetricMatch.none();
+        }
+        String[] probes = {keyword, originalMessage};
+        for (String probe : probes) {
+            if (probe == null) {
+                continue;
+            }
+            String p = probe.trim();
+            if (p.isEmpty()) {
+                continue;
+            }
+            try {
+                List<AloudataMetricEntity> byName = metricMapper.selectList(
+                        new LambdaQueryWrapper<AloudataMetricEntity>()
+                                .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                                .eq(AloudataMetricEntity::getMetricName, p)
+                                .select(AloudataMetricEntity::getMetricName,
+                                        AloudataMetricEntity::getMetricDisplayName,
+                                        AloudataMetricEntity::getType,
+                                        AloudataMetricEntity::getBusinessCaliber,
+                                        AloudataMetricEntity::getMetricCategoryName,
+                                        AloudataMetricEntity::getUnit,
+                                        AloudataMetricEntity::getSynonyms)
+                                .last("LIMIT 10"));
+                List<AloudataMetricEntity> byDisplay = metricMapper.selectList(
+                        new LambdaQueryWrapper<AloudataMetricEntity>()
+                                .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                                .eq(AloudataMetricEntity::getMetricDisplayName, p)
+                                .select(AloudataMetricEntity::getMetricName,
+                                        AloudataMetricEntity::getMetricDisplayName,
+                                        AloudataMetricEntity::getType,
+                                        AloudataMetricEntity::getBusinessCaliber,
+                                        AloudataMetricEntity::getMetricCategoryName,
+                                        AloudataMetricEntity::getUnit,
+                                        AloudataMetricEntity::getSynonyms)
+                                .last("LIMIT 10"));
+                List<AloudataMetricEntity> merged = new ArrayList<>(byName);
+                for (AloudataMetricEntity m : byDisplay) {
+                    if (m.getMetricName() != null && merged.stream()
+                            .noneMatch(x -> m.getMetricName().equals(x.getMetricName()))) {
+                        merged.add(m);
+                    }
+                }
+                if (merged.size() == 1) {
+                    return new ExactMetricMatch(true, merged.get(0));
+                }
+                if (merged.size() > 1) {
+                    // 多个指标同名仍有多义性，交由消歧流程
+                    return ExactMetricMatch.none();
+                }
+            } catch (Exception e) {
+                log.error("指标名称精确匹配查询失败，跳过（不影响原有检索）: {}", e.getMessage());
+            }
+        }
+        return ExactMetricMatch.none();
+    }
+
+    /**
+     * 追加"指标名称精确匹配"提示：明确告知 LLM 目标指标已由名称完全匹配唯一确定，
+     * 直接使用该 metricName 构造查询，禁止再向用户做消歧确认。
+     */
+    private void appendExactMatchHint(StringBuilder sb, AloudataMetricEntity metric, String keyword) {
+        sb.append("## ✅ 指标名称精确匹配\n\n");
+        sb.append("用户问题/关键词「").append(keyword).append("」与指标名称**完全匹配**，目标指标已唯一确定：\n");
+        sb.append("  - **").append(metric.getMetricName()).append("**(")
+                .append(metric.getMetricDisplayName() != null ? metric.getMetricDisplayName() : "").append(")");
+        if (metric.getBusinessCaliber() != null && !metric.getBusinessCaliber().isBlank()) {
+            sb.append(" — ").append(metric.getBusinessCaliber());
+        }
+        sb.append("\n\n> **直接使用 metricName=").append(metric.getMetricName())
+                .append(" 构造查询，不要再向用户进行消歧确认**。该结果来自指标元数据的名称精确匹配，是最可靠的目标；"
+                        + "若需要维度且用户未指定，请用默认指标时间维度（metric_time，如 metric_time__month）。\n\n");
+    }
+
+    /**
+     * 构建"## 指标"列表展示行（压缩模式）。
+     * <p>
+     * 相比 MetricHit.getPromptInfo()：业务口径 + 可用维度超过 PROMPT_MAX_AVAILABLE_DIMENSIONS 时截断并标注总数。
+     * 防止单条指标因几十个维度把整体检索结果顶到 spill 阈值，导致 LLM 只能看到 preview 而遗漏后排候选
+     * （"用户问题完全匹配指标名称"场景无法枚举全部候选、消歧场景只看到前几个候选的根因之一）。
+     */
+    private String compactMetricPrompt(AloudataSearchResult.MetricHit hit) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(hit.getMetricName());
+        if (hit.getMetricDisplayName() != null && !hit.getMetricDisplayName().isBlank()) {
+            sb.append("(").append(hit.getMetricDisplayName()).append(")");
+        }
+        if (hit.getType() != null && !hit.getType().isBlank()) {
+            sb.append(" [").append(hit.getType()).append("]");
+        }
+        if (hit.getBusinessCaliber() != null && !hit.getBusinessCaliber().isBlank()) {
+            sb.append(" - ").append(hit.getBusinessCaliber());
+        }
+        List<String> dims = hit.getAvailableDimensions();
+        if (dims != null && !dims.isEmpty()) {
+            if (dims.size() <= PROMPT_MAX_AVAILABLE_DIMENSIONS) {
+                sb.append(", 可用维度: ").append(String.join(", ", dims));
+            } else {
+                sb.append(", 可用维度(前").append(PROMPT_MAX_AVAILABLE_DIMENSIONS).append("个): ")
+                        .append(String.join(", ", dims.subList(0, PROMPT_MAX_AVAILABLE_DIMENSIONS)))
+                        .append(" …共").append(dims.size())
+                        .append("个；如需完整可用维度请调用 aloudata_metric_available_dimensions");
+            }
+        }
+        return sb.toString();
+    }
+
     /**
      * Aloudata 数据源的指标+维度级语义检索
      * <p>
@@ -807,32 +939,65 @@ public class AloudataCallTool {
             mergedDimensions = new ArrayList<>(mergedDimensions.subList(0, topK));
         }
 
-        /* 确定性族级兜底 + 宽泛查询族级聚合：仅当检索结果打满 topK 时触发。
-         * 打满说明候选池/截断边界处仍有大量候选（用户输入宽泛词时尤其常见），
-         * 目标指标可能因 topK 截断被排除；按基名确定性捞全整族、补入缺失成员，
-         * 保证目标指标族必然出现在结果中（详见 backfillMetricFamily 注释）。
-         * 结果未打满（<topK）时不存在截断风险，跳过兜底。 */
-        FamilyBackfillResult family = (mergedMetrics.size() >= topK)
-                ? backfillMetricFamily(datasourceId, keyword, originalMessage, mergedMetrics)
-                : new FamilyBackfillResult(null, List.of(), List.of());
+        /* P0: 指标名称精确匹配 —— 用户问题完全匹配指标名称时直接锁定目标，跳过消歧判断 */
+        ExactMetricMatch exactMatch = resolveExactMetricMatch(datasourceId, keyword, originalMessage);
+
+        FamilyBackfillResult family;
+        boolean familyResolved;
+        if (exactMatch.resolved()) {
+            // 精确命中：将该指标置为最高分并确保出现在结果首位，不触发族级/分数消歧
+            double dominant = mergedMetrics.stream()
+                    .mapToDouble(AloudataSearchResult.MetricHit::getScore)
+                    .max().orElse(1.0) + 1.0;
+            AloudataMetricEntity target = exactMatch.metric();
+            boolean absent = true;
+            if (target.getMetricName() != null) {
+                for (AloudataSearchResult.MetricHit hit : mergedMetrics) {
+                    if (target.getMetricName().equals(hit.getMetricName())) {
+                        hit.setScore(dominant);
+                        absent = false;
+                        break;
+                    }
+                }
+            }
+            if (absent && target.getMetricName() != null) {
+                mergedMetrics.add(toMetricHit(target, dominant));
+            }
+            mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
+            enrichBackfilledDimensions(datasourceId, mergedMetrics);
+            family = new FamilyBackfillResult(null, List.of(), List.of());
+            familyResolved = true;
+        } else {
+            /* 确定性族级兜底 + 宽泛查询族级聚合：仅当检索结果打满 topK 时触发。
+             * 打满说明候选池/截断边界处仍有大量候选（用户输入宽泛词时尤其常见），
+             * 目标指标可能因 topK 截断被排除；按基名确定性捞全整族、补入缺失成员，
+             * 保证目标指标族必然出现在结果中（详见 backfillMetricFamily 注释）。
+             * 结果未打满（<topK）时不存在截断风险，跳过兜底。 */
+            family = (mergedMetrics.size() >= topK)
+                    ? backfillMetricFamily(datasourceId, keyword, originalMessage, mergedMetrics)
+                    : new FamilyBackfillResult(null, List.of(), List.of());
+            familyResolved = family.triggered() && !family.matched().isEmpty();
+        }
 
         /* 通用口径重排：用"用户原话 vs 展示名"的字符重叠度做通用重排，将用户原话中信息量覆盖最充分的指标提权到首位。
          * 仅当族级兜底已解析出确定性目标（matched 非空，dominant 分已置位）时跳过——避免覆盖权威排序；
          * 族级已触发但 matched 为空（如宽泛词聚合多成员无括号口径，无法唯一确定）时仍执行重排，
          * 借助原话重叠度把最匹配的指标（如原话"我想看保费收入"、keyword="保费"时）提权首位，减少 LLM 额外确认。 */
-        boolean familyResolved = family.triggered() && !family.matched().isEmpty();
         if (!familyResolved) {
             applyGenericCaliberRerank(originalMessage, keyword, mergedMetrics);
         }
 
         /* Rerank 精排分支：由系统配置 dataagent.search.rerank.enabled 控制（默认关闭）。
          * 开启且配置了默认 rerank 模型时，对 TopK 截断后的指标/维度候选按与用户原话的
-         * 相关度二次精排，提升命中项排序准确度；开关关闭或调用失败时静默降级为原始排序。 */
-        SemanticRerankOutput rerankOutput = semanticRerankService.rerankSemanticHits(
-                mergedMetrics, mergedDimensions, originalMessage != null ? originalMessage : keyword);
-        if (rerankOutput.isReranked()) {
-            mergedMetrics = rerankOutput.getMetricHits();
-            mergedDimensions = rerankOutput.getDimensionHits();
+         * 相关度二次精排，提升命中项排序准确度；开关关闭或调用失败时静默降级为原始排序。
+         * 指标名称精确匹配时跳过重排，避免打乱权威排序。 */
+        if (!exactMatch.resolved()) {
+            SemanticRerankOutput rerankOutput = semanticRerankService.rerankSemanticHits(
+                    mergedMetrics, mergedDimensions, originalMessage != null ? originalMessage : keyword);
+            if (rerankOutput.isReranked()) {
+                mergedMetrics = rerankOutput.getMetricHits();
+                mergedDimensions = rerankOutput.getDimensionHits();
+            }
         }
 
         StringBuilder sb = new StringBuilder();
@@ -847,17 +1012,22 @@ public class AloudataCallTool {
         int dimensionCount = mergedDimensions.size();
         sb.append("**匹配结果**: ").append(metricCount).append(" 个指标 + ").append(dimensionCount).append(" 个维度\n\n");
 
-        /* 确定性族级口径提示 + 消歧判断：前置到指标/维度列表之前，确保即使结果超长触发 spill，
+        /* 确定性匹配提示：精确命中时直接告知目标并禁止消歧；否则走族级口径提示 + 消歧判断。
+         * 前置到指标/维度列表之前，确保即使结果超长触发 spill，
          * LLM 也能在 preview 中看到消歧和族级口径信息（这些是检索结果中最重要的决策依据）。 */
-        appendFamilyHint(sb, family, keyword);
-        appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
+        if (exactMatch.resolved()) {
+            appendExactMatchHint(sb, exactMatch.metric(), keyword);
+        } else {
+            appendFamilyHint(sb, family, keyword);
+            appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
+        }
 
         /* 展示指标命中 */
         if (!mergedMetrics.isEmpty()) {
             sb.append("## 指标\n\n");
             for (AloudataSearchResult.MetricHit hit : mergedMetrics) {
-                sb.append("- ").append(hit.getPromptInfo());
-                sb.append(" [分数: ").append(String.format("%.3f", hit.getScore()));
+                sb.append("- ").append(compactMetricPrompt(hit));
+                sb.append(" [分数: ").append(String.format("%.2f", hit.getScore()));
                 sb.append(", 来源: ").append(hit.getMatchSource()).append("]\n");
             }
             sb.append("\n");
@@ -891,7 +1061,10 @@ public class AloudataCallTool {
             sb.append("- 向用户展示候选维度时，必须标注每个维度属于哪个指标，例如");
             sb.append("「销售额可用维度：区域/省份/城市」，禁止脱离指标单独列维度让用户选。\n");
             sb.append("- 构造查询前自检：对 dimensions 中的每个 dimName，确认它出现在所选指标的");
-            sb.append("availableDimensions 列表中；若不在，移除或换用该指标的可用维度。\n\n");
+            sb.append("availableDimensions 列表中；若不在，移除或换用该指标的可用维度。\n");
+            sb.append("- **用户未指定维度时，dimensions 默认使用指标日期（metric_time）**：月度/常规统计用");
+            sb.append("metric_time__month，趋势/近N天用 metric_time__day；不要凭空选用其他维度，也不要向用户追问维度。");
+            sb.append("仅当用户明确要「累计/总计/合计」汇总时才可省略 dimensions。\n\n");
         }
 
         /* P3: 检索失败自动降级 */
@@ -984,11 +1157,14 @@ public class AloudataCallTool {
         if (Boolean.FALSE.equals(entity.getEnabled())) {
             return "数据源已禁用, id=" + datasourceId;
         }
+        if (!isVisibleEnabledDatasource(datasourceId)) {
+            return "当前用户无权限访问该数据源, id=" + datasourceId;
+        }
         return null;
     }
 
     /**
-     * 校验数据源是否为 Aloudata 类型
+     * 校验数据源是否为 Aloudata 类型 且 当前用户有权限（可见且已启用）
      *
      * @return 错误信息，null 表示校验通过
      */
@@ -1002,6 +1178,9 @@ public class AloudataCallTool {
         }
         if (Boolean.FALSE.equals(entity.getEnabled())) {
             return "数据源已禁用, id=" + datasourceId;
+        }
+        if (!isVisibleEnabledDatasource(datasourceId)) {
+            return "当前用户无权限访问该数据源, id=" + datasourceId;
         }
         return null;
     }
@@ -1649,16 +1828,20 @@ public class AloudataCallTool {
      * 当白名单为空且 LLM 未传 datasourceId 时，自动查找用户可用的 Aloudata 数据源。
      * 只有一个数据源时自动注入，多个时返回列表引导。
      */
+    /**
+     * 自动注入唯一 Aloudata 数据源。
+     * <p>
+     * 权限收紧：仅从当前用户「可见且已启用」的 Aloudata 源中选择；无权限的数据源不参与自动注入。
+     */
     private Long autoResolveDatasourceId() {
         try {
-            List<DatasourceEntity> aloudataSources = datasourceMapper.selectList(
-                    new LambdaQueryWrapper<DatasourceEntity>()
-                            .eq(DatasourceEntity::getSourceType, DataAgentConstants.SOURCE_TYPE_ALOUDATA)
-                            .eq(DatasourceEntity::getEnabled, true)
-                            .select(DatasourceEntity::getId, DatasourceEntity::getName));
-            if (aloudataSources.size() == 1) {
-                Long id = aloudataSources.get(0).getId();
-                log.info("自动注入唯一 Aloudata 数据源 ID: {}", id);
+            List<DatasourceVO> visibleAloudata = visibleEnabledDatasources().stream()
+                    .filter(d -> d.getSourceType() != null
+                            && DataAgentConstants.SOURCE_TYPE_ALOUDATA.equalsIgnoreCase(d.getSourceType()))
+                    .toList();
+            if (visibleAloudata.size() == 1) {
+                Long id = visibleAloudata.get(0).getId();
+                log.info("自动注入当前用户可见的唯一 Aloudata 数据源 ID: {}", id);
                 return id;
             }
         } catch (Exception e) {
@@ -1697,33 +1880,27 @@ public class AloudataCallTool {
             }
             return ScopeResolveResult.ok(onlyAloudata);
         }
-        // 多个 / 零个 Aloudata 源：校验 LLM 传值是否为存在且启用的数据源
-        if (resolved != null) {
-            DatasourceEntity entity = datasourceMapper.selectById(resolved);
-            if (entity != null && !Boolean.FALSE.equals(entity.getEnabled())) {
-                return ScopeResolveResult.ok(resolved);
-            }
-            log.info("语义检索：LLM 传入的 datasourceId={} 不存在或已禁用，返回可用数据源列表引导重选", resolved);
+        // 多个 / 零个 Aloudata 源：校验 LLM 传值确为当前用户「可见且已启用」的数据源
+        if (resolved != null && isVisibleEnabledDatasource(resolved)) {
+            return ScopeResolveResult.ok(resolved);
         }
+        log.info("语义检索：LLM 传入的 datasourceId={} 不存在、已禁用或无访问权限，返回可用数据源列表引导重选", resolved);
         return ScopeResolveResult.fail(buildDatasourceGuide());
     }
 
     /**
      * 构建"可用数据源列表"引导文本，供无法确定 datasourceId 时返回给 LLM 重选。
+     * <p>
+     * 权限收紧：仅列出当前用户「可见且已启用」的数据源，不暴露无权限的数据源。
      */
     private String buildDatasourceGuide() {
         try {
-            List<DatasourceEntity> sources = datasourceMapper.selectList(
-                    new LambdaQueryWrapper<DatasourceEntity>()
-                            .eq(DatasourceEntity::getEnabled, true)
-                            .select(DatasourceEntity::getId, DatasourceEntity::getName,
-                                    DatasourceEntity::getSourceType)
-                            .last("LIMIT 50"));
+            List<DatasourceVO> sources = datasourceManageService.listVisibleEnabledDatasources();
             if (sources.isEmpty()) {
-                return "未找到可用数据源，请先在数据源页面配置后再检索。";
+                return "未找到您有权限访问的已启用数据源，请先在数据源页面配置或授权后再检索。";
             }
-            StringBuilder sb = new StringBuilder("需要指定有效的 datasourceId（请勿猜测）。当前可用数据源：\n");
-            for (DatasourceEntity s : sources) {
+            StringBuilder sb = new StringBuilder("需要指定有效的 datasourceId（请勿猜测）。当前您可用的数据源：\n");
+            for (DatasourceVO s : sources) {
                 sb.append("- datasourceId=").append(s.getId())
                         .append(", name=").append(s.getName() != null ? s.getName() : "")
                         .append(", type=").append(s.getSourceType() != null ? s.getSourceType() : "")
@@ -1735,6 +1912,29 @@ public class AloudataCallTool {
             log.error("构建可用数据源列表失败: {}", e.getMessage());
             return "需要指定有效的 datasourceId（请勿猜测）。";
         }
+    }
+
+    /**
+     * 当前用户「可见且已启用」的数据源列表（权限感知），供兜底解析 / 校验使用。
+     * 用户上下文缺失时服务层回退为全量已启用列表。
+     */
+    private List<DatasourceVO> visibleEnabledDatasources() {
+        try {
+            return datasourceManageService.listVisibleEnabledDatasources();
+        } catch (Exception e) {
+            log.error("获取当前用户可见数据源失败: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 指定数据源是否对当前用户「可见且已启用」（权限收紧：无权限不可用）。
+     */
+    private boolean isVisibleEnabledDatasource(Long datasourceId) {
+        if (datasourceId == null) {
+            return false;
+        }
+        return visibleEnabledDatasources().stream().anyMatch(d -> datasourceId.equals(d.getId()));
     }
 
     /**
@@ -2356,11 +2556,13 @@ public class AloudataCallTool {
 
         sb.append("## ⚠️ 消歧提示\n\n");
         sb.append("检索到的结果存在多义性，**请不要自行选择，必须向用户确认后再构造查询**。\n\n");
+        sb.append("**转述要求（硬性）**：必须将候选中的**全部**指标逐条、原样转述给用户选择；");
+        sb.append("禁止只列前几个、禁止凭印象自行筛选、禁止凭记忆补全检索结果中不存在的指标。遗漏候选视为执行失败。\n\n");
 
         if (hasMetricAmbiguity) {
-            sb.append("**指标消歧**：用户提到的「").append(keyword).append("」可能对应以下指标，请让用户选择：\n");
-            int count = Math.min(DISAMBIGUATION_MAX_CANDIDATES, metrics.size());
-            for (int i = 0; i < count; i++) {
+            sb.append("**指标消歧**：用户提到的「").append(keyword).append("」可能对应以下 ")
+                    .append(metrics.size()).append(" 个候选指标，请让用户选择（请完整转述下方全部候选，不得遗漏）：\n");
+            for (int i = 0; i < metrics.size(); i++) {
                 AloudataSearchResult.MetricHit hit = metrics.get(i);
                 sb.append("  ").append(i + 1).append(". **").append(hit.getMetricName()).append("**(")
                         .append(hit.getMetricDisplayName() != null ? hit.getMetricDisplayName() : "").append(")");
@@ -2369,17 +2571,18 @@ public class AloudataCallTool {
                 }
                 sb.append("\n");
             }
-            sb.append("追问示例：\"「").append(keyword).append("」可能对应 ")
-                    .append(metrics.get(0).getMetricDisplayName() != null ? metrics.get(0).getMetricDisplayName() : metrics.get(0).getMetricName())
-                    .append(" 或 ")
-                    .append(metrics.get(1).getMetricDisplayName() != null ? metrics.get(1).getMetricDisplayName() : metrics.get(1).getMetricName())
-                    .append("，请选择具体指标\"\n\n");
+            if (metrics.size() >= 2) {
+                sb.append("追问示例：\"「").append(keyword).append("」可能对应 ")
+                        .append(metrics.get(0).getMetricDisplayName() != null ? metrics.get(0).getMetricDisplayName() : metrics.get(0).getMetricName())
+                        .append(" 或 ")
+                        .append(metrics.get(1).getMetricDisplayName() != null ? metrics.get(1).getMetricDisplayName() : metrics.get(1).getMetricName())
+                        .append("，请选择具体指标\"\n\n");
+            }
         }
 
         if (hasDimensionAmbiguity) {
             sb.append("**维度消歧**：检索到多个相似维度，请让用户确认具体维度：\n");
-            int count = Math.min(DISAMBIGUATION_MAX_CANDIDATES, dimensions.size());
-            for (int i = 0; i < count; i++) {
+            for (int i = 0; i < dimensions.size(); i++) {
                 AloudataSearchResult.DimensionHit hit = dimensions.get(i);
                 sb.append("  ").append(i + 1).append(". **").append(hit.getDimName()).append("**(")
                         .append(hit.getDimDisplayName() != null ? hit.getDimDisplayName() : "").append(")");
@@ -2388,11 +2591,13 @@ public class AloudataCallTool {
                 }
                 sb.append("\n");
             }
-            sb.append("追问示例：\"可按 ")
-                    .append(dimensions.get(0).getDimDisplayName() != null ? dimensions.get(0).getDimDisplayName() : dimensions.get(0).getDimName())
-                    .append(" 或 ")
-                    .append(dimensions.get(1).getDimDisplayName() != null ? dimensions.get(1).getDimDisplayName() : dimensions.get(1).getDimName())
-                    .append(" 查看数据，请选择具体维度\"\n\n");
+            if (dimensions.size() >= 2) {
+                sb.append("追问示例：\"可按 ")
+                        .append(dimensions.get(0).getDimDisplayName() != null ? dimensions.get(0).getDimDisplayName() : dimensions.get(0).getDimName())
+                        .append(" 或 ")
+                        .append(dimensions.get(1).getDimDisplayName() != null ? dimensions.get(1).getDimDisplayName() : dimensions.get(1).getDimName())
+                        .append(" 查看数据，请选择具体维度\"\n\n");
+            }
         }
     }
 

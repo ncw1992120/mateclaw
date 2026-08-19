@@ -493,8 +493,11 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private String decorateMessageWithScope(String originalMessage, List<Long> datasourceIds) {
         List<DatasourceVO> allDatasources;
         try {
-            // 使用 Caffeine 本地缓存，避免每次请求都查 DB；30s TTL，数据源变更最多延迟 30s 生效
-            allDatasources = datasourceListCache.get("all", key -> datasourceManageService.listDatasources());
+            // 使用 Caffeine 本地缓存，避免每次请求都查 DB；30s TTL，数据源变更最多延迟 30s 生效。
+            // 按用户维度缓存：未勾选（无白名单）时仅注入当前用户可见且已启用的数据源，不注入无权限的数据源
+            String dsCacheKey = "visible:" + currentDatasourceCacheKey();
+            allDatasources = datasourceListCache.get(dsCacheKey,
+                    key -> datasourceManageService.listVisibleEnabledDatasources());
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to load datasources for scope hint: {}", e.getMessage());
             allDatasources = List.of();
@@ -547,6 +550,19 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         appendBusinessTermHints(hint, originalMessage);
 
         return hint.toString();
+    }
+
+    /**
+     * 构造数据源列表缓存 key（按用户隔离，未勾选场景只缓存该用户可见的数据源）。
+     * 用户上下文缺失时回退为共享键，保证功能可用。
+     */
+    private String currentDatasourceCacheKey() {
+        try {
+            Long uid = workspaceGuard.currentUserId();
+            return uid != null ? String.valueOf(uid) : "shared";
+        } catch (Exception e) {
+            return "shared";
+        }
     }
 
     /**

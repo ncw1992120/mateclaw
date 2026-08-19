@@ -31,6 +31,17 @@ public interface DatasourceManageService {
     List<DatasourceVO> listDatasources();
 
     /**
+     * 获取当前用户「可见且已启用」的数据源列表（LLM 侧专用）
+     * <p>
+     * 过滤逻辑：仅返回当前用户**有权访问**（自己创建 / 被资源授权 / 工作区内 meta_shared 共享）
+     * 且 enabled=true 的数据源。用于对话系统提示注入与 list_datasources 工具，
+     * 避免把无权限或已停用的数据源暴露给 LLM。用户上下文不可用时回退为全量已启用列表（兼容旧行为）。
+     *
+     * @return 数据源列表
+     */
+    List<DatasourceVO> listVisibleEnabledDatasources();
+
+    /**
      * 根据 ID 获取数据源
      *
      * @param id 数据源 ID

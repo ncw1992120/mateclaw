@@ -59,9 +59,12 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      */
     @Override
     public List<DatasourceVO> listDatasources(Long ownerId) {
-        // 内部工具调用：不过滤 owner，也不按授权表过滤
+        // 内部工具调用：不过滤 owner，也不按授权表过滤，但必须过滤掉未启用（enabled=false）的数据源——
+        // 该路径仅供 LLM 侧使用（对话系统提示的数据源列表、list_datasources 工具），未勾选时更需
+        // 确保只会暴露"可用"的数据源，避免把停用数据源当可选项推给 LLM 导致误查。
         if (ownerId == null) {
             LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(DatasourceEntity::getEnabled, true);
             List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
             return entities.stream().map(this::toVO).collect(Collectors.toList());
         }
@@ -154,6 +157,32 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public List<DatasourceVO> listDatasources() {
         return listDatasources(null);
+    }
+
+    /**
+     * 获取当前用户「可见且已启用」的数据源列表（LLM 侧专用）
+     * <p>
+     * 仅返回当前用户有权访问（自己创建 + 资源授权 + 工作区 meta_shared 共享）且 enabled=true 的数据源，
+     * 供对话系统提示注入与 list_datasources 工具使用，避免把无权限或已停用的数据源暴露给 LLM。
+     */
+    @Override
+    public List<DatasourceVO> listVisibleEnabledDatasources() {
+        try {
+            Long uid = workspaceGuard.currentUserId();
+            Long wid = workspaceGuard.currentWorkspaceId();
+            if (uid != null && wid != null) {
+                // 权限感知路径：当前用户可见（自己创建 + 被授权 + 共享）且仅保留已启用
+                return listDatasources(uid).stream()
+                        .filter(ds -> !Boolean.FALSE.equals(ds.getEnabled()))
+                        .collect(Collectors.toList());
+            }
+        } catch (Exception e) {
+            // 用户上下文不可用（如工具在无身份上下文的线程执行）时回退为全量已启用列表
+            log.warn("按用户权限过滤数据源失败，回退为全量已启用列表: {}", e.getMessage());
+        }
+        return listDatasources().stream()
+                .filter(ds -> !Boolean.FALSE.equals(ds.getEnabled()))
+                .collect(Collectors.toList());
     }
 
     /**

@@ -1,7 +1,7 @@
 ---
 name: aloudata_metric_query
 version: "1.0.0"
-description: "Aloudata 指标平台查询的唯一入口。凡涉及指标数值、趋势、对比、排名、占比、按维度拆解的问数请求，必须先 load_skill('aloudata_metric_query') 加载完整工作流，再按流程执行，禁止跳过流程直接调用 aloudata_metrics_query。硬约束：禁止凭猜测构造 metricName/dimName，必须先 aloudata_search_semantic 检索获得英文名；timeConstraint 仅支持 metric_time 维度且必须用 () 包裹；同环比须 metric_time 单值锚点。"
+description: "Aloudata 指标平台查询的唯一入口。凡涉及指标数值、趋势、对比、排名、占比、按维度拆解的问数请求，必须先 load_skill('aloudata_metric_query') 加载完整工作流，再按流程执行，禁止跳过流程直接调用 aloudata_metrics_query。硬约束：禁止凭猜测构造 metricName/dimName，必须先 aloudata_search_semantic 检索获得英文名；timeConstraint 仅支持 metric_time 维度且必须用 () 包裹；同环比须 metric_time 单值锚点。当用户问题与指标名称完全匹配（=metricName或展示名）时，直接查询、禁止再做消歧确认；用户未指定维度时，dimensions 使用默认指标时间维度（metric_time，如 metric_time__month），不得追问维度或凭空选用其他维度。"
 dependencies:
   tools:
     - search_business_term
@@ -152,6 +152,8 @@ templates:
 2. 用户明确指定了时间范围（如"上月""2025年1月""近7天"）
 3. 维度名称唯一匹配
 4. 计算需求可从上下文唯一确定（如"去年和今年比"→同比）
+5. **用户问题与指标名称完全匹配**：用户表述 = 某指标的 metricName 或展示名（`aloudata_search_semantic` 返回「✅ 指标名称精确匹配」时）→ 直接使用该指标构造查询，**禁止再做消歧确认**
+6. **用户未指定维度**：使用默认指标日期维度（metric_time 粒度，如 metric_time__month），不得追问维度或凭空选用其他维度
 
 #### 追问原则
 
@@ -159,6 +161,7 @@ templates:
 - **列出候选项的展示名+口径描述**，让用户做知情选择
 - **不要替用户做决定**，即使你"觉得"某个选项更可能，也必须确认
 - **一次追问只问一个维度的问题**，不要同时问指标+时间+维度
+- **完整转述全部候选（硬性）**：必须把 `aloudata_search_semantic` 返回中的**全部**候选指标逐条、原样列给用户选择（含 metricName/展示名/口径）；禁止只列前几个、禁止凭印象自行筛选、禁止凭记忆补全检索结果中不存在的指标。遗漏候选视为执行失败、必须纠正后再继续
 
 ### 第四步：确认可用维度
 
@@ -176,7 +179,7 @@ templates:
 
 **基本参数**：
 - `metrics`（必填）：指标英文名列表，如 `["sales_amount"]`。支持快速计算语法（同环比、占比、排名、时间限定）
-- `dimensions`（选填）：维度英文名列表。**默认按指标日期查询**，即 `metric_time` 的某个粒度（支持 year/quarter/month/week/day/hour/minute，如 `metric_time__month`）；用户指定其他维度另说。详见 [references/api-doc.md](references/api-doc.md) 的 dimensions 详解
+- `dimensions`（选填）：维度英文名列表。**默认按指标日期查询**，即 `metric_time` 的某个粒度（支持 year/quarter/month/week/day/hour/minute，如 `metric_time__month`）；用户指定其他维度另说。**用户未指定任何维度时，直接使用默认指标时间维度（metric_time）：常规/月度统计用 `metric_time__month`，趋势/近N天用 `metric_time__day`；不要向用户追问维度，也不要凭空选用其他维度；仅当用户明确要「累计/总计/合计」汇总时才可省略 dimensions**。详见 [references/api-doc.md](references/api-doc.md) 的 dimensions 详解
 - `timeConstraint`（选填）：指标日期范围，**仅支持 `metric_time` 维度**（业务日期维度用 filters）。表达式语法，**必须用 `()` 包裹**，不支持 BETWEEN。如 `"(DateTrunc([metric_time],\"MONTH\")=DateTrunc(Today(),\"MONTH\"))"`。详见 [references/api-doc.md](references/api-doc.md) 的 timeConstraint 详解
 - `filters`（选填）：全局筛选（含业务日期维度如 `dim_order_date`），对全部指标生效，如 `["[region] IN (\"华东\",\"华南\")"]`
 - `resultFilters`（选填）：结果筛选，对查询结果进行二次过滤
@@ -272,3 +275,6 @@ templates:
 8. **与 Python 分析协作**：如需复杂处理，将数据传入 python_analysis 工具
 9. **系统自动保障**：queryResultType 已强制为 DATA；timeConstraint 会自动规范化（补括号、BETWEEN转AND、补方括号）；查询请求会自动校验（中文展示名、同环比约束、维度可用性等）；orders 会自动归一化（字符串数组/JSON字符串自动转对象数组）
 10. **失败止损**：相同错误连续出现 2 次以上即停止变换参数重试，优先排查数据源查询通道与认证配置（见"查询失败处理与止损"）
+11. **指标名称完全匹配即直查**：用户问题与某指标 metricName/展示名完全匹配（`aloudata_search_semantic` 返回「✅ 指标名称精确匹配」）时，直接构造查询，**禁止再次向用户做消歧确认**
+12. **未指定维度用默认指标日期**：用户未指定维度时，dimensions 使用默认指标时间维度（metric_time，如 metric_time__month），**禁止追问维度**或凭空选用其他维度；除非用户明确要求「累计/总计/合计」汇总
+13. **消歧时完整转述候选（硬性）**：收到消歧提示时，必须将检索返回的**全部**候选指标原样、完整列给用户选择；禁止凭印象只列部分或凭记忆补全（见第三点五步"追问原则"）

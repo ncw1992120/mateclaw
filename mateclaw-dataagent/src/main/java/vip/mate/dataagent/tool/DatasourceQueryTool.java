@@ -168,11 +168,12 @@ public class DatasourceQueryTool {
     }
 
     /**
-     * 列出所有可用数据源（受用户勾选白名单约束）
+     * 列出所有可用数据源（受用户勾选白名单约束 + 仅返回当前用户可见且已启用的数据源）
      */
     private String listDatasources() {
         Set<Long> allowed = currentDatasourceWhitelist();
-        var datasources = datasourceManageService.listDatasources();
+        // 仅列出当前用户「可见且已启用」的数据源：避免把无权限或已停用的数据源暴露给 LLM
+        var datasources = datasourceManageService.listVisibleEnabledDatasources();
         JSONArray arr = new JSONArray();
         for (var ds : datasources) {
             if (Boolean.FALSE.equals(ds.getEnabled())) {
