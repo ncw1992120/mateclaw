@@ -180,7 +180,7 @@ public class AloudataCallTool {
                     },
                     "keyword": {
                       "type": "string",
-                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等。重要：请保留用户原话中的所有限定词和括号内容（如「整体」「个人」「汇总」等），不要改写或精简同义词。例如用户说「交易市占率（整体）」，keyword 应传「交易市占率（整体）」而非「交易市占率」。"
+                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等。重要：请**原样保留**用户原话中的标点符号（全角/半角括号、-、_、空格等），禁止删除、改写、转换全角半角或截断关键词；系统对标点差异不敏感（如「交易市占率（整体）」与「交易市占率(整体)」能匹配同一指标），不要为对齐标点而改写关键词。保留用户原话中的所有限定词和括号内容（如「整体」「个人」「汇总」等），不要改写或精简同义词。例如用户说「交易市占率（整体）」，keyword 应传「交易市占率（整体）」而非「交易市占率」。"
                     },
                     "topK": {
                       "type": "integer",
@@ -257,7 +257,9 @@ public class AloudataCallTool {
         if (METRICS_QUERY_ENDPOINT.equalsIgnoreCase(endpointName)) {
             sb.append("。硬性规则：1) 指标名称与用户问题完全匹配（=metricName或展示名）时直接查询，"
                     + "不要向用户做消歧确认；2) 用户未指定维度时，dimensions 默认使用指标日期（metric_time，"
-                    + "常规用 metric_time__month，趋势/近N天用 metric_time__day），不要追问维度、不要凭空选维度。");
+                    + "常规用 metric_time__month，趋势/近N天用 metric_time__day），不要追问维度、不要凭空选维度；"
+                    + "3) 指标匹配对标点不敏感（全角/半角括号、-、_、空白等差异均不影响匹配），按用户原话直接检索，"
+                    + "不要因标点差异改写、删除或截断关键词。");
         }
 
         // 附加响应参数摘要，帮助 Agent 理解返回结构
@@ -781,8 +783,15 @@ public class AloudataCallTool {
             return ExactMetricMatch.none();
         }
         String[] probes = {keyword, originalMessage};
-        for (String probe : probes) {
+        // keyword 探针可信度守卫：keyword 相对原话被严重截断时跳过 keyword 探针（见 isKeywordProbeTruncated），
+        // 防止「截断关键词恰好等于同族短名指标」被精确锁定成错误目标；该场景交给族级兜底用原话整名命中
+        boolean skipKeywordProbe = isKeywordProbeTruncated(keyword, originalMessage);
+        for (int i = 0; i < probes.length; i++) {
+            String probe = probes[i];
             if (probe == null) {
+                continue;
+            }
+            if (i == 0 && skipKeywordProbe) {
                 continue;
             }
             String p = probe.trim();
@@ -832,7 +841,115 @@ public class AloudataCallTool {
                 log.error("指标名称精确匹配查询失败，跳过（不影响原有检索）: {}", e.getMessage());
             }
         }
+
+        /* 标点/空白不敏感兜底：SQL 精确相等失败时（如 全角括号 vs 半角括号、连接符/下划线/空白差异，
+         * LLM 对用户带标点原话做了截断或格式化），归一化后与 metricName/展示名比对。 */
+        for (int i = 0; i < probes.length; i++) {
+            String probe = probes[i];
+            if (probe == null) {
+                continue;
+            }
+            if (i == 0 && skipKeywordProbe) {
+                continue;
+            }
+            String p = probe.trim();
+            if (p.isEmpty()) {
+                continue;
+            }
+            List<AloudataMetricEntity> normalizedMatches = resolveNormalizedMetricMatch(datasourceId, p);
+            if (!normalizedMatches.isEmpty()) {
+                if (normalizedMatches.size() == 1) {
+                    return new ExactMetricMatch(true, normalizedMatches.get(0));
+                }
+                // 多个归一化同名词仍有多义性，交由消歧流程
+                return ExactMetricMatch.none();
+            }
+        }
         return ExactMetricMatch.none();
+    }
+
+    /**
+     * 标点/空白不敏感的指标名称匹配（兜底）。
+     * <p>
+     * 用户问题/关键词与指标名在去除标点、空白、全角半角差异（括号、-、_ 等）后**完全相等**时判定为命中。
+     * 覆盖 LLM 对用户带标点原话的截断 / 格式化导致的微小位移（如 展示名「销售金额（含税）」 命中
+     * 关键词「销售金额(含税)」或「销售金额含税」）。
+     * <p>
+     * 候选集：先按「剥离尾部口径后的基名」前缀查询缩小范围；前缀未命中时（名称分量被全角括号等隔断，
+     * 如 base=「销售金额含税」无法前缀命中 display=「销售金额（含税）」），退化为按 metricName/展示名
+     * 两列的有界全量采样，在内存中做归一化比对。仅用两列查询（列裁剪），开销可忽略。
+     */
+    private List<AloudataMetricEntity> resolveNormalizedMetricMatch(Long datasourceId, String probe) {
+        String normalized = normalizeKey(probe);
+        if (normalized.isEmpty()) {
+            return List.of();
+        }
+        try {
+            String base = stripTrailingCaliber(probe);
+            List<AloudataMetricEntity> candidates;
+            if (!base.isEmpty()) {
+                candidates = metricMapper.selectList(
+                        new LambdaQueryWrapper<AloudataMetricEntity>()
+                                .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                                .likeRight(AloudataMetricEntity::getMetricDisplayName, base)
+                                .select(AloudataMetricEntity::getMetricName,
+                                        AloudataMetricEntity::getMetricDisplayName)
+                                .orderByAsc(AloudataMetricEntity::getMetricDisplayName)
+                                .last("LIMIT 500"));
+            } else {
+                candidates = List.of();
+            }
+            if (candidates.isEmpty()) {
+                candidates = metricMapper.selectList(
+                        new LambdaQueryWrapper<AloudataMetricEntity>()
+                                .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                                .select(AloudataMetricEntity::getMetricName,
+                                        AloudataMetricEntity::getMetricDisplayName)
+                                .orderByAsc(AloudataMetricEntity::getMetricName)
+                                .last("LIMIT 1500"));
+            }
+            return candidates.stream()
+                    .filter(m -> normalized.equals(normalizeKey(m.getMetricName()))
+                            || (m.getMetricDisplayName() != null
+                            && normalized.equals(normalizeKey(m.getMetricDisplayName()))))
+                    .distinct()
+                    .toList();
+        } catch (Exception e) {
+            log.error("标点不敏感指标名称匹配查询失败，跳过（不影响原有检索）: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * keyword 探针可信度守卫（防截断劫持）。
+     * <p>
+     * 背景：{@link #resolveExactMetricMatch} 的 probes = {keyword, originalMessage} 依次精确匹配，
+     * 先命中的探针直接锁定目标并输出「禁止消歧」。当 LLM 把 keyword 截断成同族基名/短名（如
+     * 原话「查询昨天的期货收入-应收-当年」→ keyword「期货收入」），且库里恰好存在一个名为「期货收入」
+     * 的短名指标时，keyword 探针会把这个**短名指标**锁成目标，而用户真正要的是「期货收入-应收-当年」——
+     * 精确匹配把错误目标锁死且禁止消歧，属于错查而非多问。
+     * <p>
+     * 守卫：keyword 含中文、且其归一化长度不足原话归一化长度的 80% 时，判定 keyword 被严重截断，
+     * 跳过 keyword 探针（SQL 精确相等与归一化相等两轮都跳过），改由族级兜底用「原话整名命中」锁定
+     * 正确成员；族级也定不出时落到消歧（安全保守，宁多问不错查）。
+     * <p>
+     * 仅对中文 keyword 生效：用户完整写出英文 metricName（如 sales_amount）时不受影响，
+     * 即使原话带更长的中文上下文也照常走 SQL 精确相等。
+     */
+    private boolean isKeywordProbeTruncated(String keyword, String originalMessage) {
+        if (keyword == null || originalMessage == null || originalMessage.isBlank()) {
+            return false;
+        }
+        String nKw = normalizeKey(keyword);
+        String nOrig = normalizeKey(originalMessage);
+        if (nKw.isEmpty() || nOrig.isEmpty() || nKw.equals(nOrig)) {
+            return false;
+        }
+        if (!nKw.matches(".*[\\u4e00-\\u9fff].*")) {
+            // 纯英文 metricName 不受守卫影响
+            return false;
+        }
+        return nKw.length() < (int) Math.ceil(nOrig.length() * 0.8);
     }
 
     /**
@@ -919,6 +1036,21 @@ public class AloudataCallTool {
             if (complement != null && !complement.isEmpty() && !expandedKeywords.contains(complement)) {
                 expandedKeywords.add(complement);
             }
+        }
+
+        /* 标点还原：LLM 常对用户带标点的原话做截断/格式化（如 用户「销售金额（含税）」→ keyword「销售金额」
+         * 或「销售金额含税」），导致 ES 关键词侧匹配偏差。当 keyword 的归一化形态是原话归一化形态的子集、
+         * 且覆盖 ≥60% 长度时，认为 keyword 是原话的"去标点/精简"退化，把带标点的原话整体追加为检索词
+         * （hybridSearchEnhanced 中扩展词是 OR should 语义，命中即加分；不命中不影响召回），
+         * 与下方 originalMessage 并行的向量路径互补，抵消 LLM 格式化造成的失配。 */
+        String normOrig = normalizeKey(originalMessage);
+        String normKw = normalizeKey(keyword);
+        if (!normOrig.isEmpty() && !normOrig.equals(normKw)
+                && normKw.length() >= (int) Math.ceil(normOrig.length() * 0.6)
+                && normOrig.contains(normKw)
+                && !expandedKeywords.contains(originalMessage)) {
+            log.info("关键词标点还原：keyword='{}' 由原话 '{}' 归一化退化，追加带标点原话为检索词", keyword, originalMessage);
+            expandedKeywords.add(originalMessage);
         }
 
         /* 增强混合检索：传入用户原话作为并行向量检索路径，降低对 LLM keyword 压缩质量的敏感度 */
@@ -1713,6 +1845,42 @@ public class AloudataCallTool {
     }
 
     /**
+     * 归一化字符串用于「标点/空白不敏感」的匹配比较。
+     * <p>
+     * 全角 ASCII 字母数字转半角、统一小写，仅保留字母 / 数字 / 中文字符，
+     * 丢弃所有标点、括号、连接符（-、_）、斜杠、空白等分隔符。
+     * 例：{@code "销售金额（含税）"} → {@code "销售金额含税"}；
+     *     {@code "sales_amount"} → {@code "salesamount"}；
+     *     {@code "metric_time__month"} → {@code "metrictimemonth"}。
+     * <p>
+     * 背景：用户问句常带全角括号、半角括号、连接符等标点，LLM 生成检索 keyword
+     * 时可能截断 / 改写 / 转换全角半角，导致「按关键词匹配指标名称」失配。此方法只用于
+     * 「是否匹配」的判定；判定命中后仍使用原始 metricName / 展示名构造查询，不改写查询值。
+     */
+    private static String normalizeKey(String text) {
+        if (text == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (char c : text.trim().toCharArray()) {
+            char cc = c;
+            // 全角 ASCII（U+FF01~U+FF5E）转半角
+            if (cc >= 0xFF01 && cc <= 0xFF5E) {
+                cc = (char) (cc - 0xFEE0);
+            }
+            // 全角空格转半角
+            if (cc == 0x3000) {
+                cc = ' ';
+            }
+            char lower = Character.toLowerCase(cc);
+            if (Character.isLetterOrDigit(lower)) {
+                sb.append(lower);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * 获取当前会话的用户原始消息。
      * <p>
      * 通过 ToolExecutionContext 获取 conversationId，再从 scopeContext 读取用户原始消息。
@@ -2150,21 +2318,31 @@ public class AloudataCallTool {
                 return none;
             }
 
-            // ② 口径识别：用「原话 + keyword」匹配各成员口径后缀。
-            // 优先"强匹配"（原话含完整展示名 / base+口径 / 括号包裹口径），可精确区分互为子串的口径
-            // （如"个人"vs"个人及机构"，括号形式"（个人）"不会命中"（个人及机构）"）；无强匹配时用"弱匹配"
-            // （口径 token 出现在原话任意处）兜底，再用子串去重（longest-wins）收敛。
+            // ② 口径识别：用「原话 + keyword」匹配各成员。
+            // 优先"强匹配"：
+            //   a) 整名命中（含标点不敏感）——原话/关键词去掉标点后完整包含该成员展示名，直接视为强命中。
+            //      这是「-」连接成员的唯一识别通道：如 展示名「期货收入-应收-当年」无括号口径，
+            //      extractTrailingCaliber 取不到口径词，但 normalizeKey(原话) 含 normalizeKey(展示名) 即可锁定。
+            //   b) 括号口径命中（原话含完整展示名 / base+口径 / 括号包裹口径），可精确区分互为子串的口径
+            //      （如"个人"vs"个人及机构"，括号形式"（个人）"不会命中"（个人及机构）"）；
+            // 无强匹配时用"弱匹配"（口径 token 出现在原话任意处）兜底，再用子串去重（longest-wins）收敛。
             String probe = (originalMessage != null ? originalMessage : "") + " " + keyword;
+            String normProbe = normalizeKey(probe);
             List<AloudataMetricEntity> strong = new ArrayList<>();
             List<AloudataMetricEntity> loose = new ArrayList<>();
             for (AloudataMetricEntity m : familyMembers) {
-                String caliber = extractTrailingCaliber(m.getMetricDisplayName());
+                String display = m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "";
+                // a) 整名命中（标点不敏感）：覆盖 全角 vs 半角括号、-、_、空白差异
+                //    （如 展示名「销售金额（含税）/期货收入-应收-当年」命中 原话中的对应写法或 LLM 精简后形态）
+                if (!display.isEmpty() && normProbe.contains(normalizeKey(display))) {
+                    strong.add(m);
+                    continue;
+                }
+                String caliber = extractTrailingCaliber(display);
                 if (caliber.isEmpty()) {
                     continue;
                 }
-                String display = m.getMetricDisplayName() != null ? m.getMetricDisplayName() : "";
-                boolean strongHit = (!display.isEmpty() && probe.contains(display))
-                        || probe.contains(base + caliber)
+                boolean strongHit = probe.contains(base + caliber)
                         || probe.contains("（" + caliber + "）")
                         || probe.contains("(" + caliber + ")");
                 if (strongHit) {
@@ -2243,11 +2421,16 @@ public class AloudataCallTool {
             boolean isFamily = family.family().size() >= 2;
             sb.append("## ✅ 指标口径确定性识别\n\n");
             if (isFamily) {
-                // 多口径族场景：按用户原话精确匹配到唯一口径
-                sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配口径")
-                        .append(caliber.isEmpty() ? "" : "「" + caliber + "」")
-                        .append("，目标指标：**").append(r.getMetricName()).append("**(")
-                        .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+                // 多口径族场景：按用户原话精确匹配到唯一口径/成员
+                if (caliber.isEmpty()) {
+                    sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配到唯一成员，目标指标：**")
+                            .append(r.getMetricName()).append("**(")
+                            .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+                } else {
+                    sb.append("「").append(family.baseName()).append("」是多口径指标族，已按用户原话精确匹配口径「").append(caliber)
+                            .append("」，目标指标：**").append(r.getMetricName()).append("**(")
+                            .append(r.getMetricDisplayName() != null ? r.getMetricDisplayName() : "").append(")\n");
+                }
             } else {
                 // 宽泛词聚合场景：基名下仅有 1 个指标，直接视为目标
                 sb.append("「").append(family.baseName()).append("」相关指标仅有 1 个，目标指标：**")
@@ -2359,6 +2542,12 @@ public class AloudataCallTool {
      * <p>
      * 例：同时命中「个人」与「个人及机构」时，「个人」仅因是「个人及机构」的子串而命中，保留更具体的
      * 「个人及机构」。用于弱匹配兜底后收敛，避免互为子串的口径造成误判为多口径。
+     * <p>
+     * 2025 增补（覆盖「-」连接族）：整名命中（标点不敏感）会让无括号口径的短名成员与其更长兄弟同时命中，
+     * 如 命中集={期货收入, 期货收入-应收-当年}——此时两个成员的 extractTrailingCaliber 都为空，
+     * 旧口径子串规则不生效。改用「归一化展示名的包含关系」做 longest-wins：展示名（去标点）是另一成员
+     * 展示名（去标点）真子串且更短时，判定为被支配丢弃，只保留最具体的成员，避免把短名指标误判成
+     * "用户提到了多个口径"。
      */
     private List<AloudataMetricEntity> dropSubstringDominatedCalibers(List<AloudataMetricEntity> matched) {
         if (matched.size() <= 1) {
@@ -2367,13 +2556,19 @@ public class AloudataCallTool {
         List<AloudataMetricEntity> result = new ArrayList<>();
         for (AloudataMetricEntity m : matched) {
             String cal = extractTrailingCaliber(m.getMetricDisplayName());
+            String normName = normalizeKey(m.getMetricDisplayName());
             boolean dominated = false;
             for (AloudataMetricEntity other : matched) {
                 if (other == m) {
                     continue;
                 }
                 String otherCal = extractTrailingCaliber(other.getMetricDisplayName());
-                if (!cal.equals(otherCal) && otherCal.contains(cal)) {
+                boolean caliberDominated = !cal.equals(otherCal) && otherCal.contains(cal);
+                // 归一化展示名包含关系 longest-wins：仅当 other 更长且包含当前成员时才支配，
+                // 等长（如 全角 vs 半角括号两种写法）不互相支配，保留交给多口径流程
+                String otherNorm = normalizeKey(other.getMetricDisplayName());
+                boolean nameDominated = otherNorm.length() > normName.length() && otherNorm.contains(normName);
+                if (caliberDominated || nameDominated) {
                     dominated = true;
                     break;
                 }
