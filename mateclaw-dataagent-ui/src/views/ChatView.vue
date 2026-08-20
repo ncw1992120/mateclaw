@@ -2011,11 +2011,10 @@ function initEChartsChart(key: string, msgIndex: number, cardIndex: number): voi
   echartsInstances.set(key, instance)
 
   /** 合并默认配置与后端返回的 option，确保基础体验一致 */
-  const mergedOption = {
-    tooltip: {
-      trigger: 'axis' as const,
-      ...((echartsData.option.tooltip || {}) as Record<string, unknown>),
-    },
+  // 注意：此处抽成变量并在 setOption 前完成 tooltip 归一化，
+  // 避免之前的写法（...echartsData.option 在最后展开）把后端 tooltip 整体覆盖掉默认的 axis 触发
+  const mergedOption: Record<string, any> = {
+    ...echartsData.option,
     grid: {
       left: 40,
       right: 16,
@@ -2023,8 +2022,9 @@ function initEChartsChart(key: string, msgIndex: number, cardIndex: number): voi
       bottom: 20,
       ...((echartsData.option.grid || {}) as Record<string, unknown>),
     },
-    ...echartsData.option,
   }
+  // 直角坐标系（多折线等）统一 axis 触发：悬浮坐标点展示同一 X 下所有系列的值
+  normalizeCartesianTooltip(mergedOption)
 
   instance.setOption(mergedOption)
 }
@@ -2169,11 +2169,8 @@ function buildLightboxOption(box: ChartLightboxPayload): Record<string, unknown>
 
   if (card.type === 'echarts') {
     const echartsData = card.data as EChartsOptionData
-    return {
-      tooltip: {
-        trigger: 'axis' as const,
-        ...((echartsData.option.tooltip || {}) as Record<string, unknown>),
-      },
+    const lightboxOption: Record<string, any> = {
+      ...echartsData.option,
       grid: {
         left: 56,
         right: 24,
@@ -2181,8 +2178,10 @@ function buildLightboxOption(box: ChartLightboxPayload): Record<string, unknown>
         bottom: 32,
         ...((echartsData.option.grid || {}) as Record<string, unknown>),
       },
-      ...echartsData.option,
     }
+    // 直角坐标系（多折线等）统一 axis 触发：悬浮坐标点展示同一 X 下所有系列的值
+    normalizeCartesianTooltip(lightboxOption)
+    return lightboxOption
   }
 
   return null
@@ -2299,6 +2298,37 @@ function filterEchartsTopLevelKeys(option: Record<string, any>): Record<string, 
     }
   }
   return filtered
+}
+
+/** 非直角坐标系（单值/二维渲染）的 series 类型集合：这类图 tooltip 用 item 触发即可 */
+const NON_CARTESIAN_SERIES_TYPES = new Set([
+  'pie', 'gauge', 'radar', 'funnel', 'tree', 'treemap',
+  'sunburst', 'graph', 'sankey', 'themeRiver', 'parallel', 'map', 'lines',
+])
+
+/**
+ * 将直角坐标系图表（折线/柱状/混合 bar+line 等多系列图）的 tooltip 强制为 axis 触发：
+ * 悬浮在坐标轴上时展示同一 X 坐标下所有 series 的值，而不是只显示悬停的那一条。
+ * 保留原有的 formatter 等字段，仅覆盖 trigger；全非直角坐标系（纯饼图等）不改动。
+ */
+function normalizeCartesianTooltip(option: Record<string, any>): void {
+  const series: any[] = Array.isArray(option.series) ? option.series : []
+  if (series.length === 0) return
+  const isCartesian = series.some((s: any) => !NON_CARTESIAN_SERIES_TYPES.has(s?.type))
+  if (!isCartesian) return
+  const existing = (option.tooltip && typeof option.tooltip === 'object' && !Array.isArray(option.tooltip))
+    ? option.tooltip
+    : {}
+  const wasItem = existing.trigger !== 'axis'
+  // 若 AI 为多系列图保留了单值分类型 formatter（字符串模板如 '{b}: {c}'，
+  // 或按 item 单参数编写的函数），强制 axis 触发后只能显示一条甚至崩坏，
+  // 此时移除 formatter，交给 ECharts 内置的多系列兼容 tooltip 同时列出所有 series 的值。
+  // 若原始已是 axis 触发，函数 formatter 本就是按轴坐标（参数数组）编写的，予以保留。
+  const merged: Record<string, any> = { ...existing, trigger: 'axis' }
+  if (series.length > 1 && (wasItem || typeof merged.formatter === 'string')) {
+    delete merged.formatter
+  }
+  option.tooltip = merged
 }
 
 /**
@@ -2441,6 +2471,21 @@ function buildAdaptiveXAxis(categories: string[]): Record<string, any> {
 }
 
 /**
+ * 散点类图表的 axis 触发 formatter：轴坐标对齐时 ECharts 会传入参数数组（每个系列一个），
+ * 这里把同一 X 坐标下所有系列的点值都列出来，而不是只显示单系列。
+ * 兼容 axis（数组）与 item（单对象）两种传入形态。
+ */
+function buildScatterAxisFormatter(xCats: string[]): (ps: any) => string {
+  return (ps: any) => {
+    const arr: any[] = Array.isArray(ps) ? ps : [ps]
+    return arr
+      .filter((p) => p && p.value)
+      .map((p) => `${p.marker || ''}${p.seriesName || ''}<br/>${xCats[p.value[0]] ?? p.value[0]}: ${p.value[1]}`)
+      .join('<br/>')
+  }
+}
+
+/**
  * 根据目标图表类型重建 option（保留 title/legend/tooltip 等布局，替换 xAxis/yAxis/series）
  */
 function buildEchartsOption(original: Record<string, any>, type: ChartType): Record<string, any> {
@@ -2495,7 +2540,7 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
     }))
     return {
       ...base,
-      tooltip: { trigger: 'item', formatter: (p: any) => `${p.seriesName}<br/>${xCats[p.value[0]] ?? p.value[0]}: ${p.value[1]}` },
+      tooltip: { trigger: 'axis', formatter: buildScatterAxisFormatter(xCats) },
       xAxis: buildAdaptiveXAxis(xCats),
       yAxis: { type: 'value' },
       series: scatterSeries,
@@ -2596,7 +2641,7 @@ function buildEchartsOption(original: Record<string, any>, type: ChartType): Rec
     }))
     return {
       ...base,
-      tooltip: { trigger: 'item', formatter: (p: any) => `${p.seriesName}<br/>${xCats[p.value[0]] ?? p.value[0]}: ${p.value[1]}` },
+      tooltip: { trigger: 'axis', formatter: buildScatterAxisFormatter(xCats) },
       xAxis: buildAdaptiveXAxis(xCats),
       yAxis: { type: 'value' },
       series: effectSeries,
@@ -3618,6 +3663,8 @@ function scanAndMountEChartsBlocks(): void {
 
       option = filterEchartsTopLevelKeys(option)
       sanitizeEchartsOption(option)
+      // 直角坐标系（多折线等）统一 axis 触发：悬浮坐标点展示同一 X 下所有 series 的值
+      normalizeCartesianTooltip(option)
 
       // 修正布局：后端生成的 legend/grid 间距过紧容易重叠，
       // 在前端统一给标题/图例留出合理空间，避免元素互相挤压
