@@ -32,6 +32,7 @@ A Python client SDK for AI evaluation. It talks to the MateClaw DataAgent REST A
 - JWT authentication (login / current user / logout)
 - Synchronous chat
 - Streaming chat over SSE, with reconnect support
+- Direct LLM call (stateless, no persistence — like calling the LLM over HTTP directly)
 - Conversation management (list, messages, delete, rename, stop streaming)
 - Agent management (list, detail)
 - Structured SSE event parsing
@@ -157,6 +158,79 @@ print(f"Average latency: {report.avg_latency_ms:.0f} ms")
 client.close()
 ```
 
+### 4. Direct LLM Call (stateless)
+
+No agent, no conversation, no persistence — just like calling the LLM HTTP API directly:
+
+```python
+from mateclaw_dataagent import DataAgentClient, LlmChatMessage
+
+client = DataAgentClient(
+    base_url="http://localhost:18089/dataagent/api",
+    workspace_id=1,
+)
+client.login(username="admin", password="admin123")
+
+# Synchronous direct call; each message can be a dict or an LlmChatMessage
+response = client.llm_chat(
+    messages=[
+        {"role": "system", "content": "You are a data analyst expert"},
+        LlmChatMessage(role="user", content="Hi, introduce yourself briefly"),
+    ],
+    # provider="dashscope",   # optional
+    # model="qwen-max",       # optional, defaults to the default model
+    temperature=0.7,
+)
+print(f"Answer: {response.content}")
+print(f"Model: {response.model} ({response.provider})")
+print(f"Tokens: {response.prompt_tokens} + {response.completion_tokens}")
+
+# Streaming direct call
+print("Streaming: ", end="", flush=True)
+for event in client.llm_chat_stream(
+    messages=[{"role": "user", "content": "Tell me a joke"}],
+):
+    if event.event == "content_delta":
+        print(event.delta, end="", flush=True)
+    elif event.event == "done":
+        print("\n[done]")
+print()
+
+client.close()
+```
+
+### Message `role` semantics
+
+Each message in `messages` is `role` + `content`, concatenated in array order to form the full context. The three roles:
+
+| role | Purpose | Notes |
+|------|---------|-------|
+| `system` | System prompt | Sets the model's identity, behavior, output format and global constraints. **Put it first — it has the highest priority.** |
+| `user` | User input | The message the caller wants the model to answer this turn. |
+| `assistant` | Assistant history | Carries multi-turn context (prior Q&A) so the model continues from what was said; can also inject few-shot examples to steer style. |
+
+**Example: `system` defines identity and constraints**
+
+```python
+client.llm_chat(messages=[
+    {"role": "system", "content": "You are a rigorous financial analyst. Base answers on data reasoning and never invent numbers."},
+    {"role": "user", "content": "How should I evaluate a company's short-term solvency?"},
+])
+```
+
+**Example: `assistant` carries multi-turn context**
+
+```python
+client.llm_chat(messages=[
+    {"role": "system", "content": "You only tell bad puns."},
+    {"role": "user", "content": "Tell me a joke about programmers."},
+    {"role": "assistant", "content": "A programmer walks into a bar... (prior assistant turn)"},
+    {"role": "user", "content": "Now tell me a joke about project managers."},  # current turn
+])
+```
+
+> Note: `assistant` carries **no memory** — the direct endpoint is stateless, so on every call you must put all the context you need into `messages` yourself; omitting history means the model answers only from the current input. A role other than `system`/`user`/`assistant` is treated as `user`.
+
 ## Example Scripts
 
 The project ships several runnable examples:
@@ -165,6 +239,7 @@ The project ships several runnable examples:
 |--------|-------------|
 | `examples/quickstart.py` | Quick start (5-minute onboarding) |
 | `examples/chat_demo.py` | Chat feature demo |
+| `examples/llm_direct_demo.py` | Direct LLM call (stateless) demo |
 | `examples/evaluation_demo.py` | AI evaluation demo |
 | `examples/verify_evaluation.py` | Evaluation verification with custom rules |
 | `examples/test_cases.json` | Sample test cases (input for `verify_evaluation.py`) |
@@ -177,6 +252,9 @@ python examples/quickstart.py
 
 # AI evaluation
 python examples/evaluation_demo.py
+
+# Direct LLM call (stateless)
+python examples/llm_direct_demo.py
 
 # Verification with custom cases (defaults to the "数据分析助手" agent)
 python examples/verify_evaluation.py --cases examples/test_cases.json
@@ -237,6 +315,32 @@ client.stream_chat(
 client.stop_stream(conversation_id: str) -> bool
 ```
 
+#### Direct LLM Call (stateless, no persistence)
+
+```python
+# Synchronous direct LLM call; returns an LlmChatResponse.
+# messages items may be dicts ({"role","content"}) or LlmChatMessage.
+# provider / model are optional (defaults to the default model).
+client.llm_chat(
+    messages: list,
+    provider: str = None,
+    model: str = None,
+    temperature: float = None,
+    max_tokens: int = None,
+) -> LlmChatResponse
+
+# Streaming direct LLM call (SSE); yields SseEvent (content_delta / done / error).
+client.llm_chat_stream(
+    messages: list,
+    provider: str = None,
+    model: str = None,
+    temperature: float = None,
+    max_tokens: int = None,
+) -> Generator[SseEvent, None, None]
+```
+
+> The direct LLM endpoint bypasses the Agent/conversation pipeline: the server creates no conversation, saves no messages, and writes nothing to the database — the equivalent of hitting the LLM HTTP API directly.
+
 #### Conversation Management
 
 ```python
@@ -270,6 +374,8 @@ with DataAgentClient(base_url, workspace_id=1) as client:
 |-------|-----------|
 | `LoginResponse` | `id`, `token`, `username`, `nickname`, `role`, `workspaces: list[Workspace]` |
 | `ChatResponse` | `content`, `thinking`, `tool_calls`, `prompt_tokens`, `completion_tokens`, `runtime_model`, `runtime_provider`, `status`, `metadata` |
+| `LlmChatMessage` | `role`, `content` |
+| `LlmChatResponse` | `content`, `model`, `provider`, `prompt_tokens`, `completion_tokens`, `status` |
 | `SseEvent` | `event`, `data` (dict or str), `id`; convenience properties: `delta`, `content`, `thinking` |
 | `Conversation` | `id`, `conversation_id`, `title`, `agent_id`, `message_count`, `last_message`, `last_active_time`, `pinned`, `model_provider`, `model_name`, `stream_status` |
 | `Message` | `id`, `conversation_id`, `role`, `content`, `tool_name`, `status`, `metadata`, `prompt_tokens`, `completion_tokens`, `runtime_model`, `runtime_provider` |
@@ -392,6 +498,7 @@ mateclaw-dataagent-client-python/
 ├── examples/                 # Runnable example scripts
 │   ├── quickstart.py         # Quick start
 │   ├── chat_demo.py          # Chat demo
+│   ├── llm_direct_demo.py    # Direct LLM call (stateless) demo
 │   ├── evaluation_demo.py    # AI evaluation demo
 │   ├── verify_evaluation.py  # Verification script
 │   └── test_cases.json       # Sample test cases

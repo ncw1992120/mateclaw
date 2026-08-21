@@ -21,6 +21,9 @@ import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.sdk.service.agent.AgentRuntime;
 import vip.mate.sdk.service.cron.CronJobRuntime;
 import vip.mate.sdk.service.datasource.DatasourceRuntime;
+import vip.mate.sdk.service.llm.LlmRuntime;
+import vip.mate.sdk.service.llm.dto.LlmChatRequest;
+import vip.mate.sdk.service.llm.dto.LlmChatResponse;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
 import vip.mate.sdk.service.tool.ToolRuntime;
@@ -53,6 +56,7 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     private final DatasourceRuntime datasourceRuntime;
     private final ToolRuntime toolRuntime;
     private final ModelRuntime modelRuntime;
+    private final LlmRuntime llmRuntime;
     private final SkillRuntime skillRuntime;
     private final WorkspaceRuntime workspaceRuntime;
     private final CronJobRuntime cronJobRuntime;
@@ -366,6 +370,18 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public Map<String, Object> testRerankModel(Long modelId) {
         return modelRuntime.testRerankModel(modelId);
+    }
+
+    // ==================== 大模型直连 ====================
+
+    @Override
+    public LlmChatResponse chatDirect(LlmChatRequest request) {
+        return llmRuntime.chatDirect(request);
+    }
+
+    @Override
+    public Flux<String> chatDirectStream(LlmChatRequest request) {
+        return llmRuntime.chatDirectStream(request);
     }
 
     // ==================== 技能 ====================

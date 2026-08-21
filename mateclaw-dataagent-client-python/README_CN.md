@@ -6,6 +6,7 @@
 
 - ✅ JWT 认证登录
 - ✅ 同步/流式对话（SSE）
+- ✅ 大模型直连（无持久化，类似 HTTP 直连大模型）
 - ✅ 会话管理（列表、删除、重命名）
 - ✅ Agent 管理
 - ✅ 结构化 SSE 事件解析
@@ -88,6 +89,79 @@ for event in client.stream_chat(
 client.close()
 ```
 
+### 2b. 大模型直连（无持久化）
+
+不需要 Agent、不产生任何会话/消息记录，直接调用大模型，等价于通过 HTTP 直连大模型 API：
+
+```python
+from mateclaw_dataagent import DataAgentClient, LlmChatMessage
+
+client = DataAgentClient(
+    base_url="http://localhost:18089/dataagent/api",
+    workspace_id=1
+)
+client.login(username="admin", password="admin123")
+
+# 同步直连：messages 元素可为 dict 或 LlmChatMessage
+response = client.llm_chat(
+    messages=[
+        {"role": "system", "content": "你是一个数据分析专家"},
+        LlmChatMessage(role="user", content="你好，请简单介绍一下你自己"),
+    ],
+    # provider="dashscope",   # 可选
+    # model="qwen-max",       # 可选，缺省使用默认模型
+    temperature=0.7,
+)
+print(f"回答：{response.content}")
+print(f"模型：{response.model}（{response.provider}）")
+print(f"Token：{response.prompt_tokens} + {response.completion_tokens}")
+
+# 流式直连
+print("流式回答：", end="", flush=True)
+for event in client.llm_chat_stream(
+    messages=[{"role": "user", "content": "讲个冷笑话"}],
+):
+    if event.event == "content_delta":
+        print(event.delta, end="", flush=True)
+    elif event.event == "done":
+        print("\n[完成]")
+print()
+
+client.close()
+```
+
+### 消息 role 角色说明
+
+`messages` 中的每条消息由 `role` + `content` 构成，按数组顺序拼接为完整上下文。三种角色的作用：
+
+| role | 作用 | 说明 |
+|------|------|------|
+| `system` | 系统提示 | 设定模型身份、行为规范、输出格式与全局约束，**放在最前面，优先级最高**。 |
+| `user` | 用户输入 | 调用方/终端用户本轮要模型回答的内容。 |
+| `assistant` | 助手历史回复 | 携带多轮对话上下文（前一问一答），让模型在上文基础上继续；也可注入示范回答（few-shot）引导风格。 |
+
+**样例：system 设定身份与约束**
+
+```python
+client.llm_chat(messages=[
+    {"role": "system", "content": "你是一个严谨的财务分析师。回答必须基于数据推理，禁止编造数字。"},
+    {"role": "user", "content": "如何评估一家公司的短期偿债能力？"},
+])
+```
+
+**样例：assistant 携带多轮上下文（多轮对话）**
+
+```python
+client.llm_chat(messages=[
+    {"role": "system", "content": "你是一个只讲冷笑话的助手。"},
+    {"role": "user", "content": "给我讲一个关于程序员的笑话。"},
+    {"role": "assistant", "content": "程序员最讨厌的两件事：一是别人不写注释，二是让自己写注释。"},
+    {"role": "user", "content": "再讲一个关于产品经理的笑话。"},   # 本轮提问，模型结合上文回答
+])
+```
+
+> 注意：`assistant` 角色不带记忆——直连接口无持久化，每次调用必须**自己把需要的上下文放进 `messages`**；省略历史轮次则模型只基于本轮输入回答。role 值非 `system/user/assistant` 时按 `user` 处理。
+
 ### 3. AI 测评
 
 ```python
@@ -135,6 +209,7 @@ client.close()
 |------|------|
 | `examples/quickstart.py` | 快速入门（5 分钟上手） |
 | `examples/chat_demo.py` | 对话功能演示 |
+| `examples/llm_direct_demo.py` | 大模型直连（无持久化）演示 |
 | `examples/evaluation_demo.py` | AI 测评演示 |
 | `examples/verify_evaluation.py` | 测评结果验证 |
 
@@ -146,6 +221,9 @@ python examples/quickstart.py
 
 # AI 测评
 python examples/evaluation_demo.py
+
+# 大模型直连（无持久化）
+python examples/llm_direct_demo.py
 
 # 测评验证（默认使用「数据分析助手」Agent）
 python examples/verify_evaluation.py --cases examples/test_cases.json
@@ -182,6 +260,18 @@ client.stop_stream(conversation_id)                             # 停止流式�
 ```
 
 > `stream_chat` 额外支持 `reconnect`（断线重连）与 `last_event_id`（最后收到的事件 ID）参数，用于中断后恢复流式输出。
+
+#### 大模型直连（无持久化）
+```python
+client.llm_chat(messages, provider=None, model=None, temperature=None, max_tokens=None)
+    # 同步直连：返回 LlmChatResponse；不做任何持久化，类似 HTTP 直连大模型。
+    # messages 元素可为 dict（{"role","content"}）或 LlmChatMessage。
+
+client.llm_chat_stream(messages, provider=None, model=None, temperature=None, max_tokens=None)
+    # 流式直连：SSE 生成器，产出 SseEvent（content_delta / done / error）。
+```
+
+> 大模型直连接口不经过 Agent / 会话体系，服务端不创建会话、不保存消息、不写库；`provider` / `model` 缺省时使用默认模型。
 
 #### 会话管理
 ```python
@@ -236,6 +326,8 @@ with DataAgentClient(base_url, workspace_id=1) as client:
 |------|---------|
 | `LoginResponse` | `id`, `token`, `username`, `nickname`, `role`, `workspaces: list[Workspace]` |
 | `ChatResponse` | `content`, `thinking`, `tool_calls`, `prompt_tokens`, `completion_tokens`, `runtime_model`, `runtime_provider`, `status`, `metadata` |
+| `LlmChatMessage` | `role`, `content` |
+| `LlmChatResponse` | `content`, `model`, `provider`, `prompt_tokens`, `completion_tokens`, `status` |
 | `SseEvent` | `event`, `data`（dict 或 str）, `id`；便捷属性 `delta` / `content` / `thinking` |
 | `Conversation` | `id`, `conversation_id`, `title`, `agent_id`, `message_count`, `last_message`, `last_active_time`, `pinned`, `model_provider`, `model_name`, `stream_status` |
 | `Message` | `id`, `conversation_id`, `role`, `content`, `tool_name`, `status`, `metadata`, `prompt_tokens`, `completion_tokens`, `runtime_model`, `runtime_provider` |
@@ -331,6 +423,7 @@ mateclaw-dataagent-client-python/
 ├── examples/                 # 示例脚本
 │   ├── quickstart.py         # 快速入门
 │   ├── chat_demo.py          # 对话示例
+│   ├── llm_direct_demo.py    # 大模型直连（无持久化）示例
 │   ├── evaluation_demo.py    # AI 测评示例
 │   ├── verify_evaluation.py  # 测评验证脚本
 │   └── test_cases.json       # 测评用例示例

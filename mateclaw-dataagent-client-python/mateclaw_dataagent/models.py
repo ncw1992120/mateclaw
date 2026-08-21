@@ -32,6 +32,27 @@ class ChatResponse:
 
 
 @dataclass
+class LlmChatMessage:
+    """大模型直连对话消息"""
+    role: str
+    content: str
+
+    def to_dict(self) -> dict:
+        return {"role": self.role, "content": self.content}
+
+
+@dataclass
+class LlmChatResponse:
+    """大模型直连对话响应"""
+    content: str
+    model: Optional[str] = None
+    provider: Optional[str] = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    status: str = "completed"
+
+
+@dataclass
 class SseEvent:
     """SSE 流式事件"""
     event: str

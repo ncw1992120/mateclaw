@@ -13,6 +13,8 @@ from .models import (
     Agent,
     ChatResponse,
     Conversation,
+    LlmChatMessage,
+    LlmChatResponse,
     LoginResponse,
     Message,
     SseEvent,
@@ -298,6 +300,179 @@ class DataAgentClient:
             content=response.text,
             status="completed",
         )
+
+    # ==================== 大模型直连 ====================
+
+    def _build_llm_payload(
+        self,
+        messages,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> dict:
+        """
+        构建大模型直连请求体
+
+        Args:
+            messages: 消息列表，元素可为 dict（{"role","content"}）或 LlmChatMessage
+            provider: Provider ID（可选）
+            model: 模型名称（可选）
+            temperature: 采样温度（可选）
+            max_tokens: 最大输出 token 数（可选）
+
+        Returns:
+            dict 请求体
+        """
+        payload = {
+            "messages": [
+                m.to_dict() if isinstance(m, LlmChatMessage) else dict(m)
+                for m in messages
+            ]
+        }
+        if provider:
+            payload["provider"] = provider
+        if model:
+            payload["model"] = model
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if max_tokens is not None:
+            payload["maxTokens"] = max_tokens
+        return payload
+
+    def llm_chat(
+        self,
+        messages,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LlmChatResponse:
+        """
+        大模型直连同步对话（无持久化）
+
+        直接调用大模型并返回完整回答，服务端不产生任何会话/消息记录。
+
+        Args:
+            messages: 消息列表，元素可为 dict（{"role","content"}）或 LlmChatMessage
+            provider: Provider ID（可选，缺省用默认模型）
+            model: 模型名称（可选，缺省用默认模型）
+            temperature: 采样温度（可选）
+            max_tokens: 最大输出 token 数（可选）
+
+        Returns:
+            LlmChatResponse 大模型直连响应
+        """
+        payload = self._build_llm_payload(messages, provider, model, temperature, max_tokens)
+        response = self._request("POST", "/v1/llm/chat", json_data=payload)
+        data = response.json().get("data") or {}
+        return LlmChatResponse(
+            content=data.get("content", ""),
+            model=data.get("model"),
+            provider=data.get("provider"),
+            prompt_tokens=data.get("promptTokens", 0),
+            completion_tokens=data.get("completionTokens", 0),
+        )
+
+    def llm_chat_stream(
+        self,
+        messages,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Generator[SseEvent, None, None]:
+        """
+        大模型直连流式对话（无持久化）
+
+        通过 SSE 接收大模型内容增量（content_delta / done），服务端不产生任何会话/消息记录。
+
+        Args:
+            messages: 消息列表，元素可为 dict（{"role","content"}）或 LlmChatMessage
+            provider: Provider ID（可选，缺省用默认模型）
+            model: 模型名称（可选，缺省用默认模型）
+            temperature: 采样温度（可选）
+            max_tokens: 最大输出 token 数（可选）
+
+        Yields:
+            SseEvent SSE 事件（content_delta / done / error）
+
+        Raises:
+            ApiError: 请求失败
+        """
+        payload = self._build_llm_payload(messages, provider, model, temperature, max_tokens)
+        url = self._url("/v1/llm/chat/stream")
+
+        # token 过期（401）时基于已保存的凭据自动重新登录并重试一次
+        response = None
+        for attempt in (0, 1):
+            headers = {"Accept": "text/event-stream"}
+            if self.token:
+                headers["Authorization"] = f"Bearer {self.token}"
+
+            try:
+                response = self.session.request(
+                    "POST",
+                    url,
+                    json=payload,
+                    headers=headers,
+                    stream=True,
+                    timeout=self.timeout,
+                )
+            except requests.exceptions.Timeout:
+                raise ApiError(408, "Request timeout")
+            except requests.exceptions.ConnectionError as e:
+                raise ApiError(503, f"Connection error: {e}")
+
+            if response.status_code >= 400:
+                try:
+                    error_data = response.json()
+                    code = error_data.get("code", response.status_code)
+                    message = error_data.get("msg", "Unknown error")
+                except (json.JSONDecodeError, ValueError):
+                    code = response.status_code
+                    message = response.text or "Unknown error"
+                if code == 401 and attempt == 0 and self._username:
+                    # 关闭旧响应连接，避免流式响应未消费导致的连接泄漏
+                    response.close()
+                    self.login(self._username, self._password)
+                    continue
+                raise ApiError(code, message)
+
+            # 防御性校验：服务端若在 SSE 建立前返回 R 封装错误（HTTP 200 + JSON），
+            # 按 JSON 解析并抛 ApiError，避免将错误体当作 SSE 流解析产生伪事件
+            content_type = response.headers.get("Content-Type", "")
+            if content_type and "text/event-stream" not in content_type:
+                try:
+                    body = response.json()
+                    code = body.get("code", 200)
+                    message = body.get("msg", body.get("message", "Unknown error"))
+                    if code != 200:
+                        raise ApiError(code, message)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+            break
+
+        # 解析 SSE 流
+        buffer = ""
+        for line in response.iter_lines(decode_unicode=True):
+            if line is None:
+                continue
+
+            buffer += line + "\n"
+
+            # SSE 消息以空行分隔
+            if line.strip() == "":
+                events = self._parse_sse_buffer(buffer)
+                buffer = ""
+                for event in events:
+                    yield event
+
+        # 处理剩余缓冲
+        if buffer.strip():
+            for event in self._parse_sse_buffer(buffer):
+                yield event
 
     def stream_chat(
         self,

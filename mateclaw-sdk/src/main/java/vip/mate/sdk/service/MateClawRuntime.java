@@ -3,6 +3,7 @@ package vip.mate.sdk.service;
 import vip.mate.sdk.service.agent.AgentRuntime;
 import vip.mate.sdk.service.cron.CronJobRuntime;
 import vip.mate.sdk.service.datasource.DatasourceRuntime;
+import vip.mate.sdk.service.llm.LlmRuntime;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
 import vip.mate.sdk.service.tool.ToolRuntime;
@@ -27,5 +28,5 @@ import vip.mate.sdk.service.workspace.WorkspaceRuntime;
  * </ul>
  */
 public interface MateClawRuntime extends AgentRuntime, DatasourceRuntime, ToolRuntime,
-        ModelRuntime, SkillRuntime, WorkspaceRuntime, CronJobRuntime {
+        ModelRuntime, LlmRuntime, SkillRuntime, WorkspaceRuntime, CronJobRuntime {
 }

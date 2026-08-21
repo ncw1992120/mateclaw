@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from mateclaw_dataagent import DataAgentClient, ApiError
-from mateclaw_dataagent.models import SseEvent, ChatResponse
+from mateclaw_dataagent.models import SseEvent, ChatResponse, LlmChatMessage, LlmChatResponse
 
 
 class TestDataAgentClient(unittest.TestCase):
@@ -63,6 +63,99 @@ data: {"status": "completed"}"""
 
         thinking_event = SseEvent(event="thinking_delta", data={"delta": "Thinking..."})
         self.assertEqual(thinking_event.thinking, "Thinking...")
+
+    # ==================== 大模型直连 ====================
+
+    def test_build_llm_payload_minimal(self):
+        """仅传 messages 时请求体最小"""
+        payload = self.client._build_llm_payload([{"role": "user", "content": "hi"}])
+        self.assertEqual(payload, {"messages": [{"role": "user", "content": "hi"}]})
+
+    def test_build_llm_payload_full(self):
+        """全部可选参数时请求体包含所有字段"""
+        payload = self.client._build_llm_payload(
+            [LlmChatMessage(role="user", content="hi")],
+            provider="dashscope",
+            model="qwen-max",
+            temperature=0.5,
+            max_tokens=1024,
+        )
+        self.assertEqual(payload, {
+            "messages": [{"role": "user", "content": "hi"}],
+            "provider": "dashscope",
+            "model": "qwen-max",
+            "temperature": 0.5,
+            "maxTokens": 1024,
+        })
+
+    def test_llm_chat_maps_response(self):
+        """同步大模型直连解析 R 封装响应"""
+        response = Mock()
+        response.json.return_value = {
+            "code": 200,
+            "data": {
+                "content": "你好！",
+                "model": "qwen-max",
+                "provider": "dashscope",
+                "promptTokens": 12,
+                "completionTokens": 20,
+            },
+        }
+
+        with patch.object(self.client, "_request", return_value=response) as mock_request:
+            result = self.client.llm_chat(
+                messages=[{"role": "user", "content": "你好"}],
+                provider="dashscope",
+                model="qwen-max",
+            )
+
+        mock_request.assert_called_once_with(
+            "POST",
+            "/v1/llm/chat",
+            json_data={
+                "messages": [{"role": "user", "content": "你好"}],
+                "provider": "dashscope",
+                "model": "qwen-max",
+            },
+        )
+        self.assertIsInstance(result, LlmChatResponse)
+        self.assertEqual(result.content, "你好！")
+        self.assertEqual(result.model, "qwen-max")
+        self.assertEqual(result.provider, "dashscope")
+        self.assertEqual(result.prompt_tokens, 12)
+        self.assertEqual(result.completion_tokens, 20)
+
+    def test_llm_chat_stream_yields_sse_events(self):
+        """流式大模型直连解析 SSE 事件"""
+        client = self.client
+
+        class FakeResponse:
+            """模拟 requests.Response 流式对象"""
+
+            status_code = 200
+
+            def __init__(self):
+                self.headers = {"Content-Type": "text/event-stream"}
+
+            def iter_lines(self, decode_unicode=False):
+                lines = [
+                    "event: content_delta",
+                    'data: {"delta": "Hello"}',
+                    "",
+                    "event: done",
+                    'data: {"status": "completed"}',
+                    "",
+                ]
+                return iter(lines)
+
+        with patch.object(client.session, "request", return_value=FakeResponse()):
+            events = list(client.llm_chat_stream(messages=[{"role": "user", "content": "hi"}]))
+
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0].event, "content_delta")
+        self.assertEqual(events[0].data, {"delta": "Hello"})
+        self.assertEqual(events[1].event, "done")
+        self.assertEqual(events[1].data, {"status": "completed"})
 
     def test_request_auto_relogin_on_401(self):
         """token 过期（401）时自动重新登录并重试一次"""
