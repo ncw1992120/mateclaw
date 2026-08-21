@@ -3344,10 +3344,49 @@ function findMessageIndexForChart(htmlEl: HTMLElement): number | null {
   return Number.isNaN(idx) ? null : idx
 }
 
+/** 从查询入参解析 metric_time 时间粒度（先 dimensions 后 timeConstraint），无则返回 null */
+function callTimeGrain(args: Record<string, any>): string | null {
+  const dims = Array.isArray(args.dimensions) ? args.dimensions : []
+  for (const d of dims) {
+    if (typeof d === 'string') {
+      const m = /metric_time__(\w+)/.exec(d)
+      if (m) return m[1]
+    }
+  }
+  if (typeof args.timeConstraint === 'string') {
+    const m = /metric_time__(\w+)/.exec(args.timeConstraint)
+    if (m) return m[1]
+  }
+  return null
+}
+
+/**
+ * 从图表 X 轴类别标签推断时间粒度，用于区分"指标相同但粒度不同"的多张图：
+ * "2026-08-17" → day，"2026-08" → month，"2026" → year，"2026-Q3" → quarter，"2026-W34" → week。
+ * 无法识别返回 null。
+ */
+function inferChartTimeGrain(htmlEl: HTMLElement): string | null {
+  const option = echartsBlockOptions.get(htmlEl)
+  if (!option) return null
+  const xAxis: any = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
+  const data: unknown[] = xAxis && Array.isArray(xAxis.data) ? xAxis.data : []
+  for (const d of data) {
+    if (typeof d !== 'string') continue
+    if (/^\d{4}$/.test(d)) return 'year'
+    if (/^\d{4}-Q[1-4]$/i.test(d)) return 'quarter'
+    if (/^\d{4}-W\d{1,2}$/i.test(d)) return 'week'
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return 'day'
+    if (/^\d{4}-\d{2}/.test(d)) return 'month'
+  }
+  return null
+}
+
 /**
  * 挂载时解析图表「指标查看」请求载荷：
- * 从所属消息的 metrics_query 工具调用（toolCalls 优先，回退 segments）合并 metrics/dimensions/filters/timeConstraint/datasourceId。
- * 无 metrics_query 时返回 null（不显示「指标查看」按钮）。
+ * 从所属消息的 metrics_query 工具调用（toolCalls 优先，回退 segments）中，
+ * 按「图表自身 series 名称 = 指标名」匹配出生成该图表的那个查询调用。
+ * 一条回答可能有多张图（分属不同查询、不同时间粒度/指标），
+ * 因此不能笼统取最后成功的一次，否则所有图表都会关联到同一查询。
  */
 function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload | null {
   const idx = findMessageIndexForChart(htmlEl)
@@ -3358,8 +3397,6 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
   const meta = (msg?.metadata || {}) as Record<string, any>
 
   // 收集该消息里全部工具调用（带入参与是否成功标记；入参可能是字符串或对象）
-  // 优先取「最后一次成功」的指标查询的 datasourceId——若 LLM 曾用错误 id（如幻觉出的 1）再纠正成功，
-  // 自定义查询应沿用纠正后的，而不是第一次（错误）的
   const candidates: { args: Record<string, any>; success: boolean }[] = []
   const toolCalls = Array.isArray(meta.toolCalls) ? meta.toolCalls : []
   for (const tc of toolCalls) {
@@ -3380,38 +3417,107 @@ function buildMetricPayloadForChart(htmlEl: HTMLElement): ChartMetricMetaPayload
     return null
   }
 
+  // 当前图表的 series 名称（LLM 生成图表时取自该次查询结果，series.name 即指标名/展示名）——
+  // 用于把图表关联到生成它的那一次查询调用
+  const chartOption = echartsBlockOptions.get(htmlEl)
+  const rawSeries: any[] = chartOption && Array.isArray(chartOption.series) ? chartOption.series : []
+  const chartTokens: string[] = []
+  for (const s of rawSeries) {
+    if (s && typeof s.name === 'string' && s.name.trim()) {
+      chartTokens.push(s.name.trim())
+    }
+  }
+  // 从图表 X 轴标签推断时间粒度，用于同指标多粒度图表的次级区分
+  const chartGrain = inferChartTimeGrain(htmlEl)
+
+  /** 打分：成功调用给高分；指标名与图表 series 名称匹配加分；时间粒度与 X 轴标签一致加分 */
+  function scoreCall(c: { args: Record<string, any>; success: boolean }): number {
+    let score = c.success ? 100 : 0
+    const ms = Array.isArray(c.args.metrics) ? c.args.metrics.filter((m: unknown) => typeof m === 'string') : []
+    for (const m of ms) {
+      const hit = chartTokens.some((tok) => tok === m || tok.startsWith(m) || m.startsWith(tok))
+      if (hit) score += 10
+    }
+    if (chartGrain && callTimeGrain(c.args) === chartGrain) {
+      score += 5
+    }
+    return score
+  }
+
+  // 选匹配度最高的调用；同分时偏向靠后的调用（越接近出图阶段的查询越可能是本图的数据来源）
+  let baseCall: { args: Record<string, any>; success: boolean } = queryCalls[0]
+  let baseScore = -1
+  for (const c of queryCalls) {
+    const s = scoreCall(c)
+    if (s >= baseScore) {
+      baseScore = s
+      baseCall = c
+    }
+  }
+  // 完全无匹配信号（无成功调用且指标名全部不匹配）时回退到最近一次成功；再无成功则用最近一次调用
+  if (baseScore <= 0 && queryCalls.length > 0) {
+    let lastSuccess: { args: Record<string, any>; success: boolean } | null = null
+    for (const c of queryCalls) if (c.success) lastSuccess = c
+    baseCall = lastSuccess ?? queryCalls[queryCalls.length - 1]
+  }
+
+  // 以基准调用为准构建载荷；datasourceId 兜底最后一次成功/非空
   const metrics: string[] = []
   const dimensions: string[] = []
   const filters: string[] = []
-  let timeConstraint: string | null = null
-  let datasourceId: string | null = null
-  // 记录最近一次携带有效 datasourceId 的是否成功；若最近一次成功则优先，否则回退到最近一次非空
-  let lastSuccessId: string | null = null
-  let lastNonEmptyId: string | null = null
-  for (const { args, success } of queryCalls) {
-    if (Array.isArray(args.metrics)) {
-      for (const m of args.metrics) if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
-    }
-    if (Array.isArray(args.dimensions)) {
-      for (const d of args.dimensions) if (typeof d === 'string' && !dimensions.includes(d)) dimensions.push(d)
-    }
-    if (Array.isArray(args.filters)) {
-      for (const f of args.filters) if (typeof f === 'string' && !filters.includes(f)) filters.push(f)
-    }
-    if (!timeConstraint && typeof args.timeConstraint === 'string' && args.timeConstraint) {
-      timeConstraint = args.timeConstraint
-    }
-    if (args.datasourceId != null) {
-      const id = String(args.datasourceId)
-      lastNonEmptyId = id
-      if (success) lastSuccessId = id
+  for (const m of (Array.isArray(baseCall.args.metrics) ? baseCall.args.metrics : [])) {
+    if (typeof m === 'string' && !metrics.includes(m)) metrics.push(m)
+  }
+  // 一张图可能由多次查询共同生成（如两个指标分别查询后合并成一张图）：
+  // 其他调用中与图表 series 名称匹配的指标也并入，避免组合图指标漏显示
+  for (const c of queryCalls) {
+    if (c === baseCall) continue
+    for (const m of (Array.isArray(c.args.metrics) ? c.args.metrics : [])) {
+      if (typeof m !== 'string' || metrics.includes(m)) continue
+      if (chartTokens.some((tok) => tok === m || tok.startsWith(m) || m.startsWith(tok))) {
+        metrics.push(m)
+      }
     }
   }
+  // 维度：非时间维度全部保留；时间维度只保留一个——优先与图表 X 轴推断粒度一致，否则取首个
+  const baseDims: string[] = Array.isArray(baseCall.args.dimensions)
+    ? baseCall.args.dimensions.filter((d: unknown): d is string => typeof d === 'string')
+    : []
+  for (const d of baseDims) {
+    if (!d.startsWith('metric_time') && !dimensions.includes(d)) dimensions.push(d)
+  }
+  const timeDims = baseDims.filter((d) => d.startsWith('metric_time'))
+  if (timeDims.length > 0) {
+    const kept = chartGrain
+      ? (timeDims.find((d) => /metric_time__(\w+)/.exec(d)?.[1] === chartGrain) ?? timeDims[0])
+      : timeDims[0]
+    if (kept && !dimensions.includes(kept)) dimensions.push(kept)
+  }
+  if (Array.isArray(baseCall.args.filters)) {
+    for (const f of baseCall.args.filters) if (typeof f === 'string' && !filters.includes(f)) filters.push(f)
+  }
+  const timeConstraint = (typeof baseCall.args.timeConstraint === 'string' && baseCall.args.timeConstraint)
+    ? baseCall.args.timeConstraint
+    : null
   if (metrics.length === 0) {
     return null
   }
-  // 优先用最后一次成功的；其次用最后一次非空的
-  datasourceId = lastSuccessId ?? lastNonEmptyId
+  let datasourceId: string | null = null
+  if (baseCall.args.datasourceId != null) {
+    datasourceId = String(baseCall.args.datasourceId)
+  }
+  if (datasourceId == null) {
+    let lastSuccessId: string | null = null
+    let lastNonEmptyId: string | null = null
+    for (const c of queryCalls) {
+      if (c.args.datasourceId != null) {
+        const id = String(c.args.datasourceId)
+        lastNonEmptyId = id
+        if (c.success) lastSuccessId = id
+      }
+    }
+    datasourceId = lastSuccessId ?? lastNonEmptyId
+  }
   return { datasourceId, metrics, dimensions, filters, timeConstraint }
 }
 

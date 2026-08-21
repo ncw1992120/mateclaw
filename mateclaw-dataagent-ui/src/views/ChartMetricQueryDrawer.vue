@@ -645,7 +645,9 @@ async function executeQuery(): Promise<void> {
     
     let timeConstraint: string | undefined
     if (dateRange.value && dateRange.value[0] && dateRange.value[1]) {
-      timeConstraint = `[${timeDim}] BETWEEN ("${dateRange.value[0]}","${dateRange.value[1]}")`
+      // timeConstraint 不支持 BETWEEN 语法（Aloudata API：日期区间用 AND 连接两个边界条件）
+      // 正确格式：([metric_time__day]>="2026-08-17" AND [metric_time__day]<="2026-08-21")
+      timeConstraint = `([${timeDim}]>="${dateRange.value[0]}" AND [${timeDim}]<="${dateRange.value[1]}")`
     }
 
     // 构建筛选条件
