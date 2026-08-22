@@ -575,7 +575,13 @@
           <div class="footer-tools">
             <el-popover :width="280" trigger="click" placement="top-start" :persistent="false" :teleported="true">
               <template #reference>
-                <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('chat.datasourceScope')">
+                <button
+                  class="tool-btn ds-scope-trigger"
+                  :class="{ active: chatStore.selectedDatasourceIds.length > 0 }"
+                  :disabled="chatStore.isStreaming"
+                  type="button"
+                  :title="t('chat.datasourceScope')"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <ellipse cx="12" cy="5" rx="9" ry="3"/>
                     <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
@@ -6536,6 +6542,17 @@ onUnmounted(() => {
 .footer-tools .tool-btn.active {
   color: var(--theme-text);
   background: var(--theme-surface-hover);
+}
+
+/* 数据源触发按钮：勾选数据源后用主题色高亮图标（各主题保留各自 accent 色） */
+.footer-tools .tool-btn.ds-scope-trigger.active {
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+}
+
+.footer-tools .tool-btn.ds-scope-trigger.active:hover {
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 16%, transparent);
 }
 
 .footer-send {

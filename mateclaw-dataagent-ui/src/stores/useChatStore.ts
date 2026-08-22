@@ -323,7 +323,8 @@ export const useChatStore = defineStore('chat', () => {
   function prepareNewConversation(): void {
     messages.value = []
     conversationId.value = ''
-    selectedDatasourceIds.value = []
+    // 新对话保留已勾选的数据源（与模型选择一致，通过 usePersistedState 持久化），
+    // 用户无需每次重新勾选；切换工作空间时由 resetForWorkspaceSwitch 显式重置
     // 新会话没有上下文使用数据：清空旧会话残留的占比，并收起展开面板，
     // 避免「上下文按钮」子元素展示上一个会话的占比
     contextUsage.value = null
@@ -372,6 +373,9 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.removeItem('mc-chat-selected-model-name')
     localStorage.removeItem('mc-chat-selected-model-provider')
     localStorage.removeItem('mc-chat-selected-datasource-ids')
+    // 同时清空内存中的已选数据源（不同工作空间的数据源不同），
+    // 否则持久化 watcher 会把旧值重新写回 localStorage
+    selectedDatasourceIds.value = []
     // 清理续连状态
     clearReconnectState()
 
