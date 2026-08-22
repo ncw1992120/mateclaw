@@ -59,7 +59,7 @@
               <span class="file-icon" v-html="getFileIcon(file.filename)"></span>
               <span class="prompt-name" :title="file.filename">{{ file.filename }}</span>
               <span class="prompt-size">{{ formatFileSize(file.fileSize) }}</span>
-              <div class="prompt-actions">
+              <div v-if="canManage" class="prompt-actions">
                 <el-button
                   size="small"
                   link
@@ -91,7 +91,7 @@
               <h2 class="card-title">{{ t('workspaceMenu.contextFiles') }}</h2>
               <span class="card-subtitle">{{ t('workspaceMenu.contextFilesDesc') }}</span>
             </div>
-            <el-button type="primary" size="small" @click="openCreateDialog">
+            <el-button v-if="canManage" type="primary" size="small" @click="openCreateDialog">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               {{ t('workspaceMenu.newFile') }}
             </el-button>
@@ -125,18 +125,23 @@
                 </div>
               </div>
               <div class="file-actions">
-                <el-tooltip :content="isPromptEnabled(file.filename) ? t('workspaceMenu.disablePrompt') : t('workspaceMenu.enableAsPrompt')" placement="top">
-                  <el-button
-                    size="small"
-                    :type="isPromptEnabled(file.filename) ? 'success' : 'default'"
-                    plain
-                    @click="togglePrompt(file.filename)"
-                  >
-                    {{ isPromptEnabled(file.filename) ? t('workspaceMenu.promptOn') : t('workspaceMenu.promptOff') }}
-                  </el-button>
-                </el-tooltip>
-                <el-button size="small" link @click="handleEdit(file)">{{ t('workspaceMenu.edit') }}</el-button>
-                <el-button size="small" link type="danger" @click="handleDelete(file)">{{ t('workspaceMenu.delete') }}</el-button>
+                <el-button v-if="!canManage" size="small" link :title="t('workspaceMenu.viewFile')" @click="handleView(file)">
+                  {{ t('workspaceMenu.view') }}
+                </el-button>
+                <template v-if="canManage">
+                  <el-tooltip :content="isPromptEnabled(file.filename) ? t('workspaceMenu.disablePrompt') : t('workspaceMenu.enableAsPrompt')" placement="top">
+                    <el-button
+                      size="small"
+                      :type="isPromptEnabled(file.filename) ? 'success' : 'default'"
+                      plain
+                      @click="togglePrompt(file.filename)"
+                    >
+                      {{ isPromptEnabled(file.filename) ? t('workspaceMenu.promptOn') : t('workspaceMenu.promptOff') }}
+                    </el-button>
+                  </el-tooltip>
+                  <el-button size="small" link @click="handleEdit(file)">{{ t('workspaceMenu.edit') }}</el-button>
+                  <el-button size="small" link type="danger" @click="handleDelete(file)">{{ t('workspaceMenu.delete') }}</el-button>
+                </template>
               </div>
             </div>
           </div>
@@ -144,10 +149,10 @@
       </template>
     </section>
 
-    <!-- 编辑/新建文件弹窗 -->
+    <!-- 查看/编辑/新建文件弹窗 -->
     <el-dialog
       v-model="editDialogVisible"
-      :title="editingFile ? t('workspaceMenu.editFile') : t('workspaceMenu.newFile')"
+      :title="dialogReadonly ? t('workspaceMenu.viewFile') : editingFile ? t('workspaceMenu.editFile') : t('workspaceMenu.newFile')"
       width="760px"
       :close-on-click-modal="false"
       class="file-edit-dialog"
@@ -158,7 +163,7 @@
           <el-input
             v-model="editingFilename"
             :placeholder="t('workspaceMenu.newFileName')"
-            :disabled="!!editingFile"
+            :disabled="!!editingFile || dialogReadonly"
             size="default"
           />
         </div>
@@ -168,16 +173,20 @@
             v-model="editingContent"
             type="textarea"
             :rows="20"
+            :disabled="dialogReadonly"
             placeholder="Markdown content..."
             class="content-textarea"
           />
         </div>
       </div>
       <template #footer>
-        <el-button @click="editDialogVisible = false">{{ t('workspaceMenu.cancel') }}</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">
-          {{ t('workspaceMenu.save') }}
-        </el-button>
+        <el-button v-if="dialogReadonly" @click="editDialogVisible = false">{{ t('common.close') }}</el-button>
+        <template v-else>
+          <el-button @click="editDialogVisible = false">{{ t('workspaceMenu.cancel') }}</el-button>
+          <el-button type="primary" :loading="saving" @click="handleSave">
+            {{ t('workspaceMenu.save') }}
+          </el-button>
+        </template>
       </template>
     </el-dialog>
   </div>
@@ -188,11 +197,16 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAgentStore } from '@/stores/useAgentStore'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import * as contextApi from '@/api/agent-context'
 import type { Agent, WorkspaceFile } from '@/types'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
+const { hasPermission } = usePermission()
+
+/** 是否可编辑智能体上下文（管理员/工作区 admin+owner，全局管理员自动放行），否则只读 */
+const canManage = computed(() => hasPermission(PERMISSION.AGENT_MANAGE))
 
 /** 当前选中的 Agent ID */
 const selectedAgentId = ref<number | string>('')
@@ -208,6 +222,8 @@ const loading = ref(false)
 
 /** 编辑弹窗 */
 const editDialogVisible = ref(false)
+/** 弹窗是否为只读（查看详情）模式 */
+const dialogReadonly = ref(false)
 const editingFile = ref<WorkspaceFile | null>(null)
 const editingFilename = ref('')
 const editingContent = ref('')
@@ -329,14 +345,16 @@ async function persistPromptFiles(): Promise<void> {
 
 /** 打开新建弹窗 */
 function openCreateDialog(): void {
+  dialogReadonly.value = false
   editingFile.value = null
   editingFilename.value = ''
   editingContent.value = ''
   editDialogVisible.value = true
 }
 
-/** 编辑文件 */
-async function handleEdit(file: WorkspaceFile): Promise<void> {
+/** 打开文件内容弹窗（readonly=true 时为只读查看） */
+async function openFileDialog(file: WorkspaceFile, readonly: boolean): Promise<void> {
+  dialogReadonly.value = readonly
   editingFile.value = file
   editingFilename.value = file.filename
   try {
@@ -350,6 +368,16 @@ async function handleEdit(file: WorkspaceFile): Promise<void> {
   editDialogVisible.value = true
 }
 
+/** 查看文件详情（只读） */
+async function handleView(file: WorkspaceFile): Promise<void> {
+  await openFileDialog(file, true)
+}
+
+/** 编辑文件 */
+async function handleEdit(file: WorkspaceFile): Promise<void> {
+  await openFileDialog(file, false)
+}
+
 /** 保存文件 */
 async function handleSave(): Promise<void> {
   if (!editingFilename.value.trim()) {
@@ -359,7 +387,7 @@ async function handleSave(): Promise<void> {
   saving.value = true
   try {
     await contextApi.saveFile(selectedAgentId.value, editingFilename.value.trim(), editingContent.value)
-    ElMessage.success(t('workspaceMenu.save') + ' OK')
+    ElMessage.success(t('workspaceMenu.saveSuccess'))
     editDialogVisible.value = false
     await loadFiles()
   } catch (err) {
@@ -372,11 +400,11 @@ async function handleSave(): Promise<void> {
 /** 删除文件 */
 async function handleDelete(file: WorkspaceFile): Promise<void> {
   try {
-    await ElMessageBox.confirm(t('workspaceMenu.confirmDelete') + ` (${file.filename})`, 'Delete', {
+    await ElMessageBox.confirm(t('workspaceMenu.confirmDelete') + ` (${file.filename})`, t('workspaceMenu.deleteFileTitle'), {
       type: 'warning',
     })
     await contextApi.removeFile(selectedAgentId.value, file.filename)
-    ElMessage.success('Deleted')
+    ElMessage.success(t('workspaceMenu.deleteSuccess'))
     await loadFiles()
   } catch (err) {
     if (err !== 'cancel') {

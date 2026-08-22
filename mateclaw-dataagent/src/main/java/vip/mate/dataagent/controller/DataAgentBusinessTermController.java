@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermCreateRequest;
 import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
@@ -164,6 +166,7 @@ public class DataAgentBusinessTermController {
      * 为租户下的所有术语生成嵌入向量并写入 ES 索引
      */
     @PostMapping("/embed")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "向量化并索引", description = "为租户下所有术语生成嵌入向量并写入ES索引，支持语义检索")
     public R<Integer> embedAndIndex(
             @Parameter(description = "租户编码") @RequestParam String tenantCode) {
@@ -174,6 +177,7 @@ public class DataAgentBusinessTermController {
      * 重建租户的术语 ES 索引
      */
     @PostMapping("/rebuild-es")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "重建ES索引", description = "从MySQL已同步数据重新向量化并写入ES")
     public R<Integer> rebuildEsIndex(
             @Parameter(description = "租户编码") @RequestParam String tenantCode) {

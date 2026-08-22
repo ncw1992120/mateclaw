@@ -4,7 +4,7 @@
       <span class="agent-count">
         {{ t('agentConfig.total') }} <b>{{ agentStore.agents.length }}</b>
       </span>
-      <el-button type="primary" size="small" @click="openCreateDialog">
+      <el-button v-if="canManage" type="primary" size="small" @click="openCreateDialog">
         + {{ t('configCenter.agentNew') }}
       </el-button>
     </div>
@@ -16,7 +16,7 @@
     <div v-else-if="agentStore.agents.length === 0" class="empty-state">
       <span class="empty-icon">📭</span>
       <p>{{ t('configCenter.agentEmpty') }}</p>
-      <el-button type="primary" size="small" @click="openCreateDialog">
+      <el-button v-if="canManage" type="primary" size="small" @click="openCreateDialog">
         + {{ t('configCenter.agentNew') }}
       </el-button>
     </div>
@@ -32,6 +32,7 @@
           <div class="card-icon">{{ agent.icon || '🤖' }}</div>
           <el-switch
             :model-value="agent.enabled"
+            :disabled="!canManage"
             @update:model-value="(val: boolean | string | number) => handleToggle(agent, !!val)"
           />
         </div>
@@ -40,20 +41,26 @@
           <p class="card-desc">{{ agent.description || '—' }}</p>
         </div>
         <div class="card-footer">
-          <el-button size="small" link @click="handleEdit(agent)">
-            {{ t('configCenter.agentEdit') }}
+          <el-button v-if="!canManage" size="small" link :title="t('configCenter.agentViewDesc')" @click="handleView(agent)">
+            {{ t('configCenter.agentView') }}
           </el-button>
-          <el-button size="small" link type="danger" @click="handleDelete(agent)">
-            {{ t('configCenter.agentDelete') }}
-          </el-button>
+          <template v-if="canManage">
+            <el-button size="small" link @click="handleEdit(agent)">
+              {{ t('configCenter.agentEdit') }}
+            </el-button>
+            <el-button size="small" link type="danger" @click="handleDelete(agent)">
+              {{ t('configCenter.agentDelete') }}
+            </el-button>
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- 编辑 / 新建弹窗 -->
+    <!-- 查看 / 编辑 / 新建弹窗 -->
     <AgentFormDialog
       v-model:visible="dialogVisible"
       :edit-id="editingId"
+      :readonly="dialogReadonly"
       @saved="handleSaved"
     />
   </div>
@@ -64,11 +71,16 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAgentStore } from '@/stores/useAgentStore'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import AgentFormDialog from '@/views/dialog/AgentFormDialog.vue'
 import type { Agent } from '@/types'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
+const { hasPermission } = usePermission()
+
+/** 是否可管理智能体（管理员/工作区 admin+owner，全局管理员自动放行），否则只读 */
+const canManage = computed(() => hasPermission(PERMISSION.AGENT_MANAGE))
 
 /** 当前工作区 ID：优先取已有 agent 的 workspaceId，否则用 1 */
 const currentWorkspaceId = computed(() => {
@@ -83,6 +95,8 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 /** 正在编辑的 Agent ID（新建时为 null） */
 const editingId = ref<number | string | null>(null)
+/** 弹窗是否为只读（查看详情）模式 */
+const dialogReadonly = ref(false)
 
 /** 智能体名（兼容 name 为空或中英文名） */
 function resolveAgentName(agent: Agent): string {
@@ -105,21 +119,30 @@ async function loadAgents(): Promise<void> {
 async function handleToggle(agent: Agent, enabled: boolean): Promise<void> {
   try {
     await agentStore.updateAgent(agent.id, { ...agent, enabled })
-    ElMessage.success(enabled ? t('configCenter.agentEnable') + '成功' : t('configCenter.agentDisable') + '成功')
+    ElMessage.success(enabled ? t('configCenter.agentEnableSuccess') : t('configCenter.agentDisableSuccess'))
   } catch (err) {
     console.error('[AgentConfigView] handleToggle failed:', err)
   }
 }
 
+/** 查看 - 弹出只读详情弹窗 */
+function handleView(agent: Agent): void {
+  editingId.value = agent.id
+  dialogReadonly.value = true
+  dialogVisible.value = true
+}
+
 /** 编辑 - 弹出编辑智能体弹窗 */
 function handleEdit(agent: Agent): void {
   editingId.value = agent.id
+  dialogReadonly.value = false
   dialogVisible.value = true
 }
 
 /** 新建 - 弹出新建智能体弹窗 */
 function openCreateDialog(): void {
   editingId.value = null
+  dialogReadonly.value = false
   dialogVisible.value = true
 }
 

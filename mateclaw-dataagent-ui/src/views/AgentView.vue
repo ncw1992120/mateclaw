@@ -4,10 +4,10 @@
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-gray-800">{{ t('agent.title') }}</h2>
       <div class="flex gap-2">
-        <el-button @click="handleApplyTemplate">
+        <el-button v-if="canManage" @click="handleApplyTemplate">
           {{ t('agent.applyTemplate') }}
         </el-button>
-        <el-button type="primary" @click="handleCreate">
+        <el-button v-if="canManage" type="primary" @click="handleCreate">
           {{ t('agent.create') }}
         </el-button>
       </div>
@@ -41,7 +41,7 @@
               <p class="text-sm text-gray-500 line-clamp-2 min-h-[2.5rem]">
                 {{ agent.description || '-' }}
               </p>
-              <div class="flex justify-end gap-2 pt-2">
+              <div v-if="canManage" class="flex justify-end gap-2 pt-2">
                 <el-button text type="primary" size="small" @click.stop="handleEdit(agent)">
                   {{ t('agent.edit') }}
                 </el-button>
@@ -99,12 +99,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Agent } from '@/types'
 import AgentFormDialog from './dialog/AgentFormDialog.vue'
 
@@ -114,6 +115,10 @@ const DEFAULT_WORKSPACE_ID = 1
 const { t } = useI18n()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
+const { hasPermission } = usePermission()
+
+/** 是否可管理智能体（管理员/工作区 admin+owner，全局管理员自动放行），否则只读 */
+const canManage = computed(() => hasPermission(PERMISSION.AGENT_MANAGE))
 
 /** 编辑/新建弹窗是否可见 */
 const formDialogVisible = ref(false)

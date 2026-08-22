@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.HandlerMapping;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.sdk.service.WorkspaceFileRuntime;
 import vip.mate.workspace.document.model.WorkspaceFileEntity;
 
@@ -54,7 +56,8 @@ public class DataAgentAgentContextController {
      * 创建或更新文件（支持子目录）
      */
     @PutMapping("/files/**")
-    @Operation(summary = "保存工作区文件", description = "创建或更新工作区文件内容")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "保存工作区文件", description = "创建或更新工作区文件内容（仅管理员）")
     public R<WorkspaceFileEntity> saveFile(@PathVariable Long agentId,
                                             HttpServletRequest httpRequest,
                                             @RequestBody SaveFileRequest body) {
@@ -66,7 +69,8 @@ public class DataAgentAgentContextController {
      * 删除文件（支持子目录）
      */
     @DeleteMapping("/files/**")
-    @Operation(summary = "删除工作区文件", description = "删除指定的工作区文件")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "删除工作区文件", description = "删除指定的工作区文件（仅管理员）")
     public R<Void> deleteFile(@PathVariable Long agentId, HttpServletRequest request) {
         String filename = extractFilename(request);
         workspaceFileRuntime.deleteFile(agentId, filename);
@@ -86,7 +90,8 @@ public class DataAgentAgentContextController {
      * 设置启用的系统提示文件列表（有序）
      */
     @PutMapping("/prompt-files")
-    @Operation(summary = "设置系统提示文件列表", description = "批量设置启用为系统提示的文件列表（有序）")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "设置系统提示文件列表", description = "批量设置启用为系统提示的文件列表（有序，仅管理员）")
     public R<Void> setPromptFiles(@PathVariable Long agentId,
                                    @RequestBody PromptFilesRequest request) {
         workspaceFileRuntime.setPromptFiles(agentId, request.getFiles());

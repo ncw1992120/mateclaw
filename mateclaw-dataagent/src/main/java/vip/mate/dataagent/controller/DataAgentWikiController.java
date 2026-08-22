@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.service.DataAgentWikiService;
 import vip.mate.wiki.dto.PageCitationWithRaw;
 import vip.mate.wiki.dto.PageSearchResult;
@@ -77,6 +79,7 @@ public class DataAgentWikiController {
      * 创建知识库
      */
     @PostMapping("/knowledge-bases")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "创建知识库", description = "新建一个业务知识库")
     public R<WikiKnowledgeBaseEntity> createKB(@RequestBody Map<String, Object> body) {
         String name = (String) body.get("name");
@@ -90,6 +93,7 @@ public class DataAgentWikiController {
      * 更新知识库
      */
     @PutMapping("/knowledge-bases/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "更新知识库", description = "更新知识库的名称、描述或绑定模型")
     public R<WikiKnowledgeBaseEntity> updateKB(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         return R.ok(wikiService.updateKB(id, body));
@@ -99,6 +103,7 @@ public class DataAgentWikiController {
      * 删除知识库（级联删除所有关联数据）
      */
     @DeleteMapping("/knowledge-bases/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除知识库", description = "级联删除知识库及其所有原始材料、页面、切片等")
     public R<Map<String, Object>> deleteKB(@PathVariable Long id) {
         return R.ok(wikiService.deleteKB(id));
@@ -121,6 +126,7 @@ public class DataAgentWikiController {
      * 更新知识库配置
      */
     @PutMapping("/knowledge-bases/{id}/config")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "更新知识库配置", description = "更新知识库的 Wiki 处理规则配置")
     public R<Void> updateConfig(@PathVariable Long id, @RequestBody Map<String, String> body) {
         wikiService.updateKBConfig(id, body.get("content"));
@@ -133,6 +139,7 @@ public class DataAgentWikiController {
      * 设置知识库关联目录
      */
     @PutMapping("/knowledge-bases/{id}/source-directory")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "设置关联目录", description = "设置知识库的本地目录扫描路径")
     public R<Void> setSourceDirectory(@PathVariable Long id, @RequestBody Map<String, String> body) {
         wikiService.setSourceDirectory(id, body.get("path"));
@@ -143,6 +150,7 @@ public class DataAgentWikiController {
      * 扫描关联目录导入文件
      */
     @PostMapping("/knowledge-bases/{id}/scan")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "扫描目录", description = "扫描知识库关联目录并导入文件")
     public R<Map<String, Object>> scanDirectory(@PathVariable Long id) {
         return R.ok(wikiService.scanDirectory(id));
@@ -163,6 +171,7 @@ public class DataAgentWikiController {
      * 添加文本材料
      */
     @PostMapping("/knowledge-bases/{kbId}/raw/text")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "添加文本材料", description = "向知识库添加纯文本形式的原始材料")
     public R<WikiRawMaterialEntity> addRawText(@PathVariable Long kbId, @RequestBody Map<String, String> body) {
         return R.ok(wikiService.addRawText(kbId, body.get("title"), body.get("content")));
@@ -172,6 +181,7 @@ public class DataAgentWikiController {
      * 上传文件材料
      */
     @PostMapping(value = "/knowledge-bases/{kbId}/raw/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "上传文件材料", description = "向知识库上传文件作为原始材料（支持 pdf/docx/xlsx/pptx/image/text）")
     public R<WikiRawMaterialEntity> uploadRaw(@PathVariable Long kbId, @RequestParam("file") MultipartFile file)
             throws IOException {
@@ -182,6 +192,7 @@ public class DataAgentWikiController {
      * 删除原始材料
      */
     @DeleteMapping("/knowledge-bases/{kbId}/raw/{rawId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除原始材料", description = "删除指定的原始材料及其关联数据")
     public R<Void> deleteRaw(@PathVariable Long kbId, @PathVariable Long rawId) {
         wikiService.deleteRaw(kbId, rawId);
@@ -192,6 +203,7 @@ public class DataAgentWikiController {
      * 重新处理材料
      */
     @PostMapping("/knowledge-bases/{kbId}/raw/{rawId}/reprocess")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "重新处理材料", description = "重新触发指定材料的处理流程")
     public R<Void> reprocessRaw(@PathVariable Long kbId, @PathVariable Long rawId,
                                  @RequestParam(defaultValue = "false") boolean force) {
@@ -203,6 +215,7 @@ public class DataAgentWikiController {
      * 取消材料处理
      */
     @PostMapping("/knowledge-bases/{kbId}/raw/{rawId}/cancel")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "取消处理", description = "取消正在进行的材料处理")
     public R<Void> cancelRaw(@PathVariable Long kbId, @PathVariable Long rawId) {
         wikiService.cancelRaw(kbId, rawId);
@@ -225,6 +238,7 @@ public class DataAgentWikiController {
      * 触发知识库处理
      */
     @PostMapping("/knowledge-bases/{kbId}/process")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "触发处理", description = "触发知识库的全量处理流程")
     public R<Map<String, Object>> processKB(@PathVariable Long kbId,
                                              @RequestParam(defaultValue = "false") boolean force) {
@@ -278,6 +292,7 @@ public class DataAgentWikiController {
      * 更新页面内容
      */
     @PutMapping("/knowledge-bases/{kbId}/pages/{slug}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "更新页面", description = "手动编辑 Wiki 页面内容")
     public R<WikiPageEntity> updatePage(@PathVariable Long kbId, @PathVariable String slug,
                                          @RequestBody Map<String, String> body) {
@@ -288,6 +303,7 @@ public class DataAgentWikiController {
      * 删除页面
      */
     @DeleteMapping("/knowledge-bases/{kbId}/pages/{slug}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除页面", description = "删除指定的 Wiki 页面")
     public R<Void> deletePage(@PathVariable Long kbId, @PathVariable String slug) {
         wikiService.deletePage(kbId, slug);
@@ -298,6 +314,7 @@ public class DataAgentWikiController {
      * 批量删除页面
      */
     @DeleteMapping("/knowledge-bases/{kbId}/pages/batch")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "批量删除页面", description = "批量删除指定的 Wiki 页面")
     public R<Integer> batchDeletePages(@PathVariable Long kbId, @RequestBody List<String> slugs) {
         return R.ok(wikiService.batchDeletePages(kbId, slugs));
@@ -325,6 +342,7 @@ public class DataAgentWikiController {
      * 归档页面
      */
     @PostMapping("/knowledge-bases/{kbId}/pages/{slug}/archive")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "归档页面", description = "将指定页面归档（软删除，可恢复）")
     public R<Map<String, Object>> archivePage(@PathVariable Long kbId, @PathVariable String slug) {
         return R.ok(wikiService.archivePage(kbId, slug));
@@ -334,6 +352,7 @@ public class DataAgentWikiController {
      * 取消归档
      */
     @PostMapping("/knowledge-bases/{kbId}/pages/{slug}/unarchive")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "取消归档", description = "恢复已归档的页面")
     public R<Map<String, Object>> unarchivePage(@PathVariable Long kbId, @PathVariable String slug) {
         return R.ok(wikiService.unarchivePage(kbId, slug));
@@ -349,6 +368,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/knowledge-bases/{kbId}/transformations")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "创建转换模板", description = "为知识库创建新的转换模板")
     public R<WikiTransformationEntity> createTransformation(
             @PathVariable Long kbId, @RequestBody WikiTransformationEntity body) {
@@ -356,6 +376,7 @@ public class DataAgentWikiController {
     }
 
     @PutMapping("/transformations/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "更新转换模板", description = "更新转换模板的配置")
     public R<WikiTransformationEntity> updateTransformation(
             @PathVariable Long id, @RequestBody WikiTransformationEntity body) {
@@ -363,6 +384,7 @@ public class DataAgentWikiController {
     }
 
     @DeleteMapping("/transformations/{id}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除转换模板", description = "删除指定的转换模板")
     public R<Void> deleteTransformation(@PathVariable Long id) {
         wikiService.deleteTransformation(id);
@@ -370,6 +392,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/transformations/{id}/apply")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "应用转换", description = "对指定的原始材料或页面应用转换模板")
     public R<WikiTransformationRunEntity> applyTransformation(
             @PathVariable Long id, @RequestBody Map<String, Object> body,
@@ -382,6 +405,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/transformations/{id}/aggregate")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "聚合转换", description = "将转换模板的所有运行结果聚合为知识库级合成页面")
     public R<Map<String, Object>> aggregateTransformation(
             @PathVariable Long id, @RequestParam Long kbId) {
@@ -402,6 +426,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/transformation-runs/{runId}/cancel")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "取消运行", description = "取消正在进行的转换运行")
     public R<Void> cancelTransformationRun(@PathVariable Long runId) {
         boolean cancelled = wikiService.cancelTransformationRun(runId);
@@ -412,6 +437,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/transformation-runs/{runId}/save-as-page")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "保存为页面", description = "将转换运行结果保存为Wiki页面")
     public R<Map<String, Object>> saveRunAsPage(@PathVariable Long runId) {
         try {
@@ -422,6 +448,7 @@ public class DataAgentWikiController {
     }
 
     @DeleteMapping("/transformation-runs/{runId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "删除运行记录", description = "删除转换运行记录")
     public R<Void> deleteTransformationRun(@PathVariable Long runId) {
         wikiService.deleteTransformationRun(runId);
@@ -437,6 +464,7 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/knowledge-bases/{kbId}/hot-cache/regenerate")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "重新生成热缓存", description = "手动触发热缓存重建")
     public R<Void> regenerateHotCache(@PathVariable Long kbId) {
         wikiService.regenerateHotCache(kbId);
@@ -444,6 +472,7 @@ public class DataAgentWikiController {
     }
 
     @DeleteMapping("/knowledge-bases/{kbId}/hot-cache")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "重置热缓存", description = "清空知识库的热缓存")
     public R<Void> resetHotCache(@PathVariable Long kbId) {
         wikiService.resetHotCache(kbId);
@@ -481,12 +510,14 @@ public class DataAgentWikiController {
     }
 
     @PostMapping("/knowledge-bases/{kbId}/pages/{slug}/enrich")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "富化页面", description = "触发页面的链接富化处理")
     public R<Map<String, Object>> enrichPage(@PathVariable Long kbId, @PathVariable String slug) {
         return R.ok(wikiService.enrichPage(kbId, slug));
     }
 
     @PostMapping("/knowledge-bases/{kbId}/pages/{slug}/repair")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
     @Operation(summary = "修复页面", description = "触发页面的本地修复处理")
     public R<Map<String, Object>> repairPage(@PathVariable Long kbId, @PathVariable String slug) {
         return R.ok(wikiService.repairPage(kbId, slug));

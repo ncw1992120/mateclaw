@@ -2,7 +2,7 @@
   <div class="cron-job-page">
     <div class="page-header">
       <h1 class="page-title">{{ t('cronJob.title') }}</h1>
-      <button class="btn-primary" @click="openCreateModal">
+      <button v-if="canManage" class="btn-primary" @click="openCreateModal">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -32,11 +32,14 @@
         <el-table-column prop="enabled" :label="t('cronJob.colStatus')" width="90">
           <template #default="{ row }">
             <el-switch
+              v-if="canManage"
               :model-value="row.enabled"
               size="small"
-              :disabled="!canManage"
               @change="(val: boolean) => handleToggle(row, val)"
             />
+            <span v-else class="status-text" :class="row.enabled ? 'on' : 'off'">
+              {{ row.enabled ? t('cronJob.statusEnabled') : t('cronJob.statusDisabled') }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column prop="nextRunTime" :label="t('cronJob.colNextRun')" width="170" />
@@ -50,14 +53,19 @@
         </el-table-column>
         <el-table-column :label="t('common.action')" width="180" fixed="right">
           <template #default="{ row }">
-            <div class="row-actions">
-              <button class="action-link" :disabled="!canManage" @click="handleRunNow(row)">
+            <div v-if="!canManage" class="row-actions">
+              <button class="action-link" :title="t('cronJob.viewDesc')" @click="openDetail(row)">
+                {{ t('cronJob.view') }}
+              </button>
+            </div>
+            <div v-else class="row-actions">
+              <button class="action-link" @click="handleRunNow(row)">
                 {{ t('cronJob.runNow') }}
               </button>
-              <button class="action-link" :disabled="!canManage" @click="openEditModal(row)">
+              <button class="action-link" @click="openEditModal(row)">
                 {{ t('common.edit') }}
               </button>
-              <button class="action-link danger" :disabled="!canManage" @click="handleDelete(row)">
+              <button class="action-link danger" @click="handleDelete(row)">
                 {{ t('common.delete') }}
               </button>
             </div>
@@ -144,6 +152,75 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 查看详情弹窗（只读） -->
+    <el-dialog
+      v-model="showDetail"
+      :title="t('cronJob.detailTitle')"
+      width="560px"
+      destroy-on-close
+      :close-on-click-modal="false"
+    >
+      <div v-loading="detailLoading" class="detail-body">
+        <template v-if="detail">
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.fieldName') }}</span>
+            <span class="detail-value">{{ detail.name || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.fieldAgent') }}</span>
+            <span class="detail-value">{{ detail.agentName || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.fieldTaskType') }}</span>
+            <span class="detail-value">{{ taskTypeLabel(detail.taskType) }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.fieldCron') }}</span>
+            <span class="detail-value detail-value--mono">{{ detail.cronExpression || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.fieldTimezone') }}</span>
+            <span class="detail-value">{{ detail.timezone || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.colStatus') }}</span>
+            <span class="detail-value" :class="detail.enabled ? 'status-on' : 'status-off'">
+              {{ detail.enabled ? t('cronJob.statusEnabled') : t('cronJob.statusDisabled') }}
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.colNextRun') }}</span>
+            <span class="detail-value">{{ detail.nextRunTime || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.colLastRun') }}</span>
+            <span class="detail-value">{{ detail.lastRunTime || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">{{ t('cronJob.colDelivery') }}</span>
+            <span class="detail-value">{{ deliveryLabel(detail.lastDeliveryStatus) }}</span>
+          </div>
+          <template v-if="detail.taskType === 'text' || detail.taskType === 'reminder'">
+            <div class="detail-row detail-row--block">
+              <span class="detail-label">{{ t('cronJob.fieldTrigger') }}</span>
+              <span class="detail-value detail-value--pre">{{ detail.triggerMessage || '-' }}</span>
+            </div>
+          </template>
+          <template v-else-if="detail.taskType === 'agent'">
+            <div class="detail-row detail-row--block">
+              <span class="detail-label">{{ t('cronJob.fieldTarget') }}</span>
+              <span class="detail-value detail-value--pre">{{ detail.requestBody || '-' }}</span>
+            </div>
+          </template>
+        </template>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showDetail = false">{{ t('common.close') }}</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -168,6 +245,11 @@ const showModal = ref(false)
 const submitting = ref(false)
 const isEdit = ref(false)
 const editingId = ref<number | string | null>(null)
+
+/** 查看详情弹窗状态 */
+const showDetail = ref(false)
+const detailLoading = ref(false)
+const detail = ref<CronJob | null>(null)
 
 const canManage = computed(() => hasPermission(PERMISSION.CRON_JOB_MANAGE))
 
@@ -251,6 +333,20 @@ function openEditModal(row: CronJob): void {
   form.requestBody = row.requestBody || ''
   form.enabled = row.enabled ?? true
   showModal.value = true
+}
+
+/** 查看详情（只读）：优先拉取详情接口，失败时回退列表数据 */
+async function openDetail(row: CronJob): Promise<void> {
+  showDetail.value = true
+  detailLoading.value = true
+  detail.value = null
+  try {
+    detail.value = await cronJobApi.getCronJob(row.id)
+  } catch {
+    detail.value = { ...row }
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 function taskTypeLabel(type: string): string {
@@ -434,6 +530,19 @@ async function handleDelete(row: CronJob): Promise<void> {
   color: var(--theme-text);
 }
 
+/* 只读状态文字 */
+.status-text {
+  font-size: 12px;
+}
+
+.status-text.on {
+  color: #00b42a;
+}
+
+.status-text.off {
+  color: var(--theme-text-muted);
+}
+
 .task-type-tag {
   display: inline-block;
   padding: 2px 8px;
@@ -535,5 +644,66 @@ async function handleDelete(row: CronJob): Promise<void> {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 详情弹窗 */
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px;
+  min-height: 120px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.detail-row--block {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-label {
+  flex-shrink: 0;
+  width: 90px;
+  font-size: 13px;
+  color: var(--theme-text-muted);
+}
+
+.detail-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--theme-text);
+  word-break: break-all;
+}
+
+.detail-value--mono {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.detail-value--pre {
+  white-space: pre-wrap;
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.status-on {
+  color: #00b42a;
+}
+
+.status-off {
+  color: var(--theme-text-muted);
 }
 </style>

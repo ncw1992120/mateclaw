@@ -62,8 +62,8 @@ public class DataAgentAgentController {
      * 创建 Agent
      */
     @PostMapping
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "创建 Agent", description = "新增 Agent 配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "创建 Agent", description = "新增 Agent 配置（仅管理员）")
     public R<AgentEntity> create(@RequestBody AgentEntity agent) {
         agent.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         return R.ok(runtime.createAgent(agent));
@@ -73,8 +73,8 @@ public class DataAgentAgentController {
      * 更新 Agent
      */
     @PutMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "更新 Agent", description = "更新 Agent 配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "更新 Agent", description = "更新 Agent 配置（仅管理员）")
     public R<AgentEntity> update(@PathVariable Long id, @RequestBody AgentEntity agent) {
         agentGuard.requireAgentInCurrentWorkspace(id);
         agent.setId(id);
@@ -85,8 +85,8 @@ public class DataAgentAgentController {
      * 删除 Agent
      */
     @DeleteMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "删除 Agent", description = "删除指定 Agent")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "删除 Agent", description = "删除指定 Agent（仅管理员）")
     public R<Void> delete(@PathVariable Long id) {
         agentGuard.requireAgentInCurrentWorkspace(id);
         runtime.deleteAgent(id);
@@ -97,8 +97,8 @@ public class DataAgentAgentController {
      * 应用模板
      */
     @PostMapping("/apply-template")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "应用模板", description = "从模板创建 Agent")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "应用模板", description = "从模板创建 Agent（仅管理员）")
     public R<AgentEntity> applyTemplate(@RequestBody ApplyTemplateRequest req) {
         return R.ok(runtime.applyTemplate(req.getTemplateId(), workspaceGuard.currentWorkspaceId(), null));
     }
@@ -162,8 +162,8 @@ public class DataAgentAgentController {
      * 批量设置 Agent 技能绑定
      */
     @PutMapping("/{id}/skills")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "设置技能绑定", description = "批量替换 Agent 的技能绑定")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "设置技能绑定", description = "批量替换 Agent 的技能绑定（仅管理员）")
     public R<Void> setAgentSkills(@PathVariable Long id, @RequestBody List<Long> skillIds) {
         agentGuard.requireAgentInCurrentWorkspace(id);
         runtime.setAgentSkillBindings(id, skillIds);
@@ -187,8 +187,8 @@ public class DataAgentAgentController {
      * 批量设置 Agent 工具绑定
      */
     @PutMapping("/{id}/tools")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "设置工具绑定", description = "批量替换 Agent 的工具绑定")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "设置工具绑定", description = "批量替换 Agent 的工具绑定（仅管理员）")
     public R<Void> setAgentTools(@PathVariable Long id, @RequestBody List<String> toolNames) {
         agentGuard.requireAgentInCurrentWorkspace(id);
         runtime.setAgentToolBindings(id, toolNames);
@@ -212,8 +212,8 @@ public class DataAgentAgentController {
      * 批量设置 Agent 偏好供应商顺序
      */
     @PutMapping("/{id}/provider-preferences")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "设置偏好供应商", description = "按顺序替换 Agent 的偏好 Provider 列表")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "设置偏好供应商", description = "按顺序替换 Agent 的偏好 Provider 列表（仅管理员）")
     public R<Void> setAgentProviderPreferences(@PathVariable Long id, @RequestBody List<String> providerIds) {
         agentGuard.requireAgentInCurrentWorkspace(id);
         runtime.setAgentProviderPreferences(id, providerIds);

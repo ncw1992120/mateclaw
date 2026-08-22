@@ -8,7 +8,7 @@
           <span class="title-text">{{ t('knowledgeConfig.wikiLibrary') }}</span>
           <span class="kb-count">{{ knowledgeBases.length }}</span>
         </div>
-        <el-button type="primary" size="small" @click="openCreateDialog">
+        <el-button v-if="canManage" type="primary" size="small" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           {{ t('knowledgeConfig.create') }}
         </el-button>
@@ -25,7 +25,7 @@
         <el-icon :size="48" class="empty-icon"><Collection /></el-icon>
         <p class="empty-title">{{ t('knowledgeConfig.emptyTitle') }}</p>
         <p class="empty-desc">{{ t('knowledgeConfig.emptyDesc') }}</p>
-        <el-button type="primary" @click="openCreateDialog">
+        <el-button v-if="canManage" type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
           {{ t('knowledgeConfig.create') }}
         </el-button>
@@ -61,12 +61,15 @@
               <span class="kb-stat-label">{{ t('knowledgeConfig.pageCount') }}</span>
               <span class="kb-stat-value">{{ kb.pageCount }}</span>
             </div>
-          </div>
-          <!-- 悬浮操作 -->
-          <div class="kb-card-actions" @click.stop>
-            <el-button size="small" circle @click="handleDelete(kb)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
+            <!-- 悬浮操作：位于卡片底部右侧，样式参考洞察卡片按钮 -->
+            <div v-if="canManage" class="kb-card-actions" @click.stop>
+              <button class="kb-card-action" :title="t('common.edit')" @click="openEditDialog(kb)">
+                <el-icon><EditPen /></el-icon>
+              </button>
+              <button class="kb-card-action kb-card-action--danger" :title="t('knowledgeConfig.delete')" @click="handleDelete(kb)">
+                <el-icon><Delete /></el-icon>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -172,7 +175,7 @@
         <!-- ===== 原始材料 Tab ===== -->
         <div v-if="activeTab === 'raw'" class="tab-panel raw-panel">
           <!-- 上传区 + 添加文本 -->
-          <div class="raw-toolbar">
+          <div v-if="canManage" class="raw-toolbar">
             <div
               class="upload-zone"
               :class="{ 'is-dragging': isDragging }"
@@ -196,7 +199,7 @@
           </div>
 
           <!-- 目录扫描 -->
-          <div class="scan-row">
+          <div v-if="canManage" class="scan-row">
             <el-input
               v-model="scanPath"
               :placeholder="t('knowledgeConfig.dirPlaceholder')"
@@ -254,16 +257,16 @@
                   </span>
                 </div>
                 <div class="raw-item-actions" @click.stop>
-                  <el-button v-if="raw.processingStatus === 'processing'" size="small" text type="danger" @click="handleCancelRaw(raw)">
+                  <el-button v-if="canManage && raw.processingStatus === 'processing'" size="small" text type="danger" @click="handleCancelRaw(raw)">
                     <el-icon><Close /></el-icon>
                   </el-button>
-                  <el-button v-else-if="raw.processingStatus === 'failed' || raw.processingStatus === 'partial' || raw.processingStatus === 'completed' || raw.processingStatus === 'cancelled'" size="small" text @click="handleReprocess(raw)">
+                  <el-button v-else-if="canManage && (raw.processingStatus === 'failed' || raw.processingStatus === 'partial' || raw.processingStatus === 'completed' || raw.processingStatus === 'cancelled')" size="small" text @click="handleReprocess(raw)">
                     <el-icon><RefreshRight /></el-icon>
                   </el-button>
                   <el-button size="small" text @click="handleDownloadRaw(raw)">
                     <el-icon><Download /></el-icon>
                   </el-button>
-                  <el-button size="small" text type="danger" @click="handleDeleteRaw(raw)">
+                  <el-button v-if="canManage" size="small" text type="danger" @click="handleDeleteRaw(raw)">
                     <el-icon><Delete /></el-icon>
                   </el-button>
                 </div>
@@ -285,7 +288,7 @@
           </div>
 
           <!-- 全部处理按钮 -->
-          <div v-if="rawMaterials.some(r => r.processingStatus === 'pending')" class="process-all-row">
+          <div v-if="canManage && rawMaterials.some(r => r.processingStatus === 'pending')" class="process-all-row">
             <el-button type="primary" @click="handleProcessAll">
               <el-icon><VideoPlay /></el-icon>
               {{ t('knowledgeConfig.processAll') }}
@@ -311,13 +314,7 @@
                 </div>
               </div>
               <div class="page-viewer-actions">
-                <el-button size="small" @click="editingPage = !editingPage">
-                  {{ editingPage ? t('common.cancel') : t('common.edit') }}
-                </el-button>
-                <el-button v-if="editingPage" type="primary" size="small" @click="savePageEdit">
-                  {{ t('common.save') }}
-                </el-button>
-                <el-button size="small" type="danger" text @click="handleDeletePage(currentPage)">
+                <el-button v-if="canManage" size="small" type="danger" text @click="handleDeletePage(currentPage)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
@@ -326,7 +323,20 @@
               <el-alert type="info" :title="currentPage.summary" :closable="false" />
             </div>
             <div v-if="!editingPage" class="page-content markdown-body" v-html="renderedPageContent" />
-            <el-input v-else v-model="editContent" type="textarea" :rows="20" />
+            <template v-else>
+              <el-input v-model="editContent" type="textarea" :rows="20" />
+              <div class="page-edit-actions">
+                <el-button size="small" @click="editingPage = false">{{ t('common.cancel') }}</el-button>
+                <el-button size="small" type="primary" @click="savePageEdit">{{ t('common.save') }}</el-button>
+              </div>
+            </template>
+            <!-- 编辑入口：跟随内容区，位于页面底部 -->
+            <div v-if="canManage && !editingPage" class="page-edit-bar">
+              <el-button size="small" @click="editingPage = true">
+                <el-icon><EditPen /></el-icon>
+                {{ t('common.edit') }}
+              </el-button>
+            </div>
           </div>
         </div>
 
@@ -378,23 +388,23 @@
             <div class="config-card">
               <div class="config-card-head">
                 <h4>{{ t('knowledgeConfig.embeddingModel') }}</h4>
-                <el-button size="small" type="primary" :loading="configSavingEmbedding" @click="saveEmbeddingModel">
+                <el-button v-if="canManage" size="small" type="primary" :loading="configSavingEmbedding" @click="saveEmbeddingModel">
                   {{ t('common.save') }}
                 </el-button>
               </div>
               <p class="config-desc">{{ t('knowledgeConfig.embeddingDesc') }}</p>
-              <el-input v-model="configEmbeddingModelId" :placeholder="t('knowledgeConfig.modelIdPlaceholder')" />
+              <el-input v-model="configEmbeddingModelId" :disabled="!canManage" :placeholder="t('knowledgeConfig.modelIdPlaceholder')" />
             </div>
 
             <!-- Ingest Mode -->
             <div class="config-card">
               <div class="config-card-head">
                 <h4>{{ t('knowledgeConfig.ingestMode') }}</h4>
-                <el-button size="small" type="primary" :loading="configSavingIngest" @click="saveIngestMode">
+                <el-button v-if="canManage" size="small" type="primary" :loading="configSavingIngest" @click="saveIngestMode">
                   {{ t('common.save') }}
                 </el-button>
               </div>
-              <el-radio-group v-model="configIngestMode">
+              <el-radio-group v-model="configIngestMode" :disabled="!canManage">
                 <el-radio-button value="eager">{{ t('knowledgeConfig.eager') }}</el-radio-button>
                 <el-radio-button value="lazy">{{ t('knowledgeConfig.lazy') }}</el-radio-button>
               </el-radio-group>
@@ -405,7 +415,7 @@
             <div class="config-card">
               <div class="config-card-head">
                 <h4>{{ t('knowledgeConfig.processingRules') }}</h4>
-                <el-button size="small" type="primary" @click="handleSaveConfig">
+                <el-button v-if="canManage" size="small" type="primary" @click="handleSaveConfig">
                   {{ t('common.save') }}
                 </el-button>
               </div>
@@ -413,6 +423,7 @@
                 v-model="kbConfigContent"
                 type="textarea"
                 :rows="12"
+                :disabled="!canManage"
                 :placeholder="t('knowledgeConfig.configPlaceholder')"
               />
             </div>
@@ -454,7 +465,7 @@
               <h4>{{ t('knowledgeConfig.transformations') }}</h4>
               <p class="panel-desc">{{ t('knowledgeConfig.transformationsDesc') }}</p>
             </div>
-            <el-button type="primary" size="small" @click="openTransformEditor()">
+            <el-button v-if="canManage" type="primary" size="small" @click="openTransformEditor()">
               <el-icon><Plus /></el-icon> {{ t('knowledgeConfig.createTransformation') }}
             </el-button>
           </div>
@@ -480,15 +491,15 @@
               <p v-if="tpl.description" class="tpl-desc">{{ tpl.description }}</p>
 
               <div class="tpl-actions">
-                <el-select v-model="selectedRawForTransform[tpl.id]" size="small" clearable :placeholder="t('knowledgeConfig.selectRaw')" style="width:200px">
+                <el-select v-model="selectedRawForTransform[tpl.id]" size="small" clearable :placeholder="t('knowledgeConfig.selectRaw')" style="width:200px" :disabled="!canManage">
                   <el-option v-for="raw in rawMaterials.filter(r => r.processingStatus === 'completed' || r.processingStatus === 'partial')" :key="raw.id" :label="raw.title" :value="raw.id" />
                 </el-select>
-                <el-button size="small" type="primary" @click="onApplyTransform(tpl)">{{ t('knowledgeConfig.run') }}</el-button>
-                <el-button size="small" @click="onAggregateTransform(tpl)">{{ t('knowledgeConfig.aggregate') }}</el-button>
-                <el-button size="small" text @click="openTransformEditor(tpl)">
+                <el-button v-if="canManage" size="small" type="primary" @click="onApplyTransform(tpl)">{{ t('knowledgeConfig.run') }}</el-button>
+                <el-button v-if="canManage" size="small" @click="onAggregateTransform(tpl)">{{ t('knowledgeConfig.aggregate') }}</el-button>
+                <el-button v-if="canManage" size="small" text @click="openTransformEditor(tpl)">
                   <el-icon><EditPen /></el-icon>
                 </el-button>
-                <el-button size="small" text type="danger" @click="onDeleteTransform(tpl)">
+                <el-button v-if="canManage" size="small" text type="danger" @click="onDeleteTransform(tpl)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
               </div>
@@ -509,9 +520,9 @@
                     </div>
                     <div v-if="run.error" class="run-error">{{ run.error }}</div>
                     <div class="run-actions">
-                      <el-button v-if="run.status === 'running' || run.status === 'pending'" size="small" text @click="onCancelTransformRun(run.id)">{{ t('knowledgeConfig.cancel') }}</el-button>
-                      <el-button v-if="run.status === 'completed' && run.output" size="small" text type="primary" @click="onSaveRunAsPage(run.id)">{{ t('knowledgeConfig.saveAsPage') }}</el-button>
-                      <el-button size="small" text type="danger" @click="onDeleteTransformRun(run.id)">{{ t('knowledgeConfig.delete') }}</el-button>
+                      <el-button v-if="canManage && (run.status === 'running' || run.status === 'pending')" size="small" text @click="onCancelTransformRun(run.id)">{{ t('knowledgeConfig.cancel') }}</el-button>
+                      <el-button v-if="canManage && run.status === 'completed' && run.output" size="small" text type="primary" @click="onSaveRunAsPage(run.id)">{{ t('knowledgeConfig.saveAsPage') }}</el-button>
+                      <el-button v-if="canManage" size="small" text type="danger" @click="onDeleteTransformRun(run.id)">{{ t('knowledgeConfig.delete') }}</el-button>
                     </div>
                   </div>
                 </div>
@@ -529,12 +540,12 @@
           <div v-else-if="!hotCache" class="panel-empty">
             <el-icon :size="48"><Clock /></el-icon>
             <p>{{ t('knowledgeConfig.noHotCache') }}</p>
-            <el-button type="primary" :loading="hotCacheRegenerating" @click="onRegenerateHotCache">
+            <el-button v-if="canManage" type="primary" :loading="hotCacheRegenerating" @click="onRegenerateHotCache">
               {{ t('knowledgeConfig.regenerate') }}
             </el-button>
           </div>
           <div v-else class="hot-cache-body">
-            <div class="panel-actions">
+            <div v-if="canManage" class="panel-actions">
               <el-button :loading="hotCacheRegenerating" @click="onRegenerateHotCache">
                 <el-icon><Refresh /></el-icon> {{ t('knowledgeConfig.regenerate') }}
               </el-button>
@@ -595,6 +606,34 @@
         <el-button @click="createDialogVisible = false">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="createLoading" @click="handleCreate">
           {{ t('common.create') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ========== 编辑知识库弹窗 ========== -->
+    <el-dialog
+      v-model="editDialogVisible"
+      :title="t('knowledgeConfig.editTitle')"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item :label="t('knowledgeConfig.fieldName')" required>
+          <el-input v-model="editForm.name" :placeholder="t('knowledgeConfig.fieldNamePlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('knowledgeConfig.fieldDescription')">
+          <el-input
+            v-model="editForm.description"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('knowledgeConfig.fieldDescPlaceholder')"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="editLoading" @click="handleEditSubmit">
+          {{ t('common.save') }}
         </el-button>
       </template>
     </el-dialog>
@@ -679,6 +718,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import * as echarts from 'echarts'
 import {
   Plus, Delete, Loading, Collection, Document, Files, ArrowLeft,
@@ -703,6 +743,10 @@ import type {
 } from '@/api/knowledge'
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
+
+/** 是否可管理知识库（管理员/工作区 admin+owner，全局管理员自动放行），否则只读 */
+const canManage = computed(() => hasPermission(PERMISSION.KNOWLEDGE_MANAGE))
 
 const KB_STORAGE_KEY = 'mateclaw_kb_state'
 
@@ -1231,6 +1275,46 @@ async function handleCreate() {
     await fetchKBs()
   } catch { /* */ } finally {
     createLoading.value = false
+  }
+}
+
+// ==================== Edit KB ====================
+/** 编辑知识库弹窗状态 */
+const editDialogVisible = ref(false)
+const editLoading = ref(false)
+const editForm = ref({ id: '', name: '', description: '' })
+
+/** 打开编辑知识库弹窗 */
+function openEditDialog(kb: KnowledgeBase): void {
+  editForm.value = { id: String(kb.id), name: kb.name || '', description: kb.description || '' }
+  editDialogVisible.value = true
+}
+
+/** 保存知识库名称/描述修改 */
+async function handleEditSubmit() {
+  if (!editForm.value.name.trim()) {
+    ElMessage.warning(t('knowledgeConfig.nameRequired'))
+    return
+  }
+  editLoading.value = true
+  try {
+    await updateKB(editForm.value.id, {
+      name: editForm.value.name.trim(),
+      description: editForm.value.description,
+    })
+    ElMessage.success(t('knowledgeConfig.updateSuccess'))
+    editDialogVisible.value = false
+    await fetchKBs()
+    // 若编辑的是当前打开的知识库，同步工作区头部信息
+    if (currentKB.value && String(currentKB.value.id) === editForm.value.id) {
+      currentKB.value = {
+        ...currentKB.value,
+        name: editForm.value.name.trim(),
+        description: editForm.value.description,
+      }
+    }
+  } catch { /* */ } finally {
+    editLoading.value = false
   }
 }
 
@@ -1956,11 +2040,38 @@ watch(activeTab, (tab) => {
 }
 
 .kb-card-actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;
+}
+
+/* 洞察卡片同款操作按钮：无边框、透明底、灰色，hover 浅色底 */
+.kb-card-action {
+  border: none;
+  background: transparent;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.kb-card-action:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.kb-card-action--danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
 }
 
 .kb-card:hover .kb-card-actions {
@@ -2330,6 +2441,21 @@ watch(activeTab, (tab) => {
 .page-viewer-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+/* 编辑入口与编辑态操作：跟随内容区，位于页面底部 */
+.page-edit-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.page-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .page-summary {

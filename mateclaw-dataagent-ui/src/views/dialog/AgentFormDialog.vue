@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="isEdit ? '编辑智能体' : '新建智能体'"
+    :title="isReadonly ? t('agentForm.viewTitle') : isEdit ? t('agentForm.editTitle') : t('agentForm.createTitle')"
     width="720px"
     :close-on-click-modal="false"
     :close-on-press-escape="false"
@@ -12,16 +12,17 @@
     <div v-loading="loading" class="agent-form-dialog">
       <el-tabs v-model="activeTab" class="agent-tabs">
         <!-- 基本信息 -->
-        <el-tab-pane label="基本信息" name="basic">
+        <el-tab-pane :label="t('agentForm.basicInfo')" name="basic">
           <el-form
             ref="formRef"
             :model="formData"
             :rules="formRules"
+            :disabled="isReadonly"
             label-position="top"
           >
             <div class="form-row">
               <el-form-item :label="t('agent.name')" prop="name" class="flex-1">
-                <el-input v-model="formData.name" placeholder="请输入名称" />
+                <el-input v-model="formData.name" :placeholder="t('agentForm.namePlaceholder')" />
               </el-form-item>
               <el-form-item :label="t('agent.type')" class="w-160">
                 <el-select v-model="formData.agentType" class="w-full">
@@ -40,17 +41,17 @@
                 v-model="formData.description"
                 type="textarea"
                 :rows="2"
-                placeholder="简要描述该智能体的用途"
+                :placeholder="t('agentForm.descriptionPlaceholder')"
               />
             </el-form-item>
 
             <div class="form-row">
-              <el-form-item label="使用模型" class="flex-1">
+              <el-form-item :label="t('agentForm.modelLabel')" class="flex-1">
                 <el-select
                   v-model="formData.modelName"
                   filterable
                   clearable
-                  placeholder="留空则使用全局默认模型"
+                  :placeholder="t('agentForm.modelPlaceholder')"
                   class="w-full"
                 >
                   <el-option
@@ -77,7 +78,7 @@
             </el-form-item>
 
             <div class="form-row">
-              <el-form-item label="思考深度" class="flex-1">
+              <el-form-item :label="t('agentForm.thinkingLevelLabel')" class="flex-1">
                 <el-select v-model="formData.defaultThinkingLevel" clearable class="w-full">
                   <el-option
                     v-for="tl in THINKING_LEVELS"
@@ -92,8 +93,8 @@
               </el-form-item>
             </div>
 
-            <el-form-item label="标签">
-              <el-input v-model="formData.tags" placeholder="逗号分隔，如：数据分析,AUM" />
+            <el-form-item :label="t('agentForm.tagsLabel')">
+              <el-input v-model="formData.tags" :placeholder="t('agentForm.tagsPlaceholder')" />
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -102,34 +103,32 @@
         <el-tab-pane name="skills" :disabled="!isEdit">
           <template #label>
             <span class="tab-label">
-              技能
-              <span v-if="formData.skillsDisabled" class="tab-badge tab-badge--off">已禁用</span>
+              {{ t('agentForm.skillsTab') }}
+              <span v-if="formData.skillsDisabled" class="tab-badge tab-badge--off">{{ t('agentForm.disabledBadge') }}</span>
               <span v-else-if="selectedSkillIds.length" class="tab-badge">{{ selectedSkillIds.length }}</span>
             </span>
           </template>
-          <div v-if="!isEdit" class="binding-disabled-tip">请先保存基本信息后再配置技能</div>
+          <div v-if="!isEdit" class="binding-disabled-tip">{{ t('agentForm.bindTip', { tab: t('agentForm.skillsTab') }) }}</div>
           <template v-else>
-            <p class="binding-hint">
-              选择该智能体可使用的技能。技能会被注入提示词，并自动暴露其声明的工具。
-            </p>
+            <p class="binding-hint">{{ t('agentForm.skillHint') }}</p>
             <div class="binding-disable-row">
               <el-checkbox v-model="formData.skillsDisabled">
-                <strong>禁用所有技能</strong>
-                <span class="binding-disable-hint">开启后，智能体不会装载任何技能（包括 SKILL.md 与技能扩展工具）。</span>
+                <strong>{{ t('agentForm.disableAllSkills') }}</strong>
+                <span class="binding-disable-hint">{{ t('agentForm.disableAllSkillsHint') }}</span>
               </el-checkbox>
             </div>
             <div class="binding-search">
               <el-input
                 v-model="skillSearchKeyword"
-                placeholder="搜索技能名称或描述"
+                :placeholder="t('agentForm.skillSearchPlaceholder')"
                 clearable
-                :disabled="formData.skillsDisabled"
+                :disabled="formData.skillsDisabled || isReadonly"
               >
                 <template #prefix><span class="search-icon">🔍</span></template>
               </el-input>
             </div>
             <div v-if="filteredSkills.length === 0" class="binding-empty">
-              {{ availableSkills.length === 0 ? '暂无可绑定技能' : '没有匹配的技能' }}
+              {{ availableSkills.length === 0 ? t('agentForm.noSkills') : t('agentForm.noSkillMatch') }}
             </div>
             <div
               v-else
@@ -147,7 +146,7 @@
               >
                 <el-checkbox
                   :model-value="!formData.skillsDisabled && selectedSkillIds.includes(skill.id)"
-                  :disabled="formData.skillsDisabled"
+                  :disabled="formData.skillsDisabled || isReadonly"
                   @change="(checked: boolean | string | number) => onSkillToggle(skill.id, !!checked)"
                 />
                 <div class="binding-icon">{{ skill.icon || '🧩' }}</div>
@@ -165,34 +164,32 @@
         <el-tab-pane name="tools" :disabled="!isEdit">
           <template #label>
             <span class="tab-label">
-              工具
-              <span v-if="formData.toolsDisabled" class="tab-badge tab-badge--off">已禁用</span>
+              {{ t('agentForm.toolsTab') }}
+              <span v-if="formData.toolsDisabled" class="tab-badge tab-badge--off">{{ t('agentForm.disabledBadge') }}</span>
               <span v-else-if="selectedToolNames.length" class="tab-badge">{{ selectedToolNames.length }}</span>
             </span>
           </template>
-          <div v-if="!isEdit" class="binding-disabled-tip">请先保存基本信息后再配置工具</div>
+          <div v-if="!isEdit" class="binding-disabled-tip">{{ t('agentForm.bindTip', { tab: t('agentForm.toolsTab') }) }}</div>
           <template v-else>
-            <p class="binding-hint">
-              直接挑选原子工具。技能绑定会自动展开其工具集，这里仅用于追加额外工具。
-            </p>
+            <p class="binding-hint">{{ t('agentForm.toolHint') }}</p>
             <div class="binding-disable-row">
               <el-checkbox v-model="formData.toolsDisabled">
-                <strong>禁用所有用户可选工具</strong>
-                <span class="binding-disable-hint">开启后仅保留系统内置（如记忆、知识库）能力，普通工具将不再暴露给该智能体。</span>
+                <strong>{{ t('agentForm.disableAllTools') }}</strong>
+                <span class="binding-disable-hint">{{ t('agentForm.disableAllToolsHint') }}</span>
               </el-checkbox>
             </div>
             <div class="binding-search">
               <el-input
                 v-model="toolSearchKeyword"
-                placeholder="搜索工具名称"
+                :placeholder="t('agentForm.toolSearchPlaceholder')"
                 clearable
-                :disabled="formData.toolsDisabled"
+                :disabled="formData.toolsDisabled || isReadonly"
               >
                 <template #prefix><span class="search-icon">🔍</span></template>
               </el-input>
             </div>
             <div v-if="filteredToolGroups.length === 0" class="binding-empty">
-              {{ availableTools.length === 0 ? '暂无可绑定工具' : '没有匹配的工具' }}
+              {{ availableTools.length === 0 ? t('agentForm.noTools') : t('agentForm.noToolMatch') }}
             </div>
             <div
               v-else
@@ -212,7 +209,7 @@
                 >
                   <el-checkbox
                     :model-value="!formData.toolsDisabled && selectedToolNames.includes(tool.name)"
-                    :disabled="formData.toolsDisabled || !tool.available"
+                    :disabled="formData.toolsDisabled || !tool.available || isReadonly"
                     @change="(checked: boolean | string | number) => onToolToggle(tool.name, !!checked)"
                   />
                   <div class="binding-icon">{{ tool.source === 'mcp' ? '🔌' : tool.source === 'plugin' ? '🧩' : '🔧' }}</div>
@@ -220,8 +217,8 @@
                     <div class="binding-name">{{ tool.rawName || tool.name }}</div>
                     <div v-if="tool.description" class="binding-desc">{{ tool.description }}</div>
                   </div>
-                  <span v-if="tool.stale" class="binding-meta binding-meta--warn">已下线</span>
-                  <span v-else-if="!tool.available" class="binding-meta binding-meta--warn">不可用</span>
+                  <span v-if="tool.stale" class="binding-meta binding-meta--warn">{{ t('agentForm.toolStale') }}</span>
+                  <span v-else-if="!tool.available" class="binding-meta binding-meta--warn">{{ t('agentForm.toolUnavailable') }}</span>
                   <span v-else class="binding-meta">{{ tool.source }}</span>
                 </label>
               </template>
@@ -233,15 +230,13 @@
         <el-tab-pane name="providers" :disabled="!isEdit">
           <template #label>
             <span class="tab-label">
-              偏好提供商
+              {{ t('agentForm.providersTab') }}
               <span v-if="selectedProviderIds.length" class="tab-badge">{{ selectedProviderIds.length }}</span>
             </span>
           </template>
-          <div v-if="!isEdit" class="binding-disabled-tip">请先保存基本信息后再配置偏好提供商</div>
+          <div v-if="!isEdit" class="binding-disabled-tip">{{ t('agentForm.bindTip', { tab: t('agentForm.providersTab') }) }}</div>
           <template v-else>
-            <p class="binding-hint">
-              指定该智能体优先使用的供应商。列表顺序即调用优先级，未列出的供应商按系统默认顺序兜底。
-            </p>
+            <p class="binding-hint">{{ t('agentForm.providerHint') }}</p>
             <div v-if="selectedProviderIds.length" class="provider-list">
               <div
                 v-for="(pid, idx) in selectedProviderIds"
@@ -251,26 +246,27 @@
                 <span class="provider-rank">{{ idx + 1 }}</span>
                 <span class="provider-name">{{ providerNameById(pid) }}</span>
                 <span class="provider-id">{{ pid }}</span>
-                <el-button size="small" :disabled="idx === 0" @click="moveProvider(idx, -1)">
+                <el-button size="small" :disabled="idx === 0 || isReadonly" @click="moveProvider(idx, -1)">
                   ↑
                 </el-button>
-                <el-button size="small" :disabled="idx === selectedProviderIds.length - 1" @click="moveProvider(idx, 1)">
+                <el-button size="small" :disabled="idx === selectedProviderIds.length - 1 || isReadonly" @click="moveProvider(idx, 1)">
                   ↓
                 </el-button>
-                <el-button size="small" type="danger" plain @click="removeProvider(idx)">
+                <el-button size="small" type="danger" plain :disabled="isReadonly" @click="removeProvider(idx)">
                   ✕
                 </el-button>
               </div>
             </div>
-            <div v-else class="binding-empty">未配置偏好顺序，使用全局默认</div>
+            <div v-else class="binding-empty">{{ t('agentForm.noProviderPreference') }}</div>
 
             <div v-if="unpickedProviders.length" class="provider-pool">
-              <p class="binding-hint" style="margin-top: 12px">点击下方供应商加入偏好列表：</p>
+              <p class="binding-hint" style="margin-top: 12px">{{ t('agentForm.providerPoolHint') }}</p>
               <el-button
                 v-for="p in unpickedProviders"
                 :key="p.providerId"
                 size="small"
                 plain
+                :disabled="isReadonly"
                 @click="addProvider(p.providerId)"
               >
                 + {{ p.name }}
@@ -283,22 +279,20 @@
         <el-tab-pane name="knowledge" :disabled="!isEdit">
           <template #label>
             <span class="tab-label">
-              知识库
+              {{ t('agentForm.knowledgeTab') }}
               <span v-if="selectedKbId" class="tab-badge">1</span>
             </span>
           </template>
-          <div v-if="!isEdit" class="binding-disabled-tip">请先保存基本信息后再配置知识库</div>
+          <div v-if="!isEdit" class="binding-disabled-tip">{{ t('agentForm.bindTip', { tab: t('agentForm.knowledgeTab') }) }}</div>
           <template v-else>
-            <p class="binding-hint">
-              选择该智能体的主知识库，知识库工具默认操作该库。所有知识库仍保持工作区共享。
-            </p>
+            <p class="binding-hint">{{ t('agentForm.knowledgeHint') }}</p>
             <div class="binding-list">
               <label class="binding-item" :class="{ selected: selectedKbId === null }">
-                <el-radio v-model="selectedKbId" :value="null" />
+                <el-radio v-model="selectedKbId" :value="null" :disabled="isReadonly" />
                 <div class="binding-icon">🚫</div>
                 <div class="binding-info">
-                  <div class="binding-name">未指定主知识库</div>
-                  <div class="binding-desc">使用工作区最近更新的知识库作为兜底。</div>
+                  <div class="binding-name">{{ t('agentForm.noPrimaryKb') }}</div>
+                  <div class="binding-desc">{{ t('agentForm.noPrimaryKbDesc') }}</div>
                 </div>
               </label>
               <label
@@ -307,13 +301,13 @@
                 class="binding-item"
                 :class="{ selected: selectedKbId === String(kb.id) }"
               >
-                <el-radio v-model="selectedKbId" :value="String(kb.id)" />
+                <el-radio v-model="selectedKbId" :value="String(kb.id)" :disabled="isReadonly" />
                 <div class="binding-icon">📚</div>
                 <div class="binding-info">
                   <div class="binding-name">{{ kb.name }}</div>
                   <div v-if="kb.description" class="binding-desc">{{ kb.description }}</div>
                 </div>
-                <span v-if="kb.pageCount != null" class="binding-meta">{{ kb.pageCount }} 页</span>
+                <span v-if="kb.pageCount != null" class="binding-meta">{{ kb.pageCount }} {{ t('agentForm.pagesUnit') }}</span>
               </label>
             </div>
           </template>
@@ -322,10 +316,15 @@
     </div>
 
     <template #footer>
-      <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSave">
-        {{ t('common.confirm') }}
-      </el-button>
+      <template v-if="isReadonly">
+        <el-button @click="handleClose">{{ t('common.close') }}</el-button>
+      </template>
+      <template v-else>
+        <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">
+          {{ t('common.confirm') }}
+        </el-button>
+      </template>
     </template>
   </el-dialog>
 </template>
@@ -356,6 +355,8 @@ const props = defineProps<{
   visible: boolean
   /** 编辑模式时传入 Agent id；新建模式不传或传 null */
   editId?: number | string | null
+  /** 只读模式（仅查看详情，不可编辑） */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -369,6 +370,9 @@ const modelStore = useModelStore()
 
 /** 是否编辑模式 */
 const isEdit = computed(() => !!props.editId)
+
+/** 是否只读模式（查看详情） */
+const isReadonly = computed(() => props.readonly === true && isEdit.value)
 
 /** 加载中 */
 const loading = ref(false)
@@ -409,8 +413,8 @@ const formData = reactive<Partial<Agent>>(buildDefaultForm())
 
 /** 表单校验规则 */
 const formRules = reactive<FormRules>({
-  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
-  agentType: [{ required: true, message: '请选择类型', trigger: 'change' }],
+  name: [{ required: true, message: t('agentForm.nameRequired'), trigger: 'blur' }],
+  agentType: [{ required: true, message: t('agentForm.typeRequired'), trigger: 'change' }],
 })
 
 /** ============= 绑定状态 ============= */
@@ -655,7 +659,7 @@ async function handleSave(): Promise<void> {
   }
 
   if (!formData.name?.trim()) {
-    ElMessage.warning('请输入名称')
+    ElMessage.warning(t('agentForm.nameRequired'))
     activeTab.value = 'basic'
     return
   }
@@ -677,11 +681,11 @@ async function handleSave(): Promise<void> {
       await persistBindings(agentId)
     }
 
-    ElMessage.success(isEdit.value ? '保存成功' : '创建成功')
+    ElMessage.success(isEdit.value ? t('agentForm.saveSuccess') : t('agentForm.createSuccess'))
     emit('saved')
     emit('update:visible', false)
   } catch (err) {
-    const message = err instanceof Error ? err.message : '操作失败'
+    const message = err instanceof Error ? err.message : t('agentForm.opFailed')
     ElMessage.error(message)
   } finally {
     saving.value = false

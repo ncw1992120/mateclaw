@@ -51,8 +51,8 @@ public class DataAgentCronJobController {
      * 创建定时任务
      */
     @PostMapping
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "创建定时任务", description = "新增定时任务配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "创建定时任务", description = "新增定时任务配置（仅管理员）")
     public R<CronJobDTO> create(@RequestBody CronJobDTO dto) {
         return R.ok(runtime.createCronJob(dto, workspaceGuard.currentWorkspaceId()));
     }
@@ -61,8 +61,8 @@ public class DataAgentCronJobController {
      * 更新定时任务
      */
     @PutMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "更新定时任务", description = "更新定时任务配置")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "更新定时任务", description = "更新定时任务配置（仅管理员）")
     public R<CronJobDTO> update(@PathVariable Long id, @RequestBody CronJobDTO dto) {
         return R.ok(runtime.updateCronJob(id, dto, workspaceGuard.currentWorkspaceId()));
     }
@@ -71,8 +71,8 @@ public class DataAgentCronJobController {
      * 删除定时任务
      */
     @DeleteMapping("/{id}")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "删除定时任务", description = "删除指定定时任务")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "删除定时任务", description = "删除指定定时任务（仅管理员）")
     public R<Void> delete(@PathVariable Long id) {
         runtime.deleteCronJob(id, workspaceGuard.currentWorkspaceId());
         return R.ok();
@@ -82,8 +82,8 @@ public class DataAgentCronJobController {
      * 启用/禁用定时任务
      */
     @PutMapping("/{id}/toggle")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "启用/禁用定时任务", description = "切换定时任务启停状态")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "启用/禁用定时任务", description = "切换定时任务启停状态（仅管理员）")
     public R<Void> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
         runtime.toggleCronJob(id, enabled, workspaceGuard.currentWorkspaceId());
         return R.ok();
@@ -93,8 +93,8 @@ public class DataAgentCronJobController {
      * 立即执行定时任务
      */
     @PostMapping("/{id}/run")
-    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
-    @Operation(summary = "立即执行定时任务", description = "手动触发一次定时任务执行")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "立即执行定时任务", description = "手动触发一次定时任务执行（仅管理员）")
     public R<Void> runNow(@PathVariable Long id) {
         runtime.runCronJobNow(id, workspaceGuard.currentWorkspaceId());
         return R.ok();

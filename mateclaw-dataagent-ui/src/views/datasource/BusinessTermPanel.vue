@@ -5,14 +5,13 @@
         <input v-model="keyword" class="search-input" :placeholder="t('businessTerm.searchPlaceholder')" @keyup.enter="handleSearch" />
       </div>
       <div class="toolbar-right">
-        <button class="tool-btn" :disabled="embedding" @click="handleEmbedAll">
-          <span v-if="embedding">⏳</span>
-          <span v-else>🔮</span>
+        <button v-permission="PERMISSION.BUSINESS_TERM_MANAGE" class="tool-btn" :disabled="embedding" @click="handleEmbedAll">
+          <el-icon v-if="embedding" class="is-loading" :size="14"><Loading /></el-icon>
+          <el-icon v-else :size="14"><MagicStick /></el-icon>
           {{ embedding ? t('businessTerm.embedding') : t('businessTerm.embedAll') }}
         </button>
-        <button class="tool-btn" :disabled="rebuilding" @click="handleRebuildEs">
-          <span v-if="rebuilding">⏳</span>
-          <span v-else>🔄</span>
+        <button v-permission="PERMISSION.BUSINESS_TERM_MANAGE" class="tool-btn" :disabled="rebuilding" @click="handleRebuildEs">
+          <el-icon :class="{ 'is-loading': rebuilding }" :size="14"><Refresh /></el-icon>
           {{ rebuilding ? t('businessTerm.rebuilding') : t('businessTerm.rebuildEs') }}
         </button>
         <button class="tool-btn primary" @click="handleCreate">
@@ -248,7 +247,9 @@
 import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { MagicStick, Refresh, Loading } from '@element-plus/icons-vue'
 import * as businessTermApi from '@/api/business-term'
+import { PERMISSION } from '@/composables/usePermission'
 import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermRef, BusinessTermUpdateRequest } from '@/types'
 
 const props = defineProps<{
@@ -711,6 +712,12 @@ async function handleRebuildEs(): Promise<void> {
 .tool-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* 按钮图标与文字间距 */
+.tool-btn .el-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 
 .tool-btn.primary {
