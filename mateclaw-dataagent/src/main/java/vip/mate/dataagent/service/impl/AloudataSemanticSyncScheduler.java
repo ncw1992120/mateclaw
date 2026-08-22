@@ -17,6 +17,8 @@ import vip.mate.dataagent.service.AloudataSemanticSyncService;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -30,7 +32,8 @@ import java.util.concurrent.Executors;
  * 调度语义：
  * <ul>
  *   <li>每 60s 扫描一次启用了「定时同步」的 Aloudata 数据源（{@code aloudata_sync_enabled=1}），
- *       用 cron 表达式（Spring 6 段）匹配当前时间窗，命中则触发一次 {@code fullSync}；</li>
+ *       匹配当前时间窗内是否有 cron 触发点，命中则触发一次 {@code fullSync}；
+ *       页面配置的是 5 段 cron（分 时 日 月 周），解析时补秒段 {@code "0 "} 构成 Spring 6 段再匹配；</li>
  *   <li>外层 {@code @SchedulerLock} 保护「扫描」本身（多实例下只有一个节点执行扫描）；</li>
  *   <li>内层为每个数据源单独加 ShedLock（key={@code aloudataSemanticAutoSync-{datasourceId}}），
  *       保证跨节点同一数据源不被并发同步；{@code lockAtMostFor=PT55M} 是单次同步最长时间的兜底；</li>
@@ -148,10 +151,15 @@ public class AloudataSemanticSyncScheduler {
         try {
             // 页面配置为 5 段 cron（分 时 日 月 周），补秒段构成 Spring 6 段后解析
             CronExpression expr = CronExpression.parse("0 " + cron.trim());
-            Instant next = expr.next(windowStart);
-            return next != null && !next.isAfter(now);
-        } catch (IllegalArgumentException e) {
-            log.warn("[Aloudata定时同步] 数据源 {} 的 cron 表达式不合法: {}", datasourceId, cron);
+            // 必须用 ZonedDateTime 计算下一触发点：CronExpression 会对 DayOfWeek 等字段做
+            // 字段级运算，而 java.time.Instant 不支持这些字段（会抛
+            // DateTimeException: Unsupported field: DayOfWeek）。
+            // 与 Spring CronTrigger 的做法一致：先把时间转成 ZonedDateTime 再调用 next()。
+            ZoneId zone = ZoneId.systemDefault();
+            ZonedDateTime next = expr.next(windowStart.atZone(zone));
+            return next != null && !next.isAfter(now.atZone(zone));
+        } catch (RuntimeException e) {
+            log.warn("[Aloudata定时同步] 数据源 {} 的 cron 表达式计算失败: {}（cron={}）", datasourceId, e.getMessage(), cron);
             return false;
         }
     }
