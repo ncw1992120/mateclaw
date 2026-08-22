@@ -22,10 +22,12 @@ import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataMetricDimensionEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.model.QueryStateEntity;
 import vip.mate.dataagent.repository.AloudataMetricDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.*;
+import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
 import vip.mate.sdk.service.MateClawRuntime;
@@ -73,6 +75,7 @@ public class AloudataCallTool {
     private final MateClawRuntime mateClawRuntime;
     private final DataAgentChatScopeContext scopeContext;
     private final SemanticRerankService semanticRerankService;
+    private final QueryStateService queryStateService;
 
     /** 指标查询端点名，需要 ECharts 图表生成等增值逻辑 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
@@ -512,6 +515,11 @@ public class AloudataCallTool {
 
             // 调用 API（认证 Header 由 apiClient 自动注入）
             ResponseEntity<Map> response = apiClient.callWithParams(endpointName, config, params);
+
+            // P0-1/P0-2: 指标查询【成功】后记录证据（RAW 结果，供最终答案数字对齐校验）并持久化查询基座
+            if (METRICS_QUERY_ENDPOINT.equalsIgnoreCase(endpointName)) {
+                recordMetricQueryEvidence(datasourceId, params, response);
+            }
 
             // 格式化响应
             return formatResponse(endpointName, response);
@@ -2867,5 +2875,174 @@ public class AloudataCallTool {
             }
         }
         return keywordMatchCount >= 2;
+    }
+
+    // ==================== 答案数字对齐证据 + 查询基座持久化（P0-1 / P0-2） ====================
+
+    /**
+     * P0-1/P0-2: 指标查询【成功】后执行的两件事：
+     * <ol>
+     *   <li>从 RAW 响应（spill/截断前）抽取数值证据写入会话 scope，供 {@code MetricAnswerVerifier}
+     *       在收尾时对最终答案做数字对齐校验；</li>
+     *   <li>把成功的结构化查询参数（metrics/dimensions/timeConstraint/filters/指标映射）持久化为
+     *       会话级「查询基座」（{@code dataagent_query_state}），供下一轮追问直接复用，避免依赖
+     *       会被压缩的会话历史。</li>
+     * </ol>
+     * 两件事都尽力而为（失败仅告警），不影响主链路。
+     */
+    @SuppressWarnings("unchecked")
+    private void recordMetricQueryEvidence(Long datasourceId, Map<String, Object> params,
+                                           ResponseEntity<Map> response) {
+        try {
+            String conversationId = ToolExecutionContext.conversationId();
+
+            Map<String, Object> body = response != null ? response.getBody() : null;
+            boolean success = body != null && Boolean.TRUE.equals(body.get("success"));
+            if (success) {
+                MetricQueryEvidence evidence = buildEvidence(datasourceId, params, body);
+                if (conversationId != null && !conversationId.isBlank()) {
+                    scopeContext.addMetricQueryEvidence(conversationId, evidence);
+                    // P0-2: 持久化成功查询基座
+                    saveQueryState(conversationId, datasourceId, params);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("指标查询证据记录/基座持久化失败，跳过: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 从 RAW 指标查询响应构建数字证据快照。
+     */
+    @SuppressWarnings("unchecked")
+    private MetricQueryEvidence buildEvidence(Long datasourceId, Map<String, Object> params,
+                                              Map<String, Object> body) {
+        MetricQueryEvidence.Builder builder = MetricQueryEvidence.builder(datasourceId);
+
+        List<String> metricNames = extractStringList(params, "metrics", new ArrayList<>());
+        for (String m : metricNames) {
+            builder.addMetricName(m.contains("__") ? m.split("__")[0] : m);
+        }
+        List<String> dims = extractStringList(params, "dimensions", new ArrayList<>());
+        for (String d : dims) {
+            builder.addDimensionName(d);
+        }
+
+        int rowCount = 0;
+        Object dataObj = body.get("data");
+        if (dataObj instanceof Map<?, ?> data) {
+            if (data.get("table") instanceof Map<?, ?> table) {
+                if (table.get("columns") instanceof Map<?, ?> columns) {
+                    for (Object listObj : columns.values()) {
+                        if (listObj instanceof List<?> col) {
+                            if (col.size() > rowCount) {
+                                rowCount = col.size();
+                            }
+                            for (Object cell : col) {
+                                if (cell instanceof Map<?, ?> cv) {
+                                    Object v = cv.get("value");
+                                    builder.addNumber(v != null ? v.toString() : null);
+                                } else if (cell != null) {
+                                    builder.addNumber(cell.toString());
+                                }
+                            }
+                        }
+                    }
+                }
+                if (table.get("rows") instanceof List<?> rows) {
+                    if (rows.size() > rowCount) {
+                        rowCount = rows.size();
+                    }
+                    for (Object rowObj : rows) {
+                        if (rowObj instanceof Map<?, ?> row) {
+                            for (Object v : row.values()) {
+                                if (v != null) {
+                                    builder.addNumber(v.toString());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Object totalObj = data.get("total");
+            if (totalObj instanceof Number) {
+                builder.addNumber(totalObj.toString());
+            }
+        }
+        return builder.withRowCount(rowCount).build();
+    }
+
+    /**
+     * P0-2: 把成功查询的结构化参数持久化为会话级查询基座。
+     */
+    private void saveQueryState(String conversationId, Long datasourceId, Map<String, Object> params) {
+        try {
+            QueryStateEntity state = new QueryStateEntity();
+            state.setConversationId(conversationId);
+            state.setDatasourceId(datasourceId);
+            state.setMetrics(toJsonOrNull(params.get("metrics")));
+            state.setDimensions(toJsonOrNull(params.get("dimensions")));
+            Object tc = params.get("timeConstraint");
+            state.setTimeConstraint(tc != null ? tc.toString() : null);
+            state.setFilters(toJsonOrNull(params.get("filters")));
+            state.setOrders(toJsonOrNull(params.get("orders")));
+            state.setMetricDisplayMap(buildMetricDisplayMap(datasourceId, params));
+            state.setRequestJson(toJsonOrNull(params));
+            queryStateService.upsert(state);
+        } catch (Exception e) {
+            log.debug("查询基座持久化失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 构建指标英文名 → 中文展示名/口径 映射（供下一轮追问提示展示"已验证指标"）。
+     */
+    private String buildMetricDisplayMap(Long datasourceId, Map<String, Object> params) {
+        List<String> metrics = extractStringList(params, "metrics", new ArrayList<>());
+        if (metrics.isEmpty()) {
+            return null;
+        }
+        Set<String> baseNames = new LinkedHashSet<>();
+        for (String m : metrics) {
+            String base = m.contains("__") ? m.split("__")[0] : m;
+            if (!base.isBlank()) {
+                baseNames.add(base);
+            }
+        }
+        if (baseNames.isEmpty()) {
+            return null;
+        }
+        try {
+            List<AloudataMetricEntity> entities = metricMapper.selectList(
+                    new LambdaQueryWrapper<AloudataMetricEntity>()
+                            .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                            .in(AloudataMetricEntity::getMetricName, baseNames)
+                            .select(AloudataMetricEntity::getMetricName,
+                                    AloudataMetricEntity::getMetricDisplayName,
+                                    AloudataMetricEntity::getBusinessCaliber));
+            JSONObject map = new JSONObject(new LinkedHashMap<>());
+            for (AloudataMetricEntity e : entities) {
+                if (e.getMetricName() == null) {
+                    continue;
+                }
+                JSONObject info = new JSONObject(new LinkedHashMap<>());
+                info.set("displayName", e.getMetricDisplayName());
+                info.set("caliber", e.getBusinessCaliber());
+                map.set(e.getMetricName(), info);
+            }
+            return map.isEmpty() ? null : map.toString();
+        } catch (Exception e) {
+            log.debug("构建指标映射失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 对象转 JSON 字符串；null 返回 null（避免 JSONUtil 对 null 输出 "null" 文本） */
+    private String toJsonOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String json = JSONUtil.toJsonStr(value);
+        return "null".equals(json) ? null : json;
     }
 }

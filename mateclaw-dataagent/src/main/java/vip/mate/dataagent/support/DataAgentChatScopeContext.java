@@ -1,6 +1,7 @@
 package vip.mate.dataagent.support;
 
 import org.springframework.stereotype.Component;
+import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -46,6 +47,41 @@ public class DataAgentChatScopeContext {
 
     /** originalMessages 大小上限，防止异常中断的会话泄漏导致内存膨胀 */
     private static final int ORIGINAL_MESSAGES_MAX_SIZE = 1000;
+
+    /**
+     * conversationId -> 本轮指标查询的证据列表（P0-1 答案数字对齐校验用）。
+     * <p>
+     * 查询工具在 RAW 结果上抽取证据并追加到这里；会话收尾（handleStreamFinalize）
+     * 消费后随 clear() 清理。多轮同轮多次查询时按执行顺序累计。
+     */
+    private final Map<String, List<MetricQueryEvidence>> metricQueryEvidences = new ConcurrentHashMap<>();
+
+    /**
+     * 追加一条本轮指标查询的证据。
+     *
+     * @param conversationId 会话 ID
+     * @param evidence       查询证据（不可为 null）
+     */
+    public void addMetricQueryEvidence(String conversationId, MetricQueryEvidence evidence) {
+        if (conversationId == null || conversationId.isBlank() || evidence == null) {
+            return;
+        }
+        metricQueryEvidences.computeIfAbsent(conversationId, k -> new java.util.ArrayList<>()).add(evidence);
+    }
+
+    /**
+     * 读取本轮指标查询的证据列表。
+     *
+     * @param conversationId 会话 ID
+     * @return 证据列表（不可变快照）；无则返回空列表
+     */
+    public List<MetricQueryEvidence> getMetricQueryEvidences(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return List.of();
+        }
+        List<MetricQueryEvidence> list = metricQueryEvidences.get(conversationId);
+        return list != null ? List.copyOf(list) : List.of();
+    }
 
     /**
      * 写入或更新会话级数据源白名单。
@@ -168,6 +204,7 @@ public class DataAgentChatScopeContext {
         }
         datasourceIdScopes.remove(conversationId);
         originalMessages.remove(conversationId);
+        metricQueryEvidences.remove(conversationId);
     }
 
     /**

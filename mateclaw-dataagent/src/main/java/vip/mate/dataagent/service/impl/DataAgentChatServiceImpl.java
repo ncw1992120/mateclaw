@@ -17,10 +17,14 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.DatasourceVO;
+import vip.mate.dataagent.model.QueryStateEntity;
 import vip.mate.dataagent.service.BusinessTermEsService;
 import vip.mate.dataagent.service.DataAgentChatService;
 import vip.mate.dataagent.service.DataAgentStreamTracker;
 import vip.mate.dataagent.service.DatasourceManageService;
+import vip.mate.dataagent.service.QueryStateService;
+import vip.mate.dataagent.service.grounding.GroundingResult;
+import vip.mate.dataagent.service.grounding.MetricAnswerVerifier;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 import vip.mate.sdk.service.MateClawRuntime;
@@ -64,6 +68,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final DataAgentChatScopeContext scopeContext;
     private final DatasourceManageService datasourceManageService;
     private final BusinessTermEsService businessTermEsService;
+    private final QueryStateService queryStateService;
+    private final MetricAnswerVerifier metricAnswerVerifier;
     private final WorkspaceGuard workspaceGuard;
     private final AgentGuard agentGuard;
     private final ExecutorService sseExecutor;
@@ -92,6 +98,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     DataAgentChatScopeContext scopeContext,
                                     DatasourceManageService datasourceManageService,
                                     BusinessTermEsService businessTermEsService,
+                                    QueryStateService queryStateService,
+                                    MetricAnswerVerifier metricAnswerVerifier,
                                     WorkspaceGuard workspaceGuard,
                                     AgentGuard agentGuard) {
         this.runtime = runtime;
@@ -101,6 +109,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.scopeContext = scopeContext;
         this.datasourceManageService = datasourceManageService;
         this.businessTermEsService = businessTermEsService;
+        this.queryStateService = queryStateService;
+        this.metricAnswerVerifier = metricAnswerVerifier;
         this.workspaceGuard = workspaceGuard;
         this.agentGuard = agentGuard;
         // 有界线程池：核心 4 线程（提高首次调度响应），最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
@@ -205,8 +215,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                     }
                 }, sseExecutor);
 
-                // 构建提示词（含数据源白名单注入 + 业务术语 ES 预查 + 附件处理）
-                String llmMessage = decorateMessageWithScope(message, longIds);
+                // 构建提示词（含数据源白名单注入 + 业务术语 ES 预查 + 附件处理 + 追问基座注入）
+                String llmMessage = decorateMessageWithScope(message, longIds, conversationId);
                 if (contentParts != null && !contentParts.isEmpty()) {
                     log.info("[DataAgent] contentParts received: size={}, types={}", contentParts.size(),
                             contentParts.stream().map(p -> p != null ? p.getType() : "null").collect(Collectors.joining(",")));
@@ -390,7 +400,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         }
 
         StreamAccumulator accumulator = new StreamAccumulator();
-        String llmMessage = decorateMessageWithScope(message, longIds);
+        String llmMessage = decorateMessageWithScope(message, longIds, conversationId);
         // 将附件信息注入到发送给 LLM 的 prompt 中
         llmMessage = buildPromptText(llmMessage, contentParts);
         Flux<StreamDelta> stream = runtime.chatStructuredStream(agentId, llmMessage, conversationId);
@@ -490,7 +500,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      * @param datasourceIds   用户勾选的数据源白名单
      * @return 注入提示后的消息文本，未配置白名单时直接返回原文
      */
-    private String decorateMessageWithScope(String originalMessage, List<Long> datasourceIds) {
+    private String decorateMessageWithScope(String originalMessage, List<Long> datasourceIds, String conversationId) {
         List<DatasourceVO> allDatasources;
         try {
             // 使用 Caffeine 本地缓存，避免每次请求都查 DB；30s TTL，数据源变更最多延迟 30s 生效。
@@ -548,6 +558,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
         // 注入业务术语预查结果，帮助 LLM 更准确地理解用户意图和映射术语
         appendBusinessTermHints(hint, originalMessage);
+
+        // P0-2: 注入「上一轮成功查询基座」，让追问直接复用已验证的结构化参数，
+        // 不依赖可能被压缩的会话历史，保证多轮连贯
+        appendQueryStateHints(hint, conversationId);
 
         return hint.toString();
     }
@@ -610,6 +624,98 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
         } catch (Exception e) {
             log.debug("[DataAgent] 业务术语预查失败，跳过: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * P0-2: 注入「上一轮成功查询基座」结构化提示。
+     * <p>
+     * 读取会话持久化的成功查询基座（dataagent_query_state，独立于会话历史、不受上下文压缩影响），
+     * 以系统角色注入：指示 LLM 若本轮为追问则以此为起点增量修改、直接复用已验证的英文名，
+     * 禁止对已验证实体重新检索；若更换主指标则忽略。使追问连贯性从"考古历史"变为"读结构化状态"。
+     */
+    private void appendQueryStateHints(StringBuilder hint, String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            return;
+        }
+        List<QueryStateEntity> states = queryStateService.listByConversation(conversationId);
+        if (states == null || states.isEmpty()) {
+            return;
+        }
+        boolean anyUsable = false;
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n[系统-上一轮成功查询基座]\n");
+        sb.append("以下为当前会话已成功执行的指标查询（结构化记录，独立于历史消息、不会被压缩）。请遵守：\n");
+        for (QueryStateEntity st : states) {
+            String metrics = st.getMetrics();
+            if (metrics == null || metrics.isBlank()) {
+                continue;
+            }
+            anyUsable = true;
+            sb.append("- 基座: ").append("metrics=").append(metrics);
+            if (st.getDimensions() != null && !st.getDimensions().isBlank()) {
+                sb.append(", dimensions=").append(st.getDimensions());
+            }
+            if (st.getTimeConstraint() != null && !st.getTimeConstraint().isBlank()) {
+                sb.append(", timeConstraint=").append(st.getTimeConstraint());
+            }
+            if (st.getFilters() != null && !st.getFilters().isBlank()) {
+                sb.append(", filters=").append(st.getFilters());
+            }
+            sb.append(", 数据源id=").append(st.getDatasourceId()).append("\n");
+            appendMetricDisplayMapHint(sb, st.getMetricDisplayMap());
+        }
+        if (!anyUsable) {
+            return;
+        }
+        sb.append("使用规则：\n")
+                .append("1) 若本轮为追问（省略主指标、使用指代词，或仅调整时间/粒度/维度/计算/筛选），")
+                .append("必须以上述基座为起点增量修改，直接复用其中已成功的 metricName/dimName，")
+                .append("禁止对它们重新调用 aloudata_search_semantic；\n")
+                .append("2) 仅当本轮引入基座中不存在的新指标/新维度时，才对该新实体执行语义检索；\n")
+                .append("3) 若本轮更换主指标或为全新查询，忽略本提示，按标准流程执行。\n");
+        hint.append(sb);
+    }
+
+    /**
+     * 把基座中的指标英文名 → 中文展示名/口径映射渲染到提示中，帮助 LLM 从用户口语映射到已验证指标。
+     */
+    private void appendMetricDisplayMapHint(StringBuilder sb, String metricDisplayMap) {
+        if (metricDisplayMap == null || metricDisplayMap.isBlank()) {
+            return;
+        }
+        try {
+            Map<String, Object> map = objectMapper.readValue(metricDisplayMap,
+                    new TypeReference<LinkedHashMap<String, Object>>() {});
+            if (map.isEmpty()) {
+                return;
+            }
+            sb.append("  ✓ 已验证指标: ");
+            for (Map.Entry<String, Object> e : map.entrySet()) {
+                String metricName = e.getKey();
+                String display = "";
+                String caliber = "";
+                if (e.getValue() instanceof Map<?, ?> info) {
+                    Object d = info.get("displayName");
+                    Object c = info.get("caliber");
+                    display = d != null ? String.valueOf(d) : "";
+                    caliber = c != null ? String.valueOf(c) : "";
+                }
+                sb.append(metricName);
+                if (!display.isBlank()) {
+                    sb.append("(").append(display).append(")");
+                }
+                if (!caliber.isBlank()) {
+                    sb.append("[").append(caliber).append("]");
+                }
+                sb.append("、");
+            }
+            if (!sb.isEmpty() && sb.charAt(sb.length() - 1) == '、') {
+                sb.deleteCharAt(sb.length() - 1);
+            }
+            sb.append("\n");
+        } catch (Exception e) {
+            log.debug("解析指标映射提示失败: {}", e.getMessage());
         }
     }
 
@@ -691,11 +797,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
      * @return metadata JSON 字符串
      */
     private String buildMetadataWithRecommendedQuestions(StreamAccumulator accumulator, List<String> recQuestions,
-                                                         List<DataAgentStreamTracker.DelegationEvent> delegationEvents) {
+                                                         List<DataAgentStreamTracker.DelegationEvent> delegationEvents,
+                                                         GroundingResult grounding) {
         String baseJson = accumulator.toMetadataJson(objectMapper);
         boolean hasRecQuestions = recQuestions != null && !recQuestions.isEmpty();
         boolean hasDelegationEvents = delegationEvents != null && !delegationEvents.isEmpty();
-        if (!hasRecQuestions && !hasDelegationEvents) {
+        boolean hasGrounding = grounding != null
+                && grounding.getStatus() != GroundingResult.Status.NO_EVIDENCE
+                && grounding.getStatus() != GroundingResult.Status.INCONCLUSIVE;
+        if (!hasRecQuestions && !hasDelegationEvents && !hasGrounding) {
             return baseJson;
         }
         try {
@@ -716,11 +826,29 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                         .toList();
                 metadata.put("delegationEvents", evtList);
             }
+            if (hasGrounding) {
+                // P0-1: 持久化数字对齐校验结果，刷新后前端可从 metadata 恢复徽标
+                metadata.put("grounding", groundingEventPayload(grounding));
+            }
             return objectMapper.writeValueAsString(metadata);
         } catch (Exception e) {
             log.warn("[DataAgent] Failed to append metadata: {}", e.getMessage());
             return baseJson;
         }
+    }
+
+    /**
+     * P0-1: 把校验结果转成 SSE/done/metadata 共用的可序列化负载。
+     */
+    private Map<String, Object> groundingEventPayload(GroundingResult grounding) {
+        Map<String, Object> gd = new LinkedHashMap<>();
+        gd.put("status", grounding.getStatus().name());
+        gd.put("totalClaims", grounding.getTotalClaims());
+        gd.put("verifiedClaims", grounding.getVerifiedClaims());
+        if (!grounding.getUnsupportedNumbers().isEmpty()) {
+            gd.put("unsupportedNumbers", grounding.getUnsupportedNumbers());
+        }
+        return gd;
     }
 
     /**
@@ -756,6 +884,10 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 }
             }
 
+            // P0-1: 最终答案数字对齐校验（基于本轮指标查询 RAW 证据；仅在执行过查询且有显著数值声明时生效）
+            GroundingResult grounding = metricAnswerVerifier.verify(
+                    assistantText, scopeContext.getMetricQueryEvidences(conversationId));
+
             // 先生成推荐问题，以便持久化到 metadata
             List<String> recQuestions = null;
             try {
@@ -786,12 +918,18 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             // 将推荐问题写入 metadata 以支持持久化（刷新页面后可恢复）
             List<DataAgentStreamTracker.DelegationEvent> delegEvents = streamTracker.drainDelegationEvents(conversationId);
-            String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions, delegEvents);
+            String metadataJson = buildMetadataWithRecommendedQuestions(accumulator, recQuestions, delegEvents, grounding);
+
+            // P0-1: 校验不通过时，在持久化/下发的答案末尾追加显式声明（live 流已发出原文，此处保证
+            // 持久化与刷新后可见；另有 grounding SSE 事件 + done.grounding 供前端实时展示徽标）
+            String finalAnswerText = grounding.needsCaveat()
+                    ? assistantText + "\n\n" + grounding.caveatText()
+                    : assistantText;
 
             MessageEntity savedAssistant = null;
             try {
                 savedAssistant = conversationService.saveMessage(
-                        conversationId, "assistant", assistantText, assistantParts, status,
+                        conversationId, "assistant", finalAnswerText, assistantParts, status,
                         accumulator.getPromptTokens(), accumulator.getCompletionTokens(),
                         accumulator.getRuntimeModelName(), accumulator.getRuntimeProviderId(),
                         metadataJson);
@@ -842,7 +980,15 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             // 而 accumulator.getContent() 仅含最终答案（已排除 segmentOnly 旁白），与持久化一致。
             // 仅在正常完成时携带，避免覆盖前端在 message_complete 中为 stopped/failed 追加的标记。
             if ("completed".equals(status) && !assistantText.isBlank()) {
-                donePayload.put("content", assistantText);
+                donePayload.put("content", finalAnswerText);
+            }
+
+            // P0-1: 广播数字对齐校验结果（前端可用徽标提示），并在 done 中携带
+            if (grounding.getStatus() != GroundingResult.Status.NO_EVIDENCE
+                    && grounding.getStatus() != GroundingResult.Status.INCONCLUSIVE) {
+                Map<String, Object> gd = groundingEventPayload(grounding);
+                broadcastEvent(conversationId, "grounding", gd);
+                donePayload.put("grounding", gd);
             }
 
             // 广播推荐问题事件

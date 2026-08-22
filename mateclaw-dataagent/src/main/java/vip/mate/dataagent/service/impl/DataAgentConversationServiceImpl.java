@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.service.DataAgentConversationService;
+import vip.mate.dataagent.service.QueryStateService;
 import vip.mate.exception.MateClawException;
 import vip.mate.sdk.service.ConversationRuntime;
 import vip.mate.workspace.conversation.vo.ContextUsageVO;
@@ -33,6 +34,9 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
 
     private final WorkspaceGuard workspaceGuard;
 
+    /** 会话级查询基座服务（P0-2）：会话删除时联动清理，避免残留脏数据 */
+    private final QueryStateService queryStateService;
+
     @Override
     public List<ConversationVO> listConversations() {
         String username = workspaceGuard.currentUsername();
@@ -58,6 +62,8 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
     public void deleteConversation(String conversationId) {
         requireOwnership(conversationId);
         conversationRuntime.deleteConversation(conversationId);
+        // P0-2: 联动清理该会话的查询基座，避免残留脏数据
+        queryStateService.deleteByConversation(conversationId);
     }
 
     @Override
