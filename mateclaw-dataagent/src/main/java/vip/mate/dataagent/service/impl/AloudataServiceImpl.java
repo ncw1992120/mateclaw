@@ -217,6 +217,13 @@ public class AloudataServiceImpl implements AloudataService {
         AloudataConfigDTO config = parseConfigWithUserAuth(datasourceId);
 
         try {
+            // 与 AloudataCallTool 一致：timeConstraint 不支持 BETWEEN 语法，
+            // 这里兜底把 BETWEEN 区间转成 >= AND <=，并确保外层括号包裹，
+            // 兼容前端/历史数据可能遗留的 BETWEEN ("start","end") 写法
+            if (request.getTimeConstraint() != null && !request.getTimeConstraint().isBlank()) {
+                request.setTimeConstraint(normalizeTimeConstraint(request.getTimeConstraint()));
+            }
+
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
                     METRICS_QUERY_ENDPOINT, config, request);
 
@@ -277,6 +284,50 @@ public class AloudataServiceImpl implements AloudataService {
             log.error("执行 Aloudata 指标查询失败: {}", e.getMessage());
             throw new RuntimeException("执行指标查询失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 规范化 timeConstraint 表达式（与 AloudataCallTool 的 LLM 路径逻辑保持一致）。
+     * <p>
+     * Aloudata API 的 timeConstraint 不支持 BETWEEN 语法，日期区间须用 {@code >=} /
+     * {@code <=} AND 连接两个边界条件，且整个表达式必须用 {@code ()} 包裹。
+     * 兼容两种旧写法：
+     * <ul>
+     *   <li>BETWEEN "start" AND "end"（双引号 / 单引号）</li>
+     *   <li>BETWEEN ("start","end")（括号内逗号分隔，前端自定义查询的旧格式）</li>
+     * </ul>
+     * 统一转为 {@code ([metric_time__day]>="start" AND [metric_time__day]<="end")}，
+     * 并确保外层括号。
+     *
+     * @param raw 原始 timeConstraint 表达式
+     * @return 规范化后的表达式
+     */
+    private String normalizeTimeConstraint(String raw) {
+        String tc = raw.trim();
+        if (tc.isEmpty()) {
+            return tc;
+        }
+        // 1. 修复未用方括号的 metric_time 引用
+        tc = tc.replaceAll("(?<!\\[)(metric_time__(?:day|month|year|week|quarter))(?![\\]\\w])", "[$1]");
+
+        // 2a. BETWEEN "start" AND "end" / BETWEEN 'start' AND 'end'
+        tc = tc.replaceAll(
+                "\\[metric_time__(\\w+)\\]\\s*[Bb][Ee][Tt][Ww][Ee][Ee][Nn]\\s*\"([^\"]+)\"\\s+[Aa][Nn][Dd]\\s*\"([^\"]+)\"",
+                "[metric_time__$1]>=\"$2\" AND [metric_time__$1]<=\"$3\"");
+        tc = tc.replaceAll(
+                "\\[metric_time__(\\w+)\\]\\s*[Bb][Ee][Tt][Ww][Ee][Ee][Nn]\\s*'([^']+)'\\s+[Aa][Nn][Dd]\\s*'([^']+)'",
+                "[metric_time__$1]>=\"$2\" AND [metric_time__$1]<=\"$3\"");
+
+        // 2b. BETWEEN ("start","end") 括号内逗号分隔
+        tc = tc.replaceAll(
+                "\\[metric_time__(\\w+)\\]\\s*[Bb][Ee][Tt][Ww][Ee][Ee][Nn]\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+)\"\\s*\\)",
+                "[metric_time__$1]>=\"$2\" AND [metric_time__$1]<=\"$3\"");
+
+        // 3. 确保外层括号
+        if (!tc.startsWith("(") || !tc.endsWith(")")) {
+            tc = "(" + tc + ")";
+        }
+        return tc;
     }
 
     /**
