@@ -470,6 +470,12 @@ public class AloudataCallTool {
             // 校验数据源
             String validationError = validateAloudataDatasource(datasourceId);
             if (validationError != null) {
+                // 无白名单时，校验失败（不存在/已禁用/无权限）附带可用数据源列表引导，
+                // 防止 LLM 拿到"数据源不存在"后继续凭空猜测幻 ID 浪费轮次（与语义检索路径的
+                // buildDatasourceGuide 引导行为保持一致）
+                if (!scopeContext.hasScope(dsConvId) && isDatasourceIdentityError(validationError)) {
+                    return error(validationError + "\n" + buildDatasourceGuide());
+                }
                 return error(validationError);
             }
 
@@ -1359,6 +1365,19 @@ public class AloudataCallTool {
             return "当前用户无权限访问该数据源, id=" + datasourceId;
         }
         return null;
+    }
+
+    /**
+     * 判断校验错误是否属于"数据源身份类"错误（不存在/已禁用/无权限）。
+     * <p>
+     * 这类错误的根因是 LLM 猜错/编造了 datasourceId，附带可用列表引导即可纠正；
+     * "类型不是 aloudata"等结构性错误不在此列（引导列表帮不上忙，保持原错误信息）。
+     */
+    private boolean isDatasourceIdentityError(String validationError) {
+        return validationError != null
+                && (validationError.startsWith("数据源不存在")
+                || validationError.contains("已禁用")
+                || validationError.contains("无权限"));
     }
 
     private String error(String message) {
