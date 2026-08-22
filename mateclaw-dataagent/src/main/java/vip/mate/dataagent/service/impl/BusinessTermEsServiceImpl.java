@@ -26,6 +26,7 @@ import vip.mate.dataagent.dto.BusinessTermSearchResult.TermHit;
 import vip.mate.dataagent.model.BusinessTermEntity;
 import vip.mate.dataagent.repository.BusinessTermMapper;
 import vip.mate.dataagent.service.BusinessTermEsService;
+import vip.mate.dataagent.support.NameMatchSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -574,22 +575,30 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
 
     private List<TermHit> fallbackMySqlSearchTerms(String tenantCode, String query, int topK) {
         String likePattern = "%" + query + "%";
+        // 标点不敏感模式：拆段 % 连接（「客户 - 收入」→「%客户%收入%」），
+        // 覆盖 LLM 格式化（加空格/改标点/全角半角）导致的字面 LIKE 失配；无有效段时为 null
+        String segmentedPattern = buildPunctuationInsensitivePattern(query);
         LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
         if (tenantCode != null) {
             wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
         }
         wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
-        wrapper.and(w -> w
-                .like(BusinessTermEntity::getTermName, likePattern)
-                .or().like(BusinessTermEntity::getSynonyms, likePattern)
-                .or().like(BusinessTermEntity::getDescription, likePattern)
-                .or().like(BusinessTermEntity::getCalculationFormula, likePattern)
-                .or().like(BusinessTermEntity::getDataCaliber, likePattern)
-                .or().like(BusinessTermEntity::getBusinessRule, likePattern)
-                .or().like(BusinessTermEntity::getCategory, likePattern)
-                .or().like(BusinessTermEntity::getRelatedMetricsJson, likePattern)
-                .or().like(BusinessTermEntity::getRelatedDimensionsJson, likePattern)
-        );
+        wrapper.and(w -> {
+            w.like(BusinessTermEntity::getTermName, likePattern)
+                    .or().like(BusinessTermEntity::getSynonyms, likePattern)
+                    .or().like(BusinessTermEntity::getDescription, likePattern)
+                    .or().like(BusinessTermEntity::getCalculationFormula, likePattern)
+                    .or().like(BusinessTermEntity::getDataCaliber, likePattern)
+                    .or().like(BusinessTermEntity::getBusinessRule, likePattern)
+                    .or().like(BusinessTermEntity::getCategory, likePattern)
+                    .or().like(BusinessTermEntity::getRelatedMetricsJson, likePattern)
+                    .or().like(BusinessTermEntity::getRelatedDimensionsJson, likePattern);
+            // 标点不敏感召回只加在核心字段 termName/synonyms，避免外围字段放宽后噪声变多
+            if (segmentedPattern != null) {
+                w.or().like(BusinessTermEntity::getTermName, segmentedPattern)
+                        .or().like(BusinessTermEntity::getSynonyms, segmentedPattern);
+            }
+        });
         wrapper.last("LIMIT " + topK);
 
         List<BusinessTermEntity> entities = businessTermMapper.selectList(wrapper);
@@ -597,22 +606,145 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
         // 补充父术语名称
         Map<Long, String> parentNameMap = buildParentNameMap(entities);
 
-        return entities.stream().map(e -> {
-            TermHit th = new TermHit();
-            th.setTermName(e.getTermName());
-            th.setSynonyms(e.getSynonyms());
-            th.setDescription(e.getDescription());
-            th.setCalculationFormula(e.getCalculationFormula());
-            th.setDataCaliber(e.getDataCaliber());
-            th.setBusinessRule(e.getBusinessRule());
-            th.setCategory(e.getCategory());
-            th.setRelatedMetricNames(toRefNames(e.parseRelatedMetrics()));
-            th.setRelatedDimensionNames(toRefNames(e.parseRelatedDimensions()));
-            th.setParentTermName(e.getParentId() != null ? parentNameMap.get(e.getParentId()) : null);
-            th.setScore(1.0);
-            th.setMatchSource("keyword");
-            return th;
-        }).collect(Collectors.toList());
+        return entities.stream()
+                .map(e -> toTermHit(e, parentNameMap))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 术语精确命中检索（确定性，不走 ES 打分 / 向量 / topK 截断）。
+     * <p>
+     * 关键词与某术语的 termName 或任一同义词在去除标点/空白/全角半角差异后**完全相等**时判定命中，
+     * 覆盖 LLM 格式化（加空格/改标点/全角半角）与用户直接使用缩写/同义词（如「GMV」命中术语「成交总额」的
+     * 同义词字段）的场景。候选集先用「首个核心段」LIKE 裁剪（SQL 无法表达"去标点后相等"），
+     * 再在内存中归一化比对，避免全表扫描。
+     *
+     * @param keyword    搜索关键词
+     * @param tenantCode 租户编码，null 表示跨所有租户
+     * @return 精确命中术语列表，无命中或检索异常时为空列表
+     */
+    @Override
+    public List<TermHit> exactSearch(String keyword, String tenantCode) {
+        String normKw = NameMatchSupport.normalizeKey(keyword);
+        if (normKw.isEmpty()) {
+            return List.of();
+        }
+        try {
+            LambdaQueryWrapper<BusinessTermEntity> wrapper = new LambdaQueryWrapper<>();
+            if (tenantCode != null) {
+                wrapper.eq(BusinessTermEntity::getTenantCode, tenantCode);
+            }
+            wrapper.eq(BusinessTermEntity::getStatus, DataAgentConstants.BUSINESS_TERM_STATUS_ENABLED);
+            // 候选裁剪：termName/synonyms 含「首个核心段」的启用术语（MySQL 默认不区分大小写排序规则可命中缩写）
+            String firstSegment = firstLikeSegment(keyword);
+            if (firstSegment != null) {
+                wrapper.and(w -> w
+                        .like(BusinessTermEntity::getTermName, "%" + firstSegment + "%")
+                        .or().like(BusinessTermEntity::getSynonyms, "%" + firstSegment + "%"));
+            }
+            wrapper.last("LIMIT " + EXACT_SEARCH_CANDIDATE_MAX);
+
+            List<BusinessTermEntity> candidates = businessTermMapper.selectList(wrapper);
+            Map<Long, String> parentNameMap = buildParentNameMap(candidates);
+
+            List<TermHit> hits = new ArrayList<>();
+            for (BusinessTermEntity e : candidates) {
+                if (isExactTermMatch(e, normKw)) {
+                    TermHit th = toTermHit(e, parentNameMap);
+                    th.setMatchSource("exact");
+                    hits.add(th);
+                }
+            }
+            if (!hits.isEmpty()) {
+                log.info("业务术语精确命中：keyword='{}' → {}", keyword,
+                        hits.stream().map(TermHit::getTermName).collect(Collectors.joining(",")));
+            }
+            return hits;
+        } catch (Exception ex) {
+            log.error("术语精确命中检索失败，跳过（不影响原有检索）: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 术语精确命中候选集上限（首个核心段命中面过宽时截断，真实词典远小于此） */
+    private static final int EXACT_SEARCH_CANDIDATE_MAX = 1000;
+
+    /** 取文本的第一个"字母/数字/汉字"连续段（全角 ASCII 先转半角），用作候选 LIKE 裁剪；无有效段返回 null */
+    private static String firstLikeSegment(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        StringBuilder seg = new StringBuilder();
+        for (char c : text.toCharArray()) {
+            char cc = c;
+            if (cc >= 0xFF01 && cc <= 0xFF5E) {
+                cc = (char) (cc - 0xFEE0);
+            }
+            if (cc == 0x3000) {
+                cc = ' ';
+            }
+            if (Character.isLetterOrDigit(cc)) {
+                seg.append(cc);
+                if (seg.length() >= 8) {
+                    break;
+                }
+            } else if (seg.length() > 0) {
+                break;
+            }
+        }
+        return seg.length() == 0 ? null : seg.toString();
+    }
+
+    /** 判定术语是否与归一化后的关键词完全相等（termName 或任一同义词，同义词按常见分隔符拆分） */
+    private static boolean isExactTermMatch(BusinessTermEntity e, String normKw) {
+        String name = e.getTermName();
+        if (name != null && NameMatchSupport.normalizeKey(name).equals(normKw)) {
+            return true;
+        }
+        String synonyms = e.getSynonyms();
+        if (synonyms != null && !synonyms.isBlank()) {
+            for (String syn : synonyms.split("[,，;；]")) {
+                String s = syn.trim();
+                if (!s.isEmpty() && NameMatchSupport.normalizeKey(s).equals(normKw)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 术语实体 → 检索命中项（public 展示用） */
+    private TermHit toTermHit(BusinessTermEntity e, Map<Long, String> parentNameMap) {
+        TermHit th = new TermHit();
+        th.setTermName(e.getTermName());
+        th.setSynonyms(e.getSynonyms());
+        th.setDescription(e.getDescription());
+        th.setCalculationFormula(e.getCalculationFormula());
+        th.setDataCaliber(e.getDataCaliber());
+        th.setBusinessRule(e.getBusinessRule());
+        th.setCategory(e.getCategory());
+        th.setRelatedMetricNames(toRefNames(e.parseRelatedMetrics()));
+        th.setRelatedDimensionNames(toRefNames(e.parseRelatedDimensions()));
+        th.setParentTermName(e.getParentId() != null ? parentNameMap.get(e.getParentId()) : null);
+        th.setScore(1.0);
+        th.setMatchSource("keyword");
+        return th;
+    }
+
+    /**
+     * 标点不敏感 LIKE 模式。
+     * <p>
+     * 将查询拆分为连续「字母/数字/汉字」段（范式与 AloudataCallTool.normalizeKey 一致：
+     * 全角 ASCII 转半角、丢弃空白/标点/括号/连接符），段间用 LIKE 通配符 {@code %} 连接：
+     * 「客户 - 收入」→「%客户%收入%」，可命中库内「客户-收入」「客户(收入)」「客户收入」等写法。
+     * <p>
+     * 仅用于 MySQL LIKE 降级路径的 termName/synonyms 核心字段，避免 LLM 格式化（加空格/改标点/
+     * 全角半角）导致业务词典召回落空；ES 主路径走 ik 分词（拆词后天然免疫），无需此处理。
+     * 全角字母数字（如「ＡＢＣ」）先转半角再分段。无有效段（如纯标点查询）时返回 null，
+     * 由调用方跳过该模式。实现委托 {@link vip.mate.dataagent.support.NameMatchSupport}。
+     */
+    private static String buildPunctuationInsensitivePattern(String query) {
+        return NameMatchSupport.likePattern(query);
     }
 
     // ==================== 辅助方法 ====================

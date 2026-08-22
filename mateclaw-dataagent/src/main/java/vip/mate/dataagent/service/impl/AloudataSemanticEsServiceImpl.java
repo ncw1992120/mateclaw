@@ -31,6 +31,7 @@ import vip.mate.dataagent.repository.AloudataDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
+import vip.mate.dataagent.support.NameMatchSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -1371,10 +1372,13 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         }
         LambdaQueryWrapper<AloudataMetricEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
-        // 每个关键词独立 LIKE，OR 语义，避免合并串 LIKE 失效
+        // 每个关键词独立 LIKE，OR 语义，避免合并串 LIKE 失效；
+        // 核心字段（metricName/展示名）额外加"拆段 % 连接"的标点不敏感模式（如「客户 - 收入」→「%客户%收入%」），
+        // 覆盖 LLM 格式化（加空格/改标点/全角半角）导致的字面 LIKE 失配
         wrapper.and(w -> {
             for (int i = 0; i < keywords.size(); i++) {
                 String likePattern = "%" + keywords.get(i) + "%";
+                String segPattern = NameMatchSupport.likePattern(keywords.get(i));
                 if (i == 0) {
                     w.like(AloudataMetricEntity::getMetricName, likePattern)
                      .or().like(AloudataMetricEntity::getMetricDisplayName, likePattern)
@@ -1385,6 +1389,10 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                      .or().like(AloudataMetricEntity::getMetricDisplayName, likePattern)
                      .or().like(AloudataMetricEntity::getBusinessCaliber, likePattern)
                      .or().like(AloudataMetricEntity::getSynonyms, likePattern);
+                }
+                if (segPattern != null) {
+                    w.or().like(AloudataMetricEntity::getMetricName, segPattern)
+                     .or().like(AloudataMetricEntity::getMetricDisplayName, segPattern);
                 }
             }
         });
@@ -1412,10 +1420,13 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         }
         LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
-        // 每个关键词独立 LIKE，OR 语义，避免合并串 LIKE 失效
+        // 每个关键词独立 LIKE，OR 语义，避免合并串 LIKE 失效；
+        // 核心字段（dimName/展示名）额外加"拆段 % 连接"的标点不敏感模式（如「客户 - 收入」→「%客户%收入%」），
+        // 覆盖 LLM 格式化（加空格/改标点/全角半角）导致的字面 LIKE 失配
         wrapper.and(w -> {
             for (int i = 0; i < keywords.size(); i++) {
                 String likePattern = "%" + keywords.get(i) + "%";
+                String segPattern = NameMatchSupport.likePattern(keywords.get(i));
                 if (i == 0) {
                     w.like(AloudataDimensionEntity::getDimName, likePattern)
                      .or().like(AloudataDimensionEntity::getDimDisplayName, likePattern)
@@ -1426,6 +1437,10 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                      .or().like(AloudataDimensionEntity::getDimDisplayName, likePattern)
                      .or().like(AloudataDimensionEntity::getDimDescription, likePattern)
                      .or().like(AloudataDimensionEntity::getSynonyms, likePattern);
+                }
+                if (segPattern != null) {
+                    w.or().like(AloudataDimensionEntity::getDimName, segPattern)
+                     .or().like(AloudataDimensionEntity::getDimDisplayName, segPattern);
                 }
             }
         });

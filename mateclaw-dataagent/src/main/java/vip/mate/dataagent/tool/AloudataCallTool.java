@@ -30,6 +30,7 @@ import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
+import vip.mate.dataagent.support.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
@@ -215,6 +216,8 @@ public class AloudataCallTool {
                 + "返回匹配的术语名称、定义、同义词、分类等信息，帮助理解用户查询中的业务术语含义。"
                 + "当用户提问中包含业务术语、缩写或别名时，应先调用此工具查询其标准术语名和定义，"
                 + "再结合语义搜索工具查找对应的指标或维度。"
+                + "关键词与术语名或同义词完全一致（忽略标点/空白/全角半角差异）时，"
+                + "返回结果头部会出现「✅ 术语精确命中（确定性）」，请优先采信其中的标准术语名。"
                 + "使用 Elasticsearch 进行关键词检索和向量语义检索的混合模式（RRF 融合），"
                 + "ES 不可用时自动降级为 MySQL 模糊匹配。"
                 + "跨所有业务域检索术语，需要 keyword 参数。";
@@ -731,8 +734,40 @@ public class AloudataCallTool {
             StringBuilder sb = new StringBuilder();
             sb.append("**搜索关键词**: ").append(keyword).append("\n");
 
+            /* 精确命中前置（确定性）：关键词与术语名/同义词归一化后完全相等时，该术语即为用户所指，
+             * 展示在结果最前并标注，LLM 优先采信其标准术语名；不受 ES 打分/topK 截断影响。 */
+            List<BusinessTermSearchResult.TermHit> exactHits = businessTermEsService.exactSearch(keyword, null);
+            if (exactHits != null && !exactHits.isEmpty()) {
+                sb.append("## ✅ 术语精确命中（确定性）\n\n");
+                sb.append("关键词「").append(keyword)
+                        .append("」与以下术语的名称/同义词**完全一致**（忽略标点/空白/全角半角差异），请优先采信其标准术语名：\n");
+                for (BusinessTermSearchResult.TermHit hit : exactHits) {
+                    sb.append("- **").append(hit.getTermName()).append("**");
+                    if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
+                        sb.append("（同义词: ").append(hit.getSynonyms()).append("）");
+                    }
+                    if (hit.getDescription() != null && !hit.getDescription().isBlank()) {
+                        sb.append(" - ").append(hit.getDescription());
+                    }
+                    if (hit.getCategory() != null && !hit.getCategory().isBlank()) {
+                        sb.append(" [分类: ").append(hit.getCategory()).append("]");
+                    }
+                    if (hit.getRelatedMetricNames() != null && !hit.getRelatedMetricNames().isEmpty()) {
+                        sb.append(" [关联指标: ").append(String.join(", ", hit.getRelatedMetricNames())).append("]");
+                    }
+                    if (hit.getRelatedDimensionNames() != null && !hit.getRelatedDimensionNames().isEmpty()) {
+                        sb.append(" [关联维度: ").append(String.join(", ", hit.getRelatedDimensionNames())).append("]");
+                    }
+                    sb.append(" [来源: 精确命中]\n");
+                }
+                sb.append("\n");
+            }
+
             int hitCount = searchResult.getTermHits() != null ? searchResult.getTermHits().size() : 0;
             sb.append("**匹配结果**: ").append(hitCount).append(" 个术语");
+            if (exactHits != null && !exactHits.isEmpty()) {
+                sb.append("（另精确命中 ").append(exactHits.size()).append(" 个，见上方 ✅ 块）");
+            }
             sb.append(" (检索耗时: ").append(searchResult.getElapsedMs()).append("ms)\n\n");
 
             if (searchResult.getTermHits() != null && !searchResult.getTermHits().isEmpty()) {
@@ -760,7 +795,8 @@ public class AloudataCallTool {
                 sb.append("\n");
             }
 
-            if (hitCount == 0) {
+            // 混合检索无命中且无精确命中时才提示"未找到"；精确命中已在上方展示，避免自相矛盾的提示
+            if (hitCount == 0 && (exactHits == null || exactHits.isEmpty())) {
                 sb.append("未找到匹配的业务术语。请尝试更换关键词。");
             }
 
@@ -1751,20 +1787,48 @@ public class AloudataCallTool {
         keywords.add(keyword);
 
         try {
+            /* 精确命中优先（确定性）：关键词与某术语的 termName/同义词归一化后完全相等时，
+             * 该术语与用户输入直接等价，其标准名与全部同义词**无条件**纳入扩展——
+             * 不受 topK=3 截断影响，也绕过 isRelevantExpansion 的字符重叠过滤
+             * （缩写型同义词如「GMV」↔「成交总额」无中文重叠，旧过滤会拦掉）。 */
+            List<BusinessTermSearchResult.TermHit> exactHits = businessTermEsService.exactSearch(keyword, null);
+            if (exactHits != null && !exactHits.isEmpty()) {
+                for (BusinessTermSearchResult.TermHit hit : exactHits) {
+                    if (hit.getTermName() != null && !hit.getTermName().isBlank()
+                            && !keywords.contains(hit.getTermName())) {
+                        keywords.add(hit.getTermName());
+                    }
+                    if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
+                        for (String syn : hit.getSynonyms().split("[,，;；]")) {
+                            String trimmed = syn.trim();
+                            if (!trimmed.isEmpty() && !keywords.contains(trimmed)) {
+                                keywords.add(trimmed);
+                            }
+                        }
+                    }
+                }
+                log.info("业务术语精确命中扩展：keyword='{}' → 标准名 {}，同义词已纳入",
+                        keyword, exactHits.stream().map(BusinessTermSearchResult.TermHit::getTermName)
+                                .collect(Collectors.joining(",")));
+            }
+
             BusinessTermSearchResult termResult = businessTermEsService.hybridSearch(keyword, 3, 0.3);
             if (termResult.getTermHits() != null) {
                 for (var hit : termResult.getTermHits()) {
                     // 添加术语标准名（需通过相关性校验）
                     if (hit.getTermName() != null && !hit.getTermName().isBlank()
                             && isRelevantExpansion(keyword, hit.getTermName())) {
-                        keywords.add(hit.getTermName());
+                        if (!keywords.contains(hit.getTermName())) {
+                            keywords.add(hit.getTermName());
+                        }
                     }
                     // 添加同义词（需通过相关性校验）
                     if (hit.getSynonyms() != null && !hit.getSynonyms().isBlank()) {
-                        for (String syn : hit.getSynonyms().split(",")) {
+                        for (String syn : hit.getSynonyms().split("[,，;；]")) {
                             String trimmed = syn.trim();
                             if (!trimmed.isEmpty() && !trimmed.equals(keyword)
-                                    && isRelevantExpansion(keyword, trimmed)) {
+                                    && isRelevantExpansion(keyword, trimmed)
+                                    && !keywords.contains(trimmed)) {
                                 keywords.add(trimmed);
                             }
                         }
@@ -1864,28 +1928,11 @@ public class AloudataCallTool {
      * 背景：用户问句常带全角括号、半角括号、连接符等标点，LLM 生成检索 keyword
      * 时可能截断 / 改写 / 转换全角半角，导致「按关键词匹配指标名称」失配。此方法只用于
      * 「是否匹配」的判定；判定命中后仍使用原始 metricName / 展示名构造查询，不改写查询值。
+     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport}，与业务术语/维度
+     * MySQL 降级检索的标点不敏感 LIKE 模式共用同一套字符归一化规则。
      */
     private static String normalizeKey(String text) {
-        if (text == null) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (char c : text.trim().toCharArray()) {
-            char cc = c;
-            // 全角 ASCII（U+FF01~U+FF5E）转半角
-            if (cc >= 0xFF01 && cc <= 0xFF5E) {
-                cc = (char) (cc - 0xFEE0);
-            }
-            // 全角空格转半角
-            if (cc == 0x3000) {
-                cc = ' ';
-            }
-            char lower = Character.toLowerCase(cc);
-            if (Character.isLetterOrDigit(lower)) {
-                sb.append(lower);
-            }
-        }
-        return sb.toString();
+        return NameMatchSupport.normalizeKey(text);
     }
 
     /**
@@ -2571,11 +2618,15 @@ public class AloudataCallTool {
                     continue;
                 }
                 String otherCal = extractTrailingCaliber(other.getMetricDisplayName());
-                boolean caliberDominated = !cal.equals(otherCal) && otherCal.contains(cal);
+                // 口径子串支配仅对非空口径生效：cal 为空时 String.contains("") 恒为 true，
+                // 会让无括号口径成员（如「期货收入-应收-当年」）被任何带括号口径的成员误删；
+                // 空口径成员的交叠关系由下方 nameDominated（归一化展示名 longest-wins）处理
+                boolean caliberDominated = !cal.isEmpty() && !cal.equals(otherCal) && otherCal.contains(cal);
                 // 归一化展示名包含关系 longest-wins：仅当 other 更长且包含当前成员时才支配，
                 // 等长（如 全角 vs 半角括号两种写法）不互相支配，保留交给多口径流程
                 String otherNorm = normalizeKey(other.getMetricDisplayName());
-                boolean nameDominated = otherNorm.length() > normName.length() && otherNorm.contains(normName);
+                boolean nameDominated = !normName.isEmpty() && otherNorm.length() > normName.length()
+                        && otherNorm.contains(normName);
                 if (caliberDominated || nameDominated) {
                     dominated = true;
                     break;
