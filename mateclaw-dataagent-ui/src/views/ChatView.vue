@@ -665,6 +665,17 @@
               >
                 <span class="model-option">
                   <span class="model-option-name">{{ model.name }}</span>
+                  <span
+                    v-if="modelModalities(model).length > 0"
+                    class="model-option-vision"
+                    :title="t('chart.modelModalities')"
+                  >
+                    <span
+                      v-for="mod in modelModalities(model)"
+                      :key="mod"
+                      class="model-option-modality"
+                    >{{ t(MODALITY_LABELS[mod]) }}</span>
+                  </span>
                   <span class="model-option-provider">{{ model.provider }}</span>
                 </span>
               </el-option>
@@ -1024,6 +1035,37 @@ const availableModels = computed(() => {
     return isChatModel && providerOk
   })
 })
+
+/**
+ * 读取模型支持的多模态类型：
+ * 仅依据模型配置的 modalities 字段（JSON 数组如 ["vision","video","audio"]），
+ * 不做任何名称/前缀等主观推断。返回规范化后的模态列表（不含 text）。
+ */
+function modelModalities(model: { modalities?: string }): string[] {
+  const modalitiesRaw = model.modalities?.trim()
+  if (!modalitiesRaw) {
+    return []
+  }
+  try {
+    const declared = JSON.parse(modalitiesRaw) as unknown[]
+    if (!Array.isArray(declared)) {
+      return []
+    }
+    return declared
+      .map(m => typeof m === 'string' ? m.trim().toLowerCase() : '')
+      .filter(m => m === 'vision' || m === 'video' || m === 'audio')
+  } catch {
+    // JSON 解析失败，视为无多模态声明
+    return []
+  }
+}
+
+/** 多模态类型展示文案（i18n key） */
+const MODALITY_LABELS: Record<string, string> = {
+  vision: 'chart.modalityVision',
+  video: 'chart.modalityVideo',
+  audio: 'chart.modalityAudio',
+}
 
 /** 模型切换（仅更新前端选择状态） */
 function handleModelChange(modelId: number): void {
@@ -6454,6 +6496,25 @@ onUnmounted(() => {
 .model-option-provider {
   font-size: 10px;
   color: var(--muted);
+}
+
+/* 模型选项：多模态能力标识 —— 主题色小徽标，列出模型支持的模态（图片/视频/音频） */
+.model-option-vision {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  flex-shrink: 0;
+}
+
+.model-option-modality + .model-option-modality {
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--main-orange) 25%, transparent);
 }
 
 .composer-body {
