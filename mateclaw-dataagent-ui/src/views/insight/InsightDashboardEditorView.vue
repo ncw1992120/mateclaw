@@ -178,6 +178,7 @@ import { ArrowLeft, ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
+import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
@@ -200,6 +201,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const store = useInsightDashboardStore()
+const { canModifyResource } = usePermission()
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
@@ -311,6 +313,12 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
 /** 加载仪表盘数据 */
 async function loadDashboard(id: string): Promise<void> {
   await store.selectDashboard(id)
+  // 归属守卫：非创建者且非工作区管理员不可进入编辑（防止 localStorage 残留的编辑模式）
+  if (dashboard.value && !canModifyResource(dashboard.value.ownerId)) {
+    ElMessage.warning(t('insight.noEditPerm'))
+    emit('back')
+    return
+  }
   if (dashboard.value) {
     dashboardName.value = dashboard.value.name
     dashboardDescription.value = dashboard.value.description ?? ''

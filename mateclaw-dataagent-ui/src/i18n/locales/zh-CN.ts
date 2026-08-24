@@ -1660,6 +1660,7 @@ export default {
   insight: {
     title: '洞察仪表盘',
     create: '新建仪表盘',
+    noEditPerm: '仅创建者或工作区管理员可编辑该仪表盘',
     generate: 'AI生成',
     generateTitle: 'AI生成仪表盘',
     generateName: '仪表盘名称',

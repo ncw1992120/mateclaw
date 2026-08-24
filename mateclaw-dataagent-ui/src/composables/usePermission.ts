@@ -42,6 +42,8 @@ export const PERMISSION = {
   // 定时任务
   CRON_JOB_VIEW: 'cron-job:view',
   CRON_JOB_MANAGE: 'cron-job:manage',
+  // 洞察（仪表盘/报告）
+  INSIGHT_CREATE: 'insight:create',
 } as const
 
 export type PermissionCode = (typeof PERMISSION)[keyof typeof PERMISSION]
@@ -79,6 +81,8 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   // 定时任务
   [PERMISSION.CRON_JOB_VIEW]: ['viewer', 'member', 'admin', 'owner'],
   [PERMISSION.CRON_JOB_MANAGE]: ['admin', 'owner'],
+  // 洞察：查看全员可见；新建/复制为 member 及以上（viewer 只读）
+  [PERMISSION.INSIGHT_CREATE]: ['member', 'admin', 'owner'],
 }
 
 /**
@@ -122,6 +126,23 @@ export function usePermission() {
   }
 
   /**
+   * 判断当前用户是否可修改指定归属的资源（仪表盘/报告等工作台资产）
+   * <p>
+   * 规则与后端 requireResourceOwner 对齐：
+   * 工作区 admin/owner 可管理全部资源；普通成员仅可管理自己创建的；
+   * ownerId 为空（历史无主数据）时仅管理员层级可操作。
+   */
+  function canModifyResource(ownerId?: number | string | null): boolean {
+    if (hasAnyPermission([PERMISSION.WORKSPACE_MANAGE])) {
+      return true
+    }
+    if (ownerId == null) {
+      return false
+    }
+    return String(ownerId) === String(userStore.userId)
+  }
+
+  /**
    * 判断当前用户是否拥有任意一个权限点
    * @param codes 权限点 code 数组
    * @returns true 如果有任意一个权限
@@ -144,5 +165,6 @@ export function usePermission() {
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    canModifyResource,
   }
 }

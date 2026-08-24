@@ -54,8 +54,12 @@
             <el-tooltip :content="t('insight.reportViewDetail')" placement="top">
               <el-button text size="small" :icon="View" @click="handleViewReport(report)" />
             </el-tooltip>
-            <!-- 我的洞察：可删除 -->
-            <el-tooltip v-if="activeTab === 'mine'" :content="t('insight.reportDelete')" placement="top">
+            <!-- 我的洞察：可删除（仅创建者本人或工作区管理员） -->
+            <el-tooltip
+              v-if="activeTab === 'mine' && canModifyReport(report)"
+              :content="t('insight.reportDelete')"
+              placement="top"
+            >
               <el-button text size="small" type="danger" :icon="Delete" @click="handleDeleteReport(report)" />
             </el-tooltip>
             <!-- 洞察广场：可订阅/取消订阅（非自己发布的报告） -->
@@ -121,12 +125,16 @@ import {
   unsubscribeReport,
 } from '@/api/insight-report'
 import { usePersistedRef } from '@/composables/usePersistedRef'
+import { usePermission } from '@/composables/usePermission'
+import { useUserStore } from '@/stores/useUserStore'
 
 defineOptions({
   name: 'ReportListView',
 })
 
 const { t } = useI18n()
+const { canModifyResource } = usePermission()
+const userStore = useUserStore()
 
 /** Tab 定义 */
 const tabs = [
@@ -228,7 +236,18 @@ async function loadReports(): Promise<void> {
 /** 判断是否为当前用户发布的报告 */
 function isOwner(report: InsightReport): boolean {
   // 洞察广场中，自己发布的报告不显示订阅按钮
-  return false // 后端已通过 subscribed 字段标记，自己的报告不需要订阅
+  if (report.ownerId != null) {
+    return String(report.ownerId) === String(userStore.userId)
+  }
+  return false
+}
+
+/**
+ * 是否可删除该报告：创建者本人 或 工作区 admin/owner
+ * （与后端 deleteReport 的归属校验对齐）
+ */
+function canModifyReport(report: InsightReport): boolean {
+  return canModifyResource(report.ownerId)
 }
 
 /** 格式化时间 */

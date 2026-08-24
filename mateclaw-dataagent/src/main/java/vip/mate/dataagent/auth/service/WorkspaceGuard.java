@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import vip.mate.dataagent.auth.context.UserContext;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.exception.MateClawException;
 import vip.mate.sdk.service.MateClawRuntime;
 
 /**
@@ -52,6 +53,31 @@ public class WorkspaceGuard {
         }
         Long workspaceId = ctx.getWorkspaceId() != null ? ctx.getWorkspaceId() : DataAgentConstants.DEFAULT_WORKSPACE_ID;
         return mateClawRuntime.hasWorkspacePermission(workspaceId, ctx.getUserId(), minRole);
+    }
+
+    /**
+     * 断言当前用户可操作指定归属的资源：全局管理员、工作区 admin/owner 放行，
+     * 否则必须是资源创建者本人；不通过抛 403。
+     * <p>
+     * ownerId 为 null（历史无主数据）时仅管理员层级可操作。
+     *
+     * @param ownerId 资源创建者用户 ID
+     */
+    public void requireResourceOwner(Long ownerId) {
+        UserContext ctx = UserContextHolder.get();
+        if (ctx == null) {
+            throw new IllegalStateException("用户上下文未初始化");
+        }
+        if (ctx.isAdmin()) {
+            return;
+        }
+        if (hasRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)) {
+            return;
+        }
+        if (ownerId != null && ownerId.equals(ctx.getUserId())) {
+            return;
+        }
+        throw new MateClawException("err.resource.forbidden", 403, "仅创建者或工作区管理员可执行此操作");
     }
 
     /**

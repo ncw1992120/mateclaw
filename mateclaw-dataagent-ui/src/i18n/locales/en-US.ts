@@ -1650,6 +1650,7 @@ export default {
   insight: {
     title: 'Insight Dashboard',
     create: 'New Dashboard',
+    noEditPerm: 'Only the creator or a workspace admin can edit this dashboard',
     generate: 'AI Generate',
     generateTitle: 'AI Generate Dashboard',
     generateName: 'Dashboard Name',

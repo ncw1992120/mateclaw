@@ -835,6 +835,8 @@ export interface SkillInstallTask {
 export interface SemanticModel {
   id: string
   datasourceId: string
+  /** 创建者用户 ID（资源归属人） */
+  ownerId?: number | string | null
   tableName: string
   columnName: string
   businessName: string
@@ -885,6 +887,8 @@ export interface SemanticModelUpdateRequest {
 export interface LogicalRelation {
   id: string
   datasourceId: string
+  /** 创建者用户 ID（资源归属人） */
+  ownerId?: number | string | null
   sourceTableName: string
   sourceColumnName: string
   targetTableName: string

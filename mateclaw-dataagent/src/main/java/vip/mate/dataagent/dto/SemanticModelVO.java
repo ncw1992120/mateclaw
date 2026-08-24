@@ -14,6 +14,9 @@ public class SemanticModelVO {
     /** 关联数据源 ID */
     private Long datasourceId;
 
+    /** 创建者用户 ID（资源归属人） */
+    private Long ownerId;
+
     /** 表名 */
     private String tableName;
 

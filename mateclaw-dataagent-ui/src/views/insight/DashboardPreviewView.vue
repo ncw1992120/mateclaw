@@ -8,7 +8,7 @@
       </div>
       <div class="toolbar-right mc-toolbar-right">
         <el-button
-          v-if="!reportGenerating"
+          v-if="canCreate && !reportGenerating"
           size="small"
           :icon="Document"
           @click="handleGenerateReport"
@@ -24,7 +24,7 @@
           {{ t('insight.reportView') }}
         </el-button>
         <el-button
-          v-if="hasReport && !reportGenerating"
+          v-if="canCreate && hasReport && !reportGenerating"
           size="small"
           :icon="Upload"
           @click="handlePublishReport"
@@ -129,6 +129,7 @@ import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { preview } from '@/api/insight-dashboard'
 import { generateReport, getReport, publishReport } from '@/api/insight-report'
 import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 
 defineOptions({
@@ -145,6 +146,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+// 生成/发布报告为 member 级写操作，viewer 只读
+const { hasPermission } = usePermission()
+const canCreate = computed(() => hasPermission(PERMISSION.INSIGHT_CREATE))
 const store = useInsightDashboardStore()
 
 const dashboard = computed(() => store.currentDashboard)

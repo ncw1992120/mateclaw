@@ -8,6 +8,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import vip.mate.dataagent.auth.interceptor.DataAgentWorkspaceInterceptor;
 import vip.mate.dataagent.auth.interceptor.UserContextInterceptor;
+import vip.mate.dataagent.audit.DataAgentAuditInterceptor;
 
 /**
  * DataAgent Web MVC 配置
@@ -21,6 +22,7 @@ public class DataAgentWebMvcConfig implements WebMvcConfigurer {
 
     private final UserContextInterceptor userContextInterceptor;
     private final DataAgentWorkspaceInterceptor dataAgentWorkspaceInterceptor;
+    private final DataAgentAuditInterceptor dataAgentAuditInterceptor;
 
     /** CORS 允许的来源，逗号分隔 */
     @Value("${mateclaw.cors.allowed-origins:*}")
@@ -39,6 +41,12 @@ public class DataAgentWebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/v1/**")
                 .excludePathPatterns("/v1/auth/login", "/error")
                 .order(1);
+
+        // 3. 操作审计拦截器：记录写请求（POST/PUT/PATCH/DELETE）到 mate_audit_event
+        registry.addInterceptor(dataAgentAuditInterceptor)
+                .addPathPatterns("/v1/**")
+                .excludePathPatterns("/v1/auth/login", "/error")
+                .order(2);
     }
 
     @Override

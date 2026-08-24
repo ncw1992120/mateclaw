@@ -112,6 +112,7 @@ public class SemanticModelServiceImpl implements SemanticModelService {
         SemanticModelEntity entity = new SemanticModelEntity();
         BeanUtils.copyProperties(request, entity);
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        entity.setOwnerId(workspaceGuard.currentUserId());
         entity.setDeleted(0);
         entity.setStatus(DataAgentConstants.SEMANTIC_STATUS_ENABLED);
         semanticModelMapper.insert(entity);
@@ -290,7 +291,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
     /**
      * 校验当前用户对指定语义模型是否具有访问权限
      * <p>
-     * 校验语义模型存在性 + workspaceId 一致性，不匹配抛出 BusinessException。
+     * 校验语义模型存在性 + workspaceId 一致性；写操作另需满足：
+     * 创建者本人 或 工作区 admin/owner（{@link WorkspaceGuard#requireResourceOwner}）。
      */
     private void requireSemanticOwnership(Long id) {
         SemanticModelEntity entity = semanticModelMapper.selectById(id);
@@ -302,6 +304,8 @@ public class SemanticModelServiceImpl implements SemanticModelService {
                 || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
             throw new BusinessException(403, "无权访问该语义模型");
         }
+        // 归属校验：仅创建者本人或工作区管理员层级可修改/删除
+        workspaceGuard.requireResourceOwner(entity.getOwnerId());
     }
 
     /**

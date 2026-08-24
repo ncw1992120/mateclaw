@@ -987,6 +987,9 @@ public class InsightReportServiceImpl implements InsightReportService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteReport(Long id) {
         requireReportOwnership(id);
+        // 删除为破坏性操作：仅创建者本人 或 工作区 admin/owner 可执行
+        InsightReportEntity entity = insightReportMapper.selectById(id);
+        workspaceGuard.requireResourceOwner(entity == null ? null : entity.getOwnerId());
         int rows = insightReportMapper.deleteById(id);
         log.info("删除报告: id={}, 影响行数={}", id, rows);
     }

@@ -111,6 +111,7 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
         LogicalRelationEntity entity = new LogicalRelationEntity();
         BeanUtils.copyProperties(request, entity);
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        entity.setOwnerId(workspaceGuard.currentUserId());
         entity.setDeleted(0);
         if (entity.getRelationType() == null || entity.getRelationType().isBlank()) {
             entity.setRelationType(DataAgentConstants.RELATION_TYPE_ONE_TO_MANY);
@@ -225,7 +226,8 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
     /**
      * 校验当前用户对指定逻辑外键关系是否具有访问权限
      * <p>
-     * 校验存在性 + workspaceId 一致性，不匹配抛出 BusinessException。
+     * 校验存在性 + workspaceId 一致性；写操作另需满足：
+     * 创建者本人 或 工作区 admin/owner（归属校验）。
      */
     private void requireLogicalOwnership(Long id) {
         LogicalRelationEntity entity = logicalRelationMapper.selectById(id);
@@ -237,6 +239,8 @@ public class LogicalRelationServiceImpl implements LogicalRelationService {
                 || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
             throw new BusinessException(403, "无权访问该逻辑外键关系");
         }
+        // 归属校验：仅创建者本人或工作区管理员层级可修改/删除
+        workspaceGuard.requireResourceOwner(entity.getOwnerId());
     }
 
     /**

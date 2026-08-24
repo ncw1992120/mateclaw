@@ -1675,6 +1675,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
     }
 
+    /**
+     * 写操作归属校验：存在性 + workspaceId 一致性 + 归属
+     * （仅创建者本人 或 工作区 admin/owner 可修改/删除；历史无主数据仅管理员层级可维护）。
+     */
     private void requireOwnership(Long id) {
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
         if (entity == null || entity.getDeleted() == 1) {
@@ -1685,6 +1689,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
             throw new BusinessException(403, "无权访问该仪表盘");
         }
+        workspaceGuard.requireResourceOwner(entity.getOwnerId());
     }
 
     private InsightDashboardVO toVO(InsightDashboardEntity entity) {

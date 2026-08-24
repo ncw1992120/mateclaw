@@ -20,7 +20,7 @@
             </template>
             {{ t('insight.aiAssistant') }}
           </el-button>
-          <el-button type="primary" :icon="Plus" @click="handleCreate">
+          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
             {{ t('insight.create') }}
           </el-button>
         </div>
@@ -38,7 +38,7 @@
               </template>
               {{ t('insight.aiAssistant') }}
             </el-button>
-              <el-button type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
+              <el-button v-if="canCreate" type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
             </div>
           </div>
 
@@ -60,26 +60,30 @@
                 <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
               </div>
               <div class="card-actions">
-                <el-tooltip :content="t('insight.edit')" placement="top">
+                <el-tooltip
+                  v-if="canModifyDashboard(dashboard)"
+                  :content="t('insight.edit')"
+                  placement="top"
+                >
                   <el-button text size="small" :icon="Edit" @click="handleEdit(dashboard.id)" />
                 </el-tooltip>
                 <el-tooltip :content="t('insight.preview')" placement="top">
                   <el-button text size="small" :icon="View" @click="handlePreview(dashboard.id)" />
                 </el-tooltip>
                 <el-tooltip
-                  v-if="dashboard.status === 'draft'"
+                  v-if="canCreate && dashboard.status === 'draft'"
                   :content="t('insight.publish')"
                   placement="top"
                 >
                   <el-button text size="small" type="success" :icon="VideoPlay" @click="handlePublish(dashboard)" />
                 </el-tooltip>
-                <el-tooltip v-else :content="t('insight.unpublish')" placement="top">
+                <el-tooltip v-else-if="canModifyDashboard(dashboard)" :content="t('insight.unpublish')" placement="top">
                   <el-button text size="small" :icon="VideoPause" @click="handleUnpublish(dashboard)" />
                 </el-tooltip>
-                <el-tooltip :content="t('insight.copy')" placement="top">
+                <el-tooltip v-if="canCreate" :content="t('insight.copy')" placement="top">
                   <el-button text size="small" :icon="DocumentCopy" @click="handleCopy(dashboard)" />
                 </el-tooltip>
-                <el-tooltip :content="t('insight.delete')" placement="top">
+                <el-tooltip v-if="canModifyDashboard(dashboard)" :content="t('insight.delete')" placement="top">
                   <el-button text size="small" type="danger" :icon="Delete" @click="handleDelete(dashboard)" />
                 </el-tooltip>
               </div>
@@ -125,6 +129,8 @@ import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
+import { usePermission, PERMISSION } from '@/composables/usePermission'
+import { useUserStore } from '@/stores/useUserStore'
 import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
@@ -135,6 +141,19 @@ defineOptions({
 
 const { t } = useI18n()
 const store = useInsightDashboardStore()
+const { hasPermission, canModifyResource } = usePermission()
+const userStore = useUserStore()
+
+/** 新建/复制权限：member 及以上（viewer 只读） */
+const canCreate = computed(() => hasPermission(PERMISSION.INSIGHT_CREATE))
+
+/**
+ * 是否可管理该仪表盘（编辑/发布/取消发布/删除）：
+ * 工作区 admin+owner 管理全部，普通成员仅限自己创建的
+ */
+function canModifyDashboard(dashboard: InsightDashboard): boolean {
+  return canModifyResource((dashboard as InsightDashboard & { ownerId?: number | string | null }).ownerId)
+}
 
 type ViewMode = 'list' | 'editor' | 'preview'
 const mode = usePersistedState<ViewMode>('mc-insight-view-mode', 'list')

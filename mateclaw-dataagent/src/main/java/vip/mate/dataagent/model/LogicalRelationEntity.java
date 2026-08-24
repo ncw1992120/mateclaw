@@ -25,6 +25,10 @@ public class LogicalRelationEntity {
     @TableField("workspace_id")
     private Long workspaceId;
 
+    /** 创建者用户 ID（资源归属人；历史数据为 NULL，仅工作区管理员可维护） */
+    @TableField("owner_id")
+    private Long ownerId;
+
     /** 源表名 */
     private String sourceTableName;
 
