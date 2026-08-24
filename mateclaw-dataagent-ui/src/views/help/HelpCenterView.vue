@@ -135,9 +135,14 @@ import HelpContent from './HelpContent.vue'
 import HelpToc from './HelpToc.vue'
 import HelpDocEditor from './HelpDocEditor.vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { usePersistedState } from '@/composables/usePersistedRef'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+
+/** 刷新页面后恢复上次查看的文档/分类（localStorage 持久化） */
+const lastDocId = usePersistedState<string | null>('mc-help-current-doc-id', null)
+const lastCategoryId = usePersistedState<string | null>('mc-help-current-category-id', null)
 
 /** 分类树（含文档列表，方便一次性渲染） */
 interface CategoryWithDocs extends HelpCategory {
@@ -169,11 +174,8 @@ const docDialogVisible = ref(false)
 const editingDoc = ref<HelpDocument | null>(null)
 const docForm = ref<HelpDocumentRequest>({ title: '', categoryId: '', content: '', author: '', sortOrder: 0, status: 'draft', tags: '', summary: '' })
 
-/** 当前用户是否有帮助中心管理权限（全局管理员 / 工作区 owner / 工作区 admin） */
-  const canManageHelp = computed(() => {
-    const ws = userStore.currentWorkspace
-    return userStore.isAdmin || (ws && (ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin'))
-  })
+/** 当前用户是否有帮助中心管理权限（帮助文档为全局内容，后端 @RequireGlobalAdmin，仅全局管理员） */
+  const canManageHelp = computed(() => userStore.isAdmin)
 
   /** 分类树选择器数据（添加根节点，递归构建） */
   const categoryTreeForSelect = computed(() => {
@@ -233,6 +235,8 @@ function handleCategoryClick(category: HelpCategory): void {
   currentCategoryId.value = category.id
   currentDocument.value = null
   searchVisible.value = false
+  lastDocId.value = null
+  lastCategoryId.value = category.id
 }
 
 /** 点击文档查看详情 */
@@ -243,6 +247,8 @@ async function handleDocClick(doc: HelpDocument | HelpSearchResult): Promise<voi
     currentDocument.value = detail
     currentCategoryId.value = detail.categoryId
     searchVisible.value = false
+    lastDocId.value = detail.id
+    lastCategoryId.value = detail.categoryId
     await nextTick()
   } catch {
     // 错误已在拦截器处理
@@ -284,6 +290,8 @@ function handleGoHome(): void {
   currentCategoryId.value = null
   currentDocument.value = null
   searchVisible.value = false
+  lastDocId.value = null
+  lastCategoryId.value = null
 }
 
 /** 标题目录变化 */
@@ -463,6 +471,7 @@ async function handleDeleteDoc(doc: HelpDocument): Promise<void> {
     ElMessage.success(t('helpCenter.deleteSuccess'))
     if (currentDocument.value?.id === doc.id) {
       currentDocument.value = null
+      lastDocId.value = null
     }
     await fetchCategoryTree()
   } catch {
@@ -497,8 +506,39 @@ watch(currentDocument, (val) => {
   }
 })
 
+/** 恢复上次查看的文档（刷新后保持页面状态）
+ *  侧边栏默认展开全部分类且按 currentNodeKey 自动高亮，恢复文档/分类状态后即可定位 */
+async function restoreLastView(): Promise<void> {
+  const docId = lastDocId.value
+  const categoryId = lastCategoryId.value
+  if (categoryId && !docId) {
+    // 上次停在分类节点
+    currentCategoryId.value = categoryId
+    return
+  }
+  if (!docId) {
+    return
+  }
+  // 上次停在文档：重新拉取详情（文档可能已被删除或权限变化，失败时静默忽略）
+  try {
+    const data = await helpApi.getDocument(docId)
+    const detail = data as unknown as HelpDocument
+    currentDocument.value = detail
+    currentCategoryId.value = detail.categoryId
+    await nextTick()
+  } catch {
+    // 文档不可达：清空过期状态，回到分类
+    lastDocId.value = null
+    if (categoryId) {
+      currentCategoryId.value = categoryId
+    }
+  }
+}
+
 onMounted(() => {
-  fetchCategoryTree()
+  fetchCategoryTree().then(() => {
+    void restoreLastView()
+  })
 })
 </script>
 
