@@ -1,7 +1,7 @@
 ---
 name: aloudata_metric_attribution_analysis
 version: "1.0.0"
-description: "指标归因分析入口。当用户问'为什么下降/上升/变化''什么原因导致''归因'时，必须先 load_skill('aloudata_metric_attribution_analysis') 加载归因工作流。流程：检索指标英文名 → 归因校验 → LLM 自动选维度跑多维归因 → 对主因维度下钻 → 解读贡献率。硬约束：metric/dimensions 必须用英文名（先走 aloudata_search_semantic）；先 attribution_check 校验能否归因，再调归因查询；comparisonType 与时间粒度匹配。"
+description: "指标归因分析入口。当用户问'为什么下降/上升/变化''什么原因导致''归因'时，必须先 load_skill('aloudata_metric_attribution_analysis') 加载归因工作流。流程：检索指标英文名 → 归因校验 → LLM 自动选维度跑多维归因 → 对主因维度下钻 → 解读贡献率。硬约束：metric/dimensions 必须用英文名（先走 aloudata_search_semantic）；先 attribution_check 校验能否归因，再调归因查询；comparisonType 与时间粒度匹配；对比时间涉及相对表述（上月/去年/上周几等）必须先调 DateTimeTool.getCurrentDate 获取当前日期，禁止主观推算。"
 dependencies:
   tools:
     - search_business_term
@@ -45,6 +45,8 @@ templates:
 - **候选维度**：用户指定的维度（若有）；若未指定，LLM 自动选（见第四步）
 
 **与查询的边界**：若用户只问"上月销售额多少"（查数值）→ 走 `aloudata_metric_query`；若问"上月销售额为什么下降"（查原因）→ 走本技能。
+
+**时间锚定（先取真实日期，禁止主观推算）**：对比基准涉及相对表述（"上月""去年""上周""近N天"等）时，必须**先调用内置工具 getCurrentDate（DateTimeTool.getCurrentDate）获取服务器当前日期与星期**，再以其返回值为唯一锚点换算 currentFilter/comparison 的时间表达式与 CUSTOM 区间；严禁凭主观印象推算今天的日期与星期。
 
 ### 第二步：检索指标英文名（必执行）
 
@@ -152,5 +154,6 @@ dimension: "<主因维度单数>"   // 注意是单数 dimension，不是 dimens
 4. **下钻用 dimension 单数**：`attribution_drilldown` 的参数是 `dimension`（单数），不是 `dimensions`
 5. **贡献率正负含义**：正值同向推动，负值反向拖累，绝对值大小代表贡献程度
 6. **与查询 skill 协作**：归因前若需查看指标当前值，可先走 `aloudata_metric_query`；归因 skill 聚焦"为什么变"
+7. **相对时间先取真实日期（硬性）**：归因的当前/对比时间表达式涉及相对表述（"上月/去年/上周几"等）时，必须先调用内置工具 getCurrentDate 获取服务器当前日期与星期，以其为唯一锚点换算；禁止主观推算当前日期（见第一步"时间锚定"）
 
 详细参数说明参考 [aloudata_metric_query/references/api-doc.md](../aloudata_metric_query/references/api-doc.md) 的"指标归因分析 API"章节。

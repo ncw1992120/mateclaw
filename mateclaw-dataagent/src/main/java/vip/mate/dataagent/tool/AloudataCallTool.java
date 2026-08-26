@@ -603,7 +603,7 @@ public class AloudataCallTool {
                     bodyPreview = bodyPreview.substring(0, 600) + "...(截断)";
                 }
                 return error("API: " + endpointName + " 返回失败（success=false），但未携带错误信息。完整响应: " + bodyPreview
-                        + "\n提示: 此类错误多为数据源查询通道/查询引擎问题而非参数格式问题，请检查数据源（指标应用→API集成）的查询服务地址与认证配置；若连续 2 次返回相同错误，请停止重试并向用户说明。");
+                        + "\n提示: 此类错误多为数据源查询通道/查询引擎问题而非参数格式问题，请检查数据源（指标应用→API集成）的查询服务地址与认证配置；若连续 5 次返回相同错误，请停止重试并向用户说明。");
             }
 
             // P1: API 错误智能解析，附加修正建议

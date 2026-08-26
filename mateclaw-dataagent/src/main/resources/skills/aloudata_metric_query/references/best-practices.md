@@ -373,6 +373,7 @@
 - [ ] metrics 中的指标名是否为英文名（metricName）？是否来自 aloudata_search_semantic 返回？
 - [ ] dimensions 中的维度名是否为英文名（dimName）？是否在 availableDimensions 中？
 - [ ] timeConstraint 表达式是否使用了正确的语法（整个表达式用 `()` 包裹、方括号引用维度、双引号转义）？
+- [ ] 相对时间（昨日/上周几/近N天/去年同期等）是否已先调用 getCurrentDate 获取真实当前日期，再据此换算？
 - [ ] 使用同环比时，metric_time 是否在 dimensions 或 timeConstraint 中？
 - [ ] 同环比的偏移粒度是否大于等于日期粒度？
 - [ ] 占比/排名的范围维度是否在 dimensions 中声明？
