@@ -426,8 +426,11 @@ async function handleLogin(): Promise<void> {
       // 验证码模式下登录失败（如验证码错误/密码错误）：刷新图片供重试
       form.validCode = ''
       await loadCaptcha()
+    } else if (!(e as { isAxiosError?: boolean })?.isAxiosError) {
+      // auth.ts 内部错误（公钥获取/加密失败等）非 axios 错误，拦截器不会提示，此处兜底
+      ElMessage.error(e instanceof Error ? e.message : '登录失败，请重试')
     }
-    // 其余错误由 axios 拦截器统一提示
+    // 其余 axios 错误由拦截器统一提示
   } finally {
     loading.value = false
   }

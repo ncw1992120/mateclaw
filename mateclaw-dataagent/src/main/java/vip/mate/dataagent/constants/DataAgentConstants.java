@@ -299,6 +299,9 @@ public final class DataAgentConstants {
     /** 企业 SSO 免登接口路径（SecurityConfig 放行，浏览器持企业票据即可调用） */
     public static final String AUTH_SSO_LOGIN_PATH = "/v1/auth/sso/login";
 
+    /** 传输加密公钥接口路径（SecurityConfig 放行，登录页加密敏感字段前拉取） */
+    public static final String AUTH_PUBKEY_PATH = "/v1/auth/pubkey";
+
     /** 全局管理员角色标识 */
     public static final String ROLE_ADMIN = "admin";
 

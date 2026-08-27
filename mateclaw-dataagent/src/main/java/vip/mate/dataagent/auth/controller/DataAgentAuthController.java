@@ -8,11 +8,14 @@ import org.springframework.web.bind.annotation.*;
 import vip.mate.auth.model.UserEntity;
 import vip.mate.auth.service.AuthService;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.crypto.TransportCryptoService;
 import vip.mate.dataagent.auth.dto.AuthModeVO;
 import vip.mate.dataagent.auth.dto.DataAgentLoginRequest;
 import vip.mate.dataagent.auth.dto.DataAgentLoginResponse;
+import vip.mate.dataagent.auth.dto.PasswordChangeRequest;
 import vip.mate.dataagent.auth.dto.PilotCaptchaVO;
 import vip.mate.dataagent.auth.dto.PilotSsoRequest;
+import vip.mate.dataagent.auth.dto.PublicKeyVO;
 import vip.mate.dataagent.auth.service.DataAgentAuthService;
 
 /**
@@ -32,6 +35,7 @@ public class DataAgentAuthController {
 
     private final DataAgentAuthService dataAgentAuthService;
     private final AuthService authService;
+    private final TransportCryptoService transportCryptoService;
 
     @Operation(summary = "用户登录", description = "用户名密码登录（本地或企业认证代验），返回 JWT 令牌与可见工作区列表；企业风控要求验证码时返回 HTTP 429")
     @PostMapping("/login")
@@ -75,16 +79,23 @@ public class DataAgentAuthController {
         return R.ok(info);
     }
 
-    @Operation(summary = "修改密码", description = "当前用户修改自己的密码，需提供原密码")
+    @Operation(summary = "获取传输加密公钥", description = "敏感字段（password/ssoCookie/改密口令）传输前的 RSA-OAEP 公钥；公钥公开，密文仅服务端私钥可解")
+    @GetMapping("/pubkey")
+    public R<PublicKeyVO> publicKey() {
+        return R.ok(new PublicKeyVO(transportCryptoService.publicKeyPem(), "RSA-OAEP"));
+    }
+
+    @Operation(summary = "修改密码", description = "当前用户修改自己的密码，需提供原密码；oldPassword/newPassword 为 RSA-OAEP 加密信封（ts:明文）")
     @PutMapping("/password")
-    public R<Void> changePassword(@RequestParam String oldPassword,
-                                  @RequestParam String newPassword,
+    public R<Void> changePassword(@RequestBody PasswordChangeRequest request,
                                   Authentication auth) {
         UserEntity user = authService.findByUsername(auth.getName());
         if (user == null) {
             return R.fail(401, "用户不存在");
         }
-        authService.changePassword(user.getId(), oldPassword, newPassword);
+        authService.changePassword(user.getId(),
+                transportCryptoService.unwrapField(request.getOldPassword()),
+                transportCryptoService.unwrapField(request.getNewPassword()));
         return R.ok();
     }
 }

@@ -52,6 +52,8 @@ public class DataAgentSecurityConfig {
                 .requestMatchers(DataAgentConstants.AUTH_MODE_PATH).permitAll()
                 // 企业 SSO 免登：持有效领航票据即可换取本地会话
                 .requestMatchers(DataAgentConstants.AUTH_SSO_LOGIN_PATH).permitAll()
+                // 传输加密公钥：登录页加密敏感字段前拉取（公钥公开）
+                .requestMatchers(DataAgentConstants.AUTH_PUBKEY_PATH).permitAll()
                 // 工具生成文件下载端点，UUID 即为访问凭证，无需认证
                 .requestMatchers("/v1/files/generated/**").permitAll()
                 .anyRequest().authenticated()

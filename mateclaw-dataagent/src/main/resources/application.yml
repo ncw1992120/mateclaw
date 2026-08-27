@@ -72,6 +72,13 @@ mateclaw:
     timeout: 5s
     local-fallback-users:
       - admin
+  # 传输加密：无 TLS 部署下对 password/ssoCookie/改密口令做 RSA-OAEP 公钥加密（前端 jsencrypt）。
+  # private-key-pem 为 PKCS#8 私钥 PEM；多实例部署必须显式配置共享私钥，留空则启动自动生成内存密钥
+  # （重启后公钥变化，前端会重新拉取，但多实例无法互解）。
+  auth:
+    crypto:
+      private-key-pem: ${MATECLAW_AUTH_CRYPTO_PRIVATE_KEY:}
+      timestamp-window: 5m
   mcp:
     enabled: true
   skill:

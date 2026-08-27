@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import vip.mate.auth.model.UserEntity;
 import vip.mate.auth.service.AuthService;
 import vip.mate.dataagent.auth.LoginRateLimiter;
+import vip.mate.dataagent.auth.crypto.TransportCryptoService;
 import vip.mate.dataagent.auth.dto.AuthModeVO;
 import vip.mate.dataagent.auth.dto.DataAgentLoginRequest;
 import vip.mate.dataagent.auth.dto.DataAgentLoginResponse;
@@ -52,9 +53,13 @@ public class DataAgentAuthServiceImpl implements DataAgentAuthService {
     private final ShadowAccountService shadowAccountService;
     private final PilotAuthProperties pilotAuthProperties;
     private final LoginRateLimiter loginRateLimiter;
+    private final TransportCryptoService transportCryptoService;
 
     @Override
     public DataAgentLoginResponse login(DataAgentLoginRequest request) {
+        // 传输加密：口令为 RSA-OAEP 信封，解密还原为明文后再进入本地/领航校验。
+        // 解密失败（格式/过期）返回 400，不计入登录限速。
+        request.setPassword(transportCryptoService.unwrapField(request.getPassword()));
         String username = request.getUsername();
         if (loginRateLimiter.isBlocked(username)) {
             throw new MateClawException("err.auth.too_many_attempts", 403, "登录失败次数过多，请稍后再试");
@@ -153,7 +158,7 @@ public class DataAgentAuthServiceImpl implements DataAgentAuthService {
     @Override
     public DataAgentLoginResponse loginBySso(PilotSsoRequest request) {
         EnterpriseAuthResult result = enterpriseIdentityProvider.authenticateBySso(
-                request.getSsoCookie(), request.getAuthnType());
+                transportCryptoService.unwrapField(request.getSsoCookie()), request.getAuthnType());
         if (result.status() != EnterpriseAuthResult.Status.SUCCESS || result.user() == null) {
             // 统一文案：不区分票据无效/过期/账号不存在，防探测
             throw new MateClawException("err.auth.sso_invalid", 401, "企业统一身份校验失败，请重新登录");
@@ -170,7 +175,11 @@ public class DataAgentAuthServiceImpl implements DataAgentAuthService {
 
     @Override
     public void renewSsoSession(PilotSsoRequest request) {
-        enterpriseIdentityProvider.renewSso(request.getSsoCookie(), request.getAuthnType());
+        String ssoCookie = request.getSsoCookie();
+        if (ssoCookie != null && !ssoCookie.isBlank()) {
+            ssoCookie = transportCryptoService.unwrapField(ssoCookie);
+        }
+        enterpriseIdentityProvider.renewSso(ssoCookie, request.getAuthnType());
     }
 
     /**
