@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import vip.mate.exception.MateClawException;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -61,6 +62,36 @@ public class PilotIdentityProvider implements EnterpriseIdentityProvider {
     private static final java.util.Set<String> SUPPORTED_AUTH_TYPES =
             java.util.Set.of(AUTH_TYPE_UM, AUTH_TYPE_AD);
 
+    /**
+     * 全信任 SSL 上下文（联调期策略）：单例创建，避免每请求重建。
+     * 生产上线前必须替换为平安 CA 受信方案（导入 cacerts/独立 truststore），
+     * 并关闭主机名绕过——TLS 拦截将直接暴露转发的明文口令。
+     */
+    private static final SSLContext TRUST_ALL_SSL_CONTEXT = createTrustAllSslContext();
+
+    /** 绕过域名校验（与全信任配套，仅联调期使用） */
+    private static final HostnameVerifier TRUST_ALL_HOSTNAME_VERIFIER = (hostname, session) -> true;
+
+    private static SSLContext createTrustAllSslContext() {
+        try {
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, new TrustManager[]{new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }}, new SecureRandom());
+            return context;
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            throw new IllegalStateException("Failed to create trust-all SSLContext", e);
+        }
+    }
+
     private final PilotAuthProperties properties;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
@@ -73,24 +104,8 @@ public class PilotIdentityProvider implements EnterpriseIdentityProvider {
             protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
                 if (connection instanceof HttpsURLConnection) {
                     HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
-                    // 信任所有证书（需要自己构建 TrustManager[]）
-                    SSLContext sslContext = null;
-                    try {
-                        sslContext = SSLContext.getInstance("TLS");
-                    } catch (NoSuchAlgorithmException e) {
-                        throw new RuntimeException(e);
-                    }
-                    try {
-                        sslContext.init(null, new TrustManager[]{new X509TrustManager() {
-                            public void checkClientTrusted(X509Certificate[] chain, String authType) {}
-                            public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-                            public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                        }}, new SecureRandom());
-                    } catch (KeyManagementException e) {
-                        throw new RuntimeException(e);
-                    }
-                    httpsConn.setSSLSocketFactory(sslContext.getSocketFactory());
-                    httpsConn.setHostnameVerifier((hostname, session) -> true); // 绕过域名校验
+                    httpsConn.setSSLSocketFactory(TRUST_ALL_SSL_CONTEXT.getSocketFactory());
+                    httpsConn.setHostnameVerifier(TRUST_ALL_HOSTNAME_VERIFIER);
                 }
                 super.prepareConnection(connection, httpMethod);
             }
