@@ -86,6 +86,11 @@ api.interceptors.response.use(
 
     // 401：Token 过期或无效，清除登录状态并跳转登录页
     if (status === 401) {
+      // 企业 SSO 静默免登失败属正常降级（无票据/票据过期），必须静默处理：
+      // 若落入下方通用 401 分支会误清本地 token 与业务状态，影响已登录用户
+      if (error.config?.url?.includes('/auth/sso/login')) {
+        return Promise.reject(error)
+      }
       // 登录接口返回 401 表示用户名或密码错误，需要提示用户而非跳转
       const isLoginRequest = error.config?.url?.includes('/auth/login')
       if (isLoginRequest) {

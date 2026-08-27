@@ -47,6 +47,7 @@
               v-for="dashboard in filteredDashboards"
               :key="dashboard.id"
               class="dashboard-card"
+              @click="handlePreview(dashboard.id)"
             >
               <div class="card-header">
                 <span class="card-name">{{ dashboard.name }}</span>
@@ -59,33 +60,59 @@
                 <span class="card-owner">{{ dashboard.ownerName || '--' }}</span>
                 <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
               </div>
-              <div class="card-actions">
-                <el-tooltip
+              <div class="card-actions" @click.stop>
+                <el-button
+                  size="small"
+                  :icon="View"
+                  @click="handlePreview(dashboard.id)"
+                >
+                  {{ t('insight.preview') }}
+                </el-button>
+                <el-button
                   v-if="canModifyDashboard(dashboard)"
-                  :content="t('insight.edit')"
-                  placement="top"
+                  size="small"
+                  :icon="Edit"
+                  @click="handleEdit(dashboard.id)"
                 >
-                  <el-button text size="small" :icon="Edit" @click="handleEdit(dashboard.id)" />
-                </el-tooltip>
-                <el-tooltip :content="t('insight.preview')" placement="top">
-                  <el-button text size="small" :icon="View" @click="handlePreview(dashboard.id)" />
-                </el-tooltip>
-                <el-tooltip
-                  v-if="canCreate && dashboard.status === 'draft'"
-                  :content="t('insight.publish')"
-                  placement="top"
+                  {{ t('insight.edit') }}
+                </el-button>
+                <el-dropdown
+                  v-if="hasMoreActions(dashboard)"
+                  trigger="click"
+                  placement="bottom-end"
+                  @command="(command) => handleCardCommand(dashboard, command)"
                 >
-                  <el-button text size="small" type="success" :icon="VideoPlay" @click="handlePublish(dashboard)" />
-                </el-tooltip>
-                <el-tooltip v-else-if="canModifyDashboard(dashboard)" :content="t('insight.unpublish')" placement="top">
-                  <el-button text size="small" :icon="VideoPause" @click="handleUnpublish(dashboard)" />
-                </el-tooltip>
-                <el-tooltip v-if="canCreate" :content="t('insight.copy')" placement="top">
-                  <el-button text size="small" :icon="DocumentCopy" @click="handleCopy(dashboard)" />
-                </el-tooltip>
-                <el-tooltip v-if="canModifyDashboard(dashboard)" :content="t('insight.delete')" placement="top">
-                  <el-button text size="small" type="danger" :icon="Delete" @click="handleDelete(dashboard)" />
-                </el-tooltip>
+                  <el-button text size="small" :aria-label="t('insight.moreActions')">
+                    <el-icon><MoreFilled /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-if="canCreate && dashboard.status === 'draft'"
+                        command="publish"
+                      >
+                        <el-icon><VideoPlay /></el-icon>{{ t('insight.publish') }}
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        v-else-if="canModifyDashboard(dashboard)"
+                        command="unpublish"
+                      >
+                        <el-icon><VideoPause /></el-icon>{{ t('insight.unpublish') }}
+                      </el-dropdown-item>
+                      <el-dropdown-item v-if="canCreate" command="copy">
+                        <el-icon><DocumentCopy /></el-icon>{{ t('insight.copy') }}
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        v-if="canModifyDashboard(dashboard)"
+                        command="delete"
+                        divided
+                        class="mc-more-danger"
+                      >
+                        <el-icon><Delete /></el-icon>{{ t('insight.delete') }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
           </div>
@@ -123,7 +150,7 @@
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause, Search } from '@element-plus/icons-vue'
+import { Plus, MagicStick, MoreFilled, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
@@ -297,6 +324,32 @@ async function handleDelete(dashboard: InsightDashboard): Promise<void> {
   }
 }
 
+/** 卡片是否有“更多”操作可用 */
+function hasMoreActions(dashboard: InsightDashboard): boolean {
+  return canCreate || canModifyDashboard(dashboard)
+}
+
+/** “更多”菜单命令分派 */
+function handleCardCommand(
+  dashboard: InsightDashboard,
+  command: string | number | object,
+): void {
+  switch (String(command)) {
+    case 'publish':
+      handlePublish(dashboard)
+      break
+    case 'unpublish':
+      handleUnpublish(dashboard)
+      break
+    case 'copy':
+      handleCopy(dashboard)
+      break
+    case 'delete':
+      handleDelete(dashboard)
+      break
+  }
+}
+
 /** 返回列表 */
 function handleBackToList(): void {
   mode.value = 'list'
@@ -402,12 +455,14 @@ function handleBackToList(): void {
   flex-direction: column;
   gap: var(--space-sm);
   box-shadow: var(--shadow-card);
-  transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+  cursor: pointer;
+  transition: box-shadow var(--transition-base), border-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .dashboard-card:hover {
   border-color: var(--db-border-strong);
   box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -459,11 +514,22 @@ function handleBackToList(): void {
 
 .card-actions {
   display: flex;
-  justify-content: center;
-  gap: var(--space-xs);
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
   border-top: 1px solid var(--db-border);
   padding-top: var(--space-sm);
   margin-top: var(--space-xs);
+}
+
+/* “更多”菜单中的删除项（下拉菜单渲染在 body 下，需全局选择器） */
+:global(.mc-more-danger) {
+  color: var(--db-danger);
+}
+
+:global(.mc-more-danger:hover) {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
 }
 
 .list-ai-panel {

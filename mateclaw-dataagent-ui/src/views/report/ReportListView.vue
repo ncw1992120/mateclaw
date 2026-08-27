@@ -38,6 +38,7 @@
           v-for="report in filteredReports"
           :key="report.id"
           class="report-card"
+          @click="handleViewReport(report)"
         >
           <div class="card-header">
             <span class="card-name">{{ report.name }}</span>
@@ -50,36 +51,45 @@
             <span class="card-owner">{{ report.ownerName || '--' }}</span>
             <span class="card-time">{{ formatTime(report.updateTime) }}</span>
           </div>
-          <div class="card-actions">
-            <el-tooltip :content="t('insight.reportViewDetail')" placement="top">
-              <el-button text size="small" :icon="View" @click="handleViewReport(report)" />
-            </el-tooltip>
-            <!-- 我的洞察：可删除（仅创建者本人或工作区管理员） -->
-            <el-tooltip
-              v-if="activeTab === 'mine' && canModifyReport(report)"
-              :content="t('insight.reportDelete')"
-              placement="top"
+          <div class="card-actions" @click.stop>
+            <el-button
+              size="small"
+              :icon="View"
+              @click="handleViewReport(report)"
             >
-              <el-button text size="small" type="danger" :icon="Delete" @click="handleDeleteReport(report)" />
-            </el-tooltip>
+              {{ t('insight.reportViewDetail') }}
+            </el-button>
             <!-- 洞察广场：可订阅/取消订阅（非自己发布的报告） -->
-            <el-tooltip
+            <el-button
               v-if="activeTab === 'square' && !isOwner(report)"
-              :content="report.subscribed ? t('insight.reportUnsubscribe') : t('insight.reportSubscribe')"
-              placement="top"
+              size="small"
+              :type="report.subscribed ? 'warning' : 'primary'"
+              :icon="report.subscribed ? StarFilled : Star"
+              @click="handleToggleSubscribe(report)"
             >
-              <el-button
-                text
-                size="small"
-                :type="report.subscribed ? 'warning' : 'primary'"
-                :icon="report.subscribed ? StarFilled : Star"
-                @click="handleToggleSubscribe(report)"
-              />
-            </el-tooltip>
+              {{ report.subscribed ? t('insight.reportUnsubscribe') : t('insight.reportSubscribe') }}
+            </el-button>
             <!-- 我的订阅：可取消订阅 -->
-            <el-tooltip v-if="activeTab === 'subscribed'" :content="t('insight.reportUnsubscribe')" placement="top">
-              <el-button text size="small" type="warning" :icon="StarFilled" @click="handleUnsubscribe(report)" />
-            </el-tooltip>
+            <el-button
+              v-if="activeTab === 'subscribed'"
+              size="small"
+              type="warning"
+              :icon="StarFilled"
+              @click="handleUnsubscribe(report)"
+            >
+              {{ t('insight.reportUnsubscribe') }}
+            </el-button>
+            <!-- 我的洞察：可删除（仅创建者本人或工作区管理员） -->
+            <el-button
+              v-if="activeTab === 'mine' && canModifyReport(report)"
+              size="small"
+              type="danger"
+              plain
+              :icon="Delete"
+              @click="handleDeleteReport(report)"
+            >
+              {{ t('insight.reportDelete') }}
+            </el-button>
           </div>
         </div>
       </div>
@@ -581,12 +591,14 @@ async function handleUnsubscribe(report: InsightReport): Promise<void> {
   flex-direction: column;
   gap: var(--space-sm);
   box-shadow: var(--shadow-card);
-  transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+  cursor: pointer;
+  transition: box-shadow var(--transition-base), border-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .report-card:hover {
   border-color: var(--db-border-strong);
   box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
 }
 
 .card-header {
@@ -638,8 +650,9 @@ async function handleUnsubscribe(report: InsightReport): Promise<void> {
 
 .card-actions {
   display: flex;
-  justify-content: center;
-  gap: var(--space-xs);
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
   border-top: 1px solid var(--db-border);
   padding-top: var(--space-sm);
   margin-top: var(--space-xs);

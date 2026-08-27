@@ -316,10 +316,13 @@ function resetAutoPlay(): void {
   startAutoPlay()
 }
 
-/** 拉取企业认证图形验证码（authMechanism 与认证方式一致） */
+/** 拉取企业认证图形验证码（authMechanism 与当前登录类型一致：AD/UM） */
 async function loadCaptcha(): Promise<void> {
   try {
-    captcha.value = await getCaptcha({ authnType: form.authnType })
+    // 必须传当前登录类型：form 上无 authnType 字段，漏传会落到后端默认 UM，
+    // 与 AD 表单的登录请求认证类型不一致，验证码永远校验不过
+    const authnType = loginType.value === 'LOCAL' ? undefined : loginType.value
+    captcha.value = await getCaptcha({ authnType })
   } catch {
     // 错误提示已由 axios 拦截器统一处理；保留占位允许用户点击重试
   }

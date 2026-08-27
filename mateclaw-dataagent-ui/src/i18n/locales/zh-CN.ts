@@ -1692,6 +1692,7 @@ export default {
     copySuccess: '复制成功',
     copyFailed: '复制失败',
     delete: '删除',
+    moreActions: '更多操作',
     save: '保存',
     editor: '仪表盘编辑器',
     description: '描述',
