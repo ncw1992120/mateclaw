@@ -46,6 +46,12 @@ public class DataAgentSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 .requestMatchers(DataAgentConstants.AUTH_LOGIN_PATH).permitAll()
+                // 企业认证图形验证码：登录 429 后由前端拉取，UUID/requestId 即访问凭证
+                .requestMatchers(DataAgentConstants.AUTH_CAPTCHA_PATH).permitAll()
+                // 认证模式查询：登录页初始化时判断是否展示企业认证选择器
+                .requestMatchers(DataAgentConstants.AUTH_MODE_PATH).permitAll()
+                // 企业 SSO 免登：持有效领航票据即可换取本地会话
+                .requestMatchers(DataAgentConstants.AUTH_SSO_LOGIN_PATH).permitAll()
                 // 工具生成文件下载端点，UUID 即为访问凭证，无需认证
                 .requestMatchers("/v1/files/generated/**").permitAll()
                 .anyRequest().authenticated()

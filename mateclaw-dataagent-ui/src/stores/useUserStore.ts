@@ -64,9 +64,34 @@ export const useUserStore = defineStore('user', () => {
 
   /**
    * 用户登录
+   * @param extra 扩展负载：验证码重试信息 / authnType（UM|AD）/ channel=local（本地通道）
    */
-  async function login(user: string, password: string): Promise<void> {
-    const data = await authApi.login({ username: user, password })
+  async function login(
+    user: string,
+    password: string,
+    extra?: {
+      requestId?: string
+      validCode?: string
+      authnType?: 'UM' | 'AD'
+      channel?: 'local'
+    }
+  ): Promise<void> {
+    const data = await authApi.login({
+      username: user,
+      password,
+      requestId: extra?.requestId,
+      validCode: extra?.validCode,
+      authnType: extra?.authnType,
+      channel: extra?.channel,
+    })
+    applyLoginResponse(data as unknown as LoginResponse)
+  }
+
+  /**
+   * 企业 SSO 免登：领航共享域 Cookie 换取本地会话
+   */
+  async function loginBySso(ssoCookie: string, authnType?: 'UM' | 'AD'): Promise<void> {
+    const data = await authApi.ssoLogin({ ssoCookie, authnType })
     applyLoginResponse(data as unknown as LoginResponse)
   }
 
@@ -140,6 +165,7 @@ export const useUserStore = defineStore('user', () => {
     isAdmin,
     currentWorkspace,
     login,
+    loginBySso,
     fetchCurrentUser,
     setCurrentWorkspace,
     logout,

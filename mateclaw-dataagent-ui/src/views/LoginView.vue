@@ -82,11 +82,25 @@
         </div>
 
         <form @submit.prevent="handleLogin">
+          <!-- 登录类型页签：激活项下划线指示；切换仅变更字段文案与提交通道 -->
+          <div v-if="authProvider === 'pilot'" class="auth-tabs">
+            <button
+              v-for="t in typeOptions"
+              :key="t"
+              type="button"
+              class="auth-tab"
+              :class="{ active: loginType === t }"
+              @click="selectLoginType(t)"
+            >
+              {{ TYPE_META[t].label }}
+            </button>
+          </div>
+
           <div class="form-field">
-            <label class="field-label">用户名</label>
+            <label class="field-label">{{ meta.userLabel }}</label>
             <el-input
               v-model="form.username"
-              placeholder="请输入用户名"
+              :placeholder="meta.userPh"
               size="large"
               :prefix-icon="User"
               clearable
@@ -96,17 +110,44 @@
           </div>
 
           <div class="form-field">
-            <label class="field-label">密码</label>
+            <label class="field-label">{{ meta.pwdLabel }}</label>
             <el-input
               v-model="form.password"
               type="password"
-              placeholder="请输入密码"
+              :placeholder="meta.pwdPh"
               size="large"
               :prefix-icon="Lock"
               :show-password="true"
               class="login-input"
               @keyup.enter="handleLogin"
             />
+          </div>
+
+          <!-- 企业认证风控触发的图形验证码（后端返回 HTTP 429 后显示） -->
+          <div v-if="needCaptcha" class="form-field">
+            <label class="field-label">图形验证码</label>
+            <div class="captcha-row">
+              <el-input
+                v-model="form.validCode"
+                placeholder="请输入验证码"
+                size="large"
+                :prefix-icon="Key"
+                clearable
+                class="login-input captcha-input"
+                @keyup.enter="handleLogin"
+              />
+              <img
+                v-if="captcha?.captchaImage"
+                :src="`data:image/png;base64,${captcha.captchaImage}`"
+                class="captcha-img"
+                title="看不清？点击刷新"
+                alt="图形验证码"
+                @click="loadCaptcha"
+              />
+              <div v-else class="captcha-img captcha-placeholder" title="点击加载" @click="loadCaptcha">
+                点击加载
+              </div>
+            </div>
           </div>
 
           <el-button
@@ -141,12 +182,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   User,
   Lock,
+  Key,
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   ChatDotRound,
@@ -154,6 +197,7 @@ import {
   Document,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/useUserStore'
+import { getCaptcha, getAuthMode, isNeedCaptchaError, type CaptchaInfo } from '@/api/auth'
 import SmartQueryScene from './login-scenes/SmartQueryScene.vue'
 import InsightScene from './login-scenes/InsightScene.vue'
 import ReportScene from './login-scenes/ReportScene.vue'
@@ -164,11 +208,19 @@ const userStore = useUserStore()
 const form = reactive({
   username: '',
   password: '',
+  validCode: '',
 })
 
 const loading = ref(false)
 const activeScene = ref(0)
 let autoPlayTimer: number | null = null
+
+/** 企业认证风控状态：后端返回 HTTP 429 后进入验证码模式 */
+const needCaptcha = ref(false)
+const captcha = ref<CaptchaInfo | null>(null)
+
+/** 认证模式：local=本地账密（隐藏企业认证选择器）；pilot=领航代验 */
+const authProvider = ref<'local' | 'pilot'>('local')
 
 const scenes = [
   {
@@ -194,8 +246,42 @@ const scenes = [
   },
 ]
 
+/** 读取共享域 Cookie 值（领航 SSO 免登探测用） */
+function readCookie(name: string): string | undefined {
+  const prefix = name + '='
+  const hit = document.cookie.split('; ').find((c) => c.startsWith(prefix))
+  return hit ? decodeURIComponent(hit.slice(prefix.length)) : undefined
+}
+
+/** 企业 SSO 静默免登：持有效企业票据时无感进入系统，失败则留在登录表单 */
+async function trySilentSso(ssoCookie: string): Promise<void> {
+  loading.value = true
+  try {
+    await userStore.loginBySso(ssoCookie)
+    router.push('/')
+  } catch {
+    // 拦截器对该接口静默处理，此处仅降级为普通登录表单
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
   startAutoPlay()
+  // 查询认证模式：pilot 时展示 UM/AD 选择器；配置了 SSO Cookie 名且浏览器持有票据时静默免登
+  getAuthMode()
+    .then(async (mode) => {
+      authProvider.value = mode.provider
+      if (mode.provider === 'pilot' && mode.ssoCookieName) {
+        const ssoCookie = readCookie(mode.ssoCookieName)
+        if (ssoCookie) {
+          await trySilentSso(ssoCookie)
+        }
+      }
+    })
+    .catch(() => {
+      // 后端不可达时保持 local 形态，登录请求由后端最终裁决
+    })
 })
 
 onUnmounted(() => {
@@ -230,20 +316,118 @@ function resetAutoPlay(): void {
   startAutoPlay()
 }
 
+/** 拉取企业认证图形验证码（authMechanism 与认证方式一致） */
+async function loadCaptcha(): Promise<void> {
+  try {
+    captcha.value = await getCaptcha({ authnType: form.authnType })
+  } catch {
+    // 错误提示已由 axios 拦截器统一处理；保留占位允许用户点击重试
+  }
+}
+
+/** 三种登录类型及其表单文案（对应三个登录表单形态） */
+type LoginChannel = 'AD' | 'UM' | 'LOCAL'
+const TYPE_META: Record<
+  LoginChannel,
+  { label: string; userLabel: string; pwdLabel: string; userPh: string; pwdPh: string }
+> = {
+  AD: {
+    label: '开机账号登录',
+    userLabel: '开机账号',
+    pwdLabel: '开机密码',
+    userPh: '请输入开机账号',
+    pwdPh: '请输入开机密码',
+  },
+  UM: {
+    label: 'UM 账号登录',
+    userLabel: 'UM 账号',
+    pwdLabel: 'UM 密码',
+    userPh: '请输入 UM 账号',
+    pwdPh: '请输入 UM 密码',
+  },
+  LOCAL: {
+    label: '本地账号登录',
+    userLabel: '账号',
+    pwdLabel: '密码',
+    userPh: '请输入本地账号',
+    pwdPh: '请输入密码',
+  },
+}
+const typeOptions: LoginChannel[] = ['AD', 'UM', 'LOCAL']
+
+/** 当前登录类型：默认开机账号(AD)；LOCAL 走本地账密通道 */
+const loginType = ref<LoginChannel>('AD')
+const meta = computed(() => TYPE_META[loginType.value])
+
+/** 切换登录类型：清空验证码；离开领航通道时复位验证码状态，回到领航通道且处于验证码模式时刷新图片 */
+function selectLoginType(type: LoginChannel): void {
+  if (loginType.value === type) {
+    return
+  }
+  const leavingPilot = loginType.value !== 'LOCAL'
+  loginType.value = type
+  form.validCode = ''
+  if (type === 'LOCAL') {
+    needCaptcha.value = false
+    captcha.value = null
+  } else if (leavingPilot && needCaptcha.value) {
+    loadCaptcha()
+  }
+}
+
 /** 处理登录 */
 async function handleLogin(): Promise<void> {
   if (!form.username.trim() || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
+    ElMessage.warning('请输入账号和密码')
+    return
+  }
+  const isPilotType = loginType.value !== 'LOCAL'
+  if (isPilotType && needCaptcha.value && !captcha.value?.requestId) {
+    // 首次进入验证码模式尚未拉取图片，先补拉再等用户输入
+    await loadCaptcha()
+    return
+  }
+  if (isPilotType && needCaptcha.value && !form.validCode.trim()) {
+    ElMessage.warning('请输入图形验证码')
     return
   }
 
   loading.value = true
   try {
-    await userStore.login(form.username.trim(), form.password)
+    let extra: {
+      requestId?: string
+      validCode?: string
+      authnType?: 'UM' | 'AD'
+      channel?: 'local'
+    }
+    if (loginType.value === 'LOCAL') {
+      extra = { channel: 'local' }
+    } else if (needCaptcha.value) {
+      extra = {
+        requestId: captcha.value?.requestId,
+        validCode: form.validCode.trim(),
+        authnType: loginType.value,
+      }
+    } else {
+      extra = { authnType: loginType.value }
+    }
+    await userStore.login(form.username.trim(), form.password, extra)
     ElMessage.success('登录成功')
     router.push('/')
   } catch (e) {
-    // 错误已由 axios 拦截器统一提示
+    if (isPilotType && isNeedCaptchaError(e)) {
+      // HTTP 429：领航风控要求验证码（错误文案已由拦截器提示），切换 UI 并拉取图片
+      if (!needCaptcha.value) {
+        needCaptcha.value = true
+        form.validCode = ''
+      }
+      await loadCaptcha()
+    } else if (isPilotType && needCaptcha.value) {
+      // 验证码模式下登录失败（如验证码错误/密码错误）：刷新图片供重试
+      form.validCode = ''
+      await loadCaptcha()
+    }
+    // 其余错误由 axios 拦截器统一提示
   } finally {
     loading.value = false
   }
@@ -548,6 +732,35 @@ async function handleLogin(): Promise<void> {
   margin-bottom: 24px;
 }
 
+/* 登录类型页签：横排三等分，激活项主题蓝 + 下划线 */
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 6px 4px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #8896b0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid rgba(65, 118, 230, 0.12);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-tab:hover {
+  color: #4176E6;
+}
+
+.auth-tab.active {
+  color: #4176E6;
+  border-bottom-color: #4176E6;
+}
+
 .field-label {
   display: block;
   font-size: 13px;
@@ -595,6 +808,40 @@ async function handleLogin(): Promise<void> {
 
 .login-input :deep(.el-input__password:hover) {
   color: #4176E6;
+}
+
+/* 图形验证码 */
+.captcha-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.captcha-input {
+  flex: 1;
+}
+
+.captcha-img {
+  height: 40px;
+  min-width: 120px;
+  border-radius: 10px;
+  border: 1px solid rgba(65, 118, 230, 0.14);
+  background: #f4f7fd;
+  cursor: pointer;
+  object-fit: cover;
+  transition: border-color 0.25s ease;
+}
+
+.captcha-img:hover {
+  border-color: rgba(65, 118, 230, 0.4);
+}
+
+.captcha-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #8fa8d9;
 }
 
 .login-btn {

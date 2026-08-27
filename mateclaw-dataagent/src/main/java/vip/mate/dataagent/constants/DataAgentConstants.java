@@ -290,6 +290,15 @@ public final class DataAgentConstants {
     /** 登录接口路径（SecurityConfig 放行） */
     public static final String AUTH_LOGIN_PATH = "/v1/auth/login";
 
+    /** 企业认证图形验证码接口路径（SecurityConfig 放行） */
+    public static final String AUTH_CAPTCHA_PATH = "/v1/auth/captcha";
+
+    /** 认证模式查询接口路径（SecurityConfig 放行，登录页初始化用） */
+    public static final String AUTH_MODE_PATH = "/v1/auth/mode";
+
+    /** 企业 SSO 免登接口路径（SecurityConfig 放行，浏览器持企业票据即可调用） */
+    public static final String AUTH_SSO_LOGIN_PATH = "/v1/auth/sso/login";
+
     /** 全局管理员角色标识 */
     public static final String ROLE_ADMIN = "admin";
 

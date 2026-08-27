@@ -114,6 +114,10 @@ api.interceptors.response.use(
 
     const errData = error.response?.data
     const message = errData?.msg || errData?.message || error.message || '网络异常'
+    // SSO 静默免登失败属正常情况（浏览器无有效企业票据），不打扰用户，由调用方自行降级
+    if (error.config?.url?.includes('/auth/sso/login')) {
+      return Promise.reject(error)
+    }
     console.error('[API] 网络/HTTP 错误:', status, message, error.config?.url)
     ElMessage.error(message)
     return Promise.reject(error)

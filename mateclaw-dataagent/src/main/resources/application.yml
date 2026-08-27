@@ -53,6 +53,25 @@ mateclaw:
   jwt:
     secret: ${JWT_SECRET:MateClaw-JWT-Secret-Key-2024-Please-Change-In-Production}
     expiration: 86400000
+  # ========== 平安领航认证（企业内部账密代验） ==========
+  # enabled=false 时完全走本地账密登录，行为与历史版本一致；
+  # 置 true 后 /v1/auth/login 切换为领航代验，admin 等白名单账号仍走本地兜底。
+  # sso-server / sso-renewal-server 本期预留（账密代验模式不维护企业侧会话）。
+  # authn-type 为默认认证类型（UM=域账号 / AD=用户主机账号），
+  # 登录请求可逐次传 authnType 覆盖；验证码接口的 authMechanism 传同一值。
+  pilot:
+    enabled: ${MATECLAW_PILOT_ENABLED:true}
+    auth-server: ${MATECLAW_PILOT_AUTH_SERVER:https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion}
+    captcha-server: ${MATECLAW_PILOT_CAPTCHA_SERVER:https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion/captcha}
+    sso-server: ${MATECLAW_PILOT_TOKEN_SERVER:https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion/sso}
+    sso-renewal-server: ${MATECLAW_PILOT_SSO_RENEWAL_SERVER:https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/sso/renewal}
+    # 浏览器共享域上的领航 SSO Cookie 名（免登探测用）；已确认域为 .paic.com.cn、非 HttpOnly
+    sso-cookie-name: ${MATECLAW_PILOT_SSO_COOKIE_NAME:CAS_SSO_COOKIE}
+    authn-type: ${MATECLAW_PILOT_AUTHN_TYPE:UM}
+    life-time: "432000"
+    timeout: 5s
+    local-fallback-users:
+      - admin
   mcp:
     enabled: true
   skill:
