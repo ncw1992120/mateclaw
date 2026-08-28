@@ -42,9 +42,11 @@ import static org.mockito.Mockito.when;
  * endpoints did not — an asymmetry that becomes a cross-workspace breach once
  * workspaces are untrusted isolation boundaries.
  *
- * <p>Post-fix behavior: shared conversations are visible only to members of
- * their own workspace (plus global admins, plus the legacy escape hatches for
- * pre-workspace rows and anonymous permitAll reconnects).
+ * <p>Post-fix behavior: shared conversations are visible only to global admins
+ * (plus the legacy escape hatches for pre-workspace rows and anonymous
+ * permitAll reconnects). Issue #616 intentionally rejects same-workspace
+ * ordinary members too, because workspace membership is not conversation
+ * ownership.
  *
  * <p>Pure-Mockito (no Spring context) so the test stays fast and isolated.
  *
@@ -101,7 +103,8 @@ class ConversationServiceOwnershipWorkspaceTest {
     }
 
     // ------------------------------------------------------------------
-    // 2. System conv, same-workspace member → allowed
+    // 2. System conv, same-workspace member → allowed (fork keeps member
+    //    visibility for shared rows; supersedes upstream #616 here)
     // ------------------------------------------------------------------
 
     @Test
@@ -232,7 +235,7 @@ class ConversationServiceOwnershipWorkspaceTest {
     }
 
     @Test
-    @DisplayName("system conv + same-workspace member that the workspace service lost track of: rejected")
+    @DisplayName("system conv + ordinary member: rejected without membership lookup (#616)")
     void systemConvMemberCacheMiss() {
         when(conversationMapper.selectOne(any())).thenReturn(conv(SYSTEM_CONV, "system", WS_TENANT_A));
         // Membership cache returns false even though we'd expect this user to

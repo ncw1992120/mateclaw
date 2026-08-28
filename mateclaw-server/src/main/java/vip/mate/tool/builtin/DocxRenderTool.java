@@ -7,6 +7,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
+import vip.mate.tool.ToolInputValidationException;
 import vip.mate.tool.document.FilenameSanitizer;
 import vip.mate.tool.document.GeneratedFileCache;
 import vip.mate.tool.document.GeneratedFileLink;
@@ -42,7 +43,7 @@ public class DocxRenderTool {
     private final GeneratedFileCache cache;
     private final WorkspaceArtifactService artifactService;
 
-    @Tool(description = """
+    @Tool(returnDirect = true, description = """
         Render a new .docx (Microsoft Word) file from Markdown text and return a
         one-time download URL. Use for creating EDITABLE Word documents the user
         will continue to revise — reports, memos, contracts, letters, resumes.
@@ -78,7 +79,9 @@ public class DocxRenderTool {
             @Nullable ToolContext ctx) {
 
         if (markdown == null || markdown.isBlank()) {
-            return "错误：markdown 参数为空，无法生成文档。";
+            throw new ToolInputValidationException(
+                    "markdown must not be blank; provide the document content, "
+                            + "or write it to a .md file and call renderDocxFromFile");
         }
 
         String displayName = FilenameSanitizer.sanitize(filename, "document", ".docx") + ".docx";
@@ -92,7 +95,7 @@ public class DocxRenderTool {
             return GeneratedFileLink.resultZh(bytes, displayName, DOCX_MIME, cache, "文档", ctx, artifactService);
         } catch (Exception e) {
             log.error("[DocxRender] render failed for {}: {}", displayName, e.getMessage(), e);
-            return "渲染失败：" + e.getMessage();
+            throw new IllegalStateException("DOCX rendering failed", e);
         }
     }
 
@@ -107,7 +110,7 @@ public class DocxRenderTool {
      * the markdown locally → calls this tool with the file path → docx is
      * rendered from disk in one IO call. Token cost ≈ 50 (just the path).
      */
-    @Tool(description = """
+    @Tool(returnDirect = true, description = """
         Render a .docx (Microsoft Word) file from a markdown FILE on disk and return
         a one-time download URL. Use this for EDITABLE Word documents only.
 
@@ -144,7 +147,7 @@ public class DocxRenderTool {
         try {
             input = MarkdownInputResolver.readSingle(filePath);
         } catch (ResolveException e) {
-            return "Error: " + e.getMessage();
+            throw new ToolInputValidationException(e.getMessage(), e);
         }
 
         String displayName = FilenameSanitizer.sanitize(filename, "document", ".docx") + ".docx";
@@ -159,7 +162,7 @@ public class DocxRenderTool {
         } catch (Exception e) {
             log.error("[DocxRender] render failed for {} (source: {}): {}",
                     displayName, input.sources().get(0), e.getMessage(), e);
-            return "Render failed: " + e.getMessage();
+            throw new IllegalStateException("DOCX rendering failed", e);
         }
     }
 
@@ -174,7 +177,7 @@ public class DocxRenderTool {
      * Empty / missing files abort the render with a clear error so the agent
      * can fix its file list before retrying.
      */
-    @Tool(description = """
+    @Tool(returnDirect = true, description = """
         Render a .docx by concatenating MULTIPLE markdown files in order and return a
         download URL. Use when a report is split into chapters / sections, or when the
         agent assembled the document piece by piece (cover, table of contents, body,
@@ -204,7 +207,7 @@ public class DocxRenderTool {
         try {
             input = MarkdownInputResolver.readManyJoined(filePaths);
         } catch (ResolveException e) {
-            return "Error: " + e.getMessage();
+            throw new ToolInputValidationException(e.getMessage(), e);
         }
 
         String displayName = FilenameSanitizer.sanitize(filename, "document", ".docx") + ".docx";
@@ -221,7 +224,7 @@ public class DocxRenderTool {
         } catch (Exception e) {
             log.error("[DocxRender] render failed for {} (sources: {}): {}",
                     displayName, input.sources(), e.getMessage(), e);
-            return "Render failed: " + e.getMessage();
+            throw new IllegalStateException("DOCX rendering failed", e);
         }
     }
 

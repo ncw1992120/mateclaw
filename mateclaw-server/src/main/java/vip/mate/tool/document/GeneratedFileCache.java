@@ -37,7 +37,8 @@ import java.util.stream.Stream;
  * cache eviction and a JVM restart, so a link a user clicks minutes — or days —
  * after generation still resolves instead of 404ing. Entries are retained for
  * {@link #TTL} and a scheduled sweep removes expired files. The download URL
- * embeds a random {@link UUID}, which acts as the only access credential.
+ * embeds a random {@link UUID}; web downloads additionally verify the stored
+ * workspace owner so links cannot cross workspace boundaries.
  */
 @Slf4j
 @Component
@@ -132,11 +133,28 @@ public class GeneratedFileCache {
         }
     }
 
+    public record Owner(@Nullable Long workspaceId,
+                        @Nullable Long ownerUserId,
+                        @Nullable String conversationId) {
+
+        public static Owner from(@Nullable ToolContext ctx) {
+            ChatOrigin origin = ChatOrigin.from(ctx);
+            return new Owner(origin.workspaceId(), origin.requesterUserId(), origin.conversationId());
+        }
+    }
+
     public record Entry(byte[] bytes, String filename, String mimeType, long expireAt,
-                        boolean persistent) {
+                        boolean persistent,
+                        @Nullable Long workspaceId,
+                        @Nullable Long ownerUserId,
+                        @Nullable String conversationId) {
 
         public Entry(byte[] bytes, String filename, String mimeType, long expireAt) {
-            this(bytes, filename, mimeType, expireAt, false);
+            this(bytes, filename, mimeType, expireAt, false, null, null, null);
+        }
+
+        public Entry(byte[] bytes, String filename, String mimeType, long expireAt, boolean persistent) {
+            this(bytes, filename, mimeType, expireAt, persistent, null, null, null);
         }
 
         public boolean expired() {
@@ -155,7 +173,15 @@ public class GeneratedFileCache {
      * {@code /api/v1/files/generated/{id}}.
      */
     public String put(byte[] bytes, String filename, String mimeType) {
-        return put(bytes, filename, mimeType, false);
+        return put(bytes, filename, mimeType, false, null);
+    }
+
+    public String put(byte[] bytes, String filename, String mimeType, @Nullable ToolContext ctx) {
+        return put(bytes, filename, mimeType, false, Owner.from(ctx));
+    }
+
+    public String put(byte[] bytes, String filename, String mimeType, @Nullable Owner owner) {
+        return put(bytes, filename, mimeType, false, owner);
     }
 
     /**
@@ -166,13 +192,22 @@ public class GeneratedFileCache {
      * the in-memory entry still serves the current process, same as {@link #put}).
      */
     public String putPersistent(byte[] bytes, String filename, String mimeType) {
-        return put(bytes, filename, mimeType, true);
+        return put(bytes, filename, mimeType, true, null);
     }
 
-    private String put(byte[] bytes, String filename, String mimeType, boolean persistent) {
+    /** {@link #putPersistent(byte[], String, String)} with workspace-owner scoping (issue #611). */
+    public String putPersistent(byte[] bytes, String filename, String mimeType, @Nullable ToolContext ctx) {
+        return put(bytes, filename, mimeType, true, Owner.from(ctx));
+    }
+
+    private String put(byte[] bytes, String filename, String mimeType, boolean persistent,
+                       @Nullable Owner owner) {
         String id = UUID.randomUUID().toString();
         long expireAt = System.currentTimeMillis() + TTL.toMillis();
-        Entry entry = new Entry(bytes, filename, mimeType, expireAt, persistent);
+        Entry entry = new Entry(bytes, filename, mimeType, expireAt, persistent,
+                owner != null ? owner.workspaceId() : null,
+                owner != null ? owner.ownerUserId() : null,
+                owner != null ? owner.conversationId() : null);
         entries.put(id, entry);
         persist(id, entry);
         log.debug("Cached generated file id={} filename={} bytes={} persistent={}",
@@ -261,6 +296,21 @@ public class GeneratedFileCache {
         return Optional.of(entry);
     }
 
+    public Optional<Entry> getForWorkspace(String id, @Nullable Long workspaceId) {
+        Optional<Entry> entry = get(id);
+        if (entry.isEmpty()) {
+            return Optional.empty();
+        }
+        Long ownerWorkspaceId = entry.get().workspaceId();
+        if (ownerWorkspaceId == null) {
+            return entry;
+        }
+        if (workspaceId == null || !ownerWorkspaceId.equals(workspaceId)) {
+            return Optional.empty();
+        }
+        return entry;
+    }
+
     /**
      * Best-effort lookup of a live entry's id by its logical filename, optionally
      * constrained to a mime-type prefix (e.g. {@code "image/"}). Scans the
@@ -304,25 +354,19 @@ public class GeneratedFileCache {
         long now = System.currentTimeMillis();
         for (Path metaPath : metas) {
             try {
-                // split limit 4: issue #514 added a 4th field (persistent flag);
-                // older 3-field metas still parse (absent fields default).
-                String[] parts = Files.readString(metaPath).split("\t", 4);
-                boolean persistent = parts.length > 3 && "1".equals(parts[3].trim());
+                Metadata meta = parseMeta(Files.readString(metaPath), idFromMetaPath(metaPath));
                 // Persistent entries never expire (issue #514); transient ones
                 // are skipped once their expireAt has passed.
-                if (!persistent && Long.parseLong(parts[0].trim()) <= now) {
+                if (!meta.persistent() && meta.expireAt() <= now) {
                     continue;
                 }
-                String mime = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
+                String mime = meta.mimeType();
                 if (mimePrefix != null && (mime == null || !mime.startsWith(mimePrefix))) {
                     continue;
                 }
-                String fn = parts.length > 2 && !parts[2].isEmpty()
-                        ? new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8)
-                        : null;
+                String fn = meta.filename();
                 if (fn != null && target.equalsIgnoreCase(fn)) {
-                    String name = metaPath.getFileName().toString();
-                    return Optional.of(name.substring(0, name.length() - META_SUFFIX.length()));
+                    return Optional.of(idFromMetaPath(metaPath));
                 }
             } catch (Exception ignore) {
                 // Skip unreadable / malformed meta.
@@ -338,15 +382,19 @@ public class GeneratedFileCache {
         try {
             Files.write(storageDir.resolve(id), entry.bytes());
             // expireAt \t mimeType \t base64(filename) \t persistent
-            // — filename is base64-encoded so arbitrary unicode / separators
-            //   round-trip without escaping.
-            // — persistent ("1"/"0") was added in issue #514; older metas have
-            //   only 3 fields and default to non-persistent on read.
+            // \t workspaceId \t ownerUserId \t base64(conversationId).
+            // — filename / conversationId are base64-encoded so unicode and
+            //   separators round-trip without custom escaping.
+            // — persistent ("1"/"0", issue #514) and the owner triple
+            //   (issue #611) are appended after the legacy 3-field prefix;
+            //   parseMeta reads all historical shapes (3/4/6/7 fields).
             String meta = entry.expireAt()
                     + "\t" + (entry.mimeType() == null ? "" : entry.mimeType())
-                    + "\t" + Base64.getEncoder().encodeToString(
-                            (entry.filename() == null ? "" : entry.filename()).getBytes(StandardCharsets.UTF_8))
-                    + "\t" + (entry.persistent() ? "1" : "0");
+                    + "\t" + b64(entry.filename())
+                    + "\t" + (entry.persistent() ? "1" : "0")
+                    + "\t" + (entry.workspaceId() == null ? "" : entry.workspaceId())
+                    + "\t" + (entry.ownerUserId() == null ? "" : entry.ownerUserId())
+                    + "\t" + b64(entry.conversationId());
             Files.writeString(storageDir.resolve(id + META_SUFFIX), meta);
         } catch (IOException e) {
             // Best-effort: an in-memory entry still serves the current process.
@@ -362,21 +410,79 @@ public class GeneratedFileCache {
             return null;
         }
         try {
-            String[] parts = Files.readString(meta).split("\t", 4);
-            long expireAt = Long.parseLong(parts[0].trim());
-            String mimeType = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
-            String filename = parts.length > 2 && !parts[2].isEmpty()
-                    ? new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8)
-                    : id;
-            // 4th field (issue #514): "1" = persistent (workspace artifact).
-            // Absent in pre-#514 metas → defaults to false (TTL-governed).
-            boolean persistent = parts.length > 3 && "1".equals(parts[3].trim());
+            Metadata parsed = parseMeta(Files.readString(meta), id);
             byte[] bytes = Files.readAllBytes(bin);
-            return new Entry(bytes, filename, mimeType, expireAt, persistent);
+            return new Entry(bytes, parsed.filename(), parsed.mimeType(), parsed.expireAt(),
+                    parsed.persistent(), parsed.workspaceId(), parsed.ownerUserId(),
+                    parsed.conversationId());
         } catch (Exception e) {
             log.warn("Could not load generated file id={}: {}", id, e.toString());
             return null;
         }
+    }
+
+    private record Metadata(long expireAt, @Nullable String mimeType, String filename,
+                            boolean persistent,
+                            @Nullable Long workspaceId, @Nullable Long ownerUserId,
+                            @Nullable String conversationId) {}
+
+    /**
+     * Parse a meta line. Field-count dispatch keeps every historical shape
+     * readable:
+     * <ul>
+     *   <li>3 fields — legacy: expireAt, mimeType, b64(filename)</li>
+     *   <li>4 fields — fork #514: + persistent ("1"/"0")</li>
+     *   <li>6 fields — upstream #611: + workspaceId, ownerUserId,
+     *       b64(conversationId) directly after the legacy prefix</li>
+     *   <li>7 fields — merged: persistent, then the #611 owner triple</li>
+     * </ul>
+     */
+    private static Metadata parseMeta(String raw, String fallbackFilename) {
+        String[] parts = raw.split("\t", -1);
+        long expireAt = Long.parseLong(parts[0].trim());
+        String mimeType = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
+        String filename = parts.length > 2 && !parts[2].isEmpty() ? fromB64(parts[2]) : fallbackFilename;
+        boolean persistent = false;
+        Long workspaceId = null;
+        Long ownerUserId = null;
+        String conversationId = null;
+        if (parts.length >= 7) {
+            persistent = "1".equals(parts[3].trim());
+            workspaceId = parseLongOrNull(parts[4]);
+            ownerUserId = parseLongOrNull(parts[5]);
+            conversationId = parts[6].isEmpty() ? null : fromB64(parts[6]);
+        } else if (parts.length == 6) {
+            workspaceId = parseLongOrNull(parts[3]);
+            ownerUserId = parseLongOrNull(parts[4]);
+            conversationId = parts[5].isEmpty() ? null : fromB64(parts[5]);
+        } else if (parts.length == 4) {
+            persistent = "1".equals(parts[3].trim());
+        }
+        return new Metadata(expireAt, mimeType, filename, persistent,
+                workspaceId, ownerUserId, conversationId);
+    }
+
+    private static Long parseLongOrNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Long.parseLong(value.trim());
+    }
+
+    private static String b64(@Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String fromB64(String value) {
+        return new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
+    }
+
+    private static String idFromMetaPath(Path metaPath) {
+        String name = metaPath.getFileName().toString();
+        return name.substring(0, name.length() - META_SUFFIX.length());
     }
 
     private void evict(String id) {
@@ -413,12 +519,10 @@ public class GeneratedFileCache {
                         String name = metaPath.getFileName().toString();
                         String id = name.substring(0, name.length() - META_SUFFIX.length());
                         try {
-                            String[] parts = Files.readString(metaPath).split("\t", 4);
-                            long expireAt = Long.parseLong(parts[0].trim());
-                            boolean persistent = parts.length > 3 && "1".equals(parts[3].trim());
+                            Metadata meta = parseMeta(Files.readString(metaPath), id);
                             // Persistent entries survive the sweep (issue #514);
                             // everything else with a passed expiry is evicted.
-                            if (!persistent && expireAt <= now) {
+                            if (!meta.persistent() && meta.expireAt() <= now) {
                                 evict(id);
                             }
                         } catch (Exception e) {

@@ -204,11 +204,13 @@
           type="button"
           class="action-btn send-btn"
           :class="sendBtnClass"
-          :disabled="!canSend && !loading"
+          :disabled="props.streamPhase === 'interrupting' || (!canSend && !loading)"
+          :title="sendButtonTitle"
           @click="handleSubmit"
         >
           <!-- 有输入时始终显示发送图标（运行中发送 = interrupt） -->
-          <el-icon v-if="canSend"><Promotion /></el-icon>
+          <el-icon v-if="props.streamPhase === 'interrupting'" class="stop-spinner"><Loading /></el-icon>
+          <el-icon v-else-if="canSend"><Promotion /></el-icon>
           <!-- 运行中无输入：停止图标 -->
           <el-icon v-else-if="loading"><CloseBold /></el-icon>
           <!-- 空闲无输入 -->
@@ -220,7 +222,10 @@
 
     <!-- 底部信息 -->
     <div class="input-footer">
-      <span class="input-hint">{{ hint }}</span>
+      <span class="input-footer__left">
+        <span class="input-hint">{{ hint }}</span>
+        <span v-if="runtimeActionHint" class="input-action-hint">{{ runtimeActionHint }}</span>
+      </span>
       <span v-if="maxLength" class="input-length">
         {{ inputValue.length }}/{{ maxLength }}
       </span>
@@ -241,7 +246,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowDown, CloseBold, MagicStick, Microphone, Paperclip, Promotion, Select, Timer, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowDown, CloseBold, Loading, MagicStick, Microphone, Paperclip, Promotion, Select, Timer, WarningFilled } from '@element-plus/icons-vue'
 import { useToolLabel } from '@/composables/useToolLabel'
 import SkillSlashMenu from '@/components/chat/SkillSlashMenu.vue'
 import type { ChatAttachment, PendingApprovalMeta, StreamPhase, QueuedMessage, Skill } from '@/types'
@@ -489,6 +494,7 @@ const canSend = computed(() => {
 
 // 运行中输入的占位符
 const inputPlaceholder = computed(() => {
+  if (props.streamPhase === 'interrupting') return t('chat.streamInterrupting')
   if (props.loading) {
     if (props.queuedMessage) return t('chat.queuedReplace')
     return props.placeholder
@@ -496,8 +502,20 @@ const inputPlaceholder = computed(() => {
   return props.placeholder
 })
 
+const runtimeActionHint = computed(() => {
+  if (props.streamPhase === 'interrupting') return t('chat.streamInterrupting')
+  if (!props.loading) return ''
+  if (props.queuedMessage && !canSend.value) return t('chat.streamQueuedWaitingAction')
+  if (props.queuedMessage && canSend.value) return t('chat.streamReplaceQueuedAction')
+  if (canSend.value) return t('chat.streamQueueAction')
+  return t('chat.streamStopAction')
+})
+
+const sendButtonTitle = computed(() => runtimeActionHint.value || undefined)
+
 // 处理提交
 const handleSubmit = () => {
+  if (props.streamPhase === 'interrupting') return
   // 有排队消息时，点击按钮取消排队
   if (props.queuedMessage && props.queuedMessage.status === 'queued') {
     // 如果输入框为空，取消排队；如果有新输入，替换排队消息
@@ -530,6 +548,7 @@ const handleSubmit = () => {
 // 发送按钮样式
 const sendBtnClass = computed(() => ({
   'is-loading': props.loading && !canSend.value,
+  'is-stopping': props.streamPhase === 'interrupting',
   'is-empty': !canSend.value && !props.loading,
   'is-interrupt': props.loading && canSend.value,
 }))
@@ -857,6 +876,21 @@ defineExpose({
   background: var(--mc-danger-hover, #dc2626);
 }
 
+.send-btn.is-stopping,
+.send-btn.is-stopping:disabled {
+  background: var(--mc-text-tertiary, #94a3b8);
+  opacity: 1;
+  cursor: wait;
+}
+
+.stop-spinner {
+  animation: stop-spin 0.8s linear infinite;
+}
+
+@keyframes stop-spin {
+  to { transform: rotate(360deg); }
+}
+
 .send-btn.is-empty:not(.is-loading) {
   opacity: 0.4;
   cursor: not-allowed;
@@ -867,16 +901,41 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   margin-top: 6px;
   padding: 0 4px;
+}
+
+.input-footer__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .input-hint {
   font-size: 12px;
   color: var(--mc-text-tertiary, #94a3b8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input-action-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--mc-border, #e2e8f0);
+  color: var(--mc-text-secondary, #64748b);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .input-length {
+  flex: 0 0 auto;
   font-size: 12px;
   color: var(--mc-text-tertiary, #94a3b8);
 }

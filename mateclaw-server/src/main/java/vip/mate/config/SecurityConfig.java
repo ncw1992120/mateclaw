@@ -14,6 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.DispatcherType;
 import vip.mate.kbopen.auth.KbOpenApiAuthFilter;
 
 /**
@@ -79,6 +80,10 @@ public class SecurityConfig {
             )
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
+                // REQUEST dispatches are authenticated below. Async SSE error/completion
+                // redispatches can run after the response is committed and no longer carry
+                // the JWT; challenging them produces a second AccessDeniedException.
+                auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll();
                 // GET /settings/language stays anonymous (first-paint i18n). PUT
                 // requires login + admin (see @RequireGlobalAdmin on the controller).
                 auth.requestMatchers(HttpMethod.GET, "/api/v1/settings/language").permitAll()
@@ -95,15 +100,13 @@ public class SecurityConfig {
                     // KB Open API: authenticated by KbOpenApiAuthFilter (API key),
                     // not JWT — must be permitAll so the filter is the sole gatekeeper (R1).
                     "/api/v1/open/kb/**",
+                    "/api/a2a/card",
+                    "/.well-known/agent-card.json",
                     "/api/v1/talk/ws",
                     // Desktop local-tool tunnel — the handshake interceptor
                     // authenticates the ?token= query param itself, so the
                     // upgrade request is opened to the filter chain like talk/ws.
                     "/api/v1/desktop/ws",
-                    // RFC-045: tool-generated files served via unguessable UUID; entries
-                    // expire after GeneratedFileCache.TTL (7 days) — delayed access (e.g. an
-                    // IM-delivered link opened later) is intentional, the UUID is the guard.
-                    "/api/v1/files/generated/**",
                     // JWKS: public RSA key for verifying MCP identity-forward tokens
                     // (issue #459). The public key is public by definition — no auth.
                     "/api/v1/mcp/.well-known/jwks.json"

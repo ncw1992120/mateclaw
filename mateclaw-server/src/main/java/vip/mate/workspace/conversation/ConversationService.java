@@ -120,7 +120,7 @@ public class ConversationService {
     /**
      * Workspace-scoped variant of {@link #listConversations(String)}.
      *
-     * <p>Strict ownership: only the user's own + {@code system} rows. Used by
+     * <p>Strict ownership: only the user's own rows. Used by
      * callers that must not see other principals' conversations — notably the
      * webchat visitor self-service path, which scopes to one visitor.
      *
@@ -131,33 +131,27 @@ public class ConversationService {
     }
 
     /**
-     * Admin-console variant. When {@code includeChannelPrincipals} is true, also
-     * returns conversations owned by external channel principals
-     * ({@code webchat:<visitorId>}) so the console surfaces webchat threads
-     * alongside the user's own + {@code system} rows — the same way IM-channel
-     * ({@code system}-owned) conversations already appear. The visitor-facing
-     * webchat endpoints keep using the strict overload, so this does not widen a
-     * visitor's own access.
+     * Admin-console variant. Ordinary users only see their own rows. When
+     * {@code includeChannelPrincipals} is true, global admins additionally see
+     * shared system/channel-principal conversations for inspection. The
+     * visitor-facing webchat endpoints keep using the strict overload, so this
+     * does not widen a visitor's own access.
      *
      * <p>控制台变体：includeChannelPrincipals 为 true 时额外纳入 webchat 访客会话。
      */
     public List<ConversationVO> listConversations(String username, Long workspaceId,
                                                   boolean includeChannelPrincipals) {
-        // Return both the current user's conversations AND those created by
-        // scheduled jobs (owner=system). Child conversations spawned by
-        // delegation are excluded — they don't belong in the sidebar.
+        // Return the current user's conversations. Shared system/channel
+        // principals are only surfaced to global admins; otherwise members in
+        // the same workspace can see each other's IM/cron conversations (#616).
         //
-        // 同时返回当前用户的会话和定时任务（system）产生的会话；
-        // 排除子会话（委派产生的子会话不在侧边栏显示）。
-        //
-        // External channel principals (webchat) are only surfaced to global
-        // admins: per isConversationOwner they are the only ones who can open a
-        // webchat-owned conversation, so listing them to anyone else would show
-        // rows the caller would then 403 on (issue #344 alignment).
-        boolean includeWebchat = includeChannelPrincipals && isGlobalAdmin(username);
+        // 返回当前用户自己的会话。system/webchat 等共享主体仅对全局管理员展示，
+        // 避免同工作区成员互相看到 IM/定时任务会话（#616）。
+        boolean includeSharedPrincipals = includeChannelPrincipals && isGlobalAdmin(username);
         LambdaQueryWrapper<ConversationEntity> wrapper = new LambdaQueryWrapper<ConversationEntity>()
-                .and(w -> applyOwnerScope(w, username, includeWebchat))
+                .and(w -> applyOwnerScope(w, username, includeSharedPrincipals))
                 .and(this::applyMalformedIdGuard)
+                .and(this::applyOrdinaryConversationGuard)
                 .isNull(ConversationEntity::getParentConversationId)
                 .orderByDesc(ConversationEntity::getPinned)
                 .orderByDesc(ConversationEntity::getLastActiveTime);
@@ -199,15 +193,16 @@ public class ConversationService {
 
     /**
      * Apply the owner-scope predicate onto a (nested) wrapper: always the user's
-     * own + {@link #SYSTEM_USER} rows; when {@code includeChannelPrincipals} is
-     * true, also external channel-principal rows ({@code webchat:%}). Kept as one
-     * helper so the list and page queries stay in lockstep.
+     * own rows; when {@code includeSharedPrincipals} is true, also shared
+     * {@link #SYSTEM_USER} and external channel-principal rows ({@code webchat:%}).
+     * Kept as one helper so the list and page queries stay in lockstep.
      */
     private void applyOwnerScope(LambdaQueryWrapper<ConversationEntity> w,
-                                 String username, boolean includeChannelPrincipals) {
-        w.in(ConversationEntity::getUsername, username, SYSTEM_USER);
-        if (includeChannelPrincipals) {
-            w.or().likeRight(ConversationEntity::getUsername, WEBCHAT_OWNER_PREFIX);
+                                 String username, boolean includeSharedPrincipals) {
+        w.eq(ConversationEntity::getUsername, username);
+        if (includeSharedPrincipals) {
+            w.or().eq(ConversationEntity::getUsername, SYSTEM_USER)
+                    .or().likeRight(ConversationEntity::getUsername, WEBCHAT_OWNER_PREFIX);
         }
     }
 
@@ -231,6 +226,15 @@ public class ConversationService {
         w.notLikeLeft(ConversationEntity::getConversationId, ":");
     }
 
+    /** Keep worker evidence sessions out of ordinary list/page SQL, including legacy rows. */
+    private void applyOrdinaryConversationGuard(LambdaQueryWrapper<ConversationEntity> w) {
+        w.and(kind -> kind
+                        .isNull(ConversationEntity::getConversationKind)
+                        .or()
+                        .ne(ConversationEntity::getConversationKind, "team_worker"))
+                .notLikeRight(ConversationEntity::getConversationId, "team-task-");
+    }
+
     /**
      * Whether the user is a global admin (role=admin), resolved from the DB —
      * never from client-controlled data. Gates webchat row visibility in the
@@ -247,7 +251,7 @@ public class ConversationService {
      * Paginated variant used by the Sessions admin page.
      *
      * <p>Mirrors {@link #listConversations(String, Long)}'s filtering (current
-     * user + system rows, top-level only, optional workspace) and adds a
+     * user rows, top-level only, optional workspace) and adds a
      * {@code keyword} match against title / conversationId. The keyword is
      * case-insensitive and treated as a substring.
      *
@@ -262,12 +266,13 @@ public class ConversationService {
         com.baomidou.mybatisplus.extension.plugins.pagination.Page<ConversationEntity> pager =
                 new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
 
-        // Admin Sessions page surfaces channel conversations too, but only to
-        // global admins — they are the only ones who can open a webchat-owned
-        // conversation (issue #344), so non-admins must not see those rows.
+        // Admin Sessions page surfaces shared system/channel conversations too,
+        // but only to global admins. Non-admins are isolated to their own rows
+        // so workspace peers cannot see each other's shared-channel threads (#616).
         LambdaQueryWrapper<ConversationEntity> wrapper = new LambdaQueryWrapper<ConversationEntity>()
                 .and(w -> applyOwnerScope(w, username, isGlobalAdmin(username)))
                 .and(this::applyMalformedIdGuard)
+                .and(this::applyOrdinaryConversationGuard)
                 .isNull(ConversationEntity::getParentConversationId)
                 .orderByDesc(ConversationEntity::getPinned)
                 .orderByDesc(ConversationEntity::getLastActiveTime);
@@ -443,8 +448,19 @@ public class ConversationService {
     public ConversationEntity createChildConversation(String childConversationId, Long agentId,
                                                         String username, Long workspaceId,
                                                         String parentConversationId) {
+        return createChildConversation(childConversationId, agentId, username, workspaceId,
+                parentConversationId, "primary");
+    }
+
+    @Transactional
+    public ConversationEntity createChildConversation(String childConversationId, Long agentId,
+                                                        String username, Long workspaceId,
+                                                        String parentConversationId,
+                                                        String conversationKind) {
         ConversationEntity conv = getOrCreateConversation(childConversationId, agentId, username, workspaceId);
         conv.setParentConversationId(parentConversationId);
+        conv.setConversationKind(conversationKind == null || conversationKind.isBlank()
+                ? "primary" : conversationKind);
         conv.setTitle("子任务");
         conversationMapper.updateById(conv);
         return conv;
@@ -453,17 +469,17 @@ public class ConversationService {
     /**
      * Get-or-create a shared channel conversation.
      *
-     * <p>IM-channel (Feishu / DingTalk / WeCom / …) conversations must be
-     * visible to every logged-in user in the admin console, so the owner is
-     * uniformly set to {@code system}. For legacy rows whose owner was
+     * <p>IM-channel (Feishu / DingTalk / WeCom / …) conversations use the
+     * shared {@code system} owner and are only surfaced to global admins in the
+     * admin console. For legacy rows whose owner was
      * historically written as a sender nickname / {@code open_id}, this
      * method silently rewrites it to {@code system} on read — otherwise the
-     * console list and message endpoints would 403 those rows.
+     * admin console list and message endpoints would 403 those rows.
      *
-     * <p>获取或创建共享渠道会话。IM 渠道（飞书 / 钉钉 / 企微等）的会话需要在控制台中
-     * 对登录用户可见，因此统一使用 {@code system} 作为 owner。对于历史上已写成发送者
-     * 昵称 / open_id 的会话，这里会自动修正为 {@code system}，避免控制台列表和
-     * 消息接口因权限校验而不可见。
+     * <p>获取或创建共享渠道会话。IM 渠道（飞书 / 钉钉 / 企微等）的会话统一使用
+     * {@code system} 作为 owner，并仅在全局管理员控制台中展示。对于历史上已写成
+     * 发送者昵称 / open_id 的会话，这里会自动修正为 {@code system}，避免管理员
+     * 控制台列表和消息接口因权限校验而不可见。
      */
     @Transactional
     public ConversationEntity getOrCreateSharedConversation(String conversationId, Long agentId) {
@@ -1718,10 +1734,11 @@ public class ConversationService {
     }
 
     /**
-     * Check whether a user owns the conversation. Direct owners always pass;
-     * shared rows (system / IM / {@code webchat:<visitorId>} principals) are
-     * additionally gated by the requester's membership in the conversation's
-     * workspace, so they are not reachable cross-workspace by id.
+     * Check whether a user owns the conversation. Direct owners always pass.
+     * Shared rows (system / IM / {@code webchat:<visitorId>} principals) are
+     * visible to global admins and to members of the conversation's own
+     * workspace, with legacy system-owner fallbacks preserved for rows /
+     * endpoints that cannot resolve an authenticated user.
      *
      * <p><b>Cross-workspace guard (issue #344).</b> The legacy contract let any
      * logged-in user reach a system / IM / webchat-owned conversation by id —
@@ -1730,18 +1747,22 @@ public class ConversationService {
      * untrusted isolation boundaries, that asymmetry is a cross-workspace
      * authorization gap. This method now also requires, for shared (non-direct)
      * conversations, that the requester actually be a member of the
-     * conversation's workspace.
+     * conversation's workspace. Upstream #616 went further ("workspace
+     * membership alone is not ownership"); this fork deliberately keeps
+     * member-level visibility for shared system/webchat rows — the webchat
+     * visitor-monitoring console depends on it, and the same-workspace
+     * member guard already provides the isolation boundary.
      *
      * <p>校验用户是否拥有该会话。直属会话直接放行;共享会话(system / IM / webchat)
-     * 额外要求请求者是该会话所属 workspace 的成员。
+     * 对全局管理员及该会话所属 workspace 的成员(viewer 或更高)可见。
      *
      * <p>分支:
      * <ul>
      *   <li>会话不存在 → false</li>
      *   <li>请求者是该会话的直属 owner → true(自己的会话,workspace 隐式一致)</li>
+     *   <li>请求者是全局 admin(user.role=admin)→ true(横切覆盖,与具体 workspace 无关)</li>
      *   <li>会话无 workspace_id(老数据)→ 仅看是否 system / webchat owner(维持旧行为,避免回归)</li>
      *   <li>请求者用户记录不存在(permitAll 端点的匿名重连)→ 仅看是否 system / webchat owner(维持旧行为)</li>
-     *   <li>请求者是全局 admin(user.role=admin)→ true(横切覆盖,与具体 workspace 无关)</li>
      *   <li>请求者非该会话 workspace 的成员 → false</li>
      *   <li>否则 → system / webchat owner 检查(共享会话对本 workspace 成员可见)</li>
      * </ul>
@@ -1764,14 +1785,14 @@ public class ConversationService {
         // 共享会话(system / IM / webchat owner)以下收紧。
         Long convWorkspaceId = conv.getWorkspaceId();
         UserEntity requester = authService.findByUsername(username);
+        // 全局 admin 横切放行,覆盖所有 workspace。
+        if (requester != null && "admin".equalsIgnoreCase(requester.getRole())) {
+            return true;
+        }
         // 老数据无 workspace_id,或请求者为匿名(permitAll 端点重连场景):维持旧行为,
         // 仅 system / webchat owner 可见。避免数据迁移未完成或匿名流式场景下回归。
         if (convWorkspaceId == null || requester == null) {
             return isSharedPrincipal(conv.getUsername());
-        }
-        // 全局 admin 横切放行,覆盖所有 workspace。
-        if ("admin".equalsIgnoreCase(requester.getRole())) {
-            return true;
         }
         // #344 的核心守卫:必须是该会话所属 workspace 的成员(viewer 或更高)。
         // 不读 X-Workspace-Id header —— 客户端可伪造;以 DB 成员关系为准。
@@ -1807,6 +1828,22 @@ public class ConversationService {
         return conversationMapper.selectOne(
                 new LambdaQueryWrapper<ConversationEntity>()
                         .eq(ConversationEntity::getConversationId, conversationId));
+    }
+
+    /** User-facing Chat endpoints may not append turns to worker evidence sessions. */
+    public boolean isUserMessageAllowed(String conversationId) {
+        ConversationEntity conversation = findByConversationId(conversationId);
+        return !isTeamWorkerConversation(conversation);
+    }
+
+    /** Canonical server-side worker classification, including bounded legacy fallback. */
+    public static boolean isTeamWorkerConversation(ConversationEntity conversation) {
+        if (conversation == null) {
+            return false;
+        }
+        return "team_worker".equals(conversation.getConversationKind())
+                || conversation.getConversationId() != null
+                && conversation.getConversationId().startsWith("team-task-");
     }
 
     /**

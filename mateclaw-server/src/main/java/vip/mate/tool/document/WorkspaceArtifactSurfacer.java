@@ -85,8 +85,8 @@ public final class WorkspaceArtifactSurfacer {
                     String mime = probeMime(p, name);
                     boolean register = artifactService != null;
                     String id = register
-                            ? cache.putPersistent(bytes, name, mime)
-                            : cache.put(bytes, name, mime);
+                            ? cache.putPersistent(bytes, name, mime, ctx)
+                            : cache.put(bytes, name, mime, ctx);
                     links.add("[" + name + "](" + cache.downloadUrl(id, ctx) + ")");
                     if (register) {
                         GeneratedFileLink.registerArtifact(artifactService, id, bytes, name, mime,
@@ -104,8 +104,7 @@ public final class WorkspaceArtifactSurfacer {
 
     private static boolean modifiedSince(Path p, long sinceMillis) {
         try {
-            // 1s slack absorbs filesystem mtime granularity.
-            return Files.getLastModifiedTime(p).toMillis() >= sinceMillis - 1000L;
+            return Files.getLastModifiedTime(p).toMillis() >= sinceMillis;
         } catch (Exception e) {
             return false;
         }

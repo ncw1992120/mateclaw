@@ -96,6 +96,8 @@ export async function fetchAuthenticatedBlob(fileUrl: string): Promise<Blob> {
   const token = localStorage.getItem('token')
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`
+  const workspaceId = localStorage.getItem('mc-workspace-id')
+  if (workspaceId) headers['X-Workspace-Id'] = workspaceId
   const response = await fetch(fileUrl, { headers })
   if (!response.ok) throw new Error(`Fetch failed: ${response.status}`)
   return response.blob()
@@ -204,10 +206,12 @@ export const conversationApi = {
    */
   page: (params: { page?: number; size?: number; keyword?: string }) =>
     http.get('/conversations/page', { params }),
-  listMessages: (conversationId: string, params?: { beforeId?: number; limit?: number }) =>
+  listMessages: (conversationId: string, params?: { beforeId?: number; limit?: number; runId?: string; taskId?: string }) =>
     http.get(`/conversations/${encId(conversationId)}/messages`, { params }),
   getStatus: (conversationId: string) =>
     http.get(`/conversations/${encId(conversationId)}/status`),
+  getTeamWorkerContext: (conversationId: string, params?: { runId?: string; taskId?: string }) =>
+    http.get(`/conversations/${encId(conversationId)}/team-worker-context`, { params }),
   delete: (conversationId: string) =>
     http.delete(`/conversations/${encId(conversationId)}`),
   clearMessages: (conversationId: string) =>
@@ -437,6 +441,7 @@ export interface LiveSnapshot {
 
 export const liveApi = {
   snapshot: () => http.get<{ data: LiveSnapshot }>('/admin/agent-runtime/snapshot'),
+  dshDiagnostics: () => http.get<{ data: Record<string, any> }>('/admin/agent-runtime/dsh/diagnostics'),
   stop: (conversationId: string) =>
     http.post(`/admin/agent-runtime/runs/${encodeURIComponent(conversationId)}/stop`),
   recycle: (conversationId: string) =>
@@ -519,8 +524,8 @@ export const toolApi = {
   list: () => http.get('/tools'),
   listEnabled: () => http.get('/tools/enabled'),
   /**
-   * Unified picker source for the agent edit tool tab — returns built-in
-   * tools plus every MCP-discovered tool grouped by server. The `name`
+   * Unified picker source for the agent edit tool tab — returns built-in,
+   * channel, plugin, and MCP-discovered tools. The `name`
    * field is what gets saved into mate_agent_tool.tool_name.
    */
   listAvailable: () => http.get('/tools/available'),
@@ -751,6 +756,17 @@ export const settingsApi = {
   getSearchProviders: () => http.get('/settings/search-providers'),
 }
 
+// ==================== DeepSeek Harness runtime ====================
+export const dshApi = {
+  status: () => http.get('/admin/dsh/status'),
+  saveConfig: (data: Record<string, string>) => http.put('/admin/dsh/config', data),
+  install: () => http.post('/admin/dsh/install'),
+  verify: () => http.post('/admin/dsh/verify'),
+  testConnection: () => http.post('/admin/dsh/test-connection'),
+  enable: () => http.post('/admin/dsh/enable'),
+  disable: () => http.post('/admin/dsh/disable'),
+}
+
 // ==================== Global outbound proxy ====================
 export const proxyApi = {
   get: () => http.get('/settings/proxy'),
@@ -893,6 +909,7 @@ export interface TeamMemberVO {
 export interface TeamTask {
   id: string
   teamId: string
+  runId?: string | null
   taskNumber: number
   subject: string
   description: string | null
@@ -924,6 +941,7 @@ export interface TeamTaskVO {
   task: TeamTask
   assigneeName: string | null
   ownerName: string | null
+  runId?: string | null
 }
 
 export interface TeamTaskComment {
@@ -947,6 +965,8 @@ export interface TeamTaskEvent {
   createTime?: string
 }
 
+const TEAM_TASK_READ_TIMEOUT_MS = 15_000
+
 export const teamApi = {
   list: () => http.get('/teams'),
   get: (id: string) => http.get(`/teams/${id}`),
@@ -962,21 +982,29 @@ export const teamApi = {
   addMember: (id: string, agentId: string, role: string) =>
     http.post(`/teams/${id}/members`, { agentId, role }),
   removeMember: (id: string, agentId: string) => http.delete(`/teams/${id}/members/${agentId}`),
-  listTasks: (id: string, status?: string[], opts?: { limit?: number; offset?: number }) =>
+  listTasks: (id: string, status?: string[], opts?: { limit?: number; offset?: number; runId?: string }) =>
     http.get(`/teams/${id}/tasks`, {
+      timeout: TEAM_TASK_READ_TIMEOUT_MS,
       params: {
         ...(status?.length ? { status: status.join(',') } : {}),
         ...(opts?.limit != null ? { limit: opts.limit } : {}),
         ...(opts?.offset != null ? { offset: opts.offset } : {}),
+        ...(opts?.runId ? { runId: opts.runId } : {}),
       },
     }),
-  taskStats: (id: string) => http.get(`/teams/${id}/tasks/stats`),
-  getTask: (id: string, taskId: string) => http.get(`/teams/${id}/tasks/${taskId}`),
+  taskStats: (id: string, runId?: string) => http.get(`/teams/${id}/tasks/stats`, {
+    timeout: TEAM_TASK_READ_TIMEOUT_MS,
+    params: runId ? { runId } : {},
+  }),
+  getTask: (id: string, taskId: string) => http.get(`/teams/${id}/tasks/${taskId}`, {
+    timeout: TEAM_TASK_READ_TIMEOUT_MS,
+  }),
   createTask: (
     id: string,
     data: {
       subject: string
       description?: string
+      runId?: string
       assigneeAgentId: string
       priority?: number
       blockedBy?: string[]
@@ -992,6 +1020,130 @@ export const teamApi = {
     http.post(`/teams/${id}/tasks/${taskId}/cancel`, { reason }),
   commentTask: (id: string, taskId: string, content: string) =>
     http.post(`/teams/${id}/tasks/${taskId}/comments`, { content }),
+}
+
+export type TeamRunStatus =
+  | 'planning'
+  | 'running'
+  | 'awaiting_review'
+  | 'finalizing'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'cancelled'
+
+export interface TeamRunProgress {
+  total: number
+  done: number
+  failed: number
+  inReview: number
+  percent: number
+}
+
+export interface TeamRunTask {
+  id: string
+  teamId: string
+  runId: string
+  taskNumber: number
+  subject: string
+  description: string | null
+  status: string
+  priority: number
+  taskType: string
+  assigneeAgentId: string
+  ownerAgentId: string | null
+  blockedBy: string | null
+  requireApproval: boolean | null
+  progressPercent: number | null
+  progressStep: string | null
+  result: string | null
+  reason: string | null
+  conversationId: string | null
+  metadata: string | null
+  createTime: string | null
+  updateTime: string | null
+}
+
+export type TeamRunOutcomeQuality = 'synthesized' | 'fallback' | 'partial' | 'pending'
+export type TeamRunLivenessState = 'live' | 'quiet' | 'stalled' | 'terminal'
+export interface TeamRunDeliverable { id: string; name: string; url: string; type: string; sourceTaskIds: string[]; sourceAgentIds: string[]; createdAt: string | null; verificationStatus: string }
+export interface TeamRunContribution { taskId: string; agentId: string; subject: string; status: string; durationSeconds: number | null; lastActivityAt: string | null; resultSummary: string | null; conversationId: string | null }
+export interface TeamRunAttentionItem { id: string; type: string; severity: string; priority: number; taskId: string | null; message: string; createdAt: string | null }
+export interface TeamRunLiveness { state: TeamRunLivenessState; lastActivityAt: string | null }
+export interface TeamRunMetrics { durationSeconds: number | null; totalTasks: number; completedTasks: number; failedTasks: number; deliverableCount: number }
+export interface TeamRunPage { items: TeamRun[]; nextCursor: string | null }
+
+export interface TeamRun {
+  id: string
+  teamId: string
+  workspaceId: string
+  leadAgentId: string
+  leadConversationId: string
+  originMessageId: string | null
+  title: string
+  objective: string
+  status: TeamRunStatus
+  finalSummary: string | null
+  stopReason: string | null
+  metadata: string | null
+  startedAt: string | null
+  completedAt: string | null
+  createTime: string | null
+  updateTime: string | null
+  projectionCompleteness?: 'full' | 'summary' | string
+  outcomeQuality?: TeamRunOutcomeQuality | null
+  deliverables?: TeamRunDeliverable[]
+  contributions?: TeamRunContribution[]
+  attentionItems?: TeamRunAttentionItem[]
+  liveness?: TeamRunLiveness | null
+  metrics?: TeamRunMetrics | null
+  progress: TeamRunProgress
+  tasks: TeamRunTask[]
+}
+
+const TEAM_RUN_READ_TIMEOUT_MS = 15_000
+
+export const teamRunApi = {
+  get: (runId: string) => http.get(`/team-runs/${runId}`, { timeout: TEAM_RUN_READ_TIMEOUT_MS }),
+  listByTeamPage: (
+    teamId: string,
+    options: { activeOnly?: boolean; cursor?: string; limit?: number } = {},
+  ) => {
+    const params: { activeOnly?: boolean; cursor?: string; limit: number } = {
+      limit: options.limit ?? 20,
+    }
+    if (options.activeOnly) params.activeOnly = true
+    if (options.cursor) params.cursor = options.cursor
+    return http.get(`/teams/${teamId}/runs/page`, { params, timeout: TEAM_RUN_READ_TIMEOUT_MS })
+  },
+  listByConversationPage: (
+    conversationId: string,
+    options: { cursor?: string; limit?: number } = {},
+  ) => {
+    const params: { cursor?: string; limit: number } = { limit: options.limit ?? 20 }
+    if (options.cursor) params.cursor = options.cursor
+    return http.get(`/conversations/${encId(conversationId)}/team-runs/page`, {
+      params,
+      timeout: TEAM_RUN_READ_TIMEOUT_MS,
+    })
+  },
+  listByTeam: (teamId: string, activeOnly = false, cursor?: string, limit = 30) => {
+    const query = new URLSearchParams()
+    if (activeOnly) query.set('activeOnly', 'true')
+    if (cursor) query.set('cursor', cursor)
+    if (limit !== 30) query.set('limit', String(limit))
+    const suffix = query.size ? `?${query}` : ''
+    return http.get(`/teams/${teamId}/runs${suffix}`)
+  },
+  listByConversation: (conversationId: string, cursor?: string, limit = 30) => {
+    const query = new URLSearchParams()
+    if (cursor) query.set('cursor', cursor)
+    if (limit !== 30) query.set('limit', String(limit))
+    const suffix = query.size ? `?${query}` : ''
+    return http.get(`/conversations/${encId(conversationId)}/team-runs${suffix}`)
+  },
+  cancel: (runId: string, reason?: string) =>
+    http.post(`/team-runs/${runId}/cancel`, { reason }),
 }
 
 // ==================== Wiki Knowledge Base ====================
@@ -1669,6 +1821,8 @@ export interface Goal {
   description: string
   exitCriteria?: string | null
   status: 'active' | 'paused' | 'completed' | 'abandoned' | 'exhausted'
+  /** Durable continuation; zero budgets are unlimited only in this mode. */
+  persistentExecution?: boolean
   turnBudget: number
   turnsUsed: number
   llmCallBudget: number
@@ -1704,6 +1858,7 @@ export const goalApi = {
     title: string
     description?: string
     exitCriteria?: string
+    persistentExecution?: boolean
     turnBudget?: number
     llmCallBudget?: number
     autoFollowupEnabled?: boolean

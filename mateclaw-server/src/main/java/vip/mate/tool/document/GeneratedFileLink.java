@@ -96,8 +96,8 @@ public final class GeneratedFileLink {
                                      @Nullable WorkspaceArtifactService artifactService) {
         boolean register = artifactService != null;
         String id = register
-                ? cache.putPersistent(bytes, displayName, mimeType)
-                : cache.put(bytes, displayName, mimeType);
+                ? cache.putPersistent(bytes, displayName, mimeType, ctx)
+                : cache.put(bytes, displayName, mimeType, ctx);
         String url = cache.downloadUrl(id, ctx);
         if (register) {
             registerArtifact(artifactService, id, bytes, displayName, mimeType, ctx,

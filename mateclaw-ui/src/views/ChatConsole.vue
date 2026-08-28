@@ -63,6 +63,13 @@
               <div class="agent-badge-text">
                 <span class="agent-badge-name">{{ currentAgent.name }}</span>
               </div>
+              <span
+                class="agent-runtime-badge"
+                :class="{ 'agent-runtime-badge--dsh': currentAgentRuntimeType === 'dsh' }"
+                :title="currentAgentRuntimeLabel"
+              >
+                {{ currentAgentRuntimeLabel }}
+              </span>
               <span class="status-dot" :class="connectionStatusClass" :title="connectionStatusLabel"></span>
             </div>
           </div>
@@ -104,6 +111,15 @@
         </div>
       </div>
 
+      <TeamWorkerBanner
+        v-if="workerRunContext"
+        :run-id="workerRunContext.runId"
+        :task-id="workerRunContext.taskId"
+        :team-id="workerRunContext.teamId"
+        :lead-conversation-id="workerRunContext.leadConversationId"
+        @navigate="router.push($event)"
+      />
+
       <!-- 使用组件化的 MessageList -->
       <MessageList
         ref="messageListRef"
@@ -114,6 +130,12 @@
         :title="blockingPrompt ? modelPromptText.title : $t('app.title')"
         :subtitle="blockingPrompt ? modelPromptText.desc : $t('chat.subtitle')"
         :suggestions="blockingPrompt ? [] : suggestions"
+        :team-runs="teamRuns"
+        :expanded-team-run-id="teamRunRouteQuery.teamRunId || null"
+        :selected-team-task-id="teamRunRouteQuery.taskId || null"
+        :team-runs-has-more="Boolean(teamRunsNextCursor)"
+        :team-runs-loading-more="teamRunsLoadingMore"
+        :readonly="workerConversationReadOnly"
         @regenerate="handleRegenerate"
         @rewind="handleRewind"
         @suggestion-click="sendSuggestion"
@@ -121,6 +143,8 @@
         @approve="handleApprove"
         @approve-always="handleApproveAlways"
         @deny="handleDeny"
+        @team-run-navigate="router.push($event)"
+        @team-runs-load-more="loadMoreTeamRuns"
       >
         <!-- Issue #81 v2 R2: blocking-only popup. Recoverable cases use the
              non-blocking <RecoverableModelBanner> below instead. -->
@@ -224,7 +248,7 @@
         ref="chatInputRef"
         v-model="inputText"
         :loading="isGenerating && !hasPendingApproval"
-        :disabled="blockingPrompt || !currentAgent"
+        :disabled="blockingPrompt || !currentAgent || workerConversationReadOnly"
         :skills-enabled="!!currentAgent && !currentAgent.skillsDisabled"
         :placeholder="$t('chat.messagePlaceholder')"
         :hint="currentRuntimeModel"
@@ -288,13 +312,25 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { useFileDrop } from '@/composables/useFileDrop'
 import { useIsMobile, useMediaQuery, BREAKPOINTS } from '@/composables/useBreakpoint'
 import { useChat } from '@/composables/chat/useChat'
+import { useTeamRuns } from '@/composables/chat/useTeamRuns'
+import { useWorkerConversationGuard } from '@/composables/chat/useWorkerConversationGuard'
+import { parseTeamMessageMetadata } from '@/composables/chat/messageMetadata'
 import RunOverviewPanel from '@/components/chat/RunOverviewPanel.vue'
 import { reconstructErrorInfo } from '@/types/chatError'
 import { reconcileMessages, extractMessages } from '@/utils/messageReconcile'
+import {
+  buildChatRouteQuery,
+  decideConversationResume,
+  readLegacyWorkerRouteContext,
+  readTeamRunRouteQuery,
+  resolveConversationAgentSelection,
+  resolveRouteHydrationQuery,
+} from '@/utils/chatRouteHydration'
 import type { Conversation, Agent, ModelConfig, ProviderInfo, ActiveModelsInfo, ChatAttachment, MessageContentPart, Message, ToolCallMeta } from '@/types'
 
 // 导入组件化组件
 import MessageList from '@/components/chat/MessageList.vue'
+import TeamWorkerBanner from '@/components/chat/TeamWorkerBanner.vue'
 import RecoverableModelBanner from '@/components/chat/RecoverableModelBanner.vue'
 import SkillIcon from '@/components/common/SkillIcon.vue'
 import ConversationSidebar from '@/components/chat/ConversationSidebar.vue'
@@ -629,6 +665,7 @@ function reconcileCurrentConversation() {
 const { isDragging, onDragEnter, onDragLeave, onDrop } = useFileDrop(processDroppedItems)
 
 async function processDroppedItems(e: DragEvent) {
+  if (workerConversationReadOnly.value) return
   const dtFiles = Array.from(e.dataTransfer?.files || [])
   const items = Array.from(e.dataTransfer?.items || [])
 
@@ -670,6 +707,7 @@ async function processDroppedItems(e: DragEvent) {
 }
 
 function handleDirectoryAttach(dirFiles: File[]) {
+  if (workerConversationReadOnly.value) return
   if (!currentConversationId.value) {
     newConversation()
   }
@@ -782,6 +820,52 @@ const {
   },
 })
 
+const teamRunRouteQuery = computed(() => readTeamRunRouteQuery(route.query))
+const metadataWorkerRunId = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const metadata = parseTeamMessageMetadata(messages.value[index])
+    if (metadata.runId && metadata.taskId) return metadata.runId
+  }
+  return undefined
+})
+const linkedTeamRunId = computed(() => teamRunRouteQuery.value.teamRunId ?? metadataWorkerRunId.value)
+const {
+  runs: teamRuns,
+  nextCursor: teamRunsNextCursor,
+  loadingMore: teamRunsLoadingMore,
+  loadMore: loadMoreTeamRuns,
+} = useTeamRuns(currentConversationId, { linkedRunId: linkedTeamRunId })
+const currentConversationKind = computed(() => conversations.value
+  .find(conversation => conversation.conversationId === currentConversationId.value)?.conversationKind)
+const workerRouteHint = computed(() => Boolean(
+  teamRunRouteQuery.value.teamRunId
+  || teamRunRouteQuery.value.taskId
+  || currentConversationKind.value === 'team_worker'))
+const workerGuard = useWorkerConversationGuard({
+  conversationId: currentConversationId,
+  workerHint: workerRouteHint,
+  load: async (conversationId) => {
+    if (isEphemeralConversation(conversationId)) return null
+    const query = teamRunRouteQuery.value
+    const response = await conversationApi.getTeamWorkerContext(conversationId, {
+      runId: query.teamRunId,
+      taskId: query.taskId,
+    })
+    return response.data ?? null
+  },
+})
+const workerRunContext = computed(() => workerGuard.context.value
+  ?? readLegacyWorkerRouteContext(currentConversationId.value, route.query))
+const workerConversationReadOnly = computed(() => workerGuard.readOnly.value)
+
+function workerTranscriptMessageParams() {
+  const query = teamRunRouteQuery.value
+  return {
+    runId: query.teamRunId,
+    taskId: query.taskId,
+  }
+}
+
 // ============ 连接状态 ============
 const connectionStatusClass = computed(() => {
   if (isGenerating.value) return 'status-streaming'
@@ -804,6 +888,9 @@ const currentAgentRuntimeMode = computed(() => {
   if (!a) return ''
   return a.agentType === 'react' ? t('agents.types.react') : t('agents.types.planExecute')
 })
+
+const currentAgentRuntimeType = computed(() => currentAgent.value?.runtimeType === 'dsh' ? 'dsh' : 'native')
+const currentAgentRuntimeLabel = computed(() => t(`agents.runtime.${currentAgentRuntimeType.value}`))
 
 // Per-conversation last-viewed timestamp store (localStorage-backed, MVP).
 // Keyed by conversationId. Updated when the user opens a conversation; the
@@ -1271,10 +1358,17 @@ onActivated(async () => {
   }, 1000)
   // 登出已改为 window.location.href（刷新页面），所以切回时不会有跨用户残留
   if (currentConversationId.value && !isEphemeralConversation(currentConversationId.value)) {
+    const cid = currentConversationId.value
     try {
-      const statusRes: any = await conversationApi.getStatus(currentConversationId.value)
-      if (currentConversationId.value && statusRes.data?.streamStatus === 'running') {
-        await reconnectStream(currentConversationId.value)
+      const statusRes: any = await conversationApi.getStatus(cid)
+      if (currentConversationId.value !== cid) return
+      const running = statusRes.data?.streamStatus === 'running'
+      await refreshCurrentConversationMessages(cid, {
+        allowWhileGenerating: !running,
+        preserveGeneratingStatus: running,
+      })
+      if (currentConversationId.value === cid && running) {
+        await reconnectStream(cid)
       }
     } catch {
       // 忽略
@@ -1595,17 +1689,20 @@ async function loadConversations() {
   }
 }
 
-async function refreshCurrentConversationMessages(conversationId: string) {
+async function refreshCurrentConversationMessages(
+  conversationId: string,
+  options: { allowWhileGenerating?: boolean; preserveGeneratingStatus?: boolean } = {},
+) {
   if (!conversationId) return
-  if (isGenerating.value) return
+  if (isGenerating.value && !options.allowWhileGenerating) return
   if (streamPhase.value === 'awaiting_approval') return
   try {
-    const res: any = await conversationApi.listMessages(conversationId)
+    const res: any = await conversationApi.listMessages(conversationId, workerTranscriptMessageParams())
     // Stale guard：await 返回后确认仍是当前会话
     if (currentConversationId.value !== conversationId) return
     // 二次 isGenerating 检查：如果 await 期间用户已发新消息，不覆盖本地状态
-    if (isGenerating.value) return
-    const fetched = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg))
+    if (isGenerating.value && !options.allowWhileGenerating) return
+    const fetched = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg, options.preserveGeneratingStatus))
     // 严格过滤：只保留 conversationId 完全匹配的本地消息，orphan（空 conversationId）直接丢弃
     const currentMessages = messages.value.filter(
       (m: any) => m.conversationId === conversationId
@@ -1617,24 +1714,12 @@ async function refreshCurrentConversationMessages(conversationId: string) {
 }
 
 async function hydrateStateFromRoute() {
-  let agentId = route.query.agentId ? String(route.query.agentId) : ''
-  let conversationId = String(route.query.conversationId || '')
-
-  // The URL can outlive its workspace: switching workspaces remounts this view
-  // (via the router-view key) but keeps the query string, so agentId /
-  // conversationId may still point at entities of the previous workspace. An
-  // agentId missing from the workspace-scoped agent list is such a leftover —
-  // drop it so the default-select below picks a real employee instead of the
-  // picker rendering the unresolvable raw id.
-  if (agentId && agents.value.length > 0 && !agents.value.some(a => String(a.id) === agentId)) {
-    agentId = ''
-    // Only follow the paired conversationId when it resolves locally (e.g. a
-    // Sessions-page jump within this workspace); otherwise it is equally stale
-    // and would attach the fallback agent to a foreign conversation.
-    if (!conversations.value.some(conv => conv.conversationId === conversationId)) {
-      conversationId = ''
-    }
-  }
+  const { agentId, conversationId } = resolveRouteHydrationQuery({
+    routeAgentId: route.query.agentId ? String(route.query.agentId) : '',
+    routeConversationId: String(route.query.conversationId || ''),
+    agents: agents.value,
+    conversations: conversations.value,
+  })
 
   if (agentId && agentId !== String(selectedAgentId.value)) {
     selectedAgentId.value = agentId
@@ -1643,22 +1728,34 @@ async function hydrateStateFromRoute() {
   if (conversationId && conversationId !== currentConversationId.value) {
     const matchedConversation = conversations.value.find(conv => conv.conversationId === conversationId)
     if (matchedConversation) {
-      await selectConversation(matchedConversation)
+      await selectConversation(matchedConversation, agentId)
     } else {
       // 会话不在已加载列表中（可能来自 Sessions 页面跳转），尝试加载消息
       currentConversationId.value = conversationId
       messages.value = []
+      let liveStreamStatus = ''
       try {
-        const res: any = await conversationApi.listMessages(conversationId)
         if (currentConversationId.value !== conversationId) return
-      messages.value = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg, true))
+        const statusRes: any = await conversationApi.getStatus(conversationId)
+        liveStreamStatus = statusRes.data?.streamStatus || ''
+      } catch {
+        // 状态探测失败，仍继续拉历史
+      }
+      const resume = decideConversationResume({
+        currentConversationId: conversationId,
+        targetConversationId: conversationId,
+        liveStreamStatus,
+      })
+      try {
+        if (currentConversationId.value !== conversationId) return
+        const res: any = await conversationApi.listMessages(conversationId, workerTranscriptMessageParams())
+        if (currentConversationId.value !== conversationId) return
+        messages.value = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg, resume.shouldReconnectStream))
       } catch {
         // 消息加载失败，保持空
       }
       try {
-        if (currentConversationId.value !== conversationId) return
-        const statusRes: any = await conversationApi.getStatus(conversationId)
-        if (currentConversationId.value === conversationId && statusRes.data?.streamStatus === 'running') {
+        if (currentConversationId.value === conversationId && resume.shouldReconnectStream) {
           await reconnectStream(conversationId)
         }
       } catch {
@@ -1674,26 +1771,38 @@ async function hydrateStateFromRoute() {
 }
 
 function syncRouteState() {
-  const query: Record<string, string> = {}
-  if (selectedAgentId.value) query.agentId = String(selectedAgentId.value)
-  if (currentConversationId.value) query.conversationId = currentConversationId.value
+  const query = buildChatRouteQuery({
+    currentQuery: route.query,
+    agentId: selectedAgentId.value ? String(selectedAgentId.value) : undefined,
+    conversationId: currentConversationId.value || undefined,
+  })
   router.replace({ path: '/chat', query })
 }
 
-async function selectConversation(conv: Conversation) {
+async function selectConversation(conv: Conversation, routeAgentId = '') {
   if (isMobile.value) convPanelOpen.value = false
   // 切换到不同会话：只清理本地 UI/SSE（resetForNewConversation 会 stream.disconnect + 清变量），
   // 但不 POST /chat/{A}/stop —— 让 A 的后台 agent run 跑到完成。
   // 用户之后回到 A：pollActivity / selectConversation 的 /status 探测会自动 reconnect 接回实时流；
   // 若 A 已完成，refreshCurrentConversationMessages 会从 DB 拉完整结果。
   // 点同一个会话则完全不 reset，避免打断正在观察的流。
-  const switchingAway = currentConversationId.value !== conv.conversationId
-  if (switchingAway) {
+  const previousConversationId = currentConversationId.value
+  const switchingAway = previousConversationId !== conv.conversationId
+  const initialResume = decideConversationResume({
+    currentConversationId: previousConversationId,
+    targetConversationId: conv.conversationId,
+    snapshotStreamStatus: conv.streamStatus,
+  })
+  if (initialResume.shouldResetLocalStream) {
     resetForNewConversation()
     messageListRef.value?.resetScrollLock()
   }
   currentConversationId.value = conv.conversationId
-  selectedAgentId.value = conv.agentId || selectedAgentId.value
+  selectedAgentId.value = resolveConversationAgentSelection({
+    routeAgentId,
+    conversationAgentId: conv.agentId,
+    currentAgentId: selectedAgentId.value,
+  })
   // Opening another conversation: its pin (or the agent/global fallback) is
   // authoritative, so clear the previous conversation's manual-pick guard.
   userPickedModel.value = false
@@ -1711,13 +1820,27 @@ async function selectConversation(conv: Conversation) {
   markConversationViewed(conv.conversationId, conv.lastActiveTime)
   const requestedConvId = conv.conversationId
   try {
-    const res: any = await conversationApi.listMessages(requestedConvId)
+    let liveStreamStatus = ''
+    try {
+      const statusRes: any = await conversationApi.getStatus(requestedConvId)
+      if (currentConversationId.value !== requestedConvId) return
+      liveStreamStatus = statusRes?.data?.streamStatus || ''
+    } catch {
+      // 探测失败不阻断主流程，退回侧栏快照
+    }
+    const resume = decideConversationResume({
+      currentConversationId: previousConversationId,
+      targetConversationId: requestedConvId,
+      snapshotStreamStatus: conv.streamStatus,
+      liveStreamStatus,
+    })
+    const res: any = await conversationApi.listMessages(requestedConvId, workerTranscriptMessageParams())
     // Stale guard：await 返回后确认仍是当前会话，否则丢弃
     if (currentConversationId.value !== requestedConvId) return
-    // 点同一个会话时，若已有 SSE 在跑就不要覆盖本地消息状态
-    if (switchingAway || !isGenerating.value) {
-      const convRunning = conv.streamStatus === 'running'
-      messages.value = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg, convRunning))
+    // 点同一个会话且已有真实 SSE 在跑时，不用历史快照覆盖本地流式片段；
+    // 若后端已 idle，则允许快照把 stale generating 历史恢复成终态。
+    if (switchingAway || !isGenerating.value || !resume.shouldReconnectStream) {
+      messages.value = extractMessages(res).messages.map((msg: Message) => normalizeMessage(msg, resume.shouldReconnectStream))
     }
 
     // Hydrate pending approvals：恢复刷新后丢失的审批卡片（RFC-067 §4.9）
@@ -1804,20 +1927,7 @@ async function selectConversation(conv: Conversation) {
       // hydration 失败不影响正常使用
     }
 
-    // 决定是否重连 SSE：
-    // - 快照 streamStatus==='running' → 直接重连
-    // - 否则探测实时状态（兜底处理：渠道消息进入后侧栏快照未刷新时，仍能接入运行中的流）
-    let shouldReconnect = conv.streamStatus === 'running'
-    if (!shouldReconnect) {
-      try {
-        const statusRes: any = await conversationApi.getStatus(requestedConvId)
-        if (currentConversationId.value !== requestedConvId) return
-        shouldReconnect = statusRes?.data?.streamStatus === 'running'
-      } catch {
-        // 探测失败不阻断主流程
-      }
-    }
-    if (currentConversationId.value === requestedConvId && shouldReconnect) {
+    if (currentConversationId.value === requestedConvId && resume.shouldReconnectStream) {
       await reconnectStream(requestedConvId)
     }
   } catch (e) {
@@ -1922,11 +2032,14 @@ const currentPromptTokens = computed(() => {
 })
 
 // ============ 消息发送和处理 ============
-async function handleSendMessage(content: string) {
+async function handleSendMessage(content: string, pendingApprovalId?: string) {
   // 允许在等待审批时发送审批命令
   const isApprovalCommand = /^\/(approve|deny)$/i.test(content.trim())
 
-  if ((!content && pendingAttachments.value.length === 0) || !selectedAgentId.value || blockingPrompt.value) return
+  if ((!content && pendingAttachments.value.length === 0)
+      || !selectedAgentId.value
+      || blockingPrompt.value
+      || workerConversationReadOnly.value) return
   // 不再阻止运行中发送 — useChat 会自动走 interrupt/queue 路径
 
   // 拦截 /approve 和 /deny 命令 —— 通过 SSE 流发送（和普通消息相同通道）
@@ -1963,6 +2076,7 @@ async function handleSendMessage(content: string) {
         conversationId: currentConversationId.value,
         agentId: selectedAgentId.value,
         contentParts: [],
+        pendingApprovalId,
       })
     } catch (e: any) {
       console.error('Approval stream failed:', e)
@@ -2034,7 +2148,8 @@ function handleStopStream() {
 }
 
 async function handleRegenerate(message: Message) {
-  if (isGenerating.value || !currentConversationId.value || !selectedAgentId.value) return
+  if (workerConversationReadOnly.value
+    || isGenerating.value || !currentConversationId.value || !selectedAgentId.value) return
   const idx = messages.value.indexOf(message)
   if (idx >= 0) {
     // The server drops the trailing assistant block and reuses the persisted
@@ -2058,7 +2173,7 @@ async function handleRegenerate(message: Message) {
 }
 
 async function handleRewind(message: Message) {
-  if (isGenerating.value || !currentConversationId.value) return
+  if (workerConversationReadOnly.value || isGenerating.value || !currentConversationId.value) return
   const idx = messages.value.indexOf(message)
   if (idx < 0) return
   const count = messages.value.length - idx
@@ -2101,12 +2216,12 @@ function handleToggleThinking(message: import('@/types').Message, expanded: bool
 // ============ 审批处理 ============
 async function handleApprove(pendingId: string) {
   if (!currentConversationId.value) return
-  await handleSendMessage('/approve')
+  await handleSendMessage('/approve', pendingId)
 }
 
 async function handleDeny(pendingId: string) {
   if (!currentConversationId.value) return
-  await handleSendMessage('/deny')
+  await handleSendMessage('/deny', pendingId)
 }
 
 // Always-approve: create the matching grant first, then send /approve as usual.
@@ -2134,7 +2249,7 @@ async function handleApproveAlways(
   }
   if (!scopeId) {
     ElMessage.error('Cannot resolve scope id for always-approve')
-    await handleSendMessage('/approve')
+    await handleSendMessage('/approve', payload.pendingId)
     return
   }
 
@@ -2160,7 +2275,7 @@ async function handleApproveAlways(
   } catch (e: any) {
     ElMessage.error(e?.message || 'Failed to create auto-approve rule')
   }
-  await handleSendMessage('/approve')
+  await handleSendMessage('/approve', payload.pendingId)
 }
 
 // 重连到运行中的流
@@ -2186,6 +2301,7 @@ function resetStreamingState() {
 
 // ============ 附件处理 ============
 async function handleFileSelect(files: File[]) {
+  if (workerConversationReadOnly.value) return
   if (!currentConversationId.value) {
     newConversation()
   }
@@ -2582,6 +2698,26 @@ function handleCodeCopy(e: MouseEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+}
+
+.agent-runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--mc-border);
+  border-radius: 999px;
+  color: var(--mc-text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.agent-runtime-badge--dsh {
+  border-color: rgba(24, 126, 104, 0.28);
+  color: #187e68;
+  background: rgba(24, 126, 104, 0.08);
 }
 
 
