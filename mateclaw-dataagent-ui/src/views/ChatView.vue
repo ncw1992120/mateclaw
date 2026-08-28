@@ -37,7 +37,7 @@
       <!-- Messages -->
       <template v-for="(msg, index) in chatStore.messages" :key="index">
         <!-- User Message -->
-        <div v-if="msg.role === 'user'" :ref="(el) => setUserMsgRef(el as HTMLElement | null, index)" class="msg user">
+        <div v-if="msg.role === 'user'" :ref="(el) => registerMsgRef(el as HTMLElement | null, index)" class="msg user">
           <div class="user-content-wrapper">
             <div v-if="msg.content" class="bubble user-bubble">{{ msg.content }}</div>
             <!-- 附件展示 -->
@@ -70,7 +70,7 @@
         </div>
 
         <!-- AI Message -->
-        <div v-else class="msg ai" :data-msg-index="index">
+        <div v-else :ref="(el) => registerMsgRef(el as HTMLElement | null, index)" class="msg ai" :data-msg-index="index">
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble" @click="handleCodeCopyClick">
               <!-- Token & model info (右上角) -->
@@ -467,9 +467,7 @@
         <span class="streaming-cursor-end" />
         <span class="streaming-cursor-end__label">{{ t('chat.generating') }}</span>
       </div>
-      <!-- 底部哨兵元素：IntersectionObserver 监测其可见性以判断用户是否在底部附近 -->
-      <div ref="bottomSentinelRef" class="bottom-sentinel" />
-    </div>
+      </div>
 
       <!-- 回到底部按钮 -->
       <transition name="scroll-btn-fade">
@@ -479,7 +477,7 @@
           type="button"
           :title="t('chat.scrollToBottom')"
           :aria-label="t('chat.scrollToBottom')"
-          @click="scrollToBottom(true)"
+          @click="handleScrollToBottom"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
         </button>
@@ -1550,12 +1548,55 @@ const chatAreaRef = ref<HTMLElement | null>(null)
 /** 缓存 DOM 引用用于卸载时移除滚动监听 */
 let chatAreaEl: HTMLElement | null = null
 
-/** 底部哨兵元素引用：用于 IntersectionObserver 判断用户是否在底部附近 */
-const bottomSentinelRef = ref<HTMLElement | null>(null)
-/** 底部哨兵是否可见（用户是否在底部附近） */
-const bottomVisible = ref(true)
-/** IntersectionObserver 实例 */
-let bottomObserver: IntersectionObserver | null = null
+/**
+ * 底部跟随观察目标：当前最后一条消息元素（参考 DeepSeek Harness ChatView
+ * 的 bottom-follow 设计）。流式思考/回答、图表挂载、图片加载等异步增长都
+ * 发生在该元素内，仅监听 messages 内容无法覆盖这些变化——用 ResizeObserver
+ * 在元素尺寸变化时按"是否处于底部跟随态"决定是否继续下滑。
+ */
+let flowTipEl: HTMLElement | null = null
+/** ResizeObserver 实例：跟随输出增长滚动 */
+let flowTipObserver: ResizeObserver | null = null
+
+/** 注册消息元素：既维护右侧导航引用，也维护底部跟随观察目标（仅最后一条） */
+function registerMsgRef(el: HTMLElement | null, msgIndex: number): void {
+  setUserMsgRef(el, msgIndex)
+  registerFlowTip(el, msgIndex)
+}
+
+/** 注册/更新底部跟随观察目标（最后一条消息元素） */
+function registerFlowTip(el: HTMLElement | null, msgIndex: number): void {
+  if (msgIndex === chatStore.messages.length - 1 && el) {
+    if (flowTipEl !== el) {
+      flowTipEl = el
+      detachFlowTipObserver()
+      attachFlowTipObserver()
+    }
+  } else if (flowTipEl === el) {
+    flowTipEl = null
+    detachFlowTipObserver()
+  }
+}
+
+/** 观察最后一条消息元素：处于底部跟随态时，其尺寸变化（输出增长）即自动下滑 */
+function attachFlowTipObserver(): void {
+  if (flowTipObserver || typeof ResizeObserver === 'undefined' || !flowTipEl) {
+    return
+  }
+  flowTipObserver = new ResizeObserver(() => {
+    // 仅当用户未上翻（处于底部跟随态）时跟随；用户主动上滑后不打扰
+    if (!userScrolledUp.value) {
+      scrollToBottom()
+    }
+  })
+  flowTipObserver.observe(flowTipEl)
+}
+
+/** 释放底部跟随观察器 */
+function detachFlowTipObserver(): void {
+  flowTipObserver?.disconnect()
+  flowTipObserver = null
+}
 
 /** QueryPlan 确认状态 */
 const queryPlanConfirmed = reactive<Record<string, boolean>>({})
@@ -4255,13 +4296,37 @@ function handleModify(field: string): void {
   console.log('Modify field:', field)
 }
 
+/** 底部跟随阈值（px）：距底部该距离以内视为"在底部"，保持自动跟随 */
+const FOLLOW_THRESHOLD = 24
+
 /** 用户是否已主动向上翻看历史（生成过程中不再自动下滚） */
 const userScrolledUp = ref(false)
+
+/**
+ * 程序化滚动记账：每次程序写入 scrollTop 后同步记录一次。
+ * <p>
+ * 参考 DeepSeek Harness ChatView 的 observed-top ledger：滚动事件用它区分
+ * 用户滚动与程序化滚动（流式跟随写入、浏览器高度收缩钳制），
+ * 避免自身跟随触发的 scroll 事件被误判为"用户上翻"而中断自动下滑。
+ */
+let observedScrollTop = 0
 
 /** 是否显示「回到底部」悬浮按钮：有消息且用户已向上翻看时展示 */
 const showScrollToBottom = computed(
   () => userScrolledUp.value && chatStore.messages.length > 0
 )
+
+/** 切换会话 / 新开对话（conversationId 变化）时恢复底部跟随态：
+ *  新会话内容从底部展示，与 DSH「打开会话默认对齐底部」行为一致 */
+watch(() => chatStore.conversationId, () => {
+  userScrolledUp.value = false
+})
+
+/** 点击「回到底部」：恢复底部跟随态并滚到底部（此后输出增长继续自动下滑） */
+function handleScrollToBottom(): void {
+  userScrolledUp.value = false
+  scrollToBottom(true)
+}
 
 /** 用户提问 DOM 引用映射，key = 消息索引（用于右侧导航跳转） */
 const userMsgRefs = new Map<number, HTMLElement>()
@@ -4366,36 +4431,46 @@ function scheduleActiveQuestionUpdate(): void {
   })
 }
 
-/** 判断当前滚动位置是否在底部附近（基于 IntersectionObserver 维护的 bottomVisible 状态） */
-function isNearBottom(): boolean {
-  return bottomVisible.value
-}
-
 /** 滚动到底部（仅在用户未主动上翻时执行）
  *  使用 rAF 替代 nextTick：Vue 的 watch 在 FlushBuffer 更新 content 后触发，
  *  DOM patch 在微任务中完成，rAF 时浏览器已完成 layout，scrollHeight 为最新值。
+ *  写入后同步记账 observedScrollTop，供 handleScroll 区分用户滚动与程序滚动。
  */
 function scrollToBottom(force = false): void {
   requestAnimationFrame(() => {
-    if (!chatAreaRef.value) {
+    const el = chatAreaRef.value
+    if (!el) {
       return
     }
     if (force || !userScrolledUp.value) {
-      chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight
+      el.scrollTop = el.scrollHeight
+      observedScrollTop = el.scrollTop
     }
   })
 }
 
-/** 监听聊天区域滚动，检测用户是否主动向上翻看
- *  基于 IntersectionObserver 维护的 bottomVisible 状态判断是否在底部附近，
- *  不依赖 scrollHeight 计算，避免流式场景下程序滚动 + content 增长导致的时序竞争。
+/**
+ * 监听聊天区域滚动，区分用户滚动与程序化滚动：
+ * - 用户滚动（滚轮/触摸/拖动滚动条/键盘）使 scrollTop 偏离记账位置：
+ *   距底部超过跟随阈值才视为"向上翻看"，否则（阈值内）保持跟随态；
+ * - 程序化滚动（流式跟随写入、浏览器高度收缩钳制落到底部）不改变跟随态，
+ *   落在底部时反而恢复跟随态——修复原 IntersectionObserver 方案中
+ *   "程序滚动事件先于哨兵可见性更新到达 → 误判上翻 → 自动下滑中断"的竞态。
  */
 function handleScroll(): void {
-  if (bottomVisible.value) {
-    userScrolledUp.value = false
-  } else {
-    userScrolledUp.value = true
+  const el = chatAreaRef.value
+  if (!el) {
+    return
   }
+  const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+  const movedByReader = Math.abs(el.scrollTop - Math.min(observedScrollTop, floor)) > 0.5
+  if (movedByReader) {
+    userScrolledUp.value = floor - el.scrollTop > FOLLOW_THRESHOLD + 1
+  } else if (floor - el.scrollTop <= FOLLOW_THRESHOLD + 1) {
+    // 程序化滚动落到底部：恢复跟随态
+    userScrolledUp.value = false
+  }
+  observedScrollTop = el.scrollTop
   scheduleActiveQuestionUpdate()
 }
 
@@ -4433,25 +4508,8 @@ onMounted(() => {
   document.addEventListener('keydown', onContextEscape)
   chatAreaEl = chatAreaRef.value
   chatAreaEl?.addEventListener('scroll', handleScroll)
-  // 初始化底部哨兵的 IntersectionObserver：监测用户是否滚动到底部附近
-  // 相比 scrollHeight 计算方案，IntersectionObserver 不受程序滚动与内容增长的时序竞争影响
-  if (bottomSentinelRef.value && chatAreaEl) {
-    bottomObserver = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        if (entry) {
-          bottomVisible.value = entry.isIntersecting
-        }
-      },
-      {
-        root: chatAreaEl,
-        // 当哨兵元素距视口底部 80px 以内时即视为"在底部附近"，给自动跟随留出缓冲
-        rootMargin: '0px 0px 80px 0px',
-        threshold: 0,
-      }
-    )
-    bottomObserver.observe(bottomSentinelRef.value)
-  }
+  // 底部跟随改由「最后一条消息元素」的 ResizeObserver 驱动（见 registerFlowTip），
+  // 覆盖流式思考/回答、图表挂载、图片加载等所有异步内容增长。
   // 加载数据源列表（用于输入框设置面板中的数据源选择）
   loadDatasources()
   // 加载模型和 Provider 列表（用于输入框设置面板中的模型选择）
@@ -4494,11 +4552,8 @@ onUnmounted(() => {
   document.removeEventListener('mousedown', onContextOutsideClick)
   document.removeEventListener('keydown', onContextEscape)
   chatAreaEl?.removeEventListener('scroll', handleScroll)
-  // 清理底部哨兵的 IntersectionObserver
-  if (bottomObserver) {
-    bottomObserver.disconnect()
-    bottomObserver = null
-  }
+  // 清理底部跟随的 ResizeObserver
+  detachFlowTipObserver()
   if (activeQuestionRaf) {
     cancelAnimationFrame(activeQuestionRaf)
     activeQuestionRaf = 0
@@ -4763,12 +4818,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-/* 底部哨兵元素：1px 高度，不可见但参与布局，供 IntersectionObserver 监测 */
-.bottom-sentinel {
-  height: 1px;
-  flex-shrink: 0;
 }
 
 .empty-state {
