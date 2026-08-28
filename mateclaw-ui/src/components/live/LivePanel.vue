@@ -65,35 +65,53 @@
       </button>
     </div>
 
-    <!-- Loading -->
-    <div v-if="isInitialLoading" class="cards-grid">
-      <div v-for="i in 3" :key="i" class="agent-card mc-surface-card agent-card-skeleton">
-        <el-skeleton :rows="2" animated />
+    <div v-if="initialLoadingCopy" class="live-loading-state" role="status" aria-live="polite">
+      <span v-if="initialLoadingStage !== 'failed'" class="live-loading-spinner" aria-hidden="true"></span>
+      <div class="live-loading-copy">
+        <strong>{{ t(initialLoadingCopy.title) }}</strong>
+        <span>{{ t(initialLoadingCopy.hint) }}</span>
       </div>
+      <button v-if="initialLoadingStage === 'failed'" class="loading-retry" @click="retryInitialLoad">
+        {{ t('live.loading.retry') }}
+      </button>
     </div>
 
-    <!-- Lifecycle board: runs + goals across status columns -->
-    <LiveBoard
-      v-else-if="layout === 'board'"
-      :runs="snapshot?.runs ?? []"
-      :summary="snapshot?.summary ?? null"
-      :goal-by-conv="goalByConv"
-      :done-goals="doneGoals"
-      :failed-goals="failedGoals"
-      @open="openDetail"
-      @stop="confirmStop"
-      @recycle="confirmRecycle"
-    />
+    <template v-else>
+      <div v-if="loadingState.stage === 'syncingTeams'" class="team-sync-note" role="status" aria-live="polite">
+        <span class="team-sync-dot" aria-hidden="true"></span>
+        <span>{{ t('live.loading.syncingTeams') }}</span>
+      </div>
+      <AgentRunGroups
+        :groups="teamProjection.groups"
+        :selected-run-id="selectedTeamRunId"
+        :selected-task-id="selectedTeamTaskId"
+        @open-run="openTeamRun"
+        @open-worker="openTeamWorker"
+      />
+      <p v-if="teamGroups.error.value" class="team-runs-error">{{ t('live.teamRuns.loadError') }}</p>
+      <h2 v-if="teamProjection.groups.length && visibleRuns.length" class="other-live-title">{{ t('live.teamRuns.otherSessions') }}</h2>
 
-    <!-- Empty: nothing to see -->
-    <div v-else-if="snapshot && snapshot.runs.length === 0" class="empty-still">
-      <div class="empty-orb"></div>
-      <div class="empty-line">{{ t('live.empty.allQuiet') }}</div>
-      <div class="empty-hint">{{ t('live.empty.hint') }}</div>
-    </div>
+      <!-- Lifecycle board: non-team runs + goals across status columns -->
+      <LiveBoard
+        v-if="layout === 'board' && visibleRuns.length"
+        :runs="visibleRuns"
+        :summary="snapshot?.summary ?? null"
+        :goal-by-conv="goalByConv"
+        :done-goals="doneGoals"
+        :failed-goals="failedGoals"
+        @open="openDetail"
+        @stop="confirmStop"
+        @recycle="confirmRecycle"
+      />
 
-    <!-- Active runs -->
-    <div v-else class="cards-grid">
+      <div v-else-if="teamProjection.groups.length === 0 && visibleRuns.length === 0" class="empty-still">
+        <div class="empty-orb"></div>
+        <div class="empty-line">{{ t('live.empty.allQuiet') }}</div>
+        <div class="empty-hint">{{ t('live.empty.hint') }}</div>
+      </div>
+
+      <!-- Non-team active runs -->
+      <div v-else-if="layout === 'grid' && visibleRuns.length" class="cards-grid">
       <article
         v-for="run in visibleRuns"
         :key="run.conversationId"
@@ -172,7 +190,8 @@
           </div>
         </div>
       </article>
-    </div>
+      </div>
+    </template>
   </div>
 
   <LiveFocusPanel
@@ -188,16 +207,25 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { mcToast } from '@/composables/useMcToast'
 import SkillIcon from '@/components/common/SkillIcon.vue'
 import LiveFocusPanel from '@/components/live/LiveFocusPanel.vue'
 import LiveBoard from '@/components/live/LiveBoard.vue'
+import AgentRunGroups from '@/components/live/AgentRunGroups.vue'
 import { useLiveAgent } from '@/composables/useLiveAgent'
+import { buildAgentWorkerChatRoute, useAgentRunGroups, type AgentRunWorker } from '@/composables/useAgentRunGroups'
+import { createAgentsLiveRouteHydrator, parseAgentsLiveRoute, reconcileAgentsLiveRoute } from '@/composables/agentsLiveRouteState'
+import { useLiveSnapshot } from '@/composables/useLiveSnapshot'
 import { mcConfirm } from '@/components/common/useConfirm'
 import { liveApi, goalApi, type LiveSnapshot, type LiveRunCard, type LiveSubagentCard, type Goal } from '@/api'
+import { buildTeamRunRoute } from '@/components/team-run/teamRunPresentation'
+import { resolveLivePanelLoading, type LivePanelLoadingStage } from '@/utils/livePanelLoading'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const {
   avatarLetter,
   avatarBgStyle,
@@ -209,13 +237,51 @@ const {
 
 type FilterKey = 'all' | 'working' | 'attention' | 'quiet'
 
-const snapshot = ref<LiveSnapshot | null>(null)
-const isInitialLoading = ref(true)
+let teamGroups!: ReturnType<typeof useAgentRunGroups>
+const liveSnapshot = useLiveSnapshot({ load: liveApi.snapshot, refreshRuns: () => teamGroups.refreshForSnapshot() })
+const snapshot = liveSnapshot.snapshot
+teamGroups = useAgentRunGroups(snapshot)
+const teamProjection = computed(() => teamGroups.projection.value)
+const liveRoute = computed(() => parseAgentsLiveRoute(route.query))
+const selection = computed(() => reconcileAgentsLiveRoute(liveRoute.value, teamGroups.runs.value, snapshot.value))
+const routeHydrator = createAgentsLiveRouteHydrator({
+  invalidatePoll: liveSnapshot.invalidate,
+  ensureRun: (runId, revision) => teamGroups.ensureRun(runId, revision),
+  reconcile: routeState => reconcileAgentsLiveRoute(routeState, teamGroups.runs.value, snapshot.value),
+  replace: query => router.replace({ query }),
+})
+const selectedTeamRunId = computed(() => selection.value.selectedRunId)
+const selectedTeamTaskId = computed(() => selection.value.selectedTaskId)
+const loadingElapsedMs = ref(0)
+const hasRuntimeActivity = computed(() => (
+  (snapshot.value?.runs.length ?? 0) > 0 || (snapshot.value?.subagents.length ?? 0) > 0
+))
+const loadingState = computed(() => resolveLivePanelLoading({
+  hasSnapshot: snapshot.value != null,
+  snapshotLoading: liveSnapshot.loading.value,
+  teamLoading: teamGroups.loading.value,
+  hasRuntimeActivity: hasRuntimeActivity.value,
+  hasError: liveSnapshot.error.value != null,
+  elapsedMs: loadingElapsedMs.value,
+}))
+const initialLoadingStage = computed<LivePanelLoadingStage>(() => (
+  loadingState.value.blocksContent ? loadingState.value.stage : null
+))
+const initialLoadingCopy = computed(() => {
+  switch (initialLoadingStage.value) {
+    case 'connecting': return { title: 'live.loading.connecting', hint: 'live.loading.connectingHint' }
+    case 'checking': return { title: 'live.loading.checking', hint: 'live.loading.checkingHint' }
+    case 'slow': return { title: 'live.loading.slow', hint: 'live.loading.slowHint' }
+    case 'failed': return { title: 'live.loading.failed', hint: 'live.loading.failedHint' }
+    default: return null
+  }
+})
 const autoRefresh = ref(true)
 const drawerOpen = ref(false)
 const detail = ref<LiveRunCard | null>(null)
 const activeFilter = ref<FilterKey>('all')
 let timer: ReturnType<typeof setInterval> | null = null
+let loadingClock: ReturnType<typeof setInterval> | null = null
 
 // ===== Lifecycle board mode =====
 // Same snapshot, laid out across run/goal lifecycle columns. Goals are fetched
@@ -308,7 +374,7 @@ function tierOf(r: LiveRunCard): number {
 }
 
 const visibleRuns = computed<LiveRunCard[]>(() => {
-  const runs = snapshot.value?.runs ?? []
+  const runs = teamProjection.value.ungrouped
   const filtered = (() => {
     switch (activeFilter.value) {
       case 'working': return runs.filter(isWorking)
@@ -411,20 +477,59 @@ function closeDetail() {
 }
 
 async function refresh() {
-  try {
-    const res: any = await liveApi.snapshot()
-    snapshot.value = (res?.data ?? res) as LiveSnapshot
+  const accepted = await liveSnapshot.refresh()
+  if (accepted) {
     if (detail.value && snapshot.value) {
       const fresh = snapshot.value.runs.find(r => r.conversationId === detail.value!.conversationId)
       if (fresh) detail.value = fresh
     }
     // Keep the board's goal columns fresh on the same cadence as the snapshot.
     if (layout.value === 'board') loadGoals()
-  } catch (e: any) {
-    if (isInitialLoading.value) mcToast.error(e?.message || t('live.errors.loadFailed'))
-  } finally {
-    isInitialLoading.value = false
+  } else if (liveSnapshot.error.value) {
+    const cause = liveSnapshot.error.value as { message?: string }
+    mcToast.error(cause.message || t('live.errors.loadFailed'))
   }
+}
+
+function stopLoadingClock() {
+  if (!loadingClock) return
+  clearInterval(loadingClock)
+  loadingClock = null
+}
+
+function startLoadingClock() {
+  stopLoadingClock()
+  const startedAt = Date.now()
+  loadingElapsedMs.value = 0
+  loadingClock = setInterval(() => {
+    loadingElapsedMs.value = Date.now() - startedAt
+    if (snapshot.value != null || !liveSnapshot.loading.value) stopLoadingClock()
+  }, 100)
+}
+
+function retryInitialLoad() {
+  startLoadingClock()
+  void refresh()
+}
+
+watch(
+  () => [liveRoute.value.view, liveRoute.value.runId, liveRoute.value.taskId] as const,
+  () => routeHydrator.hydrate(liveRoute.value),
+  { flush: 'sync' },
+)
+
+function openTeamRun(runId: string) {
+  const group = teamProjection.value.groups.find(item => item.run.id === runId)
+  if (group) router.push(buildTeamRunRoute(group.run.teamId, group.run.id))
+}
+
+function openTeamWorker(worker: AgentRunWorker) {
+  const conversationId = worker.task.conversationId
+  if (!conversationId) return
+  const group = teamProjection.value.groups.find(item => item.run.id === worker.task.runId)
+  if (!group) return
+  const target = buildAgentWorkerChatRoute(group, worker)
+  if (target) router.push(target)
 }
 
 function toggleAutoRefresh() {
@@ -514,18 +619,97 @@ async function confirmSweep() {
 }
 
 onMounted(() => {
+  startLoadingClock()
   refresh()
   timer = setInterval(refresh, 5000)
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
+  stopLoadingClock()
+  liveSnapshot.close()
+  teamGroups.close()
 })
 </script>
 
 <style scoped>
 .live-panel {
   --card-radius: 24px;
+}
+.other-live-title { margin: 0 0 10px; color: var(--mc-text-primary); font-size: 14px; letter-spacing: 0; }
+.team-runs-error { margin: -8px 0 12px; color: var(--mc-danger, #c13d3d); font-size: 12px; }
+
+.live-loading-state {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-top: 1px solid var(--mc-border-light);
+  border-bottom: 1px solid var(--mc-border-light);
+  color: var(--mc-text-secondary);
+}
+
+.live-loading-spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, var(--mc-text-tertiary) 25%, transparent);
+  border-top-color: var(--mc-primary);
+  border-radius: 50%;
+  animation: live-loading-spin 0.8s linear infinite;
+}
+
+.live-loading-copy {
+  display: grid;
+  gap: 4px;
+  max-width: 520px;
+}
+
+.live-loading-copy strong {
+  color: var(--mc-text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.live-loading-copy span {
+  color: var(--mc-text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.loading-retry {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--mc-border-light);
+  border-radius: 6px;
+  background: var(--mc-bg-elevated);
+  color: var(--mc-text-primary);
+  cursor: pointer;
+}
+
+.team-sync-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin: -4px 0 14px;
+  padding: 0 2px;
+  color: var(--mc-text-tertiary);
+  font-size: 12px;
+}
+
+.team-sync-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--mc-primary);
+  animation: chip-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes live-loading-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ===== Toolbar: live toggle + status filters + sweep ===== */
