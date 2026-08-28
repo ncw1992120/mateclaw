@@ -186,7 +186,7 @@ public class AloudataCallTool {
                     },
                     "keyword": {
                       "type": "string",
-                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等。重要：请**原样保留**用户原话中的标点符号（全角/半角括号、-、_、空格等），禁止删除、改写、转换全角半角或截断关键词；系统对标点差异不敏感（如「交易市占率（整体）」与「交易市占率(整体)」能匹配同一指标），不要为对齐标点而改写关键词。保留用户原话中的所有限定词和括号内容（如「整体」「个人」「汇总」等），不要改写或精简同义词。例如用户说「交易市占率（整体）」，keyword 应传「交易市占率（整体）」而非「交易市占率」。"
+                      "description": "搜索关键词，用于搜索指标/维度的业务名称、同义词等。重要：请**原样保留**用户原话中的标点符号（全角/半角括号、-、_、空格等），禁止删除、改写、转换全角半角或截断关键词；系统对标点差异不敏感（如「交易市占率（整体）」与「交易市占率(整体)」能匹配同一指标），不要为对齐标点而改写关键词。保留用户原话中的所有限定词和括号内容（如「整体」「个人」「汇总」等），不要改写或精简同义词。例如用户说「交易市占率（整体）」，keyword 应传「交易市占率（整体）」而非「交易市占率」。不确定哪部分是完整指标名时，直接把用户原话整句作为 keyword 传入（宁可多检索也不截断/精简）——截断到同族短名可能被精确匹配锁死成错误指标。"
                     },
                     "topK": {
                       "type": "integer",
@@ -981,9 +981,14 @@ public class AloudataCallTool {
      * 的短名指标时，keyword 探针会把这个**短名指标**锁成目标，而用户真正要的是「期货收入-应收-当年」——
      * 精确匹配把错误目标锁死且禁止消歧，属于错查而非多问。
      * <p>
-     * 守卫：keyword 含中文、且其归一化长度不足原话归一化长度的 80% 时，判定 keyword 被严重截断，
+     * 守卫：keyword 含中文、且其归一化长度不足原话归一化长度的 90% 时，判定 keyword 被严重截断，
      * 跳过 keyword 探针（SQL 精确相等与归一化相等两轮都跳过），改由族级兜底用「原话整名命中」锁定
      * 正确成员；族级也定不出时落到消歧（安全保守，宁多问不错查）。
+     * <p>
+     * 阈值说明：早期为 80%，但用户原话本身即为指标名短语（无废话修饰词）时，截断掉 2-3 个限定字
+     * （如「大客户月度销售金额（含税）」→「大客户月度销售金额」）恰好落在 80% 窗口内逃过守卫，
+     * 短名探针仍会把同族短名指标锁死。收紧到 90% 后该窗口被覆盖；原话带修饰词的长问句场景
+     * （keyword 相对整句原话通常远低于 90%）行为不受影响。
      * <p>
      * 仅对中文 keyword 生效：用户完整写出英文 metricName（如 sales_amount）时不受影响，
      * 即使原话带更长的中文上下文也照常走 SQL 精确相等。
@@ -1001,14 +1006,20 @@ public class AloudataCallTool {
             // 纯英文 metricName 不受守卫影响
             return false;
         }
-        return nKw.length() < (int) Math.ceil(nOrig.length() * 0.8);
+        return nKw.length() < (int) Math.ceil(nOrig.length() * 0.9);
     }
 
     /**
      * 追加"指标名称精确匹配"提示：明确告知 LLM 目标指标已由名称完全匹配唯一确定，
      * 直接使用该 metricName 构造查询，禁止再向用户做消歧确认。
+     * <p>
+     * 若匹配展示名未完整覆盖用户原话中的限定内容（如 keyword 被截断为同族短名，
+     * 原话「大客户月度销售金额（含税）」→ keyword「大客户月度销售金额」），追加限定词
+     * 覆盖核对警告，提示 LLM 不要盲目采信该精确匹配（与 isKeywordProbeTruncated
+     * 的探针守卫互为兜底：守卫管代码侧锁定，本警告管 LLM 侧采信）。
      */
-    private void appendExactMatchHint(StringBuilder sb, AloudataMetricEntity metric, String keyword) {
+    private void appendExactMatchHint(StringBuilder sb, AloudataMetricEntity metric, String keyword,
+                                      String originalMessage) {
         sb.append("## ✅ 指标名称精确匹配\n\n");
         sb.append("用户问题/关键词「").append(keyword).append("」与指标名称**完全匹配**，目标指标已唯一确定：\n");
         sb.append("  - **").append(metric.getMetricName()).append("**(")
@@ -1016,9 +1027,57 @@ public class AloudataCallTool {
         if (metric.getBusinessCaliber() != null && !metric.getBusinessCaliber().isBlank()) {
             sb.append(" — ").append(metric.getBusinessCaliber());
         }
-        sb.append("\n\n> **直接使用 metricName=").append(metric.getMetricName())
-                .append(" 构造查询，不要再向用户进行消歧确认**。该结果来自指标元数据的名称精确匹配，是最可靠的目标；"
-                        + "若需要维度且用户未指定，请用默认指标时间维度（metric_time，如 metric_time__month）。\n\n");
+        sb.append("\n\n");
+
+        /* 限定词覆盖核对：匹配展示名（归一化）是原话（归一化）的真子集且原话还有额外限定字符时，
+         * 说明存在 keyword 截断/精简导致的短名劫持风险，警告 LLM 复核后再采信。
+         * 命中时最终指令改为「先复核再使用」，避免与下方「直接使用」指令自相矛盾。 */
+        boolean qualifierWarning = false;
+        if (originalMessage != null && !originalMessage.isBlank() && !originalMessage.equals(keyword)) {
+            String display = metric.getMetricDisplayName() != null ? metric.getMetricDisplayName() : "";
+            String normOrig = normalizeKey(originalMessage);
+            String normName = normalizeKey(!display.isBlank() ? display : metric.getMetricName());
+            if (normOrig.length() > normName.length() && normOrig.contains(normName)) {
+                String extra = extractExtraQualifierChars(originalMessage, display);
+                if (!extra.isEmpty()) {
+                    qualifierWarning = true;
+                    sb.append("> ⚠️ 限定词覆盖核对：用户原话「").append(originalMessage)
+                            .append("」中还包含限定内容「").append(extra).append("」，未被匹配展示名「")
+                            .append(display).append("」覆盖。若这些限定内容确实属于该指标口径")
+                            .append("（如（含税）（整体）（汇总）等），**禁止直接采信本精确匹配**，")
+                            .append("应改用完整原话重新调用 aloudata_search_semantic 检索，")
+                            .append("或向用户确认目标指标口径后再查询。\n\n");
+                }
+            }
+        }
+
+        if (qualifierWarning) {
+            sb.append("> **本精确匹配存在限定词覆盖疑问，请先按上方 ⚠️ 警告复核**：改用完整原话重新调用")
+                    .append(" aloudata_search_semantic，或向用户确认目标指标口径；")
+                    .append("确认无误后再使用 metricName=").append(metric.getMetricName()).append(" 构造查询。\n\n");
+        } else {
+            sb.append("> **直接使用 metricName=").append(metric.getMetricName())
+                    .append(" 构造查询，不要再向用户进行消歧确认**。该结果来自指标元数据的名称精确匹配，是最可靠的目标；"
+                            + "若需要维度且用户未指定，请用默认指标时间维度（metric_time，如 metric_time__month）。\n\n");
+        }
+    }
+
+    /**
+     * 提取原话中未被指标展示名覆盖的限定中文字符，用于精确匹配的截断校验提示。
+     * <p>
+     * 仅当展示名是原话字面子串时生效（原话含全角/半角差异时不提取，避免误报）；
+     * 残余内容（如（含税）（整体）及"帮我查下"等修饰词）一并返回，由 LLM 自行判断
+     * 哪些属于真正缺失的指标口径。超长时截断展示。
+     */
+    private static String extractExtraQualifierChars(String original, String display) {
+        if (original == null || display == null || display.isBlank() || !original.contains(display)) {
+            return "";
+        }
+        String residue = original.replace(display, "").replaceAll("[^\\u4e00-\\u9fff（）()]", "");
+        if (residue.isEmpty()) {
+            return "";
+        }
+        return residue.length() > 20 ? residue.substring(0, 20) + "…" : residue;
     }
 
     /**
@@ -1203,7 +1262,7 @@ public class AloudataCallTool {
          * 前置到指标/维度列表之前，确保即使结果超长触发 spill，
          * LLM 也能在 preview 中看到消歧和族级口径信息（这些是检索结果中最重要的决策依据）。 */
         if (exactMatch.resolved()) {
-            appendExactMatchHint(sb, exactMatch.metric(), keyword);
+            appendExactMatchHint(sb, exactMatch.metric(), keyword, originalMessage);
         } else {
             appendFamilyHint(sb, family, keyword);
             appendDisambiguationHint(sb, mergedMetrics, mergedDimensions, keyword, family.triggered());
