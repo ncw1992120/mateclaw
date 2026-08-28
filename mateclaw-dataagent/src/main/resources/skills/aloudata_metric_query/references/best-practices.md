@@ -374,6 +374,7 @@
 - [ ] dimensions 中的维度名是否为英文名（dimName）？是否在 availableDimensions 中？
 - [ ] timeConstraint 表达式是否使用了正确的语法（整个表达式用 `()` 包裹、方括号引用维度、双引号转义）？
 - [ ] 相对时间（昨日/上周几/近N天/去年同期等）是否已先调用 getCurrentDate 获取真实当前日期，再据此换算？
+- [ ] 换算结果是否自检通过：星期与表述一致（如"上周五"结果必须为星期五）、区间天数与"近N天"一致？
 - [ ] 使用同环比时，metric_time 是否在 dimensions 或 timeConstraint 中？
 - [ ] 同环比的偏移粒度是否大于等于日期粒度？
 - [ ] 占比/排名的范围维度是否在 dimensions 中声明？

@@ -46,7 +46,7 @@ templates:
 
 **与查询的边界**：若用户只问"上月销售额多少"（查数值）→ 走 `aloudata_metric_query`；若问"上月销售额为什么下降"（查原因）→ 走本技能。
 
-**时间锚定（先取真实日期，禁止主观推算）**：对比基准涉及相对表述（"上月""去年""上周""近N天"等）时，必须**先调用内置工具 getCurrentDate（DateTimeTool.getCurrentDate）获取服务器当前日期与星期**，再以其返回值为唯一锚点换算 currentFilter/comparison 的时间表达式与 CUSTOM 区间；严禁凭主观印象推算今天的日期与星期。
+**时间锚定（先取真实日期，禁止主观推算）**：对比基准涉及相对表述（"上月""去年""上周""近N天"等）时，必须**先调用内置工具 getCurrentDate（DateTimeTool.getCurrentDate）获取服务器当前日期与星期**，再以其返回值为唯一锚点换算 currentFilter/comparison 的时间表达式与 CUSTOM 区间；严禁凭主观印象推算今天的日期与星期。`aloudata_search_semantic` 返回头部注入的「当前日期」锚点同样可信，可作为同轮换算依据；换算后自检结果星期与区间长度同表述一致。
 
 ### 第二步：检索指标英文名（必执行）
 
