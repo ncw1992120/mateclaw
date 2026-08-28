@@ -12,7 +12,6 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.google.common.collect.Lists;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -321,10 +320,9 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
 
         List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, primaryQuery, expandedWords,
                 effectiveOriginalMessage, topK, similarityThreshold);
-        // 注释维度 RAG检索
-//        List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, primaryQuery, expandedWords,
-//                effectiveOriginalMessage, topK, similarityThreshold);
-        List<DimensionHit> dimensionHits = Lists.newArrayList();
+        // 维度不做独立 RAG 检索：用户查询以指标为中心，维度由 enrichMetricDimensions 按指标关联确定性补充，
+        // 避免维度模糊命中的假阳性干扰指标消歧与查询构造
+        List<DimensionHit> dimensionHits = List.of();
 
         // 为指标补充可用维度列表
         enrichMetricDimensions(metricHits, datasourceId);

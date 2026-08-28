@@ -34,6 +34,8 @@ import vip.mate.dataagent.support.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
+import java.time.LocalDate;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1189,10 +1191,13 @@ public class AloudataCallTool {
         }
         sb.append("\n");
         sb.append("**数据源 ID**: ").append(datasourceId).append("\n");
+        // 时间锚点注入：相对时间（上周五/上月同期等）换算必须以此为准，禁止 LLM 主观推算当前日期与星期
+        LocalDate today = LocalDate.now();
+        String week = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA);
+        sb.append("**当前日期**: ").append(today).append("（").append(week).append("）\n");
 
         int metricCount = mergedMetrics.size();
-        int dimensionCount = mergedDimensions.size();
-        sb.append("**匹配结果**: ").append(metricCount).append(" 个指标 + ").append(dimensionCount).append(" 个维度\n\n");
+        sb.append("**匹配结果**: ").append(metricCount).append(" 个指标\n\n");
 
         /* 确定性匹配提示：精确命中时直接告知目标并禁止消歧；否则走族级口径提示 + 消歧判断。
          * 前置到指标/维度列表之前，确保即使结果超长触发 spill，
@@ -1250,7 +1255,7 @@ public class AloudataCallTool {
         }
 
         /* P3: 检索失败自动降级 */
-        if (metricCount == 0 && dimensionCount == 0) {
+        if (metricCount == 0) {
             sb.append("语义检索未命中。");
             // 自动降级：查询全量指标概要
             List<AloudataMetricEntity> allMetrics = metricMapper.selectList(
