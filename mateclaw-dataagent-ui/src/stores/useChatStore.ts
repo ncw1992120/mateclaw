@@ -764,13 +764,16 @@ export const useChatStore = defineStore('chat', () => {
     return typeof id === 'string' && id ? id : null
   }
 
-  async function sendMessage(agentId: number | string, message: string, contentParts?: MessageContentPart[]): Promise<void> {
+  async function sendMessage(agentId: number | string, message: string, contentParts?: MessageContentPart[], preferredConversationId?: string): Promise<void> {
     if (isStreaming.value) return
 
     // 新对话时生成临时 UUID 传给后端（后端 getOrCreateConversation 据此创建会话），
-    // 但不持久化到 localStorage——等 SSE session 事件返回真实 ID 后再持久化
+    // 但不持久化到 localStorage——等 SSE session 事件返回真实 ID 后再持久化。
+    // 若上传附件时已生成本地临时 ID（附件按该 ID 存储），优先复用，
+    // 保证附件目录与会话 ID 一致。
     if (!conversationId.value) {
-      const tempId = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const tempId = preferredConversationId
+        || (self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
       conversationId.value = tempId
     }
 

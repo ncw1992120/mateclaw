@@ -143,9 +143,9 @@
                         </Transition>
                       </div>
 
-                      <!-- tool_call 类型 -->
+                      <!-- tool_call 类型（运行过程中不展示，运行结束、用户手动展开执行过程时可见） -->
                       <div
-                        v-else-if="seg.type === 'tool_call'"
+                        v-else-if="seg.type === 'tool_call' && !isStreamingLastMessage(index)"
                         class="seg-tool"
                         :class="{
                           'is-running': seg.status === 'running',
@@ -272,8 +272,11 @@
               <!-- Streaming cursor -->
               <span
                 v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content"
-                class="streaming-cursor"
-              />
+                class="streaming-cursor-wrap"
+              >
+                <span class="streaming-cursor" />
+                <span class="streaming-cursor__label">{{ t('chat.thinking') }}</span>
+              </span>
             </div>
             <!-- AI 消息操作栏（气泡外右下角） -->
             <div class="msg-actions msg-actions--ai">
@@ -462,6 +465,7 @@
         class="msg ai"
       >
         <span class="streaming-cursor-end" />
+        <span class="streaming-cursor-end__label">{{ t('chat.generating') }}</span>
       </div>
       <!-- 底部哨兵元素：IntersectionObserver 监测其可见性以判断用户是否在底部附近 -->
       <div ref="bottomSentinelRef" class="bottom-sentinel" />
@@ -1470,6 +1474,23 @@ watch(inputMessage, () => {
 /** 待发送的附件列表 */
 const pendingAttachments = ref<ChatAttachment[]>([])
 
+/**
+ * 新对话上传附件时使用的本地临时会话 ID。
+ * <p>
+ * 不写入 chatStore.conversationId——否则 fetchConversations 会把它当作
+ * "不存在的会话 ID"并把当前对话自动切换到其他已有会话（附件跟着跑错会话）。
+ * 发送消息时作为 preferredConversationId 传给 sendMessage，后端按该 ID
+ * 创建会话，保证附件存储目录与会话 ID 一致。
+ */
+const pendingUploadConversationId = ref('')
+
+// 新开对话（conversationId 置空）时重置临时上传会话 ID
+watch(() => chatStore.conversationId, (id) => {
+  if (!id) {
+    pendingUploadConversationId.value = ''
+  }
+})
+
 /** 附件上传中状态 */
 const isUploading = ref(false)
 
@@ -1617,6 +1638,20 @@ const expandedNarrations = ref<Set<string>>(new Set())
 
 /** "执行过程"卡片展开状态，key = `${msgIndex}` */
 const expandedExecutionProcesses = ref<Set<number>>(new Set())
+
+/** 流式运行期间用户手动折叠的执行过程（key = msgIndex），本次流式内不再自动展开 */
+const runCollapsedExecutionProcesses = ref<Set<number>>(new Set())
+
+/** 流式运行期间用户手动折叠的中间叙述（key = `${msgIndex}-${segIdx}`） */
+const runCollapsedNarrations = ref<Set<string>>(new Set())
+
+// 新一轮运行开始时清空上一轮的手动折叠记录，保证执行过程/思考过程再次自动展开
+watch(() => chatStore.isStreaming, (streaming) => {
+  if (streaming) {
+    runCollapsedExecutionProcesses.value = new Set()
+    runCollapsedNarrations.value = new Set()
+  }
+})
 
 /** 图表实例映射 */
 const chartInstances = new Map<string, echarts.ECharts>()
@@ -1881,21 +1916,44 @@ function getFinalAnswer(msg: typeof chatStore.messages.value[0]): string {
 
 /** 展开/收起"执行过程"卡片 */
 function toggleExecutionProcessExpand(msgIdx: number): void {
-  if (expandedExecutionProcesses.value.has(msgIdx)) {
+  if (isExecutionProcessExpanded(msgIdx)) {
     expandedExecutionProcesses.value.delete(msgIdx)
+    if (isStreamingLastMessage(msgIdx)) {
+      // 运行过程中手动折叠：本次流式内不再自动展开
+      runCollapsedExecutionProcesses.value.add(msgIdx)
+    }
   } else {
     expandedExecutionProcesses.value.add(msgIdx)
+    if (isStreamingLastMessage(msgIdx)) {
+      runCollapsedExecutionProcesses.value.delete(msgIdx)
+    }
   }
 }
 
-/** 判断"执行过程"卡片是否处于展开状态 */
+/**
+ * 判断"执行过程"卡片是否处于展开状态：
+ * 运行过程中自动展开以实时展示思考过程；运行结束后自动折叠（仅展示最终答案），
+ * 用户手动展开过的消息保持展开。
+ */
 function isExecutionProcessExpanded(msgIdx: number): boolean {
+  if (isStreamingLastMessage(msgIdx)) {
+    return !runCollapsedExecutionProcesses.value.has(msgIdx)
+  }
   return expandedExecutionProcesses.value.has(msgIdx)
 }
 
 /** 展开/收起某条中间叙述。key 形如 `${msgIndex}-${segIdx}`，跨消息独立。 */
 function toggleNarrationExpand(msgIdx: number, segIdx: number): void {
   const key = `${msgIdx}-${segIdx}`
+  if (isStreamingLastMessage(msgIdx)) {
+    // 运行过程中思考段默认展开，手动切换只影响本次流式期间
+    if (runCollapsedNarrations.value.has(key)) {
+      runCollapsedNarrations.value.delete(key)
+    } else {
+      runCollapsedNarrations.value.add(key)
+    }
+    return
+  }
   if (expandedNarrations.value.has(key)) {
     expandedNarrations.value.delete(key)
   } else {
@@ -1903,9 +1961,16 @@ function toggleNarrationExpand(msgIdx: number, segIdx: number): void {
   }
 }
 
-/** 判断某条中间叙述是否处于展开状态。 */
+/**
+ * 判断某条中间叙述是否处于展开状态：
+ * 运行过程中默认展开以实时展示思考过程；运行结束后默认折叠。
+ */
 function isNarrationExpanded(msgIdx: number, segIdx: number): boolean {
-  return expandedNarrations.value.has(`${msgIdx}-${segIdx}`)
+  const key = `${msgIdx}-${segIdx}`
+  if (isStreamingLastMessage(msgIdx)) {
+    return !runCollapsedNarrations.value.has(key)
+  }
+  return expandedNarrations.value.has(key)
 }
 
 /** 提取工具调用列表（兜底：当 metadata.segments 不存在时使用） */
@@ -3952,7 +4017,7 @@ function handleSend(): void {
       fileSize: att.size,
     })
   }
-  chatStore.sendMessage(chatStore.currentAgentId, message, contentParts)
+  chatStore.sendMessage(chatStore.currentAgentId, message, contentParts, pendingUploadConversationId.value || undefined)
   // 发送后将附件附加到最后一条用户消息（前端展示用）
   if (attachments.length > 0) {
     const lastMsg = chatStore.messages[chatStore.messages.length - 2]
@@ -3992,8 +4057,16 @@ function handlePaste(event: ClipboardEvent): void {
 async function uploadFiles(files: File[]): Promise<void> {
   let convId = chatStore.conversationId
   if (!convId) {
-    convId = self.crypto.randomUUID ? self.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-    chatStore.conversationId = convId
+    // 新会话尚无真实 ID：用本地临时 ID 上传（同一输入会话内复用），
+    // 发送时传给 sendMessage，后端会按该 ID 创建会话，保证附件目录与会话一致。
+    // 注意不能写入 chatStore.conversationId——否则 fetchConversations 会将其
+    // 视为"不存在的会话"并把当前对话自动切换到其他已有会话。
+    if (!pendingUploadConversationId.value) {
+      pendingUploadConversationId.value = self.crypto.randomUUID
+        ? self.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+    convId = pendingUploadConversationId.value
   }
 
   isUploading.value = true
@@ -5078,6 +5151,12 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--theme-text) 3%, transparent);
 }
 
+.streaming-cursor-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .streaming-cursor {
   display: inline-block;
   width: 8px;
@@ -5085,6 +5164,11 @@ onUnmounted(() => {
   background: var(--main-orange);
   border-radius: 2px;
   animation: pulse 1s ease-in-out infinite;
+}
+
+.streaming-cursor__label {
+  font-size: 13px;
+  color: var(--theme-text-muted);
 }
 
 .streaming-cursor-end {
@@ -5095,6 +5179,12 @@ onUnmounted(() => {
   border-radius: 2px;
   animation: pulse 1s ease-in-out infinite;
   margin-left: 36px;
+}
+
+.streaming-cursor-end__label {
+  font-size: 13px;
+  color: var(--theme-text-muted);
+  margin-left: 8px;
 }
 
 @keyframes pulse {

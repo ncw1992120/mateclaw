@@ -118,6 +118,7 @@ export default {
     viewDashboard: '查看完整仪表盘',
     stop: '停止',
     generating: '正在生成…',
+    thinking: '正在思考中…',
     scrollToBottom: '回到底部',
     questionNav: '提问导航',
     copy: '复制',
