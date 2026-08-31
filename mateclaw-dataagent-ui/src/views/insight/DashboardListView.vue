@@ -4,130 +4,288 @@
     <template v-if="mode === 'list'">
       <div class="list-mode" :class="{ 'with-ai-panel': showAiPanel }">
         <div class="list-header mc-toolbar">
-        <h2 class="list-title mc-toolbar-title">{{ t('insight.title') }}</h2>
-        <div class="list-header-actions mc-toolbar-right">
-          <el-input
-            v-model="searchKeyword"
-            :placeholder="t('insight.searchPlaceholder')"
-            :prefix-icon="Search"
-            clearable
-            size="default"
-            class="search-input"
-          />
-          <el-button @click="toggleAiPanel">
-            <template #icon>
-              <RobotIcon style="width: 16px; height: 16px;" />
-            </template>
-            {{ t('insight.aiAssistant') }}
-          </el-button>
-          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
-            {{ t('insight.create') }}
-          </el-button>
-        </div>
-      </div>
-
-      <div class="list-body">
-        <div v-loading="store.loading" class="list-content">
-          <div v-if="filteredDashboards.length === 0 && !store.loading" class="empty-state">
-            <div class="empty-icon">📊</div>
-            <div class="empty-text">{{ searchKeyword ? t('insight.searchNoResult') : t('insight.listEmpty') }}</div>
-            <div class="empty-actions">
-              <el-button @click="toggleAiPanel">
+          <div class="list-title-block">
+            <h2 class="list-title mc-toolbar-title">{{ t('insight.title') }}</h2>
+            <div class="list-subtitle">{{ t('insight.headerSub', { count: store.dashboards.length }) }}</div>
+          </div>
+          <div class="list-header-actions mc-toolbar-right">
+            <el-input
+              v-model="searchKeyword"
+              :placeholder="t('insight.searchPlaceholder')"
+              :prefix-icon="Search"
+              clearable
+              size="default"
+              class="search-input"
+            />
+            <el-button class="ai-assistant-btn" :class="{ on: showAiPanel }" @click="toggleAiPanel">
               <template #icon>
                 <RobotIcon style="width: 16px; height: 16px;" />
               </template>
               {{ t('insight.aiAssistant') }}
             </el-button>
+            <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
+              {{ t('insight.create') }}
+            </el-button>
+          </div>
+        </div>
+
+      <div class="list-body">
+        <div class="list-content">
+          <!-- 筛选行：状态 Tab / 排序 / 视图切换 -->
+          <div class="filter-row">
+            <div class="filter-tabs">
+              <button
+                type="button"
+                class="filter-tab"
+                :class="{ active: statusFilter === 'all' }"
+                @click="statusFilter = 'all'"
+              >
+                {{ t('insight.filterAll') }}<span class="tab-cnt">{{ statusCounts.all }}</span>
+              </button>
+              <button
+                type="button"
+                class="filter-tab"
+                :class="{ active: statusFilter === 'published' }"
+                @click="statusFilter = 'published'"
+              >
+                {{ t('insight.status.published') }}<span class="tab-cnt">{{ statusCounts.published }}</span>
+              </button>
+              <button
+                type="button"
+                class="filter-tab"
+                :class="{ active: statusFilter === 'draft' }"
+                @click="statusFilter = 'draft'"
+              >
+                {{ t('insight.status.draft') }}<span class="tab-cnt">{{ statusCounts.draft }}</span>
+              </button>
+            </div>
+            <button type="button" class="filter-sort" @click="toggleSortOrder">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/></svg>
+              {{ sortOrder === 'desc' ? t('insight.sortByRecent') : t('insight.sortByOldest') }}
+            </button>
+            <div class="view-toggle">
+              <button
+                type="button"
+                class="view-toggle-btn"
+                :class="{ on: viewMode === 'grid' }"
+                :title="t('insight.viewGrid')"
+                @click="viewMode = 'grid'"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+              </button>
+              <button
+                type="button"
+                class="view-toggle-btn"
+                :class="{ on: viewMode === 'list' }"
+                :title="t('insight.viewList')"
+                @click="viewMode = 'list'"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div v-loading="store.loading" class="list-scroll">
+          <div v-if="displayedDashboards.length === 0 && !store.loading" class="empty-state">
+            <div class="empty-illustration">
+              <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+                <rect x="12" y="14" width="56" height="52" rx="10" fill="var(--db-muted)" opacity=".45"/>
+                <rect x="22" y="38" width="9" height="20" rx="3" fill="var(--main-orange)" opacity=".55"/>
+                <rect x="35" y="28" width="9" height="30" rx="3" fill="var(--main-orange)" opacity=".75"/>
+                <rect x="48" y="34" width="9" height="24" rx="3" fill="var(--main-orange)" opacity=".55"/>
+                <circle cx="60" cy="22" r="10" fill="var(--db-card)" stroke="var(--db-border-strong)" stroke-width="1.5"/>
+                <path d="M57 22 h6 M60 19 v6" stroke="var(--db-text-muted)" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="empty-copy">
+              <div class="empty-title">{{ searchKeyword ? t('insight.searchNoResult') : t('insight.listEmpty') }}</div>
+              <div class="empty-hint">{{ searchKeyword ? t('insight.searchNoResultHint') : t('insight.emptyHint') }}</div>
+            </div>
+            <div class="empty-actions">
+              <el-button @click="toggleAiPanel">
+                <template #icon><RobotIcon style="width: 16px; height: 16px;" /></template>
+                {{ t('insight.aiAssistant') }}
+              </el-button>
               <el-button v-if="canCreate" type="primary" @click="handleCreate">{{ t('insight.create') }}</el-button>
             </div>
           </div>
 
-          <div v-else class="card-grid">
+          <div v-else class="card-grid" :class="{ 'view-list': viewMode === 'list' }">
             <div
-              v-for="dashboard in filteredDashboards"
+              v-for="dashboard in displayedDashboards"
               :key="dashboard.id"
               class="dashboard-card"
+              :class="'card-theme-' + getCardTheme(dashboard.id)"
               @click="handlePreview(dashboard.id)"
             >
+              <!-- 头部：图标 + 标题 + 状态标签 -->
               <div class="card-header">
+                <div class="card-icon">
+                  <!-- bar icon -->
+                  <svg v-if="getCardIconType(dashboard.id) === 'bar'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                  <!-- line icon -->
+                  <svg v-else-if="getCardIconType(dashboard.id) === 'line'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m7 13 3-3 4 4 5-6"/></svg>
+                  <!-- pie icon -->
+                  <svg v-else-if="getCardIconType(dashboard.id) === 'pie'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                  <!-- funnel icon -->
+                  <svg v-else width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+                </div>
                 <span class="card-name">{{ dashboard.name }}</span>
-                <el-tag :type="dashboard.status === 'published' ? 'success' : 'info'" size="small">
-                  {{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}
+                <el-tag
+                  class="card-status"
+                  :type="dashboard.status === 'published' ? 'success' : 'warning'"
+                  effect="light"
+                  size="small"
+                  round
+                >
+                  <span class="status-dot"></span>{{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}
                 </el-tag>
               </div>
+
+              <!-- 描述 -->
               <div class="card-desc">{{ dashboard.description || t('insight.noDescription') }}</div>
-              <div class="card-meta">
-                <span class="card-owner">{{ dashboard.ownerName || '--' }}</span>
-                <span class="card-time">{{ formatTime(dashboard.updateTime) }}</span>
+
+              <!-- 图表预览区（按主题切换图形类型） -->
+              <div class="card-chart-preview">
+                <!-- 柱状图 -->
+                <svg v-if="getChartKind(dashboard.id) === 'bar'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <rect x="6" y="22" width="14" height="16" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
+                  <rect x="28" y="16" width="14" height="22" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="50" y="24" width="14" height="14" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
+                  <rect x="72" y="10" width="14" height="28" rx="2" fill="var(--card-tint-fg)" opacity=".7"/>
+                  <rect x="94" y="18" width="14" height="20" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="116" y="8" width="14" height="30" rx="2" fill="var(--card-tint-fg)" opacity=".85"/>
+                  <rect x="138" y="14" width="14" height="24" rx="2" fill="var(--card-tint-fg)"/>
+                  <rect x="160" y="6" width="14" height="32" rx="2" fill="var(--card-tint-fg)" opacity=".6"/>
+                </svg>
+                <!-- 面积折线 -->
+                <svg v-else-if="getChartKind(dashboard.id) === 'area'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <path d="M4 34 L34 26 L64 30 L94 16 L124 20 L154 8 L176 12 L176 42 L4 42 Z" fill="var(--card-tint-fg)" opacity=".1"/>
+                  <path d="M4 34 L34 26 L64 30 L94 16 L124 20 L154 8 L176 12" fill="none" stroke="var(--card-tint-fg)" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="154" cy="8" r="3" fill="var(--db-card)" stroke="var(--card-tint-fg)" stroke-width="2"/>
+                </svg>
+                <!-- 柱状图带告警色 -->
+                <svg v-else-if="getChartKind(dashboard.id) === 'bar-alert'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <rect x="6" y="12" width="14" height="26" rx="2" fill="var(--card-tint-fg)" opacity=".8"/>
+                  <rect x="28" y="20" width="14" height="18" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="50" y="26" width="14" height="12" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
+                  <rect x="72" y="16" width="14" height="22" rx="2" fill="var(--card-tint-fg)" opacity=".6"/>
+                  <rect x="94" y="28" width="14" height="10" rx="2" fill="var(--db-card-pink-fg)" opacity=".75"/>
+                  <rect x="116" y="22" width="14" height="16" rx="2" fill="var(--card-tint-fg)" opacity=".45"/>
+                  <rect x="138" y="18" width="14" height="20" rx="2" fill="var(--card-tint-fg)" opacity=".6"/>
+                  <rect x="160" y="24" width="14" height="14" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
+                </svg>
+                <!-- 环形图 -->
+                <svg v-else-if="getChartKind(dashboard.id) === 'donut'" width="120" height="44" viewBox="0 0 120 44" aria-hidden="true">
+                  <circle cx="26" cy="22" r="15" fill="none" stroke="var(--db-chart-preview-track)" stroke-width="7"/>
+                  <circle cx="26" cy="22" r="15" fill="none" stroke="var(--card-tint-fg)" stroke-width="7" stroke-dasharray="56 94" stroke-linecap="round" transform="rotate(-90 26 22)"/>
+                  <circle cx="26" cy="22" r="15" fill="none" stroke="var(--db-card-blue-fg)" stroke-width="7" stroke-dasharray="24 118" stroke-dashoffset="-56" transform="rotate(-90 26 22)"/>
+                  <circle cx="62" cy="14" r="3" fill="var(--card-tint-fg)"/>
+                  <rect x="70" y="11.5" width="34" height="5" rx="2.5" fill="var(--db-chart-preview-track)"/>
+                  <circle cx="62" cy="30" r="3" fill="var(--db-card-blue-fg)"/>
+                  <rect x="70" y="27.5" width="24" height="5" rx="2.5" fill="var(--db-chart-preview-track)"/>
+                </svg>
+                <!-- 漏斗 -->
+                <svg v-else-if="getChartKind(dashboard.id) === 'funnel'" width="150" height="44" viewBox="0 0 150 44" aria-hidden="true">
+                  <path d="M10 8 h130 l-24 10 h-82 Z" fill="var(--card-tint-fg)" opacity=".8"/>
+                  <path d="M30 20 h90 l-20 8 h-50 Z" fill="var(--card-tint-fg)" opacity=".55"/>
+                  <path d="M48 30 h54 l-14 7 h-26 Z" fill="var(--card-tint-fg)" opacity=".32"/>
+                </svg>
+                <!-- 双折线 -->
+                <svg v-else width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <path d="M4 36 L34 30 L64 32 L94 22 L124 26 L154 14 L176 18" fill="none" stroke="var(--card-tint-fg)" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M4 40 L34 38 L64 39 L94 34 L124 35 L154 28 L176 30" fill="none" stroke="var(--card-tint-fg)" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4" opacity=".45"/>
+                </svg>
               </div>
+
+              <!-- 底部信息行：更新时间 + 更新人 -->
+              <div class="card-meta">
+                <span class="card-time">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  {{ t('insight.updatedAt') }} {{ formatTime(dashboard.updateTime) }}
+                </span>
+                <span class="card-owner">
+                  <span class="owner-avatar">{{ (dashboard.ownerName || '--').charAt(0) }}</span>
+                  {{ dashboard.ownerName || '--' }}
+                </span>
+              </div>
+
+              <!-- 操作栏 -->
               <div class="card-actions" @click.stop>
-                <el-button
-                  size="small"
-                  :icon="View"
-                  @click="handlePreview(dashboard.id)"
-                >
-                  {{ t('insight.preview') }}
-                </el-button>
-                <el-button
-                  v-if="canModifyDashboard(dashboard)"
-                  size="small"
-                  :icon="Edit"
-                  @click="handleEdit(dashboard.id)"
-                >
-                  {{ t('insight.edit') }}
-                </el-button>
-                <el-dropdown
-                  v-if="hasMoreActions(dashboard)"
-                  trigger="click"
-                  placement="bottom-end"
-                  @command="(command) => handleCardCommand(dashboard, command)"
-                >
-                  <el-button text size="small" :aria-label="t('insight.moreActions')">
-                    <el-icon><MoreFilled /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        v-if="canCreate && dashboard.status === 'draft'"
-                        command="publish"
-                      >
-                        <el-icon><VideoPlay /></el-icon>{{ t('insight.publish') }}
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        v-else-if="canModifyDashboard(dashboard)"
-                        command="unpublish"
-                      >
-                        <el-icon><VideoPause /></el-icon>{{ t('insight.unpublish') }}
-                      </el-dropdown-item>
-                      <el-dropdown-item v-if="canCreate" command="copy">
-                        <el-icon><DocumentCopy /></el-icon>{{ t('insight.copy') }}
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        v-if="canModifyDashboard(dashboard)"
-                        command="delete"
-                        divided
-                        class="mc-more-danger"
-                      >
-                        <el-icon><Delete /></el-icon>{{ t('insight.delete') }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <div class="action-group">
+                  <button class="card-action-btn" @click="handlePreview(dashboard.id)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    {{ t('insight.preview') }}
+                  </button>
+                  <button
+                    v-if="canCreate"
+                    class="card-action-btn"
+                    @click="handleCopy(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    {{ t('insight.copy') }}
+                  </button>
+                  <button
+                    v-if="canCreate && dashboard.status === 'draft'"
+                    class="card-action-btn action-publish"
+                    @click="handlePublish(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    {{ t('insight.publish') }}
+                  </button>
+                  <button
+                    v-if="canModifyDashboard(dashboard) && dashboard.status === 'published'"
+                    class="card-action-btn action-unpublish"
+                    @click="handleUnpublish(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    {{ t('insight.unpublish') }}
+                  </button>
+                </div>
+                <div v-if="canModifyDashboard(dashboard)" class="action-group action-group-right">
+                  <button
+                    v-if="canModifyDashboard(dashboard)"
+                    class="card-action-btn"
+                    @click="handleEdit(dashboard.id)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    {{ t('insight.edit') }}
+                  </button>
+                  <button
+                    v-if="canModifyDashboard(dashboard)"
+                    class="card-action-btn action-delete"
+                    @click="handleDelete(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    {{ t('insight.delete') }}
+                  </button>
+                 </div>
+                <span v-else class="no-perm">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  {{ t('insight.noEditPermission') }}
+                </span>
               </div>
             </div>
           </div>
+          </div>
         </div>
 
-        <!-- AI助手面板 -->
-        <div v-if="showAiPanel" class="list-ai-panel">
-          <AiChatPanel
-            @close="toggleAiPanel"
-            @dashboard-updated="handleAiDashboardUpdated"
-          />
-        </div>
-      </div>
-      </div>
-    </template>
+      <!-- AI助手抽屉（Element Plus Drawer，遮罩 + 右侧浮动面板） -->
+      <el-drawer
+        v-model="showAiPanel"
+        direction="rtl"
+        size="400px"
+        :with-header="false"
+        class="ai-drawer-overlay"
+      >
+        <AiChatPanel
+          @close="showAiPanel = false"
+          @dashboard-updated="handleAiDashboardUpdated"
+        />
+      </el-drawer>
+    </div>
+  </div>
+</template>
 
     <!-- 编辑器模式 -->
     <InsightDashboardEditorView
@@ -150,7 +308,7 @@
 import { onMounted, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, MagicStick, MoreFilled, Edit, View, DocumentCopy, Delete, VideoPlay, VideoPause, Search } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import type { InsightDashboard } from '@/types'
@@ -204,6 +362,45 @@ const filteredDashboards = computed(() => {
       || d.ownerName?.toLowerCase().includes(keyword)
   })
 })
+
+/** 状态筛选：all / published / draft */
+const statusFilter = ref<'all' | 'published' | 'draft'>('all')
+
+/** 排序方向：desc=最近更新在前 */
+const sortOrder = ref<'desc' | 'asc'>('desc')
+
+/** 卡片布局：grid / list（持久化） */
+const viewMode = usePersistedState<'grid' | 'list'>('mc-insight-view-layout', 'grid')
+
+/** 各状态计数（基于搜索后的列表） */
+const statusCounts = computed(() => {
+  const list = filteredDashboards.value
+  return {
+    all: list.length,
+    published: list.filter((d) => d.status === 'published').length,
+    draft: list.filter((d) => d.status === 'draft').length,
+  }
+})
+
+/** 最终展示列表：状态筛选 + 按更新时间排序 */
+const displayedDashboards = computed(() => {
+  let list = filteredDashboards.value
+  if (statusFilter.value !== 'all') {
+    list = list.filter((d) => d.status === statusFilter.value)
+  }
+  const sorted = [...list]
+  sorted.sort((a, b) => {
+    const ta = dayjs(a.updateTime).valueOf() || 0
+    const tb = dayjs(b.updateTime).valueOf() || 0
+    return sortOrder.value === 'desc' ? tb - ta : ta - tb
+  })
+  return sorted
+})
+
+/** 切换排序方向 */
+function toggleSortOrder(): void {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+}
 
 onMounted(() => {
   store.fetchDashboards().catch(() => {
@@ -324,30 +521,49 @@ async function handleDelete(dashboard: InsightDashboard): Promise<void> {
   }
 }
 
-/** 卡片是否有“更多”操作可用 */
-function hasMoreActions(dashboard: InsightDashboard): boolean {
-  return canCreate || canModifyDashboard(dashboard)
+/** 卡片主题色（浅色系）：按 ID hash 稳定分配 */
+type CardTheme = 'blue' | 'violet' | 'green' | 'orange' | 'pink' | 'cyan'
+const cardThemes: CardTheme[] = ['blue', 'violet', 'green', 'orange', 'pink', 'cyan']
+
+function hashId(id: string): number {
+  let hash = 0
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return Math.abs(hash)
 }
 
-/** “更多”菜单命令分派 */
-function handleCardCommand(
-  dashboard: InsightDashboard,
-  command: string | number | object,
-): void {
-  switch (String(command)) {
-    case 'publish':
-      handlePublish(dashboard)
-      break
-    case 'unpublish':
-      handleUnpublish(dashboard)
-      break
-    case 'copy':
-      handleCopy(dashboard)
-      break
-    case 'delete':
-      handleDelete(dashboard)
-      break
-  }
+function getCardTheme(id: string): CardTheme {
+  return cardThemes[hashId(id) % cardThemes.length]
+}
+
+/** 卡片主题对应的图标类型 */
+const cardThemeIcon: Record<CardTheme, 'bar' | 'line' | 'pie' | 'funnel'> = {
+  blue: 'bar',
+  violet: 'line',
+  green: 'bar',
+  orange: 'pie',
+  pink: 'line',
+  cyan: 'funnel',
+}
+
+function getCardIconType(id: string): 'bar' | 'line' | 'pie' | 'funnel' {
+  return cardThemeIcon[getCardTheme(id)]
+}
+
+/** 卡片主题对应的图表预览图形类型 */
+type ChartKind = 'bar' | 'area' | 'bar-alert' | 'donut' | 'funnel' | 'dual-line'
+const cardThemeChart: Record<CardTheme, ChartKind> = {
+  blue: 'bar',
+  violet: 'area',
+  green: 'bar-alert',
+  orange: 'donut',
+  pink: 'dual-line',
+  cyan: 'funnel',
+}
+
+function getChartKind(id: string): ChartKind {
+  return cardThemeChart[getCardTheme(id)]
 }
 
 /** 返回列表 */
@@ -385,78 +601,319 @@ function handleBackToList(): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md) var(--space-xl);
-  min-height: 56px;
+  padding: 0 var(--space-xl);
+  height: 72px;
+  min-height: 72px;
+  gap: 14px;
   background: var(--db-card);
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
-.list-header-actions {
+.list-title-block {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.search-input {
-  width: 200px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .list-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--db-text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-subtitle {
+  font-size: 12px;
+  color: var(--db-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-input {
+  width: 232px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  height: 36px;
+  border-radius: 8px;
+}
+
+.search-input :deep(.el-input__wrapper.is-focus) {
+  background: var(--db-card);
+  box-shadow: 0 0 0 1px var(--main-orange) inset;
+}
+
+.list-header-actions :deep(.el-button) {
+  height: 36px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.list-header-actions :deep(.el-button:not(.el-button--primary)) {
+  background: var(--db-card);
+  border-color: var(--db-border-strong);
+  color: var(--db-text-secondary);
+}
+
+.list-header-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+}
+
+.list-header-actions :deep(.el-button.ai-assistant-btn.on) {
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+  font-weight: 600;
+}
+
+.list-header-actions :deep(.el-button--primary) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  box-shadow: var(--shadow-md);
+}
+
+.list-header-actions :deep(.el-button--primary:hover),
+.list-header-actions :deep(.el-button--primary:focus) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  filter: brightness(1.08);
 }
 
 .list-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 var(--space-xl);
+}
+
+.filter-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: var(--space-md) 0;
+}
+
+.filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+}
+
+.filter-tab:hover {
+  color: var(--db-text);
+}
+
+.filter-tab.active {
+  color: var(--main-orange);
+  font-weight: 600;
+}
+
+.filter-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--main-orange);
+}
+
+.tab-cnt {
+  font-size: 11px;
+  background: var(--db-muted);
+  color: var(--db-text-muted);
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-weight: 600;
+}
+
+.filter-tab.active .tab-cnt {
+  background: var(--db-accent-light);
+  color: var(--db-accent);
+}
+
+.filter-sort {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.filter-sort:hover {
+  color: var(--db-text);
+  background: var(--db-hover);
+}
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--db-border-strong);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--db-card);
+  flex-shrink: 0;
+}
+
+.view-toggle-btn {
+  width: 32px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.view-toggle-btn.on {
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--main-orange);
+}
+
+.list-scroll {
+  flex: 1;
   overflow-y: auto;
-  padding: var(--space-xl);
+  padding-bottom: var(--space-xl);
 }
 
 .empty-state {
   width: 100%;
-  height: 100%;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-md);
+  gap: 20px;
+  padding: 48px 24px;
+}
+
+.empty-illustration svg {
+  display: block;
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--main-orange) 12%, transparent));
+}
+
+.empty-copy {
+  text-align: center;
+  max-width: 360px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--db-text);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.empty-hint {
+  font-size: 13px;
   color: var(--db-text-muted);
+  line-height: 1.5;
 }
 
 .empty-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 12px;
+  margin-top: 4px;
 }
 
-.empty-icon {
-  font-size: 48px;
+.empty-actions :deep(.el-button) {
+  height: 36px;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-weight: 500;
 }
 
-.empty-text {
-  font-size: 14px;
+.empty-actions :deep(.el-button:not(.el-button--primary)) {
+  background: var(--db-card);
+  border-color: var(--db-border-strong);
+  color: var(--db-text-secondary);
+}
+
+.empty-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+}
+
+.empty-actions :deep(.el-button--primary) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  box-shadow: var(--shadow-md);
+}
+
+.empty-actions :deep(.el-button--primary:hover),
+.empty-actions :deep(.el-button--primary:focus) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  filter: brightness(1.08);
 }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-auto-rows: 1fr;
   gap: var(--space-lg);
+}
+
+.card-grid.view-list {
+  grid-template-columns: 1fr;
 }
 
 .dashboard-card {
   background: var(--db-card);
   border: 1px solid var(--db-border);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: 16px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
   box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: box-shadow var(--transition-base), border-color var(--transition-fast), transform var(--transition-fast);
+  overflow: hidden;
 }
 
 .dashboard-card:hover {
@@ -468,73 +925,228 @@ function handleBackToList(): void {
 .card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  gap: 10px;
+}
+
+/* 卡片主题：浅色系图标底色 + 图表主色（深色模式下由 --db-card-*-bg 覆盖） */
+.card-theme-blue { --card-tint-bg: var(--db-card-blue-bg); --card-tint-fg: var(--db-card-blue-fg); }
+.card-theme-violet { --card-tint-bg: var(--db-card-violet-bg); --card-tint-fg: var(--db-card-violet-fg); }
+.card-theme-green { --card-tint-bg: var(--db-card-green-bg); --card-tint-fg: var(--db-card-green-fg); }
+.card-theme-orange { --card-tint-bg: var(--db-card-orange-bg); --card-tint-fg: var(--db-card-orange-fg); }
+.card-theme-pink { --card-tint-bg: var(--db-card-pink-bg); --card-tint-fg: var(--db-card-pink-fg); }
+.card-theme-cyan { --card-tint-bg: var(--db-card-cyan-bg); --card-tint-fg: var(--db-card-cyan-fg); }
+
+.card-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--card-tint-bg);
+  color: var(--card-tint-fg);
 }
 
 .card-name {
-  font-size: 15px;
-  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--db-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.card-status.el-tag {
+  margin-left: auto;
+  border: none;
+  border-radius: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.card-status .status-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 5px;
+}
+
+.card-status.el-tag--success {
+  background: #e7f8ef;
+  color: #14a05a;
+}
+
+.card-status.el-tag--warning {
+  background: #fdf1e0;
+  color: #dd8a1d;
+}
+
 .card-desc {
-  font-size: 13px;
+  padding: 8px 0;
+  font-size: 12px;
   color: var(--db-text-secondary);
-  min-height: 20px;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
+}
+
+.card-chart-preview {
+  height: 100px;
+  min-height: 100px;
+  flex: 1;
+  background: var(--db-chart-preview-bg);
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .card-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
   gap: var(--space-md);
 }
 
-.card-owner {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--db-accent);
-  background: var(--db-accent-light);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+.card-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--db-text-muted);
+  white-space: nowrap;
 }
 
-.card-time {
+.card-time svg {
+  flex-shrink: 0;
+}
+
+.card-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
-  color: var(--db-text-muted);
+  color: var(--db-text-secondary);
+  white-space: nowrap;
+}
+
+.owner-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--db-accent-light);
+  color: var(--db-accent);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .card-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-sm);
+  justify-content: space-between;
+  gap: 0;
   border-top: 1px solid var(--db-border);
-  padding-top: var(--space-sm);
-  margin-top: var(--space-xs);
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.action-group-right {
+  border-left: 1px solid var(--db-border);
 }
 
-/* “更多”菜单中的删除项（下拉菜单渲染在 body 下，需全局选择器） */
-:global(.mc-more-danger) {
-  color: var(--db-danger);
+.no-perm {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--db-text-quaternary);
+  white-space: nowrap;
+}
+.card-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 8px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  white-space: nowrap;
 }
 
-:global(.mc-more-danger:hover) {
+.card-action-btn:hover {
+  color: var(--db-text);
+  background: var(--db-hover);
+}
+
+.card-action-btn.action-publish {
+  color: var(--main-orange);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+}
+
+.card-action-btn.action-publish:hover {
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+}
+
+.card-action-btn.action-unpublish {
+  color: #d97706;
+}
+
+.card-action-btn.action-unpublish:hover {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.card-action-btn.action-delete {
+  color: #ef4444;
+}
+
+.card-action-btn.action-delete:hover {
+  color: #dc2626;
   background: var(--db-danger-bg);
-  color: var(--db-danger);
+}
+</style>
+
+<!-- 抽屉覆盖样式（非 scoped：class 继承到 el-drawer 根节点 .el-overlay，scoped 选择器够不到） -->
+<style>
+/* 遮罩：使用 --db-mask，随明暗主题切换 */
+.ai-drawer-overlay.el-overlay {
+  background-color: var(--db-mask);
 }
 
-.list-ai-panel {
-  width: 380px;
-  flex-shrink: 0;
+/* 面板：白/暗底卡片、左侧圆角与投影，贴合设计稿 */
+.ai-drawer-overlay .el-drawer {
+  background: var(--db-card);
+  border-radius: 12px 0 0 12px;
+  border-left: 1px solid var(--db-border);
+  box-shadow: -14px 0 44px rgba(23, 43, 99, 0.18);
+}
+
+/* 抽屉内容区无内边距，AiChatPanel 自带各区域 padding */
+.ai-drawer-overlay .el-drawer__body {
+  padding: 0;
   overflow: hidden;
 }
 </style>

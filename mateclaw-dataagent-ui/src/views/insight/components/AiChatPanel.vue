@@ -3,18 +3,14 @@
     <div class="ai-chat-header">
       <div class="ai-chat-header-left">
         <div class="ai-robot-icon">
-          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="8" y="12" width="32" height="28" rx="8" fill="#6366F1" />
-            <rect x="14" y="20" width="8" height="8" rx="4" fill="white" fill-opacity="0.9" />
-            <rect x="26" y="20" width="8" height="8" rx="4" fill="white" fill-opacity="0.9" />
-            <rect x="20" y="32" width="8" height="3" rx="1.5" fill="white" fill-opacity="0.6" />
-            <rect x="18" y="6" width="12" height="4" rx="2" fill="#818CF8" />
-            <circle cx="24" cy="4" r="2" fill="#818CF8" />
-          </svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>
         </div>
-        <span class="ai-chat-title">{{ t('insight.aiAssistantTitle') }}</span>
+        <div class="ai-chat-title-block">
+          <span class="ai-chat-title">{{ t('insight.aiAssistantTitle') }}</span>
+          <span class="ai-chat-sub">{{ t('insight.aiPanelSub') }}</span>
+        </div>
       </div>
-      <el-button text size="small" @click="$emit('close')">
+      <el-button class="ai-panel-close" text size="small" @click="$emit('close')">
         <el-icon><Close /></el-icon>
       </el-button>
     </div>
@@ -50,12 +46,14 @@
               :value="ds.id"
             />
           </el-select>
+          <div class="field-hint">{{ t('insight.datasourceHint') }}</div>
         </el-form-item>
       </el-form>
     </div>
 
     <!-- 消息展示 + 输入框整体容器 -->
     <div class="ai-chat-body">
+      <div class="chat-label">{{ t('insight.agentChat') }}</div>
       <div ref="messageListRef" class="ai-chat-messages">
         <div v-if="messages.length === 0 && (isModifyMode || hasStarted)" class="ai-chat-empty">
           <div class="ai-robot-large">
@@ -156,6 +154,7 @@
             <el-icon><Promotion /></el-icon>
           </el-button>
         </div>
+        <div class="input-hint">{{ t('insight.aiInputHint') }}</div>
       </div>
     </div>
   </div>
@@ -526,77 +525,160 @@ async function handleSend(): Promise<void> {
   background: var(--db-card);
 }
 
-/* 头部 */
+/* 头部（设计稿 .panel-head） */
 .ai-chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  gap: 11px;
+  padding: 15px 18px;
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--db-card) 0%, rgba(99, 102, 241, 0.04) 100%);
 }
 
 .ai-chat-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  min-width: 0;
 }
 
 .ai-robot-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--db-accent) 0%, #818cf8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--db-accent) 30%, transparent);
 }
 
 .ai-robot-icon svg {
-  width: 100%;
-  height: 100%;
+  width: 16px;
+  height: 16px;
+}
+
+.ai-chat-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .ai-chat-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15.5px;
+  font-weight: 700;
   color: var(--db-text);
+  line-height: 1.3;
 }
 
-/* 生成模式表单 */
+.ai-chat-sub {
+  font-size: 11.5px;
+  color: var(--db-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-panel-close {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--db-border-strong);
+  color: var(--db-text-muted);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.ai-panel-close:hover {
+  color: var(--db-text);
+  border-color: var(--db-text-muted);
+}
+
+/* 生成模式表单（设计稿 .panel-form） */
 .ai-chat-generate-form {
-  padding: 14px;
+  padding: 16px 18px 14px;
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   overflow-y: auto;
 }
 
 .ai-chat-generate-form :deep(.el-form-item) {
-  margin-bottom: 12px;
+  margin-bottom: 13px;
+}
+
+.ai-chat-generate-form :deep(.el-form-item:last-child) {
+  margin-bottom: 2px;
 }
 
 .ai-chat-generate-form :deep(.el-form-item__label) {
-  font-size: 12px;
-  padding-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--db-text-secondary);
+  padding-bottom: 7px;
 }
 
-/* 消息展示 + 输入框整体容器 */
+.ai-chat-generate-form :deep(.el-input__wrapper),
+.ai-chat-generate-form :deep(.el-select__wrapper) {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1.5px var(--db-border-strong) inset;
+  min-height: 38px;
+}
+
+.ai-chat-generate-form :deep(.el-input__wrapper.is-focus),
+.ai-chat-generate-form :deep(.el-select__wrapper.is-focus),
+.ai-chat-generate-form :deep(.el-input__wrapper.is-focus:hover),
+.ai-chat-generate-form :deep(.el-select__wrapper.is-focus:hover) {
+  box-shadow: 0 0 0 1.5px var(--db-accent) inset, 0 0 0 3px var(--db-accent-light);
+}
+
+.field-hint {
+  width: 100%;
+  font-size: 11px;
+  color: var(--db-text-muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+/* 消息展示 + 输入框整体容器（设计稿 .panel-body） */
 .ai-chat-body {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  margin: 0 10px 10px;
-  border: 1px solid var(--db-border);
-  border-radius: 12px;
-  background: var(--db-card);
+  min-height: 0;
 }
 
-/* 消息列表 */
+/* Agent 对话标签（设计稿 .chat-label） */
+.chat-label {
+  padding: 12px 18px 8px;
+  font-size: 11.5px;
+  color: var(--db-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.chat-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--db-border);
+}
+
+/* 消息列表（设计稿 .chat） */
 .ai-chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 14px;
+  padding: 2px 18px 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  min-height: 0;
 }
 
 .ai-chat-empty {
@@ -627,21 +709,28 @@ async function handleSend(): Promise<void> {
   padding: 0 12px;
 }
 
-/* 消息气泡 */
+/* 消息气泡（设计稿 .msg / .bubble） */
 .ai-chat-message {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
+  max-width: 100%;
 }
 
 .ai-chat-message.user {
   flex-direction: row-reverse;
 }
 
+/* 设计稿中用户消息不显示头像 */
+.ai-chat-message.user .message-avatar {
+  display: none;
+}
+
 .message-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  margin-top: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -650,26 +739,14 @@ async function handleSend(): Promise<void> {
   overflow: hidden;
 }
 
-.user-avatar {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 50%;
-  font-size: 13px;
-}
-
 .robot-avatar-small {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
-  border-radius: 50%;
-  padding: 2px;
+  background: linear-gradient(135deg, var(--db-accent) 0%, #818cf8 100%);
+  border-radius: 8px;
 }
 
 .robot-avatar-small svg {
@@ -678,46 +755,36 @@ async function handleSend(): Promise<void> {
 }
 
 .message-content {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  max-width: 86%;
+  padding: 9px 12px;
+  border-radius: 10px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-word;
   white-space: pre-wrap;
 }
 
 .ai-chat-message.user .message-content {
-  background: linear-gradient(135deg, #4176e6 0%, #4868b2 100%);
+  background: var(--db-accent);
   color: #fff;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 3px;
 }
 
 .ai-chat-message.assistant .message-content {
-  background: var(--db-hover);
+  background: var(--db-muted);
+  border: 1px solid var(--db-border);
   color: var(--db-text);
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 3px;
 }
 
 /* 流式光标 */
 .cursor-blink {
-n.reasoning-cursor {
-  display: inline;
-}
   animation: blink 1s step-end infinite;
-n.reasoning-cursor {
-  display: inline;
-}
   color: var(--db-accent);
-n.reasoning-cursor {
-  display: inline;
-}
   font-weight: bold;
-n.reasoning-cursor {
-  display: inline;
 }
-}
-n.reasoning-cursor {
+
+.reasoning-cursor {
   display: inline;
 }
 
@@ -868,9 +935,9 @@ n.reasoning-cursor {
   }
 }
 
-/* 输入框（与消息列表同属整体容器，无分隔线） */
+/* 输入区（设计稿 .panel-input / .chat-input / .send-btn） */
 .ai-chat-input-wrapper {
-  padding: 8px 12px 10px;
+  padding: 12px 14px 13px;
   border-top: 1px solid var(--db-border);
   flex-shrink: 0;
   background: transparent;
@@ -879,11 +946,11 @@ n.reasoning-cursor {
 .ai-chat-input-box {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  background: var(--db-bg);
+  gap: 9px;
+  background: var(--db-muted);
   border: 1px solid var(--db-border);
-  border-radius: 10px;
-  padding: 6px 8px 6px 12px;
+  border-radius: 20px;
+  padding: 4px 4px 4px 16px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -904,7 +971,7 @@ n.reasoning-cursor {
   font-size: 13px;
   min-height: 32px !important;
   max-height: 120px;
-  padding: 4px 0;
+  padding: 5px 0;
   background: transparent;
   border: none;
   box-shadow: none;
@@ -921,17 +988,38 @@ n.reasoning-cursor {
 }
 
 .send-btn {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: 50% !important;
   padding: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--db-accent);
+  border-color: var(--db-accent);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--db-accent) 40%, transparent);
+}
+
+.send-btn:hover,
+.send-btn:focus {
+  background: var(--db-accent);
+  border-color: var(--db-accent);
+  filter: brightness(1.08);
+}
+
+.send-btn:disabled {
+  box-shadow: none;
 }
 
 .send-btn :deep(.el-icon) {
-  font-size: 14px;
+  font-size: 16px;
+}
+
+.input-hint {
+  font-size: 10.5px;
+  color: var(--db-text-muted);
+  margin-top: 8px;
+  text-align: center;
 }
 </style>
