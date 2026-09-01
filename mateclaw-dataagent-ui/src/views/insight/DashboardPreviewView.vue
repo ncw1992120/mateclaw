@@ -3,13 +3,21 @@
     <!-- 顶部工具栏 -->
     <div class="preview-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
-        <el-button :icon="ArrowLeft" text @click="handleBack">{{ t('common.back') }}</el-button>
-        <span class="toolbar-title mc-toolbar-title">{{ dashboard?.name ?? t('insight.preview') }}</span>
+        <button type="button" class="back-btn" :title="t('common.back')" @click="handleBack">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div class="toolbar-title-block">
+          <h2 class="toolbar-title mc-toolbar-title">{{ dashboard?.name ?? t('insight.preview') }}</h2>
+          <div class="toolbar-subtitle">
+            {{ t('insight.previewMode') }}<span v-if="dashboard?.status" class="toolbar-status-dot" :class="dashboard.status"></span><span v-if="dashboard?.status">{{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}</span>
+          </div>
+        </div>
       </div>
       <div class="toolbar-right mc-toolbar-right">
         <el-button
           v-if="canCreate && !reportGenerating"
-          size="small"
+          type="primary"
+          class="toolbar-btn"
           :icon="Document"
           @click="handleGenerateReport"
         >
@@ -17,7 +25,7 @@
         </el-button>
         <el-button
           v-if="hasReport && !reportGenerating"
-          size="small"
+          class="toolbar-btn"
           :icon="View"
           @click="handleViewReport"
         >
@@ -25,7 +33,7 @@
         </el-button>
         <el-button
           v-if="canCreate && hasReport && !reportGenerating"
-          size="small"
+          class="toolbar-btn"
           :icon="Upload"
           @click="handlePublishReport"
         >
@@ -72,8 +80,24 @@
         <div class="loading-text">{{ t('insight.loadingData') }}</div>
       </div>
       <div v-else-if="currentPageComponents.length === 0" class="preview-empty">
-        <div class="empty-icon">📭</div>
-        <div class="empty-text">{{ t('insight.previewEmpty') }}</div>
+        <div class="empty-illustration">
+          <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
+            <rect x="12" y="14" width="56" height="52" rx="10" fill="var(--db-muted)" opacity=".45"/>
+            <rect x="22" y="38" width="9" height="20" rx="3" fill="var(--main-orange)" opacity=".55"/>
+            <rect x="35" y="28" width="9" height="30" rx="3" fill="var(--main-orange)" opacity=".75"/>
+            <rect x="48" y="34" width="9" height="24" rx="3" fill="var(--main-orange)" opacity=".55"/>
+            <circle cx="60" cy="22" r="10" fill="var(--db-card)" stroke="var(--db-border-strong)" stroke-width="1.5"/>
+            <path d="M57 22 h6 M60 19 v6" stroke="var(--db-text-muted)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="empty-copy">
+          <div class="empty-title">{{ t('insight.previewEmpty') }}</div>
+          <div class="empty-hint">{{ t('insight.previewEmptyHint') }}</div>
+        </div>
+        <div class="empty-actions">
+          <el-button class="toolbar-btn" @click="handleBack">{{ t('common.back') }}</el-button>
+          <el-button v-if="canCreate" type="primary" class="toolbar-btn" :icon="EditPen" @click="handleGoEdit">{{ t('insight.goEdit') }}</el-button>
+        </div>
       </div>
       <DashboardCanvas
         v-else
@@ -114,7 +138,7 @@
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document, View, Loading, Upload } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, View, Loading, Upload, EditPen } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
 import type {
@@ -143,6 +167,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'back'): void
+  (e: 'edit'): void
 }>()
 
 const { t } = useI18n()
@@ -609,6 +634,11 @@ function handleBack(): void {
   emit('back')
 }
 
+/** 去编辑仪表盘（空态引导） */
+function handleGoEdit(): void {
+  emit('edit')
+}
+
 /** 切换页面 */
 function handlePageChange(pageId: string): void {
   if (activePageId.value === pageId) {
@@ -631,15 +661,117 @@ function handlePageChange(pageId: string): void {
 }
 
 .preview-toolbar {
-  min-height: 48px;
+  height: 72px;
+  min-height: 72px;
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
+  gap: 14px;
 }
 
 .toolbar-left {
-  gap: var(--space-md);
+  gap: 12px;
+  min-width: 0;
+}
+
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--db-border-strong);
+  border-radius: 8px;
+  background: var(--db-card);
+  color: var(--db-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.back-btn:hover {
+  color: var(--db-accent);
+  border-color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 6%, transparent);
+}
+
+.toolbar-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toolbar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--db-text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toolbar-status-dot.published {
+  background: #14a05a;
+}
+
+.toolbar-status-dot.draft {
+  background: #dd8a1d;
 }
 
 .toolbar-right {
-  gap: var(--space-sm);
+  gap: 10px;
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn) {
+  height: 36px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn:not(.el-button--primary)) {
+  background: var(--db-card);
+  border-color: var(--db-border-strong);
+  color: var(--db-text-secondary);
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn:not(.el-button--primary):hover) {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+}
+
+.toolbar-right :deep(.el-button--primary.toolbar-btn) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  box-shadow: var(--shadow-md);
+}
+
+.toolbar-right :deep(.el-button--primary.toolbar-btn:hover),
+.toolbar-right :deep(.el-button--primary.toolbar-btn:focus) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  filter: brightness(1.08);
 }
 
 .generating-indicator {
@@ -649,9 +781,9 @@ function handlePageChange(pageId: string): void {
   font-size: 13px;
   font-weight: 500;
   color: var(--db-accent);
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: var(--db-accent-light);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
 }
 
 .report-container {
@@ -796,36 +928,96 @@ function handlePageChange(pageId: string): void {
 .preview-empty {
   width: 100%;
   height: 100%;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-md);
+  gap: 20px;
+  padding: 48px 24px;
+}
+
+.preview-empty .empty-illustration svg {
+  display: block;
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--main-orange) 12%, transparent));
+}
+
+.preview-empty .empty-copy {
+  text-align: center;
+  max-width: 360px;
+}
+
+.preview-empty .empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--db-text);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.preview-empty .empty-hint {
+  font-size: 13px;
   color: var(--db-text-muted);
+  line-height: 1.5;
 }
 
-.preview-empty .empty-icon {
-  font-size: 56px;
-  line-height: 1;
-  opacity: 0.8;
+.preview-empty .empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
 }
 
-.preview-empty .empty-text {
-  font-size: 14px;
+.preview-empty .empty-actions :deep(.el-button) {
+  height: 36px;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.preview-empty .empty-actions :deep(.el-button:not(.el-button--primary)) {
+  background: var(--db-card);
+  border-color: var(--db-border-strong);
+  color: var(--db-text-secondary);
+}
+
+.preview-empty .empty-actions :deep(.el-button:not(.el-button--primary):hover) {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+}
+
+.preview-empty .empty-actions :deep(.el-button--primary) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  box-shadow: var(--shadow-md);
+}
+
+.preview-empty .empty-actions :deep(.el-button--primary:hover),
+.preview-empty .empty-actions :deep(.el-button--primary:focus) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  filter: brightness(1.08);
 }
 
 @media (max-width: 767px) {
   .preview-toolbar {
-    padding: var(--space-sm);
+    padding: 0 var(--space-md);
+    gap: 10px;
   }
 
   .toolbar-left,
   .toolbar-right {
-    width: 100%;
+    width: auto;
+    min-width: 0;
   }
 
   .toolbar-right {
     justify-content: flex-end;
+  }
+
+  .toolbar-title {
+    font-size: 16px;
   }
 }
 </style>

@@ -4618,6 +4618,18 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+.chat-main::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--theme-border);
+  pointer-events: none;
+  z-index: 5;
+}
+
 /* 回到底部悬浮按钮：锚定在消息区底部（即输入框上方）居中 */
 .scroll-to-bottom {
   position: absolute;
@@ -4818,6 +4830,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .empty-state {
@@ -4826,24 +4841,24 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding: 40px 20px;
+  padding: 40px 20px 12vh;
 }
 
 .empty-avatar {
-  width: 88px;
-  height: 88px;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--main-orange) 18%, transparent);
 }
 
 .empty-avatar__icon {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
 }
 
 .empty-greeting {
@@ -4852,7 +4867,7 @@ onUnmounted(() => {
 }
 
 .empty-greeting__title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 600;
   color: var(--theme-text);
   margin: 0 0 8px;
@@ -4869,7 +4884,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  max-width: 420px;
+  max-width: 540px;
   margin-bottom: 32px;
 }
 
@@ -6441,9 +6456,12 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 12px 20px 20px;
-  border-top: 1px solid var(--theme-border);
+  border-top: none;
   background: transparent;
   flex-shrink: 0;
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .input-bar__card {

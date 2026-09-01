@@ -1734,9 +1734,17 @@ export default {
     deleteFailed: '删除失败',
     deleteConfirm: '确定要删除仪表盘「{name}」吗？',
     previewEmpty: '该仪表盘暂无组件，请先编辑添加组件',
+    previewEmptyHint: '当前页面还没有可视化组件，去编辑添加后即可在此预览效果',
+    previewMode: '预览模式',
+    goEdit: '去编辑',
     previewDataFailed: '组件数据加载失败，请检查数据源配置',
     canvasEmpty: '从左侧拖拽组件到此处',
     paletteTitle: '组件库',
+    paletteGroup: {
+      basic: '基础组件',
+      commonChart: '基础图表',
+      advancedChart: '高级图表',
+    },
     propertyTitle: '属性配置',
     editorMobile: {
       pages: '页面',

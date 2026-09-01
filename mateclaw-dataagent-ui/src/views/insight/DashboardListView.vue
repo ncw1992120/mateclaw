@@ -115,20 +115,22 @@
               v-for="dashboard in displayedDashboards"
               :key="dashboard.id"
               class="dashboard-card"
-              :class="'card-theme-' + getCardTheme(dashboard.id)"
+              :class="['card-theme-' + getCardTheme(dashboard.id), { 'card-is-empty': getDashboardChartKind(dashboard) === 'empty' }]"
               @click="handlePreview(dashboard.id)"
             >
               <!-- 头部：图标 + 标题 + 状态标签 -->
               <div class="card-header">
                 <div class="card-icon">
                   <!-- bar icon -->
-                  <svg v-if="getCardIconType(dashboard.id) === 'bar'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                  <svg v-if="getDashboardIconType(dashboard) === 'bar'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
                   <!-- line icon -->
-                  <svg v-else-if="getCardIconType(dashboard.id) === 'line'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m7 13 3-3 4 4 5-6"/></svg>
+                  <svg v-else-if="getDashboardIconType(dashboard) === 'line'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m7 13 3-3 4 4 5-6"/></svg>
                   <!-- pie icon -->
-                  <svg v-else-if="getCardIconType(dashboard.id) === 'pie'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                  <svg v-else-if="getDashboardIconType(dashboard) === 'pie'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
                   <!-- funnel icon -->
-                  <svg v-else width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+                  <svg v-else-if="getDashboardIconType(dashboard) === 'funnel'" width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+                  <!-- empty icon -->
+                  <svg v-else width="15.5" height="15.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="13" y2="14"/></svg>
                 </div>
                 <span class="card-name">{{ dashboard.name }}</span>
                 <el-tag
@@ -147,8 +149,34 @@
 
               <!-- 图表预览区（按主题切换图形类型） -->
               <div class="card-chart-preview">
+                <!-- 空状态（无组件时） -->
+                <svg v-if="getDashboardChartKind(dashboard) === 'empty'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <rect x="2" y="2" width="176" height="40" rx="8" fill="none" stroke="var(--db-text-muted)" stroke-width="1.5" stroke-dasharray="4 3" opacity=".3"/>
+                  <g transform="translate(78, 10)" opacity=".35">
+                    <path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" fill="none" stroke="var(--db-text-muted)" stroke-width="1.5"/>
+                    <line x1="8" y1="10" x2="16" y2="10" stroke="var(--db-text-muted)" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="8" y1="14" x2="13" y2="14" stroke="var(--db-text-muted)" stroke-width="1.5" stroke-linecap="round"/>
+                  </g>
+                </svg>
+                <!-- KPI 网格（无 chart 组件时） -->
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'kpi-grid'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <rect x="4" y="4" width="54" height="36" rx="6" fill="var(--card-tint-fg)" opacity=".08"/>
+                  <rect x="12" y="12" width="24" height="4" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="12" y="22" width="36" height="6" rx="3" fill="var(--card-tint-fg)" opacity=".35"/>
+                  <rect x="63" y="4" width="54" height="36" rx="6" fill="var(--card-tint-fg)" opacity=".08"/>
+                  <rect x="71" y="12" width="24" height="4" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="71" y="22" width="36" height="6" rx="3" fill="var(--card-tint-fg)" opacity=".35"/>
+                  <rect x="122" y="4" width="54" height="36" rx="6" fill="var(--card-tint-fg)" opacity=".08"/>
+                  <rect x="130" y="12" width="24" height="4" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
+                  <rect x="130" y="22" width="36" height="6" rx="3" fill="var(--card-tint-fg)" opacity=".35"/>
+                </svg>
+                <!-- 折线 -->
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'line'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                  <path d="M4 34 L34 26 L64 30 L94 16 L124 20 L154 8 L176 12" fill="none" stroke="var(--card-tint-fg)" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="154" cy="8" r="3" fill="var(--db-card)" stroke="var(--card-tint-fg)" stroke-width="2"/>
+                </svg>
                 <!-- 柱状图 -->
-                <svg v-if="getChartKind(dashboard.id) === 'bar'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'bar'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
                   <rect x="6" y="22" width="14" height="16" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
                   <rect x="28" y="16" width="14" height="22" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
                   <rect x="50" y="24" width="14" height="14" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
@@ -159,13 +187,13 @@
                   <rect x="160" y="6" width="14" height="32" rx="2" fill="var(--card-tint-fg)" opacity=".6"/>
                 </svg>
                 <!-- 面积折线 -->
-                <svg v-else-if="getChartKind(dashboard.id) === 'area'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'area'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
                   <path d="M4 34 L34 26 L64 30 L94 16 L124 20 L154 8 L176 12 L176 42 L4 42 Z" fill="var(--card-tint-fg)" opacity=".1"/>
                   <path d="M4 34 L34 26 L64 30 L94 16 L124 20 L154 8 L176 12" fill="none" stroke="var(--card-tint-fg)" stroke-width="2" stroke-linecap="round"/>
                   <circle cx="154" cy="8" r="3" fill="var(--db-card)" stroke="var(--card-tint-fg)" stroke-width="2"/>
                 </svg>
                 <!-- 柱状图带告警色 -->
-                <svg v-else-if="getChartKind(dashboard.id) === 'bar-alert'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'bar-alert'" width="180" height="44" viewBox="0 0 180 44" aria-hidden="true">
                   <rect x="6" y="12" width="14" height="26" rx="2" fill="var(--card-tint-fg)" opacity=".8"/>
                   <rect x="28" y="20" width="14" height="18" rx="2" fill="var(--card-tint-fg)" opacity=".5"/>
                   <rect x="50" y="26" width="14" height="12" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
@@ -176,7 +204,7 @@
                   <rect x="160" y="24" width="14" height="14" rx="2" fill="var(--card-tint-fg)" opacity=".35"/>
                 </svg>
                 <!-- 环形图 -->
-                <svg v-else-if="getChartKind(dashboard.id) === 'donut'" width="120" height="44" viewBox="0 0 120 44" aria-hidden="true">
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'donut'" width="120" height="44" viewBox="0 0 120 44" aria-hidden="true">
                   <circle cx="26" cy="22" r="15" fill="none" stroke="var(--db-chart-preview-track)" stroke-width="7"/>
                   <circle cx="26" cy="22" r="15" fill="none" stroke="var(--card-tint-fg)" stroke-width="7" stroke-dasharray="56 94" stroke-linecap="round" transform="rotate(-90 26 22)"/>
                   <circle cx="26" cy="22" r="15" fill="none" stroke="var(--db-card-blue-fg)" stroke-width="7" stroke-dasharray="24 118" stroke-dashoffset="-56" transform="rotate(-90 26 22)"/>
@@ -186,7 +214,7 @@
                   <rect x="70" y="27.5" width="24" height="5" rx="2.5" fill="var(--db-chart-preview-track)"/>
                 </svg>
                 <!-- 漏斗 -->
-                <svg v-else-if="getChartKind(dashboard.id) === 'funnel'" width="150" height="44" viewBox="0 0 150 44" aria-hidden="true">
+                <svg v-else-if="getDashboardChartKind(dashboard) === 'funnel'" width="150" height="44" viewBox="0 0 150 44" aria-hidden="true">
                   <path d="M10 8 h130 l-24 10 h-82 Z" fill="var(--card-tint-fg)" opacity=".8"/>
                   <path d="M30 20 h90 l-20 8 h-50 Z" fill="var(--card-tint-fg)" opacity=".55"/>
                   <path d="M48 30 h54 l-14 7 h-26 Z" fill="var(--card-tint-fg)" opacity=".32"/>
@@ -300,6 +328,7 @@
       v-else-if="mode === 'preview'"
       :dashboard-id="currentDashboardId"
       @back="handleBackToList"
+      @edit="handleEdit(currentDashboardId)"
     />
   </div>
 </template>
@@ -537,7 +566,7 @@ function getCardTheme(id: string): CardTheme {
   return cardThemes[hashId(id) % cardThemes.length]
 }
 
-/** 卡片主题对应的图标类型 */
+/** 卡片主题对应的图标类型（保留用于回退） */
 const cardThemeIcon: Record<CardTheme, 'bar' | 'line' | 'pie' | 'funnel'> = {
   blue: 'bar',
   violet: 'line',
@@ -547,12 +576,7 @@ const cardThemeIcon: Record<CardTheme, 'bar' | 'line' | 'pie' | 'funnel'> = {
   cyan: 'funnel',
 }
 
-function getCardIconType(id: string): 'bar' | 'line' | 'pie' | 'funnel' {
-  return cardThemeIcon[getCardTheme(id)]
-}
-
-/** 卡片主题对应的图表预览图形类型 */
-type ChartKind = 'bar' | 'area' | 'bar-alert' | 'donut' | 'funnel' | 'dual-line'
+/** 卡片主题对应的图表预览图形类型（回退用） */
 const cardThemeChart: Record<CardTheme, ChartKind> = {
   blue: 'bar',
   violet: 'area',
@@ -562,8 +586,94 @@ const cardThemeChart: Record<CardTheme, ChartKind> = {
   cyan: 'funnel',
 }
 
-function getChartKind(id: string): ChartKind {
-  return cardThemeChart[getCardTheme(id)]
+/** 从仪表盘 schemaJson 解析出主要图表类型 */
+type ChartKind = 'bar' | 'area' | 'bar-alert' | 'donut' | 'funnel' | 'dual-line' | 'kpi-grid' | 'line' | 'empty'
+
+/** chartType → ChartKind 映射 */
+const chartTypeToKind: Record<string, ChartKind> = {
+  bar: 'bar',
+  line: 'line',
+  area: 'area',
+  pie: 'donut',
+  scatter: 'dual-line',
+  radar: 'donut',
+  funnel: 'funnel',
+  gauge: 'donut',
+  heatmap: 'bar-alert',
+  candlestick: 'bar-alert',
+  sankey: 'funnel',
+  treemap: 'bar',
+  sunburst: 'donut',
+  tree: 'line',
+  graph: 'dual-line',
+  map: 'area',
+  lines: 'dual-line',
+  boxplot: 'bar',
+  parallel: 'dual-line',
+  themeRiver: 'area',
+  pictorialBar: 'bar',
+  effectScatter: 'dual-line',
+}
+
+function getDashboardChartKind(dashboard: InsightDashboard): ChartKind {
+  // schemaJson 为空 → 空状态
+  if (!dashboard.schemaJson || dashboard.schemaJson.trim() === '') return 'empty'
+  try {
+    const parsed = JSON.parse(dashboard.schemaJson)
+    const pages = parsed?.pages ?? []
+    if (!Array.isArray(pages) || pages.length === 0) return 'empty'
+
+    // 收集所有组件
+    const allComponents: Array<{ type?: string; chartType?: string }> = []
+    for (const page of pages) {
+      if (Array.isArray(page.components)) {
+        allComponents.push(...page.components)
+      }
+    }
+    if (allComponents.length === 0) return 'empty'
+
+    // 统计 chart 类型分布
+    const chartCounts: Record<string, number> = {}
+    let hasKpi = false
+    let hasTable = false
+    for (const comp of allComponents) {
+      if (comp.type === 'chart' && comp.chartType) {
+        chartCounts[comp.chartType] = (chartCounts[comp.chartType] ?? 0) + 1
+      } else if (comp.type === 'kpi') {
+        hasKpi = true
+      } else if (comp.type === 'table') {
+        hasTable = true
+      }
+    }
+
+    // 有 chart 组件 → 取数量最多的 chartType
+    const entries = Object.entries(chartCounts)
+    if (entries.length > 0) {
+      entries.sort((a, b) => b[1] - a[1])
+      const topChartType = entries[0][0]
+      return chartTypeToKind[topChartType] ?? 'line'
+    }
+
+    // 无 chart 但有 kpi/table → 用 kpi-grid
+    if (hasKpi || hasTable) return 'kpi-grid'
+
+    // 只有 filter/timeFilter/aiAnalysis → 默认简洁样式
+    return 'kpi-grid'
+  } catch {
+    // schemaJson 解析失败 → 回退到主题色映射
+    return cardThemeChart[getCardTheme(dashboard.id)]
+  }
+}
+
+function getDashboardIconType(dashboard: InsightDashboard): 'bar' | 'line' | 'pie' | 'funnel' | 'empty' {
+  const kind = getDashboardChartKind(dashboard)
+  if (kind === 'empty') return 'empty'
+  if (kind === 'bar' || kind === 'bar-alert') return 'bar'
+  if (kind === 'line' || kind === 'area' || kind === 'dual-line') return 'line'
+  if (kind === 'donut') return 'pie'
+  if (kind === 'funnel') return 'funnel'
+  if (kind === 'kpi-grid') return 'bar'
+  return 'line'
 }
 
 /** 返回列表 */
@@ -935,6 +1045,12 @@ function handleBackToList(): void {
 .card-theme-orange { --card-tint-bg: var(--db-card-orange-bg); --card-tint-fg: var(--db-card-orange-fg); }
 .card-theme-pink { --card-tint-bg: var(--db-card-pink-bg); --card-tint-fg: var(--db-card-pink-fg); }
 .card-theme-cyan { --card-tint-bg: var(--db-card-cyan-bg); --card-tint-fg: var(--db-card-cyan-fg); }
+
+/* 空状态：icon 颜色与预览图一致（灰色） */
+.card-is-empty .card-icon {
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
+  color: var(--db-text-muted);
+}
 
 .card-icon {
   width: 30px;

@@ -1723,9 +1723,17 @@ export default {
     deleteFailed: 'Failed to delete',
     deleteConfirm: 'Are you sure you want to delete dashboard "{name}"?',
     previewEmpty: 'No components in this dashboard. Please edit and add components first.',
+    previewEmptyHint: 'This page has no visualization components yet. Edit the dashboard to add some, then preview them here.',
+    previewMode: 'Preview Mode',
+    goEdit: 'Go to Edit',
     previewDataFailed: 'Failed to load component data. Please check datasource configuration.',
     canvasEmpty: 'Drag components from the left panel here',
     paletteTitle: 'Components',
+    paletteGroup: {
+      basic: 'Basic',
+      commonChart: 'Common Charts',
+      advancedChart: 'Advanced Charts',
+    },
     propertyTitle: 'Properties',
     editorMobile: {
       pages: 'Pages',

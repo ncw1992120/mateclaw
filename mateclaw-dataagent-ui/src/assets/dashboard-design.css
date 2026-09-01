@@ -189,6 +189,13 @@ html[data-theme='dark'] {
   gap: var(--space-md);
 }
 
+/* Element Plus 相邻按钮默认 margin-left: 12px，会与容器 gap 叠加导致间距过大；
+   此处清零，统一由容器 gap 控制按钮间距 */
+.mc-toolbar-left .el-button + .el-button,
+.mc-toolbar-right .el-button + .el-button {
+  margin-left: 0;
+}
+
 .mc-toolbar-title {
   font-size: 16px;
   font-weight: 500;
