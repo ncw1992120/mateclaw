@@ -272,6 +272,10 @@ onMounted(() => {
   getAuthMode()
     .then(async (mode) => {
       authProvider.value = mode.provider
+      // 本地模式隐藏企业页签时，同步把表单切到 LOCAL 文案（账号/密码），避免残留"开机账号"字样
+      if (mode.provider === 'local') {
+        loginType.value = 'LOCAL'
+      }
       if (mode.provider === 'pilot' && mode.ssoCookieName) {
         const ssoCookie = readCookie(mode.ssoCookieName)
         if (ssoCookie) {
