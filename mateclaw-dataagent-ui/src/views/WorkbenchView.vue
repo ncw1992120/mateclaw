@@ -144,6 +144,7 @@
       <!-- 历史对话侧栏（问数、洞察、报告页面展示） -->
       <div v-if="showSelectorPanel" class="history-sidebar" :class="{ collapsed: historyCollapsed }">
         <div class="history-header">
+          <span v-if="!historyCollapsed" class="history-title">{{ t('conversation.history') }}</span>
           <div class="header-spacer"></div>
 
           <button v-if="!historyCollapsed" class="new-chat-btn" :title="t('conversation.newChat')" @click="handleNewChat">
@@ -1302,6 +1303,14 @@ onBeforeUnmount(() => {
 }
 
 /** 操作按钮行（新对话 + 折叠按钮） */
+.history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .header-spacer {
   flex: 1;
 }
@@ -1392,7 +1401,7 @@ onBeforeUnmount(() => {
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 10px 10px;
+  padding: 0 8px 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1400,15 +1409,15 @@ onBeforeUnmount(() => {
 
 .history-group-title {
   align-self: flex-start;
-  margin: 16px 0 8px 4px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--theme-surface-hover);
+  margin: 14px 0 6px 6px;
+  padding: 0;
+  background: none;
   color: var(--theme-text-muted);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .history-group-title:first-child {
@@ -1418,12 +1427,12 @@ onBeforeUnmount(() => {
 .history-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
+  gap: 6px;
+  padding: 7px 10px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
-  min-height: 44px;
+  min-height: 38px;
   border: 1px solid transparent;
 }
 

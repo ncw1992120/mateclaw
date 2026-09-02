@@ -1,6 +1,11 @@
 <template>
   <div class="property-panel">
-    <div class="panel-header">{{ t('insight.propertyTitle') }}</div>
+    <div class="panel-header">
+      <span>{{ t('insight.propertyTitle') }}</span>
+      <button type="button" class="property-collapse-btn" title="收起面板" @click="emit('collapse')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+      </button>
+    </div>
 
     <div v-if="!component" class="panel-empty">
       <div class="empty-icon">⚙️</div>
@@ -11,13 +16,13 @@
       <!-- 标题 -->
       <div class="form-group">
         <label class="form-label">{{ t('insight.property.componentTitle') }}</label>
-        <el-input v-model="localComponent.title" size="small" @change="emitChange" />
+        <el-input v-model="localComponent.title"  @change="emitChange" />
       </div>
 
       <!-- 图表类型（仅 chart 组件） -->
       <div v-if="component.type === 'chart'" class="form-group">
         <label class="form-label">{{ t('insight.property.chartType') }}</label>
-        <el-select v-model="localComponent.chartType" size="small" filterable style="width: 100%" @change="emitChange">
+        <el-select v-model="localComponent.chartType"  filterable style="width: 100%" @change="emitChange">
           <el-option value="line" :label="t('insight.component.line')" />
           <el-option value="bar" :label="t('insight.component.bar')" />
           <el-option value="pie" :label="t('insight.component.pie')" />
@@ -50,7 +55,7 @@
           <label class="form-label">{{ t('insight.property.multiKpi') }}</label>
           <el-switch
             v-model="localMultiKpi"
-            size="small"
+            
             @change="emitChange"
           />
           <span class="form-hint">{{ t('insight.property.multiKpiHint') }}</span>
@@ -61,7 +66,7 @@
           <label class="form-label">多 Tab 模式</label>
           <el-switch
             v-model="tabModeEnabled"
-            size="small"
+            
             @change="handleTabModeToggle"
           />
           <span class="form-hint">开启后组件支持多个 Tab 切换不同数据源</span>
@@ -69,7 +74,7 @@
 
         <!-- Tab 管理区域（多 Tab 模式开启时显示） -->
         <template v-if="tabModeEnabled">
-          <div class="form-group">
+          <div class="form-group form-group-column">
             <label class="form-label">Tab 列表</label>
             <div class="tab-list-editor">
               <div
@@ -81,20 +86,20 @@
               >
                 <el-input
                   v-model="tab.title"
-                  size="small"
+                
                   placeholder="Tab 标题"
                   style="flex: 1"
                   @change="emitTabChange"
                 />
                 <el-button
                   text
-                  size="small"
+                  
                   @click.stop="removeTab(idx)"
                 >✕</el-button>
               </div>
               <el-button
                 text
-                size="small"
+                
                 @click="addTab"
               >+ 添加 Tab</el-button>
             </div>
@@ -108,7 +113,7 @@
               <el-select
                 v-model="activeTab.dataSource.datasourceId"
                 :placeholder="t('insight.property.selectDatasource')"
-                size="small"
+                
                 filterable
                 style="width: 100%"
                 @change="handleTabDatasourceChange"
@@ -127,7 +132,7 @@
               <el-select
                 v-model="activeTab.dataSource.metrics"
                 :placeholder="t('insight.property.selectMetrics')"
-                size="small"
+                
                 multiple
                 filterable
                 remote
@@ -150,7 +155,7 @@
               <el-select
                 v-model="activeTab.dataSource.dimensions"
                 :placeholder="t('insight.property.selectDimensions')"
-                size="small"
+                
                 multiple
                 filterable
                 remote
@@ -174,7 +179,7 @@
                 v-model="activeTab.dataSource.limit"
                 :min="1"
                 :max="500"
-                size="small"
+                
                 style="width: 100%"
                 @change="emitTabChange"
               />
@@ -189,7 +194,7 @@
             <el-select
               v-model="localDataSource.datasourceId"
               :placeholder="t('insight.property.selectDatasource')"
-              size="small"
+              
               filterable
               style="width: 100%"
               @change="handleDatasourceChange"
@@ -208,7 +213,7 @@
             <el-select
               v-model="localDataSource.metrics"
               :placeholder="t('insight.property.selectMetrics')"
-              size="small"
+              
               multiple
               filterable
               remote
@@ -231,7 +236,7 @@
             <el-select
               v-model="localDataSource.dimensions"
               :placeholder="t('insight.property.selectDimensions')"
-              size="small"
+              
               multiple
               filterable
               remote
@@ -255,7 +260,7 @@
               v-model="localDataSource.limit"
               :min="1"
               :max="500"
-              size="small"
+              
               style="width: 100%"
               @change="emitChange"
             />
@@ -264,7 +269,7 @@
           <!-- 验证数据按钮 -->
           <div v-if="canPreview" class="form-group preview-group">
             <el-button
-              size="small"
+              
               type="primary"
               :loading="previewLoading"
               @click="handlePreviewData"
@@ -293,7 +298,7 @@
           <el-select
             v-model="localFilterDatasourceId"
             :placeholder="t('insight.property.selectDatasource')"
-            size="small"
+            
             filterable
             style="width: 100%"
             @change="handleFilterDatasourceChange"
@@ -313,7 +318,7 @@
           <el-select
             v-model="localFilterConfig.field"
             :placeholder="t('insight.property.selectDimensions')"
-            size="small"
+            
             filterable
             remote
             :remote-method="searchFilterDimensions"
@@ -333,23 +338,25 @@
         <!-- 选项来源：静态手填 / 动态自动取值 -->
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.filterOptions') }}</label>
-          <el-radio-group
-            v-model="localFilterConfig.optionSource"
-            size="small"
-            @change="emitFilterConfigChange"
-          >
-            <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
-            <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
-          </el-radio-group>
-          <span class="form-hint">
-            {{ localFilterConfig.optionSource === 'dynamic'
-              ? t('insight.property.filterOptionDynamicHint')
-              : t('insight.property.filterOptionStaticHint') }}
-          </span>
+          <div class="form-group-column" style="display: flex;align-items: unset;">
+            <el-radio-group
+              v-model="localFilterConfig.optionSource"
+              
+              @change="emitFilterConfigChange"
+            >
+              <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
+              <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
+            </el-radio-group>
+            <span class="form-hint">
+              {{ localFilterConfig.optionSource === 'dynamic'
+                ? t('insight.property.filterOptionDynamicHint')
+                : t('insight.property.filterOptionStaticHint') }}
+            </span>
+          </div>
         </div>
 
         <!-- 静态选项编辑（仅静态来源）-->
-        <div v-if="localFilterConfig.optionSource === 'static'" class="form-group">
+        <div v-if="localFilterConfig.optionSource === 'static'" class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
           <div
             v-for="(opt, idx) in localFilterConfig.staticOptions"
@@ -358,21 +365,21 @@
           >
             <el-input
               v-model="opt.label"
-              size="small"
+              
               :placeholder="t('insight.property.optionLabel')"
               style="flex: 1"
               @change="emitFilterConfigChange"
             />
             <el-input
               v-model="opt.value"
-              size="small"
+              
               :placeholder="t('insight.property.optionValue')"
               style="flex: 1"
               @change="emitFilterConfigChange"
             />
             <el-button
               text
-              size="small"
+              
               @click="removeStaticOption(idx)"
             >
               ✕
@@ -380,7 +387,7 @@
           </div>
           <el-button
             text
-            size="small"
+            
             @click="addStaticOption"
           >
             + {{ t('insight.property.addOption') }}
@@ -392,7 +399,7 @@
           <label class="form-label">{{ t('insight.property.filterScope') }}</label>
           <el-radio-group
             v-model="localFilterScope"
-            size="small"
+            
             @change="emitFilterConfigChange"
           >
             <el-radio-button value="global">{{ t('insight.property.filterScopeGlobal') }}</el-radio-button>
@@ -406,7 +413,7 @@
           <el-select
             v-model="localTargetComponentIds"
             :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
-            size="small"
+            
             multiple
             style="width: 100%"
             @change="emitFilterConfigChange"
@@ -423,11 +430,11 @@
 
       <!-- 时间筛选组件配置（仅 timeFilter 组件；时间字段固定 metric_time，无需数据源/指标） -->
       <template v-if="component.type === 'timeFilter'">
-        <div class="form-group">
+        <div class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.timeFilterPresets') }}</label>
           <el-checkbox-group
             v-model="localTimeFilterPresets"
-            size="small"
+            
             @change="emitTimeFilterConfigChange"
           >
             <el-checkbox value="today">{{ t('insight.timeRange.today') }}</el-checkbox>
@@ -442,7 +449,7 @@
           <label class="form-label">{{ t('insight.property.filterScope') }}</label>
           <el-radio-group
             v-model="localFilterScope"
-            size="small"
+            
             @change="emitTimeFilterConfigChange"
           >
             <el-radio-button value="global">{{ t('insight.property.filterScopeGlobal') }}</el-radio-button>
@@ -455,7 +462,7 @@
           <el-select
             v-model="localTargetComponentIds"
             :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
-            size="small"
+            
             multiple
             style="width: 100%"
             @change="emitTimeFilterConfigChange"
@@ -472,13 +479,13 @@
 
       <!-- AI 分析组件配置（仅 aiAnalysis 组件） -->
       <template v-if="component.type === 'aiAnalysis'">
-        <div class="form-group">
+        <div class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.aiAnalysisPrompt') }}</label>
           <el-input
             v-model="localAiAnalysisPrompt"
             type="textarea"
             :rows="3"
-            size="small"
+            
             :placeholder="t('insight.property.aiAnalysisPromptPlaceholder')"
             @change="emitAiAnalysisConfigChange"
           />
@@ -487,7 +494,7 @@
           <label class="form-label">{{ t('insight.property.aiAnalysisAutoGenerate') }}</label>
           <el-switch
             v-model="localAiAnalysisAutoGenerate"
-            size="small"
+            
             @change="emitAiAnalysisConfigChange"
           />
         </div>
@@ -500,7 +507,7 @@
           <el-select
             v-model="localBoundFilterIds"
             :placeholder="t('insight.property.boundFiltersPlaceholder')"
-            size="small"
+            
             multiple
             clearable
             style="width: 100%"
@@ -520,7 +527,7 @@
           <label class="form-label">{{ t('insight.property.enableTimeFilter') }}</label>
           <el-switch
             v-model="localEnableTimeFilter"
-            size="small"
+            
             @change="emitChange"
           />
         </div>
@@ -554,6 +561,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void
   (e: 'preview', data: InsightComponentData): void
+  (e: 'collapse'): void
 }>()
 
 const datasourceStore = useDatasourceStore()
@@ -1135,21 +1143,62 @@ datasourceStore.fetchDatasources().catch(() => {
 }
 
 .panel-header {
-  padding: 12px 16px;
+  padding: 10px 14px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--db-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--db-text-secondary);
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.property-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--db-text-muted);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.property-collapse-btn:hover {
+  color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
 }
 
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+
+.panel-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.panel-body::-webkit-scrollbar-thumb {
+  background: var(--db-border-strong, #d0d0d0);
+  border-radius: 3px;
+}
+
+.panel-body::-webkit-scrollbar-thumb:hover {
+  background: var(--db-text-quaternary, #bbb);
+}
+
+.panel-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .panel-empty {
@@ -1158,55 +1207,140 @@ datasourceStore.fetchDatasources().catch(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--db-text-muted);
 }
 
 .empty-icon {
-  font-size: 36px;
+  font-size: 32px;
+  opacity: 0.6;
 }
 
 .empty-text {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .form-group {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-group-column {
   flex-direction: column;
+  align-items: stretch;
   gap: 6px;
+}
+
+/* 行内模式：标签固定宽度，控件占满剩余空间 */
+.form-group:not(.form-group-column) > .form-label {
+  flex-shrink: 0;
+  width: 64px;
+  min-width: 64px;
+}
+
+.form-group:not(.form-group-column) > :not(.form-label) {
+  min-width: 0;
+}
+
+/* 开关类表单项：标签与开关同行（左标签右开关），提示文字换行到下方整行 */
+.form-group:has(> .el-switch) {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+}
+
+.form-group:has(> .el-switch) > .form-label {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.form-group:has(> .el-switch) > .el-switch {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.form-group:has(> .el-switch) > .form-hint {
+  flex-basis: 100%;
+  margin-top: 0;
 }
 
 .form-label {
   font-size: 12px;
-  font-weight: 500;
-  color: var(--db-text-secondary);
+  font-weight: 600;
+  color: var(--db-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+/* el-input / el-select / el-switch 在属性面板中的统一微调 */
+.panel-body :deep(.el-input__wrapper) {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--db-border) inset;
+  transition: box-shadow var(--transition-fast, 0.15s);
+}
+
+.panel-body :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--db-border-strong, #c0c4cc) inset;
+}
+
+.panel-body :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--db-accent) inset;
+}
+
+.panel-body :deep(.el-select) {
+  width: 100%;
+}
+
+.panel-body :deep(.el-input-number) {
+  width: 100%;
+}
+
+.panel-body :deep(.el-input-number .el-input__wrapper) {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.panel-body :deep(.el-switch) {
+  height: 20px;
 }
 
 .preview-group {
-  margin-top: 4px;
+  margin-top: 2px;
+}
+
+.preview-group :deep(.el-button) {
+  width: 100%;
+  border-radius: 6px;
 }
 
 .preview-result {
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-radius: 6px;
   background: var(--db-hover);
   border: 1px solid var(--db-border);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .preview-error {
   color: var(--el-color-danger);
-  font-size: 13px;
 }
 
 .preview-ok {
   color: var(--el-color-success);
-  font-size: 13px;
 }
 
 .form-hint {
   font-size: 11px;
-  color: var(--db-text-muted);
-  margin-top: 2px;
+  color: var(--db-text-quaternary, #999);
+  line-height: 1.4;
+  margin-top: 1px;
 }
 
 .tab-list-editor {
@@ -1218,38 +1352,108 @@ datasourceStore.fetchDatasources().catch(() => {
 .tab-item-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-radius: 4px;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
+  transition: background var(--transition-fast, 0.15s), border-color var(--transition-fast, 0.15s);
+}
+
+.tab-item-row:hover {
+  background: var(--db-hover);
 }
 
 .tab-item-row.active {
   border-color: var(--db-accent);
-  background: var(--db-accent-light);
+  background: color-mix(in srgb, var(--db-accent) 6%, transparent);
+}
+
+.tab-item-row :deep(.el-button) {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--db-text-muted);
+  min-width: 20px;
+  height: 20px;
+}
+
+.tab-item-row :deep(.el-button:hover) {
+  color: var(--el-color-danger);
 }
 
 .tab-datasource-section {
-  border: 1px dashed var(--db-border);
-  border-radius: 6px;
-  padding: 12px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: color-mix(in srgb, var(--db-bg) 50%, transparent);
 }
 
 .tab-datasource-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--db-accent);
-  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
 }
 
 .static-option-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 4px;
+}
+
+.static-option-row :deep(.el-button) {
+  padding: 2px 4px;
+  font-size: 11px;
+  color: var(--db-text-muted);
+  min-width: 20px;
+  height: 20px;
+}
+
+.static-option-row :deep(.el-button:hover) {
+  color: var(--el-color-danger);
+}
+
+/* radio-group 在属性面板中更紧凑 */
+.panel-body :deep(.el-radio-group) {
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.panel-body :deep(.el-radio-button__inner) {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.panel-body :deep(.el-radio-button:first-child .el-radio-button__inner) {
+  border-radius: 6px 0 0 6px;
+}
+
+.panel-body :deep(.el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 0 6px 6px 0;
+}
+
+/* checkbox-group 在属性面板中更紧凑 */
+.panel-body :deep(.el-checkbox-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.panel-body :deep(.el-checkbox) {
+  margin-right: 0;
+  height: 24px;
+}
+
+/* textarea 圆角统一 */
+.panel-body :deep(.el-textarea__inner) {
+  border-radius: 6px;
+  font-size: 12px;
 }
 </style>

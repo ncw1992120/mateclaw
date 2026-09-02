@@ -3,21 +3,48 @@
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
-        <el-button :icon="ArrowLeft" text @click="handleBack">{{ t('common.back') }}</el-button>
-        <el-input
-          v-model="dashboardName"
-          class="toolbar-name-input"
-          size="small"
-          :placeholder="t('insight.editor')"
-          @change="handleNameChange"
-        />
-        <el-input
-          v-model="dashboardDescription"
-          class="toolbar-desc-input"
-          size="small"
-          :placeholder="t('insight.description')"
-          @change="handleDescriptionChange"
-        />
+        <button type="button" class="back-btn" :title="t('common.back')" @click="handleBack">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div class="toolbar-title-block">
+          <input
+            v-if="editingName"
+            v-model="dashboardName"
+            class="toolbar-name-input"
+            :placeholder="t('insight.editor')"
+            autofocus
+            @blur="commitName"
+            @keyup.enter="blurTarget"
+          />
+          <h2
+            v-else
+            class="toolbar-title"
+            :class="{ placeholder: !dashboardName }"
+            :title="t('insight.editor')"
+            @click="editingName = true"
+          >
+            {{ dashboardName || t('insight.editor') }}
+          </h2>
+          <input
+            v-if="editingDesc"
+            v-model="dashboardDescription"
+            class="toolbar-desc-input"
+            :placeholder="t('insight.description')"
+            autofocus
+            @blur="commitDesc"
+            @keyup.enter="blurTarget"
+          />
+          <div
+            v-else
+            class="toolbar-subtitle"
+            :class="{ placeholder: !dashboardDescription }"
+            @click="editingDesc = true"
+          >
+            {{ dashboardDescription || t('insight.description') }}
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-right mc-toolbar-right">
         <el-input
           v-model="dashboardOwnerName"
           class="toolbar-owner-input"
@@ -25,88 +52,122 @@
           :placeholder="t('insight.ownerName')"
           @change="handleOwnerNameChange"
         />
-      </div>
-      <div class="toolbar-right mc-toolbar-right">
-        <el-button @click="toggleAiChat">
+        <span class="toolbar-separator"></span>
+        <el-button class="ai-assistant-btn toolbar-btn" :class="{ on: showAiChat }" @click="toggleAiChat">
           <template #icon>
             <RobotIcon style="width: 16px; height: 16px;" />
           </template>
           {{ t('insight.aiAssistant') }}
         </el-button>
-        <el-button @click="handleSave" :loading="saving">{{ t('insight.save') }}</el-button>
-        <el-button @click="handlePreview" :disabled="!dashboard">{{ t('insight.preview') }}</el-button>
+        <el-button class="toolbar-btn" @click="handleSave" :loading="saving">
+          <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
+          {{ t('insight.save') }}
+        </el-button>
+        <el-button type="primary" class="toolbar-btn" @click="handlePreview" :disabled="!dashboard">
+          <template #icon><el-icon><View /></el-icon></template>
+          {{ t('insight.preview') }}
+        </el-button>
       </div>
     </div>
 
     <!-- 四栏布局：页面菜单 | 物料面板 | 画布 | 属性面板 -->
     <div class="editor-body">
       <!-- 页面菜单树 -->
-      <div class="editor-pages" :class="{ 'mobile-open': showMobilePages }">
+      <div v-if="!pagesCollapsed" class="editor-pages" :class="{ 'mobile-open': showMobilePages }">
         <div class="pages-header">
           <span class="pages-title">页面</span>
-          <el-button text size="small" @click="addPage">+</el-button>
-        </div>
-        <div class="pages-list">
-          <div
-            v-for="page in sortedPages"
-            :key="page.id"
-            class="page-item"
-            :class="{ active: page.id === activePageId }"
-            :style="{ paddingLeft: (getPageDepth(page.id) * 12 + 12) + 'px' }"
-            @click="handleSelectPage(page.id)"
-          >
-            <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
-            <el-input
-              v-if="editingPageId === page.id"
-              v-model="editingPageName"
-              size="small"
-              autofocus
-              class="page-name-input"
-              @blur="handlePageNameBlur"
-              @keyup.enter="handlePageNameBlur"
-            />
-            <span v-else class="page-name" @dblclick.stop="startEditPageName(page)">{{ page.name }}</span>
-            <div v-if="editingPageId !== page.id" class="page-actions">
-              <el-dropdown
-                trigger="click"
-                size="small"
-                @command="(cmd) => handlePageAction(cmd, page)"
-              >
-                <el-button text size="small" @click.stop>
-                  <el-icon><More /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="moveUp">
-                      <el-icon><ArrowUp /></el-icon>上移
-                    </el-dropdown-item>
-                    <el-dropdown-item command="moveDown">
-                      <el-icon><ArrowDown /></el-icon>下移
-                    </el-dropdown-item>
-                    <el-dropdown-item command="addSub">
-                      <el-icon><Plus /></el-icon>添加子页面
-                    </el-dropdown-item>
-                    <el-dropdown-item command="copy">
-                      <el-icon><DocumentCopy /></el-icon>复制页面
-                    </el-dropdown-item>
-                    <el-dropdown-item command="rename">
-                      <el-icon><Edit /></el-icon>重命名
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>
-                      <el-icon><Delete /></el-icon>删除
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
+          <div class="pages-header-actions">
+            <el-button text size="small" @click="addPage">+</el-button>
+            <button type="button" class="panel-collapse-btn" title="收起面板" @click="pagesCollapsed = true">
+              <el-icon :size="14"><Fold /></el-icon>
+            </button>
           </div>
         </div>
+        <div class="pages-list">
+          <el-tree
+            ref="pageTreeRef"
+            :data="treeData"
+            :props="{ children: 'children', label: 'name' }"
+            node-key="id"
+            :current-node-key="activePageId"
+            highlight-current
+            :expand-on-click-node="false"
+            :default-expand-all="true"
+            @node-click="handleTreeNodeClick"
+          >
+            <template #default="{ data: node }">
+              <div class="page-node">
+                <span v-if="node.icon" class="page-icon">{{ node.icon }}</span>
+                <el-input
+                  v-if="editingPageId === node.id"
+                  v-model="editingPageName"
+                  size="small"
+                  autofocus
+                  class="page-name-input"
+                  @blur="handlePageNameBlur"
+                  @keyup.enter="handlePageNameBlur"
+                  @click.stop
+                />
+                <span v-else class="page-name" @dblclick.stop="startEditPageName(node)">{{ node.name }}</span>
+                <div v-if="editingPageId !== node.id" class="page-actions">
+                  <el-dropdown
+                    trigger="click"
+                    size="small"
+                    @command="(cmd: string) => handlePageAction(cmd, node)"
+                  >
+                    <el-button text size="small" @click.stop>
+                      <el-icon><More /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="moveUp">
+                          <el-icon><ArrowUp /></el-icon>上移
+                        </el-dropdown-item>
+                        <el-dropdown-item command="moveDown">
+                          <el-icon><ArrowDown /></el-icon>下移
+                        </el-dropdown-item>
+                        <el-dropdown-item command="addSub">
+                          <el-icon><Plus /></el-icon>添加子页面
+                        </el-dropdown-item>
+                        <el-dropdown-item command="copy">
+                          <el-icon><DocumentCopy /></el-icon>复制页面
+                        </el-dropdown-item>
+                        <el-dropdown-item command="rename">
+                          <el-icon><Edit /></el-icon>重命名
+                        </el-dropdown-item>
+                        <el-dropdown-item command="delete" divided>
+                          <el-icon><Delete /></el-icon>删除
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </div>
+            </template>
+          </el-tree>
+        </div>
       </div>
+      <!-- 页面面板折叠态：悬浮按钮 -->
+      <PanelFloatButton
+        v-if="pagesCollapsed"
+        label="页面"
+        side="left"
+        :default-top-percent="38"
+        @expand="pagesCollapsed = false"
+      />
 
       <!-- 物料面板 -->
-      <div class="editor-palette" :class="{ 'mobile-open': showMobilePalette }">
-        <ComponentPalette />
+      <div v-if="!paletteCollapsed" class="editor-palette" :class="{ 'mobile-open': showMobilePalette }">
+        <ComponentPalette @collapse="paletteCollapsed = true" />
       </div>
+      <!-- 物料面板折叠态：悬浮按钮 -->
+      <PanelFloatButton
+        v-if="paletteCollapsed"
+        :label="t('insight.paletteTitle')"
+        side="left"
+        :default-top-percent="55"
+        @expand="paletteCollapsed = false"
+      />
 
       <!-- 画布 -->
       <div class="editor-canvas">
@@ -123,7 +184,7 @@
       </div>
 
       <!-- 右侧边栏：属性面板 + AI助手面板上下布局 -->
-      <div class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
+      <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
           <PropertyPanel
@@ -131,6 +192,7 @@
             :all-components="currentPageComponents"
             @change="handleComponentChange"
             @preview="handlePreviewResult"
+            @collapse="sidebarCollapsed = true"
           />
         </div>
 
@@ -143,6 +205,14 @@
           />
         </div>
       </div>
+      <!-- 右侧边栏折叠态：悬浮按钮 -->
+      <PanelFloatButton
+        v-if="sidebarCollapsed"
+        label="属性"
+        side="right"
+        :default-top-percent="45"
+        @expand="sidebarCollapsed = false"
+      />
 
       <!-- 移动端面板切换栏 -->
       <div class="mobile-panel-bar">
@@ -171,10 +241,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete } from '@element-plus/icons-vue'
+import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
@@ -184,6 +254,7 @@ import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
+import PanelFloatButton from './components/PanelFloatButton.vue'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -213,10 +284,36 @@ const dashboardOwnerName = ref('')
 /** AI对话面板可见性 */
 const showAiChat = ref(false)
 
+/** topbar 标题/描述点击编辑状态 */
+const editingName = ref(false)
+const editingDesc = ref(false)
+
+/** 完成名称编辑（失焦/回车） */
+function commitName(): void {
+  editingName.value = false
+  handleNameChange()
+}
+
+/** 完成描述编辑（失焦/回车） */
+function commitDesc(): void {
+  editingDesc.value = false
+  handleDescriptionChange()
+}
+
+/** 回车时使输入框失焦以触发提交 */
+function blurTarget(event: Event): void {
+  (event.target as HTMLInputElement).blur()
+}
+
 /** 移动端面板可见性 */
 const showMobilePages = ref(false)
 const showMobilePalette = ref(false)
 const showMobileProperty = ref(false)
+
+/** 侧边面板折叠状态（展开以最大化画布操作空间） */
+const pagesCollapsed = ref(false)
+const paletteCollapsed = ref(false)
+const sidebarCollapsed = ref(false)
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
@@ -237,27 +334,54 @@ const editingPageName = ref<string>('')
 /** 预览防抖定时器 */
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 排序后的页面列表（按 order 排序，支持树形缩进展示） */
-const sortedPages = computed<DashboardPage[]>(() => {
+/** 树形节点类型（DashboardPage + children） */
+interface PageTreeNode extends DashboardPage {
+  children?: PageTreeNode[]
+}
+
+/** 将扁平页面列表构建为 el-tree 所需的树形数据 */
+const treeData = computed<PageTreeNode[]>(() => {
   const sorted = [...schema.pages].sort((a, b) => {
     const orderDiff = (a.order ?? 0) - (b.order ?? 0)
     if (orderDiff !== 0) return orderDiff
     return a.name.localeCompare(b.name)
   })
-  return sorted
+
+  const map = new Map<string, PageTreeNode>()
+  const roots: PageTreeNode[] = []
+
+  for (const page of sorted) {
+    map.set(page.id, { ...page, children: [] })
+  }
+
+  for (const page of sorted) {
+    const node = map.get(page.id)!
+    if (page.parentId && map.has(page.parentId)) {
+      map.get(page.parentId)!.children!.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+
+  // 移除空 children 数组（el-tree 不显示展开箭头）
+  for (const node of map.values()) {
+    if (node.children && node.children.length === 0) {
+      delete node.children
+    }
+  }
+
+  return roots
 })
 
-/** 获取页面在树中的深度（用于缩进） */
-function getPageDepth(pageId: string): number {
-  let depth = 0
-  let page = schema.pages.find((p) => p.id === pageId)
-  while (page?.parentId) {
-    depth++
-    page = schema.pages.find((p) => p.id === page!.parentId)
-    if (depth > 20) break // 防止循环引用
-  }
-  return depth
-}
+/** el-tree 组件引用 */
+const pageTreeRef = ref<any>(null)
+
+/** activePageId 变化时同步 el-tree 高亮 */
+watch(activePageId, (newId) => {
+  nextTick(() => {
+    pageTreeRef.value?.setCurrentKey(newId)
+  })
+})
 
 /** 当前激活页面的组件列表 */
 const currentPageComponents = computed<InsightComponent[]>(() => {
@@ -672,6 +796,11 @@ function handleSelectPage(pageId: string): void {
   selectedComponentId.value = ''
 }
 
+/** el-tree 节点点击回调 */
+function handleTreeNodeClick(data: PageTreeNode): void {
+  handleSelectPage(data.id)
+}
+
 /** 添加顶级页面 */
 function addPage(): void {
   const newPage: DashboardPage = {
@@ -863,91 +992,214 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 .editor-toolbar {
-  min-height: 48px;
+  height: 60px;
+  min-height: 60px;
+  background: var(--db-card);
+  border-bottom: 1px solid var(--db-border);
+  gap: 12px;
 }
 
 .toolbar-left {
-  gap: var(--space-md);
+  gap: 10px;
+  min-width: 0;
+}
+
+.back-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--db-border-strong);
+  border-radius: 8px;
+  background: var(--db-card);
+  color: var(--db-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.back-btn:hover {
+  color: var(--db-accent);
+  border-color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 6%, transparent);
+}
+
+.toolbar-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.toolbar-title {
+  margin: 0;
+  padding: 1px 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--db-text);
+  line-height: 1.4;
+  border-radius: 6px;
+  cursor: text;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.toolbar-title:hover {
+  background: var(--db-muted);
+}
+
+.toolbar-title.placeholder {
+  color: var(--db-text-quaternary, #bbb);
+  font-weight: 500;
 }
 
 .toolbar-name-input {
-  width: 200px;
-  font-size: 15px;
-  font-weight: 600;
+  width: 300px;
+  height: 26px;
+  border: none;
+  outline: none;
+  background: var(--db-muted);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--db-text);
+  box-shadow: 0 0 0 1px var(--db-accent) inset;
+}
 
-  :deep(.el-input__wrapper) {
-    background: transparent;
-    box-shadow: none;
-    padding: 0 4px;
-  }
+.toolbar-subtitle {
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 1.7;
+  border-radius: 4px;
+  cursor: text;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
 
-  :deep(.el-input__wrapper:hover),
-  :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--db-border) inset;
-  }
+.toolbar-subtitle:hover {
+  background: var(--db-muted);
+}
 
-  :deep(.el-input__inner) {
-    color: var(--db-text);
-    font-weight: 600;
-  }
+.toolbar-subtitle.placeholder {
+  color: var(--db-text-quaternary, #bbb);
 }
 
 .toolbar-desc-input {
-  width: 300px;
-  font-size: 13px;
-
-  :deep(.el-input__wrapper) {
-    background: transparent;
-    box-shadow: none;
-    padding: 0 4px;
-  }
-
-  :deep(.el-input__wrapper:hover),
-  :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--db-border) inset;
-  }
-
-  :deep(.el-input__inner) {
-    color: var(--db-text-secondary);
-  }
+  width: 340px;
+  height: 22px;
+  border: none;
+  outline: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  box-shadow: 0 0 0 1px var(--db-border-strong) inset;
 }
 
 .toolbar-owner-input {
   width: 120px;
-  font-size: 13px;
+  flex-shrink: 0;
 
   :deep(.el-input__wrapper) {
-    background: transparent;
+    background: var(--db-muted);
     box-shadow: none;
-    padding: 0 4px;
+    padding: 0 10px;
+    height: 30px;
+    border-radius: 8px;
   }
 
-  :deep(.el-input__wrapper:hover),
+  :deep(.el-input__wrapper:hover) {
+    background: color-mix(in srgb, var(--db-muted) 80%, var(--db-card));
+  }
+
   :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--db-border) inset;
+    background: var(--db-card);
+    box-shadow: 0 0 0 1px var(--db-accent) inset;
   }
 
   :deep(.el-input__inner) {
     color: var(--db-text-secondary);
+    font-size: 12.5px;
   }
 }
 
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: var(--db-border);
+  flex-shrink: 0;
+}
+
 .toolbar-right {
-  gap: var(--space-sm);
+  gap: 8px;
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn) {
+  height: 32px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn:not(.el-button--primary)) {
+  background: var(--db-card);
+  border-color: var(--db-border-strong);
+  color: var(--db-text-secondary);
+}
+
+.toolbar-right :deep(.el-button.toolbar-btn:not(.el-button--primary):hover) {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+}
+
+.toolbar-right :deep(.el-button.ai-assistant-btn.on) {
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+  font-weight: 600;
+}
+
+.toolbar-right :deep(.el-button--primary.toolbar-btn) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  box-shadow: var(--shadow-md);
+}
+
+.toolbar-right :deep(.el-button--primary.toolbar-btn:hover),
+.toolbar-right :deep(.el-button--primary.toolbar-btn:focus) {
+  background: var(--main-orange);
+  border-color: var(--main-orange);
+  filter: brightness(1.08);
 }
 
 .editor-body {
   flex: 1;
   display: flex;
+  gap: 12px;
+  padding: 12px 16px 16px;
   overflow: hidden;
+  position: relative;
 }
 
 .editor-pages {
   width: 200px;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--db-card);
-  border-right: 1px solid var(--db-border);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   animation: fadeIn var(--transition-base) both;
@@ -957,48 +1209,106 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-sm) var(--space-md);
+  padding: 12px 12px 10px;
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }
 
+.pages-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pages-header :deep(.el-button) {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--db-border-strong);
+  color: var(--db-text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.pages-header :deep(.el-button:hover) {
+  color: var(--db-accent);
+  border-color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 6%, transparent);
+}
+
 .pages-title {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--db-text-secondary);
+  color: var(--db-text-muted);
 }
 
 .pages-list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-xs) 0;
+  padding: 8px;
 }
 
-.page-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  margin: 0 var(--space-xs);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
+.pages-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pages-list::-webkit-scrollbar-thumb {
+  background: var(--db-border-strong);
+  border-radius: 3px;
+}
+
+.pages-list::-webkit-scrollbar-thumb:hover {
+  background: var(--db-text-quaternary, #bbb);
+}
+
+.pages-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── el-tree 覆写 ────────────────────────────── */
+.pages-list :deep(.el-tree) {
+  background: transparent;
   color: var(--db-text-secondary);
-  transition: color var(--transition-fast), background var(--transition-fast);
-  white-space: nowrap;
+  --el-tree-node-hover-bg-color: var(--db-hover);
 }
 
-.page-item:hover {
-  background: var(--db-hover);
-  color: var(--db-text);
+.pages-list :deep(.el-tree-node__content) {
+  height: 34px;
+  border-radius: 8px;
+  padding-right: 4px;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.page-item.active {
+.pages-list :deep(.el-tree-node.is-current > .el-tree-node__content) {
   background: color-mix(in srgb, var(--db-accent) 10%, transparent);
   color: var(--db-accent);
-  font-weight: 500;
+  font-weight: 600;
+  position: relative;
+}
+
+/* 激活节点：左侧指示条 */
+.pages-list :deep(.el-tree-node__expand-icon) {
+  color: var(--db-text-muted);
+  font-size: 12px;
+  padding: 4px;
+}
+
+.pages-list :deep(.el-tree-node__expand-icon.is-leaf) {
+  color: transparent;
+}
+
+/* ─── 自定义节点内容 ─────────────────────────── */
+.page-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
 }
 
 .page-icon {
@@ -1019,14 +1329,19 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 .page-actions {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-fast), visibility var(--transition-fast);
 }
 
-.page-item:hover .page-actions {
-  display: flex;
+.pages-list :deep(.el-tree-node__content:hover) .page-actions,
+.pages-list :deep(.el-tree-node.is-current > .el-tree-node__content) .page-actions {
+  opacity: 1;
+  visibility: visible;
 }
 
 .page-actions :deep(.el-button) {
@@ -1045,13 +1360,26 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   width: 200px;
   flex-shrink: 0;
   overflow: hidden;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   animation: fadeIn var(--transition-base) both;
+}
+
+/* 剥离子组件自带的分隔边框，避免与卡片容器双重边框 */
+.editor-palette :deep(.component-palette) {
+  border-right: none;
+  background: transparent;
 }
 
 .editor-canvas {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   background: var(--db-bg);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
 }
 
 .editor-right-sidebar {
@@ -1060,6 +1388,10 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   animation: fadeIn var(--transition-base) both;
 }
 
@@ -1070,14 +1402,41 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   animation: fadeIn var(--transition-base) both;
 }
 
+/* 剥离子组件自带的分隔边框 */
+.editor-property :deep(.property-panel) {
+  border-left: none;
+  background: transparent;
+}
+
 .editor-ai-chat {
   flex: 2;
   min-height: 0;
   overflow: hidden;
   border-top: 1px solid var(--db-border);
-  border-left: 1px solid var(--db-border);
   animation: fadeIn var(--transition-base) both;
 }
+
+/* ─── 面板收起按钮 ─────────────────────────────── */
+.panel-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--db-text-muted);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.panel-collapse-btn:hover {
+  color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+}
+
+/* ─── 悬浮折叠按钮（样式在 PanelFloatButton.vue 内） ─────────────────────────────────── */
 
 @media (max-width: 1279px) {
   .editor-pages,
@@ -1096,9 +1455,14 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
     display: none;
   }
 
-  .page-item {
+  .pages-list :deep(.el-tree-node__content) {
     justify-content: center;
-    padding: var(--space-sm);
+    padding-left: 0 !important;
+    padding-right: 0;
+  }
+
+  .page-node {
+    justify-content: center;
   }
 
   .editor-palette :deep(.palette-header),
@@ -1119,10 +1483,11 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 @media (max-width: 1023px) {
   .editor-right-sidebar {
     position: absolute;
-    right: 0;
-    top: 48px;
-    bottom: 0;
+    right: 16px;
+    top: 72px;
+    bottom: 16px;
     z-index: 100;
+    border-radius: 12px;
     box-shadow: var(--shadow-dropdown);
   }
 
@@ -1138,10 +1503,13 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
 @media (max-width: 767px) {
   .editor-toolbar {
-    padding: var(--space-sm);
+    padding: 0 var(--space-md);
     min-height: auto;
+    height: auto;
     flex-wrap: wrap;
-    gap: var(--space-sm);
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
 
   .toolbar-left,
@@ -1151,6 +1519,10 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
   .toolbar-right {
     justify-content: flex-end;
+  }
+
+  .toolbar-separator {
+    display: none;
   }
 
   .toolbar-name-input,
@@ -1210,7 +1582,7 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
     align-items: center;
     justify-content: space-around;
     padding: var(--space-xs) 0;
-    background: var(--db-hover);
+    background: var(--db-card);
     border-top: 1px solid var(--db-border);
     flex-shrink: 0;
     position: relative;
