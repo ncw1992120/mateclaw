@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: datareasonagentservice-ingress
+  namespace: datareasonagentservices
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # application.yml 的 multipart max-request-size 为 200MB，代理层需留足余量
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    # Agent 单次执行可能持续数分钟（LLM + Python 分析），保持长读超时
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    # SSE 流式输出（Agent 对话）必须关闭缓冲，否则响应被攒批、前端无逐字效果
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/keepalive: "32"
+    nginx.ingress.kubernetes.io/websocket-services: "datareasonagentservice"
+    nginx.ingress.kubernetes.io/service-upstream: "true"
+    nginx.ingress.kubernetes.io/app-root: "/dataagent/api/"
+spec:
+  ingressClassName: nginx
+  rules:
+  # TODO: 替换为实际域名
+  - host: dataagent.example.com
+    http:
+      paths:
+      # fat jar 同时承载前端 SPA（/）与后端 API（/dataagent/api，context-path），
+      # 单服务单路径即可，无需前后端分离路由
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: datareasonagentservice
+            port:
+              number: 18089

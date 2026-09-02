@@ -26,3 +26,10 @@ data
 !matevip-sites/**/*.md
 !mateclaw-plugin-api/**
 !mateclaw-server/**
+# dataagent is a runtime-only image: only the locally-built jar is COPY'd, and
+# its src/ (skills .md etc.) is already baked into the jar at `mvn package`.
+# The jar is built locally and expected in target/ (see mateclaw-dataagent/Dockerfile).
+# `**/target` excludes the directory itself, and Docker cannot re-include a file
+# whose parent directory is already excluded, so re-include the whole directory.
+# (Only the jar is COPY'd into the image; the rest of target/ is small/cached.)
+!mateclaw-dataagent/target

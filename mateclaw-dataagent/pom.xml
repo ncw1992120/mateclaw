@@ -195,6 +195,15 @@
                         </exclude>
                     </excludes>
                 </configuration>
+                <!-- 生成可执行 fat jar（java -jar / Dockerfile COPY 的对象），
+                     不加 classifier 直接替换原始 jar，保证 target/*.jar 唯一 -->
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

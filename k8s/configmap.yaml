@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datareasonagentservices-config
+  namespace: datareasonagentservices
+data:
+  # ---- Database ----
+  # 注意：有效 profile 名为 mysql | pgsql（对应 application-mysql.yml /
+  # application-pgsql.yml），不是 postgresql。写错会导致方言配置不加载，
+  # 数据源回落 H2 且 Flyway 扫描全部方言目录报版本冲突。
+  SPRING_PROFILES_ACTIVE: "pgsql"
+  # 对应 application-mysql.yml / application-pgsql.yml 中的 ${DB_HOST} 等占位符
+  DB_HOST: "192.168.1.7"
+  DB_PORT: "5432"
+  DB_NAME: "postgres"
+  # ---- Elasticsearch ----
+  # 对应 spring.elasticsearch.uris（完整 URI，含协议与端口）
+  ES_URIS: "http://es.service:80"
+  # ---- 平安领航 SSO ----
+  # false 时走本地账密登录；接入企业 SSO 时置 true 并按环境调整下方地址
+  MATECLAW_PILOT_ENABLED: "true"
+  MATECLAW_PILOT_AUTH_SERVER: "https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion"
+  MATECLAW_PILOT_CAPTCHA_SERVER: "https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion/captcha"
+  MATECLAW_PILOT_TOKEN_SERVER: "https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/assertion/sso"
+  MATECLAW_PILOT_SSO_RENEWAL_SERVER: "https://dove-dev.pilotcloud-dev.paic.com.cn:10081/v3/sso/renewal"

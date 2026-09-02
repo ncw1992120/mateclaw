@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: datareasonagentservice
+  namespace: datareasonagentservices
+  labels:
+    app: datareasonagentservice
+spec:
+  serviceName: datareasonagentservice
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datareasonagentservice
+  template:
+    metadata:
+      labels:
+        app: datareasonagentservice
+    spec:
+      containers:
+      - name: backend
+        image: mateclaw-dataagent:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        # 与镜像 EXPOSE 及 application.yml 的 server.port 一致
+        - containerPort: 18089
+          name: http
+        # ConfigMap/Secret 的键名已与 jar 内 application.yml 的 ${...} 占位符
+        # 一一对应（DB_* / ES_* / SPRING_PROFILES_ACTIVE / JWT_SECRET /
+        # AI_DASHSCOPE_API_KEY / MATECLAW_PILOT_*），envFrom 即完成全部注入，
+        # 无需逐项 env 声明。
+        envFrom:
+        - configMapRef:
+            name: datareasonagentservices-config
+        - secretRef:
+            name: datareasonagentservices-secrets
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          # JVM 堆由镜像内 -XX:MaxRAMPercentage=75.0 按 limit 自适应（约 3G），
+          # 其余留给 Python 分析子进程（pandas/matplotlib）与堆外内存
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+#        livenessProbe:
+#          httpGet:
+#            # context-path 为 /dataagent/api，actuator 挂载在其下
+#            path: /dataagent/api/actuator/health
+#            port: 18089
+#          initialDelaySeconds: 60
+#          periodSeconds: 15
+#          timeoutSeconds: 5
+#          failureThreshold: 3
+#        readinessProbe:
+#          httpGet:
+#            path: /dataagent/api/actuator/health
+#            port: 18089
+#          initialDelaySeconds: 30
+#          periodSeconds: 10
+#          timeoutSeconds: 5
+#          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        # 注意：Wiki/聊天上传落在容器内 /app/data（相对路径 data/...），
+        # 技能工作区在 ~/.mateclaw —— 当前均为容器临时存储，Pod 重建即丢。
+        # 上线前若需持久化，建议通过 volumeClaimTemplates 挂载 PVC 到 /app/data。
+      volumes:
+      - name: logs
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: datareasonagentservice
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datareasonagentservice
+  namespace: datareasonagentservices
+  labels:
+    app: datareasonagentservice
+spec:
+  type: ClusterIP
+  ports:
+  - port: 18089
+    targetPort: 18089
+    protocol: TCP
+    name: http
+  selector:
+    app: datareasonagentservice
