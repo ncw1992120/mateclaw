@@ -19,4 +19,22 @@
             `update_time` = VALUES(`update_time`)
     </insert>
 
+    <!-- PostgreSQL 方言版本：按业务唯一键 (datasource_id, category_id) 冲突更新 -->
+    <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
+        INSERT INTO dataagent_aloudata_category
+        (id, datasource_id, category_id, category_name, category_type,
+         parent_id, sync_version, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.categoryId}, #{item.categoryName}, #{item.categoryType},
+             #{item.parentId}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON CONFLICT (datasource_id, category_id) DO UPDATE SET
+            category_name = EXCLUDED.category_name,
+            category_type = EXCLUDED.category_type,
+            parent_id = EXCLUDED.parent_id,
+            sync_version = EXCLUDED.sync_version,
+            update_time = EXCLUDED.update_time
+    </insert>
+
 </mapper>

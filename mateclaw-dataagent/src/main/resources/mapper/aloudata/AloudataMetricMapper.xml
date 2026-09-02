@@ -32,4 +32,35 @@
             `update_time` = VALUES(`update_time`)
     </insert>
 
+    <!-- PostgreSQL 方言版本：ON CONFLICT 按 PK 冲突更新（MySQL 版无业务唯一键，实践中仅 PK 冲突） -->
+    <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
+        INSERT INTO dataagent_aloudata_metric
+        (id, datasource_id, metric_name, metric_display_name, type,
+         business_caliber, owner, metric_category_id, metric_category_name,
+         status, unit, synonyms, embedding_text, sync_version,
+         embedding, embedding_model_id, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.metricName}, #{item.metricDisplayName}, #{item.type},
+             #{item.businessCaliber}, #{item.owner}, #{item.metricCategoryId}, #{item.metricCategoryName},
+             #{item.status}, #{item.unit}, #{item.synonyms}, #{item.embeddingText}, #{item.syncVersion},
+             #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON CONFLICT (id) DO UPDATE SET
+            metric_display_name = EXCLUDED.metric_display_name,
+            type = EXCLUDED.type,
+            business_caliber = EXCLUDED.business_caliber,
+            owner = EXCLUDED.owner,
+            metric_category_id = EXCLUDED.metric_category_id,
+            metric_category_name = EXCLUDED.metric_category_name,
+            status = EXCLUDED.status,
+            unit = EXCLUDED.unit,
+            synonyms = EXCLUDED.synonyms,
+            embedding_text = EXCLUDED.embedding_text,
+            sync_version = EXCLUDED.sync_version,
+            embedding = COALESCE(EXCLUDED.embedding, dataagent_aloudata_metric.embedding),
+            embedding_model_id = COALESCE(EXCLUDED.embedding_model_id, dataagent_aloudata_metric.embedding_model_id),
+            update_time = EXCLUDED.update_time
+    </insert>
+
 </mapper>

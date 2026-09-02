@@ -32,4 +32,35 @@
             `update_time` = VALUES(`update_time`)
     </insert>
 
+    <!-- PostgreSQL 方言版本：按业务唯一键 (datasource_id, dim_name) 冲突更新 -->
+    <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
+        INSERT INTO dataagent_aloudata_dimension
+        (id, datasource_id, dim_name, dim_display_name, origin_data_type,
+         dim_description, is_time_dimension, synonyms, config_type, config_value,
+         dataset_name, example_values, embedding_text, sync_version,
+         embedding, embedding_model_id, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.dimName}, #{item.dimDisplayName}, #{item.originDataType},
+             #{item.dimDescription}, #{item.isTimeDimension}, #{item.synonyms}, #{item.configType}, #{item.configValue},
+             #{item.datasetName}, #{item.exampleValues}, #{item.embeddingText}, #{item.syncVersion},
+             #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON CONFLICT (datasource_id, dim_name) DO UPDATE SET
+            dim_display_name = EXCLUDED.dim_display_name,
+            origin_data_type = EXCLUDED.origin_data_type,
+            dim_description = EXCLUDED.dim_description,
+            is_time_dimension = EXCLUDED.is_time_dimension,
+            synonyms = EXCLUDED.synonyms,
+            config_type = EXCLUDED.config_type,
+            config_value = EXCLUDED.config_value,
+            dataset_name = EXCLUDED.dataset_name,
+            example_values = EXCLUDED.example_values,
+            embedding_text = EXCLUDED.embedding_text,
+            sync_version = EXCLUDED.sync_version,
+            embedding = COALESCE(EXCLUDED.embedding, dataagent_aloudata_dimension.embedding),
+            embedding_model_id = COALESCE(EXCLUDED.embedding_model_id, dataagent_aloudata_dimension.embedding_model_id),
+            update_time = EXCLUDED.update_time
+    </insert>
+
 </mapper>

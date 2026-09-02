@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: mateclaw-dataagent
+  # 未显式指定 SPRING_PROFILES_ACTIVE 时默认激活 mysql（与历史行为兼容）；
+  # PG 部署显式设置 SPRING_PROFILES_ACTIVE=pgsql。
+  profiles:
+    default: pgsql
   servlet:
     multipart:
       max-file-size: 100MB
@@ -14,17 +18,16 @@ spring:
     uris: ${ES_URIS:http://es.service:80}
     username: ${ES_USERNAME:elastic}
     password: ${ES_PASSWORD:TWMM22KT82GJW7P77LK87lY4}
+  # 数据源连接信息按方言拆分至 application-mysql.yml / application-pgsql.yml，
+  # 此处仅保留与具体数据库无关的 HikariCP 连接池参数。
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:data_agent}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
       # 显式声明池防护参数（与 server 侧对齐），不依赖 server JAR 内 application.yml 的隐式继承：
-      # max-lifetime(30min) 须小于 MySQL wait_timeout(默认 8h)，避免取到已被服务端断开的连接；
-      # idle-timeout 须小于 max-lifetime；leak-detection 在连接持有超阈值时打印获取堆栈，
+      # max-lifetime(30min) 须小于数据库侧连接空闲超时（如 MySQL wait_timeout，默认 8h），
+      # 避免取到已被服务端断开的连接；idle-timeout 须小于 max-lifetime；
+      # leak-detection 在连接持有超阈值时打印获取堆栈，
       # 便于定位 Agent 执行 / Python 分析链路上的长事务。
       connection-timeout: 30000        # 获取连接最长等待 30s
       idle-timeout: 600000             # 空闲连接 10min 回收
@@ -34,11 +37,18 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: "199"
-    locations:
-      - classpath:db/migration/mysql
+    # 迁移脚本目录由各方言 profile 显式指定：
+    #   application-mysql.yml    -> classpath:db/migration/mysql
+    #   application-pgsql.yml    -> classpath:db/migration/postgresql
+    # classpath 扫描同时覆盖本模块与内嵌 mateclaw-server JAR 中的同名目录
+    # （server 提供 V1-V140，本模块提供 V200-V217，版本号不冲突）。
     validate-on-migrate: true
     clean-disabled: true
     placeholder-replacement: false
+    # server 与 dataagent 分段维护版本号（server V1-V199，dataagent V200+）。
+    # 当 dataagent 侧已迁移至 V200+ 后，后补的 server 低版本号迁移（如 V141）
+    # 属于 out-of-order，需开启此开关才会执行，否则 validate 直接失败。
+    out-of-order: true
   ai:
     dashscope:
       api-key: ${AI_DASHSCOPE_API_KEY:configure-in-admin-ui}

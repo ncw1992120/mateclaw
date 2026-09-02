@@ -41,6 +41,9 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
     /** Cached flag: true when running on MySQL/MariaDB, false for H2. */
     private volatile Boolean isMySQL;
 
+    /** Cached flag: true when running on PostgreSQL. */
+    private volatile Boolean isPostgreSQL;
+
     /**
      * When true, wait for Desktop splash screen to call /setup/init with chosen language.
      * When false (default), auto-initialize immediately on startup.
@@ -111,6 +114,8 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
             String scriptName;
             if (isMySQL()) {
                 scriptName = "en-US".equals(locale) ? "db/data-mysql-en.sql" : "db/data-mysql-zh.sql";
+            } else if (isPostgreSQL()) {
+                scriptName = "en-US".equals(locale) ? "db/data-pgsql-en.sql" : "db/data-pgsql-zh.sql";
             } else {
                 scriptName = "en-US".equals(locale) ? "db/data-en.sql" : "db/data-zh.sql";
             }
@@ -166,6 +171,20 @@ public class DatabaseBootstrapRunner implements ApplicationRunner {
             }
         }
         return isMySQL;
+    }
+
+    /** Whether the runtime database is PostgreSQL (seed script dialect selection). */
+    private boolean isPostgreSQL() {
+        if (isPostgreSQL == null) {
+            try (Connection connection = dataSource.getConnection()) {
+                String dbProduct = connection.getMetaData().getDatabaseProductName().toLowerCase();
+                isPostgreSQL = dbProduct.contains("postgresql");
+            } catch (Exception e) {
+                log.warn("Failed to detect database type, defaulting PostgreSQL flag to false", e);
+                isPostgreSQL = false;
+            }
+        }
+        return isPostgreSQL;
     }
 
     private void runScript(String path) {

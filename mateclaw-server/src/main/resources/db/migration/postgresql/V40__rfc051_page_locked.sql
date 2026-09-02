@@ -1,0 +1,4 @@
+-- V40: RFC-051 PR-2 — page protection flag.
+-- MySQL lacks `ADD COLUMN IF NOT EXISTS`; use INFORMATION_SCHEMA guard.
+
+ALTER TABLE mate_wiki_page ADD COLUMN IF NOT EXISTS locked SMALLINT NOT NULL DEFAULT 0;

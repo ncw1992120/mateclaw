@@ -3,7 +3,8 @@ import MainLayout from '@/views/layout/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  // 与 vite base（/dataagent/api/）保持一致：路由路径在部署基座下解析
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/login',

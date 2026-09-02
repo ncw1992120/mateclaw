@@ -18,4 +18,21 @@
             `update_time` = VALUES(`update_time`)
     </insert>
 
+    <!-- PostgreSQL 方言版本：按业务唯一键 (datasource_id, metric_name, dim_name) 冲突更新 -->
+    <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
+        INSERT INTO dataagent_aloudata_metric_dimension
+        (id, datasource_id, metric_name, dim_name, dim_display_name,
+         origin_data_type, sync_version, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.datasourceId}, #{item.metricName}, #{item.dimName}, #{item.dimDisplayName},
+             #{item.originDataType}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON CONFLICT (datasource_id, metric_name, dim_name) DO UPDATE SET
+            dim_display_name = EXCLUDED.dim_display_name,
+            origin_data_type = EXCLUDED.origin_data_type,
+            sync_version = EXCLUDED.sync_version,
+            update_time = EXCLUDED.update_time
+    </insert>
+
 </mapper>

@@ -53,6 +53,9 @@ spring:
       - classpath:db/migration/h2
     validate-on-migrate: true
     clean-disabled: true
+    # 后补的低版本号迁移（如 V141 补丁晚于 V200+ 分段应用）允许乱序执行，
+    # 避免 server/dataagent 分段版本号共存时 validate 因 out-of-order 失败。
+    out-of-order: true
     # Disable Flyway's built-in ${...} placeholder substitution. Some migrations
     # (e.g. V85 ckjia MCP seed) intentionally store ${ENV_VAR} literals so that
     # mateclaw's runtime header parser (McpClientManager.parseHeaders) can

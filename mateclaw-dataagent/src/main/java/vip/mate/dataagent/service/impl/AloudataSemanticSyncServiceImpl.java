@@ -27,6 +27,7 @@ import vip.mate.wiki.service.WikiEmbeddingService;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -544,7 +545,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             int batchUpsertSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_UPSERT_SIZE;
             for (int i = 0; i < categoryEntities.size(); i += batchUpsertSize) {
                 List<AloudataCategoryEntity> batch = categoryEntities.subList(i, Math.min(i + batchUpsertSize, categoryEntities.size()));
-                categoryMapper.upsertBatch(batch);
+                categoryMapper.upsertBatch(dedupeByBatch(batch,
+                        e -> e.getDatasourceId() + ":" + e.getCategoryId()));
             }
         }
 
@@ -708,7 +710,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             int batchUpsertSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_UPSERT_SIZE;
             for (int i = 0; i < entities.size(); i += batchUpsertSize) {
                 List<AloudataDimensionEntity> batch = entities.subList(i, Math.min(i + batchUpsertSize, entities.size()));
-                dimensionMapper.upsertBatch(batch);
+                dimensionMapper.upsertBatch(dedupeByBatch(batch,
+                        e -> e.getDatasourceId() + ":" + e.getDimName()));
             }
             totalDimCount += entities.size();
 
@@ -1080,7 +1083,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 int upsertBatchSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_UPSERT_SIZE;
                 for (int j = 0; j < rels.size(); j += upsertBatchSize) {
                     List<AloudataMetricDimensionEntity> upsertBatch = rels.subList(j, Math.min(j + upsertBatchSize, rels.size()));
-                    metricDimensionMapper.upsertBatch(upsertBatch);
+                    metricDimensionMapper.upsertBatch(dedupeByBatch(upsertBatch,
+                            r -> r.getDatasourceId() + ":" + r.getMetricName() + ":" + r.getDimName()));
                 }
 
                 log.debug("[Aloudata同步] 指标-维度关联进度: {}/{}", Math.min(i + batchSize, metricNames.size()), metricNames.size());
@@ -1524,5 +1528,26 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 .map(this::toDimensionCategoryGroupDto)
                 .collect(Collectors.toList()));
         return dto;
+    }
+
+    /**
+     * 按业务键对批次内实体去重，保留首次出现的记录
+     * <p>
+     * Aloudata API 可能对同一业务键返回多条记录（如同一指标挂多个类目）。
+     * PostgreSQL 的 ON CONFLICT DO UPDATE 不允许同一条语句影响同一行两次
+     * （MySQL 的 ON DUPLICATE KEY UPDATE 允许），批量 upsert 前必须保证
+     * 批次内业务键唯一，否则 PG 端报 "cannot affect row a second time"。
+     *
+     * @param items 批次实体列表
+     * @param keyFn 业务键提取函数，返回值需正确实现 equals/hashCode
+     * @param <T>   实体类型
+     * @return 批次内按业务键去重后的列表（保持原有顺序）
+     */
+    private <T> List<T> dedupeByBatch(List<T> items, Function<T, Object> keyFn) {
+        Map<Object, T> unique = new LinkedHashMap<>(items.size());
+        for (T item : items) {
+            unique.putIfAbsent(keyFn.apply(item), item);
+        }
+        return new ArrayList<>(unique.values());
     }
 }
