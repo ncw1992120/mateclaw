@@ -95,7 +95,7 @@ public class DataAgentConversationController {
      * 兜底列表快照过期（fetchConversations 与实际流状态不同步）的竞态。
      */
     @GetMapping("/{conversationId}/status")
-    @Operation(summary = "获取会话流状态", description = "返回指定会话的实时流状态：running/idle")
+    @Operation(summary = "获取会话流状态", description = "返回指定会话的实时流状态：running/stopped/idle（stopped 为用户主动停止后的短暂中间态）")
     public R<Map<String, String>> getStatus(@PathVariable String conversationId) {
         String streamStatus = conversationService.getStreamStatus(conversationId);
         return R.ok(Map.of("streamStatus", streamStatus != null ? streamStatus : "idle"));

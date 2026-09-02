@@ -47,6 +47,41 @@ function clearPersistedReconnectState(): void {
   }
 }
 
+/**
+ * 用户主动停止的会话标记（存储会话 ID）。
+ * <p>
+ * stopChat 时写入：刷新后 tryResumeStream 据此识别"停止后立即刷新"场景，
+ * 跳过对该会话的续连回放（后端 finalize 异步落库存在 stream_status 残留 running 的窗口），
+ * 避免数据流被重新推送一遍。同一会话重新发送消息时清除。
+ */
+const STOPPED_STORAGE_KEY = 'mateclaw.chat.stopped'
+
+function saveStoppedMarker(conversationId: string): void {
+  try {
+    sessionStorage.setItem(STOPPED_STORAGE_KEY, conversationId)
+  } catch {
+    // 忽略存储失败（隐私模式 / 配额耗尽）
+  }
+}
+
+function loadStoppedMarker(): string | null {
+  try {
+    return sessionStorage.getItem(STOPPED_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function clearStoppedMarker(conversationId: string): void {
+  try {
+    if (sessionStorage.getItem(STOPPED_STORAGE_KEY) === conversationId) {
+      sessionStorage.removeItem(STOPPED_STORAGE_KEY)
+    }
+  } catch {
+    // 忽略
+  }
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   /** 当前选中的智能体 ID（刷新后保留） */
@@ -659,6 +694,9 @@ export const useChatStore = defineStore('chat', () => {
     nextCompleted.delete(stoppedConvId)
     backgroundCompletedConversations.value = nextCompleted
     clearReconnectState()
+    // 写入停止标记：后端 finalize 异步落库存在 stream_status 残留 running 的窗口，
+    // 刷新后 tryResumeStream 据此跳过对该会话的续连回放，避免数据流被重新推送
+    saveStoppedMarker(stoppedConvId)
 
     // 3 秒兜底定时器：done 事件没来时确保状态已清理（消息状态已设置，此处为安全网）
     if (stopFallbackTimer) clearTimeout(stopFallbackTimer)
@@ -828,6 +866,8 @@ export const useChatStore = defineStore('chat', () => {
     const flushBuf = new FlushBuffer(assistantIdx, () => targetMsgs)
 
     clearReconnectState()
+    // 同一会话重新发送消息：旧的停止标记失效（新流开始后恢复正常的续连语义）
+    clearStoppedMarker(convId)
     savePersistedReconnectState({ conversationId: convId, lastEventId: null })
 
     /** 当前会话是否已切到后台（用户切到其他会话后，本流继续运行） */
@@ -1214,6 +1254,15 @@ export const useChatStore = defineStore('chat', () => {
     const candidateConvId = persisted?.conversationId || conversationId.value
     if (!candidateConvId) return false
 
+    // 用户在刷新前已主动停止该会话（stopChat 写入标记）：跳过续连回放，
+    // 否则"停止后立即刷新"会因 stream_status 残留 running 而重新推送整个数据流。
+    // 返回 false 走正常历史加载（switchConversation → listMessages）。
+    if (loadStoppedMarker() === candidateConvId) {
+      clearStoppedMarker(candidateConvId)
+      logDebug('tryResumeStream: conversation stopped by user before refresh, skipping reconnect')
+      return false
+    }
+
     // 若候选 conversationId 不在已有会话列表中，说明会话已被删除或 ID 无效，
     // 只清理续连脏数据，不影响用户当前选中的会话
     const existsInList = conversations.value.some(c => c.conversationId === candidateConvId)
@@ -1226,17 +1275,16 @@ export const useChatStore = defineStore('chat', () => {
       return false
     }
 
-    // 列表快照判断 + 实时探测兜底（对齐 mateclaw-ui ChatConsole.vue 两层判断）：
-    // fetchConversations 拿到的 streamStatus 是快照，可能与实际流状态不同步
-    // （流在快照之后结束/开始）。快照 ≠ running 时再实时 getStatus 探测一次。
-    let shouldReconnect = convInList?.streamStatus === 'running'
-    if (!shouldReconnect) {
-      try {
-        const statusRes = await conversationApi.getStatus(candidateConvId) as { streamStatus?: string } | undefined
-        shouldReconnect = statusRes?.streamStatus === 'running'
-      } catch {
-        // 探测失败不阻断，按快照结果走
-      }
+    // 实时探测为准，列表快照兜底（对齐 mateclaw-ui ChatConsole.vue 两层判断）：
+    // 快照读的是 DB 的 stream_status（最终一致，可能残留 running，如停止后落库失败场景），
+    // 实时 getStatus 后端以内存 RunState 优先解析、零延迟，是权威状态。
+    // 因此无论快照结果如何都实时探测一次，仅在探测失败时回退到快照。
+    let shouldReconnect = false
+    try {
+      const statusRes = await conversationApi.getStatus(candidateConvId) as { streamStatus?: string } | undefined
+      shouldReconnect = statusRes?.streamStatus === 'running'
+    } catch {
+      shouldReconnect = convInList?.streamStatus === 'running'
     }
     if (!shouldReconnect) {
       logDebug('tryResumeStream: stream not running, skipping reconnect')

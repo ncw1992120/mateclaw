@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.service.DataAgentConversationService;
+import vip.mate.dataagent.service.DataAgentStreamTracker;
 import vip.mate.dataagent.service.QueryStateService;
 import vip.mate.exception.MateClawException;
 import vip.mate.sdk.service.ConversationRuntime;
@@ -36,6 +37,9 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
 
     /** 会话级查询基座服务（P0-2）：会话删除时联动清理，避免残留脏数据 */
     private final QueryStateService queryStateService;
+
+    /** 流状态追踪器：内存 RunState 是流真实状态的权威来源，用于优先解析 streamStatus */
+    private final DataAgentStreamTracker streamTracker;
 
     @Override
     public List<ConversationVO> listConversations() {
@@ -120,6 +124,22 @@ public class DataAgentConversationServiceImpl implements DataAgentConversationSe
                 throw new MateClawException("err.conversation.forbidden", 403,
                         "无权访问该会话");
             }
+        }
+        return resolveStreamStatus(conversationId);
+    }
+
+    /**
+     * 解析会话流状态：内存 RunState 优先，DB 兜底。
+     * <p>
+     * 内存标志（stopRequested/done）在停止/完成时同步置位、零延迟，是流的
+     * 权威状态；DB 的 stream_status 为异步落库的最终一致快照，存在滞后窗口
+     * （如"停止后立即刷新"场景 DB 仍残留 running，导致前端误判并从头回放
+     * buffer）。当前节点无 RunState 时（应用重启后），回退到 DB 值。
+     */
+    private String resolveStreamStatus(String conversationId) {
+        String inMemoryStatus = streamTracker.getInMemoryStatus(conversationId);
+        if (inMemoryStatus != null) {
+            return inMemoryStatus;
         }
         return conversationRuntime.getStreamStatus(conversationId);
     }

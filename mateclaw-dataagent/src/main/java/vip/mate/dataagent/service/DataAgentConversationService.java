@@ -62,9 +62,12 @@ public interface DataAgentConversationService {
      * 获取会话实时流状态
      * <p>
      * 用于页面刷新后判断是否需要 reconnect 接入仍在运行的流。
+     * 解析顺序：内存 RunState（权威，零延迟）优先；当前节点无 RunState 时
+     * （如应用重启后）回退到 DB 的 stream_status。
      *
      * @param conversationId 会话 ID
-     * @return "running" / "idle"；会话不存在时返回 null
+     * @return "running" / "stopped" / "idle"（stopped 表示用户主动停止后的短暂中间态）；
+     *         会话不存在时返回 null
      */
     String getStreamStatus(String conversationId);
 }

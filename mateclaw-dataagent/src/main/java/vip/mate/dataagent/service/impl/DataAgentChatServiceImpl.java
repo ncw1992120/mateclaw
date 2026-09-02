@@ -429,9 +429,19 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         boolean stopped = streamTracker.requestStop(conversationId);
         log.info("[DataAgent] Stop requested: conversationId={}, stopped={}", conversationId, stopped);
         if (stopped) {
-            // 防御性兜底：dispose 后 Reactor 回调（doOnCancel/doOnError）可能因
-            // 节点同步阻塞未及时触发，导致 stream_status 残留 running。
-            // 延迟 5 秒后检查，若仍为 running 则强制重置为 idle。
+            // 同步将 stream_status 置为 stopped：dispose 后的 finalize 是异步落库的，
+            // 若依赖其更新，"停止后立即刷新"的时间窗内 getStatus 仍返回 running，
+            // 前端 tryResumeStream 会误判为流仍在生成并从头回放 buffer，造成数据流被重新推送。
+            // 此处同步落库消除该窗口；后续 finalize 仍会将其重置为 idle。
+            try {
+                conversationService.updateStreamStatus(conversationId, "stopped");
+            } catch (Exception e) {
+                log.warn("[DataAgent] Failed to sync stream_status to stopped for {}: {}",
+                        conversationId, e.getMessage());
+            }
+            // 防御性兜底：若上面对话记录已不存在导致同步落库未生效，且 dispose 后
+            // Reactor 回调（doOnCancel/doOnError）因节点同步阻塞未及时触发，
+            // stream_status 仍可能残留 running。延迟 5 秒后检查，若仍为 running 则强制重置为 idle。
             finalizeExecutor.execute(() -> {
                 try {
                     Thread.sleep(5000);

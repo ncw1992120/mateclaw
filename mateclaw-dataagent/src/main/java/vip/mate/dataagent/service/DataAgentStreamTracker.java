@@ -416,6 +416,31 @@ public class DataAgentStreamTracker {
     }
 
     /**
+     * 解析会话在当前节点内存中的权威流状态。
+     * <p>
+     * 内存 RunState 是流真实状态的唯一权威来源：stopRequested 在 requestStop
+     * 中同步置位、done 在 finalize 中同步置位，均零延迟。相比之下 DB 的
+     * stream_status 是异步落库的最终一致快照，存在滞后窗口——若重连决策
+     * 信任 DB（如"停止后立即刷新"场景 status 残留 running），会导致前端
+     * 误判流仍在生成并从头回放 buffer。
+     *
+     * @param conversationId 会话 ID
+     * @return "running"（RunState 存活且未请求停止）/ "stopped"（已请求停止）；
+     *         当前节点无 RunState 时返回 null（应用重启后或从未在本节点运行，
+     *         由调用方回退到 DB 状态）
+     */
+    public String getInMemoryStatus(String conversationId) {
+        RunState state = runs.get(conversationId);
+        if (state == null) {
+            return null;
+        }
+        if (state.stopRequested.get()) {
+            return "stopped";
+        }
+        return state.done ? "idle" : "running";
+    }
+
+    /**
      * Mark that the first content/thinking token has been received.
      * Reschedules heartbeat to streaming cadence.
      */
