@@ -2,35 +2,91 @@
   <div class="chat-view">
     <!-- 消息区域（含悬浮「回到底部」按钮），高度自适应，占满输入区上方空间 -->
     <div class="chat-main">
+      <!-- 聊天头部：收缩态浮动按钮 + agent-switch pill + spacer + 右 dataset-count -->
+      <div class="chat-header">
+        <!-- 历史侧栏收缩后：与 agent-switch 同行的快捷按钮 -->
+        <template v-if="historyCollapsed">
+          <button class="header-float-btn" :title="t('conversation.expand')" @click="toggleHistoryExpand">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <line x1="8" y1="9" x2="16" y2="9"/>
+              <line x1="8" y1="13" x2="13" y2="13"/>
+            </svg>
+          </button>
+          <button class="header-float-btn" :title="t('conversation.newChat')" @click="parentHandleNewChat?.()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </template>
+        <el-dropdown
+          trigger="click"
+          placement="bottom-start"
+          :disabled="chatStore.isStreaming"
+          popper-class="agent-select-popper"
+          @command="handleAgentChange"
+        >
+          <button class="agent-switch" :disabled="chatStore.isStreaming" type="button" :title="t('chat.switchAgent')">
+            <span class="agent-dot"></span>
+            <span class="agent-name">{{ currentAgentName }}</span>
+            <span class="agent-chev"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="agent in enabledAgents"
+                :key="agent.id"
+                :command="agent.id"
+                class="agent-dropdown-item"
+                :class="{ 'is-current': chatStore.currentAgentId === agent.id }"
+              >
+                <span class="agent-option-icon">
+                  <PiIcon v-if="agent.icon?.startsWith('pi:')" :name="agent.icon" :size="16" />
+                  <template v-else>{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</template>
+                </span>
+                <span class="agent-option-name">{{ agent.name }}</span>
+                <el-icon v-if="chatStore.currentAgentId === agent.id" class="agent-check-icon"><Check /></el-icon>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <div class="header-spacer"></div>
+        <span class="dataset-count">{{ datasetCountText }}</span>
+      </div>
     <!-- Chat Area -->
     <div ref="chatAreaRef" class="chat-area">
       <!-- Empty State -->
       <div v-if="chatStore.messages.length === 0" class="empty-state">
-        <div class="empty-avatar">
-          <svg class="empty-avatar__icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <line x1="32" y1="12" x2="32" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="32" cy="9" r="3.5" fill="white"/>
-            <rect x="14" y="20" width="36" height="28" rx="9" fill="white"/>
-            <rect x="19" y="27" width="26" height="14" rx="5" fill="var(--main-orange)"/>
-            <circle cx="26" cy="34" r="2.5" fill="white"/>
-            <circle cx="38" cy="34" r="2.5" fill="white"/>
-          </svg>
-        </div>
-        <div class="empty-greeting">
+        <div class="empty-hero">
+          <div class="empty-avatar">
+            <svg class="empty-avatar__icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="32" y1="12" x2="32" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="32" cy="9" r="3.5" fill="white"/>
+              <rect x="14" y="20" width="36" height="28" rx="9" fill="white"/>
+              <rect x="19" y="27" width="26" height="14" rx="5" fill="var(--main-orange)"/>
+              <circle cx="26" cy="34" r="2.5" fill="white"/>
+              <circle cx="38" cy="34" r="2.5" fill="white"/>
+            </svg>
+          </div>
           <h1 class="empty-greeting__title">{{ greetingText }}</h1>
           <p class="empty-greeting__subtitle">{{ t('chat.emptySubtitle') }}</p>
         </div>
-        <!-- 智能问数快捷菜单 -->
+        <!-- 能力卡片网格 -->
         <div class="smart-ask-menu">
-          <span
+          <button
             v-for="item in smartAskMenuItems"
             :key="item.key"
-            class="smart-ask-chip"
+            class="smart-ask-card"
+            type="button"
             @click="handleSmartAskMenu(item)"
           >
-            <span class="chip-icon" v-html="item.icon"></span>
-            <span class="chip-label">{{ t(item.label) }}</span>
-          </span>
+            <span class="card-icon" v-html="item.icon"></span>
+            <span class="card-body">
+              <span class="card-label">{{ t(item.label) }}</span>
+              <span class="card-desc">{{ t(item.desc) }}</span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -71,6 +127,17 @@
 
         <!-- AI Message -->
         <div v-else :ref="(el) => registerMsgRef(el as HTMLElement | null, index)" class="msg ai" :data-msg-index="index">
+          <!-- Agent 角色标识（设计稿 .ai-role） -->
+          <div class="ai-role">
+            <span class="ai-role__dot"></span>
+            {{ currentAgentName }}
+          </div>
+          <!-- 数据源标识（设计稿 .source-line，仅有选中数据源时显示） -->
+          <div v-if="chatStore.selectedDatasourceIds.length > 0" class="source-line">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            {{ t('chat.datasourceSource') }}：
+            <span v-for="dsId in chatStore.selectedDatasourceIds" :key="dsId" class="chip">{{ getDatasourceName(dsId) }}</span>
+          </div>
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble" @click="handleCodeCopyClick">
               <!-- Token & model info (右上角) -->
@@ -116,6 +183,7 @@
                           type="button"
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
+                          <svg class="seg-narration__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
                           <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
                           <span
@@ -155,9 +223,9 @@
                       >
                         <div class="seg-tool__header" @click="toggleToolExpand(segIdx)">
                           <span class="seg-tool__status">
-                            <span v-if="seg.status === 'running'" class="spin-icon">⟳</span>
-                            <span v-else-if="seg.status === 'completed' && seg.toolSuccess !== false">✓</span>
-                            <span v-else>✕</span>
+                            <svg v-if="seg.status === 'running'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                            <svg v-else-if="seg.status === 'completed' && seg.toolSuccess !== false" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                            <svg v-else viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
                           </span>
                           <span class="seg-tool__name">{{ seg.toolName || seg.name }}</span>
                           <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
@@ -228,6 +296,7 @@
                           type="button"
                           @click="toggleNarrationExpand(index, segIdx)"
                         >
+                          <svg class="seg-narration__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
                           <span class="seg-narration__label">{{ t('chat.executionStep') }}</span>
                           <span v-if="formatDuration(seg)" class="seg-duration">· {{ formatDuration(seg) }}</span>
                           <span
@@ -271,10 +340,10 @@
 
               <!-- Streaming cursor -->
               <span
-                v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content"
+                v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content && !hasExecutionProcess(msg) && !getPlanMeta(msg)"
                 class="streaming-cursor-wrap"
               >
-                <span class="streaming-cursor" />
+                <span class="typing-dots"><i /><i /><i /></span>
                 <span class="streaming-cursor__label">{{ t('chat.thinking') }}</span>
               </span>
             </div>
@@ -420,26 +489,24 @@
             </div>
 
             <!-- Recommended Questions -->
-            <div v-else-if="card.type === 'recommended_questions'" class="recommended-questions" :class="{ 'is-collapsed': !isLatestRecommendedQuestions(index) && !expandedHistoryRecQuestions.has(`${index}-${cardIdx}`) }">
-              <div class="recommended-questions__header" @click="!isLatestRecommendedQuestions(index) && toggleHistoryRecQuestion(`${index}-${cardIdx}`)">
-                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                {{ t('chat.recommendedQuestions') }}
-                <span v-if="!isLatestRecommendedQuestions(index) && !expandedHistoryRecQuestions.has(`${index}-${cardIdx}`)" class="recommended-questions__toggle">
-                  {{ t('chat.expandRecQuestions', { count: (card.data as RecommendedQuestionData).questions.length }) }}
-                </span>
-                <span v-else-if="!isLatestRecommendedQuestions(index)" class="recommended-questions__toggle">
-                  {{ t('chat.collapseRecQuestions') }}
-                </span>
-              </div>
-              <div class="recommended-questions__list">
+            <div v-else-if="card.type === 'recommended_questions'" class="rec-section">
+              <button
+                class="rec-toggle"
+                :class="{ expanded: isRecExpanded(index, cardIdx) }"
+                @click="toggleRecQuestion(index, cardIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                {{ (card.data as RecommendedQuestionData).questions.length }} {{ t('chat.recommendedQuestions') }}
+              </button>
+              <div class="rec-pills" :class="{ open: isRecExpanded(index, cardIdx) }">
                 <button
                   v-for="(question, qIdx) in (card.data as RecommendedQuestionData).questions"
                   :key="qIdx"
-                  class="recommended-question-item"
+                  class="rec-pill"
                   @click="handleFollowup(question)"
                 >
-                  <svg class="recommended-question-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                  <span class="recommended-question-item__text">{{ question }}</span>
+                  <svg class="rec-pill__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
+                  <span>{{ question }}</span>
                 </button>
               </div>
             </div>
@@ -459,13 +526,15 @@
         </template>
       </template>
 
-      <!-- Streaming cursor at end -->
+      <!-- Streaming cursor at end (inline text cursor after content) -->
       <div
         v-if="chatStore.isStreaming && chatStore.messages.length > 0 && chatStore.messages[chatStore.messages.length - 1]?.content"
         class="msg ai"
       >
-        <span class="streaming-cursor-end" />
-        <span class="streaming-cursor-end__label">{{ t('chat.generating') }}</span>
+        <span class="streaming-cursor-end">
+          <span class="typing-dots typing-dots--sm"><i /><i /><i /></span>
+          <span class="streaming-cursor-end__label">{{ t('chat.generating') }}</span>
+        </span>
       </div>
       </div>
 
@@ -535,39 +604,15 @@
       <div class="input-bar__card">
         <input ref="fileInputRef" type="file" multiple style="display:none" @change="handleFileChange" />
 
-        <!-- 当前智能体标签 -->
-        <div class="composer-agent">
-          <el-popover :width="240" trigger="click" placement="top-start" :persistent="false" :teleported="true">
-            <template #reference>
-              <button class="agent-tag" :disabled="chatStore.isStreaming" type="button">
-                <span class="agent-tag-icon">@</span>
-                <span class="agent-tag-name">{{ currentAgentName }}</span>
-              </button>
-            </template>
-            <div class="agent-popover-list">
-              <button
-                v-for="agent in enabledAgents"
-                :key="agent.id"
-                class="agent-popover-item"
-                :class="{ active: chatStore.currentAgentId === agent.id }"
-                type="button"
-                @click="handleAgentChange(agent.id)"
-              >
-                <span class="agent-option-icon">{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</span>
-                <span class="agent-option-name">{{ agent.name }}</span>
-              </button>
-            </div>
-          </el-popover>
-        </div>
-
+        <!-- 输入行：纯 textarea，输入区域独占一行更突出 -->
         <div class="composer-body">
           <textarea
             ref="chatInputRef"
             v-model="inputMessage"
             class="chat-input"
-            :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholderWithAgent', { agent: currentAgentName })"
+            :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholderSimple')"
             :disabled="chatStore.isStreaming"
-            rows="1"
+            rows="2"
             @keydown="handleKeydown"
             @paste="handlePaste"
           />
@@ -575,74 +620,108 @@
 
         <div class="composer-footer">
           <div class="footer-tools">
-            <el-popover :width="280" trigger="click" placement="top-start" :persistent="false" :teleported="true">
-              <template #reference>
-                <button
-                  class="tool-btn ds-scope-trigger"
-                  :class="{ active: chatStore.selectedDatasourceIds.length > 0 }"
-                  :disabled="chatStore.isStreaming"
-                  type="button"
-                  :title="t('chat.datasourceScope')"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                  </svg>
-                </button>
-              </template>
-              <div class="composer-settings">
-                <div v-if="enabledDatasources.length > 0" class="settings-section">
-                  <div class="settings-header">
-                    <span class="settings-label">{{ t('chat.datasourceScope') }}</span>
-                    <span
-                      v-if="chatStore.selectedDatasourceIds.length > 0"
-                      class="settings-clear"
-                      @click="chatStore.selectedDatasourceIds = []"
-                    >{{ t('chat.clearDatasourceScope') }}</span>
-                  </div>
-                  <div class="settings-ds-list">
-                    <label
-                      v-for="ds in enabledDatasources"
-                      :key="ds.id"
-                      class="settings-ds-item"
-                      :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
-                      :title="ds.name"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="chatStore.selectedDatasourceIds.includes(ds.id)"
-                        @change="toggleDatasource(ds.id)"
-                      />
-                      <span class="ds-item-name">{{ ds.name }}</span>
-                      <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
-                      <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </el-popover>
-            <button class="tool-btn" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+            <!-- 附件按钮 -->
+            <button class="footer-tool-pill icon-only" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
               </svg>
             </button>
-            <button class="tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- 指定数据源 -->
+            <el-dropdown
+              trigger="click"
+              placement="top-start"
+              :hide-on-click="false"
+              :disabled="chatStore.isStreaming"
+              popper-class="ds-select-popper"
+            >
+              <button
+                class="footer-tool-pill"
+                :class="{ active: chatStore.selectedDatasourceIds.length > 0 }"
+                :disabled="chatStore.isStreaming"
+                type="button"
+                :title="t('chat.datasourceScope')"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+                {{ t('chat.datasourceScope') }}
+                <span v-if="chatStore.selectedDatasourceIds.length > 0" class="ext-tool-badge">{{ chatStore.selectedDatasourceIds.length }}</span>
+                <el-icon :size="11"><ArrowDown /></el-icon>
+              </button>
+              <template #dropdown>
+                <div class="ds-dropdown-panel">
+                  <div v-if="dsLoading" class="ds-dropdown-state">
+                    <el-icon class="is-loading" :size="16"><Loading /></el-icon>
+                    <span>加载中…</span>
+                  </div>
+                  <div v-else-if="enabledDatasources.length > 0" class="ds-dropdown-section">
+                    <div class="ds-dropdown-header">
+                      <span class="ds-dropdown-label">{{ t('chat.datasourceScope') }}</span>
+                      <el-button
+                        v-if="chatStore.selectedDatasourceIds.length > 0"
+                        link
+                        size="small"
+                        type="primary"
+                        @click="chatStore.selectedDatasourceIds = []"
+                      >{{ t('chat.clearDatasourceScope') }}</el-button>
+                    </div>
+                    <div class="ds-dropdown-list">
+                      <div
+                        v-for="ds in enabledDatasources"
+                        :key="ds.id"
+                        class="ds-dropdown-item"
+                        :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
+                      >
+                        <el-checkbox
+                          :model-value="chatStore.selectedDatasourceIds.includes(ds.id)"
+                          @change="toggleDatasource(ds.id)"
+                        >
+                          <span class="ds-item-name">{{ ds.name }}</span>
+                          <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
+                        </el-checkbox>
+                        <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="ds-dropdown-state">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                      <line x1="4" y1="20" x2="20" y2="4" stroke-width="1.8"/>
+                    </svg>
+                    <span>{{ t('chat.noDatasourcesAvailable') }}</span>
+                  </div>
+                </div>
+              </template>
+            </el-dropdown>
+            <!-- 快捷提问 -->
+            <button class="footer-tool-pill" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
                 <rect x="3" y="14" width="7" height="7" rx="1"/>
                 <rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
+              {{ t('chat.quickAsk') }}
             </button>
-            <button class="tool-btn optimize-btn" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
-              <span v-if="isOptimizing" class="spin-icon">⟳</span>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3l1.2 4.8L18 9l-4.8 1.2L12 15l-1.2-4.8L6 9l4.8-1.2L12 3z"/>
-                <path d="M18 14l.8 1.6 1.6.8-1.6.8-.8 1.6-.8-1.6-1.6-.8 1.6-.8.8-1.6z"/>
+            <!-- 优化提示词 -->
+            <button class="footer-tool-pill optimize-pill" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+              <span v-if="isOptimizing" class="spin-icon">&#x27F3;</span>
+              <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/>
+                <path d="m14 7 3 3"/>
+                <path d="M5 6v4"/>
+                <path d="M19 14v4"/>
+                <path d="M10 2v2"/>
+                <path d="M7 8H3"/>
+                <path d="M21 16h-4"/>
+                <path d="M11 3H9"/>
               </svg>
+              {{ t('chat.optimizePrompt') }}
             </button>
-
           </div>
 
           <div class="footer-send">
@@ -655,12 +734,22 @@
               class="model-select-footer"
               popper-class="model-select-popper"
               @change="handleModelChange"
+              @visible-change="(visible: boolean) => { if (!visible) modelSearchQuery = '' }"
             >
               <template #header>
-                <span class="model-select-header">{{ t('modelConfig.model') }}</span>
+                <div class="model-search-box">
+                  <el-input
+                    v-model="modelSearchQuery"
+                    size="small"
+                    :placeholder="t('modelConfig.searchModel')"
+                    clearable
+                    :prefix-icon="Search"
+                    @click.stop
+                  />
+                </div>
               </template>
               <el-option
-                v-for="model in availableModels"
+                v-for="model in filteredModels"
                 :key="model.id"
                 :label="model.name"
                 :value="model.id"
@@ -981,7 +1070,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, watch, onMounted, onUnmounted, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
@@ -993,12 +1082,13 @@ import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import * as echarts from 'echarts'
-import { CopyDocument, Select, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
+import { CopyDocument, Select, RefreshRight, Loading, Search, ArrowDown, Check } from '@element-plus/icons-vue'
 import ContextUsagePanel from './ContextUsagePanel.vue'
 import MetricQueryDrawer from './MetricQueryDrawer.vue'
 import ChartMetricQueryDrawer from './ChartMetricQueryDrawer.vue'
 import PlanStepsPanel from '@/components/PlanStepsPanel.vue'
 import DelegationNodeView from '@/components/DelegationNodeView.vue'
+import PiIcon from '@/components/PiIcon.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
@@ -1008,6 +1098,15 @@ import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
+
+/** 从父组件 WorkbenchView 注入的历史侧栏收缩态与新建对话回调 */
+const historyCollapsed = inject<Ref<boolean>>('historyCollapsed', ref(false))
+const parentHandleNewChat = inject<(() => void) | null>('handleNewChat', null)
+
+/** 展开历史侧栏（收缩态头部按钮回调） */
+function toggleHistoryExpand(): void {
+  historyCollapsed.value = false
+}
 const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const userStore = useUserStore()
@@ -1024,6 +1123,15 @@ const currentAgentName = computed(() => {
   return agent?.name || t('agentConfig.selectAgent')
 })
 
+/** 数据集数量文本（设计稿 header 右侧） */
+const datasetCountText = computed(() => {
+  const selected = chatStore.selectedDatasourceIds.length
+  if (selected > 0) {
+    return `${selected} 个数据源已关联`
+  }
+  return '未选择数据源'
+})
+
 /** 可用模型列表：仅展示已启用的对话模型 */
 const availableModels = computed(() => {
   const enabledProviderIds = new Set<string>(
@@ -1036,6 +1144,18 @@ const availableModels = computed(() => {
     const providerOk = enabledProviderIds.size === 0 || enabledProviderIds.has(String(m.provider))
     return isChatModel && providerOk
   })
+})
+
+/** 模型搜索关键词 */
+const modelSearchQuery = ref('')
+
+/** 搜索过滤后的模型列表（按名称或 provider 模糊匹配） */
+const filteredModels = computed(() => {
+  const q = modelSearchQuery.value.trim().toLowerCase()
+  if (!q) return availableModels.value
+  return availableModels.value.filter(m =>
+    m.name.toLowerCase().includes(q) || (m.provider?.toLowerCase().includes(q) ?? false)
+  )
 })
 
 /**
@@ -1148,24 +1268,28 @@ defineEmits<{
 /** 智能问数快捷菜单项配置 */
 const ICON_STROKE_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
 const smartAskMenuItems = [
-  { key: 'aumTrend', label: 'smartAskMenu.aumTrend', icon: `<svg ${ICON_STROKE_ATTRS}><polyline points="3 17 9 11 15 15 21 7"/></svg>` },
-  { key: 'gmvRatio', label: 'smartAskMenu.gmvRatio', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>` },
-  { key: 'orderCompare', label: 'smartAskMenu.orderCompare', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>` },
-  { key: 'consumeTrend', label: 'smartAskMenu.consumeTrend', icon: `<svg ${ICON_STROKE_ATTRS}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>` },
-  { key: 'monthlyReport', label: 'smartAskMenu.monthlyReport', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>` },
-  { key: 'anomalyDetect', label: 'smartAskMenu.anomalyDetect', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` },
+  { key: 'aumTrend', label: 'smartAskMenu.aumTrend', desc: 'smartAskMenu.aumTrendDesc', icon: `<svg ${ICON_STROKE_ATTRS}><polyline points="3 17 9 11 15 15 21 7"/></svg>` },
+  { key: 'gmvRatio', label: 'smartAskMenu.gmvRatio', desc: 'smartAskMenu.gmvRatioDesc', icon: `<svg ${ICON_STROKE_ATTRS}><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>` },
+  { key: 'orderCompare', label: 'smartAskMenu.orderCompare', desc: 'smartAskMenu.orderCompareDesc', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>` },
+  { key: 'consumeTrend', label: 'smartAskMenu.consumeTrend', desc: 'smartAskMenu.consumeTrendDesc', icon: `<svg ${ICON_STROKE_ATTRS}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>` },
+  { key: 'monthlyReport', label: 'smartAskMenu.monthlyReport', desc: 'smartAskMenu.monthlyReportDesc', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>` },
+  { key: 'anomalyDetect', label: 'smartAskMenu.anomalyDetect', desc: 'smartAskMenu.anomalyDetectDesc', icon: `<svg ${ICON_STROKE_ATTRS}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>` },
 ]
 
 /** 已启用的数据源列表（用于输入框上方数据源选择器） */
 const enabledDatasources = ref<Datasource[]>([])
+const dsLoading = ref(false)
 
 /** 加载数据源列表 */
 async function loadDatasources(): Promise<void> {
+  dsLoading.value = true
   try {
     const list = await datasourceApi.list() as unknown as Datasource[]
-    enabledDatasources.value = list.filter(ds => ds.enabled)
+    enabledDatasources.value = Array.isArray(list) ? list.filter(ds => ds.enabled) : []
   } catch {
     enabledDatasources.value = []
+  } finally {
+    dsLoading.value = false
   }
 }
 
@@ -1178,6 +1302,12 @@ function toggleDatasource(dsId: string): void {
   } else {
     ids.push(dsId)
   }
+}
+
+/** 根据数据源 ID 获取名称（用于 AI 回复 source-line chip） */
+function getDatasourceName(dsId: string): string {
+  const ds = enabledDatasources.value.find(d => d.id === dsId)
+  return ds?.name || dsId
 }
 
 /** 数据源触发按钮文案 */
@@ -4239,8 +4369,10 @@ function handleStop(): void {
 
 /** 历史推荐问题展开状态 */
 const expandedHistoryRecQuestions = reactive(new Set<string>())
+/** 最新推荐问题的折叠集合（默认展开，用户可手动收起） */
+const collapsedRecQuestions = reactive(new Set<string>())
 
-/** 判断指定消息索引是否为最后一条 assistant 消息（即最新的推荐问题应展开显示） */
+/** 判断指定消息索引是否为最后一条 assistant 消息（即最新的推荐问题默认展开显示） */
 function isLatestRecommendedQuestions(msgIndex: number): boolean {
   const msgs = chatStore.messages
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -4251,12 +4383,32 @@ function isLatestRecommendedQuestions(msgIndex: number): boolean {
   return false
 }
 
-/** 切换历史推荐问题的展开/折叠状态 */
-function toggleHistoryRecQuestion(key: string): void {
-  if (expandedHistoryRecQuestions.has(key)) {
-    expandedHistoryRecQuestions.delete(key)
+function recQuestionKey(msgIndex: number, cardIdx: number): string {
+  return `${msgIndex}-${cardIdx}`
+}
+
+/** 推荐问题卡片是否展开：最新默认展开（可收起），历史默认折叠（可展开） */
+function isRecExpanded(msgIndex: number, cardIdx: number): boolean {
+  const key = recQuestionKey(msgIndex, cardIdx)
+  if (isLatestRecommendedQuestions(msgIndex)) return !collapsedRecQuestions.has(key)
+  return expandedHistoryRecQuestions.has(key)
+}
+
+/** 切换推荐问题卡片展开/折叠 */
+function toggleRecQuestion(msgIndex: number, cardIdx: number): void {
+  const key = recQuestionKey(msgIndex, cardIdx)
+  if (isLatestRecommendedQuestions(msgIndex)) {
+    if (collapsedRecQuestions.has(key)) {
+      collapsedRecQuestions.delete(key)
+    } else {
+      collapsedRecQuestions.add(key)
+    }
   } else {
-    expandedHistoryRecQuestions.add(key)
+    if (expandedHistoryRecQuestions.has(key)) {
+      expandedHistoryRecQuestions.delete(key)
+    } else {
+      expandedHistoryRecQuestions.add(key)
+    }
   }
 }
 
@@ -4595,18 +4747,106 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--theme-bg);
+  background: transparent;
 }
 
-/* 参考 DSH 对话页背景（ui-conversation ConversationRoot .root → --dsw-alias-bg-base）：
-   浅色用微蓝灰近白（neutral-bluish-50 #EDF3FE）作为页面底色，与浮起的白色输入卡片形成层次；
-   暗色用 DSH 的 near-black（neutral-bluish-950 rgb(21,21,23)）。 */
-:global(html[data-theme='light']) .chat-view {
-  background: #EDF3FE;
+/* 聊天区背景使用主题语义色（设计稿 --bg），不再硬编码 */
+
+/* 聊天头部：收缩态浮动按钮 + agent-switch pill + spacer + 右 dataset-count */
+.chat-header {
+  padding: 12px 24px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-:global(html[data-theme='dark']) .chat-view {
-  background: #151517;
+/* 收缩态下与 agent-switch 同行的快捷按钮 */
+.header-float-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-elevated, var(--theme-surface));
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.header-float-btn:hover {
+  color: var(--main-orange);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 8%, var(--theme-surface-elevated, var(--theme-surface)));
+  transform: scale(1.06);
+}
+
+.header-float-btn:active {
+  transform: scale(0.97);
+}
+
+.agent-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.agent-switch:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+  color: var(--main-orange);
+}
+
+.agent-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--main-orange);
+  flex-shrink: 0;
+}
+
+.agent-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chev {
+  display: inline-flex;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.dataset-count {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 消息区容器：撑满输入区上方空间，作为悬浮按钮的定位参照 */
@@ -4616,18 +4856,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-.chat-main::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--theme-border);
-  pointer-events: none;
-  z-index: 5;
 }
 
 /* 回到底部悬浮按钮：锚定在消息区底部（即输入框上方）居中 */
@@ -4826,105 +5054,204 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 10px 24px 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 920px;
+  gap: 8px;
+  max-width: 820px;
   width: 100%;
   margin: 0 auto;
 }
 
+/* ===== Empty State — 数据智能体欢迎页 ===== */
+
 .empty-state {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding: 40px 20px 12vh;
+  padding: 0 32px;
+  animation: empty-fade-in 0.5s ease-out both;
 }
 
-.empty-avatar {
-  width: 72px;
-  height: 72px;
+/* 背景光晕装饰 */
+.empty-state::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 480px;
+  height: 280px;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--main-orange) 7%, transparent) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes empty-fade-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Hero 区：头像 + 问候语 */
+.empty-hero {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  margin-bottom: 20px;
-  background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--main-orange) 18%, transparent);
-}
-
-.empty-avatar__icon {
-  width: 40px;
-  height: 40px;
-}
-
-.empty-greeting {
-  text-align: center;
   margin-bottom: 32px;
 }
 
+.empty-avatar {
+  width: 68px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  margin-bottom: 28px;
+  background: linear-gradient(135deg, var(--main-orange) 0%, var(--dark-orange) 100%);
+  box-shadow:
+    0 6px 24px color-mix(in srgb, var(--main-orange) 20%, transparent),
+    0 2px 6px color-mix(in srgb, var(--main-orange) 12%, transparent);
+  animation: avatar-float 4s ease-in-out infinite;
+}
+
+@keyframes avatar-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.empty-avatar__icon {
+  width: 38px;
+  height: 38px;
+}
+
 .empty-greeting__title {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--theme-text);
   margin: 0 0 8px;
+  letter-spacing: -0.3px;
+  text-align: center;
 }
 
 .empty-greeting__subtitle {
   font-size: 14px;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-muted);
   margin: 0;
+  line-height: 1.5;
+  text-align: center;
 }
 
-/* 智能问数快捷菜单 */
+/* ===== 能力卡片网格 ===== */
 .smart-ask-menu {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  max-width: 540px;
-  margin-bottom: 32px;
+  max-width: 580px;
+  width: 100%;
 }
 
-.smart-ask-chip {
+.smart-ask-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  font-family: inherit;
+}
+
+.smart-ask-card:hover {
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 4%, var(--theme-surface));
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--main-orange) 10%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.smart-ask-card:active {
+  transform: translateY(0);
+  box-shadow: none;
+  transition-duration: 0.08s;
+}
+
+.card-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 24px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-surface);
-  color: var(--theme-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.smart-ask-chip:hover {
-  background: var(--theme-surface-hover);
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
-  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  transition: background 0.22s ease, color 0.22s ease;
 }
 
-.chip-icon {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
+.smart-ask-card:hover .card-icon {
+  background: color-mix(in srgb, var(--main-orange) 16%, transparent);
 }
 
-.chip-icon svg {
-  width: 100%;
-  height: 100%;
+.card-icon :deep(svg) {
+  width: 14px;
+  height: 14px;
   display: block;
 }
 
-.chip-label {
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+  line-height: 1.3;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.22s ease;
+}
+
+.smart-ask-card:hover .card-label {
+  color: var(--main-orange);
+}
+
+.card-desc {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .smart-ask-menu {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 400px) {
+  .smart-ask-menu {
+    grid-template-columns: 1fr;
+  }
 }
 
 .msg {
@@ -4936,14 +5263,16 @@ onUnmounted(() => {
 /* 用户消息：保持紧凑聊天式宽度 */
 .msg.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
-  max-width: min(720px, 88%);
+  justify-content: flex-end;
+  max-width: 100%;
 }
 
-/* AI 消息：最大化展示宽度，提升长文/表格/图表阅读体验 */
+/* AI 消息：垂直堆叠（agent名称 → 数据源 → 内容气泡 → 操作栏），最大化展示宽度 */
 .msg.ai {
   align-self: flex-start;
   max-width: 100%;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .ai-content-wrapper {
@@ -4972,10 +5301,11 @@ onUnmounted(() => {
 }
 
 .bubble {
-  border-radius: 22px;
-  padding: 10px 16px;
-  font-size: 16px;
-  line-height: 24px;
+  border-radius: 14px 14px 4px 14px;
+  padding: 11px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 /* AI 消息：参考 DSH 无背景气泡（直接文字排版），内部卡片自带表面 */
@@ -4983,22 +5313,22 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   color: var(--body-text);
+  padding: 0;
 }
 
-/* 用户气泡：参考 DSH .bubble（浅色底 + 深色文字 + 22px 大圆角，无橙色）。
-   浅色系主题统一用 DSH 的 deepseek-50 浅蓝 rgb(237,243,254)；
-   暗色主题用 bluish-850 深灰 rgb(44,44,46)。 */
+/* 用户气泡：背景跟随主题色（各主题定义的 --very-light-orange 品牌极浅底色），
+   文字保持 --theme-text 可读性；暗色主题用 color-mix 混合出深底。 */
 .user-bubble {
-  background: rgb(237, 243, 254);
-  color: #111;
+  background: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
   /* 保留用户输入中的换行（Ctrl+Enter），同时正常自动折行 */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 :global(html[data-theme='dark']) .user-bubble {
-  background: rgb(44, 44, 46);
-  color: var(--theme-text);
+  background: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
 }
 
 .msg-error {
@@ -5043,8 +5373,8 @@ onUnmounted(() => {
 
 .msg-text {
   color: var(--body-text);
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 14.5px;
+  line-height: 1.78;
   letter-spacing: 0.01em;
 }
 
@@ -5218,37 +5548,52 @@ onUnmounted(() => {
 .streaming-cursor-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 4px 0;
 }
 
-.streaming-cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
+/* 三点跳动动画（思考中 / 生成中通用） */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: var(--main-orange);
-  border-radius: 2px;
-  animation: pulse 1s ease-in-out infinite;
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+.typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-5px); opacity: 1; }
 }
 
 .streaming-cursor__label {
   font-size: 13px;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
 }
 
 .streaming-cursor-end {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background: var(--main-orange);
-  border-radius: 2px;
-  animation: pulse 1s ease-in-out infinite;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: 36px;
+  padding: 4px 0;
+}
+
+.typing-dots--sm i {
+  width: 5px;
+  height: 5px;
 }
 
 .streaming-cursor-end__label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--theme-text-muted);
-  margin-left: 8px;
 }
 
 @keyframes pulse {
@@ -6079,88 +6424,131 @@ onUnmounted(() => {
 }
 
 .followup-chip {
-  padding: 7px 16px;
-  border-radius: 16px;
+  padding: 5px 12px;
+  border-radius: 14px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
   border: 1px solid var(--theme-border);
-  background: var(--theme-surface);
+  background: transparent;
   color: var(--theme-text-secondary);
   transition: all 0.15s;
 }
 
 .followup-chip:hover {
   background: var(--theme-surface-hover);
-  color: var(--main-orange);
-  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  color: var(--theme-text);
+  border-color: var(--theme-border-strong);
 }
 
-/* Recommended Questions */
+/* 推荐问题：外层卡片容器 */
 .recommended-questions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  align-self: flex-start;
+  gap: 0;
+  padding: 6px 8px;
+  margin-top: 4px;
+  align-self: stretch;
+  width: 100%;
   max-width: 100%;
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
   border-radius: 12px;
-  border-left: 2px solid var(--main-orange);
 }
 
 .recommended-questions__header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 8px;
+  width: 100%;
+  font-size: 13px;
+  color: var(--theme-text);
+  padding: 6px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.recommended-questions__header:hover {
+  background: var(--theme-surface-hover);
+}
+
+.recommended-questions__label {
   font-weight: 600;
-  color: var(--theme-text-secondary);
-  margin-bottom: 4px;
+  color: var(--main-orange);
+}
+
+/* 数字 badge（替代原来的「N 个问题」文字） */
+.recommended-questions__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 .recommended-questions__list {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 2px 0 4px;
 }
 
+/* 每个推荐问题：独立卡片 */
 .recommended-question-item {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
   border: 1px solid var(--theme-border);
-  background: var(--theme-surface);
+  background: var(--theme-bg);
   color: var(--theme-text);
   font-size: 13px;
   line-height: 1.5;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   width: 100%;
   font-family: inherit;
 }
 
 .recommended-question-item:hover {
-  background: var(--theme-surface-hover);
-  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, var(--theme-border));
+  background: color-mix(in srgb, var(--main-orange) 4%, var(--theme-bg));
   color: var(--main-orange);
+  transform: translateY(-1px);
+  box-shadow:
+    0 3px 10px color-mix(in srgb, var(--main-orange) 8%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.recommended-question-item:active {
+  transform: translateY(0);
+  box-shadow: none;
+  transition-duration: 0.06s;
 }
 
 .recommended-question-item__icon {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  margin-top: 3px;
-  color: var(--muted);
-  transition: color 0.15s;
+  color: var(--main-orange);
+  opacity: 0.8;
+  transition: opacity 0.15s;
 }
 
 .recommended-question-item:hover .recommended-question-item__icon {
-  color: var(--main-orange);
+  opacity: 1;
 }
 
 .recommended-question-item__text {
@@ -6168,24 +6556,22 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-/* 折叠状态：隐藏问题列表 */
-.recommended-questions.is-collapsed .recommended-questions__list {
-  display: none;
-}
-
-.recommended-questions.is-collapsed .recommended-questions__header {
-  cursor: pointer;
-}
-
-.recommended-questions.is-collapsed .recommended-questions__header:hover {
-  opacity: 0.8;
-}
-
-.recommended-questions__toggle {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--main-orange);
+.recommended-questions__arrow {
   margin-left: auto;
+  display: inline-flex;
+  width: 10px;
+  height: 10px;
+  color: var(--muted);
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
+}
+
+.recommended-questions__header:hover .recommended-questions__arrow {
+  opacity: 1;
+}
+
+.recommended-questions__arrow.is-open {
+  transform: rotate(180deg);
 }
 
 /* Feedback */
@@ -6230,29 +6616,32 @@ onUnmounted(() => {
   color: var(--dark-orange);
 }
 
-/* 消息操作栏（位于气泡外部） */
+/* 消息操作栏：AI 消息常显（时间+复制+重新生成），用户消息 hover 才显示。
+   AI 靠左、用户靠右，紧贴气泡下方。 */
 .msg-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-top: 5px;
-  opacity: 0;
-  pointer-events: none;
+  margin-top: 2px;
   transition: opacity 0.15s ease;
-}
-
-.msg:hover .msg-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .msg-actions--ai {
   justify-content: flex-start;
+  opacity: 1;
+  pointer-events: auto;
+  border-top: 1px solid var(--ai-divider);
 }
 
 .msg-actions--user {
-  justify-content: flex-start;
-  padding-right: 4px;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.user-content-wrapper:hover .msg-actions--user {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .action-btn {
@@ -6345,121 +6734,17 @@ onUnmounted(() => {
   opacity: 0.6;
 }
 
-/* Popover */
-.ds-popover {
-  padding: 0;
-}
-
-.ds-popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--theme-text);
-  border-bottom: 1px solid var(--theme-border);
-}
-
-.ds-popover-clear {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.ds-popover-clear:hover {
-  color: var(--main-orange);
-}
-
-.ds-popover-list {
-  max-height: 320px;
-  overflow-y: auto;
-  padding: 6px 0;
-}
-
-.ds-popover-list::-webkit-scrollbar {
-  width: 5px;
-}
-
-.ds-popover-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.ds-popover-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: 3px;
-}
-
-.ds-popover-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.ds-popover-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  margin: 0 6px;
-  transition: all 0.12s;
-  font-size: 13px;
-  color: var(--theme-text);
-  line-height: 1.4;
-}
-
-.ds-popover-item:hover {
-  background: var(--theme-surface-hover);
-}
-
-.ds-popover-item.checked {
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--dark-orange);
-}
-
-.ds-popover-item input[type="checkbox"] {
-  accent-color: var(--main-orange);
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.ds-item-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.ds-item-type {
-  font-size: 10px;
-  color: var(--muted);
-  background: var(--theme-surface-hover);
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.ds-popover-item.checked .ds-item-type {
-  color: var(--dark-orange);
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-}
-
 /* Input Bar */
 .input-bar {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 20px 20px;
+  padding: 8px 24px 18px;
   border-top: none;
   background: transparent;
   flex-shrink: 0;
-  max-width: 920px;
+  max-width: 820px;
   width: 100%;
   margin: 0 auto;
 }
@@ -6468,20 +6753,93 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 120px;
-  max-height: 260px;
-  padding: 10px 14px 10px 18px;
-  border-radius: 20px;
+  gap: 8px;
+  min-height: 56px;
+  max-height: 220px;
+  padding: 12px 14px 10px;
+  border-radius: 16px;
   border: 1px solid var(--theme-border);
-  background: var(--theme-surface);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: color-mix(in srgb, var(--theme-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(15, 23, 42, 0.07));
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .input-bar__card:focus-within {
-  border-color: var(--theme-border-strong);
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 10%, transparent), var(--shadow-md, 0 8px 24px rgba(15, 23, 42, 0.07));
+}
+
+/* footer pill 工具按钮（设计稿 .tool 样式） */
+.footer-tool-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.footer-tool-pill.icon-only {
+  padding: 0;
+  width: 30px;
+  justify-content: center;
+}
+
+.footer-tool-pill svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.footer-tool-pill:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+  color: var(--main-orange);
+}
+
+.footer-tool-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.footer-tool-pill.active {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+}
+
+.footer-tool-pill.optimize-pill:not(:disabled) {
+  color: var(--main-orange);
+}
+
+.footer-tool-pill.optimize-pill:not(:disabled):hover {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--main-orange);
+}
+
+.ext-tool-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--main-orange);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* 多轮对话提示条：输入框上方，达到轮次阈值后展示 */
@@ -6562,74 +6920,17 @@ onUnmounted(() => {
   transform: translateY(-4px);
 }
 
-.composer-agent {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.agent-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: none;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--dark-orange);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.agent-tag:hover {
-  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
-}
-
+/* agent pill 内联在 footer */
 .agent-tag-icon {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.9;
 }
 
 .agent-tag-name {
-  max-width: 160px;
+  max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-popover-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px;
-}
-
-.agent-popover-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--theme-text);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
-}
-
-.agent-popover-item:hover {
-  background: var(--theme-surface-hover);
-}
-
-.agent-popover-item.active {
-  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--dark-orange);
 }
 
 .agent-option,
@@ -6676,25 +6977,24 @@ onUnmounted(() => {
 
 .composer-body {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
   width: 100%;
-  min-height: 48px;
+  min-height: 36px;
   flex: 1;
 }
 
 .chat-input {
   width: 100%;
-  min-height: 48px;
-  max-height: 140px;
-  padding: 4px 0 0;
+  min-height: 36px;
+  max-height: 160px;
+  padding: 3px 0 0;
   margin: 0;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--theme-text);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
   font-family: inherit;
   resize: none;
   outline: none;
@@ -6712,65 +7012,17 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  padding-top: 2px;
 }
 
 .footer-tools {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.footer-tools .tool-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.footer-tools .tool-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.footer-tools .tool-btn.optimize-btn svg {
-  width: 22px;
-  height: 22px;
-}
-
-.footer-tools .tool-btn:hover:not(:disabled) {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
-}
-
-.footer-tools .tool-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.footer-tools .tool-btn.active {
-  color: var(--theme-text);
-  background: var(--theme-surface-hover);
-}
-
-/* 数据源触发按钮：勾选数据源后用主题色高亮图标（各主题保留各自 accent 色） */
-.footer-tools .tool-btn.ds-scope-trigger.active {
-  color: var(--main-orange);
-  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
-}
-
-.footer-tools .tool-btn.ds-scope-trigger.active:hover {
-  color: var(--main-orange);
-  background: color-mix(in srgb, var(--main-orange) 16%, transparent);
+  flex-wrap: wrap;
 }
 
 .footer-send {
@@ -6782,93 +7034,40 @@ onUnmounted(() => {
 
 .model-select-footer {
   width: auto;
-  min-width: 140px;
+  min-width: 0;
   max-width: none;
 }
 
-/* 模型选择弹窗（参考 DSH 菜单表面：r12、菜单底色、shadow-lv3、中性文字，去掉高饱和高亮） */
-.model-select-popper.el-select__popper {
-  border: 1px solid var(--theme-border-strong);
-  border-radius: 12px;
-  background: var(--theme-surface-elevated);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-  padding: 4px;
-  font-size: 12px;
-  color: var(--theme-text-secondary);
+.model-select-footer :deep(.el-select__wrapper) {
+  /* 按内容撑开：短模型名不再留大片空白 */
+  width: max-content;
 }
 
-.model-select-popper .el-select-dropdown__header {
-  padding: 6px 10px 8px;
-  border-bottom: 1px solid var(--theme-border);
-}
-
-.model-select-popper .model-select-header {
-  display: block;
-  padding: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--theme-text-muted);
-  line-height: 1.4;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.model-select-popper .el-select-dropdown__list {
-  padding: 2px 0;
-  margin: 0;
-}
-
-.model-select-popper .el-select-dropdown__item {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--theme-text-secondary);
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.model-select-popper .el-select-dropdown__item:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
-}
-
-.model-select-popper .el-select-dropdown__item.is-selected {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
-  font-weight: 600;
-}
-
-.model-select-popper .el-select-dropdown__empty {
-  padding: 12px 10px;
-  font-size: 12px;
-  color: var(--theme-text-muted);
-}
-
-/* 模型选择（完全参考 DSH InputBar .select：无边框原生 select chip + 自定义 chevron 箭头）。
+/* 模型选择器：设计稿 pill 风格（border + radius 999px + hover 变色）。
    EP 2.14 的 el-select 边框画在 .el-select__wrapper（inset box-shadow），须清除它；
    同时隐藏 EP 默认 caret，改用 DSH 的 SVG chevron data-uri 作为背景箭头。 */
 .model-select-footer :deep(.el-select__wrapper) {
   appearance: none;
-  border: none !important;
-  border-radius: 8px;
-  min-height: 28px;
-  height: 28px;
-  padding: 0 20px 0 8px;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 999px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 22px 0 10px;
   gap: 6px;
-  background-color: transparent;
+  background-color: var(--theme-surface-hover);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 4px center;
+  background-position: right 8px center;
   background-size: 12px 12px;
   box-shadow: none !important;
   white-space: nowrap;
-  transition: background-color 120ms ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .model-select-footer :deep(.el-select__wrapper.is-hovering),
 .model-select-footer :deep(.el-select:hover .el-select__wrapper),
 .model-select-footer :deep(.el-select__wrapper:hover) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent) !important;
   background-color: var(--theme-surface-hover);
   box-shadow: none !important;
 }
@@ -6876,13 +7075,14 @@ onUnmounted(() => {
 .model-select-footer :deep(.el-select__wrapper.is-focused),
 .model-select-footer :deep(.is-focus .el-select__wrapper),
 .model-select-footer :deep(.el-select.is-focus .el-select__wrapper) {
+  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent) !important;
   background-color: color-mix(in srgb, var(--main-orange) 8%, transparent);
   box-shadow: none !important;
 }
 
 .model-select-footer :deep(.el-select.is-disabled .el-select__wrapper) {
-  background-color: transparent;
-  border: none !important;
+  background-color: var(--theme-surface-hover);
+  border-color: var(--theme-border) !important;
   box-shadow: none !important;
   opacity: 0.5;
 }
@@ -6893,12 +7093,21 @@ onUnmounted(() => {
 }
 
 .model-select-footer :deep(.el-select__placeholder) {
-  font-size: 13px;
-  color: var(--theme-text-muted);
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
+  /* 让 placeholder span 参与宽度计算，选择器按内容撑开 */
+  min-width: max-content;
+  white-space: nowrap;
+  /* EP 默认 absolute + top:50% + translateY(-50%)（配合 filterable 叠在输入框上）；
+     我们已不使用 filterable，改回静态定位让其参与宽度计算，
+     同时清掉配套的位移，让文字由 wrapper 的 align-items:center 垂直居中 */
+  position: static;
+  top: auto;
+  transform: none;
 }
 
 .model-select-footer :deep(.el-select__selected-item) {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 20px;
   color: var(--theme-text-secondary);
@@ -6910,11 +7119,14 @@ onUnmounted(() => {
 
 /* 选择容器与内部输入框同样完整展示模型名称 */
 .model-select-footer :deep(.el-select__selection) {
+  /* 覆盖 EP 的显式 width:0 和 flex-basis:0，让内容尺寸参与宽度计算 */
+  width: auto;
+  flex-basis: auto;
   min-width: max-content;
 }
 
 .model-select-footer :deep(.el-select__wrapper .el-input__inner) {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--theme-text-secondary);
   overflow: visible;
@@ -6931,114 +7143,6 @@ onUnmounted(() => {
 }
 
 /** 输入框设置面板 */
-.composer-settings {
-  padding: 8px 4px;
-}
-
-.settings-section + .settings-section {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--theme-border);
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.settings-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.settings-clear {
-  font-size: 11px;
-  color: var(--main-orange);
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.settings-clear:hover {
-  color: var(--dark-orange);
-}
-
-.settings-ds-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.settings-ds-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-surface-elevated);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 13px;
-  color: var(--theme-text);
-}
-
-.settings-ds-item:hover {
-  border-color: color-mix(in srgb, var(--main-orange) 30%, transparent);
-  background: color-mix(in srgb, var(--main-orange) 4%, transparent);
-}
-
-.settings-ds-item.checked {
-  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--dark-orange);
-}
-
-.settings-ds-item input[type="checkbox"] {
-  accent-color: var(--main-orange);
-}
-
-.settings-ds-item .ds-item-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.settings-ds-item .ds-item-type {
-  font-size: 10px;
-  color: var(--muted);
-  background: var(--theme-surface-hover);
-  padding: 2px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.settings-ds-item .ds-item-browse {
-  font-size: 12px;
-  color: var(--main-orange);
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: transparent;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-
-.settings-ds-item:hover .ds-item-browse {
-  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
-  opacity: 1;
-}
-
-.settings-ds-item.checked .ds-item-browse {
-  color: var(--dark-orange);
-}
-
 /* --- 发送按钮（参考 DSH ui-conversation .primary：纯色圆钮 + 快速微过渡） --- */
 .btn-send {
   display: flex;
@@ -7133,50 +7237,47 @@ onUnmounted(() => {
 .seg-tool {
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--theme-border);
-  border-left: 2px solid var(--theme-border);
   border-radius: 0;
   margin-bottom: 0;
-  overflow: hidden;
+  overflow: visible;
 }
-
-.seg-tool.is-running { border-left-color: #409eff; }
-.seg-tool.is-success { border-left-color: #67c23a; }
-.seg-tool.is-error   { border-left-color: #f56c6c; }
 
 .seg-tool__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 7px 10px;
   cursor: pointer;
   user-select: none;
   font-size: 13px;
   line-height: 1.4;
   color: var(--theme-text-secondary);
+  border-radius: 6px;
+  transition: all 0.15s;
 }
 
 .seg-tool__header:hover {
   color: var(--theme-text);
+  background: var(--theme-surface-hover);
 }
 
 .seg-tool__status {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  color: #fff;
-  background: #909399;
+  color: var(--muted);
 }
 
-.is-running .seg-tool__status { background: #409eff; }
-.is-success .seg-tool__status { background: #67c23a; }
-.is-error .seg-tool__status   { background: #f56c6c; }
+.seg-tool__status svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.is-running .seg-tool__status { color: #409eff; }
+.is-success .seg-tool__status { color: #67c23a; }
+.is-error .seg-tool__status   { color: #f56c6c; }
 
 .spin-icon {
   display: inline-block;
@@ -7190,12 +7291,13 @@ onUnmounted(() => {
 
 .seg-tool__name {
   font-weight: 500;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 180px;
   transition: color 0.15s;
+  font-size: 13px;
 }
 
 .seg-tool__header:hover .seg-tool__name {
@@ -7226,8 +7328,13 @@ onUnmounted(() => {
   width: 10px;
   height: 10px;
   color: var(--muted);
-  transition: transform 0.2s;
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
   margin-left: auto;
+}
+
+.seg-tool:hover .seg-tool__arrow {
+  opacity: 1;
 }
 
 .seg-tool__arrow.is-open {
@@ -7235,7 +7342,7 @@ onUnmounted(() => {
 }
 
 .seg-tool__body {
-  padding: 0 12px 12px 36px;
+  padding: 0 10px 6px 30px;
 }
 
 .seg-tool__section + .seg-tool__section {
@@ -7278,36 +7385,43 @@ onUnmounted(() => {
 .seg-narration {
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--theme-border);
-  border-left: 2px solid var(--theme-border);
   border-radius: 0;
   margin-bottom: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .seg-narration__toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 7px 10px;
   background: transparent;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text);
   text-align: left;
-  transition: color 0.15s;
+  transition: all 0.15s;
 }
 
 .seg-narration__toggle:hover {
-  color: var(--theme-text);
+  background: var(--theme-surface-hover);
 }
 
 .seg-narration__label {
   font-weight: 500;
+}
+
+.seg-narration__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--main-orange);
+  opacity: 0.75;
 }
 
 .seg-narration__arrow {
@@ -7316,7 +7430,12 @@ onUnmounted(() => {
   width: 10px;
   height: 10px;
   color: var(--muted);
-  transition: transform 0.2s;
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
+}
+
+.seg-narration:hover .seg-narration__arrow {
+  opacity: 1;
 }
 
 .seg-narration__arrow.is-open {
@@ -7324,7 +7443,9 @@ onUnmounted(() => {
 }
 
 .seg-narration__body {
-  padding: 0 44px 12px 36px;
+  margin-left: 12px;
+  border-left: 2px solid var(--theme-border-strong);
+  padding: 0 10px 8px 10px;
   font-size: 13px;
   line-height: 1.6;
   color: var(--theme-text-secondary);
@@ -7399,37 +7520,38 @@ onUnmounted(() => {
 .seg-execution {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  width: fit-content;
+  align-items: stretch;
+  width: 100%;
   max-width: 100%;
-  /* 中性浅背景（文字色淡化），避免主题表面 hover 的橙色色调 */
-  background: color-mix(in srgb, var(--theme-text) 5%, transparent);
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  margin-bottom: 10px;
-  overflow: hidden;
+  /* Codeon 风格：无外框、无背景，内容平铺 */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin-bottom: 8px;
+  overflow: visible;
 }
 
 .seg-execution__toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 10px;
+  width: 100%;
+  padding: 6px 10px;
   background: transparent;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-text-muted);
+  color: var(--theme-text);
   text-align: left;
   transition: all 0.15s;
   white-space: nowrap;
 }
 
 .seg-execution__toggle:hover {
-  color: var(--theme-text-secondary);
-  background: var(--theme-border);
+  background: var(--theme-surface-hover);
 }
 
 .seg-execution__label {
@@ -7437,18 +7559,23 @@ onUnmounted(() => {
 }
 
 .seg-execution__count {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 400;
 }
 
 .seg-execution__arrow {
-  margin-left: 1px;
+  margin-left: auto;
   display: inline-flex;
   width: 9px;
   height: 9px;
   color: var(--muted);
-  transition: transform 0.2s;
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
+}
+
+.seg-execution:hover .seg-execution__arrow {
+  opacity: 1;
 }
 
 .seg-execution__arrow.is-open {
@@ -7460,12 +7587,20 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* 内容区右上角复制按钮（常显） */
+/* 内容区右上角复制按钮：默认隐藏，悬停内容区时渐显 */
 .seg-copy-wrap .seg-copy-btn {
   position: absolute;
   top: 4px;
   right: 8px;
   z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-color 120ms ease, color 120ms ease, opacity 0.15s ease;
+}
+
+.seg-copy-wrap:hover .seg-copy-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .seg-copy-btn {
@@ -7506,6 +7641,13 @@ onUnmounted(() => {
   top: 8px;
   right: 8px;
   z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.seg-tool__code:hover .seg-copy-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* 工具段标题行 */
@@ -7518,12 +7660,15 @@ onUnmounted(() => {
 .seg-execution__body {
   width: 100%;
   max-width: 100%;
-  padding: 0 12px 12px;
+  padding: 2px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .seg-execution__body .seg-narration:first-child,
 .seg-execution__body .seg-tool:first-child {
-  border-top: 1px solid var(--theme-border);
+  border-top: none;
 }
 
 /* seg-slide transition (Vue Transition) */
@@ -8053,3 +8198,249 @@ onUnmounted(() => {
   inset: 0;
   border-radius: 999px;
 }</style>
+
+<!-- 下拉面板 popper 样式：el-dropdown/el-select 的弹出层 teleport 到 body，
+     scoped 样式无法命中，因此放在独立的非 scoped 块中（类名均以 popper-class 隔离，不会泄漏） -->
+<style>
+/* agent 下拉菜单 popper */
+.agent-select-popper.el-popper {
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+  min-width: 200px;
+}
+
+.agent-select-popper .el-dropdown-menu {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.agent-select-popper .agent-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+  line-height: 1.5;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.agent-select-popper .agent-dropdown-item:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.agent-select-popper .agent-dropdown-item.is-current {
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+}
+
+.agent-select-popper .agent-dropdown-item .agent-option-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.agent-select-popper .agent-dropdown-item .agent-option-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.agent-select-popper .agent-dropdown-item .agent-check-icon {
+  color: var(--main-orange);
+  flex-shrink: 0;
+}
+
+/* 数据源下拉面板 popper */
+.ds-select-popper.el-popper {
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 6px;
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.ds-dropdown-panel {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ds-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--theme-border);
+  margin-bottom: 4px;
+}
+
+.ds-dropdown-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ds-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ds-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.ds-dropdown-item:hover {
+  background: var(--theme-surface-hover);
+}
+
+.ds-dropdown-item.checked {
+  background: color-mix(in srgb, var(--main-orange) 5%, transparent);
+}
+
+.ds-dropdown-item .el-checkbox {
+  flex: 1;
+  min-width: 0;
+  --el-checkbox-checked-bg-color: var(--main-orange);
+  --el-checkbox-checked-input-border-color-hover: var(--main-orange);
+}
+
+.ds-dropdown-item .el-checkbox__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ds-dropdown-item .ds-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--theme-text);
+}
+
+.ds-dropdown-item .ds-item-type {
+  font-size: 10px;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.ds-dropdown-item .ds-item-browse {
+  font-size: 12px;
+  color: var(--main-orange);
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.ds-dropdown-item:hover .ds-item-browse {
+  opacity: 1;
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+}
+
+/* 数据源下拉：加载中 / 空状态 */
+.ds-dropdown-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 16px;
+  color: var(--theme-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.ds-dropdown-state svg {
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+
+/* 模型选择弹窗（参考 DSH 菜单表面：r12、菜单底色、shadow-lv3、中性文字，去掉高饱和高亮） */
+.model-select-popper.el-select__popper {
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 12px;
+  background: var(--theme-surface-elevated);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+
+.model-select-popper .el-select-dropdown__header {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+/* header 内的搜索框：去掉 el-input 默认边框、融入 popper 表面 */
+.model-search-box {
+  width: 100%;
+}
+
+.model-search-box .el-input__wrapper {
+  box-shadow: none !important;
+  background: var(--theme-surface-hover);
+  border-radius: 6px;
+}
+
+.model-search-box .el-input__wrapper:hover,
+.model-search-box .el-input__wrapper.is-focus {
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+  box-shadow: none !important;
+}
+
+.model-search-box .el-input__prefix {
+  color: var(--theme-text-muted);
+}
+
+.model-select-popper .el-select-dropdown__list {
+  padding: 2px 0;
+  margin: 0;
+}
+
+.model-select-popper .el-select-dropdown__item {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--theme-text-secondary);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.model-select-popper .el-select-dropdown__item:hover {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+}
+
+.model-select-popper .el-select-dropdown__item.is-selected {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text);
+  font-weight: 600;
+}
+
+.model-select-popper .el-select-dropdown__empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--theme-text-muted);
+}
+</style>

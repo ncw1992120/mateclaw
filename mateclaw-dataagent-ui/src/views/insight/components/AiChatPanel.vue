@@ -103,10 +103,12 @@
             </template>
             <template v-if="msg.role === 'assistant' && msg.content">
               <template v-if="msg.streaming">
-                <span class="streaming-text">{{ msg.content }}</span>
+                <span class="streaming-text" v-html="renderMessageContent(msg.content)"></span>
                 <span class="cursor-blink">|</span>
               </template>
-              <template v-else>{{ msg.content }}</template>
+              <template v-else>
+                <div class="msg-markdown" v-html="renderMessageContent(msg.content)"></div>
+              </template>
             </template>
             <template v-if="msg.role === 'assistant' && !msg.reasoning && !msg.content && msg.streaming">
               <span class="cursor-blink">|</span>
@@ -166,6 +168,8 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Promotion, Close, ArrowRight } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { Datasource, InsightDashboard, ChatHistoryMessage } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import * as datasourceApi from '@/api/datasource'
@@ -390,6 +394,16 @@ function escapeHtml(text: string): string {
   const div = document.createElement("div")
   div.textContent = text
   return div.innerHTML
+}
+
+/* ── Markdown 渲染（AI 消息回复） ──────────────────────── */
+const markedInstance = new Marked({ gfm: true, breaks: true })
+
+/** 将 AI 回复文本渲染为安全的 HTML（marked + DOMPurify） */
+function renderMessageContent(content: string): string {
+  if (!content) return ''
+  const html = markedInstance.parse(content) as string
+  return DOMPurify.sanitize(html, { ADD_ATTR: ['target', 'rel'] })
 }
 
 /** 切换思考过程展开/收起状态 */
@@ -771,10 +785,19 @@ async function handleSend(): Promise<void> {
 }
 
 .ai-chat-message.assistant .message-content {
-  background: var(--db-muted);
-  border: 1px solid var(--db-border);
+  /* Codeon 风格：AI 回复无气泡，平铺在面板底色上，全宽 markdown 排版 */
+  background: transparent;
+  border: none;
   color: var(--db-text);
-  border-bottom-left-radius: 3px;
+  padding: 2px 0;
+  max-width: 100%;
+  flex: 1;
+  border-radius: 0;
+}
+
+/* AI 回复隐藏左侧头像（Codeon 风格：AI 内容无头像） */
+.ai-chat-message.assistant .message-avatar {
+  display: none;
 }
 
 /* 流式光标 */
@@ -900,6 +923,148 @@ async function handleSend(): Promise<void> {
 
 .reasoning-text :deep(ul) {
   list-style-type: disc;
+}
+
+/* ── AI 回复 Markdown 渲染样式（与 ChatView .msg-text 对齐） ── */
+.msg-markdown {
+  white-space: normal;
+}
+
+.msg-markdown :deep(p) {
+  margin: 0 0 8px;
+}
+
+.msg-markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.msg-markdown :deep(h1),
+.msg-markdown :deep(h2),
+.msg-markdown :deep(h3),
+.msg-markdown :deep(h4),
+.msg-markdown :deep(h5),
+.msg-markdown :deep(h6) {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--db-text);
+}
+
+.msg-markdown :deep(h1:first-child),
+.msg-markdown :deep(h2:first-child),
+.msg-markdown :deep(h3:first-child),
+.msg-markdown :deep(h4:first-child) {
+  margin-top: 0;
+}
+
+.msg-markdown :deep(h1) { font-size: 1.3em; }
+.msg-markdown :deep(h2) { font-size: 1.2em; }
+.msg-markdown :deep(h3) { font-size: 1.1em; }
+.msg-markdown :deep(h4) { font-size: 1.05em; }
+
+.msg-markdown :deep(strong) {
+  font-weight: 600;
+  color: var(--db-text);
+}
+
+.msg-markdown :deep(em) {
+  font-style: italic;
+}
+
+.msg-markdown :deep(a) {
+  color: var(--db-accent);
+  text-decoration: none;
+}
+
+.msg-markdown :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.msg-markdown :deep(ul),
+.msg-markdown :deep(ol) {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.msg-markdown :deep(li) {
+  margin: 3px 0;
+  line-height: 1.5;
+}
+
+.msg-markdown :deep(ol) {
+  list-style-type: decimal;
+}
+
+.msg-markdown :deep(ul) {
+  list-style-type: disc;
+}
+
+.msg-markdown :deep(code) {
+  background: rgba(99, 102, 241, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--db-accent);
+}
+
+.msg-markdown :deep(pre) {
+  background: rgba(15, 23, 42, 0.95);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.msg-markdown :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.msg-markdown :deep(blockquote) {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--db-accent);
+  color: var(--db-text-secondary);
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+
+.msg-markdown :deep(blockquote p) {
+  margin: 0;
+}
+
+.msg-markdown :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.msg-markdown :deep(th),
+.msg-markdown :deep(td) {
+  border: 1px solid var(--db-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.msg-markdown :deep(th) {
+  background: var(--db-muted);
+  font-weight: 600;
+  color: var(--db-text);
+}
+
+.msg-markdown :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--db-border);
+  margin: 10px 0;
 }
 
 /* 加载动画 */
