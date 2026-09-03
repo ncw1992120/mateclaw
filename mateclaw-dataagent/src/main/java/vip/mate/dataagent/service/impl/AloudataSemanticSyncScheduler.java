@@ -105,6 +105,8 @@ public class AloudataSemanticSyncScheduler {
             }
             try {
                 if (!isDue(datasourceId, ds.getAloudataSyncCron(), windowStart, now)) {
+                    // 未到触发点，释放防重入标记，否则后续轮次会被 contains 永久拦截
+                    runningDatasourceIds.remove(datasourceId);
                     continue;
                 }
                 // 跨节点 per-datasource 分布式锁：取到锁才真正提交同步任务
@@ -114,7 +116,8 @@ public class AloudataSemanticSyncScheduler {
                         SYNC_LOCK_AT_MOST_FOR,
                         Duration.ZERO));
                 if (lock.isEmpty()) {
-                    log.debug("[Aloudata定时同步] 数据源 {} 被其它节点持锁，跳过本轮", datasourceId);
+                    log.info("[Aloudata定时同步] 数据源 {} 被其它节点持锁，跳过本轮", datasourceId);
+                    runningDatasourceIds.remove(datasourceId);
                     continue;
                 }
                 SimpleLock held = lock.get();
