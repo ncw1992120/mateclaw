@@ -3,11 +3,11 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // 生产部署时 SPA 由 Spring Boot 服务（context-path /dataagent/api）承载，
   // 资源引用必须带该前缀，否则 /assets/** 落到根路径 404。
-  // dev server 同样在该基座下提供页面（http://localhost:5174/dataagent/api/）。
-  base: '/dataagent/api/',
+  // dev server 挂在根路径，直接访问 http://localhost:5174/ 即可。
+  base: mode === 'production' ? '/dataagent/api/' : '/',
   plugins: [
     vue(),
     tailwindcss(),
@@ -41,4 +41,5 @@ export default defineConfig({
       },
     },
   },
-})
+}))
+
