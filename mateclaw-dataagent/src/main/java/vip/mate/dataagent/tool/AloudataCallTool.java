@@ -28,13 +28,16 @@ import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
+import vip.mate.dataagent.support.AloudataTimeResolver;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
 import vip.mate.dataagent.support.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -108,6 +111,12 @@ public class AloudataCallTool {
 
     /** 消歧阈值：前两名分数差距小于此值时触发消歧追问 */
     private static final double DISAMBIGUATION_SCORE_GAP = 0.15;
+
+    /** 时间锚点时区：与 mateclaw-server 内置 DateTimeTool.getCurrentDate 保持一致 */
+    private static final ZoneId TIME_ANCHOR_ZONE = ZoneId.of("Asia/Shanghai");
+
+    /** 周对照表标签（周一~周日），下标 i 对应 ISO 星期值 i+1 */
+    private static final String WEEKDAY_LABELS = "一二三四五六日";
 
     /** 匹配指标展示名尾部的口径后缀（全角/半角括号），用于剥离得到基名 */
     private static final Pattern TRAILING_CALIBER_PATTERN =
@@ -499,9 +508,18 @@ public class AloudataCallTool {
             Map<String, Object> params = buildParamsFromInput(endpointName, input, config);
 
             // ====== 指标查询端点专属：校验 + 自动修正 ======
+            String systemTimeNote = null;
             if (METRICS_QUERY_ENDPOINT.equalsIgnoreCase(endpointName)) {
                 // P0: 强制 queryResultType 为 DATA，避免 SQL_AND_DATA 导致数据截断
                 params.put("queryResultType", "DATA");
+
+                // P0: 系统时间解析优先（C 方案）：用户原话含相对时间表述（昨日/上周五/近N天/上月等）时，
+                // 由确定性规则解析出绝对日期区间并直接锁定 timeConstraint，LLM 不再自行推算日期；
+                // 解析命中即覆盖 LLM 传入的时间表达式（"LLM 只能确认不能改"）。
+                systemTimeNote = applySystemTimeRange(params, getOriginalMessage());
+                if (systemTimeNote != null) {
+                    log.info("系统时间解析优先命中: {}", systemTimeNote);
+                }
 
                 // P0: timeConstraint 自动规范化
                 normalizeTimeConstraint(params);
@@ -530,7 +548,12 @@ public class AloudataCallTool {
             }
 
             // 格式化响应
-            return formatResponse(endpointName, response);
+            String formatted = formatResponse(endpointName, response);
+            // 系统时间锁定的回显提示：告知 LLM 时间区间已由系统锁定，无需（也不应）再修改
+            if (systemTimeNote != null) {
+                formatted = formatted + systemTimeNote;
+            }
+            return formatted;
         } catch (IllegalArgumentException e) {
             log.error("Aloudata Tool [{}] 参数校验失败: {}", endpointName, e.getMessage());
             return error(e.getMessage());
@@ -1078,6 +1101,52 @@ public class AloudataCallTool {
     }
 
     /**
+     * 注入时间锚点与日期对照表。
+     * <p>
+     * 背景：相对时间（昨日/上周几/近N天/去年同期等）换算 timeConstraint 时，LLM 仅凭
+     * 「当前日期 + 星期」自行做星期推算经常出错（如上周五被算成错误日期，查询区间错位、取数错误）。
+     * 故锚点不仅给出当前日期与星期，还把本周/上周逐日、本月/上月/去年同月边界、近N天区间
+     * 全部在服务端确定性算好，LLM 只需查表取日期。与内置 DateTimeTool.getCurrentDate 使用同一时区。
+     */
+    private static void appendTimeAnchor(StringBuilder sb) {
+        LocalDate today = LocalDate.now(TIME_ANCHOR_ZONE);
+        String week = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA);
+        sb.append("**当前日期**: ").append(today).append("（").append(week).append("）\n");
+        sb.append("**日期对照表**（相对时间换算必须查此表取日期，禁止自行推算星期）:\n");
+        LocalDate yesterday = today.minusDays(1);
+        LocalDate lastYear = today.minusYears(1);
+        sb.append("- 昨天=").append(yesterday)
+                .append("；今天=").append(today)
+                .append("；去年今日=").append(lastYear).append("\n");
+        appendWeekRow(sb, "本周", today.with(DayOfWeek.MONDAY));
+        appendWeekRow(sb, "上周", today.with(DayOfWeek.MONDAY).minusWeeks(1));
+        LocalDate lastMonth = today.minusMonths(1);
+        sb.append("- 本月=").append(today.withDayOfMonth(1)).append("~").append(today.withDayOfMonth(today.lengthOfMonth()))
+                .append("；上月=").append(lastMonth.withDayOfMonth(1)).append("~").append(lastMonth.withDayOfMonth(lastMonth.lengthOfMonth()))
+                .append("；去年同月=").append(lastYear.withDayOfMonth(1)).append("~").append(lastYear.withDayOfMonth(lastYear.lengthOfMonth()))
+                .append("\n");
+        sb.append("- 近7天=").append(today.minusDays(6)).append("~").append(today)
+                .append("；近30天=").append(today.minusDays(29)).append("~").append(today).append("\n");
+        sb.append("\n");
+    }
+
+    /**
+     * 追加一行周对照（周一~周日逐日完整日期，覆盖跨年场景）。
+     * <p>
+     * 「上周五」等表述的查表路径：定位「上周」行 → 取「五」对应日期。
+     */
+    private static void appendWeekRow(StringBuilder sb, String label, LocalDate monday) {
+        sb.append("- ").append(label).append(": ");
+        for (int i = 0; i < WEEKDAY_LABELS.length(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(WEEKDAY_LABELS.charAt(i)).append("=").append(monday.plusDays(i));
+        }
+        sb.append("\n");
+    }
+
+    /**
      * 构建"## 指标"列表展示行（压缩模式）。
      * <p>
      * 相比 MetricHit.getPromptInfo()：增加业务口径字段。维度段由
@@ -1244,10 +1313,8 @@ public class AloudataCallTool {
         }
         sb.append("\n");
         sb.append("**数据源 ID**: ").append(datasourceId).append("\n");
-        // 时间锚点注入：相对时间（上周五/上月同期等）换算必须以此为准，禁止 LLM 主观推算当前日期与星期
-        LocalDate today = LocalDate.now();
-        String week = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.CHINA);
-        sb.append("**当前日期**: ").append(today).append("（").append(week).append("）\n");
+        // 时间锚点注入：相对时间（昨日/上周几/近N天等）换算必须查下方对照表，禁止 LLM 主观推算星期与日期
+        appendTimeAnchor(sb);
 
         int metricCount = mergedMetrics.size();
         sb.append("**匹配结果**: ").append(metricCount).append(" 个指标\n\n");
@@ -1446,6 +1513,29 @@ public class AloudataCallTool {
     }
 
     // ==================== 查询请求校验与自动修正 ====================
+
+    /**
+     * P0: 系统时间解析优先——从用户原话解析相对时间并锁定 timeConstraint。
+     * <p>
+     * 相对时间（昨日/上周几/近N天/上月/去年同期等）由确定性规则（{@link AloudataTimeResolver}）
+     * 在服务端换算为绝对日期区间并直接写入 params.timeConstraint，覆盖 LLM 传入的表达式；
+     * LLM 无需推算星期/日期，只需按查询结果作答。解析不到时不做任何干预。
+     * 时区与内置 DateTimeTool.getCurrentDate 及检索锚点一致（Asia/Shanghai）。
+     *
+     * @return 命中时返回回显提示文本（含锁定区间），未命中返回 null
+     */
+    private String applySystemTimeRange(Map<String, Object> params, String originalMessage) {
+        AloudataTimeResolver.ResolvedRange range = AloudataTimeResolver.resolveRelativeTime(
+                originalMessage, LocalDate.now(TIME_ANCHOR_ZONE));
+        if (range == null) {
+            return null;
+        }
+        String timeConstraint = "([metric_time__day]>=\"" + range.start()
+                + "\" AND [metric_time__day]<=\"" + range.end() + "\")";
+        params.put("timeConstraint", timeConstraint);
+        return "\n\n**系统时间锁定**：" + range.label() + "（" + range.start() + " ~ " + range.end() + "），"
+                + "timeConstraint 已由系统据此设置，请勿修改。";
+    }
 
     /**
      * P0: timeConstraint 自动规范化
