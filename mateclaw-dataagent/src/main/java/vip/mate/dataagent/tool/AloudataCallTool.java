@@ -109,9 +109,6 @@ public class AloudataCallTool {
     /** 消歧阈值：前两名分数差距小于此值时触发消歧追问 */
     private static final double DISAMBIGUATION_SCORE_GAP = 0.15;
 
-    /** 指标列表展示中可用维度的最大截断数：保留足够维度供构造查询，同时防止结果超长触发 spill 截断 */
-    private static final int PROMPT_MAX_AVAILABLE_DIMENSIONS = 15;
-
     /** 匹配指标展示名尾部的口径后缀（全角/半角括号），用于剥离得到基名 */
     private static final Pattern TRAILING_CALIBER_PATTERN =
             Pattern.compile("[（(][^（）()]*[）)]\\s*$");
@@ -1083,9 +1080,11 @@ public class AloudataCallTool {
     /**
      * 构建"## 指标"列表展示行（压缩模式）。
      * <p>
-     * 相比 MetricHit.getPromptInfo()：业务口径 + 可用维度超过 PROMPT_MAX_AVAILABLE_DIMENSIONS 时截断并标注总数。
-     * 防止单条指标因几十个维度把整体检索结果顶到 spill 阈值，导致 LLM 只能看到 preview 而遗漏后排候选
-     * （"用户问题完全匹配指标名称"场景无法枚举全部候选、消歧场景只看到前几个候选的根因之一）。
+     * 相比 MetricHit.getPromptInfo()：增加业务口径字段。维度段由
+     * {@link AloudataSearchResult.MetricHit#getDimensionsPrompt()} 统一渲染
+     * （总数 + 查询相关 TopN 带展示名 + 完整列表工具引导），
+     * 防止单条指标因几十个维度英文名把整体检索结果顶到 spill 阈值，导致 LLM 只能看到 preview
+     * 而遗漏后排候选（"用户问题完全匹配指标名称"场景无法枚举全部候选、消歧场景只看到前几个候选的根因之一）。
      */
     private String compactMetricPrompt(AloudataSearchResult.MetricHit hit) {
         StringBuilder sb = new StringBuilder();
@@ -1099,16 +1098,9 @@ public class AloudataCallTool {
         if (hit.getBusinessCaliber() != null && !hit.getBusinessCaliber().isBlank()) {
             sb.append(" - ").append(hit.getBusinessCaliber());
         }
-        List<String> dims = hit.getAvailableDimensions();
-        if (dims != null && !dims.isEmpty()) {
-            if (dims.size() <= PROMPT_MAX_AVAILABLE_DIMENSIONS) {
-                sb.append(", 可用维度: ").append(String.join(", ", dims));
-            } else {
-                sb.append(", 可用维度(前").append(PROMPT_MAX_AVAILABLE_DIMENSIONS).append("个): ")
-                        .append(String.join(", ", dims.subList(0, PROMPT_MAX_AVAILABLE_DIMENSIONS)))
-                        .append(" …共").append(dims.size())
-                        .append("个；如需完整可用维度请调用 aloudata_metric_available_dimensions");
-            }
+        String dimsPrompt = hit.getDimensionsPrompt();
+        if (!dimsPrompt.isEmpty()) {
+            sb.append(", ").append(dimsPrompt);
         }
         return sb.toString();
     }
@@ -1207,7 +1199,9 @@ public class AloudataCallTool {
                 mergedMetrics.add(toMetricHit(target, dominant));
             }
             mergedMetrics.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
-            enrichBackfilledDimensions(datasourceId, mergedMetrics);
+            // 为精确命中的目标补充可用维度（可能通过 toMetricHit 新补入，尚未 enrich）
+            aloudataSemanticEsService.enrichMissingDimensions(mergedMetrics, datasourceId,
+                    expandedKeywords, originalMessage);
             family = new FamilyBackfillResult(null, List.of(), List.of());
             familyResolved = true;
         } else {
@@ -1299,15 +1293,18 @@ public class AloudataCallTool {
 
         /* 指标-维度配对约束：强制 LLM 按映射关系选维度，禁止跨指标错配 */
         if (!mergedMetrics.isEmpty()) {
+            String dimToolName = DataAgentConstants.ALOUDATA_TOOL_METRIC_AVAILABLE_DIMENSIONS;
             sb.append("## ⚠️ 指标-维度配对规则（硬约束）\n\n");
-            sb.append("- 每个指标的「可用维度」是该指标**唯一合法**的维度来源，构造 dimensions 时");
-            sb.append("只能从所选指标的 availableDimensions 中选取，禁止混入其他指标的维度。\n");
+            sb.append("- 每个指标的「相关维度」是该指标合法维度的相关性子集，构造 dimensions 时");
+            sb.append("只能从所选指标展示的相关维度中选取，禁止混入其他指标的维度。\n");
+            sb.append("- 相关维度未覆盖用户所需时，调用 ").append(dimToolName);
+            sb.append(" 获取该指标的完整可用维度列表（传入 metricNames），以工具返回为准。\n");
             sb.append("- 当查询多个指标时，dimensions 中的每个维度必须**同时**属于所有被查指标的可用维度集");
             sb.append("（取交集），否则查询会报错。\n");
             sb.append("- 向用户展示候选维度时，必须标注每个维度属于哪个指标，例如");
             sb.append("「销售额可用维度：区域/省份/城市」，禁止脱离指标单独列维度让用户选。\n");
             sb.append("- 构造查询前自检：对 dimensions 中的每个 dimName，确认它出现在所选指标的");
-            sb.append("availableDimensions 列表中；若不在，移除或换用该指标的可用维度。\n");
+            sb.append("相关维度列表或 ").append(dimToolName).append(" 返回中；若不在，移除或换用该指标的可用维度。\n");
             sb.append("- **用户未指定维度时，dimensions 默认使用指标日期（metric_time）**：月度/常规统计用");
             sb.append("metric_time__month，趋势/近N天用 metric_time__day；不要凭空选用其他维度，也不要向用户追问维度。");
             sb.append("仅当用户明确要「累计/总计/合计」汇总时才可省略 dimensions。\n\n");
@@ -1970,33 +1967,24 @@ public class AloudataCallTool {
         return false;
     }
 
-    /** 提取字符串中的所有中文字符 */
+    /**
+     * 提取字符串中的所有中文字符。
+     * <p>
+     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractChineseChars(String)}，
+     * 供检索层维度相关性打分等处共用同一实现。
+     */
     private static Set<String> extractChineseChars(String text) {
-        Set<String> chars = new HashSet<>();
-        if (text == null) {
-            return chars;
-        }
-        for (char c : text.toCharArray()) {
-            if (c >= '\u4e00' && c <= '\u9fff') {
-                chars.add(String.valueOf(c));
-            }
-        }
-        return chars;
+        return NameMatchSupport.extractChineseChars(text);
     }
 
-    /** 提取字符串中的英文单词（按下划线和非字母数字分隔） */
+    /**
+     * 提取字符串中的英文单词（按下划线和非字母数字分隔）。
+     * <p>
+     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractEnglishWords(String)}，
+     * 供检索层维度相关性打分等处共用同一实现。
+     */
     private static Set<String> extractEnglishWords(String text) {
-        Set<String> words = new HashSet<>();
-        if (text == null) {
-            return words;
-        }
-        String[] parts = text.split("[^a-zA-Z0-9]+");
-        for (String part : parts) {
-            if (!part.isEmpty() && part.matches(".*[a-zA-Z].*")) {
-                words.add(part.toLowerCase());
-            }
-        }
-        return words;
+        return NameMatchSupport.extractEnglishWords(text);
     }
 
     /**
@@ -2298,7 +2286,7 @@ public class AloudataCallTool {
         String lower = errorMsg.toLowerCase();
 
         if (lower.contains("dimension") && (lower.contains("not available") || lower.contains("not support") || lower.contains("不可用"))) {
-            return "使用了不可用的维度。请先调用 aloudata_metric_available_dimensions 确认指标的可用维度，移除不支持的维度后重试。";
+            return "使用了不可用的维度。请先调用 " + DataAgentConstants.ALOUDATA_TOOL_METRIC_AVAILABLE_DIMENSIONS + " 确认指标的可用维度，移除不支持的维度后重试。";
         }
         if (lower.contains("timeconstraint") || lower.contains("time constraint") || lower.contains("时间约束")) {
             return "timeConstraint 格式错误。请确保：1)整个表达式用()包裹 2)metric_time用[]引用 3)日期值用双引号包裹 4)不支持BETWEEN语法，改用>= AND <=。";
@@ -2512,7 +2500,8 @@ public class AloudataCallTool {
 
             // 为补入的族成员补充可用维度（ES 命中项已在检索层补充；补入项否则会缺失"可用维度"，
             // 而被唯一命中的目标口径往往正是补入项，缺维度会让 LLM 误判其无可用维度或多一次工具调用）
-            enrichBackfilledDimensions(datasourceId, mergedMetrics);
+            aloudataSemanticEsService.enrichMissingDimensions(mergedMetrics, datasourceId,
+                    List.of(keyword), originalMessage);
 
             // 命中口径（唯一命中或多选，如"对比整体和个人"）：置为最高分，稳居前列
             if (!matched.isEmpty()) {
@@ -2605,42 +2594,6 @@ public class AloudataCallTool {
             sb.append("\n");
         }
         sb.append("\n");
-    }
-
-    /**
-     * 为族级兜底补入的成员补充可用维度。
-     * <p>
-     * ES 命中项的 availableDimensions 已由检索层填充（可能为空列表），补入项则为 null；此处仅处理
-     * availableDimensions 为 null 的补入项，一次批量查询指标-维度关联表，避免逐个查询。
-     */
-    private void enrichBackfilledDimensions(Long datasourceId, List<AloudataSearchResult.MetricHit> hits) {
-        List<String> names = hits.stream()
-                .filter(h -> h.getAvailableDimensions() == null && h.getMetricName() != null)
-                .map(AloudataSearchResult.MetricHit::getMetricName)
-                .distinct()
-                .toList();
-        if (names.isEmpty()) {
-            return;
-        }
-        try {
-            List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(
-                    new LambdaQueryWrapper<AloudataMetricDimensionEntity>()
-                            .eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId)
-                            .in(AloudataMetricDimensionEntity::getMetricName, names)
-                            .select(AloudataMetricDimensionEntity::getMetricName,
-                                    AloudataMetricDimensionEntity::getDimName));
-            Map<String, List<String>> dimMap = relations.stream()
-                    .collect(Collectors.groupingBy(
-                            AloudataMetricDimensionEntity::getMetricName,
-                            Collectors.mapping(AloudataMetricDimensionEntity::getDimName, Collectors.toList())));
-            for (AloudataSearchResult.MetricHit h : hits) {
-                if (h.getAvailableDimensions() == null && h.getMetricName() != null) {
-                    h.setAvailableDimensions(dimMap.getOrDefault(h.getMetricName(), List.of()));
-                }
-            }
-        } catch (Exception e) {
-            log.error("族级兜底补入成员的维度补充失败，跳过: {}", e.getMessage());
-        }
     }
 
     /** 由指标实体构造检索命中项（用于族级兜底补入缺失成员） */
@@ -2800,18 +2753,16 @@ public class AloudataCallTool {
      * <p>
      * 语义：展示名中有多少比例的字符出现在用户原话中。
      * 值域 [0, 1]，1 表示展示名的每个字符都在原话中出现。
+     * <p>
+     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#charOverlapRatio(Set, Set)}，
+     * 供检索层维度相关性打分等处共用同一实现。
      *
      * @param origChars 用户原话的中文字符集合
      * @param nameChars 展示名的中文字符集合
      * @return 重叠度
      */
     private static double computeCharOverlap(Set<String> origChars, Set<String> nameChars) {
-        if (nameChars.isEmpty()) {
-            return 0;
-        }
-        Set<String> intersection = new HashSet<>(nameChars);
-        intersection.retainAll(origChars);
-        return (double) intersection.size() / nameChars.size();
+        return NameMatchSupport.charOverlapRatio(origChars, nameChars);
     }
 
     /**

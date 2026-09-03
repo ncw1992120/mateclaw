@@ -1,5 +1,8 @@
 package vip.mate.dataagent.support;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * 名称匹配的标点/空白不敏感工具。
  * <p>
@@ -96,5 +99,71 @@ public final class NameMatchSupport {
             pattern.append('%').append(current);
         }
         return pattern.length() == 0 ? null : pattern.toString();
+    }
+
+    /**
+     * 提取字符串中的所有中文字符集合。
+     * <p>
+     * 原实现位于 AloudataCallTool（私有方法），抽取至此供检索层维度相关性打分等
+     * 多处复用，避免重复实现。
+     *
+     * @param text 原始文本，可为 null
+     * @return 中文字符集合（单字符字符串），null 输入返回空集合
+     */
+    public static Set<String> extractChineseChars(String text) {
+        Set<String> chars = new HashSet<>();
+        if (text == null) {
+            return chars;
+        }
+        for (char c : text.toCharArray()) {
+            if (c >= '\u4e00' && c <= '\u9fff') {
+                chars.add(String.valueOf(c));
+            }
+        }
+        return chars;
+    }
+
+    /**
+     * 提取字符串中的英文单词集合（按下划线和非字母数字分隔，统一小写）。
+     * <p>
+     * 原实现位于 AloudataCallTool（私有方法），抽取至此供检索层维度相关性打分等
+     * 多处复用，避免重复实现。
+     *
+     * @param text 原始文本，可为 null
+     * @return 英文单词集合（小写），null 输入返回空集合
+     */
+    public static Set<String> extractEnglishWords(String text) {
+        Set<String> words = new HashSet<>();
+        if (text == null) {
+            return words;
+        }
+        String[] parts = text.split("[^a-zA-Z0-9]+");
+        for (String part : parts) {
+            if (!part.isEmpty() && part.matches(".*[a-zA-Z].*")) {
+                words.add(part.toLowerCase());
+            }
+        }
+        return words;
+    }
+
+    /**
+     * 计算两个中文字符集合的重叠度 = 交集大小 / targetChars 大小。
+     * <p>
+     * 语义：目标名称中有多少比例的字符出现在源文本中。
+     * 值域 [0, 1]，1 表示目标名称的每个字符都在源文本中出现。
+     * 原实现位于 AloudataCallTool（私有方法 computeCharOverlap），抽取至此供
+     * 检索层维度相关性打分等多处复用，避免重复实现。
+     *
+     * @param srcChars    源文本（如用户原话）的中文字符集合
+     * @param targetChars 目标名称（如维度展示名）的中文字符集合
+     * @return 重叠度；目标集合为空时返回 0
+     */
+    public static double charOverlapRatio(Set<String> srcChars, Set<String> targetChars) {
+        if (targetChars == null || targetChars.isEmpty()) {
+            return 0;
+        }
+        Set<String> intersection = new HashSet<>(targetChars);
+        intersection.retainAll(srcChars);
+        return (double) intersection.size() / targetChars.size();
     }
 }

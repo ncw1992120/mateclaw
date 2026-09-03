@@ -242,6 +242,30 @@ public final class DataAgentConstants {
     /** Aloudata 混合检索：每路候选召回上限，避免 topK 过大时召回过多影响延迟 */
     public static final int ALOUDATA_SEARCH_MAX_RETRIEVAL_POOL = 100;
 
+    /** 指标检索结果随指标展示的「查询相关维度」最大条数 */
+    public static final int ALOUDATA_SEARCH_RELEVANT_DIM_TOP_N = 5;
+
+    /** 维度相关性最低得分，低于该值不进入 relevantDimensions */
+    public static final double ALOUDATA_SEARCH_DIM_RELEVANCE_MIN_SCORE = 0.5;
+
+    /** 维度相关性打分档位：展示名归一化包含 */
+    public static final double ALOUDATA_SEARCH_DIM_SCORE_DISPLAY_CONTAIN = 1.0;
+
+    /** 维度相关性打分档位：同义词命中 */
+    public static final double ALOUDATA_SEARCH_DIM_SCORE_SYNONYM_CONTAIN = 0.9;
+
+    /** 维度相关性打分档位：中文字符重叠达标 */
+    public static final double ALOUDATA_SEARCH_DIM_SCORE_CHAR_OVERLAP = 0.7;
+
+    /** 维度相关性打分档位：英文名分词命中 */
+    public static final double ALOUDATA_SEARCH_DIM_SCORE_EN_TOKEN = 0.5;
+
+    /** Aloudata 时间维度英文名前缀 */
+    public static final String ALOUDATA_TIME_DIMENSION_NAME_PREFIX = "metric_time";
+
+    /** Aloudata 动态工具名：查询指标完整可用维度 */
+    public static final String ALOUDATA_TOOL_METRIC_AVAILABLE_DIMENSIONS = "aloudata_metric_available_dimensions";
+
     /** Aloudata 指标管理默认每页条数 */
     public static final int ALOUDATA_METRIC_DEFAULT_PAGE_SIZE = 20;
 

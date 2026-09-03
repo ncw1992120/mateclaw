@@ -105,4 +105,18 @@ public interface AloudataSemanticEsService {
      */
     AloudataSearchResult hybridSearchEnhanced(Long datasourceId, List<String> keywords,
                                               String originalMessage, int topK, double similarityThreshold);
+
+    /**
+     * 为尚未补充相关维度的指标命中项（族级兜底补入成员）批量补充
+     * availableDimensions 与 relevantDimensions，与检索时 enrich 使用同一套相关性打分。
+     * <p>
+     * 仅处理 relevantDimensions == null 的命中项（待补标记），已补充的跳过。
+     *
+     * @param hits            指标命中列表
+     * @param datasourceId    数据源 ID
+     * @param keywords        搜索关键词列表（第一个为原始关键词，后续为扩展词，可只传单个）
+     * @param originalMessage 用户原始消息（可为 null）
+     */
+    void enrichMissingDimensions(List<AloudataSearchResult.MetricHit> hits, Long datasourceId,
+                                List<String> keywords, String originalMessage);
 }

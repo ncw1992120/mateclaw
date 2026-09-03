@@ -239,8 +239,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, query, List.of(), null, topK, similarityThreshold);
         List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, query, List.of(), null, topK, similarityThreshold);
 
-        // 为指标补充可用维度列表
-        enrichMetricDimensions(metricHits, datasourceId);
+        // 为指标补充可用维度列表（含查询相关维度）
+        enrichMetricDimensions(metricHits, datasourceId, List.of(query), null);
 
         result.setMetricHits(metricHits);
         result.setDimensionHits(dimensionHits);
@@ -278,8 +278,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         List<MetricHit> metricHits = esSearchMetrics(client, datasourceId, primaryQuery, expandedWords, null, topK, similarityThreshold);
         List<DimensionHit> dimensionHits = esSearchDimensions(client, datasourceId, primaryQuery, expandedWords, null, topK, similarityThreshold);
 
-        // 为指标补充可用维度列表
-        enrichMetricDimensions(metricHits, datasourceId);
+        // 为指标补充可用维度列表（含查询相关维度）
+        enrichMetricDimensions(metricHits, datasourceId, keywords, null);
 
         result.setMetricHits(metricHits);
         result.setDimensionHits(dimensionHits);
@@ -324,8 +324,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         // 避免维度模糊命中的假阳性干扰指标消歧与查询构造
         List<DimensionHit> dimensionHits = List.of();
 
-        // 为指标补充可用维度列表
-        enrichMetricDimensions(metricHits, datasourceId);
+        // 为指标补充可用维度列表（含查询相关维度）
+        enrichMetricDimensions(metricHits, datasourceId, keywords, effectiveOriginalMessage);
 
         result.setMetricHits(metricHits);
         result.setDimensionHits(dimensionHits);
@@ -1359,7 +1359,8 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         List<MetricHit> metricHits = fallbackMySqlSearchMetrics(datasourceId, keywords, topK);
         List<DimensionHit> dimensionHits = fallbackMySqlSearchDimensions(datasourceId, keywords, topK);
 
-        enrichMetricDimensions(metricHits, datasourceId);
+        // MySQL 降级为退化模式：不追原话上下文，仅按关键词补相关维度
+        enrichMetricDimensions(metricHits, datasourceId, keywords, null);
 
         result.setMetricHits(metricHits);
         result.setDimensionHits(dimensionHits);
@@ -1466,9 +1467,17 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     // ==================== 辅助方法 ====================
 
     /**
-     * 为指标命中补充可用维度列表
+     * 为指标命中补充可用维度列表与查询相关维度。
+     * <p>
+     * availableDimensions 保留全量维度英文名（硬约束校验的权威数据）；
+     * relevantDimensions 只保留与用户查询相关的 TopN 维度（带展示名），
+     * 由 prompt 层统一渲染，避免全量罗列英文名导致上下文暴涨、检索不准。
+     * <p>
+     * 相关性打分只用 originalMessage + keywords 首元素，不使用业务术语扩展词——
+     * 扩展词服务于指标召回（OR should 加分语义），用于维度相关性会造成跨检索串味。
      */
-    private void enrichMetricDimensions(List<MetricHit> metricHits, Long datasourceId) {
+    private void enrichMetricDimensions(List<MetricHit> metricHits, Long datasourceId,
+                                        List<String> keywords, String originalMessage) {
         if (metricHits == null || metricHits.isEmpty()) return;
 
         List<String> metricNames = metricHits.stream()
@@ -1482,15 +1491,219 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         wrapper.in(AloudataMetricDimensionEntity::getMetricName, metricNames);
         List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
 
-        Map<String, List<String>> metricDimMap = relations.stream()
-                .collect(Collectors.groupingBy(
-                        AloudataMetricDimensionEntity::getMetricName,
-                        Collectors.mapping(AloudataMetricDimensionEntity::getDimName, Collectors.toList())
-                ));
+        Map<String, List<AloudataMetricDimensionEntity>> metricDimMap = relations.stream()
+                .collect(Collectors.groupingBy(AloudataMetricDimensionEntity::getMetricName));
+
+        // 查询上下文：原话优先，keyword 首元素兜底
+        String primaryQuery = keywords == null || keywords.isEmpty() ? null : keywords.getFirst();
+        // 批量查维度元数据（展示名/同义词兜底），一次 in 查询
+        Map<String, AloudataDimensionEntity> dimMetaMap = loadDimensionMeta(datasourceId, relations);
 
         for (MetricHit mh : metricHits) {
-            mh.setAvailableDimensions(metricDimMap.getOrDefault(mh.getMetricName(), List.of()));
+            List<AloudataMetricDimensionEntity> rels = metricDimMap.getOrDefault(mh.getMetricName(), List.of());
+            mh.setAvailableDimensions(rels.stream()
+                    .map(AloudataMetricDimensionEntity::getDimName)
+                    .filter(Objects::nonNull)
+                    .toList());
+            mh.setRelevantDimensions(selectRelevantDimensions(rels, dimMetaMap, originalMessage, primaryQuery));
         }
+    }
+
+    @Override
+    public void enrichMissingDimensions(List<MetricHit> hits, Long datasourceId,
+                                       List<String> keywords, String originalMessage) {
+        if (hits == null || hits.isEmpty()) return;
+
+        // 仅处理待补标记（relevantDimensions == null）的命中项，如族级兜底补入成员
+        List<MetricHit> missing = hits.stream()
+                .filter(h -> h.getRelevantDimensions() == null && h.getMetricName() != null)
+                .toList();
+        if (missing.isEmpty()) return;
+
+        List<String> metricNames = missing.stream()
+                .map(MetricHit::getMetricName)
+                .distinct()
+                .toList();
+        try {
+            LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
+            wrapper.in(AloudataMetricDimensionEntity::getMetricName, metricNames);
+            List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
+
+            Map<String, List<AloudataMetricDimensionEntity>> metricDimMap = relations.stream()
+                    .collect(Collectors.groupingBy(AloudataMetricDimensionEntity::getMetricName));
+            Map<String, AloudataDimensionEntity> dimMetaMap = loadDimensionMeta(datasourceId, relations);
+
+            String primaryQuery = keywords == null || keywords.isEmpty() ? null : keywords.getFirst();
+            for (MetricHit mh : missing) {
+                List<AloudataMetricDimensionEntity> rels = metricDimMap.getOrDefault(mh.getMetricName(), List.of());
+                mh.setAvailableDimensions(rels.stream()
+                        .map(AloudataMetricDimensionEntity::getDimName)
+                        .filter(Objects::nonNull)
+                        .toList());
+                mh.setRelevantDimensions(selectRelevantDimensions(rels, dimMetaMap, originalMessage, primaryQuery));
+            }
+        } catch (Exception e) {
+            log.error("指标命中项维度补充失败，置为空列表跳过: {}", e.getMessage());
+            for (MetricHit mh : missing) {
+                if (mh.getAvailableDimensions() == null) {
+                    mh.setAvailableDimensions(List.of());
+                }
+                mh.setRelevantDimensions(List.of());
+            }
+        }
+    }
+
+    /**
+     * 批量加载维度元数据（展示名/同义词），用于相关性打分与展示名兜底。
+     * <p>
+     * 关联表自带 dimDisplayName，但旧同步数据可能为空，维度元数据表作为兜底来源。
+     */
+    private Map<String, AloudataDimensionEntity> loadDimensionMeta(Long datasourceId,
+                                                                   List<AloudataMetricDimensionEntity> relations) {
+        List<String> dimNames = relations.stream()
+                .map(AloudataMetricDimensionEntity::getDimName)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (dimNames.isEmpty()) {
+            return Map.of();
+        }
+        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
+        wrapper.in(AloudataDimensionEntity::getDimName, dimNames);
+        wrapper.select(AloudataDimensionEntity::getDimName,
+                AloudataDimensionEntity::getDimDisplayName,
+                AloudataDimensionEntity::getSynonyms);
+        return dimensionMapper.selectList(wrapper).stream()
+                .filter(d -> d.getDimName() != null)
+                .collect(Collectors.toMap(AloudataDimensionEntity::getDimName, d -> d, (a, b) -> a));
+    }
+
+    /**
+     * 对单个指标的关联维度做查询相关性打分，返回 TopN 相关维度。
+     * <p>
+     * 时间维度（metric_time 前缀）是默认维度约定，直接排除，不占相关维度名额。
+     * 得分低于 {@link DataAgentConstants#ALOUDATA_SEARCH_DIM_RELEVANCE_MIN_SCORE} 的维度不进入结果；
+     * 无相关维度时返回空列表（prompt 层展示总数 + 工具引导，不回退全量罗列）。
+     */
+    private List<MetricHit.DimensionBrief> selectRelevantDimensions(List<AloudataMetricDimensionEntity> rels,
+                                                                    Map<String, AloudataDimensionEntity> dimMetaMap,
+                                                                    String originalMessage, String primaryQuery) {
+        if (rels == null || rels.isEmpty()) {
+            return List.of();
+        }
+        record Scored(AloudataMetricDimensionEntity rel, double score) {
+        }
+        List<Scored> scored = new ArrayList<>();
+        for (AloudataMetricDimensionEntity rel : rels) {
+            String dimName = rel.getDimName();
+            if (dimName == null
+                    || dimName.startsWith(DataAgentConstants.ALOUDATA_TIME_DIMENSION_NAME_PREFIX)) {
+                continue;
+            }
+            AloudataDimensionEntity meta = dimMetaMap.get(dimName);
+            // 展示名兜底：关联表为空时用维度元数据表展示名
+            String displayName = StringUtils.hasText(rel.getDimDisplayName())
+                    ? rel.getDimDisplayName()
+                    : (meta != null ? meta.getDimDisplayName() : null);
+            String synonyms = meta != null ? meta.getSynonyms() : null;
+            double score = scoreDimensionRelevance(dimName, displayName, synonyms, originalMessage, primaryQuery);
+            if (score >= DataAgentConstants.ALOUDATA_SEARCH_DIM_RELEVANCE_MIN_SCORE) {
+                scored.add(new Scored(rel, score));
+            }
+        }
+        // 降序截断 TopN；稳定排序保持关联表原序
+        scored.sort((a, b) -> Double.compare(b.score(), a.score()));
+        return scored.stream()
+                .limit(DataAgentConstants.ALOUDATA_SEARCH_RELEVANT_DIM_TOP_N)
+                .map(s -> {
+                    AloudataDimensionEntity meta = dimMetaMap.get(s.rel().getDimName());
+                    String displayName = StringUtils.hasText(s.rel().getDimDisplayName())
+                            ? s.rel().getDimDisplayName()
+                            : (meta != null ? meta.getDimDisplayName() : null);
+                    return new MetricHit.DimensionBrief(s.rel().getDimName(), displayName);
+                })
+                .toList();
+    }
+
+    /**
+     * 单个维度与查询的相关性打分（first-match-wins 取最高档）。
+     * <p>
+     * 分档（复用仓库已验证的归一化包含 + 中文字符重叠匹配模式）：
+     * <ul>
+     *   <li>1.0：归一化后原话/keyword 包含维度展示名（最强信号，如"按区域看"→"区域"）</li>
+     *   <li>0.9：原话/keyword 包含某同义词</li>
+     *   <li>0.7：展示名中文字符 ≥2 且中文字符重叠率 ≥ 0.5（覆盖换序/修饰词形态）</li>
+     *   <li>0.5：dimName 下划线切段（长度≥3）命中查询英文词（覆盖英文查询）</li>
+     * </ul>
+     */
+    private static double scoreDimensionRelevance(String dimName, String dimDisplayName, String synonyms,
+                                                  String originalMessage, String primaryQuery) {
+        List<String> contexts = new ArrayList<>();
+        if (StringUtils.hasText(originalMessage)) {
+            contexts.add(originalMessage);
+        }
+        if (StringUtils.hasText(primaryQuery)) {
+            contexts.add(primaryQuery);
+        }
+        if (contexts.isEmpty()) {
+            return 0;
+        }
+
+        if (StringUtils.hasText(dimDisplayName)) {
+            String normDisplay = NameMatchSupport.normalizeKey(dimDisplayName);
+            if (!normDisplay.isEmpty()) {
+                for (String ctx : contexts) {
+                    if (NameMatchSupport.normalizeKey(ctx).contains(normDisplay)) {
+                        return DataAgentConstants.ALOUDATA_SEARCH_DIM_SCORE_DISPLAY_CONTAIN;
+                    }
+                }
+            }
+        }
+
+        if (StringUtils.hasText(synonyms)) {
+            for (String syn : synonyms.split("[,，]")) {
+                String normSyn = NameMatchSupport.normalizeKey(syn);
+                if (normSyn.isEmpty()) {
+                    continue;
+                }
+                for (String ctx : contexts) {
+                    if (NameMatchSupport.normalizeKey(ctx).contains(normSyn)) {
+                        return DataAgentConstants.ALOUDATA_SEARCH_DIM_SCORE_SYNONYM_CONTAIN;
+                    }
+                }
+            }
+        }
+
+        if (StringUtils.hasText(dimDisplayName)) {
+            // 中文字符重叠（覆盖换序/修饰词形态）
+            Set<String> displayChars = NameMatchSupport.extractChineseChars(dimDisplayName);
+            if (displayChars.size() >= 2) {
+                for (String ctx : contexts) {
+                    double overlap = NameMatchSupport.charOverlapRatio(
+                            NameMatchSupport.extractChineseChars(ctx), displayChars);
+                    if (overlap >= 0.5) {
+                        return DataAgentConstants.ALOUDATA_SEARCH_DIM_SCORE_CHAR_OVERLAP;
+                    }
+                }
+            }
+        }
+
+        if (StringUtils.hasText(dimName)) {
+            Set<String> queryWords = new HashSet<>();
+            for (String ctx : contexts) {
+                queryWords.addAll(NameMatchSupport.extractEnglishWords(ctx));
+            }
+            if (!queryWords.isEmpty()) {
+                for (String seg : dimName.split("_+")) {
+                    if (seg.length() >= 3 && queryWords.contains(seg.toLowerCase())) {
+                        return DataAgentConstants.ALOUDATA_SEARCH_DIM_SCORE_EN_TOKEN;
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     private void ensureIndicesIfNeeded(Object entity) {
