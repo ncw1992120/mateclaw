@@ -77,9 +77,10 @@ function truncateResult(text: string, max: number): string {
   }">
     <!-- 标题栏 -->
     <div class="plan-panel__toggle" @click="collapsed = !collapsed">
-      <span class="plan-panel__icon">
-        <span v-if="isGenerating && planStatusLabel !== 'completed' && planStatusLabel !== 'failed'" class="spin-icon">⟳</span>
-        <span v-else-if="planStatusLabel === 'failed'" class="icon-failed">✕</span>
+      <span class="plan-panel__status" :class="{ 'is-done': planStatusLabel === 'completed', 'is-failed': planStatusLabel === 'failed', 'is-running': isGenerating && planStatusLabel !== 'completed' && planStatusLabel !== 'failed' }">
+        <svg v-if="planStatusLabel === 'failed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+        <svg v-else-if="planStatusLabel === 'completed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <svg v-else class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       </span>
       <span class="plan-panel__label">{{ $t('chat.executionPlan') }}</span>
       <span class="plan-panel__count">
@@ -115,10 +116,10 @@ function truncateResult(text: string, max: number): string {
         >
           <div class="plan-step__header">
             <span class="plan-step__status">
-              <span v-if="stepStatuses[i] === 'running'" class="spin-icon">⟳</span>
-              <span v-else-if="stepStatuses[i] === 'completed'" class="icon-done">✓</span>
-              <span v-else-if="stepStatuses[i] === 'failed'" class="icon-failed">✕</span>
-              <span v-else class="plan-step__dot"></span>
+              <svg v-if="stepStatuses[i] === 'running'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              <svg v-else-if="stepStatuses[i] === 'completed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+              <svg v-else-if="stepStatuses[i] === 'failed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
             </span>
             <span class="plan-step__index">{{ i + 1 }}.</span>
             <span class="plan-step__text" :title="step">{{ step }}</span>
@@ -147,71 +148,65 @@ function truncateResult(text: string, max: number): string {
 .plan-panel {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  width: fit-content;
+  align-items: stretch;
+  width: 100%;
   max-width: 100%;
-  background: var(--theme-surface-hover);
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  margin-bottom: 10px;
-  overflow: hidden;
-  transition: border-color 0.3s;
+  /* Codeon 风格：无外框、无背景，内容平铺 */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin-bottom: 8px;
+  overflow: visible;
+  transition: none;
 }
 .plan-panel.is-failed {
-  border-color: var(--el-color-warning-light-5, #f0c78a);
+  border: none;
 }
 
 .plan-panel__toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
   background: transparent;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
-  color: var(--theme-text-muted);
+  color: var(--theme-text);
   text-align: left;
   transition: all 0.15s;
   white-space: nowrap;
 }
 .plan-panel__toggle:hover {
-  color: var(--theme-text-secondary);
-  background: var(--theme-border);
+  background: var(--theme-surface-hover);
 }
 
-.plan-panel__icon {
-  display: flex;
+.plan-panel__status {
+  display: inline-flex;
   align-items: center;
-  color: var(--muted);
+  justify-content: center;
+  flex-shrink: 0;
 }
-.plan-panel.is-done .plan-panel__icon {
-  color: var(--el-color-success, #67c23a);
+.plan-panel__status svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
-.plan-panel.is-failed .plan-panel__icon {
-  color: var(--el-color-warning, #e6a23c);
-}
+.plan-panel__status.is-running { color: var(--main-orange); }
+.plan-panel__status.is-done    { color: var(--el-color-success, #67c23a); }
+.plan-panel__status.is-failed  { color: var(--el-color-warning, #e6a23c); }
 
 .spin-icon {
   display: inline-block;
   animation: spin 1s linear infinite;
-  font-size: 12px;
+  font-size: 14px;
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.icon-done {
-  color: var(--el-color-success, #67c23a);
-  font-size: 12px;
-  font-weight: 700;
-}
-.icon-failed {
-  color: var(--el-color-warning, #e6a23c);
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .plan-panel__label {
@@ -219,7 +214,7 @@ function truncateResult(text: string, max: number): string {
 }
 
 .plan-panel__count {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 400;
 }
@@ -240,12 +235,16 @@ function truncateResult(text: string, max: number): string {
 }
 
 .plan-panel__arrow {
-  margin-left: 1px;
+  margin-left: auto;
   display: inline-flex;
   width: 9px;
   height: 9px;
   color: var(--muted);
-  transition: transform 0.2s;
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
+}
+.plan-panel__toggle:hover .plan-panel__arrow {
+  opacity: 1;
 }
 .plan-panel__arrow.is-open {
   transform: rotate(90deg);
@@ -254,27 +253,27 @@ function truncateResult(text: string, max: number): string {
 .plan-panel__body {
   width: 100%;
   max-width: 100%;
-  padding: 0 12px 12px;
+  padding: 2px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .plan-step {
   transition: background 0.15s;
   cursor: pointer;
-  border-top: 1px solid var(--theme-border);
-}
-.plan-step:first-child {
-  border-top: none;
+  border-radius: 6px;
 }
 .plan-step:hover {
-  background: var(--theme-border);
+  background: var(--theme-surface-hover);
 }
 
 .plan-step__header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 2px;
-  font-size: 12px;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
   user-select: none;
 }
 
@@ -282,24 +281,23 @@ function truncateResult(text: string, max: number): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
 }
-.is-completed .plan-step__status { color: var(--el-color-success, #67c23a); }
-.is-running .plan-step__status { color: var(--muted); }
-.is-failed .plan-step__status { color: var(--el-color-warning, #e6a23c); }
-
-.plan-step__dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1.5px solid var(--muted);
-  background: transparent;
+.plan-step__status svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
+.is-completed .plan-step__status { color: var(--el-color-success, #67c23a); }
+.is-running .plan-step__status { color: var(--main-orange); }
+.is-failed .plan-step__status { color: var(--el-color-warning, #e6a23c); }
+.is-pending .plan-step__status { color: var(--muted); }
+
 
 .plan-step__index {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 500;
   flex-shrink: 0;
@@ -308,17 +306,14 @@ function truncateResult(text: string, max: number): string {
 .plan-step__text {
   flex: 1;
   min-width: 0;
-  color: var(--theme-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--theme-text-secondary);
 }
 .is-running .plan-step__text {
-  color: var(--theme-text-secondary);
+  color: var(--theme-text);
   font-weight: 500;
 }
 .is-completed .plan-step__text {
-  color: var(--muted);
+  color: var(--theme-text-secondary);
 }
 .is-failed .plan-step__text {
   color: var(--el-color-warning, #e6a23c);
@@ -328,10 +323,14 @@ function truncateResult(text: string, max: number): string {
 .plan-step__arrow {
   flex-shrink: 0;
   color: var(--muted);
-  transition: transform 0.2s;
+  opacity: 0;
+  transition: transform 0.2s, opacity 0.15s ease;
   display: inline-flex;
   width: 9px;
   height: 9px;
+}
+.plan-step:hover .plan-step__arrow {
+  opacity: 1;
 }
 .plan-step__arrow.is-open {
   transform: rotate(90deg);
