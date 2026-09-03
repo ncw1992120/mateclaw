@@ -307,9 +307,6 @@ function truncateResult(text: string, max: number): string {
   flex: 1;
   min-width: 0;
   color: var(--theme-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .is-running .plan-step__text {
   color: var(--theme-text);

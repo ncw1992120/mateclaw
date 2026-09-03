@@ -8,24 +8,30 @@ html, body, #app {
 }
 
 :root {
-  /* 品牌强调色（参考 DSH deepseek 色板：500 主蓝 / 600 深蓝 / 200 浅蓝 / 50 极浅蓝） */
+  /* 品牌强调色（与设计稿一致） */
   --main-orange: #4176E6;
-  --dark-orange: #4868B2;
+  --dark-orange: #3A6AD8;
   --light-orange: #B7C8FE;
   --very-light-orange: #EDF3FE;
 
-  /* 主题语义色 */
-  --theme-bg: #ffffff;
-  --theme-surface: #ffffff;
-  --theme-surface-elevated: #ffffff;
-  --theme-surface-hover: rgba(65, 118, 230, 0.05);
-  --theme-text: #333333;
-  --theme-text-secondary: #555555;
-  --theme-text-muted: #999999;
-  --theme-border: rgba(0, 0, 0, 0.045);
-  --theme-border-strong: rgba(0, 0, 0, 0.065);
+  /* 主题语义色（与设计稿 :root 对齐） */
+  --theme-bg: #F6F8FB;
+  --theme-surface: #FFFFFF;
+  --theme-surface-elevated: #FFFFFF;
+  --theme-surface-hover: rgba(65, 118, 230, 0.06);
+  --theme-text: #1A2233;
+  --theme-text-secondary: #46536B;
+  --theme-text-muted: #8A94A6;
+  --theme-border: rgba(26, 34, 51, 0.08);
+  --theme-border-strong: rgba(26, 34, 51, 0.14);
   --theme-overlay: rgba(255, 255, 255, 0.85);
   --theme-scrollbar: #E7E6E6;
+
+  /* 聊天气泡 / 代码块 / 分割线（设计稿语义 token） */
+  --user-bubble-bg: #E8F0FE;
+  --user-bubble-text: #1A2233;
+  --code-bg: #EFF3F9;
+  --ai-divider: rgba(26, 34, 51, 0.07);
 
   /* 兼容旧变量 */
   --blue-grey: #44546A;
@@ -47,17 +53,22 @@ html[data-theme='warm'] {
   --light-orange: #EAD3C6;
   --very-light-orange: #F9F4F0;
 
-  --theme-bg: #F7F3EF;
-  --theme-surface: #FDFAF7;
+  --theme-bg: #F8F4EF;
+  --theme-surface: #FFFDFA;
   --theme-surface-elevated: #FFFFFF;
-  --theme-surface-hover: rgba(160, 110, 80, 0.05);
-  --theme-text: #3A3228;
-  --theme-text-secondary: #5C5346;
-  --theme-text-muted: #958B80;
-  --theme-border: rgba(120, 100, 85, 0.06);
-  --theme-border-strong: rgba(120, 100, 85, 0.09);
+  --theme-surface-hover: rgba(200, 107, 58, 0.06);
+  --theme-text: #33291F;
+  --theme-text-secondary: #5F5245;
+  --theme-text-muted: #A2968A;
+  --theme-border: rgba(97, 74, 55, 0.09);
+  --theme-border-strong: rgba(97, 74, 55, 0.15);
   --theme-overlay: rgba(247, 243, 239, 0.88);
   --theme-scrollbar: #DDD6CD;
+
+  --user-bubble-bg: #F6E9DE;
+  --user-bubble-text: #33291F;
+  --code-bg: #F1E9E0;
+  --ai-divider: rgba(97, 74, 55, 0.09);
 
   --blue-grey: #6B5E52;
   --mid-grey: #9C8F82;
@@ -78,17 +89,22 @@ html[data-theme='eye-care'] {
   --light-orange: #D6E8D4;
   --very-light-orange: #F0F7EE;
 
-  --theme-bg: #F0F5EC;
-  --theme-surface: #F6FAF3;
-  --theme-surface-elevated: #FAFDF8;
-  --theme-surface-hover: rgba(100, 140, 95, 0.05);
-  --theme-text: #2E3B2E;
-  --theme-text-secondary: #4A5A4A;
-  --theme-text-muted: #7A8A7A;
-  --theme-border: rgba(80, 120, 80, 0.06);
-  --theme-border-strong: rgba(80, 120, 80, 0.09);
+  --theme-bg: #F1F6ED;
+  --theme-surface: #FBFDF9;
+  --theme-surface-elevated: #FFFFFF;
+  --theme-surface-hover: rgba(106, 154, 104, 0.07);
+  --theme-text: #26372A;
+  --theme-text-secondary: #4C5F50;
+  --theme-text-muted: #7F917F;
+  --theme-border: rgba(58, 92, 60, 0.09);
+  --theme-border-strong: rgba(58, 92, 60, 0.15);
   --theme-overlay: rgba(240, 245, 236, 0.88);
   --theme-scrollbar: #C8D8C4;
+
+  --user-bubble-bg: #E4F0DE;
+  --user-bubble-text: #26372A;
+  --code-bg: #E7F0E2;
+  --ai-divider: rgba(58, 92, 60, 0.09);
 
   --blue-grey: #5A6B5A;
   --mid-grey: #8A9A8A;
@@ -109,17 +125,22 @@ html[data-theme='dark'] {
   --light-orange: #4A3B32;
   --very-light-orange: #2A2520;
 
-  --theme-bg: #121212;
-  --theme-surface: #1E1E1E;
-  --theme-surface-elevated: #2A2A2A;
-  --theme-surface-hover: rgba(255, 255, 255, 0.05);
-  --theme-text: #F0F0F0;
-  --theme-text-secondary: #D0D0D0;
-  --theme-text-muted: #888888;
-  --theme-border: rgba(255, 255, 255, 0.06);
-  --theme-border-strong: rgba(255, 255, 255, 0.1);
+  --theme-bg: #0D1117;
+  --theme-surface: #161B26;
+  --theme-surface-elevated: #1E2532;
+  --theme-surface-hover: rgba(255, 140, 90, 0.07);
+  --theme-text: #EDF1F7;
+  --theme-text-secondary: #C3CCD9;
+  --theme-text-muted: #6B7789;
+  --theme-border: rgba(237, 241, 247, 0.08);
+  --theme-border-strong: rgba(237, 241, 247, 0.14);
   --theme-overlay: rgba(30, 30, 30, 0.85);
   --theme-scrollbar: #3A3A3A;
+
+  --user-bubble-bg: #2B3550;
+  --user-bubble-text: #EDF1F7;
+  --code-bg: #242C3D;
+  --ai-divider: rgba(237, 241, 247, 0.08);
 
   --blue-grey: #A0AEC0;
   --mid-grey: #888888;
@@ -134,21 +155,21 @@ html[data-theme='dark'] {
 
   color-scheme: dark;
 
-  /* Element Plus 暗色覆盖 */
-  --el-bg-color: #1E1E1E;
-  --el-bg-color-page: #121212;
-  --el-bg-color-overlay: #2A2A2A;
-  --el-text-color-primary: #F0F0F0;
-  --el-text-color-regular: #D0D0D0;
-  --el-text-color-secondary: #888888;
-  --el-text-color-placeholder: #666666;
-  --el-border-color: #3A3A3A;
-  --el-border-color-light: #2A2A2A;
-  --el-border-color-lighter: #333333;
-  --el-fill-color: #2A2A2A;
-  --el-fill-color-light: #333333;
-  --el-fill-color-lighter: #3A3A3A;
-  --el-fill-color-blank: #1E1E1E;
+  /* Element Plus 暗色覆盖（与设计稿 dark surface 对齐） */
+  --el-bg-color: #161B26;
+  --el-bg-color-page: #0D1117;
+  --el-bg-color-overlay: #1E2532;
+  --el-text-color-primary: #EDF1F7;
+  --el-text-color-regular: #C3CCD9;
+  --el-text-color-secondary: #6B7789;
+  --el-text-color-placeholder: #4A5568;
+  --el-border-color: rgba(237, 241, 247, 0.1);
+  --el-border-color-light: rgba(237, 241, 247, 0.06);
+  --el-border-color-lighter: rgba(237, 241, 247, 0.04);
+  --el-fill-color: #1E2532;
+  --el-fill-color-light: #242C3D;
+  --el-fill-color-lighter: #1A2030;
+  --el-fill-color-blank: #161B26;
   --el-mask-color: rgba(0, 0, 0, 0.6);
 }
 

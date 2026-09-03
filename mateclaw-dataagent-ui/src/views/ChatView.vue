@@ -2,6 +2,58 @@
   <div class="chat-view">
     <!-- 消息区域（含悬浮「回到底部」按钮），高度自适应，占满输入区上方空间 -->
     <div class="chat-main">
+      <!-- 聊天头部：收缩态浮动按钮 + agent-switch pill + spacer + 右 dataset-count -->
+      <div class="chat-header">
+        <!-- 历史侧栏收缩后：与 agent-switch 同行的快捷按钮 -->
+        <template v-if="historyCollapsed">
+          <button class="header-float-btn" :title="t('conversation.expand')" @click="toggleHistoryExpand">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <line x1="8" y1="9" x2="16" y2="9"/>
+              <line x1="8" y1="13" x2="13" y2="13"/>
+            </svg>
+          </button>
+          <button class="header-float-btn" :title="t('conversation.newChat')" @click="parentHandleNewChat?.()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </template>
+        <el-dropdown
+          trigger="click"
+          placement="bottom-start"
+          :disabled="chatStore.isStreaming"
+          popper-class="agent-select-popper"
+          @command="handleAgentChange"
+        >
+          <button class="agent-switch" :disabled="chatStore.isStreaming" type="button" :title="t('chat.switchAgent')">
+            <span class="agent-dot"></span>
+            <span class="agent-name">{{ currentAgentName }}</span>
+            <span class="agent-chev"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="agent in enabledAgents"
+                :key="agent.id"
+                :command="agent.id"
+                class="agent-dropdown-item"
+                :class="{ 'is-current': chatStore.currentAgentId === agent.id }"
+              >
+                <span class="agent-option-icon">
+                  <PiIcon v-if="agent.icon?.startsWith('pi:')" :name="agent.icon" :size="16" />
+                  <template v-else>{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</template>
+                </span>
+                <span class="agent-option-name">{{ agent.name }}</span>
+                <el-icon v-if="chatStore.currentAgentId === agent.id" class="agent-check-icon"><Check /></el-icon>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <div class="header-spacer"></div>
+        <span class="dataset-count">{{ datasetCountText }}</span>
+      </div>
     <!-- Chat Area -->
     <div ref="chatAreaRef" class="chat-area">
       <!-- Empty State -->
@@ -75,6 +127,17 @@
 
         <!-- AI Message -->
         <div v-else :ref="(el) => registerMsgRef(el as HTMLElement | null, index)" class="msg ai" :data-msg-index="index">
+          <!-- Agent 角色标识（设计稿 .ai-role） -->
+          <div class="ai-role">
+            <span class="ai-role__dot"></span>
+            {{ currentAgentName }}
+          </div>
+          <!-- 数据源标识（设计稿 .source-line，仅有选中数据源时显示） -->
+          <div v-if="chatStore.selectedDatasourceIds.length > 0" class="source-line">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            {{ t('chat.datasourceSource') }}：
+            <span v-for="dsId in chatStore.selectedDatasourceIds" :key="dsId" class="chip">{{ getDatasourceName(dsId) }}</span>
+          </div>
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble" @click="handleCodeCopyClick">
               <!-- Token & model info (右上角) -->
@@ -426,29 +489,26 @@
             </div>
 
             <!-- Recommended Questions -->
-            <div v-else-if="card.type === 'recommended_questions'" class="recommended-questions">
-              <div class="recommended-questions__header" @click="toggleRecQuestion(index, cardIdx)">
-                <span class="recommended-questions__label">{{ t('chat.recommendedQuestions') }}</span>
-                <span v-if="!isRecExpanded(index, cardIdx)" class="recommended-questions__badge">
-                  {{ (card.data as RecommendedQuestionData).questions.length }}
-                </span>
-                <span class="recommended-questions__arrow" :class="{ 'is-open': isRecExpanded(index, cardIdx) }">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
+            <div v-else-if="card.type === 'recommended_questions'" class="rec-section">
+              <button
+                class="rec-toggle"
+                :class="{ expanded: isRecExpanded(index, cardIdx) }"
+                @click="toggleRecQuestion(index, cardIdx)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                {{ (card.data as RecommendedQuestionData).questions.length }} {{ t('chat.recommendedQuestions') }}
+              </button>
+              <div class="rec-pills" :class="{ open: isRecExpanded(index, cardIdx) }">
+                <button
+                  v-for="(question, qIdx) in (card.data as RecommendedQuestionData).questions"
+                  :key="qIdx"
+                  class="rec-pill"
+                  @click="handleFollowup(question)"
+                >
+                  <svg class="rec-pill__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
+                  <span>{{ question }}</span>
+                </button>
               </div>
-              <Transition name="seg-slide">
-                <div v-if="isRecExpanded(index, cardIdx)" class="recommended-questions__list">
-                  <button
-                    v-for="(question, qIdx) in (card.data as RecommendedQuestionData).questions"
-                    :key="qIdx"
-                    class="recommended-question-item"
-                    @click="handleFollowup(question)"
-                  >
-                    <svg class="recommended-question-item__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
-                    <span class="recommended-question-item__text">{{ question }}</span>
-                  </button>
-                </div>
-              </Transition>
             </div>
 
             <!-- Feedback -->
@@ -541,88 +601,6 @@
           <button class="attachment-tag__remove" type="button" @click="removeAttachment(idx)">×</button>
         </div>
       </div>
-      <!-- 数据源 & 快捷入口工具条（从输入框内提出） -->
-      <div class="input-bar__tools">
-        <el-dropdown
-          trigger="click"
-          placement="top-start"
-          :hide-on-click="false"
-          :disabled="chatStore.isStreaming"
-          popper-class="ds-select-popper"
-        >
-          <button
-            class="ext-tool-btn"
-            :class="{ active: chatStore.selectedDatasourceIds.length > 0 }"
-            :disabled="chatStore.isStreaming"
-            type="button"
-            :title="t('chat.datasourceScope')"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <ellipse cx="12" cy="5" rx="9" ry="3"/>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-            </svg>
-            <span class="ext-tool-label">{{ t('chat.datasourceScope') }}</span>
-            <span v-if="chatStore.selectedDatasourceIds.length > 0" class="ext-tool-badge">{{ chatStore.selectedDatasourceIds.length }}</span>
-            <el-icon :size="11"><ArrowDown /></el-icon>
-          </button>
-          <template #dropdown>
-            <div class="ds-dropdown-panel">
-              <div v-if="dsLoading" class="ds-dropdown-state">
-                <el-icon class="is-loading" :size="16"><Loading /></el-icon>
-                <span>加载中…</span>
-              </div>
-              <div v-else-if="enabledDatasources.length > 0" class="ds-dropdown-section">
-                <div class="ds-dropdown-header">
-                  <span class="ds-dropdown-label">{{ t('chat.datasourceScope') }}</span>
-                  <el-button
-                    v-if="chatStore.selectedDatasourceIds.length > 0"
-                    link
-                    size="small"
-                    type="primary"
-                    @click="chatStore.selectedDatasourceIds = []"
-                  >{{ t('chat.clearDatasourceScope') }}</el-button>
-                </div>
-                <div class="ds-dropdown-list">
-                  <div
-                    v-for="ds in enabledDatasources"
-                    :key="ds.id"
-                    class="ds-dropdown-item"
-                    :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
-                  >
-                    <el-checkbox
-                      :model-value="chatStore.selectedDatasourceIds.includes(ds.id)"
-                      @change="toggleDatasource(ds.id)"
-                    >
-                      <span class="ds-item-name">{{ ds.name }}</span>
-                      <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
-                    </el-checkbox>
-                    <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="ds-dropdown-state">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                  <line x1="4" y1="20" x2="20" y2="4" stroke-width="1.8"/>
-                </svg>
-                <span>{{ t('chat.noDatasourcesAvailable') }}</span>
-              </div>
-            </div>
-          </template>
-        </el-dropdown>
-        <button class="ext-tool-btn" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
-          <span class="ext-tool-label">{{ t('chat.quickAsk') }}</span>
-        </button>
-      </div>
       <div class="input-bar__card">
         <input ref="fileInputRef" type="file" multiple style="display:none" @change="handleFileChange" />
 
@@ -642,44 +620,97 @@
 
         <div class="composer-footer">
           <div class="footer-tools">
-            <!-- agent 选择器移至 footer 左侧，与附件/优化按钮同层 -->
+            <!-- 附件按钮 -->
+            <button class="footer-tool-pill icon-only" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
+            <!-- 指定数据源 -->
             <el-dropdown
               trigger="click"
               placement="top-start"
+              :hide-on-click="false"
               :disabled="chatStore.isStreaming"
-              popper-class="agent-select-popper"
-              @command="handleAgentChange"
+              popper-class="ds-select-popper"
             >
-              <button class="agent-tag-inline" :disabled="chatStore.isStreaming" type="button">
-                <span class="agent-tag-icon">@</span>
-                <span class="agent-tag-name">{{ currentAgentName }}</span>
+              <button
+                class="footer-tool-pill"
+                :class="{ active: chatStore.selectedDatasourceIds.length > 0 }"
+                :disabled="chatStore.isStreaming"
+                type="button"
+                :title="t('chat.datasourceScope')"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+                {{ t('chat.datasourceScope') }}
+                <span v-if="chatStore.selectedDatasourceIds.length > 0" class="ext-tool-badge">{{ chatStore.selectedDatasourceIds.length }}</span>
                 <el-icon :size="11"><ArrowDown /></el-icon>
               </button>
               <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item
-                    v-for="agent in enabledAgents"
-                    :key="agent.id"
-                    :command="agent.id"
-                    class="agent-dropdown-item"
-                    :class="{ 'is-current': chatStore.currentAgentId === agent.id }"
-                  >
-                    <span class="agent-option-icon">{{ agent.icon || agent.name?.charAt(0)?.toUpperCase() || 'A' }}</span>
-                    <span class="agent-option-name">{{ agent.name }}</span>
-                    <el-icon v-if="chatStore.currentAgentId === agent.id" class="agent-check-icon"><Check /></el-icon>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
+                <div class="ds-dropdown-panel">
+                  <div v-if="dsLoading" class="ds-dropdown-state">
+                    <el-icon class="is-loading" :size="16"><Loading /></el-icon>
+                    <span>加载中…</span>
+                  </div>
+                  <div v-else-if="enabledDatasources.length > 0" class="ds-dropdown-section">
+                    <div class="ds-dropdown-header">
+                      <span class="ds-dropdown-label">{{ t('chat.datasourceScope') }}</span>
+                      <el-button
+                        v-if="chatStore.selectedDatasourceIds.length > 0"
+                        link
+                        size="small"
+                        type="primary"
+                        @click="chatStore.selectedDatasourceIds = []"
+                      >{{ t('chat.clearDatasourceScope') }}</el-button>
+                    </div>
+                    <div class="ds-dropdown-list">
+                      <div
+                        v-for="ds in enabledDatasources"
+                        :key="ds.id"
+                        class="ds-dropdown-item"
+                        :class="{ checked: chatStore.selectedDatasourceIds.includes(ds.id) }"
+                      >
+                        <el-checkbox
+                          :model-value="chatStore.selectedDatasourceIds.includes(ds.id)"
+                          @change="toggleDatasource(ds.id)"
+                        >
+                          <span class="ds-item-name">{{ ds.name }}</span>
+                          <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
+                        </el-checkbox>
+                        <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="ds-dropdown-state">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                      <line x1="4" y1="20" x2="20" y2="4" stroke-width="1.8"/>
+                    </svg>
+                    <span>{{ t('chat.noDatasourcesAvailable') }}</span>
+                  </div>
+                </div>
               </template>
             </el-dropdown>
-            <button class="footer-icon-btn" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 5v14"/>
-                <path d="M5 12h14"/>
+            <!-- 快捷提问 -->
+            <button class="footer-tool-pill" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
+              {{ t('chat.quickAsk') }}
             </button>
-            <button class="footer-icon-btn optimize-icon-btn" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
-              <span v-if="isOptimizing" class="spin-icon">⟳</span>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- 优化提示词 -->
+            <button class="footer-tool-pill optimize-pill" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+              <span v-if="isOptimizing" class="spin-icon">&#x27F3;</span>
+              <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/>
                 <path d="m14 7 3 3"/>
                 <path d="M5 6v4"/>
@@ -689,6 +720,7 @@
                 <path d="M21 16h-4"/>
                 <path d="M11 3H9"/>
               </svg>
+              {{ t('chat.optimizePrompt') }}
             </button>
           </div>
 
@@ -1038,7 +1070,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, watch, onMounted, onUnmounted, inject, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
@@ -1056,6 +1088,7 @@ import MetricQueryDrawer from './MetricQueryDrawer.vue'
 import ChartMetricQueryDrawer from './ChartMetricQueryDrawer.vue'
 import PlanStepsPanel from '@/components/PlanStepsPanel.vue'
 import DelegationNodeView from '@/components/DelegationNodeView.vue'
+import PiIcon from '@/components/PiIcon.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
@@ -1065,6 +1098,15 @@ import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
+
+/** 从父组件 WorkbenchView 注入的历史侧栏收缩态与新建对话回调 */
+const historyCollapsed = inject<Ref<boolean>>('historyCollapsed', ref(false))
+const parentHandleNewChat = inject<(() => void) | null>('handleNewChat', null)
+
+/** 展开历史侧栏（收缩态头部按钮回调） */
+function toggleHistoryExpand(): void {
+  historyCollapsed.value = false
+}
 const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const userStore = useUserStore()
@@ -1079,6 +1121,15 @@ const enabledAgents = computed(() => agentStore.agents.filter(a => a.enabled))
 const currentAgentName = computed(() => {
   const agent = enabledAgents.value.find(a => a.id === chatStore.currentAgentId)
   return agent?.name || t('agentConfig.selectAgent')
+})
+
+/** 数据集数量文本（设计稿 header 右侧） */
+const datasetCountText = computed(() => {
+  const selected = chatStore.selectedDatasourceIds.length
+  if (selected > 0) {
+    return `${selected} 个数据源已关联`
+  }
+  return '未选择数据源'
 })
 
 /** 可用模型列表：仅展示已启用的对话模型 */
@@ -1251,6 +1302,12 @@ function toggleDatasource(dsId: string): void {
   } else {
     ids.push(dsId)
   }
+}
+
+/** 根据数据源 ID 获取名称（用于 AI 回复 source-line chip） */
+function getDatasourceName(dsId: string): string {
+  const ds = enabledDatasources.value.find(d => d.id === dsId)
+  return ds?.name || dsId
 }
 
 /** 数据源触发按钮文案 */
@@ -4690,18 +4747,106 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: var(--theme-bg);
+  background: transparent;
 }
 
-/* 参考 DSH 对话页背景（ui-conversation ConversationRoot .root → --dsw-alias-bg-base）：
-   浅色用微蓝灰近白（neutral-bluish-50 #EDF3FE）作为页面底色，与浮起的白色输入卡片形成层次；
-   暗色用 DSH 的 near-black（neutral-bluish-950 rgb(21,21,23)）。 */
-:global(html[data-theme='light']) .chat-view {
-  background: #EDF3FE;
+/* 聊天区背景使用主题语义色（设计稿 --bg），不再硬编码 */
+
+/* 聊天头部：收缩态浮动按钮 + agent-switch pill + spacer + 右 dataset-count */
+.chat-header {
+  padding: 12px 24px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-:global(html[data-theme='dark']) .chat-view {
-  background: #151517;
+/* 收缩态下与 agent-switch 同行的快捷按钮 */
+.header-float-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface-elevated, var(--theme-surface));
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.header-float-btn:hover {
+  color: var(--main-orange);
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 8%, var(--theme-surface-elevated, var(--theme-surface)));
+  transform: scale(1.06);
+}
+
+.header-float-btn:active {
+  transform: scale(0.97);
+}
+
+.agent-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.agent-switch:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+  color: var(--main-orange);
+}
+
+.agent-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--main-orange);
+  flex-shrink: 0;
+}
+
+.agent-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chev {
+  display: inline-flex;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.dataset-count {
+  font-size: 12px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 消息区容器：撑满输入区上方空间，作为悬浮按钮的定位参照 */
@@ -4909,11 +5054,11 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 10px 24px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 860px;
+  max-width: 820px;
   width: 100%;
   margin: 0 auto;
 }
@@ -5118,14 +5263,16 @@ onUnmounted(() => {
 /* 用户消息：保持紧凑聊天式宽度 */
 .msg.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
-  max-width: min(720px, 88%);
+  justify-content: flex-end;
+  max-width: 100%;
 }
 
-/* AI 消息：最大化展示宽度，提升长文/表格/图表阅读体验 */
+/* AI 消息：垂直堆叠（agent名称 → 数据源 → 内容气泡 → 操作栏），最大化展示宽度 */
 .msg.ai {
   align-self: flex-start;
   max-width: 100%;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .ai-content-wrapper {
@@ -5154,10 +5301,11 @@ onUnmounted(() => {
 }
 
 .bubble {
-  border-radius: 16px 4px 16px 16px;
-  padding: 10px 16px;
-  font-size: 16px;
-  line-height: 24px;
+  border-radius: 14px 14px 4px 14px;
+  padding: 11px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 /* AI 消息：参考 DSH 无背景气泡（直接文字排版），内部卡片自带表面 */
@@ -5171,16 +5319,16 @@ onUnmounted(() => {
 /* 用户气泡：背景跟随主题色（各主题定义的 --very-light-orange 品牌极浅底色），
    文字保持 --theme-text 可读性；暗色主题用 color-mix 混合出深底。 */
 .user-bubble {
-  background: var(--very-light-orange);
-  color: var(--theme-text);
+  background: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
   /* 保留用户输入中的换行（Ctrl+Enter），同时正常自动折行 */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 :global(html[data-theme='dark']) .user-bubble {
-  background: color-mix(in srgb, var(--main-orange) 15%, var(--theme-surface));
-  color: var(--theme-text);
+  background: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
 }
 
 .msg-error {
@@ -5225,8 +5373,8 @@ onUnmounted(() => {
 
 .msg-text {
   color: var(--body-text);
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 14.5px;
+  line-height: 1.78;
   letter-spacing: 0.01em;
 }
 
@@ -6482,6 +6630,7 @@ onUnmounted(() => {
   justify-content: flex-start;
   opacity: 1;
   pointer-events: auto;
+  border-top: 1px solid var(--ai-divider);
 }
 
 .msg-actions--user {
@@ -6591,11 +6740,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 32px 20px;
+  padding: 8px 24px 18px;
   border-top: none;
   background: transparent;
   flex-shrink: 0;
-  max-width: 860px;
+  max-width: 820px;
   width: 100%;
   margin: 0 auto;
 }
@@ -6604,66 +6753,78 @@ onUnmounted(() => {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   min-height: 56px;
   max-height: 220px;
-  padding: 10px 14px 8px 16px;
+  padding: 12px 14px 10px;
   border-radius: 16px;
   border: 1px solid var(--theme-border);
   background: color-mix(in srgb, var(--theme-surface) 92%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(15, 23, 42, 0.07));
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .input-bar__card:focus-within {
-  border-color: color-mix(in srgb, var(--main-orange) 35%, var(--theme-border));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--main-orange) 8%, transparent), 0 4px 16px rgba(0, 0, 0, 0.03);
+  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 10%, transparent), var(--shadow-md, 0 8px 24px rgba(15, 23, 42, 0.07));
 }
 
-/* 输入框上方工具条：数据源 & 快捷入口 */
-.input-bar__tools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 2px;
-}
-
-.ext-tool-btn {
+/* footer pill 工具按钮（设计稿 .tool 样式） */
+.footer-tool-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--theme-surface) 80%, transparent);
-  color: var(--theme-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.ext-tool-btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--main-orange) 30%, var(--theme-border));
+  background: var(--theme-surface-hover);
   color: var(--theme-text-secondary);
-  background: color-mix(in srgb, var(--theme-surface-hover) 60%, transparent);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
 }
 
-.ext-tool-btn:disabled {
-  opacity: 0.5;
+.footer-tool-pill.icon-only {
+  padding: 0;
+  width: 30px;
+  justify-content: center;
+}
+
+.footer-tool-pill svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.footer-tool-pill:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+  color: var(--main-orange);
+}
+
+.footer-tool-pill:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 
-.ext-tool-btn.active {
+.footer-tool-pill.active {
   border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
   color: var(--main-orange);
   background: color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
-.ext-tool-label {
-  line-height: 1;
+.footer-tool-pill.optimize-pill:not(:disabled) {
+  color: var(--main-orange);
+}
+
+.footer-tool-pill.optimize-pill:not(:disabled):hover {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--main-orange);
 }
 
 .ext-tool-badge {
@@ -6759,33 +6920,7 @@ onUnmounted(() => {
   transform: translateY(-4px);
 }
 
-/* agent 标签内联在输入行 */
-.agent-tag-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--dark-orange);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
-}
-
-.agent-tag-inline:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
-}
-
-.agent-tag-inline:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
+/* agent pill 内联在 footer */
 .agent-tag-icon {
   font-size: 12px;
   opacity: 0.9;
@@ -6844,14 +6979,14 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 28px;
+  min-height: 36px;
   flex: 1;
 }
 
 .chat-input {
   width: 100%;
-  min-height: 28px;
-  max-height: 140px;
+  min-height: 36px;
+  max-height: 160px;
   padding: 3px 0 0;
   margin: 0;
   border: none;
@@ -6879,6 +7014,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
   padding-top: 2px;
 }
 
@@ -6886,47 +7022,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-/* footer 左侧纯图标按钮（附件 / 优化）：无边框圆角方块，hover 浅底 */
-.footer-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.footer-icon-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.footer-icon-btn:hover:not(:disabled) {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
-}
-
-.footer-icon-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-/* 优化按钮：有输入时以主题色提示可用 */
-.footer-icon-btn.optimize-icon-btn:not(:disabled) {
-  color: var(--main-orange);
-}
-
-.footer-icon-btn.optimize-icon-btn:not(:disabled):hover {
-  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
-  color: var(--main-orange);
+  flex-wrap: wrap;
 }
 
 .footer-send {
@@ -6947,30 +7043,31 @@ onUnmounted(() => {
   width: max-content;
 }
 
-/* 模型选择（完全参考 DSH InputBar .select：无边框原生 select chip + 自定义 chevron 箭头）。
+/* 模型选择器：设计稿 pill 风格（border + radius 999px + hover 变色）。
    EP 2.14 的 el-select 边框画在 .el-select__wrapper（inset box-shadow），须清除它；
    同时隐藏 EP 默认 caret，改用 DSH 的 SVG chevron data-uri 作为背景箭头。 */
 .model-select-footer :deep(.el-select__wrapper) {
   appearance: none;
-  border: none !important;
-  border-radius: 8px;
-  min-height: 28px;
-  height: 28px;
-  padding: 0 20px 0 8px;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 999px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 22px 0 10px;
   gap: 6px;
-  background-color: transparent;
+  background-color: var(--theme-surface-hover);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 4px center;
+  background-position: right 8px center;
   background-size: 12px 12px;
   box-shadow: none !important;
   white-space: nowrap;
-  transition: background-color 120ms ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .model-select-footer :deep(.el-select__wrapper.is-hovering),
 .model-select-footer :deep(.el-select:hover .el-select__wrapper),
 .model-select-footer :deep(.el-select__wrapper:hover) {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent) !important;
   background-color: var(--theme-surface-hover);
   box-shadow: none !important;
 }
@@ -6978,13 +7075,14 @@ onUnmounted(() => {
 .model-select-footer :deep(.el-select__wrapper.is-focused),
 .model-select-footer :deep(.is-focus .el-select__wrapper),
 .model-select-footer :deep(.el-select.is-focus .el-select__wrapper) {
+  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent) !important;
   background-color: color-mix(in srgb, var(--main-orange) 8%, transparent);
   box-shadow: none !important;
 }
 
 .model-select-footer :deep(.el-select.is-disabled .el-select__wrapper) {
-  background-color: transparent;
-  border: none !important;
+  background-color: var(--theme-surface-hover);
+  border-color: var(--theme-border) !important;
   box-shadow: none !important;
   opacity: 0.5;
 }
@@ -6995,8 +7093,8 @@ onUnmounted(() => {
 }
 
 .model-select-footer :deep(.el-select__placeholder) {
-  font-size: 13px;
-  color: var(--theme-text-muted);
+  font-size: 12.5px;
+  color: var(--theme-text-secondary);
   /* 让 placeholder span 参与宽度计算，选择器按内容撑开 */
   min-width: max-content;
   white-space: nowrap;
@@ -7009,7 +7107,7 @@ onUnmounted(() => {
 }
 
 .model-select-footer :deep(.el-select__selected-item) {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 20px;
   color: var(--theme-text-secondary);
@@ -7028,7 +7126,7 @@ onUnmounted(() => {
 }
 
 .model-select-footer :deep(.el-select__wrapper .el-input__inner) {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--theme-text-secondary);
   overflow: visible;

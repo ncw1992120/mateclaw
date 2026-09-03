@@ -10,6 +10,21 @@
         <WorkbenchView />
       </template>
 
+      <!-- 洞察仪表盘 -->
+      <template v-else-if="activeNav === 'insight'">
+        <DashboardListView />
+      </template>
+
+      <!-- 报告 -->
+      <template v-else-if="activeNav === 'report'">
+        <ReportListView />
+      </template>
+
+      <!-- 配置中心 -->
+      <template v-else-if="activeNav === 'config'">
+        <ConfigCenter />
+      </template>
+
       <!-- 帮助 -->
       <template v-else-if="activeNav === 'help'">
         <HelpCenterView />
@@ -43,6 +58,9 @@ import { useModelStore } from '@/stores/useModelStore'
 import { useUserStore } from '@/stores/useUserStore'
 import TopNavBar from './TopNavBar.vue'
 import WorkbenchView from '../WorkbenchView.vue'
+import DashboardListView from '../insight/DashboardListView.vue'
+import ReportListView from '../report/ReportListView.vue'
+import ConfigCenter from '../config/ConfigCenter.vue'
 import HelpCenterView from '../help/HelpCenterView.vue'
 import ModelConfigDialog from '../dialog/ModelConfigDialog.vue'
 import AgentConfigDialog from '../dialog/AgentConfigDialog.vue'
