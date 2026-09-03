@@ -2,11 +2,15 @@
 MateClaw DataAgent HTTP 客户端
 """
 
+import base64
 import json
+import time
 from typing import Generator, Optional
 from urllib.parse import urljoin
 
 import requests
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from .models import (
     ApiError,
@@ -186,13 +190,54 @@ class DataAgentClient:
 
     # ==================== 认证 ====================
 
+    def _encrypt_sensitive_field(self, plain: str) -> str:
+        """
+        敏感字段传输加密（与服务端/前端约定一致）
+
+        信封格式：base64( RSA-OAEP-SHA256/MGF1-SHA256( base64( UTF-8("毫秒时间戳:明文") ) ) )。
+        明文先经 UTF-8 → Base64 再进 OAEP，使输入恒为纯 ASCII，规避非 ASCII 码位的填充缺陷；
+        服务端解密后按 Base64 → UTF-8 还原并校验时间戳窗口（防重放）。
+        公钥每次发送前实时拉取（服务端重启换钥后旧缓存会失效）。
+
+        Args:
+            plain: 明文（如密码）
+
+        Returns:
+            str 加密信封
+
+        Raises:
+            ApiError: 公钥获取失败或加密失败
+        """
+        response = self._request("GET", "/v1/auth/pubkey")
+        info = response.json().get("data") or {}
+        public_key_pem = info.get("publicKey")
+        if not public_key_pem:
+            raise ApiError(500, "获取传输加密公钥失败，请稍后重试")
+        try:
+            public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+            blob = f"{int(time.time() * 1000)}:{plain}".encode("utf-8")
+            inner = base64.b64encode(blob)
+            encrypted = public_key.encrypt(
+                inner,
+                padding.OAEP(
+                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                    algorithm=hashes.SHA256(),
+                    label=None,
+                ),
+            )
+            return base64.b64encode(encrypted).decode("ascii")
+        except ApiError:
+            raise
+        except Exception as e:
+            raise ApiError(500, f"敏感字段加密失败: {e}")
+
     def login(self, username: str, password: str) -> LoginResponse:
         """
-        用户登录
+        用户登录（password 经 RSA-OAEP 加密信封传输，与服务端/前端约定一致）
 
         Args:
             username: 用户名
-            password: 密码
+            password: 密码（明文传入，传输前由客户端加密）
 
         Returns:
             LoginResponse 登录响应
@@ -203,7 +248,7 @@ class DataAgentClient:
         response = self._request(
             "POST",
             "/v1/auth/login",
-            json_data={"username": username, "password": password},
+            json_data={"username": username, "password": self._encrypt_sensitive_field(password)},
         )
         data = response.json().get("data") or {}
         if not data or not data.get("token"):

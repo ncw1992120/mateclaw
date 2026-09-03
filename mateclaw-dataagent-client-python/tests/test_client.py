@@ -2,8 +2,13 @@
 MateClaw DataAgent Python Client SDK 单元测试
 """
 
+import base64
+import time
 import unittest
 from unittest.mock import Mock, patch
+
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from mateclaw_dataagent import DataAgentClient, ApiError
 from mateclaw_dataagent.models import SseEvent, ChatResponse, LlmChatMessage, LlmChatResponse
@@ -197,6 +202,66 @@ data: {"status": "completed"}"""
 
         self.assertEqual(ctx.exception.code, 401)
         mock_login.assert_not_called()
+
+    # ==================== 敏感字段传输加密 ====================
+
+    def test_encrypt_sensitive_field_envelope(self):
+        """加密信封可被对应私钥解出 "毫秒时间戳:明文" 结构"""
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_pem = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("utf-8")
+
+        response = Mock()
+        response.json.return_value = {
+            "code": 200,
+            "data": {"publicKey": public_pem, "algorithm": "RSA-OAEP"},
+        }
+
+        with patch.object(self.client, "_request", return_value=response) as mock_request:
+            envelope = self.client._encrypt_sensitive_field("p@ss中文123")
+
+        mock_request.assert_called_once_with("GET", "/v1/auth/pubkey")
+        inner = private_key.decrypt(
+            base64.b64decode(envelope),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+        plain = base64.b64decode(inner).decode("utf-8")
+        ts, _, value = plain.partition(":")
+        self.assertTrue(ts.isdigit())
+        self.assertLessEqual(abs(int(time.time() * 1000) - int(ts)), 60_000)
+        self.assertEqual(value, "p@ss中文123")
+
+    def test_encrypt_sensitive_field_missing_pubkey(self):
+        """公钥响应缺失 publicKey 时抛出 ApiError"""
+        response = Mock()
+        response.json.return_value = {"code": 200, "data": {}}
+
+        with patch.object(self.client, "_request", return_value=response):
+            with self.assertRaises(ApiError):
+                self.client._encrypt_sensitive_field("secret")
+
+    def test_login_encrypts_password(self):
+        """login 的 password 经加密信封传输"""
+        response = Mock()
+        response.json.return_value = {"code": 200, "data": {"token": "tok", "username": "admin"}}
+
+        with patch.object(self.client, "_encrypt_sensitive_field", return_value="ENVELOPE") as mock_enc, \
+             patch.object(self.client, "_request", return_value=response) as mock_request:
+            result = self.client.login("admin", "admin123")
+
+        mock_enc.assert_called_once_with("admin123")
+        mock_request.assert_called_once_with(
+            "POST",
+            "/v1/auth/login",
+            json_data={"username": "admin", "password": "ENVELOPE"},
+        )
+        self.assertEqual(result.token, "tok")
 
     def test_request_no_relogin_on_login_failure(self):
         """登录接口本身的 401 不触发自动重登（避免密码错误时无限循环）"""
