@@ -9,6 +9,12 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 
+  /* Element Plus 组件圆角对齐项目圆角语言：
+     表单控件（输入框/下拉/日期选择/级联/文本域）与按钮统一 8px，
+     小尺寸控件 6px 对应 --radius-sm */
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+
   /* 间距 */
   --space-xs: 4px;
   --space-sm: 8px;
@@ -84,6 +90,18 @@
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-base: 250ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* size=small 的控件保持 Element Plus 默认圆角，不跟随上面的全局 8px 覆盖。
+   小尺寸组件圆角均从 --el-border-radius-base 派生（按钮为 calc(base - 1px)），
+   在组件根上把变量还原为 EP 默认值即可统一还原：base 4px / small 2px */
+.el-button--small,
+.el-input--small,
+.el-select--small,
+.el-textarea--small,
+.el-cascader--small {
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 2px;
 }
 
 /* ===== 洞察/报告跟随应用主题 =====

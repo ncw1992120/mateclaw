@@ -107,6 +107,7 @@ export default {
     planFailed: 'failed',
     planStatusCompleted: 'Completed',
     planStatusFailed: 'Failed',
+    planStatusStopped: 'Stopped',
     subagentAsync: 'Async delegation, running in background',
     subagentStalled: 'Sub-agent stalled, no recent progress',
     toolExecution: 'Tool Execution',
@@ -172,6 +173,11 @@ export default {
   },
   metricQuery: {
     title: 'Quick Ask',
+    subtitle: 'Pick a datasource and metrics to build a query',
+    sectionData: 'Data Setup',
+    sectionTime: 'Time & Dimensions',
+    sectionFilter: 'Filters & Ordering',
+    dimHint: 'Time dimension is included automatically; add other business dimensions here',
     datasource: 'Datasource',
     selectDatasource: 'Select datasource',
     metrics: 'Metrics',
@@ -461,6 +467,12 @@ export default {
     accountSaveBtn: 'Save',
     accountTestOk: 'Connection successful',
     accountTestFail: 'Connection failed',
+  },
+  browseDrawer: {
+    subtitle: 'Browse metrics and dimensions of this datasource',
+  },
+  reportDrawer: {
+    subtitle: 'AI-generated data analysis report',
   },
   metricPlatform: {
     sectionTitle: 'Metric Platform Connection',
@@ -1862,6 +1874,9 @@ export default {
     reportUnsubscribeSuccess: 'Unsubscribed',
     reportSubscribeFailed: 'Operation failed',
     reportSearchPlaceholder: 'Search report name, description, owner…',
+    reportSearchNoResult: 'No matching reports found',
+    reportResultCount: 'Total {n} reports',
+    reportListSubtitle: 'AI-generated data analysis reports — view, download and subscribe',
     reportViewDetail: 'View',
     reportDelete: 'Delete',
     reportDeleteConfirm: 'Are you sure you want to delete report "{name}"?',

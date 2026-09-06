@@ -13,6 +13,7 @@ const expanded = ref(props.node.status === 'running')
 const isRunning = computed(() => props.node.status === 'running')
 const isError = computed(() => props.node.status === 'error')
 const isSuccess = computed(() => props.node.status === 'completed')
+const isStopped = computed(() => props.node.status === 'stopped')
 const isStalled = computed(() => isRunning.value && !!props.node.stale)
 // 异步委派（delegateAsync）：父 agent 不阻塞，结果稍后通过 task_output 取回
 const isAsync = computed(() => !!props.node.async)
@@ -39,11 +40,15 @@ const progress = computed(() => {
   return n ? `${n} ${n === 1 ? 'tool' : 'tools'}` : ''
 })
 
-function stepStatus(i: number): 'pending' | 'running' | 'completed' {
+function stepStatus(i: number): 'pending' | 'running' | 'completed' | 'stopped' {
   const p = plan.value
   if (!p) return 'pending'
   if (p.stepResults?.[i]?.status === 'completed') return 'completed'
-  if (i === p.currentStep) return 'running'
+  // 计划已被用户中断时，当前步骤画中性停止态而非永远转圈
+  if (i === p.currentStep) {
+    if (p.planStatus === 'stopped') return 'stopped'
+    return p.planStatus === 'running' ? 'running' : 'pending'
+  }
   return 'pending'
 }
 
@@ -53,11 +58,12 @@ function toggle() {
 </script>
 
 <template>
-  <div class="deleg-node" :class="{ 'is-running': isRunning, 'is-error': isError, 'is-success': isSuccess }">
+  <div class="deleg-node" :class="{ 'is-running': isRunning, 'is-error': isError, 'is-success': isSuccess, 'is-stopped': isStopped }">
     <div class="deleg-node__header" @click="toggle">
       <span class="deleg-node__status">
         <span v-if="isAsync" class="deleg-node__async" :title="$t('chat.subagentAsync')">⏱</span>
         <span v-else-if="isRunning" class="spin-icon">⟳</span>
+        <span v-else-if="isStopped" class="icon-stopped">—</span>
         <span v-else-if="isSuccess" class="icon-done">✓</span>
         <span v-else class="icon-failed">✕</span>
       </span>
@@ -84,6 +90,7 @@ function toggle() {
           >
             <span v-if="stepStatus(i) === 'running'" class="spin-icon">⟳</span>
             <span v-else-if="stepStatus(i) === 'completed'" class="icon-done">✓</span>
+            <span v-else-if="stepStatus(i) === 'stopped'" class="icon-stopped">—</span>
             <span v-else class="deleg-node__dot"></span>
             <span class="deleg-node__step-text">{{ step }}</span>
           </div>
@@ -99,6 +106,7 @@ function toggle() {
           >
             <span v-if="t.status === 'running'" class="spin-icon">⟳</span>
             <span v-else-if="t.status === 'completed'" class="icon-done">✓</span>
+            <span v-else-if="t.status === 'stopped'" class="icon-stopped">—</span>
             <span v-else class="icon-failed">✕</span>
             <span class="deleg-node__tool-name">{{ t.name }}</span>
           </div>
@@ -138,6 +146,7 @@ function toggle() {
 .is-success .deleg-node__status { color: var(--el-color-success, #67c23a); }
 .is-error .deleg-node__status { color: var(--el-color-warning, #e6a23c); }
 .is-running .deleg-node__status { color: var(--el-color-primary, #409eff); }
+.is-stopped .deleg-node__status { color: var(--theme-text-muted, #999); }
 
 .deleg-node__icon { color: var(--muted); flex-shrink: 0; font-size: 11px; }
 .deleg-node__name {
@@ -197,6 +206,8 @@ function toggle() {
 .deleg-node__step.is-completed,
 .deleg-node__tool.is-completed { color: var(--theme-text-muted); }
 .deleg-node__tool.is-error { color: var(--el-color-warning, #e6a23c); }
+.deleg-node__step.is-stopped,
+.deleg-node__tool.is-stopped { color: var(--theme-text-muted, #999); }
 .deleg-node__dot {
   width: 5px;
   height: 5px;
@@ -238,6 +249,11 @@ function toggle() {
 }
 .icon-failed {
   color: var(--el-color-warning, #e6a23c);
+  font-size: 11px;
+  font-weight: 700;
+}
+.icon-stopped {
+  color: var(--theme-text-muted, #999);
   font-size: 11px;
   font-weight: 700;
 }

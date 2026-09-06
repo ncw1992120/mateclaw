@@ -187,6 +187,9 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 用户是否主动点击了停止按钮（取消后禁止自动重连） */
   let userStopped = false
+  /** 当前活跃 SSE 流的中断函数（由 streamChat/reconnectStream 通过 onAbortController 注册）；
+   * stopChat 借此真正断开前端连接，此前 AbortController 封在 api 层内部无法触达 */
+  let activeAbort: (() => void) | null = null
 
   /**
    * 断连后自动重连的退避轮询状态机。
@@ -685,9 +688,22 @@ export const useChatStore = defineStore('chat', () => {
     if (lastMsg?.role === 'assistant') {
       lastMsg.status = 'stopped'
       const segments = ensureSegments(messages.value, messages.value.length - 1)
-      finalizeAllRunningSegments(segments)
+      stopFinalizeSegments(segments)
+      // 顶层计划同步置 stopped：否则 PlanStepsPanel 在步骤未齐时头图标会永远转圈，
+      // 步骤恰好都有结果时又会被 allDone 误判成绿色“已完成”勾
+      const topPlan = (lastMsg.metadata as Record<string, unknown> | undefined)?.plan as PlanMeta | undefined
+      if (topPlan && topPlan.planStatus === 'running') {
+        topPlan.planStatus = 'stopped'
+      }
     }
-    markConversationStreaming(stoppedConvId, false)
+    // 立即断开本地 SSE 连接：stopChat 此前只改本地状态 + 发 stop 请求，
+    // 连接不关会使旧流悬挂在 reader.read()，重发后 isStreaming 因新流重新为 true，
+    // 旧流的迟到事件会穿过 break 检查写回已停止的消息（复活）。
+    // 断连后流循环在 finally 里统一清除流式标记；在连接真正关闭前的窗口内，
+    // sendMessage 的 streamingConversations 守卫会拦住同会话重发，
+    // 关闭“后端两个 run 并存 → 历史出现连续两条相同用户消息”的重叠窗口。
+    activeAbort?.()
+    activeAbort = null
     reconnectStates.delete(stoppedConvId)
     backgroundConversationMessages.delete(stoppedConvId)
     const nextCompleted = new Set(backgroundCompletedConversations.value)
@@ -707,6 +723,10 @@ export const useChatStore = defineStore('chat', () => {
       if (msg?.role === 'assistant' && msg.status === 'streaming') {
         msg.status = 'stopped'
       }
+      // 安全网：流循环若仍未退出（异常路径），在这里断开并清除流式标记
+      activeAbort?.()
+      activeAbort = null
+      markConversationStreaming(stoppedConvId, false)
     }, 3000)
 
     // 发送 stop 请求到后端（fire-and-forget，不阻塞 UI）
@@ -855,6 +875,7 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
       metadata: {},
       status: 'streaming',
+      datasourceIds: selectedDatasourceIds.value.length > 0 ? [...selectedDatasourceIds.value] : undefined,
     }
     targetMsgs.push(assistantMessage)
 
@@ -872,6 +893,8 @@ export const useChatStore = defineStore('chat', () => {
 
     /** 当前会话是否已切到后台（用户切到其他会话后，本流继续运行） */
     let isBackground = false
+    /** 本流的 abort 句柄（用于 finally 中按身份清理 activeAbort，避免误清新流的注册） */
+    let myAbort: (() => void) | null = null
 
     try {
       const streamOptions = {
@@ -880,6 +903,10 @@ export const useChatStore = defineStore('chat', () => {
           savePersistedReconnectState({ conversationId: convId, lastEventId: id })
         },
         seenEventIds: seenEventIds.value,
+        onAbortController: (c: AbortController) => {
+          myAbort = () => c.abort()
+          activeAbort = myAbort
+        },
       }
 
       let streamFinished = false
@@ -919,7 +946,11 @@ export const useChatStore = defineStore('chat', () => {
         if (isBackground) {
           if (userStopped) break
         } else {
-          if (!isStreaming.value) {
+          // 按“本流自己的” assistant 消息状态判断，而非全局 isStreaming：
+          // 用户停止后立即重发时，isStreaming 会因新流重新为 true，
+          // 若用全局值，本已停止的旧流的迟到事件会穿过检查写回旧消息（复活）
+          const ownMsg = targetMsgs[assistantIdx]
+          if (!ownMsg || ownMsg.status !== 'streaming') {
             break
           }
         }
@@ -951,8 +982,8 @@ export const useChatStore = defineStore('chat', () => {
         startReconnectPoll(convId)
         return
       }
-      const lastMsg = targetMsgs[targetMsgs.length - 1]
-      if (lastMsg && lastMsg.role === 'assistant') {
+      const lastMsg = targetMsgs[assistantIdx]
+      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.status === 'streaming') {
         lastMsg.status = 'failed'
         if (!lastMsg.content) {
           lastMsg.content = '抱歉，请求出现异常，请稍后重试。'
@@ -965,12 +996,16 @@ export const useChatStore = defineStore('chat', () => {
         markConversationStreaming(convId, false)
         backgroundConversationMessages.set(convId, targetMsgs)
       } else {
-        // 安全网：确保消息状态不再为 'streaming'
-        const finLastMsg = messages.value[messages.value.length - 1]
-        if (finLastMsg?.role === 'assistant' && finLastMsg.status === 'streaming') {
-          finLastMsg.status = 'completed'
+        // 安全网：确保“本流自己的”消息状态不再为 'streaming'；
+        // 不能用 messages.value 末尾——旧流 finally 滞后于新流启动时会误标新流消息
+        const finOwnMsg = targetMsgs[assistantIdx]
+        if (finOwnMsg?.role === 'assistant' && finOwnMsg.status === 'streaming') {
+          finOwnMsg.status = 'completed'
         }
         markConversationStreaming(convId, false)
+      }
+      if (activeAbort === myAbort) {
+        activeAbort = null
       }
       disconnectedBySwitch = false
     }
@@ -1076,15 +1111,23 @@ export const useChatStore = defineStore('chat', () => {
       last.status = 'streaming'
     }
 
+    const replayIdx = messages.value.length - 1
+    /** 本流的 abort 句柄（用于 finally 中按身份清理 activeAbort，避免误清新流的注册） */
+    let myAbort: (() => void) | null = null
+
     const streamOptions = {
       onLastEventId: (id: string) => {
         lastEventId.value = id
         savePersistedReconnectState({ conversationId: convId, lastEventId: id })
       },
       seenEventIds: seenEventIds.value,
+      onAbortController: (c: AbortController) => {
+        myAbort = () => c.abort()
+        activeAbort = myAbort
+      },
     }
 
-    const flushBuf = new FlushBuffer(messages.value.length - 1, () => messages.value)
+    const flushBuf = new FlushBuffer(replayIdx, () => messages.value)
 
     try {
       let streamFinished = false
@@ -1100,8 +1143,9 @@ export const useChatStore = defineStore('chat', () => {
         if (reconnectEventCount === 1) {
           logDebug('Reconnect: first SSE event received, evt=', sse.event, 'id=', sse.id)
         }
-        if (!isStreaming.value) {
-          logDebug('Reconnect: isStreaming became false, breaking loop at event count=', reconnectEventCount)
+        const ownMsg = messages.value[replayIdx]
+        if (!ownMsg || ownMsg.status !== 'streaming') {
+          logDebug('Reconnect: own replay message no longer streaming, breaking loop at event count=', reconnectEventCount)
           break
         }
 
@@ -1211,18 +1255,21 @@ export const useChatStore = defineStore('chat', () => {
       if (!isAbort) {
         clearReconnectState()
       }
-      const errMsg = messages.value[messages.value.length - 1]
-      if (errMsg?.role === 'assistant') {
+      const errMsg = messages.value[replayIdx]
+      if (errMsg?.role === 'assistant' && errMsg.status === 'streaming') {
         errMsg.status = 'failed'
       }
     } finally {
       flushBuf.destroy()
-      // 安全网：确保消息状态不再为 'streaming'
-      const finMsg = messages.value[messages.value.length - 1]
+      // 安全网：确保“本流自己的”消息状态不再为 'streaming'
+      const finMsg = messages.value[replayIdx]
       if (finMsg?.role === 'assistant' && finMsg.status === 'streaming') {
         finMsg.status = finMsg.content ? 'completed' : 'failed'
       }
       markConversationStreaming(convId, false)
+      if (activeAbort === myAbort) {
+        activeAbort = null
+      }
     }
   }
 
@@ -1358,6 +1405,40 @@ export const useChatStore = defineStore('chat', () => {
         seg.status = 'completed'
         finalizeDuration(seg)
       }
+    }
+  }
+
+  /**
+   * 用户主动停止时的执行树收尾：所有 running 的 segment / 委派节点 / 子工具 / 子计划
+   * 统一置为 'stopped'（中性终态）而非 'completed'。
+   * 若沿用 completed，UI 会把被打断的执行画成绿色成功勾；若留在 running，
+   * spinner 会永远转。渲染层对 'stopped' 画中性灰停止图标。
+   */
+  function stopFinalizeSegments(segments: Array<Record<string, unknown>>): void {
+    for (const seg of segments) {
+      if (seg.status === 'running') {
+        seg.status = 'stopped'
+        finalizeDuration(seg)
+      }
+      const tl = seg.childTimeline as DelegationTimeline | undefined
+      if (tl?.children) finalizeDelegNodesStopped(tl.children)
+    }
+  }
+
+  /** 递归把委派子节点及其工具/计划从 running 收尾为 stopped */
+  function finalizeDelegNodesStopped(nodes: DelegationNode[] | undefined): void {
+    if (!nodes) return
+    for (const n of nodes) {
+      if (n.status === 'running') n.status = 'stopped'
+      if (n.tools) {
+        for (const t of n.tools) {
+          if (t.status === 'running') t.status = 'stopped'
+        }
+      }
+      if (n.plan && n.plan.planStatus === 'running') {
+        n.plan.planStatus = 'stopped'
+      }
+      finalizeDelegNodesStopped(n.children)
     }
   }
 
@@ -1740,7 +1821,7 @@ export const useChatStore = defineStore('chat', () => {
       case 'context_usage': {
         const usage = data as Record<string, unknown>
         if (usage.conversationId === conversationId.value) {
-          updateContextUsage(usage as ContextUsage)
+          updateContextUsage(usage as unknown as ContextUsage)
         }
         break
       }
@@ -2378,8 +2459,10 @@ export const useChatStore = defineStore('chat', () => {
 
     const userContent = messages.value[userMsgIndex].content
 
-    // 删除从该 AI 消息起的所有后续消息（含自身）
-    messages.value.splice(msgIndex)
+    // 删除从对应用户消息起的所有后续消息（含用户消息与 AI 消息自身）：
+    // sendMessage 会重新 push 用户消息，若只从 AI 消息起删，本地会残留旧用户气泡，
+    // 形成“连续两条相同用户消息”
+    messages.value.splice(userMsgIndex)
 
     // 重新发送用户消息（模型信息由 sendMessage 内部从 store 同步快照读取）
     const agentId = currentAgentId.value

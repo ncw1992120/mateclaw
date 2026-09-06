@@ -132,12 +132,6 @@
             <span class="ai-role__dot"></span>
             {{ currentAgentName }}
           </div>
-          <!-- 数据源标识（设计稿 .source-line，仅有选中数据源时显示） -->
-          <div v-if="chatStore.selectedDatasourceIds.length > 0" class="source-line">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {{ t('chat.datasourceSource') }}：
-            <span v-for="dsId in chatStore.selectedDatasourceIds" :key="dsId" class="chip">{{ getDatasourceName(dsId) }}</span>
-          </div>
           <div class="ai-content-wrapper">
             <div class="bubble ai-bubble" @click="handleCodeCopyClick">
               <!-- Token & model info (右上角) -->
@@ -219,11 +213,13 @@
                           'is-running': seg.status === 'running',
                           'is-success': seg.status === 'completed' && seg.toolSuccess !== false,
                           'is-error': seg.status === 'error' || seg.toolSuccess === false,
+                          'is-stopped': seg.status === 'stopped',
                         }"
                       >
                         <div class="seg-tool__header" @click="toggleToolExpand(segIdx)">
                           <span class="seg-tool__status">
                             <svg v-if="seg.status === 'running'" class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                            <svg v-else-if="seg.status === 'stopped'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8" stroke-linecap="round"/></svg>
                             <svg v-else-if="seg.status === 'completed' && seg.toolSuccess !== false" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
                             <svg v-else viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
                           </span>
@@ -346,6 +342,13 @@
                 <span class="typing-dots"><i /><i /><i /></span>
                 <span class="streaming-cursor__label">{{ t('chat.thinking') }}</span>
               </span>
+
+              <!-- 数据源标识（设计稿 .source-line，位于回复末尾；取发送时锁定的快照） -->
+              <div v-if="msg.datasourceIds && msg.datasourceIds.length > 0" class="source-line">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                {{ t('chat.datasourceSource') }}：
+                <span v-for="dsId in msg.datasourceIds" :key="dsId" class="chip">{{ getDatasourceName(dsId) }}</span>
+              </div>
             </div>
             <!-- AI 消息操作栏（气泡外右下角） -->
             <div class="msg-actions msg-actions--ai">
@@ -489,27 +492,12 @@
             </div>
 
             <!-- Recommended Questions -->
-            <div v-else-if="card.type === 'recommended_questions'" class="rec-section">
-              <button
-                class="rec-toggle"
-                :class="{ expanded: isRecExpanded(index, cardIdx) }"
-                @click="toggleRecQuestion(index, cardIdx)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                {{ (card.data as RecommendedQuestionData).questions.length }} {{ t('chat.recommendedQuestions') }}
-              </button>
-              <div class="rec-pills" :class="{ open: isRecExpanded(index, cardIdx) }">
-                <button
-                  v-for="(question, qIdx) in (card.data as RecommendedQuestionData).questions"
-                  :key="qIdx"
-                  class="rec-pill"
-                  @click="handleFollowup(question)"
-                >
-                  <svg class="rec-pill__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
-                  <span>{{ question }}</span>
-                </button>
-              </div>
-            </div>
+            <RecommendedQuestions
+              v-else-if="card.type === 'recommended_questions'"
+              :questions="(card.data as RecommendedQuestionData).questions"
+              :is-latest="isLatestRecommendedQuestions(index)"
+              @select="handleFollowup"
+            />
 
             <!-- Feedback -->
             <div v-else-if="card.type === 'feedback'" class="feedback">
@@ -865,12 +853,22 @@
     <!-- 数据源指标/维度浏览抽屉 -->
     <el-drawer
       v-model="browseDrawerVisible"
-      :title="browseDatasource?.name"
       direction="rtl"
-      size="480px"
+      size="500px"
       :close-on-press-escape="true"
       class="datasource-browse-drawer"
     >
+      <template #header>
+        <div class="bd-header">
+          <div class="bd-header-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div class="bd-header-text">
+            <span class="bd-header-title">{{ browseDatasource?.name }}</span>
+            <span class="bd-header-sub">{{ t('browseDrawer.subtitle') }}</span>
+          </div>
+        </div>
+      </template>
       <div class="browse-drawer-body">
         <!-- Tab 切换 -->
         <div class="browse-tabs">
@@ -905,7 +903,6 @@
           <div class="browse-search">
             <el-input
               v-model="browseMetricKeyword"
-              size="small"
               :placeholder="t('metricPlatform.searchMetrics')"
               clearable
               @keyup.enter="handleMetricSearch"
@@ -918,12 +915,14 @@
           </div>
           <div class="browse-scroll-area">
             <div v-if="browseMetrics.length === 0" class="browse-empty">
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+              <div class="browse-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 3v18h18"/>
                 <path d="M18 17V9"/>
                 <path d="M13 17V5"/>
                 <path d="M8 17v-3"/>
               </svg>
+              </div>
               <p>{{ browseMetricKeyword.trim() ? '暂无匹配结果' : t('metricPlatform.noMetrics') }}</p>
             </div>
             <div
@@ -988,7 +987,6 @@
           <div class="browse-search">
             <el-input
               v-model="browseDimensionKeyword"
-              size="small"
               :placeholder="t('metricPlatform.searchDimensions')"
               clearable
               @keyup.enter="handleDimensionSearch"
@@ -1001,11 +999,13 @@
           </div>
           <div class="browse-scroll-area">
             <div v-if="browseDimensions.length === 0" class="browse-empty">
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+              <div class="browse-empty-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                 <line x1="3" y1="9" x2="21" y2="9"/>
                 <line x1="9" y1="21" x2="9" y2="9"/>
               </svg>
+              </div>
               <p>{{ browseDimensionKeyword.trim() ? '暂无匹配结果' : t('metricPlatform.noDimensions') }}</p>
             </div>
             <div
@@ -1095,6 +1095,7 @@ import * as semanticModelApi from '@/api/semantic-model'
 import { uploadAttachment, optimizePrompt, resolveChartMetricMeta, interpretChart, type MessageContentPart, type ChartMetricMeta, type ChartMetricMetaPayload, type ChartMetricItem } from '@/api/chat'
 import type { QueryPlanData, ChartCardData, EChartsOptionData, ClarifyData, DashboardCardData, FollowupData, RecommendedQuestionData, Datasource, ChatAttachment, AloudataSyncedMetric, AloudataSyncedDimension, PlanMeta, DelegationNode, DelegationTimeline } from '@/types'
 import { getErrorDisplayMessage, type ChatErrorInfo } from '@/types/chatError'
+import RecommendedQuestions from '@/components/RecommendedQuestions.vue'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -1899,46 +1900,29 @@ function escapeHtmlForStreaming(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
-/** 流式输出期间的轻量渲染：转义 + 换行 + 基础代码块边界（不高亮不解析 Markdown 语法） */
-function renderStreamingText(content: string): string {
-  if (!content) return ''
-  // 按代码围栏拆分，代码块内仅转义保留空白，块外做换行处理
-  const parts = content.split(/(```[\s\S]*?```)/g)
-  let html = ''
-  for (const part of parts) {
-    if (part.startsWith('```') && part.endsWith('```')) {
-      // 代码块：去掉围栏，提取语言标识，内容转义
-      const inner = part.slice(3, -3)
-      const nlIdx = inner.indexOf('\n')
-      const lang = nlIdx >= 0 ? inner.slice(0, nlIdx).trim() : ''
-      const code = nlIdx >= 0 ? inner.slice(nlIdx + 1) : ''
-      const langClass = lang ? ` language-${lang.split(/\s/)[0]}` : ''
-      html += `<pre><code class="hljs${langClass}">${escapeHtmlForStreaming(code)}</code></pre>\n`
-    } else {
-      html += escapeHtmlForStreaming(part).replace(/\n/g, '<br>\n')
-    }
-  }
-  return html
-}
-
 /** 判断指定索引的消息是否为正在流式输出的最后一条 */
 function isStreamingLastMessage(index: number): boolean {
   return chatStore.isStreaming && index === chatStore.messages.length - 1
 }
 
-/** 根据是否流式选择渲染策略：流式时轻量渲染，非流式时完整 Markdown */
+/** 根据是否流式选择渲染策略：统一走完整 Markdown 渲染。
+ *  流式帧已由 FlushBuffer 按 rAF 合帧，marked.parse 开销可接受；
+ *  对未闭合的代码围栏先补闭合，保证中间状态代码块也正确渲染，
+ *  避免"流式期间 br 占位 + 结束后整体突变"的割裂体验。 */
 function renderMessageText(content: string, index: number): string {
-  if (isStreamingLastMessage(index)) {
-    return renderStreamingText(content)
-  }
   return renderMarkdown(content)
 }
 
 function renderMarkdown(content: string): string {
   if (!content) return ''
-  const cached = markdownCache.get(content)
+  // 流式中间状态：代码围栏数为奇数（未闭合）时临时补闭合，
+  // 使已到达的代码内容在中间帧即按代码块渲染，闭合符到达后自动恢复正常
+  let text = content
+  const fenceCount = (text.match(/```/g) || []).length
+  if (fenceCount % 2 === 1) text += '\n```'
+  const cached = markdownCache.get(text)
   if (cached !== undefined) return cached
-  const html = markedInstance.parse(content) as string
+  const html = markedInstance.parse(text) as string
   const sanitized = DOMPurify.sanitize(html, purifyConfig)
   // 简单的 LRU：超过上限时丢弃最早插入项（Map 保留插入顺序）
   if (markdownCache.size >= MAX_MARKDOWN_CACHE) {
@@ -1947,7 +1931,7 @@ function renderMarkdown(content: string): string {
       markdownCache.delete(firstKey)
     }
   }
-  markdownCache.set(content, sanitized)
+  markdownCache.set(text, sanitized)
   return sanitized
 }
 
@@ -4367,10 +4351,7 @@ function handleStop(): void {
   chatStore.stopChat()
 }
 
-/** 历史推荐问题展开状态 */
-const expandedHistoryRecQuestions = reactive(new Set<string>())
-/** 最新推荐问题的折叠集合（默认展开，用户可手动收起） */
-const collapsedRecQuestions = reactive(new Set<string>())
+/** 历史推荐问题展开状态（已迁移至 RecommendedQuestions 组件内部管理） */
 
 /** 判断指定消息索引是否为最后一条 assistant 消息（即最新的推荐问题默认展开显示） */
 function isLatestRecommendedQuestions(msgIndex: number): boolean {
@@ -4383,34 +4364,6 @@ function isLatestRecommendedQuestions(msgIndex: number): boolean {
   return false
 }
 
-function recQuestionKey(msgIndex: number, cardIdx: number): string {
-  return `${msgIndex}-${cardIdx}`
-}
-
-/** 推荐问题卡片是否展开：最新默认展开（可收起），历史默认折叠（可展开） */
-function isRecExpanded(msgIndex: number, cardIdx: number): boolean {
-  const key = recQuestionKey(msgIndex, cardIdx)
-  if (isLatestRecommendedQuestions(msgIndex)) return !collapsedRecQuestions.has(key)
-  return expandedHistoryRecQuestions.has(key)
-}
-
-/** 切换推荐问题卡片展开/折叠 */
-function toggleRecQuestion(msgIndex: number, cardIdx: number): void {
-  const key = recQuestionKey(msgIndex, cardIdx)
-  if (isLatestRecommendedQuestions(msgIndex)) {
-    if (collapsedRecQuestions.has(key)) {
-      collapsedRecQuestions.delete(key)
-    } else {
-      collapsedRecQuestions.add(key)
-    }
-  } else {
-    if (expandedHistoryRecQuestions.has(key)) {
-      expandedHistoryRecQuestions.delete(key)
-    } else {
-      expandedHistoryRecQuestions.add(key)
-    }
-  }
-}
 
 /** 追问点击 */
 function handleFollowup(text: string): void {
@@ -4742,6 +4695,52 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* AI 回复顶部 agent 角色标识（设计稿 .ai-role） */
+.ai-role {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.ai-role__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--main-orange);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* 数据源标识行（设计稿 .source-line + .chip，位于回复气泡末尾） */
+.source-line {
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.source-line svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.chip {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text-secondary);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
 .chat-view {
   display: flex;
   flex-direction: column;
@@ -6630,7 +6629,6 @@ onUnmounted(() => {
   justify-content: flex-start;
   opacity: 1;
   pointer-events: auto;
-  border-top: 1px solid var(--ai-divider);
 }
 
 .msg-actions--user {
@@ -7278,6 +7276,7 @@ onUnmounted(() => {
 .is-running .seg-tool__status { color: #409eff; }
 .is-success .seg-tool__status { color: #67c23a; }
 .is-error .seg-tool__status   { color: #f56c6c; }
+.is-stopped .seg-tool__status { color: var(--theme-text-muted, #999); }
 
 .spin-icon {
   display: inline-block;
@@ -7833,24 +7832,53 @@ onUnmounted(() => {
   object-fit: cover;
 }
 
-/* 数据源浏览抽屉 */
-.datasource-browse-drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--theme-border);
+/* 数据源浏览抽屉：头部自定义内容（插槽元素带 scoped 属性） */
+.bd-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
 }
 
-.datasource-browse-drawer :deep(.el-drawer__title) {
-  font-size: 16px;
-  font-weight: 600;
+.bd-header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--main-orange) 0%, color-mix(in srgb, var(--main-orange) 60%, #fff) 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--main-orange) 30%, transparent);
+}
+
+.bd-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bd-header-title {
+  font-size: 15.5px;
+  font-weight: 700;
   color: var(--theme-text);
-}
-
-.datasource-browse-drawer :deep(.el-drawer__body) {
-  padding: 0;
+  line-height: 1.3;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.bd-header-sub {
+  font-size: 11.5px;
+  color: var(--theme-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 数据源浏览抽屉 */
 .browse-drawer-body {
   display: flex;
   flex-direction: column;
@@ -7861,7 +7889,7 @@ onUnmounted(() => {
 .browse-tabs {
   display: flex;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--theme-border);
   background: var(--theme-surface);
   flex-shrink: 0;
@@ -7871,12 +7899,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 7px 12px;
   border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--theme-text-secondary);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -7927,38 +7955,51 @@ onUnmounted(() => {
 .browse-scroll-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .browse-empty {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 60px 20px;
+  gap: 14px;
+  padding: 40px 20px;
   color: var(--theme-text-muted);
   text-align: center;
 }
 
-.browse-empty svg {
-  color: var(--theme-border-strong);
-  opacity: 0.7;
+.browse-empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.browse-empty-icon svg {
+  width: 30px;
+  height: 30px;
+  color: var(--main-orange);
+  opacity: 0.6;
 }
 
 .browse-empty p {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .browse-card {
   background: var(--theme-surface);
   border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 10px;
+  padding: 12px 14px;
   transition: all 0.15s ease;
 }
 
@@ -8041,18 +8082,28 @@ onUnmounted(() => {
 
 .browse-search {
   flex-shrink: 0;
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--theme-border);
   background: var(--theme-surface);
 }
 
 .browse-search :deep(.el-input__wrapper) {
+  border-radius: 8px;
   background: var(--theme-bg);
   box-shadow: 0 0 0 1px var(--theme-border) inset;
+  transition: box-shadow 0.2s ease;
+}
+
+.browse-search :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--main-orange) 40%, var(--theme-border)) inset;
 }
 
 .browse-search :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--main-orange) inset;
+  box-shadow: 0 0 0 1px var(--main-orange) inset, 0 0 0 3px color-mix(in srgb, var(--main-orange) 12%, transparent);
+}
+
+.browse-search :deep(.el-input__prefix .el-icon) {
+  color: var(--theme-text-muted);
 }
 
 .browse-search :deep(.el-input__inner) {
@@ -8098,7 +8149,7 @@ onUnmounted(() => {
 .browse-pagination {
   display: flex;
   justify-content: flex-end;
-  padding-top: 8px;
+  padding: 8px 12px;
   border-top: 1px solid var(--theme-border);
 }
 
@@ -8442,5 +8493,33 @@ onUnmounted(() => {
   padding: 12px 10px;
   font-size: 12px;
   color: var(--theme-text-muted);
+}
+</style>
+
+<style>
+/* el-drawer teleport 到 body，scoped 选择器无法命中其内部节点，
+   故用非 scoped 块 + 自定义类名限定作用域 */
+.datasource-browse-drawer {
+  --el-color-primary: var(--main-orange, #4176E6);
+  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176E6) 70%, var(--theme-surface, #fff));
+  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176E6) 50%, var(--theme-surface, #fff));
+  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176E6) 30%, var(--theme-surface, #fff));
+  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176E6) 20%, var(--theme-surface, #fff));
+  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176E6) 10%, var(--theme-surface, #fff));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176E6) 85%, #000);
+  background: var(--theme-bg, #f6f8fb);
+}
+
+.datasource-browse-drawer .el-drawer__header {
+  margin-bottom: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-border, #e5e7eb);
+  background: var(--theme-surface, #fff);
+}
+
+.datasource-browse-drawer .el-drawer__body {
+  padding: 0;
+  overflow: hidden;
+  background: var(--theme-bg, #f6f8fb);
 }
 </style>

@@ -8,7 +8,6 @@ import router from './router'
 import i18n from './i18n'
 import './assets/main.css'
 import './assets/dashboard-design.css'
-import './assets/rec-questions.css'
 import { useThemeStore } from '@/stores/useThemeStore'
 import { permissionDirective } from '@/directives/permission'
 

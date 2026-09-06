@@ -3,35 +3,41 @@
     <!-- 列表模式 -->
     <template v-if="mode === 'list'">
       <div class="list-mode" :class="{ 'with-ai-panel': showAiPanel }">
-        <div class="list-header mc-toolbar">
-          <div class="list-title-block">
-            <h2 class="list-title mc-toolbar-title">{{ t('insight.title') }}</h2>
-            <div class="list-subtitle">{{ t('insight.headerSub', { count: store.dashboards.length }) }}</div>
-          </div>
-          <div class="list-header-actions mc-toolbar-right">
-            <el-input
-              v-model="searchKeyword"
-              :placeholder="t('insight.searchPlaceholder')"
-              :prefix-icon="Search"
-              clearable
-              size="default"
-              class="search-input"
-            />
-            <el-button class="ai-assistant-btn" :class="{ on: showAiPanel }" @click="toggleAiPanel">
-              <template #icon>
-                <RobotIcon style="width: 16px; height: 16px;" />
-              </template>
-              {{ t('insight.aiAssistant') }}
-            </el-button>
-            <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
-              {{ t('insight.create') }}
-            </el-button>
+      <!-- 悬浮纸面卡片：页头 + 搜索行 + Tab 行 + 列表，与灰底导航形成两层视觉层级 -->
+      <div class="page-card">
+      <!-- 页头：标题组（左） + 搜索与操作（右）同一行 -->
+      <div class="list-header">
+        <div class="list-title-group">
+          <span class="list-title-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m7 13 3-3 4 4 5-6"/></svg>
+          </span>
+          <div class="list-title-text">
+            <h2 class="list-title">{{ t('insight.title') }}</h2>
+            <p class="list-subtitle">{{ t('insight.headerSub', { count: store.dashboards.length }) }}</p>
           </div>
         </div>
-
+        <div class="header-actions">
+          <el-input
+            v-model="searchKeyword"
+            :placeholder="t('insight.searchPlaceholder')"
+            :prefix-icon="Search"
+            clearable
+            class="search-input"
+          />
+          <el-button class="ai-assistant-btn" :class="{ on: showAiPanel }" @click="toggleAiPanel">
+            <template #icon>
+              <RobotIcon style="width: 16px; height: 16px;" />
+            </template>
+            {{ t('insight.aiAssistant') }}
+          </el-button>
+          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
+            {{ t('insight.create') }}
+          </el-button>
+        </div>
+      </div>
       <div class="list-body">
         <div class="list-content">
-          <!-- 筛选行：状态 Tab / 排序 / 视图切换 -->
+          <!-- 筛选行：状态 Tab（胶囊式，与报告页统一） / 排序 / 视图切换 -->
           <div class="filter-row">
             <div class="filter-tabs">
               <button
@@ -48,7 +54,7 @@
                 :class="{ active: statusFilter === 'published' }"
                 @click="statusFilter = 'published'"
               >
-                {{ t('insight.status.published') }}<span class="tab-cnt">{{ statusCounts.published }}</span>
+                <span class="tab-dot dot-published"></span>{{ t('insight.status.published') }}<span class="tab-cnt">{{ statusCounts.published }}</span>
               </button>
               <button
                 type="button"
@@ -56,7 +62,7 @@
                 :class="{ active: statusFilter === 'draft' }"
                 @click="statusFilter = 'draft'"
               >
-                {{ t('insight.status.draft') }}<span class="tab-cnt">{{ statusCounts.draft }}</span>
+                <span class="tab-dot dot-draft"></span>{{ t('insight.status.draft') }}<span class="tab-cnt">{{ statusCounts.draft }}</span>
               </button>
             </div>
             <button type="button" class="filter-sort" @click="toggleSortOrder">
@@ -110,7 +116,7 @@
             </div>
           </div>
 
-          <div v-else class="card-grid" :class="{ 'view-list': viewMode === 'list' }">
+          <div v-else ref="cardGridRef" class="card-grid" :class="{ 'view-list': viewMode === 'list' }">
             <div
               v-for="dashboard in displayedDashboards"
               :key="dashboard.id"
@@ -144,8 +150,16 @@
                 </el-tag>
               </div>
 
-              <!-- 描述 -->
-              <div class="card-desc">{{ dashboard.description || t('insight.noDescription') }}</div>
+              <!-- 描述：截断时悬停弹出完整文案 -->
+              <el-tooltip
+                :content="dashboard.description"
+                placement="top"
+                :show-after="150"
+                :disabled="!truncatedDescs[dashboard.id]"
+                popper-class="card-desc-tooltip"
+              >
+                <div class="card-desc" :data-id="dashboard.id">{{ dashboard.description || t('insight.noDescription') }}</div>
+              </el-tooltip>
 
               <!-- 图表预览区（按主题切换图形类型） -->
               <div class="card-chart-preview">
@@ -297,6 +311,7 @@
           </div>
           </div>
         </div>
+      </div>
 
       <!-- AI助手抽屉（Element Plus Drawer，遮罩 + 右侧浮动面板） -->
       <el-drawer
@@ -334,12 +349,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
+import { formatRelativeTime } from '@/utils/time'
 import type { InsightDashboard } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
@@ -401,6 +417,33 @@ const sortOrder = ref<'desc' | 'asc'>('desc')
 /** 卡片布局：grid / list（持久化） */
 const viewMode = usePersistedState<'grid' | 'list'>('mc-insight-view-layout', 'grid')
 
+/** 卡片网格容器 ref：用于测量描述截断状态 */
+const cardGridRef = ref<HTMLElement | null>(null)
+
+/** 描述被截断的看板 id 集合：仅截断的卡片悬停时弹出完整描述 */
+const truncatedDescs = ref<Record<string, boolean>>({})
+
+/** 测量各卡片描述是否被单行省略截断（scrollWidth 超出可视宽度即为截断） */
+function measureDescTruncation(): void {
+  const root = cardGridRef.value
+  if (!root) {
+    return
+  }
+  const map: Record<string, boolean> = {}
+  root.querySelectorAll<HTMLElement>('.card-desc').forEach((el) => {
+    const id = el.dataset.id
+    if (id) {
+      map[id] = el.scrollWidth > el.clientWidth
+    }
+  })
+  truncatedDescs.value = map
+}
+
+/** 窗口尺寸变化会改变卡片宽度，需重新测量 */
+function handleWindowResize(): void {
+  measureDescTruncation()
+}
+
 /** 各状态计数（基于搜索后的列表） */
 const statusCounts = computed(() => {
   const list = filteredDashboards.value
@@ -426,12 +469,19 @@ const displayedDashboards = computed(() => {
   return sorted
 })
 
+/* watch 必须位于 displayedDashboards 声明之后：
+   setup 同步执行时求值源数组会访问未初始化的 const，抛出 TDZ ReferenceError 导致整页崩溃 */
+watch([displayedDashboards, viewMode], () => {
+  void nextTick(measureDescTruncation)
+})
+
 /** 切换排序方向 */
 function toggleSortOrder(): void {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
 }
 
 onMounted(() => {
+  window.addEventListener('resize', handleWindowResize)
   store.fetchDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
@@ -445,12 +495,13 @@ onMounted(() => {
   }
 })
 
-/** 格式化时间 */
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
+})
+
+/** 格式化时间：相对时间（刚刚 / x 分钟前 / 昨天 HH:mm…），空值回退 -- */
 function formatTime(time: string): string {
-  if (!time) {
-    return '--'
-  }
-  return dayjs(time).format('YYYY-MM-DD HH:mm')
+  return formatRelativeTime(time) || '--'
 }
 
 /** 切换AI助手面板 */
@@ -699,37 +750,64 @@ function handleBackToList(): void {
   display: flex;
   flex-direction: column;
   background: var(--db-bg);
+  /* 四周留灰底边距，让纸面卡片悬浮于页面底色之上，与透明导航拉开层级 */
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
-.list-body {
+/* 悬浮纸面卡片：承载筛选/搜索行与列表，白色表面 + 圆角 + 投影，与灰底页面分层 */
+.page-card {
   flex: 1;
+  min-height: 0;
   display: flex;
+  flex-direction: column;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 
+/* 页头：标题组（左） + 搜索与操作（右）同一行，建立页面层级且不占多余行数 */
 .list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-xl);
-  height: 72px;
-  min-height: 72px;
-  gap: 14px;
-  background: var(--db-card);
-  border-bottom: 1px solid var(--db-border);
+  gap: var(--space-md);
+  padding: 20px var(--space-xl) 12px;
   flex-shrink: 0;
 }
 
-.list-title-block {
+/* 标题组：图标 chip（左） + 标题/副标题（右），横向排布 */
+.list-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 标题图标：主题色淡底圆角 chip，轻量不抢顶导层级 */
+.list-title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-title-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .list-title {
   margin: 0;
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--db-text);
   line-height: 1.3;
@@ -739,67 +817,113 @@ function handleBackToList(): void {
 }
 
 .list-subtitle {
+  margin: 0;
   font-size: 12px;
   color: var(--db-text-muted);
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.list-header-actions {
+.list-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  overflow: hidden;
 }
 
+/* 搜索行：搜索居左、AI 助手 / 新建居右；作为卡片第二行，与上方筛选行分隔 */
+/* 搜索框：白底描边胶囊（36px），置于页头右侧与标题同行；
+   宽度可收缩，优先让出空间给操作按钮 */
 .search-input {
-  width: 232px;
+  width: 260px;
+  max-width: 100%;
+  flex: 0 1 260px;
+  min-width: 160px;
 }
 
 .search-input :deep(.el-input__wrapper) {
   height: 36px;
-  border-radius: 8px;
+  border-radius: 999px;
+  background: var(--theme-surface-elevated);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--theme-border-strong);
+  padding: 0 14px;
+  transition: box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.search-input :deep(.el-input__inner) {
+  font-size: 13px;
+}
+
+.search-input :deep(.el-input__wrapper:hover) {
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px color-mix(in srgb, var(--main-orange) 45%, var(--theme-border-strong));
 }
 
 .search-input :deep(.el-input__wrapper.is-focus) {
-  background: var(--db-card);
-  box-shadow: 0 0 0 1px var(--main-orange) inset;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--main-orange) 14%, transparent),
+    inset 0 0 0 1px var(--main-orange);
 }
 
-.list-header-actions :deep(.el-button) {
+.search-input :deep(.el-input__prefix) {
+  color: var(--db-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.search-input :deep(.el-input__wrapper.is-focus .el-input__prefix) {
+  color: var(--main-orange);
+}
+
+/* 页头操作区：搜索 / AI 助手 / 新建同一行，flex gap 保证间距；
+   同时清零 Element 相邻按钮自带 margin，避免与 gap 叠加 */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.header-actions :deep(.el-button) {
   height: 36px;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 0 14px;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
-.list-header-actions :deep(.el-button:not(.el-button--primary)) {
+.header-actions :deep(.el-button:not(.el-button--primary)) {
   background: var(--db-card);
   border-color: var(--db-border-strong);
   color: var(--db-text-secondary);
 }
 
-.list-header-actions :deep(.el-button:not(.el-button--primary):hover) {
+.header-actions :deep(.el-button:not(.el-button--primary):hover) {
   border-color: var(--db-accent);
   color: var(--db-accent);
 }
 
-.list-header-actions :deep(.el-button.ai-assistant-btn.on) {
+.header-actions :deep(.el-button.ai-assistant-btn.on) {
   background: color-mix(in srgb, var(--db-accent) 8%, transparent);
   border-color: var(--db-accent);
   color: var(--db-accent);
   font-weight: 600;
 }
 
-.list-header-actions :deep(.el-button--primary) {
+.header-actions :deep(.el-button--primary) {
   background: var(--main-orange);
   border-color: var(--main-orange);
   box-shadow: var(--shadow-md);
 }
 
-.list-header-actions :deep(.el-button--primary:hover),
-.list-header-actions :deep(.el-button--primary:focus) {
+.header-actions :deep(.el-button--primary:hover),
+.header-actions :deep(.el-button--primary:focus) {
   background: var(--main-orange);
   border-color: var(--main-orange);
   filter: brightness(1.08);
@@ -810,69 +934,127 @@ function handleBackToList(): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 var(--space-xl);
+  padding: 0 var(--space-lg) var(--space-lg);
 }
 
 .filter-row {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 22px;
-  padding: var(--space-md) 0;
+  gap: var(--space-md);
+  padding: 0 0 var(--space-md);
 }
 
+/* 窄屏：筛选行收紧间距，搜索行换行让搜索独占整行，避免右侧按钮被推出视口 */
+@media (max-width: 640px) {
+  .list-header {
+    flex-wrap: wrap;
+  }
+
+  .header-actions {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-row {
+    gap: 12px;
+  }
+
+  .filter-tabs {
+    gap: 12px;
+  }
+}
+
+/* 状态 Tab 容器：灰底分段胶囊（次级控件，内 3px 衬住激活项） */
 .filter-tabs {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--db-bg);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
+.filter-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* 状态 Tab 项：默认灰容器上透明，hover 浅灰底；
+   激活为白面浮起 + 主题色描边/文字（次级高亮，实心 pill 只留给顶导） */
 .filter-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 2px;
-  border: none;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid transparent;
   background: transparent;
-  font-size: 13.5px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--db-text-secondary);
   cursor: pointer;
-  position: relative;
   white-space: nowrap;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.filter-tab:hover {
+.filter-tab:hover:not(.active) {
   color: var(--db-text);
+  background: color-mix(in srgb, var(--db-text-muted) 8%, transparent);
 }
 
 .filter-tab.active {
+  background: var(--theme-surface-elevated);
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
   color: var(--main-orange);
   font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
-.filter-tab.active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -4px;
-  height: 2.5px;
-  border-radius: 2px;
-  background: var(--main-orange);
+/* Tab 状态点：已发布绿 / 草稿橙，与卡片状态标签同色系 */
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
+.tab-dot.dot-published {
+  background: #14a05a;
+}
+
+.tab-dot.dot-draft {
+  background: #dd8a1d;
+}
+
+/* Tab 计数徽标：默认半透明灰 chip，激活 pill 上为半透明白底 + 白字 */
 .tab-cnt {
   font-size: 11px;
-  background: var(--db-muted);
-  color: var(--db-text-muted);
-  border-radius: 20px;
-  padding: 1px 7px;
   font-weight: 600;
+  line-height: 16px;
+  color: var(--db-text-secondary);
+  background: color-mix(in srgb, var(--db-text-muted) 14%, transparent);
+  border-radius: 999px;
+  padding: 0 7px;
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
 .filter-tab.active .tab-cnt {
-  background: var(--db-accent-light);
-  color: var(--db-accent);
+  color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 .filter-sort {
@@ -925,7 +1107,8 @@ function handleBackToList(): void {
 .list-scroll {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: var(--space-xl);
+  /* 顶部留白：为首卡片 hover 上浮预留空间，避免上边框/投影被滚动容器裁切 */
+  padding: 4px 0 var(--space-xl);
 }
 
 .empty-state {
@@ -1176,7 +1359,7 @@ function handleBackToList(): void {
   gap: 0;
   border-top: 1px solid var(--db-border);
   padding-top: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .action-group {
   display: flex;
@@ -1199,14 +1382,14 @@ function handleBackToList(): void {
 .card-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   border: none;
   background: transparent;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--db-text-secondary);
   cursor: pointer;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 4px 6px;
   transition: color var(--transition-fast), background var(--transition-fast);
   white-space: nowrap;
 }

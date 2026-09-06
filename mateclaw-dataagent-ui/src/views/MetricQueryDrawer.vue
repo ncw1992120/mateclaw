@@ -2,270 +2,281 @@
   <el-drawer
     :model-value="visible"
     direction="rtl"
-    size="560px"
+    size="500px"
     :title="t('metricQuery.title')"
     :before-close="handleClose"
     class="metric-query-drawer"
   >
-    <div class="mq-body">
-      <!-- 数据源 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('metricQuery.datasource') }}</label>
-        <el-select
-          v-model="localDatasourceId"
-          :placeholder="t('metricQuery.selectDatasource')"
-          size="default"
-          filterable
-          style="width: 100%"
-          @change="handleDatasourceChange"
-        >
-          <el-option
-            v-for="ds in datasources"
-            :key="ds.id"
-            :label="ds.name"
-            :value="ds.id"
-          />
-        </el-select>
-      </div>
-
-      <!-- 指标 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('metricQuery.metrics') }}</label>
-        <el-select
-          v-model="localMetrics"
-          :placeholder="t('metricQuery.selectMetrics')"
-          size="default"
-          multiple
-          filterable
-          remote
-          :remote-method="searchMetrics"
-          :loading="metricsLoading"
-          style="width: 100%"
-          @change="handleMetricsChange"
-        >
-          <el-option
-            v-for="m in metricsOptions"
-            :key="m.metricName"
-            :label="m.metricDisplayName || m.metricName"
-            :value="m.metricName"
-          >
-            <span>{{ m.metricDisplayName || m.metricName }}</span>
-            <span v-if="m.unit" class="mq-option-extra">{{ m.unit }}</span>
-          </el-option>
-        </el-select>
-      </div>
-
-      <!-- 时间范围 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('metricQuery.timeRange') }}</label>
-        <el-date-picker
-          v-model="localTimeRange"
-          type="daterange"
-          :start-placeholder="t('metricQuery.startDate')"
-          :end-placeholder="t('metricQuery.endDate')"
-          size="default"
-          style="width: 100%"
-          value-format="YYYY-MM-DD"
-          :shortcuts="dateShortcuts"
-        />
-      </div>
-
-      <!-- 时间粒度选择 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('chart.timeGranularity') }}</label>
-        <el-radio-group v-model="timeGranularity" size="default">
-          <el-radio-button value="minute">{{ t('chart.granularityMinute') }}</el-radio-button>
-          <el-radio-button value="hour">{{ t('chart.granularityHour') }}</el-radio-button>
-          <el-radio-button value="day">{{ t('chart.granularityDay') }}</el-radio-button>
-          <el-radio-button value="week">{{ t('chart.granularityWeek') }}</el-radio-button>
-          <el-radio-button value="month">{{ t('chart.granularityMonth') }}</el-radio-button>
-          <el-radio-button value="quarter">{{ t('chart.granularityQuarter') }}</el-radio-button>
-          <el-radio-button value="year">{{ t('chart.granularityYear') }}</el-radio-button>
-        </el-radio-group>
-      </div>
-
-      <!-- 维度 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('metricQuery.dimensions') }}</label>
-        <el-select
-          v-model="localDimensions"
-          :placeholder="t('metricQuery.selectDimensions')"
-          size="default"
-          multiple
-          filterable
-          remote
-          :remote-method="searchDimensions"
-          :loading="dimensionsLoading"
-          style="width: 100%"
-        >
-          <el-option
-            v-for="d in dimensionsOptions"
-            :key="d.dimName"
-            :label="d.dimDisplayName || d.dimName"
-            :value="d.dimName"
-          >
-            <span>{{ d.dimDisplayName || d.dimName }}</span>
-            <span v-if="d.isTimeDimension" class="mq-option-tag">{{ t('metricQuery.timeDim') }}</span>
-          </el-option>
-        </el-select>
-        <div class="mq-dim-tip">{{ t('chart.dimTip') }}</div>
-      </div>
-
-      <!-- 筛选条件（支持多维度筛选，按数据类型区分操作符） -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('chart.fieldFilters') }}</label>
-        <div class="mq-filter-list">
-          <div
-            v-for="(f, idx) in filterItems"
-            :key="idx"
-            class="mq-filter-row"
-          >
-            <!-- 维度选择 -->
-            <el-select
-              v-model="f.dim"
-              size="small"
-              filterable
-              clearable
-              :placeholder="t('chart.selectFilterDim')"
-              style="width: 130px"
-              @change="onFilterDimChange(f)"
-            >
-              <el-option
-                v-for="d in dimensionsOptions"
-                :key="d.dimName"
-                :label="d.dimDisplayName || d.dimName"
-                :value="d.dimName"
-              />
-            </el-select>
-
-            <!-- 操作符选择（根据数据类型） -->
-            <el-select
-              v-model="f.op"
-              size="small"
-              :placeholder="t('chart.selectFilterOp')"
-              style="width: 110px"
-            >
-              <el-option
-                v-for="op in getFilterOps(f.dim)"
-                :key="op.value"
-                :label="t(op.label)"
-                :value="op.value"
-              />
-            </el-select>
-
-            <!-- 筛选值输入 -->
-            <el-input
-              v-model="f.value"
-              size="small"
-              :placeholder="t('chart.selectFilterValue')"
-              style="flex: 1"
-            />
-
-            <!-- 删除按钮 -->
-            <el-button
-              size="small"
-              type="danger"
-              text
-              @click="removeFilterItem(idx)"
-            >
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
+    <template #header>
+      <div class="mq-header">
+        <div class="mq-header-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         </div>
-        <el-button size="small" text type="primary" @click="addFilterItem">
-          + {{ t('chart.addFilter') }}
-        </el-button>
+        <div class="mq-header-text">
+          <span class="mq-header-title">{{ t('metricQuery.title') }}</span>
+          <span class="mq-header-sub">{{ t('metricQuery.subtitle') }}</span>
+        </div>
       </div>
+    </template>
 
-      <!-- 排序条件（支持多字段排序） -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('chart.orderBy') }}</label>
-        <div class="mq-order-list">
-          <div
-            v-for="(o, idx) in orderItems"
-            :key="idx"
-            class="mq-orderby-row"
+    <div class="mq-body">
+      <el-form ref="formRef" :model="formData" :rules="formRules" label-position="left" label-width="76px" size="default">
+        <!-- ── 分区 1：数据设置 ── -->
+        <section class="mq-section">
+          <div class="mq-section-title">{{ t('metricQuery.sectionData') }}</div>
+        <!-- 数据源 -->
+        <el-form-item :label="t('metricQuery.datasource')" prop="datasourceId">
+          <el-select
+            v-model="localDatasourceId"
+            :placeholder="t('metricQuery.selectDatasource')"
+            filterable
+            style="width: 100%"
+            @change="handleDatasourceChange"
           >
-            <el-select
-              v-model="o.col"
-              size="small"
-              filterable
-              allow-create
-              default-first-option
-              clearable
-              :placeholder="t('chart.selectOrderByCol')"
-              style="flex: 1"
+            <el-option
+              v-for="ds in datasources"
+              :key="ds.id"
+              :label="ds.name"
+              :value="ds.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 指标 -->
+        <el-form-item :label="t('metricQuery.metrics')" prop="metrics">
+          <el-select
+            v-model="localMetrics"
+            :placeholder="t('metricQuery.selectMetrics')"
+            multiple
+            filterable
+            remote
+            :remote-method="searchMetrics"
+            :loading="metricsLoading"
+            style="width: 100%"
+            @change="handleMetricsChange"
+          >
+            <el-option
+              v-for="m in metricsOptions"
+              :key="m.metricName"
+              :label="m.metricDisplayName || m.metricName"
+              :value="m.metricName"
             >
-              <el-option-group
-                v-if="orderByMetricOptions.length > 0"
-                :label="t('chart.orderByMetricGroup')"
+              <span>{{ m.metricDisplayName || m.metricName }}</span>
+              <span v-if="m.unit" class="mq-option-extra">{{ m.unit }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        </section>
+
+        <!-- ── 分区 2：时间与维度 ── -->
+        <section class="mq-section">
+          <div class="mq-section-title">{{ t('metricQuery.sectionTime') }}</div>
+
+        <!-- 时间范围 -->
+        <el-form-item :label="t('metricQuery.timeRange')">
+          <el-date-picker
+            v-model="localTimeRange"
+            type="daterange"
+            :start-placeholder="t('metricQuery.startDate')"
+            :end-placeholder="t('metricQuery.endDate')"
+            style="width: 100%"
+            value-format="YYYY-MM-DD"
+            :shortcuts="dateShortcuts"
+          />
+        </el-form-item>
+
+        <!-- 时间粒度选择 -->
+        <el-form-item :label="t('chart.timeGranularity')">
+          <el-radio-group v-model="timeGranularity">
+            <el-radio-button value="minute">{{ t('chart.granularityMinute') }}</el-radio-button>
+            <el-radio-button value="hour">{{ t('chart.granularityHour') }}</el-radio-button>
+            <el-radio-button value="day">{{ t('chart.granularityDay') }}</el-radio-button>
+            <el-radio-button value="week">{{ t('chart.granularityWeek') }}</el-radio-button>
+            <el-radio-button value="month">{{ t('chart.granularityMonth') }}</el-radio-button>
+            <el-radio-button value="quarter">{{ t('chart.granularityQuarter') }}</el-radio-button>
+            <el-radio-button value="year">{{ t('chart.granularityYear') }}</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- 维度 -->
+        <el-form-item :label="t('metricQuery.dimensions')">
+          <el-select
+            v-model="localDimensions"
+            :placeholder="t('metricQuery.selectDimensions')"
+            multiple
+            filterable
+            remote
+            :remote-method="searchDimensions"
+            :loading="dimensionsLoading"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in dimensionsOptions"
+              :key="d.dimName"
+              :label="d.dimDisplayName || d.dimName"
+              :value="d.dimName"
+            >
+              <span>{{ d.dimDisplayName || d.dimName }}</span>
+              <span v-if="d.isTimeDimension" class="mq-option-tag">{{ t('metricQuery.timeDim') }}</span>
+            </el-option>
+          </el-select>
+          <div class="mq-field-hint">{{ t('metricQuery.dimHint') }}</div>
+          <template #error>
+            <span></span>
+          </template>
+        </el-form-item>
+        </section>
+
+        <!-- ── 分区 3：筛选与排序 ── -->
+        <section class="mq-section">
+          <div class="mq-section-title">{{ t('metricQuery.sectionFilter') }}</div>
+
+        <!-- 筛选条件 -->
+        <el-form-item :label="t('chart.fieldFilters')">
+          <div class="mq-filter-list">
+            <div
+              v-for="(f, idx) in filterItems"
+              :key="idx"
+              class="mq-filter-row"
+            >
+              <el-select
+                v-model="f.dim"
+                size="small"
+                filterable
+                clearable
+                :placeholder="t('chart.selectFilterDim')"
+                style="width: 130px"
+                @change="onFilterDimChange(f)"
               >
                 <el-option
-                  v-for="m in orderByMetricOptions"
-                  :key="m.name"
-                  :label="m.displayName || m.name"
-                  :value="m.name"
-                />
-              </el-option-group>
-              <el-option-group :label="t('chart.orderByTimeGroup')">
-                <el-option
-                  :label="orderByTimeDimOption.label"
-                  :value="orderByTimeDimOption.value"
-                />
-              </el-option-group>
-              <el-option-group
-                v-if="orderByDimOptions.length > 0"
-                :label="t('chart.orderByDimGroup')"
-              >
-                <el-option
-                  v-for="d in orderByDimOptions"
+                  v-for="d in dimensionsOptions"
                   :key="d.dimName"
                   :label="d.dimDisplayName || d.dimName"
                   :value="d.dimName"
                 />
-              </el-option-group>
-            </el-select>
-            <el-radio-group v-model="o.desc" size="small">
-              <el-radio-button :value="false">{{ t('chart.asc') }}</el-radio-button>
-              <el-radio-button :value="true">{{ t('chart.desc') }}</el-radio-button>
-            </el-radio-group>
-            <el-button
-              size="small"
-              type="danger"
-              text
-              @click="removeOrderItem(idx)"
-            >
-              <el-icon><Delete /></el-icon>
-            </el-button>
+              </el-select>
+              <el-select
+                v-model="f.op"
+                size="small"
+                :placeholder="t('chart.selectFilterOp')"
+                style="width: 110px"
+              >
+                <el-option
+                  v-for="op in getFilterOps(f.dim)"
+                  :key="op.value"
+                  :label="t(op.label)"
+                  :value="op.value"
+                />
+              </el-select>
+              <el-input
+                v-model="f.value"
+                size="small"
+                :placeholder="t('chart.selectFilterValue')"
+                style="flex: 1"
+              />
+              <el-button
+                size="small"
+                type="danger"
+                text
+                @click="removeFilterItem(idx)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
           </div>
-        </div>
-        <el-button size="small" text type="primary" @click="addOrderItem">
-          + {{ t('chart.addOrder') }}
-        </el-button>
-      </div>
+          <el-button size="small" text type="primary" @click="addFilterItem">
+            + {{ t('chart.addFilter') }}
+          </el-button>
+        </el-form-item>
 
-      <!-- 分页设置 -->
-      <div class="mq-section">
-        <label class="mq-label">{{ t('chart.pagination') }}</label>
-        <div class="mq-pagination-row">
-          <span class="mq-pagination-label">{{ t('chart.pageSize') }}</span>
-          <el-input-number
-            v-model="pageSize"
-            :min="10"
-            :max="500"
-            :step="10"
-            size="default"
-            controls-position="right"
-          />
-          <span class="mq-pagination-label">{{ t('chart.pageNum') }}</span>
-          <el-input-number
-            v-model="pageNum"
-            :min="1"
-            size="default"
-            controls-position="right"
-          />
-        </div>
-      </div>
+        <!-- 排序条件 -->
+        <el-form-item :label="t('chart.orderBy')">
+          <div class="mq-order-list">
+            <div
+              v-for="(o, idx) in orderItems"
+              :key="idx"
+              class="mq-orderby-row"
+            >
+              <el-select
+                v-model="o.col"
+                size="small"
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                :placeholder="t('chart.selectOrderByCol')"
+                style="flex: 1"
+              >
+                <el-option-group
+                  v-if="orderByMetricOptions.length > 0"
+                  :label="t('chart.orderByMetricGroup')"
+                >
+                  <el-option
+                    v-for="m in orderByMetricOptions"
+                    :key="m.name"
+                    :label="m.displayName || m.name"
+                    :value="m.name"
+                  />
+                </el-option-group>
+                <el-option-group :label="t('chart.orderByTimeGroup')">
+                  <el-option
+                    :label="orderByTimeDimOption.label"
+                    :value="orderByTimeDimOption.value"
+                  />
+                </el-option-group>
+                <el-option-group
+                  v-if="orderByDimOptions.length > 0"
+                  :label="t('chart.orderByDimGroup')"
+                >
+                  <el-option
+                    v-for="d in orderByDimOptions"
+                    :key="d.dimName"
+                    :label="d.dimDisplayName || d.dimName"
+                    :value="d.dimName"
+                  />
+                </el-option-group>
+              </el-select>
+              <el-radio-group v-model="o.desc" size="small">
+                <el-radio-button :value="false">{{ t('chart.asc') }}</el-radio-button>
+                <el-radio-button :value="true">{{ t('chart.desc') }}</el-radio-button>
+              </el-radio-group>
+              <el-button
+                size="small"
+                type="danger"
+                text
+                @click="removeOrderItem(idx)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+          </div>
+          <el-button size="small" text type="primary" @click="addOrderItem">
+            + {{ t('chart.addOrder') }}
+          </el-button>
+        </el-form-item>
+
+        <!-- 分页设置 -->
+        <el-form-item :label="t('chart.pagination')">
+          <div class="mq-pagination-row">
+            <span class="mq-pagination-label">{{ t('chart.pageSize') }}</span>
+            <el-input-number
+              v-model="pageSize"
+              :min="10"
+              :max="500"
+              :step="10"
+              controls-position="right"
+            />
+            <span class="mq-pagination-label">{{ t('chart.pageNum') }}</span>
+            <el-input-number
+              v-model="pageNum"
+              :min="1"
+              controls-position="right"
+            />
+          </div>
+        </el-form-item>
+        </section>
+      </el-form>
     </div>
 
     <!-- 底部操作栏 -->
@@ -283,9 +294,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Delete } from '@element-plus/icons-vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import type { Datasource, AloudataSyncedMetric, AloudataSyncedDimension } from '@/types'
 import * as semanticModelApi from '@/api/semantic-model'
 import * as datasourceApi from '@/api/datasource'
@@ -310,6 +322,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
+/** 表单实例 */
+const formRef = ref<FormInstance>()
+
 /** 默认每页条数 */
 const DEFAULT_PAGE_SIZE = 100
 
@@ -322,6 +337,18 @@ const localTimeRange = ref<[string, string] | null>(null)
 const timeGranularity = ref<'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year'>('day')
 const pageSize = ref(DEFAULT_PAGE_SIZE)
 const pageNum = ref(1)
+
+/** 表单数据模型（用于 el-form :model 绑定） */
+const formData = reactive({
+  datasourceId: localDatasourceId,
+  metrics: localMetrics,
+})
+
+/** 表单校验规则：数据源和指标为必填 */
+const formRules = computed<FormRules>(() => ({
+  datasourceId: [{ required: true, message: t('metricQuery.selectDatasource'), trigger: 'change' }],
+  metrics: [{ required: true, type: 'array', min: 1, message: t('metricQuery.selectMetrics'), trigger: 'change' }],
+}))
 
 /** 筛选操作符定义 */
 type FilterOp = 'in' | 'not in' | '=' | '!=' | '>' | '<' | '>=' | '<=' | 'like'
@@ -755,36 +782,117 @@ function handleClose(): void {
 </script>
 
 <style scoped>
-.metric-query-drawer :deep(.el-drawer__header) {
-  margin-bottom: 0;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--theme-border, #e5e7eb);
+/* ── 头部自定义内容（插槽元素带 scoped 属性，可正常命中） ── */
+.mq-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
 }
 
-.metric-query-drawer :deep(.el-drawer__body) {
-  padding: 0;
+.mq-header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--main-orange, #4176E6) 0%, color-mix(in srgb, var(--main-orange, #4176E6) 60%, #fff) 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--main-orange, #4176E6) 30%, transparent);
 }
 
-.mq-body {
-  padding: 20px;
+.mq-header-text {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mq-header-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--theme-text, #1a2233);
+  line-height: 1.3;
+}
+
+.mq-header-sub {
+  font-size: 11.5px;
+  color: var(--theme-text-muted, #8a94a6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 内容区 ── */
+.mq-body {
+  padding: 12px;
   overflow-y: auto;
 }
 
+/* ── 分区卡片 ── */
 .mq-section {
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-border, rgba(26, 34, 51, 0.08));
+  border-radius: 10px;
+  padding: 12px 14px 4px;
+  margin-bottom: 10px;
+}
+
+.mq-section:last-child {
+  margin-bottom: 0;
+}
+
+.mq-section-title {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mq-label {
-  font-size: 13px;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--el-text-primary);
+  color: var(--theme-text-secondary, #46536b);
+  margin-bottom: 12px;
+  letter-spacing: 0.2px;
 }
 
+.mq-section-title::before {
+  content: "";
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--main-orange, #4176E6);
+}
+
+/* ── 表单项 ── */
+.mq-body :deep(.el-form-item) {
+  margin-bottom: 12px;
+}
+
+.mq-body :deep(.el-form-item:last-child) {
+  margin-bottom: 4px;
+}
+
+.mq-body :deep(.el-form-item__label) {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-secondary, #606266);
+  padding-right: 10px;
+}
+
+.mq-body :deep(.el-form-item.is-required .el-form-item__label::before) {
+  color: var(--el-color-danger);
+}
+
+/* 字段下方提示文本（维度提示等） */
+.mq-field-hint {
+  width: 100%;
+  font-size: 11.5px;
+  color: var(--theme-text-muted, #8a94a6);
+  margin-top: 5px;
+  line-height: 1.4;
+}
+
+/* ── 下拉选项装饰 ── */
 .mq-option-extra {
   float: right;
   color: var(--theme-text-muted, #999);
@@ -794,63 +902,87 @@ function handleClose(): void {
 .mq-option-tag {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 4px;
+  padding: 0 5px;
   font-size: 10px;
   line-height: 16px;
-  border-radius: 3px;
-  background: var(--main-orange, #4176E6);
-  color: #fff;
-  opacity: 0.8;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--main-orange, #4176E6) 14%, transparent);
+  color: var(--main-orange, #4176E6);
 }
 
-.mq-filter-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.mq-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
+/* ── 筛选 / 排序行 ── */
+.mq-filter-list,
 .mq-order-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
 }
 
+.mq-filter-row,
 .mq-orderby-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
+/* ── 分页行 ── */
 .mq-pagination-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.mq-pagination-row :deep(.el-input-number) {
+  width: 90px;
 }
 
 .mq-pagination-label {
   font-size: 13px;
-  color: var(--el-text-secondary);
+  color: var(--theme-text-secondary, #909399);
   white-space: nowrap;
 }
 
-.mq-dim-tip {
-  font-size: 12px;
-  color: var(--el-text-secondary);
-  margin-top: 4px;
-}
-
+/* ── 底部操作栏内容 ── */
 .mq-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 10px 16px;
+}
+</style>
+
+<style>
+/* el-drawer teleport 到 body，scoped 选择器无法命中其内部节点，
+   故用非 scoped 块 + 自定义类名限定作用域 */
+.metric-query-drawer {
+  --el-color-primary: var(--main-orange, #4176E6);
+  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176E6) 70%, var(--theme-surface, #fff));
+  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176E6) 50%, var(--theme-surface, #fff));
+  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176E6) 30%, var(--theme-surface, #fff));
+  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176E6) 20%, var(--theme-surface, #fff));
+  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176E6) 10%, var(--theme-surface, #fff));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176E6) 85%, #000);
+  background: var(--theme-bg, #f6f8fb);
+}
+
+.metric-query-drawer .el-drawer__header {
+  margin-bottom: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-border, #e5e7eb);
+  background: var(--theme-surface, #fff);
+}
+
+.metric-query-drawer .el-drawer__body {
+  padding: 0;
+  background: var(--theme-bg, #f6f8fb);
+}
+
+.metric-query-drawer .el-drawer__footer {
+  padding: 0;
   border-top: 1px solid var(--theme-border, #e5e7eb);
+  background: var(--theme-surface, #fff);
 }
 </style>

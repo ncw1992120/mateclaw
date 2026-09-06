@@ -107,6 +107,7 @@ export default {
     planFailed: '已失败',
     planStatusCompleted: '已完成',
     planStatusFailed: '已失败',
+    planStatusStopped: '已中断',
     subagentAsync: '异步委派，后台运行中',
     subagentStalled: '子 Agent 长时间无进展',
     toolExecution: '工具执行',
@@ -172,6 +173,11 @@ export default {
   },
   metricQuery: {
     title: '快捷提问',
+    subtitle: '选择数据源与指标，快速构建数据查询',
+    sectionData: '数据设置',
+    sectionTime: '时间与维度',
+    sectionFilter: '筛选与排序',
+    dimHint: '已自动包含时间维度，此处仅需添加其他业务维度',
     datasource: '数据源',
     selectDatasource: '请选择数据源',
     metrics: '指标',
@@ -461,6 +467,12 @@ export default {
     accountSaveBtn: '保存',
     accountTestOk: '连接成功',
     accountTestFail: '连接失败',
+  },
+  browseDrawer: {
+    subtitle: '浏览该数据源下的指标与维度',
+  },
+  reportDrawer: {
+    subtitle: 'AI 生成的数据分析报告',
   },
   metricPlatform: {
     sectionTitle: '指标平台连接',
@@ -1880,6 +1892,9 @@ export default {
     reportUnsubscribeSuccess: '已取消订阅',
     reportSubscribeFailed: '操作失败',
     reportSearchPlaceholder: '搜索报告名称、描述、所有者…',
+    reportSearchNoResult: '未找到匹配的报告',
+    reportResultCount: '共 {n} 份报告',
+    reportListSubtitle: 'AI 自动生成的数据分析报告，支持查看、下载与订阅管理',
     reportViewDetail: '查看',
     reportDelete: '删除',
     reportDeleteConfirm: '确定要删除报告「{name}」吗？',
