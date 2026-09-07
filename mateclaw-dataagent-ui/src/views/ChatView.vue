@@ -54,8 +54,9 @@
         <div class="header-spacer"></div>
         <span class="dataset-count">{{ datasetCountText }}</span>
       </div>
-    <!-- Chat Area -->
+    <!-- 聊天区：全宽滚动容器（滚动条贴页面最右缘）；内容经内层包裹维持原 820px 居中列 -->
     <div ref="chatAreaRef" class="chat-area">
+      <div class="chat-area-inner">
       <!-- Empty State -->
       <div v-if="chatStore.messages.length === 0" class="empty-state">
         <div class="empty-hero">
@@ -157,6 +158,12 @@
                   type="button"
                   @click="toggleExecutionProcessExpand(index)"
                 >
+                  <span v-if="isStreamingLastMessage(index)" class="streaming-spinner streaming-spinner--sm" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="2" opacity="0.25" />
+                      <path d="M14.5 8a6.5 6.5 0 0 0-6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                  </span>
                   <span class="seg-execution__label">{{ t('chat.executionProcess') }}</span>
                   <span class="seg-execution__count">{{ getExecutionProcessSummary(msg) }}</span>
                   <span
@@ -205,9 +212,9 @@
                         </Transition>
                       </div>
 
-                      <!-- tool_call 类型（运行过程中不展示，运行结束、用户手动展开执行过程时可见） -->
+                      <!-- tool_call 类型：流式期间即展示（running 旋转态），与结束后展示一致，避免结束时整行突现 -->
                       <div
-                        v-else-if="seg.type === 'tool_call' && !isStreamingLastMessage(index)"
+                        v-else-if="seg.type === 'tool_call'"
                         class="seg-tool"
                         :class="{
                           'is-running': seg.status === 'running',
@@ -334,12 +341,17 @@
                 <button v-if="msg.errorInfo.retryable" class="msg-error__retry" type="button" @click="handleRegenerate(index)">{{ t('chat.regenerate') }}</button>
               </div>
 
-              <!-- Streaming cursor -->
+              <!-- 流式状态：思考中（当前消息尚无首段内容时显示，旋转弧指示器） -->
               <span
                 v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && !msg.content && !hasExecutionProcess(msg) && !getPlanMeta(msg)"
                 class="streaming-cursor-wrap"
               >
-                <span class="typing-dots"><i /><i /><i /></span>
+                <span class="streaming-spinner" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="2" opacity="0.25" />
+                    <path d="M14.5 8a6.5 6.5 0 0 0-6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </span>
                 <span class="streaming-cursor__label">{{ t('chat.thinking') }}</span>
               </span>
 
@@ -349,6 +361,20 @@
                 {{ t('chat.datasourceSource') }}：
                 <span v-for="dsId in msg.datasourceIds" :key="dsId" class="chip">{{ getDatasourceName(dsId) }}</span>
               </div>
+
+              <!-- 流式状态：生成中（随末条消息正文末尾显示，不再占用独立消息行） -->
+              <span
+                v-if="chatStore.isStreaming && index === chatStore.messages.length - 1 && msg.content"
+                class="streaming-generating"
+              >
+                <span class="streaming-spinner streaming-spinner--sm" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="2" opacity="0.25" />
+                    <path d="M14.5 8a6.5 6.5 0 0 0-6.5-6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  </svg>
+                </span>
+                <span class="streaming-generating__label">{{ t('chat.generating') }}</span>
+              </span>
             </div>
             <!-- AI 消息操作栏（气泡外右下角） -->
             <div class="msg-actions msg-actions--ai">
@@ -514,15 +540,6 @@
         </template>
       </template>
 
-      <!-- Streaming cursor at end (inline text cursor after content) -->
-      <div
-        v-if="chatStore.isStreaming && chatStore.messages.length > 0 && chatStore.messages[chatStore.messages.length - 1]?.content"
-        class="msg ai"
-      >
-        <span class="streaming-cursor-end">
-          <span class="typing-dots typing-dots--sm"><i /><i /><i /></span>
-          <span class="streaming-cursor-end__label">{{ t('chat.generating') }}</span>
-        </span>
       </div>
       </div>
 
@@ -1808,22 +1825,10 @@ const expandedTools = reactive<Set<number>>(new Set())
 /** 中间叙述（content segment）展开状态，key = `${msgIndex}-${segIdx}` */
 const expandedNarrations = ref<Set<string>>(new Set())
 
-/** "执行过程"卡片展开状态，key = `${msgIndex}` */
+/** "执行过程"卡片展开状态，key = `${msgIndex}`。
+ * 流式期间与结束后共用这一套状态源：默认收起，用户手动展开才入集。
+ * 因默认值与状态源在流结束边界两侧一致，结束点无状态反转，无需冻结逻辑。 */
 const expandedExecutionProcesses = ref<Set<number>>(new Set())
-
-/** 流式运行期间用户手动折叠的执行过程（key = msgIndex），本次流式内不再自动展开 */
-const runCollapsedExecutionProcesses = ref<Set<number>>(new Set())
-
-/** 流式运行期间用户手动折叠的中间叙述（key = `${msgIndex}-${segIdx}`） */
-const runCollapsedNarrations = ref<Set<string>>(new Set())
-
-// 新一轮运行开始时清空上一轮的手动折叠记录，保证执行过程/思考过程再次自动展开
-watch(() => chatStore.isStreaming, (streaming) => {
-  if (streaming) {
-    runCollapsedExecutionProcesses.value = new Set()
-    runCollapsedNarrations.value = new Set()
-  }
-})
 
 /** 图表实例映射 */
 const chartInstances = new Map<string, echarts.ECharts>()
@@ -2069,46 +2074,28 @@ function getFinalAnswer(msg: typeof chatStore.messages.value[0]): string {
   return msg.content || ''
 }
 
-/** 展开/收起"执行过程"卡片 */
+/** 展开/收起"执行过程"卡片：流式期间默认收起，手动展开的状态在流结束后保持 */
 function toggleExecutionProcessExpand(msgIdx: number): void {
-  if (isExecutionProcessExpanded(msgIdx)) {
+  if (expandedExecutionProcesses.value.has(msgIdx)) {
     expandedExecutionProcesses.value.delete(msgIdx)
-    if (isStreamingLastMessage(msgIdx)) {
-      // 运行过程中手动折叠：本次流式内不再自动展开
-      runCollapsedExecutionProcesses.value.add(msgIdx)
-    }
   } else {
     expandedExecutionProcesses.value.add(msgIdx)
-    if (isStreamingLastMessage(msgIdx)) {
-      runCollapsedExecutionProcesses.value.delete(msgIdx)
-    }
   }
 }
 
 /**
  * 判断"执行过程"卡片是否处于展开状态：
- * 运行过程中自动展开以实时展示思考过程；运行结束后自动折叠（仅展示最终答案），
- * 用户手动展开过的消息保持展开。
+ * 运行过程中默认收起（仅头部摘要+实时计数+旋转指示，避免执行细节持续撑高消息布局）；
+ * 用户手动展开记入同一集合，运行结束后保持展开；历史消息默认折叠。
+ * 默认值与状态源在流结束边界两侧一致，结束点无跳变。
  */
 function isExecutionProcessExpanded(msgIdx: number): boolean {
-  if (isStreamingLastMessage(msgIdx)) {
-    return !runCollapsedExecutionProcesses.value.has(msgIdx)
-  }
   return expandedExecutionProcesses.value.has(msgIdx)
 }
 
 /** 展开/收起某条中间叙述。key 形如 `${msgIndex}-${segIdx}`，跨消息独立。 */
 function toggleNarrationExpand(msgIdx: number, segIdx: number): void {
   const key = `${msgIdx}-${segIdx}`
-  if (isStreamingLastMessage(msgIdx)) {
-    // 运行过程中思考段默认展开，手动切换只影响本次流式期间
-    if (runCollapsedNarrations.value.has(key)) {
-      runCollapsedNarrations.value.delete(key)
-    } else {
-      runCollapsedNarrations.value.add(key)
-    }
-    return
-  }
   if (expandedNarrations.value.has(key)) {
     expandedNarrations.value.delete(key)
   } else {
@@ -2118,13 +2105,11 @@ function toggleNarrationExpand(msgIdx: number, segIdx: number): void {
 
 /**
  * 判断某条中间叙述是否处于展开状态：
- * 运行过程中默认展开以实时展示思考过程；运行结束后默认折叠。
+ * 运行过程中默认收起，与执行过程卡片同一套"默认收起 + 手动展开入集"规则；
+ * 手动展开的状态在流结束后保持；历史消息默认折叠。
  */
 function isNarrationExpanded(msgIdx: number, segIdx: number): boolean {
   const key = `${msgIdx}-${segIdx}`
-  if (isStreamingLastMessage(msgIdx)) {
-    return !runCollapsedNarrations.value.has(key)
-  }
   return expandedNarrations.value.has(key)
 }
 
@@ -5049,17 +5034,24 @@ onUnmounted(() => {
   display: block;
 }
 
+/* 滚动容器：全宽，滚动条贴页面最右缘；原 820px 居中列移入内层包裹 */
 .chat-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  width: 100%;
+}
+
+/* 内容包裹：维持原 820px 居中列宽；min-height:100% 使空态仍整高垂直居中 */
+.chat-area-inner {
+  max-width: 820px;
+  width: 100%;
+  margin: 0 auto;
+  min-height: 100%;
   padding: 10px 24px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 820px;
-  width: 100%;
-  margin: 0 auto;
 }
 
 /* ===== Empty State — 数据智能体欢迎页 ===== */
@@ -5551,25 +5543,26 @@ onUnmounted(() => {
   padding: 4px 0;
 }
 
-/* 三点跳动动画（思考中 / 生成中通用） */
-.typing-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* 旋转弧指示器（思考中 / 生成中通用）：淡底整环 + 旋转弧段 */
+.streaming-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--main-orange);
+  animation: spinnerRotate 0.9s linear infinite;
 }
-.typing-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--main-orange);
-  animation: dotBounce 1.2s ease-in-out infinite;
+.streaming-spinner--sm {
+  width: 12px;
+  height: 12px;
 }
-.typing-dots i:nth-child(2) { animation-delay: 0.15s; }
-.typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+.streaming-spinner svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
-@keyframes dotBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-5px); opacity: 1; }
+@keyframes spinnerRotate {
+  to { transform: rotate(360deg); }
 }
 
 .streaming-cursor__label {
@@ -5577,27 +5570,17 @@ onUnmounted(() => {
   color: var(--theme-text-secondary);
 }
 
-.streaming-cursor-end {
+/* 生成中指示：随末条消息正文末尾显示（替代旧的独立消息行） */
+.streaming-generating {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-left: 36px;
-  padding: 4px 0;
+  padding: 6px 0 2px;
 }
 
-.typing-dots--sm i {
-  width: 5px;
-  height: 5px;
-}
-
-.streaming-cursor-end__label {
+.streaming-generating__label {
   font-size: 12px;
   color: var(--theme-text-muted);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
 }
 
 /* QueryPlan */
@@ -7670,25 +7653,17 @@ onUnmounted(() => {
   border-top: none;
 }
 
-/* seg-slide transition (Vue Transition) */
+/* seg-slide transition (Vue Transition)
+   仅做透明度淡入淡出：不用 max-height 高度动画——展开动画期间内容逐帧增长会被
+   固定上限裁剪产生闪烁，且结束时的折叠高度动画正是页面抖动的来源 */
 .seg-slide-enter-active,
 .seg-slide-leave-active {
-  transition: all 0.25s ease;
-  overflow: hidden;
+  transition: opacity 0.18s ease;
 }
 
 .seg-slide-enter-from,
 .seg-slide-leave-to {
   opacity: 0;
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.seg-slide-enter-to,
-.seg-slide-leave-from {
-  opacity: 1;
-  max-height: 600px;
 }
 
 /* 附件预览区 */

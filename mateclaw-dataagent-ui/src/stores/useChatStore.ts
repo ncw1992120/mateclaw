@@ -963,6 +963,17 @@ export const useChatStore = defineStore('chat', () => {
 
       if (!streamFinished && !isBackground) {
         clearReconnectState()
+        // 流自然结束但后端未发出 done/error 等终止事件（如模型服务商限流重试耗尽后
+        // 零事件关流）：assistant 消息仍为 status='streaming' 且无任何内容/段落，
+        // finally 安全网会把它标成 completed，渲染为空白气泡，用户无法感知失败。
+        // 这里标记 failed 并附可重试 errorInfo，与 msg-error 结构化错误同形态展示。
+        const ownMsg = targetMsgs[assistantIdx]
+        const ownSegs = ownMsg?.metadata?.segments as Array<Record<string, unknown>> | undefined
+        if (ownMsg?.role === 'assistant' && ownMsg.status === 'streaming'
+            && !ownMsg.content && (!ownSegs || ownSegs.length === 0)) {
+          ownMsg.status = 'failed'
+          ownMsg.errorInfo = { category: 'unknown', rawMessage: '生成失败，请稍后重试', retryable: true, timestamp: Date.now() }
+        }
       }
 
       if (isNewConversation) {
