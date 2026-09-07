@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
@@ -292,7 +293,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         List<DatasetFieldVO> fields = listFields(datasetId);
         int rowNum = 0;
         try (Connection conn = DriverManager.getConnection(
-                JdbcUtils.buildJdbcUrl(dsEntity), dsEntity.getUsername(), dsEntity.getPassword())) {
+                JdbcUtils.buildJdbcUrl(dsEntity), dsEntity.getUsername(),
+                AesPasswordCryptor.decrypt(dsEntity.getPassword()))) {
             List<Map<String, Object>> sourceRows = queryAllTableData(conn, dsEntity, firstTable, fields);
             for (Map<String, Object> row : sourceRows) {
                 DatasetDataEntity dataEntity = new DatasetDataEntity();

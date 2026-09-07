@@ -7,6 +7,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.tool.builtin.ToolExecutionContext;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
@@ -300,7 +301,8 @@ public class DatasourceQueryTool {
             return error("当前用户未绑定数据源查询账号，请先在数据源页面配置查询账号后再执行查询");
         }
         String queryUsername = account.getQueryUsername();
-        String queryPassword = account.getQueryPassword();
+        // decrypt 幂等兜底，保证 JDBC 只读查询使用明文密码
+        String queryPassword = AesPasswordCryptor.decrypt(account.getQueryPassword());
         log.info("用户 {} 使用自定义查询账号连接数据源 {}", currentUserId, datasourceId);
 
         String jdbcUrl = JdbcUtils.buildJdbcUrl(entity);

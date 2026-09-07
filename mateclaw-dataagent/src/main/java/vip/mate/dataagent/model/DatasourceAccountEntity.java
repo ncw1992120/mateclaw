@@ -2,6 +2,7 @@ package vip.mate.dataagent.model;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import vip.mate.dataagent.auth.crypto.AesPasswordTypeHandler;
 
 import java.time.LocalDateTime;
 
@@ -12,7 +13,7 @@ import java.time.LocalDateTime;
  * 查询时优先使用用户自己的查询账号，而非数据源的管理员同步账号。
  */
 @Data
-@TableName("dataagent_datasource_account")
+@TableName(value = "dataagent_datasource_account", autoResultMap = true)
 public class DatasourceAccountEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
@@ -30,7 +31,8 @@ public class DatasourceAccountEntity {
     /** 查询用户名 */
     private String queryUsername;
 
-    /** 查询密码（AES 加密存储） */
+    /** 查询密码（AES-256-GCM 加密存储，读写由 AesPasswordTypeHandler 自动加解密） */
+    @TableField(typeHandler = AesPasswordTypeHandler.class)
     private String queryPassword;
 
     /** 状态：0-停用 / 1-启用 */

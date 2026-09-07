@@ -2,6 +2,7 @@ package vip.mate.dataagent.model;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import vip.mate.dataagent.auth.crypto.AesPasswordTypeHandler;
 
 import java.time.LocalDateTime;
 
@@ -11,7 +12,7 @@ import java.time.LocalDateTime;
  * 支持关系型数据库、数据仓库、OLAP引擎、NoSQL、文件系统、API接口、消息队列等多源异构接入。
  */
 @Data
-@TableName("dataagent_datasource")
+@TableName(value = "dataagent_datasource", autoResultMap = true)
 public class DatasourceEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
@@ -50,7 +51,8 @@ public class DatasourceEntity {
     /** 用户名 */
     private String username;
 
-    /** 密码（AES 加密存储） */
+    /** 密码（AES-256-GCM 加密存储，读写由 AesPasswordTypeHandler 自动加解密） */
+    @TableField(typeHandler = AesPasswordTypeHandler.class)
     private String password;
 
     /** 连接参数（JSON 格式，存放额外配置） */

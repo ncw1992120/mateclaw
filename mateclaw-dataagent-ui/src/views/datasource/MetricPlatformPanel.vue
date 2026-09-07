@@ -565,6 +565,7 @@ import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import CronExpressionField from '@/components/CronExpressionField.vue'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { AloudataCategoryCount, Datasource } from '@/types'
+import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 import { storeToRefs } from 'pinia'
 
 const { t } = useI18n()
@@ -1236,9 +1237,9 @@ async function handleSave(): Promise<void> {
         payload.aloudataSyncEnabled = form.aloudataSyncEnabled
         payload.aloudataSyncCron = form.aloudataSyncEnabled ? form.aloudataSyncCron : ''
       }
-      // 仅当用户填写了新认证值时才提交，留空表示不修改密码
+      // 仅当用户填写了新认证值时才提交，留空表示不修改密码；认证值做 RSA-OAEP 传输加密
       if (form.authValue && form.authValue.trim()) {
-        payload.password = form.authValue
+        payload.password = await encryptSensitiveField(form.authValue)
       }
       const updated = await datasourceApi.update(props.datasourceId, payload as never)
       // 用接口返回的最新数据回填表单，保证与服务端一致

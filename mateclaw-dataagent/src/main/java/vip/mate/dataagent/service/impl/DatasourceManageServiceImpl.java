@@ -9,6 +9,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
+import vip.mate.dataagent.auth.crypto.TransportCryptoService;
 import vip.mate.dataagent.auth.service.PermissionChecker;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
@@ -47,6 +49,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     private final AloudataConfigHelper aloudataConfigHelper;
     private final PermissionChecker permissionChecker;
     private final WorkspaceGuard workspaceGuard;
+    private final TransportCryptoService transportCryptoService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -284,6 +287,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Transactional(rollbackFor = Exception.class)
     public DatasourceVO createDatasource(DatasourceCreateRequest request) {
         DatasourceEntity entity = new DatasourceEntity();
+        request.setPassword(unwrapPassword(request.getPassword()));
         BeanUtils.copyProperties(request, entity);
         entity.setSchemaStatus("pending");
         entity.setDeleted(0);
@@ -305,6 +309,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Transactional(rollbackFor = Exception.class)
     public DatasourceVO createDatasource(DatasourceCreateRequest request, Long ownerId) {
         DatasourceEntity entity = new DatasourceEntity();
+        request.setPassword(unwrapPassword(request.getPassword()));
         BeanUtils.copyProperties(request, entity);
         entity.setOwnerId(ownerId);
         // 元数据共享：显式传入优先，否则默认 false
@@ -361,7 +366,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             entity.setUsername(request.getUsername());
         }
         if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-            entity.setPassword(request.getPassword());
+            entity.setPassword(unwrapPassword(request.getPassword()));
         }
         if (request.getConnectionParams() != null) {
             entity.setConnectionParams(request.getConnectionParams());
@@ -453,6 +458,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
     @Override
     public boolean testConnectionByParams(DatasourceCreateRequest request) {
         DatasourceEntity entity = new DatasourceEntity();
+        request.setPassword(unwrapPassword(request.getPassword()));
         BeanUtils.copyProperties(request, entity);
         return doTestConnection(entity);
     }
@@ -607,7 +613,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         TableDataPreviewVO vo = new TableDataPreviewVO();
         String jdbcUrl = buildJdbcUrl(datasourceEntity);
         try (Connection conn = DriverManager.getConnection(
-                jdbcUrl, datasourceEntity.getUsername(), datasourceEntity.getPassword())) {
+                jdbcUrl, datasourceEntity.getUsername(), decryptPassword(datasourceEntity.getPassword()))) {
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SELECT * FROM `" + tableName + "` LIMIT " + limit)) {
                 ResultSetMetaData metaData = rs.getMetaData();
@@ -684,7 +690,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         try {
             String jdbcUrl = buildJdbcUrl(entity);
             Connection conn = DriverManager.getConnection(
-                    jdbcUrl, entity.getUsername(), entity.getPassword());
+                    jdbcUrl, entity.getUsername(), decryptPassword(entity.getPassword()));
             conn.close();
             return true;
         } catch (SQLException e) {
@@ -786,7 +792,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         }
         cleanSchemaData(entity.getId());
         try (Connection conn = DriverManager.getConnection(
-                buildJdbcUrl(entity), entity.getUsername(), entity.getPassword())) {
+                buildJdbcUrl(entity), entity.getUsername(), decryptPassword(entity.getPassword()))) {
             DatabaseMetaData meta = conn.getMetaData();
             ResultSet tablesRs = meta.getTables(catalog, schemaPattern, "%", new String[]{"TABLE", "VIEW"});
             while (tablesRs.next()) {
@@ -884,7 +890,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         datasourceColumnMapper.delete(colWrapper);
         // 重新获取字段信息并插入
         try (Connection conn = DriverManager.getConnection(
-                buildJdbcUrl(datasourceEntity), datasourceEntity.getUsername(), datasourceEntity.getPassword())) {
+                buildJdbcUrl(datasourceEntity), datasourceEntity.getUsername(),
+                decryptPassword(datasourceEntity.getPassword()))) {
             DatabaseMetaData meta = conn.getMetaData();
             // 发现字段
             ResultSet colsRs = meta.getColumns(catalog, schemaPattern, tableName, "%");
@@ -965,7 +972,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
                 .max().orElse(0);
         // 重新发现字段信息，只插入不存在的字段
         try (Connection conn = DriverManager.getConnection(
-                buildJdbcUrl(datasourceEntity), datasourceEntity.getUsername(), datasourceEntity.getPassword())) {
+                buildJdbcUrl(datasourceEntity), datasourceEntity.getUsername(),
+                decryptPassword(datasourceEntity.getPassword()))) {
             DatabaseMetaData meta = conn.getMetaData();
             ResultSet colsRs = meta.getColumns(catalog, schemaPattern, tableName, "%");
             int ordinal = maxOrdinal + 1;
@@ -1196,6 +1204,33 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
             vo.setUpdateTime(entity.getUpdateTime().toString());
         }
         return vo;
+    }
+
+    /**
+     * 解密前端 RSA-OAEP 传输信封中的密码明文。
+     * <p>
+     * 空值（未填写）返回 null 表示不修改；非空值视为加密信封并解包，
+     * 解包失败由 TransportCryptoService 抛出格式异常。
+     *
+     * @param encrypted 前端加密信封（可能为 null / 空串）
+     * @return 明文密码，未填写时返回 null
+     */
+    private String unwrapPassword(String encrypted) {
+        if (encrypted == null || encrypted.isEmpty()) {
+            return null;
+        }
+        return transportCryptoService.unwrapField(encrypted);
+    }
+
+    /**
+     * 密码解密兜底：decrypt 幂等，密文解为明文、明文（TypeHandler 已解密）原样返回，
+     * 保证 JDBC 连接/测试等消费点不受实体查询 TypeHandler 是否生效的影响。
+     *
+     * @param raw 数据库读取的密码（可能为密文，也可能是已解密明文）
+     * @return 明文密码
+     */
+    private String decryptPassword(String raw) {
+        return AesPasswordCryptor.decrypt(raw);
     }
 
 }

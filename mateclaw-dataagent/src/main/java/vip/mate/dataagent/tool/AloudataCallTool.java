@@ -86,6 +86,13 @@ public class AloudataCallTool {
     /** 指标查询端点名，需要 ECharts 图表生成等增值逻辑 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
 
+    /**
+     * 认证头参数键集合（HEADER 位置的敏感参数，来自 Aloudata API 参数规范）。
+     * 持久化请求快照（request_json）前必须剔除，防止明文认证值（auth-value 即密码）落库。
+     */
+    private static final Set<String> SENSITIVE_HEADER_PARAM_KEYS = Set.of(
+            "tenant-id", "auth-type", "auth-value", "query-user-account");
+
     /** 术语检索工具名 */
     private static final String SEARCH_BUSINESS_TERM_TOOL_NAME = "search_business_term";
 
@@ -3162,11 +3169,30 @@ public class AloudataCallTool {
             state.setFilters(toJsonOrNull(params.get("filters")));
             state.setOrders(toJsonOrNull(params.get("orders")));
             state.setMetricDisplayMap(buildMetricDisplayMap(datasourceId, params));
-            state.setRequestJson(toJsonOrNull(params));
+            // 安全：params 携带认证头（auth-value 即密码明文），落库前必须剔除敏感键
+            state.setRequestJson(toJsonOrNull(sanitizeSensitiveParams(params)));
             queryStateService.upsert(state);
         } catch (Exception e) {
             log.debug("查询基座持久化失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 构建剔除认证头参数后的请求副本（不修改原始 params）。
+     * <p>
+     * params 由 {@code buildParamsFromConfigAndInput} 合并了 HEADER 型认证参数
+     * （含 auth-value 密码），直接序列化会把明文密码写入 dataagent_query_state.request_json。
+     *
+     * @param params 原始请求参数
+     * @return 不含敏感认证头的副本；入参为 null 时返回 null
+     */
+    private Map<String, Object> sanitizeSensitiveParams(Map<String, Object> params) {
+        if (params == null) {
+            return null;
+        }
+        Map<String, Object> sanitized = new LinkedHashMap<>(params);
+        SENSITIVE_HEADER_PARAM_KEYS.forEach(sanitized::remove);
+        return sanitized;
     }
 
     /**
