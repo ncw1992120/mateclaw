@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
+import vip.mate.dataagent.auth.crypto.TransportCryptoService;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.dto.DatasourceAccountRequest;
@@ -41,16 +43,19 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     /** @Lazy 打破与 AloudataServiceImpl 的循环依赖 */
     private final AloudataService aloudataService;
     private final AloudataConfigHelper aloudataConfigHelper;
+    private final TransportCryptoService transportCryptoService;
 
     public DatasourceAccountServiceImpl(
             DatasourceAccountMapper datasourceAccountMapper,
             DatasourceMapper datasourceMapper,
             @Lazy AloudataService aloudataService,
-            AloudataConfigHelper aloudataConfigHelper) {
+            AloudataConfigHelper aloudataConfigHelper,
+            TransportCryptoService transportCryptoService) {
         this.datasourceAccountMapper = datasourceAccountMapper;
         this.datasourceMapper = datasourceMapper;
         this.aloudataService = aloudataService;
         this.aloudataConfigHelper = aloudataConfigHelper;
+        this.transportCryptoService = transportCryptoService;
     }
 
     /**
@@ -76,7 +81,8 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
         if (account == null || account.getStatus() == null || account.getStatus() != 1) {
             return null;
         }
-        return account.getQueryPassword();
+        // decrypt 幂等兜底：TypeHandler 已解密时为明文原样返回，旧构建/脏数据时为密文则解为明文
+        return AesPasswordCryptor.decrypt(account.getQueryPassword());
     }
 
     /**
@@ -104,7 +110,10 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
         DatasourceAccountEntity existing = getByDatasourceIdAndUserId(request.getDatasourceId(), userId);
         if (existing != null) {
             existing.setQueryUsername(request.getQueryUsername());
-            existing.setQueryPassword(request.getQueryPassword());
+            // 密码仅在显式提供非空值时更新，空值忽略以保留已存密码
+            if (request.getQueryPassword() != null && !request.getQueryPassword().isEmpty()) {
+                existing.setQueryPassword(unwrapQueryPassword(request.getQueryPassword()));
+            }
             existing.setStatus(1);
             datasourceAccountMapper.updateById(existing);
             return toVO(existing);
@@ -115,7 +124,7 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
         entity.setWorkspaceId(datasource.getWorkspaceId());
         entity.setUserId(userId);
         entity.setQueryUsername(request.getQueryUsername());
-        entity.setQueryPassword(request.getQueryPassword());
+        entity.setQueryPassword(unwrapQueryPassword(request.getQueryPassword()));
         entity.setStatus(1);
         entity.setDeleted(0);
         datasourceAccountMapper.insert(entity);
@@ -160,7 +169,7 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
             // 临时测试：使用传入的参数，不查询数据库，不持久化
             DatasourceAccountEntity tempAccount = new DatasourceAccountEntity();
             tempAccount.setQueryUsername(request.getQueryUsername());
-            tempAccount.setQueryPassword(request.getQueryPassword());
+            tempAccount.setQueryPassword(unwrapQueryPassword(request.getQueryPassword()));
             if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(datasource.getSourceType())) {
                 ok = testAloudataAccountConnection(datasource, tempAccount);
             } else {
@@ -197,8 +206,8 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     private boolean testAloudataAccountConnection(DatasourceEntity datasource, DatasourceAccountEntity account) {
         try {
             AloudataConfigDTO config = aloudataConfigHelper.parseConfig(datasource);
-            // 覆盖为用户自己的 auth-value（存于 queryPassword 字段）
-            config.setAuthValue(account.getQueryPassword());
+            // 覆盖为用户自己的 auth-value（存于 queryPassword 字段）；decrypt 幂等兜底保证明文
+            config.setAuthValue(AesPasswordCryptor.decrypt(account.getQueryPassword()));
             return aloudataService.testConnection(config);
         } catch (Exception e) {
             log.warn("Aloudata 查询账号连接测试失败: datasourceId={}, userId={}, error={}",
@@ -220,10 +229,12 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
         tempEntity.setDatabaseName(datasource.getDatabaseName());
         tempEntity.setSchemaName(datasource.getSchemaName());
         tempEntity.setUsername(account.getQueryUsername());
-        tempEntity.setPassword(account.getQueryPassword());
+        // decrypt 幂等兜底，保证 JDBC 账号测试使用明文密码
+        String queryPassword = AesPasswordCryptor.decrypt(account.getQueryPassword());
+        tempEntity.setPassword(queryPassword);
 
         String jdbcUrl = JdbcUtils.buildJdbcUrl(tempEntity);
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, account.getQueryUsername(), account.getQueryPassword())) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, account.getQueryUsername(), queryPassword)) {
             return true;
         } catch (Exception e) {
             log.warn("JDBC 查询账号连接测试失败: datasourceId={}, userId={}, error={}",
@@ -262,5 +273,21 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
             return null;
         }
         return time.format(FORMATTER);
+    }
+
+    /**
+     * 解密前端 RSA-OAEP 传输信封中的查询密码明文。
+     * <p>
+     * 空值（未填写）返回 null；非空值视为加密信封并解包，
+     * 解包失败由 TransportCryptoService 抛出格式异常。
+     *
+     * @param encrypted 前端加密信封（可能为 null / 空串）
+     * @return 明文查询密码，未填写时返回 null
+     */
+    private String unwrapQueryPassword(String encrypted) {
+        if (encrypted == null || encrypted.isEmpty()) {
+            return null;
+        }
+        return transportCryptoService.unwrapField(encrypted);
     }
 }

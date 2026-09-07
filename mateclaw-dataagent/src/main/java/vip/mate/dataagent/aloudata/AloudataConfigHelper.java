@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.model.DatasourceEntity;
 
@@ -68,9 +69,11 @@ public class AloudataConfigHelper {
         config.setAnymetricsHost(firstNonBlank(anymetricsHost, entity.getProductHost(), entity.getHost()));
         config.setSemanticHost(firstNonBlank(semanticHost, entity.getSemanticHost(), entity.getHost()));
 
-        // username 字段存储租户ID，password 字段存储认证值
+        // username 字段存储租户ID，password 字段存储认证值；decrypt 幂等兜底：
+        // TypeHandler 已解密时为明文原样返回，旧构建/脏数据时为密文则解为明文，
+        // 保证 Aloudata 调用方（含指标查询）拿到的 auth-value 必为明文
         config.setTenantId(entity.getUsername());
-        config.setAuthValue(entity.getPassword());
+        config.setAuthValue(AesPasswordCryptor.decrypt(entity.getPassword()));
         return config;
     }
 

@@ -3,6 +3,7 @@ package vip.mate.dataagent.auth.enterprise;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -135,10 +136,12 @@ public class PilotIdentityProvider implements EnterpriseIdentityProvider {
         // 领航线上的报文字段名为 authnType，取值为 UM/AD
         body.put("authnType", effectiveAuthnType);
         body.put("lifeTime", properties.getLifeTime());
-        Map<String, Object> additionalInfo = new LinkedHashMap<>();
-        additionalInfo.put("requestId", requestId);
-        additionalInfo.put("validCode", validCode);
-        body.put("additionalInfo", additionalInfo);
+        if (StringUtils.isNotBlank(requestId) && StringUtils.isNotBlank(validCode)) {
+            Map<String, Object> additionalInfo = new LinkedHashMap<>();
+            additionalInfo.put("requestId", requestId);
+            additionalInfo.put("validCode", validCode);
+            body.put("additionalInfo", additionalInfo);
+        }
 
         log.info("[PilotAuth] auth attempt for account [{}] with authnType [{}]", username, effectiveAuthnType);
         JsonNode root = postForJson("auth", properties.getAuthServer(), body);

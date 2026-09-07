@@ -321,6 +321,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
+import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 
 const props = withDefaults(defineProps<{
   sourceId?: number
@@ -556,8 +557,8 @@ function handleCancel(): void {
   emit('back')
 }
 
-/** 构建请求参数（兼容创建和更新） */
-function buildCreateRequest() {
+/** 构建请求参数（兼容创建和更新）；密码/认证值做 RSA-OAEP 传输加密 */
+async function buildCreateRequest() {
   const sourceTypeMap: Record<number, string> = {
     3: 'mysql',
     15: 'postgresql',
@@ -578,7 +579,8 @@ function buildCreateRequest() {
   // 编辑模式：密码/认证值留空表示不修改；新建模式需在前端校验中保证已填写
   const pwd = isAloudata ? form.authValue : form.password
   if (pwd && pwd.trim()) {
-    request.password = pwd
+    // 传输加密：后端 RSA-OAEP 解密后由 TypeHandler AES 存储加密
+    request.password = await encryptSensitiveField(pwd)
   }
   // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {
@@ -617,7 +619,7 @@ async function handleTestConnection(): Promise<void> {
       result = await datasourceApi.testConnection(testId)
     } else {
       // 新建模式：仅做连通性测试，不创建数据源记录
-      const request = buildCreateRequest()
+      const request = await buildCreateRequest()
       result = await datasourceApi.testConnectionApi(request)
     }
     if (result) {
@@ -647,7 +649,7 @@ async function handleSubmit(): Promise<void> {
   
   submitting.value = true
   try {
-    const request = buildCreateRequest()
+    const request = await buildCreateRequest()
     if (createdDsId.value) {
       await datasourceApi.update(createdDsId.value, request)
     } else {

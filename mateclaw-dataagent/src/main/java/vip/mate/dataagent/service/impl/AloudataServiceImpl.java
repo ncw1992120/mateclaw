@@ -128,8 +128,15 @@ public class AloudataServiceImpl implements AloudataService {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Boolean success = (Boolean) response.getBody().get("success");
+                if (!Boolean.TRUE.equals(success)) {
+                    // 诊断：认证/参数被拒时输出响应码与错误信息（不含 auth-value，避免敏感泄露）
+                    log.warn("[Aloudata测试] 平台返回失败: code={}, errorMsg={}, traceId={}, authType={}, tenantId={}",
+                            response.getBody().get("code"), response.getBody().get("errorMsg"),
+                            response.getBody().get("traceid"), config.getAuthType(), config.getTenantId());
+                }
                 return Boolean.TRUE.equals(success);
             }
+            log.warn("[Aloudata测试] 非 2xx 响应: status={}", response.getStatusCode());
             return false;
         } catch (Exception e) {
             log.error("测试 Aloudata 连接失败: {}", e.getMessage());

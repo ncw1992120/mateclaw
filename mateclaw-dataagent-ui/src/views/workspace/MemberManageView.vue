@@ -171,7 +171,8 @@ async function handleSubmit(): Promise<void> {
     await workspaceApi.addWorkspaceMember(workspaceId, {
       username,
       nickname: form.nickname.trim() || undefined,
-      password: form.password || undefined,
+      // 初始密码做 RSA-OAEP 传输加密，后端解包后创建账号；未填写则不传
+      password: form.password ? await encryptSensitiveField(form.password) : undefined,
       role: form.role,
     })
     ElMessage.success(t('memberManage.addSuccess'))

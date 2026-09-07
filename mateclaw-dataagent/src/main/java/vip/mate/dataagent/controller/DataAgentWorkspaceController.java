@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.auth.crypto.TransportCryptoService;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.exception.MateClawException;
@@ -31,6 +32,7 @@ public class DataAgentWorkspaceController {
 
     private final MateClawRuntime runtime;
     private final WorkspaceGuard workspaceGuard;
+    private final TransportCryptoService transportCryptoService;
 
     // ==================== 工作区 CRUD ====================
 
@@ -143,8 +145,13 @@ public class DataAgentWorkspaceController {
         }
         String nickname = body.containsKey("nickname") && body.get("nickname") != null
                 ? body.get("nickname").toString() : null;
-        String password = body.containsKey("password") && body.get("password") != null
-                ? body.get("password").toString().trim() : null;
+        // password 为前端 RSA-OAEP 传输信封，解包还原明文后再创建账号；未填写（不需要初始密码）时保持 null
+        String password = null;
+        Object rawPassword = body.get("password");
+        if (body.containsKey("password") && rawPassword != null
+                && !rawPassword.toString().trim().isEmpty()) {
+            password = transportCryptoService.unwrapField(rawPassword.toString().trim());
+        }
         String role = body.containsKey("role") ? body.get("role").toString() : DataAgentConstants.WORKSPACE_ROLE_MEMBER;
         return R.ok(runtime.addWorkspaceMember(id, username, nickname, password, role));
     }

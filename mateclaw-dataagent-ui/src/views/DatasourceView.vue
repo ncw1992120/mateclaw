@@ -222,6 +222,7 @@ import type { DatasourceAccountVO } from '@/api/datasource'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Datasource } from '@/types'
+import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 import DatasourceForm from './datasource/DatasourceForm.vue'
 import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
 
@@ -570,10 +571,14 @@ async function handleSaveAccount(): Promise<void> {
     return
   }
   try {
+    // 查询密码做 RSA-OAEP 传输加密，后端解密后 AES 存储加密落库
+    const encryptedPwd = accountForm.value.queryPassword
+      ? await encryptSensitiveField(accountForm.value.queryPassword)
+      : accountForm.value.queryPassword
     await datasourceApi.upsertDatasourceAccount({
       datasourceId: selectedDs.value.id,
       queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
-      queryPassword: accountForm.value.queryPassword,
+      queryPassword: encryptedPwd,
     })
     accountHasExisting.value = true
     // 刷新列表徽标状态
@@ -613,9 +618,12 @@ async function handleTestAccountConnection(): Promise<void> {
   accountTesting.value = true
   try {
     // 使用当前表单中的账号参数进行临时测试，不保存到数据库
+    const encryptedPwd = accountForm.value.queryPassword
+      ? await encryptSensitiveField(accountForm.value.queryPassword)
+      : accountForm.value.queryPassword
     const testOk = await datasourceApi.testDatasourceAccount(selectedDs.value.id, {
       queryUsername: isAloudataDatasource.value ? '' : accountForm.value.queryUsername,
-      queryPassword: accountForm.value.queryPassword,
+      queryPassword: encryptedPwd,
     })
     accountLastTestOk.value = !!testOk
     if (testOk) {
