@@ -31,7 +31,7 @@ import vip.mate.dataagent.repository.AloudataDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
-import vip.mate.dataagent.support.NameMatchSupport;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;

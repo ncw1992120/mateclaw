@@ -20,6 +20,7 @@ import vip.mate.dataagent.repository.*;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.dataagent.service.AloudataService;
+import vip.mate.dataagent.support.AloudataSyncFilterSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -52,6 +53,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private final AloudataSemanticEsService esService;
     private final ModelConfigService modelConfigService;
     private final AloudataService aloudataService;
+    private final AloudataSyncFilterSupport syncFilterSupport;
 
     @Autowired(required = false)
     private EmbeddingModelFactory embeddingModelFactory;
@@ -82,23 +84,32 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             // 计算新版本号
             int newVersion = getNextSyncVersion(datasourceId);
 
-            // 1. 获取类目并持久化
-            Map<String, String> categoryMap = fetchAndSaveCategories(datasourceId, config, newVersion);
-            int categoryCount = categoryMap.size();
+            // 1. 获取类目并持久化（黑名单类目不入库；返回过滤后的类目映射 + 同步过滤规则）
+            CategorySyncOutcome categoryOutcome = fetchAndSaveCategories(datasourceId, config, newVersion);
+            int categoryCount = categoryOutcome.categoryMap().size();
             log.info("[Aloudata同步] 类目数量: {}", categoryCount);
 
-            // 2. 流式处理指标：分页获取 → 详情 → 写入MySQL → 关联维度
-            int metricCount = streamSyncMetrics(datasourceId, config, categoryMap, newVersion);
+            // 2. 流式处理指标：黑名单过滤 → 分页获取 → 详情 → 写入MySQL → 关联维度
+            int metricCount = streamSyncMetrics(datasourceId, config,
+                    categoryOutcome.categoryMap(), newVersion, categoryOutcome.filterRules());
             log.info("[Aloudata同步] 指标同步完成: {}", metricCount);
 
-            // 3. 流式处理维度：分页获取 → 详情 → 写入MySQL
-            int dimensionCount = streamSyncDimensions(datasourceId, config, categoryMap, newVersion);
+            // 3. 流式处理维度：黑名单过滤 → 分页获取 → 详情 → 写入MySQL
+            int dimensionCount = streamSyncDimensions(datasourceId, config,
+                    categoryOutcome.categoryMap(), newVersion, categoryOutcome.filterRules());
             log.info("[Aloudata同步] 维度同步完成: {}", dimensionCount);
 
-            // 4. 清理旧版本数据
+            // 4. 全零保护：类目/指标/维度全部拉取为 0 且库中已有存量数据时，疑似接口异常返回空数据，
+            //    中止同步并保留旧数据，防止误清空（首次同步空源不受影响）
+            if (categoryCount == 0 && metricCount == 0 && dimensionCount == 0
+                    && hasExistingSyncData(datasourceId)) {
+                throw new IllegalStateException("本次同步拉取的类目/指标/维度均为 0，且库中存在存量数据，疑似接口异常，已中止同步并保留旧数据");
+            }
+
+            // 5. 清理旧版本数据
             cleanOldVersionData(datasourceId, newVersion);
 
-            // 5. 向量化 + ES 索引（分页加载，避免全量驻留内存）
+            // 6. 向量化 + ES 索引（分页加载，避免全量驻留内存）
             int metricDimensionCount = countMetricDimensions(datasourceId);
             embedAndIndexAll(datasourceId);
 
@@ -483,61 +494,81 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
      * <p>
      * 同时获取指标类目和维度类目，写入 dataagent_aloudata_category 表。
      * 返回的 Map 用于指标写入时填充 categoryName。
+     * <p>
+     * 黑名单过滤：合并全局/数据源级 QLExpress 表达式构建过滤规则，命中类目及其级联子类目
+     * 不入库、不进类目映射（指标/维度按所属类目 ID 级联过滤）。
      */
     @SuppressWarnings("unchecked")
-    private Map<String, String> fetchAndSaveCategories(Long datasourceId, AloudataConfigDTO config, int syncVersion) {
+    private CategorySyncOutcome fetchAndSaveCategories(Long datasourceId, AloudataConfigDTO config, int syncVersion) {
         Map<String, String> map = new HashMap<>();
         List<AloudataCategoryEntity> categoryEntities = new ArrayList<>();
+        List<AloudataSyncFilterSupport.CategoryRaw> rawCategories = new ArrayList<>();
 
-        /* 分别获取指标类目和维度类目 */
-        for (String categoryType : List.of("CATEGORY_METRIC", "CATEGORY_DIMENSION")) {
-            try {
-                Map<String, Object> input = new HashMap<>();
-                input.put("categoryType", categoryType);
+        /* 分别获取指标类目和维度类目原始数据（调用失败直接终止同步，防止误判为空导致旧数据被清） */
+        for (String categoryType : List.of(
+                DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC,
+                DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION)) {
+            Map<String, Object> input = new HashMap<>();
+            input.put("categoryType", categoryType);
 
-                Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_CATEGORY_LIST, config, input);
-                ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_CATEGORY_LIST, config, params);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_CATEGORY_LIST, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_CATEGORY_LIST, config, params);
 
-                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                    continue;
-                }
-                Boolean success = (Boolean) response.getBody().get("success");
-                if (!Boolean.TRUE.equals(success)) {
-                    continue;
-                }
-
-                List<Map<String, Object>> categories = (List<Map<String, Object>>) response.getBody().get("data");
-                if (categories == null) {
-                    continue;
-                }
-
-                for (Map<String, Object> cat : categories) {
-                    String id = cat.get("id") != null ? cat.get("id").toString() : null;
-                    String name = (String) cat.get("name");
-                    if (id == null) {
-                        continue;
-                    }
-
-                    /* 写入内存映射 */
-                    if (name != null) {
-                        map.put(id, name);
-                    }
-
-                    /* 构建实体，后续批量 upsert */
-                    AloudataCategoryEntity entity = new AloudataCategoryEntity();
-                    entity.setDatasourceId(datasourceId);
-                    entity.setCategoryId(id);
-                    entity.setCategoryName(name);
-                    entity.setCategoryType(categoryType);
-                    entity.setParentId(cat.get("parentId") != null ? cat.get("parentId").toString() : null);
-                    entity.setFrontId(cat.get("frontId") != null ? cat.get("frontId").toString() : null);
-                    entity.setType((String) cat.get("type"));
-                    entity.setSyncVersion(syncVersion);
-                    categoryEntities.add(entity);
-                }
-            } catch (Exception e) {
-                log.warn("[Aloudata同步] 获取类目失败(type={}): {}", categoryType, e.getMessage());
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new IllegalStateException("类目列表接口响应异常，HTTP: " + response.getStatusCode() + ", type=" + categoryType);
             }
+            Boolean success = (Boolean) response.getBody().get("success");
+            if (!Boolean.TRUE.equals(success)) {
+                throw new IllegalStateException("类目列表接口返回失败: errorMsg=" + response.getBody().get("errorMsg") + ", type=" + categoryType);
+            }
+
+            List<Map<String, Object>> categories = (List<Map<String, Object>>) response.getBody().get("data");
+            if (categories == null) {
+                throw new IllegalStateException("类目列表接口返回 data 为 null, type=" + categoryType);
+            }
+
+            for (Map<String, Object> cat : categories) {
+                rawCategories.add(new AloudataSyncFilterSupport.CategoryRaw(categoryType, cat));
+            }
+        }
+
+        /* 构建黑名单过滤规则（全局 + 数据源级表达式，类目黑名单含级联子类目） */
+        AloudataSyncFilterSupport.SyncFilterRules filterRules = syncFilterSupport.buildRules(config, rawCategories);
+
+        /* 黑名单类目不入库、不进类目映射 */
+        int filteredCategoryCount = 0;
+        for (AloudataSyncFilterSupport.CategoryRaw raw : rawCategories) {
+            Map<String, Object> cat = raw.data();
+            String id = cat.get("id") != null ? cat.get("id").toString() : null;
+            if (id == null) {
+                continue;
+            }
+            if (filterRules.blockedCategoryIds().contains(id)) {
+                filteredCategoryCount++;
+                continue;
+            }
+
+            String name = (String) cat.get("name");
+
+            /* 写入内存映射 */
+            if (name != null) {
+                map.put(id, name);
+            }
+
+            /* 构建实体，后续批量 upsert */
+            AloudataCategoryEntity entity = new AloudataCategoryEntity();
+            entity.setDatasourceId(datasourceId);
+            entity.setCategoryId(id);
+            entity.setCategoryName(name);
+            entity.setCategoryType(raw.categoryType());
+            entity.setParentId(cat.get("parentId") != null ? cat.get("parentId").toString() : null);
+            entity.setFrontId(cat.get("frontId") != null ? cat.get("frontId").toString() : null);
+            entity.setType((String) cat.get("type"));
+            entity.setSyncVersion(syncVersion);
+            categoryEntities.add(entity);
+        }
+        if (filteredCategoryCount > 0) {
+            log.info("[Aloudata同步] 类目黑名单过滤: 命中 {} 个不入库", filteredCategoryCount);
         }
 
         /* 批量 upsert 类目 */
@@ -550,20 +581,22 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             }
         }
 
-        return map;
+        return new CategorySyncOutcome(map, filterRules);
     }
 
     // ==================== 流式同步管道 ====================
 
     /**
-     * 流式同步指标：分页获取 → 批量详情 → 批量写入 MySQL → 批量获取维度关联
+     * 流式同步指标：分页获取 → 黑名单过滤 → 批量详情 → 批量写入 MySQL → 批量获取维度关联
      * <p>
      * 每页处理完成后立即释放，不累积全量 List 和 detailMap。
      */
     @SuppressWarnings("unchecked")
     private int streamSyncMetrics(Long datasourceId, AloudataConfigDTO config,
-                                   Map<String, String> categoryMap, int syncVersion) {
+                                   Map<String, String> categoryMap, int syncVersion,
+                                   AloudataSyncFilterSupport.SyncFilterRules filterRules) {
         int totalMetricCount = 0;
+        int filteredMetricCount = 0;
         int pageNumber = 1;
         int pageSize = DataAgentConstants.ALOUDATA_SYNC_METRIC_PAGE_SIZE;
         boolean hasNext = true;
@@ -586,17 +619,19 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 log.warn("[Aloudata同步] 指标列表接口响应异常，HTTP: {}", response.getStatusCode());
-                break;
+                throw new IllegalStateException("指标列表接口响应异常，HTTP: " + response.getStatusCode());
             }
             Map<String, Object> body = response.getBody();
             Boolean success = (Boolean) body.get("success");
             if (!Boolean.TRUE.equals(success)) {
                 log.warn("[Aloudata同步] 指标列表接口返回失败: errorMsg={}", body.get("errorMsg"));
-                break;
+                throw new IllegalStateException("指标列表接口返回失败: errorMsg=" + body.get("errorMsg"));
             }
 
             Map<String, Object> data = (Map<String, Object>) body.get("data");
-            if (data == null) break;
+            if (data == null) {
+                throw new IllegalStateException("指标列表接口返回 data 为 null");
+            }
 
             /* 从首次响应中获取 total，计算最大页数 */
             if (totalFromApi < 0 && data.get("total") != null) {
@@ -616,44 +651,62 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 break;
             }
 
-            /* 2. 批量获取本页指标详情 */
-            Map<String, Map<String, Object>> detailMap = fetchMetricDetailBatch(config, pageMetrics);
+            /* 2. 黑名单过滤：命中表达式或所属类目被拉黑的指标不入库（提前过滤，减少详情拉取） */
+            List<Map<String, Object>> keptMetrics = new ArrayList<>(pageMetrics.size());
+            for (Map<String, Object> metricData : pageMetrics) {
+                if (metricData.get("metricName") == null) {
+                    continue;
+                }
+                if (syncFilterSupport.isMetricBlacklisted(filterRules, metricData)) {
+                    filteredMetricCount++;
+                    continue;
+                }
+                keptMetrics.add(metricData);
+            }
 
-            /* 3. 构建实体并批量写入 MySQL */
-            List<AloudataMetricEntity> entities = buildMetricEntities(datasourceId, pageMetrics, detailMap, categoryMap, syncVersion);
+            /* 3. 批量获取本页指标详情 */
+            Map<String, Map<String, Object>> detailMap = fetchMetricDetailBatch(config, keptMetrics);
+
+            /* 4. 构建实体并批量 upsert 写入数据库 */
+            List<AloudataMetricEntity> entities = buildMetricEntities(datasourceId, keptMetrics, detailMap, categoryMap, syncVersion);
             int batchUpsertSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_UPSERT_SIZE;
             for (int i = 0; i < entities.size(); i += batchUpsertSize) {
                 List<AloudataMetricEntity> batch = entities.subList(i, Math.min(i + batchUpsertSize, entities.size()));
-                metricMapper.upsertBatch(batch);
+                metricMapper.upsertBatch(dedupeByBatch(batch,
+                        e -> e.getDatasourceId() + ":" + e.getMetricName()));
             }
             totalMetricCount += entities.size();
 
-            /* 4. 收集 metricName */
-            for (Map<String, Object> m : pageMetrics) {
-                String name = (String) m.get("metricName");
-                if (name != null) {
-                    allMetricNames.add(name);
-                }
+            /* 5. 收集 metricName（仅黑名单过滤后的指标） */
+            for (AloudataMetricEntity entity : entities) {
+                allMetricNames.add(entity.getMetricName());
             }
 
-            log.info("[Aloudata同步] 指标进度: 页 {}, 本页 {}, 累计 {}", pageNumber, pageMetrics.size(), totalMetricCount);
+            log.info("[Aloudata同步] 指标进度: 页 {}, 本页 {}, 累计 {}（黑名单过滤 {}）",
+                    pageNumber, pageMetrics.size(), totalMetricCount, filteredMetricCount);
             hasNext = Boolean.TRUE.equals(data.get("hasNext"));
             pageNumber++;
         }
 
-        /* 5. 批量获取指标-维度关联（使用 metric_all_dimensions） */
-        fetchAndSaveMetricDimensions(datasourceId, config, allMetricNames, syncVersion);
+        if (filteredMetricCount > 0) {
+            log.info("[Aloudata同步] 指标黑名单过滤: 命中 {} 个不入库", filteredMetricCount);
+        }
+
+        /* 6. 批量获取指标-维度关联（使用 metric_all_dimensions） */
+        fetchAndSaveMetricDimensions(datasourceId, config, allMetricNames, syncVersion, filterRules);
 
         return totalMetricCount;
     }
 
     /**
-     * 流式同步维度：分页获取 → 批量详情 → 批量写入 MySQL
+     * 流式同步维度：分页获取 → 黑名单过滤 → 批量详情 → 批量写入 MySQL
      */
     @SuppressWarnings("unchecked")
     private int streamSyncDimensions(Long datasourceId, AloudataConfigDTO config,
-                                     Map<String, String> categoryMap, int syncVersion) {
+                                     Map<String, String> categoryMap, int syncVersion,
+                                     AloudataSyncFilterSupport.SyncFilterRules filterRules) {
         int totalDimCount = 0;
+        int filteredDimCount = 0;
         int pageNumber = 1;
         int pageSize = DataAgentConstants.ALOUDATA_SYNC_DIMENSION_PAGE_SIZE;
         boolean hasNext = true;
@@ -672,17 +725,19 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 log.warn("[Aloudata同步] 维度列表接口响应异常");
-                break;
+                throw new IllegalStateException("维度列表接口响应异常，HTTP: " + response.getStatusCode());
             }
             Map<String, Object> body = response.getBody();
             Boolean success = (Boolean) body.get("success");
             if (!Boolean.TRUE.equals(success)) {
                 log.warn("[Aloudata同步] 维度列表接口返回失败: errorMsg={}", body.get("errorMsg"));
-                break;
+                throw new IllegalStateException("维度列表接口返回失败: errorMsg=" + body.get("errorMsg"));
             }
 
             Map<String, Object> data = (Map<String, Object>) body.get("data");
-            if (data == null) break;
+            if (data == null) {
+                throw new IllegalStateException("维度列表接口返回 data 为 null");
+            }
 
             /* 从首次响应中获取 total，计算最大页数 */
             if (totalFromApi < 0 && data.get("total") != null) {
@@ -702,11 +757,24 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 break;
             }
 
-            /* 2. 批量获取本页维度详情 */
-            Map<String, Map<String, Object>> detailMap = fetchDimensionDetailBatch(config, pageDims);
+            /* 2. 黑名单过滤：命中表达式或所属类目被拉黑的维度不入库（提前过滤，减少详情拉取） */
+            List<Map<String, Object>> keptDims = new ArrayList<>(pageDims.size());
+            for (Map<String, Object> dimData : pageDims) {
+                if (dimData.get("dimName") == null) {
+                    continue;
+                }
+                if (syncFilterSupport.isDimensionBlacklisted(filterRules, dimData)) {
+                    filteredDimCount++;
+                    continue;
+                }
+                keptDims.add(dimData);
+            }
 
-            /* 3. 构建实体并批量写入 MySQL */
-            List<AloudataDimensionEntity> entities = buildDimensionEntities(datasourceId, pageDims, detailMap, categoryMap, syncVersion);
+            /* 3. 批量获取本页维度详情 */
+            Map<String, Map<String, Object>> detailMap = fetchDimensionDetailBatch(config, keptDims);
+
+            /* 4. 构建实体并批量 upsert 写入数据库 */
+            List<AloudataDimensionEntity> entities = buildDimensionEntities(datasourceId, keptDims, detailMap, categoryMap, syncVersion);
             int batchUpsertSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_UPSERT_SIZE;
             for (int i = 0; i < entities.size(); i += batchUpsertSize) {
                 List<AloudataDimensionEntity> batch = entities.subList(i, Math.min(i + batchUpsertSize, entities.size()));
@@ -715,9 +783,14 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             }
             totalDimCount += entities.size();
 
-            log.info("[Aloudata同步] 维度进度: 页 {}, 本页 {}, 累计 {}", pageNumber, pageDims.size(), totalDimCount);
+            log.info("[Aloudata同步] 维度进度: 页 {}, 本页 {}, 累计 {}（黑名单过滤 {}）",
+                    pageNumber, pageDims.size(), totalDimCount, filteredDimCount);
             hasNext = Boolean.TRUE.equals(data.get("hasNext"));
             pageNumber++;
+        }
+
+        if (filteredDimCount > 0) {
+            log.info("[Aloudata同步] 维度黑名单过滤: 命中 {} 个不入库", filteredDimCount);
         }
 
         return totalDimCount;
@@ -1022,6 +1095,13 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 if (detailCategoryName != null) {
                     entity.setDimCategoryName((String) detailCategoryName);
                 }
+                // 示例值（低基数维度增值数据）：兼容 List 或字符串，逗号分隔
+                Object exampleObj = detail.get("exampleValues");
+                if (exampleObj instanceof List) {
+                    entity.setExampleValues(String.join(",", ((List<String>) exampleObj)));
+                } else if (exampleObj != null) {
+                    entity.setExampleValues(exampleObj.toString());
+                }
             }
 
             entity.setEmbeddingText(entity.buildEmbeddingText());
@@ -1034,10 +1114,12 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
      * 批量获取指标-维度关联并写入
      * <p>
      * 使用 metric_all_dimensions（dimensionAll）接口，响应按指标名分组。
+     * 关联数据按维度黑名单过滤（关联条目无类目 ID，仅做表达式判断）。
      */
     @SuppressWarnings("unchecked")
     private void fetchAndSaveMetricDimensions(Long datasourceId, AloudataConfigDTO config,
-                                               List<String> metricNames, int syncVersion) {
+                                               List<String> metricNames, int syncVersion,
+                                               AloudataSyncFilterSupport.SyncFilterRules filterRules) {
         int batchSize = DataAgentConstants.ALOUDATA_SYNC_BATCH_SIZE;
         for (int i = 0; i < metricNames.size(); i += batchSize) {
             List<String> batch = metricNames.subList(i, Math.min(i + batchSize, metricNames.size()));
@@ -1060,13 +1142,23 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 /* data 格式: { "metricName1": [dim1, ...], "metricName2": [dim3, ...] } */
                 Map<String, Object> data = (Map<String, Object>) response.getBody().get("data");
                 List<AloudataMetricDimensionEntity> rels = new ArrayList<>();
+                int filteredRelCount = 0;
                 for (Map.Entry<String, Object> entry : data.entrySet()) {
                     String metricName = entry.getKey();
-                    if (!(entry.getValue() instanceof List)) continue;
+                    if (!(entry.getValue() instanceof List)) {
+                        continue;
+                    }
                     List<Map<String, Object>> dimensions = (List<Map<String, Object>>) entry.getValue();
                     for (Map<String, Object> dim : dimensions) {
                         String dimName = (String) dim.get("dimName");
-                        if (dimName == null) continue;
+                        if (dimName == null) {
+                            continue;
+                        }
+                        /* 维度黑名单过滤：命中表达式则关联不入库 */
+                        if (syncFilterSupport.isDimensionBlacklisted(filterRules, dim)) {
+                            filteredRelCount++;
+                            continue;
+                        }
 
                         AloudataMetricDimensionEntity rel = new AloudataMetricDimensionEntity();
                         rel.setDatasourceId(datasourceId);
@@ -1077,6 +1169,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                         rel.setSyncVersion(syncVersion);
                         rels.add(rel);
                     }
+                }
+                if (filteredRelCount > 0) {
+                    log.info("[Aloudata同步] 指标-维度关联黑名单过滤: 命中 {} 条不入库", filteredRelCount);
                 }
 
                 /* 批量 upsert */
@@ -1137,6 +1232,16 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 .lt(AloudataCategoryEntity::getSyncVersion, currentVersion));
 
         log.info("[Aloudata同步] 旧版本数据清理完成，当前版本: {}", currentVersion);
+    }
+
+    /**
+     * 判断该数据源是否已有同步落库的元数据（以指标表为代理），
+     * 用于全零保护：接口异常可能被吞掉或源端临时返回空，避免误清空存量数据
+     */
+    private boolean hasExistingSyncData(Long datasourceId) {
+        Long count = metricMapper.selectCount(new LambdaQueryWrapper<AloudataMetricEntity>()
+                .eq(AloudataMetricEntity::getDatasourceId, datasourceId));
+        return count != null && count > 0;
     }
 
     /**
@@ -1549,5 +1654,17 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             unique.putIfAbsent(keyFn.apply(item), item);
         }
         return new ArrayList<>(unique.values());
+    }
+
+    /**
+     * 类目同步产物：黑名单过滤后的类目映射 + 供指标/维度同步复用的过滤规则
+     *
+     * @param categoryMap 过滤后的类目 ID → 名称映射
+     * @param filterRules 同步过滤规则（含黑名单类目 ID 集合与 QLExpress 表达式）
+     */
+    private record CategorySyncOutcome(
+            Map<String, String> categoryMap,
+            AloudataSyncFilterSupport.SyncFilterRules filterRules
+    ) {
     }
 }

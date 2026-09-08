@@ -26,6 +26,7 @@
         <mybatis-plus.version>3.5.16</mybatis-plus.version>
         <elasticsearch-client.version>8.19.16</elasticsearch-client.version>
         <agentscope.version>1.0.9</agentscope.version>
+        <qlexpress.version>3.3.4</qlexpress.version>
     </properties>
 
     <dependencyManagement>
@@ -172,6 +173,13 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope</artifactId>
             <version>${agentscope.version}</version>
+        </dependency>
+
+        <!-- ===== QLExpress 表达式引擎（Aloudata 元数据同步黑名单动态过滤） ===== -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>QLExpress</artifactId>
+            <version>${qlexpress.version}</version>
         </dependency>
 
         <!-- ===== Test ===== -->

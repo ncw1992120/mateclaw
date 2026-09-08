@@ -28,10 +28,10 @@ import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
-import vip.mate.dataagent.support.AloudataTimeResolver;
+import vip.mate.dataagent.util.AloudataTimeResolver;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
-import vip.mate.dataagent.support.NameMatchSupport;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
 
@@ -2067,7 +2067,7 @@ public class AloudataCallTool {
     /**
      * 提取字符串中的所有中文字符。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractChineseChars(String)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#extractChineseChars(String)}，
      * 供检索层维度相关性打分等处共用同一实现。
      */
     private static Set<String> extractChineseChars(String text) {
@@ -2077,7 +2077,7 @@ public class AloudataCallTool {
     /**
      * 提取字符串中的英文单词（按下划线和非字母数字分隔）。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractEnglishWords(String)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#extractEnglishWords(String)}，
      * 供检索层维度相关性打分等处共用同一实现。
      */
     private static Set<String> extractEnglishWords(String text) {
@@ -2096,7 +2096,7 @@ public class AloudataCallTool {
      * 背景：用户问句常带全角括号、半角括号、连接符等标点，LLM 生成检索 keyword
      * 时可能截断 / 改写 / 转换全角半角，导致「按关键词匹配指标名称」失配。此方法只用于
      * 「是否匹配」的判定；判定命中后仍使用原始 metricName / 展示名构造查询，不改写查询值。
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport}，与业务术语/维度
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport}，与业务术语/维度
      * MySQL 降级检索的标点不敏感 LIKE 模式共用同一套字符归一化规则。
      */
     private static String normalizeKey(String text) {
@@ -2851,7 +2851,7 @@ public class AloudataCallTool {
      * 语义：展示名中有多少比例的字符出现在用户原话中。
      * 值域 [0, 1]，1 表示展示名的每个字符都在原话中出现。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#charOverlapRatio(Set, Set)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#charOverlapRatio(Set, Set)}，
      * 供检索层维度相关性打分等处共用同一实现。
      *
      * @param origChars 用户原话的中文字符集合

@@ -149,6 +149,24 @@
                   </button>
                 </div>
               </div>
+              <!-- 同步过滤规则（QLExpress 黑名单，命中不入库） -->
+              <div class="form-field form-field-wide">
+                <label class="form-label">
+                  <span>同步过滤规则</span>
+                  <el-tooltip
+                    content="元数据同步黑名单（QLExpress 布尔表达式，每行一条，命中任一即不入库持久化；类目命中后其子类目一并过滤）。可用变量：类目 categoryName/categoryType/type/parentId，指标 metricName/metricDisplayName/categoryName/owner/businessOwner 等，维度 dimName/dimDisplayName/datasetName/categoryName 等；data.xxx 可访问任意原始字段。示例：categoryName in ('测试类目', '敏感数据')、metricName.startsWith('test_')"
+                    placement="top"
+                  >
+                    <span class="form-tip">?</span>
+                  </el-tooltip>
+                </label>
+                <textarea
+                  v-model="form.syncFilterExpressions"
+                  class="form-textarea"
+                  rows="3"
+                  placeholder="categoryName in ('测试类目', '敏感数据')&#10;metricName.startsWith('test_')"
+                ></textarea>
+              </div>
             </template>
 
             <!-- 数据库类型通用配置 (非 Aloudata) -->
@@ -355,6 +373,8 @@ const testing = ref(false)
 const createdDsId = ref<string | null>(null)
 /** 表单加载中 */
 const formLoading = ref(false)
+/** 存量 connection_params 原始配置（编辑模式回填，保存时合并避免覆盖 apiOverrides 等自定义配置） */
+const rawConnectionParams = ref<Record<string, any>>({})
 
 /** 编辑模式下加载已有数据源 */
 onMounted(async () => {
@@ -403,11 +423,17 @@ onMounted(async () => {
         if (ds.connectionParams) {
           try {
             const params = JSON.parse(ds.connectionParams)
+            // 缓存存量配置（apiOverrides 等自定义 key 编辑保存时需保留）
+            rawConnectionParams.value = params
             if (params.semanticPort) {
               form.semanticPort = String(params.semanticPort)
             }
             if (params.authType) {
               form.authType = params.authType
+            }
+            // 同步过滤规则（表达式数组回填为每行一条）
+            if (Array.isArray(params.syncFilterExpressions)) {
+              form.syncFilterExpressions = params.syncFilterExpressions.join('\n')
             }
           } catch {
             // 忽略解析错误
@@ -464,6 +490,8 @@ const form = reactive({
   tenantId: '',
   authType: 'UID',
   authValue: '',
+  // 元数据同步黑名单过滤规则（QLExpress 表达式，每行一条）
+  syncFilterExpressions: '',
 })
 
 /**
@@ -584,13 +612,25 @@ async function buildCreateRequest() {
   }
   // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {
-    request.connectionParams = JSON.stringify({
-      anymetricsHost: form.productHost,
-      semanticHost: form.semanticHost,
-      anymetricsPort: Number(form.aloudataPort) || 8083,
-      semanticPort: Number(form.semanticPort) || 8085,
-      authType: form.authType,
-    })
+    // 过滤规则按行拆分为表达式数组，未配置时不携带该字段
+    const syncFilterExpressions = form.syncFilterExpressions
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    // 合并存量配置（apiOverrides 等自定义 key 保留），避免编辑保存时整体覆盖丢失
+    const merged = { ...rawConnectionParams.value }
+    merged.anymetricsHost = form.productHost
+    merged.semanticHost = form.semanticHost
+    merged.anymetricsPort = Number(form.aloudataPort) || 8083
+    merged.semanticPort = Number(form.semanticPort) || 8085
+    merged.authType = form.authType
+    if (syncFilterExpressions.length > 0) {
+      merged.syncFilterExpressions = syncFilterExpressions
+    } else {
+      // 用户清空过滤规则时，同步移除存量规则，避免残留旧配置
+      delete merged.syncFilterExpressions
+    }
+    request.connectionParams = JSON.stringify(merged)
   } else {
     request.host = form.host
   }
@@ -899,6 +939,37 @@ async function handleSubmit(): Promise<void> {
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
   border-color: #c9cdd4;
+}
+
+/* 多行文本域：继承输入框视觉风格，高度自适应且可纵向拉伸 */
+.form-textarea {
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1d2129;
+  outline: none;
+  transition: all 0.15s;
+  font-family: inherit;
+  background: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.form-textarea:hover {
+  border-color: #c9cdd4;
+}
+
+.form-textarea:focus {
+  border-color: #165dff;
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+}
+
+.form-textarea::placeholder {
+  color: #c9cdd4;
 }
 
 .form-input:focus,
