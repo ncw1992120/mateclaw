@@ -470,14 +470,14 @@ export interface PlanMeta {
   steps: string[]
   currentStep: number
   stepResults?: { result: string; status: 'completed' | 'failed' }[]
-  /** 计划整体状态：running / completed / failed */
-  planStatus?: 'running' | 'completed' | 'failed'
+  /** 计划整体状态：running / completed / failed / stopped（用户主动中断） */
+  planStatus?: 'running' | 'completed' | 'failed' | 'stopped'
 }
 
 /** 委派子 agent 执行的工具条目（delegation_progress 累积） */
 export interface DelegationToolEntry {
   name: string
-  status: 'running' | 'completed' | 'error'
+  status: 'running' | 'completed' | 'error' | 'stopped'
 }
 
 /**
@@ -488,7 +488,7 @@ export interface DelegationToolEntry {
 export interface DelegationNode {
   subagentId: string
   agentName: string
-  status: 'running' | 'completed' | 'error'
+  status: 'running' | 'completed' | 'error' | 'stopped'
   depth: number
   task?: string
   result?: string
@@ -526,6 +526,8 @@ export interface ChatMessage {
   status?: ChatMessageStatus
   /** 错误信息（status=failed 时存在） */
   errorInfo?: import('./chatError').ChatErrorInfo
+  /** 该轮回复对应的数据源 ID 快照（发送时锁定，不随输入框后续改动变化） */
+  datasourceIds?: string[]
 }
 
 /** SSE 结构化事件 */

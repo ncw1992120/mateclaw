@@ -30,8 +30,6 @@ html, body, #app {
   /* 聊天气泡 / 代码块 / 分割线（设计稿语义 token） */
   --user-bubble-bg: #E8F0FE;
   --user-bubble-text: #1A2233;
-  --code-bg: #EFF3F9;
-  --ai-divider: rgba(26, 34, 51, 0.07);
 
   /* 兼容旧变量 */
   --blue-grey: #44546A;
@@ -67,8 +65,6 @@ html[data-theme='warm'] {
 
   --user-bubble-bg: #F6E9DE;
   --user-bubble-text: #33291F;
-  --code-bg: #F1E9E0;
-  --ai-divider: rgba(97, 74, 55, 0.09);
 
   --blue-grey: #6B5E52;
   --mid-grey: #9C8F82;
@@ -103,8 +99,6 @@ html[data-theme='eye-care'] {
 
   --user-bubble-bg: #E4F0DE;
   --user-bubble-text: #26372A;
-  --code-bg: #E7F0E2;
-  --ai-divider: rgba(58, 92, 60, 0.09);
 
   --blue-grey: #5A6B5A;
   --mid-grey: #8A9A8A;
@@ -139,8 +133,6 @@ html[data-theme='dark'] {
 
   --user-bubble-bg: #2B3550;
   --user-bubble-text: #EDF1F7;
-  --code-bg: #242C3D;
-  --ai-divider: rgba(237, 241, 247, 0.08);
 
   --blue-grey: #A0AEC0;
   --mid-grey: #888888;
@@ -282,4 +274,16 @@ body {
 
 .hljs-strong {
   font-weight: 600;
+}
+
+/* 卡片描述悬停浮层：限定宽度，避免长文案被拉成满屏单行。
+   el-tooltip 的 popper teleport 到 body，scoped 样式无法命中，故置于全局样式 */
+.card-desc-tooltip {
+  max-width: 360px;
+}
+
+.card-desc-tooltip .el-tooltip__content {
+  max-width: 360px;
+  line-height: 1.6;
+  word-break: break-word;
 }

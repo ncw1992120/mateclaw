@@ -41,18 +41,6 @@
           </button>
         </div>
         <template v-if="!historyCollapsed">
-          <!-- 搜索框（默认隐藏，点击搜索图标展开） -->
-          <div v-if="searchOpen" class="history-search">
-            <el-input
-              ref="searchInputRef"
-              v-model="conversationSearchKeyword"
-              :placeholder="t('conversation.searchPlaceholder')"
-              clearable
-              class="history-search-input"
-              :prefix-icon="Search"
-              @keyup.enter="searchInputRef?.blur()"
-            />
-          </div>
           <!-- 历史对话列表 -->
           <div class="history-list">
               <el-collapse v-model="expandedGroupKeys" class="history-collapse">
@@ -120,9 +108,6 @@
               <div v-if="chatStore.conversations.length === 0" class="history-empty">
                 {{ t('conversation.history') }}
               </div>
-              <div v-else-if="groupedConversations.length === 0 && conversationSearchKeyword" class="history-empty">
-                {{ t('conversation.noSearchResult') }}
-              </div>
             </div>
         </template>
       </div>
@@ -173,16 +158,21 @@
       </button>
     </div>
   </Teleport>
+
+  <!-- 历史对话搜索弹框（DeepSeek 风格：全屏遮罩 + 顶部居中面板） -->
+  <ConversationSearchDialog v-model:open="searchOpen" @select="handleSwitchConversation" />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useChatStore } from '@/stores/useChatStore'
 import ChatView from '@/views/ChatView.vue'
-import { Search } from '@element-plus/icons-vue'
+import ConversationSearchDialog from '@/components/ConversationSearchDialog.vue'
+import { formatRelativeTime } from '@/utils/time'
 import type { Conversation } from '@/types'
+import { usePersistedState } from '@/composables/usePersistedRef'
 
 /** 历史对话侧栏是否显示（问数页面始终展示） */
 const showSelectorPanel = true
@@ -190,8 +180,8 @@ const showSelectorPanel = true
 const { t } = useI18n()
 const chatStore = useChatStore()
 
-/** 历史对话侧栏是否折叠（独立于左侧菜单折叠状态） */
-const historyCollapsed = ref(false)
+/** 历史对话侧栏是否折叠（独立于左侧菜单折叠状态；持久化到 localStorage，刷新后保持） */
+const historyCollapsed = usePersistedState<boolean>('mc-chat-history-collapsed', false)
 
 /** 向子组件 ChatView 提供收缩态状态与新建对话回调，用于在 chat-header 同行渲染浮动按钮 */
 provide('historyCollapsed', historyCollapsed)
@@ -199,9 +189,6 @@ provide('handleNewChat', handleNewChat)
 
 /** 搜索框是否展开（默认隐藏，点击搜索图标切换） */
 const searchOpen = ref(false)
-
-/** 搜索输入框引用（用于自动聚焦） */
-const searchInputRef = ref<InstanceType<typeof import('element-plus')['ElInput']> | null>(null)
 
 /** 当前打开操作菜单的会话 id（仅一个） */
 const openMenuConvId = ref<string | null>(null)
@@ -214,20 +201,6 @@ const editingConvId = ref<string | null>(null)
 
 /** 重命名输入框的临时值 */
 const editingTitle = ref('')
-
-/** 历史会话搜索关键词 */
-const conversationSearchKeyword = ref('')
-
-/** 搜索框展开时自动聚焦 */
-watch(searchOpen, (open) => {
-  if (open) {
-    nextTick(() => {
-      searchInputRef.value?.focus()
-    })
-  } else {
-    conversationSearchKeyword.value = ''
-  }
-})
 
 /** 已折叠的历史分组 key 集合（供 expandedGroupKeys 计算属性桥接使用） */
 const collapsedGroupKeys = ref(new Set<string>())
@@ -259,17 +232,7 @@ const groupedConversations = computed<ConversationGroup[]>(() => {
   const sevenDaysStart = todayStart - 6 * DAY_MILLISECONDS
   const thirtyDaysStart = todayStart - 29 * DAY_MILLISECONDS
 
-  let sourceConversations = [...chatStore.conversations]
-
-  // 搜索过滤：按标题关键词匹配
-  const keyword = conversationSearchKeyword.value.trim().toLowerCase()
-  if (keyword) {
-    sourceConversations = sourceConversations.filter(conv =>
-      (conv.title || '').toLowerCase().includes(keyword)
-    )
-  }
-
-  const sortedConversations = sourceConversations.sort((a, b) => getConversationTime(b) - getConversationTime(a))
+  const sortedConversations = [...chatStore.conversations].sort((a, b) => getConversationTime(b) - getConversationTime(a))
   const pinnedItems = sortedConversations.filter(conv => isConversationPinned(conv))
 
   sortedConversations
@@ -446,44 +409,6 @@ function getConversationGroup(
   return { key: `${year}-${month}`, label: `${year}年${month}月` }
 }
 
-/**
- * 把后端返回的时间戳格式化为相对时间（用于历史侧栏紧凑展示）。
- * <p>
- * 不到 1 分钟：刚刚；1-59 分钟：x 分钟前；1-23 小时：x 小时前；
- * 当天但更早：今天 HH:mm；昨天：昨天 HH:mm；7 天内：x 天前；
- * 更早：直接 yyyy-MM-dd。
- */
-function formatRelativeTime(value: string | undefined): string {
-  if (!value) return ''
-  const date = new Date(value)
-  const time = date.getTime()
-  if (Number.isNaN(time)) return ''
-  const now = Date.now()
-  const diff = Math.max(0, now - time)
-  const minute = 60 * 1000
-  const hour = 60 * minute
-  const day = 24 * hour
-
-  if (diff < minute) return t('time.justNow')
-  if (diff < hour) return t('time.minutesAgo', { n: Math.floor(diff / minute) })
-  if (diff < day) return t('time.hoursAgo', { n: Math.floor(diff / hour) })
-
-  const pad = (n: number): string => n.toString().padStart(2, '0')
-  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-
-  const isSameDay = (a: Date, b: Date): boolean =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  const yesterday = new Date(now - day)
-  if (isSameDay(date, new Date(now))) {
-    return t('time.todayAt', { time: `${pad(date.getHours())}:${pad(date.getMinutes())}` })
-  }
-  if (isSameDay(date, yesterday)) {
-    return t('time.yesterdayAt', { time: `${pad(date.getHours())}:${pad(date.getMinutes())}` })
-  }
-  if (diff < 7 * day) return t('time.daysAgo', { n: Math.floor(diff / day) })
-  return ymd
-}
-
 onMounted(() => {
   // 点击非历史项区域时，关闭弹出的操作菜单
   document.addEventListener('click', handleDocumentClick)
@@ -562,37 +487,6 @@ onBeforeUnmount(() => {
 
 .history-sidebar.collapsed .history-header {
   display: none;
-}
-
-/* 搜索框 */
-.history-search {
-  padding: 0 14px 10px;
-  flex-shrink: 0;
-}
-
-.history-search-input :deep(.el-input__wrapper) {
-  border-radius: 8px;
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
-  box-shadow: none !important;
-}
-
-.history-search-input :deep(.el-input__wrapper:hover) {
-  box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--main-orange) 30%, var(--theme-border));
-}
-
-.history-search-input :deep(.el-input__wrapper.is-focus) {
-  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 8%, transparent) !important;
-}
-
-.history-search-input :deep(.el-input__prefix) {
-  color: var(--muted);
-}
-
-.history-search-input :deep(.el-input__clear) {
-  color: var(--muted);
 }
 
 /** 操作按钮行（新对话 + 折叠按钮） */

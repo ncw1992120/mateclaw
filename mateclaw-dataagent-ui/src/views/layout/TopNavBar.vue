@@ -3,73 +3,39 @@
     <div class="nav-left">
       <div class="brand-area" role="button" tabindex="0" :title="t('nav.brandName')" @click="handleNavClick('smart-ask')" @keydown.enter="handleNavClick('smart-ask')">
         <div class="logo">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30">
+          <!-- 线性渐变标志：开口圆环 + 上升趋势线，无方形底 -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="34" height="34" fill="none" aria-hidden="true">
             <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:var(--main-orange);stop-opacity:1" />
-                <stop offset="100%" style="stop-color:var(--dark-orange);stop-opacity:1" />
+              <linearGradient id="logoGrad" x1="6" y1="8" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+                <stop style="stop-color:var(--main-orange)" />
+                <stop offset="1" style="stop-color:var(--dark-orange)" />
               </linearGradient>
             </defs>
-            <rect width="100" height="100" rx="15" fill="url(#logoGrad)"/>
-            <circle cx="50" cy="45" r="25" fill="none" stroke="white" stroke-width="4"/>
-            <line x1="68" y1="62" x2="85" y2="79" stroke="white" stroke-width="6" stroke-linecap="round"/>
-            <polyline points="38,52 45,45 52,48 60,38" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <polygon points="60,38 57,42 60,41 58,48 62,46 65,43" fill="white"/>
+            <circle cx="24" cy="26" r="15" stroke="url(#logoGrad)" stroke-width="6" stroke-linecap="round" stroke-dasharray="71 24" />
+            <path d="M15 31l7-7 5 4 9-11" stroke="url(#logoGrad)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="37" cy="15" r="3.6" fill="var(--dark-orange)" />
           </svg>
         </div>
         <span class="brand-name">{{ t('nav.brandName') }}</span>
       </div>
     </div>
 
-    <nav class="nav-menu">
+    <nav ref="menuRef" class="nav-menu">
+      <span class="nav-pill" :style="pillStyle" aria-hidden="true"></span>
       <a
         v-for="item in navItems"
         :key="item.key"
         class="nav-item"
         :class="{ active: activeNav === item.key }"
+        tabindex="0"
         @click="handleNavClick(item.key)"
+        @keydown.enter="handleNavClick(item.key)"
       >
         {{ t(item.label) }}
       </a>
     </nav>
 
     <div class="nav-right">
-      <!-- 工作区切换器 -->
-      <el-dropdown
-        v-if="userStore.workspaces.length > 0"
-        trigger="click"
-        popper-class="topnav-dropdown-popper workspace-dropdown-popper"
-        @visible-change="handleWorkspaceVisibleChange"
-        @command="handleWorkspaceCommand"
-      >
-        <button
-          class="nav-btn workspace-btn"
-          :class="{ 'is-open': workspaceDropdownOpen }"
-          :title="workspaceDisplayName(userStore.currentWorkspace)"
-        >
-          <span class="workspace-btn-icon"><el-icon><OfficeBuilding /></el-icon></span>
-          <span class="workspace-btn-name">{{ workspaceDisplayName(userStore.currentWorkspace) }}</span>
-          <svg class="workspace-btn-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item
-              v-for="ws in userStore.workspaces"
-              :key="ws.id"
-              :command="ws.id"
-              :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
-              :title="workspaceDisplayName(ws)"
-            >
-              <span class="dropdown-workspace-name">{{ workspaceDisplayName(ws) }}</span>
-              <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
-              <span v-if="ws.memberRole" class="dropdown-workspace-role">{{ ws.memberRole }}</span>
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-
       <button class="nav-btn icon-btn notification-btn" :title="t('nav.notification')">
         <el-icon class="nav-icon"><Bell /></el-icon>
         <span class="notification-dot"></span>
@@ -95,7 +61,7 @@
         </template>
       </el-dropdown>
 
-      <!-- 用户头像 -->
+      <!-- 用户头像（纯圆形，点击仍打开下拉菜单） -->
       <el-dropdown trigger="click" popper-class="topnav-dropdown-popper" @command="handleUserCommand">
         <div class="user-chip" :title="userStore.username">
           <div class="user-avatar"><span>{{ avatarText }}</span></div>
@@ -128,17 +94,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell, Sunny, Moon, View, MagicStick, FolderOpened, SwitchButton, OfficeBuilding, Check } from '@element-plus/icons-vue'
+import { Bell, Sunny, Moon, View, MagicStick, FolderOpened, SwitchButton } from '@element-plus/icons-vue'
 import { useThemeStore, type ThemeMode } from '@/stores/useThemeStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Component } from 'vue'
-import type { Workspace } from '@/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -149,6 +114,49 @@ const chatStore = useChatStore()
 
 /** 当前激活的导航项 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
+
+/** 菜单容器引用（高亮滑块定位的 offsetParent） */
+const menuRef = ref<HTMLElement | null>(null)
+
+/** 高亮滑块样式：测量激活项位置，切换时由 CSS transition 平滑滑动 */
+const pillStyle = ref<{ left: string; top: string; width: string; height: string; opacity: number }>({
+  left: '0px',
+  top: '0px',
+  width: '0px',
+  height: '0px',
+  opacity: 0,
+})
+
+/** 测量激活导航项并移动高亮滑块 */
+function updateNavPill(): void {
+  const menu = menuRef.value
+  if (!menu) return
+  const active = menu.querySelector<HTMLElement>('.nav-item.active')
+  if (!active) {
+    pillStyle.value.opacity = 0
+    return
+  }
+  pillStyle.value = {
+    left: `${active.offsetLeft}px`,
+    top: `${active.offsetTop}px`,
+    width: `${active.offsetWidth}px`,
+    height: `${active.offsetHeight}px`,
+    opacity: 1,
+  }
+}
+
+watch(activeNav, () => {
+  nextTick(updateNavPill)
+})
+
+onMounted(() => {
+  updateNavPill()
+  window.addEventListener('resize', updateNavPill)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateNavPill)
+})
 
 /** 导航项配置 */
 const navItems = [
@@ -189,33 +197,6 @@ const avatarText = computed(() => {
 const { hasPermission } = usePermission()
 const canManageWorkspace = computed(() => hasPermission(PERMISSION.WORKSPACE_MANAGE))
 
-/** 工作区下拉是否展开（用于触发按钮箭头旋转等展开态样式） */
-const workspaceDropdownOpen = ref(false)
-
-/** 工作区下拉展开状态变化 */
-function handleWorkspaceVisibleChange(visible: boolean): void {
-  workspaceDropdownOpen.value = visible
-}
-
-/** 工作区显示名称：优先使用 name，空则回退 description */
-function workspaceDisplayName(ws: Workspace | null): string {
-  if (!ws) {
-    return t('workspace.select')
-  }
-  return ws.name?.trim() || ws.description?.trim() || t('workspace.select')
-}
-
-/** 工作区下拉命令处理：切换工作区前清理会话缓存，刷新后按新工作区重新加载 */
-function handleWorkspaceCommand(command: string | number): void {
-  if (command === userStore.currentWorkspaceId) {
-    return
-  }
-  chatStore.resetForWorkspaceSwitch()
-  userStore.setCurrentWorkspace(command)
-  ElMessage.success(t('workspace.switchSuccess'))
-  window.location.reload()
-}
-
 /** 用户菜单命令处理 */
 function handleUserCommand(command: string): void {
   if (command === 'manage') {
@@ -245,12 +226,11 @@ function handleUserCommand(command: string): void {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 24px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  /* 与内容区同底色（参考设计稿：顶栏无独立背景，导航元素浮于页面底色上） */
+  background: transparent;
+  border-bottom: 1px solid transparent;
   flex-shrink: 0;
   z-index: 100;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 /* ========== 左侧：品牌 ========== */
@@ -264,63 +244,81 @@ function handleUserCommand(command: string): void {
 .brand-area {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-shrink: 0;
   user-select: none;
   cursor: pointer;
-  border-radius: 8px;
   padding: 4px 6px;
   margin: -4px -6px;
-  transition: background 0.2s ease;
-}
-
-.brand-area:hover {
-  background: var(--theme-surface-hover);
+  border-radius: 10px;
 }
 
 .logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  overflow: hidden;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s ease;
 }
 
 .brand-area:hover .logo {
-  transform: scale(1.05);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  transform: scale(1.06);
 }
 
 .brand-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.6px;
   line-height: 20px;
   white-space: nowrap;
   color: var(--theme-text);
 }
 
-/* ========== 导航菜单（居中） ========== */
+/* ========== 导航菜单（居中，分段胶囊式） ========== */
+/* 菜单容器：elevated 底色（蓝色主题下为白底，暗色自动适配）浮起胶囊 */
 .nav-menu {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
   justify-self: center;
   min-width: 0;
 }
 
+/* 高亮滑块：在导航项间平滑滑动，主题色底 + 悬浮投影（随主题 accent 换色）；
+   四向位移统一同一缓动曲线，避免宽高与位置不同步 */
+.nav-pill {
+  position: absolute;
+  border-radius: 999px;
+  background: var(--main-orange);
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--main-orange) 40%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  transition:
+    left 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    width 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    top 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    height 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    opacity 0.2s ease;
+}
+
 .nav-item {
   position: relative;
-  padding: 8px 18px;
+  z-index: 1;
+  padding: 8px 20px;
+  border-radius: 999px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 20px;
   color: var(--theme-text-secondary);
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.25s ease, background 0.2s ease;
   white-space: nowrap;
   text-decoration: none;
   display: inline-flex;
@@ -328,14 +326,16 @@ function handleUserCommand(command: string): void {
   letter-spacing: 0.3px;
 }
 
-.nav-item:hover {
-  color: var(--main-orange);
+.nav-item:hover:not(.active) {
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
 }
 
+/* 激活项：文字白色浮于滑块之上；字号与默认态一致，
+   仅加粗区分，避免激活瞬间文字放大带动滑块宽度抖动 */
 .nav-item.active {
-  color: var(--main-orange);
+  color: #fff;
   font-weight: 600;
-  font-size: 18px;
 }
 
 /* ========== 右侧：图标按钮 + 头像 ========== */
@@ -350,10 +350,11 @@ function handleUserCommand(command: string): void {
 .icon-btn {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 50%;
   border: none;
-  background: transparent;
-  color: var(--theme-text-muted);
+  /* 常驻浅色底，hover 加深 */
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -363,12 +364,13 @@ function handleUserCommand(command: string): void {
 }
 
 .icon-btn:hover {
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--main-orange);
+  background: color-mix(in srgb, var(--theme-text-muted) 16%, transparent);
+  color: var(--theme-text);
 }
 
 .icon-btn:active {
-  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+  background: color-mix(in srgb, var(--theme-text-muted) 22%, transparent);
+  color: var(--theme-text);
 }
 
 .nav-icon {
@@ -384,115 +386,15 @@ function handleUserCommand(command: string): void {
   position: relative;
 }
 
-/* ========== 工作区切换器 ========== */
-.workspace-btn {
-  height: 36px;
-  max-width: 220px;
-  border-radius: 10px;
-  border: 1px solid var(--theme-border);
-  background: var(--theme-surface);
-  color: var(--theme-text);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px 0 6px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.workspace-btn:hover {
-  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
-  background: color-mix(in srgb, var(--main-orange) 5%, var(--theme-surface));
-  color: var(--main-orange);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-}
-
-.workspace-btn:active {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.workspace-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--main-orange) 45%, transparent);
-  outline-offset: 1px;
-}
-
-/* 展开态：描边加深，与下拉面板形成呼应 */
-.workspace-btn.is-open {
-  border-color: color-mix(in srgb, var(--main-orange) 50%, transparent);
-  background: color-mix(in srgb, var(--main-orange) 7%, var(--theme-surface));
-  color: var(--main-orange);
-}
-
-/* 工作区图标徽标 */
-.workspace-btn-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  background: var(--very-light-orange);
-  color: var(--main-orange);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  flex-shrink: 0;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.workspace-btn-name {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.workspace-btn-arrow {
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: transform 0.2s ease;
-}
-
-/* 下拉展开时箭头翻转 */
-.workspace-btn.is-open .workspace-btn-arrow {
-  transform: rotate(180deg);
-}
-
-.dropdown-workspace-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-check {
-  margin-left: 6px;
-  color: var(--main-orange);
-}
-
-.dropdown-workspace-role {
-  margin-left: 6px;
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-  color: var(--theme-text-muted);
-  background: var(--theme-surface-hover);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-
 .notification-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 6px;
+  right: 6px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #ef4444;
-  border: 1.5px solid var(--theme-surface);
+  border: 1.5px solid var(--theme-bg);
   box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
 }
 
@@ -502,26 +404,27 @@ function handleUserCommand(command: string): void {
   vertical-align: middle;
 }
 
-/* ========== 用户头像 ========== */
+/* ========== 用户头像（纯圆头像，hover 浅底） ========== */
 .user-chip {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 6px;
-  transition: box-shadow 0.2s ease;
+  padding: 2px;
+  transition: background 0.2s ease;
 }
 
 .user-chip:hover {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-text-muted) 16%, transparent);
 }
 
 .user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--very-light-orange);
   display: flex;
@@ -530,6 +433,7 @@ function handleUserCommand(command: string): void {
   color: var(--main-orange);
   font-size: 13px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .dropdown-user-info {
@@ -567,10 +471,19 @@ function handleUserCommand(command: string): void {
   color: #e53e3e;
 }
 
+/* ========== 键盘可达性：统一主题色 focus 环 ========== */
+.brand-area:focus-visible,
+.nav-item:focus-visible,
+.icon-btn:focus-visible,
+.user-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--main-orange) 55%, transparent);
+  outline-offset: 2px;
+}
+
 /* ========== 响应式适配 ========== */
 @media (max-width: 1280px) {
   .nav-item {
-    padding: 8px 14px;
+    padding: 8px 16px;
   }
 }
 
@@ -579,7 +492,7 @@ function handleUserCommand(command: string): void {
     padding: 0 20px;
   }
   .nav-item {
-    padding: 8px 12px;
+    padding: 8px 13px;
   }
 }
 
@@ -593,16 +506,6 @@ function handleUserCommand(command: string): void {
   .icon-btn {
     width: 32px;
     height: 32px;
-  }
-  /* 小屏隐藏工作区名称，仅保留图标入口 */
-  .workspace-btn {
-    max-width: none;
-    padding: 0 9px;
-    gap: 6px;
-  }
-  .workspace-btn-name,
-  .workspace-btn-arrow {
-    display: none;
   }
 }
 </style>
@@ -620,27 +523,6 @@ function handleUserCommand(command: string): void {
   border: none;
   box-shadow: none;
   padding: 0;
-}
-
-/* 工作区下拉项：名称 + 选中勾 + 角色徽标横向排布 */
-.topnav-dropdown-popper .el-dropdown-menu__item {
-  display: flex;
-  align-items: center;
-}
-
-/* 工作区下拉面板：固定最小宽度，选项加高，视觉更从容 */
-.workspace-dropdown-popper {
-  min-width: 224px;
-}
-
-.workspace-dropdown-popper .el-dropdown-menu__item {
-  padding: 8px 10px;
-  border-radius: 8px;
-  line-height: 20px;
-}
-
-.workspace-dropdown-popper .el-dropdown-menu__item + .el-dropdown-menu__item {
-  margin-top: 2px;
 }
 
 .topnav-dropdown-popper .el-dropdown-menu__item:not(.is-disabled):hover,
