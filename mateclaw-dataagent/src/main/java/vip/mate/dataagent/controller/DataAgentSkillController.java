@@ -9,16 +9,18 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.dto.SkillFileUpdateRequest;
+import vip.mate.dataagent.dto.SkillInstallRequest;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.auth.service.SkillGuard;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
-import vip.mate.dataagent.dto.SkillInstallRequest;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.installer.model.HubSkillInfo;
 import vip.mate.skill.installer.model.InstallRequest;
 import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileView;
 
 import java.util.List;
 import java.util.Map;
@@ -134,6 +136,60 @@ public class DataAgentSkillController {
     public R<SkillEntity> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
         skillGuard.requireSkillInCurrentWorkspace(id);
         return R.ok(runtime.toggleSkill(id, enabled));
+    }
+
+    /**
+     * 重新执行安全扫描
+     */
+    @PostMapping("/{id}/rescan")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "重新安全扫描", description = "对指定技能重新执行安全扫描，返回更新后的技能实体（含最新扫描状态与发现列表）")
+    public R<SkillEntity> rescan(@PathVariable Long id) {
+        skillGuard.requireSkillInCurrentWorkspace(id);
+        return R.ok(runtime.rescanSkill(id));
+    }
+
+    // ==================== 技能文件 ====================
+
+    /**
+     * 列出技能 bundle 文件
+     */
+    @GetMapping("/{id}/files")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "技能文件列表", description = "列出技能 references/、scripts/ 目录下所有文件的元信息（不含正文）")
+    public R<List<SkillFileView>> listFiles(@PathVariable Long id) {
+        skillGuard.requireSkillInCurrentWorkspace(id);
+        return R.ok(runtime.listSkillFiles(id));
+    }
+
+    /**
+     * 读取技能 bundle 文件内容
+     */
+    @GetMapping("/{id}/files/content")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "读取技能文件内容", description = "按路径读取技能 references/、scripts/ 目录下指定文件的正文")
+    public R<SkillFileView> getFileContent(@PathVariable Long id, @RequestParam("path") String filePath) {
+        skillGuard.requireSkillInCurrentWorkspace(id);
+        SkillFileView file = runtime.getSkillFileContent(id, filePath);
+        if (file == null) {
+            return R.fail("文件不存在: " + filePath);
+        }
+        return R.ok(file);
+    }
+
+    /**
+     * 更新技能 bundle 文件内容
+     */
+    @PutMapping("/{id}/files/content")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_ADMIN)
+    @Operation(summary = "更新技能文件内容", description = "更新（或新建）技能 references/、scripts/ 目录下的单个文件，保存后同步工作区并刷新运行时")
+    public R<SkillFileView> updateFileContent(@PathVariable Long id, @RequestParam("path") String filePath,
+            @RequestBody SkillFileUpdateRequest request) {
+        skillGuard.requireSkillInCurrentWorkspace(id);
+        if (request == null || request.getContent() == null) {
+            return R.fail("文件内容不能为空");
+        }
+        return R.ok(runtime.updateSkillFileContent(id, filePath, request.getContent()));
     }
 
     // ==================== 技能导入 ====================

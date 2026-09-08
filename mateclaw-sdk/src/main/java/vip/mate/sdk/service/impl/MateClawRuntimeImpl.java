@@ -26,6 +26,7 @@ import vip.mate.sdk.service.llm.dto.LlmChatRequest;
 import vip.mate.sdk.service.llm.dto.LlmChatResponse;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.sdk.service.tool.ToolRuntime;
 import vip.mate.sdk.service.workspace.WorkspaceRuntime;
 import vip.mate.skill.installer.model.HubSkillInfo;
@@ -426,6 +427,26 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public SkillEntity toggleSkill(Long id, boolean enabled) {
         return skillRuntime.toggleSkill(id, enabled);
+    }
+
+    @Override
+    public SkillEntity rescanSkill(Long id) {
+        return skillRuntime.rescanSkill(id);
+    }
+
+    @Override
+    public List<SkillFileView> listSkillFiles(Long skillId) {
+        return skillRuntime.listSkillFiles(skillId);
+    }
+
+    @Override
+    public SkillFileView getSkillFileContent(Long skillId, String filePath) {
+        return skillRuntime.getSkillFileContent(skillId, filePath);
+    }
+
+    @Override
+    public SkillFileView updateSkillFileContent(Long skillId, String filePath, String content) {
+        return skillRuntime.updateSkillFileContent(skillId, filePath, content);
     }
 
     @Override

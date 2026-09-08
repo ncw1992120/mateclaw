@@ -757,12 +757,51 @@ export interface Skill {
   workspaceId: number
   /** 安全扫描状态 */
   securityScanStatus: string
+  /** 最近一次安全扫描的发现列表（JSON 序列化的 SkillSecurityFinding[]） */
+  securityScanResult?: string
+  /** 最近一次安全扫描时间 */
+  securityScanTime?: string
   /** 生命周期状态：active / stale / archived */
   lifecycleState: string
   /** 是否被钉住 */
   pinned: boolean
+  /** SKILL.md 协议正文（详情接口返回） */
+  skillContent?: string
   createTime: string
   updateTime: string
+}
+
+/** 技能 bundle 文件视图（references/、scripts/ 目录下） */
+export interface SkillFileView {
+  /** 相对路径，例如 references/notes.md */
+  filePath: string
+  /** 文件正文（列表接口不返回，读取接口返回） */
+  content: string | null
+  /** 正文大小（字节） */
+  contentSize: number | null
+  /** SHA-256 哈希 */
+  sha256: string | null
+  updateTime: string | null
+}
+
+/** 技能安全扫描发现项（securityScanResult JSON 数组元素） */
+export interface SkillSecurityFinding {
+  /** 严重度：CRITICAL / HIGH / MEDIUM / LOW / INFO */
+  severity: string
+  /** 规则 ID，例如 REVERSE_SHELL */
+  ruleId: string
+  /** 风险类别，例如 CODE_EXECUTION */
+  category?: string
+  /** 所在文件路径 */
+  filePath?: string
+  /** 所在行号 */
+  lineNumber?: number
+  /** 发现标题 */
+  title?: string
+  /** 发现描述 */
+  description?: string
+  /** 修复建议 */
+  remediation?: string
 }
 
 /** 技能类型选项（对齐后端 SkillEntity.skillType 实际值：builtin / custom / mcp） */

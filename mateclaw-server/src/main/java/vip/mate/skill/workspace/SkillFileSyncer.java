@@ -2,9 +2,11 @@ package vip.mate.skill.workspace;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import vip.mate.skill.model.SkillEntity;
 import vip.mate.skill.model.SkillFileEntity;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.skill.service.SkillFileService;
 import vip.mate.skill.service.SkillService;
 
@@ -45,6 +47,7 @@ public class SkillFileSyncer {
     private final SkillService skillService;
     private final SkillFileService skillFileService;
     private final SkillWorkspaceManager workspaceManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** Aggregate counters for one full sync pass. */
     public record SyncReport(int skillsConsidered,
@@ -120,18 +123,33 @@ public class SkillFileSyncer {
         return new PerSkillReport(materialized, alreadyCurrent, backfilled, didBackfill);
     }
 
+    /**
+     * 在线编辑单个 bundle 文件后的编排入口：更新 canonical store（DB）→
+     * 物化到本地工作区磁盘（运行时脚本执行读磁盘）→ 发布 UPDATED 事件触发
+     * runtime 缓存去抖刷新（目录树可能因新建文件而变化）。
+     *
+     * @param skill    所属技能
+     * @param filePath 文件路径（references/ 或 scripts/ 下）
+     * @param content  新的 UTF-8 文本内容
+     * @return 更新后的文件视图（含正文）
+     */
+    public SkillFileView updateBundleFileAndSync(SkillEntity skill, String filePath, String content) {
+        SkillFileEntity row = skillFileService.updateSingleBundleFile(skill.getId(), filePath, content);
+        syncOne(skill);
+        eventPublisher.publishEvent(new SkillWorkspaceEvent(skill.getName(), SkillWorkspaceEvent.Type.UPDATED,
+                workspaceManager.resolveConventionPath(skill.getName())));
+        return SkillFileView.from(row, true);
+    }
+
     private enum MaterializeOutcome { WROTE, CURRENT, SKIPPED }
 
     private MaterializeOutcome materializeOne(Path workspaceDir, SkillFileEntity row) {
-        String relative = row.getFilePath();
-        if (relative == null || relative.isBlank()) return MaterializeOutcome.SKIPPED;
-        if (!relative.startsWith("references/") && !relative.startsWith("scripts/")) {
-            log.warn("Skipping skill_file row {} — path outside scripts/ or references/: {}",
-                    row.getId(), relative);
-            return MaterializeOutcome.SKIPPED;
-        }
-        if (relative.contains("..")) {
-            log.warn("Skipping skill_file row {} — suspicious path: {}", row.getId(), relative);
+        String relative;
+        try {
+            // 复用 bundle 路径安全校验（前缀/相对跳转/绝对路径），非法路径跳过落盘
+            relative = SkillFileService.validateBundlePath(row.getFilePath());
+        } catch (Exception e) {
+            log.warn("Skipping skill_file row {} — invalid path {}: {}", row.getId(), row.getFilePath(), e.getMessage());
             return MaterializeOutcome.SKIPPED;
         }
 

@@ -4,20 +4,26 @@
 
     <insert id="upsertBatch" parameterType="java.util.List">
         INSERT INTO `dataagent_aloudata_dimension`
-        (`id`, `datasource_id`, `dim_name`, `dim_display_name`, `origin_data_type`,
+        (`id`, `datasource_id`, `dim_code`, `dim_name`, `dim_display_name`, `dim_category_id`, `dim_category_name`,
+         `origin_data_type`, `display_status`,
          `dim_description`, `is_time_dimension`, `synonyms`, `config_type`, `config_value`,
          `dataset_name`, `example_values`, `embedding_text`, `sync_version`,
          `embedding`, `embedding_model_id`, `create_time`, `update_time`)
         VALUES
         <foreach collection="list" item="item" separator=",">
-            (#{item.id}, #{item.datasourceId}, #{item.dimName}, #{item.dimDisplayName}, #{item.originDataType},
+            (#{item.id}, #{item.datasourceId}, #{item.dimCode}, #{item.dimName}, #{item.dimDisplayName}, #{item.dimCategoryId}, #{item.dimCategoryName},
+             #{item.originDataType}, #{item.displayStatus},
              #{item.dimDescription}, #{item.isTimeDimension}, #{item.synonyms}, #{item.configType}, #{item.configValue},
              #{item.datasetName}, #{item.exampleValues}, #{item.embeddingText}, #{item.syncVersion},
              #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON DUPLICATE KEY UPDATE
+            `dim_code` = VALUES(`dim_code`),
             `dim_display_name` = VALUES(`dim_display_name`),
+            `dim_category_id` = VALUES(`dim_category_id`),
+            `dim_category_name` = VALUES(`dim_category_name`),
             `origin_data_type` = VALUES(`origin_data_type`),
+            `display_status` = VALUES(`display_status`),
             `dim_description` = VALUES(`dim_description`),
             `is_time_dimension` = VALUES(`is_time_dimension`),
             `synonyms` = VALUES(`synonyms`),
@@ -35,20 +41,26 @@
     <!-- PostgreSQL 方言版本：按业务唯一键 (datasource_id, dim_name) 冲突更新 -->
     <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
         INSERT INTO dataagent_aloudata_dimension
-        (id, datasource_id, dim_name, dim_display_name, origin_data_type,
+        (id, datasource_id, dim_code, dim_name, dim_display_name, dim_category_id, dim_category_name,
+         origin_data_type, display_status,
          dim_description, is_time_dimension, synonyms, config_type, config_value,
          dataset_name, example_values, embedding_text, sync_version,
          embedding, embedding_model_id, create_time, update_time)
         VALUES
         <foreach collection="list" item="item" separator=",">
-            (#{item.id}, #{item.datasourceId}, #{item.dimName}, #{item.dimDisplayName}, #{item.originDataType},
+            (#{item.id}, #{item.datasourceId}, #{item.dimCode}, #{item.dimName}, #{item.dimDisplayName}, #{item.dimCategoryId}, #{item.dimCategoryName},
+             #{item.originDataType}, #{item.displayStatus},
              #{item.dimDescription}, #{item.isTimeDimension}, #{item.synonyms}, #{item.configType}, #{item.configValue},
              #{item.datasetName}, #{item.exampleValues}, #{item.embeddingText}, #{item.syncVersion},
              #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON CONFLICT (datasource_id, dim_name) DO UPDATE SET
+            dim_code = EXCLUDED.dim_code,
             dim_display_name = EXCLUDED.dim_display_name,
+            dim_category_id = EXCLUDED.dim_category_id,
+            dim_category_name = EXCLUDED.dim_category_name,
             origin_data_type = EXCLUDED.origin_data_type,
+            display_status = EXCLUDED.display_status,
             dim_description = EXCLUDED.dim_description,
             is_time_dimension = EXCLUDED.is_time_dimension,
             synonyms = EXCLUDED.synonyms,

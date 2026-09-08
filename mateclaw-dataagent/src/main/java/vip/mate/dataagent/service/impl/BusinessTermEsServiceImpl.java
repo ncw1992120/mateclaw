@@ -26,7 +26,7 @@ import vip.mate.dataagent.dto.BusinessTermSearchResult.TermHit;
 import vip.mate.dataagent.model.BusinessTermEntity;
 import vip.mate.dataagent.repository.BusinessTermMapper;
 import vip.mate.dataagent.service.BusinessTermEsService;
-import vip.mate.dataagent.support.NameMatchSupport;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -741,7 +741,7 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
      * 仅用于 MySQL LIKE 降级路径的 termName/synonyms 核心字段，避免 LLM 格式化（加空格/改标点/
      * 全角半角）导致业务词典召回落空；ES 主路径走 ik 分词（拆词后天然免疫），无需此处理。
      * 全角字母数字（如「ＡＢＣ」）先转半角再分段。无有效段（如纯标点查询）时返回 null，
-     * 由调用方跳过该模式。实现委托 {@link vip.mate.dataagent.support.NameMatchSupport}。
+     * 由调用方跳过该模式。实现委托 {@link vip.mate.dataagent.util.NameMatchSupport}。
      */
     private static String buildPunctuationInsensitivePattern(String query) {
         return NameMatchSupport.likePattern(query);

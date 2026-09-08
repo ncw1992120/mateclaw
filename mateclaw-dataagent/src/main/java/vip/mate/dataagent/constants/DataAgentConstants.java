@@ -278,6 +278,15 @@ public final class DataAgentConstants {
     /** Aloudata 类目类型：维度类目 */
     public static final String ALOUDATA_CATEGORY_TYPE_DIMENSION = "CATEGORY_DIMENSION";
 
+    /**
+     * 系统配置 key：Aloudata 元数据同步黑名单过滤表达式（全局级）。
+     * <p>
+     * 值为 QLExpress 布尔表达式 JSON 数组，命中任一表达式即视为黑名单，
+     * 对应元数据（类目/指标/维度）不落库持久化。与数据源级
+     * connection_params.syncFilterExpressions 合并生效。
+     */
+    public static final String ALOUDATA_SYNC_FILTER_EXPRESSIONS_KEY = "aloudata.sync.filter.expressions";
+
     /** 默认 Embedding 向量维度 */
     public static final int DEFAULT_EMBEDDING_DIMENSION = 1024;
 

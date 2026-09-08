@@ -42,6 +42,7 @@ class SkillFileSyncerTest {
     private SkillFileMapper mapper;
     private SkillFileService fileService;
     private SkillWorkspaceManager workspaceManager;
+    private ApplicationEventPublisher eventPublisher;
     private SkillFileSyncer syncer;
 
     @BeforeEach
@@ -49,10 +50,11 @@ class SkillFileSyncerTest {
         skillService = mock(SkillService.class);
         mapper = mock(SkillFileMapper.class);
         fileService = new SkillFileService(mapper);
+        eventPublisher = mock(ApplicationEventPublisher.class);
         SkillWorkspaceProperties props = new SkillWorkspaceProperties();
         props.setRoot(tmp.toString());
-        workspaceManager = new SkillWorkspaceManager(props, mock(ApplicationEventPublisher.class));
-        syncer = new SkillFileSyncer(skillService, fileService, workspaceManager);
+        workspaceManager = new SkillWorkspaceManager(props, eventPublisher);
+        syncer = new SkillFileSyncer(skillService, fileService, workspaceManager, eventPublisher);
     }
 
     @Test
@@ -69,7 +71,8 @@ class SkillFileSyncerTest {
 
         var report = syncer.syncAll();
 
-        Path workspace = tmp.resolve("demo");
+        // workspace 目录约定为「名称-<hash>」，必须经由 manager 解析，不能写死为 tmp/demo
+        Path workspace = workspaceManager.resolveConventionPath("demo");
         assertEquals("print('a')\n", Files.readString(workspace.resolve("scripts/run.py")));
         assertEquals("hello", Files.readString(workspace.resolve("references/notes.md")));
         assertEquals(2, report.filesMaterialized());
@@ -83,7 +86,7 @@ class SkillFileSyncerTest {
         SkillEntity skill = newSkill(10L, "demo");
         when(skillService.listSkills()).thenReturn(List.of(skill));
 
-        Path workspace = tmp.resolve("demo");
+        Path workspace = workspaceManager.resolveConventionPath("demo");
         Files.createDirectories(workspace.resolve("scripts"));
         Files.writeString(workspace.resolve("scripts/run.py"), "stable");
 
@@ -103,7 +106,7 @@ class SkillFileSyncerTest {
         SkillEntity skill = newSkill(10L, "demo");
         when(skillService.listSkills()).thenReturn(List.of(skill));
 
-        Path workspace = tmp.resolve("demo");
+        Path workspace = workspaceManager.resolveConventionPath("demo");
         Files.createDirectories(workspace.resolve("scripts"));
         Files.createDirectories(workspace.resolve("references"));
         Files.writeString(workspace.resolve("scripts/run.py"), "legacy");
