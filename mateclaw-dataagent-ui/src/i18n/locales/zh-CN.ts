@@ -1057,6 +1057,8 @@ export default {
     securityNoFindings: '扫描未通过，但未持久化发现列表，请重新扫描',
     securityFix: '修复建议',
     editHint: '修改技能基础信息。SKILL.md 与相关文件请在对应 Tab 中编辑。',
+    editTitle: '编辑技能',
+    tabSkillmd: 'SKILL.md',
     skillMdHint: '编辑 SKILL.md 协议正文（技能用途、工作流与使用约束），保存后同步到工作区。',
     skillMdPlaceholder: '# 技能名称\n\n描述该技能的用途、工作流与使用约束…',
     charCount: '{n} 字符',

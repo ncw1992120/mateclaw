@@ -1047,6 +1047,8 @@ export default {
     securityNoFindings: 'Scan failed but no persisted findings; please rescan',
     securityFix: 'Fix',
     editHint: 'Edit the skill basics. Edit SKILL.md and related files in their own tabs.',
+    editTitle: 'Edit Skill',
+    tabSkillmd: 'SKILL.md',
     skillMdHint: 'Edit the SKILL.md protocol body (purpose, workflow and constraints). Synced to the workspace after saving.',
     skillMdPlaceholder: '# Skill Name\n\nDescribe the purpose, workflow and constraints…',
     charCount: '{n} chars',

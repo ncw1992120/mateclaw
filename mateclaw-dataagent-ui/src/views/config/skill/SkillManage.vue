@@ -241,11 +241,11 @@
       </div>
     </div>
 
-    <!-- 新建技能弹窗 -->
+    <!-- 新建/编辑技能弹窗 -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-      <div class="modal">
+      <div class="modal" :class="{ 'modal-wide': editingSkillId != null }">
         <div class="modal-header">
-          <h2>{{ t('skillManage.create') }}</h2>
+          <h2>{{ editingSkillId != null ? t('skillManage.editTitle') : t('skillManage.create') }}</h2>
           <button class="modal-close" :disabled="submitting" @click="closeModal">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -253,8 +253,25 @@
             </svg>
           </button>
         </div>
+
+        <!-- 编辑态 Tab：基础信息 / SKILL.md / 相关文件 / 安全扫描 -->
+        <div v-if="editingSkillId != null" class="edit-tabs">
+          <button
+            v-for="et in editTabs"
+            :key="et.value"
+            type="button"
+            class="edit-tab"
+            :class="{ active: activeEditTab === et.value }"
+            @click="switchEditTab(et.value)"
+          >
+            {{ et.label }}
+          </button>
+        </div>
+
         <div class="modal-body">
-          <p class="modal-hint">{{ t('skillManage.createHint') }}</p>
+          <!-- ===== Tab: 基础信息 ===== -->
+          <div v-if="activeEditTab === 'basic'" class="edit-section">
+            <p class="modal-hint">{{ editingSkillId != null ? t('skillManage.editHint') : t('skillManage.createHint') }}</p>
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">{{ t('skillManage.fieldName') }} *</label>
@@ -333,8 +350,169 @@
               <el-switch v-model="form.enabled" :disabled="submitting" />
             </div>
           </div>
+          </div>
+
+          <!-- ===== Tab: SKILL.md ===== -->
+          <div v-else-if="activeEditTab === 'skillmd'" class="edit-section">
+            <p class="modal-hint">{{ t('skillManage.skillMdHint') }}</p>
+            <textarea
+              v-model="skillMdContent"
+              class="form-textarea code-textarea"
+              rows="16"
+              :placeholder="t('skillManage.skillMdPlaceholder')"
+              :disabled="savingSkillMd"
+            />
+            <div class="edit-footer">
+              <span class="char-count">{{ t('skillManage.charCount', { n: skillMdContent.length }) }}</span>
+              <el-button
+                type="primary"
+                size="small"
+                :disabled="savingSkillMd || skillMdContent === (editingSkill?.skillContent || '')"
+                :loading="savingSkillMd"
+                @click="saveSkillMd"
+              >
+                {{ t('common.confirm') }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- ===== Tab: 相关文件 ===== -->
+          <div v-else-if="activeEditTab === 'files'" class="edit-section">
+            <div class="files-layout">
+              <!-- 左侧：文件列表 -->
+              <div class="files-list">
+                <div class="files-list-head">
+                  <span class="files-title">{{ t('skillManage.filesTitle') }}</span>
+                  <button type="button" class="file-new-btn" :disabled="creatingFile" @click="startNewFile">
+                    {{ t('skillManage.fileNew') }}
+                  </button>
+                </div>
+                <div v-if="filesLoading" class="files-hint">{{ t('common.loading') }}</div>
+                <div v-else-if="skillFiles.length === 0" class="files-hint">{{ t('skillManage.filesEmpty') }}</div>
+                <button
+                  v-for="f in skillFiles"
+                  v-else
+                  :key="f.filePath"
+                  type="button"
+                  class="file-item"
+                  :class="{ active: !creatingFile && activeFilePath === f.filePath }"
+                  @click="openSkillFile(f)"
+                >
+                  <span class="file-name">{{ f.filePath }}</span>
+                  <span class="file-size">{{ formatFileSize(f.contentSize) }}</span>
+                </button>
+              </div>
+
+              <!-- 右侧：文件编辑器 -->
+              <div class="file-editor">
+                <template v-if="creatingFile">
+                  <div class="file-editor-head">
+                    <input
+                      v-model="newFilePath"
+                      class="form-input file-path-input"
+                      :placeholder="t('skillManage.filePathPlaceholder')"
+                      :disabled="savingFile"
+                    />
+                  </div>
+                  <textarea
+                    v-model="activeFileContent"
+                    class="form-textarea code-textarea"
+                    rows="14"
+                    :placeholder="t('skillManage.skillMdPlaceholder')"
+                    :disabled="savingFile"
+                  />
+                  <div class="edit-footer">
+                    <el-button size="small" :disabled="savingFile" @click="closeFileEditor">
+                      {{ t('common.cancel') }}
+                    </el-button>
+                    <el-button type="primary" size="small" :disabled="savingFile" :loading="savingFile" @click="saveActiveFile">
+                      {{ t('common.confirm') }}
+                    </el-button>
+                  </div>
+                </template>
+
+                <template v-else-if="activeFilePath">
+                  <div class="file-editor-head">
+                    <span class="file-path">{{ activeFilePath }}</span>
+                    <span v-if="activeFileSize != null" class="file-size">{{ formatFileSize(activeFileSize) }}</span>
+                  </div>
+                  <div v-if="fileContentLoading" class="file-editor-empty">{{ t('common.loading') }}</div>
+                  <template v-else>
+                    <textarea
+                      v-model="activeFileContent"
+                      class="form-textarea code-textarea"
+                      rows="14"
+                      :disabled="savingFile"
+                    />
+                    <div class="edit-footer">
+                      <el-button
+                        type="primary"
+                        size="small"
+                        :disabled="savingFile"
+                        :loading="savingFile"
+                        @click="saveActiveFile"
+                      >
+                        {{ t('common.confirm') }}
+                      </el-button>
+                    </div>
+                  </template>
+                </template>
+
+                <!-- 未选择文件 -->
+                <div v-else class="file-editor-empty">{{ t('skillManage.fileSelectHint') }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== Tab: 安全扫描 ===== -->
+          <div v-else-if="activeEditTab === 'security'" class="edit-section">
+            <div class="scan-head">
+              <span class="status-pill" :class="scanStatusPill.cls">{{ scanStatusPill.label }}</span>
+              <span v-if="scanTimeText" class="scan-time">{{ t('skillManage.securityScanTime') }}: {{ scanTimeText }}</span>
+              <button
+                v-if="canRescan"
+                type="button"
+                class="scan-rescan-btn"
+                :disabled="rescanning"
+                @click="handleRescan"
+              >
+                {{ rescanning ? t('skillManage.securityRescanning') : t('skillManage.securityRescan') }}
+              </button>
+            </div>
+
+            <ul v-if="parsedFindings.length > 0" class="scan-findings-list">
+              <li
+                v-for="(f, idx) in parsedFindings"
+                :key="`scan-f-${idx}`"
+                class="scan-finding-item"
+                :class="`sev-${(f.severity || 'info').toLowerCase()}`"
+              >
+                <div class="scan-finding-head">
+                  <span class="scan-finding-sev">[{{ f.severity || 'INFO' }}]</span>
+                  <span class="scan-finding-id">{{ f.ruleId || f.category || '—' }}</span>
+                  <span v-if="f.filePath" class="scan-finding-loc">
+                    {{ f.filePath }}<span v-if="f.lineNumber">:{{ f.lineNumber }}</span>
+                  </span>
+                </div>
+                <div v-if="f.title" class="scan-finding-title">{{ f.title }}</div>
+                <div v-if="f.description" class="scan-finding-desc">{{ f.description }}</div>
+                <div v-if="f.remediation" class="scan-finding-fix">
+                  {{ t('skillManage.securityFix') }}: {{ f.remediation }}
+                </div>
+              </li>
+            </ul>
+            <div v-else-if="editingSkill?.securityScanStatus === 'FAILED'" class="scan-empty">
+              {{ t('skillManage.securityNoFindings') }}
+            </div>
+            <div v-else-if="editingSkill?.securityScanStatus === 'PASSED'" class="scan-empty">
+              {{ t('skillManage.securityPassed') }}
+            </div>
+            <div v-else class="scan-empty">{{ t('skillManage.securityNotScanned') }}</div>
+          </div>
         </div>
-        <div class="modal-footer">
+
+        <!-- 底部操作：仅基础信息 Tab 展示（其余 Tab 自带保存动作） -->
+        <div v-if="activeEditTab === 'basic'" class="modal-footer">
           <el-button :disabled="submitting" @click="closeModal">
             {{ t('common.cancel') }}
           </el-button>
@@ -361,7 +539,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, ElPagination } from 'element-plus'
 import { Plus, Search, Check } from '@element-plus/icons-vue'
 import * as skillApi from '@/api/skill'
-import { SKILL_TYPE_OPTIONS, type Skill } from '@/types'
+import { SKILL_TYPE_OPTIONS, type Skill, type SkillFileView, type SkillSecurityFinding } from '@/types'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import ImportSkillDialog from './ImportSkillDialog.vue'
@@ -436,6 +614,216 @@ const query = reactive({
 
 /** 弹窗 */
 const showModal = ref(false)
+
+// ==================== 编辑弹窗多 Tab 状态 ====================
+
+/** 编辑中的技能 ID（null 表示新建模式：仅展示基础信息 Tab） */
+const editingSkillId = ref<number | null>(null)
+
+/** 编辑中的技能详情实体（含 SKILL.md 正文与安全扫描结果） */
+const editingSkill = ref<Skill | null>(null)
+
+/** 编辑弹窗当前 Tab：basic / skillmd / files / security */
+const activeEditTab = ref<'basic' | 'skillmd' | 'files' | 'security'>('basic')
+
+/** 编辑态 Tab 定义 */
+const editTabs = computed(() => [
+  { value: 'basic' as const, label: t('skillManage.tabBasic') },
+  { value: 'skillmd' as const, label: t('skillManage.tabSkillmd') },
+  { value: 'files' as const, label: t('skillManage.tabFiles') },
+  { value: 'security' as const, label: t('skillManage.tabSecurity') },
+])
+
+/** SKILL.md 正文编辑缓冲 */
+const skillMdContent = ref('')
+/** SKILL.md 保存中 */
+const savingSkillMd = ref(false)
+
+/** 技能 bundle 文件列表（references/、scripts/） */
+const skillFiles = ref<SkillFileView[]>([])
+/** 文件列表加载中 */
+const filesLoading = ref(false)
+
+/** 当前打开的文件路径（空表示未选择） */
+const activeFilePath = ref('')
+/** 当前打开文件的大小（字节） */
+const activeFileSize = ref<number | null>(null)
+/** 当前打开文件的正文编辑缓冲 */
+const activeFileContent = ref('')
+/** 文件正文加载中 */
+const fileContentLoading = ref(false)
+/** 文件保存中 */
+const savingFile = ref(false)
+
+/** 新建文件模式 */
+const creatingFile = ref(false)
+/** 新建文件路径输入 */
+const newFilePath = ref('')
+
+/** 切换编辑 Tab：首次进入相关文件 Tab 时懒加载文件列表 */
+function switchEditTab(tab: 'basic' | 'skillmd' | 'files' | 'security'): void {
+  activeEditTab.value = tab
+  if (tab === 'files' && skillFiles.value.length === 0 && !filesLoading.value) {
+    loadSkillFiles()
+  }
+}
+
+/** 保存 SKILL.md 正文（复用技能更新接口的 skillContent 字段） */
+async function saveSkillMd(): Promise<void> {
+  if (editingSkillId.value == null || savingSkillMd.value) return
+  savingSkillMd.value = true
+  try {
+    const updated = await skillApi.update(editingSkillId.value, { skillContent: skillMdContent.value })
+    if (updated) {
+      editingSkill.value = updated
+    }
+    ElMessage.success(t('skillManage.saveSuccess'))
+  } catch {
+    // 错误由拦截器处理
+  } finally {
+    savingSkillMd.value = false
+  }
+}
+
+/** 拉取技能 bundle 文件列表 */
+async function loadSkillFiles(): Promise<void> {
+  if (editingSkillId.value == null) return
+  filesLoading.value = true
+  try {
+    skillFiles.value = await skillApi.listFiles(editingSkillId.value)
+  } catch {
+    skillFiles.value = []
+  } finally {
+    filesLoading.value = false
+  }
+}
+
+/** 打开指定文件：拉取正文进入编辑态 */
+async function openSkillFile(file: SkillFileView): Promise<void> {
+  if (editingSkillId.value == null || file.filePath == null) return
+  creatingFile.value = false
+  activeFilePath.value = file.filePath
+  activeFileSize.value = file.contentSize ?? null
+  activeFileContent.value = ''
+  fileContentLoading.value = true
+  try {
+    const detail = await skillApi.getFileContent(editingSkillId.value, file.filePath)
+    activeFileContent.value = detail?.content ?? ''
+    activeFileSize.value = detail?.contentSize ?? file.contentSize ?? null
+  } catch {
+    activeFileContent.value = ''
+  } finally {
+    fileContentLoading.value = false
+  }
+}
+
+/** 进入新建文件模式：清空右侧编辑器 */
+function startNewFile(): void {
+  creatingFile.value = true
+  newFilePath.value = ''
+  activeFilePath.value = ''
+  activeFileSize.value = null
+  activeFileContent.value = ''
+}
+
+/** 退出新建文件模式，回到未选择状态 */
+function closeFileEditor(): void {
+  creatingFile.value = false
+  newFilePath.value = ''
+  activeFilePath.value = ''
+  activeFileSize.value = null
+  activeFileContent.value = ''
+}
+
+/** 保存当前编辑（或新建）的 bundle 文件 */
+async function saveActiveFile(): Promise<void> {
+  if (editingSkillId.value == null || savingFile.value) return
+  const path = creatingFile.value ? newFilePath.value.trim() : activeFilePath.value
+  if (!path) {
+    ElMessage.warning(t('skillManage.filePathRequired'))
+    return
+  }
+  savingFile.value = true
+  try {
+    await skillApi.updateFileContent(editingSkillId.value, path, activeFileContent.value)
+    ElMessage.success(t('skillManage.saveSuccess'))
+    if (creatingFile.value) {
+      // 新建成功：退出新建态并选中新文件
+      creatingFile.value = false
+      await loadSkillFiles()
+      activeFilePath.value = path
+    }
+  } catch {
+    // 错误由拦截器处理
+  } finally {
+    savingFile.value = false
+  }
+}
+
+/** 文件大小展示：字节 → 可读单位 */
+function formatFileSize(size: number | null | undefined): string {
+  if (size == null) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+// ==================== 安全扫描 Tab ====================
+
+/** 安全扫描重扫中 */
+const rescanning = ref(false)
+
+/** 最近一次扫描的发现列表（解析 securityScanResult JSON） */
+const parsedFindings = computed<SkillSecurityFinding[]>(() => {
+  const raw = editingSkill.value?.securityScanResult
+  if (!raw) return []
+  try {
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? (arr as SkillSecurityFinding[]) : []
+  } catch {
+    return []
+  }
+})
+
+/** 扫描状态徽标：PASSED 绿 / FAILED 红 / 其余视为未扫描 */
+const scanStatusPill = computed<{ label: string; cls: string }>(() => {
+  const status = editingSkill.value?.securityScanStatus
+  if (status === 'FAILED') {
+    return { label: t('skillManage.securityScanFailed'), cls: 'st-blocked' }
+  }
+  if (status === 'PASSED') {
+    return { label: t('skillManage.securityScanPassed'), cls: 'st-ready' }
+  }
+  return { label: t('skillManage.securityNotScanned'), cls: 'st-disabled' }
+})
+
+/** 扫描时间展示文本 */
+const scanTimeText = computed<string>(() => {
+  const raw = editingSkill.value?.securityScanTime
+  if (!raw) return ''
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? raw : d.toLocaleString()
+})
+
+/** 是否允许重扫：MCP 协议技能固定标记 PASSED，且虚拟 MCP 技能服务端会拒绝重扫 */
+const canRescan = computed(() => editingSkill.value?.skillType !== 'mcp')
+
+/** 重新执行安全扫描 */
+async function handleRescan(): Promise<void> {
+  if (editingSkillId.value == null || rescanning.value) return
+  rescanning.value = true
+  try {
+    const updated = await skillApi.rescan(editingSkillId.value)
+    if (updated) {
+      editingSkill.value = updated
+    }
+    ElMessage.success(t('skillManage.securityRescanDone'))
+  } catch {
+    // 错误由拦截器处理
+  } finally {
+    rescanning.value = false
+  }
+}
 
 /** 排序选项（value 与后端 params.sort 对齐） */
 const sortOptions = computed(() => [
@@ -631,6 +1019,9 @@ async function loadSkills(): Promise<void> {
 
 function openCreateModal(): void {
   resetForm()
+  editingSkillId.value = null
+  editingSkill.value = null
+  activeEditTab.value = 'basic'
   showModal.value = true
 }
 
@@ -653,9 +1044,18 @@ function resetForm(): void {
 
 /** 卡片点击或编辑按钮触发：加载详情后打开弹窗 */
 async function openEditFromCard(skill: Skill): Promise<void> {
+  // 重置文件与扫描编辑状态
+  editingSkillId.value = null
+  activeEditTab.value = 'basic'
+  skillMdContent.value = ''
+  skillFiles.value = []
+  editingSkill.value = null
+  closeFileEditor()
   try {
     const detail = await skillApi.get(skill.id)
     const target = detail || skill
+    editingSkillId.value = skill.id
+    editingSkill.value = target
     form.name = target.name || ''
     form.nameZh = target.nameZh || ''
     form.nameEn = target.nameEn || ''
@@ -665,9 +1065,12 @@ async function openEditFromCard(skill: Skill): Promise<void> {
     form.author = target.author || ''
     form.tags = target.tags || ''
     form.enabled = !!target.enabled
+    skillMdContent.value = target.skillContent || ''
     showModal.value = true
   } catch {
-    // 加载失败则回退到当前卡片数据
+    // 加载失败则回退到当前卡片数据（SKILL.md 正文与扫描详情不可用）
+    editingSkillId.value = skill.id
+    editingSkill.value = skill
     form.name = skill.name
     form.nameZh = skill.nameZh || ''
     form.nameEn = skill.nameEn || ''
@@ -677,6 +1080,7 @@ async function openEditFromCard(skill: Skill): Promise<void> {
     form.author = skill.author || ''
     form.tags = skill.tags || ''
     form.enabled = !!skill.enabled
+    skillMdContent.value = skill.skillContent || ''
     showModal.value = true
   }
 }
@@ -697,10 +1101,9 @@ async function handleSubmit(): Promise<void> {
       enabled: form.enabled,
       workspaceId: currentWorkspaceId.value,
     }
-    // 在已启用 / 未启用段中查找已存在记录 → 走更新
-    const existing = findLoadedSkill(s => s.name === form.name.trim())
-    if (existing) {
-      await skillApi.update(existing.id, payload as Partial<Skill>)
+    // 编辑模式按当前技能 ID 更新；新建模式创建
+    if (editingSkillId.value != null) {
+      await skillApi.update(editingSkillId.value, payload as Partial<Skill>)
       ElMessage.success(t('skillManage.updateSuccess'))
     } else {
       await skillApi.create(payload as Partial<Skill>)
@@ -714,10 +1117,6 @@ async function handleSubmit(): Promise<void> {
   } finally {
     submitting.value = false
   }
-}
-
-function findLoadedSkill(pred: (s: Skill) => boolean): Skill | undefined {
-  return list.items.find(pred)
 }
 
 async function handleToggle(skill: Skill, enabled: boolean): Promise<void> {
@@ -1716,6 +2115,396 @@ function metaLabel(skill: Skill): string {
   background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
   color: var(--db-text-muted);
   cursor: not-allowed;
+}
+
+/* ===== 编辑弹窗多 Tab ===== */
+.modal.modal-wide {
+  max-width: 860px;
+}
+
+.edit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--db-border);
+  flex-shrink: 0;
+}
+
+.edit-tab {
+  padding: 8px 14px 10px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text-muted);
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.edit-tab:hover {
+  color: var(--db-text);
+}
+
+.edit-tab.active {
+  color: var(--main-orange);
+  font-weight: 600;
+}
+
+.edit-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--main-orange);
+}
+
+.edit-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 320px;
+}
+
+/* ===== SKILL.md 编辑 ===== */
+.code-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 320px;
+  white-space: pre;
+}
+
+.edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.char-count {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--db-text-muted);
+}
+
+/* ===== 相关文件 Tab ===== */
+.files-layout {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.files-list {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.files-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 8px;
+}
+
+.files-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--db-text-secondary);
+}
+
+.file-new-btn {
+  border: none;
+  background: transparent;
+  color: var(--main-orange);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+
+.file-new-btn:hover {
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+}
+
+.file-new-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.files-hint {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.file-item:hover {
+  background: color-mix(in srgb, var(--db-text-muted) 8%, transparent);
+}
+
+.file-item.active {
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+}
+
+.file-name {
+  font-size: 12px;
+  color: var(--db-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-item.active .file-name {
+  color: var(--main-orange);
+  font-weight: 600;
+}
+
+.file-size {
+  font-size: 10px;
+  color: var(--db-text-muted);
+  flex-shrink: 0;
+}
+
+.file-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.file-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.file-path {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--db-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-path-input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.file-editor .code-textarea {
+  flex: 1;
+  min-height: 260px;
+}
+
+.file-editor-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--db-border);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  min-height: 260px;
+}
+
+/* ===== 安全扫描 Tab ===== */
+.scan-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pill.st-ready {
+  background: rgba(34, 197, 94, 0.14);
+  color: #16a34a;
+}
+
+.status-pill.st-disabled {
+  background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
+  color: var(--db-text-muted);
+}
+
+.status-pill.st-blocked {
+  background: rgba(245, 63, 63, 0.14);
+  color: #dc2626;
+}
+
+.scan-time {
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+
+.scan-rescan-btn {
+  margin-left: auto;
+  border: 1px solid var(--db-border-strong);
+  background: var(--db-card);
+  color: var(--db-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.scan-rescan-btn:hover:not(:disabled) {
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+}
+
+.scan-rescan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-findings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.scan-finding-item {
+  border: 1px solid var(--db-border);
+  border-left: 3px solid var(--db-text-muted);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scan-finding-item.sev-critical {
+  border-left-color: #dc2626;
+  background: rgba(245, 63, 63, 0.04);
+}
+
+.scan-finding-item.sev-high {
+  border-left-color: #f97316;
+}
+
+.scan-finding-item.sev-medium {
+  border-left-color: #eab308;
+}
+
+.scan-finding-item.sev-low {
+  border-left-color: #3b82f6;
+}
+
+.scan-finding-item.sev-info {
+  border-left-color: var(--db-text-muted);
+}
+
+.scan-finding-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scan-finding-sev {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--db-text);
+}
+
+.scan-finding-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--main-orange);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.scan-finding-loc {
+  font-size: 11px;
+  color: var(--db-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.scan-finding-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--db-text);
+}
+
+.scan-finding-desc {
+  font-size: 12px;
+  color: var(--db-text-secondary);
+  line-height: 1.5;
+}
+
+.scan-finding-fix {
+  font-size: 11px;
+  color: var(--db-text-muted);
+  line-height: 1.5;
+}
+
+.scan-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--db-border);
+  border-radius: 10px;
+  padding: 40px 16px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  min-height: 200px;
 }
 
 /* ===== 响应式适配 ===== */
