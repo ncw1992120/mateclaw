@@ -35,6 +35,8 @@ export default {
   workspace: {
     manage: '管理工作区',
     manageNoPermission: '您没有管理工作区的权限',
+    select: '选择工作区',
+    switchSuccess: '已切换工作区',
   },
   sidebar: {
     core: '核心',

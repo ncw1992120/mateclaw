@@ -35,6 +35,8 @@ export default {
   workspace: {
     manage: 'Manage Workspaces',
     manageNoPermission: 'You do not have permission to manage workspaces',
+    select: 'Select Workspace',
+    switchSuccess: 'Workspace switched',
   },
   sidebar: {
     core: 'Core',

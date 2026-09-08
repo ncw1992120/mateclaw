@@ -34,6 +34,42 @@
     </nav>
 
     <div class="nav-right">
+      <!-- 工作区切换器 -->
+      <el-dropdown
+        v-if="userStore.workspaces.length > 0"
+        trigger="click"
+        popper-class="topnav-dropdown-popper workspace-dropdown-popper"
+        @visible-change="handleWorkspaceVisibleChange"
+        @command="handleWorkspaceCommand"
+      >
+        <button
+          class="nav-btn workspace-btn"
+          :class="{ 'is-open': workspaceDropdownOpen }"
+          :title="workspaceDisplayName(userStore.currentWorkspace)"
+        >
+          <span class="workspace-btn-icon"><el-icon><OfficeBuilding /></el-icon></span>
+          <span class="workspace-btn-name">{{ workspaceDisplayName(userStore.currentWorkspace) }}</span>
+          <svg class="workspace-btn-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="ws in userStore.workspaces"
+              :key="ws.id"
+              :command="ws.id"
+              :class="{ 'is-active': ws.id === userStore.currentWorkspaceId }"
+              :title="workspaceDisplayName(ws)"
+            >
+              <span class="dropdown-workspace-name">{{ workspaceDisplayName(ws) }}</span>
+              <el-icon v-if="ws.id === userStore.currentWorkspaceId" class="workspace-check"><Check /></el-icon>
+              <span v-if="ws.memberRole" class="dropdown-workspace-role">{{ ws.memberRole }}</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
       <button class="nav-btn icon-btn notification-btn" :title="t('nav.notification')">
         <el-icon class="nav-icon"><Bell /></el-icon>
         <span class="notification-dot"></span>
@@ -92,16 +128,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell, Sunny, Moon, View, MagicStick, FolderOpened, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, Sunny, Moon, View, MagicStick, FolderOpened, SwitchButton, OfficeBuilding, Check } from '@element-plus/icons-vue'
 import { useThemeStore, type ThemeMode } from '@/stores/useThemeStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Component } from 'vue'
+import type { Workspace } from '@/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -151,6 +188,33 @@ const avatarText = computed(() => {
 /** 是否可管理工作区 */
 const { hasPermission } = usePermission()
 const canManageWorkspace = computed(() => hasPermission(PERMISSION.WORKSPACE_MANAGE))
+
+/** 工作区下拉是否展开（用于触发按钮箭头旋转等展开态样式） */
+const workspaceDropdownOpen = ref(false)
+
+/** 工作区下拉展开状态变化 */
+function handleWorkspaceVisibleChange(visible: boolean): void {
+  workspaceDropdownOpen.value = visible
+}
+
+/** 工作区显示名称：优先使用 name，空则回退 description */
+function workspaceDisplayName(ws: Workspace | null): string {
+  if (!ws) {
+    return t('workspace.select')
+  }
+  return ws.name?.trim() || ws.description?.trim() || t('workspace.select')
+}
+
+/** 工作区下拉命令处理：切换工作区前清理会话缓存，刷新后按新工作区重新加载 */
+function handleWorkspaceCommand(command: string | number): void {
+  if (command === userStore.currentWorkspaceId) {
+    return
+  }
+  chatStore.resetForWorkspaceSwitch()
+  userStore.setCurrentWorkspace(command)
+  ElMessage.success(t('workspace.switchSuccess'))
+  window.location.reload()
+}
 
 /** 用户菜单命令处理 */
 function handleUserCommand(command: string): void {
@@ -320,6 +384,106 @@ function handleUserCommand(command: string): void {
   position: relative;
 }
 
+/* ========== 工作区切换器 ========== */
+.workspace-btn {
+  height: 36px;
+  max-width: 220px;
+  border-radius: 10px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.workspace-btn:hover {
+  border-color: color-mix(in srgb, var(--main-orange) 35%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 5%, var(--theme-surface));
+  color: var(--main-orange);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.workspace-btn:active {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workspace-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--main-orange) 45%, transparent);
+  outline-offset: 1px;
+}
+
+/* 展开态：描边加深，与下拉面板形成呼应 */
+.workspace-btn.is-open {
+  border-color: color-mix(in srgb, var(--main-orange) 50%, transparent);
+  background: color-mix(in srgb, var(--main-orange) 7%, var(--theme-surface));
+  color: var(--main-orange);
+}
+
+/* 工作区图标徽标 */
+.workspace-btn-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--very-light-orange);
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.workspace-btn-name {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-btn-arrow {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.2s ease;
+}
+
+/* 下拉展开时箭头翻转 */
+.workspace-btn.is-open .workspace-btn-arrow {
+  transform: rotate(180deg);
+}
+
+.dropdown-workspace-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-check {
+  margin-left: 6px;
+  color: var(--main-orange);
+}
+
+.dropdown-workspace-role {
+  margin-left: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
 .notification-dot {
   position: absolute;
   top: 7px;
@@ -430,6 +594,16 @@ function handleUserCommand(command: string): void {
     width: 32px;
     height: 32px;
   }
+  /* 小屏隐藏工作区名称，仅保留图标入口 */
+  .workspace-btn {
+    max-width: none;
+    padding: 0 9px;
+    gap: 6px;
+  }
+  .workspace-btn-name,
+  .workspace-btn-arrow {
+    display: none;
+  }
 }
 </style>
 
@@ -446,6 +620,27 @@ function handleUserCommand(command: string): void {
   border: none;
   box-shadow: none;
   padding: 0;
+}
+
+/* 工作区下拉项：名称 + 选中勾 + 角色徽标横向排布 */
+.topnav-dropdown-popper .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+}
+
+/* 工作区下拉面板：固定最小宽度，选项加高，视觉更从容 */
+.workspace-dropdown-popper {
+  min-width: 224px;
+}
+
+.workspace-dropdown-popper .el-dropdown-menu__item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  line-height: 20px;
+}
+
+.workspace-dropdown-popper .el-dropdown-menu__item + .el-dropdown-menu__item {
+  margin-top: 2px;
 }
 
 .topnav-dropdown-popper .el-dropdown-menu__item:not(.is-disabled):hover,
