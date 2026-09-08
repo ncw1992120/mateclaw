@@ -16,9 +16,12 @@ import vip.mate.agent.model.AgentEntity;
 import vip.mate.skill.lessons.SkillLessonsService;
 import vip.mate.skill.manifest.SkillManifest;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileEntity;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.skill.runtime.SkillDependencyChecker;
 import vip.mate.skill.runtime.SkillCatalogSort;
 import vip.mate.skill.runtime.SkillCatalogSorter;
+import vip.mate.skill.service.SkillFileService;
 import vip.mate.skill.service.SkillService;
 import vip.mate.skill.synthesis.SkillSynthesisService;
 import vip.mate.skill.runtime.SkillRuntimeService;
@@ -60,6 +63,7 @@ public class SkillController {
     private final SkillWorkspaceManager workspaceManager;
     private final BundledSkillSyncer bundledSkillSyncer;
     private final SkillFileSyncer skillFileSyncer;
+    private final SkillFileService skillFileService;
     private final SkillSynthesisService synthesisService;
     private final SkillDependencyChecker dependencyChecker;
     private final SkillLessonsService lessonsService;
@@ -333,6 +337,55 @@ public class SkillController {
         body.put("filesBackfilledFromDisk", report.filesBackfilledFromDisk());
         return R.ok(body);
     }
+
+    // ==================== Bundle files API ====================
+
+    @Operation(summary = "列出技能 bundle 文件",
+            description = "返回 references/、scripts/ 目录下所有文件的元信息（路径/大小/哈希/更新时间，不含正文）")
+    @GetMapping("/{id}/files")
+    @RequireWorkspaceRole("member")
+    public R<List<SkillFileView>> listFiles(@PathVariable Long id,
+            @RequestHeader(value = "X-Workspace-Id", required = false) Long workspaceId) {
+        rejectVirtualSkillMutation(id);
+        verifyResourceWorkspace(skillService.getSkill(id), workspaceId);
+        List<SkillFileView> files = skillFileService.listBySkillId(id).stream()
+                .map(row -> SkillFileView.from(row, false))
+                .toList();
+        return R.ok(files);
+    }
+
+    @Operation(summary = "读取技能 bundle 文件内容")
+    @GetMapping("/{id}/files/content")
+    @RequireWorkspaceRole("member")
+    public R<SkillFileView> getFileContent(@PathVariable Long id, @RequestParam String path,
+            @RequestHeader(value = "X-Workspace-Id", required = false) Long workspaceId) {
+        rejectVirtualSkillMutation(id);
+        verifyResourceWorkspace(skillService.getSkill(id), workspaceId);
+        SkillFileEntity file = skillFileService.getBySkillIdAndPath(id, SkillFileService.validateBundlePath(path));
+        if (file == null) {
+            return R.fail("文件不存在: " + path);
+        }
+        return R.ok(SkillFileView.from(file, true));
+    }
+
+    @Operation(summary = "更新技能 bundle 文件内容",
+            description = "更新（或新建）references/、scripts/ 下的单个文件，保存后同步到本地工作区并刷新运行时解析")
+    @PutMapping("/{id}/files/content")
+    @RequireWorkspaceRole("admin")
+    public R<SkillFileView> updateFileContent(@PathVariable Long id, @RequestParam String path,
+            @RequestBody(required = false) SkillFileUpdateRequest body,
+            @RequestHeader(value = "X-Workspace-Id", required = false) Long workspaceId) {
+        rejectVirtualSkillMutation(id);
+        SkillEntity skill = skillService.getSkill(id);
+        verifyResourceWorkspace(skill, workspaceId);
+        if (body == null) {
+            return R.fail("请求体不能为空");
+        }
+        return R.ok(skillFileSyncer.updateBundleFileAndSync(skill, path, body.content()));
+    }
+
+    /** Body of {@code PUT /skills/{id}/files/content}. */
+    public record SkillFileUpdateRequest(String content) {}
 
     /**
      * Mutation paths refuse virtual MCP/ACP skill ids upfront. The bridge

@@ -2,6 +2,7 @@ import api from './index'
 import type {
   HubSkillInfo,
   Skill,
+  SkillFileView,
   SkillInstallRequest,
   SkillInstallTask,
   SkillPage,
@@ -55,6 +56,32 @@ export function remove(id: number) {
 /** 切换技能启停状态 */
 export function toggle(id: number, enabled: boolean) {
   return api.put<Skill>(`${BASE_URL}/${id}/toggle`, null, { params: { enabled } })
+}
+
+/** 对指定技能重新执行安全扫描 */
+export function rescan(id: number) {
+  return api.post<Skill>(`${BASE_URL}/${id}/rescan`)
+}
+
+// ==================== 技能 bundle 文件 ====================
+
+/** 列出技能 references/、scripts/ 目录下所有文件的元信息（不含正文） */
+export function listFiles(id: number) {
+  return api.get<SkillFileView[]>(`${BASE_URL}/${id}/files`)
+}
+
+/** 按路径读取技能 bundle 文件正文 */
+export function getFileContent(id: number, filePath: string) {
+  return api.get<SkillFileView>(`${BASE_URL}/${id}/files/content`, {
+    params: { path: filePath },
+  })
+}
+
+/** 更新（或新建）技能 bundle 单个文件，保存后同步工作区并刷新运行时 */
+export function updateFileContent(id: number, filePath: string, content: string) {
+  return api.put<SkillFileView>(`${BASE_URL}/${id}/files/content`, { content }, {
+    params: { path: filePath },
+  })
 }
 
 // ==================== 技能导入 ====================

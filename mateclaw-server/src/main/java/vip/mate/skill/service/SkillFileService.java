@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vip.mate.exception.MateClawException;
 import vip.mate.skill.model.SkillFileEntity;
 import vip.mate.skill.repository.SkillFileMapper;
 
@@ -14,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +35,16 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class SkillFileService {
 
+    /**
+     * 单个 bundle 文件的内容大小上限（字节），与 {@code ZipSkillFetcher.MAX_FILE_SIZE}
+     * 保持一致，避免 ZIP 安装能写入而在线编辑被拒的不对称限制。
+     */
+    public static final long MAX_BUNDLE_FILE_SIZE = 1_000_000;
+
+    /** 允许存放 bundle 文件的两个目录前缀。 */
+    private static final String REFERENCES_PREFIX = "references/";
+    private static final String SCRIPTS_PREFIX = "scripts/";
+
     private final SkillFileMapper mapper;
 
     /** All file rows owned by a skill. */
@@ -41,6 +53,81 @@ public class SkillFileService {
         QueryWrapper<SkillFileEntity> q = new QueryWrapper<>();
         q.eq("skill_id", skillId);
         return mapper.selectList(q);
+    }
+
+    /** 按路径查询单个文件行，不存在时返回 null。 */
+    public SkillFileEntity getBySkillIdAndPath(Long skillId, String filePath) {
+        if (skillId == null || filePath == null || filePath.isBlank()) {
+            return null;
+        }
+        for (SkillFileEntity row : listBySkillId(skillId)) {
+            if (filePath.equals(row.getFilePath())) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 校验并归一化 bundle 文件路径。
+     * <p>
+     * 规则与 {@code SkillFileSyncer.materializeOne} 的落盘校验一致：
+     * 必须以 {@code references/} 或 {@code scripts/} 为前缀、拒绝相对跳转
+     * （{@code ..}）、拒绝绝对路径。统一将反斜杠归一为正斜杠。
+     *
+     * @param filePath 原始路径
+     * @return 归一化后的安全路径
+     * @throws MateClawException 路径非法时抛出
+     */
+    public static String validateBundlePath(String filePath) {
+        if (filePath == null || filePath.isBlank()) {
+            throw new MateClawException("err.skill.file_path_invalid", 400, "文件路径不能为空");
+        }
+        String normalized = filePath.replace('\\', '/').trim();
+        if (normalized.startsWith("/")) {
+            throw new MateClawException("err.skill.file_path_invalid", 400,
+                    "文件路径必须为相对路径: " + filePath);
+        }
+        if (!normalized.startsWith(REFERENCES_PREFIX) && !normalized.startsWith(SCRIPTS_PREFIX)) {
+            throw new MateClawException("err.skill.file_path_invalid", 400,
+                    "文件路径必须位于 references/ 或 scripts/ 目录下: " + filePath);
+        }
+        if (normalized.contains("..")) {
+            throw new MateClawException("err.skill.file_path_invalid", 400,
+                    "文件路径不允许包含相对跳转: " + filePath);
+        }
+        return normalized;
+    }
+
+    /**
+     * 更新（或新建）单个 bundle 文件，其余文件保持不变。
+     * <p>
+     * {@link #applyBundleFiles} 是整体替换语义：传入集合中未提及的同 bucket
+     * 文件会被裁剪。因此这里先全量读入现有文件集、仅替换目标路径后整体提交，
+     * 并保持 {@code force=false} 以保留空 bucket 保护。
+     *
+     * @param skillId  所属技能 ID
+     * @param filePath 文件路径（references/ 或 scripts/ 下）
+     * @param content  新的 UTF-8 文本内容（null 归一为空串）
+     * @return 更新后的文件行
+     */
+    @Transactional
+    public SkillFileEntity updateSingleBundleFile(Long skillId, String filePath, String content) {
+        String safePath = validateBundlePath(filePath);
+        String safeContent = content == null ? "" : content;
+        if (safeContent.getBytes(StandardCharsets.UTF_8).length > MAX_BUNDLE_FILE_SIZE) {
+            throw new MateClawException("err.skill.file_too_large", 400,
+                    "文件内容超过大小上限 " + MAX_BUNDLE_FILE_SIZE + " 字节: " + safePath);
+        }
+        Map<String, String> fullFiles = new LinkedHashMap<>();
+        for (SkillFileEntity row : listBySkillId(skillId)) {
+            if (row.getFilePath() != null) {
+                fullFiles.put(row.getFilePath(), row.getContent() == null ? "" : row.getContent());
+            }
+        }
+        fullFiles.put(safePath, safeContent);
+        applyBundleFiles(skillId, fullFiles, false);
+        return getBySkillIdAndPath(skillId, safePath);
     }
 
     /** Compute SHA-256 hex of a UTF-8 string (used for idempotent diffs). */

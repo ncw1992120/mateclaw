@@ -44,6 +44,7 @@ class SkillControllerListEnabledTest {
                 /* workspaceManager */ null,
                 /* bundledSkillSyncer */ null,
                 /* skillFileSyncer */ null,
+                /* skillFileService */ null,
                 /* synthesisService */ null,
                 /* dependencyChecker */ null,
                 /* lessonsService */ null,

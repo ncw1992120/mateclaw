@@ -6,6 +6,7 @@ import vip.mate.skill.installer.model.HubSkillInfo;
 import vip.mate.skill.installer.model.InstallRequest;
 import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileView;
 
 import java.util.List;
 import java.util.Map;
@@ -89,6 +90,41 @@ public interface SkillRuntime {
      * @return 更新后的技能实体
      */
     SkillEntity toggleSkill(Long id, boolean enabled);
+
+    /**
+     * 重新对单个技能执行安全扫描（RFC-042 §2.3.4）
+     *
+     * @param id 技能 ID
+     * @return 更新后的技能实体（含最新 securityScanStatus/Result/Time）
+     */
+    SkillEntity rescanSkill(Long id);
+
+    /**
+     * 列出技能的 bundle 文件（references/、scripts/）元信息（不含正文）
+     *
+     * @param skillId 技能 ID
+     * @return 文件视图列表（content 为 null）
+     */
+    List<SkillFileView> listSkillFiles(Long skillId);
+
+    /**
+     * 读取技能 bundle 文件内容
+     *
+     * @param skillId  技能 ID
+     * @param filePath 文件路径（references/ 或 scripts/ 下）
+     * @return 文件视图（含正文），文件不存在时返回 null
+     */
+    SkillFileView getSkillFileContent(Long skillId, String filePath);
+
+    /**
+     * 更新（或新建）技能 bundle 文件内容，保存后同步到本地工作区并刷新运行时解析
+     *
+     * @param skillId  技能 ID
+     * @param filePath 文件路径（references/ 或 scripts/ 下）
+     * @param content  新的 UTF-8 文本内容
+     * @return 更新后的文件视图（含正文）
+     */
+    SkillFileView updateSkillFileContent(Long skillId, String filePath, String content);
 
     /**
      * 在 ClawHub 市场搜索可用技能
