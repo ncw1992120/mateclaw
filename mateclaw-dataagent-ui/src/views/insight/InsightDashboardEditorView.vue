@@ -48,7 +48,6 @@
         <el-input
           v-model="dashboardOwnerName"
           class="toolbar-owner-input"
-          size="small"
           :placeholder="t('insight.ownerName')"
           @change="handleOwnerNameChange"
         />
@@ -183,8 +182,8 @@
         />
       </div>
 
-      <!-- 右侧边栏：属性面板 + AI助手面板上下布局 -->
-      <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
+      <!-- 右侧边栏：属性面板 -->
+      <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty }">
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
           <PropertyPanel
@@ -193,15 +192,6 @@
             @change="handleComponentChange"
             @preview="handlePreviewResult"
             @collapse="sidebarCollapsed = true"
-          />
-        </div>
-
-        <!-- AI助手面板 -->
-        <div v-if="showAiChat" class="editor-ai-chat">
-          <AiChatPanel
-            :dashboard-id="dashboardId"
-            @close="toggleAiChat"
-            @dashboard-updated="handleAiDashboardUpdated"
           />
         </div>
       </div>
@@ -236,6 +226,21 @@
         class="mobile-panel-backdrop"
         @click="closeAllMobilePanels"
       />
+
+      <!-- AI助手抽屉 -->
+      <el-drawer
+        v-model="showAiChat"
+        direction="rtl"
+        size="400px"
+        :with-header="false"
+        class="ai-drawer-overlay"
+      >
+        <AiChatPanel
+          :dashboard-id="dashboardId"
+          @close="showAiChat = false"
+          @dashboard-updated="handleAiDashboardUpdated"
+        />
+      </el-drawer>
     </div>
   </div>
 </template>
@@ -989,14 +994,23 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   flex-direction: column;
   background: var(--db-bg);
   overflow: hidden;
+  /* 与列表页一致：四周留灰底边距，工具栏与各面板悬浮于页面底色之上 */
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
+/* 页头工具栏：白色纸面卡片（描边+圆角+投影），与列表页 .page-card 同一层级语言，
+   覆盖 .mc-toolbar 的默认通栏白底/下边框/定高 */
 .editor-toolbar {
-  height: 60px;
-  min-height: 60px;
-  background: var(--db-card);
-  border-bottom: 1px solid var(--db-border);
+  padding: 10px 16px;
   gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: var(--space-md);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  height: auto;
+  min-height: 0;
 }
 
 .toolbar-left {
@@ -1008,7 +1022,7 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   width: 32px;
   height: 32px;
   border: 1px solid var(--db-border-strong);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--db-card);
   color: var(--db-text-secondary);
   display: flex;
@@ -1025,17 +1039,22 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   background: color-mix(in srgb, var(--db-accent) 6%, transparent);
 }
 
+.back-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--main-orange) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .toolbar-title-block {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   min-width: 0;
 }
 
 .toolbar-title {
   margin: 0;
   padding: 1px 8px;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--db-text);
   line-height: 1.4;
@@ -1075,7 +1094,7 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   padding: 0 8px;
   font-size: 12px;
   color: var(--db-text-muted);
-  line-height: 1.7;
+  line-height: 1.4;
   border-radius: 4px;
   cursor: text;
   max-width: 380px;
@@ -1107,15 +1126,16 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 .toolbar-owner-input {
-  width: 120px;
+  width: 160px;
   flex-shrink: 0;
 
   :deep(.el-input__wrapper) {
     background: var(--db-muted);
     box-shadow: none;
-    padding: 0 10px;
-    height: 30px;
-    border-radius: 8px;
+    padding: 0 14px;
+    /* 与右侧 32px 高的工具按钮对齐 */
+    height: 32px;
+    border-radius: 999px;
   }
 
   :deep(.el-input__wrapper:hover) {
@@ -1124,12 +1144,16 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
   :deep(.el-input__wrapper.is-focus) {
     background: var(--db-card);
-    box-shadow: 0 0 0 1px var(--db-accent) inset;
+    box-shadow: 0 0 0 1px var(--main-orange) inset;
   }
 
   :deep(.el-input__inner) {
-    color: var(--db-text-secondary);
+    color: var(--db-text);
     font-size: 12.5px;
+  }
+
+  :deep(.el-input__inner)::placeholder {
+    color: var(--db-text-muted);
   }
 }
 
@@ -1146,8 +1170,8 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
 .toolbar-right :deep(.el-button.toolbar-btn) {
   height: 32px;
-  border-radius: 8px;
-  padding: 0 12px;
+  border-radius: 999px;
+  padding: 0 14px;
   font-size: 13px;
   font-weight: 500;
 }
@@ -1187,7 +1211,8 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   flex: 1;
   display: flex;
   gap: 12px;
-  padding: 12px 16px 16px;
+  /* 外边距已由根容器统一提供，与列表页灰底留边一致 */
+  padding: 0;
   overflow: hidden;
   position: relative;
 }
@@ -1382,6 +1407,14 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   border-radius: 12px;
 }
 
+/* 编辑画布淡点阵底纹：与页面灰底区分出工作区；
+   DashboardCanvas 根节点自带不透明灰底，需 :deep 覆盖才能透出 */
+.editor-canvas :deep(.dashboard-canvas) {
+  background-image: radial-gradient(color-mix(in srgb, var(--db-border-strong) 55%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+  background-position: 9px 9px;
+}
+
 .editor-right-sidebar {
   width: 340px;
   flex-shrink: 0;
@@ -1409,11 +1442,7 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 .editor-ai-chat {
-  flex: 2;
-  min-height: 0;
-  overflow: hidden;
-  border-top: 1px solid var(--db-border);
-  animation: fadeIn var(--transition-base) both;
+  /* 已迁移至 el-drawer，保留空规则避免响应式媒体查询报错 */
 }
 
 /* ─── 面板收起按钮 ─────────────────────────────── */
@@ -1492,7 +1521,7 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   }
 
   .editor-ai-chat {
-    border-top: 1px solid var(--db-border);
+    /* 已迁移至 el-drawer */
   }
 }
 
@@ -1502,8 +1531,12 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 @media (max-width: 767px) {
+  .insight-editor-view {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+  }
+
   .editor-toolbar {
-    padding: 0 var(--space-md);
+    padding: 10px var(--space-md);
     min-height: auto;
     height: auto;
     flex-wrap: wrap;
@@ -1582,8 +1615,11 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
     align-items: center;
     justify-content: space-around;
     padding: var(--space-xs) 0;
+    margin-top: var(--space-md);
     background: var(--db-card);
-    border-top: 1px solid var(--db-border);
+    border: 1px solid var(--db-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
     flex-shrink: 0;
     position: relative;
     z-index: 99;
@@ -1612,5 +1648,24 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
     z-index: 95;
     animation: fadeIn var(--transition-fast) both;
   }
+}
+</style>
+
+<!-- 抽屉覆盖样式（非 scoped：class 继承到 el-drawer 根节点 .el-overlay） -->
+<style>
+.ai-drawer-overlay.el-overlay {
+  background-color: var(--db-mask);
+}
+
+.ai-drawer-overlay .el-drawer {
+  background: var(--db-card);
+  border-radius: 12px 0 0 12px;
+  border-left: 1px solid var(--db-border);
+  box-shadow: -14px 0 44px rgba(23, 43, 99, 0.18);
+}
+
+.ai-drawer-overlay .el-drawer__body {
+  padding: 0;
+  overflow: hidden;
 }
 </style>

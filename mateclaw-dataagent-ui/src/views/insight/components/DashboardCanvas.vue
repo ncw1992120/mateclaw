@@ -67,7 +67,14 @@
           </div>
           <div class="grid-item-body">
             <div v-if="getComponentData(item.i)?.error" class="grid-item-error">
-              {{ getComponentData(item.i)?.error }}
+              <div class="error-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div class="error-msg" :title="getComponentData(item.i)?.error">{{ getComponentData(item.i)?.error }}</div>
             </div>
             <template v-else>
               <KpiCardWidget
@@ -705,18 +712,47 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   overflow: hidden;
 }
 
+/* 组件数据加载失败：内嵌 danger 淡色提示面板（图标 chip + 截断消息），
+   卡片本体保持白面，避免整面红底抢视觉；内缩 8px 与卡片边缘拉开余量 */
 .grid-item-error {
-  width: 100%;
-  height: 100%;
+  width: calc(100% - var(--space-md));
+  height: calc(100% - var(--space-md));
+  margin: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  color: var(--db-text-secondary);
+  background: color-mix(in srgb, var(--db-danger) 4%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--db-danger) 30%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.grid-item-error .error-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-md);
   color: var(--db-danger);
-  font-size: 13px;
-  text-align: center;
   background: var(--db-danger-bg);
-  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.grid-item-error .error-msg {
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--db-text-muted);
+  word-break: break-word;
+  /* 最多 3 行，超出截断；悬停 title 显示全文 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .canvas-empty {

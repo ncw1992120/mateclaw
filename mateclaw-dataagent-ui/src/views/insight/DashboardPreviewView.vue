@@ -112,24 +112,33 @@
       />
     </div>
 
-    <!-- 报告抽屉 -->
+    <!-- 报告抽屉（样式对齐报告页报告详情抽屉） -->
     <el-drawer
       v-model="reportDrawerVisible"
-      :title="t('insight.reportTitle')"
       direction="rtl"
       size="50%"
       :close-on-press-escape="true"
+      class="report-detail-drawer"
       @close="handleReportDrawerClose"
     >
-      <div class="report-container">
-        <div ref="reportContentRef" class="report-content" v-html="reportHtmlContent"></div>
-      </div>
-      <template #footer>
-        <div class="report-footer">
-          <span class="disclaimer">{{ t('insight.aiDisclaimer') }}</span>
-          <el-button size="small" @click="handleDownloadReport">{{ t('insight.reportDownload') }}</el-button>
+      <template #header>
+        <div class="rd-header">
+          <div class="rd-header-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <div class="rd-header-text">
+            <span class="rd-header-title">{{ dashboard?.name || t('insight.reportTitle') }}</span>
+            <span class="rd-header-sub">{{ t('reportDrawer.subtitle') }}</span>
+          </div>
+          <el-button class="rd-download" type="primary" plain size="small" :icon="Download" @click="handleDownloadReport">
+            {{ t('insight.reportDownload') }}
+          </el-button>
         </div>
       </template>
+      <div class="report-container">
+        <div ref="reportContentRef" class="report-content" v-html="reportHtmlContent"></div>
+        <p class="report-end-note">{{ t('insight.aiDisclaimer') }}</p>
+      </div>
     </el-drawer>
   </div>
 </template>
@@ -138,7 +147,7 @@
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Document, View, Loading, Upload, EditPen } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, View, Loading, Upload, EditPen, Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 
 import type {
@@ -487,6 +496,8 @@ async function handlePublishReport(): Promise<void> {
     await publishReport({
       dashboardId: props.dashboardId,
       name: dashboard.value?.name,
+      // 报告描述沿用看板描述；此前漏传导致列表卡片始终显示"暂无描述"
+      description: dashboard.value?.description,
     })
     ElMessage.success(t('insight.reportPublishSuccess'))
   } catch (err: any) {
@@ -658,26 +669,35 @@ function handlePageChange(pageId: string): void {
   flex-direction: column;
   background: var(--db-bg);
   overflow: hidden;
+  /* 与列表页/编辑页一致：四周留灰底边距，页头与预览卡片悬浮于页面底色之上 */
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
+/* 页头工具栏：白色纸面卡片（描边+圆角+投影），与列表页 .page-card / 编辑页工具栏同一层级语言，
+   覆盖 .mc-toolbar 的默认通栏白底/下边框/定高 */
 .preview-toolbar {
-  height: 72px;
-  min-height: 72px;
-  background: var(--db-card);
-  border-bottom: 1px solid var(--db-border);
+  padding: 10px 16px;
   gap: 14px;
+  flex-shrink: 0;
+  margin-bottom: var(--space-md);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  height: auto;
+  min-height: 0;
 }
 
 .toolbar-left {
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .back-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--db-border-strong);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--db-card);
   color: var(--db-text-secondary);
   display: flex;
@@ -694,6 +714,11 @@ function handlePageChange(pageId: string): void {
   background: color-mix(in srgb, var(--db-accent) 6%, transparent);
 }
 
+.back-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--main-orange) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .toolbar-title-block {
   display: flex;
   flex-direction: column;
@@ -703,7 +728,7 @@ function handlePageChange(pageId: string): void {
 
 .toolbar-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--db-text);
   line-height: 1.3;
@@ -739,14 +764,14 @@ function handlePageChange(pageId: string): void {
 }
 
 .toolbar-right {
-  gap: 10px;
+  gap: 8px;
 }
 
 .toolbar-right :deep(.el-button.toolbar-btn) {
-  height: 36px;
-  border-radius: 8px;
+  height: 32px;
+  border-radius: 999px;
   padding: 0 14px;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -778,122 +803,297 @@ function handlePageChange(pageId: string): void {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--db-accent);
-  padding: 6px 12px;
-  border-radius: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+}
+
+/* 抽屉自定义头部（#header 插槽内容，与报告页报告详情抽屉一致） */
+.rd-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rd-header-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--main-orange) 0%, color-mix(in srgb, var(--main-orange) 60%, #fff) 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--main-orange) 30%, transparent);
+}
+
+.rd-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rd-header-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--db-text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rd-header-sub {
+  font-size: 11.5px;
+  color: var(--db-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 抽屉头部右侧的下载按钮（轻量 plain 样式，与关闭按钮视觉平衡） */
+.rd-download {
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-weight: 500;
 }
 
 .report-container {
   height: 100%;
   overflow-y: auto;
+  /* 层级一：抽屉内页面底色，与内容白纸卡形成对比 */
+  background: var(--db-bg);
+  padding: 20px;
 }
 
 .report-content {
   max-width: 800px;
   margin: 0 auto;
-  padding: var(--space-lg);
+  /* 层级二：白纸内容卡 */
+  padding: 28px 32px 32px;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   color: var(--db-text);
   line-height: 1.8;
+  font-size: 14px;
   animation: fadeIn var(--transition-base) both;
 }
 
 .report-content :deep(h1) {
-  font-size: 24px;
-  border-bottom: 2px solid var(--db-border);
-  padding-bottom: var(--space-sm);
+  font-size: 22px;
+  font-weight: 700;
   color: var(--db-text);
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--db-border);
 }
 
 .report-content :deep(h2) {
-  font-size: 20px;
-  border-bottom: 1px solid var(--db-border);
-  padding-bottom: 6px;
-  margin-top: var(--space-xl);
+  font-size: 17px;
+  font-weight: 700;
   color: var(--db-text);
+  line-height: 1.4;
+  margin: 32px 0 14px;
+  padding-left: 10px;
+  border-left: 3px solid var(--main-orange);
 }
 
 .report-content :deep(h3) {
-  font-size: 16px;
-  margin-top: var(--space-lg);
+  font-size: 15px;
+  font-weight: 600;
   color: var(--db-text);
+  margin: 22px 0 10px;
+}
+
+.report-content :deep(p) {
+  margin: 0 0 14px;
+  color: var(--db-text-secondary);
+}
+
+.report-content :deep(strong) {
+  color: var(--db-text);
+  font-weight: 600;
+}
+
+.report-content :deep(ul),
+.report-content :deep(ol) {
+  padding-left: 22px;
+  margin: 0 0 14px;
+}
+
+.report-content :deep(li) {
+  margin: 5px 0;
+  color: var(--db-text-secondary);
+}
+
+.report-content :deep(li)::marker {
+  color: var(--main-orange);
 }
 
 .report-content :deep(table) {
   border-collapse: collapse;
   width: 100%;
-  margin: var(--space-md) 0;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  margin: 16px 0;
+  font-size: 13px;
 }
 
 .report-content :deep(th),
 .report-content :deep(td) {
-  border: 1px solid var(--db-border);
-  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid var(--db-border);
+  padding: 9px 12px;
   text-align: left;
 }
 
 .report-content :deep(th) {
-  background: var(--db-hover);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
   font-weight: 600;
-  color: var(--db-text-secondary);
+  color: var(--db-text);
 }
 
 .report-content :deep(tr:nth-child(even)) {
-  background: var(--db-hover);
+  background: color-mix(in srgb, var(--db-text-muted) 5%, transparent);
 }
 
 .report-content :deep(code) {
-  background: var(--db-hover);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--db-text);
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
+  border-radius: 4px;
+  font-size: 13px;
 }
 
 .report-content :deep(blockquote) {
-  border-left: 4px solid var(--db-border-strong);
-  margin: var(--space-md) 0;
-  padding: var(--space-sm) var(--space-md);
+  position: relative;
+  margin: 16px 0;
+  padding: 12px 16px 12px 40px;
+  border: 1px solid color-mix(in srgb, var(--main-orange) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--main-orange) 4%, transparent);
   color: var(--db-text-secondary);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  background: var(--db-hover);
+}
+
+/* 左上角信息徽标，替代左边框的视觉锚点 */
+.report-content :deep(blockquote)::before {
+  content: "i";
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+  color: var(--main-orange);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.report-content :deep(blockquote > p:last-child) {
+  margin-bottom: 0;
 }
 
 .report-content :deep(.echarts-container) {
   width: 100%;
   height: 300px;
-  margin: var(--space-md) 0;
+  margin: 16px 0;
+  padding: 8px;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-md);
 }
 
-.report-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
+/* 统一垂直节奏：内容卡首尾子元素归零边距 */
+.report-content :deep(> *:first-child) {
+  margin-top: 0;
 }
 
-.report-footer .disclaimer {
+.report-content :deep(> *:last-child) {
+  margin-bottom: 0;
+}
+
+/* 报告结尾免责声明 */
+.report-end-note {
+  max-width: 800px;
+  margin: 16px auto 0;
+  text-align: center;
   font-size: 12px;
   color: var(--db-text-muted);
 }
 
+/* 预览区卡片容器：Tab 行与内容一起框进同一张卡片，
+   Tab 行是卡片白色头部，画布保持灰底作为卡片内嵌区域 */
 .preview-body {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* 外边距已由根容器统一提供，与列表页灰底留边一致 */
+  margin: 0;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
 }
 
+/* Tab 行：卡片头部平铺式标签，激活项主题色下划线，
+   覆盖 .mc-tabs 的白底/边框与 .mc-tab 的胶囊高亮 */
 .page-bar {
   animation: fadeIn var(--transition-base) both;
+  background: transparent;
+  border-bottom: 1px solid var(--db-border);
+  padding: 8px 16px 0;
+  gap: 4px;
+  width: auto;
+  max-width: none;
+  margin: 0;
 }
 
+.page-tab {
+  padding: 10px 2px;
+  margin: 0 10px;
+  border-radius: 0;
+  font-size: 13px;
+  color: var(--db-text-secondary);
+  /* 下划线为 inset box-shadow，需纳入过渡避免切换生硬 */
+  transition: color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.page-tab:hover {
+  background: transparent;
+  color: var(--db-text);
+}
+
+.page-tab.active {
+  background: transparent;
+  color: var(--db-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--main-orange);
+}
+
+.page-tab.mc-tab-sub {
+  font-size: 12px;
+  padding: 8px 2px;
+}
+
+/* 子 Tab 行略紧凑 */
 .sub-page-bar {
-  background: var(--db-bg);
-  border-bottom: 1px solid var(--db-border);
+  padding-top: 6px;
 }
 
 .page-icon {
@@ -933,8 +1133,8 @@ function handlePageChange(pageId: string): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: 48px 24px;
+  gap: 18px;
+  padding: 40px 24px;
 }
 
 .preview-empty .empty-illustration svg {
@@ -969,10 +1169,10 @@ function handlePageChange(pageId: string): void {
 }
 
 .preview-empty .empty-actions :deep(.el-button) {
-  height: 36px;
-  border-radius: 8px;
-  padding: 0 16px;
-  font-size: 13.5px;
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -1001,8 +1201,12 @@ function handlePageChange(pageId: string): void {
 }
 
 @media (max-width: 767px) {
+  .dashboard-preview-view {
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+  }
+
   .preview-toolbar {
-    padding: 0 var(--space-md);
+    padding: 10px var(--space-md);
     gap: 10px;
   }
 
@@ -1019,5 +1223,56 @@ function handlePageChange(pageId: string): void {
   .toolbar-title {
     font-size: 16px;
   }
+}
+</style>
+
+<style>
+/* el-drawer teleport 到 body，scoped 选择器无法命中其内部节点，
+   故用非 scoped 块 + 自定义类名限定作用域（与报告页报告详情抽屉一致） */
+.report-detail-drawer {
+  --el-color-primary: var(--main-orange, #4176E6);
+  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176E6) 70%, var(--theme-surface, #fff));
+  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176E6) 50%, var(--theme-surface, #fff));
+  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176E6) 30%, var(--theme-surface, #fff));
+  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176E6) 20%, var(--theme-surface, #fff));
+  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176E6) 10%, var(--theme-surface, #fff));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176E6) 85%, #000);
+  background: var(--theme-surface, #fff);
+}
+
+.report-detail-drawer .el-drawer__header {
+  margin-bottom: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-border, #e5e7eb);
+  background: var(--theme-surface, #fff);
+  gap: 10px;
+}
+
+.report-detail-drawer .el-drawer__close-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--db-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.report-detail-drawer .el-drawer__close-btn:hover {
+  background: color-mix(in srgb, var(--db-text-muted) 14%, transparent);
+  color: var(--db-text);
+}
+
+.report-detail-drawer .el-drawer__close-btn:hover i,
+.report-detail-drawer .el-drawer__close-btn:focus i {
+  color: var(--db-text);
+}
+
+.report-detail-drawer .el-drawer__body {
+  padding: 0;
+  overflow: hidden;
+  background: var(--theme-surface, #fff);
 }
 </style>

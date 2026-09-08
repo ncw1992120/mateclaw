@@ -31,8 +31,12 @@ const planHasFailed = computed(() =>
 
 /** 计划终态标签 */
 const planStatusLabel = computed(() => {
+  if (props.plan.planStatus === 'stopped') return 'stopped'
   if (props.plan.planStatus === 'completed') return 'completed'
   if (props.plan.planStatus === 'failed') return 'failed'
+  // 防御异常终态：计划仍标 running 但生成已结束（被中断/历史残留），
+  // 按 stopped 处理，避免头图标永远转圈或被误判为 completed
+  if (props.plan.planStatus === 'running' && !props.isGenerating) return 'stopped'
   if (allDone.value) return 'completed'
   if (planHasFailed.value) return 'failed'
   return ''
@@ -74,12 +78,14 @@ function truncateResult(text: string, max: number): string {
   <div class="plan-panel" :class="{
     'is-done': planStatusLabel === 'completed',
     'is-failed': planStatusLabel === 'failed',
+    'is-stopped': planStatusLabel === 'stopped',
   }">
     <!-- 标题栏 -->
     <div class="plan-panel__toggle" @click="collapsed = !collapsed">
-      <span class="plan-panel__status" :class="{ 'is-done': planStatusLabel === 'completed', 'is-failed': planStatusLabel === 'failed', 'is-running': isGenerating && planStatusLabel !== 'completed' && planStatusLabel !== 'failed' }">
+      <span class="plan-panel__status" :class="{ 'is-done': planStatusLabel === 'completed', 'is-failed': planStatusLabel === 'failed', 'is-stopped': planStatusLabel === 'stopped', 'is-running': isGenerating && planStatusLabel !== 'completed' && planStatusLabel !== 'failed' && planStatusLabel !== 'stopped' }">
         <svg v-if="planStatusLabel === 'failed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
         <svg v-else-if="planStatusLabel === 'completed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        <svg v-else-if="planStatusLabel === 'stopped'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8" stroke-linecap="round"/></svg>
         <svg v-else class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       </span>
       <span class="plan-panel__label">{{ $t('chat.executionPlan') }}</span>
@@ -93,6 +99,9 @@ function truncateResult(text: string, max: number): string {
       </span>
       <span v-if="planStatusLabel === 'failed'" class="plan-panel__badge" :class="planStatusLabel">
         {{ $t('chat.planStatusFailed') }}
+      </span>
+      <span v-else-if="planStatusLabel === 'stopped'" class="plan-panel__badge stopped">
+        {{ $t('chat.planStatusStopped') }}
       </span>
       <span class="plan-panel__arrow" :class="{ 'is-open': !collapsed }">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
@@ -198,6 +207,7 @@ function truncateResult(text: string, max: number): string {
 .plan-panel__status.is-running { color: var(--main-orange); }
 .plan-panel__status.is-done    { color: var(--el-color-success, #67c23a); }
 .plan-panel__status.is-failed  { color: var(--el-color-warning, #e6a23c); }
+.plan-panel__status.is-stopped { color: var(--theme-text-muted, #999); }
 
 .spin-icon {
   display: inline-block;
@@ -232,6 +242,9 @@ function truncateResult(text: string, max: number): string {
 }
 .plan-panel__badge.failed {
   background: var(--el-color-warning-light-5, #f0c78a);
+}
+.plan-panel__badge.stopped {
+  background: color-mix(in srgb, var(--theme-text-muted, #999) 55%, transparent);
 }
 
 .plan-panel__arrow {

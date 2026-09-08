@@ -3,31 +3,33 @@
     <div class="nav-left">
       <div class="brand-area" role="button" tabindex="0" :title="t('nav.brandName')" @click="handleNavClick('smart-ask')" @keydown.enter="handleNavClick('smart-ask')">
         <div class="logo">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30">
+          <!-- 线性渐变标志：开口圆环 + 上升趋势线，无方形底 -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="34" height="34" fill="none" aria-hidden="true">
             <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:var(--main-orange);stop-opacity:1" />
-                <stop offset="100%" style="stop-color:var(--dark-orange);stop-opacity:1" />
+              <linearGradient id="logoGrad" x1="6" y1="8" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+                <stop style="stop-color:var(--main-orange)" />
+                <stop offset="1" style="stop-color:var(--dark-orange)" />
               </linearGradient>
             </defs>
-            <rect width="100" height="100" rx="15" fill="url(#logoGrad)"/>
-            <circle cx="50" cy="45" r="25" fill="none" stroke="white" stroke-width="4"/>
-            <line x1="68" y1="62" x2="85" y2="79" stroke="white" stroke-width="6" stroke-linecap="round"/>
-            <polyline points="38,52 45,45 52,48 60,38" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <polygon points="60,38 57,42 60,41 58,48 62,46 65,43" fill="white"/>
+            <circle cx="24" cy="26" r="15" stroke="url(#logoGrad)" stroke-width="6" stroke-linecap="round" stroke-dasharray="71 24" />
+            <path d="M15 31l7-7 5 4 9-11" stroke="url(#logoGrad)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="37" cy="15" r="3.6" fill="var(--dark-orange)" />
           </svg>
         </div>
         <span class="brand-name">{{ t('nav.brandName') }}</span>
       </div>
     </div>
 
-    <nav class="nav-menu">
+    <nav ref="menuRef" class="nav-menu">
+      <span class="nav-pill" :style="pillStyle" aria-hidden="true"></span>
       <a
         v-for="item in navItems"
         :key="item.key"
         class="nav-item"
         :class="{ active: activeNav === item.key }"
+        tabindex="0"
         @click="handleNavClick(item.key)"
+        @keydown.enter="handleNavClick(item.key)"
       >
         {{ t(item.label) }}
       </a>
@@ -59,7 +61,7 @@
         </template>
       </el-dropdown>
 
-      <!-- 用户头像 -->
+      <!-- 用户头像（纯圆形，点击仍打开下拉菜单） -->
       <el-dropdown trigger="click" popper-class="topnav-dropdown-popper" @command="handleUserCommand">
         <div class="user-chip" :title="userStore.username">
           <div class="user-avatar"><span>{{ avatarText }}</span></div>
@@ -92,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -112,6 +114,49 @@ const chatStore = useChatStore()
 
 /** 当前激活的导航项 */
 const activeNav = computed(() => (route.query.nav as string) || 'smart-ask')
+
+/** 菜单容器引用（高亮滑块定位的 offsetParent） */
+const menuRef = ref<HTMLElement | null>(null)
+
+/** 高亮滑块样式：测量激活项位置，切换时由 CSS transition 平滑滑动 */
+const pillStyle = ref<{ left: string; top: string; width: string; height: string; opacity: number }>({
+  left: '0px',
+  top: '0px',
+  width: '0px',
+  height: '0px',
+  opacity: 0,
+})
+
+/** 测量激活导航项并移动高亮滑块 */
+function updateNavPill(): void {
+  const menu = menuRef.value
+  if (!menu) return
+  const active = menu.querySelector<HTMLElement>('.nav-item.active')
+  if (!active) {
+    pillStyle.value.opacity = 0
+    return
+  }
+  pillStyle.value = {
+    left: `${active.offsetLeft}px`,
+    top: `${active.offsetTop}px`,
+    width: `${active.offsetWidth}px`,
+    height: `${active.offsetHeight}px`,
+    opacity: 1,
+  }
+}
+
+watch(activeNav, () => {
+  nextTick(updateNavPill)
+})
+
+onMounted(() => {
+  updateNavPill()
+  window.addEventListener('resize', updateNavPill)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateNavPill)
+})
 
 /** 导航项配置 */
 const navItems = [
@@ -181,12 +226,11 @@ function handleUserCommand(command: string): void {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 24px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  /* 与内容区同底色（参考设计稿：顶栏无独立背景，导航元素浮于页面底色上） */
+  background: transparent;
+  border-bottom: 1px solid transparent;
   flex-shrink: 0;
   z-index: 100;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background 0.25s ease, border-color 0.25s ease;
 }
 
 /* ========== 左侧：品牌 ========== */
@@ -200,63 +244,81 @@ function handleUserCommand(command: string): void {
 .brand-area {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-shrink: 0;
   user-select: none;
   cursor: pointer;
-  border-radius: 8px;
   padding: 4px 6px;
   margin: -4px -6px;
-  transition: background 0.2s ease;
-}
-
-.brand-area:hover {
-  background: var(--theme-surface-hover);
+  border-radius: 10px;
 }
 
 .logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  overflow: hidden;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s ease;
 }
 
 .brand-area:hover .logo {
-  transform: scale(1.05);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  transform: scale(1.06);
 }
 
 .brand-name {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.6px;
   line-height: 20px;
   white-space: nowrap;
   color: var(--theme-text);
 }
 
-/* ========== 导航菜单（居中） ========== */
+/* ========== 导航菜单（居中，分段胶囊式） ========== */
+/* 菜单容器：elevated 底色（蓝色主题下为白底，暗色自动适配）浮起胶囊 */
 .nav-menu {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--theme-surface-elevated);
+  border: 1px solid var(--theme-border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
   justify-self: center;
   min-width: 0;
 }
 
+/* 高亮滑块：在导航项间平滑滑动，主题色底 + 悬浮投影（随主题 accent 换色）；
+   四向位移统一同一缓动曲线，避免宽高与位置不同步 */
+.nav-pill {
+  position: absolute;
+  border-radius: 999px;
+  background: var(--main-orange);
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--main-orange) 40%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  transition:
+    left 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    width 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    top 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    height 0.32s cubic-bezier(0.35, 0.9, 0.3, 1),
+    opacity 0.2s ease;
+}
+
 .nav-item {
   position: relative;
-  padding: 8px 18px;
+  z-index: 1;
+  padding: 8px 20px;
+  border-radius: 999px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 20px;
   color: var(--theme-text-secondary);
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.25s ease, background 0.2s ease;
   white-space: nowrap;
   text-decoration: none;
   display: inline-flex;
@@ -264,14 +326,16 @@ function handleUserCommand(command: string): void {
   letter-spacing: 0.3px;
 }
 
-.nav-item:hover {
-  color: var(--main-orange);
+.nav-item:hover:not(.active) {
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
 }
 
+/* 激活项：文字白色浮于滑块之上；字号与默认态一致，
+   仅加粗区分，避免激活瞬间文字放大带动滑块宽度抖动 */
 .nav-item.active {
-  color: var(--main-orange);
+  color: #fff;
   font-weight: 600;
-  font-size: 18px;
 }
 
 /* ========== 右侧：图标按钮 + 头像 ========== */
@@ -286,10 +350,11 @@ function handleUserCommand(command: string): void {
 .icon-btn {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 50%;
   border: none;
-  background: transparent;
-  color: var(--theme-text-muted);
+  /* 常驻浅色底，hover 加深 */
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
+  color: var(--theme-text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -299,12 +364,13 @@ function handleUserCommand(command: string): void {
 }
 
 .icon-btn:hover {
-  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
-  color: var(--main-orange);
+  background: color-mix(in srgb, var(--theme-text-muted) 16%, transparent);
+  color: var(--theme-text);
 }
 
 .icon-btn:active {
-  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+  background: color-mix(in srgb, var(--theme-text-muted) 22%, transparent);
+  color: var(--theme-text);
 }
 
 .nav-icon {
@@ -322,13 +388,13 @@ function handleUserCommand(command: string): void {
 
 .notification-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 6px;
+  right: 6px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #ef4444;
-  border: 1.5px solid var(--theme-surface);
+  border: 1.5px solid var(--theme-bg);
   box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2);
 }
 
@@ -338,26 +404,27 @@ function handleUserCommand(command: string): void {
   vertical-align: middle;
 }
 
-/* ========== 用户头像 ========== */
+/* ========== 用户头像（纯圆头像，hover 浅底） ========== */
 .user-chip {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
+  background: color-mix(in srgb, var(--theme-text-muted) 8%, transparent);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 6px;
-  transition: box-shadow 0.2s ease;
+  padding: 2px;
+  transition: background 0.2s ease;
 }
 
 .user-chip:hover {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--main-orange) 20%, transparent);
+  background: color-mix(in srgb, var(--theme-text-muted) 16%, transparent);
 }
 
 .user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--very-light-orange);
   display: flex;
@@ -366,6 +433,7 @@ function handleUserCommand(command: string): void {
   color: var(--main-orange);
   font-size: 13px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .dropdown-user-info {
@@ -403,10 +471,19 @@ function handleUserCommand(command: string): void {
   color: #e53e3e;
 }
 
+/* ========== 键盘可达性：统一主题色 focus 环 ========== */
+.brand-area:focus-visible,
+.nav-item:focus-visible,
+.icon-btn:focus-visible,
+.user-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--main-orange) 55%, transparent);
+  outline-offset: 2px;
+}
+
 /* ========== 响应式适配 ========== */
 @media (max-width: 1280px) {
   .nav-item {
-    padding: 8px 14px;
+    padding: 8px 16px;
   }
 }
 
@@ -415,7 +492,7 @@ function handleUserCommand(command: string): void {
     padding: 0 20px;
   }
   .nav-item {
-    padding: 8px 12px;
+    padding: 8px 13px;
   }
 }
 
