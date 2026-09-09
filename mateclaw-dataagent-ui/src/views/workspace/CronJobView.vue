@@ -1,18 +1,22 @@
 <template>
   <div class="cron-job-page">
     <div class="page-header">
-      <h1 class="page-title">{{ t('cronJob.title') }}</h1>
-      <button v-if="canManage" class="btn-primary" @click="openCreateModal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        {{ t('cronJob.create') }}
-      </button>
+      <div class="page-header-left">
+        <h1 class="page-title">{{ t('cronJob.title') }}</h1>
+      </div>
+      <div v-if="canManage" class="page-header-actions">
+        <button class="btn-create-pill" @click="openCreateModal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          {{ t('cronJob.create') }}
+        </button>
+      </div>
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="cronJobs" stripe class="cron-job-table">
+      <el-table v-loading="loading" :data="cronJobs" class="cron-job-table">
         <el-table-column prop="name" :label="t('cronJob.colName')" min-width="140">
           <template #default="{ row }">
             <span class="job-name" :title="row.name">{{ row.name }}</span>
@@ -470,7 +474,7 @@ async function handleDelete(row: CronJob): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 24px;
+  padding: 0 20px;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -480,33 +484,49 @@ async function handleDelete(row: CronJob): Promise<void> {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  padding: 2px 2px 14px;
+}
+
+.page-header-left {
+  min-width: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
   margin: 0;
+  line-height: 1.3;
 }
 
-.btn-primary {
+/* 胶囊按钮：主题色实心 + 白字 + 阴影 */
+.btn-create-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
 }
 
-.btn-primary:hover {
-  background: var(--dark-orange);
+.btn-create-pill:hover {
+  filter: brightness(1.08);
 }
 
 .page-body {
@@ -517,12 +537,39 @@ async function handleDelete(row: CronJob): Promise<void> {
 }
 
 .surface-card {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-card);
 }
 
 .cron-job-table {
   width: 100%;
+}
+
+/* 覆盖 Element Plus 默认斑马纹，用 CSS 变量统一管理 */
+.cron-job-table .el-table__row {
+  background: transparent;
+}
+.cron-job-table.el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: var(--db-card, var(--theme-surface));
+}
+.cron-job-table .el-table__body tr:hover > td {
+  background: var(--db-hover, var(--theme-surface-hover)) !important;
+}
+.cron-job-table .el-table__header-wrapper th.el-table__cell {
+  background: var(--db-card, var(--theme-surface)) !important;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--db-border, var(--theme-border)) !important;
+}
+.cron-job-table .el-table__body td {
+  border-bottom: 1px solid var(--db-border, rgba(0, 0, 0, 0.05));
+  color: var(--db-text, var(--theme-text));
+  padding: 14px 8px;
 }
 
 .job-name {
