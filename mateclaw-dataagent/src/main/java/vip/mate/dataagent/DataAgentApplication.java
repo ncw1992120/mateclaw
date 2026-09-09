@@ -11,6 +11,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
+import vip.mate.dataagent.config.ProtectionProperties;
 import vip.mate.dataagent.service.code.CodeExecutorProperties;
 import vip.mate.sdk.config.MateClawRuntimeAutoConfiguration;
 
@@ -32,7 +33,7 @@ import vip.mate.sdk.config.MateClawRuntimeAutoConfiguration;
                 DashScopeAgentAutoConfiguration.class,
         }
 )
-@EnableConfigurationProperties(CodeExecutorProperties.class)
+@EnableConfigurationProperties({CodeExecutorProperties.class, ProtectionProperties.class})
 @Import(MateClawRuntimeAutoConfiguration.class)
 public class DataAgentApplication {
 

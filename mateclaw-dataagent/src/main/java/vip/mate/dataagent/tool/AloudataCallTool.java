@@ -19,6 +19,7 @@ import vip.mate.dataagent.aloudata.ApiParam;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.AloudataMetricDimensionEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
@@ -570,6 +571,10 @@ public class AloudataCallTool {
             return error("参数类型错误: " + e.getMessage()
                     + "。请检查参数结构是否符合 API 契约：orders 必须为对象数组（如 [{\"metric_time__day\": \"asc\"}]），"
                     + "metrics/dimensions/filters 必须为字符串数组。");
+        } catch (BusinessException e) {
+            // 熔断降级：查询服务不可用时直接向 LLM 下达停止重试指令，避免盲目变换参数继续穿透
+            log.error("Aloudata Tool [{}] 熔断降级: {}", endpointName, e.getMessage());
+            return error("查询服务暂时不可用（系统熔断保护中）。请停止重试，直接向用户说明当前暂时无法获取指标数据，建议稍后再试。");
         } catch (Exception e) {
             log.error("Aloudata Tool [{}] 调用失败: {}", endpointName, e.getMessage(), e);
             return error("调用失败: " + e.getMessage());

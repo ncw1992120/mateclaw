@@ -9,6 +9,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import vip.mate.dataagent.auth.interceptor.DataAgentWorkspaceInterceptor;
 import vip.mate.dataagent.auth.interceptor.UserContextInterceptor;
 import vip.mate.dataagent.audit.DataAgentAuditInterceptor;
+import vip.mate.dataagent.protection.HighCostRateLimitInterceptor;
 
 /**
  * DataAgent Web MVC 配置
@@ -23,6 +24,7 @@ public class DataAgentWebMvcConfig implements WebMvcConfigurer {
     private final UserContextInterceptor userContextInterceptor;
     private final DataAgentWorkspaceInterceptor dataAgentWorkspaceInterceptor;
     private final DataAgentAuditInterceptor dataAgentAuditInterceptor;
+    private final HighCostRateLimitInterceptor highCostRateLimitInterceptor;
 
     /** CORS 允许的来源，逗号分隔 */
     @Value("${mateclaw.cors.allowed-origins:*}")
@@ -47,6 +49,12 @@ public class DataAgentWebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/v1/**")
                 .excludePathPatterns("/v1/auth/login", "/error")
                 .order(2);
+
+        // 4. 高成本端点限流拦截器：LLM 生成类写请求（提示词优化/洞察生成）按用户限频，
+        //    注册于用户上下文拦截器之后，可直接读取 UserContextHolder
+        registry.addInterceptor(highCostRateLimitInterceptor)
+                .addPathPatterns("/v1/chat/optimize/**", "/v1/insight/**")
+                .order(3);
     }
 
     @Override
