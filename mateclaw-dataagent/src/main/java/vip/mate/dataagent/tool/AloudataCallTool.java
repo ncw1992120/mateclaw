@@ -631,11 +631,11 @@ public class AloudataCallTool {
             // 避免 LLM 拿到 "返回错误: null" 后只能盲目变换参数重试
             String combinedMsg = extractApiErrorMessage(responseBody);
             if (combinedMsg == null) {
-                log.error("Aloudata API [{}] 返回失败且无错误明细，完整响应: {}", endpointName, JSONUtil.toJsonStr(responseBody));
                 String bodyPreview = JSONUtil.toJsonStr(responseBody);
                 if (bodyPreview.length() > 600) {
                     bodyPreview = bodyPreview.substring(0, 600) + "...(截断)";
                 }
+                log.error("Aloudata API [{}] 返回失败且无错误明细，响应预览: {}", endpointName, bodyPreview);
                 return error("API: " + endpointName + " 返回失败（success=false），但未携带错误信息。完整响应: " + bodyPreview
                         + "\n提示: 此类错误多为数据源查询通道/查询引擎问题而非参数格式问题，请检查数据源（指标应用→API集成）的查询服务地址与认证配置；若连续 5 次返回相同错误，请停止重试并向用户说明。");
             }
