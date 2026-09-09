@@ -3,64 +3,50 @@
     <div class="page-header">
       <div class="page-header-left">
         <h1 class="page-title">{{ t('workspaceManage.title') }}</h1>
+        <p class="page-desc">{{ t('workspaceManage.desc') }}</p>
       </div>
       <div class="page-header-actions">
         <button class="btn-create-pill" @click="openCreateModal">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <el-icon :size="14"><Plus /></el-icon>
           {{ t('workspaceManage.create') }}
         </button>
       </div>
     </div>
 
     <div class="page-body surface-card">
-      <div class="table-grid-scroll">
-        <table class="data-grid" v-loading="loading">
-          <thead>
-            <tr>
-              <th>{{ t('workspaceManage.colName') }}</th>
-              <th>{{ t('workspaceManage.colSlug') }}</th>
-              <th>{{ t('workspaceManage.colDescription') }}</th>
-              <th>{{ t('workspaceManage.colMyRole') }}</th>
-              <th>{{ t('workspaceManage.colCreateTime') }}</th>
-              <th>{{ t('common.action') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in workspaces" :key="row.id">
-              <td><span class="cell-name cell-text" :title="row.name">{{ row.name }}</span></td>
-              <td><span class="cell-text">{{ row.slug || '-' }}</span></td>
-              <td><span class="cell-text" :title="row.description">{{ row.description || '-' }}</span></td>
-              <td>
-                <span class="role-tag" :class="row.effectiveRole || row.memberRole">
-                  {{ row.effectiveRole || row.memberRole || '-' }}
-                </span>
-              </td>
-              <td><span class="cell-text">{{ row.createTime || '-' }}</span></td>
-              <td>
-                <div class="row-actions">
-                  <button v-if="canEdit(row)" class="icon-btn" :title="t('common.edit')" @click="openEditModal(row)">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
-                  <button v-if="canDelete(row)" class="icon-btn danger" :title="t('common.delete')" @click="handleDelete(row)">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      <line x1="10" y1="11" x2="10" y2="17"/>
-                      <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <el-table v-loading="loading" :data="workspaces" class="mc-table">
+        <el-table-column prop="name" :label="t('workspaceManage.colName')" min-width="160">
+          <template #default="{ row }">
+            <span class="cell-name">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="slug" :label="t('workspaceManage.colSlug')" min-width="140" />
+        <el-table-column prop="description" :label="t('workspaceManage.colDescription')" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="memberRole" :label="t('workspaceManage.colMyRole')" width="120">
+          <template #default="{ row }">
+            <span class="mc-tag" :class="row.effectiveRole || row.memberRole">
+              {{ row.effectiveRole || row.memberRole || '-' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createTime" :label="t('workspaceManage.colCreateTime')" width="170" />
+        <el-table-column :label="t('common.action')" width="80" fixed="right">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-tooltip :content="t('common.edit')" placement="top" :disabled="!canEdit(row)">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': !canEdit(row) }" @click="openEditModal(row)">
+                  <Edit />
+                </el-icon>
+              </el-tooltip>
+              <el-tooltip :content="t('common.delete')" placement="top" :disabled="!canDelete(row)">
+                <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': !canDelete(row) }" @click="handleDelete(row)">
+                  <Delete />
+                </el-icon>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- 新建/编辑弹窗 -->
@@ -106,6 +92,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { Workspace } from '@/types'
@@ -259,6 +246,13 @@ async function handleDelete(row: Workspace): Promise<void> {
   line-height: 1.3;
 }
 
+.page-desc {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
+}
+
 /* 胶囊按钮：主题色实心 + 白字 + 阴影 */
 .btn-create-pill {
   display: inline-flex;
@@ -284,134 +278,51 @@ async function handleDelete(row: Workspace): Promise<void> {
 
 .page-body {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   border-radius: 12px;
-  padding: 16px;
+  padding: 6px 12px 12px;
 }
 
-.surface-card {
-  background: transparent;
-}
-
-.table-grid-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  border: 1px solid var(--db-border, var(--theme-border));
-  border-radius: 10px;
-  background: var(--db-card, var(--theme-surface));
-}
-
-.data-grid {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.data-grid thead tr {
-  background: var(--theme-bg, #fafafa);
-}
-
-.data-grid th {
-  padding: 11px 12px;
-  text-align: center;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--db-text-muted, var(--theme-text-muted));
-  border-bottom: 1px solid var(--db-border, var(--theme-border));
-  white-space: nowrap;
-}
-
-.data-grid td {
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--db-text-secondary, var(--theme-text-secondary));
-  border-bottom: 1px solid var(--db-border, var(--theme-border));
-  vertical-align: middle;
-  text-align: center;
-}
-
-.data-grid tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.data-grid tbody tr:hover {
-  background: var(--db-hover, var(--theme-surface-hover));
-}
-
-.cell-text {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.cell-name {
-  color: var(--db-text, var(--theme-text));
-  font-weight: 500;
-}
-
-.workspace-name {
-  font-weight: 600;
-  color: var(--theme-text);
-}
-
-.role-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: capitalize;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-
-.role-tag.owner {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
-.role-tag.admin {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
+/* row-actions + action-icon */
 .row-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
 }
 
-.icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
+.action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  color: var(--db-text-secondary, var(--theme-text-secondary));
-  opacity: 0.65;
-  padding: 0;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
-  line-height: 1;
 }
 
-.icon-btn:hover {
+.action-icon:hover {
   opacity: 1;
-  background: var(--db-hover, var(--theme-surface-hover));
-  color: var(--db-text, var(--theme-text));
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.icon-btn.danger:hover {
+.action-icon.danger:hover {
   background: rgba(245, 63, 63, 0.1);
   color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.cell-name {
+  color: var(--db-text);
+  font-weight: 500;
 }
 
 .form-body {

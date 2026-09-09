@@ -14,57 +14,34 @@
     </div>
 
     <div class="page-body surface-card">
-      <div class="table-grid-scroll">
-        <table class="data-grid" v-loading="loading">
-          <thead>
-            <tr>
-              <th>{{ t('memberManage.colUsername') }}</th>
-              <th>{{ t('memberManage.colNickname') }}</th>
-              <th>{{ t('memberManage.colRole') }}</th>
-              <th>{{ t('memberManage.colJoinTime') }}</th>
-              <th v-if="canManage">{{ t('common.action') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in members" :key="row.userId">
-              <td><span class="cell-text">{{ row.username }}</span></td>
-              <td><span class="cell-text">{{ row.nickname || '-' }}</span></td>
-              <td>
-                <span class="role-tag" :class="row.role">{{ row.role }}</span>
-              </td>
-              <td><span class="cell-text">{{ row.createTime || '-' }}</span></td>
-              <td v-if="canManage">
-                <div class="row-actions">
-                  <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
-                    <button class="icon-btn" :disabled="row.role === 'owner'" :title="t('memberManage.changeRole')">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                      </svg>
-                    </button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="admin">admin</el-dropdown-item>
-                        <el-dropdown-item command="member">member</el-dropdown-item>
-                        <el-dropdown-item command="viewer">viewer</el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                  <button class="icon-btn danger" :disabled="row.role === 'owner'" :title="t('memberManage.remove')" @click="handleRemove(row)">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      <line x1="10" y1="11" x2="10" y2="17"/>
-                      <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <el-table v-loading="loading" :data="members" class="mc-table">
+        <el-table-column prop="username" :label="t('memberManage.colUsername')" min-width="140" />
+        <el-table-column prop="nickname" :label="t('memberManage.colNickname')" min-width="140" />
+        <el-table-column prop="role" :label="t('memberManage.colRole')" width="120">
+          <template #default="{ row }">
+            <span class="mc-tag" :class="row.role">{{ row.role }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="170" />
+        <el-table-column v-if="canManage" :label="t('common.action')" width="80" fixed="right">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleChangeRole(row, 'admin')">
+                  <Edit />
+                </el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="admin">admin</el-dropdown-item>
+                    <el-dropdown-item command="member">member</el-dropdown-item>
+                    <el-dropdown-item command="viewer">viewer</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleRemove(row)">
+                <Delete />
+              </el-icon>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -122,7 +99,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { WorkspaceMember } from '@/types'
@@ -324,106 +301,41 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   padding: 6px 12px 12px;
 }
 
-.surface-card {
-  background: transparent;
-}
-
-.table-grid-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  border: 1px solid var(--db-border, var(--theme-border));
-  border-radius: 10px;
-  background: var(--db-card, var(--theme-surface));
-}
-
-.data-grid {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.data-grid thead tr {
-  background: var(--theme-bg, #fafafa);
-}
-
-.data-grid th {
-  padding: 11px 12px;
-  text-align: center;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--db-text-muted, var(--theme-text-muted));
-  border-bottom: 1px solid var(--db-border, var(--theme-border));
-  white-space: nowrap;
-}
-
-.data-grid td {
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--db-text-secondary, var(--theme-text-secondary));
-  border-bottom: 1px solid var(--db-border, var(--theme-border));
-  vertical-align: middle;
-  text-align: center;
-}
-
-.data-grid tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.data-grid tbody tr:hover {
-  background: var(--db-hover, var(--theme-surface-hover));
-}
-
-.cell-text {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-/* 表格统一皮肤见全局 .mc-table */
-
-/* 标签与行操作使用全局 .mc-tag / .mc-action-link 皮肤 */
+/* row-actions + action-icon */
 .row-actions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
 }
 
-.icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
+.action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  color: var(--db-text-secondary, var(--theme-text-secondary));
-  opacity: 0.65;
-  padding: 0;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
-  line-height: 1;
 }
 
-.icon-btn:hover:not(:disabled) {
+.action-icon:hover {
   opacity: 1;
-  background: var(--db-hover, var(--theme-surface-hover));
-  color: var(--db-text, var(--theme-text));
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.icon-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.icon-btn.danger:hover:not(:disabled) {
+.action-icon.danger:hover {
   background: rgba(245, 63, 63, 0.1);
   color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .form-body {
