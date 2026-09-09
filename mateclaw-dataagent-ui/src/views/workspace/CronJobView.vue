@@ -3,79 +3,87 @@
     <div class="page-header">
       <div class="page-header-left">
         <h1 class="page-title">{{ t('cronJob.title') }}</h1>
+        <p class="page-desc">{{ t('cronJob.desc') }}</p>
       </div>
       <div v-if="canManage" class="page-header-actions">
         <button class="btn-create-pill" @click="openCreateModal">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <el-icon :size="14"><Plus /></el-icon>
           {{ t('cronJob.create') }}
         </button>
       </div>
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="cronJobs" class="cron-job-table">
-        <el-table-column prop="name" :label="t('cronJob.colName')" min-width="140">
-          <template #default="{ row }">
-            <span class="job-name" :title="row.name">{{ row.name }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="agentName" :label="t('cronJob.colAgent')" min-width="120">
-          <template #default="{ row }">
-            {{ row.agentName || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="taskType" :label="t('cronJob.colTaskType')" width="100">
-          <template #default="{ row }">
-            <span class="task-type-tag" :class="row.taskType">{{ taskTypeLabel(row.taskType) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="cronExpression" :label="t('cronJob.colCron')" min-width="120" />
-        <el-table-column prop="enabled" :label="t('cronJob.colStatus')" width="90">
-          <template #default="{ row }">
-            <el-switch
-              v-if="canManage"
-              :model-value="row.enabled"
-              size="small"
-              @change="(val: boolean) => handleToggle(row, val)"
-            />
-            <span v-else class="status-text" :class="row.enabled ? 'on' : 'off'">
-              {{ row.enabled ? t('cronJob.statusEnabled') : t('cronJob.statusDisabled') }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="nextRunTime" :label="t('cronJob.colNextRun')" width="170" />
-        <el-table-column prop="lastRunTime" :label="t('cronJob.colLastRun')" width="170" />
-        <el-table-column prop="lastDeliveryStatus" :label="t('cronJob.colDelivery')" width="100">
-          <template #default="{ row }">
-            <span class="delivery-tag" :class="deliveryClass(row.lastDeliveryStatus)">
-              {{ deliveryLabel(row.lastDeliveryStatus) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('common.action')" width="180" fixed="right">
-          <template #default="{ row }">
-            <div v-if="!canManage" class="row-actions">
-              <button class="action-link" :title="t('cronJob.viewDesc')" @click="openDetail(row)">
-                {{ t('cronJob.view') }}
-              </button>
-            </div>
-            <div v-else class="row-actions">
-              <button class="action-link" @click="handleRunNow(row)">
-                {{ t('cronJob.runNow') }}
-              </button>
-              <button class="action-link" @click="openEditModal(row)">
-                {{ t('common.edit') }}
-              </button>
-              <button class="action-link danger" @click="handleDelete(row)">
-                {{ t('common.delete') }}
-              </button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-grid-scroll">
+        <table class="data-grid" v-loading="loading">
+          <thead>
+            <tr>
+              <th>{{ t('cronJob.colName') }}</th>
+              <th>{{ t('cronJob.colAgent') }}</th>
+              <th>{{ t('cronJob.colTaskType') }}</th>
+              <th>{{ t('cronJob.colCron') }}</th>
+              <th>{{ t('cronJob.colStatus') }}</th>
+              <th>{{ t('cronJob.colNextRun') }}</th>
+              <th>{{ t('cronJob.colLastRun') }}</th>
+              <th>{{ t('cronJob.colDelivery') }}</th>
+              <th>{{ t('common.action') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in cronJobs" :key="row.id">
+              <td><span class="cell-name cell-text" :title="row.name">{{ row.name }}</span></td>
+              <td><span class="cell-text">{{ row.agentName || '-' }}</span></td>
+              <td><span class="mc-tag" :class="row.taskType">{{ taskTypeLabel(row.taskType) }}</span></td>
+              <td><span class="cell-text cell-mono">{{ row.cronExpression || '-' }}</span></td>
+              <td>
+                <el-switch
+                  v-if="canManage"
+                  :model-value="row.enabled"
+                  size="small"
+                  @change="(val: boolean) => handleToggle(row, val)"
+                />
+                <span v-else class="status-text" :class="row.enabled ? 'on' : 'off'">
+                  {{ row.enabled ? t('cronJob.statusEnabled') : t('cronJob.statusDisabled') }}
+                </span>
+              </td>
+              <td><span class="cell-text">{{ row.nextRunTime || '-' }}</span></td>
+              <td><span class="cell-text">{{ row.lastRunTime || '-' }}</span></td>
+              <td><span class="mc-tag" :class="deliveryClass(row.lastDeliveryStatus)">{{ deliveryLabel(row.lastDeliveryStatus) }}</span></td>
+              <td>
+                <div v-if="!canManage" class="row-actions">
+                  <button class="icon-btn" :title="t('cronJob.viewDesc')" @click="openDetail(row)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  </button>
+                </div>
+                <div v-else class="row-actions">
+                  <button class="icon-btn" :title="t('cronJob.runNow')" @click="handleRunNow(row)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn" :title="t('common.edit')" @click="openEditModal(row)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  <button class="icon-btn danger" :title="t('common.delete')" @click="handleDelete(row)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- 新建/编辑弹窗 -->
@@ -232,6 +240,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import * as cronJobApi from '@/api/cron-job'
 import * as agentApi from '@/api/agent'
@@ -506,6 +515,13 @@ async function handleDelete(row: CronJob): Promise<void> {
   line-height: 1.3;
 }
 
+.page-desc {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
+}
+
 /* 胶囊按钮：主题色实心 + 白字 + 阴影 */
 .btn-create-pill {
   display: inline-flex;
@@ -531,50 +547,77 @@ async function handleDelete(row: CronJob): Promise<void> {
 
 .page-body {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   border-radius: 12px;
-  padding: 16px;
+  padding: 6px 12px 12px;
 }
 
 .surface-card {
-  background: var(--db-card);
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-card);
-}
-
-.cron-job-table {
-  width: 100%;
-}
-
-/* 覆盖 Element Plus 默认斑马纹，用 CSS 变量统一管理 */
-.cron-job-table .el-table__row {
   background: transparent;
 }
-.cron-job-table.el-table--striped .el-table__body tr.el-table__row--striped td {
+
+.table-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--db-border, var(--theme-border));
+  border-radius: 10px;
   background: var(--db-card, var(--theme-surface));
 }
-.cron-job-table .el-table__body tr:hover > td {
-  background: var(--db-hover, var(--theme-surface-hover)) !important;
-}
-.cron-job-table .el-table__header-wrapper th.el-table__cell {
-  background: var(--db-card, var(--theme-surface)) !important;
-  color: var(--db-text-secondary, var(--theme-text-secondary));
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--db-border, var(--theme-border)) !important;
-}
-.cron-job-table .el-table__body td {
-  border-bottom: 1px solid var(--db-border, rgba(0, 0, 0, 0.05));
-  color: var(--db-text, var(--theme-text));
-  padding: 14px 8px;
+
+.data-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 
-.job-name {
-  font-weight: 600;
-  color: var(--theme-text);
+.data-grid thead tr {
+  background: var(--theme-bg, #fafafa);
+}
+
+.data-grid th {
+  padding: 11px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--db-text-muted, var(--theme-text-muted));
+  border-bottom: 1px solid var(--db-border, var(--theme-border));
+  white-space: nowrap;
+}
+
+.data-grid td {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  border-bottom: 1px solid var(--db-border, var(--theme-border));
+  vertical-align: middle;
+  text-align: center;
+}
+
+.data-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-grid tbody tr:hover {
+  background: var(--db-hover, var(--theme-surface-hover));
+}
+
+.cell-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.cell-name {
+  color: var(--db-text, var(--theme-text));
+  font-weight: 500;
+}
+
+.cell-mono {
+  font-family: 'Consolas', 'Monaco', monospace;
 }
 
 /* 只读状态文字 */
@@ -583,89 +626,47 @@ async function handleDelete(row: CronJob): Promise<void> {
 }
 
 .status-text.on {
-  color: #00b42a;
+  color: var(--db-positive);
 }
 
 .status-text.off {
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
-.task-type-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-
-.task-type-tag.text {
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
-}
-
-.task-type-tag.agent {
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
-}
-
-.task-type-tag.reminder {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-}
-
-.delivery-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-
-.delivery-tag.pending {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-}
-
-.delivery-tag.delivered {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-}
-
-.delivery-tag.failed {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-}
-
+/* 标签与行操作使用全局 .mc-tag / .mc-action-link 皮肤 */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 2px;
 }
 
-.action-link {
+.icon-btn {
+  background: none;
   border: none;
-  background: transparent;
-  color: var(--main-orange);
-  font-size: 13px;
   cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  opacity: 0.65;
   padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  line-height: 1;
 }
 
-.action-link:hover:not(:disabled) {
-  text-decoration: underline;
+.icon-btn:hover {
+  opacity: 1;
+  background: var(--db-hover, var(--theme-surface-hover));
+  color: var(--db-text, var(--theme-text));
 }
 
-.action-link:disabled {
-  color: var(--theme-text-muted);
-  cursor: not-allowed;
-}
-
-.action-link.danger {
-  color: #e53e3e;
+.icon-btn.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
 }
 
 .form-body {
@@ -747,10 +748,10 @@ async function handleDelete(row: CronJob): Promise<void> {
 }
 
 .status-on {
-  color: #00b42a;
+  color: var(--db-positive);
 }
 
 .status-off {
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 </style>

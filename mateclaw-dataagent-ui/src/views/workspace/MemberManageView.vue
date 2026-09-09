@@ -7,44 +7,64 @@
       </div>
       <div v-if="canManage" class="page-header-actions">
         <button class="btn-create-pill" @click="openAddModal">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <el-icon :size="14"><Plus /></el-icon>
           {{ t('memberManage.addMember') }}
         </button>
       </div>
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="members" class="member-table">
-        <el-table-column prop="username" :label="t('memberManage.colUsername')" min-width="140" />
-        <el-table-column prop="nickname" :label="t('memberManage.colNickname')" min-width="140" />
-        <el-table-column prop="role" :label="t('memberManage.colRole')" width="120">
-          <template #default="{ row }">
-            <span class="role-tag" :class="row.role">{{ row.role }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="170" />
-        <el-table-column v-if="canManage" :label="t('common.action')" width="160" fixed="right">
-          <template #default="{ row }">
-            <div class="row-actions">
-              <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
-                <button class="action-link" :disabled="row.role === 'owner'">
-                  {{ t('memberManage.changeRole') }}
-                </button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="admin">admin</el-dropdown-item>
-                    <el-dropdown-item command="member">member</el-dropdown-item>
-                    <el-dropdown-item command="viewer">viewer</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-              <button class="action-link danger" :disabled="row.role === 'owner'" @click="handleRemove(row)">
-                {{ t('memberManage.remove') }}
-              </button>
-            </div>
+      <div class="table-grid-scroll">
+        <table class="data-grid" v-loading="loading">
+          <thead>
+            <tr>
+              <th>{{ t('memberManage.colUsername') }}</th>
+              <th>{{ t('memberManage.colNickname') }}</th>
+              <th>{{ t('memberManage.colRole') }}</th>
+              <th>{{ t('memberManage.colJoinTime') }}</th>
+              <th v-if="canManage">{{ t('common.action') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in members" :key="row.userId">
+              <td><span class="cell-text">{{ row.username }}</span></td>
+              <td><span class="cell-text">{{ row.nickname || '-' }}</span></td>
+              <td>
+                <span class="role-tag" :class="row.role">{{ row.role }}</span>
+              </td>
+              <td><span class="cell-text">{{ row.createTime || '-' }}</span></td>
+              <td v-if="canManage">
+                <div class="row-actions">
+                  <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
+                    <button class="icon-btn" :disabled="row.role === 'owner'" :title="t('memberManage.changeRole')">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="admin">admin</el-dropdown-item>
+                        <el-dropdown-item command="member">member</el-dropdown-item>
+                        <el-dropdown-item command="viewer">viewer</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                  <button class="icon-btn danger" :disabled="row.role === 'owner'" :title="t('memberManage.remove')" @click="handleRemove(row)">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
           </template>
         </el-table-column>
       </el-table>
@@ -102,6 +122,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { WorkspaceMember } from '@/types'
@@ -298,94 +319,111 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 
 .page-body {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   border-radius: 12px;
-  padding: 16px;
+  padding: 6px 12px 12px;
 }
 
 .surface-card {
-  background: var(--db-card);
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: var(--shadow-card);
-}
-
-.member-table {
-  width: 100%;
-}
-
-/* 覆盖 Element Plus 默认斑马纹，用 CSS 变量统一管理 */
-.member-table .el-table__row {
   background: transparent;
 }
-.member-table.el-table--striped .el-table__body tr.el-table__row--striped td {
+
+.table-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid var(--db-border, var(--theme-border));
+  border-radius: 10px;
   background: var(--db-card, var(--theme-surface));
 }
-.member-table .el-table__body tr:hover > td {
-  background: var(--db-hover, var(--theme-surface-hover)) !important;
+
+.data-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
 }
-.member-table .el-table__header-wrapper th.el-table__cell {
-  background: var(--db-card, var(--theme-surface)) !important;
+
+.data-grid thead tr {
+  background: var(--theme-bg, #fafafa);
+}
+
+.data-grid th {
+  padding: 11px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--db-text-muted, var(--theme-text-muted));
+  border-bottom: 1px solid var(--db-border, var(--theme-border));
+  white-space: nowrap;
+}
+
+.data-grid td {
+  padding: 10px 12px;
+  font-size: 13px;
   color: var(--db-text-secondary, var(--theme-text-secondary));
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--db-border, var(--theme-border)) !important;
-}
-.member-table .el-table__body td {
-  border-bottom: 1px solid var(--db-border, rgba(0, 0, 0, 0.05));
-  color: var(--db-text, var(--theme-text));
-  padding: 14px 8px;
+  border-bottom: 1px solid var(--db-border, var(--theme-border));
+  vertical-align: middle;
+  text-align: center;
 }
 
-.role-tag {
+.data-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-grid tbody tr:hover {
+  background: var(--db-hover, var(--theme-surface-hover));
+}
+
+.cell-text {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: capitalize;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
-.role-tag.owner {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
+/* 表格统一皮肤见全局 .mc-table */
 
-.role-tag.admin {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
+/* 标签与行操作使用全局 .mc-tag / .mc-action-link 皮肤 */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 2px;
 }
 
-.action-link {
+.icon-btn {
+  background: none;
   border: none;
-  background: transparent;
-  color: var(--main-orange);
-  font-size: 13px;
   cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  opacity: 0.65;
   padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  line-height: 1;
 }
 
-.action-link:hover:not(:disabled) {
-  text-decoration: underline;
+.icon-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--db-hover, var(--theme-surface-hover));
+  color: var(--db-text, var(--theme-text));
 }
 
-.action-link:disabled {
-  color: var(--theme-text-muted);
+.icon-btn:disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
-.action-link.danger {
-  color: #e53e3e;
+.icon-btn.danger:hover:not(:disabled) {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
 }
 
 .form-body {
