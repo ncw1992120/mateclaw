@@ -3,6 +3,7 @@ package vip.mate.dataagent.config;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
  * 服务保护配置属性（限流 / 熔断 / 降级相关阈值）
@@ -12,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @Getter
 @Setter
+@Component
 @ConfigurationProperties(prefix = ProtectionProperties.CONFIG_PREFIX)
 public class ProtectionProperties {
 

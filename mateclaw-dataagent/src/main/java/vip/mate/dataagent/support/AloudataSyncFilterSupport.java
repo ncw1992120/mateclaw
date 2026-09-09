@@ -10,15 +10,7 @@ import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.util.QlExpressSupport;
 import vip.mate.system.service.SystemSettingService;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Aloudata 元数据同步黑名单过滤支持（QLExpress 动态规则）

@@ -9,13 +9,7 @@ import vip.mate.auth.model.UserEntity;
 import vip.mate.auth.service.AuthService;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.crypto.TransportCryptoService;
-import vip.mate.dataagent.auth.dto.AuthModeVO;
-import vip.mate.dataagent.auth.dto.DataAgentLoginRequest;
-import vip.mate.dataagent.auth.dto.DataAgentLoginResponse;
-import vip.mate.dataagent.auth.dto.PasswordChangeRequest;
-import vip.mate.dataagent.auth.dto.PilotCaptchaVO;
-import vip.mate.dataagent.auth.dto.PilotSsoRequest;
-import vip.mate.dataagent.auth.dto.PublicKeyVO;
+import vip.mate.dataagent.auth.dto.*;
 import vip.mate.dataagent.auth.service.DataAgentAuthService;
 
 /**

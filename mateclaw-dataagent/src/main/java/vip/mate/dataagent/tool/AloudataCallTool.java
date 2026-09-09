@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import vip.mate.tool.builtin.ToolExecutionContext;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
@@ -29,12 +28,13 @@ import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
-import vip.mate.dataagent.util.AloudataTimeResolver;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
+import vip.mate.dataagent.util.AloudataTimeResolver;
 import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
+import vip.mate.tool.builtin.ToolExecutionContext;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -2873,7 +2873,8 @@ public class AloudataCallTool {
      * @param baseName 指标族基名；未触发时为 null
      * @param family   整族成员；未触发时为空。
      *                 口径族场景 ≥2；宽泛词聚合场景可能 =1（唯一前缀成员即目标）。
-     * @param resolved 由用户原话唯一确定的目标口径指标；未唯一确定时为空
+     * @param matched 按口径词命中的族成员列表（强命中优先，剔除子串支配项）；
+     *                可能多选（如"对比整体和个人"）；宽泛词聚合整族唯一时为该唯一成员；未命中时为空
      */
     private record FamilyBackfillResult(String baseName,
                                         List<AloudataMetricEntity> family,

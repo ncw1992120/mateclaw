@@ -2,6 +2,7 @@ package vip.mate.dataagent.auth.enterprise;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.List;
  * @author MateClaw Team
  */
 @Data
+@Component
 @ConfigurationProperties(prefix = "mateclaw.pilot")
 public class PilotAuthProperties {
 
