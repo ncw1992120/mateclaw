@@ -2,6 +2,14 @@
   <div class="datasource-form-page">
     <!-- 页面头部 -->
     <header class="form-header">
+      <!-- 返回列表：与右上角关闭/底部取消同一语义，顶部提供显式返回入口 -->
+      <button type="button" class="form-back-btn" @click="handleCancel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 12H5" />
+          <path d="M12 19l-7-7 7-7" />
+        </svg>
+        <span>{{ t('common.back') || '返回' }}</span>
+      </button>
       <h1 class="form-title">{{ isEditMode ? t('dsForm.editTitle') : t('dsForm.title') }}</h1>
       <!-- 步骤条 -->
       <div class="step-bar">
@@ -721,10 +729,35 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   padding: 12px 24px;
   background: #fff;
-  border-bottom: 1px solid #e5e6eb;
   flex-shrink: 0;
   gap: 32px;
   position: relative;
+}
+
+/* 返回按钮：头部左侧显式入口，与表单浅色调式一致 */
+.form-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.form-back-btn:hover {
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+  background: #fff;
 }
 
 .form-title {
@@ -828,7 +861,7 @@ async function handleSubmit(): Promise<void> {
 .form-main {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
 }

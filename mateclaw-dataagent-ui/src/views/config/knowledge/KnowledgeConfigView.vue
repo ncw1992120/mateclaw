@@ -1,17 +1,32 @@
 <template>
   <div class="knowledge-config-page">
     <!-- ========== 知识库列表视图 (Library) ========== -->
-    <div v-if="!currentKB" class="kb-library">
-      <!-- 工具栏 -->
-      <div class="library-toolbar">
-        <div class="library-title">
-          <span class="title-text">{{ t('knowledgeConfig.wikiLibrary') }}</span>
-          <span class="kb-count">{{ knowledgeBases.length }}</span>
+    <div v-if="!currentKB" ref="libraryRef" class="kb-library">
+      <!-- 身份页头：标题 + 数量统计 + 描述（左） + 主操作（右），与技能/数据/词典页同一版式语言 -->
+      <div class="kb-content-header">
+        <div class="kb-content-title">
+          <div class="kb-content-name-row">
+            <h3 class="kb-content-name">{{ t('knowledgeConfig.wikiLibrary') }}</h3>
+            <!-- 数量标识：加载完成后才显示，避免首帧 0 闪烁 -->
+            <span v-if="statsReady" class="kb-title-stats">
+              <span class="summary-item">
+                <span class="summary-dot" aria-hidden="true"></span>
+                {{ t('knowledgeConfig.kbCount') }}
+                <b class="summary-num">{{ knowledgeBases.length }}</b>
+              </span>
+            </span>
+          </div>
+          <p class="kb-content-desc">{{ t('knowledgeConfig.desc') }}</p>
         </div>
-        <el-button v-if="canManage" type="primary" size="small" @click="openCreateDialog">
-          <el-icon><Plus /></el-icon>
-          {{ t('knowledgeConfig.create') }}
-        </el-button>
+        <div class="header-actions">
+          <button v-if="canManage" type="button" class="btn-create-pill" @click="openCreateDialog">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {{ t('knowledgeConfig.create') }}
+          </button>
+        </div>
       </div>
 
       <!-- 加载中 -->
@@ -20,15 +35,23 @@
         <span>{{ t('common.loading') }}</span>
       </div>
 
-      <!-- 空状态 -->
-      <div v-else-if="knowledgeBases.length === 0" class="library-empty">
-        <el-icon :size="48" class="empty-icon"><Collection /></el-icon>
-        <p class="empty-title">{{ t('knowledgeConfig.emptyTitle') }}</p>
-        <p class="empty-desc">{{ t('knowledgeConfig.emptyDesc') }}</p>
-        <el-button v-if="canManage" type="primary" @click="openCreateDialog">
-          <el-icon><Plus /></el-icon>
+      <!-- 全局空态：线型 SVG chip + 文案 + 胶囊按钮，与技能/数据/词典页同形态 -->
+      <div v-else-if="knowledgeBases.length === 0" class="global-empty surface-card">
+        <div class="global-empty-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+        </div>
+        <h3>{{ t('knowledgeConfig.emptyTitle') }}</h3>
+        <p class="global-empty-desc">{{ t('knowledgeConfig.emptyDesc') }}</p>
+        <button v-if="canManage" type="button" class="btn-create-pill small" @click="openCreateDialog">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           {{ t('knowledgeConfig.create') }}
-        </el-button>
+        </button>
       </div>
 
       <!-- 知识库卡片网格 -->
@@ -37,37 +60,39 @@
           v-for="kb in knowledgeBases"
           :key="kb.id"
           class="kb-card"
-          :class="{ 'kb-card--processing': kb.status === 'processing', 'kb-card--error': kb.status === 'error' }"
           @click="selectKB(kb)"
         >
           <div class="kb-card-header">
-            <div class="kb-card-icon">
-              <el-icon :size="20"><Document /></el-icon>
-            </div>
-            <el-tag :type="statusTagType(kb.status)" size="small" effect="plain">
-              {{ statusLabel(kb.status) }}
+            <h3 class="kb-card-name" :title="kb.name">{{ kb.name }}</h3>
+            <el-tag class="kb-card-status" :type="statusTagType(kb.status)" effect="light" size="small" round>
+              <span class="status-dot"></span>{{ statusLabel(kb.status) }}
             </el-tag>
           </div>
-          <div class="kb-card-body">
-            <h3 class="kb-card-name">{{ kb.name }}</h3>
-            <p class="kb-card-desc">{{ kb.description || t('knowledgeConfig.noDescription') }}</p>
-          </div>
+          <!-- 描述：截断时悬停弹出完整文案（对齐报告/洞察卡片） -->
+          <el-tooltip
+            :content="kb.description || t('knowledgeConfig.noDescription')"
+            placement="top"
+            :show-after="150"
+            :disabled="!kb.description || !truncatedDescs[kb.id]"
+            popper-class="card-desc-tooltip"
+          >
+            <p class="kb-card-desc" :data-id="kb.id">{{ kb.description || t('knowledgeConfig.noDescription') }}</p>
+          </el-tooltip>
           <div class="kb-card-footer">
-            <div class="kb-stat">
-              <span class="kb-stat-label">{{ t('knowledgeConfig.rawCount') }}</span>
-              <span class="kb-stat-value">{{ kb.rawCount }}</span>
-            </div>
-            <div class="kb-stat">
-              <span class="kb-stat-label">{{ t('knowledgeConfig.pageCount') }}</span>
-              <span class="kb-stat-value">{{ kb.pageCount }}</span>
-            </div>
-            <!-- 悬浮操作：位于卡片底部右侧，样式参考洞察卡片按钮 -->
+            <span class="kb-card-meta">
+              {{ t('knowledgeConfig.rawCount') }} {{ kb.rawCount }}
+              <span class="meta-sep">·</span>
+              {{ t('knowledgeConfig.pageCount') }} {{ kb.pageCount }}
+            </span>
+            <!-- 操作：纯文字轻量按钮，常驻底栏右侧 -->
             <div v-if="canManage" class="kb-card-actions" @click.stop>
-              <button class="kb-card-action" :title="t('common.edit')" @click="openEditDialog(kb)">
-                <el-icon><EditPen /></el-icon>
+              <button type="button" class="kb-card-action" @click="openEditDialog(kb)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                {{ t('common.edit') }}
               </button>
-              <button class="kb-card-action kb-card-action--danger" :title="t('knowledgeConfig.delete')" @click="handleDelete(kb)">
-                <el-icon><Delete /></el-icon>
+              <button type="button" class="kb-card-action kb-card-action--danger" @click="handleDelete(kb)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                {{ t('knowledgeConfig.delete') }}
               </button>
             </div>
           </div>
@@ -80,33 +105,24 @@
       <!-- 工作区头部 -->
       <div class="workspace-header">
         <div class="header-left">
-          <el-button size="small" text @click="backToLibrary">
-            <el-icon><ArrowLeft /></el-icon>
-            {{ t('knowledgeConfig.backToLibrary') }}
-          </el-button>
-          <div class="header-divider" />
-          <div class="header-kb-icon">{{ (currentKB.name || '?').charAt(0).toUpperCase() }}</div>
+          <button type="button" class="ws-back-btn" :title="t('knowledgeConfig.backToLibrary')" @click="backToLibrary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
           <div class="header-kb-info">
             <span class="header-kb-name">{{ currentKB.name }}</span>
             <span v-if="currentKB.description" class="header-kb-desc">{{ currentKB.description }}</span>
           </div>
-          <el-tag :type="statusTagType(currentKB.status)" size="small" effect="plain">
-            {{ statusLabel(currentKB.status) }}
-          </el-tag>
         </div>
         <div class="header-right">
-          <div class="header-stats">
-            <span class="header-stat">
-              <el-icon><Document /></el-icon>
-              <span class="header-stat-value">{{ currentKB.pageCount }}</span>
-              <span class="header-stat-label">{{ t('knowledgeConfig.pageCount') }}</span>
-            </span>
-            <span class="header-stat">
-              <el-icon><Files /></el-icon>
-              <span class="header-stat-value">{{ currentKB.rawCount }}</span>
-              <span class="header-stat-label">{{ t('knowledgeConfig.rawCount') }}</span>
-            </span>
-          </div>
+          <!-- 状态从左侧身份组移至右组，与计数元信息行组成“状态信息组”（左侧只留身份） -->
+          <el-tag class="kb-card-status workspace-status" :type="statusTagType(currentKB.status)" effect="light" size="small" round>
+            <span class="status-dot"></span>{{ statusLabel(currentKB.status) }}
+          </el-tag>
+          <span class="workspace-meta">
+            {{ t('knowledgeConfig.pageCount') }} {{ currentKB.pageCount }}
+            <span class="meta-sep">·</span>
+            {{ t('knowledgeConfig.rawCount') }} {{ currentKB.rawCount }}
+          </span>
         </div>
       </div>
 
@@ -120,7 +136,6 @@
           <el-input
             v-model="pageSearchQuery"
             :placeholder="t('knowledgeConfig.searchPages')"
-            size="small"
             clearable
             class="sidebar-search"
           >
@@ -129,29 +144,34 @@
             </template>
           </el-input>
           <div class="sidebar-pages">
-            <div v-for="[type, group] in groupedSidebarPages" :key="type" class="sidebar-group">
-              <button class="sidebar-group-title" type="button" @click="toggleSidebarGroup(type)">
-                <span class="sidebar-group-left">
-                  <el-icon class="sidebar-group-arrow" :class="{ collapsed: collapsedSidebarGroups.has(type) }">
-                    <ArrowDown />
-                  </el-icon>
-                  <span>{{ type }}</span>
-                </span>
-                <span class="sidebar-group-count">{{ group.length }}</span>
-              </button>
-              <div v-show="!collapsedSidebarGroups.has(type)" class="sidebar-group-pages">
-                <div
-                  v-for="page in group"
-                  :key="page.id"
-                  class="sidebar-page-item"
-                  :class="{ active: currentPage?.slug === page.slug }"
-                  @click="openPage(page); activeTab = 'pages'"
-                >
-                  <span class="sidebar-page-title">{{ page.title }}</span>
-                  <span v-if="page.locked" class="page-flag page-flag--locked">L</span>
+            <!-- 分组折叠改用 el-collapse：动画/aria/点击区内置，展开态由 v-model 持有（搜索过滤不丢失） -->
+            <el-collapse v-model="expandedGroups" class="sidebar-collapse">
+              <el-collapse-item v-for="[type, group] in groupedSidebarPages" :key="type" :name="type">
+                <template #title>
+                  <span class="sidebar-group-row">
+                    <span class="sidebar-group-left">
+                      <span>{{ type }}</span>
+                      <span class="sidebar-group-count">{{ group.length }}</span>
+                    </span>
+                    <el-icon class="sidebar-group-arrow"><ArrowDown /></el-icon>
+                  </span>
+                </template>
+                <div class="sidebar-group-pages">
+                  <div
+                    v-for="page in group"
+                    :key="page.id"
+                    class="sidebar-page-item"
+                    :class="{ active: currentPage?.slug === page.slug }"
+                    @click="openPage(page); activeTab = 'pages'"
+                  >
+                    <span class="sidebar-page-title">{{ page.title }}</span>
+                    <span v-if="page.locked" class="page-flag page-flag--locked" :title="t('knowledgeConfig.pageLocked')">
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </el-collapse-item>
+            </el-collapse>
           </div>
         </div>
 
@@ -174,8 +194,8 @@
           <div class="workspace-content">
         <!-- ===== 原始材料 Tab ===== -->
         <div v-if="activeTab === 'raw'" class="tab-panel raw-panel">
-          <!-- 上传区 + 添加文本 -->
-          <div v-if="canManage" class="raw-toolbar">
+          <!-- 摄取工具卡：上传条 + 添加文本 + 目录扫描 -->
+          <div v-if="canManage" class="raw-ingest">
             <div
               class="upload-zone"
               :class="{ 'is-dragging': isDragging }"
@@ -185,36 +205,38 @@
               @dragleave.prevent="isDragging = false"
               @drop.prevent="handleDrop"
             >
-              <el-icon :size="24"><Upload /></el-icon>
+              <span class="upload-icon-chip">
+                <el-icon :size="16"><Upload /></el-icon>
+              </span>
               <div class="upload-text">
                 <span class="upload-label">{{ t('knowledgeConfig.dropFiles') }}</span>
                 <span class="upload-hint">.txt .md .csv .pdf .docx .xlsx .pptx .html</span>
               </div>
             </div>
             <input ref="fileInput" type="file" style="display:none" accept=".txt,.md,.csv,.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.html,.htm" multiple @change="handleFileSelect" />
-            <el-button class="add-text-btn" @click="showAddTextDialog = true">
-              <el-icon><Plus /></el-icon>
-              {{ t('knowledgeConfig.addText') }}
-            </el-button>
-          </div>
-
-          <!-- 目录扫描 -->
-          <div v-if="canManage" class="scan-row">
-            <el-input
-              v-model="scanPath"
-              :placeholder="t('knowledgeConfig.dirPlaceholder')"
-              size="small"
-              clearable
-              @keyup.enter="handleScanDir"
-            >
-              <template #prefix>
-                <el-icon><Folder /></el-icon>
-              </template>
-            </el-input>
-            <el-button size="small" :loading="scanning" @click="handleScanDir">
-              <el-icon><Search /></el-icon>
-              {{ t('knowledgeConfig.scan') }}
-            </el-button>
+            <div class="raw-ingest-actions">
+              <el-button class="add-text-btn" @click="showAddTextDialog = true">
+                <el-icon><Plus /></el-icon>
+                {{ t('knowledgeConfig.addText') }}
+              </el-button>
+              <el-input
+                v-model="scanPath"
+                :placeholder="t('knowledgeConfig.dirPlaceholder')"
+                clearable
+                class="scan-input"
+                @keyup.enter="handleScanDir"
+              >
+                <template #prefix>
+                  <el-icon><Folder /></el-icon>
+                </template>
+                <template #append>
+                  <el-button :loading="scanning" class="scan-append-btn" @click="handleScanDir">
+                    <el-icon><Search /></el-icon>
+                    {{ t('knowledgeConfig.scan') }}
+                  </el-button>
+                </template>
+              </el-input>
+            </div>
           </div>
 
           <!-- 扫描结果 -->
@@ -226,10 +248,25 @@
 
           <!-- 原始材料列表 -->
           <div class="raw-list">
-            <h4 class="raw-list-title">
-              {{ t('knowledgeConfig.rawMaterials') }} ({{ rawMaterials.length }})</h4>
-            <div v-if="rawMaterials.length === 0" class="raw-empty">
-              {{ t('knowledgeConfig.noRawMaterials') }}
+            <div class="raw-list-header">
+              <h4 class="raw-list-title">{{ t('knowledgeConfig.rawMaterials') }}</h4>
+              <span class="raw-list-count">{{ rawMaterials.length }}</span>
+              <el-button
+                v-if="canManage && rawMaterials.some(r => r.processingStatus === 'pending')"
+                type="primary"
+                size="small"
+                class="process-all-btn"
+                @click="handleProcessAll"
+              >
+                <el-icon><VideoPlay /></el-icon>
+                {{ t('knowledgeConfig.processAll') }}
+              </el-button>
+            </div>
+            <div v-if="rawMaterials.length === 0" class="inline-empty">
+              <div class="inline-empty-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <p>{{ t('knowledgeConfig.noRawMaterials') }}</p>
             </div>
 
             <div
@@ -286,20 +323,14 @@
               </div>
             </div>
           </div>
-
-          <!-- 全部处理按钮 -->
-          <div v-if="canManage && rawMaterials.some(r => r.processingStatus === 'pending')" class="process-all-row">
-            <el-button type="primary" @click="handleProcessAll">
-              <el-icon><VideoPlay /></el-icon>
-              {{ t('knowledgeConfig.processAll') }}
-            </el-button>
-          </div>
         </div>
 
         <!-- ===== Wiki 页面 Tab ===== -->
         <div v-if="activeTab === 'pages'" class="tab-panel pages-panel">
-          <div v-if="!currentPage" class="page-empty">
-            <el-icon :size="48"><Document /></el-icon>
+          <div v-if="!currentPage" class="inline-empty">
+            <div class="inline-empty-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </div>
             <p>{{ t('knowledgeConfig.selectPage') }}</p>
           </div>
           <div v-else class="page-viewer">
@@ -721,7 +752,7 @@ import { useI18n } from 'vue-i18n'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import * as echarts from 'echarts'
 import {
-  Plus, Delete, Loading, Collection, Document, Files, ArrowLeft,
+  Plus, Delete, Loading, Document,
   Upload, Folder, Search, Close, RefreshRight, Download, VideoPlay,
   Share, SetUp, Clock, Grid, EditPen, Monitor, FullScreen, Refresh,
   ArrowDown, Warning,
@@ -775,6 +806,8 @@ function clearKBState() {
 
 // ==================== State ====================
 const loading = ref(false)
+/** 首次加载完成后才显示标题旁数量统计，避免首帧 0 闪烁 */
+const statsReady = ref(false)
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const currentKB = ref<KnowledgeBase | null>(null)
 const activeTab = ref('raw')
@@ -790,7 +823,6 @@ const isDragging = ref(false)
 const scanPath = ref('')
 const scanning = ref(false)
 const scanResult = ref<{ scanned: number; added: number; skipped: number } | null>(null)
-const collapsedSidebarGroups = ref<Set<string>>(new Set())
 
 // SSE
 let sse: EventSource | null = null
@@ -871,15 +903,19 @@ const groupedSidebarPages = computed(() => {
   return groups
 })
 
-function toggleSidebarGroup(type: string) {
-  const next = new Set(collapsedSidebarGroups.value)
-  if (next.has(type)) {
-    next.delete(type)
-  } else {
-    next.add(type)
+/** el-collapse 展开分组：新分组默认展开；用户手动收起的状态保留，搜索过滤重算分组时不丢失 */
+const expandedGroups = ref<string[]>([])
+const seenSidebarGroups = new Set<string>()
+watch(groupedSidebarPages, (groups) => {
+  const types = [...groups.keys()]
+  for (const type of types) {
+    if (!seenSidebarGroups.has(type)) {
+      seenSidebarGroups.add(type)
+      expandedGroups.value.push(type)
+    }
   }
-  collapsedSidebarGroups.value = next
-}
+  expandedGroups.value = expandedGroups.value.filter((t) => types.includes(t))
+}, { immediate: true })
 
 const renderedPageContent = computed(() => {
   if (!currentPage.value?.content) return ''
@@ -941,6 +977,31 @@ function rawStatusLabel(status: string) {
 }
 
 // ==================== KB Library ====================
+const libraryRef = ref<HTMLElement | null>(null)
+/** 描述两行截断状态映射（kbId → 是否截断），仅截断的描述悬停才弹 tooltip */
+const truncatedDescs = ref<Record<string, boolean>>({})
+
+/** 测量卡片描述是否被截断（line-clamp 裁切后 scrollHeight > clientHeight） */
+function measureDescTruncation(): void {
+  const root = libraryRef.value
+  if (!root) return
+  const map: Record<string, boolean> = {}
+  root.querySelectorAll<HTMLElement>('.kb-card-desc').forEach((el) => {
+    const id = el.dataset.id
+    if (id) map[id] = el.scrollHeight > el.clientHeight
+  })
+  truncatedDescs.value = map
+}
+
+/** 窗口尺寸变化会改变卡片宽度与换行数，需重新测量 */
+function handleKbWindowResize(): void {
+  measureDescTruncation()
+}
+
+watch(knowledgeBases, () => {
+  nextTick(() => measureDescTruncation())
+})
+
 async function fetchKBs() {
   loading.value = true
   try {
@@ -957,6 +1018,7 @@ async function fetchKBs() {
     /* 错误已由拦截器处理 */
   } finally {
     loading.value = false
+    statsReady.value = true
   }
 }
 
@@ -1831,11 +1893,13 @@ async function onResetHotCache() {
 onMounted(() => {
   fetchKBs()
   window.addEventListener('resize', onGraphResize)
+  window.addEventListener('resize', handleKbWindowResize)
 })
 
 onBeforeUnmount(() => {
   closeSSE()
   window.removeEventListener('resize', onGraphResize)
+  window.removeEventListener('resize', handleKbWindowResize)
   if (graphRenderTimer) {
     clearTimeout(graphRenderTimer)
     graphRenderTimer = null
@@ -1864,6 +1928,7 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: transparent;
 }
 
 /* ========== Library 视图 ========== */
@@ -1871,41 +1936,112 @@ watch(activeTab, (tab) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 24px 24px;
   overflow: auto;
 }
 
-.library-toolbar {
+/* 身份页头：标题/描述靠左，主操作靠右，单行对齐 */
+.kb-content-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 16px;
+  flex-shrink: 0;
+  padding: 2px 2px 14px;
 }
 
-.library-title {
+.kb-content-title {
+  min-width: 0;
+}
+
+.kb-content-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
+  min-width: 0;
 }
 
-.title-text {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--theme-text);
+.kb-content-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
+  line-height: 1.3;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.kb-count {
+.kb-content-desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 数量标识：紧凑内联，与技能/数据/词典页统计同一语言 */
+.kb-title-stats {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--theme-surface-hover);
-  border-radius: 10px;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--theme-text-muted);
+  color: var(--db-text-secondary);
+}
+.summary-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--db-text-muted);
+}
+.summary-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--db-text);
+  margin-left: 1px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* 主操作：家族胶囊按钮（主题色实心 + 白字 + 阴影） */
+.btn-create-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--main-orange);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
+}
+.btn-create-pill:hover {
+  filter: brightness(1.08);
+}
+.btn-create-pill.small {
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
 }
 
 .page-loading {
@@ -1915,167 +2051,223 @@ watch(activeTab, (tab) => {
   justify-content: center;
   gap: 12px;
   padding: 48px 0;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
-.library-empty {
+/* 全局空态：一整块接管内容区，图标为线型 SVG chip */
+.global-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 64px 0;
-  color: var(--theme-text-muted);
-  gap: 12px;
+  flex: 1;
+  padding: 56px 20px;
+  text-align: center;
 }
-
-.empty-icon {
-  color: var(--theme-text-muted);
+.global-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
+  color: var(--db-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
 }
-
-.empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--theme-text-secondary);
-  margin: 0;
-}
-
-.empty-desc {
+.global-empty h3 {
   font-size: 14px;
-  color: var(--theme-text-muted);
-  margin: 0;
+  font-weight: 600;
+  color: var(--db-text);
+  margin: 0 0 6px;
+  max-width: 360px;
+  line-height: 1.6;
+}
+.global-empty-desc {
+  font-size: 12px;
+  color: var(--db-text-muted);
+  margin: 0 0 14px;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* 卡片面：系统统一变量（白面 + 细边 + 圆角） */
+.surface-card {
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
 }
 
 /* 卡片网格 */
 .kb-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--space-lg, 16px);
 }
 
+/* 卡片：家族统一尺寸（padding 16/16/12、flex column、hover 提边+阴影+微浮起），等高卡空白由 footer margin-top:auto 吸收 */
 .kb-card {
   position: relative;
-  background: var(--theme-surface);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.2s, transform 0.15s;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 16px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s), transform var(--transition-fast, 0.15s);
   cursor: pointer;
-  border-left: 3px solid transparent;
+  overflow: hidden;
 }
 
 .kb-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--db-border-strong);
+  box-shadow: var(--shadow-card-hover);
   transform: translateY(-2px);
 }
 
-.kb-card--processing {
-  border-left-color: #e6a23c;
-}
-
-.kb-card--error {
-  border-left-color: #f56c6c;
-}
-
+/* 卡头：名称 + 状态 tag 同行（图标 chip 已按用户要求移除），名称弹性占据剩余空间 */
 .kb-card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.kb-card-icon {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(65, 118, 230, 0.08);
-  border-radius: 8px;
-  color: var(--main-orange);
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .kb-card-name {
-  font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--theme-text);
-  margin: 0 0 4px;
+  color: var(--db-text);
+  margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* 状态标签：圆角胶囊 + 圆点（与洞察/报告卡片统一），kb 状态较多故四型均给语义色 */
+.kb-card-status.el-tag {
+  margin-left: auto;
+  border: none;
+  border-radius: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* el-tag 内容区默认是 inline span，圆点按基线对齐会偏离文字中线——改 flex 垂直居中 */
+.kb-card-status :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.kb-card-status .status-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.kb-card-status.el-tag--success {
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+  color: var(--el-color-success);
+}
+
+.kb-card-status.el-tag--warning {
+  background: color-mix(in srgb, var(--el-color-warning) 14%, transparent);
+  color: var(--el-color-warning);
+}
+
+.kb-card-status.el-tag--danger {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
+}
+
+.kb-card-status.el-tag--info {
+  background: var(--db-hover);
+  color: var(--db-text-muted);
+}
+
+/* 描述：上下间距用 margin（line-clamp 裁切边界是 padding-box，垂直 padding 会漏绘）；整数行高；截断态由测量逻辑驱动 tooltip */
 .kb-card-desc {
-  font-size: 13px;
-  color: var(--theme-text-muted);
-  margin: 0;
+  font-size: 12px;
+  color: var(--db-text-secondary);
+  margin: 8px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 36px;
+  line-height: 18px;
 }
 
+/* 底栏：安静元信息行（左）+ 纯文字操作（右）；margin-top:auto 吸收等高卡剩余空白 */
 .kb-card-footer {
   display: flex;
-  gap: 16px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--theme-border);
-}
-
-.kb-stat {
-  display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 16px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--db-border);
 }
 
-.kb-stat-label {
-  color: var(--theme-text-muted);
+/* 统计元信息：材料/页面合并为一行安静小字（对齐技能卡 meta 行），不再用加粗数值强调 */
+.kb-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--db-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.kb-stat-value {
-  font-weight: 600;
-  color: var(--theme-text-secondary);
+.kb-card-meta .meta-sep {
+  color: var(--db-border-strong);
 }
 
+/* 操作按钮常驻可见，纯文字轻量按钮（透明底、11.5px，hover 浅色底），margin-left:auto 右靠 */
 .kb-card-actions {
   margin-left: auto;
   align-self: center;
   display: inline-flex;
   gap: 2px;
-  opacity: 0;
-  transition: opacity 0.15s;
+  flex-shrink: 0;
 }
 
-/* 洞察卡片同款操作按钮：无边框、透明底、灰色，hover 浅色底 */
 .kb-card-action {
-  border: none;
-  background: transparent;
-  color: var(--theme-text-muted);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px 6px;
+  transition: color var(--transition-fast, 0.15s), background var(--transition-fast, 0.15s);
+  white-space: nowrap;
 }
 
 .kb-card-action:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
+  color: var(--db-text);
+  background: var(--db-hover);
+}
+
+/* 删除按钮默认红色文字+图标（家族约定：技能/智能体/报告/洞察卡 action-delete 默认 #ef4444），hover 淡红底 */
+.kb-card-action--danger {
+  color: #ef4444;
 }
 
 .kb-card-action--danger:hover {
-  background: rgba(245, 63, 63, 0.1);
-  color: #f53f3f;
-}
-
-.kb-card:hover .kb-card-actions {
-  opacity: 1;
+  color: #dc2626;
+  background: var(--db-danger-bg);
 }
 
 /* ========== Workspace 视图 ========== */
@@ -2084,29 +2276,53 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--theme-bg);
+  background: transparent;
 }
 
 .workspace-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+/* 详情页状态标签复用列表卡 kb-card-status 的圆点+语义色，但取消 margin-left:auto（头部非两端布局） */
+.workspace-status.el-tag {
+  margin-left: 0;
   flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
-.header-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--theme-border);
+/* 圆形返回图标按钮：30px 描边圆、透明底，hover 提边+浅底（家族幽灵按钮语言） */
+.ws-back-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--db-border);
+  background: transparent;
+  color: var(--db-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color var(--transition-fast, 0.15s), background var(--transition-fast, 0.15s), color var(--transition-fast, 0.15s);
+}
+
+.ws-back-btn:hover {
+  border-color: var(--db-border-strong);
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
 .header-kb-name {
@@ -2121,27 +2337,29 @@ watch(activeTab, (tab) => {
   gap: 16px;
 }
 
-.header-stats {
-  display: flex;
-  gap: 16px;
-}
-
-.header-stat {
-  display: flex;
+/* 头部统计：安静元信息行（与列表卡 kb-card-meta 同语言），取代旧的图标+加粗数值 */
+.workspace-meta {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--theme-text-muted);
+  gap: 5px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  white-space: nowrap;
 }
 
-/* Tab 导航 */
+.workspace-meta .meta-sep {
+  color: var(--db-border-strong);
+}
+
+/* Tab 导航：透明底 + 细分隔线，与内容同处一张纸面 */
 .workspace-tabs {
   display: flex;
   gap: 4px;
-  padding: 8px 24px 0;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  background: transparent;
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tab-btn {
@@ -2154,6 +2372,8 @@ watch(activeTab, (tab) => {
   border-radius: 6px 6px 0 0;
   transition: all 0.15s;
   position: relative;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab-btn:hover {
@@ -2181,7 +2401,6 @@ watch(activeTab, (tab) => {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 24px;
   display: flex;
   flex-direction: column;
 }
@@ -2192,70 +2411,117 @@ watch(activeTab, (tab) => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 8px;
 }
 
 /* ========== Raw Panel ========== */
-.raw-toolbar {
+/* 摄取工具卡：上传条 + 动作行收进一张浅底内嵌卡，与内容白面形成层级 */
+.raw-ingest {
   display: flex;
-  gap: 12px;
-  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--db-bg);
+  border: 1px solid var(--db-border);
+  border-radius: 12px;
 }
 
+/* 瘦长上传条：圆形橙色图标 chip 做视觉焦点，拖拽态环描边 */
 .upload-zone {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
-  border: 1px dashed var(--theme-border);
-  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--db-border-strong);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
-  color: var(--theme-text-muted);
-  background: var(--theme-surface);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  color: var(--db-text-muted);
+  background: transparent;
 }
 
 .upload-zone:hover {
   border-color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 5%, transparent);
   color: var(--main-orange);
 }
 
 .upload-zone.is-dragging {
   border-color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.08);
-  box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.1);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 12%, transparent);
+}
+
+.upload-icon-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+  color: var(--main-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .upload-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .upload-label {
-  font-size: 14px;
-  color: var(--theme-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text);
 }
 
 .upload-hint {
-  font-size: 12px;
-  color: var(--theme-text-muted);
+  font-size: 11px;
+  color: var(--db-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.raw-ingest-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .add-text-btn {
   flex-shrink: 0;
-  height: auto;
 }
 
-.scan-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+.scan-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* 扫描按钮并入输入框 append 槽：与输入框连体，操作归属一目了然 */
+.scan-input :deep(.el-input-group__append) {
+  background: var(--db-bg);
+  color: var(--db-text-secondary);
+  padding: 0 12px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.scan-input :deep(.el-input-group__append .scan-append-btn) {
+  margin: 0 -12px;
+  color: inherit;
+}
+
+.scan-input :deep(.el-input-group__append:hover) {
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--main-orange);
 }
 
 .scan-result {
-  margin-top: 4px;
+  margin-top: -4px;
 }
 
 /* Raw list */
@@ -2265,20 +2531,61 @@ watch(activeTab, (tab) => {
   gap: 8px;
 }
 
-.raw-list-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--theme-text-muted);
-  margin: 0 0 4px;
+/* 列表页眉：标题 + 计数 pill + 右靠主操作 */
+.raw-list-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.raw-empty {
+.raw-list-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--db-text);
+  margin: 0;
+}
+
+.raw-list-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
+  color: var(--db-text-muted);
+  font-size: 11px;
+  font-weight: 600;
   text-align: center;
-  padding: 24px 0;
-  font-size: 14px;
-  color: var(--theme-text-muted);
+}
+
+.process-all-btn {
+  margin-left: auto;
+}
+
+/* 内联空态：家族线型 SVG chip + 安静文案（对齐数据配置/技能页 global-empty 语言） */
+.inline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--db-text-muted);
+}
+
+.inline-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
+  color: var(--db-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.inline-empty p {
+  font-size: 13px;
+  margin: 0;
 }
 
 .raw-item {
@@ -2286,7 +2593,7 @@ watch(activeTab, (tab) => {
   flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--theme-surface);
+  background: var(--db-card);
   border: 1px solid var(--theme-border);
   border-radius: 10px;
   font-size: 13px;
@@ -2295,12 +2602,12 @@ watch(activeTab, (tab) => {
 }
 
 .raw-item:hover {
-  border-color: var(--theme-border);
+  border-color: var(--db-border-strong);
 }
 
 .raw-item--active {
   border-color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
 }
 
 .raw-item-row {
@@ -2346,7 +2653,7 @@ watch(activeTab, (tab) => {
 
 .error-hint {
   font-size: 11px;
-  color: #f56c6c;
+  color: var(--db-danger);
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2380,27 +2687,11 @@ watch(activeTab, (tab) => {
   text-align: right;
 }
 
-.process-all-row {
-  display: flex;
-  justify-content: center;
-  padding: 16px 0;
-}
-
 /* ========== Pages Panel ========== */
 .pages-panel {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.page-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 300px;
-  color: var(--theme-text-muted);
 }
 
 .page-viewer {
@@ -2480,9 +2771,9 @@ watch(activeTab, (tab) => {
 .config-panel,
 .transformations-panel,
 .hotcache-panel {
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-radius: 10px;
-  padding: 24px;
+  /* padding: 24px; */
   min-height: 300px;
 }
 
@@ -2523,12 +2814,13 @@ watch(activeTab, (tab) => {
     width: 100%;
     min-width: 0;
     max-height: 260px;
-    border-right: none;
-    border-bottom: 1px solid var(--theme-border);
+    margin-right: 0;
   }
 
-  .raw-toolbar {
+  /* 窄视口下动作行纵向堆叠，添加文本撑满便于点按 */
+  .raw-ingest-actions {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .add-text-btn {
@@ -2555,13 +2847,17 @@ watch(activeTab, (tab) => {
 .wiki-sidebar {
   width: 260px;
   min-width: 260px;
-  background: var(--theme-surface);
-  border-right: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   padding: 16px;
   gap: 12px;
   overflow: hidden;
+  margin-right: 14px;
+  flex-shrink: 0;
 }
 
 .sidebar-header {
@@ -2579,7 +2875,7 @@ watch(activeTab, (tab) => {
 .sidebar-count {
   font-size: 12px;
   color: var(--theme-text-muted);
-  background: var(--theme-surface-hover);
+  background: var(--db-hover);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -2596,31 +2892,13 @@ watch(activeTab, (tab) => {
   gap: 4px;
 }
 
-.sidebar-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.sidebar-group-title {
-  width: 100%;
+/* 分组标题行：撑满 el-collapse header，名称+计数左 / 箭头图标最右 */
+.sidebar-group-row {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: none;
-  background: transparent;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--theme-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 8px 10px 4px;
-  margin-top: 4px;
-  cursor: pointer;
-}
-
-.sidebar-group-title:hover {
-  color: var(--main-orange);
 }
 
 .sidebar-group-left {
@@ -2630,13 +2908,55 @@ watch(activeTab, (tab) => {
   min-width: 0;
 }
 
+/* 箭头图标默认指向右（收起），展开时转正（is-active 由 el-collapse 维护） */
 .sidebar-group-arrow {
   font-size: 12px;
-  transition: transform 0.15s ease;
+  transition: transform 0.2s ease;
+  transform: rotate(-90deg);
 }
 
-.sidebar-group-arrow.collapsed {
-  transform: rotate(-90deg);
+.sidebar-collapse :deep(.el-collapse-item.is-active) .sidebar-group-arrow {
+  transform: rotate(0deg);
+}
+
+/* el-collapse 去 EP 默认边框/底色/自带箭头，保留家族轻量分组外观（小字大写标题 + 计数 chip） */
+.sidebar-collapse {
+  border: none;
+}
+
+.sidebar-collapse :deep(.el-collapse-item__header) {
+  height: 28px;
+  line-height: 28px;
+  background: transparent;
+  border-bottom: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--db-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 2px;
+  margin-top: 4px;
+}
+
+.sidebar-collapse :deep(.el-collapse-item__header:hover),
+.sidebar-collapse :deep(.el-collapse-item__header:focus) {
+  color: var(--main-orange);
+}
+
+.sidebar-collapse :deep(.el-collapse-item__arrow) {
+  display: none;
+}
+
+.sidebar-collapse :deep(.el-collapse-item__wrap) {
+  background: transparent;
+  border-bottom: none;
+}
+
+.sidebar-collapse :deep(.el-collapse-item__content) {
+  padding-bottom: 6px;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .sidebar-group-count {
@@ -2646,7 +2966,7 @@ watch(activeTab, (tab) => {
   line-height: 18px;
   text-align: center;
   border-radius: 9px;
-  background: var(--theme-surface-hover);
+  background: var(--db-hover);
   color: var(--theme-text-muted);
   font-size: 10px;
 }
@@ -2674,7 +2994,7 @@ watch(activeTab, (tab) => {
 }
 
 .sidebar-page-item.active {
-  background: rgba(65, 118, 230, 0.08);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
   font-weight: 500;
 }
@@ -2701,22 +3021,8 @@ watch(activeTab, (tab) => {
 }
 
 .page-flag--locked {
-  background: rgba(245, 108, 108, 0.12);
-  color: #f56c6c;
-}
-
-/* Header improvements */
-.header-kb-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--main-orange) 0%, #ff8a5c 100%);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
 }
 
 .header-kb-info {
@@ -2734,15 +3040,6 @@ watch(activeTab, (tab) => {
   text-overflow: ellipsis;
 }
 
-.header-stat-value {
-  font-weight: 600;
-  color: var(--theme-text);
-}
-
-.header-stat-label {
-  color: var(--theme-text-muted);
-}
-
 /* ========== Graph Panel ========== */
 .graph-panel {
   position: relative;
@@ -2756,7 +3053,7 @@ watch(activeTab, (tab) => {
   right: 0;
   bottom: 0;
   z-index: 2000;
-  background: var(--theme-surface);
+  background: var(--db-card);
 }
 
 .graph-toolbar {
@@ -2764,7 +3061,7 @@ watch(activeTab, (tab) => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
@@ -2798,7 +3095,7 @@ watch(activeTab, (tab) => {
 }
 
 .graph-stat-orphan {
-  color: #f56c6c;
+  color: var(--db-danger);
 }
 
 .graph-canvas {
@@ -2811,7 +3108,7 @@ watch(activeTab, (tab) => {
   right: 16px;
   top: 60px;
   width: 260px;
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.1);
   padding: 16px;
@@ -2851,7 +3148,7 @@ watch(activeTab, (tab) => {
 }
 
 .config-card {
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-radius: 12px;
   padding: 16px;
   border: 1px solid var(--theme-border);
@@ -2975,7 +3272,7 @@ watch(activeTab, (tab) => {
 }
 
 .transformation-card {
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-radius: 12px;
   padding: 16px;
   border: 1px solid var(--theme-border);
@@ -3065,13 +3362,13 @@ watch(activeTab, (tab) => {
   color: var(--theme-text-secondary);
   max-height: 200px;
   overflow: auto;
-  background: var(--theme-surface);
+  background: var(--db-card);
   padding: 8px;
   border-radius: 6px;
 }
 
 .run-error {
-  color: #f56c6c;
+  color: var(--db-danger);
   margin-top: 4px;
 }
 
@@ -3095,7 +3392,7 @@ watch(activeTab, (tab) => {
 }
 
 .meta-item {
-  background: var(--theme-surface);
+  background: var(--db-card);
   border-radius: 10px;
   padding: 12px;
   border: 1px solid var(--theme-border);
@@ -3120,14 +3417,14 @@ watch(activeTab, (tab) => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(245, 108, 108, 0.12);
-  color: #f56c6c;
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
   border-radius: 8px;
   font-size: 13px;
 }
 
 .cache-content {
-  background: var(--theme-surface);
+  background: var(--db-card);
   border: 1px solid var(--theme-border);
   border-radius: 10px;
   padding: 16px;

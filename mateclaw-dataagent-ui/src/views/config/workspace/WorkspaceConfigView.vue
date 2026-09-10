@@ -1,17 +1,19 @@
 <template>
   <div class="workspace-config-page">
-    <!-- 左侧二级菜单 -->
+    <!-- 左侧二级菜单：与配置中心主导航同族（db-* token、图标+文字、激活主题淡底），透明底融入纸面卡片 -->
     <aside class="workspace-sidebar">
       <nav class="sub-menu">
-        <a
+        <button
           v-for="item in visibleSubMenuItems"
           :key="item.key"
+          type="button"
           class="sub-menu-item"
           :class="{ active: activeSubMenu === item.key }"
           @click="activeSubMenu = item.key"
         >
-          {{ t(item.labelKey) }}
-        </a>
+          <span class="sub-menu-icon" aria-hidden="true"><el-icon :size="15"><component :is="item.icon" /></el-icon></span>
+          <span class="sub-menu-label">{{ t(item.labelKey) }}</span>
+        </button>
       </nav>
     </aside>
 
@@ -28,6 +30,8 @@
 
 <script setup lang="ts">
 import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { Component } from 'vue'
+import { Document, Folder, User, Lock, Clock } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { usePersistedRef } from '@/composables/usePersistedRef'
@@ -43,12 +47,23 @@ const { hasPermission } = usePermission()
 /** 二级菜单项 key 类型 */
 type SubMenuKey = 'agentContext' | 'workspaceManage' | 'memberManage' | 'grantManage' | 'cronJob'
 
-/** 二级菜单项配置（含权限点） */
+/** 二级菜单项配置（含权限点与图标） */
 interface SubMenuItem {
   key: SubMenuKey
   labelKey: string
   /** 显示该菜单项所需的权限点 */
   permission: string
+  /** 侧栏图标（Element Plus 图标组件，15px，与配置中心主导航同语言） */
+  icon: Component
+}
+
+/** 子菜单图标：Element Plus 图标组件（15px 线性，与配置中心主导航同族） */
+const SUB_MENU_ICONS: Record<SubMenuKey, Component> = {
+  agentContext: Document,
+  workspaceManage: Folder,
+  memberManage: User,
+  grantManage: Lock,
+  cronJob: Clock,
 }
 
 const subMenuItems: SubMenuItem[] = [
@@ -56,26 +71,31 @@ const subMenuItems: SubMenuItem[] = [
     key: 'agentContext',
     labelKey: 'workspaceMenu.agentContext',
     permission: PERMISSION.AGENT_VIEW,
+    icon: SUB_MENU_ICONS.agentContext,
   },
   {
     key: 'workspaceManage',
     labelKey: 'workspaceMenu.workspaceManage',
     permission: PERMISSION.WORKSPACE_MANAGE,
+    icon: SUB_MENU_ICONS.workspaceManage,
   },
   {
     key: 'memberManage',
     labelKey: 'workspaceMenu.memberManage',
     permission: PERMISSION.WORKSPACE_MEMBER_VIEW,
+    icon: SUB_MENU_ICONS.memberManage,
   },
   {
     key: 'grantManage',
     labelKey: 'workspaceMenu.grantManage',
     permission: PERMISSION.WORKSPACE_MANAGE,
+    icon: SUB_MENU_ICONS.grantManage,
   },
   {
     key: 'cronJob',
     labelKey: 'workspaceMenu.cronJob',
     permission: PERMISSION.CRON_JOB_VIEW,
+    icon: SUB_MENU_ICONS.cronJob,
   },
 ]
 
@@ -117,19 +137,19 @@ onBeforeUnmount(() => {
 <style scoped>
 .workspace-config-page {
   display: flex;
+  gap: 16px;
   width: 100%;
   height: 100%;
-  background: var(--theme-bg);
+  /* 透明底：与配置中心内容画布一致，子视图自带的工作区底色直接呈现 */
+  background: transparent;
   overflow: hidden;
 }
 
-/* 左侧二级菜单 */
+/* 左侧二级菜单：与主导航同族（透明底融入纸面，层级靠激活淡底与留白表达，不用异色底/硬边框切分） */
 .workspace-sidebar {
   width: 180px;
   flex-shrink: 0;
-  background: var(--theme-surface);
-  border-right: 1px solid var(--theme-border);
-  padding: 16px 0;
+  background: transparent;
   overflow-y: auto;
 }
 
@@ -137,39 +157,58 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 12px;
 }
 
+/* 子菜单项：与配置中心 .nav-item 同规格（13px/500、9px 圆角、8px 10px 内边距） */
 .sub-menu-item {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
   font-size: 13px;
-  color: var(--theme-text-secondary);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
-  text-decoration: none;
-  white-space: nowrap;
   font-weight: 500;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
 
-.sub-menu-item:hover {
-  background: var(--theme-surface-hover);
-  color: var(--main-orange);
+.sub-menu-item:hover:not(.active) {
+  color: var(--db-text);
+  background: color-mix(in srgb, var(--db-text-muted) 8%, transparent);
 }
 
 .sub-menu-item.active {
   color: var(--main-orange);
   font-weight: 600;
-  background: rgba(65, 118, 230, 0.1);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
-/* 右侧内容区 */
+.sub-menu-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.sub-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右侧内容区：子视图自带 topbar 与工作区底色，壳层透明传递 */
 .workspace-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
-  background: var(--theme-bg);
+  background: transparent;
 }
 </style>

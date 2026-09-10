@@ -33,24 +33,22 @@
               <el-icon><User /></el-icon> {{ currentDocument.author }}
             </span>
             <span>
-              <el-icon><Clock /></el-icon> {{ currentDocument.updateTime }}
+              <el-icon><Clock /></el-icon> {{ formatDateTime(currentDocument.updateTime, '') }}
             </span>
             <span>
               <el-icon><View /></el-icon> {{ t('helpCenter.viewCount', { count: currentDocument.viewCount }) }}
             </span>
-            <el-tag :type="currentDocument.status === 'published' ? 'success' : 'info'" size="small">
+            <span class="mc-tag" :class="currentDocument.status === 'published' ? 'delivered' : 'pending'">
               {{ currentDocument.status === 'published' ? t('helpCenter.published') : t('helpCenter.draft') }}
-            </el-tag>
+            </span>
             <template v-if="currentDocument.tags">
-              <el-tag
+              <span
                 v-for="tag in currentDocument.tags.split(',')"
                 :key="tag"
-                size="small"
-                type="warning"
-                effect="plain"
+                class="mc-tag"
               >
                 {{ tag.trim() }}
-              </el-tag>
+              </span>
             </template>
           </div>
         </div>
@@ -93,20 +91,69 @@
       </div>
     </template>
 
-    <!-- 未选中文档：空白占位 -->
-    <div v-else class="content-blank" />
+    <!-- 分类视图：选中分类后展示其文档列表 -->
+    <template v-else-if="currentCategory">
+      <div class="content-header">
+        <div class="content-header-info">
+          <div class="content-breadcrumb">
+            <span class="breadcrumb-link" @click="handleBreadcrumbHome">{{ t('helpCenter.breadcrumbHome') }}</span>
+            <template v-for="(crumb, idx) in categoryBreadcrumb" :key="idx">
+              <el-icon><ArrowRight /></el-icon>
+              <span :class="['breadcrumb-item', { 'breadcrumb-current': idx === categoryBreadcrumb.length - 1 }]">
+                {{ crumb.name }}
+              </span>
+            </template>
+          </div>
+          <h1 class="content-title">{{ currentCategory.name }}</h1>
+          <div class="content-meta">
+            <span v-if="currentCategory.description">{{ currentCategory.description }}</span>
+            <span class="mc-tag text">{{ t('helpCenter.categoryDocCount', { count: currentCategory.documents?.length ?? 0 }) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="content-body">
+        <div v-if="currentCategory.documents && currentCategory.documents.length > 0" class="category-docs">
+          <div
+            v-for="doc in currentCategory.documents"
+            :key="doc.id"
+            class="doc-row"
+            @click="emit('selectDoc', doc)"
+          >
+            <el-icon class="doc-row-icon"><Document /></el-icon>
+            <div class="doc-row-main">
+              <div class="doc-row-title">{{ doc.title }}</div>
+              <div v-if="doc.summary" class="doc-row-summary">{{ doc.summary }}</div>
+            </div>
+            <div class="doc-row-meta">
+              <span v-if="doc.status === 'draft'" class="mc-tag pending">{{ t('helpCenter.draft') }}</span>
+              <span class="doc-row-views"><el-icon><View /></el-icon>{{ doc.viewCount }}</span>
+            </div>
+            <el-icon class="doc-row-arrow"><ArrowRight /></el-icon>
+          </div>
+        </div>
+        <el-empty v-else :description="t('helpCenter.emptyDocDesc')" />
+      </div>
+    </template>
+
+    <!-- 未选中文档/分类：欢迎占位 -->
+    <div v-else class="content-welcome">
+      <el-icon class="welcome-icon"><QuestionFilled /></el-icon>
+      <div class="welcome-title">{{ t('helpCenter.welcomeTitle') }}</div>
+      <div class="welcome-desc">{{ t('helpCenter.welcomeDesc') }}</div>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Edit, Delete, ArrowRight, User, Clock, View } from '@element-plus/icons-vue'
+import { Edit, Delete, ArrowRight, User, Clock, View, Document, QuestionFilled } from '@element-plus/icons-vue'
 import { Marked } from 'marked'
 import hljs from 'highlight.js'
 import DOMPurify from 'dompurify'
 import type { HelpCategory, HelpDocument, HelpSearchResult, HelpFeedbackSummary } from '@/types'
 import * as helpApi from '@/api/help-center'
+import { formatDateTime } from '@/utils/time'
 import HelpSearchPanel from './HelpSearchPanel.vue'
 import HelpRelatedDocs from './HelpRelatedDocs.vue'
 import HelpFeedback from './HelpFeedback.vue'
@@ -115,6 +162,7 @@ const { t } = useI18n()
 
 const props = defineProps<{
   currentDocument: HelpDocument | null
+  currentCategoryId: string | null
   categoryTree: HelpCategory[]
   searchVisible: boolean
   searchResults: HelpSearchResult[]
@@ -175,6 +223,45 @@ function findCategoryPath(
   }
   return false
 }
+
+/** 带文档列表的分类节点 */
+interface CategoryWithDocs extends HelpCategory {
+  documents?: HelpDocument[]
+}
+
+/** 当前选中的分类（含其文档列表） */
+const currentCategory = computed<CategoryWithDocs | null>(() => {
+  if (!props.currentCategoryId) {
+    return null
+  }
+  return findCategory(props.categoryTree as CategoryWithDocs[], props.currentCategoryId)
+})
+
+/** 递归查找分类节点 */
+function findCategory(categories: CategoryWithDocs[], id: string): CategoryWithDocs | null {
+  for (const cat of categories) {
+    if (cat.id === id) {
+      return cat
+    }
+    if (cat.children && cat.children.length > 0) {
+      const found = findCategory(cat.children as CategoryWithDocs[], id)
+      if (found) {
+        return found
+      }
+    }
+  }
+  return null
+}
+
+/** 分类视图面包屑路径（祖先链 + 当前分类） */
+const categoryBreadcrumb = computed(() => {
+  if (!props.currentCategoryId) {
+    return []
+  }
+  const path: { id: string; name: string; type: 'category' }[] = []
+  findCategoryPath(props.categoryTree, props.currentCategoryId, path)
+  return path
+})
 
 /** Markdown 渲染 */
 const customRenderer = {
@@ -331,21 +418,23 @@ defineExpose({ loadFeedbackSummary })
 </script>
 
 <style scoped>
+/* 内容画布：透明底，与配置中心 .config-content 同构，内部自行滚动 */
 .help-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--theme-surface);
+  min-height: 0;
   overflow: hidden;
+  padding: var(--space-lg);
+  gap: 16px;
 }
 
 .content-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 20px 32px 16px;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
   gap: 16px;
 }
@@ -353,6 +442,10 @@ defineExpose({ loadFeedbackSummary })
 .content-header-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
 }
 
 .content-breadcrumb {
@@ -360,8 +453,7 @@ defineExpose({ loadFeedbackSummary })
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--theme-text-muted);
-  margin-bottom: 12px;
+  color: var(--db-text-muted);
   flex-wrap: wrap;
 }
 
@@ -383,15 +475,14 @@ defineExpose({ loadFeedbackSummary })
 }
 
 .breadcrumb-current {
-  color: var(--theme-text);
+  color: var(--db-text);
   font-weight: 500;
 }
 
 .content-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--db-text);
   line-height: 1.3;
 }
 
@@ -400,7 +491,7 @@ defineExpose({ loadFeedbackSummary })
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   flex-wrap: wrap;
 }
 
@@ -416,22 +507,133 @@ defineExpose({ loadFeedbackSummary })
   flex-shrink: 0;
 }
 
+/* 抵消 Element Plus 全局 .el-button+.el-button 的 margin-left，间距只由 gap 承担 */
+.content-header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* 操作按钮胶囊化，与页头操作区同皮肤 */
+.content-header-actions :deep(.el-button) {
+  border-radius: 999px;
+}
+
 .content-body {
   flex: 1;
   overflow: auto;
-  padding: 20px 32px 60px;
 }
 
-.content-blank {
+/* 分类视图文档列表 */
+.category-docs {
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  background: var(--db-card);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.doc-row:hover {
+  border-color: color-mix(in srgb, var(--main-orange) 45%, var(--db-border));
+  box-shadow: var(--shadow-card);
+}
+
+.doc-row-icon {
+  font-size: 18px;
+  color: var(--main-orange);
+  flex-shrink: 0;
+}
+
+.doc-row-main {
   flex: 1;
-  background: var(--theme-surface);
+  min-width: 0;
+}
+
+.doc-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--db-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-row-summary {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.doc-row-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+
+.doc-row-arrow {
+  color: var(--db-text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.doc-row:hover .doc-row-arrow {
+  color: var(--main-orange);
+  transform: translateX(2px);
+}
+
+/* 欢迎占位：未选中文档/分类时居中提示 */
+.content-welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.welcome-icon {
+  font-size: 40px;
+  color: color-mix(in srgb, var(--main-orange) 55%, var(--db-text-muted));
+  margin-bottom: 4px;
+}
+
+.welcome-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--db-text-secondary);
+}
+
+.welcome-desc {
+  font-size: 13px;
+  color: var(--db-text-muted);
 }
 
 .markdown-body {
   max-width: 880px;
   font-size: 14px;
   line-height: 1.8;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
 }
 
 .markdown-body :deep(h1),
@@ -440,7 +642,7 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(h4) {
   margin: 1.6em 0 0.6em;
   font-weight: 600;
-  color: var(--theme-text);
+  color: var(--db-text);
   scroll-margin-top: 16px;
 }
 
@@ -448,7 +650,7 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(h2) {
   font-size: 1.4em;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--theme-border);
+  border-bottom: 1px solid var(--db-border);
 }
 .markdown-body :deep(h3) { font-size: 1.2em; }
 .markdown-body :deep(h4) { font-size: 1.1em; }
@@ -464,9 +666,9 @@ defineExpose({ loadFeedbackSummary })
 .markdown-body :deep(li) { margin: 0.3em 0; }
 
 .markdown-body :deep(pre) {
-  background: var(--theme-surface-hover);
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
+  background: var(--db-bg);
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
   padding: 14px;
   overflow-x: auto;
   margin: 1em 0;
@@ -479,10 +681,10 @@ defineExpose({ loadFeedbackSummary })
 
 .markdown-body :deep(p code),
 .markdown-body :deep(li code) {
-  background: var(--theme-surface-hover);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 0.85em;
 }
 
@@ -501,25 +703,25 @@ defineExpose({ loadFeedbackSummary })
 
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
-  border: 1px solid var(--theme-border);
+  border: 1px solid var(--db-border);
   padding: 8px 12px;
   text-align: left;
 }
 
 .markdown-body :deep(th) {
-  background: var(--theme-surface-hover);
+  background: var(--db-bg);
   font-weight: 600;
 }
 
-.markdown-body :deep(tr:hover) { background: var(--theme-surface-hover); }
+.markdown-body :deep(tr:hover) { background: color-mix(in srgb, var(--db-text-muted) 6%, transparent); }
 
 .markdown-body :deep(blockquote) {
   margin: 1em 0;
   padding: 8px 14px;
   border-left: 4px solid var(--main-orange);
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-  border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--main-orange) 6%, var(--db-card));
+  color: var(--db-text-secondary);
+  border-radius: 0 6px 6px 0;
 }
 
 .markdown-body :deep(a) {

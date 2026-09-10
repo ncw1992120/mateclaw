@@ -3,6 +3,7 @@
     <div class="panel-toolbar">
       <div class="toolbar-left">
         <input v-model="keyword" class="search-input" :placeholder="t('businessTerm.searchPlaceholder')" @keyup.enter="handleSearch" />
+        <span v-if="terms.length" class="term-count-chip">{{ terms.length }} {{ t('businessTerm.totalUnit') }}</span>
       </div>
       <div class="toolbar-right">
         <button v-permission="PERMISSION.BUSINESS_TERM_MANAGE" class="tool-btn" :disabled="embedding" @click="handleEmbedAll">
@@ -20,96 +21,67 @@
       </div>
     </div>
 
-    <div v-if="loading" class="panel-loading">
-      <span>{{ t('common.loading') }}</span>
-    </div>
-
-    <div v-else-if="terms.length === 0" class="panel-empty">
-      <p>{{ t('businessTerm.emptyDesc') }}</p>
-    </div>
-
-    <div v-else class="table-list-wrapper">
-      <div class="table-grid-scroll">
-        <table class="data-grid">
-          <thead>
-            <tr>
-              <th class="col-term-name">{{ t('businessTerm.colTermName') }}</th>
-              <th class="col-synonyms">{{ t('businessTerm.colSynonyms') }}</th>
-              <th class="col-description">{{ t('businessTerm.colDescription') }}</th>
-              <th class="col-calculation-formula">{{ t('businessTerm.colCalculationFormula') }}</th>
-              <th class="col-data-caliber">{{ t('businessTerm.colDataCaliber') }}</th>
-              <th class="col-owner">{{ t('businessTerm.colOwner') }}</th>
-              <th class="col-category">{{ t('businessTerm.colCategory') }}</th>
-              <th class="col-status">{{ t('businessTerm.colStatus') }}</th>
-              <th class="col-action">{{ t('datasourcePage.colAction') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="term in terms" :key="term.id">
-              <td class="col-term-name">
-                <span class="term-name cell-text" :title="term.termName">{{ term.termName }}</span>
-              </td>
-              <td class="col-synonyms">
-                <span class="cell-text" :title="term.synonyms">{{ term.synonyms || '-' }}</span>
-              </td>
-              <td class="col-description">
-                <span class="cell-text" :title="term.description">{{ term.description || '-' }}</span>
-              </td>
-              <td class="col-calculation-formula">
-                <span class="cell-text" :title="term.calculationFormula">{{ term.calculationFormula || '-' }}</span>
-              </td>
-              <td class="col-data-caliber">
-                <span class="cell-text" :title="term.dataCaliber">{{ term.dataCaliber || '-' }}</span>
-              </td>
-              <td class="col-owner">
-                <span class="cell-text" :title="term.owner">{{ term.owner || '-' }}</span>
-              </td>
-              <td class="col-category">
-                <span v-if="term.category" class="category-tag">{{ term.category }}</span>
-                <span v-else>-</span>
-              </td>
-              <td class="col-status">
-                <span class="status-badge" :class="term.status === 1 ? 'enabled' : 'disabled'">
-                  {{ term.status === 1 ? t('businessTerm.statusEnabled') : t('businessTerm.statusDisabled') }}
-                </span>
-              </td>
-              <td class="col-action">
-                <div class="row-actions">
-                  <button class="icon-btn" :title="t('businessTerm.actionEdit')" @click="handleEdit(term)">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn" :title="term.status === 1 ? t('businessTerm.actionDisable') : t('businessTerm.actionEnable')" @click="handleToggle(term)">
-                    <svg v-if="term.status === 1" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="6" y="4" width="4" height="16" rx="1.5"/>
-                      <rect x="14" y="4" width="4" height="16" rx="1.5"/>
-                    </svg>
-                    <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
-                  </button>
-                  <button class="icon-btn danger" :title="t('businessTerm.actionDelete')" @click="handleDelete(term)">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                      <line x1="10" y1="11" x2="10" y2="17"/>
-                      <line x1="14" y1="11" x2="14" y2="17"/>
-                    </svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pagination-bar">
-        <div class="page-info">
-          <span class="page-total">{{ terms.length }}</span> {{ t('businessTerm.totalUnit') }}
-        </div>
-      </div>
+    <!-- 术语表格：与成员管理同款 el-table.mc-table 组件写法（表头底色/边框圆角由全局 .mc-table 皮肤提供） -->
+    <div class="term-table-wrap">
+      <el-table v-loading="loading" :data="terms" class="mc-table term-table">
+        <el-table-column prop="termName" :label="t('businessTerm.colTermName')" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="term-name-cell">{{ row.termName }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="synonyms" :label="t('businessTerm.colSynonyms')" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.synonyms || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="description" :label="t('businessTerm.colDescription')" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.description || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="calculationFormula" :label="t('businessTerm.colCalculationFormula')" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.calculationFormula || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="dataCaliber" :label="t('businessTerm.colDataCaliber')" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.dataCaliber || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="owner" :label="t('businessTerm.colOwner')" width="100" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.owner || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="category" :label="t('businessTerm.colCategory')" width="100">
+          <template #default="{ row }">
+            <span v-if="row.category" class="mc-tag text">{{ row.category }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" :label="t('businessTerm.colStatus')" width="90">
+          <template #default="{ row }">
+            <span class="mc-tag" :class="row.status === 1 ? 'delivered' : 'revoked'">
+              {{ row.status === 1 ? t('businessTerm.statusEnabled') : t('businessTerm.statusDisabled') }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('datasourcePage.colAction')" width="110" fixed="right">
+          <template #default="{ row }">
+            <div class="row-actions">
+              <el-icon :size="14" class="action-icon" :title="t('businessTerm.actionEdit')" @click="handleEdit(row)">
+                <Edit />
+              </el-icon>
+              <el-icon
+                :size="14"
+                class="action-icon"
+                :title="row.status === 1 ? t('businessTerm.actionDisable') : t('businessTerm.actionEnable')"
+                @click="handleToggle(row)"
+              >
+                <VideoPause v-if="row.status === 1" />
+                <VideoPlay v-else />
+              </el-icon>
+              <el-icon :size="14" class="action-icon danger" :title="t('businessTerm.actionDelete')" @click="handleDelete(row)">
+                <Delete />
+              </el-icon>
+            </div>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <span class="term-empty-text">{{ t('businessTerm.emptyDesc') }}</span>
+        </template>
+      </el-table>
     </div>
 
     <!-- 新建/编辑弹窗 -->
@@ -247,7 +219,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MagicStick, Refresh, Loading } from '@element-plus/icons-vue'
+import { MagicStick, Refresh, Loading, Edit, Delete, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import * as businessTermApi from '@/api/business-term'
 import { PERMISSION } from '@/composables/usePermission'
 import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermRef, BusinessTermUpdateRequest } from '@/types'
@@ -642,16 +614,16 @@ async function handleRebuildEs(): Promise<void> {
 .business-term-panel {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   height: 100%;
-  background: var(--theme-surface);
+  /* 根透明：面板直接流于家族透明页面上，与数据配置详情区同关系 */
+  background: transparent;
 }
 
 .panel-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--theme-border);
   flex-wrap: wrap;
   gap: 10px;
 }
@@ -728,213 +700,68 @@ async function handleRebuildEs(): Promise<void> {
 
 .tool-btn.primary:hover:not(:disabled) {
   background: var(--dark-orange);
+  border-color: var(--dark-orange);
+  /* 显式保持白字：否则通用 hover 规则的橙字会叠加在橙底上导致文字不可见 */
+  color: #fff;
 }
 
-.panel-loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* 表格区：el-table 自带滚动与空态，外层只负责占满剩余高度 */
+.term-table-wrap {
   flex: 1;
-  color: var(--theme-text-muted);
-  font-size: 14px;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.panel-empty {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  flex: 1;
-  color: var(--theme-text-muted);
+.term-name-cell {
+  font-weight: 500;
+  color: var(--db-text);
+}
+
+.term-empty-text {
+  color: var(--db-text-muted);
   font-size: 13px;
-  gap: 12px;
 }
 
-.table-list-wrapper {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.table-grid-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-}
-
-.data-grid {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-
-.data-grid thead tr {
-  background: var(--theme-bg);
-}
-
-.data-grid th {
-  padding: 11px 12px;
-  text-align: left;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--theme-text-muted);
-  border-bottom: 1px solid var(--theme-border);
-  white-space: nowrap;
-}
-
-.data-grid td {
-  padding: 10px 12px;
-  font-size: 13px;
-  color: var(--theme-text-secondary);
-  border-bottom: 1px solid var(--theme-border);
-  vertical-align: middle;
-}
-
-.data-grid tbody tr:hover {
-  background: var(--theme-surface-hover);
-}
-
-.col-term-name {
-  width: 13%;
-}
-
-.col-synonyms {
-  width: 12%;
-}
-
-/* 单元格文本省略：超长内容以省略号截断，防止撑开列宽导致布局变形 */
-.cell-text {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.col-description {
-  width: 16%;
-  max-width: 180px;
-}
-
-.col-calculation-formula {
-  width: 14%;
-  max-width: 150px;
-}
-
-.col-data-caliber {
-  width: 14%;
-  max-width: 150px;
-}
-
-.col-owner {
-  width: 9%;
-}
-
-.col-category {
-  width: 8%;
-}
-
-.col-status {
-  width: 7%;
-}
-
-.col-action {
-  width: 9%;
-  text-align: right;
-}
-
-.term-name {
-  color: var(--theme-text);
-  font-weight: 500;
-}
-
-.category-tag {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(22, 93, 255, 0.1);
-  color: #165dff;
-  font-weight: 500;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.status-badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-
-.status-badge.enabled {
-  background: rgba(0, 180, 42, 0.12);
-  color: #00b42a;
-}
-
-.status-badge.disabled {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-muted);
-}
-
+/* 行内操作：与成员管理同族（28px 圆形幽灵图标、hover 浅填充、危险态红） */
 .row-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
+  justify-content: center;
+  gap: 4px;
 }
 
-/* 行内操作按钮：参考 DSH 图标按钮（28px 圆形、中性 hover 浅填充） */
-.icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
+.action-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  color: var(--theme-text-secondary);
-  opacity: 0.65;
-  padding: 0;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
   transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
-  line-height: 1;
 }
 
-.icon-btn:hover {
+.action-icon:hover {
   opacity: 1;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.icon-btn.danger:hover {
+.action-icon.danger:hover {
   background: rgba(245, 63, 63, 0.1);
   color: #f53f3f;
 }
 
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  border-top: 1px solid var(--theme-border);
-}
-
-.page-info {
-  font-size: 12px;
+/* 术语计数 pill：置于工具栏搜索框旁，不再底部独占一行 */
+.term-count-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
   color: var(--theme-text-muted);
-}
-
-.page-total {
+  font-size: 11px;
   font-weight: 600;
-  color: var(--theme-text-secondary);
+  white-space: nowrap;
 }
 
 /* ========== 弹窗 ========== */

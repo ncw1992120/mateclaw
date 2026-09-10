@@ -413,6 +413,6 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: var(--space-lg) var(--space-xl) var(--space-xl);
+  padding: var(--space-lg);
 }
 </style>
