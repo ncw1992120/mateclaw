@@ -21,7 +21,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="agentName" :label="t('cronJob.colAgent')" min-width="120" />
-        <el-table-column prop="taskType" :label="t('cronJob.colTaskType')" width="100">
+        <el-table-column prop="taskType" :label="t('cronJob.colTaskType')" width="120">
           <template #default="{ row }">
             <span class="mc-tag" :class="row.taskType">{{ taskTypeLabel(row.taskType) }}</span>
           </template>
@@ -40,8 +40,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="nextRunTime" :label="t('cronJob.colNextRun')" width="170" />
-        <el-table-column prop="lastRunTime" :label="t('cronJob.colLastRun')" width="170" />
+        <el-table-column prop="nextRunTime" :label="t('cronJob.colNextRun')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.nextRunTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="lastRunTime" :label="t('cronJob.colLastRun')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.lastRunTime) }}</template>
+        </el-table-column>
         <el-table-column prop="lastDeliveryStatus" :label="t('cronJob.colDelivery')" width="100">
           <template #default="{ row }">
             <span class="mc-tag" :class="deliveryClass(row.lastDeliveryStatus)">{{ deliveryLabel(row.lastDeliveryStatus) }}</span>
@@ -187,11 +191,11 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">{{ t('cronJob.colNextRun') }}</span>
-            <span class="detail-value">{{ detail.nextRunTime || '-' }}</span>
+            <span class="detail-value">{{ formatDateTime(detail.nextRunTime) }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">{{ t('cronJob.colLastRun') }}</span>
-            <span class="detail-value">{{ detail.lastRunTime || '-' }}</span>
+            <span class="detail-value">{{ formatDateTime(detail.lastRunTime) }}</span>
           </div>
           <div class="detail-row">
             <span class="detail-label">{{ t('cronJob.colDelivery') }}</span>
@@ -225,6 +229,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, VideoPlay, Edit, Delete, View } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import * as cronJobApi from '@/api/cron-job'
 import * as agentApi from '@/api/agent'
@@ -467,7 +472,6 @@ async function handleDelete(row: CronJob): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 0 20px;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -477,7 +481,6 @@ async function handleDelete(row: CronJob): Promise<void> {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 2px 2px 14px;
 }
 
 .page-header-left {
@@ -531,9 +534,8 @@ async function handleDelete(row: CronJob): Promise<void> {
 
 .page-body {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 12px;
-  padding: 6px 12px 12px;
 }
 
 /* row-actions + action-icon */

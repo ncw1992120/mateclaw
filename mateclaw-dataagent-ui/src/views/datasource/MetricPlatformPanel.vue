@@ -1293,7 +1293,7 @@ const indicators = reactive([
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 24px 32px 40px;
+  padding: 20px;
   background: var(--theme-bg);
   min-height: 100%;
   box-sizing: border-box;

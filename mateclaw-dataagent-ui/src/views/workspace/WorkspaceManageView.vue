@@ -29,7 +29,9 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" :label="t('workspaceManage.colCreateTime')" width="170" />
+        <el-table-column prop="createTime" :label="t('workspaceManage.colCreateTime')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
         <el-table-column :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
@@ -93,6 +95,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { Workspace } from '@/types'
@@ -214,7 +217,6 @@ async function handleDelete(row: Workspace): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 0 20px;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -223,8 +225,6 @@ async function handleDelete(row: Workspace): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-shrink: 0;
-  padding: 2px 2px 14px;
 }
 
 .page-header-left {
@@ -279,8 +279,6 @@ async function handleDelete(row: Workspace): Promise<void> {
 .page-body {
   flex: 1;
   overflow: auto;
-  border-radius: 12px;
-  padding: 6px 12px 12px;
 }
 
 /* row-actions + action-icon */

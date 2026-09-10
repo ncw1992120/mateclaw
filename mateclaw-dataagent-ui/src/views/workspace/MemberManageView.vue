@@ -22,7 +22,9 @@
             <span class="mc-tag" :class="row.role">{{ row.role }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="170" />
+        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
         <el-table-column v-if="canManage" :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
@@ -100,6 +102,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { WorkspaceMember } from '@/types'
@@ -229,8 +232,6 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 .member-manage-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 0 20px;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -240,7 +241,6 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 2px 2px 14px;
   gap: 16px;
 }
 
@@ -296,9 +296,8 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 
 .page-body {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   border-radius: 12px;
-  padding: 6px 12px 12px;
 }
 
 /* row-actions + action-icon */

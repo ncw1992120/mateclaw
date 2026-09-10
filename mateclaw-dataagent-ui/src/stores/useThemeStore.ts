@@ -21,11 +21,15 @@ export const useThemeStore = defineStore('theme', () => {
   const isDark = computed(() => effectiveTheme.value === 'dark')
 
   /**
-   * 应用主题到文档根元素
+   * 应用主题到文档根元素。
+   * 项目自定义主题走 html[data-theme]，但 Element Plus 只认 html.dark 类
+   * （配合 element-plus/theme-chalk/dark/css-vars.css 生效），故暗色时同步切换该类，
+   * 让 EP 组件（dialog/input/select/message 等）自动进入暗色变量集。
    */
   function applyTheme(): void {
     const html = document.documentElement
     html.setAttribute('data-theme', effectiveTheme.value)
+    html.classList.toggle('dark', effectiveTheme.value === 'dark')
   }
 
   /**

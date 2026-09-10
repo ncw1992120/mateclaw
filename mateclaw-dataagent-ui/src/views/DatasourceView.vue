@@ -11,12 +11,36 @@
     />
 
     <template v-else>
-      <!-- 顶部标题栏 + 新建数据源 -->
-      <div class="page-topbar">
-        <h1 class="topbar-title">{{ t('datasourcePage.title') }}</h1>
-        <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" class="btn-create-top" @click="handleCreateDatasource">
-          ＋ {{ t('datasourcePage.createDatasource') }}
-        </button>
+      <!-- 身份页头：标题 + 启停统计 + 描述（左） + 主操作（右），与技能/智能体页同一版式语言 -->
+      <div class="ds-content-header">
+        <div class="ds-content-title">
+          <div class="ds-content-name-row">
+            <h3 class="ds-content-name">{{ t('configCenter.tabData') }}</h3>
+            <!-- 启停数量标识：常驻标题旁，色彩编码与状态 chip 一致 -->
+            <span v-if="statsReady" class="ds-title-stats">
+              <span class="summary-item">
+                <span class="summary-dot on" aria-hidden="true"></span>
+                {{ t('skillManage.sectionEnabled') }}
+                <b class="summary-num">{{ statusCounts.enabled }}</b>
+              </span>
+              <span class="summary-item off">
+                <span class="summary-dot" aria-hidden="true"></span>
+                {{ t('skillManage.sectionAvailable') }}
+                <b class="summary-num">{{ statusCounts.disabled }}</b>
+              </span>
+            </span>
+          </div>
+          <p class="ds-content-desc">{{ t('configCenter.dataDesc') }}</p>
+        </div>
+        <div class="header-actions">
+          <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" type="button" class="btn-create-pill" @click="handleCreateDatasource">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {{ t('datasourcePage.createDatasource') }}
+          </button>
+        </div>
       </div>
 
       <!-- 加载中 -->
@@ -24,15 +48,18 @@
         <span>{{ t('datasourcePage.loading') }}</span>
       </div>
 
-      <!-- 空状态 -->
-      <div v-else-if="!loading && metricPlatformList.length === 0" class="empty-section">
-        <div class="empty-icon-wrapper">
-          <span class="empty-folder-icon">📁</span>
-          <span class="empty-badge">📊</span>
+      <!-- 全局空态：线型 SVG chip + 文案 + 新建按钮，与技能/智能体页同形态 -->
+      <div v-else-if="!loading && metricPlatformList.length === 0" class="global-empty surface-card">
+        <div class="global-empty-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+          </svg>
         </div>
-        <p class="empty-desc">{{ t('datasourcePage.emptyDesc') }}</p>
-        <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" class="btn-create-empty" @click="handleCreateDatasource">
-          ＋ {{ t('datasourcePage.createDatasource') }}
+        <h3>{{ t('datasourcePage.emptyDesc') }}</h3>
+        <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" type="button" class="btn-create-pill small" @click="handleCreateDatasource">
+          {{ t('datasourcePage.createDatasource') }}
         </button>
       </div>
 
@@ -49,55 +76,65 @@
               @click="handleSelectDs(ds)"
             >
               <span class="item-icon">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <ellipse cx="12" cy="5" rx="9" ry="3" />
                   <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
                   <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
                 </svg>
               </span>
-              <div class="item-info">
-                <div class="item-main-row">
-                  <span class="item-name">{{ ds.name }}</span>
-                  <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
-                    <button
-                      class="item-action-btn"
-                      :title="t('datasourcePage.actionRename')"
-                      @click="handleRename(ds)"
-                    >
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <!-- 单行紧凑布局：名称弹性占据剩余空间，共享标签/账号徽标/操作按钮依次右靠 -->
+              <span class="item-name" :title="ds.name">{{ ds.name }}</span>
+              <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
+              <div
+                class="item-account-badge"
+                :class="resolveAccountBadge(ds.id).dotClass"
+                :title="`查询账号：${resolveAccountBadge(ds.id).text}`"
+              >
+                <span class="badge-dot"></span>
+                <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
+                <span
+                  v-if="resolveAccountBadge(ds.id).testOk !== null"
+                  class="badge-test"
+                  :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
+                  :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
+                >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
+              </div>
+              <!-- 「⋯」更多菜单：重命名/删除收进下拉，行面只留一个安静触发器 -->
+              <el-dropdown
+                v-if="ds.permission === 'edit'"
+                class="item-more"
+                trigger="click"
+                popper-class="ds-more-popper"
+                @command="(cmd: string | number | object) => handleItemCommand(cmd, ds)"
+              >
+                <button class="item-more-btn" :title="t('datasourcePage.moreActions')" @click.stop>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                    <circle cx="5" cy="12" r="1.7" />
+                    <circle cx="12" cy="12" r="1.7" />
+                    <circle cx="19" cy="12" r="1.7" />
+                  </svg>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rename">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
-                    </button>
-                    <button
-                      class="item-action-btn danger"
-                      :title="t('datasourcePage.actionDelete')"
-                      @click="handleDelete(ds)"
-                    >
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      {{ t('datasourcePage.actionRename') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" class="danger">
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                         <line x1="10" y1="11" x2="10" y2="17"/>
                         <line x1="14" y1="11" x2="14" y2="17"/>
                       </svg>
-                    </button>
-                  </div>
-                </div>
-                <div class="item-meta-row">
-                  <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
-                  <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
-                  <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
-                    <span class="badge-dot"></span>
-                    <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
-                    <span
-                      v-if="resolveAccountBadge(ds.id).testOk !== null"
-                      class="badge-test"
-                      :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
-                      :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
-                    >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
-                  </div>
-                </div>
-              </div>
+                      {{ t('datasourcePage.actionDelete') }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
         </aside>
@@ -121,7 +158,13 @@
                 :title="t('datasourcePage.actionToggle')"
                 @click="handleToggle(selectedDs)"
               >
-                <span class="btn-icon">{{ selectedDs.enabled ? '⏸️' : '▶️' }}</span>
+                <svg v-if="selectedDs.enabled" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  <line x1="15" y1="5" x2="15" y2="19" />
+                </svg>
+                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                  <polygon points="6 4 20 12 6 20 6 4" />
+                </svg>
                 <span class="btn-text">{{ t('datasourcePage.actionToggle') }}</span>
               </button>
               <button
@@ -130,7 +173,10 @@
                 :title="selectedDs.permission === 'edit' ? t('datasourcePage.actionTest') : '测试你的查询账号连接（问数时使用此账号）'"
                 @click="handleTest(selectedDs)"
               >
-                <span class="btn-icon">{{ testingId === selectedDs.id ? '⏳' : '🔌' }}</span>
+                <span v-if="testingId === selectedDs.id" class="btn-spinner" />
+                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
                 <span class="btn-text">{{ t('datasourcePage.actionTest') }}</span>
               </button>
               <button
@@ -153,7 +199,9 @@
                 :title="'配置你的查询账号（问数时使用此账号连接数据库，确保数据权限隔离）'"
                 @click="handleOpenAccountDialog"
               >
-                <span class="btn-icon">🔑</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                </svg>
                 <span class="btn-text">{{ t('datasourcePage.queryAccountConfig') }}</span>
               </button>
             </div>
@@ -271,10 +319,19 @@ watch(metricPlatformList, (list) => {
   }
 }, { immediate: true })
 
-onMounted(() => {
+/** 首次加载完成后才显示标题旁启停统计，避免首帧 0/0 闪烁 */
+const statsReady = ref(false)
+
+/** 启停统计：与侧栏列表同源 */
+const statusCounts = computed(() => ({
+  enabled: metricPlatformList.value.filter((d) => d.enabled).length,
+  disabled: metricPlatformList.value.filter((d) => !d.enabled).length,
+}))
+
+onMounted(async () => {
   // 并行加载数据源列表与当前用户的查询账号绑定状态
-  store.fetchDatasources()
-  loadAccountStatus()
+  await Promise.allSettled([store.fetchDatasources(), loadAccountStatus()])
+  statsReady.value = true
 })
 
 /** 加载当前用户所有已绑定的查询账号，构建 datasourceId → account VO 映射 */
@@ -421,6 +478,15 @@ async function handleDelete(ds: Datasource): Promise<void> {
 function handleSelectDs(ds: Datasource): void {
   if (selectedDsId.value !== ds.id) {
     selectedDsId.value = ds.id
+  }
+}
+
+/** 列表项「⋯」更多菜单命令分发 */
+function handleItemCommand(command: string | number | object, ds: Datasource): void {
+  if (command === 'rename') {
+    handleRename(ds)
+  } else if (command === 'delete') {
+    handleDelete(ds)
   }
 }
 
@@ -638,43 +704,120 @@ async function handleTestAccountConnection(): Promise<void> {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--theme-bg);
+  /* 透明底：配置壳纸面卡片已提供工作区层级，子视图不再自带灰底 */
+  background: transparent;
   overflow: hidden;
 }
 
-.page-topbar {
+/* 身份页头：标题/描述靠左，主操作靠右，单行对齐 */
+.ds-content-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  gap: 16px;
+  flex-shrink: 0;
+  padding: 2px 2px 14px;
+}
+
+.ds-content-title {
+  min-width: 0;
+}
+
+.ds-content-name-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ds-content-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
+  line-height: 1.3;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-content-desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 启停数量标识：紧凑内联，色彩编码与状态 chip 一致 */
+.ds-title-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--db-text-secondary);
+}
+.summary-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--db-text-muted);
+}
+.summary-dot.on {
+  background: var(--el-color-success);
+}
+.summary-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--db-text);
+  margin-left: 1px;
+}
+.summary-item.off .summary-num {
+  color: var(--db-text-secondary);
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
-.topbar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--theme-text);
-  margin: 0;
-}
-
-.btn-create-top {
-  height: 32px;
+/* 主操作：家族胶囊按钮（主题色实心 + 白字 + 阴影） */
+.btn-create-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
   padding: 0 16px;
-  border-radius: 4px;
   border: none;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
   font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
 }
-
-.btn-create-top:hover {
-  background: var(--dark-orange);
+.btn-create-pill:hover {
+  filter: brightness(1.08);
+}
+.btn-create-pill.small {
+  height: 30px;
+  padding: 0 14px;
+  font-size: 12px;
 }
 
 .page-loading {
@@ -682,65 +825,45 @@ async function handleTestAccountConnection(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: var(--theme-text-muted);
-  font-size: 14px;
+  color: var(--db-text-muted);
+  font-size: 13px;
 }
 
-.empty-section {
+/* 全局空态：一整块接管内容区，图标为线型 SVG chip */
+.global-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding: 80px 0;
-  background: var(--theme-surface);
-}
-
-.empty-icon-wrapper {
-  position: relative;
-  width: 80px;
-  height: 80px;
-  margin-bottom: 24px;
-}
-
-.empty-folder-icon {
-  font-size: 72px;
-  opacity: 0.6;
-}
-
-.empty-badge {
-  position: absolute;
-  bottom: 4px;
-  right: 0;
-  font-size: 28px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
-}
-
-.empty-desc {
-  font-size: 14px;
-  color: var(--theme-text-muted);
-  margin: 0 0 20px 0;
+  padding: 56px 20px;
   text-align: center;
-  max-width: 320px;
+}
+.global-empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
+  color: var(--db-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.global-empty h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--db-text);
+  margin: 0 0 14px;
+  max-width: 360px;
   line-height: 1.6;
 }
 
-.btn-create-empty {
-  height: 32px;
-  padding: 0 16px;
-  border-radius: 4px;
-  border: none;
-  background: var(--main-orange);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.btn-create-empty:hover {
-  background: var(--dark-orange);
+/* 卡片面：系统统一变量（白面 + 细边 + 圆角） */
+.surface-card {
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
 }
 
 /* ========== 主从布局 ========== */
@@ -752,107 +875,98 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 /* ========== 左侧：数据源侧边栏 ========== */
+/* 侧栏：家族卡片面（白面 + 细边 + 圆角 + 弱阴影），与详情区以留白分界而非分线 */
 .ds-sidebar {
   width: 280px;
   min-width: 280px;
-  background: var(--theme-surface);
-  border-right: 1px solid var(--theme-border);
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  margin-right: 14px;
+  overflow: hidden;
 }
 
 .ds-list-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
+/* 列表项：单行紧凑布局（图标 + 名称 + 徽标 + 操作），项间由滚动区 gap 分隔 */
 .ds-list-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 7px 10px;
+  flex-shrink: 0;
   cursor: pointer;
-  transition: all 0.15s;
-  border-left: 3px solid transparent;
+  border-radius: 8px;
+  transition: background var(--transition-fast, 0.15s);
 }
 
 .ds-list-item:hover {
-  background: var(--theme-surface-hover);
+  background: var(--db-hover);
 }
 
+/* 激活态：主题色 10% 淡底 + 名称主题色加粗，与配置侧栏同一语言 */
 .ds-list-item.active {
-  background: rgba(65, 118, 230, 0.1);
-  border-left-color: var(--main-orange);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
+}
+
+.ds-list-item.active .item-name {
+  color: var(--main-orange);
+  font-weight: 600;
 }
 
 .ds-list-item.disabled {
-  opacity: 0.55;
+  opacity: 0.62;
 }
 
+/* 图标：默认不给底色与字色（继承行文本色，安静线型），行 hover/激活时才点亮全局蓝色 tint 变量对（暗色自适配） */
 .item-icon {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(65, 118, 230, 0.12) 0%, rgba(65, 118, 230, 0.04) 100%);
-  color: var(--main-orange);
-  box-shadow: inset 0 0 0 1px rgba(65, 118, 230, 0.08);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-.item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.item-main-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.ds-list-item.active .item-icon {
+  background: var(--db-card-blue-bg);
+  color: var(--db-card-blue-fg);
 }
 
 .item-name {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--theme-text);
+  font-weight: 600;
+  color: var(--db-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.item-type {
-  font-size: 12px;
-  color: var(--theme-text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.item-meta-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .item-shared-tag {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: rgba(65, 118, 230, 0.1);
-  color: var(--main-orange);
+  background: var(--db-card-blue-bg);
+  color: var(--db-card-blue-fg);
   white-space: nowrap;
 }
 
-/* 账号绑定状态徽标 */
+/* 账号绑定状态徽标：色彩改用家族语义令牌（success 绿 / 橙 / 安静灰 / danger 红） */
 .item-account-badge {
   display: inline-flex;
   align-items: center;
@@ -861,7 +975,7 @@ async function handleTestAccountConnection(): Promise<void> {
   border-radius: 8px;
   font-size: 11px;
   flex-shrink: 0;
-  background: var(--theme-surface-hover);
+  background: var(--db-hover);
 }
 
 .item-account-badge .badge-dot {
@@ -872,27 +986,27 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-account-badge.dot-bound .badge-dot {
-  background: #00b42a;
+  background: var(--el-color-success);
 }
 
 .item-account-badge.dot-disabled .badge-dot {
-  background: #ff7d00;
+  background: var(--db-card-orange-fg);
 }
 
 .item-account-badge.dot-unbound .badge-dot {
-  background: var(--theme-text-muted);
+  background: var(--db-text-muted);
 }
 
 .item-account-badge.dot-bound {
-  color: #00b42a;
+  color: var(--el-color-success);
 }
 
 .item-account-badge.dot-disabled {
-  color: #ff7d00;
+  color: var(--db-card-orange-fg);
 }
 
 .item-account-badge.dot-unbound {
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
 }
 
 .item-account-badge .badge-text {
@@ -906,71 +1020,61 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .item-account-badge .badge-test.test-ok {
-  color: #00b42a;
+  color: var(--el-color-success);
 }
 
 .item-account-badge .badge-test.test-fail {
-  color: #f53f3f;
+  color: var(--db-danger);
 }
 
-.item-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+/* 「⋯」更多菜单触发器：24px 幽灵图标按钮，安静灰常驻，行 hover/激活时提亮 */
+.item-more {
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.15s;
+  display: inline-flex;
 }
 
-.ds-list-item:hover .item-actions,
-.ds-list-item.active .item-actions {
-  opacity: 1;
-}
-
-/* 编辑/删除按钮：参考 DSH 图标按钮（28px 圆形、中性 hover 浅填充、次要文字色） */
-.item-action-btn {
-  width: 28px;
-  height: 28px;
+.item-more-btn {
+  width: 24px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 50%;
+  border-radius: 6px;
   cursor: pointer;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-muted);
   transition: background-color 120ms ease, color 120ms ease;
   padding: 0;
 }
 
-.item-action-btn:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text);
+.ds-list-item:hover .item-more-btn,
+.ds-list-item.active .item-more-btn {
+  color: var(--db-text-secondary);
 }
 
-.item-action-btn.danger:hover {
-  background: rgba(245, 63, 63, 0.1);
-  color: #f53f3f;
+.item-more-btn:hover {
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
 /* ========== 右侧：数据源详情 ========== */
 .ds-detail {
   flex: 1;
   min-width: 0;
-  background: var(--theme-bg);
+  background: transparent;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
-/* 详情顶部操作栏 */
+/* 详情顶部操作栏：与内容同处一张纸面，仅以细分隔线与面板分界 */
 .detail-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  background: var(--theme-surface);
-  border-bottom: 1px solid var(--theme-border);
+  padding: 10px 4px 12px;
+  background: transparent;
   flex-shrink: 0;
   gap: 12px;
   flex-wrap: wrap;
@@ -985,16 +1089,16 @@ async function handleTestAccountConnection(): Promise<void> {
 
 .ds-name {
   font-size: 15px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-weight: 700;
+  color: var(--db-text);
 }
 
 .ds-type-tag {
   font-size: 11.5px;
   padding: 2px 8px;
   border-radius: 10px;
-  color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.12);
+  color: var(--db-card-blue-fg);
+  background: var(--db-card-blue-bg);
 }
 
 .ds-status {
@@ -1004,21 +1108,21 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .ds-status.on {
-  color: #00b42a;
-  background: rgba(0, 180, 42, 0.12);
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
 }
 
 .ds-status.off {
-  color: var(--theme-text-muted);
-  background: var(--theme-surface-hover);
+  color: var(--db-text-muted);
+  background: var(--db-hover);
 }
 
 .ds-shared-tag {
   font-size: 11.5px;
   padding: 2px 8px;
   border-radius: 10px;
-  color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.12);
+  color: var(--db-card-blue-fg);
+  background: var(--db-card-blue-bg);
 }
 
 .toolbar-right {
@@ -1028,6 +1132,7 @@ async function handleTestAccountConnection(): Promise<void> {
   flex-wrap: wrap;
 }
 
+/* 工具栏按钮：家族描边胶囊（卡面 + 细边，hover 主题色描边淡底） */
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
@@ -1035,25 +1140,24 @@ async function handleTestAccountConnection(): Promise<void> {
   gap: 5px;
   height: 30px;
   padding: 0 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
-  background: var(--theme-surface-elevated);
-  color: var(--theme-text-secondary);
-  font-size: 13px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  background: var(--db-card);
+  color: var(--db-text-secondary);
+  font-size: 12.5px;
   line-height: 1;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color var(--transition-fast, 0.15s), border-color var(--transition-fast, 0.15s), background var(--transition-fast, 0.15s);
   font-family: inherit;
   white-space: nowrap;
   user-select: none;
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  border-color: var(--main-orange);
+  border-color: color-mix(in srgb, var(--main-orange) 45%, transparent);
   color: var(--main-orange);
-  background: var(--theme-surface-hover);
-  box-shadow: 0 1px 3px rgba(65, 118, 230, 0.1);
+  background: color-mix(in srgb, var(--main-orange) 6%, transparent);
 }
 
 .toolbar-btn:disabled {
@@ -1064,7 +1168,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .btn-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(65, 118, 230, 0.2);
+  border: 2px solid color-mix(in srgb, var(--main-orange) 25%, transparent);
   border-top-color: var(--main-orange);
   border-radius: 50%;
   animation: ds-btn-spin 0.8s linear infinite;
@@ -1077,11 +1181,6 @@ async function handleTestAccountConnection(): Promise<void> {
   }
 }
 
-.btn-icon {
-  font-size: 13px;
-  line-height: 1;
-}
-
 .btn-text {
   font-size: 12.5px;
 }
@@ -1090,7 +1189,7 @@ async function handleTestAccountConnection(): Promise<void> {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: var(--theme-surface);
+  background: transparent;
 }
 
 .detail-placeholder {
@@ -1098,7 +1197,7 @@ async function handleTestAccountConnection(): Promise<void> {
   justify-content: center;
   align-items: center;
   flex: 1;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   font-size: 13px;
 }
 
@@ -1109,7 +1208,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .account-hint {
   margin: 0 0 16px;
   font-size: 13px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   line-height: 1.6;
 }
 
@@ -1119,12 +1218,69 @@ async function handleTestAccountConnection(): Promise<void> {
 }
 
 .account-test-result .test-ok {
-  color: #00b42a;
+  color: var(--el-color-success);
   font-weight: 500;
 }
 
 .account-test-result .test-fail {
-  color: #f53f3f;
+  color: var(--db-danger);
   font-weight: 500;
+}
+
+/* ===== 响应式适配 ===== */
+
+/* 中等屏幕：标题行允许换行，避免标题被统计+按钮挤成零宽 */
+@media (max-width: 1024px) {
+  .ds-content-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .ds-content-name-row {
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+  .header-actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
+/* 小屏幕：主从改纵向堆叠，侧栏横向铺满并限高 */
+@media (max-width: 720px) {
+  .master-detail-layout {
+    flex-direction: column;
+  }
+  .ds-sidebar {
+    width: 100%;
+    min-width: 0;
+    margin-right: 0;
+    margin-bottom: 14px;
+    max-height: 200px;
+  }
+  .ds-content-desc {
+    white-space: normal;
+    overflow: visible;
+  }
+}
+</style>
+
+<style>
+/* 「⋯」更多菜单：el-dropdown 菜单 teleport 到 body，scoped 选择器够不到，故用非 scoped 块 + popper-class 限定作用域 */
+.ds-more-popper .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.ds-more-popper .el-dropdown-menu__item svg {
+  flex-shrink: 0;
+}
+
+.ds-more-popper .el-dropdown-menu__item.danger,
+.ds-more-popper .el-dropdown-menu__item.danger:hover,
+.ds-more-popper .el-dropdown-menu__item.danger:focus {
+  color: var(--el-color-danger);
 }
 </style>
