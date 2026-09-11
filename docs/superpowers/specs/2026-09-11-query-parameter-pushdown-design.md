@@ -63,7 +63,50 @@
 
 Python 通过受限 SDK 发起读取请求；页面参数只作为脚本参数传入，不要求用户在产品侧配置参数到字段的绑定。每个 `filters` 条件必须引用数据集 Schema 中已授权的字段。
 
-### 3.3 QuerySpec
+### 3.3 输入数据集目录与脚本别名
+
+多数据源 Python 节点先从已固化数据集中选择输入，并为每个输入分配脚本别名。`datasetId` 是平台内部稳定 ID，用户脚本不直接填写：
+
+```json
+{
+  "inputs": [
+    {
+      "alias": "orders",
+      "datasetId": "dataset-001",
+      "schema": {
+        "columns": [
+          {"name": "user_id", "type": "BIGINT"},
+          {"name": "order_date", "type": "DATE"},
+          {"name": "amount", "type": "DECIMAL"}
+        ]
+      }
+    }
+  ]
+}
+```
+
+Spring/DataAgent 在运行脚本前注入当前任务可用的输入目录，只包含别名、内部 ID、Schema、参数定义和能力信息，不包含事实数据、数据库凭据或未授权数据集。编辑器提供别名/字段自动补全、类型提示、读取模板和受限样本预览。
+
+运行时输入分为两层：
+
+```text
+DatasetInputDescriptor（Spring/DataAgent 返回）
+  ├── datasetId
+  ├── schema
+  ├── rowCount / statistics
+  ├── dataRef
+  └── transport
+
+DatasetInput（Python SDK 包装）
+  ├── schema()
+  ├── to_polars()
+  ├── to_pandas()
+  └── iter_batches()
+```
+
+Spring 通过 JSON 传递描述符，不传递 Python 函数或数据库连接；Python SDK 根据 `dataRef` 创建批次读取器。
+
+### 3.4 QuerySpec
 
 ```json
 {
@@ -80,6 +123,23 @@ Python 通过受限 SDK 发起读取请求；页面参数只作为脚本参数�
 ```
 
 `QuerySpec` 是平台内部契约，由 `datasets.read` 读取请求生成，不允许前端或 Python 直接提交最终 SQL。它必须包含数据源、数据集、授权字段、参数、资源限制和审计摘要。
+
+标准脚本使用输入别名而不是内部 `datasetId`：
+
+```python
+from mateclaw import datasets, filters, params
+
+orders = datasets.read(
+    input_name="orders",
+    columns=["user_id", "order_date", "amount"],
+    filters=[
+        filters.gte("order_date", params.get("start_date")),
+        filters.lte("order_date", params.get("end_date")),
+    ],
+)
+```
+
+`datasets.read` 将读取请求发送给 DataAgent，由 DataAgent 根据别名解析内部 ID，校验 Schema、权限、操作符和资源限制，再生成参数化 JDBC SQL。读取完成后返回已经过滤的数据集输入；Python 中对 DataFrame 的二次过滤不下推。
 
 ## 4. SQL 生成与安全校验
 
