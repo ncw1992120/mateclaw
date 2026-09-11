@@ -28,10 +28,18 @@
 - 同一 JDBC 数据源的 Join 可由用户 SQL 完成；跨数据源 Join 由 Python 完成。
 - SQL 参数必须使用绑定变量，禁止字符串拼接。
 - 预览使用同步执行和受限结果；正式查询使用异步任务。
-- Python Runner 使用固定 Docker 镜像，默认提供 `pandas`、`polars`、`pyarrow`，不支持运行时 `pip install`。
-- 旧 `LocalCodeExecutorService` 保持兼容，标记为后续安全迁移范围。
+- 暂定采用兼容双模式（方案 B）：新 Python Runner 使用固定 Docker 镜像，默认提供 `pandas`、`polars`、`pyarrow`，不支持运行时 `pip install`；旧 `LocalCodeExecutorService` 保持现状并标记为兼容路径。
 - 数据源名称全局唯一，不带租户作用域；可见性通过数据源权限控制。
 - 当前不引入 DuckDB、Ibis、DataFusion、Calcite 或 Trino。
+
+### 2.1 Python 执行兼容策略（方案 B）
+
+```text
+现有 Agent Python：PythonAnalysisTool → LocalCodeExecutorService
+新仪表盘脚本：PythonExecutionService → Python Runner
+```
+
+开发环境可提供 `local` 模式复用本机 Python；Docker 环境默认使用独立的 `mateclaw-python-runner:<version>` 容器。第一阶段 Runner Manager 在容器内为每个任务创建隔离进程，不要求每个任务都新建 Docker 容器，但任务之间不得共享 Python 进程状态。旧路径的运行时 `pip install` 暂不改动，新路径不接受运行时依赖安装参数。
 
 ## 3. 核心模型
 
