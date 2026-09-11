@@ -1,4 +1,4 @@
-# 页面参数绑定与 JDBC 查询下推技术设计
+# Python 条件读取与 JDBC 查询下推技术设计
 
 **日期：** 2026-09-11
 **状态：** 待评审
@@ -6,11 +6,11 @@
 
 ## 1. 目标
 
-建立一条可验证的查询链路：用户在页面选择时间、类型等筛选条件后，平台将参数绑定到各输入数据集字段，生成参数化 JDBC 查询；数据库先完成过滤、字段选择和分页，再将结果交给 Python 做多数据源 Join、清洗和聚合。
+建立一条可验证的查询链路：页面参数作为 Python 脚本入参，用户通过平台提供的 `datasets.read(..., filters=...)` 在读取数据集时声明过滤条件；平台将读取请求转换为参数化 JDBC 查询，数据库先完成过滤、字段选择和分页，再将结果交给 Python 做多数据源 Join、清洗和聚合。
 
 ```text
 页面参数
-  → 数据集字段绑定
+  → Python datasets.read(filters)
   → QuerySpec
   → JDBC SQL + PreparedStatement
   → 数据库过滤/投影/分页
@@ -23,7 +23,7 @@
 ## 2. 已确认的边界
 
 - SQL 只对 JDBC 数据源开放；Aloudata 继续使用现有指标、维度和指标视图语义层。
-- 页面筛选条件只能追加，不能覆盖用户 SQL 已有条件。
+- Python 读取请求中的筛选条件只能追加，不能覆盖用户 SQL 已有条件。
 - 首期下推范围为过滤、字段选择、分页和参数绑定；复杂逻辑不从任意 Python 代码中反向提取。
 - 同一 JDBC 数据源的 Join 可由用户 SQL 完成；跨数据源 Join 由 Python 完成。
 - SQL 参数必须使用绑定变量，禁止字符串拼接。
@@ -48,19 +48,20 @@
 
 参数类型至少包括 `string`、`number`、`boolean`、`date`、`datetime`、`enum` 和 `date_range`。参数值在服务端按声明类型校验，不能直接信任浏览器输入。
 
-### 3.2 数据集字段绑定
+### 3.2 Python 数据集读取接口
 
 ```json
 {
-  "parameter": "start_date",
   "datasetId": "orders",
-  "column": "order_date",
-  "operator": ">=",
-  "required": true
+  "columns": ["user_id", "order_date", "amount"],
+  "filters": [
+    {"column": "order_date", "operator": ">=", "parameter": "start_date"},
+    {"column": "order_date", "operator": "<=", "parameter": "end_date"}
+  ]
 }
 ```
 
-同一页面参数可绑定到多个数据集的不同字段，例如 `business_type` 分别绑定到 Doris 的 `order_type` 和 MySQL 的 `user_category`。绑定必须引用数据集 Schema 中已授权的字段。
+Python 通过受限 SDK 发起读取请求；页面参数只作为脚本参数传入，不要求用户在产品侧配置参数到字段的绑定。每个 `filters` 条件必须引用数据集 Schema 中已授权的字段。
 
 ### 3.3 QuerySpec
 
@@ -78,7 +79,7 @@
 }
 ```
 
-`QuerySpec` 是平台内部契约，不允许前端直接提交最终 SQL。它必须包含数据源、数据集、授权字段、参数、资源限制和审计摘要。
+`QuerySpec` 是平台内部契约，由 `datasets.read` 读取请求生成，不允许前端或 Python 直接提交最终 SQL。它必须包含数据源、数据集、授权字段、参数、资源限制和审计摘要。
 
 ## 4. SQL 生成与安全校验
 
@@ -87,7 +88,7 @@
 1. 根据 `datasetId` 获取已保存的基础 SQL 和数据集 Schema。
 2. 使用 JSqlParser 解析为 AST，确认是单条只读查询。
 3. 校验表、字段、函数、参数和数据源权限。
-4. 将页面绑定条件加入 AST；页面条件只能追加，不能替换基础 SQL 条件。
+4. 将 `datasets.read` 请求中的过滤条件加入 AST；读取条件只能追加，不能替换基础 SQL 条件。
 5. 生成带 JDBC 占位符的 SQL 和有序参数列表。
 6. 执行资源预算检查和目标数据源 `EXPLAIN`（如果支持）。
 7. 使用 PreparedStatement 执行查询。
@@ -122,8 +123,8 @@ WHERE order_date >= ?
 
 ```text
 页面点击查询
-  → 读取页面参数
-  → 加载数据集绑定
+  → 读取页面参数并传入 Python
+  → Python 调用 datasets.read(filters)
   → 构造 QuerySpec
   → SQL AST 校验和资源检查
   → JDBC 执行
@@ -135,7 +136,7 @@ WHERE order_date >= ?
 
 ```text
 页面点击查询
-  → 为每个输入数据集构造 QuerySpec
+  → Python 为每个输入数据集调用 datasets.read(filters)
   → 各数据源独立执行过滤/投影/分页
   → 输出受控 DatasetBatch 或 dataRef
   → Python Runner 接收多个输入
@@ -158,7 +159,7 @@ Python 不获得数据库连接、凭据或未授权数据源访问能力。Pyth
 | 错误类型 | 示例 | 处理 |
 | --- | --- | --- |
 | 参数错误 | 日期格式、枚举值或必填参数非法 | 阻止执行，返回字段级错误 |
-| 绑定错误 | 参数绑定字段不存在或无权限 | 阻止保存或执行，定位到绑定配置 |
+| 读取请求错误 | 字段不存在、过滤操作符非法或无权限 | 阻止执行，定位到 datasets.read 请求 |
 | SQL 错误 | 多语句、写操作、AST 解析失败 | 阻止执行，返回结构化错误 |
 | 资源超限 | 扫描量、行数、超时超过预算 | 阻止预览/任务，提示调整筛选 |
 | 数据源错误 | 连接失败、数据库返回错误 | 保留数据源错误码和 requestId |
@@ -168,7 +169,7 @@ Python 不获得数据库连接、凭据或未授权数据源访问能力。Pyth
 
 ### 功能验收
 
-- 页面日期和枚举筛选可以绑定到一个或多个数据集字段。
+- Python 可以通过 `datasets.read(..., filters=...)` 在读取时指定日期和枚举筛选。
 - 页面查询可以生成参数化 JDBC SQL，并展示 SQL 摘要、参数名和下推状态。
 - 页面条件不会覆盖基础 SQL 条件。
 - 单源查询能完成预览和发布；多源查询能将过滤后的数据交给 Python 并返回最终结果。
@@ -188,10 +189,10 @@ Python 不获得数据库连接、凭据或未授权数据源访问能力。Pyth
 
 ## 9. 实施顺序
 
-1. 定义参数、绑定和 `QuerySpec` DTO/Schema。
-2. 实现 JSqlParser 只读校验、AST 条件追加和 PreparedStatement 参数绑定。
+1. 定义页面参数、`DatasetReadRequest` 和 `QuerySpec` DTO/Schema。
+2. 实现受限 `datasets.read` SDK、JSqlParser 只读校验、AST 条件追加和 PreparedStatement 参数绑定。
 3. 实现单源 JDBC 预览、EXPLAIN 和资源预算。
-4. 将页面组件接入参数绑定和查询状态。
+4. 将页面组件接入脚本参数和查询状态。
 5. 实现 `DatasetBatch/dataRef` 传输和 Python Runner 调用。
 6. 增加多源 Python Join、最终 Schema 和异步正式任务。
 7. 补齐权限、审计、取消、重试、缓存和旧 Schema 兼容测试。
