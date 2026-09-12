@@ -533,6 +533,12 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     }
 
     @Override
+    public IPage<WorkspaceMemberEntity> pageWorkspaceMembers(Long workspaceId, int page, int size,
+                                                             String keyword, String role) {
+        return workspaceRuntime.pageWorkspaceMembers(workspaceId, page, size, keyword, role);
+    }
+
+    @Override
     public WorkspaceMemberEntity addWorkspaceMember(Long workspaceId, String username, String nickname,
                                                      String password, String role) {
         return workspaceRuntime.addWorkspaceMember(workspaceId, username, nickname, password, role);

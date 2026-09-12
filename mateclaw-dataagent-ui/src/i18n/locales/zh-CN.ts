@@ -1158,6 +1158,8 @@ export default {
     updateRoleSuccess: '角色更新成功',
     removeSuccess: '成员已移除',
     removeConfirm: '确定将成员"{name}"从工作区移除吗？',
+    searchPlaceholder: '搜索用户名或昵称',
+    allRoles: '全部角色',
   },
   cronJob: {
     title: '定时任务',

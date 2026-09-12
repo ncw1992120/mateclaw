@@ -15,6 +15,27 @@
     </div>
 
     <div class="page-body surface-card">
+      <!-- 工具栏：关键词搜索（用户名/昵称，防抖） + 角色过滤，共同操纵当前分页视图 -->
+      <div class="member-toolbar">
+        <el-input
+          v-model="query.keyword"
+          class="member-search-input"
+          :prefix-icon="Search"
+          clearable
+          :placeholder="t('memberManage.searchPlaceholder')"
+          @input="debouncedReload.invoke"
+        />
+        <el-select
+          v-model="query.role"
+          class="member-role-filter"
+          :placeholder="t('memberManage.allRoles')"
+          clearable
+          @change="reloadFromFirstPage"
+        >
+          <el-option v-for="r in filterRoles" :key="r" :label="r" :value="r" />
+        </el-select>
+      </div>
+
       <el-table v-loading="loading" :data="members" stripe class="member-table">
         <el-table-column prop="username" :label="t('memberManage.colUsername')" min-width="140" />
         <el-table-column prop="nickname" :label="t('memberManage.colNickname')" min-width="140" />
@@ -46,6 +67,20 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页：过滤后无数据或仅一页时不展示 -->
+      <div v-if="!loading && total > 0" class="member-pagination">
+        <el-pagination
+          v-model:current-page="query.page"
+          v-model:page-size="query.size"
+          :page-sizes="[10, 20, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next"
+          background
+          @current-change="loadMembers"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
 
     <!-- 添加成员弹窗 -->
@@ -100,8 +135,10 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
+import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { encryptSensitiveField, SensitiveCryptoError } from '@/utils/sensitiveCrypto'
 import type { WorkspaceMember } from '@/types'
 
@@ -110,8 +147,20 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const members = ref<WorkspaceMember[]>([])
+const total = ref(0)
 const showModal = ref(false)
 const submitting = ref(false)
+
+/** 列表查询条件：关键词模糊匹配用户名/昵称，role 精确过滤 */
+const query = reactive({
+  keyword: '',
+  role: '',
+  page: 1,
+  size: 20,
+})
+
+/** 角色过滤可选项（与成员角色取值一致） */
+const filterRoles = ['owner', 'admin', 'member', 'viewer']
 
 const form = reactive({
   username: '',
@@ -125,6 +174,12 @@ const canManage = computed(() => {
   return ws && (ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin' || userStore.isAdmin)
 })
 
+/** 关键词输入防抖触发重查，避免逐键请求 */
+const debouncedReload = useDebouncedFn(() => {
+  query.page = 1
+  loadMembers()
+}, 400)
+
 onMounted(() => {
   loadMembers()
 })
@@ -136,11 +191,43 @@ async function loadMembers(): Promise<void> {
   }
   loading.value = true
   try {
-    members.value = await workspaceApi.listWorkspaceMembers(workspaceId)
+    const data = await workspaceApi.pageWorkspaceMembers(workspaceId, {
+      page: query.page,
+      size: query.size,
+      keyword: query.keyword.trim() || undefined,
+      role: query.role || undefined,
+    })
+    members.value = data.records
+    total.value = data.total
   } catch {
     // 错误已由 axios 拦截器提示
   } finally {
     loading.value = false
+  }
+}
+
+/** 过滤条件变化时回到第一页并立即重查 */
+function reloadFromFirstPage(): void {
+  debouncedReload.cancel()
+  query.page = 1
+  loadMembers()
+}
+
+/** 改变每页条数后回到第一页重查 */
+function handleSizeChange(): void {
+  query.page = 1
+  loadMembers()
+}
+
+/**
+ * 增删改后刷新当前页；若当前页已越界（如移除末页最后一条、
+ * 角色改动后不再满足过滤条件），回退一页重查，避免空页
+ */
+async function reloadWithPageGuard(): Promise<void> {
+  await loadMembers()
+  if (members.value.length === 0 && query.page > 1) {
+    query.page -= 1
+    await loadMembers()
   }
 }
 
@@ -178,7 +265,7 @@ async function handleSubmit(): Promise<void> {
     })
     ElMessage.success(t('memberManage.addSuccess'))
     showModal.value = false
-    await loadMembers()
+    await reloadWithPageGuard()
   } catch (e) {
     // axios 链路错误已由拦截器统一提示；仅加密工具自身失败（不经过拦截器）需在此兜底提示，避免静默无响应
     if (e instanceof SensitiveCryptoError) {
@@ -200,7 +287,7 @@ async function handleChangeRole(row: WorkspaceMember, role: string): Promise<voi
   try {
     await workspaceApi.updateWorkspaceMemberRole(workspaceId, row.userId, role)
     ElMessage.success(t('memberManage.updateRoleSuccess'))
-    await loadMembers()
+    await reloadWithPageGuard()
   } catch {
     // 错误已由 axios 拦截器提示
   }
@@ -223,7 +310,7 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   try {
     await workspaceApi.removeWorkspaceMember(workspaceId, row.userId)
     ElMessage.success(t('memberManage.removeSuccess'))
-    await loadMembers()
+    await reloadWithPageGuard()
   } catch {
     // 错误已由 axios 拦截器提示
   }
@@ -285,6 +372,9 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   overflow: hidden;
   border-radius: 12px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .surface-card {
@@ -292,8 +382,37 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   border: 1px solid var(--theme-border);
 }
 
+.member-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 搜索框：白底描边胶囊皮肤，与技能管理页一致 */
+.member-search-input {
+  width: 260px;
+}
+
+.member-search-input :deep(.el-input__wrapper) {
+  border-radius: 999px;
+}
+
+.member-role-filter {
+  width: 140px;
+}
+
 .member-table {
   width: 100%;
+  flex: 1;
+  overflow: auto;
+}
+
+.member-pagination {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .role-tag {

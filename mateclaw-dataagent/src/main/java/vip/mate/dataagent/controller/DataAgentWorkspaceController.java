@@ -3,6 +3,7 @@ package vip.mate.dataagent.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
@@ -124,6 +125,26 @@ public class DataAgentWorkspaceController {
             runtime.requireWorkspaceRole(id, userId, DataAgentConstants.WORKSPACE_ROLE_VIEWER);
         }
         return R.ok(runtime.listWorkspaceMembers(id));
+    }
+
+    /**
+     * 分页查询工作区成员，支持按用户名/昵称关键词与角色过滤
+     * <p>
+     * 需要目标工作区的 viewer 权限。
+     */
+    @GetMapping("/{id}/members/page")
+    @Operation(summary = "成员分页列表", description = "分页查询工作区成员，keyword 模糊匹配用户名或昵称，role 精确过滤，需要 viewer 权限")
+    public R<IPage<WorkspaceMemberEntity>> pageMembers(
+            @Parameter(description = "工作区 ID") @PathVariable Long id,
+            @Parameter(description = "关键词，模糊匹配用户名或昵称") @RequestParam(required = false) String keyword,
+            @Parameter(description = "角色过滤：owner/admin/member/viewer") @RequestParam(required = false) String role,
+            @Parameter(description = "页码，从 1 开始") @RequestParam(defaultValue = "1") int page,
+            @Parameter(description = "每页条数") @RequestParam(defaultValue = "20") int size) {
+        Long userId = workspaceGuard.currentUserId();
+        if (!workspaceGuard.isCurrentAdmin()) {
+            runtime.requireWorkspaceRole(id, userId, DataAgentConstants.WORKSPACE_ROLE_VIEWER);
+        }
+        return R.ok(runtime.pageWorkspaceMembers(id, page, size, keyword, role));
     }
 
     /**

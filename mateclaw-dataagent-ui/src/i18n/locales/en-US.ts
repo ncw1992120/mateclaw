@@ -1148,6 +1148,8 @@ export default {
     updateRoleSuccess: 'Role updated successfully',
     removeSuccess: 'Member removed',
     removeConfirm: 'Are you sure to remove member "{name}" from the workspace?',
+    searchPlaceholder: 'Search by username or nickname',
+    allRoles: 'All Roles',
   },
   cronJob: {
     title: 'Scheduled Tasks',
