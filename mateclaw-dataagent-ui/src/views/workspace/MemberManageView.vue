@@ -102,6 +102,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
+import { encryptSensitiveField, SensitiveCryptoError } from '@/utils/sensitiveCrypto'
 import type { WorkspaceMember } from '@/types'
 
 const { t } = useI18n()
@@ -178,8 +179,11 @@ async function handleSubmit(): Promise<void> {
     ElMessage.success(t('memberManage.addSuccess'))
     showModal.value = false
     await loadMembers()
-  } catch {
-    // 错误已由 axios 拦截器提示
+  } catch (e) {
+    // axios 链路错误已由拦截器统一提示；仅加密工具自身失败（不经过拦截器）需在此兜底提示，避免静默无响应
+    if (e instanceof SensitiveCryptoError) {
+      ElMessage.error(e.message)
+    }
   } finally {
     submitting.value = false
   }
