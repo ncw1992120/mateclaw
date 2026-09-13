@@ -115,7 +115,10 @@ CLAUDE.md
 
 # Local agent collaboration instructions and memory (do not commit)
 AGENTS.md
+AGENT.md
+agent.md
 MEMORY.md
+memory.md
 .workbuddy/
 
 # Local simulation secrets and overrides
