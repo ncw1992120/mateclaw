@@ -11,6 +11,8 @@ test -f "$STATE_FILE" || { echo "state file not found: $STATE_FILE" >&2; exit 1;
 # environment and is never read from or written to the state file.
 jq -er '
   def export($name; $value): "export " + $name + "=" + (($value // "") | tostring | @sh);
+  # CDP 视觉入口使用通用 ID；默认指向同一轮 seed 的多源 Dashboard。
+  export("MATECLAW_E2E_DASHBOARD_ID"; .multiSourceDashboardId),
   export("MATECLAW_E2E_MULTI_SOURCE_DASHBOARD_ID"; .multiSourceDashboardId),
   export("MATECLAW_E2E_API_FILE_DASHBOARD_ID"; .apiFileDashboardId),
   export("MATECLAW_E2E_ECHARTS_DASHBOARD_ID"; .echartsDashboardId),

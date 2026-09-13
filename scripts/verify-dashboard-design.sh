@@ -53,6 +53,7 @@ fi
 has 'https://e2e-http:8443' "$seed" || fail "E2E HTTP source is not registered as HTTPS"
 has 'E2E ECharts Binding Dashboard' "$seed" || fail "E2E ECharts binding dashboard seed is missing"
 has 'echartsDashboardId' "$export_env" || fail "E2E ECharts dashboard export is missing"
+has 'MATECLAW_E2E_DASHBOARD_ID' "$export_env" || fail "generic CDP dashboard export is missing"
 has 'chart-container canvas' "$repo_root/mateclaw-dataagent-ui/e2e/dashboard-multi-source.spec.ts" || fail "E2E ECharts canvas assertion is missing"
 has 'https-port 8443' "$compose_test" || fail "E2E WireMock HTTPS port is missing"
 has 'MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT: "true"' "$compose_test" || fail "E2E DataAgent TLS fixture mode is missing"
