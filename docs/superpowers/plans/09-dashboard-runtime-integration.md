@@ -20,7 +20,7 @@
 
 **执行约定：** 09 的 seed、Playwright 和 cleanup 必须指向同一轮本地模拟服务与工作区；先完成非 Aloudata 场景，再运行 JDBC+模拟 Aloudata。E2E 启动入口会在本地模拟容器仍运行时 fail-fast，避免同端口下创建半套容器，并对健康探测设置单次超时；E2E 完成后执行 `docker compose -f docker-compose.test.yml down -v --remove-orphans`，再按外部前置计划恢复本地模拟。缺少 JWT/工作区等测试上下文时显式记录 `BLOCKED`，不将未执行标为通过。
 
-**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、Runner `20/20`、当前工作树 UI `25/25` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
+**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、当前工作树 Runner `21/21`、UI `25/25` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
 
 **结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
 

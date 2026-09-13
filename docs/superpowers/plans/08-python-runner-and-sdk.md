@@ -20,7 +20,7 @@
 
 **执行约定：** Runner 定向测试和 09 闭环必须使用固定镜像构建结果；外部网络失败、任务取消和 ObjectRef 读取均需保留日志摘要，不能通过运行时安装依赖绕过失败。
 
-**本轮复验记录（2026-09-13）：** 固定镜像、Runner `/health`、`runner_internal` 隔离和 MinIO 连通性通过；Runner `20/20`、DataAgent `152/152` 及本地 E2E `9 passed` 基线保持有效。
+**本轮复验记录（2026-09-13）：** 固定镜像、Runner `/health`、`runner_internal` 隔离和 MinIO 连通性通过；当前工作树 Runner `21/21`、DataAgent `152/152` 及本地 E2E `9 passed` 基线保持有效。
 
 ## Global Constraints
 
@@ -49,7 +49,7 @@
 - [x] **Step 1: 写失败 pytest**：别名读取、参数引用、非法字段、Descriptor 解析、Parquet 批读和 DataFrame 后置过滤不影响请求。
 - [x] **Step 2: 运行**：`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests/test_dataset_sdk.py -q`，Expected: FAIL。
 - [x] **Step 3: 实现最小 SDK；读取请求必须带任务令牌经 Runner 上下文转发给 DataAgent**。
-- [x] **Step 4: 重跑测试**：SDK/Runner 测试通过（当前 `20 passed`）；`datasets.read` 客户端会在发起网络请求前拒绝非法字段、未知操作符和非映射过滤值，兼容 DataAgent `R.ok(...)` 响应包装层，并将业务错误转换为明确异常；提交仍按统一交付边界处理。
+- [x] **Step 4: 重跑测试**：SDK/Runner 测试通过（当前工作树 `21 passed`）；`datasets.read` 客户端会在发起网络请求前拒绝非法字段、未知操作符和非映射过滤值，兼容 DataAgent `R.ok(...)` 响应包装层，并将业务错误转换为明确异常；提交仍按统一交付边界处理。
 
 ### Task 2: Runner 控制面和进程隔离
 
@@ -71,9 +71,10 @@
 - [x] **Step 4: 使用锁文件构建镜像，并验证非 root、只读目录、健康检查及只连接 `runner_internal` 内部网络**。
 
 - [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `152/152`，在 Docker Desktop/Testcontainers 环境通过。Docker 容器内执行 Maven 时使用 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk，以适配宿主 Docker Desktop 网络；Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
-- [x] **Step 5: 重跑 pytest**：历史复验曾为 `17 passed`；当前 Runner 全量测试为 `20 passed`，镜像非 root、只读根目录、无 DuckDB/运行时安装依赖基线已验证；提交仍按统一交付边界处理。
+- [x] **Step 5: 重跑 pytest**：历史复验曾为 `17 passed`；候选提交为 `20 passed`，当前 Runner 全量测试为 `21 passed`，镜像非 root、只读根目录、无 DuckDB/运行时安装依赖基线已验证；提交仍按统一交付边界处理。
 - [x] **Step 5 追加回归（2026-09-13）**：修复任务 `parameters` 未注入 `DatasetClient` 的问题，并补齐过滤条件默认 `role=dimension`；当前 Runner 全量 `19 passed`。
 - [x] **Step 5 追加 API 集成回归（2026-09-13）**：通过 `/v1/tasks` 验证参数经 App→Executor→DatasetClient→脚本完整传递，Runner 全量更新为 `20 passed`。
+- [x] **Step 6 追加多别名 Join 回归（2026-09-13）**：使用本地 HTTP 数据面返回 `orders` 与 `customers` 两个输入，Runner 脚本通过 `datasets.read` 获取两个别名并执行 Pandas Join，断言合并结果；当前 Runner 全量为 `21 passed`。
 - 最新 DataAgent 回归当前全量为 `152/152`；前述 `140/140`、`146/146`、`147/147` 均为历史工作树计数。
 
 ### Task 3: DataAgent 客户端与兼容回归

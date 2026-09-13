@@ -277,4 +277,6 @@ CDP npm 入口补强（2026-09-13）：`mateclaw-dataagent-ui/package.json` 新�
 设计门禁覆盖补强（2026-09-13）：`verify-dashboard-design.sh` 现同时检查 CDP 脚本文件和 `test:e2e:cdp` npm 命令存在，避免计划引用失效入口；门禁复验输出 `DESIGN-PASS`。
 
 当前工作树模块回归（2026-09-13）：`make dashboard-dataagent-test` 退出码 `0`，Surefire 汇总 `152 tests, 0 failures, 0 errors, 0 skipped`；`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q` 为 `20 passed`；`npm --prefix mateclaw-dataagent-ui test -- --run` 为 `8 files / 24 tests passed`；随后 `npm --prefix mateclaw-dataagent-ui run build` 成功。仅有既有 SLF4J、pytest 弃用提示和 Rollup chunk 大小告警，不影响退出码。
+
+Runner 多别名 Join 回归（2026-09-13）：当前工作树 `make dashboard-runner-test` 为 `21 passed`；新增执行器测试通过本地 HTTP 数据面返回 `orders` 与 `customers` 两个别名，用户脚本分别调用 `datasets.read` 后使用 Pandas Join，最终结果与预期一致。该测试补强 G2 的多源脚本处理证据，不替代双源 Playwright 或真实 Aloudata Gate。
 追加本轮本地前置复验（2026-09-13）：`make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；本地 WireMock 环境下通过 Docker Maven 执行 `AloudataAnalysisViewExternalIT`，结果为 `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`。该测试仅证明本地模拟 Adapter 契约，不关闭真实 Aloudata ALO-X02。
