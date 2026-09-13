@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 2 节（DOC-U01～DOC-U04）。
 
-**当前状态（2026-09-13）：** 文档范围与验收矩阵已冻结并通过设计门禁，已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；远端推送因 HTTP/2 网络错误待重试。
+**当前状态（2026-09-13）：** 文档范围与验收矩阵已冻结并通过设计门禁，已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；候选提交及后续计划更新已推送到 `origin/feature/dev_fu`。
 
 **本次范围补充：** 本地外部依赖统一由 `dev-support/local-simulation/` 的 Docker Compose 提供；身份与权限完善延期，仅保留已有行为回归。
 
@@ -67,7 +67,7 @@ Expected: 无未解释命中；历史方案中的非首期能力明确标记为�
 git diff --check -- docs/策略解读/design.md docs/superpowers/specs/2026-09-11-dashboard-mvp-acceptance.md
 ```
 
-- [x] **Step 5: 统一交付节点**：`design.md` 与 G0 文件已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；远端推送待重试。
+- [x] **Step 5: 统一交付节点**：`design.md` 与 G0 文件已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`，并已推送到 `origin/feature/dev_fu`。
 
 ```bash
 git add docs/superpowers/specs/2026-09-11-dashboard-mvp-acceptance.md
