@@ -100,4 +100,28 @@ describe('DatasetEdit source configuration', () => {
       },
     }))
   })
+
+  it('persists HTTP API sources by registered definition id only', async () => {
+    const wrapper = await mountEditor()
+    const selects = wrapper.findAll('select')
+    await wrapper.find('input.name-input').setValue('Orders API')
+    await selects[0].setValue('1')
+    await selects[1].setValue('HTTP_API')
+    const apiDefinitionInput = wrapper.find('input[placeholder="输入已登记的 API 定义 ID"]')
+    await apiDefinitionInput.setValue('orders')
+
+    expect(wrapper.find('input[placeholder="输入 URL"]').exists()).toBe(false)
+    expect(wrapper.find('input[placeholder="输入 Header"]').exists()).toBe(false)
+
+    await wrapper.find('button.finish-btn').trigger('click')
+    await flushPromises()
+
+    expect(createDatasetMock).toHaveBeenCalledWith(expect.objectContaining({
+      sourceDefinition: {
+        sourceType: 'HTTP_API',
+        datasourceId: 1,
+        apiDefinitionId: 'orders',
+      },
+    }))
+  })
 })

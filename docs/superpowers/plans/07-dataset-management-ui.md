@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 9 节（MGMT-C01～MGMT-UI05）。
 
-**当前状态（2026-09-13）：** 四类来源管理入口、来源定义校验、权限矩阵和候选提交上的 UI `24/24` 测试已完成，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；当前工作树追加五种来源选项回归后为 `25/25`。
+**当前状态（2026-09-13）：** 四类来源管理入口、来源定义校验、权限矩阵和候选提交上的 UI `24/24` 测试已完成，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；当前工作树追加五种来源选项及 HTTP/API 仅引用已登记定义回归后为 `26/26`。
 
 **本次范围说明：** UI 继续兼容现有访问上下文，但不新增身份、角色或跨工作区权限；本地数据源和文件对象优先使用 `dev-support/local-simulation/` 的 Docker 服务。
 
@@ -22,7 +22,7 @@
 
 **执行约定：** UI 验证前先运行模拟前置检查；页面创建的数据集必须能被 09 的同一工作区闭环读取，失败时记录来源类型和模拟服务响应，不回退到手工数据库写入。
 
-**本轮复验记录（2026-09-13）：** 模拟五类来源定义可用，UI 全量 `25/25` 及生产构建通过；页面来源配置与 09 本地 E2E 共用同一批 fixture。新增用例锁定五种来源类型选项顺序，防止管理入口遗漏来源。
+**本轮复验记录（2026-09-13）：** 模拟五类来源定义可用，UI 全量 `26/26` 及生产构建通过；页面来源配置与 09 本地 E2E 共用同一批 fixture。新增用例锁定五种来源类型选项，并验证 HTTP/API 只提交已登记的 `apiDefinitionId`，页面不接受任意 URL/Header。
 
 ## Global Constraints
 
@@ -74,10 +74,10 @@
 - Consumes: 类型化创建/更新 API、Aloudata 视图目录 API、HTTP 参数定义 API、文件上传登记 API、Descriptor/preview API。
 
 - [x] **Step 1（第一段）: 增加测试基础和来源定义测试**：已有 Vitest/Vue Test Utils；新增测试锁定 SQL 仅 JDBC 生成、非 JDBC 不携带 SQL。
-- [x] **Step 2（第一段）: 运行测试**：来源定义新增用例先因模块不存在失败，补齐工具后该阶段与现有 UI 测试合计 15/15 通过；后续扩展后的当前工作树 UI 全量为 25/25，通过结果见总体验收记录。
+- [x] **Step 2（第一段）: 运行测试**：来源定义新增用例先因模块不存在失败，补齐工具后该阶段与现有 UI 测试合计 15/15 通过；后续扩展后的当前工作树 UI 全量为 26/26，通过结果见总体验收记录。
 - [x] **Step 3（第一段）: 接入现有 DatasetEdit**：增加来源类型选择；JDBC SQL 显示 SQL 编辑器并提交类型化 `sourceDefinition`；JDBC 表继续使用原表选择流程；Aloudata 增加只读指标视图目录加载和选择，提交 `analysisViewId`，不编辑视图 SQL；HTTP/API 仅输入后端已登记的 `apiDefinitionId`，文件仅输入已登记的 `objectId` 和格式，不接受任意 URL、Header 或本地路径。
 - [x] **登记定义固化**：HTTP/API 数据集创建或更新时，根据数据源连接 `connectionParams.apiDefinitions` 解析 `apiDefinitionId`，将已登记的 endpoint、参数映射和结果路径固化到内部 `sourceConfig`；请求体不能直接注入 URL、Header 或凭据，缺少登记定义时拒绝保存。
-- [x] **Step 4（第一段）: 运行 UI test 与 build**：当前工作树 25 个 Vitest 用例通过，production build 通过；`DatasetEdit.spec.ts` 覆盖五种来源选项、JDBC_SQL 的 SQL 入口和 FILE 的无 SQL 约束；补充了真实 E2E 的 Chrome channel 配置，并在真实 Compose 栈中完成 API+文件和旧 Schema 兼容场景验证。
+- [x] **Step 4（第一段）: 运行 UI test 与 build**：当前工作树 26 个 Vitest 用例通过，production build 通过；`DatasetEdit.spec.ts` 覆盖五种来源选项、JDBC_SQL 的 SQL 入口、FILE 的无 SQL 约束及 HTTP/API 只引用已登记定义；补充了真实 E2E 的 Chrome channel 配置，并在真实 Compose 栈中完成 API+文件和旧 Schema 兼容场景验证。
 - [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ## 测试执行与预期结果

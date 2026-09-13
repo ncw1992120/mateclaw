@@ -217,7 +217,7 @@ scripts/e2e/verify-dashboard-mvp-cleanup.sh
 ## 本地模拟基线回归（当前工作树）
 
 - `uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`：`20 passed`。
-- `npm --prefix mateclaw-dataagent-ui test -- --run`：历史记录为 8 个测试文件、24 个测试通过；当前新增来源选项回归后为 8 个测试文件、25 个测试通过。
+- `npm --prefix mateclaw-dataagent-ui test -- --run`：历史记录为 8 个测试文件、24 个测试通过；当前新增来源选项及 HTTP/API 来源配置回归后为 8 个测试文件、26 个测试通过。
 - `npm --prefix mateclaw-dataagent-ui run build`：类型检查和 Vite production build 通过；仅有既有 Rollup chunk 大小提示。
 - Docker Maven DataAgent 全量测试（Testcontainers 使用 Docker Desktop socket）：命令退出码 0；日志仅含既有 SLF4J/Mockito/本地旧执行器 pip 兼容告警，无失败测试。
 - `make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh`、`git diff --check`：均通过。
@@ -281,6 +281,6 @@ CDP npm 入口补强（2026-09-13）：`mateclaw-dataagent-ui/package.json` 新�
 Runner 多别名 Join 回归（2026-09-13）：当前工作树 `make dashboard-runner-test` 为 `21 passed`；新增执行器测试通过本地 HTTP 数据面返回 `orders` 与 `customers` 两个别名，用户脚本分别调用 `datasets.read` 后使用 Pandas Join，最终结果与预期一致。该测试补强 G2 的多源脚本处理证据，不替代双源 Playwright 或真实 Aloudata Gate。
 追加本轮本地前置复验（2026-09-13）：`make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；本地 WireMock 环境下通过 Docker Maven 执行 `AloudataAnalysisViewExternalIT`，结果为 `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`。该测试仅证明本地模拟 Adapter 契约，不关闭真实 Aloudata ALO-X02。
 
-统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `152 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 25 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
+统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `152 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 26 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
 
 HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 WireMock HTTP/HTTPS `/orders?status=PAID`，两条路径均返回预期 `id=1004`；配合 `orders-openapi.yaml` 的 operationId、参数和 HTTPS E2E fixture，证明本地已登记 API 的筛选透传与 TLS 入口可复现。该证据不替代真实 API 所有者提供的地址、证书、分页和错误响应验收。
