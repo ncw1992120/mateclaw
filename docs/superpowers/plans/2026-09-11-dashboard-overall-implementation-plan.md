@@ -188,7 +188,7 @@ make dashboard-verify-local
 
 ## Gate 验收
 
-非 Aloudata 场景可以先独立执行和记录证据；只有在获得 Aloudata 已授权视图后，才执行 JDBC+Aloudata 双源场景并关闭最终 Gate。身份与权限完善不作为本次 Gate；独立通过 API+文件、旧 Schema 或错误路径，不得被表述为整体 G3 已完成。
+非 Aloudata 和模拟 Aloudata 场景可以先独立执行和记录证据，并据此关闭本地开发 Gate；获得真实 Aloudata 已授权视图后，再执行 JDBC+Aloudata 双源环境联调并关闭正式环境 Gate。身份与权限完善不作为本次 Gate；本地模拟通过不等同于正式环境联调通过。
 
 ### G0：设计冻结
 
