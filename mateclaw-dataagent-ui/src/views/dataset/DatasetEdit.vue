@@ -63,8 +63,52 @@
             </select>
           </div>
 
-          <!-- 上传文件区域 -->
           <div class="section-block">
+            <label class="section-label">来源类型</label>
+            <select v-model="selectedSourceType" class="datasource-select">
+              <option value="JDBC_TABLE">JDBC 表</option>
+              <option value="JDBC_SQL">JDBC SQL</option>
+              <option value="ALOUDATA_ANALYSIS_VIEW">Aloudata 指标视图</option>
+              <option value="HTTP_API">HTTP/API</option>
+              <option value="FILE">文件</option>
+            </select>
+          </div>
+
+          <div v-if="selectedSourceType === 'JDBC_SQL'" class="section-block">
+            <label class="section-label">SQL（仅 JDBC）</label>
+            <textarea v-model="sourceSql" class="sql-input" rows="6" placeholder="select ... from ..." />
+          </div>
+
+          <div v-if="selectedSourceType === 'ALOUDATA_ANALYSIS_VIEW'" class="section-block">
+            <label class="section-label">指标视图（只读）</label>
+            <select v-model="analysisViewId" class="datasource-select">
+              <option value="">选择已授权指标视图</option>
+              <option v-for="view in analysisViews" :key="view.id || view.viewName" :value="view.viewName">
+                {{ view.displayName || view.viewName }}
+              </option>
+            </select>
+            <div v-if="analysisViewsLoading" class="table-loading-hint">正在加载指标视图…</div>
+          </div>
+
+          <div v-if="selectedSourceType === 'HTTP_API'" class="section-block">
+            <label class="section-label">已登记 HTTP/API 定义</label>
+            <input v-model="apiDefinitionId" class="name-input" placeholder="输入已登记的 API 定义 ID" />
+            <div class="definition-hint">仅引用后端已登记的 API 定义，不支持在脚本或页面输入 URL。</div>
+          </div>
+
+          <div v-if="selectedSourceType === 'FILE'" class="section-block">
+            <label class="section-label">已上传文件对象</label>
+            <input v-model="fileObjectId" class="name-input" placeholder="输入已登记的对象 ID" />
+            <select v-model="fileFormat" class="datasource-select">
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="parquet">Parquet</option>
+              <option value="xlsx">XLSX</option>
+            </select>
+          </div>
+
+          <!-- 上传文件区域 -->
+          <div v-if="selectedSourceType === 'JDBC_TABLE'" class="section-block">
             <label class="section-label">{{ t('datasetEdit.uploadFile') }}</label>
             <div class="file-actions">
               <button class="file-action-btn" :title="t('datasetEdit.upload')" @click="handleUpload">
@@ -355,6 +399,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
 import * as datasetApi from '@/api/dataset'
 import type { DatasourceColumn, DatasetField, DatasetColumnDef, DatasetData } from '@/types'
+import { buildDatasetSourceDefinition, type DatasetSourceFormState } from '@/utils/dataset-management'
 
 /** 字段项结构 */
 interface FieldItem {
@@ -398,8 +443,18 @@ const searchKeyword = ref('')
 /** 选中的数据源 ID */
 const selectedDatasource = ref('')
 
+/** 数据集来源类型；SQL 只对 JDBC_SQL 开放 */
+const selectedSourceType = ref<'JDBC_TABLE' | 'JDBC_SQL' | 'ALOUDATA_ANALYSIS_VIEW' | 'HTTP_API' | 'FILE'>('JDBC_TABLE')
+const sourceSql = ref('')
+const analysisViewId = ref('')
+const analysisViews = ref<Array<{ id: string; viewName: string; displayName: string; categoryName?: string }>>([])
+const analysisViewsLoading = ref(false)
+const apiDefinitionId = ref('')
+const fileObjectId = ref('')
+const fileFormat = ref('csv')
+
 /** 数据源列表 */
-const datasourceList = ref<Array<{ id: string; name: string }>>([])
+const datasourceList = ref<Array<{ id: string; name: string; sourceType?: string }>>([])
 
 /** 选中数据源下的表列表 */
 const datasourceTables = ref<Array<{ id: string; tableName: string; tableComment?: string }>>([])
@@ -482,7 +537,13 @@ const primaryKeyFields = computed(() => {
 
 /** 是否可以完成（已选择数据源和至少一张表且输入了名称） */
 const canSave = computed(() => {
-  return !!selectedDatasource.value && selectedTableObjects.value.length > 0 && !!datasetName.value.trim()
+  if (!datasetName.value.trim()) return false
+  if (selectedSourceType.value === 'JDBC_SQL') return !!selectedDatasource.value && !!sourceSql.value.trim()
+  if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') return !!selectedDatasource.value && !!analysisViewId.value
+  if (selectedSourceType.value === 'HTTP_API') return !!selectedDatasource.value && !!apiDefinitionId.value.trim()
+  if (selectedSourceType.value === 'FILE') return !!fileObjectId.value.trim()
+  if (selectedSourceType.value === 'JDBC_TABLE') return !!selectedDatasource.value && selectedTableObjects.value.length > 0
+  return false
 })
 
 /** 过滤后的字段分组 */
@@ -583,12 +644,26 @@ onMounted(async () => {
 })
 
 watch(selectedDatasource, async (newDsId) => {
-  if (newDsId) {
+  if (newDsId && selectedSourceType.value === 'JDBC_TABLE') {
     await loadTables(newDsId)
+  } else if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') {
+    await loadAnalysisViews(newDsId)
   } else {
     datasourceTables.value = []
     selectedTableObjects.value = []
   }
+})
+
+watch(selectedSourceType, async (sourceType) => {
+  if (sourceType === 'JDBC_TABLE' && selectedDatasource.value) await loadTables(selectedDatasource.value)
+  if (sourceType === 'ALOUDATA_ANALYSIS_VIEW' && selectedDatasource.value) await loadAnalysisViews(selectedDatasource.value)
+  if (sourceType !== 'JDBC_TABLE') {
+    datasourceTables.value = []
+    selectedTableObjects.value = []
+  }
+  if (sourceType !== 'ALOUDATA_ANALYSIS_VIEW') analysisViewId.value = ''
+  if (sourceType !== 'HTTP_API') apiDefinitionId.value = ''
+  if (sourceType !== 'FILE') fileObjectId.value = ''
 })
 
 watch(dataCurrentPage, async () => {
@@ -601,7 +676,7 @@ watch(dataCurrentPage, async () => {
 async function loadDatasources(): Promise<void> {
   try {
     const list = await datasourceApi.list()
-    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string }>
+    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string; sourceType?: string }>
   } catch {
     datasourceList.value = []
   }
@@ -621,6 +696,18 @@ async function loadTables(dsId: string): Promise<void> {
   }
 }
 
+async function loadAnalysisViews(dsId: string): Promise<void> {
+  analysisViewsLoading.value = true
+  try {
+    const views = await datasourceApi.listAnalysisViews(dsId)
+    analysisViews.value = (views || []) as unknown as Array<{ id: string; viewName: string; displayName: string; categoryName?: string }>
+  } catch {
+    analysisViews.value = []
+  } finally {
+    analysisViewsLoading.value = false
+  }
+}
+
 /** 加载数据集基本信息 */
 async function loadDatasetInfo(dsId: string): Promise<void> {
   try {
@@ -628,6 +715,25 @@ async function loadDatasetInfo(dsId: string): Promise<void> {
     if (ds) {
       datasetName.value = ds.name || ''
       selectedDatasource.value = ds.datasourceId || ''
+      selectedSourceType.value = (ds.sourceType as typeof selectedSourceType.value) || 'JDBC_TABLE'
+      if (selectedSourceType.value === 'JDBC_SQL' && ds.sourceConfig) {
+        try { sourceSql.value = JSON.parse(ds.sourceConfig).sql || '' } catch { sourceSql.value = '' }
+      }
+      if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && ds.sourceConfig) {
+        try { analysisViewId.value = JSON.parse(ds.sourceConfig).analysisViewId || '' } catch { analysisViewId.value = '' }
+      }
+      if (selectedSourceType.value === 'HTTP_API' && ds.sourceConfig) {
+        try { apiDefinitionId.value = JSON.parse(ds.sourceConfig).apiDefinitionId || '' } catch { apiDefinitionId.value = '' }
+      }
+      if (selectedSourceType.value === 'FILE' && ds.sourceConfig) {
+        try {
+          const config = JSON.parse(ds.sourceConfig)
+          fileObjectId.value = config.objectId || ''
+          fileFormat.value = config.format || 'csv'
+        } catch {
+          fileObjectId.value = ''
+        }
+      }
     }
     const fields = await datasetApi.listFields(dsId)
     datasetFields.value = (fields || []) as unknown as DatasetField[]
@@ -731,10 +837,21 @@ async function handleFinish(): Promise<void> {
     return
   }
   try {
+    const sourceState: DatasetSourceFormState = {
+      sourceType: selectedSourceType.value,
+      datasourceId: selectedDatasource.value,
+      tableIds: selectedTableObjects.value.map(t => t.id),
+      sql: sourceSql.value,
+      analysisViewId: analysisViewId.value,
+      apiDefinitionId: apiDefinitionId.value,
+      objectId: fileObjectId.value,
+      format: fileFormat.value,
+    }
     const result = await datasetApi.create({
       name: datasetName.value.trim(),
       datasourceId: selectedDatasource.value,
       tableIds: selectedTableObjects.value.map(t => t.id),
+      sourceDefinition: buildDatasetSourceDefinition(sourceState),
     })
     if (result) {
       createdDatasetId.value = String(result.id)

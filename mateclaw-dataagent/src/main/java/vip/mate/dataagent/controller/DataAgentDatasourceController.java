@@ -16,6 +16,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
+import vip.mate.dataagent.service.AloudataAnalysisViewService;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
@@ -37,6 +38,7 @@ public class DataAgentDatasourceController {
     private final AloudataEndpointService aloudataEndpointService;
     private final AloudataSemanticSyncService aloudataSyncService;
     private final AloudataService aloudataService;
+    private final AloudataAnalysisViewService aloudataAnalysisViewService;
     private final WorkspaceGuard workspaceGuard;
 
     /**
@@ -456,5 +458,24 @@ public class DataAgentDatasourceController {
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "指标查询请求") @RequestBody AloudataMetricQueryRequest request) {
         return R.ok(aloudataService.queryMetrics(datasourceId, request));
+    }
+
+    /** 获取 Aloudata 已有指标视图目录（只读）。 */
+    @GetMapping("/{datasourceId}/analysis-views")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图目录", description = "获取当前 Aloudata 数据源下已授权的指标视图目录")
+    public R<List<AloudataAnalysisViewSummary>> listAnalysisViews(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataAnalysisViewService.listTree(datasourceId));
+    }
+
+    /** 获取 Aloudata 已有指标视图定义（只读）。 */
+    @GetMapping("/{datasourceId}/analysis-views/{viewName}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图详情", description = "获取指定 Aloudata 指标视图的指标、维度和筛选定义")
+    public R<AloudataAnalysisViewDetail> getAnalysisView(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标视图名称") @PathVariable String viewName) {
+        return R.ok(aloudataAnalysisViewService.getByName(datasourceId, viewName));
     }
 }

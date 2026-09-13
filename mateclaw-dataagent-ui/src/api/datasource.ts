@@ -82,6 +82,24 @@ export function previewTableData(datasourceId: string, tableId: string, limit: n
   )
 }
 
+/** 查询 Aloudata 已授权指标视图目录（只读） */
+export interface AloudataAnalysisViewSummary {
+  id: string
+  viewName: string
+  displayName: string
+  categoryId?: string
+  categoryName?: string
+}
+
+export function listAnalysisViews(datasourceId: string | number) {
+  return api.get<AloudataAnalysisViewSummary[]>(`${BASE_URL}/${datasourceId}/analysis-views`)
+}
+
+/** 查询已选 Aloudata 指标视图详情 */
+export function getAnalysisView(datasourceId: string | number, viewName: string) {
+  return api.get(`${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}`)
+}
+
 // ==================== Aloudata 语义层同步 ====================
 
 /** 触发 Aloudata 语义层全量同步 */

@@ -194,6 +194,17 @@
             @preview="handlePreviewResult"
             @collapse="sidebarCollapsed = true"
           />
+          <DatasetInputPanel
+            :dashboard-id="dashboardId"
+            :inputs="schema.datasetInputs ?? []"
+            :script="schema.script"
+            :parameters="schema.parameters ?? []"
+            :target-component-id="selectedComponent?.id"
+            @update:inputs="schema.datasetInputs = $event"
+            @update:script="schema.script = $event"
+            @update:parameters="schema.parameters = $event"
+            @apply-result="handleScriptResult"
+          />
         </div>
 
         <!-- AI助手面板 -->
@@ -253,8 +264,11 @@ import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
+import DatasetInputPanel from './components/DatasetInputPanel.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
+import { rowsToComponentData } from '@/utils/dataset-result'
+import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -317,8 +331,12 @@ const sidebarCollapsed = ref(false)
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
-  version: '1.0',
+  version: '1.1',
   pages: [],
+  datasetInputs: [],
+  parameters: [],
+  executionPolicy: {},
+  scriptBindings: [],
 })
 
 /** 组件渲染数据映射（编辑模式自动预览） */
@@ -418,20 +436,7 @@ function generateId(prefix: string): string {
 
 /** 迁移旧 Schema（单 components 数组 → pages[0]） */
 function migrateSchema(parsed: any): InsightDashboardSchema {
-  // 新格式：已有 pages 数组
-  if (parsed.pages && Array.isArray(parsed.pages)) {
-    return parsed as InsightDashboardSchema
-  }
-  // 旧格式：components + perspectives，迁移为单页面
-  const oldComponents = parsed.components ?? []
-  return {
-    version: parsed.version ?? '1.0',
-    pages: [{
-      id: generateId('page'),
-      name: t('insight.firstPageName'),
-      components: oldComponents,
-    }],
-  }
+  return migrateInsightDashboardSchema(parsed, t('insight.firstPageName'))
 }
 
 /** 加载仪表盘数据 */
@@ -450,8 +455,13 @@ async function loadDashboard(id: string): Promise<void> {
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson)
       const migrated = migrateSchema(parsed)
-      schema.version = migrated.version
+      schema.version = migrated.version || '1.1'
       schema.pages = migrated.pages
+      schema.datasetInputs = migrated.datasetInputs ?? []
+      schema.script = migrated.script
+      schema.parameters = migrated.parameters ?? []
+      schema.executionPolicy = migrated.executionPolicy ?? {}
+      schema.scriptBindings = migrated.scriptBindings ?? []
     } catch {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
       schema.pages = [{
@@ -459,6 +469,12 @@ async function loadDashboard(id: string): Promise<void> {
         name: t('insight.firstPageName'),
         components: [],
       }]
+      schema.version = '1.1'
+      schema.datasetInputs = []
+      schema.script = undefined
+      schema.parameters = []
+      schema.executionPolicy = {}
+      schema.scriptBindings = []
     }
     // 默认选中第一个页面
     if (schema.pages.length > 0) {
@@ -575,6 +591,21 @@ function handlePreviewResult(data: InsightComponentData): void {
   if (data.componentId) {
     componentDataMap.value[data.componentId] = data
   }
+}
+
+/** 将用户确认的脚本结果应用到当前选中组件；未选中组件时只保留预览，不覆盖画布。 */
+function handleScriptResult(rows: Record<string, unknown>[]): void {
+  const component = selectedComponent.value
+  if (!component) {
+    ElMessage.warning('请先选择要应用结果的组件')
+    return
+  }
+  const renderType = component.type === 'chart' ? 'echarts' : 'table'
+  componentDataMap.value[component.id] = rowsToComponentData(component.id, rows, renderType)
+  schema.scriptBindings = [
+    ...(schema.scriptBindings ?? []).filter((binding) => binding.componentId !== component.id),
+    { componentId: component.id, renderType },
+  ]
 }
 
 /** 延迟预览：数据源变更后 500ms 自动获取组件数据 */

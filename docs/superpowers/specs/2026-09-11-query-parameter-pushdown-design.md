@@ -1,21 +1,22 @@
 # Python 条件读取与 JDBC 查询下推技术设计
 
 **日期：** 2026-09-11
-**状态：** 待评审
+**状态：** 第一阶段已冻结
 **范围：** `mateclaw-dataagent` 通用洞察仪表盘第一阶段
 
 ## 1. 目标
 
-建立一条可验证的查询链路：页面参数作为 Python 脚本入参，用户通过平台提供的 `datasets.read(..., filters=...)` 在读取数据集时声明过滤条件；平台将读取请求转换为参数化 JDBC 查询，数据库先完成过滤、字段选择和分页，再将结果交给 Python 做多数据源 Join、清洗和聚合。
+建立一条可验证的查询链路：页面参数作为 Python 脚本入参，用户通过平台提供的 `datasets.read(..., filters=...)` 在读取数据集时声明过滤条件；平台根据数据源类型执行 JDBC 条件下推、HTTP/API 参数透传或文件受控读取，再将结果交给 Python 做多数据源 Join、清洗和聚合。
 
 ```text
 页面参数
-  → Python datasets.read(filters)
+  → 启动 Python Runner 并注入输入目录/任务令牌
+  → Python datasets.read(filters) 回调 DataAgent
   → QuerySpec
-  → JDBC SQL + PreparedStatement
-  → 数据库过滤/投影/分页
+  → JDBC / Aloudata / HTTP API / 文件 Adapter
+  → 数据源过滤、投影、分页或受控读取
   → Arrow/Parquet dataRef
-  → Python Runner
+  → Python SDK
   → Polars/Pandas 预处理
   → 页面展示
 ```
@@ -23,6 +24,13 @@
 ## 2. 已确认的边界
 
 - SQL 只对 JDBC 数据源开放；Aloudata 继续使用现有指标、维度和指标视图语义层。
+- 第一阶段输入数据源包括 JDBC、Aloudata、HTTP/API 和文件；湖仓目录级发现、流式数据源暂不实现。
+- Aloudata 指标视图默认通过专用 Adapter 接入：AnyMetrics 获取目录/详情，Semantic API 查询结果；Aloudata JDBC 虚拟表仅作为兼容方式。`analysisView/query` 未证明支持临时筛选时，必须从视图定义编译等价 `metrics/query`；无法等价转换就拒绝，不得全量读取后伪装下推。
+- 第一阶段只支持选择和查询已有 Aloudata 指标视图，不支持通过 MateClaw 创建、修改或删除指标视图。
+- Aloudata 数据源连接保存默认 `tenantId`；MateClaw 负责数据源/视图使用权校验，Aloudata 负责其内部指标权限校验。
+- 指标视图结果统一走 Semantic API；分页、最大行数和超时由 MateClaw 统一兜底。
+- Aloudata Semantic 返回视图权限错误时，Adapter 映射为 `VIEW_ACCESS_DENIED`，与空结果、超时和服务不可用区分。
+- HTTP/API 只能将已声明且允许的条件映射为接口参数；文件数据集必须使用 Schema、行数和读取资源限制。
 - Python 读取请求中的筛选条件只能追加，不能覆盖用户 SQL 已有条件。
 - 首期下推范围为过滤、字段选择、分页和参数绑定；复杂逻辑不从任意 Python 代码中反向提取。
 - 同一 JDBC 数据源的 Join 可由用户 SQL 完成；跨数据源 Join 由 Python 完成。
@@ -60,7 +68,7 @@
 
 ```json
 {
-  "datasetId": "orders",
+  "inputName": "orders",
   "columns": ["user_id", "order_date", "amount"],
   "filters": [
     {"column": "order_date", "operator": ">=", "parameter": "start_date"},
@@ -102,8 +110,14 @@ DatasetInputDescriptor（Spring/DataAgent 返回）
   ├── datasetId
   ├── schema
   ├── rowCount / statistics
+  └── capabilities
+
+DatasetReadResult（datasets.read 返回）
+  ├── schema
+  ├── rowCount / statistics
   ├── dataRef
-  └── transport
+  ├── transport
+  └── pushdownReport
 
 DatasetInput（Python SDK 包装）
   ├── schema()
@@ -112,7 +126,7 @@ DatasetInput（Python SDK 包装）
   └── iter_batches()
 ```
 
-Spring 通过 JSON 传递描述符，不传递 Python 函数或数据库连接；Python SDK 根据 `dataRef` 创建批次读取器。
+Spring 在任务启动时通过 JSON 传递描述符和短期任务令牌，不传递事实数据、Python 函数或数据库连接。Python SDK 调用 `datasets.read` 后才获得 `DatasetReadResult`，并根据其中的 `dataRef` 创建批次读取器。令牌只允许当前 `taskId/workspaceId` 下已声明的输入别名，脚本不能提交任意 `datasetId`。
 
 ### 3.4 QuerySpec
 
@@ -192,7 +206,9 @@ WHERE order_date >= ?
 ```text
 页面点击查询
   → 读取页面参数并传入 Python
+  → 启动 Runner
   → Python 调用 datasets.read(filters)
+  → 携带任务令牌回调 DataAgent
   → 构造 QuerySpec
   → SQL AST 校验和资源检查
   → JDBC 执行
@@ -204,10 +220,10 @@ WHERE order_date >= ?
 
 ```text
 页面点击查询
+  → 启动 Runner 并注入输入目录/任务令牌
   → Python 为每个输入数据集调用 datasets.read(filters)
   → 各数据源独立执行过滤/投影/分页
-  → 输出受控 DatasetBatch 或 dataRef
-  → Python Runner 接收多个输入
+  → 每次调用返回受控 DatasetBatch 或 dataRef
   → Polars/Pandas Join、清洗、聚合
   → 输出最终 Schema + dataRef
   → 页面渲染
@@ -242,6 +258,7 @@ Python 不获得数据库连接、凭据或未授权数据源访问能力。Pyth
 - 页面条件不会覆盖基础 SQL 条件。
 - 单源查询能完成预览和发布；多源查询能将过滤后的数据交给 Python 并返回最终结果。
 - Python 脚本不能直接访问数据库连接或其他 workspace 数据。
+- 篡改内部 `datasetId`、读取未声明别名、跨任务复用令牌或使用过期令牌都会被拒绝。
 
 ### 安全与资源验收
 
@@ -257,10 +274,10 @@ Python 不获得数据库连接、凭据或未授权数据源访问能力。Pyth
 
 ## 9. 实施顺序
 
-1. 定义页面参数、`DatasetReadRequest` 和 `QuerySpec` DTO/Schema。
-2. 实现受限 `datasets.read` SDK、JSqlParser 只读校验、AST 条件追加和 PreparedStatement 参数绑定。
-3. 实现单源 JDBC 预览、EXPLAIN 和资源预算。
-4. 将页面组件接入脚本参数和查询状态。
-5. 实现 `DatasetBatch/dataRef` 传输和 Python Runner 调用。
-6. 增加多源 Python Join、最终 Schema 和异步正式任务。
-7. 补齐权限、审计、取消、重试、缓存和旧 Schema 兼容测试。
+1. 按 `00-design-freeze-and-acceptance.md` 固化验收矩阵。
+2. 实现 `DatasetAccessContext`、`DatasetReadRequest`、`QuerySpec`、错误码和下推报告。
+3. 实现 Aloudata、JDBC、HTTP/API Adapter 及 ObjectRef，再实现依赖对象存储的文件 Adapter。
+4. 补齐四类来源的数据源/数据集管理 API 与 UI。
+5. 实现带任务级读取令牌的 `datasets.read` SDK、Python Runner 和 DataAgent 内部读取接口。
+6. 接入仪表盘输入/最终预览、异步正式任务和旧 Schema 兼容。
+7. 用同一候选提交完成真实双源闭环、权限、审计、取消、重试和兼容验收。

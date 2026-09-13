@@ -667,6 +667,8 @@ export interface Dataset {
   description: string
   datasourceId: string
   datasourceName: string
+  sourceType?: DatasetSourceType | string
+  sourceConfig?: string
   tableIds: string
   tableNames: string
   status: string
@@ -717,6 +719,71 @@ export interface DatasetData {
   columns: DatasetColumnDef[]
   rows: Record<string, unknown>[]
   total: number
+}
+
+/** 统一数据集来源类型（与 DataAgent DatasetSourceType 保持一致） */
+export type DatasetSourceType = 'JDBC_TABLE' | 'JDBC_SQL' | 'ALOUDATA_ANALYSIS_VIEW' | 'HTTP_API' | 'FILE'
+
+/** Python/预览可见的数据集字段描述 */
+export interface DatasetInputColumn {
+  name: string
+  title: string
+  dataType: string
+  nullable: boolean
+  semanticRole?: string | null
+}
+
+/** Python/预览使用的数据集输入描述；不包含连接凭据 */
+export interface DatasetInputDescriptor {
+  datasetId: string
+  inputName: string
+  sourceType: DatasetSourceType | string
+  schema: DatasetInputColumn[]
+  rowCount?: number | null
+  dataRef?: DatasetObjectRef | null
+}
+
+/** 大结果集的对象引用；小结果集由 rows 内联返回 */
+export interface DatasetObjectRef {
+  uri: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  expiresAt: string
+}
+
+/** 统一数据集过滤条件，filters 会由服务端按来源能力下推 */
+export interface DatasetFilter {
+  field: string
+  role: 'dimension' | 'measure'
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'between' | 'is_null' | 'is_not_null'
+  value?: unknown
+}
+
+/** 统一数据集读取/预览请求 */
+export interface DatasetReadRequest {
+  datasetId: string
+  inputName: string
+  columns?: string[]
+  filters?: DatasetFilter[]
+  limit?: number
+  offset?: number
+  parameters?: Record<string, unknown>
+}
+
+/** 统一数据集读取结果 */
+export interface DatasetBatch {
+  rows?: Record<string, unknown>[] | null
+  objectRef?: DatasetObjectRef | null
+  rowCount: number
+  last: boolean
+  pushdownReport?: {
+    pushedFilters: DatasetFilter[]
+    residualFilters: DatasetFilter[]
+    projectionPushed: boolean
+    limitPushed: boolean
+    sourceQueryDigest?: string | null
+  } | null
 }
 
 /** 模型类型枚举 */
@@ -1184,11 +1251,51 @@ export interface DashboardPage {
   components: InsightComponent[]
 }
 
+/** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */
+export interface DashboardDatasetInput {
+  datasetId: string
+  inputName: string
+  displayName?: string
+}
+
+/** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */
+export interface DashboardScriptParameter {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'enum' | 'date_range' | 'string[]' | 'number[]'
+  options?: string[]
+  defaultValue?: unknown
+  required?: boolean
+  scope: 'dashboard' | 'page' | 'component'
+}
+
+/** Python Runner 执行限制（不包含依赖安装配置）。 */
+export interface DashboardExecutionPolicy {
+  timeoutSeconds?: number
+  maxRows?: number
+  maxOutputBytes?: number
+}
+
+/** 脚本结果到现有仪表盘组件的显式绑定。 */
+export interface DashboardScriptBinding {
+  componentId: string
+  renderType: 'table' | 'echarts'
+}
+
 /** 仪表盘 Schema */
 export interface InsightDashboardSchema {
   version: string
   /** 页面列表（多级菜单，每个页面拥有独立组件列表） */
   pages: DashboardPage[]
+  /** 可选的数据集脚本输入；旧 Schema 缺失时按空列表处理 */
+  datasetInputs?: DashboardDatasetInput[]
+  /** Python 处理脚本草稿；平台不自动生成或执行 AI 脚本 */
+  script?: string
+  /** 脚本参数定义，不包含字段绑定 */
+  parameters?: DashboardScriptParameter[]
+  /** Runner 资源与超时策略 */
+  executionPolicy?: DashboardExecutionPolicy
+  /** 用户确认后的脚本结果组件绑定 */
+  scriptBindings?: DashboardScriptBinding[]
 }
 
 /** 洞察仪表盘实体 */

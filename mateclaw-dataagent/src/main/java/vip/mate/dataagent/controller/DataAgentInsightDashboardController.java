@@ -14,8 +14,11 @@ import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.service.InsightReportService;
+import vip.mate.dataagent.service.DashboardExecutionService;
+import vip.mate.dataagent.dto.DashboardExecutionRequest;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 洞察仪表盘控制器
@@ -31,6 +34,7 @@ public class DataAgentInsightDashboardController {
     private final InsightDashboardService dashboardService;
     private final InsightDataBindService dataBindService;
     private final InsightReportService reportService;
+    private final DashboardExecutionService executionService;
 
     /**
      * 仪表盘列表
@@ -125,6 +129,43 @@ public class DataAgentInsightDashboardController {
     public R<InsightComponentDataDTO> previewComponent(
             @RequestBody InsightDashboardSchemaDTO.Component component) {
         return R.ok(dataBindService.bindComponent(component));
+    }
+
+    @PostMapping("/{id}/executions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "创建仪表盘 Python 执行", description = "按已保存 Schema 的数据集输入和脚本创建受控 Runner 任务")
+    public R<Map<String, Object>> execute(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id,
+            @RequestBody(required = false) DashboardExecutionRequest request) {
+        return R.ok(executionService.submit(id, request));
+    }
+
+    @GetMapping("/executions/{executionId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询仪表盘执行状态")
+    public R<Map<String, Object>> executionStatus(@PathVariable String executionId) {
+        return R.ok(executionService.status(executionId));
+    }
+
+    @GetMapping("/executions/{executionId}/logs")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询仪表盘执行日志")
+    public R<Map<String, Object>> executionLogs(@PathVariable String executionId) {
+        return R.ok(executionService.logs(executionId));
+    }
+
+    @GetMapping("/executions/{executionId}/result")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "读取仪表盘执行结果", description = "受工作区权限和 ObjectRef 任务上下文保护，返回页面预览行")
+    public R<Map<String, Object>> executionResult(@PathVariable String executionId) {
+        return R.ok(executionService.result(executionId));
+    }
+
+    @PostMapping("/executions/{executionId}/cancel")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "取消仪表盘执行")
+    public R<Map<String, Object>> cancelExecution(@PathVariable String executionId) {
+        return R.ok(executionService.cancel(executionId));
     }
 
     /**

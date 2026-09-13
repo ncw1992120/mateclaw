@@ -12,14 +12,20 @@ import org.springframework.transaction.annotation.Transactional;
 import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.DatasetColumn;
+import vip.mate.dataagent.dataset.DatasetInputDescriptor;
+import vip.mate.dataagent.dataset.DatasetSourceType;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.*;
 import vip.mate.dataagent.repository.*;
 import vip.mate.dataagent.service.DatasetManageService;
+import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.util.JdbcUtils;
 
 import java.sql.*;
+import java.text.Normalizer;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -37,6 +43,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private final DatasourceColumnMapper datasourceColumnMapper;
     private final ObjectMapper objectMapper;
     private final WorkspaceGuard workspaceGuard;
+    private final DatasourceManageService datasourceManageService;
 
     private static final Set<String> NUMERIC_TYPES = Set.of(
             "int", "bigint", "smallint", "tinyint", "decimal", "float", "double",
@@ -44,6 +51,61 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     );
 
     private static final int DEFAULT_COLUMN_WIDTH = 150;
+
+    @Override
+    public DatasetInputDescriptor getInputDescriptor(DatasetAccessContext context, Long datasetId, String inputName) {
+        if (context == null || datasetId == null || !context.canRead(datasetId)) {
+            throw new BusinessException(403, "无权访问该数据集");
+        }
+        if (!Objects.equals(context.workspaceId(), workspaceGuard.currentWorkspaceId())
+                || !Objects.equals(context.userId(), workspaceGuard.currentUserId())) {
+            throw new BusinessException(403, "工作区上下文不匹配");
+        }
+        DatasetEntity entity = datasetMapper.selectById(datasetId);
+        if (entity == null) {
+            throw new BusinessException(404, "数据集不存在: " + datasetId);
+        }
+        String resolvedInputName = inputName == null || inputName.isBlank()
+                ? entity.getName() : inputName;
+        List<DatasetColumn> columns = listFields(datasetId).stream()
+                .map(field -> new DatasetColumn(field.getColumnName(),
+                        field.getColumnAlias(), field.getDataType(),
+                        !Boolean.FALSE.equals(field.getNullable()),
+                        field.getFieldCategory()))
+                .toList();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (entity.getDatasourceId() != null) metadata.put("datasourceId", entity.getDatasourceId());
+        if (entity.getTableNames() != null) metadata.put("tableNames", entity.getTableNames());
+        return new DatasetInputDescriptor(
+                datasetId,
+                resolvedInputName,
+                resolveSourceType(entity.getSourceType()),
+                columns,
+                entity.getRowCount(),
+                metadata,
+                null);
+    }
+
+    private DatasetSourceType resolveSourceType(String sourceType) {
+        if (sourceType == null || sourceType.isBlank()) {
+            return DatasetSourceType.JDBC_TABLE;
+        }
+        try {
+            return DatasetSourceType.valueOf(sourceType.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            String normalized = sourceType.toLowerCase(Locale.ROOT);
+            if (normalized.contains("aloudata") || normalized.contains("analysis_view")) {
+                return DatasetSourceType.ALOUDATA_ANALYSIS_VIEW;
+            }
+            if (normalized.equals("api") || normalized.equals("http") || normalized.equals("http_api")) {
+                return DatasetSourceType.HTTP_API;
+            }
+            if (Set.of("csv", "excel", "parquet", "file").contains(normalized)) {
+                return DatasetSourceType.FILE;
+            }
+            return DatasetSourceType.JDBC_TABLE;
+        }
+    }
 
     @Override
     public List<DatasetVO> listDatasets() {
@@ -66,22 +128,38 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DatasetVO createDataset(DatasetCreateRequest request) {
-        Long datasourceIdLong = Long.parseLong(request.getDatasourceId());
-        DatasourceEntity dsEntity = datasourceMapper.selectById(datasourceIdLong);
-        if (dsEntity == null) {
+        DatasetSourceDefinition typedDefinition = request.getSourceDefinition();
+        String normalizedName = normalizeDatasetName(request.getName());
+        ensureUniqueDatasetName(normalizedName, workspaceGuard.currentWorkspaceId(), null);
+        // Keep the nullable branch boxed: FILE datasets intentionally have no datasource id.
+        Long datasourceIdLong = typedDefinition == null
+                ? Long.valueOf(request.getDatasourceId())
+                : typedDatasourceId(typedDefinition);
+        DatasourceEntity dsEntity = datasourceIdLong == null ? null : datasourceMapper.selectById(datasourceIdLong);
+        if (typedDefinition == null && dsEntity == null) {
             throw new RuntimeException("数据源不存在");
         }
+        if (typedDefinition != null && datasourceIdLong != null && dsEntity == null) {
+            throw new RuntimeException("数据源不存在");
+        }
+        if (datasourceIdLong != null) {
+            datasourceManageService.checkDatasourceReadable(datasourceIdLong);
+        }
         DatasetEntity entity = new DatasetEntity();
-        entity.setName(request.getName());
+        entity.setName(normalizedName);
         entity.setDescription(request.getDescription());
         entity.setDatasourceId(datasourceIdLong);
-        entity.setDatasourceName(dsEntity.getName());
+        entity.setSourceType(typedDefinition == null ? DatasetSourceType.JDBC_TABLE.name() : typedDefinition.sourceType());
+        entity.setSourceConfig(serializeSourceDefinition(typedDefinition));
+        entity.setSchemaVersion(1);
+        entity.setDatasourceName(dsEntity == null ? null : dsEntity.getName());
         entity.setStatus(DataAgentConstants.DATASET_STATUS_DRAFT);
         entity.setDeleted(0);
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setOwnerId(workspaceGuard.currentUserId());
-        if (request.getTableIds() != null && !request.getTableIds().isEmpty()) {
-            List<Long> tableIdLongs = request.getTableIds().stream()
+        List<String> requestedTableIds = typedTableIds(typedDefinition, request.getTableIds());
+        if (requestedTableIds != null && !requestedTableIds.isEmpty()) {
+            List<Long> tableIdLongs = requestedTableIds.stream()
                     .map(Long::parseLong)
                     .toList();
             entity.setTableIds(tableIdLongs.stream().map(String::valueOf).collect(Collectors.joining(",")));
@@ -100,8 +178,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         entity.setColumnCount(0);
         entity.setRowCount(0L);
         datasetMapper.insert(entity);
-        if (request.getTableIds() != null && !request.getTableIds().isEmpty()) {
-            List<Long> tableIdLongs = request.getTableIds().stream()
+        if (requestedTableIds != null && !requestedTableIds.isEmpty()) {
+            List<Long> tableIdLongs = requestedTableIds.stream()
                     .map(Long::parseLong)
                     .toList();
             for (Long tableId : tableIdLongs) {
@@ -114,15 +192,113 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         return toVO(entity);
     }
 
+    private Long typedDatasourceId(DatasetSourceDefinition definition) {
+        return switch (definition) {
+            case DatasetSourceDefinition.JdbcTableDefinition value -> value.datasourceId();
+            case DatasetSourceDefinition.JdbcSqlDefinition value -> value.datasourceId();
+            case DatasetSourceDefinition.AloudataViewDefinition value -> value.datasourceId();
+            case DatasetSourceDefinition.HttpApiDefinition value -> value.datasourceId();
+            case DatasetSourceDefinition.FileDefinition ignored -> null;
+        };
+    }
+
+    private List<String> typedTableIds(DatasetSourceDefinition definition, List<String> legacyTableIds) {
+        if (definition instanceof DatasetSourceDefinition.JdbcTableDefinition value) return value.tableIds();
+        return definition == null ? legacyTableIds : List.of();
+    }
+
+    private String serializeSourceDefinition(DatasetSourceDefinition definition) {
+        if (definition == null) return null;
+        try {
+            if (definition instanceof DatasetSourceDefinition.FileDefinition file) {
+                // File uploads are durable workspace objects, while ObjectRef is the existing
+                // execution-time transport contract. Encode a managed durable reference here
+                // so old readers remain compatible without exposing a local path or URL.
+                Map<String, Object> ref = new LinkedHashMap<>();
+                ref.put("objectId", file.objectId());
+                ref.put("workspaceId", workspaceGuard.currentWorkspaceId());
+                ref.put("taskId", "dataset-" + workspaceGuard.currentWorkspaceId());
+                ref.put("format", file.format());
+                ref.put("digest", "sha256:managed-file");
+                ref.put("expiresAt", Long.MAX_VALUE);
+                Map<String, Object> stored = new LinkedHashMap<>();
+                stored.put("objectRef", ref);
+                stored.put("fileName", "dataset." + file.format().toLowerCase(Locale.ROOT));
+                stored.put("format", file.format());
+                stored.put("schemaVersion", file.schemaVersion());
+                return objectMapper.writeValueAsString(stored);
+            }
+            if (definition instanceof DatasetSourceDefinition.HttpApiDefinition http) {
+                DatasourceEntity datasource = datasourceMapper.selectById(http.datasourceId());
+                if (datasource == null || datasource.getConnectionParams() == null
+                        || datasource.getConnectionParams().isBlank()) {
+                    throw new IllegalArgumentException("HTTP API 登记定义不存在: " + http.apiDefinitionId());
+                }
+                Map<String, Object> connectionParams = objectMapper.readValue(
+                        datasource.getConnectionParams(), new TypeReference<LinkedHashMap<String, Object>>() {});
+                Map<String, Object> definitions = objectMapper.convertValue(
+                        connectionParams.getOrDefault("apiDefinitions", Map.of()),
+                        new TypeReference<LinkedHashMap<String, Object>>() {});
+                Object registered = definitions.get(http.apiDefinitionId());
+                if (!(registered instanceof Map<?, ?>)) {
+                    throw new IllegalArgumentException("HTTP API 登记定义不存在: " + http.apiDefinitionId());
+                }
+                Map<String, Object> resolved = objectMapper.convertValue(
+                        registered, new TypeReference<LinkedHashMap<String, Object>>() {});
+                resolved.put("sourceType", http.sourceType());
+                resolved.put("apiDefinitionId", http.apiDefinitionId());
+                return objectMapper.writeValueAsString(resolved);
+            }
+            return objectMapper.writeValueAsString(definition);
+        }
+        catch (Exception e) { throw new RuntimeException("数据集来源定义无效", e); }
+    }
+
+    private String normalizeDatasetName(String value) {
+        if (value == null || value.isBlank()) throw new IllegalArgumentException("数据集名称不能为空");
+        String normalized = Normalizer.normalize(value.trim(), Normalizer.Form.NFKC).trim();
+        if (normalized.isBlank()) throw new IllegalArgumentException("数据集名称不能为空");
+        return normalized;
+    }
+
+    private void ensureUniqueDatasetName(String name, Long workspaceId, Long excludeId) {
+        LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<DatasetEntity>()
+                .eq(DatasetEntity::getWorkspaceId, workspaceId)
+                .eq(DatasetEntity::getName, name);
+        if (excludeId != null) wrapper.ne(DatasetEntity::getId, excludeId);
+        if (datasetMapper.selectCount(wrapper) > 0) {
+            throw new IllegalArgumentException("同一工作区内数据集名称已存在: " + name);
+        }
+    }
+
     @Override
     public DatasetVO updateDataset(Long id, DatasetUpdateRequest request) {
         requireDatasetManageOwnership(id);
         DatasetEntity entity = datasetMapper.selectById(id);
         if (request.getName() != null) {
-            entity.setName(request.getName());
+            String normalizedName = normalizeDatasetName(request.getName());
+            ensureUniqueDatasetName(normalizedName, entity.getWorkspaceId(), id);
+            entity.setName(normalizedName);
         }
         if (request.getDescription() != null) {
             entity.setDescription(request.getDescription());
+        }
+        if (request.getSourceDefinition() != null) {
+            DatasetSourceDefinition definition = request.getSourceDefinition();
+            Long datasourceId = typedDatasourceId(definition);
+            if (datasourceId != null && datasourceMapper.selectById(datasourceId) == null) {
+                throw new RuntimeException("数据源不存在");
+            }
+            if (datasourceId != null) {
+                datasourceManageService.checkDatasourceReadable(datasourceId);
+            }
+            entity.setDatasourceId(datasourceId);
+            entity.setDatasourceName(datasourceId == null ? null : datasourceMapper.selectById(datasourceId).getName());
+            entity.setSourceType(definition.sourceType());
+            entity.setSourceConfig(serializeSourceDefinition(definition));
+            List<String> tableIds = typedTableIds(definition, null);
+            entity.setTableIds(tableIds == null ? "" : String.join(",", tableIds));
+            entity.setTableNames("");
         }
         datasetMapper.updateById(entity);
         return toVO(entity);

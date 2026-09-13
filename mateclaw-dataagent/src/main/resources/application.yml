@@ -6,6 +6,26 @@ server:
 spring:
   application:
     name: mateclaw-dataagent
+
+mateclaw:
+  dataset:
+    http:
+      # 仅供隔离 E2E 测试服务使用；生产默认拒绝 HTTP/私网地址。
+      allow-insecure-test-endpoint: ${MATECLAW_DATASET_HTTP_ALLOW_INSECURE_TEST_ENDPOINT:false}
+      # 仅允许固定 e2e-http:8443 HTTPS fixture；不放宽明文 HTTP。
+      allow-tls-test-endpoint: ${MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT:false}
+  runner:
+    url: ${MATECLAW_RUNNER_URL:http://python-runner:8080}
+    token-secret: ${MATECLAW_RUNNER_TOKEN_SECRET:change-me-in-production}
+    # Runner must call the DataAgent internal controller, including the servlet context path.
+    # Override this for a gateway or local process deployment.
+    dataset-read-base-url: ${MATECLAW_DATASET_READ_BASE_URL:http://mateclaw-dataagent:18089/dataagent/api}
+  object-ref:
+    endpoint: ${MATECLAW_OBJECT_REF_ENDPOINT:http://minio:9000}
+    access-key: ${MATECLAW_OBJECT_REF_ACCESS_KEY:}
+    secret-key: ${MATECLAW_OBJECT_REF_SECRET_KEY:}
+    bucket: ${MATECLAW_OBJECT_REF_BUCKET:mateclaw-temp}
+    ttl-seconds: ${MATECLAW_OBJECT_REF_TTL_SECONDS:3600}
   # 未显式指定 SPRING_PROFILES_ACTIVE 时默认激活 mysql（与历史行为兼容）；
   # PG 部署显式设置 SPRING_PROFILES_ACTIVE=pgsql。
   profiles:
@@ -53,13 +73,6 @@ spring:
     dashscope:
       api-key: ${AI_DASHSCOPE_API_KEY:configure-in-admin-ui}
 
-# MyBatis Plus
-mybatis-plus:
-  mapper-locations: classpath*:mapper/**/*.xml
-  # 不使用全局逻辑删除：逻辑删除改为在需要软删语义的实体上显式声明 @TableLogic，
-  # 避免宿主应用配置污染 server 层实体的删除行为（如绑定表软删残留撞唯一索引）
-
-mateclaw:
   jwt:
     secret: ${JWT_SECRET:MateClaw-JWT-Secret-Key-2024-Please-Change-In-Production}
     expiration: 86400000
@@ -130,6 +143,12 @@ mateclaw:
     max-retries: ${PYTHON_MAX_RETRIES:3}
     max-std-out-length: ${PYTHON_MAX_STDOUT:50000}
     max-std-err-length: ${PYTHON_MAX_STDERR:10000}
+
+# MyBatis Plus
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  # 不使用全局逻辑删除：逻辑删除改为在需要软删语义的实体上显式声明 @TableLogic，
+  # 避免宿主应用配置污染 server 层实体的删除行为（如绑定表软删残留撞唯一索引）
 
 springdoc:
   api-docs:

@@ -13,4 +13,7 @@ public class DatasetUpdateRequest {
 
     /** 描述 */
     private String description;
+
+    /** 可选的类型化来源定义；为空时只更新基本信息。 */
+    private DatasetSourceDefinition sourceDefinition;
 }

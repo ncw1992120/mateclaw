@@ -2,6 +2,8 @@ package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1164,12 +1166,47 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         } else {
             // edit 权限：密码不再回显给前端，编辑时留空表示不修改
             vo.setPassword(null);
+            vo.setConnectionParams(sanitizeConnectionParams(entity.getConnectionParams()));
         }
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, entity.getId());
         vo.setTableCount(datasourceTableMapper.selectCount(wrapper).intValue());
         vo.setPermission(permission);
         return vo;
+    }
+
+    /** 连接参数可能是历史自由 JSON；对管理界面也只返回非敏感字段。 */
+    private String sanitizeConnectionParams(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        try {
+            JsonNode root = objectMapper.readTree(raw);
+            redactJson(root);
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            log.warn("数据源连接参数不是有效 JSON，响应中隐藏原始内容");
+            return null;
+        }
+    }
+
+    private void redactJson(JsonNode node) {
+        if (node instanceof ObjectNode object) {
+            List<String> remove = new ArrayList<>();
+            object.fieldNames().forEachRemaining(name -> {
+                if (isSensitiveKey(name)) remove.add(name);
+                else redactJson(object.get(name));
+            });
+            remove.forEach(object::remove);
+        } else if (node != null && node.isArray()) {
+            node.forEach(this::redactJson);
+        }
+    }
+
+    private boolean isSensitiveKey(String name) {
+        String normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        return normalized.contains("password") || normalized.contains("secret")
+                || normalized.contains("token") || normalized.contains("auth")
+                || normalized.contains("authorization") || normalized.contains("cookie")
+                || normalized.equals("uid") || normalized.contains("accesskey");
     }
 
     /**

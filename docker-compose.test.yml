@@ -1,0 +1,179 @@
+services:
+  e2e-mysql:
+    image: mysql:8.0
+    container_name: mateclaw-e2e-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: e2e-root-password
+      MYSQL_DATABASE: mateclaw
+      MYSQL_USER: mateclaw
+      MYSQL_PASSWORD: e2e-user-password
+      TZ: Asia/Shanghai
+    ports:
+      - "33306:3306"
+    volumes:
+      - ./mateclaw-dataagent/src/test/resources/e2e/mysql/init.sql:/docker-entrypoint-initdb.d/001-e2e.sql:ro
+      - e2e_mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      # mysqladmin ping becomes green while entrypoint init scripts are still
+      # running; require the E2E fixture table as the readiness sentinel.
+      test: ["CMD-SHELL", "mysql -h localhost -u root -pe2e-root-password -D mateclaw -e 'SELECT COUNT(*) FROM orders' >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: mateclaw-e2e-minio
+    environment:
+      MINIO_ROOT_USER: e2e-minio-user
+      MINIO_ROOT_PASSWORD: e2e-minio-password
+    command: server /data --console-address ":9001"
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - e2e_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  e2e-http:
+    image: wiremock/wiremock:3.9.1
+    container_name: mateclaw-e2e-http
+    command:
+      - sh
+      - -ec
+      - |
+        rm -f /run/e2e-tls/*
+        keytool -genkeypair -alias e2e-http -keyalg RSA -keysize 2048 -validity 2 \
+          -dname "CN=e2e-http" -ext "SAN=dns:e2e-http" \
+          -storetype PKCS12 -keystore /run/e2e-tls/wiremock.p12 \
+          -storepass e2e-tls-password -keypass e2e-tls-password
+        keytool -exportcert -rfc -alias e2e-http -keystore /run/e2e-tls/wiremock.p12 \
+          -storepass e2e-tls-password -file /run/e2e-tls/e2e-http.crt
+        keytool -importcert -noprompt -alias e2e-http -keystore /run/e2e-tls/truststore.p12 \
+          -storetype PKCS12 -storepass e2e-tls-password -file /run/e2e-tls/e2e-http.crt
+        exec /docker-entrypoint.sh --global-response-templating --https-port 8443 \
+          --https-keystore /run/e2e-tls/wiremock.p12 --keystore-type PKCS12 \
+          --keystore-password e2e-tls-password --key-manager-password e2e-tls-password
+    volumes:
+      - ./mateclaw-dataagent/src/test/resources/e2e/wiremock:/home/wiremock:ro
+      - e2e_tls:/run/e2e-tls
+    ports:
+      - "18443:8443"
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-kfsS", "https://localhost:8443/__admin/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  python-runner:
+    build:
+      context: ./mateclaw-python-runner
+      dockerfile: Dockerfile
+    container_name: mateclaw-e2e-python-runner
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    ports:
+      - "18090:8080"
+    networks:
+      - runner_internal
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mateclaw-dataagent:
+    build:
+      context: .
+      dockerfile: mateclaw-dataagent/Dockerfile
+    container_name: mateclaw-e2e-dataagent
+    depends_on:
+      e2e-mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      python-runner:
+        condition: service_healthy
+      e2e-http:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      SPRING_AI_DASHSCOPE_API_KEY: e2e-test-key
+      # The E2E database is empty; exercise the same V1..current migration
+      # chain used to create a fresh installation instead of assuming a V199
+      # preloaded schema.
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+      SPRING_FLYWAY_PLACEHOLDER_REPLACEMENT: "false"
+      DB_HOST: e2e-mysql
+      DB_PORT: 3306
+      DB_NAME: mateclaw
+      DB_USERNAME: mateclaw
+      DB_PASSWORD: e2e-user-password
+      JWT_SECRET: e2e-jwt-secret-change-me
+      MATECLAW_DATAAGENT_PWD_AES_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      MATECLAW_OBJECT_REF_ENDPOINT: http://minio:9000
+      MATECLAW_OBJECT_REF_ACCESS_KEY: e2e-minio-user
+      MATECLAW_OBJECT_REF_SECRET_KEY: e2e-minio-password
+      MATECLAW_OBJECT_REF_BUCKET: mateclaw-temp
+      MATECLAW_RUNNER_URL: http://python-runner:8080
+      MATECLAW_DATASET_READ_BASE_URL: http://mateclaw-dataagent:18089/dataagent/api
+      MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT: "true"
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/run/e2e-tls/truststore.p12
+        -Djavax.net.ssl.trustStorePassword=e2e-tls-password
+        -Djavax.net.ssl.trustStoreType=PKCS12
+      MATECLAW_PILOT_ENABLED: "false"
+      MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED: "false"
+    ports:
+      - "18189:18089"
+    volumes:
+      - e2e_tls:/run/e2e-tls:ro
+    networks:
+      - default
+      - runner_internal
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:18089/dataagent/api/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+
+  mateclaw-dataagent-ui:
+    image: node:22-bookworm
+    container_name: mateclaw-e2e-ui
+    working_dir: /workspace/mateclaw-dataagent-ui
+    depends_on:
+      mateclaw-dataagent:
+        condition: service_healthy
+    environment:
+      VITE_DEV_PORT: 5174
+      VITE_DATAAGENT_PROXY_TARGET: http://mateclaw-dataagent:18089
+    volumes:
+      - .:/workspace
+      # Keep Linux container dependencies out of the host macOS node_modules
+      # tree. The UI service runs npm ci on startup and must not mutate or
+      # reuse host-native optional packages.
+      - e2e_ui_node_modules:/workspace/mateclaw-dataagent-ui/node_modules
+    command: ["sh", "-c", "npm ci --ignore-scripts && npm run dev -- --host 0.0.0.0"]
+    ports:
+      - "15174:5174"
+    networks:
+      - default
+
+volumes:
+  e2e_mysql_data:
+  e2e_minio_data:
+  e2e_ui_node_modules:
+  e2e_tls:
+
+networks:
+  runner_internal:
+    internal: true

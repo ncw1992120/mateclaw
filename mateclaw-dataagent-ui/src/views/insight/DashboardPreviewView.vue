@@ -150,11 +150,14 @@ import type {
   DashboardPage,
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
-import { preview } from '@/api/insight-dashboard'
+import * as insightDashboardApi from '@/api/insight-dashboard'
 import { generateReport, getReport, publishReport } from '@/api/insight-report'
 import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
+import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { rowsToComponentData } from '@/utils/dataset-result'
+import { buildScriptParameters } from '@/utils/script-parameters'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -273,20 +276,7 @@ function generateId(prefix: string): string {
 
 /** 迁移旧 Schema（单 components 数组 → pages[0]） */
 function migrateSchema(parsed: any): InsightDashboardSchema {
-  // 新格式：已有 pages 数组
-  if (parsed.pages && Array.isArray(parsed.pages)) {
-    return parsed as InsightDashboardSchema
-  }
-  // 旧格式：components + perspectives，迁移为单页面
-  const oldComponents = parsed.components ?? []
-  return {
-    version: parsed.version ?? '1.0',
-    pages: [{
-      id: generateId('page'),
-      name: t('insight.firstPageName'),
-      components: oldComponents,
-    }],
-  }
+  return migrateInsightDashboardSchema(parsed, t('insight.firstPageName'))
 }
 
 /** 筛选上下文管理（基于当前页面组件） */
@@ -322,6 +312,11 @@ async function loadDashboard(): Promise<void> {
       const migrated = migrateSchema(parsed)
       schema.version = migrated.version
       schema.pages = migrated.pages
+      schema.datasetInputs = migrated.datasetInputs ?? []
+      schema.script = migrated.script
+      schema.parameters = migrated.parameters ?? []
+      schema.executionPolicy = migrated.executionPolicy ?? {}
+      schema.scriptBindings = migrated.scriptBindings ?? []
     } catch {
       schema.pages = [{
         id: generateId('page'),
@@ -334,6 +329,7 @@ async function loadDashboard(): Promise<void> {
       activePageId.value = schema.pages[0].id
     }
     await reloadComponentData(filterContext.value)
+    await reloadScriptBindings(filterContext.value)
     // 加载已生成的报告
     await loadReport()
   }
@@ -355,7 +351,7 @@ async function loadReport(): Promise<void> {
 async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
   dataLoading.value = true
   try {
-    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
     const dataMap: Record<string, InsightComponentData> = {}
     for (const item of dataList ?? []) {
       dataMap[item.componentId] = item
@@ -365,6 +361,49 @@ async function reloadComponentData(context: DashboardFilterContext): Promise<voi
     ElMessage.warning(t('insight.previewDataFailed'))
   } finally {
     dataLoading.value = false
+  }
+}
+
+/** 执行已保存脚本，并将用户确认过的结果绑定覆盖到对应组件。 */
+async function reloadScriptBindings(context: DashboardFilterContext = filterContext.value): Promise<void> {
+  if (!schema.script?.trim() || !schema.scriptBindings?.length) return
+  try {
+    const created = await insightDashboardApi.execute(
+      props.dashboardId,
+      buildScriptParameters(schema.parameters ?? [], context),
+    )
+    const executionId = (created as unknown as { executionId?: string }).executionId
+    if (!executionId) throw new Error('未获取到脚本执行 ID')
+    let rows: Record<string, unknown>[] = []
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
+        status?: string
+        result?: string
+        error?: string
+      }
+      if (status.status === 'SUCCEEDED') {
+        const parsed = status.result ? JSON.parse(status.result) : []
+        rows = Array.isArray(parsed) ? parsed.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object') : []
+        break
+      }
+      if (status.status === 'RESULT_REF') {
+        const result = await insightDashboardApi.getExecutionResult(executionId)
+        const value = (result as unknown as { rows?: unknown }).rows
+        rows = Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object') : []
+        break
+      }
+      if (status.status && status.status !== 'RUNNING') {
+        throw new Error(status.error || `脚本执行未成功：${status.status}`)
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    for (const binding of schema.scriptBindings) {
+      const component = schema.pages.flatMap((page) => page.components).find((item) => item.id === binding.componentId)
+      if (!component) continue
+      componentDataMap.value[binding.componentId] = rowsToComponentData(binding.componentId, rows, binding.renderType)
+    }
+  } catch (error: any) {
+    ElMessage.warning(error?.message || '脚本结果加载失败')
   }
 }
 
@@ -379,7 +418,7 @@ function scheduleReloadWithFilters(context: DashboardFilterContext): void {
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
-    reloadScopedComponentData(context)
+    void reloadScopedComponentData(context).then(() => reloadScriptBindings(context))
   }, 300)
 }
 
@@ -420,7 +459,7 @@ async function reloadSingleComponentData(componentId: string, componentTimeRange
     sourceFilterId: `__component_${componentId}`,
   }
   try {
-    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
     const dataMap = { ...componentDataMap.value }
     for (const item of dataList ?? []) {
       if (item.componentId === componentId) {

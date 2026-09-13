@@ -1,5 +1,5 @@
 import api from './index'
-import type { Dataset, DatasetField, DatasetData, DatasetColumnDef } from '@/types'
+import type { Dataset, DatasetField, DatasetData, DatasetColumnDef, DatasetInputDescriptor, DatasetReadRequest, DatasetBatch } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/datasets'
@@ -15,7 +15,13 @@ export function get(id: string) {
 }
 
 /** 创建数据集 */
-export function create(data: { name: string; description?: string; datasourceId: string; tableIds: string[] }) {
+export function create(data: {
+  name: string
+  description?: string
+  datasourceId: string
+  tableIds: string[]
+  sourceDefinition?: Record<string, unknown>
+}) {
   return api.post<Dataset>(BASE_URL, data)
 }
 
@@ -37,6 +43,16 @@ export function listFields(datasetId: string) {
 /** 获取数据集数据（分页） */
 export function getDatasetData(datasetId: string, page: number = 1, size: number = 50) {
   return api.get<DatasetData>(`${BASE_URL}/${datasetId}/data`, { params: { page, size } })
+}
+
+/** 获取脚本/统一预览使用的数据集输入描述（不返回连接凭据） */
+export function getInputDescriptor(datasetId: string, inputName: string = 'dataset') {
+  return api.get<DatasetInputDescriptor>(`${BASE_URL}/${datasetId}/descriptor`, { params: { inputName } })
+}
+
+/** 使用统一 DatasetSourceAdapter 预览数据，并返回下推审计结果 */
+export function previewInput(request: DatasetReadRequest) {
+  return api.post<DatasetBatch>(`${BASE_URL}/preview`, request)
 }
 
 /** 更新数据集行数据 */

@@ -1,6 +1,8 @@
 package vip.mate.dataagent.service;
 
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.DatasetInputDescriptor;
 
 import java.util.List;
 import java.util.Map;
@@ -9,6 +11,11 @@ import java.util.Map;
  * 数据集管理服务接口
  */
 public interface DatasetManageService {
+
+    /**
+     * 获取 Python 输入所需的字段和来源元数据；绝不返回连接凭据。
+     */
+    DatasetInputDescriptor getInputDescriptor(DatasetAccessContext context, Long datasetId, String inputName);
 
     /**
      * 获取所有数据集

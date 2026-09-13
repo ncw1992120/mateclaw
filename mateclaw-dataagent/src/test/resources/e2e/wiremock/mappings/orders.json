@@ -1,0 +1,23 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/orders",
+    "queryParameters": {
+      "status": {
+        "equalTo": "PAID"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "data": [
+        {"id": 101, "region": "east", "status": "PAID", "amount": 18.5},
+        {"id": 102, "region": "west", "status": "PAID", "amount": 22.0}
+      ]
+    }
+  }
+}

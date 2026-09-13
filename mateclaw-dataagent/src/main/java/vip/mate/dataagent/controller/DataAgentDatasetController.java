@@ -10,6 +10,9 @@ import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.DatasetManageService;
+import vip.mate.dataagent.service.DatasetExecutionService;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
+import vip.mate.dataagent.dataset.*;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +29,24 @@ import java.util.Map;
 public class DataAgentDatasetController {
 
     private final DatasetManageService datasetService;
+    private final DatasetExecutionService executionService;
+    private final WorkspaceGuard workspaceGuard;
+
+    @GetMapping("/{id}/descriptor")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "获取数据集输入描述", description = "返回 Python/预览使用的字段和来源类型，不返回连接凭据")
+    public R<DatasetInputDescriptor> descriptor(@PathVariable Long id, @RequestParam(defaultValue = "dataset") String inputName) {
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + id, java.util.Set.of(id));
+        return R.ok(executionService.descriptor(context, id, inputName));
+    }
+
+    @PostMapping("/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "预览统一数据集", description = "通过统一 DatasetSourceAdapter 读取并返回受控预览")
+    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request) {
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
+        return R.ok(executionService.preview(context, request));
+    }
 
     /**
      * 数据集列表

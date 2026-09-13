@@ -44,6 +44,31 @@ export function previewComponent(component: InsightComponent) {
   return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
 }
 
+/** 创建已保存脚本的数据处理执行任务 */
+export function execute(id: string, parameters: Record<string, unknown> = {}) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/executions`, { parameters })
+}
+
+/** 查询脚本执行状态 */
+export function getExecutionStatus(executionId: string) {
+  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`)
+}
+
+/** 查询执行日志（标准输出与受限错误信息） */
+export function getExecutionLogs(executionId: string) {
+  return api.get<{ executionId: string; status: string; output?: string; error?: string }>(`${BASE_URL}/executions/${executionId}/logs`)
+}
+
+/** 读取执行结果预览（大结果由 DataAgent 受控读取 ObjectRef 后返回受限行集） */
+export function getExecutionResult(executionId: string) {
+  return api.get<{ executionId: string; status: string; rows: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`)
+}
+
+/** 取消脚本执行（幂等由 Runner 保证） */
+export function cancelExecution(executionId: string) {
+  return api.post<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}/cancel`)
+}
+
 /** SSE流式事件回调 */
 export interface StreamAiChatCallbacks {
   /** 收到reasoning事件：AI思考过程增量 */
