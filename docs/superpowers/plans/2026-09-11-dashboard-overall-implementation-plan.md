@@ -10,7 +10,7 @@
 
 **Spec:** `docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-query-parameter-pushdown-design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`
 
-**当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；总体 Gate 仍为部分通过，仅真实 Aloudata 结果查询授权未满足。候选实现及计划更新已推送到 `origin/feature/dev_fu`，当前工作树与远端一致。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
+**当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；总体 Gate 仍为部分通过，仅真实 Aloudata 结果查询授权未满足。候选实现及计划更新已在本地 `feature/dev_fu` 提交；当前分支相对远端领先 1 个提交，远端同步待网络/认证恢复后复核。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
 
 **外部条件清单：** [2026-09-13 外部前置条件与测试支撑计划](2026-09-13-dashboard-external-prerequisites.md)；执行 00–09 前必须按该清单收集并验证外部系统、账号、数据和证据条件。
 
@@ -41,7 +41,7 @@ make dashboard-prerequisites-simulation
 
 **最新复验（2026-09-13）：** 清理本地模拟栈后，独立 E2E Compose 使用同一轮 seed 和全部 Dashboard ID 重跑全量 Playwright，取得 `9 passed (36.2s)`；覆盖新增 ECharts 绑定预览。结束后已恢复本地模拟栈，fixture、MinIO 和 Runner 健康检查再次通过。
 
-**模块回归复验（2026-09-13）：** 在候选提交 `fc799a85414520a4118b36d736f01984b773255e` 上执行 DataAgent `152/152`、Python Runner `20/20`、UI `24/24` 和 UI production build，全部成功；结果已写入总验收记录。
+**模块回归复验（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 上的基线为 DataAgent `152/152`、Python Runner `20/20`、UI `24/24`；当前工作树追加多别名 Join 回归后，Runner 为 `21/21`、UI 为 `25/25`，并完成 UI production build；结果已写入总验收记录。
 
 同轮补充结果绑定聚焦复验：`dataset-result.spec.ts`、`dashboard-schema.spec.ts` 共 `4 tests passed`，覆盖脚本结果到 Table/ECharts 的映射及旧 Schema 的 `scriptBindings` 保留。
 
@@ -80,7 +80,7 @@ make dashboard-prerequisites-simulation
 
 ## 交付与提交边界
 
-各子计划中的“提交”步骤仅表示建议的 Git 交付节点，不代表实现步骤。本轮已按用户确认范围生成候选提交 `fc799a85414520a4118b36d736f01984b773255e`，并在同一 SHA 上完成模块、E2E 和 CDP 验收；候选提交及后续计划更新已推送到 `origin/feature/dev_fu`。真实 Aloudata 授权未满足前，不得将候选 SHA 标记为正式环境全量完成。
+各子计划中的“提交”步骤仅表示建议的 Git 交付节点，不代表实现步骤。本轮已按用户确认范围生成候选提交 `fc799a85414520a4118b36d736f01984b773255e`，并在同一 SHA 上完成模块、E2E 和 CDP 验收；后续计划更新已在本地提交，远端同步状态必须以实际 `git ls-remote` 复核为准。真实 Aloudata 授权未满足前，不得将候选 SHA 标记为正式环境全量完成。
 
 ## 阻塞解除后的执行顺序
 
