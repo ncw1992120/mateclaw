@@ -163,6 +163,7 @@ mvn -pl mateclaw-plugin-api,mateclaw-server install -Dmaven.test.skip=true
 mvn -N install -DskipTests -q
 mvn -f mateclaw-sdk/pom.xml install -Dmaven.test.skip=true
 make dashboard-dataagent-test
+make dashboard-runner-test
 npm --prefix mateclaw-dataagent-ui ci
 npm --prefix mateclaw-dataagent-ui run build
 ```

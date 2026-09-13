@@ -106,7 +106,7 @@
 ## 测试执行与预期结果
 
 ```bash
-uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q
+make dashboard-runner-test
 make dashboard-dataagent-test
 docker build -t mateclaw-python-runner:test mateclaw-python-runner
 docker run --rm --entrypoint id mateclaw-python-runner:test
