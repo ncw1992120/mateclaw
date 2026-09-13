@@ -10,7 +10,7 @@
 
 **Spec:** `docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-query-parameter-pushdown-design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`
 
-**当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；总体 Gate 仍为部分通过，仅真实 Aloudata 结果查询授权未满足。候选实现及计划更新已在本地 `feature/dev_fu` 提交；当前分支相对远端领先 1 个提交，远端同步待网络/认证恢复后复核。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
+**当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；总体 Gate 仍为部分通过，仅真实 Aloudata 结果查询授权未满足。候选实现及计划更新已在本地 `feature/dev_fu` 提交；当前存在尚未同步远端的本地提交，远端同步待网络/认证恢复后复核。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
 
 **外部条件清单：** [2026-09-13 外部前置条件与测试支撑计划](2026-09-13-dashboard-external-prerequisites.md)；执行 00–09 前必须按该清单收集并验证外部系统、账号、数据和证据条件。
 
