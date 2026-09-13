@@ -16,6 +16,8 @@
 
 **真实外部 Gate 预检（2026-09-13）：** 当前 shell 未注入任何 `ALOU_DATA_*` 外部测试变量；执行 `./scripts/verify-dashboard-external-prerequisites.sh --external` 立即以退出码 `3` 报告 `ALOU_DATA_EXTERNAL_TEST=true 未设置`，未发起真实网络请求。待安全注入完整变量后再执行 ALO-X01/X02。
 
+**本轮模拟入口复验（2026-09-13）：** `make dashboard-prerequisites-simulation` 通过；入口实际检查 MySQL/PostgreSQL 各 10 行、MinIO 四个对象及 manifest 字节数/SHA-256、WireMock HTTP/HTTPS、Aloudata tree/result/metrics 模拟响应、Runner `/health` 和 Runner 外网访问阻断，并输出 `EXTERNAL-PREREQUISITES-SIMULATION-PASS`。
+
 ## Global Constraints
 
 - 外部条件只支撑 JDBC、Aloudata 已有指标视图、HTTP/API、文件和 Python 多源预处理；不为 Trino、DuckDB、JS 或平台内 AI 生成准备首期依赖。
