@@ -74,11 +74,14 @@ required_vars=(
 for variable in "${required_vars[@]}"; do
   [[ -n "${!variable:-}" ]] || { echo "BLOCKED: 缺少 ${variable}" >&2; exit 3; }
 done
-for variable in ALOU_DATA_PRODUCT_BASE_URL ALOU_DATA_SEMANTIC_BASE_URL; do
-  value="${!variable}"
-  [[ "$value" =~ ^https://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]] || {
-    echo "BLOCKED: ${variable} 必须是 HTTPS URL" >&2
-    exit 3
-  }
-done
+product_url="${ALOU_DATA_PRODUCT_BASE_URL}"
+[[ "$product_url" =~ ^https://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]] || {
+  echo "BLOCKED: ALOU_DATA_PRODUCT_BASE_URL 必须是 HTTPS URL" >&2
+  exit 3
+}
+semantic_url="${ALOU_DATA_SEMANTIC_BASE_URL}"
+[[ "$semantic_url" =~ ^https?://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]] || {
+  echo "BLOCKED: ALOU_DATA_SEMANTIC_BASE_URL 必须是 HTTP 或 HTTPS URL" >&2
+  exit 3
+}
 echo "EXTERNAL-PREREQUISITES-CONFIG-PASS (未执行真实接口查询)"

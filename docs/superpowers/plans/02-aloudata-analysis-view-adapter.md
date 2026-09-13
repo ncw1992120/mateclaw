@@ -14,7 +14,7 @@
 
 **当前状态（2026-09-13）：** 目录、详情和 Adapter 单元测试已完成；ALO-X02 仍因当前认证上下文返回 `SM_02_0038` 阻塞，待已授权指标视图后联调。
 
-**本地模拟：** 日常开发使用 `dev-support/local-simulation/` 的 WireMock 脱敏响应；正式测试前再替换产品层/语义层地址、连接级 `tenantId` 和 Secret 管理的认证值。
+**本地模拟：** 日常开发使用 `dev-support/local-simulation/` 的 WireMock 脱敏响应；正式测试前再替换产品层/语义层地址、连接级 `tenantId` 和 Secret 管理的认证值。产品层必须使用 HTTPS；语义层按部署网络可使用 HTTP 或 HTTPS，HTTP 仅限明确受控的内部可信链路。
 
 **开发验证配置：** 使用 `.env.aloudata-simulation.example` 的 `local-tenant`、`local_sales_view`、`datasourceId=9001` 和 `region=east`；通过 WireMock 的 tree/detail/query/metrics 响应验证目录、详情、结果和筛选编译，不将该结果计入真实 ALO-X02。
 

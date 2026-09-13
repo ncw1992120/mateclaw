@@ -22,6 +22,7 @@
 - Aloudata 只选择和查询已有指标视图；不要求 MateClaw 创建、修改或删除视图。
 - JDBC 数据库账号必须是最小权限只读账号；只有 JDBC 数据集可以配置 SQL。
 - HTTP/API 必须是已登记的 HTTPS 地址；脚本和 Runner 不接触 URL、Header 或凭据。
+- 产品层地址必须是 HTTPS；语义层地址按部署网络允许 HTTP 或 HTTPS。语义层使用 HTTP 仅适用于明确受控的内部可信链路；跨网络、生产或无法证明链路可信时必须使用 HTTPS，并配置证书链/代理。
 - 文件必须通过对象存储对象引用登记；不得把本地绝对路径或签名 URL 写入 Dashboard Schema。
 - 真实认证值、密码、Token、签名 URL 和带敏感字段的响应原文不得进入文档、日志、截图、测试报告或提交。
 - 没有真实外部条件时，测试必须 fail-fast 或显式 `BLOCKED`，不得使用 mock、`test.skip`、空数据或历史 PASS 替代真实验收。
@@ -49,8 +50,8 @@ P0 未全部满足前，不得声称“全量实施计划完成”。本次不�
 
 | 项目 | 要求 | 当前基线/备注 |
 | --- | --- | --- |
-| 产品层地址 | 可访问 AnyMetrics 目录/详情接口的 HTTPS URL，包含协议和端口 | 当前探测基线为 `https://demo.can.aloudata.com:443` |
-| 语义层地址 | 可访问 Semantic 结果接口的 URL，包含协议和端口 | 当前探测基线为 `http://semantic.demo.can.aloudata.com:80`；若生产要求 HTTPS，应提供证书链/代理地址 |
+| 产品层地址 | 可访问 AnyMetrics 目录/详情接口的 HTTPS URL，包含协议和端口 | 当前探测基线为 `https://demo.can.aloudata.com:443`；外部检查强制 HTTPS |
+| 语义层地址 | 可访问 Semantic 结果接口的 HTTP/HTTPS URL，包含协议和端口 | 当前探测基线为 `http://semantic.demo.can.aloudata.com:80`；HTTP 仅用于受控内部链路，生产跨网络应提供 HTTPS 证书链/代理地址 |
 | 默认租户 | 连接级 `tenantId`，是唯一查询上下文 | 不与 MateClaw 数据源名称绑定，也不要求名称含租户 |
 | 认证方式 | `UID` 等明确枚举值 | 与当前 Aloudata 部署约定一致 |
 | 认证值 | UID/Token 等敏感值 | 只注入环境变量或加密配置，不写文件和日志 |
