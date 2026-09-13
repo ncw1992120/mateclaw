@@ -124,4 +124,31 @@ describe('DatasetEdit source configuration', () => {
       },
     }))
   })
+
+  it('persists Aloudata sources by the selected read-only analysis view', async () => {
+    const wrapper = await mountEditor()
+    const selects = wrapper.findAll('select')
+    listAnalysisViewsMock.mockResolvedValueOnce([
+      { viewName: 'local_sales_view', displayName: '本地销售视图' },
+    ])
+    await selects[0].setValue('1')
+    await selects[1].setValue('ALOUDATA_ANALYSIS_VIEW')
+    await flushPromises()
+
+    const viewSelect = wrapper.findAll('select')[2]
+    await viewSelect.setValue('local_sales_view')
+    expect(wrapper.find('textarea.sql-input').exists()).toBe(false)
+
+    await wrapper.find('input.name-input').setValue('Sales view')
+    await wrapper.find('button.finish-btn').trigger('click')
+    await flushPromises()
+
+    expect(createDatasetMock).toHaveBeenCalledWith(expect.objectContaining({
+      sourceDefinition: {
+        sourceType: 'ALOUDATA_ANALYSIS_VIEW',
+        datasourceId: 1,
+        analysisViewId: 'local_sales_view',
+      },
+    }))
+  })
 })

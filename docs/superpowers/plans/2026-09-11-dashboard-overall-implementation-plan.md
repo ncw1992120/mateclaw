@@ -41,7 +41,7 @@ make dashboard-prerequisites-simulation
 
 **最新复验（2026-09-13）：** 清理本地模拟栈后，独立 E2E Compose 使用同一轮 seed 和全部 Dashboard ID 重跑全量 Playwright，取得 `9 passed (36.2s)`；覆盖新增 ECharts 绑定预览。结束后已恢复本地模拟栈，fixture、MinIO 和 Runner 健康检查再次通过。
 
-**模块回归复验（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 上的基线为 DataAgent `152/152`、Python Runner `20/20`、UI `24/24`；当前工作树追加多别名 Join 和 HTTP/API 来源配置回归后，Runner 为 `21/21`、UI 为 `26/26`，并完成 UI production build；结果已写入总验收记录。
+**模块回归复验（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 上的基线为 DataAgent `152/152`、Python Runner `20/20`、UI `24/24`；当前工作树追加多别名 Join、HTTP/API 来源配置和 Aloudata 只读视图选择回归后，Runner 为 `21/21`、UI 为 `27/27`，并完成 UI production build；结果已写入总验收记录。
 
 同轮补充结果绑定聚焦复验：`dataset-result.spec.ts`、`dashboard-schema.spec.ts` 共 `4 tests passed`，覆盖脚本结果到 Table/ECharts 的映射及旧 Schema 的 `scriptBindings` 保留。
 
@@ -123,7 +123,7 @@ make dashboard-prerequisites-simulation
 - G2：Python Runner、`datasets.read` 受控回调、短期读取令牌、任务输入目录和 Docker 非 root 基线已完成定向验证；脚本 `result` 与日志分离，小结果受限 JSON，大结果惰性转换为 Parquet 并通过 DataAgent 内部令牌接口返回 `outputRef`；输入别名已与统一契约严格一致，内部读取控制器已有任务令牌/别名安全测试，Runner status/cancel、不可用/过期令牌和旧 Local `requirement` 兼容回归已补齐；Runner 任务新增内存和单文件大小限制，并由 Unix 子进程 `rlimit` 执行，用户脚本子进程仅继承最小运行时环境和任务级 SDK 变量；Python SDK 已在请求前校验过滤字段/操作符，兼容 DataAgent `R.ok(...)` 响应包装并识别业务错误，Runner 全量测试当前 `20/20` 通过；Compose 中 Runner/MinIO 健康检查及 Runner `/health` 已通过，临时 Docker `--internal` 网络已验证脚本外部 DNS/HTTPS 访问失败；DataAgent 镜像已构建并在带测试凭据的 Compose 中启动，容器内访问 Runner `/health`、MinIO readiness 均返回 HTTP 200，Flyway 已完成到 v220；本轮 DataAgent 全量测试 `152/152` 通过（0 failures/errors/skips），执行进程注入 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk 以适配 Docker Desktop 容器网络；证据见 `docs/superpowers/evidence/runner-network-isolation-2026-09-12.md` 和 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
 - G2 追加复验（2026-09-12）：在当前工作树重新执行 Docker Maven DataAgent、Runner pytest、UI 测试/构建及设计门禁校验，分别取得 `146/146`、`17/17`、`24/24`、构建成功和 `DESIGN-PASS`；另补充统一执行服务五类来源实际 `read` 路由参数化测试。详细命令与边界见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。该结果未生成候选 SHA。
 - G2 最新本地回归（2026-09-13）：Python SDK 补齐默认过滤角色并接收任务参数，随后通过 App→Executor→DatasetClient 集成回归，Runner 全量更新为 `20/20`；非 Aloudata Playwright `7 passed`，API+文件断言实际 `PAID` 结果，真实 Aloudata 用例继续显式 `BLOCKED`。
-- 当前工作树复验（2026-09-13）：`make dashboard-verify-local` 聚合门禁完整通过，包含模拟依赖检查、DataAgent `152/152`（0 failures/errors/skips）、Runner `21 passed`、UI `26/26`、UI 生产构建和 `DESIGN-PASS`。Runner 测试通过 Make 目标固定在 `mateclaw-python-runner` 子项目环境执行；仓库根目录直接使用 `uv run pytest` 会错误收集客户端项目并缺少其依赖，不作为有效门禁命令。
+- 当前工作树复验（2026-09-13）：`make dashboard-verify-local` 聚合门禁完整通过，包含模拟依赖检查、DataAgent `152/152`（0 failures/errors/skips）、Runner `21 passed`、UI `27/27`、UI 生产构建和 `DESIGN-PASS`。Runner 测试通过 Make 目标固定在 `mateclaw-python-runner` 子项目环境执行；仓库根目录直接使用 `uv run pytest` 会错误收集客户端项目并缺少其依赖，不作为有效门禁命令。
 - G2 当前工作树追加回归（2026-09-13）：Runner 新增两个别名 Join 测试，使用本地 HTTP 数据面返回 `orders` 与 `customers`，脚本通过 `datasets.read` 获取后执行 Pandas Join，断言合并结果；`make dashboard-runner-test` 更新为 `21 passed`。
 - G2 最新回归（2026-09-12）：在统一执行服务新增“未知来源无 Adapter 时明确拒绝”边界测试后，Docker Maven DataAgent 全量结果更新为 `147/147`（0 failures/errors/skips）；该数字 supersede 前述 `146/146` 记录。
 - G1 HTTP/API TLS 补强（2026-09-12 14:15）：E2E WireMock 已改为启动时生成 PKCS12 HTTPS 8443 fixture，DataAgent 通过只读 truststore 建立 TLS，HTTP 策略仅在显式 TLS 测试模式下允许固定 `e2e-http:8443` 私网主机，seed 脚本登记 `https://e2e-http:8443`，移除 `ALLOW_INSECURE` 例外；独立 fixture 与完整依赖栈健康检查均已通过，证据见验收记录。
