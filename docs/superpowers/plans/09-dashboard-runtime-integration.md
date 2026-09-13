@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 11、12 节（DASH-S01～E2E-06）。
 
-**当前状态（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 在本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；CDP 四页视觉复验也已完成。真实 Aloudata 结果查询仍未完成，最终 Gate 仅受真实外部授权约束。
+**当前状态（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 在本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；CDP 四页视觉复验也已完成，本地运行时开发 Gate 已通过。真实 Aloudata 结果查询列入后续环境联调，不阻塞本地实现。
 
 **本地模拟：** 先用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock 和 MinIO 完成非 Aloudata 闭环；正式测试环境切换项统一遵循总体计划末尾清单。本次不新增身份与权限验收。
 
@@ -20,11 +20,11 @@
 
 **执行约定：** 09 的 seed、Playwright 和 cleanup 必须指向同一轮本地模拟服务与工作区；先完成非 Aloudata 场景，再运行 JDBC+模拟 Aloudata。E2E 启动入口会在本地模拟容器仍运行时 fail-fast，避免同端口下创建半套容器，并对健康探测设置单次超时；E2E 完成后执行 `docker compose -f docker-compose.test.yml down -v --remove-orphans`，再按外部前置计划恢复本地模拟。缺少 JWT/工作区等测试上下文时显式记录 `BLOCKED`，不将未执行标为通过。
 
-**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、当前工作树 Runner `21/21`、UI `27/27` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
+**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、当前工作树 Runner `21/21`、UI `27/27` 和生产构建均通过。本地开发 Gate 已通过；真实 Aloudata 结果查询作为后续环境联调证据单独跟踪。
 
 **结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
 
-**视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，不能替代真实 Aloudata 授权场景。
+**视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，真实 Aloudata 授权场景在后续环境联调时补采。
 
 **ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在候选 SHA 的完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。
 
@@ -123,7 +123,7 @@ CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts
 - [x] **Step 2b（本地模拟）**：使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation`、E2E HTTPS WireMock 的 `local_sales_view` 和 JDBC fixture 完成页面双源预览；脚本草稿与结果表均验证 `region=east` 的 5 行结果，Playwright `1 passed`。该项只关闭本地开发验证，不关闭真实 ALO-X02；真实环境仍因 `SM_02_0038` 保持 `BLOCKED`，需取得远端筛选/下推证据后再关闭。
 - [x] **Step 3a: 完成 DataAgent/Runner 控制面与旧工具通道复验**：真实 Compose + Playwright 已验证任务取消、脚本错误/重试、脚本超时/重试、资源超限/重试、旧 Schema、API+文件和大结果 ObjectRef；Runner 控制面已补齐后台异常到 `FAILED` 的终态收敛，并以定向 E2E 复验通过；cleanup 已增加跨工作区读取 HTTP 403 的真实权限验证。大结果用例确认 DataAgent 结果接口返回 `inline=false`/`outputRef` 并限制为 10 行预览。旧执行器与 `PythonAnalysisTool` 的 `ToolCallback` 已在真实 `python3` 容器中完成兼容复验。
 - [x] **Step 3b（范围决策）：平台内 AI 生成不纳入本期**：本项目不负责自动生成 SQL/Python，用户可在外部使用大模型生成草稿后粘贴；本期只验证用户脚本的校验、预览、执行和旧 `ToolCallback` 兼容，不要求真实 LLM/Agent 对话环境。
-- [x] **Step 4: 运行完整验证；证据必须绑定同一候选 SHA**：`fc799a85414520a4118b36d736f01984b773255e` 上 Playwright `9 passed`，CDP 列表/编辑器/Table/ECharts 四页均成功；真实 Aloudata 结果查询另行记录为 `BLOCKED`。
+- [x] **Step 4: 运行完整本地验证；证据必须绑定同一候选 SHA**：`fc799a85414520a4118b36d736f01984b773255e` 上 Playwright `9 passed`，CDP 列表/编辑器/Table/ECharts 四页均成功；真实 Aloudata 结果查询另列为后续 `EXTERNAL-BLOCKED` 联调项。
 
 ```bash
 make dashboard-dataagent-test

@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/plans/2026-09-11-dashboard-overall-implementation-plan.md`、`docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`。
 
-**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 上的本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `153/153`，候选 Runner 为 `20/20`，当前工作树 Runner 为 `21/21`、UI 为 `27/27`。当前 Aloudata 真实结果访问仍待外部条件满足；后续计划提交已推送到 `origin/feature/dev_fu`，本地与远端 SHA 已复核一致。平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
+**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 上的本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `153/153`，候选 Runner 为 `20/20`，当前工作树 Runner 为 `21/21`、UI 为 `27/27`。本地开发前置条件已满足并不再阻塞实现。Aloudata 真实结果访问、正式 API 和对象存储仅作为后续环境联调条件；后续计划提交已推送到 `origin/feature/dev_fu`，本地与远端 SHA 已复核一致。平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
 
 **本轮复验（2026-09-13）：** 当前工作树执行 `make dashboard-prerequisites-simulation` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；设计门禁同时输出 `DESIGN-PASS`。Aloudata Adapter 的显式外部测试使用 Docker Maven + 本地 WireMock 环境变量运行通过，认证值仍为本地占位符，不计入真实 ALO-X02。
 
@@ -48,7 +48,7 @@
 | P1 | 可复现的双源 Join 键、筛选条件和期望结果 | 08、09 | 业务/测试负责人 | Python 脚本断言与页面结果 |
 | P2 | 候选 SHA 提交边界和发布凭据 | 00–09 最终交付 | 仓库维护者 | 同 SHA 全量验收、Git 状态/远端校验 |
 
-P0 未全部满足前，不得声称“全量实施计划完成”。本次不把身份与权限条件作为 Gate；相关能力只做既有行为回归，完整角色矩阵和跨工作区授权列入后续计划。P1 缺失只阻塞对应来源场景；P2 缺失时本地实现仍可验证，但最终 Gate 不得关闭。
+本地模拟 P0（Docker、运行时、临时数据库、MinIO、WireMock、Runner）满足后即可进行开发和本地全量验收；其结果可标记为 `LOCAL-SIMULATION-PASS`。真实 Aloudata/API/正式对象存储条件属于后续环境联调 Gate，缺失时只标记对应 `EXTERNAL-BLOCKED`，不阻塞本地实现或代码交付。本次不把身份与权限条件作为 Gate；相关能力只做既有行为回归，完整角色矩阵和跨工作区授权列入后续计划。
 
 ## 2. Aloudata 外部条件（02、09）
 
@@ -284,7 +284,7 @@ print(result)
 
 执行 E2E 时必须先执行 `dev-support/local-simulation/scripts/cleanup.sh` 释放同端口资源，再运行 `scripts/e2e/start-dashboard-mvp.sh`、simulation seed 和 Playwright；E2E 结束后清理 `docker-compose.test.yml` 专属容器/卷并重新执行上述本地模拟启动与检查。E2E 启动脚本会检测仍运行的 `mateclaw-local-sim-*` 容器并以退出码 `2` fail-fast。
 
-本地模拟条件不等于正式外部条件：真实 Aloudata 必须补齐 ALO-X01/ALO-X02，正式 S3/MinIO 需替换 endpoint/bucket/Secret；这些条件未满足时不得关闭对应 Gate。平台内 AI 生成不属于本期，不要求模型或 Agent 配置。
+本地模拟条件不等于正式外部条件：真实 Aloudata 必须在后续联调补齐 ALO-X01/ALO-X02，正式 S3/MinIO 需替换 endpoint/bucket/Secret；这些条件未满足时只保留对应 `EXTERNAL-BLOCKED`，不回退本地开发结论。平台内 AI 生成不属于本期，不要求模型或 Agent 配置。
 
 ## 8. Docker、网络与观测条件（00、05、06、08、09）
 
@@ -338,7 +338,7 @@ docker compose -f dev-support/local-simulation/docker-compose.yml down -v
 | --- | --- | --- | --- | --- | --- | --- |
 | EXT-ALO-01 | Aloudata 产品/语义地址和版本 | Aloudata 管理员 | Secret/加密配置 | ALO-X01 | 02/09 | 待提供 |
 | EXT-ALO-02 | 默认 tenantId 和认证上下文 | Aloudata 管理员 | Secret/加密配置 | ALO-X01 | 02/09 | 待提供 |
-| EXT-ALO-03 | 已授权稳定视图及筛选字段/值 | Aloudata 管理员 | 视图目录 + Secret ID | ALO-X02 | 02/09 | 阻塞；当前缺 `ALOU_DATA_TEST_VIEW_NAME`、筛选字段/值和结果查询授权 |
+| EXT-ALO-03 | 已授权稳定视图及筛选字段/值 | Aloudata 管理员 | 视图目录 + Secret ID | ALO-X02 | 02/09 | 后续联调；当前缺 `ALOU_DATA_TEST_VIEW_NAME`、筛选字段/值和结果查询授权，不阻塞本地开发 |
 | EXT-JDBC-01 | MySQL 8.4 只读连接 | DB 管理员 | Secret | JDBC-I01/I02 | 03/07/09 | 本地模拟已验证；真实连接待提供 |
 | EXT-JDBC-02 | PostgreSQL 15.6 只读连接 | DB 管理员 | Secret | JDBC-I03/I05 | 03/07 | 本地模拟已验证；真实连接待提供 |
 | EXT-JDBC-03 | orders/customers 脱敏样本 | 测试负责人 | 测试 DB | migration/integration | 03/09 | 本地样本已准备；正式样本待确认 |
@@ -353,11 +353,11 @@ docker compose -f dev-support/local-simulation/docker-compose.yml down -v
 
 ## 10. 一次性预检与解除顺序
 
-1. 启动 Docker 临时 MinIO，并核对 EXT-ALO/JDBC/API/FILE 条件，保存脱敏摘要。
-2. 运行设计门禁、DataAgent/Runner/UI 基线和 Compose healthcheck。
-3. 使用当前已有测试上下文完成非 Aloudata seed/Playwright/cleanup；不新增真实 JWT/角色矩阵验收。
-4. 注入已授权 Aloudata 视图，完成 ALO-X01/X02 和 JDBC+Aloudata 双源场景。
-5. 用户确认提交范围后生成候选 SHA，在同一 SHA 重跑全量矩阵并生成最终证据。
+1. 当前开发阶段启动 Docker 临时 MinIO，并核对本地模拟 JDBC/API/FILE/Aloudata 条件，保存脱敏摘要。
+2. 运行设计门禁、DataAgent/Runner/UI 基线和 Compose healthcheck，形成 `LOCAL-SIMULATION-PASS`。
+3. 使用当前已有测试上下文完成非 Aloudata 及模拟 Aloudata 的 seed/Playwright/cleanup；不新增真实 JWT/角色矩阵验收。
+4. 进入目标环境后再注入已授权 Aloudata 视图，完成 ALO-X01/X02 和 JDBC+Aloudata 双源场景，形成 `EXTERNAL-BLOCKED` 或通过证据。
+5. 用户确认提交范围后，在同一 SHA 重跑本地矩阵，并将真实环境联调结果作为追加证据。
 
 推荐命令：
 
@@ -376,10 +376,10 @@ bash scripts/e2e/verify-dashboard-mvp-cleanup.sh
 
 ## 验收定义
 
-- P0 条件全部满足（MinIO 由 Docker 临时部署）；P1 场景都有对应数据和接口证据；身份与权限专项不计入本次 Gate；平台内 AI 生成不纳入本期，不要求真实 LLM E2E。
+- 本地模拟 P0 条件全部满足（MinIO 由 Docker 临时部署）即可关闭本地开发 Gate；P1 真实场景在后续环境联调中补齐对应数据和接口证据；身份与权限专项不计入本次 Gate；平台内 AI 生成不纳入本期，不要求真实 LLM E2E。
 - 外部凭据均可追溯到安全存放位置，但文档、日志、截图和测试输出中不存在凭据值。
-- 每个 EXT-* 都有提供方、验证入口、关联计划和状态；阻塞项有明确解除条件。
-- 只有 Aloudata 结果、两条双源 E2E 和候选 SHA 全部取得证据，才可将本次范围标记完成；身份与权限完善不作为本次完成条件。
+- 每个 EXT-* 都有提供方、验证入口、关联计划和状态；后续联调项有明确解除条件。
+- 本地实现完成以模拟矩阵和候选 SHA 证据为准；正式环境发布前仍需补齐 Aloudata 结果、两条真实双源 E2E 和正式存储替换证据。身份与权限完善不作为本次完成条件。
 
 ## 11. 本轮本地模拟实施记录
 

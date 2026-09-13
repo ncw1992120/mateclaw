@@ -12,13 +12,13 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 4 节（ALO-U01～U08、ALO-C01～C02、ALO-X01～X02）。
 
-**当前状态（2026-09-13）：** 目录、详情和 Adapter 单元测试已完成；ALO-X02 仍因当前认证上下文返回 `SM_02_0038` 阻塞，待已授权指标视图后联调。
+**当前状态（2026-09-13）：** 本地目录、详情、结果 Adapter 和自动化测试已完成并通过；本地模拟开发 Gate 已关闭。ALO-X02 的真实结果查询因当前认证上下文返回 `SM_02_0038`，列入后续环境联调，不阻塞本地实现。
 
 **本地模拟：** 日常开发使用 `dev-support/local-simulation/` 的 WireMock 脱敏响应；正式测试前再替换产品层/语义层地址、连接级 `tenantId` 和 Secret 管理的认证值。产品层必须使用 HTTPS；语义层按部署网络可使用 HTTP 或 HTTPS，HTTP 仅限明确受控的内部可信链路。
 
 **开发验证配置：** 使用 `.env.aloudata-simulation.example` 的 `local-tenant`、`local_sales_view`、`datasourceId=9001` 和 `region=east`；通过 WireMock 的 tree/detail/query/metrics 响应验证目录、详情、结果和筛选编译，不将该结果计入真实 ALO-X02。
 
-**本地 Adapter 联调结果（2026-09-13）：** 已使用上述模拟变量运行 `AloudataAnalysisViewExternalIT`，目录、详情、模拟基线结果和 `region=east` 远端筛选均通过；该结果只作为本地开发验证，不解除真实 ALO-X02 阻塞。
+**本地 Adapter 联调结果（2026-09-13）：** 已使用上述模拟变量运行 `AloudataAnalysisViewExternalIT`，目录、详情、模拟基线结果和 `region=east` 远端筛选均通过；该结果作为当前本地开发验证。真实 ALO-X02 另行作为环境联调项跟踪。
 
 **执行约定：** 先运行 `make dashboard-prerequisites-simulation`，再执行 Adapter 定向测试；真实地址、认证值和视图授权仅在外部环境变量齐备后联调。
 
@@ -71,8 +71,8 @@
 - [x] **Step 2: 运行**：测试先因 Adapter 和编译器不存在而失败。
 - [x] **Step 3: 实现查询编译、结果列到 `DatasetColumn`/`DatasetBatch` 的转换和强制 `pageSize` 上限**；无筛选结果接口将行偏移换算为 Aloudata 的零基 `pageIndex`，非 `pageSize` 对齐的偏移显式拒绝，避免把行偏移误当页号或静默错位。
 - [x] **Step 4: 重跑 Adapter 测试**，Expected: PASS；当前 9/9 通过，包含 `SM_02_0038` 权限拒绝映射、页号转换和非对齐偏移拒绝回归用例。新增 `AloudataAnalysisViewExternalIT` 作为显式外部探测入口，缺少环境变量时会直接失败而不是跳过。
-- [ ] **Step 5: 使用已授权视图做只读联调**：目录和详情已在真实环境取得响应，但当前认证上下文对目录中探测到的视图均返回 `SM_02_0038`（视图访问拒绝），因此 5 行结果和维度筛选仍为 `BLOCKED`；这属于外部授权阻塞而非本地实现失败。证据记录见 `docs/superpowers/evidence/aloudata-analysis-view-live-probe-2026-09-12.md`。获得已授权视图后再验证远端筛选生效，凭据继续只从环境或加密配置读取，不进入命令历史。该阻塞只影响 JDBC+Aloudata 双源 E2E，API+文件、旧 Schema 和错误路径可通过 seed/cleanup 独立验收。
-- [x] **Step 6: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；真实 ALO-X02 仍为外部授权阻塞。
+- [ ] **Step 5（后续环境联调，不阻塞本地开发）：使用已授权视图做只读联调**：目录和详情已在真实环境取得响应，但当前认证上下文对目录中探测到的视图均返回 `SM_02_0038`（视图访问拒绝），因此 5 行结果和维度筛选待外部授权后补验。证据记录见 `docs/superpowers/evidence/aloudata-analysis-view-live-probe-2026-09-12.md`。获得已授权视图后再验证远端筛选生效，凭据继续只从环境或加密配置读取，不进入命令历史。该项只影响真实 JDBC+Aloudata 环境证据，不影响本地模拟、API+文件、旧 Schema 和错误路径验收。
+- [x] **Step 6: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；真实 ALO-X02 作为后续环境联调项保留。
 
 ## 视觉验收（CDP）
 
