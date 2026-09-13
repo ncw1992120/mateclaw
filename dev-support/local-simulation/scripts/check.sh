@@ -16,8 +16,10 @@ curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/__admin/health" >
 curl --fail --silent --insecure "https://127.0.0.1:${WIREMOCK_HTTPS_PORT:-18443}/__admin/health" >/dev/null
 orders_json="$(curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/orders")"
 paid_json="$(curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/orders?status=PAID")"
+secure_paid_json="$(curl --fail --silent --insecure "https://127.0.0.1:${WIREMOCK_HTTPS_PORT:-18443}/orders?status=PAID")"
 grep -q '"id":1005' <<<"$orders_json"
 grep -q '"id":1004' <<<"$paid_json"
+grep -q '"id":1004' <<<"$secure_paid_json"
 aloudata_tree="$(curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/anymetrics/api/v1/analysisview/treeList")"
 aloudata_result="$(curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/semantic/api/v1.1/analysisView/query")"
 aloudata_metrics="$(curl --fail --silent -X POST "http://127.0.0.1:${WIREMOCK_PORT:-18081}/semantic/api/v1.1/metrics/query" -H 'Content-Type: application/json' -d '{"viewName":"local_sales_view"}')"

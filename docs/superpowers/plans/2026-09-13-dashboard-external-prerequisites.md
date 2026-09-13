@@ -22,6 +22,8 @@
 
 **配置契约回归（2026-09-13）：** `make dashboard-prerequisites-contract-test` 通过，覆盖语义层 HTTP/HTTPS 正例、语义层非法协议拒绝、产品层 HTTP 拒绝以及缺少外部测试开关时的 fail-fast；测试只使用占位变量，不发起真实外部请求。
 
+**HTTP/API 模拟契约补强（2026-09-13）：** 本地前置检查现在同时调用 WireMock HTTP 与 HTTPS `/orders?status=PAID`，断言筛选结果包含 `id=1004`；因此本地检查不仅验证 OpenAPI 文件存在，还验证已登记 API 的 HTTPS 参数透传路径。该结果仍只属于本地模拟，不替代真实 API 所有者验收。
+
 ## Global Constraints
 
 - 外部条件只支撑 JDBC、Aloudata 已有指标视图、HTTP/API、文件和 Python 多源预处理；不为 Trino、DuckDB、JS 或平台内 AI 生成准备首期依赖。

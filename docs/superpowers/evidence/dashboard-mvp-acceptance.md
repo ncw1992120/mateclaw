@@ -282,3 +282,5 @@ Runner 多别名 Join 回归（2026-09-13）：当前工作树 `make dashboard-r
 追加本轮本地前置复验（2026-09-13）：`make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；本地 WireMock 环境下通过 Docker Maven 执行 `AloudataAnalysisViewExternalIT`，结果为 `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`。该测试仅证明本地模拟 Adapter 契约，不关闭真实 Aloudata ALO-X02。
 
 统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `152 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 25 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
+
+HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 WireMock HTTP/HTTPS `/orders?status=PAID`，两条路径均返回预期 `id=1004`；配合 `orders-openapi.yaml` 的 operationId、参数和 HTTPS E2E fixture，证明本地已登记 API 的筛选透传与 TLS 入口可复现。该证据不替代真实 API 所有者提供的地址、证书、分页和错误响应验收。
