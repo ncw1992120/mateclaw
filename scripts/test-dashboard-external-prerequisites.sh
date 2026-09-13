@@ -23,11 +23,26 @@ run_config_check() {
 grep -q 'EXTERNAL-PREREQUISITES-CONFIG-PASS' < <(run_config_check 'https://product.example:443' 'http://semantic.example:80')
 grep -q 'EXTERNAL-PREREQUISITES-CONFIG-PASS' < <(run_config_check 'https://product.example' 'https://semantic.example:443')
 
+negative_output=$(mktemp -t mateclaw-external-prereq.XXXXXX)
+trap 'rm -f "$negative_output"' EXIT
 set +e
-run_config_check 'http://product.example' 'http://semantic.example:80' >/tmp/mateclaw-external-prereq-negative.out 2>&1
+run_config_check 'http://product.example' 'http://semantic.example:80' >"$negative_output" 2>&1
 exit_code=$?
 set -e
-[[ "$exit_code" == 3 ]] || { echo "产品层 HTTP 未被拒绝，退出码=$exit_code" >&2; cat /tmp/mateclaw-external-prereq-negative.out >&2; exit 1; }
-grep -q 'ALOU_DATA_PRODUCT_BASE_URL 必须是 HTTPS URL' /tmp/mateclaw-external-prereq-negative.out
-rm -f /tmp/mateclaw-external-prereq-negative.out
+[[ "$exit_code" == 3 ]] || { echo "产品层 HTTP 未被拒绝，退出码=$exit_code" >&2; cat "$negative_output" >&2; exit 1; }
+grep -q 'ALOU_DATA_PRODUCT_BASE_URL 必须是 HTTPS URL' "$negative_output"
+
+set +e
+run_config_check 'https://product.example' 'ftp://semantic.example:21' >"$negative_output" 2>&1
+exit_code=$?
+set -e
+[[ "$exit_code" == 3 ]] || { echo "语义层非法协议未被拒绝，退出码=$exit_code" >&2; cat "$negative_output" >&2; exit 1; }
+grep -q 'ALOU_DATA_SEMANTIC_BASE_URL 必须是 HTTP 或 HTTPS URL' "$negative_output"
+
+set +e
+env -u ALOU_DATA_EXTERNAL_TEST "$checker" --external >"$negative_output" 2>&1
+exit_code=$?
+set -e
+[[ "$exit_code" == 3 ]] || { echo "缺少外部测试开关时未 fail-fast，退出码=$exit_code" >&2; cat "$negative_output" >&2; exit 1; }
+grep -q 'ALOU_DATA_EXTERNAL_TEST=true 未设置' "$negative_output"
 echo 'EXTERNAL-PREREQUISITES-CONTRACT-PASS'
