@@ -18,6 +18,8 @@
 
 **本轮模拟入口复验（2026-09-13）：** `make dashboard-prerequisites-simulation` 通过；入口实际检查 MySQL/PostgreSQL 各 10 行、MinIO 四个对象及 manifest 字节数/SHA-256、WireMock HTTP/HTTPS、Aloudata tree/result/metrics 模拟响应、Runner `/health` 和 Runner 外网访问阻断，并输出 `EXTERNAL-PREREQUISITES-SIMULATION-PASS`。
 
+**聚合本地门禁复验（2026-09-13）：** `make dashboard-verify-local` 串联模拟依赖、DataAgent、Runner、UI 测试/构建和设计门禁，完整执行并通过；该入口只证明本地开发基线，不关闭真实 Aloudata 授权 Gate。
+
 ## Global Constraints
 
 - 外部条件只支撑 JDBC、Aloudata 已有指标视图、HTTP/API、文件和 Python 多源预处理；不为 Trino、DuckDB、JS 或平台内 AI 生成准备首期依赖。

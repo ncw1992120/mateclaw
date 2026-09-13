@@ -1,5 +1,5 @@
 # Dashboard external prerequisite checks
-.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
 
 dashboard-prerequisites-local:
 	./scripts/verify-dashboard-external-prerequisites.sh --local
@@ -39,6 +39,11 @@ dashboard-ui-test:
 
 dashboard-ui-build:
 	npm --prefix mateclaw-dataagent-ui run build
+
+# Full local implementation gate. It uses only the disposable simulation
+# stack and never claims the external Aloudata authorization gate.
+dashboard-verify-local: dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
+	bash scripts/verify-dashboard-design.sh
 
 # Docker buildx builder setup
 .PHONY: builder-create builder-rm builder-inspect
