@@ -166,6 +166,7 @@ make dashboard-dataagent-test
 make dashboard-runner-test
 make dashboard-ui-test
 make dashboard-ui-build
+make dashboard-prerequisites-contract-test
 # 或直接执行完整本地模拟门禁：
 make dashboard-verify-local
 ```

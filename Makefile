@@ -1,5 +1,5 @@
 # Dashboard external prerequisite checks
-.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-prerequisites-contract-test dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
 
 dashboard-prerequisites-local:
 	./scripts/verify-dashboard-external-prerequisites.sh --local
@@ -9,6 +9,9 @@ dashboard-prerequisites-simulation:
 
 dashboard-prerequisites-external:
 	./scripts/verify-dashboard-external-prerequisites.sh --external
+
+dashboard-prerequisites-contract-test:
+	bash scripts/test-dashboard-external-prerequisites.sh
 
 # Run the DataAgent suite from a Maven container against Docker Desktop. The
 # host override is required for Testcontainers' dynamically published ports;
@@ -42,7 +45,7 @@ dashboard-ui-build:
 
 # Full local implementation gate. It uses only the disposable simulation
 # stack and never claims the external Aloudata authorization gate.
-dashboard-verify-local: dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
+dashboard-verify-local: dashboard-prerequisites-contract-test dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
 	bash scripts/verify-dashboard-design.sh
 
 # Docker buildx builder setup

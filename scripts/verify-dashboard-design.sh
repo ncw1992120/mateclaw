@@ -13,6 +13,7 @@ seed="$repo_root/scripts/e2e/seed-dashboard-mvp.sh"
 export_env="$repo_root/scripts/e2e/export-dashboard-mvp-env.sh"
 cdp_visual="$repo_root/mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs"
 makefile="$repo_root/Makefile"
+prerequisites_contract="$repo_root/scripts/test-dashboard-external-prerequisites.sh"
 
 fail() { printf 'DESIGN-FAIL: %s\n' "$1" >&2; exit 1; }
 has() { rg -q -- "$1" "$2"; }
@@ -23,7 +24,8 @@ has() { rg -q -- "$1" "$2"; }
 [[ -f "$overall" ]] || fail "overall implementation plan is missing"
 [[ -f "$prerequisites" ]] || fail "external prerequisites plan is missing"
 [[ -f "$makefile" ]] || fail "repository Makefile is missing"
-for target in dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-verify-local; do
+[[ -x "$prerequisites_contract" ]] || fail "external prerequisites contract test is missing or not executable"
+for target in dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-prerequisites-contract-test dashboard-verify-local; do
   has "^${target}:" "$makefile" || fail "Makefile gate target is missing: ${target}"
 done
 has '2026-09-13-dashboard-external-prerequisites.md' "$overall" || fail "overall plan does not reference external prerequisites"

@@ -20,6 +20,8 @@
 
 **聚合本地门禁复验（2026-09-13）：** `make dashboard-verify-local` 串联模拟依赖、DataAgent、Runner、UI 测试/构建和设计门禁，完整执行并通过；该入口只证明本地开发基线，不关闭真实 Aloudata 授权 Gate。
 
+**配置契约回归（2026-09-13）：** `make dashboard-prerequisites-contract-test` 通过，覆盖语义层 HTTP/HTTPS 正例和产品层 HTTP 拒绝；测试只使用占位变量，不发起真实外部请求。
+
 ## Global Constraints
 
 - 外部条件只支撑 JDBC、Aloudata 已有指标视图、HTTP/API、文件和 Python 多源预处理；不为 Trino、DuckDB、JS 或平台内 AI 生成准备首期依赖。
