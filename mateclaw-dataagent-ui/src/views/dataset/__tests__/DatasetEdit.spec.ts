@@ -47,6 +47,19 @@ async function mountEditor() {
 }
 
 describe('DatasetEdit source configuration', () => {
+  it('offers every supported dataset source type', async () => {
+    const wrapper = await mountEditor()
+    const sourceTypeValues = wrapper.findAll('select')[1].findAll('option').map(option => option.element.value)
+
+    expect(sourceTypeValues).toEqual([
+      'JDBC_TABLE',
+      'JDBC_SQL',
+      'ALOUDATA_ANALYSIS_VIEW',
+      'HTTP_API',
+      'FILE',
+    ])
+  })
+
   it('shows SQL only for JDBC_SQL and persists the SQL source definition', async () => {
     const wrapper = await mountEditor()
     const selects = wrapper.findAll('select')

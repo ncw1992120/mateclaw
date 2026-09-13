@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/plans/2026-09-11-dashboard-overall-implementation-plan.md`、`docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`。
 
-**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 上的本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `152/152`，Runner 为 `20/20`，UI 为 `24/24`。当前 Aloudata 真实结果访问仍待外部条件满足，候选提交及计划更新均已推送到 `origin/feature/dev_fu`；平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
+**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 上的本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `152/152`，Runner 为 `20/20`，当前工作树 UI 为 `25/25`。当前 Aloudata 真实结果访问仍待外部条件满足，候选提交及计划更新均已推送到 `origin/feature/dev_fu`；平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
 
 **本轮复验（2026-09-13）：** 当前工作树执行 `make dashboard-prerequisites-simulation` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；设计门禁同时输出 `DESIGN-PASS`。Aloudata Adapter 的显式外部测试使用 Docker Maven + 本地 WireMock 环境变量运行通过，认证值仍为本地占位符，不计入真实 ALO-X02。
 

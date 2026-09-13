@@ -20,7 +20,7 @@
 
 **执行约定：** 09 的 seed、Playwright 和 cleanup 必须指向同一轮本地模拟服务与工作区；先完成非 Aloudata 场景，再运行 JDBC+模拟 Aloudata。E2E 启动入口会在本地模拟容器仍运行时 fail-fast，避免同端口下创建半套容器，并对健康探测设置单次超时；E2E 完成后执行 `docker compose -f docker-compose.test.yml down -v --remove-orphans`，再按外部前置计划恢复本地模拟。缺少 JWT/工作区等测试上下文时显式记录 `BLOCKED`，不将未执行标为通过。
 
-**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、Runner `20/20`、UI `24/24` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
+**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、Runner `20/20`、当前工作树 UI `25/25` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
 
 **结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
 
@@ -96,10 +96,10 @@ CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts
 - [x] **Vitest 基础版**：已加入 Vitest + Vue Test Utils + jsdom，别名校验和 `DatasetInputPanel` 交互测试通过（6 tests）；`PropertyPanel.spec.ts` 补齐授权字段可见性和组件预览 API 分流测试（2 tests）。
 - [x] **参数基础版**：编辑器可配置参数名称、类型和 `dashboard/page/component` 作用范围；不提供字段绑定。
 - [x] **参数校验**：前端在执行前校验输入别名、数据集选择、参数名称、类型和作用范围；DataAgent 对已声明参数执行严格的未知参数、必填参数和类型校验，未声明参数的旧 Schema 保持兼容透传。
-- [x] **异步状态基础展示**：最终预览已覆盖运行中、取消、失败和重试入口，当前 24 个 Vitest 用例和 production build 通过。
+- [x] **异步状态基础展示**：最终预览已覆盖运行中、取消、失败和重试入口，当前工作树 25 个 Vitest 用例和 production build 通过。
 - [x] **真实 DataAgent/Runner 验收（本地模拟范围）**：同一轮 E2E Compose、JWT、seed 状态和系统 Chrome channel 执行全量 Playwright，`9 passed`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、大结果 ObjectRef、旧 Schema、脚本失败/重试、取消/重试、超时/重试和资源限制/重试。该结果证明本地模拟闭环，不替代真实 Aloudata 授权验收。
 - [x] **Step 4: 确保参数 UI 只配置作用范围；脚本通过 `datasets.read` 选择字段**。
-- [x] **Step 5: 运行 UI test 和 build**，Expected: PASS（当前 24 个 Vitest 用例通过，生产构建通过）。
+- [x] **Step 5: 运行 UI test 和 build**，Expected: PASS（当前工作树 25 个 Vitest 用例通过，生产构建通过）。
 - [x] **Step 6（测试入口）**：已加入 `playwright.config.ts`、两组 E2E 文件（覆盖 JDBC+Aloudata、API+文件、ECharts 绑定、旧 Schema、错误、取消、超时和资源超限）和 `test:e2e` 脚本；用例只接受真实 DataAgent/Runner，通过 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和已 seed 的 Dashboard ID 注入环境。完整 seed 产生 9 个 Dashboard，其中 JDBC+Aloudata 可选择真实数据集或 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 自动创建的 WireMock 数据集，其余 8 个可在无 Aloudata 授权时独立运行；不使用 route mock。API+文件脚本对 API 与文件都显式传入 `status=PAID` 过滤，WireMock mapping 强制校验 query 参数，确保 E2E-02 能证明参数透传和文件过滤。Vite 开发端口和 DataAgent 代理目标支持 `VITE_DEV_PORT`、`VITE_DATAAGENT_PROXY_TARGET` 覆盖，默认值保持 `5174`/`http://localhost:18089` 不变。Aloudata 用例缺少授权时显式报 `BLOCKED`，不使用 `test.skip`。
 - [x] **Step 7: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
