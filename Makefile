@@ -1,5 +1,5 @@
 # Dashboard external prerequisite checks
-.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test
 
 dashboard-prerequisites-local:
 	./scripts/verify-dashboard-external-prerequisites.sh --local
@@ -24,6 +24,13 @@ dashboard-dataagent-test:
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-w /workspace maven:3.9-eclipse-temurin-21 \
 		mvn -o -f mateclaw-dataagent/pom.xml test -q
+
+# Run the Runner suite from its own uv-managed environment. Keeping the
+# working directory and pytest path scoped to this project avoids collecting
+# the sibling Python client tests with incompatible dependencies.
+dashboard-runner-test:
+	@test -x mateclaw-python-runner/.venv/bin/pytest || { echo "缺少 Runner 虚拟环境，请先在 mateclaw-python-runner 执行 uv sync --dev" >&2; exit 2; }
+	cd mateclaw-python-runner && .venv/bin/pytest -q
 
 # Docker buildx builder setup
 .PHONY: builder-create builder-rm builder-inspect

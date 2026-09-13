@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 10 节（PY-U01～U05、PY-R01～R06、PY-J01～J03）。
 
-**当前状态（2026-09-13）：** 固定 Runner 镜像、SDK、任务隔离、ObjectRef 读取和旧执行器兼容已完成验证；补齐过滤条件默认 `role=dimension` 和任务参数注入的统一契约兼容，并增加 App→Executor→DatasetClient 集成回归，Runner 当前 `20/20`；本轮使用 `mateclaw-python-runner/.venv/bin/pytest -q` 从子项目目录复验通过，仓库根目录 `uv run pytest` 不作为有效入口；已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
+**当前状态（2026-09-13）：** 固定 Runner 镜像、SDK、任务隔离、ObjectRef 读取和旧执行器兼容已完成验证；补齐过滤条件默认 `role=dimension` 和任务参数注入的统一契约兼容，并增加 App→Executor→DatasetClient 集成回归，Runner 当前 `20/20`；本轮使用 `make dashboard-runner-test` 从子项目环境复验通过，仓库根目录 `uv run pytest` 不作为有效入口；已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** Runner 在本地 Compose 中复用固定镜像并验证 `/health`、非 root 和 `runner_internal` 网络隔离；DataAgent↔Runner↔MinIO 的完整连通性继续使用现有 E2E Compose 验证。正式测试前只替换内部服务地址、对象存储地址和镜像版本，不改变无运行时 `pip install` 约束。
 
