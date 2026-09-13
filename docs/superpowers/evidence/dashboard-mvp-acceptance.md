@@ -248,7 +248,7 @@ E2E 启动入口稳定性补强（2026-09-13）：`scripts/e2e/start-dashboard-m
 
 本地模拟 E2E 全量矩阵（2026-09-13）：清理本地模拟栈后，以干净的 `docker-compose.test.yml`、同一轮 `seed-dashboard-mvp.sh`、本地 JWT 和系统 Chrome channel 执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `8 passed (45.3s)`。通过项包括：JDBC+模拟 Aloudata 双源、API+文件双源、旧 Schema、脚本失败/重试、取消/重试、超时/重试、资源限制/重试和大结果 ObjectRef；无 route mock、无 skip。E2E 专属容器/卷随后已清理，本地模拟环境恢复并再次通过 `check.sh`。该证据绑定当前工作树而非候选 Git SHA，真实 Aloudata ALO-X02 和真实 LLM Agent 对话仍不计入 PASS。
 
-DataAgent 最新全量回归（2026-09-13）：通过 Docker Maven JDK 21 执行 `mvn -o -f mateclaw-dataagent/pom.xml test -q`，挂载 Docker Desktop socket，并设置 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`、`TESTCONTAINERS_RYUK_DISABLED=true`；命令退出码 `0`，Surefire 汇总 `152 tests, 0 failures, 0 errors, 0 skipped`。首次未设置宿主地址覆盖时的 Ryuk/MinIO 连接失败仅属于 Maven 容器网络配置问题，不计入代码失败；修正测试运行参数后所有 Testcontainers 用例通过。
+DataAgent 最新全量回归（2026-09-13）：通过 Docker Maven JDK 21 执行 `mvn -o -f mateclaw-dataagent/pom.xml test -q`，挂载 Docker Desktop socket，并设置 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`、`TESTCONTAINERS_RYUK_DISABLED=true`；命令退出码 `0`，Surefire 汇总 `153 tests, 0 failures, 0 errors, 0 skipped`。首次未设置宿主地址覆盖时的 Ryuk/MinIO 连接失败仅属于 Maven 容器网络配置问题，不计入代码失败；修正测试运行参数后所有 Testcontainers 用例通过。
 
 标准 Make 入口复验（2026-09-13）：直接执行 `make dashboard-dataagent-test`，确认 Makefile 封装的 Docker Desktop/Testcontainers 参数可复现上述全量结果，命令退出码 `0`；无需执行者手工拼接 Docker Socket、Maven 缓存或宿主地址参数。
 
@@ -276,11 +276,11 @@ CDP npm 入口补强（2026-09-13）：`mateclaw-dataagent-ui/package.json` 新�
 
 设计门禁覆盖补强（2026-09-13）：`verify-dashboard-design.sh` 现同时检查 CDP 脚本文件和 `test:e2e:cdp` npm 命令存在，避免计划引用失效入口；门禁复验输出 `DESIGN-PASS`。
 
-当前工作树模块回归（2026-09-13）：`make dashboard-dataagent-test` 退出码 `0`，Surefire 汇总 `152 tests, 0 failures, 0 errors, 0 skipped`；`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q` 为 `20 passed`；`npm --prefix mateclaw-dataagent-ui test -- --run` 为 `8 files / 24 tests passed`；随后 `npm --prefix mateclaw-dataagent-ui run build` 成功。仅有既有 SLF4J、pytest 弃用提示和 Rollup chunk 大小告警，不影响退出码。
+当前工作树模块回归（2026-09-13）：`make dashboard-dataagent-test` 退出码 `0`，Surefire 汇总 `153 tests, 0 failures, 0 errors, 0 skipped`；`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q` 为 `21 passed`；`npm --prefix mateclaw-dataagent-ui test -- --run` 为 `8 files / 27 tests passed`；随后 `npm --prefix mateclaw-dataagent-ui run build` 成功。仅有既有 SLF4J、pytest 弃用提示和 Rollup chunk 大小告警，不影响退出码。
 
 Runner 多别名 Join 回归（2026-09-13）：当前工作树 `make dashboard-runner-test` 为 `21 passed`；新增执行器测试通过本地 HTTP 数据面返回 `orders` 与 `customers` 两个别名，用户脚本分别调用 `datasets.read` 后使用 Pandas Join，最终结果与预期一致。该测试补强 G2 的多源脚本处理证据，不替代双源 Playwright 或真实 Aloudata Gate。
 追加本轮本地前置复验（2026-09-13）：`make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；本地 WireMock 环境下通过 Docker Maven 执行 `AloudataAnalysisViewExternalIT`，结果为 `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`。该测试仅证明本地模拟 Adapter 契约，不关闭真实 Aloudata ALO-X02。
 
-统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `152 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 27 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
+统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `153 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 27 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
 
 HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 WireMock HTTP/HTTPS `/orders?status=PAID`，两条路径均返回预期 `id=1004`；配合 `orders-openapi.yaml` 的 operationId、参数和 HTTPS E2E fixture，证明本地已登记 API 的筛选透传与 TLS 入口可复现。该证据不替代真实 API 所有者提供的地址、证书、分页和错误响应验收。

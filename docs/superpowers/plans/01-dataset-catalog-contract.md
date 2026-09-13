@@ -20,7 +20,7 @@
 
 **执行约定：** 本子计划只消费模拟环境中已登记的连接和 ObjectRef，不新增外部账号或数据；目录响应需能被 02～09 直接复用。
 
-**本轮复验记录（2026-09-13）：** 模拟 MySQL/PostgreSQL、MinIO 和 WireMock 健康检查通过，fixture manifest 与对象大小校验通过；目录契约定向测试纳入 DataAgent `152/152` 全量基线。
+**本轮复验记录（2026-09-13）：** 模拟 MySQL/PostgreSQL、MinIO 和 WireMock 健康检查通过，fixture manifest 与对象大小校验通过；目录契约定向测试纳入 DataAgent `153/153` 全量基线。
 
 ## Global Constraints
 

@@ -20,7 +20,7 @@
 
 **执行约定：** 文件读取必须通过 ObjectRef 和 manifest 校验；新增样本先运行 `scripts/generate-fixtures.py`，再运行模拟前置检查，不接受工作区任意本地路径。
 
-**本轮复验记录（2026-09-13）：** MinIO fixture manifest、CSV/JSON/Parquet/XLSX 对象及 Schema/大小校验通过；文件 Adapter 纳入 DataAgent `152/152` 与本地 E2E `9 passed` 基线。
+**本轮复验记录（2026-09-13）：** MinIO fixture manifest、CSV/JSON/Parquet/XLSX 对象及 Schema/大小校验通过；文件 Adapter 纳入 DataAgent `153/153` 与本地 E2E `9 passed` 基线。
 
 ## Global Constraints
 

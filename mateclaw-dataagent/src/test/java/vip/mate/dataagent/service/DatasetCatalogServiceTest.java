@@ -225,7 +225,34 @@ class DatasetCatalogServiceTest {
         verify(datasetMapper).insert((DatasetEntity) argThat((DatasetEntity entity) ->
                 "HTTP_API".equals(entity.getSourceType())
                         && entity.getSourceConfig().contains("http://e2e-http:8080/orders")
-                        && entity.getSourceConfig().contains("apiDefinitionId")));
+                && entity.getSourceConfig().contains("apiDefinitionId")));
+    }
+
+    @Test
+    void rejectsUnregisteredHttpApiDefinitionBeforePersisting() throws Exception {
+        DatasetManageServiceImpl service = newService();
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setId(4L);
+        datasource.setName("orders api");
+        datasource.setConnectionParams(new ObjectMapper().writeValueAsString(Map.of(
+                "apiDefinitions", Map.of("orders", Map.of(
+                        "endpoint", "https://api.example/orders",
+                        "method", "GET",
+                        "allowedHosts", List.of("api.example"),
+                        "allowedQueryParams", List.of("status"),
+                        "paginationMode", "none",
+                        "resultPath", "$.data")))));
+        when(datasourceMapper.selectById(4L)).thenReturn(datasource);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+
+        DatasetCreateRequest request = new DatasetCreateRequest();
+        request.setName("unregistered orders");
+        request.setSourceDefinition(new DatasetSourceDefinition.HttpApiDefinition(4L, "missing"));
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.createDataset(request));
+        assertInstanceOf(IllegalArgumentException.class, error.getCause());
+        assertEquals("HTTP API 登记定义不存在: missing", error.getCause().getMessage());
+        verify(datasetMapper, never()).insert(any(DatasetEntity.class));
     }
 
     private DatasetManageServiceImpl newService() {

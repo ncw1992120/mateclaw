@@ -20,7 +20,7 @@
 
 **执行约定：** SQL/参数和 `pushedFilters` 证据必须来自上述容器的实际查询；不得用静态 SQL 字符串或纯 mock 代替数据库执行。
 
-**本轮复验记录（2026-09-13）：** 本地 MySQL 8.4、PostgreSQL 15.6 容器保持健康，`orders/customers` fixture 可重复读取；JDBC 定向回归纳入 DataAgent `152/152` 全量基线。
+**本轮复验记录（2026-09-13）：** 本地 MySQL 8.4、PostgreSQL 15.6 容器保持健康，`orders/customers` fixture 可重复读取；JDBC 定向回归纳入 DataAgent `153/153` 全量基线。
 
 ## Global Constraints
 

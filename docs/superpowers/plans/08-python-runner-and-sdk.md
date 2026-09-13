@@ -20,7 +20,7 @@
 
 **执行约定：** Runner 定向测试和 09 闭环必须使用固定镜像构建结果；外部网络失败、任务取消和 ObjectRef 读取均需保留日志摘要，不能通过运行时安装依赖绕过失败。
 
-**本轮复验记录（2026-09-13）：** 固定镜像、Runner `/health`、`runner_internal` 隔离和 MinIO 连通性通过；当前工作树 Runner `21/21`、DataAgent `152/152` 及本地 E2E `9 passed` 基线保持有效。
+**本轮复验记录（2026-09-13）：** 固定镜像、Runner `/health`、`runner_internal` 隔离和 MinIO 连通性通过；当前工作树 Runner `21/21`、DataAgent `153/153` 及本地 E2E `9 passed` 基线保持有效。
 
 ## Global Constraints
 
@@ -70,12 +70,12 @@
 - [x] **Step 3: 实现 FastAPI 和独立子进程执行；强制终止进程树并截断日志**。
 - [x] **Step 4: 使用锁文件构建镜像，并验证非 root、只读目录、健康检查及只连接 `runner_internal` 内部网络**。
 
-- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `152/152`，在 Docker Desktop/Testcontainers 环境通过。Docker 容器内执行 Maven 时使用 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk，以适配宿主 Docker Desktop 网络；Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
+- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `153/153`，在 Docker Desktop/Testcontainers 环境通过。Docker 容器内执行 Maven 时使用 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk，以适配宿主 Docker Desktop 网络；Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
 - [x] **Step 5: 重跑 pytest**：历史复验曾为 `17 passed`；候选提交为 `20 passed`，当前 Runner 全量测试为 `21 passed`，镜像非 root、只读根目录、无 DuckDB/运行时安装依赖基线已验证；提交仍按统一交付边界处理。
 - [x] **Step 5 追加回归（2026-09-13）**：修复任务 `parameters` 未注入 `DatasetClient` 的问题，并补齐过滤条件默认 `role=dimension`；当前 Runner 全量 `19 passed`。
 - [x] **Step 5 追加 API 集成回归（2026-09-13）**：通过 `/v1/tasks` 验证参数经 App→Executor→DatasetClient→脚本完整传递，Runner 全量更新为 `20 passed`。
 - [x] **Step 6 追加多别名 Join 回归（2026-09-13）**：使用本地 HTTP 数据面返回 `orders` 与 `customers` 两个输入，Runner 脚本通过 `datasets.read` 获取两个别名并执行 Pandas Join，断言合并结果；当前 Runner 全量为 `21 passed`。
-- 最新 DataAgent 回归当前全量为 `152/152`；前述 `140/140`、`146/146`、`147/147` 均为历史工作树计数。
+- 最新 DataAgent 回归当前全量为 `153/153`；前述 `140/140`、`146/146`、`147/147` 均为历史工作树计数。
 
 ### Task 3: DataAgent 客户端与兼容回归
 
@@ -95,7 +95,7 @@
 
 - [x] **Step 1（基础安全与兼容用例）**：已覆盖输入别名严格校验、任务级令牌跨任务拒绝、`datasetId` 仅由注册别名解析、Runner status/cancel 路径、危险 taskId 拒绝，以及旧 Local 执行器继续接受 `requirement`。
 - [x] **Step 2: 实现客户端、任务输入注册表、内部读取接口、短期令牌和 Compose 服务；读取接口只接受 `inputName,columns,filters` 并忽略/拒绝客户端提供的 `datasetId`；DataAgent 不挂载 Docker Socket**。
-- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `152/152`，在 Docker Desktop/Testcontainers 环境通过。Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
+- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `153/153`，在 Docker Desktop/Testcontainers 环境通过。Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
 - [x] **Step 4: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 > 进度：已加入 `RunnerPythonExecutionService`、`ScriptTaskInputRegistry`、`ScriptTaskPreparationService`、HMAC 短期读取令牌、内部别名读取 Controller 和 Compose `runner_internal` 网络；客户端 status/cancel、危险 taskId、Runner 不可用、过期令牌、任务别名隔离、旧 Local `requirement` 兼容测试均已通过。当前 SDK 读取受限内联批次，Runner 大结果经 DataAgent 内部接口写入 `outputRef`；输入 ObjectRef 的远程批读尚未实现。Compose 首次健康验证发现 Dockerfile 仅复制 `/app/src` 但未设置模块搜索路径，导致 `uvicorn` 重启并报 `ModuleNotFoundError: No module named 'runner'`；已通过设置 `PYTHONPATH=/app/src` 修复并复测通过。资源限制与外部网络阻断已有定向证据，带测试凭据的正式 Compose 内部连通性验证已完成，证据见 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
