@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 3 节（CAT-U01～CAT-DB02）。
 
-**当前状态（2026-09-13）：** 契约、目录服务、五种来源类型路由及 CAT-U06/CAT-U07 已在本地完成并验证；仅保留统一交付节点。
+**当前状态（2026-09-13）：** 契约、目录服务、五种来源类型路由及 CAT-U06/CAT-U07 已在本地完成并验证，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** 数据源连接和文件 ObjectRef 的开发数据由 `dev-support/local-simulation/` 提供；本计划不引入新的身份与权限模型。
 
@@ -68,7 +68,7 @@ Expected: FAIL，契约类型尚不存在。
 - [x] **Step 4: 重跑测试**，Expected: PASS。
 - [x] **统一 Adapter 选择回归补强**：`DatasetExecutionServiceTest` 已参数化覆盖 JDBC 表、JDBC SQL、Aloudata 指标视图、HTTP/API 和文件五种首期来源，均通过同一 `DatasetSourceAdapter`/`DatasetAccessContext` 契约选择描述器。
 - [x] **统一 Adapter 读取与缺失实现边界**：`DatasetExecutionServiceTest` 以 `CAT-U06/CAT-U07` 覆盖五种来源实际 `read` 路由，以及目录来源无对应 Adapter 时的 `INVALID_REQUEST` 拒绝。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: add unified dataset contracts`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ### Task 2: 扩展持久化与目录服务
 
@@ -92,7 +92,7 @@ Expected: FAIL，契约类型尚不存在。
 - [x] **Step 2: 运行测试**：先因统一目录契约和服务入口不存在而失败。
 - [x] **Step 3: 添加双数据库迁移和最小服务实现**，保持现有 `/v1/datasets` 响应字段兼容。
 - [x] **Step 4: 运行契约与目录服务测试**，Expected: PASS；MySQL 8.4 和 PostgreSQL 15.6 均已用真实 Testcontainers 从模拟 V217 数据集表连续迁移至 V220，旧记录保留 `JDBC_TABLE`，文件数据集可使用空 `datasource_id`。MySQL 运行时仅有 Flyway 对 8.4 高于已测试版本的兼容性提示，无迁移失败。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: extend dataset catalog for multiple sources`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ## 视觉验收（CDP）
 

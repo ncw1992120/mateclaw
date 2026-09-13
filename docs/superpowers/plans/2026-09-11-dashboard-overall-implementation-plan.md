@@ -10,7 +10,7 @@
 
 **Spec:** `docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-query-parameter-pushdown-design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`
 
-**当前状态（2026-09-13）：** 本地实现与自动化验证已完成当前范围；总体 Gate 为部分通过，待 Aloudata 授权和提交边界确认后继续。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
+**当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；总体 Gate 仍为部分通过，仅真实 Aloudata 结果查询授权未满足。候选提交已在本地生成，推送因远端 HTTP/2 网络错误未完成。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
 
 **外部条件清单：** [2026-09-13 外部前置条件与测试支撑计划](2026-09-13-dashboard-external-prerequisites.md)；执行 00–09 前必须按该清单收集并验证外部系统、账号、数据和证据条件。
 
@@ -41,15 +41,17 @@ make dashboard-prerequisites-simulation
 
 **最新复验（2026-09-13）：** 清理本地模拟栈后，独立 E2E Compose 使用同一轮 seed 和全部 Dashboard ID 重跑全量 Playwright，取得 `9 passed (36.2s)`；覆盖新增 ECharts 绑定预览。结束后已恢复本地模拟栈，fixture、MinIO 和 Runner 健康检查再次通过。
 
-**模块回归复验（2026-09-13）：** 随后在同一工作树执行 DataAgent `152/152`、Python Runner `20/20`、UI `24/24` 和 UI production build，全部成功；结果已写入总验收记录。该证据仍属于工作树级，不等价于候选 SHA 验收。
+**模块回归复验（2026-09-13）：** 在候选提交 `fc799a85414520a4118b36d736f01984b773255e` 上执行 DataAgent `152/152`、Python Runner `20/20`、UI `24/24` 和 UI production build，全部成功；结果已写入总验收记录。
 
 同轮补充结果绑定聚焦复验：`dataset-result.spec.ts`、`dashboard-schema.spec.ts` 共 `4 tests passed`，覆盖脚本结果到 Table/ECharts 的映射及旧 Schema 的 `scriptBindings` 保留。
 
-证据边界：当前工作树已在临时 E2E Compose 预览页采集到 ECharts `canvasCount=1` 的运行时证据（截图 `/tmp/mateclaw-dashboard-cdp/dashboard-echarts-binding.png`）；该证据仍待候选 SHA 重采集，不能用映射单测、构建或 Table 截图替代候选 SHA 验收。
+证据边界：候选提交已在临时 E2E Compose 预览页采集到 ECharts `canvasCount=1` 的运行时证据（截图 `/tmp/mateclaw-dashboard-cdp/dashboard-echarts-preview.png`）；该证据只覆盖本地模拟 Aloudata，不替代真实 Aloudata 授权验收。
 
 **视觉验收复验（2026-09-13）：** 已通过 CDP 实际检查列表、编辑器和最终结果页，AX 树与 5 行结果证据已写入 09 子计划和总验收记录；候选 SHA 生成后仍需在同一 SHA 重采集。
 
-**视觉验收入口固化（2026-09-13）：** 新增并实跑 `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`，统一生成列表、编辑器、Table 结果和 ECharts 结果四页截图及 AX 摘要；脚本仅使用调用方 Token，不持久化凭据。当前工作树证据已验证，候选 SHA 仍需重跑。
+**视觉验收入口固化（2026-09-13）：** 新增并实跑 `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`，统一生成列表、编辑器、Table 结果和 ECharts 结果四页截图及 AX 摘要；脚本仅使用调用方 Token，不持久化凭据。候选提交已完成该复验。
+
+**候选 SHA 验收（2026-09-13）：** `fc799a85414520a4118b36d736f01984b773255e` 在独立 E2E Compose 中完成完整 Playwright `9 passed (34.8s)`；CDP 四页均成功，AX 节点数为列表 `567`、编辑器 `500`、Table 结果 `617`、ECharts 结果 `88`，ECharts 结果页 `canvasCount=1` 且标题可见。证据截图目录为 `/tmp/mateclaw-dashboard-cdp`。该候选 SHA 的真实 Aloudata 结果查询仍因 `SM_02_0038` 保持 `BLOCKED`。
 
 **CDP 命令入口（2026-09-13）：** UI 新增 `npm run test:e2e:cdp`，并验证缺少认证变量时 fail-fast；计划命令不再依赖开发者手工拼接 Node 路径。
 
@@ -78,7 +80,7 @@ make dashboard-prerequisites-simulation
 
 ## 交付与提交边界
 
-各子计划中的“提交”步骤仅表示建议的 Git 交付节点，不代表实现步骤。当前工作树按项目约定不自动创建或提交候选 SHA；在用户确认提交范围后，再按子计划边界选择性暂存并提交。未提交不影响本地实现和测试证据，但不能替代最终候选 SHA 验收。
+各子计划中的“提交”步骤仅表示建议的 Git 交付节点，不代表实现步骤。本轮已按用户确认范围生成候选提交 `fc799a85414520a4118b36d736f01984b773255e`，并在同一 SHA 上完成模块、E2E 和 CDP 验收；推送远端因 HTTP/2 网络错误待重试。真实 Aloudata 授权未满足前，不得将候选 SHA 标记为正式环境全量完成。
 
 ## 阻塞解除后的执行顺序
 
@@ -191,7 +193,7 @@ npm --prefix mateclaw-dataagent-ui run build
 - 五种来源类型由四个 Adapter 实现承载（JDBC 表与 JDBC SQL 共用 JDBC Adapter），均通过同一个带 `DatasetAccessContext` 的 `DatasetSourceAdapter.describe/read` 契约。
 - 权限拒绝、空结果、超时、资源超限具有不同错误码。
 - JDBC 实际 SQL、API 实际参数、文件实际读取范围可审计。
-- CAT、ALO、JDBC、HTTP、FILE、OBJ、MGMT 对应自动测试全部通过；ALO-X01/X02 取得真实环境证据。
+- CAT、JDBC、HTTP、FILE、OBJ、MGMT 及本地模拟 ALO 对应自动测试全部通过；真实 ALO-X01 目录/详情已取得响应，ALO-X02 结果查询因 `SM_02_0038` 保持 `BLOCKED`。
 
 ### G2：Python 处理
 
@@ -206,8 +208,8 @@ npm --prefix mateclaw-dataagent-ui run build
 - 用户能选择数据集、分配别名、查看字段、编写脚本并分别预览输入/最终结果。
 - 页面参数进入脚本后由 `datasets.read` 显式用于字段条件。
 - 发布后异步任务支持状态、日志、取消、重试；旧 Dashboard Schema 可继续读取。
-- DASH-S01～DASH-UI05 与 E2E-01～E2E-06 已有当前工作树/本地模拟证据，但尚未绑定候选 SHA；真实 Aloudata 场景仍为 `BLOCKED`。
-- 当前工作树已通过 CDP 采集列表、编辑器和最终结果页的基础视觉证据；VIS-UI01～VIS-UI08 的完整候选 SHA 验收仍待提交后重跑，截图、任务 ID、查询/下推报告需在同一 SHA 绑定。
+- DASH-S01～DASH-UI05 与 E2E-01～E2E-06 已绑定候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 的本地模拟证据；真实 Aloudata 场景仍为 `BLOCKED`。
+- 候选 SHA 已通过 CDP 采集列表、编辑器、Table 和 ECharts 结果页；截图、任务 ID、查询/下推报告均关联同一轮 seed。真实 Aloudata 双源页面待授权后补采。
 
 ## 完成定义
 

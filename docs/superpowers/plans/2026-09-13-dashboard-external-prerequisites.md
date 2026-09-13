@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/plans/2026-09-11-dashboard-overall-implementation-plan.md`、`docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`。
 
-**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；最新本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `152/152`，Runner 为 `20/20`，UI 为 `24/24`。当前 Aloudata 真实结果访问和提交边界仍待外部条件满足；平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
+**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；候选 SHA `fc799a85414520a4118b36d736f01984b773255e` 上的本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `152/152`，Runner 为 `20/20`，UI 为 `24/24`。当前 Aloudata 真实结果访问仍待外部条件满足，候选提交已完成但远端推送待重试；平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
 
 **本轮复验（2026-09-13）：** 当前工作树执行 `make dashboard-prerequisites-simulation` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；设计门禁同时输出 `DESIGN-PASS`。Aloudata Adapter 的显式外部测试使用 Docker Maven + 本地 WireMock 环境变量运行通过，认证值仍为本地占位符，不计入真实 ALO-X02。
 
@@ -337,7 +337,7 @@ docker compose -f dev-support/local-simulation/docker-compose.yml down -v
 | EXT-FILE-01 | 四种文件样本及 checksum | 业务/测试负责人 | 测试 bucket | FILE-U01～U09 | 05/06/09 | 本地四种样本已准备；正式样本待确认 |
 | EXT-OBJ-01 | Docker 临时 MinIO、测试 bucket 和清理 | 实施环境维护者 | `dev-support/local-simulation/` | OBJ-I01～I06 | 06/08/09 | 已完成本地验证 |
 | EXT-AUTH-01 | 身份、workspace、角色矩阵 | 后续权限项目 | 后续单独定义 | 权限专项验收 | 未来 | 延期，不阻塞本次 |
-| EXT-DEL-01 | 候选 SHA 提交边界 | 仓库维护者 | Git 审批记录 | E2E-06 | 00–09 | 待确认 |
+| EXT-DEL-01 | 候选 SHA 提交边界 | 仓库维护者 | Git 审批记录 | E2E-06 | 00–09 | 已完成本地候选提交 `fc799a85`；远端推送待重试 |
 | EXT-LOCAL-01 | 本地模拟 Compose、初始化脚本和脱敏 fixture | 实施环境维护者 | `dev-support/local-simulation/` | healthcheck + seed/cleanup + manifest checksum | 00–09 | 已完成本地验证（10 行 fixture，start 等待长期服务 healthy） |
 
 > 当前已收到产品层/语义层地址、默认租户和 UID 认证方式；仍需 Aloudata 管理员确认一个允许结果查询的 `viewName`，并由项目维护者提供对应的 MateClaw `datasourceId`、可筛选字段和值，才能填充外部测试变量并执行 ALO-X02。

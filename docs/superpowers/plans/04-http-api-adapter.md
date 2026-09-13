@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 6 节（HTTP-U01～HTTP-U11）。
 
-**当前状态（2026-09-13）：** HTTP/API 安全策略、分页、重试、过滤透传和 HTTPS 8443 E2E fixture 已完成验证；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** HTTP/API 安全策略、分页、重试、过滤透传和 HTTPS 8443 E2E fixture 已完成验证，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** WireMock 映射和 HTTPS fixture 位于 `dev-support/local-simulation/`（现有 E2E fixture 可复用）；正式测试前替换已登记的测试 API 定义、证书链和认证注入配置。
 

@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 7 节（FILE-U01～FILE-U09）。
 
-**当前状态（2026-09-13）：** CSV/JSON/XLSX/Parquet 受控读取、Schema/资源限制和 Parquet 下推已完成验证；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** CSV/JSON/XLSX/Parquet 受控读取、Schema/资源限制和 Parquet 下推已完成验证，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** 文件样本和 MinIO 由 `dev-support/local-simulation/` Docker 环境提供；正式测试前切换 S3 兼容对象存储 endpoint、bucket、prefix 和 Secret。
 

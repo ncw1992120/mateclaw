@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 9 节（MGMT-C01～MGMT-UI05）。
 
-**当前状态（2026-09-13）：** 四类来源管理入口、来源定义校验、权限矩阵和 UI 24/24 测试已完成；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** 四类来源管理入口、来源定义校验、权限矩阵和 UI 24/24 测试已完成，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本次范围说明：** UI 继续兼容现有访问上下文，但不新增身份、角色或跨工作区权限；本地数据源和文件对象优先使用 `dev-support/local-simulation/` 的 Docker 服务。
 
@@ -78,7 +78,7 @@
 - [x] **Step 3（第一段）: 接入现有 DatasetEdit**：增加来源类型选择；JDBC SQL 显示 SQL 编辑器并提交类型化 `sourceDefinition`；JDBC 表继续使用原表选择流程；Aloudata 增加只读指标视图目录加载和选择，提交 `analysisViewId`，不编辑视图 SQL；HTTP/API 仅输入后端已登记的 `apiDefinitionId`，文件仅输入已登记的 `objectId` 和格式，不接受任意 URL、Header 或本地路径。
 - [x] **登记定义固化**：HTTP/API 数据集创建或更新时，根据数据源连接 `connectionParams.apiDefinitions` 解析 `apiDefinitionId`，将已登记的 endpoint、参数映射和结果路径固化到内部 `sourceConfig`；请求体不能直接注入 URL、Header 或凭据，缺少登记定义时拒绝保存。
 - [x] **Step 4（第一段）: 运行 UI test 与 build**：当前 24 个 Vitest 用例通过，production build 通过；`DatasetEdit.spec.ts` 覆盖 JDBC_SQL 的 SQL 入口和 FILE 的无 SQL 约束；补充了真实 E2E 的 Chrome channel 配置，并在真实 Compose 栈中完成 API+文件和旧 Schema 兼容场景验证。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: add multi-source dataset management ui`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ## 测试执行与预期结果
 

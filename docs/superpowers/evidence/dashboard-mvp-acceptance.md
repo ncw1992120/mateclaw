@@ -6,6 +6,12 @@
 
 ## 已准备
 
+### 2026-09-13 候选 SHA 验收（`fc799a85414520a4118b36d736f01984b773255e`）
+
+- 独立 E2E Compose 使用同一轮 seed、JWT、系统 Chrome 和本候选 SHA，完整 Playwright `9 passed (34.8s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。
+- CDP 视觉入口 `npm run test:e2e:cdp` 成功生成列表、编辑器、Table 结果和 ECharts 结果四页截图；AX 节点数为 `567/500/617/88`，ECharts 结果页 `canvasCount=1`、标题可见。截图目录：`/tmp/mateclaw-dashboard-cdp`。
+- 同一候选 SHA 的 DataAgent `152/152`、Runner `20/20`、UI `24/24`、production build、设计门禁和本地前置条件门禁均通过。该候选只关闭本地模拟验收，不关闭真实 Aloudata ALO-X02。
+
 ### 2026-09-13 本地 E2E 复验（当前工作树）
 
 - 使用 `docker-compose.test.yml` 启动 MySQL、MinIO、HTTPS WireMock、固定 Python Runner、DataAgent 和 UI；本轮实际 UI 地址为 `http://127.0.0.1:15174`，DataAgent 地址为 `http://127.0.0.1:18189/dataagent/api`。
@@ -39,7 +45,7 @@
 | --- | --- | --- |
 | Compose 健康检查 | `PASS` | DataAgent actuator `UP`；Runner `/health` `UP`；MinIO/MySQL/WireMock/UI 均 healthy/可访问；DataAgent→Runner 内部访问成功 |
 | JDBC + Aloudata 双源 | `BLOCKED` | 需要当前认证上下文下可查询的 Aloudata 指标视图数据集 |
-| API + 文件双源 | `PASS` | 真实 Compose + DataAgent + Python Runner + MinIO + WireMock；Playwright 1 passed，脚本执行无错误并生成截图 |
+| API + 文件双源 | `PASS` | 候选 SHA `fc799a85` 的真实 Compose + DataAgent + Python Runner + MinIO + WireMock；Playwright 全量中的该场景通过，脚本执行无错误并生成截图 |
 | 旧 Schema 兼容 | `PASS` | 当前真实 Compose + JWT + Chrome Playwright 1 passed；旧 Schema 可读且编辑器标题/内容已加载，重新固定截图基线 |
 | 脚本错误展示与重试 | `PASS` | 真实 Compose + Playwright 通过，脚本失败信息显示在 `.execution-alert`，并保留“重试”入口 |
 | 脚本取消与重试 | `PASS` | 真实 Compose + Playwright 通过，30 秒受控任务可取消，页面显示“执行已取消”并保留“重试”入口 |
@@ -260,7 +266,7 @@ CDP 视觉复验（2026-09-13）：在同一轮 E2E seed、JWT 和系统 Chrome 
 
 可复用 CDP 脚本复验（2026-09-13）：新增并实际执行 `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`。首次执行发现列表标题定位过宽（标题和副标题同时匹配），已收窄为精确 heading；修复后脚本在 E2E Compose、同一轮 seed、JWT 和系统 Chrome 下成功生成 `dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`，AX 节点数为 516、500、617，最终结果 5 行且包含 `120.5`。E2E 栈随后清理，本地模拟环境恢复并通过 `check.sh`。
 
-CDP 脚本最新复验（2026-09-13）：入口已增加 ECharts Dashboard，成功生成 `dashboard-echarts-preview.png`；AX 节点数为 `567/389/617/88`（列表/编辑器/Table 结果/ECharts 结果），ECharts 结果页 `canvasCount=1`、图表标题可见。该证据绑定当前工作树和本地模拟环境，候选 SHA 仍需重跑。
+CDP 脚本最新复验（2026-09-13）：入口已增加 ECharts Dashboard，在候选 SHA `fc799a85` 上成功生成 `dashboard-echarts-preview.png`；AX 节点数为 `567/500/617/88`（列表/编辑器/Table 结果/ECharts 结果），ECharts 结果页 `canvasCount=1`、图表标题可见。该证据绑定候选 SHA 和本地模拟环境。
 
 真实 Aloudata 外部 Gate 预检（2026-09-13）：当前 shell 未注入 `ALOU_DATA_*`，执行外部前置条件入口以退出码 `3` fail-fast，未发起网络请求；真实 ALO-X01/X02 继续保持 `BLOCKED`，不以本地模拟结果替代。
 

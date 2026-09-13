@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 5 节（JDBC-U01～JDBC-I05）。
 
-**当前状态（2026-09-13）：** JDBC 表/SQL Adapter、AST 校验、参数绑定及 MySQL/PostgreSQL 集成验证已完成；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** JDBC 表/SQL Adapter、AST 校验、参数绑定及 MySQL/PostgreSQL 集成验证已完成，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** MySQL/PostgreSQL 使用 `dev-support/local-simulation/` Docker 容器和脱敏初始化 SQL；正式测试前替换测试环境只读连接 Secret。
 
@@ -46,7 +46,7 @@
 - [x] **Step 2: 运行**：测试先因校验服务不存在而失败。
 - [x] **Step 3: 实现 AST 校验、外层安全追加和参数顺序，不使用字符串拼接参数值**。
 - [x] **Step 4: 重跑测试**，当前 5/5 通过；多语句通过 JSqlParser AST 数量判断，字符串字面量分号和尾部注释均可安全编译。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: compile safe jdbc dataset queries`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ### Task 2: JDBC 执行与下推报告
 
@@ -64,7 +64,7 @@
 - [x] **Step 2: 运行测试**：首次运行暴露嵌套网络问题；改用宿主网络和 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 后真实测试可达。
 - [x] **Step 3: 实现只读连接、查询超时、最大行数、结果 Schema 和审计摘要**；MySQL/PostgreSQL 容器集成测试已执行并通过，方言扩展仍需真实环境验证。
 - [x] **Step 4: 重跑 JDBC 单元测试和两个容器集成测试**，Expected: PASS；SQL/JDBC 单元测试通过，MySQL/PostgreSQL 集成测试各 1/1、0 跳过。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: add jdbc dataset adapter`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ## 视觉验收（CDP）
 

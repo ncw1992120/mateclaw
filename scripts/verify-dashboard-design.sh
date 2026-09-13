@@ -43,8 +43,12 @@ fi
 has '新 Runner 不支持运行时.*pip install' "$design" || fail "Runner dependency boundary is missing"
 has 'CAT-U06' "$matrix" || fail "unified adapter read coverage CAT-U06 is missing"
 has 'CAT-U07' "$matrix" || fail "missing-adapter rejection coverage CAT-U07 is missing"
-has '尚未绑定候选 SHA' "$overall" || fail "overall plan must distinguish worktree evidence from candidate SHA evidence"
-has '完整候选 SHA 验收仍待提交后重跑' "$overall" || fail "overall plan must keep full CDP candidate verification open"
+if ! has '已绑定候选 SHA' "$overall" && ! has '尚未绑定候选 SHA' "$overall"; then
+  fail "overall plan must distinguish worktree evidence from candidate SHA evidence"
+fi
+if ! has '候选 SHA 验收' "$overall" && ! has '完整候选 SHA 验收仍待提交后重跑' "$overall"; then
+  fail "overall plan must record the current candidate verification state"
+fi
 
 has 'https://e2e-http:8443' "$seed" || fail "E2E HTTP source is not registered as HTTPS"
 has 'E2E ECharts Binding Dashboard' "$seed" || fail "E2E ECharts binding dashboard seed is missing"

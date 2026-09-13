@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 8 节（OBJ-I01～OBJ-I06、OBJ-U01～OBJ-U03）。
 
-**当前状态（2026-09-13）：** MinIO/S3 ObjectRef、Parquet 编解码、TTL、越权和大结果传输已完成验证；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** MinIO/S3 ObjectRef、Parquet 编解码、TTL、越权和大结果传输已完成验证，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 **本地模拟：** 默认使用 Docker 临时 MinIO 和测试 volume，不要求外部存储服务；正式测试前按总体计划替换对象存储地址、bucket、生命周期和 Secret。
 

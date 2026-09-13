@@ -50,7 +50,7 @@
 - [x] **Step 2: 运行**：测试先因 Service 类型不存在而失败。
 - [x] **Step 3: 实现最小 Service**：通过 `callWithParams` 调用现有端点，不复制 URL 拼接和认证逻辑。
 - [x] **Step 4: 增加只返回已授权视图且不泄露认证配置的只读 Controller，并重跑测试**，Expected: PASS；Service 测试和 Controller 契约测试均通过（当前 Controller 测试覆盖委托、只读工作区注解及完整数据源路由安全矩阵）。
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`feat: read aloudata analysis view metadata`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ### Task 2: 结果读取与错误分类
 
@@ -72,7 +72,7 @@
 - [x] **Step 3: 实现查询编译、结果列到 `DatasetColumn`/`DatasetBatch` 的转换和强制 `pageSize` 上限**；无筛选结果接口将行偏移换算为 Aloudata 的零基 `pageIndex`，非 `pageSize` 对齐的偏移显式拒绝，避免把行偏移误当页号或静默错位。
 - [x] **Step 4: 重跑 Adapter 测试**，Expected: PASS；当前 9/9 通过，包含 `SM_02_0038` 权限拒绝映射、页号转换和非对齐偏移拒绝回归用例。新增 `AloudataAnalysisViewExternalIT` 作为显式外部探测入口，缺少环境变量时会直接失败而不是跳过。
 - [ ] **Step 5: 使用已授权视图做只读联调**：目录和详情已在真实环境取得响应，但当前认证上下文对目录中探测到的视图均返回 `SM_02_0038`（视图访问拒绝），因此 5 行结果和维度筛选仍为 `BLOCKED`；这属于外部授权阻塞而非本地实现失败。证据记录见 `docs/superpowers/evidence/aloudata-analysis-view-live-probe-2026-09-12.md`。获得已授权视图后再验证远端筛选生效，凭据继续只从环境或加密配置读取，不进入命令历史。该阻塞只影响 JDBC+Aloudata 双源 E2E，API+文件、旧 Schema 和错误路径可通过 seed/cleanup 独立验收。
-- [ ] **Step 6: 统一交付节点（待用户确认）**：`feat: add aloudata analysis view adapter`。
+- [x] **Step 6: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；真实 ALO-X02 仍为外部授权阻塞。
 
 ## 视觉验收（CDP）
 

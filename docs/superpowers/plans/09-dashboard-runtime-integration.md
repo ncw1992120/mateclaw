@@ -12,7 +12,7 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 11、12 节（DASH-S01～E2E-06）。
 
-**当前状态（2026-09-13）：** 本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；真实 Aloudata 结果查询仍未完成，最终 Gate 仅受真实外部授权和候选 SHA 约束。
+**当前状态（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 在本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；CDP 四页视觉复验也已完成。真实 Aloudata 结果查询仍未完成，最终 Gate 仅受真实外部授权约束。
 
 **本地模拟：** 先用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock 和 MinIO 完成非 Aloudata 闭环；正式测试环境切换项统一遵循总体计划末尾清单。本次不新增身份与权限验收。
 
@@ -24,11 +24,11 @@
 
 **结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
 
-**视觉证据边界：** 当前 CDP 复验实际展示的是 Table 结果；ECharts 绑定已有映射单测，但尚未在候选 SHA 上采集图表组件的 CDP/Canvas 页面证据。因此 VIS-UI04 的 ECharts 部分保持待候选 SHA 视觉复验，不以单测或 `build` 代替。
+**视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，不能替代真实 Aloudata 授权场景。
 
-**ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。该结果补齐当前工作树/本地模拟的可重复运行时证据；候选 SHA 仍需重采集并绑定任务/查询证据。
+**ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在候选 SHA 的完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。
 
-**本轮 CDP 视觉复验（2026-09-13）：** 在同一轮 E2E seed 和系统 Chrome 下，通过 Chrome DevTools Protocol 实际采集仪表盘列表、编辑器和最终结果页：AX 树分别为 516、389、617 个节点；编辑器可见“脚本数据集输入”“插入读取模板”“最终结果预览”，最终结果页表格为 5 行且包含 `120.5`。截图保存为 `/tmp/mateclaw-dashboard-cdp.png`、`/tmp/mateclaw-dashboard-editor-cdp.png`、`/tmp/mateclaw-dashboard-preview-cdp.png`。该证据绑定当前工作树和本地模拟环境，候选 SHA 视觉验收仍待提交后重跑。
+**本轮 CDP 视觉复验（2026-09-13）：** 在候选 SHA 的同一轮 E2E seed 和系统 Chrome 下，通过 Chrome DevTools Protocol 实际采集仪表盘列表、编辑器和最终结果页：AX 树分别为列表 567、编辑器 500、Table 结果 617、ECharts 结果 88 个节点；编辑器可见“脚本数据集输入”“插入读取模板”“最终结果预览”，Table 结果页为 5 行且包含 `120.5`，ECharts 结果页 `canvasCount=1` 且标题可见。截图保存到 `/tmp/mateclaw-dashboard-cdp`。
 
 CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts-preview.png`，AX 节点 `88`，`canvasCount=1` 且图表标题可见；入口现在要求同时注入 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`。
 
@@ -101,7 +101,7 @@ CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts
 - [x] **Step 4: 确保参数 UI 只配置作用范围；脚本通过 `datasets.read` 选择字段**。
 - [x] **Step 5: 运行 UI test 和 build**，Expected: PASS（当前 24 个 Vitest 用例通过，生产构建通过）。
 - [x] **Step 6（测试入口）**：已加入 `playwright.config.ts`、两组 E2E 文件（覆盖 JDBC+Aloudata、API+文件、ECharts 绑定、旧 Schema、错误、取消、超时和资源超限）和 `test:e2e` 脚本；用例只接受真实 DataAgent/Runner，通过 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和已 seed 的 Dashboard ID 注入环境。完整 seed 产生 9 个 Dashboard，其中 JDBC+Aloudata 可选择真实数据集或 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 自动创建的 WireMock 数据集，其余 8 个可在无 Aloudata 授权时独立运行；不使用 route mock。API+文件脚本对 API 与文件都显式传入 `status=PAID` 过滤，WireMock mapping 强制校验 query 参数，确保 E2E-02 能证明参数透传和文件过滤。Vite 开发端口和 DataAgent 代理目标支持 `VITE_DEV_PORT`、`VITE_DATAAGENT_PROXY_TARGET` 覆盖，默认值保持 `5174`/`http://localhost:18089` 不变。Aloudata 用例缺少授权时显式报 `BLOCKED`，不使用 `test.skip`。
-- [ ] **Step 7: 统一交付节点（待用户确认）**：`feat: add dashboard dataset script workflow`。
+- [x] **Step 7: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ### Task 3: 真实闭环验收
 
@@ -123,7 +123,7 @@ CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts
 - [x] **Step 2b（本地模拟）**：使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation`、E2E HTTPS WireMock 的 `local_sales_view` 和 JDBC fixture 完成页面双源预览；脚本草稿与结果表均验证 `region=east` 的 5 行结果，Playwright `1 passed`。该项只关闭本地开发验证，不关闭真实 ALO-X02；真实环境仍因 `SM_02_0038` 保持 `BLOCKED`，需取得远端筛选/下推证据后再关闭。
 - [x] **Step 3a: 完成 DataAgent/Runner 控制面与旧工具通道复验**：真实 Compose + Playwright 已验证任务取消、脚本错误/重试、脚本超时/重试、资源超限/重试、旧 Schema、API+文件和大结果 ObjectRef；Runner 控制面已补齐后台异常到 `FAILED` 的终态收敛，并以定向 E2E 复验通过；cleanup 已增加跨工作区读取 HTTP 403 的真实权限验证。大结果用例确认 DataAgent 结果接口返回 `inline=false`/`outputRef` 并限制为 10 行预览。旧执行器与 `PythonAnalysisTool` 的 `ToolCallback` 已在真实 `python3` 容器中完成兼容复验。
 - [x] **Step 3b（范围决策）：平台内 AI 生成不纳入本期**：本项目不负责自动生成 SQL/Python，用户可在外部使用大模型生成草稿后粘贴；本期只验证用户脚本的校验、预览、执行和旧 `ToolCallback` 兼容，不要求真实 LLM/Agent 对话环境。
-- [ ] **Step 4: 运行完整验证；证据必须绑定同一候选 SHA**：本轮未创建提交或候选 SHA，因此只能记录工作树级验证，不能将此项标记完成。
+- [x] **Step 4: 运行完整验证；证据必须绑定同一候选 SHA**：`fc799a85414520a4118b36d736f01984b773255e` 上 Playwright `9 passed`，CDP 列表/编辑器/Table/ECharts 四页均成功；真实 Aloudata 结果查询另行记录为 `BLOCKED`。
 
 ```bash
 make dashboard-dataagent-test
@@ -144,7 +144,7 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 > HTTP/API E2E 测试服务必须提供可验证的 HTTPS 端点，并满足生产 `HttpApiRequestPolicy` 的公开地址/allowlist 校验；不能直接把 Docker 私网 WireMock 地址当作生产策略的例外。若使用本地测试服务，必须通过独立测试证书和显式测试配置完成 TLS 验证，测试配置不得进入默认或生产 profile。
 
-- [ ] **Step 5: 统一交付节点（待用户确认）**：`test: verify dashboard mvp workflow`。
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
 
 ## 单元与服务测试预期结果
 
