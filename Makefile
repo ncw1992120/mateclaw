@@ -1,5 +1,5 @@
 # Dashboard external prerequisite checks
-.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
 
 dashboard-prerequisites-local:
 	./scripts/verify-dashboard-external-prerequisites.sh --local
@@ -31,6 +31,14 @@ dashboard-dataagent-test:
 dashboard-runner-test:
 	@test -x mateclaw-python-runner/.venv/bin/pytest || { echo "缺少 Runner 虚拟环境，请先在 mateclaw-python-runner 执行 uv sync --dev" >&2; exit 2; }
 	cd mateclaw-python-runner && .venv/bin/pytest -q
+
+# Run the UI unit suite and production type/build gate with the repository's
+# installed Node dependencies.
+dashboard-ui-test:
+	npm --prefix mateclaw-dataagent-ui run test -- --run
+
+dashboard-ui-build:
+	npm --prefix mateclaw-dataagent-ui run build
 
 # Docker buildx builder setup
 .PHONY: builder-create builder-rm builder-inspect
