@@ -27,6 +27,7 @@ for target in dashboard-dataagent-test dashboard-runner-test dashboard-ui-test d
   has "^${target}:" "$makefile" || fail "Makefile gate target is missing: ${target}"
 done
 has '2026-09-13-dashboard-external-prerequisites.md' "$overall" || fail "overall plan does not reference external prerequisites"
+has 'make dashboard-verify-local' "$overall" || fail "overall plan does not reference the aggregate local gate"
 
 has '第一阶段范围状态：已冻结' "$design" || fail "design is not marked frozen"
 has '首期支持 JDBC、Aloudata 指标视图、HTTP/API 和文件数据源' "$design" || fail "first-phase source scope is missing"
