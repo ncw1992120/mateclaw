@@ -35,6 +35,14 @@ def test_read_sends_alias_filters_and_params():
     assert result.rows == ({"id": 1},)
     assert server.payload["inputName"] == "orders" and "datasetId" not in server.payload
     assert server.payload["filters"][0]["field"] == "status"
+    assert server.payload["filters"][0]["role"] == "dimension"
+
+
+def test_filter_mapping_defaults_to_dimension_role():
+    server = HTTPServer(("127.0.0.1", 0), Handler); threading.Thread(target=server.handle_request, daemon=True).start()
+    DatasetClient(f"http://127.0.0.1:{server.server_port}/read", "token").read(
+        "orders", filters=[{"field": "amount", "operator": "gt", "value": 10}])
+    assert server.payload["filters"][0]["role"] == "dimension"
 
 
 def test_read_rejects_unsupported_filter_operator_before_network_call():

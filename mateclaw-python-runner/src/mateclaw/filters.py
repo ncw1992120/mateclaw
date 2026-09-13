@@ -11,10 +11,13 @@ class Filter:
     field: str
     operator: str
     value: Any = None
+    role: str = "dimension"
 
     def as_dict(self) -> dict[str, Any]:
         if not isinstance(self.field, str) or not self.field or self.field.startswith("__"):
             raise ValueError("invalid filter field")
         if not isinstance(self.operator, str) or self.operator.lower() not in SUPPORTED_OPERATORS:
             raise ValueError(f"unsupported filter operator: {self.operator}")
-        return {"field": self.field, "operator": self.operator, "value": self.value}
+        if not isinstance(self.role, str) or self.role.lower() not in {"dimension", "measure"}:
+            raise ValueError(f"unsupported filter role: {self.role}")
+        return {"field": self.field, "role": self.role.lower(), "operator": self.operator, "value": self.value}

@@ -55,3 +55,12 @@ def test_child_does_not_inherit_arbitrary_runner_environment(monkeypatch):
     )
     assert result["status"] == "SUCCEEDED"
     assert result["result"] == '[{"value": "missing"}]'
+
+def test_dataset_client_receives_task_parameters():
+    result = TaskExecutor().start(
+        "task-parameters", "result = [{'region': datasets.params.require('region')}]",
+        {"MATECLAW_DATASET_ENDPOINT": "http://dataagent/read", "MATECLAW_READ_TOKEN": "secret"},
+        5, 1000, parameters={"region": "east"}
+    )
+    assert result["status"] == "SUCCEEDED"
+    assert result["result"] == '[{"region": "east"}]'

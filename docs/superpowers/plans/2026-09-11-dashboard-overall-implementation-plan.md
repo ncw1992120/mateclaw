@@ -4,15 +4,66 @@
 
 **Goal:** 在兼容现有 Aloudata 仪表盘和 Agent Python 的前提下，交付 JDBC、Aloudata 指标视图、HTTP/API、文件数据源与 Python 多源预处理闭环。
 
-**Architecture:** DataAgent 负责目录、权限、查询和任务治理，所有来源通过带 `DatasetAccessContext` 的 `DatasetSourceAdapter` 输出统一 `DatasetInputDescriptor`/`DatasetBatch`。Python Runner 只接收受控 `dataRef`、输入目录和任务级读取能力，不接触连接凭据；仪表盘运行时只消费数据集契约，不直接感知数据库、Aloudata 或文件协议。
+**Architecture:** DataAgent 负责目录、权限、查询和任务治理，所有来源通过带 `DatasetAccessContext` 的 `DatasetSourceAdapter` 输出统一 `DatasetInputDescriptor`/`DatasetBatch`。Python Runner 只接收输入目录和任务级读取能力，不接触连接凭据；脚本读取当前返回受限批次，脚本大结果通过受控 `outputRef/dataRef` 传输。输入侧的 ObjectRef 批读保留为后续扩展，不把尚未实现的远程批读写成当前能力；仪表盘运行时只消费数据集契约，不直接感知数据库、Aloudata 或文件协议。
 
 **Tech Stack:** Java 21、Spring Boot、MyBatis-Plus、JDBC/JSqlParser、Vue 3/TypeScript、Python 3、FastAPI、Polars/Pandas、Arrow/Parquet、MinIO/S3、Docker Compose。
 
 **Spec:** `docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-query-parameter-pushdown-design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`
 
-**当前状态（2026-09-13）：** 本地实现与自动化验证已完成当前范围；总体 Gate 为部分通过，待 Aloudata 授权、真实 LLM E2E 和提交边界确认后继续。身份与权限完善不纳入本次范围。
+**当前状态（2026-09-13）：** 本地实现与自动化验证已完成当前范围；总体 Gate 为部分通过，待 Aloudata 授权和提交边界确认后继续。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
 
 **外部条件清单：** [2026-09-13 外部前置条件与测试支撑计划](2026-09-13-dashboard-external-prerequisites.md)；执行 00–09 前必须按该清单收集并验证外部系统、账号、数据和证据条件。
+
+## 当前开发验证基线（本地模拟）
+
+**本轮前置复验（2026-09-13）：** 已在当前工作树执行 `make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local`，分别取得模拟依赖健康、`DESIGN-PASS` 和 `EXTERNAL-PREREQUISITES-LOCAL-PASS`。Aloudata Adapter 外部探测也通过 Docker Maven 入口完成；该探测使用本地 WireMock，不代表真实租户授权。
+
+在真实外部条件尚未提供前，00–09 的开发和自动化验证统一使用 `dev-support/local-simulation/`，不再等待真实 Aloudata、数据库、对象存储或 API。启动后执行：
+
+```bash
+./dev-support/local-simulation/scripts/start.sh
+make dashboard-prerequisites-simulation
+```
+
+| 能力 | 本地模拟资源 | 默认地址/标识 | 适用子计划 |
+| --- | --- | --- | --- |
+| JDBC 表/SQL | MySQL、PostgreSQL + `orders/customers` 脱敏数据 | `127.0.0.1:13306`、`127.0.0.1:15432` | 01、03、07、09 |
+| HTTP/API | WireMock + OpenAPI | HTTPS `127.0.0.1:18443/orders`、`api/orders-openapi.yaml` | 04、07、09 |
+| Aloudata 指标视图 | WireMock tree/detail/query/metrics | `local_sales_view`、`datasourceId=9001`、`tenantId=local-tenant` | 02、07、09 |
+| 文件/ObjectRef | MinIO + CSV/JSON/Parquet/XLSX + manifest | bucket `mateclaw-sim`、对象键 `files/<name>` | 05、06、07、08、09 |
+| Python Runner | 项目固定 Dockerfile + `runner_internal` internal 网络 | `/health` 返回 `status=UP` | 08、09 |
+
+本地模拟只证明契约、映射、读取、过滤、资源限制和执行链路；不得将其证据写成真实外部系统验收。切换真实环境时，按外部前置计划和本文末尾的正式环境改造清单替换连接地址、Secret、视图和对象存储配置。
+
+### 当前工作树回归结果
+
+在本地模拟环境启动后，当前工作树已复跑 Runner `20 passed`、UI `24 passed`、UI production build、DataAgent Docker Maven 全量测试（退出码 0）、独立 E2E Compose 全量 Playwright `9 passed`（含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）、设计门禁和前置条件检查；独立 E2E Compose 的 UI 容器已增加并验证 HTTP healthcheck，统一入口会等待 DataAgent actuator 与 UI 健康后再进入 seed/Playwright。结果详见 [dashboard-mvp-acceptance.md](../evidence/dashboard-mvp-acceptance.md)。这些结果是开发基线，不代表真实 Aloudata 或正式测试环境 Gate 已关闭。
+
+**最新复验（2026-09-13）：** 清理本地模拟栈后，独立 E2E Compose 使用同一轮 seed 和全部 Dashboard ID 重跑全量 Playwright，取得 `9 passed (36.2s)`；覆盖新增 ECharts 绑定预览。结束后已恢复本地模拟栈，fixture、MinIO 和 Runner 健康检查再次通过。
+
+**模块回归复验（2026-09-13）：** 随后在同一工作树执行 DataAgent `152/152`、Python Runner `20/20`、UI `24/24` 和 UI production build，全部成功；结果已写入总验收记录。该证据仍属于工作树级，不等价于候选 SHA 验收。
+
+同轮补充结果绑定聚焦复验：`dataset-result.spec.ts`、`dashboard-schema.spec.ts` 共 `4 tests passed`，覆盖脚本结果到 Table/ECharts 的映射及旧 Schema 的 `scriptBindings` 保留。
+
+证据边界：当前工作树已在临时 E2E Compose 预览页采集到 ECharts `canvasCount=1` 的运行时证据（截图 `/tmp/mateclaw-dashboard-cdp/dashboard-echarts-binding.png`）；该证据仍待候选 SHA 重采集，不能用映射单测、构建或 Table 截图替代候选 SHA 验收。
+
+**视觉验收复验（2026-09-13）：** 已通过 CDP 实际检查列表、编辑器和最终结果页，AX 树与 5 行结果证据已写入 09 子计划和总验收记录；候选 SHA 生成后仍需在同一 SHA 重采集。
+
+**视觉验收入口固化（2026-09-13）：** 新增并实跑 `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`，统一生成列表、编辑器、Table 结果和 ECharts 结果四页截图及 AX 摘要；脚本仅使用调用方 Token，不持久化凭据。当前工作树证据已验证，候选 SHA 仍需重跑。
+
+**CDP 命令入口（2026-09-13）：** UI 新增 `npm run test:e2e:cdp`，并验证缺少认证变量时 fail-fast；计划命令不再依赖开发者手工拼接 Node 路径。
+
+### 本地模拟驱动的实施顺序
+
+后续开发任务统一按以下顺序执行，避免子计划各自创建一套不可复现的外部依赖：
+
+1. 启动或复用模拟环境：`./dev-support/local-simulation/scripts/start.sh`；每轮开始先运行 `make dashboard-prerequisites-simulation`。若切换到 E2E Compose，先执行 `dev-support/local-simulation/scripts/cleanup.sh`；`scripts/e2e/start-dashboard-mvp.sh` 会检测同端口模拟容器并 fail-fast，E2E 结束后再恢复模拟环境。
+2. 先完成 01 目录契约，再按 02～06 的 Adapter 顺序运行定向测试；JDBC 使用 MySQL/PostgreSQL，HTTP/API 使用 HTTPS WireMock，文件/ObjectRef 使用 MinIO，Aloudata 使用 `local_sales_view` 模拟视图。
+3. 08 Runner 只通过任务输入别名读取上述数据集，验证过滤条件、资源限制、取消和大结果 ObjectRef；不得把连接凭据或大 JSON 放入 Runner 请求。
+4. 07 管理 UI 使用同一批模拟数据源/对象创建数据集，09 再执行 API+文件、JDBC+模拟 Aloudata、旧 Schema、异常重试和大结果闭环。
+5. 每个子计划的结果写入统一验收记录，并明确标注 `LOCAL-SIMULATION`、`EXTERNAL-BLOCKED` 或 `CANDIDATE-SHA`；本地通过不能关闭真实 Aloudata Gate。E2E seed 后使用 `scripts/e2e/export-dashboard-mvp-env.sh` 从同一 state 文件批量导出 Dashboard ID，避免人工复制遗漏；该脚本不处理认证值。
+
+子计划只负责自身的定向实现和证据，不重复部署依赖。若模拟服务未启动，任务应先执行前置检查并停止，不以 mock、跳过测试或历史结果代替。
 
 ## Global Constraints
 
@@ -22,7 +73,7 @@
 - HTTP/API 只访问已登记地址；文件只从受控对象存储读取。
 - Python 下推条件只能由 `datasets.read(..., filters=...)` 表达；DataFrame 后置过滤不下推。
 - 新 Runner 不支持运行时 `pip install`；旧 `LocalCodeExecutorService` 不改行为。
-- 不把数据库凭据或未受控 URL 交给 Runner；正式数据通过有 TTL、task 约束的 `dataRef` 传递。现有 workspace/访问上下文仅保持兼容，不在本次完善身份与权限模型。
+- 不把数据库凭据或未受控 URL 交给 Runner；输入读取由 DataAgent 返回受限批次，脚本大结果通过有 TTL、task 约束的 `dataRef/outputRef` 传递。现有 workspace/访问上下文仅保持兼容，不在本次完善身份与权限模型。
 - `datasets.read` 通过仅允许当前任务输入别名的短期读取令牌回调 DataAgent；Runner 不能凭 `datasetId` 任意读取目录中的其他数据集。
 
 ## 交付与提交边界
@@ -43,6 +94,7 @@
 | --- | --- | --- | --- |
 | 非 Aloudata E2E | 当前测试上下文（不新增 JWT/角色矩阵） | `scripts/e2e/seed-dashboard-mvp.sh` → `npm --prefix mateclaw-dataagent-ui run test:e2e` → `scripts/e2e/verify-dashboard-mvp-cleanup.sh` | API+文件、旧 Schema、错误/取消/超时/资源限制场景通过；权限专项延期 |
 | Aloudata Adapter | `ALOU_DATA_EXTERNAL_TEST=true`、产品/语义服务地址、`ALOU_DATA_TENANT_ID`、`ALOU_DATA_AUTH_TYPE`、`ALOU_DATA_AUTH_VALUE`、`ALOU_DATA_TEST_DATASOURCE_ID`、`ALOU_DATA_TEST_VIEW_NAME`、筛选字段和值 | `mvn -f mateclaw-dataagent/pom.xml -Dtest=AloudataAnalysisViewExternalIT test` | 目录/详情、至少 5 行结果和一个远端筛选结果均取得真实响应；否则记录 `BLOCKED`。认证值只在外部测试进程环境中注入，不写入日志或文档；生产 Adapter 仍从加密数据源配置读取。 |
+| 本地 CDP 视觉验收 | 同一轮 E2E 的 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID`、`MATECLAW_E2E_DASHBOARD_ID`、`MATECLAW_E2E_ECHARTS_DASHBOARD_ID` | `cd mateclaw-dataagent-ui && npm run test:e2e:cdp` | 列表、编辑器、Table 结果和 ECharts 结果页均生成截图和 AX 摘要；结果只能标记为工作树/本地模拟，候选 SHA 需重跑。 |
 | 双源最终 Gate | 上述两组变量及 `MATECLAW_E2E_ALOUDATA_DATASET_ID` | 同一候选 SHA 重跑两条双源 Playwright 场景 | JDBC+Aloudata 与 API+文件均通过，且报告包含实际查询参数/下推证据 |
 
 未满足变量时，入口必须 fail-fast 或显式 `BLOCKED`；不得用空值、mock、`test.skip` 或历史 PASS 代替真实证据。
@@ -51,7 +103,7 @@
 
 ## 本轮一致性审查结论
 
-- 读取时序统一为“Runner 启动 → 脚本调用 `datasets.read` → DataAgent 查询 → 返回 `dataRef`”，删除“先准备全部输入再启动脚本”的冲突协议。
+- 读取时序统一为“Runner 启动 → 脚本调用 `datasets.read` → DataAgent 查询 → 返回受限 `DatasetBatch`”；脚本大结果再通过受控 `outputRef/dataRef` 上传。输入侧远程 ObjectRef 批读不在当前实现范围，待专门的读取接口和 SDK 迭代后再启用。
 - Aloudata `analysisView/query` 当前登记参数不能证明支持临时筛选；必须以真实能力验证决定直查还是编译为 Semantic `metrics/query`，无法等价转换就拒绝，不伪造下推。
 - `DatasetSourceAdapter` 强制接收 `DatasetAccessContext`；短期令牌只授权当前任务的输入别名。
 - ObjectRef 基础设施前移到文件 Adapter 之前，避免文件上传计划引用尚未实现的存储能力。
@@ -61,12 +113,14 @@
 
 ## 当前实施进度（2026-09-12）
 
-> **测试计数口径**：本节早期复验记录中的 `140/140`、`146/146` 为历史工作树快照；新增统一读取与未知 Adapter 边界用例后，当前 DataAgent 全量基线以最新 `147/147`（0 failures/errors/skips）为准。
+> **测试计数口径**：本节早期复验记录中的 `140/140`、`146/146`、`147/147` 为历史工作树快照；当前 DataAgent 全量基线以最新 `152/152`（0 failures/errors/skips）为准。
 
 - G0：已新增 `scripts/verify-dashboard-design.sh`，可重复校验首期范围、JDBC-only SQL 边界、`datasets.read` 时序、Runner 依赖边界及 01–09 子计划测试矩阵引用；当前检查通过。
-- G1：JDBC、Aloudata、HTTP/API、文件 Adapter 和 ObjectRef 已有基础实现与定向测试；JDBC 编译器已用 AST 判断多语句，支持字符串字面量分号和尾部注释，并保持 PreparedStatement 绑定；文件 Schema 探测/批读四种格式定向测试通过，新增文件 `in`/`between` 过滤、Schema 版本拒绝、流关闭、空/损坏文件、字节超限和 XLSX 压缩比/条目数/解压后大小限制测试；Parquet 已使用 Avro requested projection 与 Parquet FilterPredicate 对基础比较谓词实际下推，并在 `PushdownReport` 中区分 pushed/residual filters；HTTP 已覆盖 page/offset/cursor 分页、按 offset/size 计算页码、最大页数限制、非页对齐偏移拒绝、5xx/429 分类、结果路径错误、幂等一次重试、响应字节、行数上限、重定向拒绝和每次网络尝试前的 DNS 重绑定再校验，生产 RestTemplate 已配置连接/读取超时；数据集管理已增加五种类型化来源定义，创建/更新服务支持新 `sourceDefinition`，兼容旧 JDBC 请求，并对名称执行 NFKC、空值和工作区内唯一性校验；HTTP/API 的 `apiDefinitionId` 会从数据源 `connectionParams.apiDefinitions` 解析并固化为受控来源配置，不接受数据集请求直接注入 URL/Header；创建/更新服务已统一委托 `DatasourceManageService.checkDatasourceReadable`，不会因仅能查到数据源记录就绕过工作区/授权校验；数据源编辑响应已对嵌套连接参数递归移除密码、Token、认证值和敏感 Header；管理 UI 已接入来源类型选择、JDBC SQL 编辑、Aloudata 只读指标视图目录选择，以及 HTTP/API 已登记定义 ID、文件对象 ID/格式输入，页面不接受任意 URL、Header 或本地路径；数据集目录迁移已用真实 MySQL 8.4 和 PostgreSQL 15.6 从 V217 连续验证至 V220；数据集全部管理路由、数据源全部管理路由和文件上传路由均已通过真实 `MockMvc + DataAgentWorkspaceInterceptor` 行为矩阵；统一执行服务的 Adapter 选择与读取测试已参数化覆盖五种来源，DataAgent 当前全量 `146/146` 个测试在 Docker Desktop/Testcontainers 配置下通过。Aloudata 真实目录/详情已通过探测，但当前认证上下文对结果查询返回 `SM_02_0038`，ALO-X02 保持 `BLOCKED`。
-- G2：Python Runner、`datasets.read` 受控回调、短期读取令牌、任务输入目录和 Docker 非 root 基线已完成定向验证；脚本 `result` 与日志分离，小结果受限 JSON，大结果惰性转换为 Parquet 并通过 DataAgent 内部令牌接口返回 `outputRef`；输入别名已与统一契约严格一致，内部读取控制器已有任务令牌/别名安全测试，Runner status/cancel、不可用/过期令牌和旧 Local `requirement` 兼容回归已补齐；Runner 任务新增内存和单文件大小限制，并由 Unix 子进程 `rlimit` 执行，用户脚本子进程仅继承最小运行时环境和任务级 SDK 变量；Python SDK 已在请求前校验过滤字段/操作符，兼容 DataAgent `R.ok(...)` 响应包装并识别业务错误，Runner 全量测试当前 `17/17` 通过；Compose 中 Runner/MinIO 健康检查及 Runner `/health` 已通过，临时 Docker `--internal` 网络已验证脚本外部 DNS/HTTPS 访问失败；DataAgent 镜像已构建并在带测试凭据的 Compose 中启动，容器内访问 Runner `/health`、MinIO readiness 均返回 HTTP 200，Flyway 已完成到 v220；本轮 DataAgent 全量测试 `146/146` 通过（0 failures/errors/skips）。首次 Compose 验证发现并修复 Dockerfile 缺少 `/app/src` 模块搜索路径导致的 `ModuleNotFoundError: No module named 'runner'`；证据见 `docs/superpowers/evidence/runner-network-isolation-2026-09-12.md` 和 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
+- 外部前置本地化：已新增 `dev-support/local-simulation/`，用 Docker Compose 提供 MySQL 8.4、PostgreSQL 15.6、MinIO、WireMock（HTTP/HTTPS 临时 PKCS12）和项目固定 Dockerfile 构建的 Python Runner；数据库样例、对象 bucket、10 行脱敏文件 fixture、Aloudata/HTTP 模拟接口、Runner 健康检查及 start/check/cleanup 入口已通过本机验证；`start.sh` 会等待长期服务 healthcheck 后再 seed，`check.sh` 校验 fixture manifest 的行数、文件集合、字节数和 SHA-256；本地 Aloudata Adapter 外部探测已通过；根目录统一前置条件检查脚本已支持 `--local`/`--simulation`/`--external` 并对缺少真实变量 fail-fast。真实 Aloudata 目前还缺结果查询授权，正式对象存储和身份权限仍按外部条件/后续专项处理。
+- G1：JDBC、Aloudata、HTTP/API、文件 Adapter 和 ObjectRef 已有基础实现与定向测试；JDBC 编译器已用 AST 判断多语句，支持字符串字面量分号和尾部注释，并保持 PreparedStatement 绑定；文件 Schema 探测/批读四种格式定向测试通过，新增文件 `in`/`between` 过滤、Schema 版本拒绝、流关闭、空/损坏文件、字节超限和 XLSX 压缩比/条目数/解压后大小限制测试；Parquet 已使用 Avro requested projection 与 Parquet FilterPredicate 对基础比较谓词实际下推，并在 `PushdownReport` 中区分 pushed/residual filters；HTTP 已覆盖 page/offset/cursor 分页、按 offset/size 计算页码、最大页数限制、非页对齐偏移拒绝、5xx/429 分类、结果路径错误、幂等一次重试、响应字节、行数上限、重定向拒绝和每次网络尝试前的 DNS 重绑定再校验，生产 RestTemplate 已配置连接/读取超时；数据集管理已增加五种类型化来源定义，创建/更新服务支持新 `sourceDefinition`，兼容旧 JDBC 请求，并对名称执行 NFKC、空值拒绝和工作区内唯一性校验；HTTP/API 的 `apiDefinitionId` 会从数据源 `connectionParams.apiDefinitions` 解析并固化为受控来源配置，不接受数据集请求直接注入 URL/Header；创建/更新服务已统一委托 `DatasourceManageService.checkDatasourceReadable`，不会因仅能查到数据源记录就绕过工作区/授权校验；数据源编辑响应已对嵌套连接参数递归移除密码、Token、认证值和敏感 Header；管理 UI 已接入来源类型选择、JDBC SQL 编辑、Aloudata 只读指标视图目录选择，以及 HTTP/API 已登记定义 ID、文件对象 ID/格式输入，页面不接受任意 URL、Header 或本地路径；数据集目录迁移已用真实 MySQL 8.4 和 PostgreSQL 15.6 从 V217 连续验证至 V220；数据集全部管理路由、数据源全部管理路由和文件上传路由均已通过真实 `MockMvc + DataAgentWorkspaceInterceptor` 行为矩阵；统一执行服务的 Adapter 选择与读取测试已参数化覆盖五种来源，DataAgent 当前全量 `152/152` 个测试在 Docker Desktop/Testcontainers 配置下通过。为支持内部 Runner 读取，Aloudata 端点服务已增加关键端点代码级兜底，API 客户端已在参数校验前注入连接级认证上下文，Adapter 已兼容来源定义中的 `analysisViewId` 与历史 `viewName`；认证注入、端点兜底、内部 Runner 回退和字段兼容回归均已由 Docker Maven 定向测试覆盖。Aloudata 真实目录/详情已通过探测，但当前认证上下文对结果查询返回 `SM_02_0038`，ALO-X02 保持 `BLOCKED`。
+- G2：Python Runner、`datasets.read` 受控回调、短期读取令牌、任务输入目录和 Docker 非 root 基线已完成定向验证；脚本 `result` 与日志分离，小结果受限 JSON，大结果惰性转换为 Parquet 并通过 DataAgent 内部令牌接口返回 `outputRef`；输入别名已与统一契约严格一致，内部读取控制器已有任务令牌/别名安全测试，Runner status/cancel、不可用/过期令牌和旧 Local `requirement` 兼容回归已补齐；Runner 任务新增内存和单文件大小限制，并由 Unix 子进程 `rlimit` 执行，用户脚本子进程仅继承最小运行时环境和任务级 SDK 变量；Python SDK 已在请求前校验过滤字段/操作符，兼容 DataAgent `R.ok(...)` 响应包装并识别业务错误，Runner 全量测试当前 `20/20` 通过；Compose 中 Runner/MinIO 健康检查及 Runner `/health` 已通过，临时 Docker `--internal` 网络已验证脚本外部 DNS/HTTPS 访问失败；DataAgent 镜像已构建并在带测试凭据的 Compose 中启动，容器内访问 Runner `/health`、MinIO readiness 均返回 HTTP 200，Flyway 已完成到 v220；本轮 DataAgent 全量测试 `152/152` 通过（0 failures/errors/skips），执行进程注入 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk 以适配 Docker Desktop 容器网络；证据见 `docs/superpowers/evidence/runner-network-isolation-2026-09-12.md` 和 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
 - G2 追加复验（2026-09-12）：在当前工作树重新执行 Docker Maven DataAgent、Runner pytest、UI 测试/构建及设计门禁校验，分别取得 `146/146`、`17/17`、`24/24`、构建成功和 `DESIGN-PASS`；另补充统一执行服务五类来源实际 `read` 路由参数化测试。详细命令与边界见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。该结果未生成候选 SHA。
+- G2 最新本地回归（2026-09-13）：Python SDK 补齐默认过滤角色并接收任务参数，随后通过 App→Executor→DatasetClient 集成回归，Runner 全量更新为 `20/20`；非 Aloudata Playwright `7 passed`，API+文件断言实际 `PAID` 结果，真实 Aloudata 用例继续显式 `BLOCKED`。
 - G2 最新回归（2026-09-12）：在统一执行服务新增“未知来源无 Adapter 时明确拒绝”边界测试后，Docker Maven DataAgent 全量结果更新为 `147/147`（0 failures/errors/skips）；该数字 supersede 前述 `146/146` 记录。
 - G1 HTTP/API TLS 补强（2026-09-12 14:15）：E2E WireMock 已改为启动时生成 PKCS12 HTTPS 8443 fixture，DataAgent 通过只读 truststore 建立 TLS，HTTP 策略仅在显式 TLS 测试模式下允许固定 `e2e-http:8443` 私网主机，seed 脚本登记 `https://e2e-http:8443`，移除 `ALLOW_INSECURE` 例外；独立 fixture 与完整依赖栈健康检查均已通过，证据见验收记录。
 - G3：已完成 DataAgent 的统一 Descriptor/Preview 编排基础接口，以及前端 Descriptor/Preview API、统一读取类型和输入别名校验工具；仪表盘 Schema 1.1、数据集输入面板和后端执行基础接口已接入，可选择数据集、设置别名、查看字段、执行输入预览、插入 `datasets.read` 草稿模板、配置参数作用范围、创建/查询/取消 Runner 任务、查询日志并展示受限最终结果或 `outputRef`；execution 元数据已增加 MySQL/PostgreSQL 持久化，DataAgent 已能受控读取 ObjectRef 结果行并由页面映射为预览表格；Runner 回调地址已修正为 Compose 中带 `/dataagent/api` context path 的 DataAgent 内部地址，并将 `mateclaw-dataagent` 服务加入基础 Compose；脚本结果经用户确认后可映射到当前 Table/ECharts 组件并持久化为 `scriptBindings`，预览页会对有绑定的新 Schema 执行脚本并覆盖对应组件数据，旧 Schema 无绑定时不触发 Runner；前后端已补齐参数契约校验（前端输入别名/参数定义，后端声明参数的未知、必填、类型检查），预览页已将声明参数与同名维度筛选/唯一日期范围对象映射后传入脚本执行，后端兼容日期范围对象和旧两元素列表；编辑器和预览页已共用旧 Schema 读取适配器；最终预览已补充运行中取消、失败后的重试入口，当前 UI 24 个 Vitest 用例和生产构建通过；已补齐独立 E2E Compose、MySQL/WireMock/CSV fixture、seed/cleanup 脚本和验收记录模板；本轮真实 Compose + JWT 已验证 API+文件、大结果 ObjectRef 各 1 passed，错误/兼容组 5 passed（含旧 Schema、失败/重试、取消/重试、超时/重试和资源限制/重试），并验证 UI 容器独立依赖卷下 API+文件与大结果 ObjectRef 2 passed；大结果验证 `inline=false`/`outputRef` 和 10 行受限预览；E2E seed/cleanup 已调整为允许在无 Aloudata 授权时独立运行非 Aloudata 场景；Aloudata 场景明确 BLOCKED（等待授权指标视图），因此 G3 仍为“部分通过”，不能整体关闭。
@@ -105,7 +159,7 @@
 mvn -pl mateclaw-plugin-api,mateclaw-server install -Dmaven.test.skip=true
 mvn -N install -DskipTests -q
 mvn -f mateclaw-sdk/pom.xml install -Dmaven.test.skip=true
-mvn -f mateclaw-dataagent/pom.xml test
+make dashboard-dataagent-test
 npm --prefix mateclaw-dataagent-ui ci
 npm --prefix mateclaw-dataagent-ui run build
 ```
@@ -152,8 +206,8 @@ npm --prefix mateclaw-dataagent-ui run build
 - 用户能选择数据集、分配别名、查看字段、编写脚本并分别预览输入/最终结果。
 - 页面参数进入脚本后由 `datasets.read` 显式用于字段条件。
 - 发布后异步任务支持状态、日志、取消、重试；旧 Dashboard Schema 可继续读取。
-- DASH-S01～DASH-UI05 与 E2E-01～E2E-06 全部有当前候选 SHA 证据。
-- VIS-UI01～VIS-UI08 已通过 CDP 完成页面视觉验收；页面截图与候选 SHA、任务 ID、查询/下推报告一一对应。
+- DASH-S01～DASH-UI05 与 E2E-01～E2E-06 已有当前工作树/本地模拟证据，但尚未绑定候选 SHA；真实 Aloudata 场景仍为 `BLOCKED`。
+- 当前工作树已通过 CDP 采集列表、编辑器和最终结果页的基础视觉证据；VIS-UI01～VIS-UI08 的完整候选 SHA 验收仍待提交后重跑，截图、任务 ID、查询/下推报告需在同一 SHA 绑定。
 
 ## 完成定义
 

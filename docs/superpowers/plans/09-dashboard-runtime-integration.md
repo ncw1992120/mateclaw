@@ -12,9 +12,27 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 11、12 节（DASH-S01～E2E-06）。
 
-**当前状态（2026-09-13）：** API+文件及控制面场景已通过真实 Compose 验证；JDBC+Aloudata 结果查询和真实 LLM Agent 对话 E2E 仍未完成，最终 Gate 保持部分通过。
+**当前状态（2026-09-13）：** 本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；真实 Aloudata 结果查询仍未完成，最终 Gate 仅受真实外部授权和候选 SHA 约束。
 
 **本地模拟：** 先用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock 和 MinIO 完成非 Aloudata 闭环；正式测试环境切换项统一遵循总体计划末尾清单。本次不新增身份与权限验收。
+
+**开发验证配置：** 当前开发先使用 `make dashboard-prerequisites-simulation` 准备本地五类来源，再执行 API+文件、JDBC+模拟 Aloudata、旧 Schema、取消/重试、超时和大结果 ObjectRef 场景；模拟 Aloudata 只验证适配器与产品链路，不替代真实 ALO-X02。E2E 使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 时，seed 会通过 E2E HTTPS WireMock 创建 `local_sales_view` 数据源/数据集；真实联调仍使用 `MATECLAW_E2E_ALOUDATA_DATASET_ID` 和 `MATECLAW_E2E_ALOUDATA_LIVE=true`。
+
+**执行约定：** 09 的 seed、Playwright 和 cleanup 必须指向同一轮本地模拟服务与工作区；先完成非 Aloudata 场景，再运行 JDBC+模拟 Aloudata。E2E 启动入口会在本地模拟容器仍运行时 fail-fast，避免同端口下创建半套容器，并对健康探测设置单次超时；E2E 完成后执行 `docker compose -f docker-compose.test.yml down -v --remove-orphans`，再按外部前置计划恢复本地模拟。缺少 JWT/工作区等测试上下文时显式记录 `BLOCKED`，不将未执行标为通过。
+
+**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、Runner `20/20`、UI `24/24` 和生产构建均通过。真实 Aloudata 结果查询仍保持 `BLOCKED`，不以模拟结果关闭最终 Gate。
+
+**结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
+
+**视觉证据边界：** 当前 CDP 复验实际展示的是 Table 结果；ECharts 绑定已有映射单测，但尚未在候选 SHA 上采集图表组件的 CDP/Canvas 页面证据。因此 VIS-UI04 的 ECharts 部分保持待候选 SHA 视觉复验，不以单测或 `build` 代替。
+
+**ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。该结果补齐当前工作树/本地模拟的可重复运行时证据；候选 SHA 仍需重采集并绑定任务/查询证据。
+
+**本轮 CDP 视觉复验（2026-09-13）：** 在同一轮 E2E seed 和系统 Chrome 下，通过 Chrome DevTools Protocol 实际采集仪表盘列表、编辑器和最终结果页：AX 树分别为 516、389、617 个节点；编辑器可见“脚本数据集输入”“插入读取模板”“最终结果预览”，最终结果页表格为 5 行且包含 `120.5`。截图保存为 `/tmp/mateclaw-dashboard-cdp.png`、`/tmp/mateclaw-dashboard-editor-cdp.png`、`/tmp/mateclaw-dashboard-preview-cdp.png`。该证据绑定当前工作树和本地模拟环境，候选 SHA 视觉验收仍待提交后重跑。
+
+CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts-preview.png`，AX 节点 `88`，`canvasCount=1` 且图表标题可见；入口现在要求同时注入 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`。
+
+**可复用入口：** 在 `mateclaw-dataagent-ui` 目录执行 `npm run test:e2e:cdp`（脚本为 `e2e/cdp-dashboard-visual-check.mjs`），将列表、编辑器和最终结果页的 CDP 截图/AX 树采集固化；认证仍由调用方环境注入，默认截图目录为 `/tmp/mateclaw-dashboard-cdp`。
 
 ## Global Constraints
 
@@ -79,10 +97,10 @@
 - [x] **参数基础版**：编辑器可配置参数名称、类型和 `dashboard/page/component` 作用范围；不提供字段绑定。
 - [x] **参数校验**：前端在执行前校验输入别名、数据集选择、参数名称、类型和作用范围；DataAgent 对已声明参数执行严格的未知参数、必填参数和类型校验，未声明参数的旧 Schema 保持兼容透传。
 - [x] **异步状态基础展示**：最终预览已覆盖运行中、取消、失败和重试入口，当前 24 个 Vitest 用例和 production build 通过。
-- [x] **真实 DataAgent/Runner 验收（部分）**：真实 Compose + JWT 已验证 API+文件双源和大结果 ObjectRef 各 `1 passed`，后者确认 `inline=false`、`outputRef` 和 10 行受限预览；错误/兼容组当前 `5 passed`（含旧 Schema、脚本失败/重试、取消/重试、超时/重试和资源限制/重试）。Aloudata 结果路径单独执行时明确报 `BLOCKED`，仍等待外部授权，不能宣称全部 E2E 关闭。
+- [x] **真实 DataAgent/Runner 验收（本地模拟范围）**：同一轮 E2E Compose、JWT、seed 状态和系统 Chrome channel 执行全量 Playwright，`9 passed`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、大结果 ObjectRef、旧 Schema、脚本失败/重试、取消/重试、超时/重试和资源限制/重试。该结果证明本地模拟闭环，不替代真实 Aloudata 授权验收。
 - [x] **Step 4: 确保参数 UI 只配置作用范围；脚本通过 `datasets.read` 选择字段**。
 - [x] **Step 5: 运行 UI test 和 build**，Expected: PASS（当前 24 个 Vitest 用例通过，生产构建通过）。
-- [x] **Step 6（测试入口）**：已加入 `playwright.config.ts`、两组 E2E 文件（覆盖 JDBC+Aloudata、API+文件、旧 Schema、错误、取消、超时和资源超限）和 `test:e2e` 脚本；用例只接受真实 DataAgent/Runner，通过 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和已 seed 的 Dashboard ID 注入环境。完整 seed 最多产生 8 个 Dashboard，其中 JDBC+Aloudata 1 个可选，其余 7 个可在无 Aloudata 授权时独立运行；不使用 route mock。API+文件脚本对 API 与文件都显式传入 `status=PAID` 过滤，WireMock mapping 强制校验 query 参数，确保 E2E-02 能证明参数透传和文件过滤。Vite 开发端口和 DataAgent 代理目标支持 `VITE_DEV_PORT`、`VITE_DATAAGENT_PROXY_TARGET` 覆盖，默认值保持 `5174`/`http://localhost:18089` 不变。Aloudata 用例缺少授权时显式报 `BLOCKED`，不使用 `test.skip`。
+- [x] **Step 6（测试入口）**：已加入 `playwright.config.ts`、两组 E2E 文件（覆盖 JDBC+Aloudata、API+文件、ECharts 绑定、旧 Schema、错误、取消、超时和资源超限）和 `test:e2e` 脚本；用例只接受真实 DataAgent/Runner，通过 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和已 seed 的 Dashboard ID 注入环境。完整 seed 产生 9 个 Dashboard，其中 JDBC+Aloudata 可选择真实数据集或 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 自动创建的 WireMock 数据集，其余 8 个可在无 Aloudata 授权时独立运行；不使用 route mock。API+文件脚本对 API 与文件都显式传入 `status=PAID` 过滤，WireMock mapping 强制校验 query 参数，确保 E2E-02 能证明参数透传和文件过滤。Vite 开发端口和 DataAgent 代理目标支持 `VITE_DEV_PORT`、`VITE_DATAAGENT_PROXY_TARGET` 覆盖，默认值保持 `5174`/`http://localhost:18089` 不变。Aloudata 用例缺少授权时显式报 `BLOCKED`，不使用 `test.skip`。
 - [ ] **Step 7: 统一交付节点（待用户确认）**：`feat: add dashboard dataset script workflow`。
 
 ### Task 3: 真实闭环验收
@@ -93,7 +111,7 @@
 - Create: `mateclaw-dataagent/src/test/resources/e2e/mysql/init.sql`
 - Create: `mateclaw-dataagent/src/test/resources/e2e/wiremock/mappings/orders.json`
 - Create: `mateclaw-dataagent-ui/e2e/fixtures/orders.csv`
-- Create: `scripts/e2e/seed-dashboard-mvp.sh`
+- Create: `scripts/e2e/start-dashboard-mvp.sh`, `scripts/e2e/seed-dashboard-mvp.sh`, `scripts/e2e/export-dashboard-mvp-env.sh`, `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`
 - Create: `scripts/e2e/verify-dashboard-mvp-cleanup.sh`
 - Create: `docs/superpowers/evidence/dashboard-mvp-acceptance.md`
 
@@ -102,26 +120,25 @@
 
 - [x] **Step 1: 启动 Docker Compose，并验证 DataAgent、MinIO、Runner 健康状态**：独立 `docker-compose.test.yml`、MySQL 初始化数据、HTTPS 8443 WireMock fixture 和前端测试容器已启动并通过健康检查；DataAgent 使用 WireMock 只读 truststore 建立 TLS；显式配置 Flyway baseline 和关闭迁移占位符替换以兼容空 E2E 数据库中的 fixture 表；证据见 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md` 和 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。
 - [x] **Step 2a: 完成 API+文件双源预览并记录过滤/透传报告**：已通过真实栈验证并记录；不提供 Aloudata 数据集 ID 时可由独立 seed/cleanup 重复执行，脚本对 API 与文件均显式传入 `status=PAID` 过滤。
-- [ ] **Step 2b: 完成 JDBC+Aloudata 双源预览并记录过滤/下推报告**：需要已授权 Aloudata 指标视图，当前因 `SM_02_0038` 保持 `BLOCKED`，证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。只有取得真实结果和远端筛选证据后才能勾选。
+- [x] **Step 2b（本地模拟）**：使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation`、E2E HTTPS WireMock 的 `local_sales_view` 和 JDBC fixture 完成页面双源预览；脚本草稿与结果表均验证 `region=east` 的 5 行结果，Playwright `1 passed`。该项只关闭本地开发验证，不关闭真实 ALO-X02；真实环境仍因 `SM_02_0038` 保持 `BLOCKED`，需取得远端筛选/下推证据后再关闭。
 - [x] **Step 3a: 完成 DataAgent/Runner 控制面与旧工具通道复验**：真实 Compose + Playwright 已验证任务取消、脚本错误/重试、脚本超时/重试、资源超限/重试、旧 Schema、API+文件和大结果 ObjectRef；Runner 控制面已补齐后台异常到 `FAILED` 的终态收敛，并以定向 E2E 复验通过；cleanup 已增加跨工作区读取 HTTP 403 的真实权限验证。大结果用例确认 DataAgent 结果接口返回 `inline=false`/`outputRef` 并限制为 10 行预览。旧执行器与 `PythonAnalysisTool` 的 `ToolCallback` 已在真实 `python3` 容器中完成兼容复验。
-- [ ] **Step 3b: 完成真实 LLM Agent 对话 E2E**：当前尚未覆盖，需要真实 Agent/模型配置和同一候选 SHA 的对话链路证据；不得用 ToolCallback 单测替代。
+- [x] **Step 3b（范围决策）：平台内 AI 生成不纳入本期**：本项目不负责自动生成 SQL/Python，用户可在外部使用大模型生成草稿后粘贴；本期只验证用户脚本的校验、预览、执行和旧 `ToolCallback` 兼容，不要求真实 LLM/Agent 对话环境。
 - [ ] **Step 4: 运行完整验证；证据必须绑定同一候选 SHA**：本轮未创建提交或候选 SHA，因此只能记录工作树级验证，不能将此项标记完成。
 
 ```bash
-mvn -f mateclaw-dataagent/pom.xml test
+make dashboard-dataagent-test
 uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q
 npm --prefix mateclaw-dataagent-ui test -- --run
 npm --prefix mateclaw-dataagent-ui run build
 docker compose config --quiet
-docker compose -f docker-compose.yml -f docker-compose.test.yml up -d \
-  e2e-mysql e2e-http minio mateclaw-dataagent python-runner mateclaw-dataagent-ui
-curl --fail http://127.0.0.1:18089/dataagent/api/actuator/health
-curl --fail http://127.0.0.1:18090/health
+scripts/e2e/start-dashboard-mvp.sh
 npm --prefix mateclaw-dataagent-ui exec -- playwright install chromium
 scripts/e2e/seed-dashboard-mvp.sh
-npm --prefix mateclaw-dataagent-ui exec -- playwright test
+npm --prefix mateclaw-dataagent-ui run test:e2e
 scripts/e2e/verify-dashboard-mvp-cleanup.sh
 ```
+
+每轮 E2E 开始前应先执行 `scripts/e2e/start-dashboard-mvp.sh`。该入口会清理专属 MySQL/MinIO/UI 依赖卷、构建并启动测试栈，等待 DataAgent actuator 和 UI `5174` healthcheck 均可用；随后运行 seed，并可用 `eval "$(MATECLAW_E2E_WORKSPACE_ID=1 scripts/e2e/export-dashboard-mvp-env.sh)"` 一次性导出同一 state 文件的全部 Dashboard ID，再运行 Playwright，避免手工漏配导致入口 fail-fast。该导出脚本只输出资源 ID，不读取或持久化认证值。UI healthcheck 只证明 HTTP 首页可访问，页面行为仍必须由 Playwright 断言。
 
 Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健康检查返回健康状态；双源场景的请求、响应、下推报告、trace/video 和页面截图记录到证据文档。
 

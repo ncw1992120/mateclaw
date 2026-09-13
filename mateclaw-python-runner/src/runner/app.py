@@ -19,7 +19,8 @@ async def submit(request: TaskRequest):
                 {"MATECLAW_DATASET_ENDPOINT": request.datasetReadEndpoint, "MATECLAW_READ_TOKEN": request.readToken},
                 request.limits.timeout_seconds, request.limits.max_stdout_bytes, request.limits.max_result_bytes,
                 request.resultUploadEndpoint, request.readToken,
-                request.limits.max_memory_mb, request.limits.max_file_bytes)
+                request.limits.max_memory_mb, request.limits.max_file_bytes,
+                request.parameters)
             token = request.readToken
             def redact(value): return (value or "").replace(token, "[REDACTED]")
             tasks[request.taskId] = TaskResponse(taskId=request.taskId, status=result["status"], output=redact(result["output"]), result=redact(result.get("result")), outputRef=result.get("outputRef"), error=redact(result["error"]), stats={"returncode": result["returncode"]})

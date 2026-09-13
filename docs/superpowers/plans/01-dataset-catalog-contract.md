@@ -16,6 +16,12 @@
 
 **本地模拟：** 数据源连接和文件 ObjectRef 的开发数据由 `dev-support/local-simulation/` 提供；本计划不引入新的身份与权限模型。
 
+**开发验证：** 使用本地 MySQL/PostgreSQL 的 `orders/customers` 和 MinIO `mateclaw-sim/files/<name>` 创建目录记录；执行 `make dashboard-prerequisites-simulation` 后再运行 CAT-U/CAT-DB 用例。
+
+**执行约定：** 本子计划只消费模拟环境中已登记的连接和 ObjectRef，不新增外部账号或数据；目录响应需能被 02～09 直接复用。
+
+**本轮复验记录（2026-09-13）：** 模拟 MySQL/PostgreSQL、MinIO 和 WireMock 健康检查通过，fixture manifest 与对象大小校验通过；目录契约定向测试纳入 DataAgent `152/152` 全量基线。
+
 ## Global Constraints
 
 - `datasetId` 是内部稳定 ID；脚本只使用本任务唯一的 `inputName`。

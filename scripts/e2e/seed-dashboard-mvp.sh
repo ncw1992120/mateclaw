@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${MATECLAW_E2E_WORKSPACE_ID:?set MATECLAW_E2E_WORKSPACE_ID}"
 aloudata_dataset_id="${MATECLAW_E2E_ALOUDATA_DATASET_ID:-}"
+aloudata_mode="${MATECLAW_E2E_ALOUDATA_MODE:-}"
 
 BASE_URL="${MATECLAW_E2E_API_BASE_URL:-http://127.0.0.1:18189/dataagent/api}"
 FIXTURE="${MATECLAW_E2E_ORDERS_FIXTURE:-mateclaw-dataagent-ui/e2e/fixtures/orders.csv}"
@@ -94,18 +95,46 @@ dashboard_schema() {
   }'
 }
 
-jdbc_aloudata_script=$'left = datasets.read(input_name="jdbc_orders")\nright = datasets.read(input_name="aloudata_metrics")\nresult = left.to_polars().to_dicts() + right.to_polars().to_dicts()'
+echarts_dashboard_schema() {
+  local dataset_id="$1" script="$2"
+  jq -cn --arg dataset "$dataset_id" --arg script "$script" '{
+    version:"1.1",
+    pages:[{id:"e2e-chart-page",name:"E2E Chart",components:[{id:"e2e-chart",type:"chart",title:"E2E Script Chart",position:{x:0,y:0,w:12,h:6},renderType:"echarts",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100}}]}],
+    datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],
+    script:$script,
+    parameters:[],
+    executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000},
+    scriptBindings:[{componentId:"e2e-chart",renderType:"echarts"}]
+  }'
+}
+
+jdbc_aloudata_script=$'left = datasets.read(input_name="jdbc_orders")\nright = datasets.read(input_name="aloudata_metrics", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nresult = left.to_polars().to_dicts() + right.to_polars().to_dicts()'
 api_file_script=$'paid_filter = {"field": "status", "operator": "eq", "value": "PAID"}\napi_rows = datasets.read(input_name="api_orders", filters=[paid_filter])\nfile_rows = datasets.read(input_name="file_orders", filters=[paid_filter])\nresult = api_rows.to_polars().to_dicts() + file_rows.to_polars().to_dicts()'
 
 multi_dashboard=""
+aloudata_ds=""
+if [[ "$aloudata_mode" == "simulation" ]]; then
+  aloudata_connection_params=$(jq -cn '{anymetricsHost:"https://e2e-http",semanticHost:"https://e2e-http",anymetricsPort:8443,semanticPort:8443,authType:"UID"}')
+  aloudata_ds=$(api POST /v1/datasources "$(jq -cn \
+    --arg connectionParams "$aloudata_connection_params" \
+    --arg password "$(encrypt_field local-simulation-auth)" \
+    '{name:"E2E Aloudata Simulation",description:"dashboard MVP simulated Aloudata",sourceType:"aloudata",host:"e2e-http",port:8443,productHost:"https://e2e-http",semanticHost:"https://e2e-http",username:"local-tenant",password:$password,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
+  aloudata_dataset_id=$(api POST /v1/datasets "$(jq -cn --arg ds "$aloudata_ds" \
+    '{name:"E2E Aloudata Metrics Dataset",description:"dashboard MVP simulated metric view",sourceDefinition:{sourceType:"ALOUDATA_ANALYSIS_VIEW",datasourceId:($ds|tonumber),analysisViewId:"local_sales_view"}}')" | id_from)
+elif [[ -n "$aloudata_dataset_id" ]]; then
+  aloudata_mode="live"
+fi
 if [[ -n "$aloudata_dataset_id" ]]; then
   multi_schema=$(dashboard_schema "$jdbc_dataset" jdbc_orders "$aloudata_dataset_id" aloudata_metrics "$jdbc_aloudata_script")
   multi_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$multi_schema" '{name:"E2E JDBC + Aloudata Dashboard",description:"dashboard MVP real dual-source flow",schemaJson:$schema}')" | id_from)
 else
-  echo 'Aloudata dataset ID not provided; JDBC + Aloudata dashboard will not be seeded.' >&2
+  echo 'Aloudata dataset ID not provided; JDBC + Aloudata dashboard will not be seeded (set MATECLAW_E2E_ALOUDATA_MODE=simulation or provide MATECLAW_E2E_ALOUDATA_DATASET_ID).' >&2
 fi
 api_file_schema=$(dashboard_schema "$http_dataset" api_orders "$file_dataset" file_orders "$api_file_script")
 api_file_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$api_file_schema" '{name:"E2E API + File Dashboard",description:"dashboard MVP API and file flow",schemaJson:$schema}')" | id_from)
+echarts_script=$'rows = datasets.read(input_name="jdbc_orders", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nresult = rows.to_polars().select(["region", "amount"]).to_dicts()'
+echarts_schema=$(echarts_dashboard_schema "$jdbc_dataset" "$echarts_script")
+echarts_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$echarts_schema" '{name:"E2E ECharts Binding Dashboard",description:"dashboard MVP ECharts script binding flow",schemaJson:$schema}')" | id_from)
 compat_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema '{"version":"1.0","components":[]}' '{name:"E2E Legacy Compatibility Dashboard",description:"dashboard MVP legacy schema",schemaJson:$schema}')" | id_from)
 error_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-error-page",name:"E2E Error",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"raise RuntimeError(\"e2e expected script failure\")",parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 error_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$error_schema" '{name:"E2E Script Error Dashboard",description:"dashboard MVP controlled script failure",schemaJson:$schema}')" | id_from)
@@ -120,23 +149,19 @@ large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large
 
 jq -n \
   --arg jdbcDatasourceId "$jdbc_ds" --arg jdbcDatasetId "$jdbc_dataset" \
+  --arg aloudataDatasourceId "$aloudata_ds" --arg aloudataDatasetId "$aloudata_dataset_id" \
   --arg httpDatasourceId "$http_ds" --arg httpDatasetId "$http_dataset" \
   --arg fileObjectId "$file_object_id" --arg fileDatasetId "$file_dataset" \
   --arg multiSourceDashboardId "$multi_dashboard" --arg apiFileDashboardId "$api_file_dashboard" \
+  --arg echartsDashboardId "$echarts_dashboard" \
   --arg compatibilityDashboardId "$compat_dashboard" --arg errorDashboardId "$error_dashboard" \
   --arg cancelDashboardId "$cancel_dashboard" \
   --arg timeoutDashboardId "$timeout_dashboard" --arg resourceDashboardId "$resource_dashboard" \
   --arg largeDashboardId "$large_dashboard" \
-  '{jdbcDatasourceId:$jdbcDatasourceId,jdbcDatasetId:$jdbcDatasetId,httpDatasourceId:$httpDatasourceId,httpDatasetId:$httpDatasetId,fileObjectId:$fileObjectId,fileDatasetId:$fileDatasetId,multiSourceDashboardId:$multiSourceDashboardId,apiFileDashboardId:$apiFileDashboardId,compatibilityDashboardId:$compatibilityDashboardId,errorDashboardId:$errorDashboardId,cancelDashboardId:$cancelDashboardId,timeoutDashboardId:$timeoutDashboardId,resourceDashboardId:$resourceDashboardId,largeDashboardId:$largeDashboardId}' > "$STATE_FILE"
+  '{jdbcDatasourceId:$jdbcDatasourceId,jdbcDatasetId:$jdbcDatasetId,aloudataDatasourceId:$aloudataDatasourceId,aloudataDatasetId:$aloudataDatasetId,httpDatasourceId:$httpDatasourceId,httpDatasetId:$httpDatasetId,fileObjectId:$fileObjectId,fileDatasetId:$fileDatasetId,multiSourceDashboardId:$multiSourceDashboardId,apiFileDashboardId:$apiFileDashboardId,echartsDashboardId:$echartsDashboardId,compatibilityDashboardId:$compatibilityDashboardId,errorDashboardId:$errorDashboardId,cancelDashboardId:$cancelDashboardId,timeoutDashboardId:$timeoutDashboardId,resourceDashboardId:$resourceDashboardId,largeDashboardId:$largeDashboardId}' > "$STATE_FILE"
 
 cat <<EOF
 Seed completed. State: $STATE_FILE
-export MATECLAW_E2E_MULTI_SOURCE_DASHBOARD_ID=$multi_dashboard
-export MATECLAW_E2E_API_FILE_DASHBOARD_ID=$api_file_dashboard
-export MATECLAW_E2E_COMPATIBILITY_DASHBOARD_ID=$compat_dashboard
-export MATECLAW_E2E_ERROR_DASHBOARD_ID=$error_dashboard
-export MATECLAW_E2E_CANCEL_DASHBOARD_ID=$cancel_dashboard
-export MATECLAW_E2E_TIMEOUT_DASHBOARD_ID=$timeout_dashboard
-export MATECLAW_E2E_RESOURCE_DASHBOARD_ID=$resource_dashboard
-export MATECLAW_E2E_LARGE_RESULT_DASHBOARD_ID=$large_dashboard
+$(MATECLAW_E2E_WORKSPACE_ID="$MATECLAW_E2E_WORKSPACE_ID" MATECLAW_E2E_STATE_FILE="$STATE_FILE" \
+  "$(dirname "${BASH_SOURCE[0]}")/export-dashboard-mvp-env.sh")
 EOF

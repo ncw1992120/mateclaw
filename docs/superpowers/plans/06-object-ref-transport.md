@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development, then execute this plan task-by-task.
 
-**Goal:** 为 Adapter 与 Runner 提供不经过大 JSON 的 Arrow/Parquet 数据交换和临时对象生命周期。
+**Goal:** 为 Adapter 与 Runner 提供不经过大 JSON 的 Arrow/Parquet 数据交换和临时对象生命周期；当前优先覆盖脚本大结果与页面受限预览，输入侧远程 ObjectRef 批读作为后续扩展。
 
 **Architecture:** `ObjectRefService` 将批次写入 MinIO/S3 兼容存储，返回只含对象 ID、格式、摘要和过期时间的受控引用。Runner 通过短期签名或 DataAgent 代理读取，引用必须绑定 workspace 和 task。
 
@@ -16,10 +16,16 @@
 
 **本地模拟：** 默认使用 Docker 临时 MinIO 和测试 volume，不要求外部存储服务；正式测试前按总体计划替换对象存储地址、bucket、生命周期和 Secret。
 
+**开发验证配置：** MinIO endpoint 为 `http://127.0.0.1:19000`，bucket 为 `mateclaw-sim`；对象引用只在本地测试上下文使用，仍必须验证 TTL、digest、workspace/task 约束。
+
+**执行约定：** ObjectRef 的签发、读取、过期和越权用例均使用本地 MinIO 实际对象；不得把预签名 URL 或本机路径写入 Dashboard Schema。
+
+**本轮复验记录（2026-09-13）：** 本地 MinIO 健康检查和对象大小契约通过；ObjectRef 大结果链路已在本地 E2E `9 passed` 中验证，真实存储配置仍待正式环境替换。
+
 ## Global Constraints
 
 - `dataRef` 不得是任意 URL；必须包含服务端可验证的 `objectId,workspaceId,taskId,expiresAt,digest,format`。
-- 预览 JSON 上限为 10 MB、10,000 行、100 列、嵌套深度 5；正式任务使用 `dataRef`。
+- 预览 JSON 上限为 10 MB、10,000 行、100 列、嵌套深度 5；脚本大结果使用 `dataRef`。当前输入读取仍由 DataAgent 返回受限批次，输入侧远程 `dataRef` 批读待后续接口和 SDK 支持。
 - 过期、跨 workspace、跨 task、摘要不匹配均拒绝读取。
 
 ---
@@ -59,7 +65,7 @@
 - [x] **Step 2: 实现 Parquet 首选编码；Arrow IPC 仅在同版本组件间启用**。
 - [x] **Step 3: 运行测试**：Parquet 编解码与 ObjectRef 结果读取定向测试通过；提交仍按统一交付边界处理。
 
-> 进度：已实现 `DatasetBatchCodec.writeParquet/readSchema`，覆盖常见数值、布尔、字符串、null、`LocalDate`、`Instant` 和 `BigDecimal` 的 Parquet logical type 往返；混合小数位会按放大后的有效精度建模，批次内行 Schema 不一致会以 `INVALID_REQUEST` 拒绝，不再静默丢弃字段；专项测试通过，提交仍按统一交付边界处理。
+> 进度：已实现 `DatasetBatchCodec.writeParquet/readSchema`，覆盖常见数值、布尔、字符串、null、`LocalDate`、`Instant` 和 `BigDecimal` 的 Parquet logical type 往返；混合小数位会按放大后的有效精度建模，批次内行 Schema 不一致会以 `INVALID_REQUEST` 拒绝，不再静默丢弃字段；专项测试通过，提交仍按统一交付边界处理。当前输入 Adapter 仍返回受限内联批次，未宣称 Python SDK 可直接打开输入 ObjectRef。
 
 > 运行时补充：Python Runner 的大结果已可惰性转换为 Parquet，并通过 DataAgent 内部短期令牌接口写入 `ObjectRefService`；DataAgent 已增加受工作区/任务上下文保护的 Parquet 受限行读取；当前专项测试已覆盖常见数值、布尔、字符串、`null`、`LocalDate`、`Instant`、`BigDecimal` 以及多行读取。本轮新增真实 MinIO 上的 Parquet 编码→内部 HTTP 上传接口→ObjectRef→Schema/行读取往返测试；真实 Runner 容器到 DataAgent Compose 网络的大结果 E2E 已通过，执行结果接口返回 `inline=false`/受控 `outputRef`，页面预览限制为 10 行。证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`；提交仍按统一交付边界处理。
 - [x] **Step 3: 运行测试**：Parquet 编解码与 ObjectRef 结果读取定向测试通过；提交仍按统一交付边界处理。

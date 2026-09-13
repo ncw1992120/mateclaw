@@ -82,6 +82,57 @@ class AloudataAnalysisViewAdapterTest {
     }
 
     @Test
+    void usesAnalysisViewIdFromSourceConfigForRuntimeFilterCompilation() {
+        AloudataAnalysisViewAdapter adapter = adapter();
+        DatasetEntity dataset = dataset();
+        dataset.setSourceConfig("{\"analysisViewId\":\"local_sales_view\"}");
+        DatasourceEntity datasource = new DatasourceEntity();
+        when(datasetMapper.selectById(7L)).thenReturn(dataset);
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(new AloudataConfigDTO());
+        when(viewService.getByName(3L, "local_sales_view")).thenReturn(new AloudataAnalysisViewDetail(
+                "v1", "local_sales_view", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "region")),
+                null, List.of(), List.of(), List.of()));
+        when(apiClient.callWithParams(eq("metrics_query"), any(), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("data", List.of(Map.of("region", "east", "revenue", 1)))));
+
+        adapter.read(new DatasetAccessContext(1L, 2L, "task-1", Set.of(7L)),
+                new DatasetReadRequest(7L, "sales", List.of(),
+                        List.of(new DatasetFilter("region", "dimension", "eq", "east")), 10, 0, Map.of()));
+
+        verify(viewService).getByName(3L, "local_sales_view");
+    }
+
+    @Test
+    void internalRunnerReadFallsBackToDirectViewDetailWhenWebContextIsAbsent() {
+        AloudataAnalysisViewAdapter adapter = adapter();
+        DatasetEntity dataset = dataset();
+        dataset.setSourceConfig("{\"analysisViewId\":\"local_sales_view\"}");
+        DatasourceEntity datasource = new DatasourceEntity();
+        when(datasetMapper.selectById(7L)).thenReturn(dataset);
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(new AloudataConfigDTO());
+        when(viewService.getByName(3L, "local_sales_view"))
+                .thenThrow(new IllegalStateException("用户上下文未初始化"));
+        when(apiClient.callWithParams(eq("analysis_view_query_by_name"), any(), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("data", Map.of(
+                        "name", "local_sales_view",
+                        "metrics", List.of(Map.of("name", "revenue")),
+                        "dimensions", List.of(Map.of("name", "region"))))));
+        when(apiClient.callWithParams(eq("metrics_query"), any(), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("data", List.of(Map.of("region", "east", "revenue", 1)))));
+
+        DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 0L, "task-1", Set.of(7L)),
+                new DatasetReadRequest(7L, "sales", List.of(),
+                        List.of(new DatasetFilter("region", "dimension", "eq", "east")), 10, 0, Map.of()));
+
+        assertEquals(1, batch.rows().size());
+        verify(apiClient).callWithParams(eq("analysis_view_query_by_name"), any(), argThat(p ->
+                "local_sales_view".equals(p.get("viewName"))));
+    }
+
+    @Test
     void rejectsFilterOutsideViewSchemaBeforeRemoteCall() {
         AloudataAnalysisViewAdapter adapter = adapter();
         when(datasetMapper.selectById(7L)).thenReturn(dataset());

@@ -108,7 +108,31 @@ public class AloudataEndpointService {
      * 无需预先获取 Token。公共请求头参数通过 commonHeaderParams() 统一生成。
      */
     private Map<String, ApiEndpoint> getDefaultEndpoints() {
-        return new LinkedHashMap<>();
+        Map<String, ApiEndpoint> endpoints = new LinkedHashMap<>();
+        List<ApiParam> headers = commonHeaderParams();
+        endpoints.put("analysis_view_tree", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/treeList", "GET", headers));
+        endpoints.put("analysis_view_query_by_name", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/queryByName", "GET",
+                mergeParams(headers, List.of(new ApiParam("viewName", "String", true, null, "指标视图名称", "QUERY")))));
+        endpoints.put("analysis_view_query_data", endpoint("semantic", "/semantic/api/v1.1/analysisView/query", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("viewName", "String", true, null, "指标视图名称", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY"),
+                        new ApiParam("pageIndex", "Integer", false, "0", "页码", "QUERY"),
+                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "QUERY")))));
+        endpoints.put("metrics_query", endpoint("semantic", "/semantic/api/v1.1/metrics/query", "POST",
+                mergeParams(headers, List.of(
+                        new ApiParam("metrics", "Array", true, null, "指标列表", "BODY"),
+                        new ApiParam("dimensions", "Array", false, null, "维度列表", "BODY"),
+                        new ApiParam("filters", "Array", false, null, "筛选条件", "BODY"),
+                        new ApiParam("timeConstraint", "String", false, null, "时间约束", "BODY"),
+                        new ApiParam("limit", "Integer", false, "100", "返回行数", "BODY"),
+                        new ApiParam("offset", "Integer", false, "0", "偏移量", "BODY"),
+                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "BODY")))));
+        return endpoints;
+    }
+
+    private ApiEndpoint endpoint(String service, String path, String method, List<ApiParam> requestParams) {
+        return new ApiEndpoint(service, path, method, "代码级核心端点兜底", requestParams, List.of());
     }
 
     /**

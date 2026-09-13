@@ -9,7 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:cdp": "node e2e/cdp-dashboard-visual-check.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

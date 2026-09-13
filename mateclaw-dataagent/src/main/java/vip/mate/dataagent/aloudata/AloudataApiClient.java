@@ -107,7 +107,14 @@ public class AloudataApiClient {
         }
 
         // 合并默认值：对有 defaultValue 但未传入的参数自动填充
-        Map<String, Object> effectiveParams = applyDefaults(endpoint, params);
+        Map<String, Object> effectiveParams = new LinkedHashMap<>();
+        if (params != null) effectiveParams.putAll(params);
+        // 认证参数来自数据源连接上下文，不要求每个调用方重复传递；同时保留
+        // 显式参数覆盖能力以兼容历史调用。
+        effectiveParams.putIfAbsent("tenant-id", config.getTenantId());
+        effectiveParams.putIfAbsent("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
+        effectiveParams.putIfAbsent("auth-value", config.getAuthValue());
+        effectiveParams = applyDefaults(endpoint, effectiveParams);
 
         // 参数校验
         validateParams(endpoint, effectiveParams);

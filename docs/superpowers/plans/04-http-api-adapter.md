@@ -16,6 +16,12 @@
 
 **本地模拟：** WireMock 映射和 HTTPS fixture 位于 `dev-support/local-simulation/`（现有 E2E fixture 可复用）；正式测试前替换已登记的测试 API 定义、证书链和认证注入配置。
 
+**开发验证配置：** API 定义读取 `api/orders-openapi.yaml`，endpoint 使用 `https://127.0.0.1:18443/orders`；本地临时证书仅用于模拟，生产 HTTPS/allowlist/truststore 策略不因本地 fixture 放宽。
+
+**执行约定：** 请求、过滤透传、分页和错误分类均以 WireMock 实际请求记录为证据；修改 OpenAPI fixture 时必须同步更新 manifest/检查脚本和定向测试。
+
+**本轮复验记录（2026-09-13）：** WireMock HTTP/HTTPS fixture、OpenAPI 定义和过滤约束检查通过；HTTPS API 场景纳入本地 E2E `9 passed` 矩阵。
+
 ## Global Constraints
 
 - URL scheme 只允许 `https`；隔离 E2E 可显式启用固定 `e2e-http:8443` TLS fixture，明文 `http` 例外仍默认关闭。

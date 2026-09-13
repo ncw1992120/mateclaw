@@ -42,7 +42,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
     public DatasetInputDescriptor describe(DatasetAccessContext context, long datasetId) {
         DatasetEntity dataset = requireDataset(context, datasetId);
         String viewName = viewName(dataset);
-        AloudataAnalysisViewDetail view = viewService.getByName(dataset.getDatasourceId(), viewName);
+        AloudataAnalysisViewDetail view = viewDetail(dataset.getDatasourceId(), viewName);
         List<DatasetColumn> columns = new ArrayList<>();
         view.dimensions().forEach(d -> columns.add(column(d, "dimension")));
         view.metrics().forEach(m -> columns.add(column(m, "measure")));
@@ -79,7 +79,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             report = new PushdownReport(List.of(), List.of(), true, true, null);
         } else {
             endpoint = "metrics_query";
-            AloudataAnalysisViewDetail view = viewService.getByName(dataset.getDatasourceId(), viewName);
+            AloudataAnalysisViewDetail view = viewDetail(dataset.getDatasourceId(), viewName);
             params = new LinkedHashMap<>(queryCompiler.compile(view, request));
             report = new PushdownReport(request.filters(), List.of(), true, true, null);
         }
@@ -124,7 +124,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         if (dataset.getSourceConfig() != null && !dataset.getSourceConfig().isBlank()) {
             try {
                 Map<String, Object> config = objectMapper.readValue(dataset.getSourceConfig(), new TypeReference<>() {});
-                Object value = config.get("viewName");
+                // 管理 API 固化的是 analysisViewId；历史数据可能保存 viewName。
+                Object value = config.get("analysisViewId");
+                if (value == null) value = config.get("viewName");
                 if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
             } catch (Exception e) {
                 throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "source_config 不是合法 JSON", e);
@@ -134,6 +136,40 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "未配置指标视图名称");
         }
         return dataset.getName();
+    }
+
+    /**
+     * 任务级 Runner 读取没有 Web 请求线程的 UserContext；数据集白名单已在
+     * {@link #requireDataset(DatasetAccessContext, long)} 校验，因此这里允许通过
+     * 同一数据源连接直接读取视图详情，避免把内部数据面错误地当成未初始化用户。
+     */
+    private AloudataAnalysisViewDetail viewDetail(Long datasourceId, String viewName) {
+        try {
+            return viewService.getByName(datasourceId, viewName);
+        } catch (IllegalStateException e) {
+            if (!String.valueOf(e.getMessage()).contains("用户上下文未初始化")) throw e;
+            DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
+            if (datasource == null) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "Aloudata 数据源不存在");
+            ResponseEntity<Map> response = apiClient.callWithParams("analysis_view_query_by_name",
+                    configHelper.parseConfig(datasource), Map.of("viewName", viewName));
+            Map<String, Object> body = response == null || response.getBody() == null
+                    ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
+            Object raw = body.get("data");
+            Map<String, Object> data = raw instanceof Map<?, ?> ? objectMapper.convertValue(raw, new TypeReference<>() {}) : body;
+            return new AloudataAnalysisViewDetail(
+                    text(data, "id"), text(data, "viewName", "name"), text(data, "displayName"), text(data, "description"),
+                    list(data.get("metrics")), list(data.get("dimensions")), text(data, "timeConstraint"),
+                    list(data.get("filters")), list(data.get("resultFilters")), list(data.get("orders")));
+        }
+    }
+
+    private String text(Map<String, Object> data, String... keys) {
+        for (String key : keys) if (data.get(key) != null && !String.valueOf(data.get(key)).isBlank()) return String.valueOf(data.get(key));
+        return null;
+    }
+
+    private List<Map<String, Object>> list(Object value) {
+        return value == null ? List.of() : objectMapper.convertValue(value, new TypeReference<>() {});
     }
 
     private DatasetColumn column(Map<String, Object> definition, String role) {

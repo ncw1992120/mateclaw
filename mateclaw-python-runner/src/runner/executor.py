@@ -19,14 +19,15 @@ class TaskExecutor:
     def start(self, task_id: str, script: str, env: dict[str, str], timeout: int, max_stdout: int,
               max_result: int = 1_000_000, result_upload_endpoint: str | None = None,
               result_upload_token: str | None = None, max_memory_mb: int = 1024,
-              max_file_bytes: int = 100 * 1024 * 1024):
+              max_file_bytes: int = 100 * 1024 * 1024,
+              parameters: dict | None = None):
         directory = tempfile.mkdtemp(prefix="mateclaw-task-")
         user_path = os.path.join(directory, "user_script.py")
         path = os.path.join(directory, "script.py")
         with open(user_path, "w", encoding="utf-8") as f: f.write(script)
         with open(path, "w", encoding="utf-8") as f:
             f.write("import json\nimport os\nfrom mateclaw.datasets import DatasetClient\n")
-            f.write("datasets = DatasetClient(os.environ['MATECLAW_DATASET_ENDPOINT'], os.environ['MATECLAW_READ_TOKEN']) if os.environ.get('MATECLAW_DATASET_ENDPOINT') and os.environ.get('MATECLAW_READ_TOKEN') else None\n")
+            f.write("datasets = DatasetClient(os.environ['MATECLAW_DATASET_ENDPOINT'], os.environ['MATECLAW_READ_TOKEN'], json.loads(os.environ.get('MATECLAW_TASK_PARAMETERS', '{}'))) if os.environ.get('MATECLAW_DATASET_ENDPOINT') and os.environ.get('MATECLAW_READ_TOKEN') else None\n")
             f.write("exec(compile(open('user_script.py', encoding='utf-8').read(), 'user_script.py', 'exec'))\n")
             f.write("if 'result' in globals():\n")
             f.write("    value = result\n")
@@ -40,6 +41,7 @@ class TaskExecutor:
         # SDK variables supplied by the control plane.
         child_env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if key in os.environ}
         child_env.update(env)
+        child_env["MATECLAW_TASK_PARAMETERS"] = json.dumps(parameters or {}, ensure_ascii=False)
         source_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         child_env["PYTHONPATH"] = source_root + os.pathsep + child_env.get("PYTHONPATH", "")
         process = subprocess.Popen([sys.executable, path], cwd=directory, env=child_env, stdin=subprocess.DEVNULL,

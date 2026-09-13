@@ -10,7 +10,11 @@
 
 **Spec:** `docs/superpowers/plans/2026-09-11-dashboard-overall-implementation-plan.md`、`docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`。
 
-**当前状态（2026-09-13）：** 清单已建立；当前 Aloudata 结果访问和提交边界仍待外部条件满足；身份与权限完善已明确延期。
+**当前状态（2026-09-13）：** 本地模拟依赖栈已建立，并通过清理后重新启动、健康检查、数据初始化和接口读取验证；最新本地 E2E Compose 全量矩阵为 `9 passed`，DataAgent Docker Maven 全量为 `152/152`，Runner 为 `20/20`，UI 为 `24/24`。当前 Aloudata 真实结果访问和提交边界仍待外部条件满足；平台内 AI 自动生成不属于本期；身份与权限完善已明确延期。
+
+**本轮复验（2026-09-13）：** 当前工作树执行 `make dashboard-prerequisites-simulation` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；设计门禁同时输出 `DESIGN-PASS`。Aloudata Adapter 的显式外部测试使用 Docker Maven + 本地 WireMock 环境变量运行通过，认证值仍为本地占位符，不计入真实 ALO-X02。
+
+**真实外部 Gate 预检（2026-09-13）：** 当前 shell 未注入任何 `ALOU_DATA_*` 外部测试变量；执行 `./scripts/verify-dashboard-external-prerequisites.sh --external` 立即以退出码 `3` 报告 `ALOU_DATA_EXTERNAL_TEST=true 未设置`，未发起真实网络请求。待安全注入完整变量后再执行 ALO-X01/X02。
 
 ## Global Constraints
 
@@ -33,7 +37,6 @@
 | P1 | HTTPS API 定义、参数/分页/结果映射和可重复响应 | 04 HTTP/API、09 API+文件 E2E | API 所有者 | WireMock/真实 API 请求摘要 |
 | P1 | 四种文件样本及对象登记信息 | 05、06、07、09 | 业务数据提供方 | Schema、过滤、坏文件和资源限制 |
 | P1 | 可复现的双源 Join 键、筛选条件和期望结果 | 08、09 | 业务/测试负责人 | Python 脚本断言与页面结果 |
-| P2 | 真实 LLM/Agent 对话环境 | 09 Step 3b | 模型/Agent 环境管理员 | 真实对话链路；不由单测替代 |
 | P2 | 候选 SHA 提交边界和发布凭据 | 00–09 最终交付 | 仓库维护者 | 同 SHA 全量验收、Git 状态/远端校验 |
 
 P0 未全部满足前，不得声称“全量实施计划完成”。本次不把身份与权限条件作为 Gate；相关能力只做既有行为回归，完整角色矩阵和跨工作区授权列入后续计划。P1 缺失只阻塞对应来源场景；P2 缺失时本地实现仍可验证，但最终 Gate 不得关闭。
@@ -221,8 +224,8 @@ ORDER BY order_date DESC
 
 ### 5.2 对象存储条件（本次采用 Docker 临时部署）
 
-- 开发测试直接启动 `docker-compose.test.yml` 中的 MinIO，不要求业务方或外部存储管理员提前提供 bucket；
-- Compose 为 MinIO 创建隔离测试 bucket、固定测试账号和健康检查，DataAgent 可写入临时 ObjectRef，Runner 只能经受控内部接口读取；
+- 开发测试直接启动 `dev-support/local-simulation/docker-compose.yml` 中的 MinIO，不要求业务方或外部存储管理员提前提供 bucket；现有 E2E 的 `docker-compose.test.yml` 保持独立，不与本地模拟配置混用；
+- Compose 为 MinIO 创建隔离测试 bucket、固定测试账号和健康检查，启动脚本上传四种脱敏 fixture 到稳定的 `files/<name>` 对象键；DataAgent 可写入临时 ObjectRef，Runner 只能经受控内部接口读取；
 - 测试结束使用 Compose 清理临时对象和卷，禁止连接生产 bucket；
 - 生产 S3/MinIO endpoint、region、bucket、生命周期和密钥管理不属于本次交付，另列后续部署计划；
 - 不把签名 URL、access key、secret key 或宿主路径写入 Dashboard、日志和截图。
@@ -259,6 +262,21 @@ print(result)
 
 后续若纳入权限实施，再单独准备短期 JWT、workspace ID、角色映射和安全刷新方式；凭据不得写入脚本、截图、trace、CI 输出或 Git。
 
+## 8. 本地前置条件完成记录
+
+本地开发不等待上述真实外部资源，统一使用 `dev-support/local-simulation/` 和独立 E2E Compose。当前已完成的可复核入口如下：
+
+```bash
+./dev-support/local-simulation/scripts/start.sh
+./dev-support/local-simulation/scripts/check.sh
+```
+
+通过条件：MySQL `13306`、PostgreSQL `15432`、MinIO `19000/19001`、WireMock HTTP/HTTPS `18081/18443`、Python Runner 均为 healthy；fixture manifest 的行数、文件集合、字节数、SHA-256 和 MinIO 对象大小校验通过。
+
+执行 E2E 时必须先执行 `dev-support/local-simulation/scripts/cleanup.sh` 释放同端口资源，再运行 `scripts/e2e/start-dashboard-mvp.sh`、simulation seed 和 Playwright；E2E 结束后清理 `docker-compose.test.yml` 专属容器/卷并重新执行上述本地模拟启动与检查。E2E 启动脚本会检测仍运行的 `mateclaw-local-sim-*` 容器并以退出码 `2` fail-fast。
+
+本地模拟条件不等于正式外部条件：真实 Aloudata 必须补齐 ALO-X01/ALO-X02，正式 S3/MinIO 需替换 endpoint/bucket/Secret；这些条件未满足时不得关闭对应 Gate。平台内 AI 生成不属于本期，不要求模型或 Agent 配置。
+
 ## 8. Docker、网络与观测条件（00、05、06、08、09）
 
 - Docker Desktop 和 Testcontainers socket 可用；JDK 21 容器可运行 Maven；
@@ -280,16 +298,19 @@ dev-support/local-simulation/
 ├── .env.example
 ├── mysql/init/
 ├── postgres/init/
-├── minio/init/
+├── minio/{init-minio.sh,seed-minio.sh}
+├── api/orders-openapi.yaml
 ├── wiremock/mappings/
-├── aloudata-fixtures/
+├── wiremock/init-tls.sh
 ├── files/
-└── scripts/{start.sh,seed.sh,cleanup.sh}
+└── scripts/{start.sh,check.sh,cleanup.sh,generate-fixtures.py}
 ```
 
 - MySQL/PostgreSQL 容器提供 JDBC 表、固化 SQL 和 Join 样本；
 - MinIO 容器提供隔离测试 bucket、文件对象和大结果 ObjectRef；
 - WireMock 提供 HTTP/API 与 Aloudata 目录、详情、结果的脱敏固定响应；
+- `api/` 提供脱敏 OpenAPI 参数契约，WireMock TLS 初始化脚本生成本地 HTTPS 证书；
+- Python Runner 复用项目固定 Dockerfile，在 `runner_internal` internal 网络中提供 `/health` 和外网阻断验证；
 - `files/` 只保存小型脱敏 CSV/JSON/Parquet/XLSX fixture，生成的大对象放 Docker Volume；
 - `.env.local`、访问密钥、日志和 trace 不进 Git；
 - `docker-compose.test.yml` 继续服务于现有 E2E，不与本地模拟环境混用生产配置。
@@ -308,17 +329,18 @@ docker compose -f dev-support/local-simulation/docker-compose.yml down -v
 | --- | --- | --- | --- | --- | --- | --- |
 | EXT-ALO-01 | Aloudata 产品/语义地址和版本 | Aloudata 管理员 | Secret/加密配置 | ALO-X01 | 02/09 | 待提供 |
 | EXT-ALO-02 | 默认 tenantId 和认证上下文 | Aloudata 管理员 | Secret/加密配置 | ALO-X01 | 02/09 | 待提供 |
-| EXT-ALO-03 | 已授权稳定视图及筛选字段/值 | Aloudata 管理员 | 视图目录 + Secret ID | ALO-X02 | 02/09 | 阻塞 |
-| EXT-JDBC-01 | MySQL 8.4 只读连接 | DB 管理员 | Secret | JDBC-I01/I02 | 03/07/09 | 待提供 |
-| EXT-JDBC-02 | PostgreSQL 15.6 只读连接 | DB 管理员 | Secret | JDBC-I03/I05 | 03/07 | 待提供 |
-| EXT-JDBC-03 | orders/customers 脱敏样本 | 测试负责人 | 测试 DB | migration/integration | 03/09 | 待准备 |
-| EXT-API-01 | 登记的 HTTPS API 定义 | API 所有者 | DataSource 加密配置 | HTTP-U01～U11 | 04/07/09 | 待提供 |
-| EXT-FILE-01 | 四种文件样本及 checksum | 业务/测试负责人 | 测试 bucket | FILE-U01～U09 | 05/06/09 | 待准备 |
-| EXT-OBJ-01 | Docker 临时 MinIO、测试 bucket 和清理 | 实施环境维护者 | `docker-compose.test.yml` 测试配置 | OBJ-I01～I06 | 06/08/09 | 可本地准备 |
+| EXT-ALO-03 | 已授权稳定视图及筛选字段/值 | Aloudata 管理员 | 视图目录 + Secret ID | ALO-X02 | 02/09 | 阻塞；当前缺 `ALOU_DATA_TEST_VIEW_NAME`、筛选字段/值和结果查询授权 |
+| EXT-JDBC-01 | MySQL 8.4 只读连接 | DB 管理员 | Secret | JDBC-I01/I02 | 03/07/09 | 本地模拟已验证；真实连接待提供 |
+| EXT-JDBC-02 | PostgreSQL 15.6 只读连接 | DB 管理员 | Secret | JDBC-I03/I05 | 03/07 | 本地模拟已验证；真实连接待提供 |
+| EXT-JDBC-03 | orders/customers 脱敏样本 | 测试负责人 | 测试 DB | migration/integration | 03/09 | 本地样本已准备；正式样本待确认 |
+| EXT-API-01 | 登记的 HTTPS API 定义 | API 所有者 | DataSource 加密配置 | HTTP-U01～U11 | 04/07/09 | 本地 OpenAPI/HTTPS fixture 已验证；正式定义待提供 |
+| EXT-FILE-01 | 四种文件样本及 checksum | 业务/测试负责人 | 测试 bucket | FILE-U01～U09 | 05/06/09 | 本地四种样本已准备；正式样本待确认 |
+| EXT-OBJ-01 | Docker 临时 MinIO、测试 bucket 和清理 | 实施环境维护者 | `dev-support/local-simulation/` | OBJ-I01～I06 | 06/08/09 | 已完成本地验证 |
 | EXT-AUTH-01 | 身份、workspace、角色矩阵 | 后续权限项目 | 后续单独定义 | 权限专项验收 | 未来 | 延期，不阻塞本次 |
-| EXT-LLM-01 | 真实 LLM/Agent 配置 | 模型环境管理员 | Secret/CI | 09 Step 3b | 09 | 未覆盖 |
 | EXT-DEL-01 | 候选 SHA 提交边界 | 仓库维护者 | Git 审批记录 | E2E-06 | 00–09 | 待确认 |
-| EXT-LOCAL-01 | 本地模拟 Compose、初始化脚本和脱敏 fixture | 实施环境维护者 | `dev-support/local-simulation/` | healthcheck + seed/cleanup | 00–09 | 待建立 |
+| EXT-LOCAL-01 | 本地模拟 Compose、初始化脚本和脱敏 fixture | 实施环境维护者 | `dev-support/local-simulation/` | healthcheck + seed/cleanup + manifest checksum | 00–09 | 已完成本地验证（10 行 fixture，start 等待长期服务 healthy） |
+
+> 当前已收到产品层/语义层地址、默认租户和 UID 认证方式；仍需 Aloudata 管理员确认一个允许结果查询的 `viewName`，并由项目维护者提供对应的 MateClaw `datasourceId`、可筛选字段和值，才能填充外部测试变量并执行 ALO-X02。
 
 ## 10. 一次性预检与解除顺序
 
@@ -326,12 +348,12 @@ docker compose -f dev-support/local-simulation/docker-compose.yml down -v
 2. 运行设计门禁、DataAgent/Runner/UI 基线和 Compose healthcheck。
 3. 使用当前已有测试上下文完成非 Aloudata seed/Playwright/cleanup；不新增真实 JWT/角色矩阵验收。
 4. 注入已授权 Aloudata 视图，完成 ALO-X01/X02 和 JDBC+Aloudata 双源场景。
-5. 配置真实 LLM/Agent 环境，单独完成 09 Step 3b；ToolCallback 单测不能替代。
-6. 用户确认提交范围后生成候选 SHA，在同一 SHA 重跑全量矩阵并生成最终证据。
+5. 用户确认提交范围后生成候选 SHA，在同一 SHA 重跑全量矩阵并生成最终证据。
 
 推荐命令：
 
 ```bash
+make dashboard-prerequisites-local
 bash scripts/verify-dashboard-design.sh
 docker compose -f docker-compose.test.yml config --quiet
 docker compose -f docker-compose.test.yml up -d e2e-mysql e2e-http minio mateclaw-dataagent python-runner
@@ -345,7 +367,33 @@ bash scripts/e2e/verify-dashboard-mvp-cleanup.sh
 
 ## 验收定义
 
-- P0 条件全部满足（MinIO 由 Docker 临时部署）；P1 场景都有对应数据和接口证据；身份与权限专项不计入本次 Gate；P2 条件按目标是否纳入发布范围决定，但真实 LLM E2E 未执行时必须明确标记未覆盖。
+- P0 条件全部满足（MinIO 由 Docker 临时部署）；P1 场景都有对应数据和接口证据；身份与权限专项不计入本次 Gate；平台内 AI 生成不纳入本期，不要求真实 LLM E2E。
 - 外部凭据均可追溯到安全存放位置，但文档、日志、截图和测试输出中不存在凭据值。
 - 每个 EXT-* 都有提供方、验证入口、关联计划和状态；阻塞项有明确解除条件。
-- 只有 Aloudata 结果、两条双源 E2E、真实 LLM 对话（若纳入本期）和候选 SHA 全部取得证据，才可将本次范围标记完成；身份与权限完善不作为本次完成条件。
+- 只有 Aloudata 结果、两条双源 E2E 和候选 SHA 全部取得证据，才可将本次范围标记完成；身份与权限完善不作为本次完成条件。
+
+## 11. 本轮本地模拟实施记录
+
+执行入口：
+
+```bash
+./scripts/verify-dashboard-external-prerequisites.sh --local
+./dev-support/local-simulation/scripts/start.sh
+./dev-support/local-simulation/scripts/check.sh
+```
+
+已验证结果：
+
+- Compose 配置解析和全部 shell 脚本语法通过；
+- MySQL 8.4、PostgreSQL 15.6、MinIO、WireMock HTTP/HTTPS 和 Python Runner 容器均为 healthy；本地 HTTPS 端口为 18443，使用临时 PKCS12 证书；Runner 使用项目固定 Dockerfile，并在独立 `internal` 网络中运行；
+- 本地模拟 fixture 两个数据库均初始化 10 行 `orders` 和 3 行 `PAID`，包含无匹配 Join 键、Decimal、null、日期、中文及多种状态；可直接用于本地开发验证，正式环境仍需按本节记录数据版本与 checksum；
+- MinIO `mateclaw-sim` bucket 已创建并上传 `orders.csv`、`orders.json`、`orders.parquet`、`orders.xlsx`，对象键统一为 `files/<name>`；`fixtures-manifest.json` 固化四种文件的字节数、SHA-256、Schema、过滤预期和 Join 键；
+- WireMock `/orders`、Aloudata tree/detail/analysis result/metrics query 模拟接口均取得预期响应；`api/orders-openapi.yaml` 的 OpenAPI 3 参数契约也通过前置检查；
+- `.env.aloudata-simulation.example` 提供本地 `tenantId`、UID 占位值、`datasourceId=9001`、`local_sales_view` 及 `region=east` 筛选参数；它只用于 WireMock 模拟，不替代真实 Aloudata HTTPS 验收；
+- 使用上述模拟变量运行 `AloudataAnalysisViewExternalIT` 已通过，覆盖目录、详情、模拟基线和筛选结果变化；真实环境仍须使用独立的 HTTPS/truststore 和授权视图重新执行；
+- 清理入口 `./dev-support/local-simulation/scripts/cleanup.sh` 可删除容器、网络和本地测试卷。
+- 根目录统一入口 `./scripts/verify-dashboard-external-prerequisites.sh --local` 已通过；`--simulation` 还会校验本地 Aloudata tenant/view/filter 占位配置；入口会实际列出 MinIO 四个对象并检查 Runner；`--external` 在缺少真实 Aloudata 变量时返回明确 `BLOCKED`（退出码 3），且不打印认证值。
+- 独立 Dashboard E2E 可通过 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 复用 E2E HTTPS WireMock，自动 seed `local_sales_view` 数据源/数据集；该模式只验证本地 Adapter、`datasets.read` 过滤下推和页面编排，不得替代真实 Aloudata 视图授权与 ALO-X02。
+- Runner 网络复验：`/health` 返回 `status=UP`，访问外部 DNS/HTTPS 失败，证明本地 Runner 未获得任意外网访问能力。
+
+当前未覆盖：真实 Aloudata 结果权限、正式测试环境对象存储、真实 API 所有者接口和身份权限专项。

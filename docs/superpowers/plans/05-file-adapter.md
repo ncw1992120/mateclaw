@@ -16,6 +16,12 @@
 
 **本地模拟：** 文件样本和 MinIO 由 `dev-support/local-simulation/` Docker 环境提供；正式测试前切换 S3 兼容对象存储 endpoint、bucket、prefix 和 Secret。
 
+**开发验证配置：** 使用 `files/fixtures-manifest.json` 固定四种格式的 SHA-256、Schema、过滤预期和 `id` Join 键；对象从 MinIO bucket `mateclaw-sim` 的 `files/<name>` 读取。
+
+**执行约定：** 文件读取必须通过 ObjectRef 和 manifest 校验；新增样本先运行 `scripts/generate-fixtures.py`，再运行模拟前置检查，不接受工作区任意本地路径。
+
+**本轮复验记录（2026-09-13）：** MinIO fixture manifest、CSV/JSON/Parquet/XLSX 对象及 Schema/大小校验通过；文件 Adapter 纳入 DataAgent `152/152` 与本地 E2E `9 passed` 基线。
+
 ## Global Constraints
 
 - 只读取平台上传并登记的对象；拒绝本地任意路径和外部 URL。

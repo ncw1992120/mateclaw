@@ -6,6 +6,26 @@
 
 ## 已准备
 
+### 2026-09-13 本地 E2E 复验（当前工作树）
+
+- 使用 `docker-compose.test.yml` 启动 MySQL、MinIO、HTTPS WireMock、固定 Python Runner、DataAgent 和 UI；本轮实际 UI 地址为 `http://127.0.0.1:15174`，DataAgent 地址为 `http://127.0.0.1:18189/dataagent/api`。
+- 使用本地默认测试账号完成 seed，创建 API+文件、旧 Schema、脚本失败、取消、超时、资源限制和大结果 ObjectRef 场景；未设置 Aloudata 真实授权变量。
+- 首次闭环暴露 Python `Filter` 缺少统一契约要求的 `role`，导致 DataAgent 返回 400；随后发现 Runner 构造 `DatasetClient` 时丢弃任务 `parameters`，导致脚本无法读取页面参数。两项均按 TDD 增加回归测试并修复：`Filter` 默认发送 `role=dimension`、支持显式 `measure`，且 `datasets.params` 收到任务参数；Runner 全量现为 `19 passed`。
+- 重建 Runner/DataAgent 后，非 Aloudata Playwright 用例 `7 passed`（API+文件、旧 Schema、脚本失败/重试、取消/重试、超时/重试、资源限制/重试、大结果 ObjectRef）；API+文件单独复验 `1 passed`。
+- JDBC+Aloudata 用例仍按设计记录为 `BLOCKED`，原因是缺少真实可查询指标视图授权；没有使用 skip 隐藏该阻塞。
+
+### 2026-09-13 参数注入回归
+
+- `TaskExecutor` 单测验证任务参数从 Runner 请求注入 `DatasetClient.params`，脚本可通过 `datasets.params.require(...)` 获取页面/任务参数；参数仍通过任务环境传递，不包含连接凭据。
+
+### 2026-09-13 回归门禁复验
+
+- Docker Maven DataAgent 全量测试退出码 `0`（日志仅含既有依赖告警）。
+- Runner `20 passed`；UI Vitest `8 files / 24 tests passed`；UI production build、`DESIGN-PASS`、`EXTERNAL-PREREQUISITES-SIMULATION-PASS` 和 `git diff --check` 均通过。
+- 设计样例一致性补强：明确 `datasets` 是 Runner 注入的任务客户端，并在 `verify-dashboard-design.sh` 中拒绝误写成模块导入；设计门禁再次 `DESIGN-PASS`。
+- 同步修正 08 子计划标准脚本样例，移除不存在的 `filters.gte/lte` 工厂函数，统一使用 `mateclaw.filters.Filter` 和 `datasets.params`。
+- 同步修正 `query-parameter-pushdown-design.md` 的同一示例，并将规格文件纳入样例导入门禁。
+
 - `docker-compose.test.yml`：隔离的 MySQL、MinIO、WireMock、DataAgent、Python Runner 和 UI 测试服务。
 - `mateclaw-dataagent/src/test/resources/e2e/mysql/init.sql`：可重复的订单测试数据。
 - `mateclaw-dataagent/src/test/resources/e2e/wiremock/mappings/orders.json`：API 测试响应。
@@ -44,7 +64,7 @@ HTTP/API 测试遵守生产 HTTPS/公开地址与 allowlist 校验；测试 Comp
 - cleanup 脚本新增并执行跨工作区读取验证：以真实 JWT 携带 `X-Workspace-Id: 999999999` 读取已 seed 仪表盘，服务返回 HTTP `403` 后才继续删除，证明资源归属检查未被全局 admin 的粗粒度拦截器绕过。
 - JDBC+Aloudata 单独执行：`1 failed`，失败信息为 `BLOCKED: 需要已授权且可查询的 Aloudata 指标视图 ID`；这是外部授权阻塞，不是跳过或代码成功证据。
 - 补充 ObjectRef 预览上限和 Aloudata 连接上下文回归后，使用 Docker Maven JDK 21 和 Testcontainers 重新执行：`140 tests, 0 failures, 0 errors, 0 skipped`。
-- 前端 Vitest/build：`24 passed`、生产构建通过；Python Runner：`17 passed`（通过 Python 3.13/uv 环境运行，宿主默认 Python 3.8 不满足项目类型标注要求），新增后台 executor 异常必须收敛为 `FAILED`、SDK 在网络请求前拒绝非法过滤条件、兼容 DataAgent `R.ok(...)` 包装响应以及识别业务错误的回归测试；本轮补充了 Playwright 本机 Chrome channel 兼容配置。
+- 前端 Vitest/build：`24 passed`、生产构建通过；Python Runner：`20 passed`（通过 Python 3.13/uv 环境运行，宿主默认 Python 3.8 不满足项目类型标注要求），新增后台 executor 异常必须收敛为 `FAILED`、SDK 在网络请求前拒绝非法过滤条件、兼容 DataAgent `R.ok(...)` 包装响应、识别业务错误以及任务参数端到端注入的回归测试；本轮补充了 Playwright 本机 Chrome channel 兼容配置。
 - 旧 Agent Python 兼容回归：Docker Maven JDK 21 定向执行 `LocalCodeExecutorCompatibilityTest` 通过；该测试验证旧 `requirements`/`pip` 调用契约仍保留，但使用受控 `/bin/sh` 解释器，不等价于真实 Python 解释器闭环，因此同候选 SHA 的真实 Agent 调用仍待补充。
 - 旧执行器真实解释器复验：同一测试在临时 JDK 21 + Python 3 容器中以 `MATECLAW_LEGACY_REAL_PYTHON=true` 运行，日志确认 `python=python3`，测试通过且旧 requirements 流程仍执行；这证明 LocalCodeExecutor 的真实 Python 边界，但尚未覆盖通过 Agent/Tool 通道触发的端到端调用。
 - 旧 Agent/Tool 通道复验：新增 `PythonAnalysisToolIntegrationTest`，验证 `python_analysis` 注册、`execute_python` 参数解析、stdin 传递和结果格式；默认模式通过，临时 JDK 21 + Python 3 容器真实模式也通过，日志确认工具回调使用 `python=python3`。该证据覆盖 ToolCallback 通道，不包含真实 LLM 推理，因此不宣称完整 Agent 对话 E2E。
@@ -104,10 +124,12 @@ TLS fixture 端口隔离回归（2026-09-12）：同一 TLS 测试模式下 `htt
 复现命令：
 
 ```bash
+docker compose -f docker-compose.test.yml down -v --remove-orphans
 docker compose -f docker-compose.test.yml up -d \
   e2e-mysql e2e-http minio python-runner mateclaw-dataagent mateclaw-dataagent-ui
+# 等待 mateclaw-e2e-ui 的 5174 端口可访问后再执行 seed 和 Playwright
 scripts/e2e/seed-dashboard-mvp.sh
-npm --prefix mateclaw-dataagent-ui exec -- playwright test
+npm --prefix mateclaw-dataagent-ui run test:e2e
 scripts/e2e/verify-dashboard-mvp-cleanup.sh
 ```
 
@@ -118,7 +140,7 @@ scripts/e2e/verify-dashboard-mvp-cleanup.sh
 - 总体计划基线命令在 Docker Maven JDK 21 下通过：`mvn -pl mateclaw-plugin-api,mateclaw-server install -Dmaven.test.skip=true`、`mvn -N install -DskipTests` 和 `mvn -f mateclaw-sdk/pom.xml install -Dmaven.test.skip=true` 均返回成功；该证据仅证明当前工作树的构建前置条件可用，不代表已生成候选提交 SHA。
 - `bash scripts/verify-dashboard-design.sh`：`DESIGN-PASS`。
 - Docker Maven JDK 21 执行 DataAgent 全量测试：`140 tests, 0 failures, 0 errors, 0 skipped`。
-- `uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`：`17 passed`。
+- `uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`：`20 passed`。
 - `docker build -t mateclaw-python-runner:plan-verify mateclaw-python-runner` 构建通过；以镜像实际启动解释器 `/app/.venv/bin/python` 导入 `pandas`、`polars`、`pyarrow`、`fastapi` 成功，容器 UID 为 `10001`，并确认 `uv.lock` 存在。该检查未修改生产镜像标签。
 - `uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests/test_executor.py -q`：`7 passed`，其中包含 stdout 资源上限终态验证。
 - Aloudata Adapter 定向测试：`9 passed`，覆盖 `SM_02_0038` 到 `ACCESS_DENIED` 的映射、行偏移到零基 `pageIndex` 以及非 `pageSize` 对齐偏移拒绝；真实 Aloudata 结果查询仍按 `SM_02_0038` 保持 `BLOCKED`。
@@ -131,8 +153,14 @@ scripts/e2e/verify-dashboard-mvp-cleanup.sh
 以下命令均在当前工作树重新执行并取得退出码 0；结果仍属于工作树证据，未生成候选提交 SHA：
 
 - Docker Maven JDK 21：`mvn -f mateclaw-dataagent/pom.xml test -q`，`140 tests, 0 failures, 0 errors, 0 skipped`。
-- Python Runner：`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`，`17 passed`（1 个上游弃用警告）。
+- Python Runner：`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`，`20 passed`（1 个上游弃用警告）。
 - UI 单元测试：`npm --prefix mateclaw-dataagent-ui test -- --run`，`8 files / 24 tests passed`。
+
+结果绑定聚焦复验（2026-09-13）：单独执行 `npx vitest run src/utils/__tests__/dataset-result.spec.ts src/utils/__tests__/dashboard-schema.spec.ts`（工作目录 `mateclaw-dataagent-ui`），得到 `2 files / 4 tests passed`。其中明确覆盖脚本行集到 Table 的列/行映射、到 ECharts 的分类轴/数值序列映射，以及 `scriptBindings` Schema 保留；因此 Table/ECharts 绑定不是仅由 E2E 页面截图推断。
+
+证据边界：本轮 CDP 页面采集验证了 Table 结果页；ECharts 目前只有上述映射单测证据，尚未取得候选 SHA 的图表组件 CDP/Canvas 证据，VIS-UI04 的 ECharts 子项仍保持待复验。
+
+补充 ECharts 本地运行时证据（2026-09-13）：临时 E2E Compose 的真实预览页实际检测到 `chartWidgets=1`、`canvasCount=1`，并生成 `/tmp/mateclaw-dashboard-cdp/dashboard-echarts-binding.png`。该证据属于当前工作树/本地模拟环境，不替代候选 SHA 视觉验收。
 - UI 生产构建：`npm --prefix mateclaw-dataagent-ui run build`，`vue-tsc --noEmit && vite build` 成功；仅有 Rollup 注释和 chunk 大小提示。
 - 设计门禁与差异校验：`bash scripts/verify-dashboard-design.sh && git diff --check`，返回 `DESIGN-PASS` 且无 diff 校验错误。
 
@@ -155,3 +183,92 @@ scripts/e2e/verify-dashboard-mvp-cleanup.sh
 追加外部条件清单（2026-09-13）：新增 `2026-09-13-dashboard-external-prerequisites.md`，覆盖 Aloudata 接口/视图授权、JDBC 连接与样本、HTTPS API、四种文件、对象存储、JWT/工作区、Runner/Docker、观测证据和候选 SHA；总体计划已回链，认证值均使用占位符。
 
 追加 Adapter 术语复核（2026-09-12）：01 子计划已将“所有 Adapter”表述统一为“四个 Adapter 实现，覆盖五种来源类型”，并保持 `PushdownReport` 对每种来源如实填写。
+
+## 本地外部依赖模拟复验（2026-09-13）
+
+- `docker compose -f dev-support/local-simulation/docker-compose.yml --env-file dev-support/local-simulation/.env.example config --quiet`：通过。
+- `bash -n dev-support/local-simulation/scripts/*.sh`：通过。
+- `./dev-support/local-simulation/scripts/start.sh`：成功启动 MySQL 8.4、PostgreSQL 15.6、MinIO、WireMock，并完成 MinIO bucket 初始化和 CSV/JSON fixture 上传。
+- `uv run --project mateclaw-python-runner python dev-support/local-simulation/scripts/generate-fixtures.py`：从 canonical CSV 生成可打开的 `orders.parquet` 和 `orders.xlsx`，`file`/`unzip -t` 校验通过；随后 MinIO seed 已上传四种格式 fixture。
+- `./dev-support/local-simulation/scripts/check.sh`：通过；MySQL/PostgreSQL/MinIO/WireMock HTTP+HTTPS 健康检查、WireMock 全量/`status=PAID` 响应断言、MySQL/PostgreSQL 各 10 行 fixture 断言均通过。
+- MinIO 对象键复验：`files/orders.csv`、`files/orders.json`、`files/orders.parquet`、`files/orders.xlsx` 均存在；不会生成不稳定的 `files/seed/...` 前缀。
+- `files/fixtures-manifest.json` 校验：四种样本的文件大小和 SHA-256 均匹配，Schema、`status=PAID` 预期 3 行及 `id` Join 键均已登记。
+- HTTPS fixture 复验：`https://127.0.0.1:18443/orders?status=PAID` 返回 3 行，`analysisView/query` 返回 3 行；临时证书只用于本地测试，正式环境必须替换为受信任证书链。
+- 根目录前置条件入口 `./scripts/verify-dashboard-external-prerequisites.sh --local`：通过；实际列出 MinIO 四个对象并检查 Runner；`--external` 在未注入真实 Aloudata 条件时按设计返回 `BLOCKED`/退出码 3。
+- Make 入口 `make dashboard-prerequisites-local`：通过；`make -n dashboard-prerequisites-external` 可展开真实环境检查命令。
+- 本地 Aloudata 闭环入口 `make dashboard-prerequisites-simulation`：通过；固定 `local-tenant`、`local_sales_view`、`region=east` 和 `datasourceId=9001` 仅用于 WireMock。
+- OpenAPI fixture `dev-support/local-simulation/api/orders-openapi.yaml`：通过格式/operationId/`status` 参数存在性检查，作为本地 `apiDefinitionId` 契约样例。
+- 本地 Runner 复验：复用 `mateclaw-python-runner/Dockerfile` 构建，容器 `/health` 返回 `{"status":"UP"}`；在 `runner_internal` internal 网络中访问 `https://example.com` 时 DNS 解析失败。
+- 本地 Aloudata Adapter 外部探测：`AloudataAnalysisViewExternalIT` 使用 `.env.aloudata-simulation.example` 在 WireMock 模拟租户上通过（目录、详情、模拟基线和 `region=east` 筛选结果变化）；不计入真实 Aloudata ALO-X02 验收。
+- MySQL/ PostgreSQL 均查询到 10 行订单，其中 3 行为 `PAID`；样例包含 null、Decimal、日期、中文、多种状态和无匹配 Join 键。
+- WireMock `/orders`、`/anymetrics/api/v1/analysisview/treeList`、`queryByName`、`analysisView/query`、`metrics/query` 均返回预期脱敏响应。
+- `./dev-support/local-simulation/scripts/cleanup.sh` 可删除本地模拟容器、网络和数据卷。
+
+该证据仅覆盖本地模拟依赖，不替代真实 Aloudata 结果权限、正式测试环境对象存储、真实 API 所有者接口或身份权限专项。
+
+范围说明（2026-09-13）：当前 DataAgent Adapter 到 Runner 的输入读取返回受限 `DatasetBatch`；`ObjectRef/Parquet` 已用于脚本大结果上传和页面受限预览。输入侧远程 `ObjectRef` 批读尚未实现，不计入本阶段 PASS，后续需增加专用读取接口、令牌绑定和 SDK 批读取器后再验收。
+
+## 本地模拟基线回归（当前工作树）
+
+- `uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q`：`20 passed`。
+- `npm --prefix mateclaw-dataagent-ui test -- --run`：8 个测试文件、24 个测试通过。
+- `npm --prefix mateclaw-dataagent-ui run build`：类型检查和 Vite production build 通过；仅有既有 Rollup chunk 大小提示。
+- Docker Maven DataAgent 全量测试（Testcontainers 使用 Docker Desktop socket）：命令退出码 0；日志仅含既有 SLF4J/Mockito/本地旧执行器 pip 兼容告警，无失败测试。
+- `make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh`、`git diff --check`：均通过。
+
+追加全量回归（2026-09-13）：使用 Docker Maven JDK 21 和 Docker Desktop Testcontainers 执行 `mvn -f mateclaw-dataagent/pom.xml test -q`，命令退出码为 `0`；本次未发现失败、错误或跳过测试。日志中的 SLF4J、Parquet/Hadoop、Mockito agent 及旧 Local 执行器 `pip` 兼容告警均为既有告警，不改变测试结果。
+
+本地 manifest 校验补强（2026-09-13）：`check.sh` 新增 `fixtures-manifest.json` 的 rowCount、文件集合、字节数、SHA-256、`status=PAID` 预期 3 行契约校验，并通过 MinIO `mc stat --json` 核对四个已上传对象的大小；当前模拟环境检查输出 `fixture manifest checksum/schema contract passed` 和 `MinIO object size contract passed`。
+
+非 Aloudata Compose E2E 复验（2026-09-13）：在清理 `docker-compose.test.yml` 专属容器和卷后，重新构建并启动 DataAgent、Runner、MinIO、WireMock、UI；通过同一轮登录 token 和 seed 状态执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --grep-invert ...`，7 个 API+文件、ObjectRef、旧 Schema、错误/取消/超时/资源限制场景通过。JDBC+Aloudata 用例按设计显式报告 `BLOCKED`（未提供已授权视图），不计入非 Aloudata 通过数。首次 seed 的 400 根因为残留 E2E MySQL volume 导致数据集名称唯一约束，清理测试专属卷后 seed 成功；本地模拟卷未被删除，已在 E2E 完成后恢复并通过健康检查。
+
+E2E 启动入口补强（2026-09-13）：新增 `scripts/e2e/start-dashboard-mvp.sh`，自动执行测试栈 `down -v --remove-orphans`、`up -d --build`，并轮询 DataAgent `/actuator/health` 与 UI `5174` 端口；脚本实际执行成功并输出 `Dashboard MVP E2E services are ready`。E2E 清理后本地模拟环境已恢复并通过 `check.sh`。
+
+E2E UI 健康检查补强（2026-09-13）：`docker-compose.test.yml` 为 `mateclaw-dataagent-ui` 增加 Node HTTP healthcheck（访问容器内 `127.0.0.1:5174/`，每 5 秒检查，最多 36 次）。执行 `scripts/e2e/start-dashboard-mvp.sh` 后，`docker compose -f docker-compose.test.yml ps` 显示 `mateclaw-e2e-ui ... Up (healthy)`；随后按脚本约定清理 E2E 专属容器/卷并恢复本地模拟环境，`check.sh` 继续通过。该检查使 Compose 状态与前端真实可访问性一致，但不替代 Playwright 页面断言。
+
+E2E Aloudata 模拟入口补强（2026-09-13）：`seed-dashboard-mvp.sh` 新增 `MATECLAW_E2E_ALOUDATA_MODE=simulation`，通过 E2E HTTPS WireMock 创建 `local-tenant`、`local_sales_view` 对应的数据源和 `ALOUDATA_ANALYSIS_VIEW` 数据集，并将 `region=east` 过滤写入 `datasets.read`，用于验证 JDBC+Aloudata 的编排和过滤下推路径；新增 tree/detail/analysis-result/metrics-query WireMock mappings。使用 `MATECLAW_E2E_WORKSPACE_ID=1`、本地 `admin/admin123` 登录执行 seed 成功并生成双源 Dashboard。由于当前工作机缺少 Playwright Chromium（`Executable doesn't exist ... chrome-headless-shell`），本次只记录 seed/后端准备成功，未将页面 E2E 标为 PASS；真实 Aloudata 仍需独立授权验收。
+
+E2E Aloudata 模拟链路调试（2026-09-13）：安装/启用系统 Chrome channel 后，页面用例可启动并真实调用 DataAgent，但先后发现两处内部契约问题：数据库端点 JSON 损坏时关键端点缺少代码级兜底；`AloudataApiClient.callWithParams` 校验前未注入连接级认证 Header。已分别补充核心端点默认配置（tree/detail/result/metrics）和 `tenant-id/auth-type/auth-value` 自动注入，并通过 Docker Maven JDK 21 离线打包、E2E Compose 重建验证。修复后的页面用例尚未重新取得 PASS（仍需下一轮在新镜像上重跑）；本轮失败结果保留为缺陷定位证据，不改变 G3 部分通过结论。
+
+E2E Aloudata 模拟链路继续调试（2026-09-13）：重新构建后，WireMock 请求已进入 `analysis_view_query_by_name`，但发现数据集来源定义固化字段为 `analysisViewId`，Adapter 仅读取历史 `viewName`，导致回退到数据集展示名并返回 404。Adapter 已兼容优先读取 `analysisViewId`、再读取 `viewName`；本轮已清理 E2E 栈并恢复本地模拟环境，页面 PASS 需在下一轮新镜像中复验。
+
+Aloudata Adapter 回归测试（2026-09-13）：Docker Maven JDK 21 离线执行 `-Dtest=AloudataApiClientTest,AloudataAnalysisViewAdapterTest,AloudataEndpointServiceTest test -q` 通过；新增覆盖连接级认证 Header 注入、`analysisViewId` 来源定义、数据库端点配置损坏时核心端点兜底，以及无 Web `UserContext` 的 Runner 内部读取回退。该结果证明 Adapter 单元契约已闭合，不等价于页面 E2E PASS。
+
+本地模拟数据与启动脚本补强（2026-09-13）：canonical 订单 fixture 已扩展为 10 行，并重新生成 Parquet/XLSX、manifest 及 MinIO 对象；MySQL/PostgreSQL 各 10 行、`PAID` 3 行的检查通过。`start.sh` 改为轮询五个长期服务的 healthcheck 后再执行 MinIO seed，规避一次性 TLS/MinIO init 容器导致的 `up --wait` 误失败；连续执行 `bash -n .../start.sh && start.sh && check.sh` 通过。
+
+JDBC+模拟 Aloudata 页面闭环（2026-09-13）：使用最新 DataAgent 镜像、E2E HTTPS WireMock `local_sales_view`、MySQL fixture、系统 Chrome channel（`MATECLAW_E2E_BROWSER_CHANNEL=chrome`）和同一轮 seed 状态执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --grep 'JDBC.*Aloudata'`，结果 `1 passed`。页面真实调用 DataAgent，脚本通过 `datasets.read` 读取 JDBC 与 Aloudata 输入，验证 `region=east` 条件下的 5 行结果和金额 `120.5`；更新了该用例的结果断言并生成稳定截图基线。该证据仅证明本地模拟编排、过滤参数和页面展示链路，不替代真实 Aloudata ALO-X02 授权及远端下推证据；E2E 专属容器清理后本地模拟环境已恢复并通过 `check.sh`。
+
+E2E 启动入口稳定性补强（2026-09-13）：`scripts/e2e/start-dashboard-mvp.sh` 新增本地模拟容器占用同端口时的 fail-fast（退出码 `2`）和 API/UI 健康探测的 `connect-timeout/max-time`，避免端口冲突产生半套容器或单次 `curl` 阻塞超过总体 deadline；`bash -n` 和设计/外部前置条件门禁通过。该改动只改善测试入口，不改变生产服务行为。
+
+本地模拟 E2E 全量矩阵（2026-09-13）：清理本地模拟栈后，以干净的 `docker-compose.test.yml`、同一轮 `seed-dashboard-mvp.sh`、本地 JWT 和系统 Chrome channel 执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `8 passed (45.3s)`。通过项包括：JDBC+模拟 Aloudata 双源、API+文件双源、旧 Schema、脚本失败/重试、取消/重试、超时/重试、资源限制/重试和大结果 ObjectRef；无 route mock、无 skip。E2E 专属容器/卷随后已清理，本地模拟环境恢复并再次通过 `check.sh`。该证据绑定当前工作树而非候选 Git SHA，真实 Aloudata ALO-X02 和真实 LLM Agent 对话仍不计入 PASS。
+
+DataAgent 最新全量回归（2026-09-13）：通过 Docker Maven JDK 21 执行 `mvn -o -f mateclaw-dataagent/pom.xml test -q`，挂载 Docker Desktop socket，并设置 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal`、`TESTCONTAINERS_RYUK_DISABLED=true`；命令退出码 `0`，Surefire 汇总 `152 tests, 0 failures, 0 errors, 0 skipped`。首次未设置宿主地址覆盖时的 Ryuk/MinIO 连接失败仅属于 Maven 容器网络配置问题，不计入代码失败；修正测试运行参数后所有 Testcontainers 用例通过。
+
+标准 Make 入口复验（2026-09-13）：直接执行 `make dashboard-dataagent-test`，确认 Makefile 封装的 Docker Desktop/Testcontainers 参数可复现上述全量结果，命令退出码 `0`；无需执行者手工拼接 Docker Socket、Maven 缓存或宿主地址参数。
+
+本轮完整 E2E 复验（2026-09-13）：按 `start-dashboard-mvp.sh` 清理并启动独立 E2E Compose，使用同一轮 seed、`MATECLAW_E2E_ALOUDATA_MODE=simulation`、本地 JWT 和系统 Chrome channel 执行全量 Playwright。首次运行因遗漏注入错误/取消/超时/资源场景的 Dashboard ID 而 fail-fast；补齐同一 state 文件中的全部 ID 后，`npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line` 得到 `8 passed (46.0s)`。该配置问题已定位并保留为入口证据，不是功能失败；E2E 容器清理后本地模拟栈恢复，`check.sh` 通过。
+
+E2E 环境导出入口补强（2026-09-13）：新增 `scripts/e2e/export-dashboard-mvp-env.sh`，只从 seed state 文件导出 9 个 Dashboard ID，不读取或持久化 Token/密码；已用当前 state 验证输出恰好 9 行并通过 `bash -n`。09 子计划已补充 `eval "$(.../export-dashboard-mvp-env.sh)"` 用法，避免再次因手工遗漏变量触发入口失败。
+
+E2E 环境导出安全复验（2026-09-13）：导出值统一经过 jq `@sh` quoting 后再生成 `export` 命令，避免异常 state 内容形成 shell 语句；语法、9 行输出、设计门禁和本地前置条件检查均通过。
+
+ECharts E2E 固化（2026-09-13）：seed 新增 `E2E ECharts Binding Dashboard`，state/export 新增 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`；用例从列表进入真实预览页，断言 `.chart-widget=1`、`.chart-container canvas=1` 并保留页面快照。修改后在同一轮 E2E Compose、JWT、系统 Chrome 下运行全量 Playwright，结果为 `9 passed (36.2s)`，其中新增 ECharts 用例通过。
+
+CDP 视觉复验（2026-09-13）：在同一轮 E2E seed、JWT 和系统 Chrome 下，使用 `Accessibility.getFullAXTree` 与 `Page.captureScreenshot` 采集仪表盘列表、编辑器和最终结果页。AX 节点数分别为 516、389、617；最终结果页真实表格 5 行、包含金额 `120.5`，并确认“脚本数据集输入”“输入预览”“最终结果预览”等控件存在。截图路径为 `/tmp/mateclaw-dashboard-cdp.png`、`/tmp/mateclaw-dashboard-editor-cdp.png`、`/tmp/mateclaw-dashboard-preview-cdp.png`。该结果为当前工作树本地模拟视觉证据，不替代候选 SHA 验收。
+
+计划一致性门禁补强（2026-09-13）：发现总体计划 G3 摘要曾将工作树证据误写为候选 SHA、将 VIS-UI01～VIS-UI08 误写为全部通过；已改为明确“当前工作树部分视觉证据、候选 SHA 验收待提交”，并在 `verify-dashboard-design.sh` 增加一致性断言。设计门禁复验通过。
+
+可复用 CDP 脚本复验（2026-09-13）：新增并实际执行 `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`。首次执行发现列表标题定位过宽（标题和副标题同时匹配），已收窄为精确 heading；修复后脚本在 E2E Compose、同一轮 seed、JWT 和系统 Chrome 下成功生成 `dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`，AX 节点数为 516、500、617，最终结果 5 行且包含 `120.5`。E2E 栈随后清理，本地模拟环境恢复并通过 `check.sh`。
+
+CDP 脚本最新复验（2026-09-13）：入口已增加 ECharts Dashboard，成功生成 `dashboard-echarts-preview.png`；AX 节点数为 `567/389/617/88`（列表/编辑器/Table 结果/ECharts 结果），ECharts 结果页 `canvasCount=1`、图表标题可见。该证据绑定当前工作树和本地模拟环境，候选 SHA 仍需重跑。
+
+真实 Aloudata 外部 Gate 预检（2026-09-13）：当前 shell 未注入 `ALOU_DATA_*`，执行外部前置条件入口以退出码 `3` fail-fast，未发起网络请求；真实 ALO-X01/X02 继续保持 `BLOCKED`，不以本地模拟结果替代。
+
+范围更正（2026-09-13）：根据已确认的产品范围，平台不负责 AI 自动生成或直接执行 SQL/Python；此前记录中的“真实 LLM Agent 对话 E2E”属于超出本期范围的历史审计项，已从 09 Step 3b 和外部前置条件中移除。本期仅验收用户提供脚本的校验、预览、执行及旧 `ToolCallback` 兼容。
+
+CDP npm 入口补强（2026-09-13）：`mateclaw-dataagent-ui/package.json` 新增 `npm run test:e2e:cdp`；已验证 npm 脚本可发现、package JSON 可解析，缺少 Token 时按设计 fail-fast（`CDP-FAILFAST-PASS`）。
+
+设计门禁覆盖补强（2026-09-13）：`verify-dashboard-design.sh` 现同时检查 CDP 脚本文件和 `test:e2e:cdp` npm 命令存在，避免计划引用失效入口；门禁复验输出 `DESIGN-PASS`。
+
+当前工作树模块回归（2026-09-13）：`make dashboard-dataagent-test` 退出码 `0`，Surefire 汇总 `152 tests, 0 failures, 0 errors, 0 skipped`；`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q` 为 `20 passed`；`npm --prefix mateclaw-dataagent-ui test -- --run` 为 `8 files / 24 tests passed`；随后 `npm --prefix mateclaw-dataagent-ui run build` 成功。仅有既有 SLF4J、pytest 弃用提示和 Rollup chunk 大小告警，不影响退出码。
+追加本轮本地前置复验（2026-09-13）：`make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 和 `./scripts/verify-dashboard-external-prerequisites.sh --local` 均通过；本地 WireMock 环境下通过 Docker Maven 执行 `AloudataAnalysisViewExternalIT`，结果为 `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`。该测试仅证明本地模拟 Adapter 契约，不关闭真实 Aloudata ALO-X02。

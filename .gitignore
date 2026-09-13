@@ -118,6 +118,9 @@ AGENTS.md
 MEMORY.md
 .workbuddy/
 
+# Local simulation secrets and overrides
+dev-support/local-simulation/.env.local
+
 # Sync tooling local state (generated each run; report is intentionally tracked)
 scripts/.*-sync-state.json
 

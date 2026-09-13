@@ -41,6 +41,23 @@ def test_task_returns_script_result_separately():
         time.sleep(.02)
     assert status["status"] == "SUCCEEDED" and status["result"] == '[{"id": 1}]'
 
+def test_task_parameters_reach_injected_dataset_client():
+    response = client.post("/v1/tasks", json={
+        "taskId": "t-parameters",
+        "script": "result = [{'region': datasets.params.require('region')}]",
+        "parameters": {"region": "east"},
+        "datasetReadEndpoint": "http://dataagent/read",
+        "readToken": "secret",
+    })
+    assert response.status_code == 202
+    import time
+    for _ in range(100):
+        status = client.get("/v1/tasks/t-parameters").json()
+        if status["status"] != "RUNNING": break
+        time.sleep(.02)
+    assert status["status"] == "SUCCEEDED"
+    assert status["result"] == '[{"region": "east"}]'
+
 def test_executor_crash_is_terminal_failure(monkeypatch):
     def crash(*args, **kwargs):
         raise RuntimeError("executor crashed")

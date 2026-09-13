@@ -47,3 +47,9 @@
 1. 无筛选的 5 行结果查询；
 2. 一个维度或时间筛选查询；
 3. 记录响应中的查询结果和请求/响应证据，确认筛选在语义层生效。
+
+## 本地模拟复验（2026-09-13）
+
+- `make dashboard-prerequisites-simulation`、`./scripts/verify-dashboard-external-prerequisites.sh --local`：通过。
+- `AloudataAnalysisViewExternalIT` 通过 Docker Maven 入口对本地 WireMock 执行：目录、详情、5 行基线和 `region=east` 筛选均通过。
+- 该结果只证明 Adapter 契约和模拟接口闭环；真实环境仍维持 ALO-X02 `BLOCKED`，不能替代 `SM_02_0038` 授权问题的解除。

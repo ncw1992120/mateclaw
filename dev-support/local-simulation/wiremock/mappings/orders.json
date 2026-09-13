@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/orders",
+    "queryParameters": {
+      "status": {"equalTo": "PAID"}
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {
+      "data": [
+        {"id": 1001, "customer_id": 101, "region": "east", "status": "PAID", "amount": 120.50},
+        {"id": 1002, "customer_id": 102, "region": "west", "status": "PAID", "amount": 80.00},
+        {"id": 1004, "customer_id": 103, "region": "south", "status": "PAID", "amount": 210.00}
+      ]
+    }
+  }
+}

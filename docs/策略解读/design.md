@@ -139,7 +139,7 @@ Semantic API
 
 MateClaw 的 Aloudata 数据源连接保存默认 `tenantId`，数据集保存 `aloudataViewId` 和 `aloudataViewName`。`tenantId` 是 Aloudata 查询上下文，不等于 MateClaw 数据源名称，也不要求数据源名称带租户作用域。AnyMetrics 地址用于目录和元数据，Semantic 地址用于指标结果查询；两类地址、认证信息和版本兼容性由 Adapter 管理。
 
-指标视图转换为统一 `DatasetInputDescriptor` 时，字段必须标注指标/维度角色、类型、时间能力和可用筛选操作。Python `datasets.read` 的读取请求由 DataAgent 校验后转换为 Aloudata 查询参数，结果再转换为统一批次或 `dataRef`。MateClaw 负责数据源和指标视图的使用权限校验，Aloudata 继续负责其内部指标权限校验。结果查询统一走 Semantic API；Aloudata JDBC 虚拟表方式作为兼容接入保留，不作为指标视图的默认主链路。分页、最大行数和超时由 MateClaw 统一限制。
+指标视图转换为统一 `DatasetInputDescriptor` 时，字段必须标注指标/维度角色、类型、时间能力和可用筛选操作。Python `datasets.read` 的读取请求由 DataAgent 校验后转换为 Aloudata 查询参数，当前结果返回受限批次；脚本大结果再转换为受控 `dataRef`。MateClaw 负责数据源和指标视图的使用权限校验，Aloudata 继续负责其内部指标权限校验。结果查询统一走 Semantic API；Aloudata JDBC 虚拟表方式作为兼容接入保留，不作为指标视图的默认主链路。分页、最大行数和超时由 MateClaw 统一限制。
 
 `analysisView/query` 当前登记的参数只有 `viewName`、分页和结果类型，不能预设它支持 `datasets.read` 的临时时间或维度筛选。无临时筛选时可以直接使用指标视图结果接口；存在临时筛选时，Adapter 必须先根据实际 Aloudata 版本验证能力。若该接口不支持筛选，则从指标视图详情中提取指标、维度、时间约束、默认筛选和排序，服务端构造等价的 Semantic `metrics/query`，再以结构化方式合并本次允许的筛选条件。无法完整、无歧义地转换时应拒绝该筛选并返回能力错误，不允许先全量读取再在 JVM 或 Python 中伪装为下推。
 
@@ -551,14 +551,16 @@ Spring/DataAgent 在运行脚本前向 Runner 注入当前任务可用的输入�
 标准读取样例：
 
 ```python
-from mateclaw import datasets, filters, params
+from mateclaw.filters import Filter
+
+# `datasets` 由 Python Runner 按任务输入目录注入，不从模块导入。
 
 orders = datasets.read(
     input_name="orders",
     columns=["user_id", "order_date", "amount"],
     filters=[
-        filters.gte("order_date", params.get("start_date")),
-        filters.lte("order_date", params.get("end_date")),
+        Filter("order_date", "gte", datasets.params.get("start_date")),
+        Filter("order_date", "lte", datasets.params.get("end_date")),
     ],
 )
 ```
@@ -574,10 +576,11 @@ DatasetInputDescriptor（Spring/DataAgent 返回）
   ├── rowCount / statistics
   └── capabilities
 
-DatasetReadResult（datasets.read 返回）
+DatasetReadResult（datasets.read 返回；当前阶段）
   ├── schema
   ├── rowCount / statistics
-  ├── dataRef
+  ├── rows（受限内联批次）
+  ├── dataRef（输出结果/后续输入批读预留）
   ├── transport
   └── pushdownReport
 
@@ -588,7 +591,7 @@ DatasetInput（Python SDK 包装）
   └── iter_batches()
 ```
 
-Spring 在任务启动时通过 JSON 传递 Descriptor，不传递事实数据、Python 函数或数据库连接。脚本调用 `datasets.read` 后，DataAgent 才返回 `DatasetReadResult`，Python SDK 根据其中的 `dataRef` 创建批次读取器。JDBC 数据集 Schema 通过 `DatabaseMetaData` 或零行元数据探测获取，第一阶段 Aloudata 新数据集复用指标视图 Schema，文件数据集读取文件 Schema 或受限样本推断。
+Spring 在任务启动时通过 JSON 传递 Descriptor，不传递事实数据、Python 函数或数据库连接。脚本调用 `datasets.read` 后，DataAgent 才查询并返回受限 `DatasetReadResult`；当前 SDK 消费其中的内联批次，脚本大结果使用 `dataRef` 写入对象存储并供页面受限预览。输入侧根据 `dataRef` 创建远程批次读取器需要独立读取接口，列入后续扩展，不作为本阶段已实现能力。JDBC 数据集 Schema 通过 `DatabaseMetaData` 或零行元数据探测获取，第一阶段 Aloudata 新数据集复用指标视图 Schema，文件数据集读取文件 Schema 或受限样本推断。
 
 Python 运行环境必须与 MateClaw 主 JVM 隔离，避免大数据处理拖垮主服务。本阶段暂定采用“兼容双模式（方案 B）”：旧 Agent Python 保持现有本地执行路径；新仪表盘多数据源脚本使用独立 Python Runner。
 
@@ -638,7 +641,7 @@ Spring 编译各数据源查询
     ↓
 各数据源先完成条件下推
     ↓
-按批次或受控 dataRef 传给 Python Runner
+按受限批次传给 Python Runner（输入 dataRef 批读为后续扩展）
     ↓
 Python 处理多个输入数据集
     ↓
@@ -732,7 +735,7 @@ Spring 调用 Python Runner 时传递任务描述、输入目录和短期读取�
 }
 ```
 
-`readToken` 必须绑定 `taskId`、工作区、允许的输入别名和过期时间，且只能调用内部数据集读取接口。脚本执行到 `datasets.read(input_name, columns, filters)` 时，SDK 才携带该令牌回调 DataAgent；DataAgent 根据别名解析内部 `datasetId`，重新校验权限和 Schema，执行数据源查询并返回受控 `dataRef`。`dataRef` 同样必须绑定任务、工作区和过期时间。Runner 不能提交任意 `datasetId`，也不能根据脚本自行访问数据源。
+`readToken` 必须绑定 `taskId`、工作区、允许的输入别名和过期时间，且只能调用内部数据集读取接口。脚本执行到 `datasets.read(input_name, columns, filters)` 时，SDK 才携带该令牌回调 DataAgent；DataAgent 根据别名解析内部 `datasetId`，重新校验权限和 Schema，执行数据源查询并返回受限批次。脚本大结果的 `dataRef` 同样必须绑定任务、工作区和过期时间；输入侧远程 `dataRef` 批读待后续专用接口。Runner 不能提交任意 `datasetId`，也不能根据脚本自行访问数据源。
 
 Runner 返回任务状态、输出数据引用、Schema 和运行统计：
 
@@ -809,7 +812,7 @@ MySQL `datasets.read`：
 
 两个数据源分别完成查询后，Python 才接收结果并进行后续处理，不能先把整张表加载成 DataFrame 再筛选。
 
-Python SDK 的每次 `datasets.read` 调用拿到对应来源已经过滤后的批次或 `dataRef`，再由用户使用 Polars/Pandas 做预处理：
+Python SDK 的每次 `datasets.read` 调用拿到对应来源已经过滤后的受限批次，再由用户使用 Polars/Pandas 做预处理；脚本输出超过内联阈值时才通过受控 `dataRef/outputRef` 传输：
 
 ```python
 events = datasets.read(
@@ -832,7 +835,7 @@ result = (
 return result
 ```
 
-Runner 不在任务开始时一次性接收所有输入。脚本每次调用 `datasets.read` 时才触发对应数据源查询，查询完成后 SDK 通过批次或 `dataRef` 读取该次结果。
+Runner 不在任务开始时一次性接收所有输入。脚本每次调用 `datasets.read` 时才触发对应数据源查询，查询完成后 SDK 消费该次受限批次；输入侧远程 `dataRef` 读取待后续接口完成后再启用。
 
 需要区分两类筛选：
 
@@ -936,7 +939,7 @@ Runner 负责隔离和任务生命周期，Polars 负责脚本中的列式数据
 DataAgent
   ├── 查询编排、权限、参数绑定、任务状态
   ├── JDBC SQL / Aloudata 查询
-  └── 输入数据集写入 Arrow/Parquet 或生成受控 dataRef
+  └── 脚本大结果写入 Arrow/Parquet 或生成受控 dataRef（输入侧当前返回受限批次）
           ↓
 Python Runner
   ├── 一次性隔离进程或容器
@@ -1400,7 +1403,7 @@ MateClaw 原生 UI / Schema / 权限 / 联动
 - 新 JDBC SQL 只能通过参数绑定执行，且无法执行写操作；
 - 多数据源脚本任务可以追踪状态、取消、重试和日志；
 - 预览 JSON 超限时明确失败，不自动放大限制；
-- 正式任务使用 Arrow/Parquet 或受控 `dataRef`；
+- 正式任务的大结果使用 Arrow/Parquet 或受控 `dataRef`；输入读取当前受控为批次，远程 `dataRef` 批读待后续扩展；
 - Runner 无法读取未授权数据源、凭据或其他工作区对象；
 - 固定依赖环境不需要运行时联网安装 Python 包；
 - 同一 `QuerySpec` 在预览和发布运行中保持语义一致；

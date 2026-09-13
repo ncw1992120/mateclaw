@@ -23,7 +23,7 @@ class DatasetClient:
             if isinstance(value, Filter):
                 normalized.append(value.as_dict())
             elif isinstance(value, dict):
-                normalized.append(Filter(value.get("field"), value.get("operator"), value.get("value")).as_dict())
+                normalized.append(Filter(value.get("field"), value.get("operator"), value.get("value"), value.get("role", "dimension")).as_dict())
             else:
                 raise ValueError("filter must be a Filter or mapping")
         payload = {"inputName": input_name, "columns": list(columns or []),

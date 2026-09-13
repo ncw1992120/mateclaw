@@ -1,3 +1,30 @@
+# Dashboard external prerequisite checks
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-dataagent-test
+
+dashboard-prerequisites-local:
+	./scripts/verify-dashboard-external-prerequisites.sh --local
+
+dashboard-prerequisites-simulation:
+	./scripts/verify-dashboard-external-prerequisites.sh --simulation
+
+dashboard-prerequisites-external:
+	./scripts/verify-dashboard-external-prerequisites.sh --external
+
+# Run the DataAgent suite from a Maven container against Docker Desktop. The
+# host override is required for Testcontainers' dynamically published ports;
+# Ryuk is disabled because the Maven container cannot accept its callback on
+# the Desktop bridge network. Containers are still removed by Testcontainers'
+# JVM shutdown hooks and by the normal Docker cleanup commands.
+dashboard-dataagent-test:
+	docker run --rm \
+		-e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+		-e TESTCONTAINERS_RYUK_DISABLED=true \
+		-v "$(CURDIR):/workspace" \
+		-v "$(HOME)/.m2:/root/.m2" \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-w /workspace maven:3.9-eclipse-temurin-21 \
+		mvn -o -f mateclaw-dataagent/pom.xml test -q
+
 # Docker buildx builder setup
 .PHONY: builder-create builder-rm builder-inspect
 

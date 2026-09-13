@@ -16,6 +16,14 @@
 
 **本次范围说明：** UI 继续兼容现有访问上下文，但不新增身份、角色或跨工作区权限；本地数据源和文件对象优先使用 `dev-support/local-simulation/` 的 Docker 服务。
 
+**本地模拟：** 页面开发验证统一复用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock、MinIO 和 Python Runner；不在本子计划中另起数据库、对象存储或 API mock。
+
+**开发验证配置：** 页面创建数据集时使用本地 MySQL/PostgreSQL、`local_sales_view`、已登记 OpenAPI `orders` 和 MinIO `files/<name>`；页面仍只提交来源类型化定义，不提交任意 URL、Header、本地路径或凭据。
+
+**执行约定：** UI 验证前先运行模拟前置检查；页面创建的数据集必须能被 09 的同一工作区闭环读取，失败时记录来源类型和模拟服务响应，不回退到手工数据库写入。
+
+**本轮复验记录（2026-09-13）：** 模拟五类来源定义可用，UI 全量 `24/24` 及生产构建通过；页面来源配置与 09 本地 E2E 共用同一批 fixture。
+
 ## Global Constraints
 
 - 数据源连接与数据集是两个对象：连接保存认证和访问边界，数据集保存已固化的表、SQL、指标视图、API 映射或文件引用。

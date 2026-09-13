@@ -16,6 +16,12 @@
 
 **本地模拟：** MySQL/PostgreSQL 使用 `dev-support/local-simulation/` Docker 容器和脱敏初始化 SQL；正式测试前替换测试环境只读连接 Secret。
 
+**开发验证配置：** MySQL 使用 `127.0.0.1:13306/mateclaw_sim`，PostgreSQL 使用 `127.0.0.1:15432/mateclaw_sim`；两者均以只读模拟账号读取 `orders`，覆盖 `PAID` 过滤、Decimal、null、日期和无匹配 Join 键。
+
+**执行约定：** SQL/参数和 `pushedFilters` 证据必须来自上述容器的实际查询；不得用静态 SQL 字符串或纯 mock 代替数据库执行。
+
+**本轮复验记录（2026-09-13）：** 本地 MySQL 8.4、PostgreSQL 15.6 容器保持健康，`orders/customers` fixture 可重复读取；JDBC 定向回归纳入 DataAgent `152/152` 全量基线。
+
 ## Global Constraints
 
 - 只允许单条 `SELECT`/`WITH`；拒绝 DML、DDL、会话命令和多语句。

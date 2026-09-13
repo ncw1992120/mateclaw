@@ -16,6 +16,12 @@
 
 **本地模拟：** 日常开发使用 `dev-support/local-simulation/` 的 WireMock 脱敏响应；正式测试前再替换产品层/语义层地址、连接级 `tenantId` 和 Secret 管理的认证值。
 
+**开发验证配置：** 使用 `.env.aloudata-simulation.example` 的 `local-tenant`、`local_sales_view`、`datasourceId=9001` 和 `region=east`；通过 WireMock 的 tree/detail/query/metrics 响应验证目录、详情、结果和筛选编译，不将该结果计入真实 ALO-X02。
+
+**本地 Adapter 联调结果（2026-09-13）：** 已使用上述模拟变量运行 `AloudataAnalysisViewExternalIT`，目录、详情、模拟基线结果和 `region=east` 远端筛选均通过；该结果只作为本地开发验证，不解除真实 ALO-X02 阻塞。
+
+**执行约定：** 先运行 `make dashboard-prerequisites-simulation`，再执行 Adapter 定向测试；真实地址、认证值和视图授权仅在外部环境变量齐备后联调。
+
 ## Global Constraints
 
 - 数据源连接中的默认 `tenantId` 是唯一查询上下文。

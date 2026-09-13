@@ -149,14 +149,16 @@ Spring 在任务启动时通过 JSON 传递描述符和短期任务令牌，不�
 标准脚本使用输入别名而不是内部 `datasetId`：
 
 ```python
-from mateclaw import datasets, filters, params
+from mateclaw.filters import Filter
+
+# `datasets` 由 Runner 注入，任务参数通过 `datasets.params` 提供。
 
 orders = datasets.read(
     input_name="orders",
     columns=["user_id", "order_date", "amount"],
     filters=[
-        filters.gte("order_date", params.get("start_date")),
-        filters.lte("order_date", params.get("end_date")),
+        Filter("order_date", "gte", datasets.params.get("start_date")),
+        Filter("order_date", "lte", datasets.params.get("end_date")),
     ],
 )
 ```

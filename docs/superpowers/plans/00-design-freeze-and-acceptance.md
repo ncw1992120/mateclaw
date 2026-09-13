@@ -16,6 +16,10 @@
 
 **本次范围补充：** 本地外部依赖统一由 `dev-support/local-simulation/` 的 Docker Compose 提供；身份与权限完善延期，仅保留已有行为回归。
 
+**开发验证入口：** 设计门禁前先执行 `make dashboard-prerequisites-simulation`，确认本地模拟数据、接口和 Runner 可用；本子计划只验证文档与矩阵，不把模拟服务健康误当作 G0 之外的功能验收。
+
+**本轮复验记录（2026-09-13）：** `make dashboard-prerequisites-simulation`、`bash scripts/verify-dashboard-design.sh` 均通过；设计门禁输出 `DESIGN-PASS`。
+
 ## Global Constraints
 
 - 首期包含 JDBC、Aloudata 指标视图、HTTP/API、文件和 Python 多源预处理。

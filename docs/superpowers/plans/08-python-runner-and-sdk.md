@@ -4,7 +4,7 @@
 
 **Goal:** 提供固定依赖、隔离进程和 `datasets.read` SDK 的新仪表盘 Python 执行路径。
 
-**Architecture:** 新建独立 `mateclaw-python-runner` 服务，任务 HTTP 承担控制面，`dataRef` 承担数据面。`datasets.read` 使用短期任务令牌回调 DataAgent 的内部读取接口；DataAgent 只允许令牌声明的输入别名并再次做权限、Schema 和资源校验。旧 `PythonAnalysisTool` 继续调用 `LocalCodeExecutorService`。
+**Architecture:** 新建独立 `mateclaw-python-runner` 服务，任务 HTTP 承担控制面，任务级读取接口承担输入数据面；`dataRef/outputRef` 当前用于脚本大结果和页面受限预览。`datasets.read` 使用短期任务令牌回调 DataAgent 的内部读取接口并接收受限批次；输入侧直接打开远程 ObjectRef 的批读能力留作后续扩展。DataAgent 只允许令牌声明的输入别名并再次做权限、Schema 和资源校验。旧 `PythonAnalysisTool` 继续调用 `LocalCodeExecutorService`。
 
 **Tech Stack:** Python 3.12、uv lock、FastAPI、Pydantic、Polars/Pandas/PyArrow、pytest、Docker；Java 21/Spring HTTP Client。
 
@@ -12,9 +12,15 @@
 
 **Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 10 节（PY-U01～U05、PY-R01～R06、PY-J01～J03）。
 
-**当前状态（2026-09-13）：** 固定 Runner 镜像、SDK、任务隔离、ObjectRef 读取和旧执行器兼容已完成验证，Runner 17/17；统一交付节点待用户确认。
+**当前状态（2026-09-13）：** 固定 Runner 镜像、SDK、任务隔离、ObjectRef 读取和旧执行器兼容已完成验证；补齐过滤条件默认 `role=dimension` 和任务参数注入的统一契约兼容，并增加 App→Executor→DatasetClient 集成回归，Runner 当前 `20/20`；统一交付节点待用户确认。
 
-**本地模拟：** Runner 通过本地 Compose 访问 DataAgent 和临时 MinIO；正式测试前只替换内部服务地址、对象存储地址和镜像版本，不改变无运行时 `pip install` 约束。
+**本地模拟：** Runner 在本地 Compose 中复用固定镜像并验证 `/health`、非 root 和 `runner_internal` 网络隔离；DataAgent↔Runner↔MinIO 的完整连通性继续使用现有 E2E Compose 验证。正式测试前只替换内部服务地址、对象存储地址和镜像版本，不改变无运行时 `pip install` 约束。
+
+**开发验证配置：** 本地 Runner 复用 `mateclaw-python-runner/Dockerfile`，使用 `runner_internal` internal 网络；输入别名可指向本地五类来源，结果大于内联限制时写入 MinIO ObjectRef。
+
+**执行约定：** Runner 定向测试和 09 闭环必须使用固定镜像构建结果；外部网络失败、任务取消和 ObjectRef 读取均需保留日志摘要，不能通过运行时安装依赖绕过失败。
+
+**本轮复验记录（2026-09-13）：** 固定镜像、Runner `/health`、`runner_internal` 隔离和 MinIO 连通性通过；Runner `20/20`、DataAgent `152/152` 及本地 E2E `9 passed` 基线保持有效。
 
 ## Global Constraints
 
@@ -38,12 +44,12 @@
 - Test: `mateclaw-python-runner/tests/test_dataset_sdk.py`
 
 **Interfaces:**
-- Produces: `datasets.read(input_name,columns=None,filters=None)` → `DatasetInput` with `schema,to_polars,to_pandas,iter_batches`；SDK 不接受 `datasetId` 或连接信息。
+- Produces: `datasets.read(input_name,columns=None,filters=None)` → `DatasetInput` with `schema,to_polars,to_pandas,iter_batches`；当前 SDK 消费 DataAgent 返回的受限批次，SDK 不接受 `datasetId` 或连接信息。输入 `objectRef` 的远程批读接口不属于本阶段交付。
 
 - [x] **Step 1: 写失败 pytest**：别名读取、参数引用、非法字段、Descriptor 解析、Parquet 批读和 DataFrame 后置过滤不影响请求。
 - [x] **Step 2: 运行**：`uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests/test_dataset_sdk.py -q`，Expected: FAIL。
 - [x] **Step 3: 实现最小 SDK；读取请求必须带任务令牌经 Runner 上下文转发给 DataAgent**。
-- [x] **Step 4: 重跑测试**：SDK/Runner 测试通过（当前 `17 passed`）；`datasets.read` 客户端会在发起网络请求前拒绝非法字段、未知操作符和非映射过滤值，兼容 DataAgent `R.ok(...)` 响应包装层，并将业务错误转换为明确异常；提交仍按统一交付边界处理。
+- [x] **Step 4: 重跑测试**：SDK/Runner 测试通过（当前 `20 passed`）；`datasets.read` 客户端会在发起网络请求前拒绝非法字段、未知操作符和非映射过滤值，兼容 DataAgent `R.ok(...)` 响应包装层，并将业务错误转换为明确异常；提交仍按统一交付边界处理。
 
 ### Task 2: Runner 控制面和进程隔离
 
@@ -64,9 +70,11 @@
 - [x] **Step 3: 实现 FastAPI 和独立子进程执行；强制终止进程树并截断日志**。
 - [x] **Step 4: 使用锁文件构建镜像，并验证非 root、只读目录、健康检查及只连接 `runner_internal` 内部网络**。
 
-- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`；当前工作树补充统一执行服务五类来源读取回归后重新执行，DataAgent 全量为 `146/146`，均在 Docker Desktop/Testcontainers 环境通过。Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
-- [x] **Step 5: 重跑 pytest**：Runner 测试 `17 passed`，镜像非 root、只读根目录、无 DuckDB/运行时安装依赖基线已验证；2026-09-12 14:08 在当前工作树重新执行全量 pytest 仍为 `17 passed`；提交仍按统一交付边界处理。
-- 最新 DataAgent 回归补充了统一执行服务未知来源拒绝测试，当前全量为 `147/147`；前述 `140/140`、`146/146` 均为历史工作树计数。
+- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `152/152`，在 Docker Desktop/Testcontainers 环境通过。Docker 容器内执行 Maven 时使用 `TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal` 并禁用 Ryuk，以适配宿主 Docker Desktop 网络；Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
+- [x] **Step 5: 重跑 pytest**：历史复验曾为 `17 passed`；当前 Runner 全量测试为 `20 passed`，镜像非 root、只读根目录、无 DuckDB/运行时安装依赖基线已验证；提交仍按统一交付边界处理。
+- [x] **Step 5 追加回归（2026-09-13）**：修复任务 `parameters` 未注入 `DatasetClient` 的问题，并补齐过滤条件默认 `role=dimension`；当前 Runner 全量 `19 passed`。
+- [x] **Step 5 追加 API 集成回归（2026-09-13）**：通过 `/v1/tasks` 验证参数经 App→Executor→DatasetClient→脚本完整传递，Runner 全量更新为 `20 passed`。
+- 最新 DataAgent 回归当前全量为 `152/152`；前述 `140/140`、`146/146`、`147/147` 均为历史工作树计数。
 
 ### Task 3: DataAgent 客户端与兼容回归
 
@@ -86,10 +94,10 @@
 
 - [x] **Step 1（基础安全与兼容用例）**：已覆盖输入别名严格校验、任务级令牌跨任务拒绝、`datasetId` 仅由注册别名解析、Runner status/cancel 路径、危险 taskId 拒绝，以及旧 Local 执行器继续接受 `requirement`。
 - [x] **Step 2: 实现客户端、任务输入注册表、内部读取接口、短期令牌和 Compose 服务；读取接口只接受 `inputName,columns,filters` 并忽略/拒绝客户端提供的 `datasetId`；DataAgent 不挂载 Docker Socket**。
-- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`；当前工作树补充统一执行服务五类来源读取回归后重新执行，DataAgent 全量为 `146/146`，均在 Docker Desktop/Testcontainers 环境通过。Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
+- [x] **Step 3: 运行 Java 测试和 Compose 健康检查**：历史工作树记录曾为 `140/140`、`146/146`、`147/147`；当前 DataAgent 全量基线为 `152/152`，在 Docker Desktop/Testcontainers 环境通过。Compose 中 `python-runner` 与 MinIO 健康检查通过，Runner `/health` 返回 `{"status":"UP"}`。
 - [ ] **Step 4: 统一交付节点（待用户确认）**：`feat: connect dataagent to python runner`。
 
-> 进度：已加入 `RunnerPythonExecutionService`、`ScriptTaskInputRegistry`、`ScriptTaskPreparationService`、HMAC 短期读取令牌、内部别名读取 Controller 和 Compose `runner_internal` 网络；客户端 status/cancel、危险 taskId、Runner 不可用、过期令牌、任务别名隔离、旧 Local `requirement` 兼容测试均已通过。Compose 首次健康验证发现 Dockerfile 仅复制 `/app/src` 但未设置模块搜索路径，导致 `uvicorn` 重启并报 `ModuleNotFoundError: No module named 'runner'`；已通过设置 `PYTHONPATH=/app/src` 修复并复测通过。资源限制与外部网络阻断已有定向证据，带测试凭据的正式 Compose 内部连通性验证已完成，证据见 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
+> 进度：已加入 `RunnerPythonExecutionService`、`ScriptTaskInputRegistry`、`ScriptTaskPreparationService`、HMAC 短期读取令牌、内部别名读取 Controller 和 Compose `runner_internal` 网络；客户端 status/cancel、危险 taskId、Runner 不可用、过期令牌、任务别名隔离、旧 Local `requirement` 兼容测试均已通过。当前 SDK 读取受限内联批次，Runner 大结果经 DataAgent 内部接口写入 `outputRef`；输入 ObjectRef 的远程批读尚未实现。Compose 首次健康验证发现 Dockerfile 仅复制 `/app/src` 但未设置模块搜索路径，导致 `uvicorn` 重启并报 `ModuleNotFoundError: No module named 'runner'`；已通过设置 `PYTHONPATH=/app/src` 修复并复测通过。资源限制与外部网络阻断已有定向证据，带测试凭据的正式 Compose 内部连通性验证已完成，证据见 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md`。
 
 ## 视觉验收（CDP）
 
@@ -99,8 +107,7 @@
 
 ```bash
 uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q
-mvn -f mateclaw-dataagent/pom.xml \
-  -Dtest=RunnerPythonExecutionServiceTest,LocalCodeExecutorCompatibilityTest test
+make dashboard-dataagent-test
 docker build -t mateclaw-python-runner:test mateclaw-python-runner
 docker run --rm --entrypoint id mateclaw-python-runner:test
 docker run --rm --read-only --tmpfs /tmp --entrypoint python \
@@ -124,7 +131,9 @@ docker run --rm --read-only --tmpfs /tmp --entrypoint python \
 
 ```python
 import polars as pl
-from mateclaw import datasets, filters, params
+from mateclaw.filters import Filter
+
+# `datasets` 由 Runner 注入；任务参数通过 `datasets.params` 提供。
 
 # input_name 是仪表盘输入面板中配置的别名，而不是数据集 ID。
 orders = datasets.read(
@@ -133,8 +142,8 @@ orders = datasets.read(
     columns=["user_id", "order_date", "amount"],
     # 这些条件会随读取请求发送给 DataAgent，并由来源 Adapter 尝试下推。
     filters=[
-        filters.gte("order_date", params.get("start_date")),
-        filters.lte("order_date", params.get("end_date")),
+        Filter("order_date", "gte", datasets.params.get("start_date")),
+        Filter("order_date", "lte", datasets.params.get("end_date")),
     ],
 )
 
@@ -142,4 +151,4 @@ orders = datasets.read(
 result = orders.to_polars().filter(pl.col("amount") > 0)
 ```
 
-执行前，DataAgent 会根据别名解析数据集、校验字段和操作符、复核权限，并返回受控批次或 `dataRef`；SDK 会在发起请求前拒绝非法字段、未知操作符和非 mapping 过滤值。
+执行前，DataAgent 会根据别名解析数据集、校验字段和操作符、复核权限，并返回受控批次；脚本大结果通过单独的 `outputRef/dataRef` 上传，输入侧远程 ObjectRef 批读不属于本阶段。SDK 会在发起请求前拒绝非法字段、未知操作符和非 mapping 过滤值。

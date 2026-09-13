@@ -1,0 +1,12 @@
+[
+  {"id":1001,"customer_id":101,"order_date":"2026-01-01T09:00:00Z","status":"PAID","amount":120.50},
+  {"id":1002,"customer_id":102,"order_date":"2026-01-02T10:00:00Z","status":"PAID","amount":80.00},
+  {"id":1003,"customer_id":101,"order_date":"2026-01-03T11:00:00Z","status":"CANCELLED","amount":30.00},
+  {"id":1004,"customer_id":103,"order_date":"2026-01-04T12:00:00Z","status":"PAID","amount":210.00},
+  {"id":1005,"customer_id":999,"order_date":"2026-01-05T13:00:00Z","status":"PENDING","amount":10.00},
+  {"id":1006,"customer_id":101,"order_date":"2026-01-06T14:00:00Z","status":"SHIPPED","amount":45.75,"nullable_note":"批量样本"},
+  {"id":1007,"customer_id":102,"order_date":"2026-01-07T15:00:00Z","status":"CANCELLED","amount":66.20},
+  {"id":1008,"customer_id":103,"order_date":"2026-01-08T16:00:00Z","status":"REFUNDED","amount":19.99},
+  {"id":1009,"customer_id":999,"order_date":"2026-01-09T17:00:00Z","status":"FAILED","amount":5.50,"nullable_note":"无匹配客户"},
+  {"id":1010,"customer_id":101,"order_date":"2026-01-10T18:00:00Z","status":"PROCESSING","amount":300.00}
+]
