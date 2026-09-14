@@ -16,6 +16,8 @@
 
 **当前状态（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 在本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；CDP 四页视觉复验也已完成，本地运行时开发 Gate 已通过。真实 Aloudata 结果查询列入后续环境联调，不阻塞本地实现。
 
+**当前头部基线（2026-09-14）：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上 UI 全量为 `10 files / 42 tests passed`，production build 与 `DESIGN-PASS` 通过；上段候选 SHA 的 `27/27` 等数字保留为历史阶段记录。真实 Aloudata 授权和跨工作区权限状态不因本地回归而改变。
+
 **本地模拟：** 先用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock 和 MinIO 完成非 Aloudata 闭环；正式测试环境切换项统一遵循总体计划末尾清单。本次不新增身份与权限验收。
 
 **开发验证配置：** 当前开发先使用 `make dashboard-prerequisites-simulation` 准备本地五类来源，再执行 API+文件、JDBC+模拟 Aloudata、旧 Schema、取消/重试、超时和大结果 ObjectRef 场景；模拟 Aloudata 只验证适配器与产品链路，不替代真实 ALO-X02。E2E 使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 时，seed 会通过 E2E HTTPS WireMock 创建 `local_sales_view` 数据源/数据集；真实联调仍使用 `MATECLAW_E2E_ALOUDATA_DATASET_ID` 和 `MATECLAW_E2E_ALOUDATA_LIVE=true`。

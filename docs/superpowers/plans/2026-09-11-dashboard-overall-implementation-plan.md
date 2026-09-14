@@ -14,7 +14,7 @@
 
 **当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；本地开发 Gate 已通过。真实 Aloudata 结果查询授权、正式 API/对象存储等属于后续环境联调 Gate，不阻塞本地开发和代码交付。候选实现及计划更新已提交并推送到 `origin/feature/dev_fu`，当前本地与远端 SHA 一致。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
 
-**产品闭环状态更正（2026-09-14，当前工作树）：** 本地模拟环境的正式前端入口、文件上传/统一预览、脚本结果绑定、双源运行时、错误态、Descriptor 字段可见性和数据源表单主题适配已通过真实 Chrome channel Playwright/CDP 验证；G3 在“本地模拟”范围为 `PASS`。UI 单测 `40 passed`，并已修复 Chrome autofill 主题覆盖、Playwright channel 配置覆盖、预览空态测试误假设、数据表键盘操作、空表目录刷新和 API/JDBC 来源边界。真实 Aloudata 授权、正式对象存储替换、非 Chrome 原生控件外观、其他历史页面主题和跨工作区权限矩阵仍是外部或后续 Gate，不能据此宣称生产环境完成。
+**产品闭环状态更正（2026-09-14，当前工作树）：** 本地模拟环境的正式前端入口、文件上传/统一预览、脚本结果绑定、双源运行时、错误态、Descriptor 字段可见性和数据源表单主题适配已通过真实 Chrome channel Playwright/CDP 验证；G3 在“本地模拟”范围为 `PASS`。UI 单测当前为 `10 files / 42 tests passed`，并已修复 Chrome autofill 主题覆盖、Playwright channel 配置覆盖、预览空态测试误假设、数据表键盘操作、空表目录刷新、API/JDBC 来源边界、AI 助手关闭按钮和页面树操作按钮可访问名称。真实 Aloudata 授权、正式对象存储替换、非 Chrome 原生控件外观、其他历史页面主题和跨工作区权限矩阵仍是外部或后续 Gate，不能据此宣称生产环境完成。
 
 **2026-09-14 数据集列表语义补充：** 修复列表在计数为字符串 `"0"` 或文件来源无数据源名称时显示“未命名数据源 · 0 行 · 0 个字段”的误导文案，改为按 `sourceType` 展示来源兜底名称，并将双零计数展示为“待探测”；已由单测和 Google Chrome CDP dark 主题现场截图验证。
 
@@ -290,6 +290,8 @@ make dashboard-verify-local
 **2026-09-14 AI 助手可访问性修复：** AI 助手关闭按钮增加可访问名称，系统 Chrome channel 回归和用户 Chrome CDP 打开/关闭验收通过。
 
 **2026-09-14 页面树操作按钮可访问性修复：** 编辑器页面树更多操作按钮增加可访问名称，真实编辑入口回归和用户 Chrome CDP 现场验收通过。
+
+**2026-09-14 当前头部回归基线：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上重新执行 UI `10 files / 42 tests passed`、production build、`git diff --check` 和 `DESIGN-PASS`；Google Chrome CDP 现场确认编辑器页面树操作按钮的 `aria-label` 为“页面操作”，截图 `/tmp/mateclaw-cdp-current-final.png`。该记录更新当前基线，不改变真实 Aloudata、正式对象存储、跨工作区权限等后续 Gate 状态。
 
 **2026-09-14 多页面 Tab 语义修复：** 预览页页面导航增加 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的系统 Chrome channel 回归与用户 Chrome CDP 验收通过。
 

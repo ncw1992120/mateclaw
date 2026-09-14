@@ -16,6 +16,8 @@
 
 **当前状态（2026-09-13）：** 四类来源管理入口、来源定义校验、权限矩阵和候选提交上的 UI `24/24` 测试已完成，并纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`；当前工作树追加五种来源选项、HTTP/API 仅引用已登记定义及 Aloudata 只读视图回归后为 `27/27`。
 
+**当前头部基线（2026-09-14）：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上 UI 全量为 `10 files / 42 tests passed`，production build 与 `DESIGN-PASS` 通过；上段 `27/27` 保留为历史阶段记录。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：已关闭 `FE-CLOSE-02` 的“无正式入口”部分。新增 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 路由，配置中心数据配置页增加“数据集管理”入口；列表支持读取已有数据集并进入新建、编辑/预览，路由包装器负责取消、返回和保存后的列表导航。另已将数据源新建从固定 Aloudata 改为先选择 MySQL、PostgreSQL、SQL Server 或 Aloudata，再进入连接表单；文件来源已接入受控上传接口并自动回填 `StoredFileRef.objectId`，不再要求用户手填对象 ID；HTTP/API 改为从所选数据源 `connectionParams.apiDefinitions` 目录下拉选择；编辑器中暂未开放的操作现在会给出明确反馈。仪表盘脚本结果绑定已由 09 子计划的真实 Chrome channel E2E 在本地模拟环境关闭，正式外部数据源联调仍是后续 Gate。
