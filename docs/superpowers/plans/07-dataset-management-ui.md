@@ -288,3 +288,5 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 **2026-09-15 嵌套操作键盘事件隔离：** 列表项内部编辑/删除按钮的 `keydown` 事件增加 `.item-actions` 冒泡阻断，避免触发父级数据源选择；仪表盘卡片操作区同步增加键盘事件隔离。产品入口 E2E 文件全量 `20 passed`，不改变鼠标点击行为。
 
 **2026-09-15 配置中心分类 Tab 语义：** 配置中心分类按钮补齐 `tablist/tab`、选中态和 roving focus，支持方向键/Home/End 切换；定向 Chrome E2E `1 passed`，CDP 现场确认 7 个分类的焦点与选中态同步。
+
+**2026-09-15 工作空间二级菜单语义：** 工作空间子菜单补齐 `tablist/tab`、`aria-selected`、roving focus 和 Enter/Space/方向键切换；定向 Chrome E2E `1 passed`，CDP 现场确认 5 个子菜单焦点与选中态同步。

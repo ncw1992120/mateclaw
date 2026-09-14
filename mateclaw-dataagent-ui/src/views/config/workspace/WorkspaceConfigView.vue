@@ -2,13 +2,18 @@
   <div class="workspace-config-page">
     <!-- 左侧二级菜单 -->
     <aside class="workspace-sidebar">
-      <nav class="sub-menu">
+      <nav class="sub-menu" role="tablist" aria-label="工作空间分类">
         <a
           v-for="item in visibleSubMenuItems"
           :key="item.key"
           class="sub-menu-item"
           :class="{ active: activeSubMenu === item.key }"
+          role="tab"
+          :data-sub-menu-key="item.key"
+          :aria-selected="String(activeSubMenu === item.key)"
+          :tabindex="activeSubMenu === item.key ? 0 : -1"
           @click="activeSubMenu = item.key"
+          @keydown="handleSubMenuKeydown($event, item.key)"
         >
           {{ t(item.labelKey) }}
         </a>
@@ -90,6 +95,27 @@ const activeSubMenu = usePersistedRef<SubMenuKey>(
   'agentContext',
   (v) => subMenuItems.some((item) => item.key === v),
 )
+
+function handleSubMenuKeydown(event: KeyboardEvent, key: SubMenuKey): void {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return
+  event.preventDefault()
+  const keys = visibleSubMenuItems.value.map((item) => item.key)
+  const index = keys.indexOf(key)
+  if (index < 0 || keys.length === 0) return
+  if (event.key === 'Enter' || event.key === ' ') {
+    activeSubMenu.value = key
+    return
+  }
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? keys.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + keys.length) % keys.length
+  activeSubMenu.value = keys[nextIndex]
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`.sub-menu [role="tab"][data-sub-menu-key="${keys[nextIndex]}"]`)?.focus()
+  })
+}
 
 /** 当激活的菜单因权限不可见时，自动切换到第一个可见菜单 */
 watch(visibleSubMenuItems, (list) => {

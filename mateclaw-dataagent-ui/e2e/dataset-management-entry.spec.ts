@@ -71,6 +71,24 @@ test('配置中心分类暴露 Tab 语义和选中状态', async ({ page }) => {
   }
 })
 
+test('工作空间二级菜单支持键盘切换', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=config')
+  await page.getByRole('tab', { name: '工作空间' }).click()
+  const menu = page.locator('.workspace-sidebar .sub-menu-item')
+  await expect(menu.first()).toHaveAttribute('role', 'tab')
+  await expect(menu.first()).toHaveAttribute('tabindex', '0')
+  if (await menu.count() > 1) {
+    await menu.nth(1).focus()
+    await menu.nth(1).press('Enter')
+    await expect(menu.nth(1)).toHaveAttribute('aria-selected', 'true')
+  }
+})
+
 test('帮助页图标操作暴露可访问名称', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)
