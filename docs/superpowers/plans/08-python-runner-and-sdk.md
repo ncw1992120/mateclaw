@@ -106,6 +106,8 @@
 
 本轮关联结果（2026-09-13）：VIS-UI03、VIS-UI05 本地模拟通过；VIS-UI04 因大结果边界提示缺失保持 `FAIL`；VIS-UI06 的错误/取消/超时/资源超限子项通过，但跨工作区权限拒绝为 `NOT_RUN`，真实 Aloudata 为 `EXTERNAL-BLOCKED`。
 
+**状态更正（2026-09-14）：** VIS-UI04 的大结果页面已显示 `outputRef` 与受限预览边界，相关历史 `FAIL` 已由本地模拟 E2E 和 Chrome CDP 复验关闭；VIS-UI06 的跨工作区权限拒绝和真实 Aloudata 仍分别保持 `NOT_RUN`、`EXTERNAL-BLOCKED`，不因本地 Runner 回归而改变。
+
 ## 测试执行与预期结果
 
 ```bash
