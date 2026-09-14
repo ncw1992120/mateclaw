@@ -423,6 +423,8 @@ make dashboard-verify-local
 
 **2026-09-15 双源最终现场复验：** 用户 Chrome `9222` 连接 E2E UI `15174`，打开 JDBC+Aloudata 编辑器并执行最终结果预览，实测渲染 `5` 行且包含 `120.5`；编辑器可见交互控件无名数为 `0`。截图和完整 E2E 证据已写入统一验收记录。
 
+**2026-09-15 响应式横向溢出复核：** Chrome CDP 以 `390/900/1440px` 视口检查编辑器，390px 下移动端属性面板移出视口但根文档和 body 均无横向滚动，桌面视口恢复 `1440x1000`。该项记录为视觉复核结论，无需代码调整。
+
 **当前权威基线（2026-09-15）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。`22 passed`、`25 passed` 是历史基线；最新本地模拟 Chrome channel 完整矩阵为 `26 passed (1.4m)`，双源最终结果实际为 `5` 行且包含 `120.5`，严格快照通过；UI 单测为 `12 files / 44 tests passed`，生产构建成功。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。

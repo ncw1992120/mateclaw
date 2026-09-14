@@ -909,3 +909,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 用户 Chrome `9222` 连接独立 E2E UI `15174`，打开 `E2E JDBC + Aloudata Dashboard` 编辑器，两个数据集输入和脚本面板可见交互控件无名数为 `0`。
 - 点击“最终结果预览”后实际渲染 `5` 行，并包含 `120.5`；截图 `/tmp/mateclaw-cdp-dashboard-preview-final-20260915.png`，编辑器截图 `/tmp/mateclaw-cdp-dashboard-editor-final-20260915.png`。
 - 该结果与完整 Chrome channel E2E `26 passed (1.4m)` 一致，确认新增语义修复没有破坏双源运行时闭环。
+
+### 2026-09-15 响应式横向溢出复核
+
+- 用户 Chrome CDP `9222` 在 E2E UI 编辑器分别使用 `390px`、`900px`、`1440px` 视口检查页面宽度。
+- 390px 移动端右侧属性面板按设计移出视口，`editor-body.scrollWidth=702`；根文档和 `body` 均保持 `390px`，无页面横向滚动。900px 和 1440px 下文档、body 宽度与视口一致。
+- 结论：未发现会影响用户页面滚动的响应式缺陷；桌面视口已恢复为 `1440x1000`。截图 `/tmp/mateclaw-cdp-responsive-390-20260915.png`、`/tmp/mateclaw-cdp-final-desktop-after-responsive-check-20260915.png`。
