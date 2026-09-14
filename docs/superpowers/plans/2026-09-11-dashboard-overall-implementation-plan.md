@@ -1,6 +1,6 @@
 # 通用洞察仪表盘总体 Implementation Plan
 
-> **2026-09-14 前端产品闭环更正：** 本地模拟数据和接口只替代外部依赖，不降低前端完成标准。当前 07/09 仍存在旧/新绑定模型割裂、文件上传与多个按钮为空实现、HTTP/API 手填内部 ID、主题样式未统一、E2E 绕过前端创建链路等问题；数据集正式入口和数据源新建类型选择已在本轮补齐，但总体计划仍不能表述为“前端页面已完整提供”。详细问题和复现步骤已直接记录到 [07 数据源与数据集管理入口](07-dataset-management-ui.md#前端产品闭环缺口2026-09-14) 和 [09 仪表盘运行时集成](09-dashboard-runtime-integration.md#前端产品闭环缺口2026-09-14)。
+> **2026-09-14 前端产品闭环更正：** 本地模拟数据和接口只替代外部依赖，不降低前端完成标准。07/09 中曾记录的旧/新绑定模型割裂、文件上传空实现、HTTP/API 手填内部 ID、多个按钮无反馈和 E2E 绕过正式创建链路，均已在本地模拟范围修复并由真实 Chrome channel E2E/CDP 复验关闭；当前仍保留的 `PARTIAL`、`NOT_RUN` 和 `EXTERNAL-BLOCKED` 仅对应正式 HTTP/API 定义登记、正式对象存储/外部连接、非 Chrome 原生控件与全站键盘审计、跨工作区权限以及真实 Aloudata 授权等后续 Gate。总体计划可以表述为“本地模拟前端闭环已提供”，但不能据此宣称正式外部环境或生产完成。详细问题、修复和边界记录在 [07 数据源与数据集管理入口](07-dataset-management-ui.md#前端产品闭环缺口2026-09-14) 和 [09 仪表盘运行时集成](09-dashboard-runtime-integration.md#前端产品闭环缺口2026-09-14)。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
