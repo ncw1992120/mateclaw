@@ -404,3 +404,5 @@ make dashboard-verify-local
 **2026-09-14 维度类目持久化与统计修复：** 维度 upsert 已覆盖类目 ID/名称、编码和显示状态，类目计数改用完整实体查询，解决同步后列表有数据但类目计数为 0 的不一致。Chrome CDP `9222` 重建 DataAgent 后确认“时间与区域，2 个维度”及“日期/区域”字段可见；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。该项纳入数据源元数据同步与数据集管理验收基线。
 
 **2026-09-14 E2E UI 地址复验：** 独立 E2E Compose 执行 Playwright 时显式设置 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`，避免默认 `5174` 本地开发 UI 导致 seed 仪表盘不可见。当前工作树完整 Chrome channel 矩阵 `22 passed (1.5m)`，双源定向用例 `4 passed (28.7s)`，严格 `dashboard-jdbc-aloudata.png` 快照、5 行及 `120.5` 断言均通过。
+
+**2026-09-14 Aloudata 真实只读复验：** 使用现有认证上下文探测 `Demo_view`，产品层目录/详情均返回 `HTTP 200/code=200/success=true`，详情含 5 个指标和 3 个维度；语义层 5 行基线及目录前 20 个视图均返回 `SM_02_0038`。目录/详情 Adapter 映射具备真实样本，结果查询与远端筛选下推仍为 `EXTERNAL-BLOCKED`，待 Aloudata 提供可查询视图后继续。

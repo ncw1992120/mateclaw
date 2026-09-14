@@ -48,6 +48,12 @@
 2. 一个维度或时间筛选查询；
 3. 记录响应中的查询结果和请求/响应证据，确认筛选在语义层生效。
 
+## 当前认证上下文复验（2026-09-14）
+
+- 使用既有临时认证上下文只读探测 `Demo_view`：产品层目录和详情均返回 HTTP `200`、`code=200`、`success=true`；详情包含 5 个指标和 3 个维度，可作为 Adapter 字段映射样本。
+- 语义层 `analysisView/query` 使用 `pageIndex=0`、`pageSize=5`、`queryResultType=DATA` 返回 HTTP `200`，但业务码仍为 `SM_02_0038`、`success=false`。
+- 对目录前 20 个视图做同样的 5 行基线探测，均返回 `SM_02_0038`。因此本次未执行伪造筛选通过，ALO-X02 继续保持 `EXTERNAL-BLOCKED`；目录/详情可读不等于结果查询已授权。
+
 ## 本地模拟复验（2026-09-13）
 
 - `make dashboard-prerequisites-simulation`、`./scripts/verify-dashboard-external-prerequisites.sh --local`：通过。
