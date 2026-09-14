@@ -116,6 +116,7 @@
                 :class="{ copied: copyState[index] === 'copied' }"
                 type="button"
                 :title="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                :aria-label="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
                 @click="handleCopy(index, msg.content)"
               >
                 <el-icon v-if="copyState[index] !== 'copied'"><CopyDocument /></el-icon>
@@ -201,6 +202,7 @@
                               type="button"
                               :class="{ copied: execSegCopyState[`${index}-${segIdx}`] === 'copied' }"
                               :title="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                              :aria-label="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
                               @click="handleCopySegment((seg.thinkingText as string) || '', `${index}-${segIdx}`)"
                             >
                               <svg v-if="execSegCopyState[`${index}-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -249,6 +251,7 @@
                                   type="button"
                                   :class="{ copied: execSegCopyState[`${index}-req-${segIdx}`] === 'copied' }"
                                   :title="execSegCopyState[`${index}-req-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                                  :aria-label="execSegCopyState[`${index}-req-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
                                   @click="handleCopySegment((seg.toolArgs as string) || '', `${index}-req-${segIdx}`)"
                                 >
                                   <svg v-if="execSegCopyState[`${index}-req-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -267,6 +270,7 @@
                                   type="button"
                                   :class="{ copied: execSegCopyState[`${index}-res-${segIdx}`] === 'copied' }"
                                   :title="execSegCopyState[`${index}-res-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                                  :aria-label="execSegCopyState[`${index}-res-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
                                   @click="handleCopySegment((seg.toolResult as string) || '', `${index}-res-${segIdx}`)"
                                 >
                                   <svg v-if="execSegCopyState[`${index}-res-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -314,6 +318,7 @@
                               type="button"
                               :class="{ copied: execSegCopyState[`${index}-${segIdx}`] === 'copied' }"
                               :title="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                              :aria-label="execSegCopyState[`${index}-${segIdx}`] === 'copied' ? t('chat.copied') : t('chat.copy')"
                               @click="handleCopySegment((seg.text as string) || '', `${index}-${segIdx}`)"
                             >
                               <svg v-if="execSegCopyState[`${index}-${segIdx}`] !== 'copied'" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -355,6 +360,7 @@
                 :class="{ copied: copyState[index] === 'copied' }"
                 type="button"
                 :title="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
+                :aria-label="copyState[index] === 'copied' ? t('chat.copied') : t('chat.copy')"
                 @click="handleCopy(index, msg.content)"
               >
                 <el-icon v-if="copyState[index] !== 'copied'"><CopyDocument /></el-icon>
@@ -794,6 +800,7 @@
               <button
                 class="context-usage-ring"
                 type="button"
+                :aria-label="ringTooltip"
                 :class="{ 'context-usage-ring--active': chatStore.contextUsagePanelOpen }"
                 @click="chatStore.toggleContextUsagePanel"
               >

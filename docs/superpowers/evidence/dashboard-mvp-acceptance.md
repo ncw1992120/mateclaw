@@ -1034,3 +1034,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 **聚合门禁恢复（同日）：** 暂停占用 `19000/18443` 的 E2E MinIO/HTTP 容器后，标准本地模拟栈（MinIO、WireMock、MySQL、PostgreSQL、Runner）启动成功；`make dashboard-verify-local` 完整退出码 `0`。前置契约、模拟资源健康检查、DataAgent Maven、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和 `DESIGN-PASS` 均通过。端口冲突记录仅保留为历史诊断。
 
 **聚合门禁后的 Chrome CDP 复验：** `15174` 问数页面输入工具名称为“上传附件/指定数据源/快捷提问/优化输入/发送”，历史侧栏工具名称为“搜索对话/收起历史对话/新对话/更多操作”，均无空名称；截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。
+
+### 2026-09-15 主入口无名控件巡检与修复
+
+- Chrome CDP 逐路由扫描 `smart-ask/insight/report/config/help` 的可见按钮、链接、Tab、输入框和文本域，发现问数上下文用量圆环、消息复制按钮、仪表盘编辑器返回/收起按钮及编辑输入框仅有 `title`/placeholder 或无名称。
+- 修复：为复制操作、上下文用量圆环、仪表盘编辑器/预览返回、页面与组件面板收起按钮补充 `aria-label`；为仪表盘名称、描述、负责人输入框补充显式 `aria-label`。不改变业务行为和视觉布局。
+- 验证：UI 单测 `16 files / 49 tests passed`，生产构建成功；Chrome CDP 逐路由扫描结果均为 `[]`（无可见无名控件）。现场截图：`/tmp/mateclaw-cdp-accessibility-final-20260915.png`。

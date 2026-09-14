@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
-        <button type="button" class="back-btn" :title="t('common.back')" @click="handleBack">
+        <button type="button" class="back-btn" :title="t('common.back')" :aria-label="t('common.back')" @click="handleBack">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div class="toolbar-title-block">
@@ -11,6 +11,7 @@
             v-if="editingName"
             v-model="dashboardName"
             class="toolbar-name-input"
+            :aria-label="t('insight.editor')"
             :placeholder="t('insight.editor')"
             autofocus
             @blur="commitName"
@@ -32,6 +33,7 @@
             v-if="editingDesc"
             v-model="dashboardDescription"
             class="toolbar-desc-input"
+            :aria-label="t('insight.description')"
             :placeholder="t('insight.description')"
             autofocus
             @blur="commitDesc"
@@ -56,6 +58,7 @@
         <el-input
           v-model="dashboardOwnerName"
           class="toolbar-owner-input"
+          :aria-label="t('insight.ownerName')"
           size="small"
           :placeholder="t('insight.ownerName')"
           @change="handleOwnerNameChange"
@@ -86,7 +89,7 @@
           <span class="pages-title">页面</span>
           <div class="pages-header-actions">
             <el-button text size="small" aria-label="新增页面" @click="addPage">+</el-button>
-            <button type="button" class="panel-collapse-btn" title="收起面板" @click="pagesCollapsed = true">
+            <button type="button" class="panel-collapse-btn" title="收起面板" aria-label="收起页面面板" @click="pagesCollapsed = true">
               <el-icon :size="14"><Fold /></el-icon>
             </button>
           </div>

@@ -343,3 +343,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **聚合门禁环境状态（2026-09-15）：** 设计门禁 `DESIGN-PASS`；`make dashboard-verify-local` 在启动本地模拟 MinIO 时因 `19000`（同时 WireMock 默认端口）被长期 E2E 容器占用而 `ENV-BLOCKED`。该环境冲突不影响本子计划已通过的入口/双源定向 E2E，隔离端口或停止冲突容器后补跑。
 
 **聚合门禁恢复（2026-09-15）：** 暂停冲突的 E2E MinIO/HTTP 容器后，本地模拟栈完整启动；`make dashboard-verify-local` 退出码 `0`，前置检查、DataAgent、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和 `DESIGN-PASS` 全部通过。Chrome CDP 随后确认问数输入栏与历史侧栏工具均有可访问名称，截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。
+
+**2026-09-15 主入口无名控件巡检修复：** Chrome CDP 扫描五个主入口路由发现图标按钮和仪表盘编辑输入框的 AX 名称缺失；已为复制/上下文用量、返回/收起按钮及名称/描述/负责人输入框补齐 `aria-label`。UI `16 files / 49 tests passed`、生产构建成功；逐路由扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-accessibility-final-20260915.png`。
