@@ -47,6 +47,8 @@ test('顶部导航暴露可聚焦链接语义', async ({ page }) => {
   for (let index = 0; index < 5; index += 1) {
     await expect(links.nth(index)).toHaveAttribute('href', /\/?nav=/)
   }
+  await expect(page.getByRole('button', { name: '消息通知' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '切换主题' })).toBeVisible()
 })
 
 test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
@@ -167,6 +169,8 @@ test('洞察列表筛选和视图切换暴露当前状态', async ({ page }) => 
   await expect(page.locator('.filter-tab.active')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTitle('网格视图')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTitle('列表视图')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: '网格视图' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '列表视图' })).toBeVisible()
   await page.getByTitle('列表视图').click()
   await expect(page.getByTitle('列表视图')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTitle('网格视图')).toHaveAttribute('aria-pressed', 'false')

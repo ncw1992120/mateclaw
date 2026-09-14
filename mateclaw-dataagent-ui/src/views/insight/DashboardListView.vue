@@ -73,6 +73,7 @@
                 :class="{ on: viewMode === 'grid' }"
                 :aria-pressed="viewMode === 'grid'"
                 :title="t('insight.viewGrid')"
+                :aria-label="t('insight.viewGrid')"
                 @click="viewMode = 'grid'"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -83,6 +84,7 @@
                 :class="{ on: viewMode === 'list' }"
                 :aria-pressed="viewMode === 'list'"
                 :title="t('insight.viewList')"
+                :aria-label="t('insight.viewList')"
                 @click="viewMode = 'list'"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>

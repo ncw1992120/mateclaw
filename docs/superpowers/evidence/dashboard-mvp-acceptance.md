@@ -818,3 +818,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - 在模型选择器和顶部导航修复合入当前工作树后，使用同一 E2E Compose、JWT、工作区和 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 重跑完整 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `24 passed (1.5m)`，无跳过。
 - 该结果覆盖双源快照、ObjectRef、错误/取消/超时/资源限制、主题、数据集入口、模型选择器和顶部导航链接语义。
+
+### 2026-09-15 Google Chrome CDP 无名图标按钮修复
+
+- 问题：当前 Google Chrome CDP `9222` 洞察列表中，消息通知、主题切换、网格视图和列表视图四个图标按钮只有 `title`，无可访问名称；现场扫描得到 `unnamed=4`。
+- 修复：为四个按钮补充与现有中文标题一致的 `aria-label`，不改变点击行为或视觉样式；视图切换回归同时验证 `aria-pressed` 和可访问名称。
+- 回归：`npm --prefix mateclaw-dataagent-ui run test -- --run` 为 `12 files / 44 tests passed`；Chrome channel 定向 E2E（顶部导航、洞察列表视图切换）为 `2 passed (6.4s)`；生产构建成功。
+- Chrome CDP `9222` 重新加载洞察列表后扫描所有按钮，`unnamedButtons=[]`；截图 `/tmp/mateclaw-cdp-current-20260915-fixed.png`。本地模拟双源定向 E2E 仍为 `4 passed (19.1s)`。
