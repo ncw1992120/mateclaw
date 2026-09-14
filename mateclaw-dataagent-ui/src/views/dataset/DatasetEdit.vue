@@ -246,7 +246,16 @@
                 :key="group.name"
                 class="field-group"
               >
-                <div class="group-header" @click="toggleGroup(group.name)">
+                <div
+                  class="group-header"
+                  role="button"
+                  tabindex="0"
+                  :aria-expanded="expandedGroups.has(group.name)"
+                  :aria-label="`${expandedGroups.has(group.name) ? '收起' : '展开'}字段分组 ${group.label}`"
+                  @click="toggleGroup(group.name)"
+                  @keydown.enter.prevent="toggleGroup(group.name)"
+                  @keydown.space.prevent="toggleGroup(group.name)"
+                >
                   <span class="group-toggle">{{ expandedGroups.has(group.name) ? '▼' : '▶' }}</span>
                   <span class="group-name">{{ group.label }}</span>
                   <span class="group-count">{{ group.fields.length }}</span>

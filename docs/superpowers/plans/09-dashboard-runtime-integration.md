@@ -221,6 +221,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 数据源配置关闭控件可访问性修复：** 数据源配置页关闭控件改为可聚焦语义化按钮并补充“关闭数据源配置”名称；定向主题 E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 和 Chrome CDP 现场复验通过。
 
+**2026-09-14 文件预览字段分组键盘修复：** 预览字段分组支持 `role=button`、Enter/Space 和 `aria-expanded`；文件入口 E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 与 Chrome CDP 实际切换均通过。
+
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 
 **2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。

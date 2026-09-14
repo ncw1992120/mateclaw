@@ -221,6 +221,10 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 
 数据源配置页右上角关闭控件由不可聚焦的 `span` 改为语义化 `button`，增加 `aria-label="关闭数据源配置"`；主题 E2E、UI 全量 `42/42`、构建和 Chrome CDP 现场复验通过，截图 `/tmp/mateclaw-cdp-datasource-close-a11y.png`。
 
+### 2026-09-14 文件预览字段分组键盘操作
+
+文件预览的维度/度量分组由鼠标专用 `div` 改为可聚焦按钮，支持 Enter/Space、`aria-expanded` 和动态分组名称；文件预览 E2E、UI 全量 `42/42`、构建和 Chrome CDP 现场切换复验通过，截图 `/tmp/mateclaw-cdp-field-group-keyboard.png`。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。

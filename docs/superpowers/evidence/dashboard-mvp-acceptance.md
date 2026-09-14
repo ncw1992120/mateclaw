@@ -720,6 +720,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：数据源配置主题 E2E `1 passed (6.6s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
 - Chrome CDP `9222` 按“配置 → 数据配置 → 新建数据源 → MySQL”进入真实页面，关闭按钮可见并获得焦点，名称为“关闭数据源配置”；截图 `/tmp/mateclaw-cdp-datasource-close-a11y.png`。
 
+### 2026-09-14 文件预览字段分组键盘操作
+
+- 问题：文件数据集预览的“维度/度量”分组使用 `div @click`，键盘无法展开或收起。
+- 修复：分组改为 `role="button"`、`tabindex="0"`，增加动态 `aria-expanded`/名称，并支持 Enter/Space 切换。
+- 回归：文件数据集创建与预览 Chrome E2E `1 passed (4.8s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
+- Chrome CDP `9222` 打开真实文件数据集编辑页，按 Enter 将“维度”分组从 `aria-expanded=true` 切换为 `false`，焦点保持在分组按钮；截图 `/tmp/mateclaw-cdp-field-group-keyboard.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。
