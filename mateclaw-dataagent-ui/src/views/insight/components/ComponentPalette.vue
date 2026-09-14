@@ -2,7 +2,7 @@
   <div class="component-palette">
     <div class="palette-header">
       <span>{{ t('insight.paletteTitle') }}</span>
-      <button type="button" class="palette-collapse-btn" title="收起面板" aria-label="收起组件面板" @click="emit('collapse')">
+      <button type="button" class="palette-collapse-btn" title="收起面板" aria-label="收起面板" @click="emit('collapse')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
       </button>
     </div>

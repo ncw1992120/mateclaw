@@ -478,3 +478,5 @@ make dashboard-verify-local
 **聚合门禁恢复（2026-09-15）：** 暂停占用默认端口的 E2E MinIO/HTTP 容器后，标准本地模拟栈启动成功；`make dashboard-verify-local` 完整退出码 `0`，前置检查、DataAgent、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和设计门禁全部通过。Chrome CDP 随后复验问数输入栏和历史侧栏工具名称，截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。
 
 **2026-09-15 主入口无名控件巡检修复：** 对 `smart-ask/insight/report/config/help` 进行 Chrome CDP 可见控件扫描，修复复制、上下文用量、返回/收起等图标按钮及仪表盘编辑输入框缺少 AX 名称的问题。UI 单测 `16 files / 49 tests passed`、生产构建成功；五个路由扫描均无可见无名控件，截图 `/tmp/mateclaw-cdp-accessibility-final-20260915.png`。
+
+**2026-09-15 完整矩阵复跑诊断：** 最新复跑为 `30 passed / 5 failed`；确定性的编辑器 aria-label 文案回归已修正为“收起面板”，UI/构建/CDP 复验通过。其余失败由 E2E DataAgent 依赖的 MinIO 服务停止导致（日志 `unexpected end of stream on http://minio:9000`），Descriptor、ObjectRef 和文件上传均无法完成，暂记 `ENV-BLOCKED`；此前本地模拟完整矩阵 `29 passed` 仍为有效基线，恢复测试 Compose 后需补跑。

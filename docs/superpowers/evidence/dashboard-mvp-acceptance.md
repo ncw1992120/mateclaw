@@ -1040,3 +1040,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome CDP 逐路由扫描 `smart-ask/insight/report/config/help` 的可见按钮、链接、Tab、输入框和文本域，发现问数上下文用量圆环、消息复制按钮、仪表盘编辑器返回/收起按钮及编辑输入框仅有 `title`/placeholder 或无名称。
 - 修复：为复制操作、上下文用量圆环、仪表盘编辑器/预览返回、页面与组件面板收起按钮补充 `aria-label`；为仪表盘名称、描述、负责人输入框补充显式 `aria-label`。不改变业务行为和视觉布局。
 - 验证：UI 单测 `16 files / 49 tests passed`，生产构建成功；Chrome CDP 逐路由扫描结果均为 `[]`（无可见无名控件）。现场截图：`/tmp/mateclaw-cdp-accessibility-final-20260915.png`。
+
+### 2026-09-15 完整矩阵复跑后的环境诊断与标签回归修复
+
+- 完整 Chrome channel 矩阵复跑得到 `30 passed / 5 failed`。其中编辑器面板两个断言是 aria-label 文案不兼容（实现使用了更具体的“收起页面面板/收起组件面板”），已统一恢复为既有契约“收起面板”。
+- 其余 4 个双源/大结果及文件上传失败均发生在本轮 E2E DataAgent 连接的 MinIO 服务已停止、日志出现 `unexpected end of stream on http://minio:9000` 后：Descriptor/上传无法完成，属于测试栈环境未恢复，不是业务断言回归。此前同一代码在完整本地模拟栈上已有 `29 passed` 证据；待恢复 E2E Compose 依赖后重跑矩阵。
+- 修复后 UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 现场读取编辑器返回、两处收起按钮和负责人输入框名称分别为“返回/收起面板/收起面板/负责人”，截图 `/tmp/mateclaw-cdp-editor-accessibility-final-20260915.png`。
