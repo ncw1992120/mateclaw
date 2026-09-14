@@ -150,11 +150,12 @@ docker compose config --quiet
 scripts/e2e/start-dashboard-mvp.sh
 npm --prefix mateclaw-dataagent-ui exec -- playwright install chromium
 scripts/e2e/seed-dashboard-mvp.sh
-npm --prefix mateclaw-dataagent-ui run test:e2e
+MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 \
+  npm --prefix mateclaw-dataagent-ui run test:e2e
 scripts/e2e/verify-dashboard-mvp-cleanup.sh
 ```
 
-每轮 E2E 开始前应先执行 `scripts/e2e/start-dashboard-mvp.sh`。该入口会清理专属 MySQL/MinIO/UI 依赖卷、构建并启动测试栈，等待 DataAgent actuator 和 UI `5174` healthcheck 均可用；随后运行 seed，并可用 `eval "$(MATECLAW_E2E_WORKSPACE_ID=1 scripts/e2e/export-dashboard-mvp-env.sh)"` 一次性导出同一 state 文件的全部 Dashboard ID，再运行 Playwright，避免手工漏配导致入口 fail-fast。该导出脚本只输出资源 ID，不读取或持久化认证值。UI healthcheck 只证明 HTTP 首页可访问，页面行为仍必须由 Playwright 断言。
+每轮 E2E 开始前应先执行 `scripts/e2e/start-dashboard-mvp.sh`。该入口会清理专属 MySQL/MinIO/UI 依赖卷、构建并启动测试栈，等待 DataAgent actuator 和 UI 容器内 `5174` healthcheck 均可用；宿主访问地址为 `http://127.0.0.1:15174`，运行 Playwright 时必须设置 `MATECLAW_UI_BASE_URL`。随后运行 seed，并可用 `eval "$(MATECLAW_E2E_WORKSPACE_ID=1 scripts/e2e/export-dashboard-mvp-env.sh)"` 一次性导出同一 state 文件的全部 Dashboard ID，再运行 Playwright，避免手工漏配导致入口 fail-fast。该导出脚本只输出资源 ID，不读取或持久化认证值。UI healthcheck 只证明 HTTP 首页可访问，页面行为仍必须由 Playwright 断言。
 
 Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健康检查返回健康状态；双源场景的请求、响应、下推报告、trace/video 和页面截图记录到证据文档。
 
