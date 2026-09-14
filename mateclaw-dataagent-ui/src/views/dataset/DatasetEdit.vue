@@ -142,7 +142,18 @@
                 <span class="table-name-text">{{ table.tableName }}</span>
               </li>
             </ul>
-            <div v-else-if="selectedDatasource" class="empty-hint">{{ t('datasetEdit.noTablesInDs') }}</div>
+            <div v-else-if="selectedDatasource" class="table-empty-state">
+              <div class="empty-hint">{{ t('datasetEdit.noTablesInDs') }}</div>
+              <button
+                type="button"
+                class="refresh-tables-btn"
+                :disabled="tablesLoading"
+                aria-label="刷新数据表目录"
+                @click="handleRefreshTables"
+              >
+                {{ tablesLoading ? '探测中…' : '刷新表目录' }}
+              </button>
+            </div>
             <div v-else class="empty-hint">{{ t('datasetEdit.selectDatasourceFirst') }}</div>
           </div>
         </div>
@@ -737,6 +748,19 @@ async function loadTables(dsId: string): Promise<void> {
     datasourceTables.value = []
   } finally {
     tablesLoading.value = false
+  }
+}
+
+/** 重新从 JDBC 数据源探测表目录 */
+async function handleRefreshTables(): Promise<void> {
+  const dsId = selectedDatasource.value
+  if (!dsId || !isJdbcDatasource.value) return
+  try {
+    await datasourceApi.triggerSchemaDiscovery(dsId)
+    await loadTables(dsId)
+  } catch (error: any) {
+    // 保留空态并允许用户再次尝试，同时给出可理解的反馈。
+    ElMessage.error(`刷新表目录失败${error?.message ? `：${error.message}` : ''}`)
   }
 }
 
@@ -1591,6 +1615,31 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.table-empty-state {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.refresh-tables-btn {
+  padding: 5px 10px;
+  color: var(--main-orange);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.refresh-tables-btn:hover:not(:disabled) {
+  background: var(--theme-surface-hover);
+  border-color: var(--main-orange);
+}
+
+.refresh-tables-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .table-item {

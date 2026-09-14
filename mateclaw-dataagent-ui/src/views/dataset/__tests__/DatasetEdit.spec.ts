@@ -5,6 +5,7 @@ import DatasetEdit from '../DatasetEdit.vue'
 
 const datasourceListMock = vi.hoisted(() => vi.fn())
 const listTablesMock = vi.hoisted(() => vi.fn())
+const triggerSchemaDiscoveryMock = vi.hoisted(() => vi.fn())
 const listAnalysisViewsMock = vi.hoisted(() => vi.fn())
 const createDatasetMock = vi.hoisted(() => vi.fn())
 const syncDataMock = vi.hoisted(() => vi.fn())
@@ -15,6 +16,7 @@ const uploadFileMock = vi.hoisted(() => vi.fn())
 vi.mock('@/api/datasource', () => ({
   list: datasourceListMock,
   listTables: listTablesMock,
+  triggerSchemaDiscovery: triggerSchemaDiscoveryMock,
   listAnalysisViews: listAnalysisViewsMock,
 }))
 
@@ -46,6 +48,7 @@ async function mountEditor(
   createDatasetMock.mockClear()
   datasourceListMock.mockResolvedValue(datasources)
   listTablesMock.mockResolvedValue(tables)
+  triggerSchemaDiscoveryMock.mockResolvedValue({})
   listAnalysisViewsMock.mockResolvedValue([])
   createDatasetMock.mockResolvedValue({ id: 'dataset-1' })
   syncDataMock.mockResolvedValue({ status: 'ok' })
@@ -60,6 +63,17 @@ async function mountEditor(
 }
 
 describe('DatasetEdit source configuration', () => {
+  it('offers schema discovery when a JDBC table catalog is empty', async () => {
+    const wrapper = await mountEditor()
+    await wrapper.find('#dataset-datasource').setValue('1')
+    await flushPromises()
+
+    const refresh = wrapper.find('button.refresh-tables-btn')
+    expect(refresh.exists()).toBe(true)
+    await refresh.trigger('click')
+    expect(triggerSchemaDiscoveryMock).toHaveBeenCalledWith('1')
+  })
+
   it('supports keyboard selection for JDBC tables', async () => {
     const wrapper = await mountEditor(undefined, [{ id: 'orders', tableName: 'orders' }])
     await wrapper.find('#dataset-datasource').setValue('1')
