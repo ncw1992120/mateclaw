@@ -161,6 +161,46 @@ test('洞察 AI 助手关闭按钮暴露可访问名称', async ({ page }) => {
   await expect(page.getByRole('button', { name: '关闭 AI 助手' })).toHaveCount(0)
 })
 
+test('仪表盘预览多页面 Tab 暴露选中状态', async ({ page, request }) => {
+  const token = required('MATECLAW_E2E_TOKEN')
+  const workspace = required('MATECLAW_E2E_WORKSPACE_ID')
+  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-Id': workspace }
+  const dashboardName = `E2E A11y Tabs ${Date.now()}`
+  const schemaJson = JSON.stringify({
+    version: '1.1',
+    pages: [
+      { id: 'page-one', name: '首页', components: [] },
+      { id: 'page-two', name: '明细页', components: [] },
+    ],
+    datasetInputs: [],
+    script: '',
+  })
+  const create = await request.post('/dataagent/api/v1/insight/dashboards', {
+    headers,
+    data: { name: dashboardName, description: 'temporary tab semantics', schemaJson },
+  })
+  expect(create.ok()).toBeTruthy()
+  const created = await create.json() as { data?: { id?: string } }
+  const dashboardId = created.data?.id
+  expect(dashboardId).toBeTruthy()
+
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: token, workspaceId: workspace })
+  try {
+    await page.goto('/?nav=insight')
+    const card = page.locator('.dashboard-card').filter({ hasText: dashboardName })
+    await expect(card).toHaveCount(1)
+    await card.getByRole('button', { name: '预览' }).click()
+    await expect(page.locator('.dashboard-preview-view')).toBeVisible()
+    await expect(page.locator('.page-bar').first()).toHaveAttribute('role', 'tablist')
+    await expect(page.locator('.page-bar').first().getByRole('tab').first()).toHaveAttribute('aria-selected', 'true')
+  } finally {
+    if (dashboardId) await request.delete(`/dataagent/api/v1/insight/dashboards/${dashboardId}`, { headers })
+  }
+})
+
 test('从产品入口创建文件数据集并进入预览', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

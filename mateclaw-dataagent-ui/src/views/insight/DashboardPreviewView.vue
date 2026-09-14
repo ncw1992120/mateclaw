@@ -49,12 +49,16 @@
     <!-- 仪表盘预览区 -->
     <div class="preview-body">
       <!-- 页面菜单 Tab 栏（多页面时显示） -->
-      <div v-if="schema.pages.length > 1" class="page-bar mc-tabs">
+      <div v-if="schema.pages.length > 1" class="page-bar mc-tabs" role="tablist" aria-label="仪表盘页面">
         <button
           v-for="page in topLevelPages"
           :key="page.id"
+          type="button"
+          role="tab"
           class="page-tab mc-tab"
           :class="{ active: activePageId === page.id || isDescendantPage(activePageId, page.id) }"
+          :aria-selected="activePageId === page.id || isDescendantPage(activePageId, page.id)"
+          :tabindex="activePageId === page.id || isDescendantPage(activePageId, page.id) ? 0 : -1"
           @click="handlePageChange(page.id)"
         >
           <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
@@ -62,12 +66,16 @@
         </button>
       </div>
       <!-- 子页面 Tab 栏（当前页面有子页面时显示） -->
-      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar mc-tabs">
+      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar mc-tabs" role="tablist" aria-label="仪表盘子页面">
         <button
           v-for="sub in activeSubPages"
           :key="sub.id"
+          type="button"
+          role="tab"
           class="page-tab mc-tab mc-tab-sub"
           :class="{ active: activePageId === sub.id }"
+          :aria-selected="activePageId === sub.id"
+          :tabindex="activePageId === sub.id ? 0 : -1"
           @click="handlePageChange(sub.id)"
         >
           <span v-if="sub.icon" class="page-icon">{{ sub.icon }}</span>

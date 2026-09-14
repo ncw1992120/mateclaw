@@ -659,3 +659,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：AI 助手面板关闭按钮只有图标，AX 按钮名称为空。
 - 修复：增加 `aria-label="关闭 AI 助手"`，不改变面板开关逻辑。
 - 回归：系统 Chrome channel 用例 `洞察 AI 助手关闭按钮暴露可访问名称` `1 passed (4.5s)`；Chrome CDP `9222` 现场按钮可按名称定位并点击关闭，截图 `/tmp/mateclaw-cdp-ai-close-button.png`。
+
+### 2026-09-14 仪表盘多页面 Tab 可访问语义
+
+- 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。
+- 修复：顶级页面和子页面导航增加 `role=tablist`、`role=tab`、动态 `aria-selected`、`tabindex` 及按钮类型。
+- 回归：系统 Chrome channel 临时双页面看板用例 `仪表盘预览多页面 Tab 暴露选中状态` `1 passed (3.7s)`，失败时自动清理临时看板。
+- Chrome CDP `9222` 实际创建并打开双页面看板，读取 `tablists=1`、`tabs=2`，首页 `aria-selected=true/tabindex=0`、明细页 `false/-1`；截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。临时看板已删除。
