@@ -51,6 +51,18 @@ test('顶部导航暴露可聚焦链接语义', async ({ page }) => {
   await expect(page.getByRole('button', { name: '切换主题' })).toBeVisible()
 })
 
+test('帮助页图标操作暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=help')
+  await expect(page.getByRole('button', { name: '展开全部' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '收起全部' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '搜索' })).toBeVisible()
+})
+
 test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

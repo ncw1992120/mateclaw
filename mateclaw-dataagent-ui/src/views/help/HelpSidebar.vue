@@ -4,27 +4,27 @@
       <div class="sidebar-title">{{ t('helpCenter.title') }}</div>
       <div class="sidebar-actions">
         <el-tooltip :content="t('helpCenter.expandAll')" placement="bottom">
-          <el-button link size="small" @click="handleExpandAll">
+          <el-button link size="small" :aria-label="t('helpCenter.expandAll')" @click="handleExpandAll">
             <el-icon><CaretBottom /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip :content="t('helpCenter.collapseAll')" placement="bottom">
-          <el-button link size="small" @click="handleCollapseAll">
+          <el-button link size="small" :aria-label="t('helpCenter.collapseAll')" @click="handleCollapseAll">
             <el-icon><CaretTop /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip v-if="props.canManage" :content="t('helpCenter.newCategory')" placement="bottom">
-          <el-button link size="small" @click="emit('newCategory')">
+          <el-button link size="small" :aria-label="t('helpCenter.newCategory')" @click="emit('newCategory')">
             <el-icon><Plus /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip v-if="props.canManage && !sortMode" :content="t('helpCenter.sort')" placement="bottom">
-          <el-button link size="small" @click="sortMode = true">
+          <el-button link size="small" :aria-label="t('helpCenter.sort')" @click="sortMode = true">
             <el-icon><Rank /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip v-if="props.canManage && sortMode" :content="t('helpCenter.exitSort')" placement="bottom">
-          <el-button link size="small" type="primary" @click="sortMode = false">
+          <el-button link size="small" type="primary" :aria-label="t('helpCenter.exitSort')" @click="sortMode = false">
             <el-icon><CloseBold /></el-icon>
           </el-button>
         </el-tooltip>
@@ -43,7 +43,7 @@
           <el-icon><Search /></el-icon>
         </template>
         <template #append>
-          <el-button :icon="Search" @click="handleSearch" />
+          <el-button :icon="Search" :aria-label="t('helpCenter.searchButton')" @click="handleSearch" />
         </template>
       </el-input>
     </div>

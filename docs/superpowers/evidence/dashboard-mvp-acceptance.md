@@ -825,3 +825,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为四个按钮补充与现有中文标题一致的 `aria-label`，不改变点击行为或视觉样式；视图切换回归同时验证 `aria-pressed` 和可访问名称。
 - 回归：`npm --prefix mateclaw-dataagent-ui run test -- --run` 为 `12 files / 44 tests passed`；Chrome channel 定向 E2E（顶部导航、洞察列表视图切换）为 `2 passed (6.4s)`；生产构建成功。
 - Chrome CDP `9222` 重新加载洞察列表后扫描所有按钮，`unnamedButtons=[]`；截图 `/tmp/mateclaw-cdp-current-20260915-fixed.png`。本地模拟双源定向 E2E 仍为 `4 passed (19.1s)`。
+
+### 2026-09-15 帮助中心图标操作可访问名称修复
+
+- 问题：扩展 Chrome CDP 扫描到帮助中心的展开全部、收起全部、新建分类、排序、退出排序和搜索图标按钮没有稳定的可访问名称。
+- 修复：为 HelpSidebar 的图标按钮补充对应中文操作 `aria-label`，不改变帮助中心操作逻辑和视觉样式。
+- 回归：新增“帮助页图标操作暴露可访问名称”Chrome channel E2E，结果 `1 passed (5.8s)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
+- Chrome CDP `9222` 实际打开帮助页并扫描 `button/a/[role=button]`，`unnamedCount=0`；截图 `/tmp/mateclaw-cdp-help-a11y-fixed-20260915.png`。
