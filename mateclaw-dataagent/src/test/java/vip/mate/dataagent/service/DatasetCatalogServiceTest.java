@@ -205,6 +205,26 @@ class DatasetCatalogServiceTest {
     }
 
     @Test
+    void rejectsHttpApiDefinitionBoundToJdbcDatasource() {
+        DatasetManageServiceImpl service = newService();
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setId(3L);
+        datasource.setName("warehouse");
+        datasource.setSourceType("mysql");
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+
+        DatasetCreateRequest request = new DatasetCreateRequest();
+        request.setName("invalid api");
+        request.setSourceDefinition(new DatasetSourceDefinition.HttpApiDefinition(3L, "orders"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createDataset(request));
+        assertEquals("HTTP API 数据集必须绑定 HTTP/API 数据源", error.getMessage());
+        verify(datasetMapper, never()).insert(any(DatasetEntity.class));
+    }
+
+    @Test
     void updatesTypedSourceDefinitionWithoutChangingLegacyBasicFields() throws Exception {
         DatasetManageServiceImpl service = newService();
         DatasetEntity entity = new DatasetEntity();

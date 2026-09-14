@@ -331,4 +331,6 @@ make dashboard-verify-local
 - 不把本地 WireMock 的 Aloudata 响应当作正式环境验收证据。
 **2026-09-14 来源类型边界补充：** 修复 API 数据源被误判为 JDBC 的问题；API 数据源自动选择 `HTTP_API`，JDBC 表/SQL 选项禁用。Chrome CDP 实测 `E2E HTTP Orders` 的 `sourceType=api` 选项状态正确，截图 `/tmp/mateclaw-cdp-api-source-boundary-2bbfddec.png`。
 
+**2026-09-14 服务端边界补充：** DataAgent 创建/更新数据集时新增 HTTP/API 与数据源类型兼容校验，阻止绕过 UI 将 HTTP/API 定义绑定到 MySQL 等 JDBC 数据源；定向与 DataAgent 全量测试通过。
+
 当前提交 `fa7cd9289b276b99c1049ab7567a0b85def65240` 的 Chrome CDP 复验确认 API 数据源不渲染 SQL 编辑器，截图 `/tmp/mateclaw-cdp-api-source-boundary-fa7cd928.png`。

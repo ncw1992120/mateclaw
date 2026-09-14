@@ -609,3 +609,7 @@ Chrome CDP 在模拟 JDBC 数据源返回 102 张表后聚焦首个表项，实�
 Chrome CDP 读取模拟 `E2E HTTP Orders` 数据源的真实响应 `sourceType=api`：来源类型自动为 `HTTP_API`，`JDBC_TABLE`、`JDBC_SQL`、`ALOUDATA_ANALYSIS_VIEW` 均禁用，`HTTP_API` 可用；截图：`/tmp/mateclaw-cdp-api-source-boundary-2bbfddec.png`。对应回归测试验证兼容旧数据源响应。
 
 当前提交 `fa7cd9289b276b99c1049ab7567a0b85def65240` 已在同一 Chrome CDP 页面复验，SQL 编辑器未渲染，截图 `/tmp/mateclaw-cdp-api-source-boundary-fa7cd928.png`。
+
+### 2026-09-14 服务端来源兼容性复验
+
+新增 DataAgent 服务端校验：`HTTP_API` 数据集只能绑定 API 类型数据源，JDBC/Aloudata 连接直接返回 `HTTP API 数据集必须绑定 HTTP/API 数据源`，不写入数据库。`DatasetCatalogServiceTest` 定向通过，`make dashboard-dataagent-test` 退出码为 0。

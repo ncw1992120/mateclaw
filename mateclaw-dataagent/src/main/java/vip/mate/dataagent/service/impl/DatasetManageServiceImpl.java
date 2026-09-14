@@ -263,12 +263,19 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         if (definition == null || datasource == null || datasource.getSourceType() == null) return;
         String datasourceType = datasource.getSourceType().trim().toLowerCase(Locale.ROOT);
         boolean aloudata = datasourceType.contains("aloudata") || datasourceType.contains("analysis_view");
+        boolean httpApi = datasourceType.equals("api")
+                || datasourceType.equals("http")
+                || datasourceType.equals("http_api")
+                || datasourceType.contains("http-api");
         if ((definition instanceof DatasetSourceDefinition.JdbcTableDefinition
                 || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && aloudata) {
             throw new IllegalArgumentException("JDBC 数据集不能绑定 Aloudata 数据源");
         }
         if (definition instanceof DatasetSourceDefinition.AloudataViewDefinition && !aloudata) {
             throw new IllegalArgumentException("Aloudata 指标视图必须绑定 Aloudata 数据源");
+        }
+        if (definition instanceof DatasetSourceDefinition.HttpApiDefinition && !httpApi) {
+            throw new IllegalArgumentException("HTTP API 数据集必须绑定 HTTP/API 数据源");
         }
     }
 
