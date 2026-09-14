@@ -18,7 +18,7 @@
           <h2>{{ dataset.name }}</h2>
           <span class="status">{{ dataset.status || 'READY' }}</span>
         </div>
-        <p class="meta">{{ dataset.datasourceName || '未命名数据源' }} · {{ dataset.rowCount ?? 0 }} 行 · {{ dataset.columnCount ?? 0 }} 个字段</p>
+        <p class="meta">{{ datasourceLabel(dataset) }} · {{ datasetStats(dataset) }}</p>
         <div class="card-actions">
           <button :data-testid="`dataset-edit-${dataset.id}`" class="secondary-btn" @click="router.push(`/datasets/${dataset.id}/edit`)">编辑 / 预览</button>
         </div>
@@ -36,6 +36,25 @@ import type { Dataset } from '@/types'
 const router = useRouter()
 const datasets = ref<Dataset[]>([])
 const loading = ref(true)
+
+const sourceLabels: Record<string, string> = {
+  JDBC_TABLE: 'JDBC 数据源',
+  JDBC_SQL: 'JDBC SQL 数据源',
+  ALOUDATA_ANALYSIS_VIEW: 'Aloudata 指标视图',
+  HTTP_API: 'HTTP/API 数据源',
+  FILE: '文件数据源',
+}
+
+function datasourceLabel(dataset: Dataset): string {
+  return dataset.datasourceName || sourceLabels[dataset.sourceType || ''] || '数据源待配置'
+}
+
+function datasetStats(dataset: Dataset): string {
+  const rowCount = Number(dataset.rowCount ?? 0)
+  const columnCount = Number(dataset.columnCount ?? 0)
+  if (rowCount === 0 && columnCount === 0) return '待探测'
+  return `${rowCount} 行 · ${columnCount} 个字段`
+}
 
 onMounted(async () => {
   try {

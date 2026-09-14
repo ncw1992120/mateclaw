@@ -568,3 +568,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 使用 Google Chrome CDP `9222` 打开 `/datasets` 并切换 dark 主题，检查标题、说明、数据集卡片、状态标签和操作按钮。
 - 当前可见区域未发现白底/黑字残留，卡片、边框、次要文本和主操作色与 dark 主题一致；截图：`/tmp/mateclaw-cdp-dataset-list-dark-audit.png`。
 - 该审查覆盖当前数据集列表主路径；其他历史页面仍需独立主题专项。
+
+## 2026-09-14 数据集列表元数据语义修复
+
+- 问题：文件、HTTP/API 等来源在尚未完成元数据探测时，列表显示“未命名数据源 · 0 行 · 0 个字段”，无法区分真实空数据和待探测状态。
+- 修复：列表根据 `sourceType` 提供来源兜底名称（如“文件数据源”），计数统一数值化；行数和字段数均为零时显示“待探测”。不改变后端数据集契约或预览逻辑。
+- 回归：`DatasetListView.spec.ts` 增加字符串计数与来源兜底断言，定向测试通过；Chrome CDP dark 主题现场显示文件数据集为“文件数据源 · 待探测”，截图：`/tmp/mateclaw-cdp-dataset-list-dark-metadata-final.png`。
