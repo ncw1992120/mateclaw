@@ -460,3 +460,5 @@ make dashboard-verify-local
 **2026-09-14 最新 Chrome channel 矩阵：** 模型选择器和顶部导航修复合入后，使用独立 E2E Compose、JWT、工作区 `1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation` 及 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 重跑完整 Playwright，结果 `24 passed (1.5m)`，无跳过；覆盖双源快照、ObjectRef、错误状态、主题和新增可访问性回归。
 
 **2026-09-15 双源快照与浏览抽屉 Tab 补充：** 双源 JDBC+Aloudata 查询继续以 5 行且包含 `120.5` 作为业务门禁；针对历史 `1158 pixels / ratio 0.01` 的同通道渲染噪声，快照断言增加 `maxDiffPixelRatio=0.02`，不替代业务断言。浏览抽屉“指标/维度”增加完整 `tablist/tab` 语义和键盘切换。UI 单测 `16 files / 49 tests passed`、生产构建通过；模拟数据源列表恢复后补做定向 E2E/CDP。
+
+**Chrome CDP 补验（2026-09-15）：** 本地模拟 UI `15174` 复用工作区 `1`，按 Enter 打开“E2E JDBC Orders”浏览抽屉，按 `ArrowRight` 后“维度管理”选中且焦点同步；截图 `/tmp/mateclaw-cdp-browse-tabs-20260915.png`。该现场证据关闭了浏览抽屉 Tab 的视觉/交互复验待办。

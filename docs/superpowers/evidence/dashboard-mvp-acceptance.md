@@ -997,3 +997,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 双源 JDBC+Aloudata 查询的业务断言（5 行、包含 `120.5`）已通过；视觉差异为同一 Chrome 通道下字体抗锯齿/异步布局产生的少量像素噪声（历史记录为 `1158 pixels / ratio 0.01`）。快照断言保留全页截图，并将 `maxDiffPixelRatio` 设置为 `0.02`，不放宽数据结果断言。
 - 数据源浏览抽屉的“指标/维度”切换补齐 `tablist/tab`、`aria-selected`、roving `tabindex` 及 Arrow/Home/End 键盘切换，焦点与选中态同步。
 - UI 单测 `16 files / 49 tests passed`，生产构建成功；当前本地模拟环境因数据源列表未加载无法重新跑到该入口，待模拟 fixture 恢复后补跑定向 E2E 与 CDP 截图。
+
+**现场补验（同日）：** 通过 Google Chrome CDP `9222` 连接 `15174` 本地模拟 UI，复用工作区 `1` 的现有数据源。按 Enter 打开“E2E JDBC Orders”浏览抽屉，确认 `browse-tabs[role=tablist]` 下存在 2 个 Tab；初始“指标管理”选中，按 `ArrowRight` 后“维度管理”变为 `aria-selected=true` 且 `tabindex=0`。截图：`/tmp/mateclaw-cdp-browse-tabs-20260915.png`。
