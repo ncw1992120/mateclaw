@@ -317,3 +317,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 heading 兼容回归修复：** 标题保留原生 `<h2>` heading 语义，仅增加 `tabindex` 与键盘激活，修复 `role=button` 覆盖语义导致创建链路定位失败的问题；创建绑定定向 E2E `1 passed (5.9s)`，完整 Chrome channel 矩阵 `28 passed (4.1m)`。
 
 **2026-09-15 嵌套操作按钮键盘事件隔离：** 仪表盘卡片操作区增加 `keydown.stop`，内部编辑/删除按钮按 Enter/Space 时不再冒泡触发卡片预览；对应数据源条目操作区同步隔离父级选择。新增回归用例修复前失败、修复后通过，产品入口 E2E 文件全量 `20 passed (50.8s)`。
+
+**2026-09-15 完整 Chrome 矩阵复验：** 复用本地模拟 seed 的全部 Dashboard ID 后，完整 Playwright `29 passed (1.4m)`；双源 JDBC+模拟 Aloudata 结果仍为 5 行并包含 `120.5`，快照非更新模式通过，且本轮键盘事件回归未引入预览/运行时回归。
