@@ -417,9 +417,9 @@ make dashboard-verify-local
 
 **2026-09-15 数据源开关焦点修复：** 自定义透明复选框在键盘聚焦时已补充可见焦点环；Chrome CDP 现场 Tab 聚焦 `SSH` 实测 2px 主题焦点环，UI 单测 `12 files / 44 tests passed`、生产构建成功。该修复不改变数据源连接行为。
 
-**2026-09-15 指标平台面板 AX 修复：** 指标平台连接配置、指标/维度搜索及分页 page-size 控件补齐可访问名称；Chrome CDP `9222` 现场确认指标/维度分页 combobox 均可读，空名称数为 `0`。UI 单测 `12 files / 44 tests passed`、生产构建成功；新增 E2E 用例需在完整模拟 Compose 中复跑。
+**2026-09-15 指标平台面板 AX 修复：** 指标平台连接配置、指标/维度搜索及分页 page-size 控件补齐可访问名称；Chrome CDP `9222` 现场确认指标/维度分页 combobox 均可读，空名称数为 `0`。UI 单测 `12 files / 44 tests passed`、生产构建成功；完整模拟 Compose Chrome channel 矩阵已通过 `26 passed (1.4m)`。
 
-**2026-09-15 主入口输入控件 AX 修复：** 对问数、洞察、报告和帮助页面的可见输入控件补齐稳定 `aria-label`；Chrome CDP 逐页巡检五个入口的可见交互控件无名数均为 `0`。该项不改变业务交互，完整 E2E 仍需在模拟 Compose 中复跑。
+**2026-09-15 主入口输入控件 AX 修复：** 对问数、洞察、报告和帮助页面的可见输入控件补齐稳定 `aria-label`；Chrome CDP 逐页巡检五个入口的可见交互控件无名数均为 `0`。该项不改变业务交互，完整模拟 Compose 已复跑 `26 passed (1.4m)`。
 
 **当前权威基线（2026-09-14）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。最新本地模拟 Chrome channel 完整矩阵为 `22 passed (1.5m)`，双源定向为 `4 passed (28.7s)`，`dashboard-jdbc-aloudata.png` 严格快照及 5 行/`120.5` 断言均通过；UI 单测为 `12 files / 44 tests passed`，DataAgent 为 `158 tests / 0 failures / 0 errors / 0 skipped`。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 

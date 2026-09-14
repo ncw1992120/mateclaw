@@ -70,6 +70,7 @@ test('指标平台分页控件暴露可访问名称', async ({ page }) => {
   }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
 
   await page.goto('/?nav=config')
+  await page.getByRole('button', { name: '数据配置' }).click()
   await page.getByText('E2E Aloudata Simulation', { exact: true }).click()
   await expect(page.getByRole('combobox', { name: '指标每页条数' })).toHaveCount(1)
   await expect(page.getByRole('combobox', { name: '维度每页条数' })).toHaveCount(1)

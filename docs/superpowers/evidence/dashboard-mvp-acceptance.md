@@ -889,11 +889,17 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：Chrome CDP 进入 Aloudata 指标平台面板时，连接配置字段、指标/维度搜索框及 Element Plus 分页内部 page-size combobox 存在空可访问名称。
 - 修复：为连接配置和搜索控件补充显式 `aria-label`；为分页容器增加引用，并在挂载/更新后为 Element Plus 内部 combobox 注入“指标每页条数”“维度每页条数”名称，不改变分页行为或视觉样式。
 - Chrome CDP `9222` 现场复验：指标平台面板两个分页 combobox 均有名称，交互控件空名称数为 `0`；截图 `/tmp/mateclaw-cdp-metric-panel-pagination-a11y-fixed-20260915.png`。
-- UI 单测 `12 files / 44 tests passed`，生产构建成功。新增分页名称 Chrome 回归用例在无独立 E2E 数据服务时无法启动完成，待完整模拟 Compose 矩阵复跑；该环境阻塞不影响本地 CDP 现场证据。
+- UI 单测 `12 files / 44 tests passed`，生产构建成功。新增分页名称 Chrome 回归用例随后在完整模拟 Compose 中通过；首次无服务运行超时仅作为环境诊断保留。
 
 ### 2026-09-15 主入口输入控件 AX 名称补齐
 
 - Chrome CDP 全量巡检发现问数消息输入、模型搜索、洞察脚本别名/参数/脚本草稿、报告搜索和帮助搜索存在无名输入控件。
 - 修复：为上述输入补充稳定 `aria-label`，保留既有 placeholder、交互和样式；脚本参数按序号生成唯一名称。
 - Google Chrome CDP `9222` 逐页打开 `smart-ask`、`insight`、`report`、`config`、`help`，可见交互控件无名数均为 `0`；截图分别保存为 `/tmp/mateclaw-cdp-smart-ask-a11y-followup-20260915.png`、`/tmp/mateclaw-cdp-insight-a11y-followup-20260915.png`、`/tmp/mateclaw-cdp-report-a11y-followup-20260915.png`、`/tmp/mateclaw-cdp-config-a11y-followup-20260915.png`、`/tmp/mateclaw-cdp-help-a11y-followup-20260915.png`。
-- UI 单测 `12 files / 44 tests passed`，生产构建成功；指标平台分页回归仍需完整模拟 Compose 执行，不能用本地开发服务替代。
+- UI 单测 `12 files / 44 tests passed`，生产构建成功；完整模拟 Compose Chrome channel 矩阵已通过 `26 passed (1.4m)`。
+
+### 2026-09-15 指标平台与主入口最终复验
+
+- 完整模拟 Compose 使用 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`、Chrome channel 和同一轮 Dashboard state 执行 UI E2E：`26 passed (1.4m)`，包含指标平台分页名称回归。
+- Google Chrome CDP `9222` 实际打开配置中心的 Aloudata 指标平台面板，Chrome Accessibility Tree 共检查 `60` 个交互节点，`unnamed=0`；分页名称为“指标每页条数”“维度每页条数”。截图 `/tmp/mateclaw-cdp-final-metric-panel-20260915.png`。
+- CDP 逐页复验问数、洞察、报告、配置和帮助入口，可见交互控件无名数均为 `0`；最终截图位于 `/tmp/mateclaw-cdp-{smart-ask,insight,report,config,help}-a11y-followup-20260915.png`。
