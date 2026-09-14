@@ -478,6 +478,12 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 截图：`/tmp/mateclaw-cdp-dashboard-after-05bda5c7.png`（列表）、`/tmp/mateclaw-cdp-jdbc-editor-after-05bda5c7.png`（双源编辑器）。编辑器右侧面板可滚动，两个输入项不再被固定高度裁剪。
 - CUA 服务仍不可用，因此本条使用直接 Chrome DevTools Protocol 作为交互证据；未将 CUA 错误伪记为产品失败。
 
+## 2026-09-14 组件库键盘入口验收
+
+- 修复前：组件库 `.palette-item` 只有拖拽事件，无法通过键盘创建组件。
+- 修复后：条目暴露 `role=button`、`tabindex=0`、`aria-label`，Enter/Space 触发与拖拽相同的 `add-component` 事件；`ComponentPalette.spec.ts` 通过。
+- Chrome CDP 当前页面检查到“卡片”“数据表格”等条目均具备上述 AX 属性；截图 `/tmp/mateclaw-cdp-keyboard-palette-d68c66f9.png`。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

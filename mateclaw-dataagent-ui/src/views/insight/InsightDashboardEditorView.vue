@@ -158,7 +158,7 @@
 
       <!-- 物料面板 -->
       <div v-if="!paletteCollapsed" class="editor-palette" :class="{ 'mobile-open': showMobilePalette }">
-        <ComponentPalette @collapse="paletteCollapsed = true" />
+        <ComponentPalette @collapse="paletteCollapsed = true" @add-component="handleAddComponent" />
       </div>
       <!-- 物料面板折叠态：悬浮按钮 -->
       <PanelFloatButton

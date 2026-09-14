@@ -34,8 +34,12 @@
             v-for="item in group.items"
             :key="item.type + (item.chartType ?? '')"
             class="palette-item"
+            role="button"
+            tabindex="0"
+            :aria-label="t(item.labelKey)"
             draggable="true"
             @dragstart="handleDragStart($event, item)"
+            @keydown="handleKeydown($event, item)"
           >
             <span class="palette-icon" v-html="item.icon"></span>
             <span class="palette-label">{{ t(item.labelKey) }}</span>
@@ -57,6 +61,7 @@ defineOptions({
 
 const emit = defineEmits<{
   (e: 'collapse'): void
+  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
 }>()
 
 const { t } = useI18n()
@@ -170,6 +175,13 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   }
   event.dataTransfer.effectAllowed = 'copy'
   event.dataTransfer.setData('application/json', JSON.stringify(item))
+}
+
+/** 键盘用户无法拖拽时，使用 Enter/Space 直接添加组件。 */
+function handleKeydown(event: KeyboardEvent, item: PaletteItem): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  emit('add-component', { type: item.type, chartType: item.chartType })
 }
 </script>
 
