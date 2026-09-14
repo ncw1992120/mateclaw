@@ -285,6 +285,8 @@ make dashboard-verify-local
 
 **2026-09-14 JDBC 表目录闭环补充：** 空表目录现在提供“刷新表目录”操作，触发 Schema 探测并重新加载目录；本地模拟 Chrome CDP 返回 102 张表后，已实际验证首个表项的 `role=checkbox`、`aria-checked` 及 Enter/Space 切换。当前提交 `86e955b3efda466f42ec64b83d0166add0b408a0` 的截图为 `/tmp/mateclaw-cdp-jdbc-table-keyboard-fc9cba23.png`。
 
+**2026-09-14 空态插图主题补充：** 移除数据集新建空态 SVG 的固定颜色属性，改由主题令牌统一控制；Chrome CDP 暗色主题现场显示主题化插图，截图 `/tmp/mateclaw-cdp-dataset-theme-svg-8d90ea7d.png`。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。

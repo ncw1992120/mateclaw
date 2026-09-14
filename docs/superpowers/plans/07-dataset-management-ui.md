@@ -120,6 +120,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-14 空表目录闭环修复：** JDBC 数据源尚未完成 Schema 探测时，页面原先只显示空态，用户无法知道如何继续。现增加“刷新表目录”入口，调用 `schema-discovery` 后重新加载表列表，并在失败时显示可理解的错误提示；`DatasetEdit.spec.ts` 新增回归。Chrome CDP 在模拟 JDBC 数据源返回 102 张表后确认表项可见，Enter/Space 实际切换 `aria-checked`。
 
+**2026-09-14 空态插图主题修复：** 新建数据集空态 SVG 原先保留固定浅色 `fill/stroke` 属性，暗色主题存在视觉回退风险；现移除固定颜色，统一由 `.illustration-*` 的 `--theme-*` 令牌控制。Chrome CDP 暗色主题复验卡片、线条和勾选描边均使用当前主题颜色。
+
 **2026-09-14 键盘审计补充：** Chrome CDP 对 `/datasets/new` 和双源编辑器的所有当前可聚焦 `button/input/select/textarea/[tabindex]` 控件执行名称检查，结果分别为 `5/5`、`52/52` 均存在文本、`aria-label`、`title` 或 `id`。这关闭了本地模拟范围内“无名称控件”缺口；四主题对比度仍需设计专项工具验证。
 
 - MGMT-C01～MGMT-UI05 全部通过且无跳过，UI production build 成功。

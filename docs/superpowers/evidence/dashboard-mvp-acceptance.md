@@ -597,3 +597,6 @@ JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可�
 ### 2026-09-14 JDBC 表目录与键盘操作复验
 
 修复空表目录缺少继续入口的问题：页面新增“刷新表目录”，调用 Schema 探测接口并重新加载目录；失败时保留空态并显示错误提示。Chrome CDP 模拟 JDBC 数据源返回 102 张表，首个表项实际暴露 `role=checkbox`、`tabindex=0`、`aria-checked=false`、`aria-label=选择数据表 dataagent_aloudata_category`，按 Enter/Space 后分别变为 `true/false`。截图：`/tmp/mateclaw-cdp-jdbc-table-keyboard-fc9cba23.png`。对应提交 `86e955b3efda466f42ec64b83d0166add0b408a0`。
+### 2026-09-14 空态插图主题视觉复验
+
+数据集新建页 SVG 空态移除固定浅色 `fill/stroke` 属性后，Chrome CDP 暗色主题读取到卡片填充 `rgba(255, 140, 90, 0.07)`、线条填充 `rgba(237, 241, 247, 0.14)`、勾选描边 `rgb(255, 140, 90)`，均来自当前主题令牌。截图：`/tmp/mateclaw-cdp-dataset-theme-svg-8d90ea7d.png`。

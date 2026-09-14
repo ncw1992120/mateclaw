@@ -163,12 +163,12 @@
       <main class="main-content empty-state">
         <div class="empty-illustration">
             <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect class="illustration-card" x="30" y="40" width="140" height="100" rx="8" fill="#f2f3f5" stroke="#e5e6eb" stroke-width="2"/>
-              <rect class="illustration-line" x="50" y="60" width="100" height="12" rx="4" fill="#e5e6eb"/>
-              <rect class="illustration-line" x="50" y="82" width="80" height="12" rx="4" fill="#e5e6eb"/>
-              <rect class="illustration-line" x="50" y="104" width="60" height="12" rx="4" fill="#e5e6eb"/>
-              <circle class="illustration-check" cx="150" cy="55" r="15" fill="#e8f3ff" stroke="#165dff" stroke-width="1.5"/>
-              <path class="illustration-check-mark" d="M145 55 L149 59 L156 51" stroke="#165dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect class="illustration-card" x="30" y="40" width="140" height="100" rx="8" stroke-width="2"/>
+              <rect class="illustration-line" x="50" y="60" width="100" height="12" rx="4"/>
+              <rect class="illustration-line" x="50" y="82" width="80" height="12" rx="4"/>
+              <rect class="illustration-line" x="50" y="104" width="60" height="12" rx="4"/>
+              <circle class="illustration-check" cx="150" cy="55" r="15" stroke-width="1.5"/>
+              <path class="illustration-check-mark" d="M145 55 L149 59 L156 51" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
         <p class="empty-title">{{ t('datasetEdit.selectTableHint') }}</p>
