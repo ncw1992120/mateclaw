@@ -624,3 +624,4 @@ Chrome CDP 选择 `E2E JDBC Orders` 后，来源类型保持 `JDBC_TABLE`，JDBC
 ### 2026-09-14 JDBC 反向绑定拒绝复验
 
 DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC 数据源返回 `JDBC 数据集必须绑定 JDBC 数据源`，不写入数据集；`DatasetCatalogServiceTest` 定向测试通过。
+该拒绝校验已纳入 `make dashboard-dataagent-test` 全量门禁，本轮退出码为 `0`；日志中的既有依赖和 legacy pip 告警不影响测试结果。

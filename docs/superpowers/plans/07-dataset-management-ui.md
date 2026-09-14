@@ -201,3 +201,4 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-14 JDBC 类型兼容补强：** 前端来源判断补齐 `oracle`、`snowflake`、`bigquery`、`redshift`、`clickhouse`、`doris` 等后端支持的 JDBC 类型，避免合法数据源被降级为文件来源；新增 Oracle 回归测试。
 **2026-09-14 服务端反向边界补强：** DataAgent 同时拒绝 JDBC 数据集绑定 `api/http/http_api` 等非 JDBC 数据源，防止绕过前端提交不兼容来源；新增 `DatasetCatalogServiceTest` 拒绝路径。
+**2026-09-14 JDBC 反向绑定补充：** 服务端新增 JDBC 数据集绑定非 JDBC 数据源的通用拒绝校验（不仅限于 Aloudata），与前端来源类型限制保持一致；DataAgent 全量门禁通过。
