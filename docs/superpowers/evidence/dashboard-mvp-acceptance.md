@@ -928,3 +928,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 新增临时数据表多 Tab 看板 fixture，完整模拟 Compose Chrome channel 用例实际创建并进入预览；两个 Tab 初始选中“概览”，聚焦后按 `ArrowRight` 切换为“明细”，焦点同步到第二个 Tab。
 - 定向用例 `仪表盘预览数据表多 Tab 支持键盘切换`：`1 passed (5.1s)`；随后完整矩阵更新为 `27 passed (1.4m)`，无跳过。
 - 用户 Chrome CDP 现场仍保留桌面双源截图与 AX 复核；临时 fixture 由 E2E 用例自动清理，未污染共享测试数据。
+
+### 2026-09-15 编辑器标题/描述与属性 Tab 键盘语义修复
+
+- 问题：仪表盘编辑器标题、描述和属性面板 Tab 行原先依赖鼠标点击，键盘焦点无法进入或切换。
+- 修复：标题/描述增加 `role=button`、`tabindex=0`、稳定名称及 Enter/Space 激活；属性 Tab 列表增加 `tablist/tab`、选中态、roving `tabindex` 和方向键/Home/End/Enter/Space 操作。
+- 回归：页面树操作 E2E 增加标题 Enter 激活断言，定向用例 `1 passed (4.5s)`；UI 单测与生产构建保持通过。
+- 用户 Chrome CDP `9222` 现场确认标题 Enter 能进入编辑输入，描述 Enter 能进入编辑输入，当前编辑器可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-editor-title-property-keyboard-20260915.png`。

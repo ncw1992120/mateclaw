@@ -20,8 +20,13 @@
             v-else
             class="toolbar-title"
             :class="{ placeholder: !dashboardName }"
+            role="button"
+            tabindex="0"
+            aria-label="编辑仪表盘名称"
             :title="t('insight.editor')"
             @click="editingName = true"
+            @keydown.enter="editingName = true"
+            @keydown.space.prevent="editingName = true"
           >
             {{ dashboardName || t('insight.editor') }}
           </h2>
@@ -38,7 +43,12 @@
             v-else
             class="toolbar-subtitle"
             :class="{ placeholder: !dashboardDescription }"
+            role="button"
+            tabindex="0"
+            aria-label="编辑仪表盘描述"
             @click="editingDesc = true"
+            @keydown.enter="editingDesc = true"
+            @keydown.space.prevent="editingDesc = true"
           >
             {{ dashboardDescription || t('insight.description') }}
           </div>

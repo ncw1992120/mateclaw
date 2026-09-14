@@ -79,13 +79,18 @@
         <template v-if="tabModeEnabled">
           <div class="form-group form-group-column">
             <label class="form-label">Tab 列表</label>
-            <div class="tab-list-editor">
+          <div class="tab-list-editor" role="tablist" aria-label="属性面板 Tab 列表">
               <div
                 v-for="(tab, idx) in localTabs"
                 :key="tab.id"
                 class="tab-item-row"
                 :class="{ active: activeTabIndex === idx }"
+                role="tab"
+                :aria-selected="activeTabIndex === idx"
+                :tabindex="activeTabIndex === idx ? 0 : -1"
+                :aria-label="`Tab ${tab.title || idx + 1}`"
                 @click="activeTabIndex = idx"
+                @keydown="handleTabEditorKeydown($event, idx)"
               >
                 <el-input
                   v-model="tab.title"
@@ -555,7 +560,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, ref, computed } from 'vue'
+import { nextTick, reactive, watch, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import type { InsightComponent, ComponentDataSource, ComponentTab, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, AIAnalysisComponentConfig, TimeRangePreset, FilterScope } from '@/types'
@@ -636,6 +641,23 @@ const tabModeEnabled = ref(false)
 const localTabs = ref<ComponentTab[]>([])
 const activeTabIndex = ref(0)
 const activeTab = computed(() => localTabs.value[activeTabIndex.value] ?? null)
+
+function handleTabEditorKeydown(event: KeyboardEvent, index: number): void {
+  if (localTabs.value.length < 2) return
+  let nextIndex = index
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % localTabs.value.length
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + localTabs.value.length) % localTabs.value.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = localTabs.value.length - 1
+  else if (event.key === 'Enter' || event.key === ' ') { activeTabIndex.value = index; return }
+  else return
+  event.preventDefault()
+  activeTabIndex.value = nextIndex
+  nextTick(() => {
+    const tab = Array.from(document.querySelectorAll<HTMLElement>('.property-panel [role="tab"]'))[nextIndex]
+    tab?.focus()
+  })
+}
 
 /** 指标/维度选项与加载状态 */
 const metricsOptions = ref<Array<{ metricName: string; metricDisplayName: string }>>([])

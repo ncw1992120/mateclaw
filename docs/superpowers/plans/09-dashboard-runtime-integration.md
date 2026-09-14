@@ -311,3 +311,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 表格与指标卡片多 Tab 键盘语义修复：** 两类组件从点击 `div` 改为 `tablist/tab`，补齐选中态、roving `tabindex`、方向键/Home/End 和 Enter/Space；新增 `WidgetTabs.spec.ts` 共 `2 tests`，UI 全量为 `13 files / 46 tests passed`，生产构建成功。当前 E2E Dashboard 没有多 Tab fixture，真实 Tab 切换现场验收仍单独记录为待补验。
 
 **2026-09-15 多 Tab 运行时 E2E 补验：** 新增临时数据表多 Tab 看板 fixture，真实 Chrome channel E2E 验证 `ArrowRight` 切换和焦点同步，定向用例 `1 passed (5.1s)`；完整矩阵更新为 `27 passed (1.4m)`，用例 finally 自动删除临时看板。
+
+**2026-09-15 编辑器标题/描述与属性 Tab 键盘语义修复：** 标题、描述支持键盘激活编辑，属性面板 Tab 行补齐可访问 Tab 语义和键盘切换；页面树操作定向 E2E 增加标题 Enter 激活断言并通过 `1 passed (4.5s)`，Chrome CDP 现场确认输入可见且无名控件数为 `0`。

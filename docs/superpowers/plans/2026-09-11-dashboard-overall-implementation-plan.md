@@ -429,6 +429,8 @@ make dashboard-verify-local
 
 **2026-09-15 多 Tab 运行时补验：** 新增临时数据表多 Tab 看板 fixture，Chrome channel E2E 实测 `ArrowRight` 将“概览”切换为“明细”并同步焦点；完整本地模拟矩阵为 `27 passed (1.4m)`，临时数据由用例自动清理。
 
+**2026-09-15 编辑器键盘闭环补充：** 仪表盘标题/描述编辑入口及属性面板 Tab 列表补齐键盘语义；Chrome CDP 现场验证标题/描述可进入编辑输入，定向 E2E `1 passed (4.5s)`，不改变仪表盘保存与预览逻辑。
+
 **当前权威基线（2026-09-15）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。`22 passed`、`25 passed` 是历史基线；最新本地模拟 Chrome channel 完整矩阵为 `26 passed (1.4m)`，双源最终结果实际为 `5` 行且包含 `120.5`，严格快照通过；UI 单测为 `12 files / 44 tests passed`，生产构建成功。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。
