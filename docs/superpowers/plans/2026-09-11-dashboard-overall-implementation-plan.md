@@ -279,6 +279,8 @@ make dashboard-verify-local
 
 **2026-09-14 当前工作树双源 CDP 现场复验：** 通过用户 Google Chrome CDP `9222` 打开双源 Dashboard，编辑器与最终结果页均可见；结果表实际为 `5` 行并包含 `120.5`，严格双源快照定向用例在系统 Chrome channel 下 `1 passed (7.1s)`。历史 `1158 pixels (ratio 0.01)` 差异已确认不再复现，现场截图与 AX 摘要详见统一验收记录。
 
+**2026-09-14 洞察列表主题修复：** 修复成功/草稿状态标签固定浅色导致暗色主题对比度不足的问题，改用主题状态令牌并以不透明深色底稳定实际渲染；四主题成功/草稿回归 `1 passed`，Chrome CDP 暗色现场对比度 `8.24:1`，截图详见统一验收记录。
+
 **2026-09-14 当前提交 CDP 验收：** 提交 `2fe61dd4fa3ed3671ce11969de8d61d9b8ab416c` 在 Google Chrome CDP `9222` 打开数据集列表，暗色主题下标题、4 个卡片和状态标签均可见，截图 `/tmp/mateclaw-cdp-dataset-list-96568fb6.png`；本地 UI 单测 `37/37`、构建和 `DESIGN-PASS` 通过。
 
 **2026-09-14 键盘可访问性补充：** 修复 JDBC 表列表只能鼠标点击的问题，表项现在可聚焦并以 Enter/Space 切换，暴露 `role=checkbox` 与 `aria-checked`；`DatasetEdit.spec.ts` 回归通过。当前 UI 单测为 `38/38`，Chrome CDP 已复验数据集新建/编辑入口；暂无可展示的真实表项，表项现场操作待模拟表目录返回后补采。

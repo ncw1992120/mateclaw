@@ -44,6 +44,10 @@
   --db-danger: #ef4444;
   --db-danger-bg: rgba(239, 68, 68, 0.08);
   --db-warning: #f59e0b;
+  --db-status-success-bg: #e7f8ef;
+  --db-status-success-fg: #166534;
+  --db-status-warning-bg: #fdf1e0;
+  --db-status-warning-fg: #92400e;
 
   /* 卡片配色（浅色系）：6 组，用于卡片图标底色与图表预览主色 */
   --db-card-blue-bg: #e7effe;
@@ -135,6 +139,10 @@ html[data-theme='dark'] {
   --db-accent-border: rgba(99, 102, 241, 0.3);
   --db-positive-bg: rgba(34, 197, 94, 0.14);
   --db-danger-bg: rgba(239, 68, 68, 0.14);
+  --db-status-success-bg: #163b2a;
+  --db-status-success-fg: #57d38c;
+  --db-status-warning-bg: #3a2a1b;
+  --db-status-warning-fg: #fbbf24;
 
   /* 卡片浅色系在暗色下改用低透明度色层，保持"浅底"观感 */
   --db-card-blue-bg: rgba(65, 118, 230, 0.14);

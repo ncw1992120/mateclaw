@@ -25,6 +25,60 @@ test('从产品入口进入数据集创建并取消返回', async ({ page }) => 
   await expect(page).toHaveURL(/\/datasets$/)
 })
 
+test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  await expect(page.locator('.dashboard-card').first()).toBeVisible()
+  const snapshots = await page.evaluate(async () => {
+    const themes = ['light', 'warm', 'eye-care', 'dark']
+    const parseRgb = (value: string): [number, number, number] => {
+      const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (!match) throw new Error(`无法解析颜色 ${value}`)
+      return [Number(match[1]), Number(match[2]), Number(match[3])]
+    }
+    const luminance = (value: string): number => parseRgb(value).map(channel => {
+      const normalized = channel / 255
+      return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+    }).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0)
+    const contrast = (foreground: string, background: string): number => {
+      const foregroundLum = luminance(foreground)
+      const backgroundLum = luminance(background)
+      return (Math.max(foregroundLum, backgroundLum) + 0.05) / (Math.min(foregroundLum, backgroundLum) + 0.05)
+    }
+    const result = [] as Array<{ theme: string; ratios: number[] }>
+    for (const theme of themes) {
+      document.documentElement.setAttribute('data-theme', theme)
+      await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
+      const template = document.querySelector<HTMLElement>('.card-status')
+      if (!template) throw new Error('缺少状态标签样本')
+      const synthetic = ['success', 'warning'].map(status => {
+        const element = template.cloneNode(true) as HTMLElement
+        element.classList.remove('el-tag--success', 'el-tag--warning')
+        element.classList.add(`el-tag--${status}`)
+        element.textContent = status
+        document.body.append(element)
+        return element
+      })
+      result.push({
+        theme,
+        ratios: synthetic.map(element => {
+          const style = getComputedStyle(element)
+          return contrast(style.color, style.backgroundColor)
+        }),
+      })
+      synthetic.forEach(element => element.remove())
+    }
+    return result
+  })
+  for (const snapshot of snapshots) {
+    expect(snapshot.ratios.every(ratio => ratio >= 4.5), snapshot.theme).toBe(true)
+  }
+})
+
 test('从产品入口创建文件数据集并进入预览', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

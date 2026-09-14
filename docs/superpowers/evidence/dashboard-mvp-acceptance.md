@@ -632,3 +632,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 编辑器实际显示“脚本结果数据集输入”、目标组件 `e2e-table`、JDBC `5 个字段` 和 Aloudata `3 个字段`；页面视口为 `1440x813`，AX 摘要为 `211` 行。
 - 点击“最终结果预览”后实际显示结果表 `5` 行，包含 `120.5`；现场截图为 `/tmp/mateclaw-cdp-jdbc-aloudata-editor-current.png` 和 `/tmp/mateclaw-cdp-jdbc-aloudata-result-current.png`。
 - 同一环境使用系统 Chrome channel 重跑 `dashboard-multi-source.spec.ts` 的双源用例，结果为 `1 passed (7.1s)`；严格 `dashboard-jdbc-aloudata.png` 快照断言通过。由此确认历史 `1158 pixels (ratio 0.01)` 已不再复现，属于已关闭的旧基线差异，而非查询结果问题。
+
+### 2026-09-14 洞察列表状态标签主题对比度修复
+
+- 问题：洞察列表的成功/草稿状态标签仍使用固定浅色 CSS；暗色主题实际渲染为浅橙底，主题不一致且对比度不足。
+- 修复：增加成功/警告状态主题令牌；暗色主题使用不透明深色底（成功 `#163b2a`、警告 `#3a2a1b`），确保真实渲染与自动化计算一致。
+- 回归：新增 `洞察列表状态标签在四主题下满足对比度`，覆盖成功和草稿两种标签及四主题；系统 Chrome channel `1 passed (3.2s)`。
+- Chrome CDP `9222` 现场打开 `/?nav=insight`，实际显示 9 个看板；暗色草稿标签对比度 `8.24:1`。截图：`/tmp/mateclaw-cdp-insight-list-status-dark-fixed.png`。

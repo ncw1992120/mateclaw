@@ -1093,13 +1093,13 @@ function handleBackToList(): void {
 }
 
 .card-status.el-tag--success {
-  background: #e7f8ef;
-  color: #14a05a;
+  background: var(--db-status-success-bg);
+  color: var(--db-status-success-fg);
 }
 
 .card-status.el-tag--warning {
-  background: #fdf1e0;
-  color: #dd8a1d;
+  background: var(--db-status-warning-bg);
+  color: var(--db-status-warning-fg);
 }
 
 .card-desc {
