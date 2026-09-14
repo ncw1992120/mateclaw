@@ -613,3 +613,7 @@ Chrome CDP 读取模拟 `E2E HTTP Orders` 数据源的真实响应 `sourceType=a
 ### 2026-09-14 服务端来源兼容性复验
 
 新增 DataAgent 服务端校验：`HTTP_API` 数据集只能绑定 API 类型数据源，JDBC/Aloudata 连接直接返回 `HTTP API 数据集必须绑定 HTTP/API 数据源`，不写入数据库。`DatasetCatalogServiceTest` 定向通过，`make dashboard-dataagent-test` 退出码为 0。
+
+### 2026-09-14 非 JDBC 表目录视觉复验
+
+Chrome CDP 选择 `E2E HTTP Orders` 后，页面实际为 `HTTP_API`，表区域显示“当前来源类型不使用 JDBC 表目录”，不再显示“刷新表目录”按钮，SQL 编辑器也未渲染。截图：`/tmp/mateclaw-cdp-api-no-table-action-current.png`。

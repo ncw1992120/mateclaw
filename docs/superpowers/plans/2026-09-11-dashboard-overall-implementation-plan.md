@@ -333,4 +333,6 @@ make dashboard-verify-local
 
 **2026-09-14 服务端边界补充：** DataAgent 创建/更新数据集时新增 HTTP/API 与数据源类型兼容校验，阻止绕过 UI 将 HTTP/API 定义绑定到 MySQL 等 JDBC 数据源；定向与 DataAgent 全量测试通过。
 
+**2026-09-14 表目录状态补充：** 非 JDBC 来源不再显示无效的表目录刷新操作，页面明确提示该来源类型不使用 JDBC 表目录；UI `41/41` 测试通过，Chrome CDP 已复验 HTTP/API 页面无刷新按钮。
+
 当前提交 `fa7cd9289b276b99c1049ab7567a0b85def65240` 的 Chrome CDP 复验确认 API 数据源不渲染 SQL 编辑器，截图 `/tmp/mateclaw-cdp-api-source-boundary-fa7cd928.png`。

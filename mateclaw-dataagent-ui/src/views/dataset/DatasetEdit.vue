@@ -122,10 +122,10 @@
           <!-- 表区域 -->
           <div class="section-block">
             <div class="section-label">{{ t('datasetEdit.table') }}</div>
-            <div id="dataset-table-list" v-if="tablesLoading" class="table-loading-hint">
+            <div id="dataset-table-list" v-if="selectedSourceType === 'JDBC_TABLE' && tablesLoading" class="table-loading-hint">
               <span>{{ t('datasetEdit.loadingTables') }}</span>
             </div>
-            <ul v-else-if="datasourceTables.length > 0" class="table-list">
+            <ul v-else-if="selectedSourceType === 'JDBC_TABLE' && datasourceTables.length > 0" class="table-list">
               <li
                 v-for="table in datasourceTables"
                 :key="table.id"
@@ -142,7 +142,7 @@
                 <span class="table-name-text">{{ table.tableName }}</span>
               </li>
             </ul>
-            <div v-else-if="selectedDatasource" class="table-empty-state">
+            <div v-else-if="selectedDatasource && selectedSourceType === 'JDBC_TABLE'" class="table-empty-state">
               <div class="empty-hint">{{ t('datasetEdit.noTablesInDs') }}</div>
               <button
                 type="button"
@@ -154,6 +154,7 @@
                 {{ tablesLoading ? '探测中…' : '刷新表目录' }}
               </button>
             </div>
+            <div v-else-if="selectedDatasource" class="empty-hint table-source-not-applicable">当前来源类型不使用 JDBC 表目录</div>
             <div v-else class="empty-hint">{{ t('datasetEdit.selectDatasourceFirst') }}</div>
           </div>
         </div>

@@ -196,3 +196,5 @@ npm --prefix mateclaw-dataagent-ui run build
 **2026-09-14 来源类型边界修复：** `sourceType=api` 的数据源原先被“非 Aloudata 即 JDBC”逻辑误判，导致 JDBC 表/SQL 选项错误开放。现显式归一化 `api/http/http_api`，自动切换 `HTTP_API` 并禁用 JDBC 表/SQL；兼容历史响应缺少 `sourceType` 的数据源。新增回归测试，Chrome CDP 已验证 API 数据源选项状态。
 
 **2026-09-14 后端来源边界补强：** 服务端新增 HTTP/API 数据集只能绑定 `api/http/http_api` 数据源的校验，防止绕过前端直接用 JDBC 连接创建 HTTP/API 数据集；`DatasetCatalogServiceTest` 已覆盖拒绝路径。
+
+**2026-09-14 非 JDBC 表目录误导修复：** HTTP/API、Aloudata 和文件来源不再显示无效的“刷新表目录”按钮；仅 `JDBC_TABLE` 模式展示表目录、空态和 Schema 探测入口，其他来源显示“当前来源类型不使用 JDBC 表目录”。新增 `DatasetEdit.spec.ts` 回归，Chrome CDP 已验证。

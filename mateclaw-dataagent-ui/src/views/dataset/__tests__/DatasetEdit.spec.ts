@@ -138,6 +138,15 @@ describe('DatasetEdit source configuration', () => {
     expect(wrapper.find('#dataset-source-type option[value="HTTP_API"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('does not show a JDBC table refresh action for an HTTP API dataset', async () => {
+    const wrapper = await mountEditor([{ id: 'api-1', name: 'Orders API', sourceType: 'api' }])
+    await wrapper.find('#dataset-datasource').setValue('api-1')
+    await flushPromises()
+
+    expect(wrapper.find('button.refresh-tables-btn').exists()).toBe(false)
+    expect(wrapper.find('.table-source-not-applicable').text()).toContain('当前来源类型不使用 JDBC 表目录')
+  })
+
   it('associates configuration labels with native controls', async () => {
     const wrapper = await mountEditor()
     expect(wrapper.find('label[for="dataset-name"]').exists()).toBe(true)
