@@ -201,7 +201,7 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **当前工作树 CDP 复验补充（2026-09-14）：** 当前修复后的非交互 CDP 脚本已生成四页截图；用户 Chrome 的 `9222` 页面可见 9 个看板。全量真实 Playwright 9 用例取得双源 JDBC+Aloudata 的 5 行和 `120.5`，视觉快照差异 `1158 pixels (ratio 0.01)` 已通过重新生成当前渲染基线并以非更新模式复跑关闭。CUA 后续复验受本地 DataAgent 未监听 `18089` 影响，需服务恢复后继续；不以失效登录页替代产品通过证据。
 
-**2026-09-14 主题快照修复与回归补充：** 数据源配置表单基础容器、头部、卡片、标题、标签和辅助文案已改用主题令牌，新增 `light`、`warm`、`eye-care`、`dark` 四主题真实 Chrome channel 用例。修正 Playwright 设备配置覆盖浏览器 channel 的问题，并校正双源结果断言读取位置；当前提交 `c57dc38be9a311c68649591d0b145a4ccffb2820` 的 UI 单测为 `37 passed`、完整真实 E2E 为 `15 passed`，未使用跳过机制。CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-current.png`，基础容器和文字计算样式与主题令牌一致。原生输入控件的跨浏览器外观及真实 Aloudata 授权仍不关闭对应外部 Gate。
+**2026-09-14 主题快照修复与回归补充：** 数据源配置表单基础容器、头部、卡片、标题、标签和辅助文案已改用主题令牌，新增 `light`、`warm`、`eye-care`、`dark` 四主题真实 Chrome channel 用例；同时覆盖 Chrome `:-webkit-autofill` 的背景、文字和光标样式。修正 Playwright 设备配置覆盖浏览器 channel 的问题，并校正双源结果断言读取位置；提交 `4ae6e7ac5db3a9a2c32349bf67b503668949cca6` 的 UI 单测为 `37 passed`、完整真实 E2E 为 `15 passed`，未使用跳过机制。CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`，现场视觉与主题令牌一致。非 Chrome 浏览器原生控件外观及真实 Aloudata 授权仍不关闭对应外部 Gate。
 
 **提交后回归补充（2026-09-14）：** 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 的 UI 全量 `9 files / 35 tests passed`、production build 和 `DESIGN-PASS` 均通过；既有 Playwright 快照基线修复结论保持不变。Chrome CUA 重试返回 `Unable to load browser request-header policy`，当前不新增交互视觉证据。
 

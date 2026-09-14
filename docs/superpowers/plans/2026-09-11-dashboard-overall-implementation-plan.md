@@ -261,7 +261,7 @@ make dashboard-verify-local
 
 **2026-09-14 产品入口 E2E 补充：** 新增“主导航→数据集管理→新建文件数据集→上传 CSV→创建/同步→进入预览→清理”真实后端用例，补齐 FE-CLOSE-07 的正式创建链路覆盖。首次执行因缺少 Playwright `chromium_headless_shell` 未运行，随后切换系统 Chrome channel 并注入 JWT/工作区上下文完成执行。
 
-**2026-09-14 主题快照与真实 Chrome 回归补充：** 修复 `DatasourceForm.vue` 页面容器、头部、卡片、标题、标签和辅助文案的固定颜色，统一使用主题令牌；新增四主题真实 E2E。同步修正 `playwright.config.ts` 中设备配置覆盖 `MATECLAW_E2E_BROWSER_CHANNEL` 的问题，并将双源结果断言改为读取真实结果表。提交 `c57dc38be9a311c68649591d0b145a4ccffb2820` 在本地模拟环境完成 UI 单测 `37 passed`、生产构建和真实 Chrome channel E2E `15 passed`；CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-current.png`。表单原生输入控件跨浏览器外观、其他历史页面主题审计及真实 Aloudata/正式存储联调仍为后续 Gate。
+**2026-09-14 主题快照与真实 Chrome 回归补充：** 修复 `DatasourceForm.vue` 页面容器、头部、卡片、标题、标签和辅助文案的固定颜色，统一使用主题令牌；补充 Chrome `:-webkit-autofill` 的主题背景和文字覆盖，并新增四主题真实 E2E。同步修正 `playwright.config.ts` 中设备配置覆盖 `MATECLAW_E2E_BROWSER_CHANNEL` 的问题，并将双源结果断言改为读取真实结果表。提交 `4ae6e7ac5db3a9a2c32349bf67b503668949cca6` 在本地模拟环境完成 UI 单测 `37 passed`、生产构建和真实 Chrome channel E2E `15 passed`；CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`。非 Chrome 浏览器原生控件外观、其他历史页面主题审计及真实 Aloudata/正式存储联调仍为后续 Gate。
 
 **2026-09-14 提交后 CDP 复验：** 当前提交 `58d52abdb505b5d611d9e9e4a5b28fda88599538` 已通过 Google Chrome CDP `9222` 现场检查洞察列表和双源编辑器；脚本结果数据集输入面板、默认目标组件和输入别名均可见，截图及 AX 树记录见统一验收记录。CUA 请求头策略故障、真实 Aloudata 授权和四主题对比度专项仍保持独立 Gate。
 
