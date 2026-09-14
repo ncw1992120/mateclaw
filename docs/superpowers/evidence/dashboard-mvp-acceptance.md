@@ -583,3 +583,7 @@ Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`�
 ### 2026-09-14 计划状态一致性复核
 
 复核 01～07 子计划后，补充标注 Descriptor 字段摘要、Table 可视高度、ObjectRef 边界提示和双源快照的历史 `FAIL` 已由后续修复关闭；真实 Aloudata `SM_02_0038`、跨工作区权限 `NOT_RUN`、完整键盘遍历及正式对象存储替换仍保持独立未完成状态。`bash scripts/verify-dashboard-design.sh` 输出 `DESIGN-PASS`，避免历史记录覆盖当前状态。
+
+### 2026-09-14 当前提交 CDP 视觉验收
+
+当前提交 `2fe61dd4fa3ed3671ce11969de8d61d9b8ab416c` 通过 Google Chrome CDP `9222` 打开 `http://127.0.0.1:5175/datasets`，切换暗色主题并采集 `/tmp/mateclaw-cdp-dataset-list-96568fb6.png`。页面标题“数据集”、4 个数据集卡片及状态标签均可见，未出现空白或布局溢出；对比度实测结果见上一节。
