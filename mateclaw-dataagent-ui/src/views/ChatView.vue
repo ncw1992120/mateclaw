@@ -728,6 +728,7 @@
             <el-select
               v-model="selectedModelId"
               size="small"
+              aria-label="选择模型"
               :placeholder="availableModels.length ? t('modelConfig.selectModel') : t('modelConfig.configureFirst')"
               :loading="modelStore.loading"
               :no-data-text="t('modelConfig.noAvailableModels')"

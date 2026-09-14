@@ -801,3 +801,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - `npm --prefix mateclaw-dataagent-ui test -- --run`：`12 files / 44 tests passed`。
 - `npm --prefix mateclaw-dataagent-ui run build`：生产构建成功；仅保留既有 Rollup `PURE` 注释和 chunk size warning，不影响构建退出码。
+
+### 2026-09-14 智能问数模型选择器可访问名称
+
+- 问题：智能问数底部模型 `el-select` 的原生 `role=combobox` 没有可访问名称。
+- 修复：补充 `aria-label="选择模型"`，不改变模型切换行为和视觉样式。
+- 回归：修复前 Chrome channel 定向用例因名称为空失败，修复后 `1 passed (5.1s)`；Chrome CDP `9222` 现场读取该 combobox 的名称为“选择模型”，截图 `/tmp/mateclaw-cdp-model-select-a11y-20260914.png`。

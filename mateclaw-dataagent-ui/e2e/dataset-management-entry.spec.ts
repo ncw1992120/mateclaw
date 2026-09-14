@@ -25,6 +25,16 @@ test('从产品入口进入数据集创建并取消返回', async ({ page }) => 
   await expect(page).toHaveURL(/\/datasets$/)
 })
 
+test('智能问数模型选择器暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=smart-ask')
+  await expect(page.locator('.model-select-footer input[role="combobox"]')).toHaveAccessibleName('选择模型')
+})
+
 test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

@@ -410,3 +410,5 @@ make dashboard-verify-local
 **当前权威基线（2026-09-14）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。最新本地模拟 Chrome channel 完整矩阵为 `22 passed (1.5m)`，双源定向为 `4 passed (28.7s)`，`dashboard-jdbc-aloudata.png` 严格快照及 5 行/`120.5` 断言均通过；UI 单测为 `12 files / 44 tests passed`，DataAgent 为 `158 tests / 0 failures / 0 errors / 0 skipped`。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。
+
+**2026-09-14 智能问数模型选择器可访问性修复：** 发现底部模型 `role=combobox` 无名称，先由 Chrome channel 定向用例复现，再补充 `aria-label="选择模型"`；修复后定向用例 `1 passed (5.1s)`，UI 全量 `12 files / 44 tests passed`、生产构建成功。用户 Chrome CDP `9222` 现场确认名称为“选择模型”，截图 `/tmp/mateclaw-cdp-model-select-a11y-20260914.png`。
