@@ -305,6 +305,8 @@ make dashboard-verify-local
 
 **2026-09-14 画布组件删除按钮可访问性修复：** 组件删除按钮补充动态 `aria-label="删除组件 {组件标题}"`；定向回归、UI 全量 `42/42`、构建、`DESIGN-PASS` 和 Chrome CDP 均通过。该修复收敛本地组件操作可理解性，不替代全站审计。
 
+**2026-09-14 数据源配置关闭控件可访问性修复：** 将不可聚焦的关闭 `span` 改为语义化按钮并补充 `aria-label="关闭数据源配置"`；定向回归、UI 全量 `42/42`、构建、`DESIGN-PASS` 和 Chrome CDP 均通过。该修复收敛本地配置入口可访问性，不替代全站审计。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。

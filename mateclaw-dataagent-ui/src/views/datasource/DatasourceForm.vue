@@ -20,7 +20,7 @@
           <span class="step-label">{{ t('dsForm.stepFinish') }}</span>
         </div>
       </div>
-      <span class="close-btn" @click="handleClose">{{ '\u2715' }}</span>
+      <button type="button" class="close-btn" aria-label="关闭数据源配置" @click="handleClose">{{ '\u2715' }}</button>
     </header>
 
     <!-- 主体区域 -->

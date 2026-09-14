@@ -713,6 +713,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：真实添加数据表格流程断言删除按钮名称，系统 Chrome channel `1 passed (5.5s)`；UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
 - Chrome CDP `9222` 现场拖入数据表格并读取 `删除组件 数据表格`，按钮可见；截图 `/tmp/mateclaw-cdp-component-delete-a11y.png`。
 
+### 2026-09-14 数据源配置关闭控件可访问名称
+
+- 问题：数据源配置页右上角关闭控件是 `<span @click>`，只能鼠标触发，不能获得键盘焦点，也没有按钮语义。
+- 修复：改为 `type="button"` 的语义化按钮，增加 `aria-label="关闭数据源配置"`，保留原有样式和关闭行为。
+- 回归：数据源配置主题 E2E `1 passed (6.6s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
+- Chrome CDP `9222` 按“配置 → 数据配置 → 新建数据源 → MySQL”进入真实页面，关闭按钮可见并获得焦点，名称为“关闭数据源配置”；截图 `/tmp/mateclaw-cdp-datasource-close-a11y.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

@@ -477,6 +477,7 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
   await page.getByRole('button', { name: '新建数据源' }).click()
   await page.getByRole('button', { name: '选择MySQL数据源' }).click()
   await expect(page.locator('.datasource-form-page')).toBeVisible()
+  await expect(page.getByRole('button', { name: '关闭数据源配置' })).toBeVisible()
   const snapshots = await page.evaluate(async () => {
     const themes = ['light', 'warm', 'eye-care', 'dark']
     const read = (selector: string) => {
