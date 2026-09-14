@@ -198,7 +198,9 @@ async function loadMembers(): Promise<void> {
       role: query.role || undefined,
     })
     members.value = data.records
-    total.value = data.total
+    // 后端 Long 全局序列化为字符串（防雪花 ID 精度丢失），total 会以 "8" 形式返回；
+    // ElPagination 以 typeof === 'number' 判定 total 是否有效，字符串会被当作未传值而整体不渲染
+    total.value = Number(data.total) || 0
   } catch {
     // 错误已由 axios 拦截器提示
   } finally {
