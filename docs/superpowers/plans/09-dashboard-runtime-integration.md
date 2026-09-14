@@ -229,9 +229,9 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 指标/维度类目树键盘语义修复：** 指标平台类目树节点补齐 `treeitem`、`aria-selected`、计数名称和键盘选择；展开控件补齐 `role=button`、`aria-expanded`、动态名称及 Enter/Space 操作。新增 `CategoryTreeNode.spec.ts`，UI 全量 `12 files / 44 tests passed`、production build、`DESIGN-PASS` 通过；真实指标平台 CDP 现场交互待对应 fixture。
 
-本轮 Chrome CDP 点击模拟 Aloudata“同步元数据”返回“未定义的 API 端点: metric_list”，没有生成类目树节点；因此现场树交互仍保持待补验，不把空态写成 PASS。
+首次 Chrome CDP 点击模拟 Aloudata“同步元数据”因缺少 `metric_list` 返回失败，没有生成类目树节点；该次不计为通过。
 
-**模拟同步支撑修复（2026-09-14）：** 本地 WireMock 已补齐六个 Aloudata 元数据同步端点；`AloudataEndpointService` 对不完整数据库端点配置合并核心默认定义，定向 Maven 回归通过。服务重启后需重新执行同步、类目树键盘和截图验收。
+**模拟同步支撑修复（2026-09-14）：** 本地 WireMock 已补齐六个 Aloudata 元数据同步端点；`AloudataEndpointService` 对不完整数据库端点配置合并核心默认定义，定向 Maven 回归通过。重建服务后 CDP 已同步出指标类目，Enter 选择节点和截图验收通过，详见统一验收记录。
 
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 

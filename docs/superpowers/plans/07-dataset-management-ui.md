@@ -237,9 +237,9 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 
 Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-selected` 和计数名称；有子节点时，展开控件提供 `role="button"`、`aria-expanded`、动态名称并支持 Enter/Space。新增 `CategoryTreeNode.spec.ts` 后 UI 全量为 `12 files / 44 tests passed`，构建和 `DESIGN-PASS` 通过；真实指标平台页面的 CDP 焦点截图待联调 fixture。
 
-本轮 CDP 点击本地模拟数据源“同步元数据”返回“未定义的 API 端点: metric_list”，所以模拟环境没有类目树数据；该问题属于模拟 Aloudata 端点支撑缺口，不能用空态替代现场树节点验收。
+首次 CDP 点击本地模拟数据源“同步元数据”曾返回“未定义的 API 端点: metric_list”，不能用空态替代现场树节点验收。
 
-**模拟端点补齐（2026-09-14）：** 已为本地 WireMock 增加元数据同步所需六个端点，并让 DataAgent 在数据库端点配置缺项时使用核心默认端点；`AloudataEndpointServiceTest` 通过。重启 DataAgent/模拟栈后应重新执行本节 CDP 树节点现场验收。
+**模拟端点补齐（2026-09-14）：** 已为本地 WireMock 增加元数据同步所需六个端点，并让 DataAgent 在数据库端点配置缺项时使用核心默认端点；`AloudataEndpointServiceTest` 通过。重建服务后 Chrome CDP 已实际生成“销售，1 个指标”树节点，聚焦按 Enter 后选中状态正确切换，截图 `/tmp/mateclaw-cdp-metric-tree-keyboard-pass.png`。
 
 ### 2026-09-14 多页面 Tab 可访问语义
 

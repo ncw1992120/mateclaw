@@ -747,8 +747,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：类目节点增加 `role="treeitem"`、`aria-selected`、可聚焦属性和来源计数名称；展开控件增加 `role="button"`、`aria-expanded`、动态名称，并支持 Enter/Space。
 - 回归：新增 `CategoryTreeNode.spec.ts`，验证选择、展开语义及键盘事件；UI 全量为 `12 files / 44 tests passed`，production build、`DESIGN-PASS` 通过。
 - Chrome `9222` 当前页面未打开指标平台面板，故本轮保留单测证据；进入真实指标/维度配置页后需补采现场焦点截图。
-- CDP 补充：打开本地 Aloudata 模拟数据源并点击“同步元数据”后，页面返回“同步失败: 未定义的 API 端点: metric_list”，因此当前模拟环境没有产生类目树节点；该环境支撑缺口单独保留，不将空态误记为树控件验收通过。
-- 后续修复：本地 WireMock 已补齐 `category_list`、`metric_list`、`metric_batch_detail`、`metric_all_dimensions`、`dimension_list`、`dimension_detail`；DataAgent 端点服务改为“默认核心端点 + 数据库覆盖”，兼容历史数据库端点配置不完整的环境。`AloudataEndpointServiceTest` 定向 Maven 回归通过。
+- CDP 首次复验发现本地 Aloudata 模拟环境缺少 `metric_list` 端点，页面返回“同步失败”，因此未将空态误记为树控件验收通过。
+- 修复后：本地 WireMock 已补齐 `category_list`、`metric_list`、`metric_batch_detail`、`metric_all_dimensions`、`dimension_list`、`dimension_detail`；DataAgent 端点服务改为“默认核心端点 + 数据库覆盖”，兼容历史数据库端点配置不完整的环境。`AloudataEndpointServiceTest` 定向 Maven 回归通过。
+- Chrome `9222` 重建 DataAgent 后重新点击“同步元数据”，实际生成 `role=tree` 和两个 `treeitem`，其中“销售，1 个指标”；聚焦后按 Enter，`aria-selected` 变为 `true`，并显示指标“收入”。截图 `/tmp/mateclaw-cdp-metric-tree-keyboard-pass.png`。
 
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
