@@ -2,7 +2,7 @@
   <div class="dashboard-panel" style="width: 100%; max-width: none; box-sizing: border-box;">
     <div class="right-header" style="width: 100%;">
       <span class="right-title">{{ t('dashboard.previewTitle') }}</span>
-      <button class="right-collapse-btn" @click="emit('collapse')" title="折叠右栏">▶</button>
+      <button class="right-collapse-btn" @click="emit('collapse')" title="折叠右栏" aria-label="折叠右栏">▶</button>
     </div>
 
     <div class="tabs" style="width: 100%;">

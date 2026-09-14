@@ -1070,3 +1070,8 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 进入数据集编辑/预览页后发现“ 不限显示行数 ”复选框没有可访问名称。
 - 已补充 `aria-label="不限显示行数"`；定向 `DatasetEdit.spec.ts` 为 `14 passed`，生产构建成功。
 - Chrome CDP 现场确认复选框名称为“ 不限显示行数 ”，页面可见无名控件数为 `0`；截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。
+
+### 2026-09-15 问数图表与运行时操作语义补齐
+
+- 对问数运行时中图表全屏、图表灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠等图标操作补充可访问名称；附件名称动态包含文件名，避免多个移除按钮无法区分。
+- UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 问数入口现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。

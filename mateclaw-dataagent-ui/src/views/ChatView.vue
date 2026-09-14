@@ -416,7 +416,7 @@
             <div v-else-if="card.type === 'chart'" class="chart-box">
               <div class="chart-title">{{ (card.data as ChartCardData).title }}</div>
               <div :ref="(el) => setChartRef(el as HTMLElement, index, cardIdx)" class="mid-chart"></div>
-              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
+              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" :aria-label="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
               </button>
             </div>
@@ -425,7 +425,7 @@
             <div v-else-if="card.type === 'echarts'" class="echarts-box">
               <div v-if="(card.data as EChartsOptionData).title" class="echarts-title">{{ (card.data as EChartsOptionData).title }}</div>
               <div :ref="(el) => setEChartsRef(el as HTMLElement, index, cardIdx)" class="echarts-chart"></div>
-              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
+              <button class="chart-zoom-hint" type="button" :title="t('chat.fullscreen')" :aria-label="t('chat.fullscreen')" @click="openChartLightbox(index, cardIdx)">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
               </button>
             </div>
@@ -589,7 +589,7 @@
           </span>
           <span class="new-conversation-hint__text">{{ t('chat.newConversationHint', { count: NEW_CONVERSATION_HINT_THRESHOLD }) }}</span>
           <button class="new-conversation-hint__action" type="button" @click="handleNewConversationHintAction">{{ t('chat.newConversationHintAction') }}</button>
-          <button class="new-conversation-hint__close" type="button" :title="t('chat.close')" @click="chatStore.newConversationHintDismissed = true">
+          <button class="new-conversation-hint__close" type="button" :title="t('chat.close')" :aria-label="t('chat.close')" @click="chatStore.newConversationHintDismissed = true">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -604,7 +604,7 @@
             <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
           </span>
           <span class="attachment-tag__name">{{ att.fileName }}</span>
-          <button class="attachment-tag__remove" type="button" @click="removeAttachment(idx)">×</button>
+          <button class="attachment-tag__remove" type="button" :aria-label="`移除附件 ${att.fileName}`" @click="removeAttachment(idx)">×</button>
         </div>
       </div>
       <div class="input-bar__card">
@@ -855,7 +855,7 @@
           <div class="chart-lightbox-card" role="dialog" aria-modal="true">
             <div class="chart-lightbox-header">
               <span class="chart-lightbox-title">{{ chartLightboxTitle }}</span>
-              <button class="chart-lightbox-close" type="button" :title="t('chat.close')" @click="closeChartLightbox">
+              <button class="chart-lightbox-close" type="button" :title="t('chat.close')" :aria-label="t('chat.close')" @click="closeChartLightbox">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
