@@ -529,6 +529,8 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 验证：四主题预览 E2E 修复前失败（固定 `#c9cdd4`），修复后通过；UI 单测 `37 passed`，生产构建成功，完整本地模拟 E2E `14 passed`。
 - 本轮未宣称所有页面颜色已收敛；数据集表格之外的其他历史页面仍需专项审计。
 
+- 最新提交 `df0aef3d941ad79885d0c3e28dbe58a453429a46` 的 Chrome CDP 现场复验进入真实文件数据集预览页并切换 dark 主题：工具栏和预览容器背景均为 `rgb(22, 27, 38)`，结果空态文字为 `rgb(195, 204, 217)`；截图 `/tmp/mateclaw-cdp-dataset-table-dark-df0aef3d.png`。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。
