@@ -845,3 +845,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 使用同一轮本地模拟 Compose、工作区 `1`、现有 JWT、`MATECLAW_E2E_ALOUDATA_MODE=simulation` 和 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`，从同一 state 文件导出全部 Dashboard ID。
 - 执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `25 passed (1.4m)`、无跳过；新增帮助中心图标语义用例已纳入矩阵。
 - 本结果覆盖双源快照、API+文件、ObjectRef、ECharts、旧 Schema、错误/取消/超时/资源限制、主题、数据集入口、模型选择器、顶部导航、帮助中心和页面 Tab 语义；真实 Aloudata 结果授权仍保持外部 Gate。
+
+### 2026-09-15 主入口 AX 名称复核
+
+- 使用 Google Chrome CDP `9222` 依次打开 `smart-ask`、`insight`、`report`、`config`、`help` 五个主入口，读取 `Accessibility.getFullAXTree`。
+- 对 `button`、`link`、`tab`、`textbox`、`combobox` 节点检查名称，五页均为 `emptyAXName=0`。该结果比仅读取 DOM placeholder 更准确；placeholder 或关联 label 不应被误判为无名称。
+- 该证据关闭当前主入口控件名称风险，但不替代全站键盘顺序、非 Chrome 原生控件和跨浏览器专项审计。
