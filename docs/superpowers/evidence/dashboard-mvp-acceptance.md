@@ -1028,3 +1028,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 使用本地模拟 Compose、正确 JWT/工作区 `1`、Chrome channel 和复用的 seed Dashboard ID 重跑 `dashboard-multi-source.spec.ts`，4 条用例全部 `4 passed (15.8s)`。
 - JDBC + 模拟 Aloudata 场景实际渲染 5 行并包含 `120.5`；API+文件、ObjectRef 大结果和 ECharts 绑定同步通过。快照使用 `maxDiffPixelRatio=0.02` 后通过，业务断言未放宽。
 - Google Chrome CDP `9222` 打开同一双源仪表盘编辑器，点击“最终结果预览”，DOM 结果表可见 5 行且包含 `120.5`；截图：`/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
+
+**聚合本地门禁复验（同日）：** `bash scripts/verify-dashboard-design.sh` 通过（`DESIGN-PASS`）；`make dashboard-verify-local` 未完成，失败发生在本地模拟前置检查启动 MinIO 时，端口 `19000` 已被长期运行的 E2E MinIO 容器占用，WireMock 端口同样存在冲突。该结果标记为 `ENV-BLOCKED`，不覆盖已通过的 UI 单测、生产构建、26 条入口 E2E 和 4 条双源 E2E；需先停止或改用隔离端口后重跑聚合门禁。

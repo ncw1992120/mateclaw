@@ -339,3 +339,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **全量入口 E2E 复验状态更正（2026-09-15）：** 根因是配置中心分类已使用 `role=tab`，但 4 个 E2E 仍按 `button` 查找；另一次手工命令包含错误 JWT 转义。修正选择器并注入正确认证上下文后，入口文件全量 `26 passed (57.1s)`，未跳过，原 `NOT_RUN/环境挂起` 记录仅保留为历史诊断。
 
 **2026-09-15 双源运行时最终复验：** `dashboard-multi-source.spec.ts` 在本地模拟 Compose/Chrome channel 下 `4 passed (15.8s)`；JDBC+模拟 Aloudata 实际 5 行且含 `120.5`，API+文件、ObjectRef、ECharts 同步通过。Chrome CDP 最终结果预览已复验，截图 `/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
+
+**聚合门禁环境状态（2026-09-15）：** 设计门禁 `DESIGN-PASS`；`make dashboard-verify-local` 在启动本地模拟 MinIO 时因 `19000`（同时 WireMock 默认端口）被长期 E2E 容器占用而 `ENV-BLOCKED`。该环境冲突不影响本子计划已通过的入口/双源定向 E2E，隔离端口或停止冲突容器后补跑。
