@@ -562,3 +562,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 修复：移除说明文案内联颜色，将步骤条、白名单、复选框、开关、取消/测试/确定按钮统一映射到 `--theme-*` 和 `--main-orange`；不改变连接参数或提交逻辑。
 - 验证：扩展 `数据源配置表单基础容器随主题使用主题令牌` 覆盖输入、白名单、操作按钮和步骤条，真实 Chrome channel 四主题定向用例通过；双源定向 E2E `4 passed`，UI 单测 `37 passed`，生产构建成功。
 - Chrome CDP dark 主题下滚动至表单下半区现场检查通过，截图：`/tmp/mateclaw-cdp-datasource-form-dark-lower-final.png`。
+
+## 2026-09-14 数据集列表主题现场审查
+
+- 使用 Google Chrome CDP `9222` 打开 `/datasets` 并切换 dark 主题，检查标题、说明、数据集卡片、状态标签和操作按钮。
+- 当前可见区域未发现白底/黑字残留，卡片、边框、次要文本和主操作色与 dark 主题一致；截图：`/tmp/mateclaw-cdp-dataset-list-dark-audit.png`。
+- 该审查覆盖当前数据集列表主路径；其他历史页面仍需独立主题专项。
