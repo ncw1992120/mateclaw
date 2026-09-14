@@ -461,3 +461,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 - 创建数据集后不再无条件调用只支持旧 JDBC 表落库的 `/sync`；五种来源统一调用 Descriptor/Preview Adapter，避免 FILE、HTTP/API、Aloudata 和 JDBC SQL 创建后停在配置态。
 - 修复中曾遗漏默认列宽常量，导致统一预览异常被捕获；补齐 `DEFAULT_COLUMN_WIDTH` 后真实文件创建链路恢复通过。
+
+## 2026-09-14 当前提交 Chrome CDP 视觉复验
+
+- 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
+- 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
+- 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

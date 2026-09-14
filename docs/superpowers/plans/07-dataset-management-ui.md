@@ -153,6 +153,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 2026-09-14 已使用系统 Chrome channel 和真实 DataAgent 执行该用例，结果 `2 passed`；创建后的文件预览实际显示 CSV 行数据（含 `120.5`、`east`）。
 
+当前提交的 CDP 视觉复验已选择模拟 Aloudata 数据源，确认来源类型自动切换为指标视图且 JDBC 表/SQL 选项不可选；截图见 `/tmp/mateclaw-cdp-aloudata-compatibility.png`。
+
 #### VIS-UI02 问题复现
 
 1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。
