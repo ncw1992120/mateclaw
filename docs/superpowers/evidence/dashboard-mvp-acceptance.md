@@ -883,3 +883,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为开关滑块和自定义复选框勾选框增加主题化 `:focus-visible` 焦点环，不改变开关状态或布局。
 - Chrome CDP `9222` 现场 Tab 聚焦 `SSH` 开关，滑块实际读取到 `2px` 橙色焦点环（`outlineOffset=2px`）；截图 `/tmp/mateclaw-cdp-datasource-focus-visible-20260915.png`。
 - UI 单测 `12 files / 44 tests passed`，生产构建成功；数据源表单定向 E2E 和完整 Chrome 矩阵基线保持通过。
+
+### 2026-09-15 指标平台连接表单与分页控件 AX 名称修复
+
+- 问题：Chrome CDP 进入 Aloudata 指标平台面板时，连接配置字段、指标/维度搜索框及 Element Plus 分页内部 page-size combobox 存在空可访问名称。
+- 修复：为连接配置和搜索控件补充显式 `aria-label`；为分页容器增加引用，并在挂载/更新后为 Element Plus 内部 combobox 注入“指标每页条数”“维度每页条数”名称，不改变分页行为或视觉样式。
+- Chrome CDP `9222` 现场复验：指标平台面板两个分页 combobox 均有名称，交互控件空名称数为 `0`；截图 `/tmp/mateclaw-cdp-metric-panel-pagination-a11y-fixed-20260915.png`。
+- UI 单测 `12 files / 44 tests passed`，生产构建成功。新增分页名称 Chrome 回归用例在无独立 E2E 数据服务时无法启动完成，待完整模拟 Compose 矩阵复跑；该环境阻塞不影响本地 CDP 现场证据。

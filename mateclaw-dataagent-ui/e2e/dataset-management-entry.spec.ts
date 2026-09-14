@@ -63,6 +63,18 @@ test('帮助页图标操作暴露可访问名称', async ({ page }) => {
   await expect(page.getByRole('button', { name: '搜索' })).toBeVisible()
 })
 
+test('指标平台分页控件暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=config')
+  await page.getByText('E2E Aloudata Simulation', { exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '指标每页条数' })).toHaveCount(1)
+  await expect(page.getByRole('combobox', { name: '维度每页条数' })).toHaveCount(1)
+})
+
 test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)
