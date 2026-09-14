@@ -118,6 +118,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-14 键盘可访问性修复：** 组件库条目原先仅支持拖拽，键盘用户无法添加组件；现为每个条目补充 `role="button"`、`tabindex="0"` 和可访问名称，并支持 Enter/Space 直接添加。数据集配置中的 JDBC 表列表原先仅支持鼠标点击，现补充 `role="checkbox"`、`tabindex="0"`、`aria-checked` 和 Enter/Space 切换。新增 `ComponentPalette.spec.ts` 与 `DatasetEdit.spec.ts` 回归测试，UI 全量为 `10 files / 38 tests passed`；Chrome CDP 已确认新建/编辑入口可见，表项行为由单测覆盖。
 
+**2026-09-14 空表目录闭环修复：** JDBC 数据源尚未完成 Schema 探测时，页面原先只显示空态，用户无法知道如何继续。现增加“刷新表目录”入口，调用 `schema-discovery` 后重新加载表列表，并在失败时显示可理解的错误提示；`DatasetEdit.spec.ts` 新增回归。Chrome CDP 在模拟 JDBC 数据源返回 102 张表后确认表项可见，Enter/Space 实际切换 `aria-checked`。
+
 **2026-09-14 键盘审计补充：** Chrome CDP 对 `/datasets/new` 和双源编辑器的所有当前可聚焦 `button/input/select/textarea/[tabindex]` 控件执行名称检查，结果分别为 `5/5`、`52/52` 均存在文本、`aria-label`、`title` 或 `id`。这关闭了本地模拟范围内“无名称控件”缺口；四主题对比度仍需设计专项工具验证。
 
 - MGMT-C01～MGMT-UI05 全部通过且无跳过，UI production build 成功。

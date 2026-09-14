@@ -593,3 +593,7 @@ Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`�
 JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可访问名称，Enter/Space 均可切换选择；`DatasetEdit.spec.ts` 覆盖初始、Enter、Space 三种状态。Chrome CDP 打开 `/datasets/new` 和现有 JDBC 数据集编辑页，入口与配置表单可见；当前模拟数据源未返回表目录，未伪造表项视觉 PASS。
 
 当前提交 `be44efaaee4be6fb42e5868613dafcbc00e1cb74` 的 Chrome CDP 复验截图为 `/tmp/mateclaw-cdp-dataset-edit-keyboard-be44efaa.png`，新建页标题“未命名”、6 个可交互控件可见，页面无空白布局。
+
+### 2026-09-14 JDBC 表目录与键盘操作复验
+
+修复空表目录缺少继续入口的问题：页面新增“刷新表目录”，调用 Schema 探测接口并重新加载目录；失败时保留空态并显示错误提示。Chrome CDP 模拟 JDBC 数据源返回 102 张表，首个表项实际暴露 `role=checkbox`、`tabindex=0`、`aria-checked=false`、`aria-label=选择数据表 dataagent_aloudata_category`，按 Enter/Space 后分别变为 `true/false`。截图：`/tmp/mateclaw-cdp-jdbc-table-keyboard-fc9cba23.png`。对应提交 `86e955b3efda466f42ec64b83d0166add0b408a0`。
