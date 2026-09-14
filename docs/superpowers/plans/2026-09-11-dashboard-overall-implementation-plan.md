@@ -295,6 +295,8 @@ make dashboard-verify-local
 
 **2026-09-14 组件属性面板可访问性修复：** 选中数据表格后，属性面板的组件标题、数据源、数据行数和绑定筛选器控件补齐 `aria-label`；修复前定向 E2E 失败，修复后通过。UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过，用户 Chrome CDP 现场四个名称可读，截图 `/tmp/mateclaw-cdp-property-a11y-fixed.png`。完整页面键盘遍历仍作为后续专项，不能由本条控件级证据替代。
 
+**2026-09-14 当前页面键盘遍历补充：** 用户 Chrome `9222` 对 `/datasets/new` 和 `/?nav=insight` 各执行最多 80 次 `Tab`，两页可见焦点控件均有名称（`missingCount=0`）。该结果收敛当前本地入口和编辑器的控件级风险，但不改变全站/跨浏览器键盘审计仍为 `PARTIAL` 的结论。
+
 **2026-09-14 脚本输入控件可访问性修复：** 修复脚本结果数据集输入两个 `el-select` 缺少可访问名称的问题；修复前定向 E2E 失败，修复后通过，Chrome CDP 现场确认“选择要接收脚本结果的组件”和“选择已授权数据集”两个 combobox 名称可读，截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。该修复仅收敛本地可访问性，不改变外部 Gate 状态。
 
 **2026-09-14 多页面 Tab 语义修复：** 预览页页面导航增加 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的系统 Chrome channel 回归与用户 Chrome CDP 验收通过。

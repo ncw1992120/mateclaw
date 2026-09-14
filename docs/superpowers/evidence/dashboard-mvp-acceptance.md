@@ -680,6 +680,12 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：扩展真实 Chrome channel 用例断言 `组件标题`、`数据源`、`数据行数`、`绑定筛选器`；修复前因“组件标题”名称缺失失败，修复后 `1 passed`。UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
 - Chrome CDP `9222` 现场拖入“数据表格”并读取属性面板，四个控件名称均可读；截图 `/tmp/mateclaw-cdp-property-a11y-fixed.png`。
 
+### 2026-09-14 当前页面键盘遍历补充
+
+- 范围：用户 Chrome `9222` 的 `/datasets/new` 和 `/?nav=insight` 两个真实页面；分别从页面起点执行最多 80 次 `Tab`，只统计可见、可聚焦且缺少名称的控件。
+- 结果：两页 `missingCount=0`，未发现新的无名焦点控件；洞察编辑器已覆盖选中数据表格后的属性面板。
+- 边界：该结果只关闭当前两页的控件级风险，不等同于全站所有历史页面、错误关联、焦点样式和跨浏览器原生控件的完整键盘审计；`FE-CLOSE-09` 的后续专项仍保留。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。
