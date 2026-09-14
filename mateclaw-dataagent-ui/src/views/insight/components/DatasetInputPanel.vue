@@ -5,6 +5,23 @@
         <h3>脚本结果数据集输入</h3>
         <p>这是独立于“直接指标绑定”的脚本模式；脚本通过别名调用 datasets.read。</p>
         <p class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
+        <div class="binding-target-selector">
+          <span>结果绑定组件</span>
+          <el-select
+            :model-value="targetComponentId"
+            clearable
+            filterable
+            placeholder="选择要接收脚本结果的组件"
+            @change="(value: string) => emit('update:target-component-id', value || '')"
+          >
+            <el-option
+              v-for="component in targetComponents"
+              :key="component.id"
+              :label="component.title || component.id"
+              :value="component.id"
+            />
+          </el-select>
+        </div>
       </div>
       <el-button size="small" type="primary" plain @click="addInput">添加</el-button>
     </div>
@@ -193,7 +210,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef } from '@/types'
+import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef, InsightComponent } from '@/types'
 import * as datasetApi from '@/api/dataset'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import {
@@ -208,11 +225,13 @@ const props = defineProps<{
   dashboardId?: string
   parameters?: DashboardScriptParameter[]
   targetComponentId?: string
+  targetComponents?: InsightComponent[]
 }>()
 const emit = defineEmits<{
   (e: 'update:inputs', value: DashboardDatasetInput[]): void
   (e: 'update:script', value: string): void
   (e: 'update:parameters', value: DashboardScriptParameter[]): void
+  (e: 'update:target-component-id', value: string): void
   (e: 'apply-result', value: Record<string, unknown>[]): void
 }>()
 
@@ -238,6 +257,7 @@ const executionColumns = computed(() => {
 })
 const parameterTypes: DashboardScriptParameter['type'][] = ['string', 'number', 'boolean', 'date', 'datetime', 'enum', 'date_range', 'string[]', 'number[]']
 const parameters = computed(() => props.parameters ?? [])
+const targetComponents = computed(() => (props.targetComponents ?? []).filter((component) => ['kpi', 'chart', 'table'].includes(component.type)))
 
 onMounted(async () => {
   try {

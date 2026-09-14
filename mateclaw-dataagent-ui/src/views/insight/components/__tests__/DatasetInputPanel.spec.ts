@@ -59,6 +59,15 @@ describe('DatasetInputPanel', () => {
     expect(wrapper.text()).not.toContain('自动执行脚本')
   })
 
+  it('exposes an explicit result binding target selector', () => {
+    const wrapper = mountPanel({
+      targetComponents: [{ id: 'table-1', type: 'table', title: '订单表', position: { x: 0, y: 0, w: 4, h: 3 } }],
+      targetComponentId: 'table-1',
+    })
+    expect(wrapper.text()).toContain('结果绑定组件')
+    expect(wrapper.text()).toContain('当前目标组件：table-1')
+  })
+
   it('blocks execution when script parameter definitions are invalid', async () => {
     const wrapper = mountPanel({
       dashboardId: 'dashboard-1',

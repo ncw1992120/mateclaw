@@ -199,10 +199,12 @@
             :inputs="schema.datasetInputs ?? []"
             :script="schema.script"
             :parameters="schema.parameters ?? []"
-            :target-component-id="selectedComponent?.id"
+            :target-component-id="scriptTargetComponentId"
+            :target-components="currentPageComponents"
             @update:inputs="schema.datasetInputs = $event"
             @update:script="schema.script = $event"
             @update:parameters="schema.parameters = $event"
+            @update:target-component-id="scriptTargetComponentId = $event"
             @apply-result="handleScriptResult"
           />
         </div>
@@ -339,6 +341,9 @@ const schema = reactive<InsightDashboardSchema>({
   scriptBindings: [],
 })
 
+/** 脚本结果的临时绑定目标；用户确认应用结果后写入 scriptBindings。 */
+const scriptTargetComponentId = ref('')
+
 /** 组件渲染数据映射（编辑模式自动预览） */
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
@@ -462,6 +467,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.parameters = migrated.parameters ?? []
       schema.executionPolicy = migrated.executionPolicy ?? {}
       schema.scriptBindings = migrated.scriptBindings ?? []
+      scriptTargetComponentId.value = schema.scriptBindings[0]?.componentId ?? ''
     } catch {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
       schema.pages = [{
@@ -475,6 +481,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.parameters = []
       schema.executionPolicy = {}
       schema.scriptBindings = []
+      scriptTargetComponentId.value = ''
     }
     // 默认选中第一个页面
     if (schema.pages.length > 0) {
@@ -550,6 +557,9 @@ function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w:
 /** 选中组件 */
 function handleSelectComponent(id: string): void {
   selectedComponentId.value = id
+  if (!scriptTargetComponentId.value) {
+    scriptTargetComponentId.value = id
+  }
 }
 
 /** 删除组件 */
@@ -595,7 +605,7 @@ function handlePreviewResult(data: InsightComponentData): void {
 
 /** 将用户确认的脚本结果应用到当前选中组件；未选中组件时只保留预览，不覆盖画布。 */
 function handleScriptResult(rows: Record<string, unknown>[]): void {
-  const component = selectedComponent.value
+  const component = currentPageComponents.value.find((item) => item.id === scriptTargetComponentId.value)
   if (!component) {
     ElMessage.warning('请先选择要应用结果的组件')
     return
