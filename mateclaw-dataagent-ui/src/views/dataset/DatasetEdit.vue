@@ -1221,7 +1221,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .dataset-edit-page {
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
+  color: var(--theme-text);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1232,8 +1233,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
@@ -1252,7 +1253,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   height: 32px;
   background: none;
   border: none;
-  color: #165dff;
+  color: var(--main-orange);
   font-size: 16px;
   cursor: pointer;
   border-radius: 4px;
@@ -1261,7 +1262,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .back-btn:hover {
-  background: #e8f3ff;
+  background: var(--theme-surface-hover);
 }
 
 .back-arrow {
@@ -1272,7 +1273,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .dataset-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -1296,7 +1297,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--theme-border-strong);
   font-family: inherit;
 }
 
@@ -1307,30 +1308,30 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .cancel-btn:hover {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .save-btn {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .save-btn:hover {
-  background: #0e42d2;
-  border-color: #0e42d2;
+  background: var(--dark-orange);
+  border-color: var(--dark-orange);
 }
 
 .finish-btn {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .finish-btn:hover {
-  background: #0e42d2;
-  border-color: #0e42d2;
+  background: var(--dark-orange);
+  border-color: var(--dark-orange);
 }
 
 .finish-btn:disabled,
@@ -1343,10 +1344,10 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   font-family: inherit;
@@ -1354,7 +1355,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .name-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .search-box {
@@ -1365,21 +1366,21 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 200px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   font-family: inherit;
 }
 
 .search-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .search-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .icon-btn {
@@ -1398,7 +1399,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .icon-btn:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .more-btn {
@@ -1422,9 +1423,9 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .left-panel {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -1446,7 +1447,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .panel-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 16px 0;
 }
 
@@ -1458,7 +1459,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin-bottom: 8px;
 }
 
@@ -1466,19 +1467,19 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
-  background: #fff;
+  background: var(--theme-surface);
   cursor: pointer;
   transition: border-color 0.2s;
   font-family: inherit;
 }
 
 .datasource-select:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .file-actions {
