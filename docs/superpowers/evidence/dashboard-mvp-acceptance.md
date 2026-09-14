@@ -871,3 +871,8 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：在 `datasetEdit` 中补齐中英文 `syncDataFail`，不改变刷新、重试或错误状态逻辑。
 - Chrome CDP `9222` 现场对关联数据源不存在的真实失败路径点击“刷新数据预览”，修复后显示“数据刷新失败: Request failed with status code 500”，不再出现 `datasetEdit.syncDataFail`；截图 `/tmp/mateclaw-cdp-dataset-refresh-error-i18n-20260915.png`。
 - UI 单测 `12 files / 44 tests passed`，生产构建成功。
+
+### 2026-09-15 主路由 i18n 引用复核
+
+- Chrome CDP 依次访问问数、洞察、报告、配置、帮助和新建数据集页面，监听浏览器控制台未发现缺失翻译、未定义文案或 i18n warning。
+- 静态核对 `DatasetEdit.vue` 的 52 个 `datasetEdit.*` 引用，均能在中英文 `datasetEdit` 命名空间找到对应键；本次数据集刷新失败文案修复后的 key 也已对齐。
