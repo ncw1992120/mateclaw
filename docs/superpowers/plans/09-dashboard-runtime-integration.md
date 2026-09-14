@@ -1,6 +1,6 @@
 # 仪表盘运行时集成 Implementation Plan
 
-> 2026-09-14 产品闭环审计：仪表盘组件仍使用旧数据源绑定，新脚本数据集输入作为侧栏下方的第二套模型存在，缺少清晰的数据模式、创建入口和绑定关系管理；现有 E2E 从 API seed 后开始，未覆盖正式前端创建链路。本计划的前端产品闭环状态应保持 `FAIL`。问题与复现步骤见下文“前端产品闭环缺口”。
+> 2026-09-14 状态更新：脚本结果数据集输入已明确独立模式、结果绑定组件和读取模板；正式数据集入口、文件创建/预览和返回链路已由真实 Chrome channel E2E 覆盖。本地模拟产品闭环为 `PASS`；真实 Aloudata 授权和正式对象存储仍是后续环境 Gate。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development, then execute this plan task-by-task.
 
