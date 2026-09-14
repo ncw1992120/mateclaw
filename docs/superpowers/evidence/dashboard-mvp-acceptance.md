@@ -442,3 +442,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 的 UI 全量回归为 `9 files / 35 tests passed`；production build、`git diff --check` 和 `bash scripts/verify-dashboard-design.sh`（`DESIGN-PASS`）均通过。
 - `dashboard-multi-source.spec.ts` 的历史快照差异 `1158 pixels (ratio 0.01)` 已在同一套本地模拟 E2E 环境中重新生成并以非更新模式复跑关闭；双源断言仍为 5 行并包含 `120.5`。
 - 本轮尝试恢复用户 Google Chrome CUA 两次，均返回 `Unable to load browser request-header policy`，没有把静态回归或非交互截图升级为新的交互视觉 PASS；CUA 服务恢复后需按当前提交重新采集截图和 AX 树。
+
+## 2026-09-14 数据源与来源类型兼容修复
+
+- 问题：数据集编辑器可以在 Aloudata 连接上选择 `JDBC_SQL`，形成后端无法读取的非法来源组合。
+- 修复：来源类型选项按当前连接类型禁用；选择连接时自动切换到兼容默认来源；保存前保留兼容性校验，非法组合不会提交。
+- 回归：`DatasetEdit.spec.ts` 覆盖 Aloudata + JDBC SQL 的禁用与保存保护；UI 全量为 `9 files / 36 tests passed`，production build 和 `DESIGN-PASS` 通过。

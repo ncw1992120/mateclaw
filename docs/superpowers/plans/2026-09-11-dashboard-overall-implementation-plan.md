@@ -245,6 +245,8 @@ make dashboard-verify-local
 
 **2026-09-14 提交后回归补充：** 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 已完成 UI 回归 `9 files / 35 tests passed`、production build、`git diff --check` 和 `DESIGN-PASS`。本轮未新增产品闭环状态，既有 `PARTIAL`、`NOT_RUN` 和真实 Aloudata `EXTERNAL-BLOCKED` 结论保持不变。Chrome CUA 重试仍返回 `Unable to load browser request-header policy`，因此不将本轮静态回归或非交互截图写成新的交互视觉 PASS；待 CUA 服务恢复后，按 VIS-UI01～VIS-UI08 补采当前提交证据。
 
+**2026-09-14 来源兼容约束补充：** 数据集编辑器新增数据源类型校验：Aloudata 连接仅允许指标视图来源，JDBC 连接才允许表/标准 SQL；切换连接时自动纠正不兼容的来源类型，非法组合无法保存。新增回归覆盖 Aloudata 上误选 JDBC SQL 的禁用和保存保护。该修复只收紧来源契约，不改变 HTTP/API、文件来源及旧 Schema 兼容路径。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。

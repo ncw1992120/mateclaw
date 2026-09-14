@@ -68,12 +68,13 @@
           <div class="section-block">
             <label class="section-label" for="dataset-source-type">来源类型</label>
             <select id="dataset-source-type" v-model="selectedSourceType" class="datasource-select" aria-label="选择数据集来源类型">
-              <option value="JDBC_TABLE">JDBC 表</option>
-              <option value="JDBC_SQL">JDBC SQL</option>
-              <option value="ALOUDATA_ANALYSIS_VIEW">Aloudata 指标视图</option>
+              <option value="JDBC_TABLE" :disabled="!isJdbcDatasource">JDBC 表</option>
+              <option value="JDBC_SQL" :disabled="!isJdbcDatasource">JDBC SQL</option>
+              <option value="ALOUDATA_ANALYSIS_VIEW" :disabled="!isAloudataDatasource">Aloudata 指标视图</option>
               <option value="HTTP_API">HTTP/API</option>
               <option value="FILE">文件</option>
             </select>
+            <div v-if="sourceTypeCompatibilityHint" class="definition-hint compatibility-hint">{{ sourceTypeCompatibilityHint }}</div>
           </div>
 
           <div v-if="selectedSourceType === 'JDBC_SQL'" class="section-block">
@@ -457,6 +458,20 @@ const fileUploading = ref(false)
 /** 数据源列表 */
 const datasourceList = ref<Array<{ id: string; name: string; sourceType?: string; connectionParams?: string }>>([])
 
+/** 数据源类型约束：未知类型按 JDBC 兼容处理，保留旧数据源响应兼容性。 */
+const selectedDatasourceType = computed(() => {
+  const sourceType = datasourceList.value.find(ds => ds.id === selectedDatasource.value)?.sourceType
+  return String(sourceType || '').trim().toLowerCase()
+})
+const isAloudataDatasource = computed(() => selectedDatasourceType.value === 'aloudata')
+const isJdbcDatasource = computed(() => !isAloudataDatasource.value)
+const sourceTypeCompatibilityHint = computed(() => {
+  if (!selectedDatasource.value) return ''
+  if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) return '当前数据源不是 Aloudata，不能选择指标视图。'
+  if ((selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) return '当前数据源不是 JDBC，不能选择表或编写 SQL。'
+  return ''
+})
+
 const registeredApiDefinitions = computed(() => {
   const datasource = datasourceList.value.find(ds => ds.id === selectedDatasource.value)
   if (!datasource?.connectionParams) return []
@@ -557,6 +572,7 @@ const primaryKeyFields = computed(() => {
 /** 是否可以完成（已选择数据源和至少一张表且输入了名称） */
 const canSave = computed(() => {
   if (!datasetName.value.trim()) return false
+  if (sourceTypeCompatibilityHint.value) return false
   if (selectedSourceType.value === 'JDBC_SQL') return !!selectedDatasource.value && !!sourceSql.value.trim()
   if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') return !!selectedDatasource.value && !!analysisViewId.value
   if (selectedSourceType.value === 'HTTP_API') return !!selectedDatasource.value && !!apiDefinitionId.value.trim()
@@ -663,6 +679,8 @@ onMounted(async () => {
 })
 
 watch(selectedDatasource, async (newDsId) => {
+  if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) selectedSourceType.value = 'JDBC_TABLE'
+  if (newDsId && (selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) selectedSourceType.value = 'ALOUDATA_ANALYSIS_VIEW'
   if (newDsId && selectedSourceType.value === 'JDBC_TABLE') {
     await loadTables(newDsId)
   } else if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') {

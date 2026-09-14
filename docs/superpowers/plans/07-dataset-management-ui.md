@@ -145,6 +145,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **提交后回归补充（2026-09-14）：** 提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 上 UI 全量为 `9 files / 35 tests passed`，production build 与设计门禁均通过。该结果只证明自动化回归，不替代 CUA 交互截图；当前 CUA 请求头策略错误仍待服务恢复。
 
+**来源兼容约束补充（2026-09-14）：** 数据源选择与数据集来源类型已建立前端兼容校验：Aloudata 只显示/允许指标视图，JDBC 才允许 JDBC 表和 JDBC SQL；切换数据源时自动回到兼容来源，保存前再次阻断非法组合。`DatasetEdit.spec.ts` 新增 Aloudata + JDBC SQL 回归，UI 全量回归更新为 `9 files / 36 tests passed`。
+
 #### VIS-UI02 问题复现
 
 1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。

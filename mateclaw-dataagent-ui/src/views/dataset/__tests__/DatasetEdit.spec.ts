@@ -34,9 +34,10 @@ const i18n = createI18n({
   fallbackWarn: false,
 })
 
-async function mountEditor() {
+async function mountEditor(datasources = [{ id: '1', name: 'Orders JDBC', connectionParams: JSON.stringify({ apiDefinitions: { orders: { name: '订单 API' } } }) }]) {
   uploadFileMock.mockClear()
-  datasourceListMock.mockResolvedValue([{ id: '1', name: 'Orders JDBC', connectionParams: JSON.stringify({ apiDefinitions: { orders: { name: '订单 API' } } }) }])
+  createDatasetMock.mockClear()
+  datasourceListMock.mockResolvedValue(datasources)
   listTablesMock.mockResolvedValue([])
   listAnalysisViewsMock.mockResolvedValue([])
   createDatasetMock.mockResolvedValue({ id: 'dataset-1' })
@@ -160,9 +161,9 @@ describe('DatasetEdit source configuration', () => {
   })
 
   it('persists Aloudata sources by the selected read-only analysis view', async () => {
-    const wrapper = await mountEditor()
+    const wrapper = await mountEditor([{ id: '1', name: 'Metrics Aloudata', sourceType: 'aloudata' }])
     const selects = wrapper.findAll('select')
-    listAnalysisViewsMock.mockResolvedValueOnce([
+    listAnalysisViewsMock.mockResolvedValue([
       { viewName: 'local_sales_view', displayName: '本地销售视图' },
     ])
     await selects[0].setValue('1')
@@ -184,5 +185,17 @@ describe('DatasetEdit source configuration', () => {
         analysisViewId: 'local_sales_view',
       },
     }))
+  })
+
+  it('prevents JDBC source definitions from being saved against an Aloudata connection', async () => {
+    const wrapper = await mountEditor([{ id: '60', name: 'Metrics Aloudata', sourceType: 'aloudata' }])
+    const selects = wrapper.findAll('select')
+    await selects[0].setValue('60')
+    await selects[1].setValue('JDBC_SQL')
+    await wrapper.find('input.name-input').setValue('Invalid source')
+
+    expect(selects[1].find('option[value="JDBC_SQL"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button.finish-btn').attributes('disabled')).toBeDefined()
+    expect(createDatasetMock).not.toHaveBeenCalled()
   })
 })
