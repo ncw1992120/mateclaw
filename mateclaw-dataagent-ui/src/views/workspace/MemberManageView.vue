@@ -14,7 +14,6 @@
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="members" class="mc-table">
       <!-- 工具栏：关键词搜索（用户名/昵称，防抖） + 角色过滤，共同操纵当前分页视图 -->
       <div class="member-toolbar">
         <el-input
@@ -50,8 +49,8 @@
         <el-table-column v-if="canManage" :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
-                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleChangeRole(row, 'admin')">
+              <el-dropdown trigger="click" size="small" :disabled="row.role === 'owner'" @command="(role: string) => handleChangeRole(row, role)">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.role === 'owner' }">
                   <Edit />
                 </el-icon>
                 <template #dropdown>
@@ -300,6 +299,9 @@ async function handleChangeRole(row: WorkspaceMember, role: string): Promise<voi
 }
 
 async function handleRemove(row: WorkspaceMember): Promise<void> {
+  if (row.role === 'owner') {
+    return
+  }
   try {
     await ElMessageBox.confirm(
       t('memberManage.removeConfirm', { name: row.username }),
