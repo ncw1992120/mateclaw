@@ -639,3 +639,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：增加成功/警告状态主题令牌；暗色主题使用不透明深色底（成功 `#163b2a`、警告 `#3a2a1b`），确保真实渲染与自动化计算一致。
 - 回归：新增 `洞察列表状态标签在四主题下满足对比度`，覆盖成功和草稿两种标签及四主题；系统 Chrome channel `1 passed (3.2s)`。
 - Chrome CDP `9222` 现场打开 `/?nav=insight`，实际显示 9 个看板；暗色草稿标签对比度 `8.24:1`。截图：`/tmp/mateclaw-cdp-insight-list-status-dark-fixed.png`。
+- 同步修复卡片“撤回/删除”操作按钮的固定橙/红颜色；删除按钮浅色卡片上的原始对比度仅 `3.76:1`，现改用主题语义令牌。四主题回归同时覆盖状态标签和这两类操作按钮，结果仍为 `1 passed`。

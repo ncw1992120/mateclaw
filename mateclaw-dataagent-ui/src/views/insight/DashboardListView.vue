@@ -1227,20 +1227,20 @@ function handleBackToList(): void {
 }
 
 .card-action-btn.action-unpublish {
-  color: #d97706;
+  color: var(--db-action-warning-fg);
 }
 
 .card-action-btn.action-unpublish:hover {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.06);
+  color: var(--db-action-warning-fg);
+  background: color-mix(in srgb, var(--db-action-warning-fg) 8%, transparent);
 }
 
 .card-action-btn.action-delete {
-  color: #ef4444;
+  color: var(--db-action-danger-fg);
 }
 
 .card-action-btn.action-delete:hover {
-  color: #dc2626;
+  color: var(--db-action-danger-fg);
   background: var(--db-danger-bg);
 }
 </style>

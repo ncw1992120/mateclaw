@@ -49,6 +49,15 @@ test('洞察列表状态标签在四主题下满足对比度', async ({ page }) 
       const backgroundLum = luminance(background)
       return (Math.max(foregroundLum, backgroundLum) + 0.05) / (Math.min(foregroundLum, backgroundLum) + 0.05)
     }
+    const effectiveBackground = (element: HTMLElement): string => {
+      let current: HTMLElement | null = element
+      while (current) {
+        const background = getComputedStyle(current).backgroundColor
+        if (background !== 'rgba(0, 0, 0, 0)') return background
+        current = current.parentElement
+      }
+      return getComputedStyle(document.documentElement).backgroundColor
+    }
     const result = [] as Array<{ theme: string; ratios: number[] }>
     for (const theme of themes) {
       document.documentElement.setAttribute('data-theme', theme)
@@ -63,14 +72,26 @@ test('洞察列表状态标签在四主题下满足对比度', async ({ page }) 
         document.body.append(element)
         return element
       })
+      const actionTemplate = document.querySelector<HTMLElement>('.card-action-btn')
+      if (!actionTemplate) throw new Error('缺少卡片操作按钮样本')
+      const actionHost = document.querySelector<HTMLElement>('.dashboard-card')
+      if (!actionHost) throw new Error('缺少仪表盘卡片样本')
+      const actions = ['action-unpublish', 'action-delete'].map(action => {
+        const element = actionTemplate.cloneNode(true) as HTMLElement
+        element.classList.add(action)
+        element.textContent = action
+        actionHost.append(element)
+        return element
+      })
       result.push({
         theme,
-        ratios: synthetic.map(element => {
+        ratios: [...synthetic, ...actions].map(element => {
           const style = getComputedStyle(element)
-          return contrast(style.color, style.backgroundColor)
+          return contrast(style.color, effectiveBackground(element))
         }),
       })
       synthetic.forEach(element => element.remove())
+      actions.forEach(element => element.remove())
     }
     return result
   })
