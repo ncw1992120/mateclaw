@@ -692,6 +692,12 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为按钮增加 `aria-label="新增页面"`，保留原有点击行为和视觉符号。
 - 回归：`仪表盘页面树更多操作按钮暴露可访问名称` 系统 Chrome channel `1 passed (4.8s)`；Chrome CDP `9222` 现场读取页面树按钮名称为“新增页面”和“页面操作”，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。
 
+### 2026-09-14 预览状态圆点异步加载时序修复
+
+- 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。
+- 修复：在读取颜色前显式等待 `.toolbar-status-dot` 可见，保留真实状态令牌断言。
+- 回归：修复后完整本地模拟矩阵 `22 passed (1.1m)`；Chrome CDP `9222` 当前洞察编辑器现场确认无可见无名控件（`unnamed=0`），页面树按钮名称仍为“新增页面”“页面操作”，截图 `/tmp/mateclaw-cdp-final-e2e.png`。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。

@@ -299,6 +299,8 @@ make dashboard-verify-local
 
 **2026-09-14 页面树新增按钮可访问性修复：** 页面树新增页面按钮从仅显示 `+` 改为保留符号并补充 `aria-label="新增页面"`；定向 Chrome E2E 和用户 Chrome CDP 均确认“新增页面”“页面操作”名称可读，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。该修复继续收敛本地入口可访问性，不替代全站审计。
 
+**2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
+
 **2026-09-14 脚本输入控件可访问性修复：** 修复脚本结果数据集输入两个 `el-select` 缺少可访问名称的问题；修复前定向 E2E 失败，修复后通过，Chrome CDP 现场确认“选择要接收脚本结果的组件”和“选择已授权数据集”两个 combobox 名称可读，截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。该修复仅收敛本地可访问性，不改变外部 Gate 状态。
 
 **2026-09-14 多页面 Tab 语义修复：** 预览页页面导航增加 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的系统 Chrome channel 回归与用户 Chrome CDP 验收通过。

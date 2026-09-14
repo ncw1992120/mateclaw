@@ -111,6 +111,7 @@ test('仪表盘预览状态圆点跟随主题状态令牌', async ({ page }) => 
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: '预览' }).click()
   await expect(page.locator('.dashboard-preview-view')).toBeVisible()
+  await expect(page.locator('.toolbar-status-dot')).toBeVisible()
   const colors = await page.evaluate(() => {
     document.documentElement.setAttribute('data-theme', 'dark')
     const dot = document.querySelector<HTMLElement>('.toolbar-status-dot')
