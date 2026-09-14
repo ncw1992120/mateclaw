@@ -198,6 +198,10 @@ npm --prefix mateclaw-dataagent-ui run build
 ### 2026-09-14 洞察列表筛选与视图切换状态语义
 
 状态筛选和网格/列表切换按钮新增动态 `aria-pressed`，真实点击切换回归通过；Chrome CDP 现场确认“草稿”和“列表视图”状态正确暴露，截图 `/tmp/mateclaw-cdp-insight-filter-aria-dark.png`。
+
+### 2026-09-14 AI 助手关闭按钮可访问名称
+
+AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrome channel 回归和 CDP 实际打开/关闭操作均通过，截图 `/tmp/mateclaw-cdp-ai-close-button.png`。
 ### FE-CLOSE-09 可访问性对比度（2026-09-14）
 
 - [x] 数据集列表辅助文字与状态标签改用主题语义令牌，不再使用固定颜色。

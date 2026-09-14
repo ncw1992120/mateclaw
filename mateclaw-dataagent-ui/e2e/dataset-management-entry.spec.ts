@@ -147,6 +147,20 @@ test('洞察列表筛选和视图切换暴露当前状态', async ({ page }) => 
   await expect(page.getByTitle('网格视图')).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('洞察 AI 助手关闭按钮暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  await expect(page.locator('.dashboard-card').first()).toBeVisible()
+  await page.getByRole('button', { name: /AI助手/ }).first().click()
+  await expect(page.getByRole('button', { name: '关闭 AI 助手' })).toBeVisible()
+  await page.getByRole('button', { name: '关闭 AI 助手' }).click()
+  await expect(page.getByRole('button', { name: '关闭 AI 助手' })).toHaveCount(0)
+})
+
 test('从产品入口创建文件数据集并进入预览', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

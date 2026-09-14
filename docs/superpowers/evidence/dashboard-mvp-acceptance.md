@@ -653,3 +653,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为三个状态筛选按钮和两个视图切换按钮增加动态 `aria-pressed`。
 - 回归：新增 `洞察列表筛选和视图切换暴露当前状态`，真实点击“草稿”和“列表视图”后断言状态切换，系统 Chrome channel `1 passed (4.7s)`。
 - Chrome CDP `9222` 现场确认点击前“全部9”为 `true`，点击后“草稿9”为 `true`、其余筛选为 `false`，列表视图为 `true`；暗色截图：`/tmp/mateclaw-cdp-insight-filter-aria-dark.png`。
+
+### 2026-09-14 洞察 AI 助手关闭按钮可访问名称
+
+- 问题：AI 助手面板关闭按钮只有图标，AX 按钮名称为空。
+- 修复：增加 `aria-label="关闭 AI 助手"`，不改变面板开关逻辑。
+- 回归：系统 Chrome channel 用例 `洞察 AI 助手关闭按钮暴露可访问名称` `1 passed (4.5s)`；Chrome CDP `9222` 现场按钮可按名称定位并点击关闭，截图 `/tmp/mateclaw-cdp-ai-close-button.png`。

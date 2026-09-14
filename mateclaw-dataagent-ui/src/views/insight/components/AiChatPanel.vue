@@ -10,7 +10,7 @@
           <span class="ai-chat-sub">{{ t('insight.aiPanelSub') }}</span>
         </div>
       </div>
-      <el-button class="ai-panel-close" text size="small" @click="$emit('close')">
+      <el-button class="ai-panel-close" text size="small" aria-label="关闭 AI 助手" @click="$emit('close')">
         <el-icon><Close /></el-icon>
       </el-button>
     </div>
