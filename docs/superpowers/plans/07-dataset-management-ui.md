@@ -159,6 +159,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **表格主题令牌补充（2026-09-14）：** 继续收敛数据集表格、字段大纲、分页和编辑态中的固定颜色，统一替换为主题 surface、border、text、muted 和主操作令牌。完整 UI 单测 `37 passed`、生产构建成功；本地模拟真实 E2E（含双源、错误/兼容、正式创建绑定和两项四主题检查）`14 passed`。
 
+**空态插画主题补充（2026-09-14）：** 空态 SVG 的卡片、占位线和勾选图标原先也使用固定浅色值；现已增加语义类并改用主题 surface、border 和主操作令牌。四主题真实 E2E 增加 SVG fill/stroke 校验，最新完整 E2E `14 passed`，仍保留其他历史页面专项审计为后续工作。
+
 服务端 `DatasetManageServiceImpl` 已增加同等校验，覆盖绕过 UI 直接提交创建/更新请求的场景；`DatasetCatalogServiceTest` 新增 JDBC/Aloudata 交叉绑定拒绝用例。
 
 另新增 `e2e/dataset-management-entry.spec.ts` 的文件数据集创建用例，覆盖上传、创建/同步和进入预览；首次执行因本地缺少 Playwright 浏览器二进制未运行，随后已切换系统 Chrome channel 完成执行。

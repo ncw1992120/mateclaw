@@ -531,6 +531,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 - 最新提交 `df0aef3d941ad79885d0c3e28dbe58a453429a46` 的 Chrome CDP 现场复验进入真实文件数据集预览页并切换 dark 主题：工具栏和预览容器背景均为 `rgb(22, 27, 38)`，结果空态文字为 `rgb(195, 204, 217)`；截图 `/tmp/mateclaw-cdp-dataset-table-dark-df0aef3d.png`。
 
+## 2026-09-14 数据集空态插画主题复验
+
+- 根因：新建数据集空态 SVG 的 `rect/circle/path` 直接写死 `fill`/`stroke`，主题切换时插画仍保持浅色。
+- 修复：为卡片、占位线、勾选圆和勾选线增加语义类，分别使用 `--theme-surface-hover`、`--theme-border-strong` 和 `--main-orange`。
+- 验证：四主题 E2E 额外检查 SVG 计算后的 fill/stroke；先复现“缺少 illustration card”失败，再补类和样式后通过。最新完整本地模拟 E2E `14 passed`。
+- Chrome CDP 最新 dark 主题截图：`/tmp/mateclaw-cdp-dataset-table-dark-df0aef3d.png`；空态卡片和勾选图标与 dark 背景区分清晰。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

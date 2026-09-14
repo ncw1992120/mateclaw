@@ -139,14 +139,23 @@ test('数据集空态随四种主题使用主题令牌', async ({ page }) => {
         theme,
         empty: read('.empty-state'),
         title: read('.empty-title'),
+        illustration: (() => {
+          const element = document.querySelector('.empty-illustration .illustration-card') as SVGElement | null
+          if (!element) throw new Error('missing illustration card')
+          return { fill: getComputedStyle(element).fill, stroke: getComputedStyle(element).stroke }
+        })(),
         expectedBackground: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
         expectedText: normalize(root.getPropertyValue('--theme-text').trim(), 'color'),
+        expectedIllustrationFill: normalize(root.getPropertyValue('--theme-surface-hover').trim(), 'backgroundColor'),
+        expectedIllustrationStroke: normalize(root.getPropertyValue('--theme-border-strong').trim(), 'color'),
       }
     })
   })
   for (const snapshot of snapshots) {
     expect(snapshot.empty.background, snapshot.theme).toBe(snapshot.expectedBackground)
     expect(snapshot.title.color, snapshot.theme).toBe(snapshot.expectedText)
+    expect(snapshot.illustration.fill, snapshot.theme).toBe(snapshot.expectedIllustrationFill)
+    expect(snapshot.illustration.stroke, snapshot.theme).toBe(snapshot.expectedIllustrationStroke)
   }
 })
 
