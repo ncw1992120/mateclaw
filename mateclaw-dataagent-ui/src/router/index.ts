@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '@/views/layout/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
+import DatasetListView from '@/views/dataset/DatasetListView.vue'
+import DatasetEditRoute from '@/views/dataset/DatasetEditRoute.vue'
 
 const router = createRouter({
   // 与 vite base（/dataagent/api/）保持一致：路由路径在部署基座下解析
@@ -15,6 +17,23 @@ const router = createRouter({
     {
       path: '/',
       component: MainLayout,
+    },
+    {
+      path: '/datasets',
+      name: 'dataset-list',
+      component: DatasetListView,
+    },
+    {
+      path: '/datasets/new',
+      name: 'dataset-create',
+      component: DatasetEditRoute,
+      props: { mode: 'config' },
+    },
+    {
+      path: '/datasets/:id/edit',
+      name: 'dataset-edit',
+      component: DatasetEditRoute,
+      props: (route) => ({ datasetId: route.params.id, mode: 'preview' }),
     },
   ],
 })

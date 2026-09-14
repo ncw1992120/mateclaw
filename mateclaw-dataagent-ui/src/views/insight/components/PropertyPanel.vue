@@ -50,6 +50,7 @@
 
       <!-- 数据绑定（kpi/chart/table 组件；筛选器与时间筛选无需数据源/指标） -->
       <template v-if="component.type !== 'filter' && component.type !== 'timeFilter'">
+        <div class="binding-mode-hint">当前面板配置的是“直接指标绑定”；需要 Python 预处理时，请在下方“脚本数据集输入”中选择已创建的数据集。</div>
         <!-- 多指标模式开关（仅 kpi 组件） -->
         <div v-if="component.type === 'kpi'" class="form-group">
           <label class="form-label">{{ t('insight.property.multiKpi') }}</label>
@@ -1456,4 +1457,6 @@ datasourceStore.fetchDatasources().catch(() => {
   border-radius: 6px;
   font-size: 12px;
 }
+
+.binding-mode-hint { margin-bottom: 12px; padding: 8px 10px; border-radius: 6px; color: var(--theme-text-muted); background: var(--theme-surface-hover); font-size: 12px; line-height: 1.5; }
 </style>

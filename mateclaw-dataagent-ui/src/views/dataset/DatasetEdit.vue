@@ -3,7 +3,7 @@
     <!-- 头部栏 -->
     <header class="edit-header">
       <div class="header-left">
-        <button class="back-btn" @click="handleBack">
+        <button class="back-btn" aria-label="返回数据集列表" title="返回数据集列表" @click="handleBack">
           <span class="back-arrow">&lt;</span>
         </button>
         <h1 class="dataset-title">{{ datasetName || t('datasetEdit.untitled') }}</h1>
@@ -29,7 +29,7 @@
               class="search-input"
             />
           </div>
-          <button class="icon-btn more-btn" @click="handleMore">⋯</button>
+          <button class="icon-btn more-btn" aria-label="更多操作" title="更多操作" @click="handleMore">⋯</button>
         </template>
       </div>
     </header>
@@ -92,35 +92,28 @@
 
           <div v-if="selectedSourceType === 'HTTP_API'" class="section-block">
             <label class="section-label">已登记 HTTP/API 定义</label>
-            <input v-model="apiDefinitionId" class="name-input" placeholder="输入已登记的 API 定义 ID" />
-            <div class="definition-hint">仅引用后端已登记的 API 定义，不支持在脚本或页面输入 URL。</div>
+            <select v-model="apiDefinitionId" class="datasource-select">
+              <option value="">选择已登记的 API 定义</option>
+              <option v-for="definition in registeredApiDefinitions" :key="definition.id" :value="definition.id">
+                {{ definition.name }}{{ definition.method || definition.path ? ` · ${definition.method || 'GET'} ${definition.path || ''}` : '' }}{{ definition.parameterCount ? ` · ${definition.parameterCount} 个参数` : '' }}
+              </option>
+            </select>
+            <div class="definition-hint">仅引用所选数据源已登记的 API 定义，不支持在脚本或页面输入 URL。</div>
+            <div v-if="selectedDatasource && registeredApiDefinitions.length === 0" class="empty-hint">当前数据源暂无已登记定义，请先在数据源管理中登记。</div>
           </div>
 
           <div v-if="selectedSourceType === 'FILE'" class="section-block">
             <label class="section-label">已上传文件对象</label>
-            <input v-model="fileObjectId" class="name-input" placeholder="输入已登记的对象 ID" />
+            <input v-model="fileObjectId" class="name-input" placeholder="上传后自动回填对象引用" readonly />
+            <input ref="fileInputRef" type="file" class="file-input" accept=".csv,.json,.parquet,.xlsx" @change="handleFileSelected" />
+            <button class="upload-file-btn" :disabled="fileUploading" @click="fileInputRef?.click()">{{ fileUploading ? '上传中…' : '选择并上传文件' }}</button>
+            <div class="definition-hint">文件会上传到受控对象存储，页面只保存对象引用，不接受本地路径或 URL。</div>
             <select v-model="fileFormat" class="datasource-select">
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
               <option value="parquet">Parquet</option>
               <option value="xlsx">XLSX</option>
             </select>
-          </div>
-
-          <!-- 上传文件区域 -->
-          <div v-if="selectedSourceType === 'JDBC_TABLE'" class="section-block">
-            <label class="section-label">{{ t('datasetEdit.uploadFile') }}</label>
-            <div class="file-actions">
-              <button class="file-action-btn" :title="t('datasetEdit.upload')" @click="handleUpload">
-                <span class="action-icon upload-icon">⬆️</span>
-              </button>
-              <button class="file-action-btn" :title="t('datasetEdit.download')" @click="handleDownload">
-                <span class="action-icon download-icon">⬇️</span>
-              </button>
-              <button class="file-action-btn" :title="t('datasetEdit.refresh')" @click="handleRefresh">
-                <span class="action-icon refresh-icon">🔄</span>
-              </button>
-            </div>
           </div>
 
           <!-- 表区域 -->
@@ -452,9 +445,29 @@ const analysisViewsLoading = ref(false)
 const apiDefinitionId = ref('')
 const fileObjectId = ref('')
 const fileFormat = ref('csv')
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const fileUploading = ref(false)
 
 /** 数据源列表 */
-const datasourceList = ref<Array<{ id: string; name: string; sourceType?: string }>>([])
+const datasourceList = ref<Array<{ id: string; name: string; sourceType?: string; connectionParams?: string }>>([])
+
+const registeredApiDefinitions = computed(() => {
+  const datasource = datasourceList.value.find(ds => ds.id === selectedDatasource.value)
+  if (!datasource?.connectionParams) return []
+  try {
+    const raw = JSON.parse(datasource.connectionParams).apiDefinitions
+    const normalize = (id: string, value: any) => ({
+      id,
+      name: String(value?.name || value?.displayName || value?.operationId || id),
+      method: value?.method || value?.httpMethod,
+      path: value?.path || value?.urlPath,
+      parameterCount: Array.isArray(value?.parameters) ? value.parameters.length : undefined,
+    })
+    if (Array.isArray(raw)) return raw.map((item: any) => normalize(String(item.id || item.apiDefinitionId || item.operationId), item)).filter((item: any) => item.id)
+    if (raw && typeof raw === 'object') return Object.entries(raw).map(([id, value]: [string, any]) => normalize(id, value))
+  } catch { /* 非 JSON 连接参数按无目录处理 */ }
+  return []
+})
 
 /** 选中数据源下的表列表 */
 const datasourceTables = ref<Array<{ id: string; tableName: string; tableComment?: string }>>([])
@@ -676,7 +689,7 @@ watch(dataCurrentPage, async () => {
 async function loadDatasources(): Promise<void> {
   try {
     const list = await datasourceApi.list()
-    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string; sourceType?: string }>
+    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string; sourceType?: string; connectionParams?: string }>
   } catch {
     datasourceList.value = []
   }
@@ -1072,10 +1085,34 @@ async function handleRefreshData(): Promise<void> {
   }
 }
 
-/** 刷新表列表 */
-function handleRefresh(): void {
-  if (selectedDatasource.value) {
-    loadTables(selectedDatasource.value)
+async function handleFileSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const extension = file.name.split('.').pop()?.toLowerCase() || ''
+  const supportedFormats = new Set(['csv', 'json', 'parquet', 'xlsx'])
+  if (!supportedFormats.has(extension)) {
+    ElMessage.error('仅支持 CSV、JSON、Parquet 或 XLSX 文件')
+    input.value = ''
+    return
+  }
+  const maxBytes = 50 * 1024 * 1024
+  if (file.size > maxBytes) {
+    ElMessage.error('文件大小不能超过 50MB')
+    input.value = ''
+    return
+  }
+  fileUploading.value = true
+  try {
+    const result = await datasetApi.uploadFile(file)
+    fileObjectId.value = result?.objectId || ''
+    fileFormat.value = extension
+    ElMessage.success('文件上传成功')
+  } catch {
+    ElMessage.error('文件上传失败')
+  } finally {
+    fileUploading.value = false
+    input.value = ''
   }
 }
 
@@ -1152,32 +1189,26 @@ function stopResize(): void {
   document.body.style.userSelect = ''
 }
 
-/** 上传文件 */
-function handleUpload(): void {}
-
-/** 下载文件 */
-function handleDownload(): void {}
-
 /** 了解如何配置 */
-function handleLearnMore(): void {}
+function handleLearnMore(): void { ElMessage.info('请先选择数据源和表，系统会在右侧展示可配置字段') }
 
 /** 来源表 */
-function handleSourceTable(): void {}
+function handleSourceTable(): void { ElMessage.info('来源表信息将在数据集详情中展示') }
 
 /** 新建计算字段 */
-function handleAddCalcField(): void {}
+function handleAddCalcField(): void { ElMessage.info('计算字段配置将在后续版本开放') }
 
 /** 新建分组依据 */
-function handleAddGroupBy(): void {}
+function handleAddGroupBy(): void { ElMessage.info('分组依据配置将在后续版本开放') }
 
 /** 聚合编辑器 */
-function handleAggregationEditor(): void {}
+function handleAggregationEditor(): void { ElMessage.info('聚合编辑器将在后续版本开放') }
 
 /** 字段设置 */
-function handleFieldSetting(): void {}
+function handleFieldSetting(): void { ElMessage.info('字段设置将在后续版本开放') }
 
 /** 更多操作 */
-function handleMore(): void {}
+function handleMore(): void { ElMessage.info('更多操作将在后续版本开放') }
 </script>
 
 <style scoped>
@@ -2095,6 +2126,10 @@ function handleMore(): void {}
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.file-input { display: none; }
+.upload-file-btn { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-hover); color: var(--theme-text); cursor: pointer; }
+.upload-file-btn:disabled { opacity: .6; cursor: wait; }
 
 .page-num {
   font-size: 12px;

@@ -79,3 +79,14 @@ export function updateFieldCategory(fieldId: string, fieldCategory: string) {
 export function syncData(datasetId: string) {
   return api.post<Dataset>(`${BASE_URL}/${datasetId}/sync`)
 }
+
+/** 上传文件并返回受控对象引用；文件内容不经过页面 JSON。 */
+export function uploadFile(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  return api.post<{ objectId: string; fileName?: string; format?: string }>(
+    '/dataagent/api/v1/dataset-files',
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+}

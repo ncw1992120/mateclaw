@@ -3,12 +3,26 @@
     <!-- 数据源配置表单页（直接打开，不再走选择页） -->
     <DatasourceForm
       v-if="showFormPage"
-      :source-id="60"
+      :source-id="selectedSourceTypeId"
       :edit-id="editingDsId"
       @back="handleBackFromForm"
       @cancel="handleBackFromForm"
       @submit="handleFormSubmit"
     />
+
+    <div v-else-if="showSourcePicker" class="source-picker-page">
+      <div class="source-picker-card">
+        <h1>选择数据源类型</h1>
+        <p>先选择连接类型，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。</p>
+        <div class="source-options">
+          <button v-for="source in sourceOptions" :key="source.id" class="source-option" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
+            <span class="source-option-icon">{{ source.icon }}</span>
+            <span><strong>{{ source.name }}</strong><small>{{ source.description }}</small></span>
+          </button>
+        </div>
+        <button class="source-picker-cancel" @click="showSourcePicker = false">取消</button>
+      </div>
+    </div>
 
     <template v-else>
       <!-- 顶部标题栏 + 新建数据源 -->
@@ -25,7 +39,7 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-else-if="!loading && metricPlatformList.length === 0" class="empty-section">
+      <div v-else-if="!loading && datasources.length === 0" class="empty-section">
         <div class="empty-icon-wrapper">
           <span class="empty-folder-icon">📁</span>
           <span class="empty-badge">📊</span>
@@ -42,7 +56,7 @@
         <aside class="ds-sidebar">
           <div class="ds-list-scroll">
             <div
-              v-for="ds in metricPlatformList"
+              v-for="ds in datasources"
               :key="ds.id"
               class="ds-list-item"
               :class="{ active: selectedDsId === ds.id, disabled: !ds.enabled }"
@@ -84,7 +98,7 @@
                   </div>
                 </div>
                 <div class="item-meta-row">
-                  <span class="item-type">{{ t('datasourcePage.typeMetricPlatform') }}</span>
+                  <span class="item-type">{{ displaySourceType(ds.sourceType) }}</span>
                   <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
                   <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
                     <span class="badge-dot"></span>
@@ -108,7 +122,7 @@
           <div v-if="selectedDs" class="detail-toolbar">
             <div class="toolbar-left">
               <span class="ds-name">{{ selectedDs.name }}</span>
-              <span class="ds-type-tag">{{ t('datasourcePage.typeMetricPlatform') }}</span>
+              <span class="ds-type-tag">{{ displaySourceType(selectedDs.sourceType) }}</span>
               <span class="ds-status" :class="selectedDs.enabled ? 'on' : 'off'">
                 {{ selectedDs.enabled ? t('datasourcePage.statusEnabled') : t('datasourcePage.statusDisabled') }}
               </span>
@@ -134,7 +148,7 @@
                 <span class="btn-text">{{ t('datasourcePage.actionTest') }}</span>
               </button>
               <button
-                v-if="canSyncMetadata"
+                v-if="canSyncMetadata && isAloudataDatasource"
                 class="toolbar-btn"
                 :disabled="syncing || debouncedSyncPending"
                 :title="t('metricPlatform.syncTrigger')"
@@ -161,9 +175,20 @@
 
           <div v-if="selectedDsId" class="detail-body">
             <MetricPlatformPanel
+              v-if="isAloudataDatasource"
               :datasource-id="selectedDsId"
               :refresh-key="panelRefreshKey"
             />
+            <div v-else class="generic-datasource-panel">
+              <h2>{{ selectedDs.name }}</h2>
+              <p>JDBC 数据源已接入，可在数据集配置中选择数据表或编写标准 SQL。</p>
+              <dl>
+                <dt>连接地址</dt><dd>{{ selectedDs.host || '未公开' }}{{ selectedDs.port ? `:${selectedDs.port}` : '' }}</dd>
+                <dt>数据库</dt><dd>{{ selectedDs.databaseName || '未配置' }}</dd>
+                <dt>元数据表数</dt><dd>{{ selectedDs.tableCount ?? 0 }}</dd>
+              </dl>
+              <button v-if="selectedDs.permission === 'edit'" class="generic-edit-btn" @click="handleEditDatasource(selectedDs)">编辑连接</button>
+            </div>
           </div>
           <div v-else class="detail-placeholder">
             <p>{{ t('datasourcePage.selectSource') }}</p>
@@ -237,6 +262,8 @@ const METRIC_PLATFORM_TYPES = new Set(['aloudata', 'metric_platform', 'metricpla
 
 /** 是否显示数据源配置表单页 */
 const showFormPage = ref(false)
+const showSourcePicker = ref(false)
+const selectedSourceTypeId = ref(3)
 /** 当前编辑的数据源ID（空字符串表示新建） */
 const editingDsId = ref('')
 const selectedDsId = ref('')
@@ -252,18 +279,13 @@ const accountStatusMap = ref<Map<string, DatasourceAccountVO>>(new Map())
 /** 当前用户是否可同步元数据（复用权限体系） */
 const canSyncMetadata = computed<boolean>(() => hasPermission(PERMISSION.DATASOURCE_SYNC))
 
-/** 仅展示指标平台数据源 */
-const metricPlatformList = computed<Datasource[]>(() => {
-  return datasources.value.filter((ds) => METRIC_PLATFORM_TYPES.has((ds.sourceType || '').toLowerCase()))
-})
-
 /** 当前选中的数据源对象 */
 const selectedDs = computed<Datasource | null>(() => {
-  return metricPlatformList.value.find((d) => d.id === selectedDsId.value) || null
+  return datasources.value.find((d) => d.id === selectedDsId.value) || null
 })
 
 /** 选中数据源后默认选中第一个 */
-watch(metricPlatformList, (list) => {
+watch(datasources, (list) => {
   if (list.length > 0 && !list.some((d) => d.id === selectedDsId.value)) {
     selectedDsId.value = list[0].id
   }
@@ -335,12 +357,39 @@ function resolveAccountBadge(dsId: string): { text: string; dotClass: string; te
 /** 跳转到新建数据源 */
 function handleCreateDatasource(): void {
   editingDsId.value = ''
+  showSourcePicker.value = true
+}
+
+function displaySourceType(sourceType?: string): string {
+  const value = (sourceType || '').toLowerCase()
+  if (METRIC_PLATFORM_TYPES.has(value)) return t('datasourcePage.typeMetricPlatform')
+  if (value === 'postgresql') return 'PostgreSQL'
+  if (value === 'sqlserver') return 'SQL Server'
+  return 'MySQL/JDBC'
+}
+
+function handleEditDatasource(ds: Datasource): void {
+  editingDsId.value = ds.id
+  showFormPage.value = true
+}
+
+const sourceOptions = [
+  { id: 3, name: 'MySQL', icon: '🐬', description: 'JDBC 关系型数据库' },
+  { id: 15, name: 'PostgreSQL', icon: '🐘', description: 'JDBC 关系型数据库' },
+  { id: 17, name: 'SQL Server', icon: '🔷', description: 'JDBC 关系型数据库' },
+  { id: 60, name: 'Aloudata', icon: '❎', description: '指标视图语义层' },
+]
+
+function selectSourceType(sourceId: number): void {
+  selectedSourceTypeId.value = sourceId
+  showSourcePicker.value = false
   showFormPage.value = true
 }
 
 /** 表单页返回列表 */
 function handleBackFromForm(): void {
   showFormPage.value = false
+  showSourcePicker.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -348,6 +397,7 @@ function handleBackFromForm(): void {
 /** 表单提交成功 */
 function handleFormSubmit(): void {
   showFormPage.value = false
+  showSourcePicker.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -649,6 +699,26 @@ async function handleTestAccountConnection(): Promise<void> {
   background: var(--theme-bg);
   overflow: hidden;
 }
+
+.source-picker-page { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; background: var(--theme-bg); }
+.source-picker-card { width: min(760px, 100%); padding: 32px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-surface); box-shadow: 0 8px 32px rgba(0,0,0,.06); }
+.source-picker-card h1 { margin: 0 0 8px; color: var(--theme-text); font-size: 24px; }
+.source-picker-card p { margin: 0 0 24px; color: var(--theme-text-muted); }
+.source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.source-option { display: flex; align-items: center; gap: 14px; padding: 16px; text-align: left; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-bg); color: var(--theme-text); cursor: pointer; }
+.source-option:hover { border-color: var(--main-orange); background: var(--theme-surface-hover); }
+.source-option-icon { font-size: 26px; }
+.source-option strong, .source-option small { display: block; }
+.source-option small { margin-top: 4px; color: var(--theme-text-muted); }
+.source-picker-cancel { margin-top: 20px; padding: 8px 16px; border: 1px solid var(--theme-border); border-radius: 8px; background: transparent; color: var(--theme-text); cursor: pointer; }
+.generic-datasource-panel { padding: 28px; color: var(--theme-text); }
+.generic-datasource-panel h2 { margin: 0 0 8px; font-size: 20px; }
+.generic-datasource-panel p { margin: 0 0 20px; color: var(--theme-text-muted); }
+.generic-datasource-panel dl { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 16px; max-width: 560px; }
+.generic-datasource-panel dt { color: var(--theme-text-muted); }
+.generic-datasource-panel dd { margin: 0; color: var(--theme-text); }
+.generic-edit-btn { margin-top: 20px; padding: 8px 14px; border: 1px solid var(--main-orange); border-radius: 8px; color: var(--main-orange); background: transparent; cursor: pointer; }
+@media (max-width: 640px) { .source-options { grid-template-columns: 1fr; } }
 
 .page-topbar {
   display: flex;

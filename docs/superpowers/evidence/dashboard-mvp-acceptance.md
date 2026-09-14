@@ -356,3 +356,70 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
    - 执行：设置 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID=1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation`、`MATECLAW_E2E_BROWSER_CHANNEL=chrome` 及 state 中的 9 个 Dashboard ID，然后运行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`。
    - 预期：9 个用例全部通过，`dashboard-jdbc-aloudata.png` 与仓库快照一致。
    - 修复与结果：保留严格截图断言，使用当前 UI 结构化输入预览、最小高度 Table 和双源结果重新生成快照；随后非更新模式执行得到 `9 passed`，双源功能断言仍得到 5 行和 `120.5`。该问题已关闭。
+
+## 2026-09-14 产品闭环修复补充
+
+- 数据集管理新增正式路由：`/datasets`、`/datasets/new`、`/datasets/:id/edit`；配置中心“数据配置”页新增“数据集管理”入口。
+- `DatasetListView` 已接入 `datasetApi.list()`，展示数据集名称、来源、行数和字段数，并提供新建及编辑/预览操作。
+- 自动化证据：新增 `DatasetListView.spec.ts`，UI 全量为 `9 files / 30 tests passed`；production build 成功；`verify-dashboard-design.sh` 输出 `DESIGN-PASS`。
+- 非交互浏览器补充验收：在本地 5175 端口使用 Chrome channel 和模拟 API，`/datasets` 页面可见“数据集”“新建数据集”“订单数据集”“编辑 / 预览”，并生成 `/tmp/mateclaw-datasets-route.png`。
+- CUA 当前仍返回 `Unable to load browser request-header policy`，因此本轮无法再次控制用户现有 Chrome 标签页；不以非交互截图替代该限制，待连接恢复后补做交互验收。
+
+## 2026-09-14 产品闭环继续实施补充
+
+- 数据源新建不再固定进入 Aloudata：`DatasourceView.vue` 增加来源选择页，支持 MySQL、PostgreSQL、SQL Server、Aloudata；选择后将对应 `sourceId` 传入既有连接表单。
+- 产品状态：数据集入口为已实现；数据源类型选择为已实现；数据源列表仍仅展示指标平台，HTTP/API 与文件对象登记及完整前端创建链路仍为未完成。
+- 当前工作树 UI 全量回归为 `9 files / 30 tests passed`，production build 成功，`git diff --check` 无输出，设计门禁保持 `DESIGN-PASS`。
+- CUA 重试仍失败：`Unable to load browser request-header policy`；本轮未改动用户 Chrome 标签页。此前生成的非交互页面截图仅作为补充证据。
+
+## 2026-09-14 文件数据集上传补充
+
+- `DatasetEdit.vue` 的文件来源改为隐藏原生文件控件 + “选择并上传文件”按钮，调用 `POST /dataagent/api/v1/dataset-files`，上传成功后自动回填受控 `objectId` 和格式。
+- 页面不再接受用户手填本地路径或对象 ID；后端 `DataAgentDatasetFileController` 负责工作区隔离和对象存储。
+- `DatasetEdit.spec.ts` 新增上传回填测试；当前 UI 全量为 `9 files / 31 tests passed`，production build 和设计门禁均通过。
+
+## 2026-09-14 HTTP/API 定义选择补充
+
+- HTTP/API 来源不再显示可自由编辑的内部 ID 输入框，改为读取所选数据源 `connectionParams.apiDefinitions` 的下拉目录；无定义时显示“请先在数据源管理中登记”。
+- 回归测试覆盖从登记目录选择 `orders` 定义并提交 `sourceDefinition.apiDefinitionId`；UI 全量保持 `9 files / 31 tests passed`，production build 与设计门禁通过。
+
+## 2026-09-14 仪表盘绑定心智补充
+
+- 属性面板明确标注“直接指标绑定”，脚本输入面板明确标注“脚本结果数据集输入”，并说明二者的使用边界。
+- 该调整先消除两套模型的隐式混淆，不改变现有兼容数据结构；统一保存和绑定结果展示仍列入后续 P0。
+- UI 全量回归保持 `9 files / 31 tests passed`，production build 与设计门禁通过。
+
+## 2026-09-14 Google Chrome CUA 视觉复验补充
+
+- CUA 已恢复并连接用户 Chrome 的 DataAgent 标签页 `http://127.0.0.1:5174/?nav=insight`。
+- 通过真实 Chrome AX 操作打开“配置 → 数据配置”：可见“数据集管理”入口、现有 Aloudata 数据源及连接管理页面。
+- 点击“新建数据源”后，真实 Chrome AX 树可见 MySQL、PostgreSQL、SQL Server、Aloudata 四个来源选项及说明，证明不再固定进入 Aloudata。
+- 点击“数据集管理”后，真实 Chrome 导航到 `http://127.0.0.1:5174/datasets`，页面可见“数据集”“新建数据集”和空状态提示。当前工作区无数据集，因此未继续进入编辑器上传流程。
+
+## 2026-09-14 空操作反馈补充
+
+- 数据集编辑器原先为空函数的“了解如何配置、来源表、计算字段、分组依据、聚合编辑器、字段设置、更多、下载”操作均改为明确的提示反馈；未开放能力不再静默无响应。
+- 该调整不伪造未实现功能，待后续补齐真实配置面板时再替换提示行为。
+- JDBC 表配置页中原先误放的空“上传/下载”工具组已移除；文件上传仅在 `FILE` 来源中出现，避免来源类型与操作不匹配。
+- 新增 `DatasetEditRoute.vue` 路由包装器，接收编辑器的 `back/saved` 事件并导航回 `/datasets`，避免独立路由下取消或保存后无导航。
+
+## 2026-09-14 DatasetEdit 路由闭环 Chrome 验收
+
+- 使用用户 Chrome CUA 从 `/datasets` 点击“新建数据集”，真实导航到 `/datasets/new`；AX 树可见“模型配置”、数据源选择、五种来源类型（含 HTTP/API、文件）及取消按钮。
+- 点击“取消”后真实返回 `/datasets`，AX 树再次显示数据集列表空状态；证明独立编辑路由的返回事件已接通。
+- 数据集列表新增“返回配置”按钮；在用户 Chrome 中点击后真实返回 `/?nav=config`，配置中心 AX 树可见“数据源”和“数据集管理”入口。
+
+## 2026-09-14 全量数据源页面复验
+
+- 当前用户 Chrome 配置页加载完成，Aloudata 数据源的指标/维度管理面板正常显示；页面未出现空白或脚本错误态。
+- 由于当前工作区实际仅返回一个 Aloudata 数据源，本轮无法在真实页面中展示 JDBC 条目；JDBC 通用详情分支已通过 UI build 和组件回归验证，待模拟数据源写入后补做现场截图。
+
+## 2026-09-14 HTTP/API 摘要视觉复验
+
+- 在用户 Chrome 中进入 `/datasets/new` 并选择“HTTP/API”，AX 树可见“已登记 HTTP/API 定义”下拉框及只读提示“仅引用所选数据源已登记的 API 定义，不支持在脚本或页面输入 URL”。
+- 当前工作区暂无登记定义，因此下拉仅显示空状态；method/path 摘要逻辑已由数据源 `connectionParams.apiDefinitions` 目录驱动，待注入模拟定义后可继续验收具体摘要文案。
+
+## 2026-09-14 脚本绑定目标可发现性复验
+
+- 在用户 Chrome 中打开真实仪表盘编辑器，AX 树可见“脚本结果数据集输入”及说明“当前未选择目标组件，执行结果不会覆盖画布”。
+- 该提示明确了脚本结果的绑定目标和未选择组件时的保护行为，补齐 FE-CLOSE-10 的可发现性部分；统一保存后的绑定结果展示仍待后续实现。

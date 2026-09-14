@@ -1,5 +1,7 @@
 # 通用洞察仪表盘总体 Implementation Plan
 
+> **2026-09-14 前端产品闭环更正：** 本地模拟数据和接口只替代外部依赖，不降低前端完成标准。当前 07/09 仍存在旧/新绑定模型割裂、文件上传与多个按钮为空实现、HTTP/API 手填内部 ID、主题样式未统一、E2E 绕过前端创建链路等问题；数据集正式入口和数据源新建类型选择已在本轮补齐，但总体计划仍不能表述为“前端页面已完整提供”。详细问题和复现步骤已直接记录到 [07 数据源与数据集管理入口](07-dataset-management-ui.md#前端产品闭环缺口2026-09-14) 和 [09 仪表盘运行时集成](09-dashboard-runtime-integration.md#前端产品闭环缺口2026-09-14)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在兼容现有 Aloudata 仪表盘和 Agent Python 的前提下，交付 JDBC、Aloudata 指标视图、HTTP/API、文件数据源与 Python 多源预处理闭环。
@@ -11,6 +13,18 @@
 **Spec:** `docs/策略解读/design.md`、`docs/superpowers/specs/2026-09-11-query-parameter-pushdown-design.md`、`docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md`
 
 **当前状态（2026-09-13）：** 当前范围的本地实现、自动化验证和候选提交验收已完成；本地开发 Gate 已通过。真实 Aloudata 结果查询授权、正式 API/对象存储等属于后续环境联调 Gate，不阻塞本地开发和代码交付。候选实现及计划更新已提交并推送到 `origin/feature/dev_fu`，当前本地与远端 SHA 一致。平台内 AI 自动生成 SQL/Python 不纳入本期；身份与权限完善也不纳入本次范围。
+
+**产品闭环状态更正（2026-09-14）：** 上述“本地开发 Gate 已通过”只适用于后端契约、孤立组件测试和 seed 后消费链路，不代表正式前端创建链路完成。数据集正式路由和配置中心入口已补齐，但文件上传、统一绑定心智和从主导航开始的 E2E 仍未完成，G3 产品闭环应保持 `FAIL`。
+
+| 前端验收阶段 | 状态 | 结论 |
+| --- | --- | --- |
+| 登录并进入配置 | `BLOCKED` | 本轮本地 UI `5174` 可访问、DataAgent `18089` 健康为 `UP`，但登录请求未结束；暂不归因于本次实现 |
+| 数据连接管理 | `PARTIAL` | 新建已先选择 JDBC/Aloudata 类型；列表仍只展示指标平台，HTTP/API 与文件登记未闭环 |
+| 五种来源数据集创建 | `PARTIAL` | 已有 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 和配置中心入口；文件、HTTP/API 及多个动作仍不具备完整交互 |
+| SQL、指标视图及来源参数配置 | `FAIL` | 孤立组件内能看到控件，但用户无法从产品入口到达；HTTP/API 仍要求内部 ID |
+| 仪表盘选择与绑定 | `FAIL` | 旧数据源下拉与新脚本数据集输入并存，用户截图只看到指标平台数据源 |
+| 预览和运行时消费 | `PARTIAL` | seed 后的 Table/ECharts 和异常状态已有覆盖，但未证明正式创建链路 |
+| 项目风格、主题和可访问性 | `FAIL` | 数据集页存在硬编码样式和原生控件，四主题、键盘及 AX 验收尚未闭环 |
 
 **外部条件清单：** [2026-09-13 外部前置条件与测试支撑计划](2026-09-13-dashboard-external-prerequisites.md)；执行 00–09 前必须按该清单收集并验证外部系统、账号、数据和证据条件。
 

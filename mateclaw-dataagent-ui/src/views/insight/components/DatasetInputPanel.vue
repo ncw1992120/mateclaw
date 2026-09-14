@@ -2,8 +2,9 @@
   <section class="dataset-input-panel">
     <div class="panel-heading">
       <div>
-        <h3>脚本数据集输入</h3>
-        <p>脚本通过别名调用 datasets.read，不在这里绑定字段。</p>
+        <h3>脚本结果数据集输入</h3>
+        <p>这是独立于“直接指标绑定”的脚本模式；脚本通过别名调用 datasets.read。</p>
+        <p class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
       </div>
       <el-button size="small" type="primary" plain @click="addInput">添加</el-button>
     </div>
@@ -631,4 +632,6 @@ defineExpose({
   gap: 5px;
   margin-top: 7px;
 }
+
+.binding-target-hint { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 11px; }
 </style>

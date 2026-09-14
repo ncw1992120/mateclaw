@@ -8,6 +8,7 @@ const listTablesMock = vi.hoisted(() => vi.fn())
 const listAnalysisViewsMock = vi.hoisted(() => vi.fn())
 const createDatasetMock = vi.hoisted(() => vi.fn())
 const syncDataMock = vi.hoisted(() => vi.fn())
+const uploadFileMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/datasource', () => ({
   list: datasourceListMock,
@@ -22,6 +23,7 @@ vi.mock('@/api/dataset', () => ({
   listFields: vi.fn().mockResolvedValue([]),
   getDatasetData: vi.fn().mockResolvedValue({ columns: [], rows: [], total: 0 }),
   update: vi.fn(),
+  uploadFile: uploadFileMock,
 }))
 
 const i18n = createI18n({
@@ -33,7 +35,8 @@ const i18n = createI18n({
 })
 
 async function mountEditor() {
-  datasourceListMock.mockResolvedValue([{ id: '1', name: 'Orders JDBC' }])
+  uploadFileMock.mockClear()
+  datasourceListMock.mockResolvedValue([{ id: '1', name: 'Orders JDBC', connectionParams: JSON.stringify({ apiDefinitions: { orders: { name: '订单 API' } } }) }])
   listTablesMock.mockResolvedValue([])
   listAnalysisViewsMock.mockResolvedValue([])
   createDatasetMock.mockResolvedValue({ id: 'dataset-1' })
@@ -47,6 +50,30 @@ async function mountEditor() {
 }
 
 describe('DatasetEdit source configuration', () => {
+  it('uploads a file and fills the controlled object reference', async () => {
+    const wrapper = await mountEditor()
+    uploadFileMock.mockResolvedValue({ objectId: 'datasets/1/orders.csv', format: 'csv' })
+    const selects = wrapper.findAll('select')
+    await selects[1].setValue('FILE')
+    const input = wrapper.find('input[type="file"]')
+    const file = new File(['id,amount\n1,2'], 'orders.csv', { type: 'text/csv' })
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(uploadFileMock).toHaveBeenCalled()
+    expect(wrapper.find('input[placeholder="上传后自动回填对象引用"]').element.value).toBe('datasets/1/orders.csv')
+  })
+  it('rejects unsupported or oversized files before upload', async () => {
+    const wrapper = await mountEditor()
+    const selects = wrapper.findAll('select')
+    await selects[1].setValue('FILE')
+    const input = wrapper.find('input[type="file"]')
+    const file = new File(['x'], 'orders.exe', { type: 'application/octet-stream' })
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(uploadFileMock).not.toHaveBeenCalled()
+  })
   it('offers every supported dataset source type', async () => {
     const wrapper = await mountEditor()
     const sourceTypeValues = wrapper.findAll('select')[1].findAll('option').map(option => option.element.value)
@@ -85,7 +112,7 @@ describe('DatasetEdit source configuration', () => {
     const selects = wrapper.findAll('select')
     await wrapper.find('input.name-input').setValue('Orders file')
     await selects[1].setValue('FILE')
-    await wrapper.find('input[placeholder="输入已登记的对象 ID"]').setValue('object-1')
+    await wrapper.find('input[placeholder="上传后自动回填对象引用"]').setValue('object-1')
     expect(wrapper.find('textarea.sql-input').exists()).toBe(false)
 
     await wrapper.find('button.finish-btn').trigger('click')
@@ -107,8 +134,8 @@ describe('DatasetEdit source configuration', () => {
     await wrapper.find('input.name-input').setValue('Orders API')
     await selects[0].setValue('1')
     await selects[1].setValue('HTTP_API')
-    const apiDefinitionInput = wrapper.find('input[placeholder="输入已登记的 API 定义 ID"]')
-    await apiDefinitionInput.setValue('orders')
+    const apiDefinitionSelect = wrapper.findAll('select')[2]
+    await apiDefinitionSelect.setValue('orders')
 
     expect(wrapper.find('input[placeholder="输入 URL"]').exists()).toBe(false)
     expect(wrapper.find('input[placeholder="输入 Header"]').exists()).toBe(false)

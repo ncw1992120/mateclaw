@@ -1,5 +1,7 @@
 # 仪表盘运行时集成 Implementation Plan
 
+> 2026-09-14 产品闭环审计：仪表盘组件仍使用旧数据源绑定，新脚本数据集输入作为侧栏下方的第二套模型存在，缺少清晰的数据模式、创建入口和绑定关系管理；现有 E2E 从 API seed 后开始，未覆盖正式前端创建链路。本计划的前端产品闭环状态应保持 `FAIL`。问题与复现步骤见下文“前端产品闭环缺口”。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development, then execute this plan task-by-task.
 
 **Goal:** 将统一数据集和 Python Runner 接入仪表盘编辑、输入预览、最终预览与正式异步执行。
@@ -25,6 +27,18 @@
 **结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
 
 **视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，真实 Aloudata 授权场景在后续环境联调时补采。
+
+## 前端产品闭环缺口（2026-09-14）
+
+> 2026-09-14 实施进展：数据集已具备正式路由和配置中心入口；属性面板与脚本输入已增加明确的模式说明，用户可区分“直接指标绑定”和“脚本结果数据集输入”；新增 `e2e/dataset-management-entry.spec.ts` 覆盖配置中心→数据集→新建→文件来源→取消返回的正式前端路径。后续仍需把两者的保存/绑定结果在仪表盘中统一展示，并在完整 Compose/JWT 环境执行该 E2E。
+
+| 编号 | 级别 | 问题 | 复现步骤 | 预期结果 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| FE-CLOSE-03 | P0 | 仪表盘存在割裂的两套数据模型 | 进入“洞察 → 编辑仪表盘”，选中卡片或图表，查看属性面板的数据源下拉，再向下查找脚本数据集输入 | 清楚区分“直接指标绑定”和“脚本结果绑定”，或统一为一种数据集心智；可直接选择已创建的 JDBC/API/文件数据集 | `PropertyPanel.vue` 读取旧 `datasourceStore.datasources`；`DatasetInputPanel.vue` 独立读取 `datasetApi.list()` 并挂在窄侧栏下方。用户截图中的下拉因此只显示“指标平台测试0001” |
+| FE-CLOSE-07 | P0 | E2E 绕过正式用户创建链路 | 查看 `mateclaw-dataagent-ui/e2e/` 的测试准备和起始页面 | 浏览器从主导航完成“配置 → 创建连接 → 创建数据集 → 仪表盘选择 → 脚本处理 → 预览” | 已新增前端入口回归用例覆盖配置中心→数据集→新建→来源选择→取消；完整创建连接、数据集并绑定仪表盘的 E2E 仍待补齐和执行 |
+| FE-CLOSE-10 | P1 | 数据模式、创建入口和绑定结果不够可发现 | 在右侧属性栏选择数据并应用脚本结果，然后重新进入页面 | 明确显示当前模式、输入数据集、目标组件绑定，可创建、修改和解除绑定 | 旧数据源选择位于组件属性内，新数据集输入位于更下方；来源类型、创建入口及两者关系均没有解释 |
+
+验收必须新增一条不通过业务 API seed 代替页面操作的产品 E2E。Seed 只允许准备 MySQL、WireMock、MinIO 等外部模拟 fixture；数据源、数据集、绑定和仪表盘配置必须由正式前端完成。
 
 **ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在候选 SHA 的完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。
 
