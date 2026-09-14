@@ -27,7 +27,9 @@
         :key="item.key"
         class="nav-item"
         :class="{ active: activeNav === item.key }"
-        @click="handleNavClick(item.key)"
+        :href="navHref(item.key)"
+        :aria-current="activeNav === item.key ? 'page' : undefined"
+        @click.prevent="handleNavClick(item.key)"
       >
         {{ t(item.label) }}
       </a>
@@ -125,6 +127,10 @@ const navItems = [
 /** 导航点击 */
 function handleNavClick(key: string): void {
   router.push({ path: '/', query: { ...route.query, nav: key } })
+}
+
+function navHref(key: string): string {
+  return router.resolve({ path: '/', query: { ...route.query, nav: key } }).href
 }
 
 /** 主题选项配置 */

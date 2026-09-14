@@ -807,3 +807,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：智能问数底部模型 `el-select` 的原生 `role=combobox` 没有可访问名称。
 - 修复：补充 `aria-label="选择模型"`，不改变模型切换行为和视觉样式。
 - 回归：修复前 Chrome channel 定向用例因名称为空失败，修复后 `1 passed (5.1s)`；Chrome CDP `9222` 现场读取该 combobox 的名称为“选择模型”，截图 `/tmp/mateclaw-cdp-model-select-a11y-20260914.png`。
+
+### 2026-09-14 顶部导航链接语义
+
+- 问题：顶部导航使用没有 `href` 的 `<a>`，鼠标可点击但无法进入键盘 Tab 顺序，也不是可复用链接。
+- 修复：为五个导航项生成当前路由对应的 `href`，保留 SPA 路由点击并阻止默认整页刷新；当前项增加 `aria-current="page"`。
+- 回归：修复前定向 Chrome channel 用例因 `href` 缺失失败，修复后 `1 passed (3.7s)`；Chrome CDP `9222` 现场读取五个链接地址、洞察项 `aria-current=page`，首个链接可获得焦点；截图 `/tmp/mateclaw-cdp-top-nav-links-20260914.png`。

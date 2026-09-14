@@ -35,6 +35,20 @@ test('智能问数模型选择器暴露可访问名称', async ({ page }) => {
   await expect(page.locator('.model-select-footer input[role="combobox"]')).toHaveAccessibleName('选择模型')
 })
 
+test('顶部导航暴露可聚焦链接语义', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  const links = page.locator('.nav-menu a.nav-item')
+  await expect(links).toHaveCount(5)
+  for (let index = 0; index < 5; index += 1) {
+    await expect(links.nth(index)).toHaveAttribute('href', /\/?nav=/)
+  }
+})
+
 test('洞察列表状态标签在四主题下满足对比度', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

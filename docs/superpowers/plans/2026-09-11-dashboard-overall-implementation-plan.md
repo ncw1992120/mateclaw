@@ -412,3 +412,5 @@ make dashboard-verify-local
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。
 
 **2026-09-14 智能问数模型选择器可访问性修复：** 发现底部模型 `role=combobox` 无名称，先由 Chrome channel 定向用例复现，再补充 `aria-label="选择模型"`；修复后定向用例 `1 passed (5.1s)`，UI 全量 `12 files / 44 tests passed`、生产构建成功。用户 Chrome CDP `9222` 现场确认名称为“选择模型”，截图 `/tmp/mateclaw-cdp-model-select-a11y-20260914.png`。
+
+**2026-09-14 顶部导航链接语义修复：** 顶部导航五个 `<a>` 补充当前路由 `href` 和 `aria-current="page"`，保留 SPA 点击切换；修复前定向 Chrome channel 用例因无 `href` 失败，修复后 `1 passed (3.7s)`。用户 Chrome CDP `9222` 已确认五个链接可读且首项可聚焦，截图 `/tmp/mateclaw-cdp-top-nav-links-20260914.png`。
