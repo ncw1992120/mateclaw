@@ -6,13 +6,18 @@
     </header>
 
     <!-- Tab 横向栏 -->
-    <nav class="config-tabs">
+    <nav class="config-tabs" role="tablist" aria-label="配置分类">
       <button
         v-for="tab in visibleTabs"
         :key="tab.key"
         class="tab-item"
         :class="{ active: activeTab === tab.key }"
+        role="tab"
+        :data-tab-key="tab.key"
+        :aria-selected="String(activeTab === tab.key)"
+        :tabindex="activeTab === tab.key ? 0 : -1"
         @click="activeTab = tab.key"
+        @keydown="handleTabKeydown($event, tab.key)"
       >
         {{ t(tab.labelKey) }}
       </button>
@@ -108,6 +113,23 @@ const tabs: TabConfig[] = [
 const visibleTabs = computed<TabConfig[]>(() => {
   return tabs.filter((tab) => !tab.permission || hasPermission(tab.permission))
 })
+
+function handleTabKeydown(event: KeyboardEvent, key: TabKey): void {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') return
+  event.preventDefault()
+  const keys = visibleTabs.value.map((tab) => tab.key)
+  const index = keys.indexOf(key)
+  if (index < 0 || keys.length === 0) return
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? keys.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + keys.length) % keys.length
+  activeTab.value = keys[nextIndex]
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLButtonElement>(`.config-tabs [role="tab"][data-tab-key="${keys[nextIndex]}"]`)?.focus()
+  })
+}
 
 /** 当激活的 Tab 因权限不可见时，自动切换到第一个可见 Tab */
 watch(visibleTabs, (list) => {

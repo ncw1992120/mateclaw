@@ -251,6 +251,8 @@ make dashboard-verify-local
 
 **2026-09-15 报告列表键盘语义补充：** 报告卡片增加按钮语义、可访问名称和 Enter/Space 查看操作，内部操作区阻止键盘事件冒泡；新增 `ReportListView.spec.ts`，UI 单测更新为 `16 files / 49 tests passed`，报告入口 Chrome CDP 空态检查通过。当前本地模拟没有已发布报告，报告卡片真实浏览器键盘专项待报告 fixture 注入后补验。
 
+**2026-09-15 配置中心 Tab 语义补充：** 配置分类增加 `tablist/tab`、`aria-selected`、roving `tabindex` 及方向键/Home/End 切换，新增真实 Chrome E2E 并完成 CDP 现场检查；当前 UI 单测 `16 files / 49 tests passed`，配置页 Tab 视觉/焦点证据已记录。全站其他历史菜单和跨浏览器审计仍保持后续专项。
+
 **2026-09-14 可访问性补充：** 修复组件库只能拖拽、无法用键盘添加组件的问题；条目支持 Enter/Space，具备按钮语义和可访问名称。新增回归后 UI `10 files / 37 tests` 通过，当前本地闭环的可访问性覆盖从表单控件扩展到组件创建入口。
 
 **2026-09-14 可访问性审计补充：** Chrome CDP 检查数据集新建页与双源编辑器的可聚焦控件名称，结果为 `5/5` 与 `52/52` 无缺失；本地闭环的键盘入口和名称语义已具备证据，四主题对比度仍保留为专项 Gate。

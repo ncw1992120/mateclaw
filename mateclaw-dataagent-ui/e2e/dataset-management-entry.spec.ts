@@ -51,6 +51,26 @@ test('顶部导航暴露可聚焦链接语义', async ({ page }) => {
   await expect(page.getByRole('button', { name: '切换主题' })).toBeVisible()
 })
 
+test('配置中心分类暴露 Tab 语义和选中状态', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=config')
+  const tablist = page.locator('.config-tabs')
+  await expect(tablist).toHaveAttribute('role', 'tablist')
+  const tabs = tablist.locator('[role="tab"]')
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
+  await expect(tabs.first()).toHaveAttribute('tabindex', '0')
+  if (await tabs.count() > 1) {
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'false')
+    await tabs.first().press('ArrowRight')
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs.nth(1)).toHaveAttribute('tabindex', '0')
+  }
+})
+
 test('帮助页图标操作暴露可访问名称', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

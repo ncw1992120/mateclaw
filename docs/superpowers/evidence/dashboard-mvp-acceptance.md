@@ -970,3 +970,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：报告卡片增加 `role=button`、`tabindex=0`、动态 `aria-label` 和 Enter/Space 操作；操作区增加 `keydown.stop`。
 - 回归：新增 `ReportListView.spec.ts`，验证报告卡片语义；UI 全量 `16 files / 49 tests passed`，生产构建通过。
 - 用户 Chrome CDP `9222` 现场进入报告入口，空态正常渲染，当前可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-report-final-20260915.png`。本地没有已发布报告，卡片 Enter/Space 行为由组件测试覆盖。
+
+### 2026-09-15 配置中心 Tab 语义修复
+
+- 问题：配置中心分类按钮缺少 `tablist/tab`、选中态和方向键切换语义，键盘用户无法识别当前分类。
+- 修复：配置分类增加 `role=tablist/tab`、`aria-selected`、roving `tabindex`，支持 ArrowLeft/ArrowRight/Home/End 并同步焦点。
+- 回归：新增配置中心分类 E2E，定向用例 `1 passed (4.4s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
+- 用户 Chrome CDP `9222` 现场确认配置页 7 个 Tab 中“数据配置”选中、其余为 `aria-selected=false`，按 ArrowRight 后焦点和选中态同步到下一项；截图 `/tmp/mateclaw-cdp-config-tabs-final-20260915.png`。
