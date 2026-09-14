@@ -1020,3 +1020,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：条目增加 `role=button`、`tabindex=0`、动态“切换对话：…”名称，并支持 Enter/Space；内联重命名输入和更多操作区阻止事件冒泡。
 - 新增 E2E `历史对话条目支持键盘切换`，修复前失败、修复后 `1 passed (3.6s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
 - Chrome CDP `9222` 现场确认条目语义并按 Enter 后 active 状态正常；截图：`/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
+
+**全量入口 E2E 状态：** 本轮尝试执行该文件 26 条 Chrome channel 用例时，首个“从产品入口进入数据集创建并取消返回”在 4 分钟以上无新结果，已终止进程；未将其记为通过。历史条目定向用例仍独立通过，需在模拟 DataAgent 响应恢复后重跑全量入口矩阵。

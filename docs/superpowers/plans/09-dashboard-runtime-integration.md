@@ -335,3 +335,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 历史对话工具 AX 修复：** Workbench 历史侧栏搜索、收起/展开、新对话和更多操作按钮补充 `aria-label`；定向 E2E `1 passed (4.2s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 `.history-sidebar button` 无空名称，截图 `/tmp/mateclaw-cdp-history-tools-20260915.png`。
 
 **2026-09-15 历史对话条目键盘修复：** 会话条目补齐 `role=button`、`tabindex=0`、动态名称和 Enter/Space 切换，重命名输入/更多操作区阻止冒泡；定向 E2E `1 passed (3.6s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
+
+**全量入口 E2E 复验状态（2026-09-15）：** 26 条入口用例本轮在首个数据集创建用例处超过 4 分钟无进展，已终止，状态记为 `NOT_RUN/环境挂起`；不能替代定向键盘用例的通过证据。待模拟 DataAgent 响应恢复后重跑。

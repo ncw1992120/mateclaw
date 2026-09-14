@@ -468,3 +468,5 @@ make dashboard-verify-local
 **2026-09-15 历史对话工具 AX 修复：** 历史侧栏搜索、收起/展开、新对话和更多操作按钮补充稳定 `aria-label`；定向 E2E `1 passed (4.2s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 4 个历史工具均可读，截图 `/tmp/mateclaw-cdp-history-tools-20260915.png`。
 
 **2026-09-15 历史对话条目键盘修复：** 历史会话条目补齐按钮语义、动态名称和 Enter/Space 切换，并隔离重命名/更多操作按键；定向 E2E `1 passed (3.6s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
+
+**全量入口 E2E 复验状态（2026-09-15）：** 本轮 26 条入口用例在首个数据集创建用例处超过 4 分钟无进展后终止，记为 `NOT_RUN/环境挂起`，不影响已通过的定向用例、单测、构建和 CDP 证据；待模拟 DataAgent 响应恢复后重跑。
