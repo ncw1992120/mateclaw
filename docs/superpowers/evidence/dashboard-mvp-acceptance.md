@@ -673,6 +673,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：系统 Chrome channel 用例 `从洞察产品入口创建仪表盘并绑定脚本数据集` 修复前因 combobox 名称缺失失败，修复后 `1 passed (4.8s)`；UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
 - Chrome CDP `9222` 现场读取两个可见 combobox：`选择要接收脚本结果的组件`、`选择已授权数据集`；截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。
 
+### 2026-09-14 组件属性面板控件可访问名称
+
+- 问题：选中数据表格组件后，属性面板中的组件标题、数据源、数据行数和绑定筛选器控件没有把旁侧可见标签传给实际输入元素，AX 名称为空。
+- 修复：为 `PropertyPanel.vue` 的标题输入、图表/数据源/指标/维度/筛选器选择器及数据行数输入补充对应 `aria-label`，覆盖单 Tab、多 Tab、筛选器和数据组件分支。
+- 回归：扩展真实 Chrome channel 用例断言 `组件标题`、`数据源`、`数据行数`、`绑定筛选器`；修复前因“组件标题”名称缺失失败，修复后 `1 passed`。UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
+- Chrome CDP `9222` 现场拖入“数据表格”并读取属性面板，四个控件名称均可读；截图 `/tmp/mateclaw-cdp-property-a11y-fixed.png`。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。

@@ -16,13 +16,13 @@
       <!-- 标题 -->
       <div class="form-group">
         <label class="form-label">{{ t('insight.property.componentTitle') }}</label>
-        <el-input v-model="localComponent.title"  @change="emitChange" />
+        <el-input v-model="localComponent.title" :aria-label="t('insight.property.componentTitle')" @change="emitChange" />
       </div>
 
       <!-- 图表类型（仅 chart 组件） -->
       <div v-if="component.type === 'chart'" class="form-group">
         <label class="form-label">{{ t('insight.property.chartType') }}</label>
-        <el-select v-model="localComponent.chartType"  filterable style="width: 100%" @change="emitChange">
+        <el-select v-model="localComponent.chartType" :aria-label="t('insight.property.chartType')" filterable style="width: 100%" @change="emitChange">
           <el-option value="line" :label="t('insight.component.line')" />
           <el-option value="bar" :label="t('insight.component.bar')" />
           <el-option value="pie" :label="t('insight.component.pie')" />
@@ -114,6 +114,7 @@
               <el-select
                 v-model="activeTab.dataSource.datasourceId"
                 :placeholder="t('insight.property.selectDatasource')"
+                :aria-label="t('insight.property.datasource')"
                 
                 filterable
                 style="width: 100%"
@@ -133,6 +134,7 @@
               <el-select
                 v-model="activeTab.dataSource.metrics"
                 :placeholder="t('insight.property.selectMetrics')"
+                :aria-label="t('insight.property.metrics')"
                 
                 multiple
                 filterable
@@ -156,6 +158,7 @@
               <el-select
                 v-model="activeTab.dataSource.dimensions"
                 :placeholder="t('insight.property.selectDimensions')"
+                :aria-label="t('insight.property.dimensions')"
                 
                 multiple
                 filterable
@@ -178,6 +181,7 @@
               <label class="form-label">{{ t('insight.property.limit') }}</label>
               <el-input-number
                 v-model="activeTab.dataSource.limit"
+                :aria-label="t('insight.property.limit')"
                 :min="1"
                 :max="500"
                 
@@ -195,6 +199,7 @@
             <el-select
               v-model="localDataSource.datasourceId"
               :placeholder="t('insight.property.selectDatasource')"
+              :aria-label="t('insight.property.datasource')"
               
               filterable
               style="width: 100%"
@@ -214,6 +219,7 @@
             <el-select
               v-model="localDataSource.metrics"
               :placeholder="t('insight.property.selectMetrics')"
+              :aria-label="t('insight.property.metrics')"
               
               multiple
               filterable
@@ -237,6 +243,7 @@
             <el-select
               v-model="localDataSource.dimensions"
               :placeholder="t('insight.property.selectDimensions')"
+              :aria-label="t('insight.property.dimensions')"
               
               multiple
               filterable
@@ -259,6 +266,7 @@
             <label class="form-label">{{ t('insight.property.limit') }}</label>
             <el-input-number
               v-model="localDataSource.limit"
+              :aria-label="t('insight.property.limit')"
               :min="1"
               :max="500"
               
@@ -299,6 +307,7 @@
           <el-select
             v-model="localFilterDatasourceId"
             :placeholder="t('insight.property.selectDatasource')"
+            :aria-label="t('insight.property.datasource')"
             
             filterable
             style="width: 100%"
@@ -319,6 +328,7 @@
           <el-select
             v-model="localFilterConfig.field"
             :placeholder="t('insight.property.selectDimensions')"
+            :aria-label="t('insight.property.filterField')"
             
             filterable
             remote
@@ -414,6 +424,7 @@
           <el-select
             v-model="localTargetComponentIds"
             :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
+            :aria-label="t('insight.property.filterTargetComponents')"
             
             multiple
             style="width: 100%"
@@ -463,6 +474,7 @@
           <el-select
             v-model="localTargetComponentIds"
             :placeholder="t('insight.property.filterTargetComponentsPlaceholder')"
+            :aria-label="t('insight.property.filterTargetComponents')"
             
             multiple
             style="width: 100%"
@@ -508,6 +520,7 @@
           <el-select
             v-model="localBoundFilterIds"
             :placeholder="t('insight.property.boundFiltersPlaceholder')"
+            :aria-label="t('insight.property.boundFilters')"
             
             multiple
             clearable
