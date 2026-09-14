@@ -903,3 +903,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 完整模拟 Compose 使用 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`、Chrome channel 和同一轮 Dashboard state 执行 UI E2E：`26 passed (1.4m)`，包含指标平台分页名称回归。
 - Google Chrome CDP `9222` 实际打开配置中心的 Aloudata 指标平台面板，Chrome Accessibility Tree 共检查 `60` 个交互节点，`unnamed=0`；分页名称为“指标每页条数”“维度每页条数”。截图 `/tmp/mateclaw-cdp-final-metric-panel-20260915.png`。
 - CDP 逐页复验问数、洞察、报告、配置和帮助入口，可见交互控件无名数均为 `0`；最终截图位于 `/tmp/mateclaw-cdp-{smart-ask,insight,report,config,help}-a11y-followup-20260915.png`。
+
+### 2026-09-15 双源仪表盘最终 Chrome CDP 复验
+
+- 用户 Chrome `9222` 连接独立 E2E UI `15174`，打开 `E2E JDBC + Aloudata Dashboard` 编辑器，两个数据集输入和脚本面板可见交互控件无名数为 `0`。
+- 点击“最终结果预览”后实际渲染 `5` 行，并包含 `120.5`；截图 `/tmp/mateclaw-cdp-dashboard-preview-final-20260915.png`，编辑器截图 `/tmp/mateclaw-cdp-dashboard-editor-final-20260915.png`。
+- 该结果与完整 Chrome channel E2E `26 passed (1.4m)` 一致，确认新增语义修复没有破坏双源运行时闭环。
