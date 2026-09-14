@@ -36,7 +36,7 @@
       <div v-if="aliasStatus(input.inputName) !== 'ok'" class="field-error">
         {{ aliasStatus(input.inputName) }}
       </div>
-      <div v-if="descriptors[input.datasetId]" class="descriptor-summary">
+      <div v-if="descriptors[input.datasetId]?.schema?.length" class="descriptor-summary">
         <span>{{ descriptors[input.datasetId].schema.length }} 个字段</span>
         <el-tooltip placement="top" effect="light">
           <template #content>
@@ -53,6 +53,17 @@
           @click="previewInput(input)"
         >
           输入预览
+        </el-button>
+      </div>
+      <div v-else-if="descriptors[input.datasetId]" class="descriptor-summary descriptor-pending">
+        <span>字段探测中…</span>
+        <el-button
+          text
+          size="small"
+          :loading="loadingDatasetId === input.datasetId"
+          @click="loadDescriptor(input.datasetId)"
+        >
+          刷新字段
         </el-button>
       </div>
       <el-button

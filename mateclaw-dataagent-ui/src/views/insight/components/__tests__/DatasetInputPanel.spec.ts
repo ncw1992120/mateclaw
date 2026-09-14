@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import DatasetInputPanel from '../DatasetInputPanel.vue'
+import * as datasetApi from '@/api/dataset'
 
 vi.mock('@/api/dataset', () => ({
   list: vi.fn().mockResolvedValue([]),
@@ -103,6 +104,16 @@ describe('DatasetInputPanel', () => {
     expect(wrapper.text()).toContain('2 个字段')
     expect(wrapper.text()).toContain('id')
     expect(wrapper.text()).toContain('status')
+  })
+
+  it('does not show a misleading zero-field state while descriptor fallback is pending', async () => {
+    vi.mocked(datasetApi.previewInput).mockImplementationOnce(() => new Promise(() => {}))
+    const wrapper = mountPanel({ inputs: [{ datasetId: '1', inputName: 'orders' }] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(wrapper.text()).toContain('字段探测中')
+    expect(wrapper.text()).not.toContain('0 个字段')
+    wrapper.unmount()
   })
 
   it('shows a bounded-result notice when execution uses an output reference', async () => {

@@ -214,3 +214,9 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 预期：Table 行、列名、双源结果和来源/过滤关系在画布中可见；大结果明确展示 `outputRef` 和受限预览边界。实际：Table 用户不可见，且大结果边界未向用户说明。
 
 定位线索：`DataTableWidget.vue` 的 `.table-wrapper` 使用 `flex: 1`，内部 Element Plus 表格使用 `height="100%"`；预览父容器未提供有效计算高度时，二者最终没有可见高度。该线索仅供后续修复 agent 定位，本计划未修改业务实现。
+
+## 2026-09-14 Descriptor 空 Schema 中间态修复
+
+- `DatasetInputPanel.vue` 不再在 Descriptor 空 Schema 的异步探测阶段显示“0 个字段”，改为“字段探测中…”并保留刷新入口；受控输入预览完成后再展示推断出的字段。
+- `DatasetInputPanel.spec.ts` 新增中间态回归用例，验证空 Schema 与未完成预览期间的文案不误导；定向测试 `8/8` 通过。
+- Chrome CUA 已复验数据集管理及新建数据集路由可见；当前工作区没有可授权数据集，Descriptor 中间态无法通过现场数据触发，需在模拟数据集注入后补做交互截图。
