@@ -587,3 +587,7 @@ Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`�
 ### 2026-09-14 当前提交 CDP 视觉验收
 
 当前提交 `2fe61dd4fa3ed3671ce11969de8d61d9b8ab416c` 通过 Google Chrome CDP `9222` 打开 `http://127.0.0.1:5175/datasets`，切换暗色主题并采集 `/tmp/mateclaw-cdp-dataset-list-96568fb6.png`。页面标题“数据集”、4 个数据集卡片及状态标签均可见，未出现空白或布局溢出；对比度实测结果见上一节。
+
+### 2026-09-14 键盘可访问性复验
+
+JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可访问名称，Enter/Space 均可切换选择；`DatasetEdit.spec.ts` 覆盖初始、Enter、Space 三种状态。Chrome CDP 打开 `/datasets/new` 和现有 JDBC 数据集编辑页，入口与配置表单可见；当前模拟数据源未返回表目录，未伪造表项视觉 PASS。

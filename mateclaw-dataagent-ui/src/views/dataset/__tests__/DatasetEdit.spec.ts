@@ -38,11 +38,14 @@ const i18n = createI18n({
   fallbackWarn: false,
 })
 
-async function mountEditor(datasources = [{ id: '1', name: 'Orders JDBC', connectionParams: JSON.stringify({ apiDefinitions: { orders: { name: '订单 API' } } }) }]) {
+async function mountEditor(
+  datasources = [{ id: '1', name: 'Orders JDBC', connectionParams: JSON.stringify({ apiDefinitions: { orders: { name: '订单 API' } } }) }],
+  tables: Array<{ id: string; tableName: string }> = [],
+) {
   uploadFileMock.mockClear()
   createDatasetMock.mockClear()
   datasourceListMock.mockResolvedValue(datasources)
-  listTablesMock.mockResolvedValue([])
+  listTablesMock.mockResolvedValue(tables)
   listAnalysisViewsMock.mockResolvedValue([])
   createDatasetMock.mockResolvedValue({ id: 'dataset-1' })
   syncDataMock.mockResolvedValue({ status: 'ok' })
@@ -57,6 +60,22 @@ async function mountEditor(datasources = [{ id: '1', name: 'Orders JDBC', connec
 }
 
 describe('DatasetEdit source configuration', () => {
+  it('supports keyboard selection for JDBC tables', async () => {
+    const wrapper = await mountEditor(undefined, [{ id: 'orders', tableName: 'orders' }])
+    await wrapper.find('#dataset-datasource').setValue('1')
+    await flushPromises()
+
+    const table = wrapper.find('.table-item')
+    expect(table.attributes('role')).toBe('checkbox')
+    expect(table.attributes('tabindex')).toBe('0')
+    expect(table.attributes('aria-checked')).toBe('false')
+
+    await table.trigger('keydown', { key: 'Enter' })
+    expect(table.attributes('aria-checked')).toBe('true')
+    await table.trigger('keydown', { key: ' ' })
+    expect(table.attributes('aria-checked')).toBe('false')
+  })
+
   it('uploads a file and fills the controlled object reference', async () => {
     const wrapper = await mountEditor()
     uploadFileMock.mockResolvedValue({ objectId: 'datasets/1/orders.csv', format: 'csv' })

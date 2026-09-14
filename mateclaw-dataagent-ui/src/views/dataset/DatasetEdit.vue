@@ -131,7 +131,12 @@
                 :key="table.id"
                 class="table-item"
                 :class="{ selected: isSelectedTable(table) }"
+                role="checkbox"
+                tabindex="0"
+                :aria-checked="isSelectedTable(table)"
+                :aria-label="`选择数据表 ${table.tableName}`"
                 @click="handleToggleTable(table)"
+                @keydown="handleTableKeydown($event, table)"
               >
                 <span class="table-check" :class="{ checked: isSelectedTable(table) }">✓</span>
                 <span class="table-name-text">{{ table.tableName }}</span>
@@ -858,6 +863,13 @@ function handleToggleTable(table: { id: string; tableName: string }): void {
   } else {
     selectedTableObjects.value.push({ id: table.id, tableName: table.tableName })
   }
+}
+
+/** 支持键盘选择数据表 */
+function handleTableKeydown(event: KeyboardEvent, table: { id: string; tableName: string }): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleToggleTable(table)
 }
 
 /** 返回上一页 */

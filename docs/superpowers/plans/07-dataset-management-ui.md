@@ -116,7 +116,7 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-14 快照与面板布局修复：** 编辑器属性区改为纵向可滚动，输入面板不再被子面板 `height:100%` 裁剪；双源 E2E 使用“脚本结果数据集输入”这一实际可访问标题，并逐行等待字段描述完成，避免异步 Descriptor 状态造成快照漂移。真实本地栈数据集入口创建、双源、错误/兼容和大结果场景合计 11 条 E2E 全部通过；快照基线已按当前渲染重新生成并以非更新模式验证。
 
-**2026-09-14 键盘可访问性修复：** 组件库条目原先仅支持拖拽，键盘用户无法添加组件；现为每个条目补充 `role="button"`、`tabindex="0"` 和可访问名称，并支持 Enter/Space 直接添加。新增 `ComponentPalette.spec.ts` 回归测试，UI 全量为 `10 files / 37 tests passed`；Chrome CDP 确认条目暴露正确 AX 属性。
+**2026-09-14 键盘可访问性修复：** 组件库条目原先仅支持拖拽，键盘用户无法添加组件；现为每个条目补充 `role="button"`、`tabindex="0"` 和可访问名称，并支持 Enter/Space 直接添加。数据集配置中的 JDBC 表列表原先仅支持鼠标点击，现补充 `role="checkbox"`、`tabindex="0"`、`aria-checked` 和 Enter/Space 切换。新增 `ComponentPalette.spec.ts` 与 `DatasetEdit.spec.ts` 回归测试，UI 全量为 `10 files / 38 tests passed`；Chrome CDP 已确认新建/编辑入口可见，表项行为由单测覆盖。
 
 **2026-09-14 键盘审计补充：** Chrome CDP 对 `/datasets/new` 和双源编辑器的所有当前可聚焦 `button/input/select/textarea/[tabindex]` 控件执行名称检查，结果分别为 `5/5`、`52/52` 均存在文本、`aria-label`、`title` 或 `id`。这关闭了本地模拟范围内“无名称控件”缺口；四主题对比度仍需设计专项工具验证。
 
