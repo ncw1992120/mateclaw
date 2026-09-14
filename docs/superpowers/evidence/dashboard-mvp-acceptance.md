@@ -698,6 +698,11 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：在读取颜色前显式等待 `.toolbar-status-dot` 可见，保留真实状态令牌断言。
 - 回归：修复后完整本地模拟矩阵 `22 passed (1.1m)`；Chrome CDP `9222` 当前洞察编辑器现场确认无可见无名控件（`unnamed=0`），页面树按钮名称仍为“新增页面”“页面操作”，截图 `/tmp/mateclaw-cdp-final-e2e.png`。
 
+### 2026-09-14 完整矩阵参数复验
+
+- 首次执行完整矩阵时未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按设计显式 `BLOCKED`，其余 `21 passed`；补齐 `simulation` 后重新执行当前工作树完整矩阵，结果为 `22 passed (1.1m)`。
+- 该记录确认失败属于验收参数缺失，不修改或放宽双源用例的真实 DataAgent/模拟 Aloudata 要求。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。
