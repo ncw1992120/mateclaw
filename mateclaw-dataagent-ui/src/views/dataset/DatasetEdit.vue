@@ -488,7 +488,10 @@ const isJdbcDatasource = computed(() => {
   if (!selectedDatasource.value) return true
   if (isAloudataDatasource.value || (isApiDatasource.value && selectedDatasourceType.value)) return false
   // 兼容历史数据源响应：未返回 sourceType 时按 JDBC 处理。
-  return !selectedDatasourceType.value || ['jdbc', 'mysql', 'postgresql', 'sqlserver'].includes(selectedDatasourceType.value)
+  return !selectedDatasourceType.value || [
+    'jdbc', 'mysql', 'postgresql', 'sqlserver', 'oracle', 'snowflake',
+    'bigquery', 'redshift', 'clickhouse', 'doris',
+  ].includes(selectedDatasourceType.value)
 })
 const sourceTypeCompatibilityHint = computed(() => {
   if (!selectedDatasource.value) return ''

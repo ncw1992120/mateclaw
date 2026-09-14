@@ -138,6 +138,15 @@ describe('DatasetEdit source configuration', () => {
     expect(wrapper.find('#dataset-source-type option[value="HTTP_API"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('keeps JDBC SQL available for supported warehouse JDBC types', async () => {
+    const wrapper = await mountEditor([{ id: 'oracle-1', name: 'Oracle warehouse', sourceType: 'oracle' }])
+    await wrapper.find('#dataset-datasource').setValue('oracle-1')
+    await flushPromises()
+
+    expect(wrapper.find('#dataset-source-type').element.value).toBe('JDBC_TABLE')
+    expect(wrapper.find('#dataset-source-type option[value="JDBC_SQL"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('does not show a JDBC table refresh action for an HTTP API dataset', async () => {
     const wrapper = await mountEditor([{ id: 'api-1', name: 'Orders API', sourceType: 'api' }])
     await wrapper.find('#dataset-datasource').setValue('api-1')

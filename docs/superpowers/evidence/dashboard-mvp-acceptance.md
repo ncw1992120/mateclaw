@@ -617,3 +617,7 @@ Chrome CDP 读取模拟 `E2E HTTP Orders` 数据源的真实响应 `sourceType=a
 ### 2026-09-14 非 JDBC 表目录视觉复验
 
 Chrome CDP 选择 `E2E HTTP Orders` 后，页面实际为 `HTTP_API`，表区域显示“当前来源类型不使用 JDBC 表目录”，不再显示“刷新表目录”按钮，SQL 编辑器也未渲染。截图：`/tmp/mateclaw-cdp-api-no-table-action-current.png`。
+
+### 2026-09-14 JDBC 类型兼容视觉复验
+
+Chrome CDP 选择 `E2E JDBC Orders` 后，来源类型保持 `JDBC_TABLE`，JDBC 表和 JDBC SQL 选项均可用，无兼容性提示；截图：`/tmp/mateclaw-cdp-jdbc-types-42tests.png`。Oracle 等新增类型由 `DatasetEdit.spec.ts` 回归覆盖。

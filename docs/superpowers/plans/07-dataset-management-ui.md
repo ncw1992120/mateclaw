@@ -198,3 +198,5 @@ npm --prefix mateclaw-dataagent-ui run build
 **2026-09-14 后端来源边界补强：** 服务端新增 HTTP/API 数据集只能绑定 `api/http/http_api` 数据源的校验，防止绕过前端直接用 JDBC 连接创建 HTTP/API 数据集；`DatasetCatalogServiceTest` 已覆盖拒绝路径。
 
 **2026-09-14 非 JDBC 表目录误导修复：** HTTP/API、Aloudata 和文件来源不再显示无效的“刷新表目录”按钮；仅 `JDBC_TABLE` 模式展示表目录、空态和 Schema 探测入口，其他来源显示“当前来源类型不使用 JDBC 表目录”。新增 `DatasetEdit.spec.ts` 回归，Chrome CDP 已验证。
+
+**2026-09-14 JDBC 类型兼容补强：** 前端来源判断补齐 `oracle`、`snowflake`、`bigquery`、`redshift`、`clickhouse`、`doris` 等后端支持的 JDBC 类型，避免合法数据源被降级为文件来源；新增 Oracle 回归测试。
