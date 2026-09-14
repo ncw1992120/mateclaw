@@ -915,3 +915,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 用户 Chrome CDP `9222` 在 E2E UI 编辑器分别使用 `390px`、`900px`、`1440px` 视口检查页面宽度。
 - 390px 移动端右侧属性面板按设计移出视口，`editor-body.scrollWidth=702`；根文档和 `body` 均保持 `390px`，无页面横向滚动。900px 和 1440px 下文档、body 宽度与视口一致。
 - 结论：未发现会影响用户页面滚动的响应式缺陷；桌面视口已恢复为 `1440x1000`。截图 `/tmp/mateclaw-cdp-responsive-390-20260915.png`、`/tmp/mateclaw-cdp-final-desktop-after-responsive-check-20260915.png`。
+
+### 2026-09-15 表格与指标卡片多 Tab 键盘语义修复
+
+- 问题：图表已具备键盘 Tab 语义，但数据表格和指标卡片的多 Tab 仍是仅响应点击的 `div`，键盘用户无法切换。
+- 修复：两类组件补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键/Home/End 和 Enter/Space；焦点移动使用 DOM 查找，不依赖 `CSS.escape`，兼容 jsdom 和浏览器运行时。
+- 回归：新增 `WidgetTabs.spec.ts`，表格与指标卡片共 `2 tests passed`；UI 全量更新为 `13 files / 46 tests passed`，生产构建成功。
+- 用户 Chrome CDP `9222` 在双源仪表盘桌面视口复验编辑器/预览，当前现场无多 Tab fixture，但可见交互控件无名数为 `0`、文档宽度 `1440px`；截图 `/tmp/mateclaw-cdp-widget-tabs-final-20260915.png`。多 Tab 真实运行时切换待后续带 Tab fixture 的专项 E2E。

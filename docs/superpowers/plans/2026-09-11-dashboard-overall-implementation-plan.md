@@ -425,6 +425,8 @@ make dashboard-verify-local
 
 **2026-09-15 响应式横向溢出复核：** Chrome CDP 以 `390/900/1440px` 视口检查编辑器，390px 下移动端属性面板移出视口但根文档和 body 均无横向滚动，桌面视口恢复 `1440x1000`。该项记录为视觉复核结论，无需代码调整。
 
+**2026-09-15 表格与指标卡片 Tab 语义修复：** 数据表格和指标卡片多 Tab 补齐可聚焦 `tab`、选中态、roving `tabindex` 与键盘切换；新增 `WidgetTabs.spec.ts` 后 UI 全量为 `13 files / 46 tests passed`，生产构建成功。当前完整 E2E 无多 Tab fixture，真实 Tab 切换专项保持待补验。
+
 **当前权威基线（2026-09-15）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。`22 passed`、`25 passed` 是历史基线；最新本地模拟 Chrome channel 完整矩阵为 `26 passed (1.4m)`，双源最终结果实际为 `5` 行且包含 `120.5`，严格快照通过；UI 单测为 `12 files / 44 tests passed`，生产构建成功。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。

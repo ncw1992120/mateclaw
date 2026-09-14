@@ -307,3 +307,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 本节及统一验收记录中的最新记录优先于本文件前面的历史复现段落：双源 `1158 pixels (ratio 0.01)` 快照差异已关闭；`22 passed` 是历史基线，当前本地模拟 Chrome channel 完整矩阵已更新为 `26 passed (1.4m)`，并包含指标平台分页与主入口输入语义回归。UI 单测基线为 `12 files / 44 tests passed`，DataAgent surefire 汇总为 `158 tests / 0 failures / 0 errors / 0 skipped`。仍未关闭的只有真实 Aloudata 结果授权（`SM_02_0038`）、正式外部存储/API、全站跨浏览器可访问性和权限专项。
 
 **2026-09-15 双源最终 Chrome CDP 复验：** 用户 Chrome `9222` 打开独立 E2E UI 的 `E2E JDBC + Aloudata Dashboard`，编辑器两个数据集输入和脚本面板可见交互控件无名数为 `0`；点击“最终结果预览”实际渲染 `5` 行并包含 `120.5`。完整 Chrome channel E2E 已更新为 `26 passed (1.4m)`，截图见统一验收记录。
+
+**2026-09-15 表格与指标卡片多 Tab 键盘语义修复：** 两类组件从点击 `div` 改为 `tablist/tab`，补齐选中态、roving `tabindex`、方向键/Home/End 和 Enter/Space；新增 `WidgetTabs.spec.ts` 共 `2 tests`，UI 全量为 `13 files / 46 tests passed`，生产构建成功。当前 E2E Dashboard 没有多 Tab fixture，真实 Tab 切换现场验收仍单独记录为待补验。
