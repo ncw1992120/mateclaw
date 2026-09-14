@@ -1064,3 +1064,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 进入数据源“编辑连接”表单后发现密码/认证值显示切换按钮仅有 `title`，无 AX 名称。
 - 已为两个显示切换按钮增加动态 `aria-label`（显示密码/隐藏密码、显示认证值/隐藏认证值），并保留原有切换行为。
 - UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 实际点击切换按钮后名称由“显示密码”变为“隐藏密码”，表单可见无名控件数为 `0`。截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。
+
+### 2026-09-15 数据集预览行数开关补验
+
+- 进入数据集编辑/预览页后发现“ 不限显示行数 ”复选框没有可访问名称。
+- 已补充 `aria-label="不限显示行数"`；定向 `DatasetEdit.spec.ts` 为 `14 passed`，生产构建成功。
+- Chrome CDP 现场确认复选框名称为“ 不限显示行数 ”，页面可见无名控件数为 `0`；截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。

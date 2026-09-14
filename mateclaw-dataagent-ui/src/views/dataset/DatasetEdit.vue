@@ -214,7 +214,7 @@
         </div>
         <div class="toolbar-right">
           <label class="unlimit-row-check">
-            <input v-model="unlimitRows" type="checkbox" />
+            <input v-model="unlimitRows" type="checkbox" :aria-label="t('datasetEdit.unlimitRows')" />
             <span>{{ t('datasetEdit.unlimitRows') }}</span>
           </label>
           <button class="toolbar-btn refresh-btn" aria-label="刷新数据预览" title="刷新数据预览" @click="handleRefreshData">

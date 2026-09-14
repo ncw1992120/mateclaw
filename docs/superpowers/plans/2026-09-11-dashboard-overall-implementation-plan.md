@@ -486,3 +486,5 @@ make dashboard-verify-local
 **2026-09-15 数据源配置页无障碍补充：** Chrome CDP 进入配置数据源页发现卡片“编辑名称/删除”图标按钮缺少 AX 名称，已补齐 `aria-label`；UI 单测 `16 files / 49 tests passed`、生产构建成功，现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
 
 **2026-09-15 数据源连接表单无障碍补充：** Chrome CDP 进入编辑连接表单发现密码/认证值显示按钮缺少 AX 名称，已补齐动态 `aria-label` 并验证点击切换；UI 单测 `16 files / 49 tests passed`、生产构建成功，表单现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。
+
+**2026-09-15 数据集预览页无障碍补充：** Chrome CDP 发现“ 不限显示行数 ”复选框缺少 AX 名称，已补齐 `aria-label`；`DatasetEdit.spec.ts` 定向 `14 passed`、生产构建成功，现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。
