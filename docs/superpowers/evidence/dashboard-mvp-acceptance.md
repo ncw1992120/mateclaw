@@ -796,3 +796,8 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - JDBC+Aloudata 仍实际返回 5 行并包含 `120.5`，`dashboard-jdbc-aloudata.png` 非更新模式严格快照通过；维度树现场同时确认“时间与区域，2 个维度”。
 
 > 当前基线说明：本文更早的快照失败、Descriptor 空 Schema 和 Table 高度记录均为历史复现；以本节及后续记录为准。当前本地模拟完整矩阵 `22 passed`，相关快照差异已关闭。真实 Aloudata 结果查询仍因 `SM_02_0038` 保持外部阻塞。
+
+### 2026-09-14 当前工作树 UI 回归
+
+- `npm --prefix mateclaw-dataagent-ui test -- --run`：`12 files / 44 tests passed`。
+- `npm --prefix mateclaw-dataagent-ui run build`：生产构建成功；仅保留既有 Rollup `PURE` 注释和 chunk size warning，不影响构建退出码。
