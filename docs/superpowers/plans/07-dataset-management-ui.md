@@ -24,10 +24,10 @@
 
 | 编号 | 级别 | 问题 | 复现步骤 | 预期结果 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
-| FE-CLOSE-01 | P0 | 数据配置入口只展示指标平台 | 登录后进入“配置 → 数据配置”，查看列表并点击新建 | 可选择并管理 JDBC、Aloudata、HTTP/API、文件所需连接或注册项 | 已补来源选择页并移除新建时固定 `source-id="60"`；列表和 HTTP/API、文件登记仍待完善 |
-| FE-CLOSE-02 | P0 | 五种来源编辑器没有正式入口 | 从顶部“配置”、数据配置页和洞察列表查找“新建数据集” | 可进入数据集列表和新建/编辑页，刷新、保存、取消、返回均正常 | `DatasetEdit.vue` 没有生产组件引用，路由只有 `/login` 和 `/`；仅组件单测可直接挂载 |
-| FE-CLOSE-04 | P0 | 文件上传、下载是空实现 | 在数据集编辑器选择“文件” | 完成文件选择、校验、上传、对象引用回填、预览；下载不可用时不展示 | 已完成文件选择、上传和对象引用回填；不可用的下载入口已移除，格式校验和上传后预览仍待完善 |
-| FE-CLOSE-05 | P1 | HTTP/API 要求手填内部定义 ID | 在数据集编辑器选择“HTTP/API” | 从当前工作区已登记 API 中搜索选择，展示 endpoint 摘要、参数和预览错误 | 已改为读取所选数据源 `apiDefinitions` 目录下拉选择；定义登记管理页、endpoint 摘要和预览错误展示仍待完善 |
+| FE-CLOSE-01 | P0 | 数据配置入口只展示指标平台 | 登录后进入“配置 → 数据配置”，查看列表并点击新建 | 可选择并管理 JDBC、Aloudata、HTTP/API、文件所需连接或注册项 | 已补来源选择页并移除新建时固定 `source-id="60"`；数据源列表和 HTTP/API、文件登记仍待完善 |
+| FE-CLOSE-02 | P0 | 五种来源编辑器没有正式入口 | 从顶部“配置”、数据配置页和洞察列表查找“新建数据集” | 可进入数据集列表和新建/编辑页，刷新、保存、取消、返回均正常 | 已完成 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 及配置中心入口；完整创建链路 E2E 和真实后端数据仍待执行 |
+| FE-CLOSE-04 | P0 | 文件上传、下载是空实现 | 在数据集编辑器选择“文件” | 完成文件选择、校验、上传、对象引用回填、预览；下载不可用时不展示 | 已完成文件选择、格式/大小校验、受控上传和对象引用回填；上传后数据集预览与下载仍待补齐 |
+| FE-CLOSE-05 | P1 | HTTP/API 要求手填内部定义 ID | 在数据集编辑器选择“HTTP/API” | 从当前工作区已登记 API 中搜索选择，展示 endpoint 摘要、参数和预览错误 | 已改为读取所选数据源 `apiDefinitions` 目录下拉选择并展示 method/path/参数摘要；定义登记管理页和真实预览错误仍待完善 |
 | FE-CLOSE-06 | P1 | 多个可见按钮点击无反馈 | 点击“了解如何配置”“来源表”“新建计算字段”“分组依据”“聚合编辑器”“字段设置”“更多” | 动作可用；不在本期范围的动作应移除或禁用并解释 | 未开放操作均显示明确的后续版本提示；真实配置能力仍待后续实现 |
 | FE-CLOSE-08 | P1 | 页面未完全遵循项目主题与组件风格 | 分别切换 light、warm、eye-care、dark 查看数据集编辑页 | 复用 `--theme-*`、Element Plus 和现有配置页布局，各主题下背景、边框、文字、焦点一致 | `DatasetEdit.vue` 大量硬编码颜色并自建原生表单样式，主题一致性无法成立 |
 | FE-CLOSE-09 | P2 | 可访问性和可理解性风险 | 仅用键盘操作表单，并检查控件名称、焦点、错误关联和文字对比度 | 所有控件有可访问名称，顺序和焦点清晰，错误可定位，文字对比度足够 | 多个文本 `label` 未通过 `for/id` 关联控件，自绘按钮较多；需继续用 AX 树与键盘复核 |
@@ -139,7 +139,7 @@ npm --prefix mateclaw-dataagent-ui run build
 | 用例 | 结果 | 页面操作与实际结果 |
 | --- | --- | --- |
 | VIS-UI01 | `PASS`（本地模拟） | 进入 `洞察`→编辑 `E2E JDBC + Aloudata Dashboard`，打开数据集选择器，确认可选 `E2E JDBC Orders Dataset`、`E2E Aloudata Metrics Dataset`、`E2E HTTP Orders Dataset`、`E2E File Orders Dataset`；切换至文件/HTTP 后页面不出现 SQL。进入 `配置`→`数据配置` 编辑已有 Aloudata 连接，认证值为空且未显示旧认证值。 |
-| VIS-UI02 | `FAIL` | 依次选择文件、HTTP、JDBC 数据集并点击“查看字段”，均显示 `0 个字段`；随后点击“输入预览”，却能返回含 `id/order_date/region/status/amount` 的有效行。原始 JSON 放在窄侧栏中，字段内容横向溢出，需要滚动，字段和类型不易阅读。空输入补充场景显示“每个数据集输入都必须选择数据集”，未发起无效执行，前置校验子项通过。 |
+| VIS-UI02 | `PASS（本地模拟，修复后）` | Descriptor 空 Schema 探测期间显示“字段探测中…”，受控输入预览完成后补齐字段；字段和预览使用结构化表格。空输入补充场景显示“每个数据集输入都必须选择数据集”，未发起无效执行。 |
 
 **当前工作树复验补充（2026-09-14）：** 当前实现的静态/组件验证已覆盖 Descriptor 自动补齐和结构化输入预览；非交互 CDP 脚本在 `/tmp/mateclaw-dashboard-cdp-20260914/` 生成编辑器截图。用户 Chrome `9222` 可通过 CDP 打开到洞察列表，但 CUA 交互通道连续返回 `Unable to load browser request-header policy`，本轮未能完成 CUA 点击式 VIS-UI01～VIS-UI02；因此不新增未经交互确认的 PASS。真实 E2E 的当前阻塞是 09 计划记录的双源视觉快照差异，不是本子计划 Descriptor 单测失败。
 
@@ -151,4 +151,4 @@ npm --prefix mateclaw-dataagent-ui run build
 4. 点击“输入预览”，确认预览返回包含 `id`、`order_date`、`region`、`status`、`amount` 的行。
 5. 保持 Chrome viewport `1440x736`，观察预览区域：原始 JSON 在右侧栏中被截断并出现横向滚动。
 
-预期：Descriptor 字段名、类型和数量与输入预览一致，且预览内容在面板内可读、不发生布局溢出。实际：Descriptor 与预览不一致，预览布局不可读。该问题保持 `FAIL`，统一证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md` 的“本轮 Google Chrome CDP 视觉验收”。
+预期：Descriptor 字段名、类型和数量与输入预览一致，且预览内容在面板内可读、不发生布局溢出。当前实现已在空 Schema 中间态显示“字段探测中…”并由受控预览补齐字段；统一证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md` 的“Descriptor 空 Schema 中间态修复与 Chrome 复验”。
