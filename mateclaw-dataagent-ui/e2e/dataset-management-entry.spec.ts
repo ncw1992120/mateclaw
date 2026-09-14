@@ -294,7 +294,11 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
   const datasetSelect = page.locator('.dataset-input-panel .dataset-input-row').last().locator('.el-select').first()
   await datasetSelect.click()
   await page.getByRole('option', { name: /E2E HTTP Orders Dataset/ }).click()
-  await page.locator('.dataset-input-panel .alias-input input').last().fill('api_orders')
+  const aliasInput = page.locator('.dataset-input-panel .alias-input input').last()
+  await aliasInput.fill('bad alias')
+  await expect(aliasInput).toHaveAttribute('aria-describedby', /dataset-alias-error-/)
+  await expect(page.locator('[id^="dataset-alias-error-"]')).toBeVisible()
+  await aliasInput.fill('api_orders')
   await page.locator('.dataset-input-panel textarea').fill('rows = datasets.read(input_name="api_orders")\nresult = rows.to_polars().to_dicts()')
   await expect(page.locator('.dataset-input-panel')).toContainText('结果绑定组件')
 

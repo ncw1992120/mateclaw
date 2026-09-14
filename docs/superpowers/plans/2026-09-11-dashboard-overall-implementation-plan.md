@@ -299,6 +299,8 @@ make dashboard-verify-local
 
 **2026-09-14 页面树新增按钮可访问性修复：** 页面树新增页面按钮从仅显示 `+` 改为保留符号并补充 `aria-label="新增页面"`；定向 Chrome E2E 和用户 Chrome CDP 均确认“新增页面”“页面操作”名称可读，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。该修复继续收敛本地入口可访问性，不替代全站审计。
 
+**2026-09-14 脚本别名错误关联修复：** 非法别名输入补齐 `aria-describedby` 与 `role="alert"` 错误关联；定向回归、UI 全量 `42/42`、构建和 `DESIGN-PASS` 通过，Chrome CDP 现场确认错误可见且控件无名数为 `0`。该修复收敛本地错误可定位性，不改变全站审计及外部 Gate 状态。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。

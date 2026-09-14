@@ -692,6 +692,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为按钮增加 `aria-label="新增页面"`，保留原有点击行为和视觉符号。
 - 回归：`仪表盘页面树更多操作按钮暴露可访问名称` 系统 Chrome channel `1 passed (4.8s)`；Chrome CDP `9222` 现场读取页面树按钮名称为“新增页面”和“页面操作”，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。
 
+### 2026-09-14 脚本别名错误关联
+
+- 问题：非法脚本别名虽然显示错误文案，但输入控件未通过 `aria-describedby` 关联错误，读屏用户难以定位原因。
+- 修复：别名输入动态关联 `dataset-alias-error-{index}`，错误节点增加 `role="alert"`；合法值时移除关联属性。
+- 回归：定向真实 Chrome channel 用例在非法别名断言 `aria-describedby` 和错误节点可见性后 `1 passed (5.7s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
+- Chrome CDP `9222` 现场读取 `aria-describedby=dataset-alias-error-0`、`role=alert`、错误可见且无名控件数 `0`；截图 `/tmp/mateclaw-cdp-alias-error-a11y.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

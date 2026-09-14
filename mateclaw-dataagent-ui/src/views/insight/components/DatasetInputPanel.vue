@@ -48,11 +48,12 @@
       <el-input
         :model-value="input.inputName"
         class="alias-input"
+        :aria-describedby="aliasStatus(input.inputName) === 'ok' ? undefined : `dataset-alias-error-${index}`"
         placeholder="脚本别名，如 orders"
         :status="aliasStatus(input.inputName) === 'ok' ? '' : 'error'"
         @update:model-value="(value: string) => changeAlias(index, value)"
       />
-      <div v-if="aliasStatus(input.inputName) !== 'ok'" class="field-error">
+      <div v-if="aliasStatus(input.inputName) !== 'ok'" :id="`dataset-alias-error-${index}`" class="field-error" role="alert">
         {{ aliasStatus(input.inputName) }}
       </div>
       <div v-if="descriptors[input.datasetId]?.schema?.length" class="descriptor-summary">
