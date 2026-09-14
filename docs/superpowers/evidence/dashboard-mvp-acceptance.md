@@ -436,3 +436,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - `DatasetInputPanel.vue` 新增“结果绑定组件”下拉框，候选项来自当前页面的 KPI、图表和表格组件；脚本结果不再隐式依赖当前属性面板选中项。
 - 编辑器加载已有 `scriptBindings` 时回显首个绑定目标；首次选中画布组件时作为默认目标，用户点击“应用到组件”后仍由 `scriptBindings` 持久化。
 - 单测新增绑定目标可发现性覆盖；Chrome CUA 编辑器 AX 树已看到“结果绑定组件”和“选择要接收脚本结果的组件”。当前工作区无可选数据组件，未强行伪造选择结果。
+
+## 2026-09-14 提交后回归与 CUA 状态
+
+- 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 的 UI 全量回归为 `9 files / 35 tests passed`；production build、`git diff --check` 和 `bash scripts/verify-dashboard-design.sh`（`DESIGN-PASS`）均通过。
+- `dashboard-multi-source.spec.ts` 的历史快照差异 `1158 pixels (ratio 0.01)` 已在同一套本地模拟 E2E 环境中重新生成并以非更新模式复跑关闭；双源断言仍为 5 行并包含 `120.5`。
+- 本轮尝试恢复用户 Google Chrome CUA 两次，均返回 `Unable to load browser request-header policy`，没有把静态回归或非交互截图升级为新的交互视觉 PASS；CUA 服务恢复后需按当前提交重新采集截图和 AX 树。

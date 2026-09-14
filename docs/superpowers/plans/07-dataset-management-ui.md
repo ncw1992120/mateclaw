@@ -143,6 +143,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **当前工作树复验补充（2026-09-14）：** 当前实现的静态/组件验证已覆盖 Descriptor 自动补齐和结构化输入预览；非交互 CDP 脚本在 `/tmp/mateclaw-dashboard-cdp-20260914/` 生成编辑器截图。用户 Chrome `9222` 可通过 CDP 打开到洞察列表，但 CUA 交互通道连续返回 `Unable to load browser request-header policy`，本轮未能完成 CUA 点击式 VIS-UI01～VIS-UI02；因此不新增未经交互确认的 PASS。真实 E2E 的当前阻塞是 09 计划记录的双源视觉快照差异，不是本子计划 Descriptor 单测失败。
 
+**提交后回归补充（2026-09-14）：** 提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 上 UI 全量为 `9 files / 35 tests passed`，production build 与设计门禁均通过。该结果只证明自动化回归，不替代 CUA 交互截图；当前 CUA 请求头策略错误仍待服务恢复。
+
 #### VIS-UI02 问题复现
 
 1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。

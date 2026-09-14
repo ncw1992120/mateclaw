@@ -243,6 +243,8 @@ make dashboard-verify-local
 
 **2026-09-14 继续实施补充：** 修复 `DatasetInputPanel` 在 Descriptor 空 Schema 异步探测期间误显示“0 个字段”的问题，改为“字段探测中…”并保留刷新入口；新增中间态回归测试。该修复不改变 Dataset 契约或读取时序，只校正页面状态表达。Chrome CUA 已复验数据集管理、新建数据集来源选择和取消返回链路；当前真实工作区没有可授权数据集，Descriptor 中间态现场截图待模拟数据集注入后补采。
 
+**2026-09-14 提交后回归补充：** 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 已完成 UI 回归 `9 files / 35 tests passed`、production build、`git diff --check` 和 `DESIGN-PASS`。本轮未新增产品闭环状态，既有 `PARTIAL`、`NOT_RUN` 和真实 Aloudata `EXTERNAL-BLOCKED` 结论保持不变。Chrome CUA 重试仍返回 `Unable to load browser request-header policy`，因此不将本轮静态回归或非交互截图写成新的交互视觉 PASS；待 CUA 服务恢复后，按 VIS-UI01～VIS-UI08 补采当前提交证据。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。

@@ -191,6 +191,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **当前工作树 CDP 复验补充（2026-09-14）：** 当前修复后的非交互 CDP 脚本已生成四页截图；用户 Chrome 的 `9222` 页面可见 9 个看板。全量真实 Playwright 9 用例取得双源 JDBC+Aloudata 的 5 行和 `120.5`，视觉快照差异 `1158 pixels (ratio 0.01)` 已通过重新生成当前渲染基线并以非更新模式复跑关闭。CUA 后续复验受本地 DataAgent 未监听 `18089` 影响，需服务恢复后继续；不以失效登录页替代产品通过证据。
 
+**提交后回归补充（2026-09-14）：** 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 的 UI 全量 `9 files / 35 tests passed`、production build 和 `DESIGN-PASS` 均通过；既有 Playwright 快照基线修复结论保持不变。Chrome CUA 重试返回 `Unable to load browser request-header policy`，当前不新增交互视觉证据。
+
 ### 本轮逐用例验收记录（2026-09-13）
 
 验收环境：当前工作树 HEAD `0c1b066f6f5059fcf8930294c111707e8d39c91f`、本地模拟 E2E 服务、工作区 `1`、Google Chrome viewport `1440x736`。持久化 CDP 截图位于 `/tmp/mateclaw-dashboard-cdp-current`，包括 `dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`；同轮 CDP AX 节点数为 `567/500/617/88`（列表/编辑器/Table/ECharts）。
