@@ -206,6 +206,8 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
+
+补充实现方向键（左右/上下、Home/End）切换页面并将焦点移动到新 Tab；Chrome CDP `ArrowRight` 现场验收通过，截图 `/tmp/mateclaw-cdp-multipage-tabs-arrow.png`。
 ### FE-CLOSE-09 可访问性对比度（2026-09-14）
 
 - [x] 数据集列表辅助文字与状态标签改用主题语义令牌，不再使用固定颜色。

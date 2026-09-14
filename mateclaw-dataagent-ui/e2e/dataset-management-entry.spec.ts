@@ -195,7 +195,12 @@ test('仪表盘预览多页面 Tab 暴露选中状态', async ({ page, request }
     await card.getByRole('button', { name: '预览' }).click()
     await expect(page.locator('.dashboard-preview-view')).toBeVisible()
     await expect(page.locator('.page-bar').first()).toHaveAttribute('role', 'tablist')
-    await expect(page.locator('.page-bar').first().getByRole('tab').first()).toHaveAttribute('aria-selected', 'true')
+    const tabs = page.locator('.page-bar').first().getByRole('tab')
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
+    await tabs.first().focus()
+    await tabs.first().press('ArrowRight')
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs.nth(1)).toBeFocused()
   } finally {
     if (dashboardId) await request.delete(`/dataagent/api/v1/insight/dashboards/${dashboardId}`, { headers })
   }

@@ -55,10 +55,12 @@
           :key="page.id"
           type="button"
           role="tab"
+          :data-page-id="page.id"
           class="page-tab mc-tab"
           :class="{ active: activePageId === page.id || isDescendantPage(activePageId, page.id) }"
           :aria-selected="activePageId === page.id || isDescendantPage(activePageId, page.id)"
           :tabindex="activePageId === page.id || isDescendantPage(activePageId, page.id) ? 0 : -1"
+          @keydown="handlePageTabKeydown($event, topLevelPages.map(item => item.id), page.id)"
           @click="handlePageChange(page.id)"
         >
           <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
@@ -72,10 +74,12 @@
           :key="sub.id"
           type="button"
           role="tab"
+          :data-page-id="sub.id"
           class="page-tab mc-tab mc-tab-sub"
           :class="{ active: activePageId === sub.id }"
           :aria-selected="activePageId === sub.id"
           :tabindex="activePageId === sub.id ? 0 : -1"
+          @keydown="handlePageTabKeydown($event, activeSubPages.map(item => item.id), sub.id)"
           @click="handlePageChange(sub.id)"
         >
           <span v-if="sub.icon" class="page-icon">{{ sub.icon }}</span>
@@ -694,6 +698,26 @@ function handlePageChange(pageId: string): void {
   activePageId.value = pageId
   // 页面切换后重新加载数据（筛选上下文不变，但可见组件变化）
   scheduleReloadWithFilters(filterContext.value)
+}
+
+function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: string): void {
+  if (pageIds.length < 2 || !['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    return
+  }
+  event.preventDefault()
+  const currentIndex = pageIds.indexOf(pageId)
+  if (currentIndex < 0) return
+  let nextIndex = currentIndex
+  if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = pageIds.length - 1
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % pageIds.length
+  else nextIndex = (currentIndex - 1 + pageIds.length) % pageIds.length
+  const nextPageId = pageIds[nextIndex]
+  handlePageChange(nextPageId)
+  nextTick(() => {
+    const nextTab = document.querySelector<HTMLElement>(`.page-tab[data-page-id="${CSS.escape(nextPageId)}"]`)
+    nextTab?.focus()
+  })
 }
 </script>
 

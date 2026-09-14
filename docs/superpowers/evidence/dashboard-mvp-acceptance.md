@@ -666,3 +666,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：顶级页面和子页面导航增加 `role=tablist`、`role=tab`、动态 `aria-selected`、`tabindex` 及按钮类型。
 - 回归：系统 Chrome channel 临时双页面看板用例 `仪表盘预览多页面 Tab 暴露选中状态` `1 passed (3.7s)`，失败时自动清理临时看板。
 - Chrome CDP `9222` 实际创建并打开双页面看板，读取 `tablists=1`、`tabs=2`，首页 `aria-selected=true/tabindex=0`、明细页 `false/-1`；截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。临时看板已删除。
+- 追加键盘验收：在首页 Tab 聚焦后按 `ArrowRight`，明细页实际变为 `aria-selected=true`、`tabindex=0` 且获得焦点；截图 `/tmp/mateclaw-cdp-multipage-tabs-arrow.png`。临时看板已删除。
