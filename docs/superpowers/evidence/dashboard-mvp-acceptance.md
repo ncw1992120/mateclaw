@@ -600,3 +600,7 @@ JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可�
 ### 2026-09-14 空态插图主题视觉复验
 
 数据集新建页 SVG 空态移除固定浅色 `fill/stroke` 属性后，Chrome CDP 暗色主题读取到卡片填充 `rgba(255, 140, 90, 0.07)`、线条填充 `rgba(237, 241, 247, 0.14)`、勾选描边 `rgb(255, 140, 90)`，均来自当前主题令牌。截图：`/tmp/mateclaw-cdp-dataset-theme-svg-8d90ea7d.png`。
+
+### 2026-09-14 表项焦点视觉复验
+
+Chrome CDP 在模拟 JDBC 数据源返回 102 张表后聚焦首个表项，实际读取 `role=checkbox`、`aria-checked=false`、`outline: rgb(65, 118, 230) solid 2px`、`outline-offset: 2px`；暗色主题截图：`/tmp/mateclaw-cdp-table-focus-dark-5d562f69.png`。

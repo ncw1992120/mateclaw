@@ -122,6 +122,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-14 空态插图主题修复：** 新建数据集空态 SVG 原先保留固定浅色 `fill/stroke` 属性，暗色主题存在视觉回退风险；现移除固定颜色，统一由 `.illustration-*` 的 `--theme-*` 令牌控制。Chrome CDP 暗色主题复验卡片、线条和勾选描边均使用当前主题颜色。
 
+**2026-09-14 表项焦点可见性补充：** 为可键盘操作的 JDBC 表项增加 `:focus-visible` 主题化 2px 轮廓和偏移，避免深色主题下焦点不可辨识；定向单测与构建通过，Chrome CDP 实测焦点轮廓已生效。
+
 **2026-09-14 键盘审计补充：** Chrome CDP 对 `/datasets/new` 和双源编辑器的所有当前可聚焦 `button/input/select/textarea/[tabindex]` 控件执行名称检查，结果分别为 `5/5`、`52/52` 均存在文本、`aria-label`、`title` 或 `id`。这关闭了本地模拟范围内“无名称控件”缺口；四主题对比度仍需设计专项工具验证。
 
 - MGMT-C01～MGMT-UI05 全部通过且无跳过，UI production build 成功。

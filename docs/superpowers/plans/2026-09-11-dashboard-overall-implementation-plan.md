@@ -287,6 +287,8 @@ make dashboard-verify-local
 
 **2026-09-14 空态插图主题补充：** 移除数据集新建空态 SVG 的固定颜色属性，改由主题令牌统一控制；Chrome CDP 暗色主题现场显示主题化插图，截图 `/tmp/mateclaw-cdp-dataset-theme-svg-8d90ea7d.png`。
 
+**2026-09-14 表项焦点视觉补充：** JDBC 表项新增 `:focus-visible` 主题化轮廓；Chrome CDP 暗色主题实测 `outline: 2px`、`outline-offset: 2px`，截图 `/tmp/mateclaw-cdp-table-focus-dark-5d562f69.png`。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。

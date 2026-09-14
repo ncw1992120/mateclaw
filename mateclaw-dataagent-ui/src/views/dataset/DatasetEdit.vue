@@ -1662,6 +1662,11 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   color: var(--main-orange);
 }
 
+.table-item:focus-visible {
+  outline: 2px solid var(--main-orange);
+  outline-offset: 2px;
+}
+
 .table-item.selected {
   background: var(--theme-surface-hover);
   border-color: var(--main-orange);
