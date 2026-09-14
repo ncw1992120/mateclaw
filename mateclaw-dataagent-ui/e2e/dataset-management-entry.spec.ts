@@ -216,6 +216,22 @@ test('仪表盘卡片支持键盘打开预览', async ({ page }) => {
   await expect(page.locator('.dashboard-preview-view')).toBeVisible()
 })
 
+test('仪表盘卡片内部编辑按钮的键盘操作不触发卡片预览', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  const card = page.locator('.dashboard-card').first()
+  await expect(card).toBeVisible()
+  const edit = card.getByRole('button', { name: '编辑' })
+  await edit.focus()
+  await edit.press('Enter')
+  await expect(page.locator('.editor-pages')).toBeVisible()
+  await expect(page.locator('.dashboard-preview-view')).toHaveCount(0)
+})
+
 test('洞察 AI 助手关闭按钮暴露可访问名称', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)
@@ -241,6 +257,10 @@ test('仪表盘页面树更多操作按钮暴露可访问名称', async ({ page 
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: '编辑' }).click()
   await expect(page.locator('.editor-pages')).toBeVisible()
+  await expect(page.locator('.insight-editor-view > .editor-toolbar .back-btn')).toHaveAccessibleName('返回')
+  await expect(page.locator('.toolbar-owner-input input')).toHaveAccessibleName('负责人')
+  await expect(page.locator('.panel-collapse-btn')).toHaveAccessibleName('收起面板')
+  await expect(page.locator('.palette-collapse-btn')).toHaveAccessibleName('收起面板')
   await expect(page.getByRole('button', { name: '页面操作' }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: '新增页面' })).toBeVisible()
   const titleEditor = page.locator('h2.toolbar-title')

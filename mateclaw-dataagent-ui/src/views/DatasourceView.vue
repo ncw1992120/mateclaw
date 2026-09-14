@@ -77,7 +77,7 @@
               <div class="item-info">
                 <div class="item-main-row">
                   <span class="item-name">{{ ds.name }}</span>
-                  <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop>
+                  <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop @keydown.stop>
                     <button
                       class="item-action-btn"
                       :title="t('datasourcePage.actionRename')"

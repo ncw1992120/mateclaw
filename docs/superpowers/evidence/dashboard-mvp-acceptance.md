@@ -948,3 +948,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 首次完整矩阵发现标题改为 `role=button` 后覆盖原生 heading 语义，导致正式创建链路无法找到“未命名仪表盘”；已移除该 role 和 aria-label，保留 `<h2>`、`tabindex=0` 及 Enter/Space 激活。
 - 创建仪表盘并绑定脚本数据集定向 E2E 恢复为 `1 passed (5.9s)`；完整 Chrome channel 矩阵最终为 `28 passed (4.1m)`，无跳过。
 - Chrome CDP 现场确认卡片键盘预览和编辑器标题/描述键盘编辑均正常，避免用可访问性修复破坏既有标题查询契约。
+
+### 2026-09-15 嵌套操作按钮键盘事件隔离修复
+
+- 问题：为列表卡片/数据源条目增加父级 Enter/Space 后，内部“编辑/删除”等按钮的键盘事件会冒泡，可能同时触发父级预览或选择。
+- 修复：在仪表盘 `.card-actions` 和数据源 `.item-actions` 操作区增加 `keydown.stop`，只阻止父级快捷动作，不改变按钮自身行为。
+- 回归：新增“仪表盘卡片内部编辑按钮的键盘操作不触发卡片预览”用例；修复前按 Enter 无法稳定进入编辑器，修复后定向用例 `1 passed (3.4s)`，产品入口 E2E 文件全量 `20 passed (50.8s)`，UI 单测 `13 files / 46 tests passed`，生产构建通过。
+- Google Chrome CDP `9222` 现场保留编辑器实际渲染截图 `/tmp/mateclaw-cdp-final-visual-20260915.png`；编辑器、脚本结果输入和双源组件仍可见。该页面当前没有执行结果表，因此不能以该截图替代双源结果快照证据。

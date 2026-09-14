@@ -251,7 +251,7 @@
               </div>
 
               <!-- 操作栏 -->
-              <div class="card-actions" @click.stop>
+              <div class="card-actions" @click.stop @keydown.stop>
                 <div class="action-group">
                   <button class="card-action-btn" @click="handlePreview(dashboard.id)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
