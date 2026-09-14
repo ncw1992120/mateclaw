@@ -165,6 +165,46 @@ class DatasetCatalogServiceTest {
     }
 
     @Test
+    void rejectsJdbcDefinitionBoundToAloudataDatasource() {
+        DatasetManageServiceImpl service = newService();
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setId(60L);
+        datasource.setName("metrics");
+        datasource.setSourceType("aloudata");
+        when(datasourceMapper.selectById(60L)).thenReturn(datasource);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+
+        DatasetCreateRequest request = new DatasetCreateRequest();
+        request.setName("invalid jdbc");
+        request.setSourceDefinition(new DatasetSourceDefinition.JdbcSqlDefinition(60L, "select 1"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createDataset(request));
+        assertEquals("JDBC 数据集不能绑定 Aloudata 数据源", error.getMessage());
+        verify(datasetMapper, never()).insert(any(DatasetEntity.class));
+    }
+
+    @Test
+    void rejectsAloudataViewBoundToJdbcDatasource() {
+        DatasetManageServiceImpl service = newService();
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setId(3L);
+        datasource.setName("warehouse");
+        datasource.setSourceType("mysql");
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+
+        DatasetCreateRequest request = new DatasetCreateRequest();
+        request.setName("invalid view");
+        request.setSourceDefinition(new DatasetSourceDefinition.AloudataViewDefinition(3L, "sales_view"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createDataset(request));
+        assertEquals("Aloudata 指标视图必须绑定 Aloudata 数据源", error.getMessage());
+        verify(datasetMapper, never()).insert(any(DatasetEntity.class));
+    }
+
+    @Test
     void updatesTypedSourceDefinitionWithoutChangingLegacyBasicFields() throws Exception {
         DatasetManageServiceImpl service = newService();
         DatasetEntity entity = new DatasetEntity();

@@ -147,6 +147,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **来源兼容约束补充（2026-09-14）：** 数据源选择与数据集来源类型已建立前端兼容校验：Aloudata 只显示/允许指标视图，JDBC 才允许 JDBC 表和 JDBC SQL；切换数据源时自动回到兼容来源，保存前再次阻断非法组合。`DatasetEdit.spec.ts` 新增 Aloudata + JDBC SQL 回归，UI 全量回归更新为 `9 files / 36 tests passed`。
 
+服务端 `DatasetManageServiceImpl` 已增加同等校验，覆盖绕过 UI 直接提交创建/更新请求的场景；`DatasetCatalogServiceTest` 新增 JDBC/Aloudata 交叉绑定拒绝用例。
+
 #### VIS-UI02 问题复现
 
 1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。

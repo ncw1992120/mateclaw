@@ -142,6 +142,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         if (typedDefinition != null && datasourceIdLong != null && dsEntity == null) {
             throw new RuntimeException("数据源不存在");
         }
+        validateDatasourceCompatibility(typedDefinition, dsEntity);
         if (datasourceIdLong != null) {
             datasourceManageService.checkDatasourceReadable(datasourceIdLong);
         }
@@ -254,6 +255,23 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         catch (Exception e) { throw new RuntimeException("数据集来源定义无效", e); }
     }
 
+    /**
+     * 防止把 JDBC/Aloudata 专属来源绑定到错误的连接类型。
+     * HTTP/API 仍允许复用已有连接记录中的登记定义，FILE 没有连接 ID。
+     */
+    private void validateDatasourceCompatibility(DatasetSourceDefinition definition, DatasourceEntity datasource) {
+        if (definition == null || datasource == null || datasource.getSourceType() == null) return;
+        String datasourceType = datasource.getSourceType().trim().toLowerCase(Locale.ROOT);
+        boolean aloudata = datasourceType.contains("aloudata") || datasourceType.contains("analysis_view");
+        if ((definition instanceof DatasetSourceDefinition.JdbcTableDefinition
+                || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && aloudata) {
+            throw new IllegalArgumentException("JDBC 数据集不能绑定 Aloudata 数据源");
+        }
+        if (definition instanceof DatasetSourceDefinition.AloudataViewDefinition && !aloudata) {
+            throw new IllegalArgumentException("Aloudata 指标视图必须绑定 Aloudata 数据源");
+        }
+    }
+
     private String normalizeDatasetName(String value) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException("数据集名称不能为空");
         String normalized = Normalizer.normalize(value.trim(), Normalizer.Form.NFKC).trim();
@@ -289,6 +307,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             if (datasourceId != null && datasourceMapper.selectById(datasourceId) == null) {
                 throw new RuntimeException("数据源不存在");
             }
+            validateDatasourceCompatibility(definition,
+                    datasourceId == null ? null : datasourceMapper.selectById(datasourceId));
             if (datasourceId != null) {
                 datasourceManageService.checkDatasourceReadable(datasourceId);
             }

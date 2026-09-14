@@ -448,3 +448,4 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 问题：数据集编辑器可以在 Aloudata 连接上选择 `JDBC_SQL`，形成后端无法读取的非法来源组合。
 - 修复：来源类型选项按当前连接类型禁用；选择连接时自动切换到兼容默认来源；保存前保留兼容性校验，非法组合不会提交。
 - 回归：`DatasetEdit.spec.ts` 覆盖 Aloudata + JDBC SQL 的禁用与保存保护；UI 全量为 `9 files / 36 tests passed`，production build 和 `DESIGN-PASS` 通过。
+- 服务端同步拒绝同类非法组合，Docker Maven 定向执行 `DatasetCatalogServiceTest` 通过；因此 API 直提交不会绕过页面来源约束。
