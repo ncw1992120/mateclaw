@@ -75,7 +75,7 @@ h1 { margin: 0 0 8px; font-size: 24px; }
 .dataset-card { padding: 20px; border: 1px solid var(--theme-border); border-radius: 12px; background: var(--theme-surface); }
 .card-title-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 h2 { margin: 0; font-size: 17px; }
-.status { color: #237804; font-size: 12px; }
+.status { color: var(--theme-success-text); font-size: 12px; }
 .card-actions { margin-top: 20px; }
 button { border: 0; border-radius: 8px; padding: 9px 14px; cursor: pointer; font-size: 14px; }
 .primary-btn { color: #fff; background: var(--main-orange); }

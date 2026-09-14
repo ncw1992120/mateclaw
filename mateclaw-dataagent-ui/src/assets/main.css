@@ -21,7 +21,8 @@ html, body, #app {
   --theme-surface-hover: rgba(65, 118, 230, 0.06);
   --theme-text: #1A2233;
   --theme-text-secondary: #46536B;
-  --theme-text-muted: #8A94A6;
+  --theme-text-muted: #667085;
+  --theme-success-text: #166534;
   --theme-border: rgba(26, 34, 51, 0.08);
   --theme-border-strong: rgba(26, 34, 51, 0.14);
   --theme-overlay: rgba(255, 255, 255, 0.85);
@@ -59,7 +60,8 @@ html[data-theme='warm'] {
   --theme-surface-hover: rgba(200, 107, 58, 0.06);
   --theme-text: #33291F;
   --theme-text-secondary: #5F5245;
-  --theme-text-muted: #A2968A;
+  --theme-text-muted: #6B5E52;
+  --theme-success-text: #166534;
   --theme-border: rgba(97, 74, 55, 0.09);
   --theme-border-strong: rgba(97, 74, 55, 0.15);
   --theme-overlay: rgba(247, 243, 239, 0.88);
@@ -95,7 +97,8 @@ html[data-theme='eye-care'] {
   --theme-surface-hover: rgba(106, 154, 104, 0.07);
   --theme-text: #26372A;
   --theme-text-secondary: #4C5F50;
-  --theme-text-muted: #7F917F;
+  --theme-text-muted: #5A6B5A;
+  --theme-success-text: #2F6B3B;
   --theme-border: rgba(58, 92, 60, 0.09);
   --theme-border-strong: rgba(58, 92, 60, 0.15);
   --theme-overlay: rgba(240, 245, 236, 0.88);
@@ -131,7 +134,8 @@ html[data-theme='dark'] {
   --theme-surface-hover: rgba(255, 140, 90, 0.07);
   --theme-text: #EDF1F7;
   --theme-text-secondary: #C3CCD9;
-  --theme-text-muted: #6B7789;
+  --theme-text-muted: #9AA6B6;
+  --theme-success-text: #57D38C;
   --theme-border: rgba(237, 241, 247, 0.08);
   --theme-border-strong: rgba(237, 241, 247, 0.14);
   --theme-overlay: rgba(30, 30, 30, 0.85);

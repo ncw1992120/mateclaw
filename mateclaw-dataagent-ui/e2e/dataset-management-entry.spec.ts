@@ -159,6 +159,51 @@ test('数据集空态随四种主题使用主题令牌', async ({ page }) => {
   }
 })
 
+test('数据集列表状态和辅助文字满足主题对比度', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/datasets')
+  await expect(page.locator('.dataset-card').first()).toBeVisible()
+  const results = await page.evaluate(() => {
+    const rgb = (value: string) => {
+      const parts = value.match(/\d+(?:\.\d+)?/g)
+      return parts ? parts.slice(0, 3).map(Number) : null
+    }
+    const luminance = (value: number[]) => {
+      const channels = value.map(channel => channel / 255).map(channel => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    }
+    const contrast = (foreground: string, background: string) => {
+      const fg = rgb(foreground)
+      const bg = rgb(background)
+      if (!fg || !bg) return null
+      const light = Math.max(luminance(fg), luminance(bg))
+      const dark = Math.min(luminance(fg), luminance(bg))
+      return (light + 0.05) / (dark + 0.05)
+    }
+    const themes = ['light', 'warm', 'eye-care', 'dark']
+    return themes.map(theme => {
+      document.documentElement.dataset.theme = theme
+      const muted = getComputedStyle(document.querySelector('.page-header p')!).color
+      const status = getComputedStyle(document.querySelector('.status')!).color
+      const surface = getComputedStyle(document.documentElement).getPropertyValue('--theme-surface').trim()
+      const probe = document.createElement('span')
+      probe.style.backgroundColor = surface
+      document.body.appendChild(probe)
+      const background = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return { theme, mutedContrast: contrast(muted, background), statusContrast: contrast(status, background) }
+    })
+  })
+  for (const result of results) {
+    expect(result.mutedContrast, result.theme).toBeGreaterThanOrEqual(4.5)
+    expect(result.statusContrast, result.theme).toBeGreaterThanOrEqual(4.5)
+  }
+})
+
 test('数据集预览工具栏和结果空态随主题使用主题令牌', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

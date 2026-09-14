@@ -574,3 +574,8 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 问题：文件、HTTP/API 等来源在尚未完成元数据探测时，列表显示“未命名数据源 · 0 行 · 0 个字段”，无法区分真实空数据和待探测状态。
 - 修复：列表根据 `sourceType` 提供来源兜底名称（如“文件数据源”），计数统一数值化；行数和字段数均为零时显示“待探测”。不改变后端数据集契约或预览逻辑。
 - 回归：`DatasetListView.spec.ts` 增加字符串计数与来源兜底断言，定向测试通过；Chrome CDP dark 主题现场显示文件数据集为“文件数据源 · 待探测”，截图：`/tmp/mateclaw-cdp-dataset-list-dark-metadata-final.png`。
+### 2026-09-14 数据集列表可访问性对比度复验
+
+Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`、`warm`、`eye-care`、`dark` 四种主题，读取数据集列表标题说明、状态标签的实际前景色与主题表面色并按 WCAG AA 普通文字阈值 4.5:1 计算。修复后辅助文字最低对比度为 `4.97:1`，状态标签最低为 `6.24:1`，四种主题均通过。实现上将 `--theme-text-muted` 和 `--theme-success-text` 主题化，移除数据集状态标签的固定绿色。
+
+新增 Playwright 用例 `数据集列表状态和辅助文字满足主题对比度`。当前环境未安装 Playwright headless Chromium，直接运行该用例会因 `chrome-headless-shell` 缺失而阻塞；本次结果以系统 Chrome CDP 实测为准，待标准 E2E 镜像恢复后补跑自动化用例。
