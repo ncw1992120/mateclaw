@@ -22,7 +22,7 @@
 | 数据连接管理 | `PARTIAL` | JDBC/Aloudata 连接管理和来源选择已验证；HTTP/API 登记定义与正式文件对象管理仍依赖已有登记/外部存储 |
 | 五种来源数据集创建 | `LOCAL-SIMULATION-PASS` | `/datasets`、`/datasets/new`、`/datasets/:id/edit` 覆盖文件上传、统一预览；真实入口用例已通过 |
 | SQL、指标视图及来源参数配置 | `PARTIAL` | 五种来源控件已从正式入口可达，HTTP/API 改为登记定义选择；定义登记管理和真实连接联调仍待完善 |
-| 仪表盘选择与绑定 | `PARTIAL` | 已明确直接指标/脚本输入模式并新增结果绑定组件选择器；完整创建、应用、保存、回显现场链路仍待验收 |
+| 仪表盘选择与绑定 | `LOCAL-SIMULATION-PASS` | 真实 Chrome channel E2E 已覆盖洞察入口新建仪表盘、添加组件、选择数据集、填写脚本并保存回显；正式外部数据源联调仍属后续 Gate |
 | 预览和运行时消费 | `LOCAL-SIMULATION-PASS` | 双源、ObjectRef、大结果、ECharts、错误/取消/超时/资源限制均由真实本地栈验证 |
 | 项目风格、主题和可访问性 | `PARTIAL` | 关键页面已通过 Chrome AX/CUA 基础验收；数据集页主题统一、键盘遍历和完整对比度审计仍待补齐 |
 
