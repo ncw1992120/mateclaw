@@ -1075,3 +1075,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - 对问数运行时中图表全屏、图表灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠等图标操作补充可访问名称；附件名称动态包含文件名，避免多个移除按钮无法区分。
 - UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 问数入口现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。
+
+### 2026-09-15 技能配置分页控件补验
+
+- Chrome CDP 进入配置 → 技能配置后发现 Element Plus 分页的“每页条数”内部 combobox 未继承分页容器名称。
+- 增加稳定的分页尺寸选择器 `aria-label` 补偿逻辑，并为技能搜索/排序控件补齐名称；不改变分页和筛选行为。
+- UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 现场读取两个分页 combobox 名称为“技能分页每页条数1”，可见无名控件数为 `0`。截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。

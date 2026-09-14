@@ -490,3 +490,5 @@ make dashboard-verify-local
 **2026-09-15 数据集预览页无障碍补充：** Chrome CDP 发现“ 不限显示行数 ”复选框缺少 AX 名称，已补齐 `aria-label`；`DatasetEdit.spec.ts` 定向 `14 passed`、生产构建成功，现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。
 
 **2026-09-15 问数运行时无障碍补充：** 为图表全屏、灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠图标操作补齐可访问名称；UI 单测 `16 files / 49 tests passed`、生产构建成功，Chrome CDP 问数入口扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。
+
+**2026-09-15 技能配置页无障碍补充：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序控件补齐可访问标签；UI 单测 `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能配置页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。

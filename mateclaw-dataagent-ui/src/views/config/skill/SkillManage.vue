@@ -1,5 +1,5 @@
 <template>
-  <div class="skills-page">
+  <div ref="skillsPageRef" class="skills-page">
     <!-- 固定头部（红框区域） -->
     <div class="skills-fixed">
       <!-- 页面头部 -->
@@ -57,10 +57,11 @@
           v-model="query.keyword"
           class="skill-search-input"
           type="search"
+          aria-label="搜索技能"
           :placeholder="t('skillManage.searchPlaceholder')"
           @keyup.enter="onFilterChange"
         />
-        <select v-model="query.sort" class="skill-status-filter" @change="onFilterChange">
+        <select v-model="query.sort" class="skill-status-filter" aria-label="技能排序" @change="onFilterChange">
           <option value="recommended">{{ t('skillManage.sort.recommended') }}</option>
           <option value="name">{{ t('skillManage.sort.name') }}</option>
           <option value="status">{{ t('skillManage.sort.status') }}</option>
@@ -190,6 +191,7 @@
         <el-pagination
           v-model:current-page="section.state.page"
           v-model:page-size="section.state.size"
+          aria-label="技能分页"
           :page-sizes="[12, 20, 50]"
           :total="section.state.total"
           layout="prev, pager, next, sizes, total"
@@ -317,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUpdated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, ElPagination } from 'element-plus'
 import * as skillApi from '@/api/skill'
@@ -329,6 +331,15 @@ import ImportSkillDialog from './ImportSkillDialog.vue'
 const { t, locale } = useI18n()
 const agentStore = useAgentStore()
 const { hasPermission } = usePermission()
+
+const skillsPageRef = ref<HTMLElement | null>(null)
+
+/** Element Plus 分页尺寸选择器的内部 combobox 不会继承分页容器的 aria-label，补上稳定名称。 */
+function labelPaginationSizeSelectors(): void {
+  skillsPageRef.value?.querySelectorAll<HTMLInputElement>('.skill-pagination input.el-select__input').forEach((input, index) => {
+    if (!input.getAttribute('aria-label')) input.setAttribute('aria-label', `技能分页每页条数${index + 1}`)
+  })
+}
 
 /** 当前工作区 ID：优先从当前 Agent 获取，否则取列表中第一个 Agent 的，最后兜底 1 */
 const currentWorkspaceId = computed<number>(() => {
@@ -426,7 +437,10 @@ function isTabActive(tab: { value: string }): boolean {
 onMounted(() => {
   console.log('[SkillManage] 初始化, workspaceId:', currentWorkspaceId.value)
   loadAll()
+  labelPaginationSizeSelectors()
 })
+
+onUpdated(labelPaginationSizeSelectors)
 
 /** 监听 workspaceId 变化（agent 列表加载后可能更新为真实值） */
 watch(currentWorkspaceId, (val) => {

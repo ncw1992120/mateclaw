@@ -357,3 +357,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 数据集预览页 AX 补验：** 数据集预览“ 不限显示行数 ”复选框补齐 `aria-label`；`DatasetEdit.spec.ts` 定向 `14 passed`、生产构建成功。Chrome CDP 现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。
 
 **2026-09-15 问数运行时操作 AX 补齐：** 图表全屏/灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠等图标操作补充稳定或动态 `aria-label`；UI `16 files / 49 tests passed`、生产构建成功，Chrome CDP 问数入口扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。
+
+**2026-09-15 技能配置分页 AX 补齐：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序补齐标签；UI `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
