@@ -1058,3 +1058,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome CDP 进入配置 → 数据配置 → 数据源后发现数据源卡片的“编辑名称/删除”图标按钮只有 `title`，无 AX 名称。
 - 已补充对应 `aria-label`，不改变重命名、删除和事件冒泡行为；UI 单测 `16 files / 49 tests passed`、生产构建成功。
 - CDP 现场确认“编辑名称/删除”名称正确，数据源配置页可见无名控件数为 `0`；截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
+
+### 2026-09-15 数据源连接表单密码控件补验
+
+- 进入数据源“编辑连接”表单后发现密码/认证值显示切换按钮仅有 `title`，无 AX 名称。
+- 已为两个显示切换按钮增加动态 `aria-label`（显示密码/隐藏密码、显示认证值/隐藏认证值），并保留原有切换行为。
+- UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 实际点击切换按钮后名称由“显示密码”变为“隐藏密码”，表单可见无名控件数为 `0`。截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。

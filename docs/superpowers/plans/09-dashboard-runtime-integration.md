@@ -351,3 +351,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 E2E 依赖恢复后的最终验收：** 重建 E2E TLS volume 并恢复 MinIO/WireMock/DataAgent 后，完整 Chrome channel 矩阵 `35 passed (1.7m)`，无失败、无跳过；双源定向 `4 passed (22.8s)`。用户 Chrome CDP 实际触发双源最终结果预览，5 行且包含 `120.5`，截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`。此前 `30/5` 结果确认是测试栈证书/服务状态问题，已关闭。
 
 **2026-09-15 数据源配置页 AX 补验：** CDP 扫描数据源卡片发现“编辑名称/删除”图标按钮缺少可访问名称，已补齐 `aria-label`。UI `16 files / 49 tests passed`、生产构建成功；配置页现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
+
+**2026-09-15 数据源连接表单 AX 补验：** 连接表单密码/认证值显示按钮补齐动态 `aria-label`；UI `16 files / 49 tests passed`、生产构建成功。Chrome CDP 点击验证显示/隐藏名称切换正确，表单扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。

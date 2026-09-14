@@ -484,3 +484,5 @@ make dashboard-verify-local
 **2026-09-15 最终矩阵与 Chrome CDP 验收：** 重建 E2E TLS volume、恢复 MinIO/WireMock/DataAgent 后，完整 Chrome channel 产品矩阵 `35 passed (1.7m)`，无失败、无跳过；双源 JDBC+Aloudata、API+文件、ObjectRef、ECharts、文件创建和全部错误路径均通过。用户 Chrome CDP 实际打开双源看板并执行最终结果预览，得到 5 行且包含 `120.5`，截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`；前一轮 `30 passed / 5 failed` 已确认是 E2E TLS/服务不完整导致的环境问题并关闭。
 
 **2026-09-15 数据源配置页无障碍补充：** Chrome CDP 进入配置数据源页发现卡片“编辑名称/删除”图标按钮缺少 AX 名称，已补齐 `aria-label`；UI 单测 `16 files / 49 tests passed`、生产构建成功，现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
+
+**2026-09-15 数据源连接表单无障碍补充：** Chrome CDP 进入编辑连接表单发现密码/认证值显示按钮缺少 AX 名称，已补齐动态 `aria-label` 并验证点击切换；UI 单测 `16 files / 49 tests passed`、生产构建成功，表单现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。
