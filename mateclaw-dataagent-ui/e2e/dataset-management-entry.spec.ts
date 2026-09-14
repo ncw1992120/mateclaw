@@ -116,7 +116,7 @@ test('数据集空态随四种主题使用主题令牌', async ({ page }) => {
 
   await page.goto('/datasets/new')
   await expect(page.locator('.empty-state')).toBeVisible()
-  const snapshots = await page.evaluate(() => {
+  const snapshots = await page.evaluate(async () => {
     const themes = ['light', 'warm', 'eye-care', 'dark']
     const read = (selector: string) => {
       const element = document.querySelector(selector)
@@ -216,7 +216,7 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
   await page.getByRole('button', { name: '新建数据源' }).click()
   await page.getByRole('button', { name: '选择MySQL数据源' }).click()
   await expect(page.locator('.datasource-form-page')).toBeVisible()
-  const snapshots = await page.evaluate(() => {
+  const snapshots = await page.evaluate(async () => {
     const themes = ['light', 'warm', 'eye-care', 'dark']
     const read = (selector: string) => {
       const element = document.querySelector(selector)
@@ -232,22 +232,27 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
       probe.remove()
       return normalized
     }
-    return themes.map(theme => {
+    const snapshots = []
+    for (const theme of themes) {
       document.documentElement.dataset.theme = theme
+      // 输入控件声明了 transition: all，等待过渡完成后再读取计算样式，避免读到上一主题。
+      await new Promise(resolve => setTimeout(resolve, 450))
       const root = getComputedStyle(document.documentElement)
-      return {
+      snapshots.push({
         theme,
         page: read('.datasource-form-page'),
         header: read('.form-header'),
         card: read('.form-card'),
         title: read('.form-title'),
         label: read('.form-card .form-label'),
+        input: read('.form-card input.form-input'),
         expectedBg: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
         expectedPageBg: normalize(root.getPropertyValue('--theme-bg').trim(), 'backgroundColor'),
         expectedText: normalize(root.getPropertyValue('--theme-text').trim(), 'color'),
         expectedSecondary: normalize(root.getPropertyValue('--theme-text-secondary').trim(), 'color'),
-      }
-    })
+      })
+    }
+    return snapshots
   })
   for (const snapshot of snapshots) {
     expect(snapshot.page.background, snapshot.theme).toBe(snapshot.expectedPageBg)
@@ -255,5 +260,7 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
     expect(snapshot.card.background, snapshot.theme).toBe(snapshot.expectedBg)
     expect(snapshot.title.color, snapshot.theme).toBe(snapshot.expectedText)
     expect(snapshot.label.color, snapshot.theme).toBe(snapshot.expectedSecondary)
+    expect(snapshot.input.background, snapshot.theme).toBe(snapshot.expectedBg)
+    expect(snapshot.input.color, snapshot.theme).toBe(snapshot.expectedText)
   }
 })

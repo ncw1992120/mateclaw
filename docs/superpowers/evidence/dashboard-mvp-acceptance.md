@@ -545,7 +545,7 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 ## 2026-09-14 数据源表单主题基础适配
 
 - 根因：`DatasourceForm.vue` 页面容器、头部、卡片、标题、标签和辅助文案使用固定颜色，主题切换时视觉不一致。
-- 修复：基础布局、边框和文本改用 `--theme-*` 令牌；输入控件保留浏览器原生 appearance 兼容边界，未将未确认的原生控件背景渲染误标为全量通过。
+- 修复：基础布局、边框和文本改用 `--theme-*` 令牌；针对 Chrome `:-webkit-autofill` 增加填充背景、文字色和光标色覆盖，避免已填充用户名/密码在 dark 主题出现灰色块。
 - 验证：新增 `数据源配置表单基础容器随主题使用主题令牌`，在真实 Chrome channel 下覆盖 `light`、`warm`、`eye-care`、`dark`，修复前固定背景/文字断言失败，修复后基础容器和文本断言通过。
-- 完整回归：UI 单测 `37 passed`，生产构建成功，真实 Chrome channel E2E `15 passed`（含双源、错误/兼容、数据集入口及本用例）。Chrome CDP dark 主题现场计算样式为页面 `rgb(13, 17, 23)`、头部/卡片 `rgb(22, 27, 38)`、标题 `rgb(237, 241, 247)`、标签 `rgb(195, 204, 217)`；截图：`/tmp/mateclaw-cdp-datasource-form-dark-current.png`。
-- 其他历史页面主题审计、原生输入控件跨浏览器外观和真实 Aloudata/正式存储环境仍保持未完成状态。
+- 完整回归：UI 单测 `37 passed`，生产构建成功，真实 Chrome channel E2E `15 passed`（含双源、错误/兼容、数据集入口及本用例）。Chrome CDP dark 主题现场截图确认普通输入和 autofill 输入均与深色表单一致；截图：`/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`。
+- 其他历史页面主题审计、非 Chrome 浏览器原生控件外观和真实 Aloudata/正式存储环境仍保持未完成状态。

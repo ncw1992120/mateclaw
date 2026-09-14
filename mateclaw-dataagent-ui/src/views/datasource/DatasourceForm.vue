@@ -906,6 +906,16 @@ async function handleSubmit(): Promise<void> {
   background-color: var(--theme-surface) !important;
 }
 
+/* Chrome autofill 会用内部阴影覆盖 background-color，必须同时覆盖填充色和文字色。 */
+.datasource-form-page input.form-input:-webkit-autofill,
+.datasource-form-page input.form-input:-webkit-autofill:hover,
+.datasource-form-page input.form-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--theme-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-surface) inset;
+  box-shadow: 0 0 0 1000px var(--theme-surface) inset;
+  caret-color: var(--theme-text);
+}
+
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
   border-color: var(--theme-border-strong);
