@@ -123,7 +123,12 @@
               :key="dashboard.id"
               class="dashboard-card"
               :class="['card-theme-' + getCardTheme(dashboard.id), { 'card-is-empty': getDashboardChartKind(dashboard) === 'empty' }]"
+              role="button"
+              tabindex="0"
+              :aria-label="`预览仪表盘：${dashboard.name}`"
               @click="handlePreview(dashboard.id)"
+              @keydown.enter="handlePreview(dashboard.id)"
+              @keydown.space.prevent="handlePreview(dashboard.id)"
             >
               <!-- 头部：图标 + 标题 + 状态标签 -->
               <div class="card-header">

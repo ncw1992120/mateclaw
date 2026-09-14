@@ -935,3 +935,16 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：标题/描述增加 `role=button`、`tabindex=0`、稳定名称及 Enter/Space 激活；属性 Tab 列表增加 `tablist/tab`、选中态、roving `tabindex` 和方向键/Home/End/Enter/Space 操作。
 - 回归：页面树操作 E2E 增加标题 Enter 激活断言，定向用例 `1 passed (4.5s)`；UI 单测与生产构建保持通过。
 - 用户 Chrome CDP `9222` 现场确认标题 Enter 能进入编辑输入，描述 Enter 能进入编辑输入，当前编辑器可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-editor-title-property-keyboard-20260915.png`。
+
+### 2026-09-15 仪表盘卡片与数据源列表键盘语义修复
+
+- 问题：仪表盘列表卡片和数据源列表项由普通 `div` 承担点击选择/预览，键盘无法触发相同动作。
+- 修复：增加 `role=button`、`tabindex=0`、动态 `aria-label`，并支持 Enter/Space；嵌套操作按钮的既有阻止冒泡行为保持不变。
+- 回归：新增“仪表盘卡片支持键盘打开预览”Chrome channel E2E，`1 passed (4.4s)`；UI 单测 `13 files / 46 tests passed`，生产构建成功。
+- 用户 Chrome CDP `9222` 现场读取首张仪表盘卡片 `role=button`、名称“预览仪表盘：E2E JDBC + Aloudata Dashboard”，按 Enter 进入预览，空名称数为 `0`；截图 `/tmp/mateclaw-cdp-dashboard-card-keyboard-20260915.png`。
+
+### 2026-09-15 标题 heading 兼容回归修复
+
+- 首次完整矩阵发现标题改为 `role=button` 后覆盖原生 heading 语义，导致正式创建链路无法找到“未命名仪表盘”；已移除该 role 和 aria-label，保留 `<h2>`、`tabindex=0` 及 Enter/Space 激活。
+- 创建仪表盘并绑定脚本数据集定向 E2E 恢复为 `1 passed (5.9s)`；完整 Chrome channel 矩阵最终为 `28 passed (4.1m)`，无跳过。
+- Chrome CDP 现场确认卡片键盘预览和编辑器标题/描述键盘编辑均正常，避免用可访问性修复破坏既有标题查询契约。

@@ -282,3 +282,5 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 **2026-09-15 指标平台面板可访问性补充：** 指标平台连接配置、指标/维度搜索框补充显式 AX 名称；Element Plus 分页内部 page-size combobox 通过容器引用在渲染后补齐“指标每页条数”“维度每页条数”，Chrome CDP 现场确认空名称数为 `0`。
 
 **2026-09-15 主入口输入语义补充：** 洞察脚本输入/参数、问数消息与模型搜索、报告搜索、帮助搜索补充稳定 `aria-label`；Chrome CDP 逐页巡检可见交互控件无名数均为 `0`。
+
+**2026-09-15 列表项键盘语义补充：** 仪表盘卡片和数据源列表项补齐 `role=button`、动态名称、`tabindex` 及 Enter/Space 操作；仪表盘卡片定向 Chrome E2E `1 passed`，Chrome CDP 现场按 Enter 可进入预览。

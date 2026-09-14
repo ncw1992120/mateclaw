@@ -60,7 +60,12 @@
               :key="ds.id"
               class="ds-list-item"
               :class="{ active: selectedDsId === ds.id, disabled: !ds.enabled }"
+              role="button"
+              tabindex="0"
+              :aria-label="`选择数据源：${ds.name}`"
               @click="handleSelectDs(ds)"
+              @keydown.enter="handleSelectDs(ds)"
+              @keydown.space.prevent="handleSelectDs(ds)"
             >
               <span class="item-icon">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -20,9 +20,7 @@
             v-else
             class="toolbar-title"
             :class="{ placeholder: !dashboardName }"
-            role="button"
             tabindex="0"
-            aria-label="编辑仪表盘名称"
             :title="t('insight.editor')"
             @click="editingName = true"
             @keydown.enter="editingName = true"

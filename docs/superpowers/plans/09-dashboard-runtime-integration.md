@@ -313,3 +313,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 多 Tab 运行时 E2E 补验：** 新增临时数据表多 Tab 看板 fixture，真实 Chrome channel E2E 验证 `ArrowRight` 切换和焦点同步，定向用例 `1 passed (5.1s)`；完整矩阵更新为 `27 passed (1.4m)`，用例 finally 自动删除临时看板。
 
 **2026-09-15 编辑器标题/描述与属性 Tab 键盘语义修复：** 标题、描述支持键盘激活编辑，属性面板 Tab 行补齐可访问 Tab 语义和键盘切换；页面树操作定向 E2E 增加标题 Enter 激活断言并通过 `1 passed (4.5s)`，Chrome CDP 现场确认输入可见且无名控件数为 `0`。
+
+**2026-09-15 heading 兼容回归修复：** 标题保留原生 `<h2>` heading 语义，仅增加 `tabindex` 与键盘激活，修复 `role=button` 覆盖语义导致创建链路定位失败的问题；创建绑定定向 E2E `1 passed (5.9s)`，完整 Chrome channel 矩阵 `28 passed (4.1m)`。

@@ -201,6 +201,21 @@ test('洞察列表筛选和视图切换暴露当前状态', async ({ page }) => 
   await expect(page.getByTitle('网格视图')).toHaveAttribute('aria-pressed', 'false')
 })
 
+test('仪表盘卡片支持键盘打开预览', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  const card = page.locator('.dashboard-card').first()
+  await expect(card).toHaveAttribute('role', 'button')
+  await expect(card).toHaveAttribute('tabindex', '0')
+  await card.focus()
+  await card.press('Enter')
+  await expect(page.locator('.dashboard-preview-view')).toBeVisible()
+})
+
 test('洞察 AI 助手关闭按钮暴露可访问名称', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)
@@ -229,7 +244,7 @@ test('仪表盘页面树更多操作按钮暴露可访问名称', async ({ page 
   await expect(page.getByRole('button', { name: '页面操作' }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: '新增页面' })).toBeVisible()
   const titleEditor = page.locator('h2.toolbar-title')
-  await expect(titleEditor).toHaveAttribute('role', 'button')
+  await expect(titleEditor).toHaveAttribute('tabindex', '0')
   await titleEditor.focus()
   await titleEditor.press('Enter')
   await expect(page.locator('input.toolbar-name-input')).toBeVisible()

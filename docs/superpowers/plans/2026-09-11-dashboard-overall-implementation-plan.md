@@ -431,6 +431,10 @@ make dashboard-verify-local
 
 **2026-09-15 编辑器键盘闭环补充：** 仪表盘标题/描述编辑入口及属性面板 Tab 列表补齐键盘语义；Chrome CDP 现场验证标题/描述可进入编辑输入，定向 E2E `1 passed (4.5s)`，不改变仪表盘保存与预览逻辑。
 
+**2026-09-15 列表项键盘闭环补充：** 仪表盘卡片和数据源列表项补齐按钮语义与 Enter/Space 操作；Chrome CDP 现场按 Enter 打开仪表盘预览，定向 E2E `1 passed (4.4s)`，可见交互控件无名数为 `0`。
+
+**2026-09-15 heading 兼容回归修复：** 标题保留原生 heading 角色并保留键盘编辑入口，修复语义补丁导致“未命名仪表盘”创建链路定位失败的问题；最终完整 Chrome channel E2E `28 passed (4.1m)`，创建绑定定向用例 `1 passed (5.9s)`。
+
 **当前权威基线（2026-09-15）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。`22 passed`、`25 passed` 是历史基线；最新本地模拟 Chrome channel 完整矩阵为 `26 passed (1.4m)`，双源最终结果实际为 `5` 行且包含 `120.5`，严格快照通过；UI 单测为 `12 files / 44 tests passed`，生产构建成功。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。
