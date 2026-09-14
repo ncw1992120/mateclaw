@@ -309,3 +309,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 双源最终 Chrome CDP 复验：** 用户 Chrome `9222` 打开独立 E2E UI 的 `E2E JDBC + Aloudata Dashboard`，编辑器两个数据集输入和脚本面板可见交互控件无名数为 `0`；点击“最终结果预览”实际渲染 `5` 行并包含 `120.5`。完整 Chrome channel E2E 已更新为 `26 passed (1.4m)`，截图见统一验收记录。
 
 **2026-09-15 表格与指标卡片多 Tab 键盘语义修复：** 两类组件从点击 `div` 改为 `tablist/tab`，补齐选中态、roving `tabindex`、方向键/Home/End 和 Enter/Space；新增 `WidgetTabs.spec.ts` 共 `2 tests`，UI 全量为 `13 files / 46 tests passed`，生产构建成功。当前 E2E Dashboard 没有多 Tab fixture，真实 Tab 切换现场验收仍单独记录为待补验。
+
+**2026-09-15 多 Tab 运行时 E2E 补验：** 新增临时数据表多 Tab 看板 fixture，真实 Chrome channel E2E 验证 `ArrowRight` 切换和焦点同步，定向用例 `1 passed (5.1s)`；完整矩阵更新为 `27 passed (1.4m)`，用例 finally 自动删除临时看板。

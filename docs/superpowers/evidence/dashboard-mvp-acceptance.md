@@ -922,3 +922,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：两类组件补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键/Home/End 和 Enter/Space；焦点移动使用 DOM 查找，不依赖 `CSS.escape`，兼容 jsdom 和浏览器运行时。
 - 回归：新增 `WidgetTabs.spec.ts`，表格与指标卡片共 `2 tests passed`；UI 全量更新为 `13 files / 46 tests passed`，生产构建成功。
 - 用户 Chrome CDP `9222` 在双源仪表盘桌面视口复验编辑器/预览，当前现场无多 Tab fixture，但可见交互控件无名数为 `0`、文档宽度 `1440px`；截图 `/tmp/mateclaw-cdp-widget-tabs-final-20260915.png`。多 Tab 真实运行时切换待后续带 Tab fixture 的专项 E2E。
+
+### 2026-09-15 多 Tab 运行时 E2E 补验
+
+- 新增临时数据表多 Tab 看板 fixture，完整模拟 Compose Chrome channel 用例实际创建并进入预览；两个 Tab 初始选中“概览”，聚焦后按 `ArrowRight` 切换为“明细”，焦点同步到第二个 Tab。
+- 定向用例 `仪表盘预览数据表多 Tab 支持键盘切换`：`1 passed (5.1s)`；随后完整矩阵更新为 `27 passed (1.4m)`，无跳过。
+- 用户 Chrome CDP 现场仍保留桌面双源截图与 AX 复核；临时 fixture 由 E2E 用例自动清理，未污染共享测试数据。
