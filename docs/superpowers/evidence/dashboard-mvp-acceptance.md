@@ -741,6 +741,14 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：新增 `ChartWidget.spec.ts`，验证两个 Tab 的语义、选中状态和 ArrowRight 切换；UI 全量回归为 `11 files / 43 tests passed`，production build、`DESIGN-PASS` 通过。
 - 当前模拟 Dashboard fixture 未包含带多 Tab 的真实图表组件，故运行时 Chrome CDP 只记录组件代码/单测证据；真实多 Tab 看板联调时需补充现场截图与焦点证据。
 
+### 2026-09-14 指标/维度类目树键盘语义
+
+- 问题：Aloudata 指标/维度配置类目树节点及展开图标原先仅绑定点击事件，键盘无法选择或展开。
+- 修复：类目节点增加 `role="treeitem"`、`aria-selected`、可聚焦属性和来源计数名称；展开控件增加 `role="button"`、`aria-expanded`、动态名称，并支持 Enter/Space。
+- 回归：新增 `CategoryTreeNode.spec.ts`，验证选择、展开语义及键盘事件；UI 全量为 `12 files / 44 tests passed`，production build、`DESIGN-PASS` 通过。
+- Chrome `9222` 当前页面未打开指标平台面板，故本轮保留单测证据；进入真实指标/维度配置页后需补采现场焦点截图。
+- CDP 补充：打开本地 Aloudata 模拟数据源并点击“同步元数据”后，页面返回“同步失败: 未定义的 API 端点: metric_list”，因此当前模拟环境没有产生类目树节点；该环境支撑缺口单独保留，不将空态误记为树控件验收通过。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

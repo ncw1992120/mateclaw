@@ -4,12 +4,22 @@
       class="tree-node"
       :class="{ 'is-active': selectedId === group.categoryId }"
       :style="{ paddingLeft: `${16 + level * 18}px` }"
+      role="treeitem"
+      :aria-selected="selectedId === group.categoryId"
+      :aria-label="`${group.categoryName}，${count} 个${type === 'metric' ? '指标' : '维度'}`"
+      tabindex="0"
       @click="handleSelect"
+      @keydown="handleSelectKeydown"
     >
       <span
         v-if="hasChildren"
         class="tree-node-expand"
+        role="button"
+        :aria-label="isExpanded ? `收起${group.categoryName}` : `展开${group.categoryName}`"
+        :aria-expanded="isExpanded"
+        tabindex="0"
         @click.stop="handleToggle"
+        @keydown.stop="handleToggleKeydown"
       >
         <el-icon :class="{ 'is-expanded': isExpanded }">
           <ArrowRight v-if="!isExpanded" />
@@ -99,6 +109,18 @@ function handleSelect(): void {
 function handleToggle(): void {
   emit('toggle', { categoryId: props.group.categoryId, type: props.type })
 }
+
+function handleSelectKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleSelect()
+}
+
+function handleToggleKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleToggle()
+}
 </script>
 
 <style scoped>
@@ -115,6 +137,12 @@ function handleToggle(): void {
   cursor: pointer;
   transition: background 0.2s;
   position: relative;
+}
+
+.tree-node:focus-visible,
+.tree-node-expand:focus-visible {
+  outline: 2px solid #165dff;
+  outline-offset: -2px;
 }
 
 .tree-node:hover {

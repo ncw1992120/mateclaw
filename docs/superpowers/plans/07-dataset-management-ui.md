@@ -233,6 +233,12 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 
 该项属于运行时组件的可访问性补齐：图表多 Tab 由点击专用 `div` 改为 `tablist/tab`，提供选中状态、roving `tabindex`、Enter/Space 激活及方向键/Home/End 导航。新增 `ChartWidget.spec.ts` 后 UI 全量为 `11 files / 43 tests passed`，构建和 `DESIGN-PASS` 通过；当前模拟看板没有多 Tab 图表，现场 CDP 交互待真实多 Tab fixture 补验。
 
+### 2026-09-14 指标/维度类目树键盘语义
+
+Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-selected` 和计数名称；有子节点时，展开控件提供 `role="button"`、`aria-expanded`、动态名称并支持 Enter/Space。新增 `CategoryTreeNode.spec.ts` 后 UI 全量为 `12 files / 44 tests passed`，构建和 `DESIGN-PASS` 通过；真实指标平台页面的 CDP 焦点截图待联调 fixture。
+
+本轮 CDP 点击本地模拟数据源“同步元数据”返回“未定义的 API 端点: metric_list”，所以模拟环境没有类目树数据；该问题属于模拟 Aloudata 端点支撑缺口，不能用空态替代现场树节点验收。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。

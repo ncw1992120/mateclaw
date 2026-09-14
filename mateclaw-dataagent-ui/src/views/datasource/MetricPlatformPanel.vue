@@ -259,11 +259,16 @@
             <div class="tree-header">
               <span class="tree-title">类目</span>
             </div>
-            <div class="tree-content">
+            <div class="tree-content" role="tree" aria-label="指标类目">
               <div
                 class="tree-node tree-node-all"
                 :class="{ 'is-active': selectedCategoryId === 'all' }"
+                role="treeitem"
+                :aria-selected="selectedCategoryId === 'all'"
+                aria-label="全部指标"
+                tabindex="0"
                 @click="selectCategory('all')"
+                @keydown="handleCategoryKeydown($event, 'all')"
               >
                 <span class="tree-node-expand is-placeholder" />
                 <span class="tree-node-icon">
@@ -415,11 +420,16 @@
             <div class="tree-header">
               <span class="tree-title">类目</span>
             </div>
-            <div class="tree-content">
+            <div class="tree-content" role="tree" aria-label="维度类目">
               <div
                 class="tree-node tree-node-all"
                 :class="{ 'is-active': selectedDimensionCategoryId === 'all' }"
+                role="treeitem"
+                :aria-selected="selectedDimensionCategoryId === 'all'"
+                aria-label="全部维度"
+                tabindex="0"
                 @click="selectDimensionCategory('all')"
+                @keydown="handleCategoryKeydown($event, 'all', true)"
               >
                 <span class="tree-node-expand is-placeholder" />
                 <span class="tree-node-icon">
@@ -852,6 +862,16 @@ function selectDimensionCategory(categoryId: string): void {
   dimensionPagination.categoryId = categoryId
   dimensionPagination.page = 1
   loadDimensionPage()
+}
+
+function handleCategoryKeydown(event: KeyboardEvent, categoryId: string, dimension = false): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  if (dimension) {
+    selectDimensionCategory(categoryId)
+  } else {
+    selectCategory(categoryId)
+  }
 }
 
 /**
@@ -1875,6 +1895,11 @@ const indicators = reactive([
 
 .tree-node:hover {
   background: var(--theme-surface-hover);
+}
+
+.tree-node:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
 .tree-node.is-active {

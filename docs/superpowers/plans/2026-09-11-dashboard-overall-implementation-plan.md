@@ -313,6 +313,10 @@ make dashboard-verify-local
 
 **2026-09-14 图表组件内部 Tab 键盘语义修复：** 将图表多 Tab 从点击专用 `div` 改为 `tablist/tab`，补齐 `aria-selected`、roving `tabindex`、Enter/Space 激活、方向键及 Home/End 导航；新增 `ChartWidget.spec.ts`，UI 全量 `11 files / 43 tests passed`、构建、`DESIGN-PASS` 通过。当前模拟看板没有多 Tab 图表，真实运行时 CDP 现场交互列为后续 fixture 联调项。
 
+**2026-09-14 指标/维度类目树键盘语义修复：** 将类目树节点补齐 `treeitem`、`aria-selected`、计数名称和键盘选择；展开控件补齐 `role=button`、`aria-expanded`、动态名称及 Enter/Space 操作；新增 `CategoryTreeNode.spec.ts`，UI 全量 `12 files / 44 tests passed`、构建、`DESIGN-PASS` 通过。当前 Chrome CDP 未打开指标平台面板，真实页面现场焦点验收待联调 fixture。
+
+**CDP 模拟环境补充：** 点击本地 Aloudata 数据源“同步元数据”返回“未定义的 API 端点: metric_list”，未产生类目树数据；模拟端点支撑缺口保持单独记录，不能以空态关闭类目树现场验收。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。

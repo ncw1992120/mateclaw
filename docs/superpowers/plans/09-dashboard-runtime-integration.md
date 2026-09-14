@@ -227,6 +227,10 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 图表组件内部 Tab 键盘语义修复：** 图表多 Tab 补齐 `tablist/tab`、`aria-selected`、roving `tabindex`，支持 Enter/Space、方向键及 Home/End；新增 `ChartWidget.spec.ts` 覆盖语义与 ArrowRight 切换，UI 全量 `11 files / 43 tests passed`、production build、`DESIGN-PASS` 通过。当前模拟看板无多 Tab 图表，真实运行时 Chrome CDP 现场交互待补充对应 fixture。
 
+**2026-09-14 指标/维度类目树键盘语义修复：** 指标平台类目树节点补齐 `treeitem`、`aria-selected`、计数名称和键盘选择；展开控件补齐 `role=button`、`aria-expanded`、动态名称及 Enter/Space 操作。新增 `CategoryTreeNode.spec.ts`，UI 全量 `12 files / 44 tests passed`、production build、`DESIGN-PASS` 通过；真实指标平台 CDP 现场交互待对应 fixture。
+
+本轮 Chrome CDP 点击模拟 Aloudata“同步元数据”返回“未定义的 API 端点: metric_list”，没有生成类目树节点；因此现场树交互仍保持待补验，不把空态写成 PASS。
+
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 
 **2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。
