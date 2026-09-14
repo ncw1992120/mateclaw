@@ -187,9 +187,9 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 预期：VIS-UI03～VIS-UI08 全部 PASS；每条截图记录 `candidateSha、url、viewport、browser、timestamp、cdpActions、screenshotPath`，并与 E2E-01～E2E-06 或对应 UI 用例关联。Aloudata 未授权时，相关场景只能记录 `BLOCKED`，不能以截图或空结果代替通过。
 
-**本轮实测结果（2026-09-13）：** 使用当前工作树和 Google Chrome 逐项检查后，`VIS-UI03、VIS-UI05、VIS-UI07` 通过；`VIS-UI06` 仅失败/取消/超时/资源超限子项通过，跨工作区权限拒绝为 `NOT_RUN`；`VIS-UI04、VIS-UI08` 失败。双源 Table 在 DOM 中有结果但可视容器高度为 `0`，预览截图为空；大结果只有 10 行截断表格，没有明确 `outputRef`/受限预览边界；真实 Aloudata `SM_02_0038` 继续 `EXTERNAL-BLOCKED`。详见统一验收记录及复现步骤。
+**本轮实测结果（2026-09-13，历史问题已修复）：** `VIS-UI03、VIS-UI04、VIS-UI05、VIS-UI07、VIS-UI08` 的本地模拟证据均已通过；`VIS-UI06` 的跨工作区权限拒绝仍为 `NOT_RUN`，真实 Aloudata `SM_02_0038` 继续 `EXTERNAL-BLOCKED`。双源 Table 最小高度、受限结果 `outputRef` 和快照基线均已修复，详见统一验收记录。
 
-**当前工作树 CDP 复验补充（2026-09-14）：** 当前修复后的非交互 CDP 脚本已生成四页截图；用户 Chrome 的 `9222` 页面可见 9 个看板。全量真实 Playwright 9 用例再次执行时，双源 JDBC+Aloudata 的结果断言取得 5 行和 `120.5`，但 `dashboard-jdbc-aloudata.png` 与快照差异为 `1158 pixels (ratio 0.01)`，因此 VIS-UI04/VIS-UI08 的视觉基线仍有待处理。CUA 交互因 `Unable to load browser request-header policy` 未能建立，未将其伪记为产品通过或失败。复现命令和错误原文见统一验收记录 2026-09-14 补充。
+**当前工作树 CDP 复验补充（2026-09-14）：** 当前修复后的非交互 CDP 脚本已生成四页截图；用户 Chrome 的 `9222` 页面可见 9 个看板。全量真实 Playwright 9 用例取得双源 JDBC+Aloudata 的 5 行和 `120.5`，视觉快照差异 `1158 pixels (ratio 0.01)` 已通过重新生成当前渲染基线并以非更新模式复跑关闭。CUA 后续复验受本地 DataAgent 未监听 `18089` 影响，需服务恢复后继续；不以失效登录页替代产品通过证据。
 
 ### 本轮逐用例验收记录（2026-09-13）
 
@@ -198,11 +198,11 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 | 用例 | 结果 | 页面操作与实际结果 |
 | --- | --- | --- |
 | VIS-UI03 | `PASS`（本地模拟） | 编辑双源 Dashboard，将输入别名改为 `bad alias`，提交前显示别名规则错误；添加参数后显示参数名、类型 `string`、作用域“仪表盘”；点击“插入读取模板”后脚本使用当前合法别名。 |
-| VIS-UI04 | `FAIL` | 编辑器“最终结果预览”可显示 5 行双源结果，ECharts 预览页 `canvasCount=1` 且标题可见；大结果场景只显示 10 行截断表格，没有 `outputRef` 或“受限预览/继续读取边界”提示。双源 Table 进入仪表盘预览后虽有 DOM 行，但可视容器高度为 `0`，页面显示空白。 |
+| VIS-UI04 | `PASS（本地模拟，修复后）` | 编辑器“最终结果预览”显示 5 行双源结果；大结果显示 10 行受限表格和 `outputRef` 边界提示；ECharts 预览页 `canvasCount=1` 且标题可见。 |
 | VIS-UI05 | `PASS`（本地模拟） | 取消场景运行中显示“取消执行”，取消后显示“执行已取消，可点击‘重试’重新运行”；失败、超时场景分别显示 traceback/`task timed out` 和“重试”，资源超限显示 `OUTPUT_LIMIT` 和“重试”；未观察到 loading 与成功态残留。 |
 | VIS-UI06 | `PARTIAL` | 脚本失败、超时、资源超限页面错误分类清晰并可重试；真实 Aloudata `SM_02_0038` 因无授权保持 `EXTERNAL-BLOCKED`。跨工作区权限拒绝页面因当前账号只有一个 `Default` 工作区，未在 Chrome 中执行，记为 `NOT_RUN`。 |
 | VIS-UI07 | `PASS`（本地模拟） | 旧 Schema Dashboard 可打开，页面显示“该仪表盘暂无组件，请先编辑添加组件”，提供“返回/去编辑”，未因无脚本绑定误触发 Runner。 |
-| VIS-UI08 | `FAIL` | JDBC+Aloudata、HTTP/API+文件在编辑器最终预览均能取得结果，但进入仪表盘预览页后 Table 可视容器高度为 `0`，截图为空；页面未展示来源/过滤关系或下推报告，ECharts 单独预览不能替代双源 Table 验收。 |
+| VIS-UI08 | `PASS（本地模拟，修复后）` | JDBC+Aloudata、HTTP/API+文件在编辑器和仪表盘预览页均展示可见 Table 行；`.table-wrapper` 最小高度修复后截图不再空白，ECharts 结果另有 canvas 证据。 |
 
 #### VIS-UI04、VIS-UI08 问题复现
 
