@@ -3,6 +3,6 @@
   "response": {
     "status": 200,
     "headers": {"Content-Type": "application/json"},
-    "jsonBody": {"code":"200","success":true,"data":{"total":2,"hasNext":false,"data":[{"dimName":"region","dimCode":"region","dimDisplayName":"区域","dimCategoryId":"sales","originDataType":"STRING","displayStatus":"PUBLISHED","datasetName":"local_sales_view"},{"dimName":"order_date","dimCode":"order_date","dimDisplayName":"日期","dimCategoryId":"sales","originDataType":"DATE","displayStatus":"PUBLISHED","datasetName":"local_sales_view"}]}}
+    "jsonBody": {"code":"200","success":true,"data":{"total":2,"hasNext":false,"data":[{"dimName":"region","dimCode":"region","dimDisplayName":"区域","dimCategoryId":"time","originDataType":"STRING","displayStatus":"PUBLISHED","datasetName":"local_sales_view"},{"dimName":"order_date","dimCode":"order_date","dimDisplayName":"日期","dimCategoryId":"time","originDataType":"DATE","displayStatus":"PUBLISHED","datasetName":"local_sales_view"}]}}
   }
 }
