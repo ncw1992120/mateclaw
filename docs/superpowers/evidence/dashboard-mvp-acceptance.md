@@ -839,3 +839,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：`DataTableWidget` 的导出按钮补充 `aria-label="导出 CSV"`；编辑器属性面板收起按钮同步补充 `aria-label="收起面板"`。
 - 回归：本地模拟双源 Chrome channel E2E `1 passed (5.9s)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
 - Chrome CDP `9222` 双源预览现场确认 `data-table-widget=1`、`导出 CSV` 可访问按钮 `1`、无名交互控件 `0`；截图 `/tmp/mateclaw-cdp-dashboard-preview-icons-fixed-20260915.png`。
+
+### 2026-09-15 最新完整 Chrome channel 矩阵
+
+- 使用同一轮本地模拟 Compose、工作区 `1`、现有 JWT、`MATECLAW_E2E_ALOUDATA_MODE=simulation` 和 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`，从同一 state 文件导出全部 Dashboard ID。
+- 执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `25 passed (1.4m)`、无跳过；新增帮助中心图标语义用例已纳入矩阵。
+- 本结果覆盖双源快照、API+文件、ObjectRef、ECharts、旧 Schema、错误/取消/超时/资源限制、主题、数据集入口、模型选择器、顶部导航、帮助中心和页面 Tab 语义；真实 Aloudata 结果授权仍保持外部 Gate。

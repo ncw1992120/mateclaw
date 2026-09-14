@@ -407,6 +407,8 @@ make dashboard-verify-local
 
 **2026-09-14 Aloudata 真实只读复验：** 使用现有认证上下文探测 `Demo_view`，产品层目录/详情均返回 `HTTP 200/code=200/success=true`，详情含 5 个指标和 3 个维度；语义层 5 行基线及目录前 20 个视图均返回 `SM_02_0038`。目录/详情 Adapter 映射具备真实样本，结果查询与远端筛选下推仍为 `EXTERNAL-BLOCKED`，待 Aloudata 提供可查询视图后继续。
 
+**2026-09-15 最新本地验收基线：** 当前工作树使用同一轮模拟 Compose、工作区 `1`、JWT、`MATECLAW_E2E_ALOUDATA_MODE=simulation` 和 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 执行完整 Chrome channel E2E，结果为 `25 passed (1.4m)`、无跳过；UI 单测为 `12 files / 44 tests passed`，生产构建成功，`DESIGN-PASS` 通过。该基线包含帮助中心、导出按钮和属性面板可访问语义修复；真实 Aloudata 结果授权、正式外部服务及权限专项仍不因本地模拟结果关闭。
+
 **当前权威基线（2026-09-14）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。最新本地模拟 Chrome channel 完整矩阵为 `22 passed (1.5m)`，双源定向为 `4 passed (28.7s)`，`dashboard-jdbc-aloudata.png` 严格快照及 5 行/`120.5` 断言均通过；UI 单测为 `12 files / 44 tests passed`，DataAgent 为 `158 tests / 0 failures / 0 errors / 0 skipped`。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。
