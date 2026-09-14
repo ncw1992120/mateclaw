@@ -538,6 +538,10 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
   }
   page.components.push(newComponent)
   selectedComponentId.value = newComponent.id
+  // 新增组件后立即作为脚本结果的默认目标，避免用户还要再次点击画布组件。
+  if (!scriptTargetComponentId.value) {
+    scriptTargetComponentId.value = newComponent.id
+  }
 }
 
 /** 更新布局（拖动/缩放后） */

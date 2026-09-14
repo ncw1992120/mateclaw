@@ -486,6 +486,14 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 - 同轮对 `/datasets/new` 和双源编辑器执行可聚焦控件名称审计：`5/5`、`52/52` 均具备文本、`aria-label`、`title` 或 `id`，未发现无名称控件。
 
+## 2026-09-14 正式仪表盘创建链路修复
+
+- 问题：从“洞察→新建仪表盘”拖入第一个组件后，脚本结果数据集面板仍显示“当前未选择目标组件”，用户必须再次点击画布组件才能绑定。
+- 修复：`handleAddComponent` 在新增组件后自动设置 `scriptTargetComponentId`（仅当当前没有目标时），保持用户已明确选择的目标不被覆盖。
+- 验证：新增 E2E 从产品页面创建仪表盘、拖入“数据表格”、选择 `E2E HTTP Orders Dataset`、填写别名和 `datasets.read` 脚本草稿、保存并确认绑定；完整本地模拟回归 `12 passed`。
+
+- Chrome CDP `9222` 现场复验同一行为：新建仪表盘并拖入“数据表格”后，脚本面板即时显示“当前目标组件：comp_…”。截图 `/tmp/mateclaw-cdp-formal-dashboard-binding-be88696f.png`。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

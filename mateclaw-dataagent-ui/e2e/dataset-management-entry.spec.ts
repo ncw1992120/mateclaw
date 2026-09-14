@@ -64,3 +64,46 @@ test('从产品入口创建文件数据集并进入预览', async ({ page, reque
     })
   }
 })
+
+test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ page, request }) => {
+  const token = required('MATECLAW_E2E_TOKEN')
+  const workspace = required('MATECLAW_E2E_WORKSPACE_ID')
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: token, workspaceId: workspace })
+
+  await page.goto('/?nav=insight')
+  const createResponsePromise = page.waitForResponse(response =>
+    response.request().method() === 'POST' && response.url().includes('/dataagent/api/v1/insight/dashboards'))
+  await page.getByRole('button', { name: '新建仪表盘' }).click()
+  const createResponse = await createResponsePromise
+  const created = await createResponse.json() as { data?: { id?: string } }
+  const dashboardId = created.data?.id
+  expect(dashboardId).toBeTruthy()
+
+  await page.getByRole('heading', { name: '未命名仪表盘' }).click()
+  await page.locator('.toolbar-name-input').fill(`E2E UI Dashboard ${Date.now()}`)
+  await page.locator('.toolbar-name-input').press('Enter')
+  await page.locator('.palette-item').filter({ hasText: '数据表格' }).dragTo(page.locator('.dashboard-canvas'))
+  await expect(page.locator('.dataset-input-panel')).toContainText('当前目标组件：')
+  await page.locator('.dataset-input-panel').getByRole('button', { name: '添加', exact: true }).click()
+  const datasetSelect = page.locator('.dataset-input-panel .dataset-input-row').last().locator('.el-select').first()
+  await datasetSelect.click()
+  await page.getByRole('option', { name: /E2E HTTP Orders Dataset/ }).click()
+  await page.locator('.dataset-input-panel .alias-input input').last().fill('api_orders')
+  await page.locator('.dataset-input-panel textarea').fill('rows = datasets.read(input_name="api_orders")\nresult = rows.to_polars().to_dicts()')
+  await expect(page.locator('.dataset-input-panel')).toContainText('结果绑定组件')
+
+  const updateResponsePromise = page.waitForResponse(response =>
+    response.request().method() === 'PUT' && response.url().includes(`/dataagent/api/v1/insight/dashboards/${dashboardId}`))
+  await page.getByRole('button', { name: '保存' }).click()
+  await updateResponsePromise
+  await expect(page.locator('.dataset-input-panel .alias-input input').last()).toHaveValue('api_orders')
+
+  if (dashboardId) {
+    await request.delete(`/dataagent/api/v1/insight/dashboards/${dashboardId}`, {
+      headers: { Authorization: `Bearer ${token}`, 'X-Workspace-Id': workspace },
+    })
+  }
+})
