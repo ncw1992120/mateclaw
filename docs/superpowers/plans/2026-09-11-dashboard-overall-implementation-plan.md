@@ -263,6 +263,8 @@ make dashboard-verify-local
 
 **2026-09-14 主题快照与真实 Chrome 回归补充：** 修复 `DatasourceForm.vue` 页面容器、头部、卡片、标题、标签和辅助文案的固定颜色，统一使用主题令牌；补充 Chrome `:-webkit-autofill` 的主题背景和文字覆盖，并新增四主题真实 E2E。同步修正 `playwright.config.ts` 中设备配置覆盖 `MATECLAW_E2E_BROWSER_CHANNEL` 的问题，并将双源结果断言改为读取真实结果表。提交 `4ae6e7ac5db3a9a2c32349bf67b503668949cca6` 在本地模拟环境完成 UI 单测 `37 passed`、生产构建和真实 Chrome channel E2E `15 passed`；CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`。非 Chrome 浏览器原生控件外观、其他历史页面主题审计及真实 Aloudata/正式存储联调仍为后续 Gate。
 
+**2026-09-14 双源 Descriptor 现场复验补充：** Google Chrome CDP `9222` 打开双源编辑器并点击两个输入的“查看字段”，显示 JDBC `5 个字段`、Aloudata `3 个字段`，脚本目标组件为 `e2e-table`；本地模拟环境已补齐 VIS-UI02 的 Descriptor 可见性证据。截图 `/tmp/mateclaw-cdp-dashboard-descriptors-current.png`。真实 Aloudata 结果查询和跨工作区权限矩阵仍按外部/后续 Gate 保留。
+
 **2026-09-14 提交后 CDP 复验：** 当前提交 `58d52abdb505b5d611d9e9e4a5b28fda88599538` 已通过 Google Chrome CDP `9222` 现场检查洞察列表和双源编辑器；脚本结果数据集输入面板、默认目标组件和输入别名均可见，截图及 AX 树记录见统一验收记录。CUA 请求头策略故障、真实 Aloudata 授权和四主题对比度专项仍保持独立 Gate。
 
 **2026-09-14 当前提交全量 E2E：** 在本地模拟 Aloudata、系统 Chrome channel 和同一 seed 工作区下，当前提交 `f22648bccb381f72767a847fb0df4df3405cc53f` 的双源、错误/兼容、数据集入口三组真实 Playwright 共 `12 passed`，无跳过；JDBC+Aloudata 断言 5 行并包含 `120.5`，快照基线无回归。

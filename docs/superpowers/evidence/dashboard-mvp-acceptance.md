@@ -549,3 +549,9 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 验证：新增 `数据源配置表单基础容器随主题使用主题令牌`，在真实 Chrome channel 下覆盖 `light`、`warm`、`eye-care`、`dark`，修复前固定背景/文字断言失败，修复后基础容器和文本断言通过。
 - 完整回归：UI 单测 `37 passed`，生产构建成功，真实 Chrome channel E2E `15 passed`（含双源、错误/兼容、数据集入口及本用例）。Chrome CDP dark 主题现场截图确认普通输入和 autofill 输入均与深色表单一致；截图：`/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`。
 - 其他历史页面主题审计、非 Chrome 浏览器原生控件外观和真实 Aloudata/正式存储环境仍保持未完成状态。
+
+## 2026-09-14 双源 Descriptor Chrome CDP 复验
+
+- 使用 Google Chrome CDP `9222` 打开 `E2E JDBC + Aloudata Dashboard` 编辑器，分别点击两个输入的“查看字段”。
+- 实际渲染显示 JDBC 输入 `5 个字段`、Aloudata 输入 `3 个字段`，脚本面板显示当前目标组件 `e2e-table`；未再出现输入预览有字段但 Descriptor 显示 `0 个字段` 的历史问题。
+- 截图：`/tmp/mateclaw-cdp-dashboard-descriptors-current.png`。该证据只覆盖本地模拟数据和当前 Chrome 页面，不关闭真实 Aloudata 授权 Gate。
