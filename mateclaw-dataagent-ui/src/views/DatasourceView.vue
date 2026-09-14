@@ -52,7 +52,7 @@
 
       <!-- 主从布局：左侧数据源列表 / 右侧数据源详情 -->
       <div v-else class="master-detail-layout">
-        <!-- 左侧：数据源列表（仅指标平台） -->
+        <!-- 左侧：按当前工作区权限过滤的数据源列表 -->
         <aside class="ds-sidebar">
           <div class="ds-list-scroll">
             <div
@@ -116,7 +116,7 @@
           </div>
         </aside>
 
-        <!-- 右侧：数据源详情（指标平台专属视图） -->
+        <!-- 右侧：按来源类型展示数据源详情 -->
         <main class="ds-detail">
           <!-- 顶部操作工具栏：启停 / 测试 / 同步 -->
           <div v-if="selectedDs" class="detail-toolbar">
