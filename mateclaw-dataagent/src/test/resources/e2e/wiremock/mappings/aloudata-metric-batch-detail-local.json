@@ -1,0 +1,4 @@
+{
+  "request": {"method": "GET", "urlPath": "/anymetrics/api/v1/metrics/batchDetail"},
+  "response": {"status": 200,"headers": {"Content-Type": "application/json"},"jsonBody": {"code":"200","success":true,"data":[{"metricName":"revenue","metricCategoryName":"销售","synonyms":["销售额"]}]}}
+}

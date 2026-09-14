@@ -231,6 +231,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 本轮 Chrome CDP 点击模拟 Aloudata“同步元数据”返回“未定义的 API 端点: metric_list”，没有生成类目树节点；因此现场树交互仍保持待补验，不把空态写成 PASS。
 
+**模拟同步支撑修复（2026-09-14）：** 本地 WireMock 已补齐六个 Aloudata 元数据同步端点；`AloudataEndpointService` 对不完整数据库端点配置合并核心默认定义，定向 Maven 回归通过。服务重启后需重新执行同步、类目树键盘和截图验收。
+
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 
 **2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。

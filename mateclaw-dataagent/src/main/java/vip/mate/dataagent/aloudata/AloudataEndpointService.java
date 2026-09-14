@@ -64,7 +64,11 @@ public class AloudataEndpointService {
             // 3. 从数据库读取
             Map<String, ApiEndpoint> fromDb = apiProperties.readEndpoints();
             if (fromDb != null && !fromDb.isEmpty()) {
-                cachedEndpoints = fromDb;
+                // 数据库配置允许覆盖默认端点，但不能因旧迁移缺少核心端点而让同步能力整体失效。
+                // 先放入代码级兜底，再用数据库定义覆盖同名项，兼容历史不完整配置。
+                Map<String, ApiEndpoint> merged = new LinkedHashMap<>(getDefaultEndpoints());
+                merged.putAll(fromDb);
+                cachedEndpoints = merged;
             } else {
                 // 4. 数据库无配置，使用默认兜底
                 cachedEndpoints = getDefaultEndpoints();
@@ -119,6 +123,23 @@ public class AloudataEndpointService {
                         new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY"),
                         new ApiParam("pageIndex", "Integer", false, "0", "页码", "QUERY"),
                         new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "QUERY")))));
+        endpoints.put("category_list", endpoint("anymetrics", "/anymetrics/api/v1/category/list", "GET",
+                mergeParams(headers, List.of(new ApiParam("categoryType", "String", true, null, "类目类型", "QUERY")))));
+        endpoints.put("metric_list", endpoint("anymetrics", "/anymetrics/api/v1/metrics/list", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("statusFilters", "Array", false, null, "状态筛选", "QUERY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY")))));
+        endpoints.put("metric_batch_detail", endpoint("anymetrics", "/anymetrics/api/v1/metrics/batchDetail", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("metric_all_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimensionAll", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("dimension_list", endpoint("anymetrics", "/anymetrics/api/v1/dimension/list", "POST",
+                mergeParams(headers, List.of(new ApiParam("categoryId", "String", false, null, "维度类目", "BODY"),
+                        new ApiParam("statusFilters", "Array", false, null, "状态筛选", "BODY"),
+                        new ApiParam("pager", "Object", false, null, "分页器", "BODY")))));
+        endpoints.put("dimension_detail", endpoint("anymetrics", "/anymetrics/api/v1/dimension/detail", "GET",
+                mergeParams(headers, List.of(new ApiParam("dimName", "String", true, null, "维度名称", "QUERY")))));
         endpoints.put("metrics_query", endpoint("semantic", "/semantic/api/v1.1/metrics/query", "POST",
                 mergeParams(headers, List.of(
                         new ApiParam("metrics", "Array", true, null, "指标列表", "BODY"),

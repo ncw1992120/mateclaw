@@ -317,6 +317,8 @@ make dashboard-verify-local
 
 **CDP 模拟环境补充：** 点击本地 Aloudata 数据源“同步元数据”返回“未定义的 API 端点: metric_list”，未产生类目树数据；模拟端点支撑缺口保持单独记录，不能以空态关闭类目树现场验收。
 
+**模拟 Aloudata 端点修复（2026-09-14）：** 本地 WireMock 增加 `category_list`、`metric_list`、`metric_batch_detail`、`metric_all_dimensions`、`dimension_list`、`dimension_detail` 六个同步端点；DataAgent 端点服务改为默认核心端点与数据库配置合并，旧环境缺少端点时仍可完成同步。`AloudataEndpointServiceTest` 定向 Maven 回归通过；重启服务后需补采类目树 CDP 现场证据。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。

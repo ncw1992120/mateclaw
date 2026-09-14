@@ -239,6 +239,8 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 
 本轮 CDP 点击本地模拟数据源“同步元数据”返回“未定义的 API 端点: metric_list”，所以模拟环境没有类目树数据；该问题属于模拟 Aloudata 端点支撑缺口，不能用空态替代现场树节点验收。
 
+**模拟端点补齐（2026-09-14）：** 已为本地 WireMock 增加元数据同步所需六个端点，并让 DataAgent 在数据库端点配置缺项时使用核心默认端点；`AloudataEndpointServiceTest` 通过。重启 DataAgent/模拟栈后应重新执行本节 CDP 树节点现场验收。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。

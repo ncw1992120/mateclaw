@@ -1,0 +1,8 @@
+{
+  "request": {"method": "GET", "urlPath": "/anymetrics/api/v1/metrics/list"},
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {"code":"200","success":true,"data":{"total":1,"hasNext":false,"data":[{"metricName":"revenue","metricCode":"revenue","metricDisplayName":"收入","metricCategoryId":"sales","status":"PUBLISHED","publishStatus":"PUBLISHED","displayStatus":"PUBLISHED","originDataType":"DECIMAL"}]}}
+  }
+}

@@ -28,4 +28,19 @@ class AloudataEndpointServiceTest {
         assertEquals("/semantic/api/v1.1/metrics/query", metrics.getPath());
         assertTrue(metrics.getRequestParams().stream().anyMatch(p -> "filters".equals(p.getName())));
     }
+
+    @Test
+    void incompleteDatabaseConfigurationKeepsCoreSyncEndpointFallbacks() {
+        SystemSettingService settings = mock(SystemSettingService.class);
+        when(settings.getString("aloudata.api.endpoints", "")).thenReturn(
+                "{\"metrics_query\":{\"service\":\"semantic\",\"path\":\"/custom/metrics\",\"method\":\"POST\"}}"
+        );
+
+        AloudataEndpointService service = new AloudataEndpointService(
+                new AloudataApiProperties(settings, new ObjectMapper()));
+
+        assertEquals("/custom/metrics", service.getEndpoint("metrics_query").getPath());
+        assertEquals("/anymetrics/api/v1/metrics/list", service.getEndpoint("metric_list").getPath());
+        assertEquals("/anymetrics/api/v1/category/list", service.getEndpoint("category_list").getPath());
+    }
 }
