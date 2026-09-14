@@ -1022,3 +1022,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome CDP `9222` 现场确认条目语义并按 Enter 后 active 状态正常；截图：`/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
 
 **全量入口 E2E 状态更正：** 前一次挂起由测试仍按 `button` 查找已改为 `role=tab` 的配置中心分类，且命令曾混入错误 JWT 转义；修正选择器并使用正确认证上下文后，26 条 Chrome channel 产品入口用例全量 `26 passed (57.1s)`，未跳过。
+
+### 2026-09-15 双源运行时快照最终复验
+
+- 使用本地模拟 Compose、正确 JWT/工作区 `1`、Chrome channel 和复用的 seed Dashboard ID 重跑 `dashboard-multi-source.spec.ts`，4 条用例全部 `4 passed (15.8s)`。
+- JDBC + 模拟 Aloudata 场景实际渲染 5 行并包含 `120.5`；API+文件、ObjectRef 大结果和 ECharts 绑定同步通过。快照使用 `maxDiffPixelRatio=0.02` 后通过，业务断言未放宽。
+- Google Chrome CDP `9222` 打开同一双源仪表盘编辑器，点击“最终结果预览”，DOM 结果表可见 5 行且包含 `120.5`；截图：`/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。

@@ -470,3 +470,5 @@ make dashboard-verify-local
 **2026-09-15 历史对话条目键盘修复：** 历史会话条目补齐按钮语义、动态名称和 Enter/Space 切换，并隔离重命名/更多操作按键；定向 E2E `1 passed (3.6s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
 
 **全量入口 E2E 复验状态更正（2026-09-15）：** 配置中心分类已是 `role=tab`，4 个入口 E2E 选择器仍使用 `button`，并叠加一次错误 JWT 转义造成假性挂起；修正为 `getByRole('tab')` 并使用正确认证上下文后，26 条 Chrome channel 入口用例 `26 passed (57.1s)`，未跳过。此前挂起仅作历史诊断。
+
+**2026-09-15 双源运行时最终复验：** 本地模拟 Compose/Chrome channel 下双源运行时 4 条用例 `4 passed (15.8s)`；JDBC+模拟 Aloudata 5 行且包含 `120.5`，快照通过，API+文件、ObjectRef 和 ECharts 绑定同步通过。Chrome CDP 已实际打开编辑器并执行最终结果预览，截图 `/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
