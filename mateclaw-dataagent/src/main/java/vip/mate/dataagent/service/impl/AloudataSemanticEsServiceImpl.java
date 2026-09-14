@@ -11,6 +11,7 @@ import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
+import co.elastic.clients.json.JsonData;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -213,6 +214,38 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
     }
 
     @Override
+    public void deleteBySyncVersionBefore(Long datasourceId, int syncVersion) {
+        ElasticsearchClient client = getAvailableClient();
+        if (client == null) {
+            return;
+        }
+
+        try {
+            client.deleteByQuery(d -> d
+                    .index(DataAgentConstants.ALOUDATA_METRIC_ES_INDEX)
+                    .query(q -> q.bool(b -> b
+                            .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
+                            .should(s -> s.range(r -> r.untyped(u -> u.field("syncVersion").lt(JsonData.of(syncVersion)))))
+                            .should(s -> s.bool(nb -> nb.mustNot(m -> m.exists(e -> e.field("syncVersion")))))
+                            .minimumShouldMatch("1")
+                    ))
+            );
+            client.deleteByQuery(d -> d
+                    .index(DataAgentConstants.ALOUDATA_DIMENSION_ES_INDEX)
+                    .query(q -> q.bool(b -> b
+                            .filter(f -> f.term(t -> t.field("datasourceId").value(datasourceId)))
+                            .should(s -> s.range(r -> r.untyped(u -> u.field("syncVersion").lt(JsonData.of(syncVersion)))))
+                            .should(s -> s.bool(nb -> nb.mustNot(m -> m.exists(e -> e.field("syncVersion")))))
+                            .minimumShouldMatch("1")
+                    ))
+            );
+            log.info("ES 旧版本文档清理完成，数据源: {}, 当前版本: {}", datasourceId, syncVersion);
+        } catch (IOException e) {
+            log.error("ES 旧版本文档清理失败，数据源: {} - {}", datasourceId, e.getMessage());
+        }
+    }
+
+    @Override
     public AloudataSearchResult hybridSearch(Long datasourceId, String query, int topK, double similarityThreshold) {
         long startTime = System.currentTimeMillis();
         AloudataSearchResult result = new AloudataSearchResult();
@@ -356,6 +389,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                     .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
                             .properties("metricCode", p -> p.keyword(k -> k))
                             .properties("type", p -> p.keyword(k -> k))
+                            .properties("syncVersion", p -> p.integer(i -> i))
                             .properties("businessCaliber", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties("synonyms", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))
@@ -396,6 +430,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("metricCode", p -> p.keyword(k -> k))
                             .properties("type", p -> p.keyword(k -> k))
+                            .properties("syncVersion", p -> p.integer(i -> i))
                             .properties("businessCaliber", p -> p.text(t -> t))
                             .properties("synonyms", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
@@ -437,6 +472,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                                     .fields("keyword", f -> f.keyword(k -> k))
                                     .fields("ikmax", f -> f.text(tt -> tt.analyzer("ik_max_word").searchAnalyzer("ik_max_word")))))
                             .properties("dimCode", p -> p.keyword(k -> k))
+                            .properties("syncVersion", p -> p.integer(i -> i))
                             .properties("dimDescription", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")))
                             .properties("synonyms", p -> p.text(t -> t.analyzer("ik_max_word").searchAnalyzer("ik_smart")
                                     .fields("keyword", f -> f.keyword(k -> k))
@@ -477,6 +513,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
                             .properties("dimDisplayName", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
                             .properties("dimCode", p -> p.keyword(k -> k))
+                            .properties("syncVersion", p -> p.integer(i -> i))
                             .properties("dimDescription", p -> p.text(t -> t))
                             .properties("synonyms", p -> p.text(t -> t
                                     .fields("keyword", f -> f.keyword(k -> k))))
@@ -508,6 +545,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         doc.put("metricDisplayName", entity.getMetricDisplayName());
         doc.put("metricCode", entity.getMetricCode());
         doc.put("type", entity.getType());
+        doc.put("syncVersion", entity.getSyncVersion());
         doc.put("businessCaliber", entity.getBusinessCaliber());
         doc.put("synonyms", splitToList(entity.getSynonyms()));
         doc.put("categoryName", entity.getMetricCategoryName());
@@ -527,6 +565,7 @@ public class AloudataSemanticEsServiceImpl implements AloudataSemanticEsService 
         doc.put("dimName", entity.getDimName());
         doc.put("dimDisplayName", entity.getDimDisplayName());
         doc.put("dimCode", entity.getDimCode());
+        doc.put("syncVersion", entity.getSyncVersion());
         doc.put("dimDescription", entity.getDimDescription());
         doc.put("synonyms", splitToList(entity.getSynonyms()));
         doc.put("originDataType", entity.getOriginDataType());

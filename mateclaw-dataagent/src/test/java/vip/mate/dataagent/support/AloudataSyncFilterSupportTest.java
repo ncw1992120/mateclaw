@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.system.service.SystemSettingService;
 
@@ -43,11 +44,16 @@ class AloudataSyncFilterSupportTest {
     }
 
     private AloudataSyncFilterSupport.CategoryRaw category(String id, String name, String parentId) {
+        return category(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC, id, name, parentId);
+    }
+
+    private AloudataSyncFilterSupport.CategoryRaw category(String categoryType, String id,
+                                                           String name, String parentId) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", id);
         data.put("name", name);
         data.put("parentId", parentId);
-        return new AloudataSyncFilterSupport.CategoryRaw("CATEGORY_METRIC", data);
+        return new AloudataSyncFilterSupport.CategoryRaw(categoryType, data);
     }
 
     @Test
@@ -71,8 +77,10 @@ class AloudataSyncFilterSupportTest {
                         category("4", "孙类目B", "3")));
 
         assertThat(rules.enabled()).isTrue();
-        assertThat(rules.blockedCategoryIds()).containsExactlyInAnyOrder("1", "3", "4");
-        assertThat(rules.blockedCategoryIds()).doesNotContain("2");
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC))
+                .containsExactlyInAnyOrder("1", "3", "4");
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC))
+                .doesNotContain("2");
     }
 
     @Test
@@ -137,7 +145,7 @@ class AloudataSyncFilterSupportTest {
                 List.of("categoryName.contains(", "metricName.startsWith('test_')"),
                 List.of(category("1", "正常类目", null)));
 
-        assertThat(rules.blockedCategoryIds()).isEmpty();
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC)).isEmpty();
 
         Map<String, Object> metric = new HashMap<>();
         metric.put("metricName", "test_临时指标");
@@ -160,7 +168,7 @@ class AloudataSyncFilterSupportTest {
                 "dimName.startsWith('dim_test_')");
 
         /* 系统配置命中的类目表达式应通过数据源级规则同样生效 */
-        assertThat(rules.blockedCategoryIds()).isEmpty();
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC)).isEmpty();
     }
 
     @Test
@@ -170,13 +178,14 @@ class AloudataSyncFilterSupportTest {
         AloudataSyncFilterSupport.SyncFilterRules rules = buildRules(
                 List.of("categoryName in ('未分类')", "name.startsWith('test_')"),
                 List.of(category("1", null, null), category("2", "正常类目", null)));
-        assertThat(rules.blockedCategoryIds()).isEmpty();
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC)).isEmpty();
 
         /* 归一化语义可被显式利用：空字符串规则可命中无名称类目 */
         AloudataSyncFilterSupport.SyncFilterRules emptyNameRules = buildRules(
                 List.of("name == ''"),
                 List.of(category("1", null, null)));
-        assertThat(emptyNameRules.blockedCategoryIds()).containsExactly("1");
+        assertThat(emptyNameRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC))
+                .containsExactly("1");
 
         /* 指标上下文字段缺失同样归一化：startsWith 不抛异常，owner == '' 命中 */
         AloudataSyncFilterSupport.SyncFilterRules metricRules = buildRules(
@@ -186,5 +195,45 @@ class AloudataSyncFilterSupportTest {
         metric.put("metricName", null);
         metric.put("owner", null);
         assertThat(support.isMetricBlacklisted(metricRules, metric)).isTrue();
+    }
+
+    @Test
+    @DisplayName("级联按类目类型隔离：维度类目命中不会拉黑引用了它的指标类目")
+    void cascadeIsolatedByCategoryType() {
+        /* 指标类目 M1 的 parentId 指向维度类目 D1（跨树引用），D1 命中黑名单 */
+        AloudataSyncFilterSupport.SyncFilterRules rules = buildRules(
+                List.of("categoryType == 'CATEGORY_DIMENSION' && categoryName in ('维度根类目')"),
+                List.of(
+                        category(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION, "D1", "维度根类目", null),
+                        category("M1", "指标根类目", "D1"),
+                        category("M2", "指标子类目", "M1")));
+
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION))
+                .containsExactly("D1");
+        /* 指标树的父节点 D1 属另一棵树，不建立父子边，故指标类目全部保留 */
+        assertThat(rules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("同名跨树：不限定 categoryType 时两棵树都命中，限定后只影响一侧")
+    void sameNameAcrossTreesNeedsCategoryTypeScope() {
+        List<AloudataSyncFilterSupport.CategoryRaw> categories = List.of(
+                category(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION, "D1", "交易域", null),
+                category("M1", "交易域", null));
+
+        /* 未限定作用域：指标类目树与维度类目树同名节点都会命中 */
+        AloudataSyncFilterSupport.SyncFilterRules unscopedRules =
+                buildRules(List.of("categoryName in ('交易域')"), categories);
+        assertThat(unscopedRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION))
+                .containsExactly("D1");
+        assertThat(unscopedRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC))
+                .containsExactly("M1");
+
+        /* 用 categoryType 限定作用域：只影响维度类目树 */
+        AloudataSyncFilterSupport.SyncFilterRules scopedRules = buildRules(
+                List.of("categoryType == 'CATEGORY_DIMENSION' && categoryName in ('交易域')"), categories);
+        assertThat(scopedRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION))
+                .containsExactly("D1");
+        assertThat(scopedRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC)).isEmpty();
     }
 }

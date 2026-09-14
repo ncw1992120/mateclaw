@@ -26,13 +26,13 @@ import vip.mate.sdk.service.llm.dto.LlmChatRequest;
 import vip.mate.sdk.service.llm.dto.LlmChatResponse;
 import vip.mate.sdk.service.model.ModelRuntime;
 import vip.mate.sdk.service.skill.SkillRuntime;
-import vip.mate.skill.model.SkillFileView;
 import vip.mate.sdk.service.tool.ToolRuntime;
 import vip.mate.sdk.service.workspace.WorkspaceRuntime;
 import vip.mate.skill.installer.model.HubSkillInfo;
 import vip.mate.skill.installer.model.InstallRequest;
 import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.tool.model.AvailableToolDTO;
 import vip.mate.wiki.model.WikiKnowledgeBaseEntity;
 import vip.mate.workspace.core.model.WorkspaceEntity;
@@ -530,6 +530,12 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public List<WorkspaceMemberEntity> listWorkspaceMembers(Long workspaceId) {
         return workspaceRuntime.listWorkspaceMembers(workspaceId);
+    }
+
+    @Override
+    public IPage<WorkspaceMemberEntity> pageWorkspaceMembers(Long workspaceId, int page, int size,
+                                                             String keyword, String role) {
+        return workspaceRuntime.pageWorkspaceMembers(workspaceId, page, size, keyword, role);
     }
 
     @Override

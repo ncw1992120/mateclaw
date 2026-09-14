@@ -608,4 +608,27 @@ public final class DataAgentConstants {
             + "最后给出一句结论或行动建议。"
             + "要求：不要编造数据、不要复述配置字段、不要输出图表代码，直接给分析文字，"
             + "可用简短小标题或短句分点，总长控制在 300 字以内。";
+
+    // ==================== 服务保护（限流 / 熔断 / 降级） ====================
+
+    /** Aloudata API 熔断器实例名（对应 resilience4j.circuitbreaker.instances 配置） */
+    public static final String CIRCUIT_BREAKER_ALOUDATA = "aloudataApi";
+
+    /** 限流场景：对话流 */
+    public static final String RATE_LIMIT_SCENE_CHAT = "chat";
+
+    /** 限流场景：提示词优化 */
+    public static final String RATE_LIMIT_SCENE_CHAT_OPTIMIZE = "chat-optimize";
+
+    /** 限流场景：洞察生成 */
+    public static final String RATE_LIMIT_SCENE_INSIGHT = "insight";
+
+    /** 高成本限流路径前缀：提示词优化（context-path 剥离后） */
+    public static final String PROTECTION_PATH_CHAT_OPTIMIZE = "/v1/chat/optimize";
+
+    /** 高成本限流路径前缀：洞察（context-path 剥离后） */
+    public static final String PROTECTION_PATH_INSIGHT = "/v1/insight";
+
+    /** 限流器缓存键分隔符（scene|username） */
+    public static final String RATE_LIMIT_KEY_SEPARATOR = "|";
 }

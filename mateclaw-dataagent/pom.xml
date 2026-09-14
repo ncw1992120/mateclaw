@@ -27,6 +27,7 @@
         <elasticsearch-client.version>8.19.16</elasticsearch-client.version>
         <agentscope.version>1.0.9</agentscope.version>
         <qlexpress.version>3.3.4</qlexpress.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
     <dependencyManagement>
@@ -74,6 +75,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- ===== Resilience4j 服务保护（限流 / 熔断 / 舱壁隔离） ===== -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
 
         <!-- ===== Spring Security ===== -->

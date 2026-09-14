@@ -31,6 +31,15 @@ export interface WorkspaceMember {
   updateTime: string
 }
 
+/** 工作区成员分页响应（对齐 MyBatis Plus IPage 结构） */
+export interface WorkspaceMemberPage {
+  records: WorkspaceMember[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}
+
 /** 登录响应 */
 export interface LoginResponse {
   id: number | string

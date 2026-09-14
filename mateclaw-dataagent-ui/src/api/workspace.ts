@@ -1,5 +1,5 @@
 import api from './index'
-import type { Workspace, WorkspaceMember } from '@/types'
+import type { Workspace, WorkspaceMember, WorkspaceMemberPage } from '@/types'
 
 /** 工作区 API 基础路径（通过 dataagent 后端 SDK 代理） */
 const BASE_URL = '/dataagent/api/v1/workspaces'
@@ -29,9 +29,17 @@ export function deleteWorkspace(id: number | string) {
   return api.delete(`${BASE_URL}/${id}`)
 }
 
-/** 获取工作区成员列表 */
+/** 获取工作区成员列表（全量，供成员选择器等场景使用） */
 export function listWorkspaceMembers(workspaceId: number | string) {
   return api.get<WorkspaceMember[]>(`${BASE_URL}/${workspaceId}/members`)
+}
+
+/** 分页查询工作区成员，keyword 模糊匹配用户名/昵称，role 精确过滤 */
+export function pageWorkspaceMembers(
+  workspaceId: number | string,
+  params: { page: number; size: number; keyword?: string; role?: string },
+) {
+  return api.get<WorkspaceMemberPage>(`${BASE_URL}/${workspaceId}/members/page`, { params })
 }
 
 /** 添加工作区成员 */

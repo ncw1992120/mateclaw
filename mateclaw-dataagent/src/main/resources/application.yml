@@ -137,6 +137,54 @@ springdoc:
   swagger-ui:
     path: /v1/swagger-ui.html
 
+# ========== 服务保护配置（限流 / 熔断 / 降级） ==========
+# 进程内实现（与内网单实例部署规模匹配）；多实例/公网部署需替换为分布式限流。
+dataagent:
+  protection:
+    chat:
+      # 对话流（/v1/chat/stream）单用户准入：窗口内限频 + 并发舱壁
+      per-user-rate-limit: 10           # 单用户每窗口最大对话请求数
+      per-user-rate-window-seconds: 60  # 限频统计窗口（秒）
+      max-concurrent-per-user: 3        # 单用户最大并发 SSE 对话流数
+    high-cost:
+      # 高成本端点（提示词优化 / 洞察报告与仪表盘 AI 生成）单用户限频
+      per-user-rate-limit: 20           # 单用户每窗口最大请求数
+      window-seconds: 60                # 限频统计窗口（秒）
+    aloudata:
+      # Aloudata API HTTP 超时（原实现无超时，下游挂起会拖垮 sseExecutor 线程池）
+      connect-timeout-ms: 3000          # 连接超时（毫秒）
+      read-timeout-ms: 60000            # 读取超时（毫秒），须大于下方 slow-call 阈值
+
+# Resilience4j 熔断器：Aloudata API 专用实例
+# 失败（含超时抛出的异常）计入计数滑动窗口，失败率/慢调用率超阈值后打开熔断，
+# 后续请求快速失败（BusinessException 503），open 30s 后转半开试探恢复。
+resilience4j:
+  circuitbreaker:
+    instances:
+      aloudataApi:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10                                # 统计窗口：最近 10 次调用
+        minimum-number-of-calls: 5                             # 至少 5 次调用才计算失败率
+        failure-rate-threshold: 50                             # 失败率 >= 50% 打开熔断
+        slow-call-duration-threshold: 30s                      # 超过 30s 视为慢调用
+        slow-call-rate-threshold: 80                           # 慢调用率 >= 80% 也触发熔断
+        wait-duration-in-open-state: 30s                       # 熔断打开持续 30s 后转半开
+        permitted-number-of-calls-in-half-open-state: 2        # 半开状态放行的试探请求数
+        automatic-transition-from-open-to-half-open-enabled: true
+        event-consumer-buffer-size: 10                         # 事件缓冲区上限，防异常对象堆积
+        ignore-exceptions:                                     # 4xx 客户端错误不计入失败率（Aloudata 业务错误
+          - org.springframework.web.client.HttpClientErrorException  # 走 HTTP 200 + success:false，4xx 多为调用方参数/认证问题）
+
+# 关闭 Resilience4j 熔断器对 /actuator/health 的参与：
+# aloudataApi 熔断打开时若计入健康计算会把 health 整体拉为 DOWN，
+# 存活探针（K8s / 负载均衡 / 运维脚本）会误判应用不健康并触发重启，
+# 导致 Aloudata 的一次故障升级为整个服务的重启循环。
+# 熔断状态可通过应用日志（Resilience4j 状态流转事件）观测。
+management:
+  health:
+    circuitbreakers:
+      enabled: false
+
 # MateClaw Agent 配置（DataAgent 侧扩展）
 # tool-result.excluded-tools 在此完整声明：Spring Boot 对 List 属性是整体覆盖
 # 而非追加，故须包含 server 默认的通用检索工具 + DataAgent 业务检索工具。

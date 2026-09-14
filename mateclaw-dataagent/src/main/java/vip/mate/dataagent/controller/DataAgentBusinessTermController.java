@@ -8,11 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.constants.DataAgentConstants;
-import vip.mate.dataagent.dto.BusinessTermCreateRequest;
-import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
-import vip.mate.dataagent.dto.BusinessTermSearchResult;
-import vip.mate.dataagent.dto.BusinessTermUpdateRequest;
-import vip.mate.dataagent.dto.BusinessTermVO;
+import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.BusinessTermService;
 
 import java.util.List;

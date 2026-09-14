@@ -1,11 +1,11 @@
 package vip.mate.dataagent.config;
 
-import java.util.Properties;
-
 import org.apache.ibatis.mapping.DatabaseIdProvider;
 import org.apache.ibatis.mapping.VendorDatabaseIdProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Properties;
 
 /**
  * MyBatis 方言标识配置。

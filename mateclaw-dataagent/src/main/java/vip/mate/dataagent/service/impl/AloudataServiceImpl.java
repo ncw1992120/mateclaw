@@ -9,6 +9,7 @@ import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataService;
@@ -176,7 +177,7 @@ public class AloudataServiceImpl implements AloudataService {
             return Collections.emptyList();
         } catch (Exception e) {
             log.error("查询 Aloudata 指标列表失败: {}", e.getMessage());
-            throw new RuntimeException("查询指标列表失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("查询指标列表失败", e);
         }
     }
 
@@ -212,7 +213,7 @@ public class AloudataServiceImpl implements AloudataService {
             return Collections.emptyList();
         } catch (Exception e) {
             log.error("查询 Aloudata 维度列表失败: {}", e.getMessage());
-            throw new RuntimeException("查询维度列表失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("查询维度列表失败", e);
         }
     }
 
@@ -289,7 +290,7 @@ public class AloudataServiceImpl implements AloudataService {
             return result;
         } catch (Exception e) {
             log.error("执行 Aloudata 指标查询失败: {}", e.getMessage());
-            throw new RuntimeException("执行指标查询失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("执行指标查询失败", e);
         }
     }
 
@@ -377,7 +378,7 @@ public class AloudataServiceImpl implements AloudataService {
             return values;
         } catch (Exception e) {
             log.error("查询维度值失败: dimName={}, error={}", dimName, e.getMessage());
-            throw new RuntimeException("查询维度值失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("查询维度值失败", e);
         }
     }
 
@@ -502,7 +503,7 @@ public class AloudataServiceImpl implements AloudataService {
             return result;
         } catch (Exception e) {
             log.error("查询 Aloudata 指标语义信息失败: {}", e.getMessage());
-            throw new RuntimeException("查询指标语义信息失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("查询指标语义信息失败", e);
         }
     }
 
@@ -600,8 +601,26 @@ public class AloudataServiceImpl implements AloudataService {
             return result;
         } catch (Exception e) {
             log.error("查询 Aloudata 维度语义信息失败: {}", e.getMessage());
-            throw new RuntimeException("查询维度语义信息失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("查询维度语义信息失败", e);
         }
+    }
+
+    /**
+     * 包装 Aloudata 查询异常
+     * <p>
+     * 熔断降级等携带 HTTP 状态码的业务异常（BusinessException，如 503）原样上抛，
+     * 由全局异常处理器保留状态码语义返回前端；其余异常包装为 RuntimeException，
+     * 由全局异常处理器统一转换为 500。
+     *
+     * @param action 操作描述（用于构建错误消息）
+     * @param e      原始异常
+     * @return BusinessException（原样）或包装后的 RuntimeException
+     */
+    private RuntimeException wrapQueryFailure(String action, Exception e) {
+        if (e instanceof BusinessException be) {
+            return be;
+        }
+        return new RuntimeException(action + ": " + e.getMessage(), e);
     }
 
     private Object metricsListInput(Integer pageNumber, Integer pageSize) {
@@ -700,7 +719,7 @@ public class AloudataServiceImpl implements AloudataService {
             return parseMultiDimResponse(response);
         } catch (Exception e) {
             log.error("多维归因查询失败: {}", e.getMessage());
-            throw new RuntimeException("多维归因查询失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("多维归因查询失败", e);
         }
     }
 
@@ -717,7 +736,7 @@ public class AloudataServiceImpl implements AloudataService {
             return parseMultiDimResponse(response);
         } catch (Exception e) {
             log.error("归因下钻查询失败: {}", e.getMessage());
-            throw new RuntimeException("归因下钻查询失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("归因下钻查询失败", e);
         }
     }
 
@@ -735,7 +754,7 @@ public class AloudataServiceImpl implements AloudataService {
             return parseBreakdownResponse(response);
         } catch (Exception e) {
             log.error("指标拆解失败: {}", e.getMessage());
-            throw new RuntimeException("指标拆解失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("指标拆解失败", e);
         }
     }
 
@@ -757,7 +776,7 @@ public class AloudataServiceImpl implements AloudataService {
             return parseTreeAttributionResponse(response, metricTreeDef);
         } catch (Exception e) {
             log.error("指标树归因查询失败: {}", e.getMessage());
-            throw new RuntimeException("指标树归因查询失败: " + e.getMessage(), e);
+            throw wrapQueryFailure("指标树归因查询失败", e);
         }
     }
 

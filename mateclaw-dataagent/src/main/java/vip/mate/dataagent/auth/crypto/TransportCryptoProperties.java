@@ -2,6 +2,7 @@ package vip.mate.dataagent.auth.crypto;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
@@ -12,6 +13,7 @@ import java.time.Duration;
  * RSA-OAEP 公钥加密，本配置管理私钥与防重放时间窗。
  */
 @Data
+@Component
 @ConfigurationProperties(prefix = "mateclaw.auth.crypto")
 public class TransportCryptoProperties {
 

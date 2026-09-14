@@ -189,7 +189,7 @@
               <label class="form-label">
                 <span>同步过滤规则</span>
                 <el-tooltip
-                  content="元数据同步黑名单（QLExpress 布尔表达式，每行一条，命中任一即不入库持久化；类目命中后其子类目一并过滤）。可用变量：类目 categoryName/categoryType/type/parentId，指标 metricName/metricDisplayName/categoryName/owner/businessOwner 等，维度 dimName/dimDisplayName/datasetName/categoryName 等；data.xxx 可访问任意原始字段。示例：categoryName in ('测试类目', '敏感数据')、metricName.startsWith('test_')"
+                  :content="ALOUDATA_SYNC_FILTER_TOOLTIP"
                   placement="top"
                 >
                   <span class="form-tip">?</span>
@@ -587,6 +587,7 @@ import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import CronExpressionField from '@/components/CronExpressionField.vue'
 import { describeCron } from '@/utils/cronDescribe'
+import { ALOUDATA_SYNC_FILTER_TOOLTIP } from '@/constants/aloudataSyncFilter'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { AloudataCategoryCount, Datasource } from '@/types'
 import { encryptSensitiveField } from '@/utils/sensitiveCrypto'

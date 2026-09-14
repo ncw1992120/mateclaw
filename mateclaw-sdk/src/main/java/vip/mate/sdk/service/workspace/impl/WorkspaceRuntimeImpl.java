@@ -1,5 +1,7 @@
 package vip.mate.sdk.service.workspace.impl;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -13,6 +15,7 @@ import vip.mate.workspace.core.model.WorkspaceWithRoleVO;
 import vip.mate.workspace.core.service.WorkspaceService;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 工作区运行时实现
@@ -78,6 +81,48 @@ public class WorkspaceRuntimeImpl implements WorkspaceRuntime {
     @Override
     public List<WorkspaceMemberEntity> listWorkspaceMembers(Long workspaceId) {
         List<WorkspaceMemberEntity> members = workspaceService.listMembers(workspaceId);
+        enrichWithUserInfo(members);
+        return members;
+    }
+
+    /**
+     * 分页查询工作区成员（含用户名、昵称），支持按用户名/昵称关键词与角色过滤
+     */
+    @Override
+    public IPage<WorkspaceMemberEntity> pageWorkspaceMembers(Long workspaceId, int page, int size,
+                                                             String keyword, String role) {
+        List<WorkspaceMemberEntity> members = workspaceService.listMembers(workspaceId);
+        enrichWithUserInfo(members);
+
+        String kw = keyword != null ? keyword.trim().toLowerCase(Locale.ROOT) : "";
+        String roleFilter = role != null ? role.trim().toLowerCase(Locale.ROOT) : "";
+        List<WorkspaceMemberEntity> filtered = members.stream()
+                .filter(m -> kw.isEmpty() || containsIgnoreCase(m.getUsername(), kw)
+                        || containsIgnoreCase(m.getNickname(), kw))
+                .filter(m -> roleFilter.isEmpty()
+                        || (m.getRole() != null && roleFilter.equals(m.getRole().toLowerCase(Locale.ROOT))))
+                .toList();
+
+        long total = filtered.size();
+        int fromIndex = (long) (page - 1) * size > total
+                ? (int) total : Math.max(0, (page - 1) * size);
+        int toIndex = Math.min(fromIndex + size, (int) total);
+        List<WorkspaceMemberEntity> records = fromIndex >= toIndex
+                ? List.of() : filtered.subList(fromIndex, toIndex);
+
+        Page<WorkspaceMemberEntity> result = new Page<>(page, size, total);
+        result.setRecords(records);
+        return result;
+    }
+
+    private static boolean containsIgnoreCase(String value, String lowerKeyword) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerKeyword);
+    }
+
+    /**
+     * 批量为成员填充用户名、昵称
+     */
+    private void enrichWithUserInfo(List<WorkspaceMemberEntity> members) {
         for (WorkspaceMemberEntity m : members) {
             UserEntity user = authService.findById(m.getUserId());
             if (user != null) {
@@ -85,7 +130,6 @@ public class WorkspaceRuntimeImpl implements WorkspaceRuntime {
                 m.setNickname(user.getNickname());
             }
         }
-        return members;
     }
 
     /**

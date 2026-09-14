@@ -1,12 +1,18 @@
 package vip.mate.dataagent.aloudata;
 
-import lombok.RequiredArgsConstructor;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
+import vip.mate.dataagent.config.ProtectionProperties;
+import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
+import vip.mate.dataagent.exception.BusinessException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,11 +38,31 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AloudataApiClient {
 
     private final AloudataEndpointService endpointService;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+    private final CircuitBreaker circuitBreaker;
+
+    /**
+     * 构造客户端：按保护配置初始化 HTTP 超时，并从 Resilience4j 注册表获取
+     * Aloudata 专用熔断器实例（实例名见 DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA）。
+     *
+     * @param endpointService         端点配置服务
+     * @param circuitBreakerRegistry  Resilience4j 熔断器注册表（由 spring-boot3 starter 自动装配）
+     * @param protectionProperties    服务保护配置
+     */
+    public AloudataApiClient(AloudataEndpointService endpointService,
+                             CircuitBreakerRegistry circuitBreakerRegistry,
+                             ProtectionProperties protectionProperties) {
+        this.endpointService = endpointService;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(protectionProperties.getAloudata().getConnectTimeoutMs());
+        factory.setReadTimeout(protectionProperties.getAloudata().getReadTimeoutMs());
+        this.restTemplate = new RestTemplate(factory);
+        this.circuitBreaker = circuitBreakerRegistry
+                .circuitBreaker(DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA);
+    }
 
     /** anymetrics 默认端口 */
     private static final int DEFAULT_ANYMETRICS_PORT = 8083;
@@ -78,7 +104,7 @@ public class AloudataApiClient {
         HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
 
         log.debug("调用 Aloudata API: {} {}", method, url);
-        return restTemplate.exchange(url, method, entity, Map.class);
+        return executeProtected(endpointName, url, method, entity);
     }
 
     /**
@@ -172,7 +198,45 @@ public class AloudataApiClient {
         HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
 
         log.debug("调用 Aloudata API (参数规范): {} {}", method, url);
-        return restTemplate.exchange(url, method, entity, Map.class);
+        return executeProtected(endpointName, url, method, entity);
+    }
+
+    /**
+     * 带熔断保护的 HTTP 执行
+     * <p>
+     * 调用结果（含超时/连接失败抛出的异常）计入熔断器滑动窗口统计；
+     * 失败率或慢调用率超阈值后熔断器打开，后续请求直接快速失败，
+     * 不再真实穿透到 Aloudata，避免线程资源被拖垮。
+     * <p>
+     * 统一记录调用结果日志（成功/熔断/失败），包含端点名称、HTTP 方法、
+     * 响应状态与耗时，便于外部调用链路观测。认证 Header（auth-value）不落日志。
+     *
+     * @param endpointName 端点名称（仅用于日志观测标识）
+     * @param url          完整 URL
+     * @param method       HTTP 方法
+     * @param entity       请求实体
+     * @return 原始响应体
+     * @throws BusinessException 熔断打开期间请求被拦截时报 503
+     */
+    private ResponseEntity<Map> executeProtected(String endpointName, String url, HttpMethod method,
+                                                 HttpEntity<?> entity) {
+        long startMs = System.currentTimeMillis();
+        try {
+            ResponseEntity<Map> response = circuitBreaker.executeSupplier(
+                    () -> restTemplate.exchange(url, method, entity, Map.class));
+            log.info("[Aloudata] API 调用成功: endpoint={}, method={}, status={}, costMs={}",
+                    endpointName, method, response.getStatusCode().value(),
+                    System.currentTimeMillis() - startMs);
+            return response;
+        } catch (CallNotPermittedException e) {
+            log.warn("[Protection] [Aloudata] API 熔断拦截（快速失败）: endpoint={}, method={}, costMs={}",
+                    endpointName, method, System.currentTimeMillis() - startMs);
+            throw new BusinessException(503, "Aloudata 查询服务暂时不可用（系统熔断保护中），请稍后重试");
+        } catch (RuntimeException e) {
+            log.error("[Aloudata] API 调用失败: endpoint={}, method={}, costMs={}, error={}",
+                    endpointName, method, System.currentTimeMillis() - startMs, e.getMessage());
+            throw e;
+        }
     }
 
     /**
