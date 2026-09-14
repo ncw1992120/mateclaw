@@ -469,4 +469,4 @@ make dashboard-verify-local
 
 **2026-09-15 历史对话条目键盘修复：** 历史会话条目补齐按钮语义、动态名称和 Enter/Space 切换，并隔离重命名/更多操作按键；定向 E2E `1 passed (3.6s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
 
-**全量入口 E2E 复验状态（2026-09-15）：** 本轮 26 条入口用例在首个数据集创建用例处超过 4 分钟无进展后终止，记为 `NOT_RUN/环境挂起`，不影响已通过的定向用例、单测、构建和 CDP 证据；待模拟 DataAgent 响应恢复后重跑。
+**全量入口 E2E 复验状态更正（2026-09-15）：** 配置中心分类已是 `role=tab`，4 个入口 E2E 选择器仍使用 `button`，并叠加一次错误 JWT 转义造成假性挂起；修正为 `getByRole('tab')` 并使用正确认证上下文后，26 条 Chrome channel 入口用例 `26 passed (57.1s)`，未跳过。此前挂起仅作历史诊断。

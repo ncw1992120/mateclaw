@@ -336,4 +336,4 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-15 历史对话条目键盘修复：** 会话条目补齐 `role=button`、`tabindex=0`、动态名称和 Enter/Space 切换，重命名输入/更多操作区阻止冒泡；定向 E2E `1 passed (3.6s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
 
-**全量入口 E2E 复验状态（2026-09-15）：** 26 条入口用例本轮在首个数据集创建用例处超过 4 分钟无进展，已终止，状态记为 `NOT_RUN/环境挂起`；不能替代定向键盘用例的通过证据。待模拟 DataAgent 响应恢复后重跑。
+**全量入口 E2E 复验状态更正（2026-09-15）：** 根因是配置中心分类已使用 `role=tab`，但 4 个 E2E 仍按 `button` 查找；另一次手工命令包含错误 JWT 转义。修正选择器并注入正确认证上下文后，入口文件全量 `26 passed (57.1s)`，未跳过，原 `NOT_RUN/环境挂起` 记录仅保留为历史诊断。

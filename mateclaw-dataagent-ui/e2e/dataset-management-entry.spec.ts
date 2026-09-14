@@ -13,7 +13,7 @@ test('从产品入口进入数据集创建并取消返回', async ({ page }) => 
   }, { authToken: required('MATECLAW_E2E_TOKEN'), workspace: required('MATECLAW_E2E_WORKSPACE_ID') })
 
   await page.goto('/?nav=config')
-  await page.getByRole('button', { name: '数据配置' }).click()
+  await page.getByRole('tab', { name: '数据配置' }).click()
   await page.getByRole('button', { name: '数据集管理' }).click()
   await expect(page).toHaveURL(/\/datasets$/)
   await page.getByRole('button', { name: '新建数据集' }).click()
@@ -167,7 +167,7 @@ test('指标平台分页控件暴露可访问名称', async ({ page }) => {
   }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
 
   await page.goto('/?nav=config')
-  await page.getByRole('button', { name: '数据配置' }).click()
+  await page.getByRole('tab', { name: '数据配置' }).click()
   await page.getByText('E2E Aloudata Simulation', { exact: true }).click()
   await expect(page.getByRole('combobox', { name: '指标每页条数' })).toHaveCount(1)
   await expect(page.getByRole('combobox', { name: '维度每页条数' })).toHaveCount(1)
@@ -478,7 +478,7 @@ test('从产品入口创建文件数据集并进入预览', async ({ page, reque
   }, { authToken: token, workspaceId: workspace })
 
   await page.goto('/?nav=config')
-  await page.getByRole('button', { name: '数据配置' }).click()
+  await page.getByRole('tab', { name: '数据配置' }).click()
   await page.getByRole('button', { name: '数据集管理' }).click()
   await page.getByRole('button', { name: '新建数据集' }).click()
 
@@ -730,7 +730,7 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
   }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
 
   await page.goto('/?nav=config')
-  await page.getByRole('button', { name: '数据配置' }).click()
+  await page.getByRole('tab', { name: '数据配置' }).click()
   await page.getByRole('button', { name: '新建数据源' }).click()
   await page.getByRole('button', { name: '选择MySQL数据源' }).click()
   await expect(page.locator('.datasource-form-page')).toBeVisible()
