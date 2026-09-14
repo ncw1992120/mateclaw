@@ -55,6 +55,10 @@ make dashboard-prerequisites-simulation
 
 **CDP 命令入口（2026-09-13）：** UI 新增 `npm run test:e2e:cdp`，并验证缺少认证变量时 fail-fast；计划命令不再依赖开发者手工拼接 Node 路径。
 
+**本轮 Google Chrome CDP 视觉验收（2026-09-13）：** 使用当前工作树 HEAD `0c1b066f6f5059fcf8930294c111707e8d39c91f`、本地模拟服务和 Google Chrome 交互标签页逐项执行 VIS-UI01～VIS-UI08。当前通过 `VIS-UI01、VIS-UI03、VIS-UI05、VIS-UI07`；`VIS-UI06` 的跨工作区权限拒绝子项为 `NOT_RUN`；`VIS-UI02、VIS-UI04、VIS-UI08` 失败：文件/HTTP/JDBC Descriptor 显示 `0 个字段` 但输入预览有字段，双源 Table DOM 有行但可视容器高度为 `0`，大结果没有明确 `outputRef`/受限预览边界提示。截图和复现步骤见 [dashboard-mvp-acceptance.md](../evidence/dashboard-mvp-acceptance.md) 的“本轮 Google Chrome CDP 视觉验收”。因此不能把 VIS-UI01～VIS-UI08 记为全部 PASS。
+
+**当前工作树复验补充（2026-09-14）：** 当前服务可访问，CDP 脚本已重新生成 `/tmp/mateclaw-dashboard-cdp-20260914/` 四页截图；真实 Google Chrome `9222` 页面可通过 CDP 看到洞察仪表盘列表。由于 CUA 返回 `Unable to load browser request-header policy`，未能完成 CUA 点击链路。本轮真实 Playwright 9 用例执行在 `dashboard-jdbc-aloudata.png` 快照处发现 `1158 pixels (ratio 0.01)` 差异；双源 5 行及 `120.5` 功能断言已到达，但视觉基线仍应记为待处理。详见统一验收记录的 2026-09-14 补充。
+
 ### 本地模拟驱动的实施顺序
 
 后续开发任务统一按以下顺序执行，避免子计划各自创建一套不可复现的外部依赖：

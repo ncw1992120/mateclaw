@@ -109,3 +109,26 @@ npm --prefix mateclaw-dataagent-ui run build
 - 视觉证据必须记录 `candidateSha、url、viewport、browser、timestamp、cdpActions、screenshotPath`，并能回溯到对应 UI 用例。
 
 预期：VIS-UI01～VIS-UI02 全部 PASS；截图来自当前候选 SHA 的真实页面，且页面文本/DOM 不包含敏感值。
+
+**本轮实测结果（2026-09-13）：** `VIS-UI01` 当前本地模拟通过；`VIS-UI02` 失败。文件、HTTP 和 JDBC 数据集的 Descriptor 均显示 `0 个字段`，但输入预览已有字段和数据；原始 JSON 预览在窄侧栏中发生横向截断。复现步骤和截图见统一验收记录。
+
+### 本轮逐用例验收记录（2026-09-13）
+
+验收环境：当前工作树 HEAD `0c1b066f6f5059fcf8930294c111707e8d39c91f`、本地模拟 E2E 服务、工作区 `1`、Google Chrome viewport `1440x736`。持久化 CDP 截图位于 `/tmp/mateclaw-dashboard-cdp-current`，编辑器截图为 `dashboard-editor.png`。
+
+| 用例 | 结果 | 页面操作与实际结果 |
+| --- | --- | --- |
+| VIS-UI01 | `PASS`（本地模拟） | 进入 `洞察`→编辑 `E2E JDBC + Aloudata Dashboard`，打开数据集选择器，确认可选 `E2E JDBC Orders Dataset`、`E2E Aloudata Metrics Dataset`、`E2E HTTP Orders Dataset`、`E2E File Orders Dataset`；切换至文件/HTTP 后页面不出现 SQL。进入 `配置`→`数据配置` 编辑已有 Aloudata 连接，认证值为空且未显示旧认证值。 |
+| VIS-UI02 | `FAIL` | 依次选择文件、HTTP、JDBC 数据集并点击“查看字段”，均显示 `0 个字段`；随后点击“输入预览”，却能返回含 `id/order_date/region/status/amount` 的有效行。原始 JSON 放在窄侧栏中，字段内容横向溢出，需要滚动，字段和类型不易阅读。空输入补充场景显示“每个数据集输入都必须选择数据集”，未发起无效执行，前置校验子项通过。 |
+
+**当前工作树复验补充（2026-09-14）：** 当前实现的静态/组件验证已覆盖 Descriptor 自动补齐和结构化输入预览；非交互 CDP 脚本在 `/tmp/mateclaw-dashboard-cdp-20260914/` 生成编辑器截图。用户 Chrome `9222` 可通过 CDP 打开到洞察列表，但 CUA 交互通道连续返回 `Unable to load browser request-header policy`，本轮未能完成 CUA 点击式 VIS-UI01～VIS-UI02；因此不新增未经交互确认的 PASS。真实 E2E 的当前阻塞是 09 计划记录的双源视觉快照差异，不是本子计划 Descriptor 单测失败。
+
+#### VIS-UI02 问题复现
+
+1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。
+2. 打开 `洞察`，编辑 `E2E JDBC + Aloudata Dashboard`。
+3. 在“脚本数据集输入”中选择 `E2E File Orders Dataset` 或 `E2E HTTP Orders Dataset`，点击“查看字段”，确认仍为 `0 个字段`。
+4. 点击“输入预览”，确认预览返回包含 `id`、`order_date`、`region`、`status`、`amount` 的行。
+5. 保持 Chrome viewport `1440x736`，观察预览区域：原始 JSON 在右侧栏中被截断并出现横向滚动。
+
+预期：Descriptor 字段名、类型和数量与输入预览一致，且预览内容在面板内可读、不发生布局溢出。实际：Descriptor 与预览不一致，预览布局不可读。该问题保持 `FAIL`，统一证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md` 的“本轮 Google Chrome CDP 视觉验收”。

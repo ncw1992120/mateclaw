@@ -68,12 +68,24 @@ jdbc_ds=$(api POST /v1/datasources "$(jq -cn \
 jdbc_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$jdbc_ds" \
   '{name:"E2E JDBC Orders Dataset",description:"dashboard MVP JDBC source",sourceDefinition:{sourceType:"JDBC_SQL",datasourceId:($ds|tonumber),sql:"SELECT id, order_date, region, status, amount FROM orders"}}')" | id_from)
 
-http_connection_params=$(jq -cn '{apiDefinitions:{orders:{endpoint:"https://e2e-http:8443/orders",method:"GET",allowedHosts:["e2e-http"],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data"}}}')
+http_connection_params=$(jq -cn '{apiDefinitions:{orders:{endpoint:"https://e2e-http:8443/orders",method:"GET",allowedHosts:["e2e-http"],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data",schema:[
+  {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
+  {name:"order_date",title:"订单日期",dataType:"DATE",role:"dimension"},
+  {name:"region",title:"区域",dataType:"STRING",role:"dimension"},
+  {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
+  {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
+]}}}')
 http_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg connectionParams "$http_connection_params" \
   '{name:"E2E HTTP Orders",description:"dashboard MVP E2E",sourceType:"api",host:"e2e-http",port:8443,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
 http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" \
-  '{name:"E2E HTTP Orders Dataset",description:"dashboard MVP HTTP source",sourceDefinition:{sourceType:"HTTP_API",datasourceId:($ds|tonumber),apiDefinitionId:"orders"}}')" | id_from)
+  '{name:"E2E HTTP Orders Dataset",description:"dashboard MVP HTTP source",sourceDefinition:{sourceType:"HTTP_API",datasourceId:($ds|tonumber),apiDefinitionId:"orders",schema:[
+    {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
+    {name:"order_date",title:"订单日期",dataType:"DATE",role:"dimension"},
+    {name:"region",title:"区域",dataType:"STRING",role:"dimension"},
+    {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
+    {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
+  ]}}')" | id_from)
 
 file_ref=$(curl --fail-with-body --silent --show-error -X POST \
   -H "$AUTH_HEADER" -H "$WORKSPACE_HEADER" \

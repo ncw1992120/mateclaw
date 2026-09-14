@@ -63,7 +63,17 @@
       >
         查看字段
       </el-button>
-      <pre v-if="previewResults[previewKey(input)]" class="preview-result">{{ JSON.stringify(previewResults[previewKey(input)], null, 2) }}</pre>
+      <div v-if="previewResults[previewKey(input)]" class="input-preview-card">
+        <div class="preview-meta">输入预览 · {{ previewResults[previewKey(input)].rows.length }} 行</div>
+        <div class="preview-table-scroll">
+          <table class="preview-table">
+            <thead><tr><th v-for="column in previewColumns(previewResults[previewKey(input)])" :key="column">{{ column }}</th></tr></thead>
+            <tbody><tr v-for="(row, rowIndex) in previewResults[previewKey(input)].rows" :key="rowIndex">
+              <td v-for="column in previewColumns(previewResults[previewKey(input)])" :key="column">{{ formatCell(row[column]) }}</td>
+            </tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <div class="script-draft">
@@ -114,6 +124,9 @@
       />
       <el-alert v-if="executionError" class="execution-alert" type="error" :closable="false" :title="executionError" />
       <div v-if="executionRows.length > 0" class="result-table-wrap">
+        <div v-if="executionOutputRef" class="result-limit-notice">
+          仅展示受限预览；完整结果已保存为 ObjectRef：{{ executionOutputRef.uri || executionOutputRef.objectId || '受控引用' }}
+        </div>
         <table class="result-table">
           <thead><tr><th v-for="column in executionColumns" :key="column">{{ column }}</th></tr></thead>
           <tbody>
@@ -123,7 +136,10 @@
           </tbody>
         </table>
       </div>
-      <pre v-else-if="executionResult !== null" class="preview-result execution-result">{{ JSON.stringify(executionResult, null, 2) }}</pre>
+      <div v-else-if="executionResult !== null" class="input-preview-card execution-result">
+        <div class="preview-meta">最终结果预览</div>
+        <pre class="preview-result">{{ JSON.stringify(executionResult, null, 2) }}</pre>
+      </div>
     </div>
 
     <div class="parameters-panel">
@@ -165,7 +181,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { Dataset, DatasetInputDescriptor, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter } from '@/types'
+import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef } from '@/types'
 import * as datasetApi from '@/api/dataset'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import {
@@ -196,6 +212,7 @@ const previewingKey = ref('')
 const executionLoading = ref(false)
 const executionError = ref('')
 const executionResult = ref<unknown | null>(null)
+const executionOutputRef = ref<DatasetObjectRef | null>(null)
 const executionId = ref('')
 const cancelRequested = ref(false)
 const executionRows = computed<Record<string, unknown>[]>(() => {
@@ -270,11 +287,13 @@ async function previewInput(input: DashboardDatasetInput): Promise<void> {
   const key = previewKey(input)
   previewingKey.value = key
   try {
-    previewResults[key] = await datasetApi.previewInput({
+    const batch = await datasetApi.previewInput({
       datasetId: input.datasetId,
       inputName: input.inputName,
       limit: 20,
     }) as unknown as DatasetBatch
+    previewResults[key] = batch
+    hydrateDescriptor(input.datasetId, batch)
   } catch {
     ElMessage.warning('数据集输入预览失败')
   } finally {
@@ -318,11 +337,38 @@ function formatCell(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value) : String(value)
 }
 
+function previewColumns(batch: DatasetBatch): string[] {
+  const columns = new Set<string>()
+  batch.rows.forEach((row) => Object.keys(row).forEach((key) => columns.add(key)))
+  return [...columns]
+}
+
+function inferDataType(value: unknown): string {
+  if (typeof value === 'number') return 'NUMBER'
+  if (typeof value === 'boolean') return 'BOOLEAN'
+  if (value instanceof Date) return 'DATETIME'
+  return 'STRING'
+}
+
+function hydrateDescriptor(datasetId: string, batch: DatasetBatch): void {
+  const current = descriptors[datasetId]
+  if (current?.schema?.length || !batch.rows.length) return
+  const first = batch.rows[0]
+  const schema: DatasetInputColumn[] = previewColumns(batch).map((name) => ({
+    name,
+    title: name,
+    dataType: inferDataType(first[name]),
+    nullable: batch.rows.some((row) => row[name] == null),
+  }))
+  descriptors[datasetId] = { ...current, schema }
+}
+
 async function executeScriptPreview(): Promise<void> {
   if (!props.dashboardId || !props.script?.trim()) return
   executionLoading.value = true
   executionError.value = ''
   executionResult.value = null
+  executionOutputRef.value = null
   executionId.value = ''
   cancelRequested.value = false
   try {
@@ -343,7 +389,9 @@ async function executeScriptPreview(): Promise<void> {
       }
       if (status.status === 'RESULT_REF') {
         const result = await insightDashboardApi.getExecutionResult(executionId.value)
-        executionResult.value = (result as unknown as { rows: unknown }).rows
+        const resolved = result as unknown as { rows: unknown; outputRef?: DatasetObjectRef }
+        executionResult.value = resolved.rows
+        executionOutputRef.value = resolved.outputRef ?? null
         return
       }
       if (status.status && status.status !== 'RUNNING') {
@@ -377,6 +425,10 @@ async function loadDescriptor(datasetId: string): Promise<void> {
   loadingDatasetId.value = datasetId
   try {
     descriptors[datasetId] = await datasetApi.getInputDescriptor(datasetId) as unknown as DatasetInputDescriptor
+    if (!descriptors[datasetId].schema?.length) {
+      const batch = await datasetApi.previewInput({ datasetId, inputName: 'dataset', limit: 20 }) as unknown as DatasetBatch
+      hydrateDescriptor(datasetId, batch)
+    }
   } catch {
     ElMessage.warning('数据集字段加载失败')
   } finally {
@@ -477,6 +529,56 @@ defineExpose({
   color: var(--el-text-color-regular);
   font-size: 10px;
   white-space: pre-wrap;
+}
+
+.input-preview-card {
+  max-width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+}
+
+.preview-meta {
+  margin-bottom: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+}
+
+.preview-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.preview-table th,
+.preview-table td {
+  max-width: 180px;
+  padding: 5px 7px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+
+.preview-table th {
+  color: var(--el-text-color-secondary);
+  font-weight: 600;
+}
+
+.result-limit-notice {
+  padding: 7px 9px;
+  color: var(--el-color-warning-dark);
+  font-size: 11px;
+  background: var(--el-color-warning-light-9);
+  border-bottom: 1px solid var(--el-color-warning-light-5);
 }
 
 .result-table-wrap {

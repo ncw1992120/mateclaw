@@ -78,6 +78,8 @@ git commit -m "docs: freeze dashboard mvp acceptance"
 
 本子计划只产出设计文档和验收矩阵，没有页面交互，视觉验收为 `N/A（由 07/09 统一验收）`。页面相关的视觉用例和 CDP 证据统一见测试矩阵 VIS-UI01～VIS-UI08。
 
+本轮关联结果（2026-09-13）：00–09 子计划视觉范围核对为 `10/10` 已声明；VIS-UI01～VIS-UI08 `8/8` 均有记录，具体 PASS/FAIL/NOT_RUN/EXTERNAL-BLOCKED 以 07、09 计划及统一验收记录为准。
+
 ## 测试执行与预期结果
 
 ```bash

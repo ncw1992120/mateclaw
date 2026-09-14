@@ -1,6 +1,6 @@
 # Dashboard MVP 真实验收记录
 
-状态：`PARTIAL-PASS / ALOUDATA-BLOCKED`
+状态：`PARTIAL-PASS / LOCAL-UI-PASS / ALOUDATA-EXTERNAL-BLOCKED`
 
 本记录只接受同一候选 SHA 下的真实 DataAgent、Python Runner、MinIO、JDBC、HTTP/API、文件和已授权 Aloudata 环境证据；MockMvc、单元测试和 Playwright 用例枚举不能替代真实验收。
 
@@ -40,6 +40,17 @@
 - `scripts/e2e/verify-dashboard-mvp-cleanup.sh`：删除并验证仪表盘、数据集和数据源；当前公共 API 尚无文件对象删除端点，因此会明确报告保留的对象 ID。
 
 ## 当前验收状态与尚未取得的证据
+
+> 说明：下方历史记录保留当时的失败与阻塞证据；其中本轮已修复的 UI 问题以“最新验收覆盖”结论为准，不再沿用旧截图或旧字段计数。
+
+### 最新验收覆盖（2026-09-13，当前工作树）
+
+- 使用独立 E2E Compose、同一轮 seed、真实本地 JWT 和系统 Chrome channel 完成 Playwright 全量：`9 passed (27.9s)`；无 route mock、无 skip。
+- 使用 Chrome CDP 视觉脚本 `npm --prefix mateclaw-dataagent-ui run test:e2e:cdp` 完成四页采集：列表、编辑器、Table 结果、ECharts 预览；结果目录为 `/tmp/mateclaw-dashboard-cdp`，Table 结果 `rows=5` 且包含 `120.5`，ECharts `canvasCount=1` 且标题可见。
+- 通过 Chrome CDP 手工复验：JDBC 输入显示 `5 个字段`，输入预览为结构化表格；HTTP 输入声明 Schema 后显示 `5 个字段`；文件输入在预览后自动补齐为 `5 个字段` 并显示结构化表格；大结果显示 10 行受限预览及 ObjectRef 提示。
+- VIS-UI02、VIS-UI04、VIS-UI08 记录的本地 UI 问题已关闭：字段描述不再长期显示 0、输入结果不再使用原始 JSON 大块展示、Table 结果容器有可见最小高度并支持滚动；E2E 截图基线已按实际修复后的 Chrome 渲染重新生成。
+- 本轮对应实现：`DatasetInputPanel.vue` 的字段/预览兜底与 ObjectRef 提示、`DataTableWidget.vue` 的最小高度约束、HTTP E2E API 定义的声明式 Schema；UI 单测为 `8 files / 29 tests passed`，production build 通过。
+- VIS-UI06（跨工作区/权限拒绝）已有真实 Compose API `403` 证据；真实 Aloudata ALO-X02 仍为外部授权阻塞，不以本地 WireMock 模拟结果替代。
 
 | 用例 | 状态 | 缺失证据 |
 | --- | --- | --- |
@@ -284,3 +295,64 @@ Runner 多别名 Join 回归（2026-09-13）：当前工作树 `make dashboard-r
 统一本地门禁复验（2026-09-13）：在当前工作树执行 `make dashboard-verify-local`，依次完成模拟前置条件、DataAgent Docker Maven 全量 `153 tests, 0 failures, 0 errors, 0 skipped`、Runner `21 passed`、UI `8 files / 27 tests passed`、UI production build 和 `DESIGN-PASS`；命令整体退出码为 `0`。构建输出仅含既有 Rollup chunk 大小提示，测试仅含既有 SLF4J、pytest-asyncio、Parquet/Hadoop、Mockito agent 和旧 Local 执行器 `pip` 兼容告警。该证据绑定当前工作树，不替代真实 Aloudata ALO-X02。
 
 HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 WireMock HTTP/HTTPS `/orders?status=PAID`，两条路径均返回预期 `id=1004`；配合 `orders-openapi.yaml` 的 operationId、参数和 HTTPS E2E fixture，证明本地已登记 API 的筛选透传与 TLS 入口可复现。该证据不替代真实 API 所有者提供的地址、证书、分页和错误响应验收。
+
+## 本轮 Google Chrome CDP 视觉验收（2026-09-13）
+
+验收环境：当前工作树（本轮改动尚未提交）、本地模拟 E2E 服务，工作区 `1`，Google Chrome 交互标签页 viewport `1440x736`；使用 Chrome 页面控制执行列表、编辑器、数据集选择、输入预览、最终结果预览、错误/取消/超时/资源超限和旧 Schema 场景。随后使用同一轮 seed、JWT、`Page.captureScreenshot`、`Accessibility.getFullAXTree` 生成持久截图；截图目录为 `/tmp/mateclaw-dashboard-cdp`，包含 `dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`。CDP 脚本结果为 AX 节点 `567/497/601/88`（列表/编辑器/Table/ECharts），Table 结果 DOM 有 5 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见。
+
+| 用例 | 本轮结果 | 实际观察 |
+| --- | --- | --- |
+| VIS-UI01 | `PASS`（本地模拟） | 编辑器数据集选择器可切换 `E2E JDBC Orders Dataset`、`E2E Aloudata Metrics Dataset`、`E2E HTTP Orders Dataset`、`E2E File Orders Dataset`；切换文件/HTTP 后页面不出现 SQL。Aloudata 管理页的认证值为空，页面未显示旧认证值。 |
+| VIS-UI02 | `PASS`（本地模拟，修复后） | HTTP/API 声明式 Schema 和 JDBC 字段在编辑器显示；文件输入在受控预览后自动补齐字段。输入预览使用结构化表格，展示字段名、类型对应的行数据，不再使用原始 JSON 大块输出。 |
+| VIS-UI03 | `PASS`（本地模拟） | 非法别名 `bad alias` 在提交前显示“别名须以字母开头，仅允许字母、数字和下划线（最多 64 个字符）”；添加参数后显示参数名、类型 `string`、作用域“仪表盘”；插入读取模板使用当前别名。 |
+| VIS-UI04 | `PASS`（本地模拟，修复后） | 最终结果预览返回 5 行双源数据；大结果返回 10 行受限表格并显示完整 ObjectRef 提示；ECharts 预览有可见 canvas。 |
+| VIS-UI05 | `PASS`（本地模拟） | 取消场景运行中显示“取消执行”，取消后按钮恢复“最终结果预览”，错误提示为“执行已取消，可点击‘重试’重新运行”；失败场景显示 traceback 和“重试”；超时显示 `task timed out` 和“重试”；未观察到成功态与错误态同时出现。 |
+| VIS-UI06 | `PASS`（本地模拟）/真实 Aloudata `BLOCKED` | 脚本失败、超时、资源超限分别显示可读错误分类并保留重试；跨工作区读取已有真实 Compose API `403` 证据。真实 Aloudata `SM_02_0038` 仍缺少授权，保持外部阻塞。 |
+| VIS-UI07 | `PASS`（本地模拟） | 旧 Schema 仪表盘可打开，页面明确显示“该仪表盘暂无组件，请先编辑添加组件”，提供“返回/去编辑”，未因无脚本绑定误触发 Runner。 |
+| VIS-UI08 | `PASS`（本地模拟，修复后） | JDBC+模拟 Aloudata、HTTP/API+文件双源编辑器结果均有可见 Table 行；`.table-wrapper` 增加最小可视高度并支持滚动，Chrome CDP Table 结果页已复验。ECharts 预览单独通过 canvas 结构断言。 |
+
+### 已确认问题及复现步骤
+
+1. **双源 Table 预览空白（VIS-UI04、VIS-UI08，已修复）**
+   - 前置：启动本地模拟服务，使用工作区 `1` 的 `admin` 登录，并使用 `/tmp/mateclaw-dashboard-mvp-state-1.json` 中的 `multiSourceDashboardId` 或 `apiFileDashboardId`。
+   - 复现：进入“洞察”→对应 Dashboard 卡片“预览”，等待最终结果加载；用 DOM 检查 `.el-table__body` 或 `table`，可见 4/5 行数据，但 `getBoundingClientRect().height` 为 `0`，页面截图只显示空白结果卡片。
+   - 预期：Table 行、列名、行数和双源结果在预览画布中可见。
+   - 实际：数据存在于 DOM/AX 树，但可视区域高度为 `0`，用户无法看到结果。
+   - 修复：`DataTableWidget.vue` 为 `.table-wrapper` 和内部表格增加最小可视高度并保留滚动；Chrome CDP/Playwright 已确认 Table 行可见。
+
+2. **输入 Descriptor 字段数与输入预览不一致（VIS-UI02，已修复）**
+   - 复现：编辑 `E2E JDBC + Aloudata Dashboard`，在“脚本数据集输入”中依次选择 `E2E File Orders Dataset` 或 `E2E HTTP Orders Dataset`，点击“查看字段”，再点击“输入预览”。
+   - 预期：Descriptor 展示字段名、类型和可读的字段数量，且与预览结果一致。
+   - 修复：HTTP API 定义补充声明式 Schema；`DatasetInputPanel.vue` 在 Descriptor 为空时从受控预览推断字段并回填，Chrome 中 HTTP/JDBC/文件最终均显示 `5 个字段`。
+
+3. **输入预览和最终结果预览缺少可读布局（VIS-UI02、VIS-UI04，已修复）**
+   - 复现：在上述编辑器中点击“输入预览”或“最终结果预览”，保持 Chrome viewport `1440x736`。
+   - 预期：字段、类型、行数和结果边界在侧栏内可读，不发生横向布局溢出；大结果明确提示 `outputRef` 与受限预览边界。
+   - 修复：输入预览改为结构化表格；大结果在 10 行受限表格旁显示“仅展示受限预览”和 ObjectRef；对应单测、Playwright 和 Chrome CDP 均通过。
+
+本轮结论：`VIS-UI01～VIS-UI08` 在本地模拟环境均取得通过；`VIS-UI02、VIS-UI04、VIS-UI08` 的历史失败已由当前实现和 Chrome CDP 证据关闭。真实 Aloudata 结果权限仍保持 `EXTERNAL-BLOCKED`，不以 WireMock 模拟替代。本记录已同步修复实现、测试断言和截图基线；候选 SHA 验收仍需提交后重跑。
+
+### VIS-UI02 空数据集输入补充
+
+在 `E2E JDBC + Aloudata Dashboard` 编辑器中点击“添加”创建未选择数据集的临时输入，再点击“最终结果预览”，页面即时显示“每个数据集输入都必须选择数据集”，同时保留“重试”入口，未发起无效执行；该空态/前置校验子项为 `PASS`。该操作未点击“保存”，不会改变 seed Dashboard。
+
+### 视觉验收范围审计补充
+
+对总体计划引用的 00–09 子计划做静态范围核对：`10/10` 子计划均明确写有视觉验收，或明确标注 `N/A（由 07/09 统一验收）`；测试矩阵中的 `VIS-UI01～VIS-UI08` 共 `8/8` 均有当前验收记录。后端-only 子计划不重复伪造页面证据，页面交互统一归入 07/09；本轮各项的 `PASS`、`FAIL`、`NOT_RUN` 和 `EXTERNAL-BLOCKED` 状态以本记录为准。
+
+## 2026-09-14 当前工作树 CDP 复验补充
+
+验收对象为当前工作树（尚未提交），本地 UI `http://127.0.0.1:15174`、DataAgent `http://127.0.0.1:18189/dataagent/api` 均返回健康响应，state 使用 `/tmp/mateclaw-dashboard-mvp-state-1.json`，工作区为 `1`。
+
+- 非交互 CDP 入口 `node mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs` 已重新执行并生成 `/tmp/mateclaw-dashboard-cdp/dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`；脚本退出码为 `0`，Table 结果 `rows=5` 且包含 `120.5`，ECharts `canvasCount=1` 且标题可见。
+- 使用同一轮 seed、JWT、Chrome channel 执行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --workers=1 --reporter=line`，结果为 `9 passed (28.7s)`。原 `dashboard-multi-source.spec.ts:29` 的 `1158 pixels (ratio 0.01)` 差异已通过重新生成与当前渲染一致的快照基线关闭；非更新模式再次执行也通过。
+- 本轮同时验证了回归断言：API+文件和大结果编辑器等待字段描述不再包含 `0 个字段`；HTTP API 的 Schema 来自已登记 API 定义，文件输入在受控预览后补齐字段。
+- 用户 Google Chrome 的交互页在前一轮同一本地栈中已通过 CUA 复验 JDBC 输入表格、ObjectRef 受限预览和字段显示；本轮 CUA 扩展连接短暂返回请求头策略错误，未改动用户其他 Chrome 标签页。
+
+### 当前问题及复现步骤
+
+1. **JDBC + Aloudata 视觉快照与当前渲染不一致（VIS-UI04/VIS-UI08，已修复）**
+   - 前置：保持本地 UI/DataAgent 服务运行，使用 state 文件中的 Dashboard，取得本地 `admin` JWT。
+   - 执行：设置 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID=1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation`、`MATECLAW_E2E_BROWSER_CHANNEL=chrome` 及 state 中的 9 个 Dashboard ID，然后运行 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`。
+   - 预期：9 个用例全部通过，`dashboard-jdbc-aloudata.png` 与仓库快照一致。
+   - 修复与结果：保留严格截图断言，使用当前 UI 结构化输入预览、最小高度 Table 和双源结果重新生成快照；随后非更新模式执行得到 `9 passed`，双源功能断言仍得到 5 行和 `120.5`。该问题已关闭。

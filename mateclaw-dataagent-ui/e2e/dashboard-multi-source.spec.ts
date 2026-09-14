@@ -45,6 +45,7 @@ test.describe('dashboard multi-source runtime', () => {
     await page.goto('/?nav=insight')
     await openEditor(page, 'E2E API + File Dashboard')
     await expect(page.getByText('脚本数据集输入')).toBeVisible()
+    await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await expect(page.locator('.script-draft')).toContainText('PAID')
@@ -65,6 +66,7 @@ test.describe('dashboard multi-source runtime', () => {
     await page.goto(`/?nav=insight&dashboardId=${largeResultDashboardId}`)
     await openEditor(page, 'E2E Large Result Dashboard')
     await expect(page.getByText('脚本数据集输入')).toBeVisible()
+    await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await resultResponse

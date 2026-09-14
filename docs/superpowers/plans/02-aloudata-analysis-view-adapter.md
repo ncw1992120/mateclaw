@@ -78,6 +78,8 @@
 
 本子计划只提供后端指标视图目录、详情和结果 Adapter，没有页面交互，视觉验收为 `N/A（由 07/09 统一验收）`。视图选择器和结果页面由 VIS-UI01、VIS-UI02、VIS-UI08 通过 CDP 复核；ALO-X01/ALO-X02 的真实服务证据仍按本计划验收标准执行。
 
+本轮关联结果（2026-09-13）：VIS-UI01 的 Aloudata 数据集选择和认证值脱敏在本地模拟通过；VIS-UI02 因 Descriptor 显示 `0 个字段` 保持 `FAIL`；真实 Aloudata 结果查询因 `SM_02_0038` 保持 `EXTERNAL-BLOCKED`。
+
 ## 测试执行与预期结果
 
 ```bash

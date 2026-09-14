@@ -6,7 +6,7 @@ import DatasetInputPanel from '../DatasetInputPanel.vue'
 vi.mock('@/api/dataset', () => ({
   list: vi.fn().mockResolvedValue([]),
   getInputDescriptor: vi.fn().mockResolvedValue({ schema: [] }),
-  previewInput: vi.fn(),
+  previewInput: vi.fn().mockResolvedValue({ rows: [{ id: 1, status: 'PAID' }], total: 1 }),
 }))
 
 const executeMock = vi.hoisted(() => vi.fn())
@@ -93,6 +93,29 @@ describe('DatasetInputPanel', () => {
     expect(cancelMock).toHaveBeenCalledWith('execution-1')
     await nextTick()
     expect(wrapper.text()).toContain('重试')
+    wrapper.unmount()
+  })
+
+  it('hydrates empty descriptors from the dataset preview so fields are visible', async () => {
+    const wrapper = mountPanel({ inputs: [{ datasetId: '1', inputName: 'orders' }] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(wrapper.text()).toContain('2 个字段')
+    expect(wrapper.text()).toContain('id')
+    expect(wrapper.text()).toContain('status')
+  })
+
+  it('shows a bounded-result notice when execution uses an output reference', async () => {
+    executeMock.mockResolvedValue({ executionId: 'execution-ref' })
+    statusMock.mockResolvedValue({ status: 'RESULT_REF' })
+    const getExecutionResult = (await import('@/api/insight-dashboard')).getExecutionResult as ReturnType<typeof vi.fn>
+    getExecutionResult.mockResolvedValue({ rows: [{ id: 1 }], inline: false, outputRef: { uri: 'object://result' } })
+    const wrapper = mountPanel({ dashboardId: 'dashboard-1', script: 'result = []', inputs: [{ datasetId: '1', inputName: 'orders' }] })
+    await wrapper.findAll('button').find((button) => button.text().includes('最终结果预览'))!.trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(wrapper.text()).toContain('仅展示受限预览')
+    expect(wrapper.text()).toContain('object://result')
     wrapper.unmount()
   })
 })

@@ -290,7 +290,8 @@ function escapeCsvField(field: string): string {
 
 .table-wrapper {
   flex: 1;
-  overflow: hidden;
+  min-height: 180px;
+  overflow: auto;
   padding: 0 var(--space-lg) var(--space-lg);
 }
 
@@ -352,6 +353,7 @@ function escapeCsvField(field: string): string {
 
 /* Element Plus 表格样式覆盖 */
 .table-wrapper :deep(.el-table) {
+  min-height: 160px;
   font-size: 13px;
   --el-table-border-color: var(--db-border);
   --el-table-header-bg-color: var(--db-card);
