@@ -474,3 +474,5 @@ make dashboard-verify-local
 **2026-09-15 双源运行时最终复验：** 本地模拟 Compose/Chrome channel 下双源运行时 4 条用例 `4 passed (15.8s)`；JDBC+模拟 Aloudata 5 行且包含 `120.5`，快照通过，API+文件、ObjectRef 和 ECharts 绑定同步通过。Chrome CDP 已实际打开编辑器并执行最终结果预览，截图 `/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
 
 **聚合本地门禁复验（2026-09-15）：** `scripts/verify-dashboard-design.sh` 取得 `DESIGN-PASS`；`make dashboard-verify-local` 因本地模拟 MinIO/WireMock 默认端口被长期 E2E 容器占用而返回 `ENV-BLOCKED`，不是实现或测试断言失败。停止冲突容器或切换隔离端口后需重跑聚合门禁；已通过的 UI/入口/双源定向证据不受影响。
+
+**聚合门禁恢复（2026-09-15）：** 暂停占用默认端口的 E2E MinIO/HTTP 容器后，标准本地模拟栈启动成功；`make dashboard-verify-local` 完整退出码 `0`，前置检查、DataAgent、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和设计门禁全部通过。Chrome CDP 随后复验问数输入栏和历史侧栏工具名称，截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。

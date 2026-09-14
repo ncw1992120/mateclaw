@@ -1030,3 +1030,7 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Google Chrome CDP `9222` 打开同一双源仪表盘编辑器，点击“最终结果预览”，DOM 结果表可见 5 行且包含 `120.5`；截图：`/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
 
 **聚合本地门禁复验（同日）：** `bash scripts/verify-dashboard-design.sh` 通过（`DESIGN-PASS`）；`make dashboard-verify-local` 未完成，失败发生在本地模拟前置检查启动 MinIO 时，端口 `19000` 已被长期运行的 E2E MinIO 容器占用，WireMock 端口同样存在冲突。该结果标记为 `ENV-BLOCKED`，不覆盖已通过的 UI 单测、生产构建、26 条入口 E2E 和 4 条双源 E2E；需先停止或改用隔离端口后重跑聚合门禁。
+
+**聚合门禁恢复（同日）：** 暂停占用 `19000/18443` 的 E2E MinIO/HTTP 容器后，标准本地模拟栈（MinIO、WireMock、MySQL、PostgreSQL、Runner）启动成功；`make dashboard-verify-local` 完整退出码 `0`。前置契约、模拟资源健康检查、DataAgent Maven、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和 `DESIGN-PASS` 均通过。端口冲突记录仅保留为历史诊断。
+
+**聚合门禁后的 Chrome CDP 复验：** `15174` 问数页面输入工具名称为“上传附件/指定数据源/快捷提问/优化输入/发送”，历史侧栏工具名称为“搜索对话/收起历史对话/新对话/更多操作”，均无空名称；截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。

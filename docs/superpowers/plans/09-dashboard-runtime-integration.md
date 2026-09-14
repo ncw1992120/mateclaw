@@ -341,3 +341,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 双源运行时最终复验：** `dashboard-multi-source.spec.ts` 在本地模拟 Compose/Chrome channel 下 `4 passed (15.8s)`；JDBC+模拟 Aloudata 实际 5 行且含 `120.5`，API+文件、ObjectRef、ECharts 同步通过。Chrome CDP 最终结果预览已复验，截图 `/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
 
 **聚合门禁环境状态（2026-09-15）：** 设计门禁 `DESIGN-PASS`；`make dashboard-verify-local` 在启动本地模拟 MinIO 时因 `19000`（同时 WireMock 默认端口）被长期 E2E 容器占用而 `ENV-BLOCKED`。该环境冲突不影响本子计划已通过的入口/双源定向 E2E，隔离端口或停止冲突容器后补跑。
+
+**聚合门禁恢复（2026-09-15）：** 暂停冲突的 E2E MinIO/HTTP 容器后，本地模拟栈完整启动；`make dashboard-verify-local` 退出码 `0`，前置检查、DataAgent、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和 `DESIGN-PASS` 全部通过。Chrome CDP 随后确认问数输入栏与历史侧栏工具均有可访问名称，截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。
