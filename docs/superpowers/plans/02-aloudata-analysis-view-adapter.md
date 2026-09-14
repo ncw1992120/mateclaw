@@ -80,6 +80,8 @@
 
 本轮关联结果（2026-09-13）：VIS-UI01 的 Aloudata 数据集选择和认证值脱敏在本地模拟通过；VIS-UI02 因 Descriptor 显示 `0 个字段` 保持 `FAIL`；真实 Aloudata 结果查询因 `SM_02_0038` 保持 `EXTERNAL-BLOCKED`。
 
+**状态更正（2026-09-14）：** 本地模拟的 Descriptor 空 Schema 中间态与字段摘要问题已修复并由 Chrome CDP 复验关闭；真实 Aloudata 结果查询仍因 `SM_02_0038` 保持 `EXTERNAL-BLOCKED`，两者不再混用。
+
 ## 测试执行与预期结果
 
 ```bash

@@ -72,6 +72,8 @@
 
 本轮关联结果（2026-09-13）：VIS-UI01 切换 JDBC 数据集且非 JDBC 不显示 SQL，通过；VIS-UI08 的 JDBC+Aloudata 双源 Table 在仪表盘预览中因可视容器高度为 `0` 显示空白，保持 `FAIL`。
 
+**状态更正（2026-09-14）：** Table 容器最小高度和双源快照基线已修复；本地模拟 JDBC+Aloudata 真实 E2E 断言 5 行并包含 `120.5`，VIS-UI08 的该历史空白问题已关闭。真实 Aloudata 授权仍是独立外部 Gate。
+
 ## 测试执行与预期结果
 
 ```bash

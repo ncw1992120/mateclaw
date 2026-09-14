@@ -579,3 +579,7 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`、`warm`、`eye-care`、`dark` 四种主题，读取数据集列表标题说明、状态标签的实际前景色与主题表面色并按 WCAG AA 普通文字阈值 4.5:1 计算。修复后辅助文字最低对比度为 `4.97:1`，状态标签最低为 `6.24:1`，四种主题均通过。实现上将 `--theme-text-muted` 和 `--theme-success-text` 主题化，移除数据集状态标签的固定绿色。
 
 新增 Playwright 用例 `数据集列表状态和辅助文字满足主题对比度`。当前环境未安装 Playwright headless Chromium，直接运行该用例会因 `chrome-headless-shell` 缺失而阻塞；本次结果以系统 Chrome CDP 实测为准，待标准 E2E 镜像恢复后补跑自动化用例。
+
+### 2026-09-14 计划状态一致性复核
+
+复核 01～07 子计划后，补充标注 Descriptor 字段摘要、Table 可视高度、ObjectRef 边界提示和双源快照的历史 `FAIL` 已由后续修复关闭；真实 Aloudata `SM_02_0038`、跨工作区权限 `NOT_RUN`、完整键盘遍历及正式对象存储替换仍保持独立未完成状态。`bash scripts/verify-dashboard-design.sh` 输出 `DESIGN-PASS`，避免历史记录覆盖当前状态。

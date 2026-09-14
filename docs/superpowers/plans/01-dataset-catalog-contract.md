@@ -100,6 +100,8 @@ Expected: FAIL，契约类型尚不存在。
 
 本轮关联结果（2026-09-13）：VIS-UI03 的别名/参数/脚本配置通过；VIS-UI02 的 Descriptor 字段数与输入预览不一致，保持 `FAIL`。详细复现步骤见 07 计划“本轮逐用例验收记录”。
 
+**状态更正（2026-09-14）：** 上述 `VIS-UI02` 是历史复现记录。`DatasetInputPanel` 已在 Descriptor 异步探测完成后刷新字段摘要，当前 Chrome CDP 复验显示 JDBC `5 个字段`、Aloudata `3 个字段`，与输入预览一致；该历史 `FAIL` 不再代表当前实现状态。
+
 ## 测试执行与预期结果
 
 ```bash
