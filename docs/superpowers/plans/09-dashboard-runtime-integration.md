@@ -188,6 +188,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 当前工作树 Google Chrome CDP 双源现场复验：** 通过 CDP `9222` 控制用户 Chrome 打开双源 Dashboard，编辑器实际显示脚本结果输入、`e2e-table` 目标组件、JDBC `5 个字段` 和 Aloudata `3 个字段`；点击“最终结果预览”后显示 `5` 行并包含 `120.5`。视口为 `1440x813`，AX 摘要 `211` 行，截图为 `/tmp/mateclaw-cdp-jdbc-aloudata-editor-current.png`、`/tmp/mateclaw-cdp-jdbc-aloudata-result-current.png`。同一环境系统 Chrome channel 定向 E2E `1 passed (7.1s)`，严格双源快照断言通过，历史 `1158 pixels (ratio 0.01)` 差异不再复现。
 
+**2026-09-14 预览状态圆点主题适配：** 预览页顶部草稿/已发布状态圆点改用与列表一致的主题状态令牌；真实预览路径回归 `1 passed (3.9s)`，Chrome CDP 暗色现场颜色为 `rgb(251, 191, 36)`，截图 `/tmp/mateclaw-cdp-preview-status-dot-dark-fixed.png`。
+
 使用 CDP 连接当前候选 SHA 的真实仪表盘 UI，执行 VIS-UI03～VIS-UI08；最低使用 `Page.captureScreenshot`、`Runtime.evaluate` 和 `Accessibility.getFullAXTree`，每个场景必须保存截图，并将页面、任务、查询和下推证据关联到同一候选 SHA。
 
 - 编辑器：输入别名、参数作用域和脚本配置层级清晰；非法输入在提交前显示可读错误，脚本模板使用配置的别名。

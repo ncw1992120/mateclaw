@@ -100,6 +100,32 @@ test('洞察列表状态标签在四主题下满足对比度', async ({ page }) 
   }
 })
 
+test('仪表盘预览状态圆点跟随主题状态令牌', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  const card = page.locator('.dashboard-card').first()
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: '预览' }).click()
+  await expect(page.locator('.dashboard-preview-view')).toBeVisible()
+  const colors = await page.evaluate(() => {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    const dot = document.querySelector<HTMLElement>('.toolbar-status-dot')
+    if (!dot) throw new Error('预览页缺少状态圆点')
+    const style = getComputedStyle(dot)
+    const tokenProbe = document.createElement('span')
+    tokenProbe.style.backgroundColor = 'var(--db-status-warning-fg)'
+    document.body.append(tokenProbe)
+    const expected = getComputedStyle(tokenProbe).backgroundColor
+    tokenProbe.remove()
+    return { actual: style.backgroundColor, expected }
+  })
+  expect(colors.actual).toBe(colors.expected)
+})
+
 test('从产品入口创建文件数据集并进入预览', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

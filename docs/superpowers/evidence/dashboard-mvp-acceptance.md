@@ -640,3 +640,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：新增 `洞察列表状态标签在四主题下满足对比度`，覆盖成功和草稿两种标签及四主题；系统 Chrome channel `1 passed (3.2s)`。
 - Chrome CDP `9222` 现场打开 `/?nav=insight`，实际显示 9 个看板；暗色草稿标签对比度 `8.24:1`。截图：`/tmp/mateclaw-cdp-insight-list-status-dark-fixed.png`。
 - 同步修复卡片“撤回/删除”操作按钮的固定橙/红颜色；删除按钮浅色卡片上的原始对比度仅 `3.76:1`，现改用主题语义令牌。四主题回归同时覆盖状态标签和这两类操作按钮，结果仍为 `1 passed`。
+
+### 2026-09-14 仪表盘预览状态圆点主题适配
+
+- 问题：仪表盘预览顶部草稿/已发布状态圆点仍使用固定颜色，与列表状态标签的主题令牌不一致。
+- 修复：预览页圆点改用 `--db-status-success-fg` / `--db-status-warning-fg`。
+- 回归：新增真实预览路径用例 `仪表盘预览状态圆点跟随主题状态令牌`，系统 Chrome channel `1 passed (3.9s)`；Chrome CDP `9222` 暗色现场读取草稿圆点颜色 `rgb(251, 191, 36)`。截图：`/tmp/mateclaw-cdp-preview-status-dot-dark-fixed.png`。

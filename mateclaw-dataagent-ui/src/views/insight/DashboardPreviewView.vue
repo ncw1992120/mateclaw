@@ -770,11 +770,11 @@ function handlePageChange(pageId: string): void {
 }
 
 .toolbar-status-dot.published {
-  background: #14a05a;
+  background: var(--db-status-success-fg);
 }
 
 .toolbar-status-dot.draft {
-  background: #dd8a1d;
+  background: var(--db-status-warning-fg);
 }
 
 .toolbar-right {
