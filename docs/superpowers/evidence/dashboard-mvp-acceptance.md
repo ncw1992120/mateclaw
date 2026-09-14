@@ -858,3 +858,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为数据源表单原生输入、选择器和复选框补充显式 `aria-label`；将隐藏复选框改为保留语义的 1px 透明控件，并修正 CSS 括号。
 - 回归：Vite 样式模块恢复 HTTP `200`；数据源表单定向 Chrome channel E2E `1 passed (6.7s)`；完整本地模拟 Chrome channel 矩阵 `25 passed (1.5m)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
 - Chrome CDP `9222` 现场读取 5 个复选框名称（`开启上传文件入口`、`SSL`、`SSH`、`跨 VPC/SQL`、`共享元数据`），相关 AX 空名称数为 `0`；截图 `/tmp/mateclaw-cdp-datasource-form-checkboxes-fixed-20260915.png`。
+
+### 2026-09-15 数据源表单修复后完整矩阵复验
+
+- 修复前的表单定向 E2E 曾因隐藏复选框无法稳定暴露 AX 名称而失败；同时一次热更新 CSS 多余括号造成 Vite 样式模块 HTTP `500`，该问题已定位并修正。
+- 修复后同一模拟 Compose 和 Chrome channel 完整 E2E 为 `25 passed (1.5m)`，数据源表单定向用例为 `1 passed (6.7s)`；Vite 样式模块 HTTP `200`、UI 单测 `12 files / 44 tests passed`、生产构建成功。
+- 该记录以修复后结果为当前权威基线，早期失败仅保留为历史诊断证据。
