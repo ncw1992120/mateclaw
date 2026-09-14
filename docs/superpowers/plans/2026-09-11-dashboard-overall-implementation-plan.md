@@ -261,6 +261,8 @@ make dashboard-verify-local
 
 **2026-09-14 产品入口 E2E 补充：** 新增“主导航→数据集管理→新建文件数据集→上传 CSV→创建/同步→进入预览→清理”真实后端用例，补齐 FE-CLOSE-07 的正式创建链路覆盖。首次执行因缺少 Playwright `chromium_headless_shell` 未运行，随后切换系统 Chrome channel 并注入 JWT/工作区上下文完成执行。
 
+**2026-09-14 提交后 CDP 复验：** 当前提交 `58d52abdb505b5d611d9e9e4a5b28fda88599538` 已通过 Google Chrome CDP `9222` 现场检查洞察列表和双源编辑器；脚本结果数据集输入面板、默认目标组件和输入别名均可见，截图及 AX 树记录见统一验收记录。CUA 请求头策略故障、真实 Aloudata 授权和四主题对比度专项仍保持独立 Gate。
+
 **2026-09-14 统一预览流程补充：** 修复创建文件/API/Aloudata/JDBC SQL 数据集后仍无条件调用旧 JDBC `/sync` 的问题，改为创建后通过统一 `DatasetSourceAdapter` 描述与预览，页面可直接进入预览态。新增用例在真实 E2E 栈中 `2 passed`，并断言文件结果包含 `120.5` 与 `east`；全量 E2E 的既有双源编辑器用例另有“未选中组件”失败，保持单独记录，不归因于本修复。
 
 **2026-09-14 当前提交 CDP 视觉补充：** 通过用户 Chrome `9222` CDP 打开 `/datasets/new` 并选择 `E2E Aloudata Simulation`，页面自动切换为“Aloudata 指标视图”，`JDBC_TABLE` 与 `JDBC_SQL` 选项均为禁用状态。截图 `/tmp/mateclaw-cdp-aloudata-compatibility.png`；CUA 服务仍不可用，但本次操作确实连接并控制了用户 Chrome 的 CDP 页面。

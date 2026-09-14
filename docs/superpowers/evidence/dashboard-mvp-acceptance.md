@@ -494,6 +494,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 - Chrome CDP `9222` 现场复验同一行为：新建仪表盘并拖入“数据表格”后，脚本面板即时显示“当前目标组件：comp_…”。截图 `/tmp/mateclaw-cdp-formal-dashboard-binding-be88696f.png`。
 
+## 2026-09-14 提交后 Chrome CDP 视觉复验
+
+- 候选提交：`58d52abdb505b5d611d9e9e4a5b28fda88599538`；页面：`http://127.0.0.1:5175/?nav=insight&dashboardId=2099412031543152642`；浏览器：Google Chrome CDP `9222`；视口：`1440x900`；时间：2026-09-14（Asia/Shanghai）。
+- `Page.captureScreenshot` 截图：列表 `/tmp/mateclaw-cdp-current-dashboard-list.png`，编辑器 `/tmp/mateclaw-cdp-current-dashboard-editor.png`。
+- `Accessibility.getFullAXTree`：编辑器 `532` 个节点；脚本面板可见“脚本结果数据集输入”，当前目标组件与输入别名均可见；`Runtime.evaluate`/DOM 检查确认默认目标存在。
+- 本次仅做当前提交的交互视觉复验，不替代真实 Aloudata 授权、四主题对比度专项或 CUA 请求头策略故障的后续 Gate。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

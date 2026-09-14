@@ -182,6 +182,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 CDP 复验：** 用户 Chrome 的新建仪表盘页面拖入“数据表格”后，脚本结果面板即时显示默认目标组件；未保存的临时仪表盘随后已清理，不影响 seed 数据。
 
+**2026-09-14 提交后复验：** 当前提交 `58d52abdb505b5d611d9e9e4a5b28fda88599538` 通过 Google Chrome CDP `9222` 重新打开双源 Dashboard；编辑器 AX 树 `532` 节点，脚本面板、默认目标组件和输入别名均可见。截图 `/tmp/mateclaw-cdp-current-dashboard-list.png`、`/tmp/mateclaw-cdp-current-dashboard-editor.png`。
+
 使用 CDP 连接当前候选 SHA 的真实仪表盘 UI，执行 VIS-UI03～VIS-UI08；最低使用 `Page.captureScreenshot`、`Runtime.evaluate` 和 `Accessibility.getFullAXTree`，每个场景必须保存截图，并将页面、任务、查询和下推证据关联到同一候选 SHA。
 
 - 编辑器：输入别名、参数作用域和脚本配置层级清晰；非法输入在提交前显示可读错误，脚本模板使用配置的别名。
