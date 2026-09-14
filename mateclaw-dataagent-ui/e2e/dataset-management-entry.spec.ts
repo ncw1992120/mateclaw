@@ -61,6 +61,20 @@ test('历史对话工具暴露可访问名称', async ({ page }) => {
   await expect(page.getByRole('button', { name: '新对话' })).toBeVisible()
 })
 
+test('历史对话条目支持键盘切换', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=smart-ask')
+  const item = page.locator('.history-item').first()
+  await expect(item).toBeVisible()
+  await expect(item).toHaveAttribute('role', 'button')
+  await expect(item).toHaveAttribute('tabindex', '0')
+  await expect(item).toHaveAttribute('aria-label', /对话/)
+})
+
 test('问数数据源浏览入口支持键盘打开', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

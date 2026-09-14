@@ -1013,3 +1013,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为 Workbench 历史侧栏 4 个按钮补充稳定 `aria-label`，不改变搜索、折叠、新建和菜单行为。
 - 定向 E2E `历史对话工具暴露可访问名称` 修复后 `1 passed (4.2s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
 - Chrome CDP `9222` 现场确认 4 个 `.history-sidebar button` 均有可访问名称；截图：`/tmp/mateclaw-cdp-history-tools-20260915.png`。
+
+### 2026-09-15 历史对话条目键盘切换
+
+- 问题：历史会话条目由可点击 `div` 承载，键盘无法切换会话。
+- 修复：条目增加 `role=button`、`tabindex=0`、动态“切换对话：…”名称，并支持 Enter/Space；内联重命名输入和更多操作区阻止事件冒泡。
+- 新增 E2E `历史对话条目支持键盘切换`，修复前失败、修复后 `1 passed (3.6s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
+- Chrome CDP `9222` 现场确认条目语义并按 Enter 后 active 状态正常；截图：`/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。

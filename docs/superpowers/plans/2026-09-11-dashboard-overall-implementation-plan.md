@@ -466,3 +466,5 @@ make dashboard-verify-local
 **2026-09-15 问数输入工具 AX 修复：** 输入栏附件、数据源、快捷提问、优化输入、发送按钮补充稳定 `aria-label`；新增定向 E2E，修复后 `1 passed (5.0s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 5 个输入工具均可读，截图 `/tmp/mateclaw-cdp-smart-ask-tools-20260915.png`。
 
 **2026-09-15 历史对话工具 AX 修复：** 历史侧栏搜索、收起/展开、新对话和更多操作按钮补充稳定 `aria-label`；定向 E2E `1 passed (4.2s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 4 个历史工具均可读，截图 `/tmp/mateclaw-cdp-history-tools-20260915.png`。
+
+**2026-09-15 历史对话条目键盘修复：** 历史会话条目补齐按钮语义、动态名称和 Enter/Space 切换，并隔离重命名/更多操作按键；定向 E2E `1 passed (3.6s)`，UI 单测 `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。

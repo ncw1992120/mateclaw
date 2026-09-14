@@ -68,7 +68,11 @@
                   :key="conv.conversationId"
                   class="history-item"
                   :class="{ active: chatStore.conversationId === conv.conversationId, 'menu-open': openMenuConvId === conv.conversationId, streaming: chatStore.isConversationStreaming(conv.conversationId) }"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`切换对话：${conv.title || t('conversation.untitled')}`"
                   @click="handleSwitchConversation(conv.conversationId)"
+                  @keydown="handleHistoryItemKeydown($event, conv.conversationId)"
                 >
                   <template v-if="editingConvId === conv.conversationId">
                     <input
@@ -77,6 +81,7 @@
                       :maxlength="100"
                       autofocus
                       @click.stop
+                      @keydown.stop
                       @keydown.enter="handleConfirmRename(conv.conversationId)"
                       @keydown.esc="handleCancelRename"
                       @blur="handleConfirmRename(conv.conversationId)"
@@ -103,7 +108,7 @@
                         <span class="history-item-time">{{ formatRelativeTime(conv.lastActiveTime) }}</span>
                       </span>
                     </div>
-                    <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }">
+                    <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }" @keydown.stop>
                       <button class="history-item-action" :data-conv-id="conv.conversationId" :title="t('conversation.more')" :aria-label="t('conversation.more')" @click.stop="handleToggleMenu(conv.conversationId)">
                         <span class="dot-icon" aria-hidden="true">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -317,6 +322,12 @@ async function handleSwitchConversation(convId: string): Promise<void> {
   openMenuConvId.value = null
   if (chatStore.conversationId === convId && chatStore.messages.length > 0) return
   await chatStore.switchConversation(convId)
+}
+
+function handleHistoryItemKeydown(event: KeyboardEvent, convId: string): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  void handleSwitchConversation(convId)
 }
 
 /** 切换操作菜单的显示 */
