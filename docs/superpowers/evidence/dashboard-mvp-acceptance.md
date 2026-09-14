@@ -1046,3 +1046,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 完整 Chrome channel 矩阵复跑得到 `30 passed / 5 failed`。其中编辑器面板两个断言是 aria-label 文案不兼容（实现使用了更具体的“收起页面面板/收起组件面板”），已统一恢复为既有契约“收起面板”。
 - 其余 4 个双源/大结果及文件上传失败均发生在本轮 E2E DataAgent 连接的 MinIO 服务已停止、日志出现 `unexpected end of stream on http://minio:9000` 后：Descriptor/上传无法完成，属于测试栈环境未恢复，不是业务断言回归。此前同一代码在完整本地模拟栈上已有 `29 passed` 证据；待恢复 E2E Compose 依赖后重跑矩阵。
 - 修复后 UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 现场读取编辑器返回、两处收起按钮和负责人输入框名称分别为“返回/收起面板/收起面板/负责人”，截图 `/tmp/mateclaw-cdp-editor-accessibility-final-20260915.png`。
+
+### 2026-09-15 E2E 依赖恢复后的最终矩阵与 CDP 验收
+
+- 重建仅限 E2E 的 `e2e_tls` volume，并恢复 `mateclaw-e2e-minio`、`mateclaw-e2e-http` 和 DataAgent；证书信任链恢复后，双源/文件/ObjectRef 读取不再出现 `PKIX` 或 `unexpected end of stream`。
+- 完整 Chrome channel 矩阵最终为 `35 passed (1.7m)`，无失败、无跳过；覆盖双源结果、API+文件、ObjectRef、ECharts、文件数据集创建、错误/取消/超时/资源限制和入口可访问性。
+- 用户 Chrome CDP `9222` 现场打开双源仪表盘并点击“最终结果预览”，实际结果为 `5` 行且包含 `120.5`；截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`。

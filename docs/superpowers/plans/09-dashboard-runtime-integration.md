@@ -347,3 +347,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 主入口无名控件巡检修复：** Chrome CDP 扫描五个主入口路由发现图标按钮和仪表盘编辑输入框的 AX 名称缺失；已为复制/上下文用量、返回/收起按钮及名称/描述/负责人输入框补齐 `aria-label`。UI `16 files / 49 tests passed`、生产构建成功；逐路由扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-accessibility-final-20260915.png`。
 
 **2026-09-15 完整矩阵环境诊断与标签回归：** 复跑矩阵为 `30 passed / 5 failed`；编辑器两项失败已将页面/组件收起按钮的 aria-label 统一为既有“收起面板”契约并通过 UI 单测、构建和 CDP 现场复验。其余双源/大结果/文件上传失败对应 E2E DataAgent 所连接的 MinIO 已停止并出现 `unexpected end of stream`，标记为环境阻塞，恢复 E2E Compose 后再重跑，不改变此前本地模拟 `29 passed` 基线。
+
+**2026-09-15 E2E 依赖恢复后的最终验收：** 重建 E2E TLS volume 并恢复 MinIO/WireMock/DataAgent 后，完整 Chrome channel 矩阵 `35 passed (1.7m)`，无失败、无跳过；双源定向 `4 passed (22.8s)`。用户 Chrome CDP 实际触发双源最终结果预览，5 行且包含 `120.5`，截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`。此前 `30/5` 结果确认是测试栈证书/服务状态问题，已关闭。
