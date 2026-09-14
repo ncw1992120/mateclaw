@@ -482,3 +482,5 @@ make dashboard-verify-local
 **2026-09-15 完整矩阵复跑诊断：** 最新复跑为 `30 passed / 5 failed`；确定性的编辑器 aria-label 文案回归已修正为“收起面板”，UI/构建/CDP 复验通过。其余失败由 E2E DataAgent 依赖的 MinIO 服务停止导致（日志 `unexpected end of stream on http://minio:9000`），Descriptor、ObjectRef 和文件上传均无法完成，暂记 `ENV-BLOCKED`；此前本地模拟完整矩阵 `29 passed` 仍为有效基线，恢复测试 Compose 后需补跑。
 
 **2026-09-15 最终矩阵与 Chrome CDP 验收：** 重建 E2E TLS volume、恢复 MinIO/WireMock/DataAgent 后，完整 Chrome channel 产品矩阵 `35 passed (1.7m)`，无失败、无跳过；双源 JDBC+Aloudata、API+文件、ObjectRef、ECharts、文件创建和全部错误路径均通过。用户 Chrome CDP 实际打开双源看板并执行最终结果预览，得到 5 行且包含 `120.5`，截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`；前一轮 `30 passed / 5 failed` 已确认是 E2E TLS/服务不完整导致的环境问题并关闭。
+
+**2026-09-15 数据源配置页无障碍补充：** Chrome CDP 进入配置数据源页发现卡片“编辑名称/删除”图标按钮缺少 AX 名称，已补齐 `aria-label`；UI 单测 `16 files / 49 tests passed`、生产构建成功，现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。

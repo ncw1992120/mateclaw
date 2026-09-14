@@ -1052,3 +1052,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 重建仅限 E2E 的 `e2e_tls` volume，并恢复 `mateclaw-e2e-minio`、`mateclaw-e2e-http` 和 DataAgent；证书信任链恢复后，双源/文件/ObjectRef 读取不再出现 `PKIX` 或 `unexpected end of stream`。
 - 完整 Chrome channel 矩阵最终为 `35 passed (1.7m)`，无失败、无跳过；覆盖双源结果、API+文件、ObjectRef、ECharts、文件数据集创建、错误/取消/超时/资源限制和入口可访问性。
 - 用户 Chrome CDP `9222` 现场打开双源仪表盘并点击“最终结果预览”，实际结果为 `5` 行且包含 `120.5`；截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`。
+
+### 2026-09-15 数据源配置页图标操作补验
+
+- Chrome CDP 进入配置 → 数据配置 → 数据源后发现数据源卡片的“编辑名称/删除”图标按钮只有 `title`，无 AX 名称。
+- 已补充对应 `aria-label`，不改变重命名、删除和事件冒泡行为；UI 单测 `16 files / 49 tests passed`、生产构建成功。
+- CDP 现场确认“编辑名称/删除”名称正确，数据源配置页可见无名控件数为 `0`；截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
