@@ -813,3 +813,8 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：顶部导航使用没有 `href` 的 `<a>`，鼠标可点击但无法进入键盘 Tab 顺序，也不是可复用链接。
 - 修复：为五个导航项生成当前路由对应的 `href`，保留 SPA 路由点击并阻止默认整页刷新；当前项增加 `aria-current="page"`。
 - 回归：修复前定向 Chrome channel 用例因 `href` 缺失失败，修复后 `1 passed (3.7s)`；Chrome CDP `9222` 现场读取五个链接地址、洞察项 `aria-current=page`，首个链接可获得焦点；截图 `/tmp/mateclaw-cdp-top-nav-links-20260914.png`。
+
+### 2026-09-14 最新 Chrome channel 矩阵
+
+- 在模型选择器和顶部导航修复合入当前工作树后，使用同一 E2E Compose、JWT、工作区和 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 重跑完整 `npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line`，结果为 `24 passed (1.5m)`，无跳过。
+- 该结果覆盖双源快照、ObjectRef、错误/取消/超时/资源限制、主题、数据集入口、模型选择器和顶部导航链接语义。
