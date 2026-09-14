@@ -788,3 +788,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：维度同步结果带有 `dimCategoryId=time`，但历史 upsert 未写入类目字段，且单列实体映射可能丢失类目 ID，导致类目树显示 0 个维度。
 - 修复：MySQL/PostgreSQL upsert 增加维度编码、类目 ID/名称和显示状态；类目统计改为查询完整维度实体。
 - 验证：重建 DataAgent 后 Chrome CDP `9222` 同步元数据，维度树显示“时间与区域，2 个维度”，页面可见“日期”“区域”；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。
+
+### 2026-09-14 当前工作树完整矩阵复验
+
+- 复验命令使用 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 对应独立 E2E Compose UI，并注入本地 JWT、工作区 `1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation`；先前未指定 UI 地址时实际访问了本地开发 UI，造成仪表盘卡片不存在，该环境误差不计为产品失败。
+- 同一套 DataAgent、MySQL、HTTPS WireMock、MinIO、Runner 和 seed 状态下，`npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line` 完整矩阵结果为 `22 passed (1.5m)`；`dashboard-multi-source.spec.ts` 定向结果为 `4 passed (28.7s)`。
+- JDBC+Aloudata 仍实际返回 5 行并包含 `120.5`，`dashboard-jdbc-aloudata.png` 非更新模式严格快照通过；维度树现场同时确认“时间与区域，2 个维度”。

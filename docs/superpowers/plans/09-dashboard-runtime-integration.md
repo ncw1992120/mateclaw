@@ -288,3 +288,7 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 ## 2026-09-14 维度类目数据一致性修复
 
 修复 Aloudata 维度同步 upsert 未保存类目字段、类目统计单列映射丢失 ID 的问题。重建服务后 Chrome CDP 确认维度类目“时间与区域，2 个维度”及“日期/区域”字段可见；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。
+
+## 2026-09-14 E2E UI 地址复验
+
+独立 E2E Compose 的 Playwright 必须显式设置 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`；未设置时会默认访问本地开发端口 `5174`，导致 seed 仪表盘卡片不存在。修正环境变量后，完整矩阵 `22 passed (1.5m)`，双源文件定向用例 `4 passed (28.7s)`，严格快照和 5 行/`120.5` 断言均通过。
