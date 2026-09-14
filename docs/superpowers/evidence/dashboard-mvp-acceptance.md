@@ -660,6 +660,12 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：增加 `aria-label="关闭 AI 助手"`，不改变面板开关逻辑。
 - 回归：系统 Chrome channel 用例 `洞察 AI 助手关闭按钮暴露可访问名称` `1 passed (4.5s)`；Chrome CDP `9222` 现场按钮可按名称定位并点击关闭，截图 `/tmp/mateclaw-cdp-ai-close-button.png`。
 
+### 2026-09-14 页面树更多操作按钮可访问名称
+
+- 问题：编辑器页面树每个页面的三点“更多操作”按钮只有图标，AX 名称为空。
+- 修复：增加 `aria-label="页面操作"`。
+- 回归：真实编辑入口用例 `仪表盘页面树更多操作按钮暴露可访问名称` `1 passed (4.4s)`；Chrome CDP `9222` 现场读取按钮 `aria-label=页面操作`，截图 `/tmp/mateclaw-cdp-page-actions-button.png`。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。

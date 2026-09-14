@@ -115,7 +115,7 @@
                     size="small"
                     @command="(cmd: string) => handlePageAction(cmd, node)"
                   >
-                    <el-button text size="small" @click.stop>
+                    <el-button text size="small" aria-label="页面操作" @click.stop>
                       <el-icon><More /></el-icon>
                     </el-button>
                     <template #dropdown>

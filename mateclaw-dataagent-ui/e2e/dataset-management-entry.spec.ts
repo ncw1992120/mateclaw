@@ -161,6 +161,20 @@ test('洞察 AI 助手关闭按钮暴露可访问名称', async ({ page }) => {
   await expect(page.getByRole('button', { name: '关闭 AI 助手' })).toHaveCount(0)
 })
 
+test('仪表盘页面树更多操作按钮暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=insight')
+  const card = page.locator('.dashboard-card').first()
+  await expect(card).toBeVisible()
+  await card.getByRole('button', { name: '编辑' }).click()
+  await expect(page.locator('.editor-pages')).toBeVisible()
+  await expect(page.getByRole('button', { name: '页面操作' }).first()).toBeVisible()
+})
+
 test('仪表盘预览多页面 Tab 暴露选中状态', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

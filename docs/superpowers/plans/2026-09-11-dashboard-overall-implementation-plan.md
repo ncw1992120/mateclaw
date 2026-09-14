@@ -289,6 +289,8 @@ make dashboard-verify-local
 
 **2026-09-14 AI 助手可访问性修复：** AI 助手关闭按钮增加可访问名称，系统 Chrome channel 回归和用户 Chrome CDP 打开/关闭验收通过。
 
+**2026-09-14 页面树操作按钮可访问性修复：** 编辑器页面树更多操作按钮增加可访问名称，真实编辑入口回归和用户 Chrome CDP 现场验收通过。
+
 **2026-09-14 多页面 Tab 语义修复：** 预览页页面导航增加 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的系统 Chrome channel 回归与用户 Chrome CDP 验收通过。
 
 **2026-09-14 多页面 Tab 键盘交互：** 增加方向键及 Home/End 页面切换，切换后同步选中状态和焦点；临时双页面看板的 Chrome CDP `ArrowRight` 验收通过。

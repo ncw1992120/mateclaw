@@ -203,6 +203,10 @@ npm --prefix mateclaw-dataagent-ui run build
 
 AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrome channel 回归和 CDP 实际打开/关闭操作均通过，截图 `/tmp/mateclaw-cdp-ai-close-button.png`。
 
+### 2026-09-14 页面树操作按钮可访问名称
+
+编辑器页面树更多操作按钮新增 `aria-label="页面操作"`；真实编辑入口回归和 Chrome CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-page-actions-button.png`。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
