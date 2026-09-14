@@ -1656,9 +1656,9 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .empty-state {
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
 }
 
 .empty-illustration {
@@ -1668,13 +1668,13 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .empty-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 8px 0;
 }
 
 .empty-desc {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-secondary);
   margin: 0 0 16px 0;
   text-align: center;
   max-width: 360px;
@@ -1683,7 +1683,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .learn-link {
   font-size: 13px;
-  color: #165dff;
+  color: var(--main-orange);
   text-decoration: none;
   transition: opacity 0.15s;
 }

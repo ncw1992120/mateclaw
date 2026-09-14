@@ -107,3 +107,45 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
     })
   }
 })
+
+test('数据集空态随四种主题使用主题令牌', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/datasets/new')
+  await expect(page.locator('.empty-state')).toBeVisible()
+  const snapshots = await page.evaluate(() => {
+    const themes = ['light', 'warm', 'eye-care', 'dark']
+    const read = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) throw new Error(`missing ${selector}`)
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, color: style.color }
+    }
+    return themes.map(theme => {
+      document.documentElement.dataset.theme = theme
+      const root = getComputedStyle(document.documentElement)
+      const normalize = (value: string, property: 'color' | 'backgroundColor') => {
+        const probe = document.createElement('span')
+        probe.style[property] = value
+        document.body.appendChild(probe)
+        const normalized = getComputedStyle(probe)[property]
+        probe.remove()
+        return normalized
+      }
+      return {
+        theme,
+        empty: read('.empty-state'),
+        title: read('.empty-title'),
+        expectedBackground: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
+        expectedText: normalize(root.getPropertyValue('--theme-text').trim(), 'color'),
+      }
+    })
+  })
+  for (const snapshot of snapshots) {
+    expect(snapshot.empty.background, snapshot.theme).toBe(snapshot.expectedBackground)
+    expect(snapshot.title.color, snapshot.theme).toBe(snapshot.expectedText)
+  }
+})

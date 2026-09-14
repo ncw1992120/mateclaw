@@ -508,6 +508,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 - 最新文档同步提交 `17029cedffbc4d3b25674eadcc57fa871afde493` 后再次通过 Chrome CDP 现场检查：脚本面板、默认目标组件和 `E2E JDBC Orders Dataset` 均可见；截图 `/tmp/mateclaw-cdp-final-dashboard-editor.png`，AX 树 `532` 节点。
 
+## 2026-09-14 数据集空态四主题修复
+
+- 根因：`DatasetEdit.vue` 空态 `.empty-title`、`.empty-desc`、`.learn-link` 和容器背景使用固定颜色，切换 dark/warm/eye-care 后未跟随全局主题令牌。
+- 修复：改用 `--theme-surface`、`--theme-border`、`--theme-text`、`--theme-text-secondary` 和 `--main-orange`；不改变数据集契约或来源逻辑。
+- 回归：新增 `数据集空态随四种主题使用主题令牌`，修复前按真实 Chrome channel 复现失败，修复后 `1 passed`；覆盖 `light`、`warm`、`eye-care`、`dark` 的计算样式与主题变量一致性。
+- CDP 截图：`/tmp/mateclaw-cdp-dataset-empty-light.png`、`/tmp/mateclaw-cdp-dataset-empty-warm.png`、`/tmp/mateclaw-cdp-dataset-empty-eye-care.png`、`/tmp/mateclaw-cdp-dataset-empty-dark.png`；已查看 dark 主题现场，空态背景和文字清晰可读。表单/表格其他固定颜色仍不宣称已全部收敛。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。
