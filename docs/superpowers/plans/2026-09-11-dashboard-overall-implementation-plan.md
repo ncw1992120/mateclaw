@@ -321,6 +321,8 @@ make dashboard-verify-local
 
 **类目树 CDP 验收完成（2026-09-14）：** 重建 DataAgent 后 Chrome `9222` 同步本地 Aloudata 模拟元数据，实际看到 `role=tree`、`treeitem`“销售，1 个指标”；聚焦后按 Enter，`aria-selected=true` 且指标“收入”可见，截图 `/tmp/mateclaw-cdp-metric-tree-keyboard-pass.png`。
 
+同一提交 DataAgent 全量 Maven 回归为 `158 tests，0 failures，0 errors，0 skipped`。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。
