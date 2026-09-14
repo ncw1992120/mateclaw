@@ -5,12 +5,12 @@
       <div class="sidebar-actions">
         <el-tooltip :content="t('helpCenter.expandAll')" placement="bottom">
           <el-button link size="small" @click="handleExpandAll">
-            <el-icon><CaretBottom /></el-icon>
+            <el-icon><ArrowUpBold /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip :content="t('helpCenter.collapseAll')" placement="bottom">
           <el-button link size="small" @click="handleCollapseAll">
-            <el-icon><CaretTop /></el-icon>
+            <el-icon><ArrowDownBold /></el-icon>
           </el-button>
         </el-tooltip>
         <el-tooltip v-if="props.canManage" :content="t('helpCenter.newCategory')" placement="bottom">
@@ -34,16 +34,12 @@
       <el-input
         v-model="searchKeyword"
         :placeholder="t('helpCenter.searchPlaceholder')"
-        size="small"
         clearable
         @keyup.enter="handleSearch"
         @clear="handleClearSearch"
       >
         <template #prefix>
           <el-icon><Search /></el-icon>
-        </template>
-        <template #append>
-          <el-button :icon="Search" @click="handleSearch" />
         </template>
       </el-input>
     </div>
@@ -64,17 +60,10 @@
           @node-drop="handleDrop"
         >
           <template #default="{ node, data }">
-            <div class="tree-node" :class="{ 'is-doc': data.isDoc }">
+            <div class="tree-node" :class="{ 'is-doc': data.isDoc, 'is-empty': !data.isDoc && !hasChildren(data) }">
               <span class="tree-node-icon">
-                <template v-if="data.isDoc">
-                  <el-icon size="14"><Document /></el-icon>
-                </template>
-                <template v-else-if="data.icon">
-                  {{ data.icon }}
-                </template>
-                <template v-else>
-                  <el-icon size="14"><Folder /></el-icon>
-                </template>
+                <el-icon v-if="data.isDoc" size="14"><Document /></el-icon>
+                <el-icon v-else size="14"><Folder /></el-icon>
               </span>
               <span class="tree-node-label" :title="data.name || data.title">
                 {{ data.name || data.title }}
@@ -82,7 +71,7 @@
               <span v-if="!data.isDoc && data.documentCount > 0" class="tree-node-count">
                 {{ data.documentCount }}
               </span>
-              <span v-if="data.isDoc && data.status === 'draft'" class="tree-node-status">
+              <span v-if="data.isDoc && data.status === 'draft'" class="mc-tag pending">
                 {{ t('helpCenter.draft') }}
               </span>
               <!-- 排序模式：拖拽手柄 -->
@@ -131,7 +120,7 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  Plus, Search, Document, CaretBottom, CaretTop, Edit, Delete,
+  Plus, Search, Document, ArrowUpBold, ArrowDownBold, Edit, Delete,
   Folder, DocumentAdd, Rank, CloseBold
 } from '@element-plus/icons-vue'
 import type { HelpCategory, HelpDocument } from '@/types'
@@ -196,6 +185,11 @@ interface CategoryWithDocs extends HelpCategory {
 const mixedTree = computed(() => {
   return buildMixedTree(props.categoryTree as CategoryWithDocs[])
 })
+
+/** 分类节点是否有子节点（子分类或文档），用于空分类的降级样式 */
+function hasChildren(data: any): boolean {
+  return (Array.isArray(data.children) && data.children.length > 0) || (data.documentCount ?? 0) > 0
+}
 
 /** 当前选中节点的 key */
 const currentNodeKey = computed(() => {
@@ -514,41 +508,71 @@ defineExpose({ setExpandedKeys })
 </script>
 
 <style scoped>
+/* 目录列：与配置中心导航同处一张纸面，不用硬边框切分，层级靠留白与激活淡底表达 */
 .help-sidebar {
   width: 260px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--theme-border);
-  background: var(--theme-surface);
+  overflow: hidden;
+  padding: 4px 10px 16px;
 }
 
 .sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: 14px 8px 10px;
 }
 
 .sidebar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--db-text);
 }
 
 .sidebar-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+}
+
+/* 操作图标统一为 24px 幽灵按钮：抵消 EP 全局 .el-button+.el-button margin，间距只由 gap 承担 */
+.sidebar-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.sidebar-actions :deep(.el-button) {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  border-radius: 6px;
+  color: var(--db-text-muted);
+}
+
+.sidebar-actions :deep(.el-button:hover),
+.sidebar-actions :deep(.el-button:focus) {
+  color: var(--db-text);
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
 }
 
 .sidebar-search {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: 0 6px 10px;
 }
 
-.sidebar-search :deep(.el-input-group__append) {
-  padding: 0 8px;
+/* 胶囊搜索框：与技能/智能体页搜索框同族（白底描边 + 聚焦橙环） */
+.sidebar-search :deep(.el-input__wrapper) {
+  border-radius: 999px;
+  background: var(--db-card);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--db-border);
+}
+
+.sidebar-search :deep(.el-input__wrapper:hover) {
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px color-mix(in srgb, var(--main-orange) 45%, var(--db-border));
+}
+
+.sidebar-search :deep(.el-input__wrapper.is-focused) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--main-orange) 14%, transparent), inset 0 0 0 1px var(--main-orange);
 }
 
 .sidebar-scroll {
@@ -557,7 +581,7 @@ defineExpose({ setExpandedKeys })
 }
 
 .sidebar-tree {
-  padding: 8px;
+  padding: 4px;
 }
 
 .sidebar-tree :deep(.el-tree) {
@@ -566,17 +590,18 @@ defineExpose({ setExpandedKeys })
 
 .sidebar-tree :deep(.el-tree-node__content) {
   height: 32px;
-  border-radius: 4px;
-  padding: 0 6px;
+  border-radius: 8px;
+  padding: 0 8px;
   font-size: 13px;
+  margin-bottom: 2px;
 }
 
 .sidebar-tree :deep(.el-tree-node__content:hover) {
-  background: var(--theme-surface-hover);
+  background: color-mix(in srgb, var(--db-text-muted) 8%, transparent);
 }
 
 .sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
-  background: rgba(65, 118, 230, 0.12);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
   color: var(--main-orange);
   font-weight: 500;
 }
@@ -586,27 +611,37 @@ defineExpose({ setExpandedKeys })
   position: relative;
 }
 
-.sidebar-tree :deep(.el-tree-node__children) {
+/* .sidebar-tree :deep(.el-tree-node__children) {
   padding-left: 0;
-}
+} */
 
-.sidebar-tree :deep(.el-tree-node__children .el-tree-node__content) {
+/* .sidebar-tree :deep(.el-tree-node__children .el-tree-node__content) {
+  font-size: 13px;
+} */
+
+.sidebar-tree :deep(.el-tree-node__children .tree-node-icon) {
   font-size: 13px;
 }
 
-.sidebar-tree :deep(.el-tree-node__children .tree-node-icon) {
-  font-size: 12px;
-  opacity: 0.6;
+/* 空分类（无子分类且无文档）：整行弱化为次级灰，与有内容的分类拉开层级 */
+.tree-node.is-empty .tree-node-icon {
+  opacity: 0.65;
+}
+
+.tree-node.is-empty .tree-node-label {
+  font-weight: 500;
+  color: var(--db-text-muted);
 }
 
 .sidebar-tree :deep(.el-tree-node__expand-icon) {
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   font-size: 12px;
   padding: 2px;
 }
 
 .sidebar-tree :deep(.el-tree-node__expand-icon.is-leaf) {
-  display: none;
+  /* 叶子节点保留展开图标占位宽度，保证有/无子节点的行图标列对齐 */
+  visibility: hidden;
 }
 
 .tree-node {
@@ -615,13 +650,12 @@ defineExpose({ setExpandedKeys })
   flex: 1;
   overflow: hidden;
   font-size: 13px;
-  color: var(--theme-text);
+  color: var(--db-text);
 }
 
 .tree-node.is-doc {
   font-size: 13px;
-  color: var(--theme-text-secondary);
-  padding-left: 4px;
+  color: var(--db-text-secondary);
 }
 
 .tree-node-icon {
@@ -631,10 +665,15 @@ defineExpose({ setExpandedKeys })
   margin-right: 6px;
   font-size: 14px;
   flex-shrink: 0;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .tree-node.is-doc .tree-node-icon {
+  color: var(--db-text-muted);
+}
+
+/* 选中行图标跟随主题色高亮 */
+.sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) .tree-node-icon {
   color: var(--main-orange);
 }
 
@@ -645,22 +684,19 @@ defineExpose({ setExpandedKeys })
   white-space: nowrap;
 }
 
+/* 分类节点标题加粗加深，与文档节点拉开层级 */
+/* .tree-node:not(.is-doc) .tree-node-label {
+  font-weight: 600;
+  color: var(--db-text);
+} */
+
 .tree-node-count {
   font-size: 11px;
-  color: var(--theme-text-muted);
-  background: var(--theme-surface-hover);
-  border-radius: 10px;
-  padding: 1px 6px;
-  margin-left: 4px;
-  flex-shrink: 0;
-}
-
-.tree-node-status {
-  font-size: 11px;
-  color: var(--main-orange);
-  background: rgba(65, 118, 230, 0.12);
-  border-radius: 10px;
-  padding: 1px 6px;
+  font-weight: 600;
+  color: var(--db-text-secondary);
+  background: color-mix(in srgb, var(--db-text-muted) 10%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
   margin-left: 4px;
   flex-shrink: 0;
 }
@@ -674,7 +710,7 @@ defineExpose({ setExpandedKeys })
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   cursor: grab;
   border-radius: 3px;
   transition: all 0.15s;
@@ -686,7 +722,7 @@ defineExpose({ setExpandedKeys })
 
 .tree-node-drag-handle:hover {
   color: var(--main-orange);
-  background: var(--theme-surface-hover);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 /* 悬停操作菜单 - 默认隐藏，悬停时显示 */
@@ -696,13 +732,13 @@ defineExpose({ setExpandedKeys })
   flex-shrink: 0;
 }
 
-.sidebar-tree :deep(.el-tree-node__content:hover) .tree-node-actions {
+/* .sidebar-tree :deep(.el-tree-node__content:hover) .tree-node-actions {
   display: inline-flex;
 }
 
 .sidebar-tree :deep(.el-tree-node.is-current > .el-tree-node__content) .tree-node-actions {
   display: inline-flex;
-}
+} */
 
 .action-more {
   display: inline-flex;
@@ -712,7 +748,7 @@ defineExpose({ setExpandedKeys })
   height: 20px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   cursor: pointer;
   border-radius: 3px;
   transition: all 0.15s;
@@ -721,6 +757,6 @@ defineExpose({ setExpandedKeys })
 
 .action-more:hover {
   color: var(--main-orange);
-  background: var(--theme-surface-hover);
+  background: color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 </style>

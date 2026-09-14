@@ -109,6 +109,22 @@
  * 让 --db-* 设计 Token 跟随 --theme-* 全局变量，使背景/文字随主题切换。
  */
 
+/* ===== Element Plus 主色全局桥接 =====
+ * EP 组件统一取 --el-color-primary（默认蓝 #409eff）及其 light/dark 派生色阶；
+ * 项目主题色 --main-orange 随主题变化，此处用 color-mix 对 --theme-surface 派生整套色阶，
+ * 使全站 EP 组件（按钮/标签/输入框焦点/分页等）自动跟随主题色，无需各视图重复覆盖。
+ * light-* 与表面色混合，暗色主题下色阶自动变暗。
+ */
+:root {
+  --el-color-primary: var(--main-orange, #4176e6);
+  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176e6) 70%, var(--theme-surface, #fff));
+  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176e6) 50%, var(--theme-surface, #fff));
+  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176e6) 30%, var(--theme-surface, #fff));
+  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176e6) 20%, var(--theme-surface, #fff));
+  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176e6) 10%, var(--theme-surface, #fff));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176e6) 85%, #000);
+}
+
 /* 暖色 */
 html[data-theme='warm'] {
   --db-bg: var(--theme-bg);
@@ -170,6 +186,16 @@ html[data-theme='dark'] {
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* EP dark css-vars 在 html.dark 下把主色回设为默认蓝（同级特异性），
+     此处以相同特异性 + 更后加载顺序重压回主题橙色阶 */
+  --el-color-primary: var(--main-orange, #4176e6);
+  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176e6) 70%, var(--theme-surface, #fff));
+  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176e6) 50%, var(--theme-surface, #fff));
+  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176e6) 30%, var(--theme-surface, #fff));
+  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176e6) 20%, var(--theme-surface, #fff));
+  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176e6) 10%, var(--theme-surface, #fff));
+  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176e6) 85%, #000);
 }
 
 /* ===== 通用工具类 ===== */
@@ -371,4 +397,130 @@ html[data-theme='dark'] {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--db-text-quaternary);
+}
+
+/* ===== 配置中心表格统一皮肤（.mc-table） =====
+ * 对齐业务词典 data-grid：表头浅灰底 + 容器边框圆角
+ * 表头次级色小字、去斑马纹、行悬浮主题淡色、固定列背景跟随卡面
+ */
+.mc-table {
+  --el-table-border-color: var(--db-border);
+  --el-table-text-color: var(--db-text);
+  --el-table-header-text-color: var(--db-text-secondary);
+  --el-table-bg-color: var(--db-card);
+  --el-table-tr-bg-color: var(--db-card);
+  --el-table-header-bg-color: var(--db-table-head-bg, #fafafa);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--main-orange) 4%, var(--db-card));
+  font-size: 13px;
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mc-table th.el-table__cell {
+  background-color: var(--el-table-header-bg-color);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 0;
+}
+
+.mc-table td.el-table__cell {
+  padding: 11px 0;
+}
+
+.mc-table .cell {
+  line-height: 20px;
+}
+
+.mc-table .el-table__empty-text {
+  color: var(--db-text-muted);
+}
+
+.mc-table .el-table__inner-wrapper::before {
+  display: none;
+}
+
+/* 固定列：EP 用 background:inherit（特异性 0,2,2）继承行背景，
+ * 这里用更高特异性显式给不透明底，避免横向滚动时内容从固定列下透出 */
+.mc-table .el-table__body-wrapper tr td.el-table-fixed-column--right,
+.mc-table .el-table__body-wrapper tr td.el-table-fixed-column--left {
+  background-color: var(--db-card);
+}
+
+.mc-table .el-table__body-wrapper tr:hover > td.el-table-fixed-column--right,
+.mc-table .el-table__body-wrapper tr:hover > td.el-table-fixed-column--left {
+  background-color: color-mix(in srgb, var(--main-orange) 4%, var(--db-card));
+}
+
+.mc-table .el-table__header-wrapper tr th.el-table-fixed-column--right,
+.mc-table .el-table__header-wrapper tr th.el-table-fixed-column--left {
+  background-color: var(--el-table-header-bg-color);
+}
+
+/* 语义胶囊：角色/任务类型/投递状态统一淡底胶囊族 */
+.mc-tag {
+  display: inline-block;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
+  color: var(--db-text-secondary);
+}
+
+.mc-tag.owner,
+.mc-tag.admin {
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+  color: var(--main-orange);
+}
+
+.mc-tag.text { background: var(--db-card-blue-bg); color: var(--db-card-blue-fg); }
+.mc-tag.agent { background: var(--db-card-violet-bg); color: var(--db-card-violet-fg); }
+.mc-tag.reminder { background: var(--db-card-green-bg); color: var(--db-card-green-fg); }
+.mc-tag.pending { background: color-mix(in srgb, var(--db-warning) 14%, transparent); color: var(--db-warning); }
+.mc-tag.delivered { background: var(--db-positive-bg); color: var(--db-positive); }
+.mc-tag.failed { background: var(--db-danger-bg); color: var(--db-danger); }
+.mc-tag.revoked { background: color-mix(in srgb, var(--db-text-muted) 12%, transparent); color: var(--db-text-muted); }
+
+/* 资源授权：资源类型胶囊 */
+.mc-tag.datasource { background: var(--db-card-blue-bg); color: var(--db-card-blue-fg); }
+.mc-tag.knowledge { background: var(--db-card-green-bg); color: var(--db-card-green-fg); }
+.mc-tag.skill { background: var(--db-card-violet-bg); color: var(--db-card-violet-fg); }
+.mc-tag.agent { background: color-mix(in srgb, var(--db-warning) 14%, transparent); color: var(--db-warning); }
+
+/* 行操作链接：中性次级色、悬浮主题色；破坏性操作常红 */
+.mc-action-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast, 0.15s);
+}
+
+.mc-action-link:hover:not(:disabled) {
+  color: var(--main-orange);
+}
+
+.mc-action-link:disabled {
+  color: var(--db-text-quaternary);
+  cursor: not-allowed;
+}
+
+.mc-action-link.danger {
+  color: var(--db-danger);
+}
+
+.mc-action-link.danger:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--db-danger) 80%, #000);
+}
+
+.mc-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }

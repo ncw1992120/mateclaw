@@ -1112,7 +1112,6 @@ async function handleSend(): Promise<void> {
   display: flex;
   align-items: flex-end;
   gap: 9px;
-  background: var(--db-muted);
   border: 1px solid var(--db-border);
   border-radius: 20px;
   padding: 4px 4px 4px 16px;

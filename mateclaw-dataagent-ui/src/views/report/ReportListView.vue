@@ -1057,13 +1057,20 @@ async function handleUnsubscribe(report: InsightReport): Promise<void> {
   flex-shrink: 0;
 }
 
+/* el-tag 内容区默认是 inline span，圆点按基线对齐会偏离文字中线——改 flex 垂直居中 */
+.card-status :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .card-status .status-dot {
   display: inline-block;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-  margin-right: 5px;
+  flex-shrink: 0;
 }
 
 .card-status.el-tag--success {
@@ -1417,13 +1424,6 @@ async function handleUnsubscribe(report: InsightReport): Promise<void> {
 /* el-drawer teleport 到 body，scoped 选择器无法命中其内部节点，
    故用非 scoped 块 + 自定义类名限定作用域 */
 .report-detail-drawer {
-  --el-color-primary: var(--main-orange, #4176E6);
-  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176E6) 70%, var(--theme-surface, #fff));
-  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176E6) 50%, var(--theme-surface, #fff));
-  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176E6) 30%, var(--theme-surface, #fff));
-  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176E6) 20%, var(--theme-surface, #fff));
-  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176E6) 10%, var(--theme-surface, #fff));
-  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176E6) 85%, #000);
   background: var(--theme-surface, #fff);
 }
 
