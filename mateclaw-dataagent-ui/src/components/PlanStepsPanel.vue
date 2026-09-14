@@ -63,6 +63,18 @@ function toggleStep(index: number) {
   }
 }
 
+function handleToggleKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  collapsed.value = !collapsed.value
+}
+
+function handleStepKeydown(event: KeyboardEvent, index: number) {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggleStep(index)
+}
+
 /** 截断步骤结果 */
 function truncateResult(text: string, max: number): string {
   if (!text || text.length <= max) return text
@@ -76,7 +88,14 @@ function truncateResult(text: string, max: number): string {
     'is-failed': planStatusLabel === 'failed',
   }">
     <!-- 标题栏 -->
-    <div class="plan-panel__toggle" @click="collapsed = !collapsed">
+    <div
+      class="plan-panel__toggle"
+      role="button"
+      tabindex="0"
+      :aria-expanded="String(!collapsed)"
+      @click="collapsed = !collapsed"
+      @keydown="handleToggleKeydown"
+    >
       <span class="plan-panel__status" :class="{ 'is-done': planStatusLabel === 'completed', 'is-failed': planStatusLabel === 'failed', 'is-running': isGenerating && planStatusLabel !== 'completed' && planStatusLabel !== 'failed' }">
         <svg v-if="planStatusLabel === 'failed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
         <svg v-else-if="planStatusLabel === 'completed'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M8.5 12.3l2.4 2.4 4.6-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
@@ -112,7 +131,11 @@ function truncateResult(text: string, max: number): string {
             'is-completed': stepStatuses[i] === 'completed',
             'is-failed': stepStatuses[i] === 'failed',
           }"
+          :role="plan.stepResults?.[i]?.result ? 'button' : undefined"
+          :tabindex="plan.stepResults?.[i]?.result ? 0 : undefined"
+          :aria-expanded="plan.stepResults?.[i]?.result ? String(expandedSteps.has(i)) : undefined"
           @click="toggleStep(i)"
+          @keydown="handleStepKeydown($event, i)"
         >
           <div class="plan-step__header">
             <span class="plan-step__status">

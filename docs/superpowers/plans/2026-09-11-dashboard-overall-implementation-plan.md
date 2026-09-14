@@ -247,6 +247,8 @@ make dashboard-verify-local
 
 **2026-09-15 完整矩阵复验补充：** 补齐本地模拟 seed Dashboard ID 后，在同一 Chrome channel 环境重跑完整 Playwright 矩阵 `29 passed (1.4m)`，包含双源、API+文件、ObjectRef、ECharts、异常/取消/超时/资源限制、旧 Schema、产品入口及本轮嵌套按钮键盘回归；双源快照非更新模式通过。真实 Aloudata 授权仍保持独立外部 Gate。
 
+**2026-09-15 问数执行计划键盘语义补充：** 修复 `PlanStepsPanel` 与 `DelegationNodeView` 的可点击非原生元素，增加条件按钮语义、`aria-expanded`、焦点和 Enter/Space 操作；新增 2 个组件回归用例，UI 单测更新为 `15 files / 48 tests passed`，生产构建和问数主入口 Chrome CDP 检查通过。当前完整 E2E 未生成运行中计划 fixture，运行中计划/委派节点的真实页面专项仍可在后续会话补充。
+
 **2026-09-14 可访问性补充：** 修复组件库只能拖拽、无法用键盘添加组件的问题；条目支持 Enter/Space，具备按钮语义和可访问名称。新增回归后 UI `10 files / 37 tests` 通过，当前本地闭环的可访问性覆盖从表单控件扩展到组件创建入口。
 
 **2026-09-14 可访问性审计补充：** Chrome CDP 检查数据集新建页与双源编辑器的可聚焦控件名称，结果为 `5/5` 与 `52/52` 无缺失；本地闭环的键盘入口和名称语义已具备证据，四主题对比度仍保留为专项 Gate。

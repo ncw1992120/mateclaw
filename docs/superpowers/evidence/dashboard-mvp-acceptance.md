@@ -956,3 +956,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：新增“仪表盘卡片内部编辑按钮的键盘操作不触发卡片预览”用例；修复前按 Enter 无法稳定进入编辑器，修复后定向用例 `1 passed (3.4s)`，产品入口 E2E 文件全量 `20 passed (50.8s)`，UI 单测 `13 files / 46 tests passed`，生产构建通过。
 - Google Chrome CDP `9222` 现场保留编辑器实际渲染截图 `/tmp/mateclaw-cdp-final-visual-20260915.png`；编辑器、脚本结果输入和双源组件仍可见。该页面当前没有执行结果表，因此不能以该截图替代双源结果快照证据。
 - 随后在同一模拟 Compose、同一 Chrome channel 和复用的 seed Dashboard ID 下重跑完整 E2E，结果为 `29 passed (1.4m)`，无失败、无跳过；其中双源查询仍返回 5 行并包含 `120.5`，`dashboard-jdbc-aloudata.png` 非更新模式通过。
+
+### 2026-09-15 问数执行计划与委派节点键盘语义修复
+
+- 问题：问数执行计划折叠栏、可展开步骤和委派调用树使用可点击 `div`，键盘无法触发展开/收起。
+- 修复：计划总览与有结果步骤增加按钮语义、焦点、`aria-expanded` 及 Enter/Space；委派节点有内容时增加同等语义和键盘操作，无内容节点保持非焦点状态。
+- 回归：新增 `PlanStepsPanel.spec.ts`、`DelegationNodeView.spec.ts`，修复前分别失败，修复后通过；UI 全量 `15 files / 48 tests passed`，生产构建通过。
+- 用户 Chrome CDP `9222` 现场进入问数主入口，当前可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-smart-ask-final-20260915.png`。当前没有运行中的执行计划/委派节点，组件展开行为由单测直接验证。

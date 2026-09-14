@@ -50,11 +50,24 @@ function stepStatus(i: number): 'pending' | 'running' | 'completed' {
 function toggle() {
   if (hasBody.value) expanded.value = !expanded.value
 }
+
+function handleHeaderKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggle()
+}
 </script>
 
 <template>
   <div class="deleg-node" :class="{ 'is-running': isRunning, 'is-error': isError, 'is-success': isSuccess }">
-    <div class="deleg-node__header" @click="toggle">
+    <div
+      class="deleg-node__header"
+      :role="hasBody ? 'button' : undefined"
+      :tabindex="hasBody ? 0 : undefined"
+      :aria-expanded="hasBody ? String(expanded) : undefined"
+      @click="toggle"
+      @keydown="handleHeaderKeydown"
+    >
       <span class="deleg-node__status">
         <span v-if="isAsync" class="deleg-node__async" :title="$t('chat.subagentAsync')">⏱</span>
         <span v-else-if="isRunning" class="spin-icon">⟳</span>
