@@ -18,7 +18,7 @@
 
 **当前头部基线（2026-09-14）：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上 UI 全量为 `10 files / 42 tests passed`，production build 与 `DESIGN-PASS` 通过；上段 `27/27` 保留为历史阶段记录。
 
-**2026-09-15 当前验收基线更正：** 上述 `27/27`、`42 tests` 为历史阶段记录；当前 UI 单测为 `12 files / 44 tests passed`，完整 Chrome channel E2E 为 `26 passed (1.4m)`，以统一验收记录最新章节为准。
+**2026-09-15 当前验收基线更正：** 上述 `27/27`、`42 tests`、`26 passed` 为历史阶段记录；当前 UI 单测为 `16 files / 49 tests passed`，完整 Chrome channel E2E 为 `29 passed (4.5m)`，以统一验收记录最新章节为准。
 
 ## 前端产品闭环缺口（2026-09-14）
 
