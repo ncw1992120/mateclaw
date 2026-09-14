@@ -292,6 +292,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **同日帮助中心补充：** 扩大 CDP 扫描后发现 HelpSidebar 六个图标操作缺少可访问名称；已为展开/收起、新建分类、排序/退出排序和搜索按钮补充 `aria-label`。新增定向 E2E `1 passed`，Chrome CDP 帮助页扫描无名交互控件数为 `0`，不改变外部环境 Gate。
 
+**同日双源预览补充：** Chrome CDP 打开双源仪表盘预览时发现数据表 CSV 导出图标缺少可访问名称；已为导出按钮及属性面板收起按钮补充 `aria-label`。双源 Chrome channel E2E `1 passed`，CDP 现场确认导出按钮可访问名称为“导出 CSV”、无名交互控件数为 `0`。
+
 ## 2026-09-14 维度类目数据一致性修复
 
 修复 Aloudata 维度同步 upsert 未保存类目字段、类目统计单列映射丢失 ID 的问题。重建服务后 Chrome CDP 确认维度类目“时间与区域，2 个维度”及“日期/区域”字段可见；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。

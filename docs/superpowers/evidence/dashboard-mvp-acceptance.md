@@ -832,3 +832,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为 HelpSidebar 的图标按钮补充对应中文操作 `aria-label`，不改变帮助中心操作逻辑和视觉样式。
 - 回归：新增“帮助页图标操作暴露可访问名称”Chrome channel E2E，结果 `1 passed (5.8s)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
 - Chrome CDP `9222` 实际打开帮助页并扫描 `button/a/[role=button]`，`unnamedCount=0`；截图 `/tmp/mateclaw-cdp-help-a11y-fixed-20260915.png`。
+
+### 2026-09-15 双源预览导出按钮可访问名称修复
+
+- 问题：Chrome CDP 打开 `E2E JDBC + Aloudata Dashboard` 预览后，数据表 CSV 导出图标按钮只有图标，没有可访问名称。
+- 修复：`DataTableWidget` 的导出按钮补充 `aria-label="导出 CSV"`；编辑器属性面板收起按钮同步补充 `aria-label="收起面板"`。
+- 回归：本地模拟双源 Chrome channel E2E `1 passed (5.9s)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
+- Chrome CDP `9222` 双源预览现场确认 `data-table-widget=1`、`导出 CSV` 可访问按钮 `1`、无名交互控件 `0`；截图 `/tmp/mateclaw-cdp-dashboard-preview-icons-fixed-20260915.png`。

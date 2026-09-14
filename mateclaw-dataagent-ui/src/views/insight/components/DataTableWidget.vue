@@ -20,7 +20,7 @@
           />
         </div>
         <el-tooltip v-if="activeTableData && activeTableData.rows.length > 0" :content="t('insight.tableExportCsv')" placement="top">
-          <el-button text size="small" :icon="Download" @click="handleExportCsv" />
+          <el-button text size="small" :icon="Download" :aria-label="t('insight.tableExportCsv')" @click="handleExportCsv" />
         </el-tooltip>
       </div>
     </div>
