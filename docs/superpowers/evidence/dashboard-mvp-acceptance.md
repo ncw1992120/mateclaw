@@ -607,3 +607,5 @@ Chrome CDP 在模拟 JDBC 数据源返回 102 张表后聚焦首个表项，实�
 ### 2026-09-14 来源类型边界复验
 
 Chrome CDP 读取模拟 `E2E HTTP Orders` 数据源的真实响应 `sourceType=api`：来源类型自动为 `HTTP_API`，`JDBC_TABLE`、`JDBC_SQL`、`ALOUDATA_ANALYSIS_VIEW` 均禁用，`HTTP_API` 可用；截图：`/tmp/mateclaw-cdp-api-source-boundary-2bbfddec.png`。对应回归测试验证兼容旧数据源响应。
+
+当前提交 `fa7cd9289b276b99c1049ab7567a0b85def65240` 已在同一 Chrome CDP 页面复验，SQL 编辑器未渲染，截图 `/tmp/mateclaw-cdp-api-source-boundary-fa7cd928.png`。
