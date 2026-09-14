@@ -429,7 +429,7 @@ make dashboard-verify-local
 
 **2026-09-15 响应式横向溢出复核：** Chrome CDP 以 `390/900/1440px` 视口检查编辑器，390px 下移动端属性面板移出视口但根文档和 body 均无横向滚动，桌面视口恢复 `1440x1000`。该项记录为视觉复核结论，无需代码调整。
 
-**2026-09-15 表格与指标卡片 Tab 语义修复：** 数据表格和指标卡片多 Tab 补齐可聚焦 `tab`、选中态、roving `tabindex` 与键盘切换；新增 `WidgetTabs.spec.ts` 后 UI 全量为 `13 files / 46 tests passed`，生产构建成功。当前完整 E2E 无多 Tab fixture，真实 Tab 切换专项保持待补验。
+**2026-09-15 表格与指标卡片 Tab 语义修复：** 数据表格和指标卡片多 Tab 补齐可聚焦 `tab`、选中态、roving `tabindex` 与键盘切换；新增 `WidgetTabs.spec.ts` 后 UI 全量为 `13 files / 46 tests passed`，生产构建成功。E2E 已加入临时数据表多 Tab fixture，真实 Chrome channel 已验证 ArrowRight 切换和焦点同步，完整矩阵为 `29 passed (1.4m)`，fixture 自动清理。
 
 **2026-09-15 多 Tab 运行时补验：** 新增临时数据表多 Tab 看板 fixture，Chrome channel E2E 实测 `ArrowRight` 将“概览”切换为“明细”并同步焦点；完整本地模拟矩阵为 `27 passed (1.4m)`，临时数据由用例自动清理。
 

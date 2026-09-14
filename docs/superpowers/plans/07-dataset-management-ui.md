@@ -126,7 +126,7 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-15 数据源连接表单语义修复：** Chrome CDP 发现原生端口、密码和复选框控件存在空 AX 名称，且复选框隐藏规则曾引入 Vite CSS 500。现为输入、选择器和 5 个复选框补充显式 `aria-label`，使用保留语义的透明控件并修正括号；定向 E2E `1 passed`，完整 Chrome 矩阵 `25 passed`，CDP 复验 AX 空名称数为 `0`。
 
-**修复后矩阵复验（2026-09-15）：** 同一模拟 Compose 下完整 Chrome channel E2E `25 passed (1.5m)`，UI 单测 `12 files / 44 tests passed`、生产构建成功；本地 Vite 样式模块 HTTP `200`。非 Chrome 原生控件外观和全站键盘顺序专项仍保持待验收状态。
+**修复后矩阵复验（2026-09-15）：** 同一模拟 Compose 下完整 Chrome channel E2E `29 passed (1.4m)`，UI 单测 `13 files / 46 tests passed`、生产构建成功；本地 Vite 样式模块 HTTP `200`。非 Chrome 原生控件外观和全站键盘顺序专项仍保持待验收状态。
 
 **2026-09-15 刷新失败文案修复：** 数据集刷新异常原先泄漏未定义的 `datasetEdit.syncDataFail` 原始键名；已在中英文 `datasetEdit` 命名空间补齐该键。Chrome CDP 真实错误路径确认显示可读“数据刷新失败”，UI 单测和生产构建通过。
 
