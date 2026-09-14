@@ -213,6 +213,10 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 
 用户 Chrome `9222` 对 `/datasets/new` 和 `/?nav=insight` 各执行最多 80 次 `Tab`，可见焦点控件均具备名称（两页 `missingCount=0`）；该证据覆盖当前数据集入口和洞察编辑器，不替代全站及跨浏览器专项审计。
 
+### 2026-09-14 页面树新增按钮可访问名称
+
+页面树原先的 `+` 按钮仅以符号作为名称，现增加 `aria-label="新增页面"`；页面树更多操作仍为“页面操作”。定向系统 Chrome E2E `1 passed`，CDP 现场确认两个名称均可读，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。

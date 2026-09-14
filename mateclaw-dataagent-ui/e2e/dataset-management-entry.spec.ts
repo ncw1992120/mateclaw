@@ -173,6 +173,7 @@ test('仪表盘页面树更多操作按钮暴露可访问名称', async ({ page 
   await card.getByRole('button', { name: '编辑' }).click()
   await expect(page.locator('.editor-pages')).toBeVisible()
   await expect(page.getByRole('button', { name: '页面操作' }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '新增页面' })).toBeVisible()
 })
 
 test('仪表盘预览多页面 Tab 暴露选中状态', async ({ page, request }) => {

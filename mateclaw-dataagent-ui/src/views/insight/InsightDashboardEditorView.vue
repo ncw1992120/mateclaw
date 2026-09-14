@@ -77,7 +77,7 @@
         <div class="pages-header">
           <span class="pages-title">页面</span>
           <div class="pages-header-actions">
-            <el-button text size="small" @click="addPage">+</el-button>
+            <el-button text size="small" aria-label="新增页面" @click="addPage">+</el-button>
             <button type="button" class="panel-collapse-btn" title="收起面板" @click="pagesCollapsed = true">
               <el-icon :size="14"><Fold /></el-icon>
             </button>
