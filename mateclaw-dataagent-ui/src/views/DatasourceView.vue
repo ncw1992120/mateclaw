@@ -533,6 +533,8 @@ async function doSync(): Promise<void> {
   try {
     const result = await datasourceApi.syncAloudataSemantic(selectedDs.value.id)
     if (result?.status === 'completed') {
+      // 同步写入语义层后强制刷新右侧指标/维度面板，避免用户仍看到同步前的空态。
+      panelRefreshKey.value += 1
       ElMessage.success(t('metricPlatform.syncSuccess'))
     } else {
       ElMessage.error(result?.message || t('metricPlatform.syncFailed'))

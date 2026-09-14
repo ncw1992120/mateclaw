@@ -752,6 +752,12 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome `9222` 重建 DataAgent 后重新点击“同步元数据”，实际生成 `role=tree` 和两个 `treeitem`，其中“销售，1 个指标”；聚焦后按 Enter，`aria-selected` 变为 `true`，并显示指标“收入”。截图 `/tmp/mateclaw-cdp-metric-tree-keyboard-pass.png`。
 - 同一提交 DataAgent 全量 Maven 回归：`158 tests，0 failures，0 errors，0 skipped`。
 
+### 2026-09-14 Aloudata 同步后面板刷新
+
+- 问题：元数据同步成功后，父页面没有递增已有的 `panelRefreshKey`，右侧指标/维度面板继续显示同步前的空态。
+- 修复：`DatasourceView.doSync()` 在同步返回 `completed` 后递增 `panelRefreshKey`，触发 `MetricPlatformPanel` 重新加载类目和分页数据。
+- Chrome `9222` 现场：同步前后面板均自动显示两个类目树（指标“销售，1 个指标”；维度“时间与区域，2 个维度”）及“收入”指标，无需切换数据源或刷新页面；截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

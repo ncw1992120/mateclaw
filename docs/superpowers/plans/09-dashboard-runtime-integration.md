@@ -235,6 +235,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 同一提交 DataAgent 全量 Maven 回归为 `158 tests，0 failures，0 errors，0 skipped`。
 
+**同步后面板刷新（2026-09-14）：** `DatasourceView` 在 Aloudata 同步完成后递增 `panelRefreshKey`，避免右侧运行时面板停留在同步前空态；Chrome `9222` 已现场确认指标/维度类目与数据自动出现，截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
+
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 
 **2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。

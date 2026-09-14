@@ -241,6 +241,8 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 
 **模拟端点补齐（2026-09-14）：** 已为本地 WireMock 增加元数据同步所需六个端点，并让 DataAgent 在数据库端点配置缺项时使用核心默认端点；`AloudataEndpointServiceTest` 通过。重建服务后 Chrome CDP 已实际生成“销售，1 个指标”树节点，聚焦按 Enter 后选中状态正确切换，截图 `/tmp/mateclaw-cdp-metric-tree-keyboard-pass.png`。
 
+**同步后面板刷新（2026-09-14）：** 修复父页面同步成功后未递增 `panelRefreshKey` 的问题；Chrome CDP 实际确认同步前后指标/维度类目树自动刷新，指标和维度数据可见，截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
