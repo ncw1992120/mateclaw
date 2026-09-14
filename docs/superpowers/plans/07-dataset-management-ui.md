@@ -149,7 +149,9 @@ npm --prefix mateclaw-dataagent-ui run build
 
 服务端 `DatasetManageServiceImpl` 已增加同等校验，覆盖绕过 UI 直接提交创建/更新请求的场景；`DatasetCatalogServiceTest` 新增 JDBC/Aloudata 交叉绑定拒绝用例。
 
-另新增 `e2e/dataset-management-entry.spec.ts` 的文件数据集创建用例，覆盖上传、创建/同步和进入预览；当前因本地缺少 Playwright 浏览器二进制保持 `NOT_RUN`，不能替代后续真实 E2E。
+另新增 `e2e/dataset-management-entry.spec.ts` 的文件数据集创建用例，覆盖上传、创建/同步和进入预览；首次执行因本地缺少 Playwright 浏览器二进制未运行，随后已切换系统 Chrome channel 完成执行。
+
+2026-09-14 已使用系统 Chrome channel 和真实 DataAgent 执行该用例，结果 `2 passed`；创建后的文件预览实际显示 CSV 行数据（含 `120.5`、`east`）。
 
 #### VIS-UI02 问题复现
 

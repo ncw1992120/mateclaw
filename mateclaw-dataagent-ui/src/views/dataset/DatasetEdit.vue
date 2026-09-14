@@ -398,8 +398,10 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
 import * as datasetApi from '@/api/dataset'
-import type { DatasourceColumn, DatasetField, DatasetColumnDef, DatasetData } from '@/types'
+import type { DatasourceColumn, DatasetField, DatasetColumnDef, DatasetData, DatasetBatch, DatasetInputDescriptor } from '@/types'
 import { buildDatasetSourceDefinition, type DatasetSourceFormState } from '@/utils/dataset-management'
+
+const DEFAULT_COLUMN_WIDTH = 150
 
 /** 字段项结构 */
 interface FieldItem {
@@ -892,18 +894,63 @@ async function handleFinish(): Promise<void> {
     })
     if (result) {
       createdDatasetId.value = String(result.id)
-      const syncResult = await datasetApi.syncData(createdDatasetId.value)
-      if (syncResult && syncResult.status === 'error') {
-        ElMessage.warning(t('datasetEdit.syncDataFail') || '数据同步失败，请稍后重试')
-      }
+      // 统一来源（JDBC SQL、Aloudata、HTTP/API、文件）通过 Adapter 预览；
+      // 不再调用只支持旧 JDBC 表落库的 /sync，避免新建文件/API 数据集停在配置态。
+      await loadUnifiedDatasetPreview(createdDatasetId.value)
       currentMode.value = 'preview'
       await loadDatasetInfo(createdDatasetId.value)
-      await loadDatasetData(createdDatasetId.value)
       ElMessage.success(t('datasetEdit.createSuccess'))
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     ElMessage.error(t('datasetEdit.createFail') + ': ' + msg)
+  }
+}
+
+/** 创建后按统一 DatasetSourceAdapter 读取首批预览，避免依赖旧本地落库同步。 */
+async function loadUnifiedDatasetPreview(datasetId: string): Promise<void> {
+  const inputName = datasetName.value.trim() || 'dataset'
+  const descriptor = await datasetApi.getInputDescriptor(datasetId, inputName) as unknown as DatasetInputDescriptor
+  const schema = descriptor?.schema || []
+  datasetFields.value = schema.map((column, index) => ({
+    id: `${datasetId}-${index}`,
+    columnName: column.name,
+    columnAlias: column.title,
+    columnComment: '',
+    dataType: column.dataType,
+    fieldCategory: column.semanticRole === 'measure' ? 'measure' : 'dimension',
+    primaryKey: false,
+    nullable: column.nullable,
+    ordinalPosition: index + 1,
+  })) as unknown as DatasetField[]
+  const batch = await datasetApi.previewInput({
+    datasetId,
+    inputName,
+    columns: [],
+    filters: [],
+    limit: dataPageSize.value,
+    offset: 0,
+  }) as unknown as DatasetBatch
+  const rows = batch?.rows || []
+  datasetRows.value = rows
+  dataTotal.value = batch?.rowCount ?? rows.length
+  datasetColumns.value = schema.map(column => ({
+    name: column.name,
+    title: column.title || column.name,
+    dataType: column.dataType,
+    fieldCategory: column.semanticRole === 'measure' ? 'measure' : 'dimension',
+    editable: true,
+    width: DEFAULT_COLUMN_WIDTH,
+  }))
+  if (datasetColumns.value.length === 0 && rows.length > 0) {
+    datasetColumns.value = Object.keys(rows[0]).filter(key => key !== '_rowId').map(name => ({
+      name,
+      title: name,
+      dataType: 'STRING',
+      fieldCategory: 'dimension',
+      editable: true,
+      width: DEFAULT_COLUMN_WIDTH,
+    }))
   }
 }
 

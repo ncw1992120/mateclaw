@@ -453,4 +453,11 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 ## 2026-09-14 产品入口文件数据集 E2E 补充
 
 - 新增真实后端 Playwright 用例，覆盖从配置中心进入数据集管理、上传 CSV、创建/同步数据集、进入字段预览并清理临时数据集。
-- 本地 UI 单测、类型检查、production build 和设计门禁均通过；该 E2E 当前因缺少 `chromium_headless_shell` 未执行，状态记录为 `NOT_RUN`，不作为产品闭环 PASS。
+- 本地 UI 单测、类型检查、production build 和设计门禁均通过；首次 E2E 因缺少 `chromium_headless_shell` 未执行，随后切换系统 Chrome channel 完成目标用例。
+
+- 后续使用系统 Chrome channel 重跑该文件入口用例，结果为 `2 passed`，并实际断言预览表格包含 `120.5`、`east`。全量 11 条 E2E 中另有双源编辑器未选中组件的既有失败，未掩盖或改写为全量 PASS。
+
+## 2026-09-14 创建后统一预览修复
+
+- 创建数据集后不再无条件调用只支持旧 JDBC 表落库的 `/sync`；五种来源统一调用 Descriptor/Preview Adapter，避免 FILE、HTTP/API、Aloudata 和 JDBC SQL 创建后停在配置态。
+- 修复中曾遗漏默认列宽常量，导致统一预览异常被捕获；补齐 `DEFAULT_COLUMN_WIDTH` 后真实文件创建链路恢复通过。

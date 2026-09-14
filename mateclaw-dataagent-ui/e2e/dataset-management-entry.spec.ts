@@ -55,6 +55,8 @@ test('从产品入口创建文件数据集并进入预览', async ({ page, reque
   const created = await createResponse.json() as { data?: { id?: string } }
   const datasetId = created.data?.id
   await expect(page.getByText('字段大纲')).toBeVisible()
+  await expect(page.locator('.data-table')).toContainText('120.5')
+  await expect(page.locator('.data-table')).toContainText('east')
 
   if (datasetId) {
     await request.delete(`/dataagent/api/v1/datasets/${datasetId}`, {

@@ -8,6 +8,8 @@ const listTablesMock = vi.hoisted(() => vi.fn())
 const listAnalysisViewsMock = vi.hoisted(() => vi.fn())
 const createDatasetMock = vi.hoisted(() => vi.fn())
 const syncDataMock = vi.hoisted(() => vi.fn())
+const getInputDescriptorMock = vi.hoisted(() => vi.fn())
+const previewInputMock = vi.hoisted(() => vi.fn())
 const uploadFileMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/api/datasource', () => ({
@@ -19,6 +21,8 @@ vi.mock('@/api/datasource', () => ({
 vi.mock('@/api/dataset', () => ({
   create: createDatasetMock,
   syncData: syncDataMock,
+  getInputDescriptor: getInputDescriptorMock,
+  previewInput: previewInputMock,
   get: vi.fn().mockResolvedValue({}),
   listFields: vi.fn().mockResolvedValue([]),
   getDatasetData: vi.fn().mockResolvedValue({ columns: [], rows: [], total: 0 }),
@@ -42,6 +46,8 @@ async function mountEditor(datasources = [{ id: '1', name: 'Orders JDBC', connec
   listAnalysisViewsMock.mockResolvedValue([])
   createDatasetMock.mockResolvedValue({ id: 'dataset-1' })
   syncDataMock.mockResolvedValue({ status: 'ok' })
+  getInputDescriptorMock.mockResolvedValue({ schema: [] })
+  previewInputMock.mockResolvedValue({ rows: [], rowCount: 0 })
   const wrapper = mount(DatasetEdit, {
     props: { mode: 'config' },
     global: { plugins: [i18n] },
