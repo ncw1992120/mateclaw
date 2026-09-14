@@ -14,7 +14,7 @@ describe('CategoryTreeNode', () => {
           children: [{ categoryId: 'regional', categoryName: '区域', metricCount: 1 }],
         },
         type: 'metric',
-        selectedId: '',
+        selectedId: 'sales',
         expandedSet,
       },
       global: {

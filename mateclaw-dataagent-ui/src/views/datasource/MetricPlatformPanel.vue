@@ -266,7 +266,7 @@
                 role="treeitem"
                 :aria-selected="selectedCategoryId === 'all'"
                 aria-label="全部指标"
-                tabindex="0"
+                :tabindex="selectedCategoryId === 'all' ? 0 : -1"
                 @click="selectCategory('all')"
                 @keydown="handleCategoryKeydown($event, 'all')"
               >
@@ -427,7 +427,7 @@
                 role="treeitem"
                 :aria-selected="selectedDimensionCategoryId === 'all'"
                 aria-label="全部维度"
-                tabindex="0"
+                :tabindex="selectedDimensionCategoryId === 'all' ? 0 : -1"
                 @click="selectDimensionCategory('all')"
                 @keydown="handleCategoryKeydown($event, 'all', true)"
               >

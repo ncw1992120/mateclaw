@@ -7,7 +7,7 @@
       role="treeitem"
       :aria-selected="selectedId === group.categoryId"
       :aria-label="`${group.categoryName}，${count} 个${type === 'metric' ? '指标' : '维度'}`"
-      tabindex="0"
+      :tabindex="selectedId === group.categoryId ? 0 : -1"
       @click="handleSelect"
       @keydown="handleSelectKeydown"
     >

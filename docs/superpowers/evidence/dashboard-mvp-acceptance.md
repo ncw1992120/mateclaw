@@ -758,6 +758,12 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：`DatasourceView.doSync()` 在同步返回 `completed` 后递增 `panelRefreshKey`，触发 `MetricPlatformPanel` 重新加载类目和分页数据。
 - Chrome `9222` 现场：同步前后面板均自动显示两个类目树（指标“销售，1 个指标”；维度“时间与区域，2 个维度”）及“收入”指标，无需切换数据源或刷新页面；截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
 
+### 2026-09-14 类目树 roving tabindex
+
+- 问题：类目树节点全部为 `tabindex=0`，Tab 会重复停留在同一棵树的多个节点。
+- 修复：当前选中节点保持 `tabindex=0`，其余节点为 `-1`；Enter/Space 选择后状态和焦点语义保持一致。
+- Chrome `9222` 现场读取两棵树：指标树“销售”节点为 `aria-selected=true/tabindex=0`、“全部指标”为 `false/-1`；维度树“全部维度”为 `true/0`、“时间与区域”为 `false/-1`。按 Enter 选择指标节点成功；截图 `/tmp/mateclaw-cdp-tree-roving-tabindex.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

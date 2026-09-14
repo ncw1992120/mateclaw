@@ -243,6 +243,8 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 
 **同步后面板刷新（2026-09-14）：** 修复父页面同步成功后未递增 `panelRefreshKey` 的问题；Chrome CDP 实际确认同步前后指标/维度类目树自动刷新，指标和维度数据可见，截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
 
+**类目树 roving tabindex（2026-09-14）：** 当前选中节点为 `tabindex=0`，其余节点为 `-1`，避免 Tab 重复遍历；Chrome CDP 已读取两棵真实模拟类目树并按 Enter 验证选中状态，截图 `/tmp/mateclaw-cdp-tree-roving-tabindex.png`。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
