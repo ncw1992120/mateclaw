@@ -99,11 +99,16 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                     categoryOutcome.categoryMap(), newVersion, categoryOutcome.filterRules());
             log.info("[Aloudata同步] 维度同步完成: {}", dimensionCount);
 
-            // 4. 全零保护：类目/指标/维度全部拉取为 0 且库中已有存量数据时，疑似接口异常返回空数据，
-            //    中止同步并保留旧数据，防止误清空（首次同步空源不受影响）
-            if (categoryCount == 0 && metricCount == 0 && dimensionCount == 0
-                    && hasExistingSyncData(datasourceId)) {
-                throw new IllegalStateException("本次同步拉取的类目/指标/维度均为 0，且库中存在存量数据，疑似接口异常，已中止同步并保留旧数据");
+            // 4. 全零保护（按类型分别校验）：某一类元数据本次拉取为 0 且库中已有存量时，
+            //    疑似接口异常返回空数据或过滤规则过宽，中止同步并保留旧数据，防止误清空
+            //    （首次同步空源不受影响；按类型校验可覆盖"指标类目全灭、维度类目尚存"的情况）
+            if (metricCount == 0 && hasExistingMetricData(datasourceId)) {
+                throw new IllegalStateException("本次同步拉取的指标为 0，且库中存在存量指标，"
+                        + "疑似接口异常或过滤规则过宽，已中止同步并保留旧数据");
+            }
+            if (dimensionCount == 0 && hasExistingDimensionData(datasourceId)) {
+                throw new IllegalStateException("本次同步拉取的维度为 0，且库中存在存量维度，"
+                        + "疑似接口异常或过滤规则过宽，已中止同步并保留旧数据");
             }
 
             // 5. 清理旧版本数据
@@ -546,7 +551,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             if (id == null) {
                 continue;
             }
-            if (filterRules.blockedCategoryIds().contains(id)) {
+            if (filterRules.blockedCategoryIds(raw.categoryType()).contains(id)) {
                 filteredCategoryCount++;
                 continue;
             }
@@ -1238,12 +1243,22 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     /**
-     * 判断该数据源是否已有同步落库的元数据（以指标表为代理），
+     * 判断该数据源是否已有同步落库的指标，
      * 用于全零保护：接口异常可能被吞掉或源端临时返回空，避免误清空存量数据
      */
-    private boolean hasExistingSyncData(Long datasourceId) {
+    private boolean hasExistingMetricData(Long datasourceId) {
         Long count = metricMapper.selectCount(new LambdaQueryWrapper<AloudataMetricEntity>()
                 .eq(AloudataMetricEntity::getDatasourceId, datasourceId));
+        return count != null && count > 0;
+    }
+
+    /**
+     * 判断该数据源是否已有同步落库的维度，
+     * 用于全零保护：按类型分别校验，避免"指标类目全灭、维度类目尚存"时绕过保护
+     */
+    private boolean hasExistingDimensionData(Long datasourceId) {
+        Long count = dimensionMapper.selectCount(new LambdaQueryWrapper<AloudataDimensionEntity>()
+                .eq(AloudataDimensionEntity::getDatasourceId, datasourceId));
         return count != null && count > 0;
     }
 

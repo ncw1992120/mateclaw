@@ -21,12 +21,27 @@ import java.util.*;
  *   <li>数据源级：connection_params 的 {@code syncFilterExpressions}（QLExpress 布尔表达式数组）。</li>
  * </ul>
  * 过滤语义为「黑名单」：元数据（类目/指标/维度）命中任一表达式即不落库持久化；
- * 类目命中后其全部级联子类目一并过滤。表达式执行异常按「未命中」处理（fail-open），
- * 避免坏规则误杀全量同步数据。QLExpress 引擎调用统一委托 {@link QlExpressSupport}。
+ * 类目命中后其在**同一类目树内**的全部级联子类目一并过滤（父子关系仅按 parentId 推导）。
+ * 表达式执行异常按「未命中」处理（fail-open），避免坏规则误杀全量同步数据。
+ * QLExpress 引擎调用统一委托 {@link QlExpressSupport}。
+ * <p>
+ * 表达式的求值上下文（同一份表达式会在三处分别求值）：
+ * <ul>
+ *   <li>类目上下文：{@code categoryName/name} 为类目自身名称，另有 {@code categoryType}
+ *       （{@code CATEGORY_METRIC}/{@code CATEGORY_DIMENSION}）、{@code parentId}、{@code type} 等；</li>
+ *   <li>指标上下文：{@code metricName} 为指标名，而 {@code categoryName/metricCategoryName}
+ *       为「该指标所属类目的名字」；</li>
+ *   <li>维度上下文：{@code dimName} 为维度名，而 {@code categoryName/dimCategoryName}
+ *       为「该维度所属类目的名字」。</li>
+ * </ul>
+ * <b>注意</b>：指标类目树与维度类目树常使用同一套业务域命名，因此按名称写的规则会同时命中两棵树
+ * （黑名单类目与级联按 categoryType 隔离，但表达式本身在两棵树上都会求值）。
+ * 若只想过滤其中一侧，请显式限定作用域，例如
+ * {@code categoryType == 'CATEGORY_DIMENSION' && categoryName in ('xxx', 'yyy')}。
  * <p>
  * 典型表达式示例：
  * <ul>
- *   <li>{@code categoryName in ("测试类目", "敏感数据")} —— 按类目名称黑名单；</li>
+ *   <li>{@code categoryName in ("测试类目", "敏感数据")} —— 按类目名称黑名单（两棵树同名的都会命中）；</li>
  *   <li>{@code metricName.startsWith("test_")} —— 按指标名称前缀；</li>
  *   <li>{@code type == "SYSTEM"} —— 过滤系统内置类目。</li>
  * </ul>
@@ -90,22 +105,51 @@ public class AloudataSyncFilterSupport {
 
     /**
      * 同步过滤规则（一次 fullSync 构建一次，供类目/指标/维度过滤共享）
+     * <p>
+     * 黑名单类目 ID 与「类目 ID → 名称」映射均按 {@code categoryType} 隔离存放：
+     * 指标类目树与维度类目树各自独立建树、独立级联，避免两棵树的同名/id 相互污染。
      *
-     * @param expressions        合并后的 QLExpress 黑名单表达式
-     * @param blockedCategoryIds 黑名单类目 ID 集合（表达式直接命中 + 级联子类目）
-     * @param categoryNameById   类目 ID → 名称全量映射（供指标/维度上下文填充所属类目名称）
+     * @param expressions              合并后的 QLExpress 黑名单表达式
+     * @param blockedCategoryIdsByType categoryType → 黑名单类目 ID 集合（表达式直接命中 + 同类型级联子类目）
+     * @param categoryNameByIdByType   categoryType → （类目 ID → 名称）映射（供指标/维度上下文填充所属类目名称）
      */
     public record SyncFilterRules(
             List<String> expressions,
-            Set<String> blockedCategoryIds,
-            Map<String, String> categoryNameById
+            Map<String, Set<String>> blockedCategoryIdsByType,
+            Map<String, Map<String, String>> categoryNameByIdByType
     ) {
+
+        /** 未配置该类型时的空黑名单集合（避免调用方判空） */
+        private static final Set<String> EMPTY_BLOCKED_IDS = Set.of();
+
+        /** 未配置该类型时的空类目名映射（避免调用方判空） */
+        private static final Map<String, String> EMPTY_CATEGORY_NAMES = Map.of();
 
         /**
          * 是否启用过滤（未配置任何表达式时为 false，调用方零开销直通）
          */
         public boolean enabled() {
             return !expressions.isEmpty();
+        }
+
+        /**
+         * 取指定类目类型的黑名单类目 ID 集合
+         *
+         * @param categoryType 类目类型：CATEGORY_METRIC/CATEGORY_DIMENSION
+         * @return 该类型的黑名单类目 ID 集合；未配置时为空集合
+         */
+        public Set<String> blockedCategoryIds(String categoryType) {
+            return blockedCategoryIdsByType.getOrDefault(categoryType, EMPTY_BLOCKED_IDS);
+        }
+
+        /**
+         * 取指定类目类型的「类目 ID → 名称」映射
+         *
+         * @param categoryType 类目类型：CATEGORY_METRIC/CATEGORY_DIMENSION
+         * @return 该类型的类目名映射；未配置时为空映射
+         */
+        public Map<String, String> categoryNameById(String categoryType) {
+            return categoryNameByIdByType.getOrDefault(categoryType, EMPTY_CATEGORY_NAMES);
         }
     }
 
@@ -120,7 +164,7 @@ public class AloudataSyncFilterSupport {
 
     /**
      * 构建同步过滤规则：合并全局配置与数据源级配置的表达式，
-     * 并基于本次拉取的类目计算黑名单类目 ID 集合（含级联子类目）。
+     * 并基于本次拉取的类目计算黑名单类目 ID 集合（含同类型级联子类目）。
      *
      * @param config        Aloudata 数据源配置（数据源级表达式来源）
      * @param rawCategories 本次拉取的类目原始数据（指标类目 + 维度类目）
@@ -129,10 +173,11 @@ public class AloudataSyncFilterSupport {
     public SyncFilterRules buildRules(AloudataConfigDTO config, List<CategoryRaw> rawCategories) {
         List<String> expressions = resolveExpressions(config);
         if (expressions.isEmpty()) {
-            return new SyncFilterRules(expressions, Set.of(), Map.of());
+            return new SyncFilterRules(expressions, Map.of(), Map.of());
         }
 
-        Map<String, String> categoryNameById = new HashMap<>();
+        /* 类目名映射按 categoryType 隔离，指标上下文只解析指标类目名、维度上下文只解析维度类目名 */
+        Map<String, Map<String, String>> categoryNameByIdByType = new HashMap<>();
         for (CategoryRaw raw : rawCategories) {
             String id = asString(raw.data().get("id"));
             if (id == null) {
@@ -140,14 +185,15 @@ public class AloudataSyncFilterSupport {
             }
             String name = asString(raw.data().get("name"));
             if (name != null) {
-                categoryNameById.put(id, name);
+                categoryNameByIdByType.computeIfAbsent(raw.categoryType(), key -> new HashMap<>()).put(id, name);
             }
         }
 
-        Set<String> blockedCategoryIds = resolveBlockedCategoryIds(expressions, rawCategories);
-        log.info("[Aloudata同步过滤] 规则表达式 {} 条，黑名单类目 {} 个（含级联子类目）",
-                expressions.size(), blockedCategoryIds.size());
-        return new SyncFilterRules(expressions, blockedCategoryIds, categoryNameById);
+        Map<String, Set<String>> blockedCategoryIdsByType = resolveBlockedCategoryIds(expressions, rawCategories);
+        int blockedCategoryCount = blockedCategoryIdsByType.values().stream().mapToInt(Set::size).sum();
+        log.info("[Aloudata同步过滤] 规则表达式 {} 条，黑名单类目 {} 个（按类目类型隔离，含同类型级联子类目）",
+                expressions.size(), blockedCategoryCount);
+        return new SyncFilterRules(expressions, blockedCategoryIdsByType, categoryNameByIdByType);
     }
 
     /**
@@ -162,7 +208,8 @@ public class AloudataSyncFilterSupport {
             return false;
         }
         String categoryId = asString(metricData.get(VAR_METRIC_CATEGORY_ID));
-        if (categoryId != null && filterRules.blockedCategoryIds().contains(categoryId)) {
+        if (categoryId != null
+                && filterRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC).contains(categoryId)) {
             log.info("[Aloudata同步过滤] 指标 [{}] 所属类目 [{}] 在黑名单中，跳过入库",
                     metricData.get(VAR_METRIC_NAME), categoryId);
             return true;
@@ -185,7 +232,8 @@ public class AloudataSyncFilterSupport {
             return false;
         }
         String categoryId = asString(dimData.get(VAR_DIM_CATEGORY_ID));
-        if (categoryId != null && filterRules.blockedCategoryIds().contains(categoryId)) {
+        if (categoryId != null
+                && filterRules.blockedCategoryIds(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION).contains(categoryId)) {
             log.info("[Aloudata同步过滤] 维度 [{}] 所属类目 [{}] 在黑名单中，跳过入库",
                     dimData.get(VAR_DIM_NAME), categoryId);
             return true;
@@ -243,49 +291,74 @@ public class AloudataSyncFilterSupport {
     }
 
     /**
-     * 计算黑名单类目 ID 集合：直接命中表达式的类目 + 其全部级联子类目
-     * （父子关系按 parentId（缺失时回退 frontId）推导，BFS 展开）。
+     * 计算黑名单类目 ID 集合：按 categoryType 分别建树，直接命中表达式的类目
+     * 及其同类型全部级联子类目计入黑名单（父子关系仅按 parentId 推导，BFS 展开）。
+     * <p>
+     * 指标类目树与维度类目树相互独立：只有父类目在同类型中真实存在才建立父子边，
+     * 避免一棵树上的命中通过 id 或上级引用把另一棵树整棵拉黑。
      *
      * @param expressions   黑名单表达式
      * @param rawCategories 类目原始数据
-     * @return 黑名单类目 ID 集合
+     * @return categoryType → 黑名单类目 ID 集合
      */
-    private Set<String> resolveBlockedCategoryIds(List<String> expressions, List<CategoryRaw> rawCategories) {
-        Set<String> blocked = new HashSet<>();
-        Map<String, String> parentById = new HashMap<>();
+    private Map<String, Set<String>> resolveBlockedCategoryIds(List<String> expressions,
+                                                               List<CategoryRaw> rawCategories) {
+        Map<String, Map<String, String>> parentByIdByType = new HashMap<>();
+        Map<String, Set<String>> idsByType = new HashMap<>();
+        Map<String, Set<String>> blockedByType = new HashMap<>();
+        Map<String, Integer> directHitCountByType = new HashMap<>();
+
         for (CategoryRaw raw : rawCategories) {
             String id = asString(raw.data().get("id"));
             if (id == null) {
                 continue;
             }
-            parentById.put(id, firstNonBlank(
-                    asString(raw.data().get(VAR_PARENT_ID)), asString(raw.data().get(VAR_FRONT_ID))));
+            /* 父子关系仅按 parentId 推导（与前端类目树一致）；缺失/空白视为根节点 */
+            String parentId = asString(raw.data().get(VAR_PARENT_ID));
+            parentByIdByType.computeIfAbsent(raw.categoryType(), key -> new HashMap<>())
+                    .put(id, parentId != null && !parentId.isBlank() ? parentId : null);
+            idsByType.computeIfAbsent(raw.categoryType(), key -> new HashSet<>()).add(id);
+
             Map<String, Object> context = buildCategoryContext(raw.categoryType(), raw.data());
-            if (isBlacklisted(expressions, context, "类目", asString(raw.data().get("name")))) {
-                blocked.add(id);
+            if (isBlacklisted(expressions, context, "类目[" + raw.categoryType() + "]",
+                    asString(raw.data().get("name")))) {
+                blockedByType.computeIfAbsent(raw.categoryType(), key -> new HashSet<>()).add(id);
+                directHitCountByType.merge(raw.categoryType(), 1, Integer::sum);
             }
         }
 
-        /* 级联展开子类目：父类目被拉黑则全部子类目不入库 */
-        Map<String, List<String>> childrenByParent = new HashMap<>();
-        for (Map.Entry<String, String> entry : parentById.entrySet()) {
-            if (entry.getValue() != null) {
-                childrenByParent.computeIfAbsent(entry.getValue(), key -> new ArrayList<>()).add(entry.getKey());
-            }
-        }
-        Deque<String> queue = new ArrayDeque<>(blocked);
-        while (!queue.isEmpty()) {
-            List<String> children = childrenByParent.get(queue.poll());
-            if (children == null) {
-                continue;
-            }
-            for (String child : children) {
-                if (blocked.add(child)) {
-                    queue.offer(child);
+        /* 级联展开子类目：父类目被拉黑则同类型子类目一并拉黑 */
+        for (Map.Entry<String, Map<String, String>> entry : parentByIdByType.entrySet()) {
+            String categoryType = entry.getKey();
+            Set<String> knownIds = idsByType.getOrDefault(categoryType, Set.of());
+            Map<String, List<String>> childrenByParent = new HashMap<>();
+            for (Map.Entry<String, String> node : entry.getValue().entrySet()) {
+                String parentId = node.getValue();
+                if (parentId != null && knownIds.contains(parentId)) {
+                    childrenByParent.computeIfAbsent(parentId, key -> new ArrayList<>()).add(node.getKey());
                 }
             }
+
+            Set<String> blocked = blockedByType.computeIfAbsent(categoryType, key -> new HashSet<>());
+            Deque<String> queue = new ArrayDeque<>(blocked);
+            while (!queue.isEmpty()) {
+                List<String> children = childrenByParent.get(queue.poll());
+                if (children == null) {
+                    continue;
+                }
+                for (String child : children) {
+                    if (blocked.add(child)) {
+                        queue.offer(child);
+                    }
+                }
+            }
+
+            int directHitCount = directHitCountByType.getOrDefault(categoryType, 0);
+            log.info("[Aloudata同步过滤] 类目黑名单[{}]：直接命中 {} 个，级联子类目 {} 个，合计 {} 个",
+                    categoryType, directHitCount, blocked.size() - directHitCount, blocked.size());
         }
-        return blocked;
+
+        return blockedByType;
     }
 
     /**
@@ -333,7 +406,10 @@ public class AloudataSyncFilterSupport {
     private Map<String, Object> buildMetricContext(SyncFilterRules filterRules, Map<String, Object> metricData) {
         Map<String, Object> context = new HashMap<>();
         String categoryId = asString(metricData.get(VAR_METRIC_CATEGORY_ID));
-        String categoryName = categoryId != null ? filterRules.categoryNameById().get(categoryId) : null;
+        /* 注意：指标上下文中的 categoryName/metricCategoryName 是「该指标所属类目的名字」（取自指标类目树），
+           并非指标自身名称；同名类目在指标/维度两棵树中都存在时，规则会同时作用于两棵树 */
+        String categoryName = categoryId != null
+                ? filterRules.categoryNameById(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_METRIC).get(categoryId) : null;
         context.put(VAR_METRIC_NAME, metricData.get(VAR_METRIC_NAME));
         context.put(VAR_METRIC_CODE, metricData.get(VAR_METRIC_CODE));
         context.put(VAR_METRIC_DISPLAY_NAME, metricData.get(VAR_METRIC_DISPLAY_NAME));
@@ -362,7 +438,9 @@ public class AloudataSyncFilterSupport {
     private Map<String, Object> buildDimensionContext(SyncFilterRules filterRules, Map<String, Object> dimData) {
         Map<String, Object> context = new HashMap<>();
         String categoryId = asString(dimData.get(VAR_DIM_CATEGORY_ID));
-        String categoryName = categoryId != null ? filterRules.categoryNameById().get(categoryId) : null;
+        /* 注意：维度上下文中的 categoryName/dimCategoryName 是「该维度所属类目的名字」（取自维度类目树） */
+        String categoryName = categoryId != null
+                ? filterRules.categoryNameById(DataAgentConstants.ALOUDATA_CATEGORY_TYPE_DIMENSION).get(categoryId) : null;
         String dimName = asString(dimData.get(VAR_DIM_NAME));
         context.put(VAR_DIM_NAME, dimData.get(VAR_DIM_NAME));
         context.put(VAR_DIM_CODE, dimData.get(VAR_DIM_CODE));
@@ -403,20 +481,5 @@ public class AloudataSyncFilterSupport {
      */
     private String asString(Object value) {
         return value != null ? value.toString() : null;
-    }
-
-    /**
-     * 按顺序返回首个非空字符串；全部为空时返回 null
-     */
-    private String firstNonBlank(String... values) {
-        if (values == null) {
-            return null;
-        }
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
     }
 }
