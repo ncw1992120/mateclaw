@@ -625,3 +625,10 @@ Chrome CDP 选择 `E2E JDBC Orders` 后，来源类型保持 `JDBC_TABLE`，JDBC
 
 DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC 数据源返回 `JDBC 数据集必须绑定 JDBC 数据源`，不写入数据集；`DatasetCatalogServiceTest` 定向测试通过。
 该拒绝校验已纳入 `make dashboard-dataagent-test` 全量门禁，本轮退出码为 `0`；日志中的既有依赖和 legacy pip 告警不影响测试结果。
+
+### 2026-09-14 当前工作树 Google Chrome CDP 双源现场复验
+
+- 通过 CDP `http://127.0.0.1:9222` 控制用户 Google Chrome，打开 `http://127.0.0.1:5175/?nav=insight`，进入 `E2E JDBC + Aloudata Dashboard` 编辑器。
+- 编辑器实际显示“脚本结果数据集输入”、目标组件 `e2e-table`、JDBC `5 个字段` 和 Aloudata `3 个字段`；页面视口为 `1440x813`，AX 摘要为 `211` 行。
+- 点击“最终结果预览”后实际显示结果表 `5` 行，包含 `120.5`；现场截图为 `/tmp/mateclaw-cdp-jdbc-aloudata-editor-current.png` 和 `/tmp/mateclaw-cdp-jdbc-aloudata-result-current.png`。
+- 同一环境使用系统 Chrome channel 重跑 `dashboard-multi-source.spec.ts` 的双源用例，结果为 `1 passed (7.1s)`；严格 `dashboard-jdbc-aloudata.png` 快照断言通过。由此确认历史 `1158 pixels (ratio 0.01)` 已不再复现，属于已关闭的旧基线差异，而非查询结果问题。
