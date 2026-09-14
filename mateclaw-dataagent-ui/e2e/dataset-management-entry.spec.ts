@@ -283,6 +283,7 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
   await page.locator('.toolbar-name-input').fill(`E2E UI Dashboard ${Date.now()}`)
   await page.locator('.toolbar-name-input').press('Enter')
   await page.locator('.palette-item').filter({ hasText: '数据表格' }).dragTo(page.locator('.dashboard-canvas'))
+  await expect(page.getByRole('button', { name: /删除组件/ })).toBeVisible()
   await expect(page.locator('.dataset-input-panel')).toContainText('当前目标组件：')
   await expect(page.getByRole('textbox', { name: '组件标题' })).toBeVisible()
   await expect(page.getByRole('combobox', { name: '数据源' })).toBeVisible()

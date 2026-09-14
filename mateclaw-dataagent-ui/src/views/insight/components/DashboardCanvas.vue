@@ -63,7 +63,11 @@
           </template>
           <div v-if="editable" class="grid-item-toolbar">
             <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
-            <button class="grid-item-delete" @click.stop="handleDeleteComponent(item.i)">✕</button>
+            <button
+              class="grid-item-delete"
+              :aria-label="`删除组件 ${getComponentTitle(item.i)}`"
+              @click.stop="handleDeleteComponent(item.i)"
+            >✕</button>
           </div>
           <div class="grid-item-body">
             <div v-if="getComponentData(item.i)?.error" class="grid-item-error">

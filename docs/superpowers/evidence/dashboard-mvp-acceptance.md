@@ -706,6 +706,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：真实 Chrome channel E2E 断言两个数据表格开关语义控件挂载并具备名称，修复后 `1 passed (4.9s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
 - Chrome CDP `9222` 现场读取 `多 Tab 模式`、`组件级时间筛选` 及其 `aria-checked=false`，截图 `/tmp/mateclaw-cdp-property-switches-a11y.png`。
 
+### 2026-09-14 画布组件删除按钮可访问名称
+
+- 问题：编辑画布组件右上角删除按钮仅显示 `✕`，无法说明将删除哪个组件。
+- 修复：按钮增加动态 `aria-label="删除组件 {组件标题}"`，保留原有删除行为和视觉符号。
+- 回归：真实添加数据表格流程断言删除按钮名称，系统 Chrome channel `1 passed (5.5s)`；UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
+- Chrome CDP `9222` 现场拖入数据表格并读取 `删除组件 数据表格`，按钮可见；截图 `/tmp/mateclaw-cdp-component-delete-a11y.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。
