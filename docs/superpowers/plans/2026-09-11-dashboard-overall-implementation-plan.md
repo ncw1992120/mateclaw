@@ -415,6 +415,8 @@ make dashboard-verify-local
 
 **2026-09-15 数据集刷新失败文案修复：** 发现 `datasetEdit.syncDataFail` locale 键缺失导致错误页面泄漏原始键名；已补齐中英文键。Chrome CDP 真实失败路径确认显示“数据刷新失败”，不改变错误状态逻辑；UI 单测 `12 files / 44 tests passed`、生产构建通过。
 
+**2026-09-15 数据源开关焦点修复：** 自定义透明复选框在键盘聚焦时已补充可见焦点环；Chrome CDP 现场 Tab 聚焦 `SSH` 实测 2px 主题焦点环，UI 单测 `12 files / 44 tests passed`、生产构建成功。该修复不改变数据源连接行为。
+
 **当前权威基线（2026-09-14）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。最新本地模拟 Chrome channel 完整矩阵为 `22 passed (1.5m)`，双源定向为 `4 passed (28.7s)`，`dashboard-jdbc-aloudata.png` 严格快照及 5 行/`120.5` 断言均通过；UI 单测为 `12 files / 44 tests passed`，DataAgent 为 `158 tests / 0 failures / 0 errors / 0 skipped`。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。
 
 **2026-09-14 UI 回归复验：** 当前工作树再次执行 `npm --prefix mateclaw-dataagent-ui test -- --run`，结果 `12 files / 44 tests passed`；`npm --prefix mateclaw-dataagent-ui run build` 生产构建成功。Rollup 仅输出既有注释和 chunk size 警告，不影响构建结果。

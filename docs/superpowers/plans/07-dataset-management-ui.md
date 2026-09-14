@@ -128,6 +128,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 **2026-09-15 刷新失败文案修复：** 数据集刷新异常原先泄漏未定义的 `datasetEdit.syncDataFail` 原始键名；已在中英文 `datasetEdit` 命名空间补齐该键。Chrome CDP 真实错误路径确认显示可读“数据刷新失败”，UI 单测和生产构建通过。
 
+**2026-09-15 开关焦点可见性修复：** 数据源表单透明复选框在键盘聚焦时增加主题化 `:focus-visible` 焦点环；Chrome CDP Tab 实测 `SSH` 滑块显示 2px 焦点环，UI 单测和构建通过。全站键盘顺序专项仍待单独验收。
+
 **2026-09-14 空态插图主题修复：** 新建数据集空态 SVG 原先保留固定浅色 `fill/stroke` 属性，暗色主题存在视觉回退风险；现移除固定颜色，统一由 `.illustration-*` 的 `--theme-*` 令牌控制。Chrome CDP 暗色主题复验卡片、线条和勾选描边均使用当前主题颜色。
 
 **2026-09-14 表项焦点可见性补充：** 为可键盘操作的 JDBC 表项增加 `:focus-visible` 主题化 2px 轮廓和偏移，避免深色主题下焦点不可辨识；定向单测与构建通过，Chrome CDP 实测焦点轮廓已生效。

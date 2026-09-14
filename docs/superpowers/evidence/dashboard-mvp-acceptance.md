@@ -876,3 +876,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - Chrome CDP 依次访问问数、洞察、报告、配置、帮助和新建数据集页面，监听浏览器控制台未发现缺失翻译、未定义文案或 i18n warning。
 - 静态核对 `DatasetEdit.vue` 的 52 个 `datasetEdit.*` 引用，均能在中英文 `datasetEdit` 命名空间找到对应键；本次数据集刷新失败文案修复后的 key 也已对齐。
+
+### 2026-09-15 数据源开关键盘焦点可见性修复
+
+- 问题：数据源表单自定义开关的原生复选框为透明控件，键盘聚焦时没有可见焦点反馈。
+- 修复：为开关滑块和自定义复选框勾选框增加主题化 `:focus-visible` 焦点环，不改变开关状态或布局。
+- Chrome CDP `9222` 现场 Tab 聚焦 `SSH` 开关，滑块实际读取到 `2px` 橙色焦点环（`outlineOffset=2px`）；截图 `/tmp/mateclaw-cdp-datasource-focus-visible-20260915.png`。
+- UI 单测 `12 files / 44 tests passed`，生产构建成功；数据源表单定向 E2E 和完整 Chrome 矩阵基线保持通过。

@@ -1097,6 +1097,12 @@ async function handleSubmit(): Promise<void> {
   position: absolute;
 }
 
+.checkbox-label > input[type='checkbox']:focus-visible + .checkmark-new,
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--main-orange);
+  outline-offset: 2px;
+}
+
 .switch {
   position: relative;
   display: inline-block;
