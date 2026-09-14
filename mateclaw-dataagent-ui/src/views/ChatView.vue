@@ -682,7 +682,15 @@
                           <span class="ds-item-name">{{ ds.name }}</span>
                           <span v-if="ds.sourceType" class="ds-item-type">{{ ds.sourceType }}</span>
                         </el-checkbox>
-                        <span class="ds-item-browse" @click.prevent.stop="openBrowseDrawer(ds)">浏览</span>
+                        <span
+                          class="ds-item-browse"
+                          role="button"
+                          tabindex="0"
+                          :aria-label="`浏览数据源：${ds.name}`"
+                          @click.prevent.stop="openBrowseDrawer(ds)"
+                          @keydown.enter.stop.prevent="openBrowseDrawer(ds)"
+                          @keydown.space.stop.prevent="openBrowseDrawer(ds)"
+                        >浏览</span>
                       </div>
                     </div>
                   </div>

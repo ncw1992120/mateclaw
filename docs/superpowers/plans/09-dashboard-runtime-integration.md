@@ -323,3 +323,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 问数计划/委派节点键盘修复：** `PlanStepsPanel` 和 `DelegationNodeView` 的展开入口补齐条件 `role=button`、`tabindex`、`aria-expanded` 与 Enter/Space；组件回归 `2 passed`，UI 全量 `15 files / 48 tests passed`，Chrome CDP 问数主入口无名控件数为 `0`。当前没有运行中的计划数据，真实计划节点页面专项保持待补验。
 
 **2026-09-15 报告卡片键盘修复：** 报告列表卡片补齐 `role=button`、`tabindex`、动态名称及 Enter/Space 查看操作，内部操作区阻止键盘冒泡；组件回归通过，UI 全量 `16 files / 49 tests passed`。Chrome CDP 已检查报告入口空态和控件命名，真实报告卡片专项待本地 fixture 注入。
+
+**2026-09-15 问数数据源浏览入口键盘修复：** ChatView 数据源下拉的“浏览”入口增加按钮语义、动态 `aria-label` 与 Enter/Space 操作，按键不会冒泡为勾选；定向 Chrome E2E 和用户 Chrome CDP 已实际打开数据源浏览抽屉。

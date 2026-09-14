@@ -35,6 +35,22 @@ test('智能问数模型选择器暴露可访问名称', async ({ page }) => {
   await expect(page.locator('.model-select-footer input[role="combobox"]')).toHaveAccessibleName('选择模型')
 })
 
+test('问数数据源浏览入口支持键盘打开', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=smart-ask')
+  await page.getByRole('button', { name: /指定数据源/ }).click()
+  const browse = page.locator('.ds-item-browse').first()
+  await expect(browse).toHaveAttribute('role', 'button')
+  await expect(browse).toHaveAttribute('tabindex', '0')
+  await browse.focus()
+  await browse.press('Enter')
+  await expect(page.locator('.datasource-browse-drawer')).toBeVisible()
+})
+
 test('顶部导航暴露可聚焦链接语义', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

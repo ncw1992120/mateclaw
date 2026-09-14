@@ -984,3 +984,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：二级菜单增加 `tablist/tab`、`aria-selected`、roving `tabindex`，支持 Enter/Space 选择及 ArrowUp/ArrowDown/Home/End 导航。
 - 回归：新增工作空间二级菜单 Chrome E2E，定向用例 `1 passed (4.1s)`；UI 全量 `16 files / 49 tests passed`。
 - 用户 Chrome CDP `9222` 现场确认 5 个二级 Tab 初始选中“智能体上下文”，按 ArrowDown 后焦点和选中态同步到“工作区”；截图 `/tmp/mateclaw-cdp-workspace-subtabs-final-20260915.png`。
+
+### 2026-09-15 问数数据源浏览入口键盘语义修复
+
+- 问题：问数数据源下拉中的“浏览”使用可点击 `span`，键盘无法打开数据源浏览抽屉。
+- 修复：增加 `role=button`、`tabindex=0`、按数据源生成的 `aria-label`，并支持 Enter/Space；事件阻止冒泡，避免改变勾选状态。
+- 回归：新增真实 Chrome channel E2E，修复前失败、修复后定向用例 `1 passed (5.5s)`；UI 全量 `16 files / 49 tests passed`，生产构建通过。
+- 用户 Chrome CDP `9222` 现场读取“浏览数据源：E2E JDBC Orders”，按 Enter 打开 `.datasource-browse-drawer`；截图 `/tmp/mateclaw-cdp-datasource-browse-final-20260915.png`。
