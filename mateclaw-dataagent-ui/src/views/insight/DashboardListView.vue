@@ -1266,13 +1266,20 @@ function handleBackToList(): void {
   flex-shrink: 0;
 }
 
+/* el-tag 内容区默认是 inline span，圆点按基线对齐会偏离文字中线——改 flex 垂直居中 */
+.card-status :deep(.el-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .card-status .status-dot {
   display: inline-block;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: currentColor;
-  margin-right: 5px;
+  flex-shrink: 0;
 }
 
 .card-status.el-tag--success {

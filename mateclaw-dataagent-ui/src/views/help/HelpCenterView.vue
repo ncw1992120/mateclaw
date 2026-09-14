@@ -1,5 +1,7 @@
 <template>
   <div class="help-center">
+    <!-- 悬浮纸面卡片：与配置中心 .page-card 同构，侧栏/正文/大纲共处一张纸面，层级靠留白与激活淡底表达 -->
+    <div class="help-page-card">
     <!-- 左侧：文档目录树 -->
     <HelpSidebar
       :categoryTree="categoryTree"
@@ -22,6 +24,7 @@
     <!-- 右侧：文档内容区 -->
     <HelpContent
       :currentDocument="currentDocument"
+      :currentCategoryId="currentCategoryId"
       :categoryTree="categoryTree"
       :searchVisible="searchVisible"
       :searchResults="searchResults"
@@ -44,6 +47,7 @@
       :activeHeadingId="activeHeadingId"
       @scrollTo="scrollToHeading"
     />
+    </div>
 
     <!-- 分类编辑弹窗 -->
     <el-dialog v-model="categoryDialogVisible" :title="editingCategory ? t('helpCenter.editCategory') : t('helpCenter.newCategory')" width="480">
@@ -543,37 +547,31 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 帮助页：透明底容器内一张悬浮纸面卡片，侧栏/正文/大纲共处其中（与配置中心 .page-card 同构） */
 .help-center {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  flex: 1 !important;
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 0 !important;
-  background: var(--theme-bg);
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 16px;
+  box-sizing: border-box;
+  background: transparent;
   overflow: hidden;
 }
 
-.help-center :deep(.help-sidebar) {
-  flex: 0 0 260px !important;
-  min-width: 260px !important;
-  max-width: 260px !important;
-  height: 100% !important;
-}
-
-.help-center :deep(.help-content) {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
-.help-center :deep(.help-toc) {
-  flex: 0 0 200px !important;
-  min-width: 200px !important;
-  max-width: 200px !important;
-  height: 100% !important;
+/* 纸面卡片：白面 + 圆角 + 投影，与配置中心统一 */
+.help-page-card {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 
 .doc-edit-layout {

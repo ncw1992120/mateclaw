@@ -1,36 +1,37 @@
 <template>
   <div class="member-manage-page">
     <div class="page-header">
-      <div>
+      <div class="page-header-left">
         <h1 class="page-title">{{ t('memberManage.title') }}</h1>
         <p class="page-desc">{{ t('memberManage.desc') }}</p>
       </div>
-      <button v-if="canManage" class="btn-primary" @click="openAddModal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        {{ t('memberManage.addMember') }}
-      </button>
+      <div v-if="canManage" class="page-header-actions">
+        <button class="btn-create-pill" @click="openAddModal">
+          <el-icon :size="14"><Plus /></el-icon>
+          {{ t('memberManage.addMember') }}
+        </button>
+      </div>
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="members" stripe class="member-table">
+      <el-table v-loading="loading" :data="members" class="mc-table">
         <el-table-column prop="username" :label="t('memberManage.colUsername')" min-width="140" />
         <el-table-column prop="nickname" :label="t('memberManage.colNickname')" min-width="140" />
         <el-table-column prop="role" :label="t('memberManage.colRole')" width="120">
           <template #default="{ row }">
-            <span class="role-tag" :class="row.role">{{ row.role }}</span>
+            <span class="mc-tag" :class="row.role">{{ row.role }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="170" />
-        <el-table-column v-if="canManage" :label="t('common.action')" width="160" fixed="right">
+        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column v-if="canManage" :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
-                <button class="action-link" :disabled="row.role === 'owner'">
-                  {{ t('memberManage.changeRole') }}
-                </button>
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleChangeRole(row, 'admin')">
+                  <Edit />
+                </el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="admin">admin</el-dropdown-item>
@@ -39,9 +40,9 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <button class="action-link danger" :disabled="row.role === 'owner'" @click="handleRemove(row)">
-                {{ t('memberManage.remove') }}
-              </button>
+              <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleRemove(row)">
+                <Delete />
+              </el-icon>
             </div>
           </template>
         </el-table-column>
@@ -100,6 +101,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { WorkspaceMember } from '@/types'
@@ -230,115 +233,109 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 .member-manage-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 24px;
   gap: 16px;
   box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.page-header-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
   margin: 0;
+  line-height: 1.3;
 }
 
 .page-desc {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--theme-text-secondary);
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
 }
 
-.btn-primary {
+/* 胶囊按钮：主题色实心 + 白字 + 阴影 */
+.btn-create-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
 }
 
-.btn-primary:hover {
-  background: var(--dark-orange);
+.btn-create-pill:hover {
+  filter: brightness(1.08);
 }
 
 .page-body {
   flex: 1;
   overflow: hidden;
   border-radius: 12px;
-  padding: 16px;
 }
 
-.surface-card {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
-}
-
-.member-table {
-  width: 100%;
-}
-
-.role-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: capitalize;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-
-.role-tag.owner {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
-.role-tag.admin {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
+/* row-actions + action-icon */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 4px;
 }
 
-.action-link {
-  border: none;
-  background: transparent;
-  color: var(--main-orange);
-  font-size: 13px;
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
   cursor: pointer;
-  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.action-link:hover:not(:disabled) {
-  text-decoration: underline;
+.action-icon:hover {
+  opacity: 1;
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.action-link:disabled {
-  color: var(--theme-text-muted);
+.action-icon.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
   cursor: not-allowed;
-}
-
-.action-link.danger {
-  color: #e53e3e;
 }
 
 .form-body {

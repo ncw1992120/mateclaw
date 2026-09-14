@@ -1,3 +1,4 @@
+import dayjs from 'dayjs'
 import i18n from '@/i18n'
 
 const { t } = i18n.global
@@ -38,4 +39,17 @@ export function formatRelativeTime(value: string | undefined): string {
   }
   if (diff < 7 * day) return t('time.daysAgo', { n: Math.floor(diff / day) })
   return ymd
+}
+
+/**
+ * 把后端返回的时间（ISO 字符串、'YYYY-MM-DD HH:mm:ss' 或毫秒时间戳）格式化为 'YYYY-MM-DD HH:mm'。
+ * <p>
+ * 空值或无法解析时原样返回 fallback；纯数字字符串按时间戳处理。
+ */
+export function formatDateTime(value: string | number | null | undefined, fallback = '-'): string {
+  if (value === null || value === undefined || value === '') return fallback
+  const raw = typeof value === 'number' ? value : String(value).trim()
+  const input = typeof raw === 'string' && /^\d{10,13}$/.test(raw) ? Number(raw) : raw
+  const parsed = dayjs(input)
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : String(value)
 }

@@ -20,12 +20,12 @@
           <div class="search-item-title">
             <el-icon><Document /></el-icon>
             <span>{{ item.title }}</span>
-            <el-tag size="small" type="info">{{ item.categoryName }}</el-tag>
+            <span class="mc-tag text">{{ item.categoryName }}</span>
           </div>
           <div class="search-item-content" v-html="item.highlightContent" />
           <div class="search-item-meta">
             <span v-if="item.author"><el-icon><User /></el-icon> {{ item.author }}</span>
-            <span><el-icon><Clock /></el-icon> {{ item.updateTime }}</span>
+            <span><el-icon><Clock /></el-icon> {{ formatDateTime(item.updateTime, '') }}</span>
             <span><el-icon><View /></el-icon> {{ item.viewCount }}</span>
           </div>
         </div>
@@ -43,6 +43,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { Close, Document, User, Clock, View } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import type { HelpSearchResult } from '@/types'
 
 const { t } = useI18n()
@@ -64,7 +65,6 @@ defineEmits<{
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--theme-surface);
   min-width: 0;
 }
 
@@ -72,27 +72,27 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 40px 16px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--db-border);
 }
 
 .search-header h3 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
 }
 
 .search-count {
   font-size: 13px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   flex: 1;
 }
 
 .search-body {
   flex: 1;
   overflow: auto;
-  padding: 20px 40px;
+  padding: 20px 28px;
 }
 
 .search-results {
@@ -103,17 +103,16 @@ defineEmits<{
 
 .search-item {
   padding: 16px 20px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
-  background: var(--theme-surface-elevated);
+  transition: border-color var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s);
+  background: color-mix(in srgb, var(--db-text-muted) 4%, var(--db-card));
 }
 
 .search-item:hover {
-  border-color: var(--main-orange);
-  box-shadow: 0 4px 12px rgba(65, 118, 230, 0.08);
-  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--main-orange) 50%, var(--db-border));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--main-orange) 10%, transparent);
 }
 
 .search-item-title {
@@ -122,7 +121,7 @@ defineEmits<{
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--theme-text);
+  color: var(--db-text);
   margin-bottom: 8px;
 }
 
@@ -135,7 +134,7 @@ defineEmits<{
 
 .search-item-content {
   font-size: 13px;
-  color: var(--theme-text-secondary);
+  color: var(--db-text-secondary);
   line-height: 1.7;
   margin-bottom: 8px;
   display: -webkit-box;
@@ -145,7 +144,7 @@ defineEmits<{
 }
 
 .search-item-content :deep(mark) {
-  background: rgba(65, 118, 230, 0.2);
+  background: color-mix(in srgb, var(--main-orange) 18%, transparent);
   color: var(--main-orange);
   padding: 0 2px;
   border-radius: 2px;
@@ -156,7 +155,7 @@ defineEmits<{
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
 }
 
 .search-item-meta span {
@@ -167,7 +166,7 @@ defineEmits<{
 
 .search-empty-hint {
   font-size: 12px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   margin-top: 4px;
 }
 </style>

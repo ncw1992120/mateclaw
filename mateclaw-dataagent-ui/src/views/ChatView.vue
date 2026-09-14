@@ -8475,13 +8475,6 @@ onUnmounted(() => {
 /* el-drawer teleport 到 body，scoped 选择器无法命中其内部节点，
    故用非 scoped 块 + 自定义类名限定作用域 */
 .datasource-browse-drawer {
-  --el-color-primary: var(--main-orange, #4176E6);
-  --el-color-primary-light-3: color-mix(in srgb, var(--main-orange, #4176E6) 70%, var(--theme-surface, #fff));
-  --el-color-primary-light-5: color-mix(in srgb, var(--main-orange, #4176E6) 50%, var(--theme-surface, #fff));
-  --el-color-primary-light-7: color-mix(in srgb, var(--main-orange, #4176E6) 30%, var(--theme-surface, #fff));
-  --el-color-primary-light-8: color-mix(in srgb, var(--main-orange, #4176E6) 20%, var(--theme-surface, #fff));
-  --el-color-primary-light-9: color-mix(in srgb, var(--main-orange, #4176E6) 10%, var(--theme-surface, #fff));
-  --el-color-primary-dark-2: color-mix(in srgb, var(--main-orange, #4176E6) 85%, #000);
   background: var(--theme-bg, #f6f8fb);
 }
 

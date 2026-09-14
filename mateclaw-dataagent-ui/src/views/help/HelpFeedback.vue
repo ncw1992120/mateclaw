@@ -96,7 +96,7 @@ watch(() => props.documentId, () => {
 
 <style scoped>
 .help-feedback {
-  border-top: 1px solid var(--theme-border);
+  border-top: 1px solid var(--db-border);
   padding: 24px 0 0;
   margin-top: 32px;
 }
@@ -108,13 +108,13 @@ watch(() => props.documentId, () => {
 .feedback-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--theme-text);
+  color: var(--db-text);
   margin-bottom: 8px;
 }
 
 .feedback-desc {
   font-size: 13px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   margin-bottom: 12px;
 }
 
@@ -127,7 +127,7 @@ watch(() => props.documentId, () => {
   align-items: center;
   gap: 16px;
   font-size: 13px;
-  color: var(--theme-text-muted);
+  color: var(--db-text-muted);
   margin-top: 8px;
 }
 
@@ -138,5 +138,7 @@ watch(() => props.documentId, () => {
 
 .feedback-submit {
   margin-top: 12px;
+  border-radius: 999px;
+  padding: 0 16px;
 }
 </style>
