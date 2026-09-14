@@ -528,6 +528,13 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
   await page.getByRole('button', { name: '选择MySQL数据源' }).click()
   await expect(page.locator('.datasource-form-page')).toBeVisible()
   await expect(page.getByRole('button', { name: '关闭数据源配置' })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'SSL' })).toHaveCount(1)
+  await expect(page.getByRole('checkbox', { name: 'SSH' })).toHaveCount(1)
+  await expect(page.getByRole('checkbox', { name: '跨 VPC/SQL' })).toHaveCount(1)
+  await expect(page.getByRole('checkbox', { name: '开启上传文件入口' })).toHaveCount(1)
+  await expect(page.getByRole('checkbox', { name: '共享元数据' })).toHaveCount(1)
+  await expect(page.getByRole('textbox', { name: '端口' })).toHaveAccessibleName('端口')
+  await expect(page.getByRole('textbox', { name: '密码' })).toHaveAccessibleName('密码')
   const snapshots = await page.evaluate(async () => {
     const themes = ['light', 'warm', 'eye-care', 'dark']
     const read = (selector: string) => {

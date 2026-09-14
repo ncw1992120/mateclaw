@@ -851,3 +851,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 使用 Google Chrome CDP `9222` 依次打开 `smart-ask`、`insight`、`report`、`config`、`help` 五个主入口，读取 `Accessibility.getFullAXTree`。
 - 对 `button`、`link`、`tab`、`textbox`、`combobox` 节点检查名称，五页均为 `emptyAXName=0`。该结果比仅读取 DOM placeholder 更准确；placeholder 或关联 label 不应被误判为无名称。
 - 该证据关闭当前主入口控件名称风险，但不替代全站键盘顺序、非 Chrome 原生控件和跨浏览器专项审计。
+
+### 2026-09-15 数据源连接表单 AX 名称与 CSS 回归修复
+
+- 问题：Google Chrome CDP 打开 MySQL 数据源连接表单时，端口、密码及部分复选框没有稳定 AX 名称；复选框样式规则修改过程中还出现多余 CSS 括号，导致 Vite 开发服务对 `DatasourceForm.vue` 样式返回 HTTP `500`、页面空白。
+- 修复：为数据源表单原生输入、选择器和复选框补充显式 `aria-label`；将隐藏复选框改为保留语义的 1px 透明控件，并修正 CSS 括号。
+- 回归：Vite 样式模块恢复 HTTP `200`；数据源表单定向 Chrome channel E2E `1 passed (6.7s)`；完整本地模拟 Chrome channel 矩阵 `25 passed (1.5m)`；UI 单测 `12 files / 44 tests passed`，生产构建成功。
+- Chrome CDP `9222` 现场读取 5 个复选框名称（`开启上传文件入口`、`SSL`、`SSH`、`跨 VPC/SQL`、`共享元数据`），相关 AX 空名称数为 `0`；截图 `/tmp/mateclaw-cdp-datasource-form-checkboxes-fixed-20260915.png`。

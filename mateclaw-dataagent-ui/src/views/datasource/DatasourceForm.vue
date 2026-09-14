@@ -46,6 +46,7 @@
               <input
                 v-model="form.displayName"
                 class="form-input"
+                :aria-label="t('dsForm.fieldDisplayName')"
                 :placeholder="t('dsForm.placeholderDisplayName')"
               />
             </div>
@@ -58,6 +59,7 @@
                 <input
                   v-model="form.productHost"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldProductAddress')"
                   :placeholder="t('metricPlatform.placeholderProductAddress')"
                 />
               </div>
@@ -68,6 +70,7 @@
                 <input
                   v-model="form.aloudataPort"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldProductPort')"
                   placeholder="8083"
                 />
               </div>
@@ -78,6 +81,7 @@
                 <input
                   v-model="form.semanticHost"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldSemanticAddress')"
                   :placeholder="t('metricPlatform.placeholderSemanticAddress')"
                 />
               </div>
@@ -88,6 +92,7 @@
                 <input
                   v-model="form.semanticPort"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldSemanticPort')"
                   placeholder="8085"
                 />
               </div>
@@ -103,6 +108,7 @@
                 <input
                   v-model="form.tenantId"
                   class="form-input"
+                  aria-label="租户 ID"
                   placeholder="请输入租户 ID"
                 />
               </div>
@@ -115,7 +121,7 @@
                     <span class="form-tip">?</span>
                   </el-tooltip>
                 </label>
-                <select v-model="form.authType" class="form-select">
+                <select v-model="form.authType" class="form-select" aria-label="认证方式">
                   <option value="UID">UID</option>
                   <option value="TOKEN">TOKEN</option>
                   <option value="ACCOUNT">ACCOUNT</option>
@@ -135,6 +141,7 @@
                   <input
                     v-model="form.authValue"
                     class="form-input"
+                    aria-label="认证值"
                     :type="showPassword ? 'text' : 'password'"
                     :placeholder="isEditMode ? '请输入新认证值，留空表示不修改' : ''"
                   />
@@ -159,6 +166,7 @@
                 <input
                   v-model="form.host"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldHost')"
                   :placeholder="t('dsForm.placeholderHost')"
                 />
               </div>
@@ -169,6 +177,7 @@
                 <input
                   v-model="form.port"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldPort')"
                   style="max-width: 120px;"
                 />
               </div>
@@ -179,6 +188,7 @@
                 <input
                   v-model="form.database"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldDatabase')"
                   :placeholder="t('dsForm.placeholderDatabase')"
                 />
               </div>
@@ -189,6 +199,7 @@
                 <input
                   v-model="form.username"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldUsername')"
                   :placeholder="t('dsForm.placeholderUsername')"
                 />
               </div>
@@ -200,6 +211,7 @@
                   <input
                     v-model="form.password"
                     class="form-input"
+                    :aria-label="t('dsForm.fieldPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :placeholder="isEditMode ? '请输入新密码，留空表示不修改' : ''"
                   />
@@ -218,7 +230,7 @@
               <!-- 服务器版本 -->
               <div class="form-field">
                 <label class="form-label">{{ t('dsForm.fieldVersion') }}</label>
-                <select v-model="form.version" class="form-select">
+                <select v-model="form.version" class="form-select" :aria-label="t('dsForm.fieldVersion')">
                   <option v-for="v in versionOptions" :key="v.value" :value="v.value">{{ v.label }}</option>
                 </select>
               </div>
@@ -233,7 +245,7 @@
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.sslEnabled" type="checkbox" />
+                    <input v-model="form.sslEnabled" type="checkbox" :aria-label="t('dsForm.ssl')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.ssl') }}</span>
@@ -244,7 +256,7 @@
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.sshEnabled" type="checkbox" />
+                    <input v-model="form.sshEnabled" type="checkbox" :aria-label="t('dsForm.ssh')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.ssh') }}</span>
@@ -256,7 +268,7 @@
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.crossVpcEnabled" type="checkbox" />
+                    <input v-model="form.crossVpcEnabled" type="checkbox" :aria-label="t('dsForm.crossVpcSql')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.crossVpcSql') }}</span>
@@ -267,7 +279,7 @@
               <!-- 开启上传文件入口 -->
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
-                  <input v-model="form.uploadEnabled" type="checkbox" checked />
+                  <input v-model="form.uploadEnabled" type="checkbox" checked :aria-label="t('dsForm.uploadFileEntry')" />
                   <span class="checkmark-new"></span>
                   <span class="switch-text">{{ t('dsForm.uploadFileEntry') }}</span>
                 </label>
@@ -287,7 +299,7 @@
             <div class="form-field form-field-wide">
               <label class="checkbox-label">
                 <label class="switch">
-                  <input v-model="form.metaShared" type="checkbox" />
+                  <input v-model="form.metaShared" type="checkbox" aria-label="共享元数据" />
                   <span class="slider"></span>
                 </label>
                 <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
@@ -996,8 +1008,11 @@ async function handleSubmit(): Promise<void> {
   user-select: none;
 }
 
-.checkbox-label input[type='checkbox'] {
-  display: none;
+.checkbox-label > input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .switch-text {
