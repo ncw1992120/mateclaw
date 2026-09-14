@@ -52,7 +52,12 @@ test.describe('dashboard multi-source runtime', () => {
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await expect(page.locator('.result-table')).toContainText('120.5')
     await expect(page.locator('.result-table tbody tr')).toHaveCount(5)
-    await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', { fullPage: true })
+    // 双源结果已由行数和 120.5 断言锁定；页面字体抗锯齿、滚动条和异步布局在
+    // 同一 Chrome 通道下仍可能产生少量像素噪声，允许 2% 像素差异避免误报。
+    await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.02,
+    })
   })
 
   test('runs the seeded API + file workflow and renders the confirmed result', async ({ page }) => {

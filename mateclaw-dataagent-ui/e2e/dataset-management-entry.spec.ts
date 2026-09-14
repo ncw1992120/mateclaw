@@ -49,6 +49,9 @@ test('问数数据源浏览入口支持键盘打开', async ({ page }) => {
   await browse.focus()
   await browse.press('Enter')
   await expect(page.locator('.datasource-browse-drawer')).toBeVisible()
+  const browseTabs = page.locator('.datasource-browse-drawer .browse-tabs')
+  await expect(browseTabs).toHaveAttribute('role', 'tablist')
+  await expect(browseTabs.locator('[role="tab"]').first()).toHaveAttribute('aria-selected', 'true')
 })
 
 test('顶部导航暴露可聚焦链接语义', async ({ page }) => {

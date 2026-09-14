@@ -884,11 +884,16 @@
     >
       <div class="browse-drawer-body">
         <!-- Tab 切换 -->
-        <div class="browse-tabs">
+        <div class="browse-tabs" role="tablist" :aria-label="t('metricPlatform.manageTitle') + ' / ' + t('metricPlatform.dimensionTitle')">
           <button
             class="browse-tab"
             :class="{ active: browseActiveTab === 'metrics' }"
+            role="tab"
+            data-browse-tab="metrics"
+            :aria-selected="String(browseActiveTab === 'metrics')"
+            :tabindex="browseActiveTab === 'metrics' ? 0 : -1"
             @click="browseActiveTab = 'metrics'"
+            @keydown="handleBrowseTabKeydown($event, 'metrics')"
           >
             {{ t('metricPlatform.manageTitle') }}
             <span v-if="!browseLoading" class="browse-tab-count">{{ browseMetricPagination.total }}</span>
@@ -896,7 +901,12 @@
           <button
             class="browse-tab"
             :class="{ active: browseActiveTab === 'dimensions' }"
+            role="tab"
+            data-browse-tab="dimensions"
+            :aria-selected="String(browseActiveTab === 'dimensions')"
+            :tabindex="browseActiveTab === 'dimensions' ? 0 : -1"
             @click="browseActiveTab = 'dimensions'"
+            @keydown="handleBrowseTabKeydown($event, 'dimensions')"
           >
             {{ t('metricPlatform.dimensionTitle') }}
             <span v-if="!browseLoading" class="browse-tab-count">{{ browseDimensionPagination.total }}</span>
@@ -1347,6 +1357,25 @@ const browseActiveTab = ref<'metrics' | 'dimensions'>('metrics')
 const browseLoading = ref(false)
 const browseMetrics = ref<AloudataSyncedMetric[]>([])
 const browseDimensions = ref<AloudataSyncedDimension[]>([])
+
+function handleBrowseTabKeydown(event: KeyboardEvent, tab: 'metrics' | 'dimensions'): void {
+  const key = event.key
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return
+  event.preventDefault()
+  const nextTab = key === 'Home'
+    ? 'metrics'
+    : key === 'End'
+      ? 'dimensions'
+      : tab === 'metrics'
+        ? 'dimensions'
+        : 'metrics'
+  browseActiveTab.value = nextTab
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLButtonElement>(
+      `.browse-tabs [role="tab"][data-browse-tab="${nextTab}"]`,
+    )?.focus()
+  })
+}
 
 /** 指标/维度搜索关键词 */
 const browseMetricKeyword = ref('')

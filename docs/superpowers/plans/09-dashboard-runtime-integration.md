@@ -325,3 +325,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 报告卡片键盘修复：** 报告列表卡片补齐 `role=button`、`tabindex`、动态名称及 Enter/Space 查看操作，内部操作区阻止键盘冒泡；组件回归通过，UI 全量 `16 files / 49 tests passed`。Chrome CDP 已检查报告入口空态和控件命名，真实报告卡片专项待本地 fixture 注入。
 
 **2026-09-15 问数数据源浏览入口键盘修复：** ChatView 数据源下拉的“浏览”入口增加按钮语义、动态 `aria-label` 与 Enter/Space 操作，按键不会冒泡为勾选；定向 Chrome E2E 和用户 Chrome CDP 已实际打开数据源浏览抽屉。
+
+**2026-09-15 双源快照与浏览抽屉 Tab 补充：** 双源 JDBC+Aloudata 快照保留 5 行/`120.5` 严格业务断言，并将同 Chrome 通道的少量渲染噪声容差设为 `maxDiffPixelRatio=0.02`；浏览抽屉“指标/维度”补齐 `tablist/tab`、选中态、roving tabindex 和方向键导航。UI 单测 `16 files / 49 tests passed`、生产构建通过；模拟数据源列表恢复后补做定向 E2E/CDP。
