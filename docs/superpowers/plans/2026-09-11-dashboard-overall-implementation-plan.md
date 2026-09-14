@@ -275,7 +275,7 @@ make dashboard-verify-local
 
 **2026-09-14 当前提交 CDP 视觉补充：** 通过用户 Chrome `9222` CDP 打开 `/datasets/new` 并选择 `E2E Aloudata Simulation`，页面自动切换为“Aloudata 指标视图”，`JDBC_TABLE` 与 `JDBC_SQL` 选项均为禁用状态。截图 `/tmp/mateclaw-cdp-aloudata-compatibility.png`；CUA 服务仍不可用，但本次操作确实连接并控制了用户 Chrome 的 CDP 页面。
 
-**2026-09-14 可访问性对比度补充：** 数据集列表的辅助文字和状态标签改用主题语义令牌；四主题通过 Chrome CDP 实测，最低对比度分别为 `4.97:1` 和 `6.24:1`。新增 Playwright 对比度回归用例，但当前机器缺少 `chrome-headless-shell`，自动化补跑保持待办；结果与阻塞证据见统一验收记录。
+**2026-09-14 可访问性对比度补充：** 数据集列表的辅助文字和状态标签改用主题语义令牌；四主题通过 Chrome CDP 实测，最低对比度分别为 `4.97:1` 和 `6.24:1`。新增 Playwright 对比度回归用例，并使用系统 Chrome channel 自动化执行 `1 passed`；Playwright 自带 Chromium 在当前 macOS ARM 架构不支持，已不再作为本地验证阻塞。
 
 **2026-09-14 当前提交 CDP 验收：** 提交 `2fe61dd4fa3ed3671ce11969de8d61d9b8ab416c` 在 Google Chrome CDP `9222` 打开数据集列表，暗色主题下标题、4 个卡片和状态标签均可见，截图 `/tmp/mateclaw-cdp-dataset-list-96568fb6.png`；本地 UI 单测 `37/37`、构建和 `DESIGN-PASS` 通过。
 

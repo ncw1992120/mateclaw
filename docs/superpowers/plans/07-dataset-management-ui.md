@@ -192,7 +192,7 @@ npm --prefix mateclaw-dataagent-ui run build
 
 - [x] 数据集列表辅助文字与状态标签改用主题语义令牌，不再使用固定颜色。
 - [x] 四主题通过 Chrome CDP 实测 WCAG AA 对比度（辅助文字最低 4.97:1，状态标签最低 6.24:1）。
-- [ ] 待标准 E2E 镜像提供 `chrome-headless-shell` 后补跑自动化对比度用例。
+- [x] 使用项目配置的系统 Chrome channel 补跑自动化对比度用例（`1 passed`）；Playwright 自带 Chromium 在当前 macOS ARM 架构不支持，标准 E2E 镜像仍可另行使用。
 **2026-09-14 来源类型边界修复：** `sourceType=api` 的数据源原先被“非 Aloudata 即 JDBC”逻辑误判，导致 JDBC 表/SQL 选项错误开放。现显式归一化 `api/http/http_api`，自动切换 `HTTP_API` 并禁用 JDBC 表/SQL；兼容历史响应缺少 `sourceType` 的数据源。新增回归测试，Chrome CDP 已验证 API 数据源选项状态。
 
 **2026-09-14 后端来源边界补强：** 服务端新增 HTTP/API 数据集只能绑定 `api/http/http_api` 数据源的校验，防止绕过前端直接用 JDBC 连接创建 HTTP/API 数据集；`DatasetCatalogServiceTest` 已覆盖拒绝路径。
