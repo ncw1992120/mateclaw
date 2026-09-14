@@ -1439,7 +1439,8 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-property {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: fadeIn var(--transition-base) both;
 }
 
@@ -1447,6 +1448,10 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-property :deep(.property-panel) {
   border-left: none;
   background: transparent;
+  /* 属性面板与脚本数据集面板同属右侧栏，不能用 100% 高度把后者裁掉。 */
+  height: auto;
+  min-height: 160px;
+  flex: 0 0 auto;
 }
 
 .editor-ai-chat {

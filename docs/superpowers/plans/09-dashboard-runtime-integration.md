@@ -176,6 +176,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 ## 视觉验收（CDP）
 
+**2026-09-14 双源快照问题关闭：** 失败原因是右侧属性面板布局裁剪及字段描述异步完成时机，不是 JDBC/Aloudata 查询结果错误。修复 `.editor-property` 溢出策略和输入描述等待后，JDBC+Aloudata 场景实际断言 5 行、包含 `120.5`，快照更新后非更新模式通过；API+文件、大结果 ObjectRef、ECharts 及错误/兼容场景一并纳入本轮 11 条真实 E2E 回归并全部通过。CUA 请求头策略故障仍独立记录，不用静态截图替代交互视觉证据。
+
 使用 CDP 连接当前候选 SHA 的真实仪表盘 UI，执行 VIS-UI03～VIS-UI08；最低使用 `Page.captureScreenshot`、`Runtime.evaluate` 和 `Accessibility.getFullAXTree`，每个场景必须保存截图，并将页面、任务、查询和下推证据关联到同一候选 SHA。
 
 - 编辑器：输入别名、参数作用域和脚本配置层级清晰；非法输入在提交前显示可读错误，脚本模板使用配置的别名。

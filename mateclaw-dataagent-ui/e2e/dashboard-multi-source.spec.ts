@@ -18,6 +18,19 @@ async function openEditor(page: Page, name: string): Promise<void> {
   await card.getByRole('button', { name: /编辑/ }).click()
 }
 
+async function loadInputDescriptors(page: Page, expectedCount: number): Promise<void> {
+  const rows = page.locator('.dataset-input-row')
+  await expect(rows).toHaveCount(expectedCount)
+  for (let index = 0; index < expectedCount; index += 1) {
+    const row = rows.nth(index)
+    const viewFields = row.getByRole('button', { name: '查看字段' })
+    if (await viewFields.count()) await viewFields.click()
+  }
+  for (let index = 0; index < expectedCount; index += 1) {
+    await expect(rows.nth(index).locator('.descriptor-summary').filter({ hasText: /[1-9]\d* 个字段/ })).toBeVisible({ timeout: 30_000 })
+  }
+}
+
 test.describe('dashboard multi-source runtime', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(({ authToken, workspace }) => {
@@ -33,7 +46,8 @@ test.describe('dashboard multi-source runtime', () => {
     }
     await page.goto('/?nav=insight')
     await openEditor(page, 'E2E JDBC + Aloudata Dashboard')
-    await expect(page.getByText('脚本数据集输入')).toBeVisible()
+    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await loadInputDescriptors(page, 2)
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await expect(page.locator('.script-draft')).toContainText('120.5')
@@ -44,7 +58,8 @@ test.describe('dashboard multi-source runtime', () => {
   test('runs the seeded API + file workflow and renders the confirmed result', async ({ page }) => {
     await page.goto('/?nav=insight')
     await openEditor(page, 'E2E API + File Dashboard')
-    await expect(page.getByText('脚本数据集输入')).toBeVisible()
+    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await loadInputDescriptors(page, 2)
     await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
@@ -65,7 +80,8 @@ test.describe('dashboard multi-source runtime', () => {
     })
     await page.goto(`/?nav=insight&dashboardId=${largeResultDashboardId}`)
     await openEditor(page, 'E2E Large Result Dashboard')
-    await expect(page.getByText('脚本数据集输入')).toBeVisible()
+    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await loadInputDescriptors(page, 1)
     await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })

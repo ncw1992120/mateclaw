@@ -114,6 +114,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 ## 验收标准
 
+**2026-09-14 快照与面板布局修复：** 编辑器属性区改为纵向可滚动，输入面板不再被子面板 `height:100%` 裁剪；双源 E2E 使用“脚本结果数据集输入”这一实际可访问标题，并逐行等待字段描述完成，避免异步 Descriptor 状态造成快照漂移。真实本地栈数据集入口创建、双源、错误/兼容和大结果场景合计 11 条 E2E 全部通过；快照基线已按当前渲染重新生成并以非更新模式验证。
+
 - MGMT-C01～MGMT-UI05 全部通过且无跳过，UI production build 成功。
 - JDBC、Aloudata 指标视图、HTTP/API、文件都能通过真实后端创建数据集并查看 Descriptor/受限预览。
 - 类型化 DTO 是唯一新入口；旧 JDBC 请求仅通过明确兼容映射保留。

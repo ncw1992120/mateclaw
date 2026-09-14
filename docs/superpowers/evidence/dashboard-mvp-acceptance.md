@@ -464,6 +464,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 
 ## 2026-09-14 当前提交 Chrome CDP 视觉复验
 
+## 2026-09-14 双源视觉快照差异修复与全量回归
+
+- 根因：编辑器右侧属性面板的固定高度/`overflow:hidden` 裁剪了输入区；E2E 又在 Descriptor 异步字段探测完成前采集快照，导致页面可交互但视觉基线不稳定。
+- 修复：属性区改为可滚动布局；E2E 使用实际标题“脚本结果数据集输入”，逐个输入等待非零字段描述后再截图；同步更新当前渲染快照。
+- 验证：本地 Docker 模拟 DataAgent、MySQL、HTTP、MinIO、Runner 和 Aloudata 环境下，`dashboard-multi-source.spec.ts`、`dashboard-errors-and-compatibility.spec.ts`、`dataset-management-entry.spec.ts` 合计 `11 passed`。JDBC+Aloudata 查询仍返回 5 行并包含 `120.5`；快照非更新模式通过。
+- 结论：原报告中的 `1158 pixels (ratio 0.01)` 属于旧基线/异步渲染差异，已关闭；不属于双源查询或数据断言失败。CUA 通道的 `Unable to load browser request-header policy` 仍作为独立环境问题保留。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

@@ -48,7 +48,7 @@ try {
   const results = [await capture(page, context, 'dashboard-list', '洞察仪表盘')]
   await page.locator('.dashboard-card').filter({ hasText: 'E2E JDBC + Aloudata Dashboard' })
     .getByRole('button', { name: '编辑' }).click()
-  results.push(await capture(page, context, 'dashboard-editor', '脚本数据集输入'))
+  results.push(await capture(page, context, 'dashboard-editor', '脚本结果数据集输入'))
   await page.getByRole('button', { name: '最终结果预览' }).click()
   await page.locator('.result-table tbody tr').first().waitFor({ state: 'visible', timeout: 120_000 })
   const preview = await capture(page, context, 'dashboard-preview', null)
