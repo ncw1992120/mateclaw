@@ -672,7 +672,7 @@ async function handleSubmit(): Promise<void> {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
 }
 
 /* 页面头部 */
@@ -680,8 +680,9 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   align-items: center;
   padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  background-color: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 32px;
   position: relative;
@@ -690,7 +691,7 @@ async function handleSubmit(): Promise<void> {
 .form-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   white-space: nowrap;
 }
@@ -803,16 +804,16 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-card {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   padding: 24px 28px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px var(--theme-border);
 }
 
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 4px 0;
   display: flex;
   align-items: center;
@@ -849,13 +850,13 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
 .form-label.required::before {
   content: '*';
-  color: #f53f3f;
+  color: var(--el-color-danger);
   font-weight: 600;
   margin-right: 2px;
 }
@@ -867,8 +868,8 @@ async function handleSubmit(): Promise<void> {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #e5e6eb;
-  color: #86909c;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
   font-size: 10px;
   font-weight: bold;
   cursor: help;
@@ -876,35 +877,44 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-tip:hover {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
 }
 
 .form-input,
 .form-select {
+  appearance: none;
+  -webkit-appearance: none;
   height: 36px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  background: #fff;
+  background: var(--theme-surface);
+  background-color: var(--theme-surface) !important;
   box-sizing: border-box;
   width: 100%;
 }
 
+/* 原生 input 在部分浏览器 color-scheme 下会保留 field 白底，显式覆盖以确保主题背景生效。 */
+.datasource-form-page input.form-input,
+.datasource-form-page select.form-select {
+  background-color: var(--theme-surface) !important;
+}
+
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
-  border-color: #c9cdd4;
+  border-color: var(--theme-border-strong);
 }
 
 .form-input:focus,
 .form-select:focus {
-  border-color: #165dff;
-  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+  border-color: var(--main-orange);
+  box-shadow: 0 0 0 3px var(--theme-surface-hover);
 }
 
 .form-input:disabled {
@@ -915,7 +925,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .form-select {
@@ -955,14 +965,14 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   border-radius: 4px;
   transition: all 0.15s;
 }
 
 .eye-btn:hover {
-  color: #165dff;
-  background: #f2f3f5;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 /* 开关切换新样式 */
@@ -971,7 +981,7 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   user-select: none;
 }
@@ -982,12 +992,12 @@ async function handleSubmit(): Promise<void> {
 
 .switch-text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .field-desc {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
 }
 

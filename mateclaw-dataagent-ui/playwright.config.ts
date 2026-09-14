@@ -14,12 +14,12 @@ export default defineConfig({
   reporter: process.env.CI ? [['html', { open: 'never' }], ['line']] : 'list',
   use: {
     baseURL: process.env.MATECLAW_UI_BASE_URL ?? 'http://127.0.0.1:5174',
+    ...devices['Desktop Chrome'],
     ...(process.env.MATECLAW_E2E_BROWSER_CHANNEL
       ? { channel: process.env.MATECLAW_E2E_BROWSER_CHANNEL }
       : {}),
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    ...devices['Desktop Chrome'],
   },
 })

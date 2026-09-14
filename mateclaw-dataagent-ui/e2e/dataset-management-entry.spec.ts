@@ -204,3 +204,56 @@ test('数据集预览工具栏和结果空态随主题使用主题令牌', async
     expect(snapshot.empty.color, snapshot.theme).toBe(snapshot.expectedSecondary)
   }
 })
+
+test('数据源配置表单基础容器随主题使用主题令牌', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=config')
+  await page.getByRole('button', { name: '数据配置' }).click()
+  await page.getByRole('button', { name: '新建数据源' }).click()
+  await page.getByRole('button', { name: '选择MySQL数据源' }).click()
+  await expect(page.locator('.datasource-form-page')).toBeVisible()
+  const snapshots = await page.evaluate(() => {
+    const themes = ['light', 'warm', 'eye-care', 'dark']
+    const read = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) throw new Error(`missing ${selector}`)
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, color: style.color }
+    }
+    const normalize = (value: string, property: 'color' | 'backgroundColor') => {
+      const probe = document.createElement('span')
+      probe.style[property] = value
+      document.body.appendChild(probe)
+      const normalized = getComputedStyle(probe)[property]
+      probe.remove()
+      return normalized
+    }
+    return themes.map(theme => {
+      document.documentElement.dataset.theme = theme
+      const root = getComputedStyle(document.documentElement)
+      return {
+        theme,
+        page: read('.datasource-form-page'),
+        header: read('.form-header'),
+        card: read('.form-card'),
+        title: read('.form-title'),
+        label: read('.form-card .form-label'),
+        expectedBg: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
+        expectedPageBg: normalize(root.getPropertyValue('--theme-bg').trim(), 'backgroundColor'),
+        expectedText: normalize(root.getPropertyValue('--theme-text').trim(), 'color'),
+        expectedSecondary: normalize(root.getPropertyValue('--theme-text-secondary').trim(), 'color'),
+      }
+    })
+  })
+  for (const snapshot of snapshots) {
+    expect(snapshot.page.background, snapshot.theme).toBe(snapshot.expectedPageBg)
+    expect(snapshot.header.background, snapshot.theme).toBe(snapshot.expectedBg)
+    expect(snapshot.card.background, snapshot.theme).toBe(snapshot.expectedBg)
+    expect(snapshot.title.color, snapshot.theme).toBe(snapshot.expectedText)
+    expect(snapshot.label.color, snapshot.theme).toBe(snapshot.expectedSecondary)
+  }
+})

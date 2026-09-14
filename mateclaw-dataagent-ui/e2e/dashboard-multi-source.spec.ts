@@ -50,7 +50,7 @@ test.describe('dashboard multi-source runtime', () => {
     await loadInputDescriptors(page, 2)
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
-    await expect(page.locator('.script-draft')).toContainText('120.5')
+    await expect(page.locator('.result-table')).toContainText('120.5')
     await expect(page.locator('.result-table tbody tr')).toHaveCount(5)
     await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', { fullPage: true })
   })
@@ -63,7 +63,7 @@ test.describe('dashboard multi-source runtime', () => {
     await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
-    await expect(page.locator('.script-draft')).toContainText('PAID')
+    await expect(page.locator('.script-draft textarea')).toHaveValue(/PAID/)
     await expect(page.locator('.result-table tbody tr')).toHaveCount(4)
     await expect(page).toHaveScreenshot('dashboard-api-file.png', {
       fullPage: true,
