@@ -59,3 +59,9 @@
 - `make dashboard-prerequisites-simulation`、`./scripts/verify-dashboard-external-prerequisites.sh --local`：通过。
 - `AloudataAnalysisViewExternalIT` 通过 Docker Maven 入口对本地 WireMock 执行：目录、详情、5 行基线和 `region=east` 筛选均通过。
 - 该结果只证明 Adapter 契约和模拟接口闭环；真实环境仍维持 ALO-X02 `BLOCKED`，不能替代 `SM_02_0038` 授权问题的解除。
+
+## 当前认证上下文复验（2026-09-15）
+
+- 使用已配置的 `semantic.demo.can.aloudata.com`、租户 `tn_27436`、认证类型 `UID` 和只读认证值，按 Adapter 使用的 `tenant-id`、`auth-type`、`auth-value` 请求头再次调用 `Demo_view` 的 5 行查询。
+- 返回 HTTP `200`、`code=SM_02_0038`、`success=false`，消息仍为视图 `pinganstock:Demo_view` 无权限；未执行或伪造筛选通过。
+- 结论未变：目录/详情可读，结果查询及远端筛选下推仍为 `ALO-X02 EXTERNAL-BLOCKED`，等待 Aloudata 提供已授权可查询视图。
