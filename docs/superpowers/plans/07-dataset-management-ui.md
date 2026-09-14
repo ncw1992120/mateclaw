@@ -149,6 +149,8 @@ npm --prefix mateclaw-dataagent-ui run build
 
 服务端 `DatasetManageServiceImpl` 已增加同等校验，覆盖绕过 UI 直接提交创建/更新请求的场景；`DatasetCatalogServiceTest` 新增 JDBC/Aloudata 交叉绑定拒绝用例。
 
+另新增 `e2e/dataset-management-entry.spec.ts` 的文件数据集创建用例，覆盖上传、创建/同步和进入预览；当前因本地缺少 Playwright 浏览器二进制保持 `NOT_RUN`，不能替代后续真实 E2E。
+
 #### VIS-UI02 问题复现
 
 1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。

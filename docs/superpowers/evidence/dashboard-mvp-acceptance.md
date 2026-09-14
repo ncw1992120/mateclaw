@@ -449,3 +449,8 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 修复：来源类型选项按当前连接类型禁用；选择连接时自动切换到兼容默认来源；保存前保留兼容性校验，非法组合不会提交。
 - 回归：`DatasetEdit.spec.ts` 覆盖 Aloudata + JDBC SQL 的禁用与保存保护；UI 全量为 `9 files / 36 tests passed`，production build 和 `DESIGN-PASS` 通过。
 - 服务端同步拒绝同类非法组合，Docker Maven 定向执行 `DatasetCatalogServiceTest` 通过；因此 API 直提交不会绕过页面来源约束。
+
+## 2026-09-14 产品入口文件数据集 E2E 补充
+
+- 新增真实后端 Playwright 用例，覆盖从配置中心进入数据集管理、上传 CSV、创建/同步数据集、进入字段预览并清理临时数据集。
+- 本地 UI 单测、类型检查、production build 和设计门禁均通过；该 E2E 当前因缺少 `chromium_headless_shell` 未执行，状态记录为 `NOT_RUN`，不作为产品闭环 PASS。

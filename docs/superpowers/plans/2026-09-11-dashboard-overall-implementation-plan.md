@@ -249,6 +249,8 @@ make dashboard-verify-local
 
 **2026-09-14 服务端边界补充：** `DatasetManageServiceImpl` 同步增加来源与连接类型校验，直接调用创建/更新 API 时也会拒绝 JDBC 绑定 Aloudata 或指标视图绑定 JDBC；新增服务层回归测试。前后端共同约束，不能依赖页面禁用作为唯一保护。
 
+**2026-09-14 产品入口 E2E 补充：** 新增“主导航→数据集管理→新建文件数据集→上传 CSV→创建/同步→进入预览→清理”真实后端用例，补齐 FE-CLOSE-07 的正式创建链路覆盖。当前工作站缺少 Playwright `chromium_headless_shell`，该用例尚未执行；待浏览器依赖和 JWT/工作区上下文准备好后运行，不将未执行记为通过。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。
