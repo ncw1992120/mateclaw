@@ -506,6 +506,8 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 在 `MATECLAW_UI_BASE_URL=http://127.0.0.1:5175`、`MATECLAW_E2E_BROWSER_CHANNEL=chrome`、本地模拟 Aloudata 和同一 seed 工作区下，当前提交 `f22648bccb381f72767a847fb0df4df3405cc53f` 的三组真实 E2E（双源、错误/兼容、数据集入口）共 `12 passed`，无跳过。
 - 覆盖 JDBC+Aloudata 结果（5 行、含 `120.5`）、API+文件、ObjectRef、ECharts、旧 Schema、失败/取消/超时/资源限制重试，以及正式页面创建仪表盘并保存脚本数据集绑定。
 
+- 最新文档同步提交 `17029cedffbc4d3b25674eadcc57fa871afde493` 后再次通过 Chrome CDP 现场检查：脚本面板、默认目标组件和 `E2E JDBC Orders Dataset` 均可见；截图 `/tmp/mateclaw-cdp-final-dashboard-editor.png`，AX 树 `532` 节点。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。
