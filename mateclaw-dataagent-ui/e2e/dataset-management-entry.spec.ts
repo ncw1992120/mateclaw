@@ -246,10 +246,17 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
         title: read('.form-title'),
         label: read('.form-card .form-label'),
         input: read('.form-card input.form-input'),
+        whitelist: read('.whitelist-box-new'),
+        whitelistText: read('.whitelist-text-new'),
+        cancel: read('.btn-cancel'),
+        submit: read('.btn-submit'),
+        step: read('.step-item.active .step-num'),
         expectedBg: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
+        expectedSurfaceHover: normalize(root.getPropertyValue('--theme-surface-hover').trim(), 'backgroundColor'),
         expectedPageBg: normalize(root.getPropertyValue('--theme-bg').trim(), 'backgroundColor'),
         expectedText: normalize(root.getPropertyValue('--theme-text').trim(), 'color'),
         expectedSecondary: normalize(root.getPropertyValue('--theme-text-secondary').trim(), 'color'),
+        expectedMain: normalize(root.getPropertyValue('--main-orange').trim(), 'backgroundColor'),
       })
     }
     return snapshots
@@ -262,5 +269,10 @@ test('数据源配置表单基础容器随主题使用主题令牌', async ({ pa
     expect(snapshot.label.color, snapshot.theme).toBe(snapshot.expectedSecondary)
     expect(snapshot.input.background, snapshot.theme).toBe(snapshot.expectedBg)
     expect(snapshot.input.color, snapshot.theme).toBe(snapshot.expectedText)
+    expect(snapshot.whitelist.background, snapshot.theme).toBe(snapshot.expectedSurfaceHover)
+    expect(snapshot.whitelistText.color, snapshot.theme).toBe(snapshot.expectedSecondary)
+    expect(snapshot.cancel.background, snapshot.theme).toBe(snapshot.expectedBg)
+    expect(snapshot.submit.background, snapshot.theme).toBe(snapshot.expectedMain)
+    expect(snapshot.step.background, snapshot.theme).toBe(snapshot.expectedMain)
   }
 })

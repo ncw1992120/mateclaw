@@ -555,3 +555,10 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 使用 Google Chrome CDP `9222` 打开 `E2E JDBC + Aloudata Dashboard` 编辑器，分别点击两个输入的“查看字段”。
 - 实际渲染显示 JDBC 输入 `5 个字段`、Aloudata 输入 `3 个字段`，脚本面板显示当前目标组件 `e2e-table`；未再出现输入预览有字段但 Descriptor 显示 `0 个字段` 的历史问题。
 - 截图：`/tmp/mateclaw-cdp-dashboard-descriptors-current.png`。该证据只覆盖本地模拟数据和当前 Chrome 页面，不关闭真实 Aloudata 授权 Gate。
+
+## 2026-09-14 数据源表单下半区主题复验
+
+- 根因：数据源表单步骤条、VPC/开关说明、白名单区域、复选框和底部操作按钮仍有固定浅色 CSS，dark/warm/eye-care 下与表单主体不一致。
+- 修复：移除说明文案内联颜色，将步骤条、白名单、复选框、开关、取消/测试/确定按钮统一映射到 `--theme-*` 和 `--main-orange`；不改变连接参数或提交逻辑。
+- 验证：扩展 `数据源配置表单基础容器随主题使用主题令牌` 覆盖输入、白名单、操作按钮和步骤条，真实 Chrome channel 四主题定向用例通过；双源定向 E2E `4 passed`，UI 单测 `37 passed`，生产构建成功。
+- Chrome CDP dark 主题下滚动至表单下半区现场检查通过，截图：`/tmp/mateclaw-cdp-datasource-form-dark-lower-final.png`。
