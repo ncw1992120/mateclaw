@@ -591,3 +591,5 @@ Chrome CDP 连接当前 `http://127.0.0.1:5175/datasets`，分别切换 `light`�
 ### 2026-09-14 键盘可访问性复验
 
 JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可访问名称，Enter/Space 均可切换选择；`DatasetEdit.spec.ts` 覆盖初始、Enter、Space 三种状态。Chrome CDP 打开 `/datasets/new` 和现有 JDBC 数据集编辑页，入口与配置表单可见；当前模拟数据源未返回表目录，未伪造表项视觉 PASS。
+
+当前提交 `be44efaaee4be6fb42e5868613dafcbc00e1cb74` 的 Chrome CDP 复验截图为 `/tmp/mateclaw-cdp-dataset-edit-keyboard-be44efaa.png`，新建页标题“未命名”、6 个可交互控件可见，页面无空白布局。

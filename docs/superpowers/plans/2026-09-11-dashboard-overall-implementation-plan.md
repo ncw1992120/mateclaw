@@ -281,6 +281,8 @@ make dashboard-verify-local
 
 **2026-09-14 键盘可访问性补充：** 修复 JDBC 表列表只能鼠标点击的问题，表项现在可聚焦并以 Enter/Space 切换，暴露 `role=checkbox` 与 `aria-checked`；`DatasetEdit.spec.ts` 回归通过。当前 UI 单测为 `38/38`，Chrome CDP 已复验数据集新建/编辑入口；暂无可展示的真实表项，表项现场操作待模拟表目录返回后补采。
 
+**2026-09-14 当前提交视觉记录：** `be44efaaee4be6fb42e5868613dafcbc00e1cb74` 经 Chrome CDP 打开 `/datasets/new` 复验，新建页标题、表单控件和返回/取消入口可见，截图 `/tmp/mateclaw-cdp-dataset-edit-keyboard-be44efaa.png`。
+
 ## 投入正式测试环境前的改造清单
 
 本地 `dev-support/local-simulation/` 只用于开发和自动化验证；切换到正式测试环境前，必须逐项替换以下配置，并保留可回滚的配置版本。
