@@ -255,6 +255,11 @@ test('从产品入口创建文件数据集并进入预览', async ({ page, reque
   const fieldGroup = page.locator('.group-header').first()
   await expect(fieldGroup).toHaveAttribute('role', 'button')
   await expect(fieldGroup).toHaveAttribute('aria-expanded', 'true')
+  const fieldVisibilityButton = page.locator('.field-eye-btn').first()
+  if (await fieldVisibilityButton.count()) {
+    await expect(fieldVisibilityButton).toHaveAttribute('type', 'button')
+    await expect(fieldVisibilityButton).toHaveAttribute('aria-label', /显示|隐藏/)
+  }
   await fieldGroup.press('Enter')
   await expect(fieldGroup).toHaveAttribute('aria-expanded', 'false')
   await expect(page.locator('.data-table')).toContainText('120.5')

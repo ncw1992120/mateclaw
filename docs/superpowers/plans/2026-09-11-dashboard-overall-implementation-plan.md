@@ -309,6 +309,8 @@ make dashboard-verify-local
 
 **2026-09-14 文件预览字段分组键盘修复：** 将维度/度量字段分组从鼠标专用 `div` 改为可聚焦按钮，补齐 `aria-expanded`、动态名称和 Enter/Space 操作；定向回归、UI 全量 `42/42`、构建、`DESIGN-PASS` 与 Chrome CDP 均通过。该修复收敛本地文件预览键盘可用性，不替代全站审计。
 
+**2026-09-14 文件预览字段可见性按钮语义修复：** 将字段行显示/隐藏图标从点击专用 `span` 改为原生 `button type="button"`，补齐动态“显示列/隐藏列” `aria-label` 并保持视觉不变；定向回归 `1 passed (4.5s)`、UI 全量 `42/42`、构建、`DESIGN-PASS` 通过。当前模拟 fixture 未返回字段行，真实字段按钮的现场交互需在真实文件数据联调阶段补验。
+
 **2026-09-14 完整 E2E 时序修复：** 预览状态圆点用例补充异步可见性等待，修复首次完整矩阵中由加载竞争导致的偶发失败；当前本地模拟 Chrome channel 全量 `22 passed (1.1m)`。Chrome CDP 现场当前编辑器可见控件无名数为 `0`，截图 `/tmp/mateclaw-cdp-final-e2e.png`；真实外部 Gate 状态不变。
 
 **2026-09-14 完整矩阵参数复验：** 未注入本地 Aloudata simulation 模式时，双源用例按设计显式 `BLOCKED`；补齐 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 后当前工作树完整 Chrome channel Playwright `22 passed (1.1m)`。该结果证明本地模拟闭环稳定，不改变真实 Aloudata 授权 Gate。

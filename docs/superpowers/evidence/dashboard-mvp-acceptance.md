@@ -727,6 +727,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：文件数据集创建与预览 Chrome E2E `1 passed (4.8s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
 - Chrome CDP `9222` 打开真实文件数据集编辑页，按 Enter 将“维度”分组从 `aria-expanded=true` 切换为 `false`，焦点保持在分组按钮；截图 `/tmp/mateclaw-cdp-field-group-keyboard.png`。
 
+### 2026-09-14 文件预览字段可见性按钮语义
+
+- 问题：文件预览字段行的显示/隐藏图标原先是仅绑定点击事件的 `span`，无法获得按钮语义和稳定的辅助技术名称。
+- 修复：改为原生 `button type="button"`，保留图标和点击行为，按字段状态提供“显示列/隐藏列” `aria-label`，并通过无边框样式保持原视觉。
+- 回归：文件数据集创建与预览定向 Chrome E2E `1 passed (4.5s)`；断言在存在字段行时检查按钮类型和名称。当前模拟文件 fixture 返回字段行数为 0，因此本轮未虚报字段按钮的现场点击结果。
+- 该修复与字段分组键盘操作共同收敛文件预览的键盘/读屏语义；字段行数据由后端 schema 决定，真实文件数据联调时需补充至少一条字段行的现场验收。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

@@ -269,9 +269,11 @@
                   >
                     <span class="field-name">{{ field.label || field.name }}</span>
                     <span v-if="field.type" class="field-type-tag">{{ field.type }}</span>
-                    <span
+                    <button
+                      type="button"
                       class="field-eye-btn"
                       :class="{ hidden: isFieldHidden(field.name) }"
+                      :aria-label="isFieldHidden(field.name) ? t('datasetEdit.showColumn') : t('datasetEdit.hideColumn')"
                       :title="isFieldHidden(field.name) ? t('datasetEdit.showColumn') : t('datasetEdit.hideColumn')"
                       @click.stop="toggleFieldVisibility(field.name)"
                     >
@@ -279,7 +281,7 @@
                         <path d="M8 3C4.5 3 1.73 5.11 1 8c.73 2.89 3.5 5 7 5s6.27-2.11 7-5c-.73-2.89-3.5-5-7-5zm0 9a4 4 0 110-8 4 4 0 010 8z" fill="currentColor"/>
                         <circle cx="8" cy="8" r="2" fill="currentColor"/>
                       </svg>
-                    </span>
+                    </button>
                   </li>
                 </ul>
               </div>
@@ -2008,6 +2010,10 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   border-radius: 4px;
   transition: all 0.15s;
   opacity: 0.5;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
 }
 
 .field-eye-btn:hover {

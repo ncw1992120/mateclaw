@@ -225,6 +225,10 @@ AI 助手面板关闭按钮新增 `aria-label="关闭 AI 助手"`；系统 Chrom
 
 文件预览的维度/度量分组由鼠标专用 `div` 改为可聚焦按钮，支持 Enter/Space、`aria-expanded` 和动态分组名称；文件预览 E2E、UI 全量 `42/42`、构建和 Chrome CDP 现场切换复验通过，截图 `/tmp/mateclaw-cdp-field-group-keyboard.png`。
 
+### 2026-09-14 文件预览字段可见性按钮语义
+
+字段行显示/隐藏控件由点击专用 `span` 改为原生 `button type="button"`，补充按状态变化的“显示列/隐藏列” `aria-label`，并以按钮重置样式保持现有视觉。定向文件预览 E2E `1 passed (4.5s)`、UI 全量 `42/42`、构建、`DESIGN-PASS` 通过；当前模拟 fixture 无字段行，真实字段按钮的点击/截图验收列为后续联调项。
+
 ### 2026-09-14 多页面 Tab 可访问语义
 
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
