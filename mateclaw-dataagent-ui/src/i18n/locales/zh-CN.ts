@@ -929,6 +929,7 @@ export default {
     totalRows: '共 {count} 行',
     updateCategoryFail: '更新字段分类失败',
     refreshSuccess: '数据刷新成功',
+    syncDataFail: '数据刷新失败',
     rowNumber: '行数',
     showColumnSettings: '字段显示',
     hideColumn: '隐藏',

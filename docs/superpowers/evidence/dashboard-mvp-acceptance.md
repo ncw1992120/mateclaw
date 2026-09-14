@@ -864,3 +864,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复前的表单定向 E2E 曾因隐藏复选框无法稳定暴露 AX 名称而失败；同时一次热更新 CSS 多余括号造成 Vite 样式模块 HTTP `500`，该问题已定位并修正。
 - 修复后同一模拟 Compose 和 Chrome channel 完整 E2E 为 `25 passed (1.5m)`，数据源表单定向用例为 `1 passed (6.7s)`；Vite 样式模块 HTTP `200`、UI 单测 `12 files / 44 tests passed`、生产构建成功。
 - 该记录以修复后结果为当前权威基线，早期失败仅保留为历史诊断证据。
+
+### 2026-09-15 数据集刷新失败文案修复
+
+- 问题：数据集编辑器刷新数据失败时调用了 `datasetEdit.syncDataFail`，但中文和英文该键实际位于其他命名空间，页面直接显示原始键名。
+- 修复：在 `datasetEdit` 中补齐中英文 `syncDataFail`，不改变刷新、重试或错误状态逻辑。
+- Chrome CDP `9222` 现场对关联数据源不存在的真实失败路径点击“刷新数据预览”，修复后显示“数据刷新失败: Request failed with status code 500”，不再出现 `datasetEdit.syncDataFail`；截图 `/tmp/mateclaw-cdp-dataset-refresh-error-i18n-20260915.png`。
+- UI 单测 `12 files / 44 tests passed`，生产构建成功。

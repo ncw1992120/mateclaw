@@ -946,6 +946,7 @@ export default {
     totalRows: 'Total {count} rows',
     updateCategoryFail: 'Failed to update field category',
     refreshSuccess: 'Data refreshed successfully',
+    syncDataFail: 'Data refresh failed',
     rowNumber: 'Row #',
     showColumnSettings: 'Column Settings',
     hideColumn: 'Hide',
