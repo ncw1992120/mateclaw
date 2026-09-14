@@ -666,6 +666,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：增加 `aria-label="页面操作"`。
 - 回归：真实编辑入口用例 `仪表盘页面树更多操作按钮暴露可访问名称` `1 passed (4.4s)`；Chrome CDP `9222` 现场读取按钮 `aria-label=页面操作`，截图 `/tmp/mateclaw-cdp-page-actions-button.png`。
 
+### 2026-09-14 脚本数据集下拉框可访问名称
+
+- 问题：脚本结果数据集输入中的“结果绑定组件”和“选择已授权数据集”使用 Element Plus `el-select`，实际渲染的 `input[role=combobox]` 没有可访问名称，键盘/读屏用户无法区分两个下拉框。
+- 修复：在 `DatasetInputPanel.vue` 为两个选择器补充对应 `aria-label`，不改变数据绑定或交互行为。
+- 回归：系统 Chrome channel 用例 `从洞察产品入口创建仪表盘并绑定脚本数据集` 修复前因 combobox 名称缺失失败，修复后 `1 passed (4.8s)`；UI 全量 `10 files / 42 tests passed`、production build 和 `DESIGN-PASS` 通过。
+- Chrome CDP `9222` 现场读取两个可见 combobox：`选择要接收脚本结果的组件`、`选择已授权数据集`；截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。
+
 ### 2026-09-14 仪表盘多页面 Tab 可访问语义
 
 - 问题：预览页多页面导航只有视觉 active 样式，没有 `tablist/tab` 和选中状态，读屏无法识别当前页面。

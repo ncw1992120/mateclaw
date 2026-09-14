@@ -293,6 +293,8 @@ make dashboard-verify-local
 
 **2026-09-14 当前头部回归基线：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上重新执行 UI `10 files / 42 tests passed`、production build、`git diff --check` 和 `DESIGN-PASS`；Google Chrome CDP 现场确认编辑器页面树操作按钮的 `aria-label` 为“页面操作”，截图 `/tmp/mateclaw-cdp-current-final.png`。该记录更新当前基线，不改变真实 Aloudata、正式对象存储、跨工作区权限等后续 Gate 状态。
 
+**2026-09-14 脚本输入控件可访问性修复：** 修复脚本结果数据集输入两个 `el-select` 缺少可访问名称的问题；修复前定向 E2E 失败，修复后通过，Chrome CDP 现场确认“选择要接收脚本结果的组件”和“选择已授权数据集”两个 combobox 名称可读，截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。该修复仅收敛本地可访问性，不改变外部 Gate 状态。
+
 **2026-09-14 多页面 Tab 语义修复：** 预览页页面导航增加 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的系统 Chrome channel 回归与用户 Chrome CDP 验收通过。
 
 **2026-09-14 多页面 Tab 键盘交互：** 增加方向键及 Home/End 页面切换，切换后同步选中状态和焦点；临时双页面看板的 Chrome CDP `ArrowRight` 验收通过。

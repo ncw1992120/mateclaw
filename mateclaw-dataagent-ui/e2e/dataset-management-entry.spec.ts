@@ -283,6 +283,8 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
   await page.locator('.palette-item').filter({ hasText: '数据表格' }).dragTo(page.locator('.dashboard-canvas'))
   await expect(page.locator('.dataset-input-panel')).toContainText('当前目标组件：')
   await page.locator('.dataset-input-panel').getByRole('button', { name: '添加', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: '选择要接收脚本结果的组件' })).toBeVisible()
+  await expect(page.locator('.dataset-input-panel .dataset-input-row').last().getByRole('combobox', { name: '选择已授权数据集' })).toBeVisible()
   const datasetSelect = page.locator('.dataset-input-panel .dataset-input-row').last().locator('.el-select').first()
   await datasetSelect.click()
   await page.getByRole('option', { name: /E2E HTTP Orders Dataset/ }).click()

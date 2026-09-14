@@ -11,6 +11,7 @@
             :model-value="targetComponentId"
             clearable
             filterable
+            aria-label="选择要接收脚本结果的组件"
             placeholder="选择要接收脚本结果的组件"
             @change="(value: string) => emit('update:target-component-id', value || '')"
           >
@@ -37,6 +38,7 @@
         :model-value="input.datasetId"
         filterable
         clearable
+        aria-label="选择已授权数据集"
         placeholder="选择已授权数据集"
         class="full-width"
         @change="(value: string) => changeDataset(index, value)"
