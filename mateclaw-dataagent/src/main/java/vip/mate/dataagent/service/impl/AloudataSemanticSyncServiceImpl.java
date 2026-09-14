@@ -113,6 +113,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             int metricDimensionCount = countMetricDimensions(datasourceId);
             embedAndIndexAll(datasourceId);
 
+            // 7. 按版本清理 ES 旧文档（源端已删除/改名的数据及历史残留文档）
+            esService.deleteBySyncVersionBefore(datasourceId, newVersion);
+
             long elapsed = System.currentTimeMillis() - startTime;
             log.info("[Aloudata同步] 完成，指标: {}, 维度: {}, 关联: {}, 耗时: {}ms",
                     metricCount, dimensionCount, metricDimensionCount, elapsed);
