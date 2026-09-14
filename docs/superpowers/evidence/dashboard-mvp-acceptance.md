@@ -963,3 +963,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：计划总览与有结果步骤增加按钮语义、焦点、`aria-expanded` 及 Enter/Space；委派节点有内容时增加同等语义和键盘操作，无内容节点保持非焦点状态。
 - 回归：新增 `PlanStepsPanel.spec.ts`、`DelegationNodeView.spec.ts`，修复前分别失败，修复后通过；UI 全量 `15 files / 48 tests passed`，生产构建通过。
 - 用户 Chrome CDP `9222` 现场进入问数主入口，当前可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-smart-ask-final-20260915.png`。当前没有运行中的执行计划/委派节点，组件展开行为由单测直接验证。
+
+### 2026-09-15 报告列表卡片键盘语义修复
+
+- 问题：报告列表卡片由可点击 `div` 承载，键盘无法触发查看；卡片内操作按钮也可能把键盘事件冒泡到卡片。
+- 修复：报告卡片增加 `role=button`、`tabindex=0`、动态 `aria-label` 和 Enter/Space 操作；操作区增加 `keydown.stop`。
+- 回归：新增 `ReportListView.spec.ts`，验证报告卡片语义；UI 全量 `16 files / 49 tests passed`，生产构建通过。
+- 用户 Chrome CDP `9222` 现场进入报告入口，空态正常渲染，当前可见交互控件无名数为 `0`；截图 `/tmp/mateclaw-cdp-report-final-20260915.png`。本地没有已发布报告，卡片 Enter/Space 行为由组件测试覆盖。

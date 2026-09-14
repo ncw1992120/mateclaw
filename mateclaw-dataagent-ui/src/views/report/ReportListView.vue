@@ -39,7 +39,12 @@
           v-for="report in filteredReports"
           :key="report.id"
           class="report-card"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看报告：${report.name}`"
           @click="handleViewReport(report)"
+          @keydown.enter="handleViewReport(report)"
+          @keydown.space.prevent="handleViewReport(report)"
         >
           <div class="card-header">
             <span class="card-name">{{ report.name }}</span>
@@ -52,7 +57,7 @@
             <span class="card-owner">{{ report.ownerName || '--' }}</span>
             <span class="card-time">{{ formatTime(report.updateTime) }}</span>
           </div>
-          <div class="card-actions" @click.stop>
+          <div class="card-actions" @click.stop @keydown.stop>
             <el-button
               size="small"
               :icon="View"
