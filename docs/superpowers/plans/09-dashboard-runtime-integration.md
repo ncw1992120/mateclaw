@@ -284,3 +284,7 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 - `DatasetInputPanel.vue` 新增“结果绑定组件”选择器，候选项来自当前页面的 KPI、图表和表格组件；执行结果不再隐式依赖属性面板当前选中项。
 - 编辑器加载已有 `scriptBindings` 时回显首个绑定目标；用户确认“应用到组件”后写入既有 `scriptBindings`，保持旧 Schema 兼容。
 - CUA 编辑器 AX 树已看到目标选择器和占位提示；当前工作区没有可选数据组件，因此仅验证入口可见性，具体选项选择待注入模拟组件后补验。
+
+## 2026-09-14 维度类目数据一致性修复
+
+修复 Aloudata 维度同步 upsert 未保存类目字段、类目统计单列映射丢失 ID 的问题。重建服务后 Chrome CDP 确认维度类目“时间与区域，2 个维度”及“日期/区域”字段可见；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。

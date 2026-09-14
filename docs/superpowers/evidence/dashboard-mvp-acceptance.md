@@ -782,3 +782,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：系统 Chrome channel 临时双页面看板用例 `仪表盘预览多页面 Tab 暴露选中状态` `1 passed (3.7s)`，失败时自动清理临时看板。
 - Chrome CDP `9222` 实际创建并打开双页面看板，读取 `tablists=1`、`tabs=2`，首页 `aria-selected=true/tabindex=0`、明细页 `false/-1`；截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。临时看板已删除。
 - 追加键盘验收：在首页 Tab 聚焦后按 `ArrowRight`，明细页实际变为 `aria-selected=true`、`tabindex=0` 且获得焦点；截图 `/tmp/mateclaw-cdp-multipage-tabs-arrow.png`。临时看板已删除。
+
+### 2026-09-14 维度类目持久化与统计修复
+
+- 问题：维度同步结果带有 `dimCategoryId=time`，但历史 upsert 未写入类目字段，且单列实体映射可能丢失类目 ID，导致类目树显示 0 个维度。
+- 修复：MySQL/PostgreSQL upsert 增加维度编码、类目 ID/名称和显示状态；类目统计改为查询完整维度实体。
+- 验证：重建 DataAgent 后 Chrome CDP `9222` 同步元数据，维度树显示“时间与区域，2 个维度”，页面可见“日期”“区域”；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。

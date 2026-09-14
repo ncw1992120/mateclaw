@@ -409,10 +409,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                             e -> StringUtils.hasText(e.getMetricCategoryId()) ? e.getMetricCategoryId() : "uncategorized",
                             Collectors.counting()));
         } else {
+            // 不使用只选单列的实体映射：部分 MyBatis 配置下单列结果无法回填
+            // dimCategoryId，导致类目统计显示 0，但分页列表实际存在数据。
             countMap = dimensionMapper.selectList(
                             new LambdaQueryWrapper<AloudataDimensionEntity>()
-                                    .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
-                                    .select(AloudataDimensionEntity::getDimCategoryId))
+                                    .eq(AloudataDimensionEntity::getDatasourceId, datasourceId))
                     .stream()
                     .filter(Objects::nonNull)
                     .collect(Collectors.groupingBy(

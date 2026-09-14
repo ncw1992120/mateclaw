@@ -250,6 +250,10 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 预览页顶级/子页面导航新增 `tablist/tab`、`aria-selected` 和 roving `tabindex`；临时双页面看板的真实 Chrome channel 回归及 CDP 现场检查通过，截图 `/tmp/mateclaw-cdp-multipage-tabs.png`。
 
 补充实现方向键（左右/上下、Home/End）切换页面并将焦点移动到新 Tab；Chrome CDP `ArrowRight` 现场验收通过，截图 `/tmp/mateclaw-cdp-multipage-tabs-arrow.png`。
+
+### 2026-09-14 维度类目持久化与统计修复
+
+维度同步完整保存类目 ID/名称、编码和显示状态，类目统计使用完整实体查询。Chrome CDP 实测维度树显示“时间与区域，2 个维度”及“日期/区域”字段；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。
 ### FE-CLOSE-09 可访问性对比度（2026-09-14）
 
 - [x] 数据集列表辅助文字与状态标签改用主题语义令牌，不再使用固定颜色。
