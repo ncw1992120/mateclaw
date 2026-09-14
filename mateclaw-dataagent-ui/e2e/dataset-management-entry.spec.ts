@@ -149,3 +149,49 @@ test('数据集空态随四种主题使用主题令牌', async ({ page }) => {
     expect(snapshot.title.color, snapshot.theme).toBe(snapshot.expectedText)
   }
 })
+
+test('数据集预览工具栏和结果空态随主题使用主题令牌', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/datasets')
+  const datasetCard = page.locator('.dataset-card').filter({ hasText: 'E2E File Orders Dataset' })
+  await datasetCard.getByRole('button', { name: '编辑 / 预览' }).click()
+  await expect(page.locator('.toolbar')).toBeVisible()
+  const snapshots = await page.evaluate(() => {
+    const themes = ['light', 'warm', 'eye-care', 'dark']
+    const read = (selector: string) => {
+      const element = document.querySelector(selector)
+      if (!element) throw new Error(`missing ${selector}`)
+      const style = getComputedStyle(element)
+      return { background: style.backgroundColor, color: style.color }
+    }
+    const normalize = (value: string, property: 'color' | 'backgroundColor') => {
+      const probe = document.createElement('span')
+      probe.style[property] = value
+      document.body.appendChild(probe)
+      const normalized = getComputedStyle(probe)[property]
+      probe.remove()
+      return normalized
+    }
+    return themes.map(theme => {
+      document.documentElement.dataset.theme = theme
+      const root = getComputedStyle(document.documentElement)
+      return {
+        theme,
+        toolbar: read('.toolbar'),
+        preview: read('.data-preview'),
+        empty: read('.preview-empty'),
+        expectedSurface: normalize(root.getPropertyValue('--theme-surface').trim(), 'backgroundColor'),
+        expectedSecondary: normalize(root.getPropertyValue('--theme-text-secondary').trim(), 'color'),
+      }
+    })
+  })
+  for (const snapshot of snapshots) {
+    expect(snapshot.toolbar.background, snapshot.theme).toBe(snapshot.expectedSurface)
+    expect(snapshot.preview.background, snapshot.theme).toBe(snapshot.expectedSurface)
+    expect(snapshot.empty.color, snapshot.theme).toBe(snapshot.expectedSecondary)
+  }
+})

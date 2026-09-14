@@ -515,6 +515,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 回归：新增 `数据集空态随四种主题使用主题令牌`，修复前按真实 Chrome channel 复现失败，修复后 `1 passed`；覆盖 `light`、`warm`、`eye-care`、`dark` 的计算样式与主题变量一致性。
 - CDP 截图：`/tmp/mateclaw-cdp-dataset-empty-light.png`、`/tmp/mateclaw-cdp-dataset-empty-warm.png`、`/tmp/mateclaw-cdp-dataset-empty-eye-care.png`、`/tmp/mateclaw-cdp-dataset-empty-dark.png`；已查看 dark 主题现场，空态背景和文字清晰可读。表单/表格其他固定颜色仍不宣称已全部收敛。
 
+## 2026-09-14 数据集预览主题令牌补充
+
+- 根因：预览模式 `.toolbar`、`.toolbar-btn`、`.data-preview` 和 `.preview-empty` 使用固定白色/浅灰色，切换 dark/warm/eye-care 会出现非主题背景或低对比度文字。
+- 修复：预览工具栏和按钮改用 `--theme-surface`/`--theme-border`/`--theme-text-secondary`/`--main-orange`，结果容器使用 `--theme-surface`/`--theme-border`，加载/空态使用 `--theme-text-secondary`。
+- 回归：新增 `数据集预览工具栏和结果空态随主题使用主题令牌`，修复前在 light 主题即因固定 `#c9cdd4` 失败，修复后四主题全部通过。
+- 当前提交的本地模拟完整 E2E 共 `14 passed`；新增主题场景未改变双源、ObjectRef、ECharts、错误/兼容和正式创建绑定结果。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。

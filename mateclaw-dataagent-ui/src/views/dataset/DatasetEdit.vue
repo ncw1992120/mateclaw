@@ -1698,8 +1698,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   align-items: center;
   justify-content: space-between;
   padding: 10px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 12px;
   overflow-x: auto;
@@ -1719,11 +1719,11 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   gap: 4px;
   height: 30px;
   padding: 0 10px;
-  background: #fff;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
   border-radius: 5px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
@@ -1731,8 +1731,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .toolbar-btn:disabled {
@@ -1922,9 +1922,9 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .data-preview {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1936,7 +1936,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: #c9cdd4;
+  color: var(--theme-text-secondary);
   font-size: 13px;
 }
 
