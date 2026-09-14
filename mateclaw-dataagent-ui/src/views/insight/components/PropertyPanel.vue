@@ -56,6 +56,7 @@
           <label class="form-label">{{ t('insight.property.multiKpi') }}</label>
           <el-switch
             v-model="localMultiKpi"
+            :aria-label="t('insight.property.multiKpi')"
             
             @change="emitChange"
           />
@@ -67,6 +68,7 @@
           <label class="form-label">多 Tab 模式</label>
           <el-switch
             v-model="tabModeEnabled"
+            aria-label="多 Tab 模式"
             
             @change="handleTabModeToggle"
           />
@@ -507,6 +509,7 @@
           <label class="form-label">{{ t('insight.property.aiAnalysisAutoGenerate') }}</label>
           <el-switch
             v-model="localAiAnalysisAutoGenerate"
+            :aria-label="t('insight.property.aiAnalysisAutoGenerate')"
             
             @change="emitAiAnalysisConfigChange"
           />
@@ -541,6 +544,7 @@
           <label class="form-label">{{ t('insight.property.enableTimeFilter') }}</label>
           <el-switch
             v-model="localEnableTimeFilter"
+            :aria-label="t('insight.property.enableTimeFilter')"
             
             @change="emitChange"
           />

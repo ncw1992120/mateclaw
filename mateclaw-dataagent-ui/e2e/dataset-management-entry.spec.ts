@@ -288,6 +288,8 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
   await expect(page.getByRole('combobox', { name: '数据源' })).toBeVisible()
   await expect(page.getByRole('spinbutton', { name: '数据行数' })).toBeVisible()
   await expect(page.getByRole('combobox', { name: '绑定筛选器' })).toBeVisible()
+  await expect(page.getByRole('switch', { name: '多 Tab 模式' })).toBeAttached()
+  await expect(page.getByRole('switch', { name: '组件级时间筛选' })).toBeAttached()
   await page.locator('.dataset-input-panel').getByRole('button', { name: '添加', exact: true }).click()
   await expect(page.getByRole('combobox', { name: '选择要接收脚本结果的组件' })).toBeVisible()
   await expect(page.locator('.dataset-input-panel .dataset-input-row').last().getByRole('combobox', { name: '选择已授权数据集' })).toBeVisible()

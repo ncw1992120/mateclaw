@@ -699,6 +699,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：定向真实 Chrome channel 用例在非法别名断言 `aria-describedby` 和错误节点可见性后 `1 passed (5.7s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
 - Chrome CDP `9222` 现场读取 `aria-describedby=dataset-alias-error-0`、`role=alert`、错误可见且无名控件数 `0`；截图 `/tmp/mateclaw-cdp-alias-error-a11y.png`。
 
+### 2026-09-14 属性面板开关可访问名称
+
+- 问题：数据表格属性面板的“多 Tab 模式”和“组件级时间筛选”可视开关由 Element Plus 绘制，但原生 `input[role=switch]` 没有名称。
+- 修复：为多 Tab、多指标、自动生成和组件级时间筛选开关补充对应 `aria-label`；不改变开关状态或事件逻辑。
+- 回归：真实 Chrome channel E2E 断言两个数据表格开关语义控件挂载并具备名称，修复后 `1 passed (4.9s)`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 通过。
+- Chrome CDP `9222` 现场读取 `多 Tab 模式`、`组件级时间筛选` 及其 `aria-checked=false`，截图 `/tmp/mateclaw-cdp-property-switches-a11y.png`。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。
