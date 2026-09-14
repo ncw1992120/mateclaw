@@ -1558,8 +1558,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: #f7f8fa;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1567,8 +1567,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .file-action-btn:hover {
-  border-color: #165dff;
-  background: #e8f3ff;
+  border-color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .action-icon {
@@ -1587,8 +1587,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
-  color: #4e5969;
-  background: #f7f8fa;
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-hover);
   border-radius: 4px;
   margin-bottom: 6px;
   cursor: pointer;
@@ -1597,13 +1597,13 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .table-item:hover {
-  background: #e8f3ff;
-  color: #165dff;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
 }
 
 .table-item.selected {
-  background: #e8f3ff;
-  border-color: #165dff;
+  background: var(--theme-surface-hover);
+  border-color: var(--main-orange);
 }
 
 .table-check {
@@ -1613,7 +1613,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 16px;
   height: 16px;
   border-radius: 3px;
-  border: 1.5px solid #c9cdd4;
+  border: 1.5px solid var(--theme-border-strong);
   font-size: 10px;
   color: #fff;
   flex-shrink: 0;
@@ -1621,8 +1621,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .table-check.checked {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
 }
 
 .table-name-text {
@@ -1633,14 +1633,14 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .empty-hint {
   font-size: 12px;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   text-align: center;
   padding: 12px 0;
 }
 
 .table-loading-hint {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   text-align: center;
   padding: 12px 0;
 }
@@ -1750,7 +1750,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1779,10 +1779,10 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 100%;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   font-size: 12px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   box-sizing: border-box;
@@ -1790,11 +1790,11 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .field-search-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .field-search-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .field-groups {
@@ -1820,12 +1820,12 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .group-header:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .group-toggle {
   font-size: 10px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   width: 12px;
   text-align: center;
   flex-shrink: 0;
@@ -1834,14 +1834,14 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .group-name {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   flex: 1;
 }
 
 .group-count {
   font-size: 11px;
-  color: #86909c;
-  background: #f2f3f5;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   padding: 1px 6px;
   border-radius: 10px;
   flex-shrink: 0;
@@ -1859,14 +1859,14 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   justify-content: space-between;
   padding: 6px 10px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .field-item:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .field-name {
@@ -1877,8 +1877,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .field-type-tag {
   font-size: 10px;
-  color: #86909c;
-  background: #f2f3f5;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   padding: 1px 6px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -1892,7 +1892,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
@@ -1900,19 +1900,19 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .field-eye-btn:hover {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
 .field-eye-btn.hidden {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   opacity: 0.35;
 }
 
 .field-eye-btn.hidden:hover {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
@@ -1954,7 +1954,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .data-table thead tr {
-  background: #fafafa;
+  background: var(--theme-surface);
 }
 
 .data-th {
@@ -1962,12 +1962,12 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: #4e5969;
-  border-bottom: 2px solid #e5e6eb;
+  color: var(--theme-text-secondary);
+  border-bottom: 2px solid var(--theme-border);
   white-space: nowrap;
   position: sticky;
   top: 0;
-  background: #fafafa;
+  background: var(--theme-surface);
   z-index: 1;
   min-width: 80px;
 }
@@ -1989,7 +1989,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .sortable-th:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .th-content {
@@ -2016,18 +2016,18 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .th-category.dimension {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .th-category.measure {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .sort-indicator {
   font-size: 12px;
-  color: #165dff;
+  color: var(--main-orange);
   flex-shrink: 0;
 }
 
@@ -2039,7 +2039,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   width: 16px;
   height: 16px;
   margin-left: 2px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   border-radius: 3px;
   transition: all 0.15s;
@@ -2047,19 +2047,19 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .th-eye-btn:hover {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
 .th-eye-btn.hidden {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   opacity: 0.4;
 }
 
 .th-eye-btn.hidden:hover {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
@@ -2071,8 +2071,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .data-td {
   padding: 10px 16px;
   font-size: 12.5px;
-  color: #1d2129;
-  border-bottom: 1px solid #f2f3f5;
+  color: var(--theme-text);
+  border-bottom: 1px solid var(--theme-border);
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2088,7 +2088,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 .row-num-td {
   width: 50px;
   text-align: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 12px;
 }
 
@@ -2097,7 +2097,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .editable-td:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .cell-editing {
@@ -2109,32 +2109,32 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   height: 100%;
   min-height: 36px;
   padding: 8px 14px;
-  border: 2px solid #165dff;
+  border: 2px solid var(--main-orange);
   border-radius: 0;
   font-size: 12.5px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
-  background: #fff;
+  background: var(--theme-surface);
   box-sizing: border-box;
   font-family: inherit;
 }
 
 .data-row:hover {
-  background: #fafbfc;
+  background: var(--theme-surface-hover);
 }
 
 .data-row.selected {
-  background: #f0f7ff;
+  background: var(--theme-surface-hover);
 }
 
 .data-row.editing {
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .no-data-row .no-data-cell {
   text-align: center;
   padding: 40px 0;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 13px;
 }
 
@@ -2143,8 +2143,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-top: 1px solid #f2f3f5;
-  background: #fafafa;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface);
   flex-shrink: 0;
 }
 
@@ -2162,7 +2162,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .tab-item {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   padding: 4px 0;
   transition: color 0.15s;
@@ -2170,7 +2170,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .page-info-text {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .page-arrow {
@@ -2179,10 +2179,10 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
-  background: #fff;
-  color: #4e5969;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
@@ -2190,8 +2190,8 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .page-arrow:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .page-arrow:disabled {
@@ -2205,7 +2205,7 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 
 .page-num {
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   min-width: 60px;
   text-align: center;
 }
@@ -2225,6 +2225,6 @@ function handleMore(): void { ElMessage.info('更多操作将在后续版本开�
 }
 
 .col-resize-handle:hover {
-  border-right-color: #165dff;
+  border-right-color: var(--main-orange);
 }
 </style>

@@ -522,6 +522,13 @@ HTTP/API 模拟契约补强（2026-09-13）：本地 `check.sh` 同时请求 Wir
 - 回归：新增 `数据集预览工具栏和结果空态随主题使用主题令牌`，修复前在 light 主题即因固定 `#c9cdd4` 失败，修复后四主题全部通过。
 - 当前提交的本地模拟完整 E2E 共 `14 passed`；新增主题场景未改变双源、ObjectRef、ECharts、错误/兼容和正式创建绑定结果。
 
+## 2026-09-14 数据集表格主题令牌收敛
+
+- 根因：表格列表、字段大纲、表头、单元格、分页和编辑态仍大量使用固定蓝/灰/白色，导致 warm、eye-care、dark 主题出现不一致。
+- 修复：将已覆盖的表格/字段/分页/编辑态颜色统一映射到 `--theme-surface`、`--theme-surface-hover`、`--theme-border`、`--theme-text`、`--theme-text-secondary`、`--theme-text-muted` 和 `--main-orange`；保留按钮文字在主色背景上的可读性。
+- 验证：四主题预览 E2E 修复前失败（固定 `#c9cdd4`），修复后通过；UI 单测 `37 passed`，生产构建成功，完整本地模拟 E2E `14 passed`。
+- 本轮未宣称所有页面颜色已收敛；数据集表格之外的其他历史页面仍需专项审计。
+
 - 连接用户 Chrome `http://127.0.0.1:9222`，打开 `http://127.0.0.1:5175/datasets/new`，使用本地 JWT 和工作区 `1`。
 - 选择 `E2E Aloudata Simulation` 后，页面来源类型自动显示“Aloudata 指标视图”；通过 DOM/AX 对照确认 `JDBC_TABLE`、`JDBC_SQL` 的 `disabled=true`，指标视图可选。
 - 页面截图：`/tmp/mateclaw-cdp-aloudata-compatibility.png`。该证据验证来源类型约束的当前渲染；CUA 请求头策略错误仍是独立工具通道问题。
