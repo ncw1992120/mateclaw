@@ -71,7 +71,7 @@
               <option value="JDBC_TABLE" :disabled="!isJdbcDatasource">JDBC 表</option>
               <option value="JDBC_SQL" :disabled="!isJdbcDatasource">JDBC SQL</option>
               <option value="ALOUDATA_ANALYSIS_VIEW" :disabled="!isAloudataDatasource">Aloudata 指标视图</option>
-              <option value="HTTP_API">HTTP/API</option>
+              <option value="HTTP_API" :disabled="!!selectedDatasource && !isApiDatasource">HTTP/API</option>
               <option value="FILE">文件</option>
             </select>
             <div v-if="sourceTypeCompatibilityHint" class="definition-hint compatibility-hint">{{ sourceTypeCompatibilityHint }}</div>
@@ -482,11 +482,18 @@ const selectedDatasourceType = computed(() => {
   return String(sourceType || '').trim().toLowerCase()
 })
 const isAloudataDatasource = computed(() => selectedDatasourceType.value === 'aloudata')
-const isJdbcDatasource = computed(() => !isAloudataDatasource.value)
+const isApiDatasource = computed(() => !selectedDatasourceType.value || ['api', 'http', 'http_api'].includes(selectedDatasourceType.value))
+const isJdbcDatasource = computed(() => {
+  if (!selectedDatasource.value) return true
+  if (isAloudataDatasource.value || (isApiDatasource.value && selectedDatasourceType.value)) return false
+  // 兼容历史数据源响应：未返回 sourceType 时按 JDBC 处理。
+  return !selectedDatasourceType.value || ['jdbc', 'mysql', 'postgresql', 'sqlserver'].includes(selectedDatasourceType.value)
+})
 const sourceTypeCompatibilityHint = computed(() => {
   if (!selectedDatasource.value) return ''
   if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) return '当前数据源不是 Aloudata，不能选择指标视图。'
   if ((selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) return '当前数据源不是 JDBC，不能选择表或编写 SQL。'
+  if (selectedSourceType.value === 'HTTP_API' && !isApiDatasource.value) return '当前数据源不是 HTTP/API，不能选择接口定义。'
   return ''
 })
 
@@ -697,8 +704,15 @@ onMounted(async () => {
 })
 
 watch(selectedDatasource, async (newDsId) => {
-  if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) selectedSourceType.value = 'JDBC_TABLE'
-  if (newDsId && (selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) selectedSourceType.value = 'ALOUDATA_ANALYSIS_VIEW'
+  if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) {
+    selectedSourceType.value = isApiDatasource.value ? 'HTTP_API' : isJdbcDatasource.value ? 'JDBC_TABLE' : 'FILE'
+  }
+  if (newDsId && (selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) {
+    selectedSourceType.value = isAloudataDatasource.value ? 'ALOUDATA_ANALYSIS_VIEW' : isApiDatasource.value ? 'HTTP_API' : 'FILE'
+  }
+  if (newDsId && selectedSourceType.value === 'HTTP_API' && !isApiDatasource.value) {
+    selectedSourceType.value = isAloudataDatasource.value ? 'ALOUDATA_ANALYSIS_VIEW' : isJdbcDatasource.value ? 'JDBC_TABLE' : 'FILE'
+  }
   if (newDsId && selectedSourceType.value === 'JDBC_TABLE') {
     await loadTables(newDsId)
   } else if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') {

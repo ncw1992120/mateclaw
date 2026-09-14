@@ -127,6 +127,17 @@ describe('DatasetEdit source configuration', () => {
     ])
   })
 
+  it('does not expose JDBC sources for an HTTP API datasource', async () => {
+    const wrapper = await mountEditor([{ id: 'api-1', name: 'Orders API', sourceType: 'api' }])
+    await wrapper.find('#dataset-datasource').setValue('api-1')
+    await flushPromises()
+
+    expect(wrapper.find('#dataset-source-type').element.value).toBe('HTTP_API')
+    expect(wrapper.find('#dataset-source-type option[value="JDBC_TABLE"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('#dataset-source-type option[value="JDBC_SQL"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('#dataset-source-type option[value="HTTP_API"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('associates configuration labels with native controls', async () => {
     const wrapper = await mountEditor()
     expect(wrapper.find('label[for="dataset-name"]').exists()).toBe(true)

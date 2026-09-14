@@ -329,3 +329,4 @@ make dashboard-verify-local
 - 不在本次切换中新增 JWT、角色矩阵、workspace 授权或跨租户权限模型；
 - 身份与权限专项另行立项，当前仅保持已有访问上下文和兼容回归；
 - 不把本地 WireMock 的 Aloudata 响应当作正式环境验收证据。
+**2026-09-14 来源类型边界补充：** 修复 API 数据源被误判为 JDBC 的问题；API 数据源自动选择 `HTTP_API`，JDBC 表/SQL 选项禁用。Chrome CDP 实测 `E2E HTTP Orders` 的 `sourceType=api` 选项状态正确，截图 `/tmp/mateclaw-cdp-api-source-boundary-2bbfddec.png`。

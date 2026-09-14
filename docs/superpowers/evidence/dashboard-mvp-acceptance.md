@@ -604,3 +604,6 @@ JDBC 表列表项新增 `role=checkbox`、`tabindex=0`、`aria-checked` 和可�
 ### 2026-09-14 表项焦点视觉复验
 
 Chrome CDP 在模拟 JDBC 数据源返回 102 张表后聚焦首个表项，实际读取 `role=checkbox`、`aria-checked=false`、`outline: rgb(65, 118, 230) solid 2px`、`outline-offset: 2px`；暗色主题截图：`/tmp/mateclaw-cdp-table-focus-dark-5d562f69.png`。
+### 2026-09-14 来源类型边界复验
+
+Chrome CDP 读取模拟 `E2E HTTP Orders` 数据源的真实响应 `sourceType=api`：来源类型自动为 `HTTP_API`，`JDBC_TABLE`、`JDBC_SQL`、`ALOUDATA_ANALYSIS_VIEW` 均禁用，`HTTP_API` 可用；截图：`/tmp/mateclaw-cdp-api-source-boundary-2bbfddec.png`。对应回归测试验证兼容旧数据源响应。
