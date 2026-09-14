@@ -646,3 +646,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：仪表盘预览顶部草稿/已发布状态圆点仍使用固定颜色，与列表状态标签的主题令牌不一致。
 - 修复：预览页圆点改用 `--db-status-success-fg` / `--db-status-warning-fg`。
 - 回归：新增真实预览路径用例 `仪表盘预览状态圆点跟随主题状态令牌`，系统 Chrome channel `1 passed (3.9s)`；Chrome CDP `9222` 暗色现场读取草稿圆点颜色 `rgb(251, 191, 36)`。截图：`/tmp/mateclaw-cdp-preview-status-dot-dark-fixed.png`。
+
+### 2026-09-14 洞察列表筛选与视图切换可访问状态
+
+- 问题：状态筛选和网格/列表切换按钮只有视觉 `active/on` 样式，未向读屏和自动化暴露当前状态。
+- 修复：为三个状态筛选按钮和两个视图切换按钮增加动态 `aria-pressed`。
+- 回归：新增 `洞察列表筛选和视图切换暴露当前状态`，真实点击“草稿”和“列表视图”后断言状态切换，系统 Chrome channel `1 passed (4.7s)`。
+- Chrome CDP `9222` 现场确认点击前“全部9”为 `true`，点击后“草稿9”为 `true`、其余筛选为 `false`，列表视图为 `true`；暗色截图：`/tmp/mateclaw-cdp-insight-filter-aria-dark.png`。

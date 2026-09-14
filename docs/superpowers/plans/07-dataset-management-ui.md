@@ -194,6 +194,10 @@ npm --prefix mateclaw-dataagent-ui run build
 洞察列表的成功/草稿状态标签已从固定浅色值改为主题语义令牌；暗色主题使用不透明深色状态底色，修复标签与页面主题不一致及对比度不足。新增四主题成功/草稿标签回归用例，系统 Chrome channel `1 passed`；Google Chrome CDP `9222` 实测暗色标签对比度 `8.24:1`，截图 `/tmp/mateclaw-cdp-insight-list-status-dark-fixed.png`。
 
 同一回归还覆盖卡片“撤回/删除”操作按钮：移除固定橙/红颜色，改为主题操作令牌；原删除按钮在浅色卡片上的对比度 `3.76:1`，修复后四主题均达到 WCAG AA。
+
+### 2026-09-14 洞察列表筛选与视图切换状态语义
+
+状态筛选和网格/列表切换按钮新增动态 `aria-pressed`，真实点击切换回归通过；Chrome CDP 现场确认“草稿”和“列表视图”状态正确暴露，截图 `/tmp/mateclaw-cdp-insight-filter-aria-dark.png`。
 ### FE-CLOSE-09 可访问性对比度（2026-09-14）
 
 - [x] 数据集列表辅助文字与状态标签改用主题语义令牌，不再使用固定颜色。

@@ -38,6 +38,7 @@
                 type="button"
                 class="filter-tab"
                 :class="{ active: statusFilter === 'all' }"
+                :aria-pressed="statusFilter === 'all'"
                 @click="statusFilter = 'all'"
               >
                 {{ t('insight.filterAll') }}<span class="tab-cnt">{{ statusCounts.all }}</span>
@@ -46,6 +47,7 @@
                 type="button"
                 class="filter-tab"
                 :class="{ active: statusFilter === 'published' }"
+                :aria-pressed="statusFilter === 'published'"
                 @click="statusFilter = 'published'"
               >
                 {{ t('insight.status.published') }}<span class="tab-cnt">{{ statusCounts.published }}</span>
@@ -54,6 +56,7 @@
                 type="button"
                 class="filter-tab"
                 :class="{ active: statusFilter === 'draft' }"
+                :aria-pressed="statusFilter === 'draft'"
                 @click="statusFilter = 'draft'"
               >
                 {{ t('insight.status.draft') }}<span class="tab-cnt">{{ statusCounts.draft }}</span>
@@ -68,6 +71,7 @@
                 type="button"
                 class="view-toggle-btn"
                 :class="{ on: viewMode === 'grid' }"
+                :aria-pressed="viewMode === 'grid'"
                 :title="t('insight.viewGrid')"
                 @click="viewMode = 'grid'"
               >
@@ -77,6 +81,7 @@
                 type="button"
                 class="view-toggle-btn"
                 :class="{ on: viewMode === 'list' }"
+                :aria-pressed="viewMode === 'list'"
                 :title="t('insight.viewList')"
                 @click="viewMode = 'list'"
               >
