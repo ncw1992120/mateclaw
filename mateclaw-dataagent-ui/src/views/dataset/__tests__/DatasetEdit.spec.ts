@@ -87,6 +87,13 @@ describe('DatasetEdit source configuration', () => {
     ])
   })
 
+  it('associates configuration labels with native controls', async () => {
+    const wrapper = await mountEditor()
+    expect(wrapper.find('label[for="dataset-name"]').exists()).toBe(true)
+    expect(wrapper.find('#dataset-datasource').attributes('aria-label')).toBe('选择数据源')
+    expect(wrapper.find('#dataset-source-type').attributes('aria-label')).toBe('选择数据集来源类型')
+  })
+
   it('shows SQL only for JDBC_SQL and persists the SQL source definition', async () => {
     const wrapper = await mountEditor()
     const selects = wrapper.findAll('select')

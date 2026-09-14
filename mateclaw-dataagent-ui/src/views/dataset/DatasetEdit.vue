@@ -27,6 +27,7 @@
               type="text"
               :placeholder="t('datasetEdit.searchPlaceholder')"
               class="search-input"
+              aria-label="搜索数据集预览"
             />
           </div>
           <button class="icon-btn more-btn" aria-label="更多操作" title="更多操作" @click="handleMore">⋯</button>
@@ -43,8 +44,9 @@
 
           <!-- 数据集名称 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.datasetName') }}</label>
+            <label class="section-label" for="dataset-name">{{ t('datasetEdit.datasetName') }}</label>
             <input
+              id="dataset-name"
               v-model="datasetName"
               type="text"
               class="name-input"
@@ -54,8 +56,8 @@
 
           <!-- 数据源区域 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.datasource') }}</label>
-            <select v-model="selectedDatasource" class="datasource-select">
+            <label class="section-label" for="dataset-datasource">{{ t('datasetEdit.datasource') }}</label>
+            <select id="dataset-datasource" v-model="selectedDatasource" class="datasource-select" aria-label="选择数据源">
               <option value="">{{ t('datasetEdit.selectDatasource') }}</option>
               <option v-for="ds in datasourceList" :key="ds.id" :value="ds.id">
                 {{ ds.name }}
@@ -64,8 +66,8 @@
           </div>
 
           <div class="section-block">
-            <label class="section-label">来源类型</label>
-            <select v-model="selectedSourceType" class="datasource-select">
+            <label class="section-label" for="dataset-source-type">来源类型</label>
+            <select id="dataset-source-type" v-model="selectedSourceType" class="datasource-select" aria-label="选择数据集来源类型">
               <option value="JDBC_TABLE">JDBC 表</option>
               <option value="JDBC_SQL">JDBC SQL</option>
               <option value="ALOUDATA_ANALYSIS_VIEW">Aloudata 指标视图</option>
@@ -75,13 +77,13 @@
           </div>
 
           <div v-if="selectedSourceType === 'JDBC_SQL'" class="section-block">
-            <label class="section-label">SQL（仅 JDBC）</label>
-            <textarea v-model="sourceSql" class="sql-input" rows="6" placeholder="select ... from ..." />
+            <label class="section-label" for="dataset-source-sql">SQL（仅 JDBC）</label>
+            <textarea id="dataset-source-sql" v-model="sourceSql" class="sql-input" rows="6" placeholder="select ... from ..." aria-label="JDBC SQL" />
           </div>
 
           <div v-if="selectedSourceType === 'ALOUDATA_ANALYSIS_VIEW'" class="section-block">
-            <label class="section-label">指标视图（只读）</label>
-            <select v-model="analysisViewId" class="datasource-select">
+            <label class="section-label" for="dataset-analysis-view">指标视图（只读）</label>
+            <select id="dataset-analysis-view" v-model="analysisViewId" class="datasource-select" aria-label="选择指标视图">
               <option value="">选择已授权指标视图</option>
               <option v-for="view in analysisViews" :key="view.id || view.viewName" :value="view.viewName">
                 {{ view.displayName || view.viewName }}
@@ -91,8 +93,8 @@
           </div>
 
           <div v-if="selectedSourceType === 'HTTP_API'" class="section-block">
-            <label class="section-label">已登记 HTTP/API 定义</label>
-            <select v-model="apiDefinitionId" class="datasource-select">
+            <label class="section-label" for="dataset-api-definition">已登记 HTTP/API 定义</label>
+            <select id="dataset-api-definition" v-model="apiDefinitionId" class="datasource-select" aria-label="选择已登记 HTTP API 定义">
               <option value="">选择已登记的 API 定义</option>
               <option v-for="definition in registeredApiDefinitions" :key="definition.id" :value="definition.id">
                 {{ definition.name }}{{ definition.method || definition.path ? ` · ${definition.method || 'GET'} ${definition.path || ''}` : '' }}{{ definition.parameterCount ? ` · ${definition.parameterCount} 个参数` : '' }}
@@ -103,12 +105,12 @@
           </div>
 
           <div v-if="selectedSourceType === 'FILE'" class="section-block">
-            <label class="section-label">已上传文件对象</label>
-            <input v-model="fileObjectId" class="name-input" placeholder="上传后自动回填对象引用" readonly />
-            <input ref="fileInputRef" type="file" class="file-input" accept=".csv,.json,.parquet,.xlsx" @change="handleFileSelected" />
+            <label class="section-label" for="dataset-file-object">已上传文件对象</label>
+            <input id="dataset-file-object" v-model="fileObjectId" class="name-input" placeholder="上传后自动回填对象引用" readonly aria-label="文件对象引用" />
+            <input ref="fileInputRef" type="file" class="file-input" accept=".csv,.json,.parquet,.xlsx" aria-label="选择数据集文件" @change="handleFileSelected" />
             <button class="upload-file-btn" :disabled="fileUploading" @click="fileInputRef?.click()">{{ fileUploading ? '上传中…' : '选择并上传文件' }}</button>
             <div class="definition-hint">文件会上传到受控对象存储，页面只保存对象引用，不接受本地路径或 URL。</div>
-            <select v-model="fileFormat" class="datasource-select">
+            <select v-model="fileFormat" class="datasource-select" aria-label="选择文件格式">
               <option value="csv">CSV</option>
               <option value="json">JSON</option>
               <option value="parquet">Parquet</option>
@@ -118,8 +120,8 @@
 
           <!-- 表区域 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.table') }}</label>
-            <div v-if="tablesLoading" class="table-loading-hint">
+            <div class="section-label">{{ t('datasetEdit.table') }}</div>
+            <div id="dataset-table-list" v-if="tablesLoading" class="table-loading-hint">
               <span>{{ t('datasetEdit.loadingTables') }}</span>
             </div>
             <ul v-else-if="datasourceTables.length > 0" class="table-list">
@@ -197,7 +199,7 @@
             <input v-model="unlimitRows" type="checkbox" />
             <span>{{ t('datasetEdit.unlimitRows') }}</span>
           </label>
-          <button class="toolbar-btn refresh-btn" @click="handleRefreshData">
+          <button class="toolbar-btn refresh-btn" aria-label="刷新数据预览" title="刷新数据预览" @click="handleRefreshData">
             <span class="btn-icon">🔄</span>
           </button>
         </div>
@@ -215,6 +217,7 @@
                 type="text"
                 :placeholder="t('datasetEdit.searchFieldPlaceholder')"
                 class="field-search-input"
+                aria-label="搜索字段"
               />
             </div>
 
@@ -275,6 +278,7 @@
                         type="checkbox"
                         :checked="isAllRowsSelected"
                         :indeterminate="isPartialRowsSelected"
+                        aria-label="全选预览行"
                         @change="handleSelectAllRows"
                       />
                     </th>
@@ -331,6 +335,7 @@
                       <input
                         type="checkbox"
                         :checked="isRowSelected(row)"
+                        :aria-label="`选择第 ${(dataCurrentPage - 1) * dataPageSize + idx + 1} 行`"
                         @change="handleToggleRowSelect(row)"
                       />
                     </td>
@@ -348,6 +353,7 @@
                           ref="editInputRef"
                           v-model="editCellValue"
                           class="cell-edit-input"
+                          :aria-label="`编辑第 ${idx + 1} 行 ${col.title || col.name}`"
                           @blur="handleFinishEdit(row, col.name)"
                           @keydown.enter="handleFinishEdit(row, col.name)"
                           @keydown.escape="handleCancelEdit"
