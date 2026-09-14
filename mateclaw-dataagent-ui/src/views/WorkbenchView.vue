@@ -46,6 +46,7 @@
             <el-input
               ref="searchInputRef"
               v-model="conversationSearchKeyword"
+              :aria-label="t('conversation.searchPlaceholder')"
               :placeholder="t('conversation.searchPlaceholder')"
               clearable
               class="history-search-input"

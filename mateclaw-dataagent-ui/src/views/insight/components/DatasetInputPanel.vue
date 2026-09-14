@@ -49,6 +49,7 @@
         :model-value="input.inputName"
         class="alias-input"
         :aria-describedby="aliasStatus(input.inputName) === 'ok' ? undefined : `dataset-alias-error-${index}`"
+        :aria-label="`输入 ${index + 1} 脚本别名`"
         placeholder="脚本别名，如 orders"
         :status="aliasStatus(input.inputName) === 'ok' ? '' : 'error'"
         @update:model-value="(value: string) => changeAlias(index, value)"
@@ -151,6 +152,7 @@
         type="textarea"
         :rows="7"
         resize="vertical"
+        aria-label="Python 脚本草稿"
         placeholder="在此维护脚本草稿；平台不会自动生成或直接执行。"
         @update:model-value="(value: string) => emit('update:script', value)"
       />
@@ -185,11 +187,13 @@
       <div v-for="(parameter, index) in parameters" :key="`${parameter.name}-${index}`" class="parameter-row">
         <el-input
           :model-value="parameter.name"
+          :aria-label="`脚本参数 ${index + 1} 名称`"
           placeholder="参数名"
           @update:model-value="(value: string) => updateParameter(index, { name: value })"
         />
         <el-select
           :model-value="parameter.type"
+          :aria-label="`脚本参数 ${index + 1} 类型`"
           placeholder="类型"
           @update:model-value="(value: DashboardScriptParameter['type']) => updateParameter(index, { type: value })"
         >
@@ -197,6 +201,7 @@
         </el-select>
         <el-select
           :model-value="parameter.scope"
+          :aria-label="`脚本参数 ${index + 1} 作用范围`"
           placeholder="作用范围"
           @update:model-value="(value: DashboardScriptParameter['scope']) => updateParameter(index, { scope: value })"
         >

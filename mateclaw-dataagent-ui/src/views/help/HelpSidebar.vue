@@ -33,6 +33,7 @@
     <div class="sidebar-search">
       <el-input
         v-model="searchKeyword"
+        :aria-label="t('helpCenter.searchPlaceholder')"
         :placeholder="t('helpCenter.searchPlaceholder')"
         size="small"
         clearable

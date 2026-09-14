@@ -5,6 +5,7 @@
       <h2 class="list-title mc-toolbar-title">{{ t('insight.reportList') }}</h2>
       <el-input
         v-model="searchKeyword"
+        aria-label="搜索报告"
         :placeholder="t('insight.reportSearchPlaceholder')"
         :prefix-icon="Search"
         clearable

@@ -610,6 +610,7 @@
             ref="chatInputRef"
             v-model="inputMessage"
             class="chat-input"
+            aria-label="输入消息"
             :placeholder="chatStore.isStreaming ? t('chat.generating') : t('chat.placeholderSimple')"
             :disabled="chatStore.isStreaming"
             rows="2"
@@ -742,6 +743,7 @@
                   <el-input
                     v-model="modelSearchQuery"
                     size="small"
+                    aria-label="搜索模型"
                     :placeholder="t('modelConfig.searchModel')"
                     clearable
                     :prefix-icon="Search"
