@@ -292,3 +292,7 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 ## 2026-09-14 E2E UI 地址复验
 
 独立 E2E Compose 的 Playwright 必须显式设置 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`；未设置时会默认访问本地开发端口 `5174`，导致 seed 仪表盘卡片不存在。修正环境变量后，完整矩阵 `22 passed (1.5m)`，双源文件定向用例 `4 passed (28.7s)`，严格快照和 5 行/`120.5` 断言均通过。
+
+### 当前权威基线（2026-09-14）
+
+本节及统一验收记录中的最新记录优先于本文件前面的历史复现段落：双源 `1158 pixels (ratio 0.01)` 快照差异已关闭；当前本地模拟 Chrome channel 完整矩阵为 `22 passed`，双源定向为 `4 passed`。UI 单测基线为 `12 files / 44 tests passed`，DataAgent surefire 汇总为 `158 tests / 0 failures / 0 errors / 0 skipped`。仍未关闭的只有真实 Aloudata 结果授权（`SM_02_0038`）、正式外部存储/API、全站跨浏览器可访问性和权限专项。

@@ -406,3 +406,5 @@ make dashboard-verify-local
 **2026-09-14 E2E UI 地址复验：** 独立 E2E Compose 执行 Playwright 时显式设置 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`，避免默认 `5174` 本地开发 UI 导致 seed 仪表盘不可见。当前工作树完整 Chrome channel 矩阵 `22 passed (1.5m)`，双源定向用例 `4 passed (28.7s)`，严格 `dashboard-jdbc-aloudata.png` 快照、5 行及 `120.5` 断言均通过。
 
 **2026-09-14 Aloudata 真实只读复验：** 使用现有认证上下文探测 `Demo_view`，产品层目录/详情均返回 `HTTP 200/code=200/success=true`，详情含 5 个指标和 3 个维度；语义层 5 行基线及目录前 20 个视图均返回 `SM_02_0038`。目录/详情 Adapter 映射具备真实样本，结果查询与远端筛选下推仍为 `EXTERNAL-BLOCKED`，待 Aloudata 提供可查询视图后继续。
+
+**当前权威基线（2026-09-14）：** 前文保留的历史失败段落只用于追溯，不代表当前状态。最新本地模拟 Chrome channel 完整矩阵为 `22 passed (1.5m)`，双源定向为 `4 passed (28.7s)`，`dashboard-jdbc-aloudata.png` 严格快照及 5 行/`120.5` 断言均通过；UI 单测为 `12 files / 44 tests passed`，DataAgent 为 `158 tests / 0 failures / 0 errors / 0 skipped`。当前仅保留真实 Aloudata 结果授权、正式外部 API/对象存储、全站跨浏览器可访问性和权限专项 Gate。

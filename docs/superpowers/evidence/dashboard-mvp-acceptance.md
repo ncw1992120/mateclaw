@@ -794,3 +794,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 复验命令使用 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174` 对应独立 E2E Compose UI，并注入本地 JWT、工作区 `1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation`；先前未指定 UI 地址时实际访问了本地开发 UI，造成仪表盘卡片不存在，该环境误差不计为产品失败。
 - 同一套 DataAgent、MySQL、HTTPS WireMock、MinIO、Runner 和 seed 状态下，`npm --prefix mateclaw-dataagent-ui run test:e2e -- --reporter=line` 完整矩阵结果为 `22 passed (1.5m)`；`dashboard-multi-source.spec.ts` 定向结果为 `4 passed (28.7s)`。
 - JDBC+Aloudata 仍实际返回 5 行并包含 `120.5`，`dashboard-jdbc-aloudata.png` 非更新模式严格快照通过；维度树现场同时确认“时间与区域，2 个维度”。
+
+> 当前基线说明：本文更早的快照失败、Descriptor 空 Schema 和 Table 高度记录均为历史复现；以本节及后续记录为准。当前本地模拟完整矩阵 `22 passed`，相关快照差异已关闭。真实 Aloudata 结果查询仍因 `SM_02_0038` 保持外部阻塞。
