@@ -185,6 +185,26 @@ class DatasetCatalogServiceTest {
     }
 
     @Test
+    void rejectsJdbcDefinitionBoundToHttpApiDatasource() {
+        DatasetManageServiceImpl service = newService();
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setId(4L);
+        datasource.setName("orders api");
+        datasource.setSourceType("api");
+        when(datasourceMapper.selectById(4L)).thenReturn(datasource);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+
+        DatasetCreateRequest request = new DatasetCreateRequest();
+        request.setName("invalid jdbc");
+        request.setSourceDefinition(new DatasetSourceDefinition.JdbcSqlDefinition(4L, "select 1"));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createDataset(request));
+        assertEquals("JDBC 数据集必须绑定 JDBC 数据源", error.getMessage());
+        verify(datasetMapper, never()).insert(any(DatasetEntity.class));
+    }
+
+    @Test
     void rejectsAloudataViewBoundToJdbcDatasource() {
         DatasetManageServiceImpl service = newService();
         DatasourceEntity datasource = new DatasourceEntity();

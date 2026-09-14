@@ -338,3 +338,4 @@ make dashboard-verify-local
 **2026-09-14 JDBC 类型兼容补充：** 前端与后端支持的 JDBC 类型集合对齐，新增 Oracle、Snowflake、BigQuery、Redshift、ClickHouse、Doris 识别；UI 测试更新为 `42/42`，Chrome CDP 实测 E2E JDBC 数据源可用表和 SQL 选项。
 
 当前提交 `fa7cd9289b276b99c1049ab7567a0b85def65240` 的 Chrome CDP 复验确认 API 数据源不渲染 SQL 编辑器，截图 `/tmp/mateclaw-cdp-api-source-boundary-fa7cd928.png`。
+**2026-09-14 服务端反向边界补充：** DataAgent 创建/更新接口新增 JDBC 数据集绑定非 JDBC 数据源的拒绝校验，前后端来源兼容性形成双向保护；DataAgent 定向测试通过。

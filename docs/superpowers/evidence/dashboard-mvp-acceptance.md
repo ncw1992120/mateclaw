@@ -621,3 +621,6 @@ Chrome CDP 选择 `E2E HTTP Orders` 后，页面实际为 `HTTP_API`，表区域
 ### 2026-09-14 JDBC 类型兼容视觉复验
 
 Chrome CDP 选择 `E2E JDBC Orders` 后，来源类型保持 `JDBC_TABLE`，JDBC 表和 JDBC SQL 选项均可用，无兼容性提示；截图：`/tmp/mateclaw-cdp-jdbc-types-42tests.png`。Oracle 等新增类型由 `DatasetEdit.spec.ts` 回归覆盖。
+### 2026-09-14 JDBC 反向绑定拒绝复验
+
+DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC 数据源返回 `JDBC 数据集必须绑定 JDBC 数据源`，不写入数据集；`DatasetCatalogServiceTest` 定向测试通过。

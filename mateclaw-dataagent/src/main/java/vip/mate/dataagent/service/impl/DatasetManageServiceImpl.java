@@ -267,9 +267,15 @@ public class DatasetManageServiceImpl implements DatasetManageService {
                 || datasourceType.equals("http")
                 || datasourceType.equals("http_api")
                 || datasourceType.contains("http-api");
+        boolean jdbc = Set.of("jdbc", "mysql", "postgresql", "sqlserver", "oracle", "snowflake",
+                "bigquery", "redshift", "clickhouse", "doris").contains(datasourceType);
         if ((definition instanceof DatasetSourceDefinition.JdbcTableDefinition
                 || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && aloudata) {
             throw new IllegalArgumentException("JDBC 数据集不能绑定 Aloudata 数据源");
+        }
+        if ((definition instanceof DatasetSourceDefinition.JdbcTableDefinition
+                || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && !jdbc) {
+            throw new IllegalArgumentException("JDBC 数据集必须绑定 JDBC 数据源");
         }
         if (definition instanceof DatasetSourceDefinition.AloudataViewDefinition && !aloudata) {
             throw new IllegalArgumentException("Aloudata 指标视图必须绑定 Aloudata 数据源");
