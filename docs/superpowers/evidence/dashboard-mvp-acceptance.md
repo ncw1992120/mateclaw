@@ -734,6 +734,13 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 回归：文件数据集创建与预览定向 Chrome E2E `1 passed (4.5s)`；断言在存在字段行时检查按钮类型和名称。当前模拟文件 fixture 返回字段行数为 0，因此本轮未虚报字段按钮的现场点击结果。
 - 该修复与字段分组键盘操作共同收敛文件预览的键盘/读屏语义；字段行数据由后端 schema 决定，真实文件数据联调时需补充至少一条字段行的现场验收。
 
+### 2026-09-14 图表组件内部 Tab 键盘语义
+
+- 问题：图表组件多 Tab 原先使用点击专用 `div`，运行时图表分页无法通过键盘切换，也没有 `tablist/tab` 语义。
+- 修复：补充 `role="tablist"`、`role="tab"`、动态 `aria-selected` 与 roving `tabindex`；支持 Enter/Space 激活、方向键循环切换及 Home/End 定位，并保留当前视觉样式和焦点轮廓。
+- 回归：新增 `ChartWidget.spec.ts`，验证两个 Tab 的语义、选中状态和 ArrowRight 切换；UI 全量回归为 `11 files / 43 tests passed`，production build、`DESIGN-PASS` 通过。
+- 当前模拟 Dashboard fixture 未包含带多 Tab 的真实图表组件，故运行时 Chrome CDP 只记录组件代码/单测证据；真实多 Tab 看板联调时需补充现场截图与焦点证据。
+
 ### 2026-09-14 预览状态圆点异步加载时序修复
 
 - 现象：完整 22 条 Chrome channel E2E 中，状态圆点主题用例在预览容器刚出现时立即读取 DOM，偶发因仪表盘状态尚未异步加载而报“预览页缺少状态圆点”；不是查询或主题样式失败。

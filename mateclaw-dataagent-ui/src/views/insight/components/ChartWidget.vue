@@ -18,13 +18,18 @@
       </div>
     </div>
     <!-- Tab 栏（多 Tab 模式） -->
-    <div v-if="hasTabs" class="widget-tabs">
+    <div v-if="hasTabs" class="widget-tabs" role="tablist" aria-label="图表分页">
       <div
         v-for="tab in tabList"
         :key="tab.id"
         class="widget-tab"
         :class="{ active: activeTabId === tab.id }"
-        @click="activeTabId = tab.id"
+        role="tab"
+        :data-tab-id="tab.id"
+        :aria-selected="activeTabId === tab.id"
+        :tabindex="activeTabId === tab.id ? 0 : -1"
+        @click="selectTab(tab.id)"
+        @keydown="handleTabKeydown($event, tab.id)"
       >
         {{ tab.title }}
       </div>
@@ -69,6 +74,42 @@ const hasTabs = computed(() => {
 
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
 const activeTabId = ref('')
+
+function selectTab(tabId: string): void {
+  activeTabId.value = tabId
+}
+
+function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
+  const currentIndex = tabList.value.findIndex(tab => tab.id === tabId)
+  if (currentIndex < 0 || tabList.value.length < 2) return
+
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = (currentIndex + 1) % tabList.value.length
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (currentIndex - 1 + tabList.value.length) % tabList.value.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = tabList.value.length - 1
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    selectTab(tabId)
+    return
+  } else {
+    return
+  }
+
+  event.preventDefault()
+  const nextTab = tabList.value[nextIndex]
+  if (!nextTab) return
+  selectTab(nextTab.id)
+  nextTick(() => {
+    const tab = Array.from(
+      chartContainerRef.value?.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [],
+    ).find(candidate => candidate.dataset.tabId === nextTab.id)
+    tab?.focus()
+  })
+}
 
 watch(hasTabs, (val) => {
   if (val && !activeTabId.value) {
@@ -234,6 +275,11 @@ watch(chartContainerRef, (el) => {
   color: var(--db-accent);
   background: var(--db-accent-light);
   font-weight: 600;
+}
+
+.widget-tab:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: 2px;
 }
 
 .chart-placeholder {

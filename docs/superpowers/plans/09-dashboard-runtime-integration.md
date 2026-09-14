@@ -225,6 +225,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 
 **2026-09-14 文件预览字段可见性按钮语义修复：** 字段行显示/隐藏图标改为原生 `button type="button"`，补充动态“显示列/隐藏列”名称并保持原视觉样式；定向文件入口 E2E `1 passed (4.5s)`，UI 全量 `42/42`、production build、`DESIGN-PASS` 通过。当前模拟 fixture 无字段行，真实字段按钮现场交互待真实字段数据联调补验。
 
+**2026-09-14 图表组件内部 Tab 键盘语义修复：** 图表多 Tab 补齐 `tablist/tab`、`aria-selected`、roving `tabindex`，支持 Enter/Space、方向键及 Home/End；新增 `ChartWidget.spec.ts` 覆盖语义与 ArrowRight 切换，UI 全量 `11 files / 43 tests passed`、production build、`DESIGN-PASS` 通过。当前模拟看板无多 Tab 图表，真实运行时 Chrome CDP 现场交互待补充对应 fixture。
+
 **2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
 
 **2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。
