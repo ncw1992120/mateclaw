@@ -49,6 +49,18 @@ test('问数输入工具暴露可访问名称', async ({ page }) => {
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
 })
 
+test('历史对话工具暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=smart-ask')
+  await expect(page.getByRole('button', { name: '搜索对话' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '收起历史对话' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '新对话' })).toBeVisible()
+})
+
 test('问数数据源浏览入口支持键盘打开', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

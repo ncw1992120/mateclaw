@@ -1006,3 +1006,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：为 5 个输入工具补充稳定 `aria-label`，不改变点击、禁用和发送逻辑；新增 E2E 断言覆盖完整输入栏。
 - 修复前定向 E2E 因“优化输入”按钮不可按名称定位失败，修复后 `1 passed (5.0s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
 - Chrome CDP `9222` 现场确认 5 个 `.input-bar button` 均有可访问名称；截图：`/tmp/mateclaw-cdp-smart-ask-tools-20260915.png`。
+
+### 2026-09-15 历史对话工具可访问名称补齐
+
+- Chrome CDP 扫描发现历史对话侧栏的搜索、收起/展开、新对话和会话更多操作仅有 `title`，AX 名称为空。
+- 修复：为 Workbench 历史侧栏 4 个按钮补充稳定 `aria-label`，不改变搜索、折叠、新建和菜单行为。
+- 定向 E2E `历史对话工具暴露可访问名称` 修复后 `1 passed (4.2s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
+- Chrome CDP `9222` 现场确认 4 个 `.history-sidebar button` 均有可访问名称；截图：`/tmp/mateclaw-cdp-history-tools-20260915.png`。
