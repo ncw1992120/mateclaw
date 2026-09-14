@@ -999,3 +999,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - UI 单测 `16 files / 49 tests passed`，生产构建成功；当前本地模拟环境因数据源列表未加载无法重新跑到该入口，待模拟 fixture 恢复后补跑定向 E2E 与 CDP 截图。
 
 **现场补验（同日）：** 通过 Google Chrome CDP `9222` 连接 `15174` 本地模拟 UI，复用工作区 `1` 的现有数据源。按 Enter 打开“E2E JDBC Orders”浏览抽屉，确认 `browse-tabs[role=tablist]` 下存在 2 个 Tab；初始“指标管理”选中，按 `ArrowRight` 后“维度管理”变为 `aria-selected=true` 且 `tabindex=0`。截图：`/tmp/mateclaw-cdp-browse-tabs-20260915.png`。
+
+### 2026-09-15 问数输入工具可访问名称补齐
+
+- Chrome CDP 扫描发现输入栏附件、数据源、快捷提问、优化输入和发送按钮仅设置 `title`，AX 名称为空。
+- 修复：为 5 个输入工具补充稳定 `aria-label`，不改变点击、禁用和发送逻辑；新增 E2E 断言覆盖完整输入栏。
+- 修复前定向 E2E 因“优化输入”按钮不可按名称定位失败，修复后 `1 passed (5.0s)`；UI 单测 `16 files / 49 tests passed`，生产构建通过。
+- Chrome CDP `9222` 现场确认 5 个 `.input-bar button` 均有可访问名称；截图：`/tmp/mateclaw-cdp-smart-ask-tools-20260915.png`。

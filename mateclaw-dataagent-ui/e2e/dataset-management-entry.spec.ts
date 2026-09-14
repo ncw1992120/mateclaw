@@ -35,6 +35,20 @@ test('智能问数模型选择器暴露可访问名称', async ({ page }) => {
   await expect(page.locator('.model-select-footer input[role="combobox"]')).toHaveAccessibleName('选择模型')
 })
 
+test('问数输入工具暴露可访问名称', async ({ page }) => {
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
+
+  await page.goto('/?nav=smart-ask')
+  await expect(page.getByRole('button', { name: '上传附件' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '指定数据源' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '快捷提问' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '优化输入' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+})
+
 test('问数数据源浏览入口支持键盘打开', async ({ page }) => {
   await page.addInitScript(({ authToken, workspaceId }) => {
     localStorage.setItem('token', authToken)

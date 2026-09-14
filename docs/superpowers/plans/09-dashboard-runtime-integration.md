@@ -329,3 +329,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 双源快照与浏览抽屉 Tab 补充：** 双源 JDBC+Aloudata 快照保留 5 行/`120.5` 严格业务断言，并将同 Chrome 通道的少量渲染噪声容差设为 `maxDiffPixelRatio=0.02`；浏览抽屉“指标/维度”补齐 `tablist/tab`、选中态、roving tabindex 和方向键导航。UI 单测 `16 files / 49 tests passed`、生产构建通过；模拟数据源列表恢复后补做定向 E2E/CDP。
 
 **Chrome CDP 补验（2026-09-15）：** 在本地模拟 UI `15174` 复用工作区 `1`，按 Enter 打开 JDBC 数据源浏览抽屉，`ArrowRight` 将“指标管理”切换为“维度管理”，选中态和焦点同步；截图 `/tmp/mateclaw-cdp-browse-tabs-20260915.png`。此前“数据源列表未加载”仅影响定向 Playwright 进入入口，本次 CDP 已完成现场闭环。
+
+**2026-09-15 问数输入工具 AX 修复：** 输入栏 5 个工具按钮（上传附件、指定数据源、快捷提问、优化输入、发送）补充 `aria-label`；定向 E2E 修复前失败、修复后 `1 passed (5.0s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 `.input-bar button` 无空名称，截图 `/tmp/mateclaw-cdp-smart-ask-tools-20260915.png`。

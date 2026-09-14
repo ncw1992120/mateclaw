@@ -6,14 +6,14 @@
       <div class="chat-header">
         <!-- 历史侧栏收缩后：与 agent-switch 同行的快捷按钮 -->
         <template v-if="historyCollapsed">
-          <button class="header-float-btn" :title="t('conversation.expand')" @click="toggleHistoryExpand">
+          <button class="header-float-btn" :title="t('conversation.expand')" :aria-label="t('conversation.expand')" @click="toggleHistoryExpand">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               <line x1="8" y1="9" x2="16" y2="9"/>
               <line x1="8" y1="13" x2="13" y2="13"/>
             </svg>
           </button>
-          <button class="header-float-btn" :title="t('conversation.newChat')" @click="parentHandleNewChat?.()">
+          <button class="header-float-btn" :title="t('conversation.newChat')" :aria-label="t('conversation.newChat')" @click="parentHandleNewChat?.()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"/>
               <line x1="5" y1="12" x2="19" y2="12"/>
@@ -27,7 +27,7 @@
           popper-class="agent-select-popper"
           @command="handleAgentChange"
         >
-          <button class="agent-switch" :disabled="chatStore.isStreaming" type="button" :title="t('chat.switchAgent')">
+          <button class="agent-switch" :disabled="chatStore.isStreaming" type="button" :title="t('chat.switchAgent')" :aria-label="t('chat.switchAgent')">
             <span class="agent-dot"></span>
             <span class="agent-name">{{ currentAgentName }}</span>
             <span class="agent-chev"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
@@ -622,7 +622,7 @@
         <div class="composer-footer">
           <div class="footer-tools">
             <!-- 附件按钮 -->
-            <button class="footer-tool-pill icon-only" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" @click="handleFileSelect">
+            <button class="footer-tool-pill icon-only" :disabled="chatStore.isStreaming || isUploading" type="button" :title="t('chat.uploadAttachment')" :aria-label="t('chat.uploadAttachment')" @click="handleFileSelect">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
               </svg>
@@ -641,6 +641,7 @@
                 :disabled="chatStore.isStreaming"
                 type="button"
                 :title="t('chat.datasourceScope')"
+                :aria-label="t('chat.datasourceScope')"
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <ellipse cx="12" cy="5" rx="9" ry="3"/>
@@ -707,7 +708,7 @@
               </template>
             </el-dropdown>
             <!-- 快捷提问 -->
-            <button class="footer-tool-pill" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" @click="openMetricQueryDrawer">
+            <button class="footer-tool-pill" :disabled="chatStore.isStreaming" type="button" :title="t('chat.quickAsk')" :aria-label="t('chat.quickAsk')" @click="openMetricQueryDrawer">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -717,7 +718,7 @@
               {{ t('chat.quickAsk') }}
             </button>
             <!-- 优化提示词 -->
-            <button class="footer-tool-pill optimize-pill" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" @click="handleOptimize">
+            <button class="footer-tool-pill optimize-pill" :disabled="!inputMessage.trim() || chatStore.isStreaming || isOptimizing" type="button" :title="t('chat.optimizePrompt')" :aria-label="t('chat.optimizePrompt')" @click="handleOptimize">
               <span v-if="isOptimizing" class="spin-icon">&#x27F3;</span>
               <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/>
@@ -823,7 +824,7 @@
                 <rect x="4" y="4" width="16" height="16" rx="2"/>
               </svg>
             </button>
-            <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" @click="handleSend">
+            <button v-else class="btn-send" :disabled="!canSend" type="button" :title="t('chat.send')" :aria-label="t('chat.send')" @click="handleSend">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
                 <path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z"/>
               </svg>
