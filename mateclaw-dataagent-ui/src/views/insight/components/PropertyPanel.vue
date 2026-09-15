@@ -649,7 +649,7 @@ function handleTabEditorKeydown(event: KeyboardEvent, index: number): void {
   else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + localTabs.value.length) % localTabs.value.length
   else if (event.key === 'Home') nextIndex = 0
   else if (event.key === 'End') nextIndex = localTabs.value.length - 1
-  else if (event.key === 'Enter' || event.key === ' ') { activeTabIndex.value = index; return }
+  else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activeTabIndex.value = index; return }
   else return
   event.preventDefault()
   activeTabIndex.value = nextIndex

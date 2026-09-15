@@ -1125,3 +1125,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 修复：三个组件的 Space/Enter 激活分支统一调用 `event.preventDefault()`。
 - 验证：修复前定向回归失败，修复后 `WidgetTabs.spec.ts` + `ChartWidget.spec.ts` 共 `9 passed`；UI 全量 `16 files / 55 tests passed`，生产构建成功。
 - 用户 Chrome CDP 视觉脚本最终结果：Table `5` 行且包含 `120.5`，ECharts `canvasCount=1`；完整日志 `/tmp/mateclaw-cdp-last.log`。
+
+### 2026-09-15 属性面板 Tab Space 默认行为修复
+
+- 问题：属性面板 Tab 列表按 Space 激活时未取消浏览器默认滚动。
+- 修复：`PropertyPanel.vue` 编辑 Tab 的 Enter/Space 分支补充 `event.preventDefault()`。
+- 验证：修复前定向测试失败，修复后 `PropertyPanel.spec.ts 3 passed`；UI 全量 `16 files / 56 tests passed`，生产构建成功。

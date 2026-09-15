@@ -106,4 +106,25 @@ describe('PropertyPanel', () => {
       renderType: 'echarts',
     })])
   })
+
+  it('prevents page scrolling when Space activates an editable tab', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          ...component,
+          tabs: [
+            { id: 'overview', title: '概览', dataSource: component.dataSource },
+            { id: 'detail', title: '明细', dataSource: component.dataSource },
+          ],
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+    await nextTick()
+    const tab = wrapper.find('.tab-item-row')
+    expect(tab.exists()).toBe(true)
+    const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    expect(tab.element.dispatchEvent(event)).toBe(false)
+  })
 })
