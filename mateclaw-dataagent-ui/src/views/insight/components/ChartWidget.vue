@@ -93,6 +93,7 @@ function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
   } else if (event.key === 'End') {
     nextIndex = tabList.value.length - 1
   } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
     selectTab(tabId)
     return
   } else {

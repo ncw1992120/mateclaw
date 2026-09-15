@@ -74,4 +74,14 @@ describe('ChartWidget', () => {
     expect(tabs[0].attributes('aria-selected')).toBe('true')
     expect(tabs[0].attributes('tabindex')).toBe('0')
   })
+
+  it('prevents page scrolling when Space activates a tab', () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+    const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    const dispatched = wrapper.find('[role="tab"]').element.dispatchEvent(event)
+    expect(dispatched).toBe(false)
+  })
 })

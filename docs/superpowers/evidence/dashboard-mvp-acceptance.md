@@ -1118,3 +1118,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 补齐同一轮 seed 状态后，双源专用 E2E `4 passed (21.4s)`；用户 Chrome CDP 视觉脚本四页截图全部生成，双源 Table 实测 5 行并包含 `120.5`，ECharts 页面 `canvasCount=1` 且标题可见。
 
 随后在同一认证、seed 和 Chrome channel 配置下重跑完整矩阵，共 `36 passed (2.3m)`，无失败、无跳过。
+
+### 2026-09-15 Tab Space 默认行为修复
+
+- 问题：表格、指标卡和图表的 Tab 用 Space 激活时未取消浏览器默认行为，页面会发生滚动。
+- 修复：三个组件的 Space/Enter 激活分支统一调用 `event.preventDefault()`。
+- 验证：修复前定向回归失败，修复后 `WidgetTabs.spec.ts` + `ChartWidget.spec.ts` 共 `9 passed`；UI 全量 `16 files / 55 tests passed`，生产构建成功。
+- 用户 Chrome CDP 视觉脚本最终结果：Table `5` 行且包含 `120.5`，ECharts `canvasCount=1`；完整日志 `/tmp/mateclaw-cdp-last.log`。

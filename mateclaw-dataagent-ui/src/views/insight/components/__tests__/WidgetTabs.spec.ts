@@ -87,4 +87,17 @@ describe('widget tabs', () => {
     expect(replacementTabs[0].attributes('tabindex')).toBe('0')
     expect(replacementTabs[1].attributes('aria-selected')).toBe('false')
   })
+
+  it.each([
+    ['table', DataTableWidget],
+    ['kpi', KpiCardWidget],
+  ])('%s prevents page scrolling when Space activates a tab', (_name, Component) => {
+    const wrapper = mount(Component, {
+      props: { component, componentData },
+      global: { plugins: [i18n], stubs },
+    })
+    const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    const dispatched = wrapper.find('[role="tab"]').element.dispatchEvent(event)
+    expect(dispatched).toBe(false)
+  })
 })
