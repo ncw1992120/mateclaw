@@ -30,6 +30,12 @@
 
 **视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，真实 Aloudata 授权场景在后续环境联调时补采。
 
+**2026-09-15 多源配置交互实现：** `DatasetInputPanel` 现在按来源分类展示输入数据集，并在第二个输入加入后渐进展示 Python 预处理配置；`PropertyPanel` 根据 Aloudata/JDBC/接口/文件切换可见控件，JDBC SQL 明确标注为当前数据源的标准 SQL 草稿。脚本执行和统一数据集 Descriptor/Preview API 保持原链路。由于 `preview-component` 后端兼容路径仍以 Aloudata 指标/维度为主，JDBC SQL 草稿暂不触发卡片级预览，需先通过数据集管理接口固化为 JDBC SQL 数据集后复用统一输入预览。
+
+**2026-09-15 JDBC 组件预览接入：** `preview-component` 已增加 JDBC SQL 分支；页面输入 SQL 后可执行“验证数据”，服务端先做 AST 只读校验，再通过 DataAgent 只读连接池查询并复用现有组件渲染。跨数据源组合仍由脚本数据集输入完成；该分支不改变统一 Dataset Adapter 和 Python `datasets.read` 契约。
+
+**2026-09-15 Base Script 筛选参数生成：** 脚本面板的“生成 Base Script”会按已选输入生成系统区域，并根据声明参数类型生成 `eq`（单选）、`in`（多选）和 `between`（日期/范围）读取条件；日期范围同时兼容页面 `{start,end}` 对象。重新生成只替换系统标记区，用户处理区域中的 Join、合并和计算逻辑保持不变。新增纯函数与面板回归测试，当前定向 UI `14/14` 通过。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：数据集已具备正式路由和配置中心入口；属性面板与脚本输入已增加明确的模式说明，用户可区分“直接指标绑定”和“脚本结果数据集输入”；`e2e/dataset-management-entry.spec.ts` 已覆盖配置中心→数据集→新建→文件来源→取消返回及洞察→新建仪表盘→组件→数据集→脚本→保存绑定的正式前端路径。本地模拟 Compose/JWT 环境已执行通过，正式外部数据源联调仍是后续 Gate。

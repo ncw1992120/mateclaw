@@ -7,10 +7,11 @@ import PropertyPanel from '../PropertyPanel.vue'
 const listSyncedMetricsMock = vi.hoisted(() => vi.fn())
 const listMetricsDimensionDetailsMock = vi.hoisted(() => vi.fn())
 const previewComponentMock = vi.hoisted(() => vi.fn())
+const datasourceListMock = vi.hoisted(() => [{ id: '7', name: 'Sales database', sourceType: 'aloudata' }])
 
 vi.mock('@/stores/useDatasourceStore', () => ({
   useDatasourceStore: () => ({
-    datasources: [{ id: '7', name: 'Sales database' }],
+    datasources: datasourceListMock,
     fetchDatasources: vi.fn().mockResolvedValue(undefined),
   }),
 }))
@@ -30,6 +31,7 @@ const stubs = {
   'el-input': { template: '<input v-bind="$attrs" />' },
   'el-input-number': { template: '<input v-bind="$attrs" />' },
   'el-select': { template: '<select v-bind="$attrs"><slot /></select>' },
+  'el-option-group': { props: ['label'], template: '<optgroup :label="label"><slot /></optgroup>' },
   'el-option': {
     props: ['label', 'value'],
     template: '<option :value="value">{{ label }}</option>',
@@ -65,6 +67,36 @@ const i18n = createI18n({
 })
 
 describe('PropertyPanel', () => {
+  it('shows JDBC SQL controls instead of Aloudata metrics and dimensions', async () => {
+    datasourceListMock.splice(0, datasourceListMock.length,
+      { id: 'jdbc-1', name: '业务 MySQL', sourceType: 'mysql' } as any,
+    )
+    const wrapper = mount(PropertyPanel, {
+      props: { component: { ...component, datasourceId: undefined, dataSource: { datasourceId: 'jdbc-1', metrics: [], dimensions: [], filters: [], limit: 100 } }, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+    await nextTick()
+    expect(wrapper.find('.jdbc-query-config').exists()).toBe(true)
+    expect(wrapper.find('.jdbc-query-config').text()).toContain('SQL')
+    expect(wrapper.find('[aria-label="insight.property.metrics"]').exists()).toBe(false)
+    datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
+  })
+
+  it('shows a unified dataset hint for API and file sources', async () => {
+    datasourceListMock.splice(0, datasourceListMock.length,
+      { id: 'api-1', name: '订单接口', sourceType: 'HTTP_API' } as any,
+    )
+    const wrapper = mount(PropertyPanel, {
+      props: { component: { ...component, dataSource: { datasourceId: 'api-1', metrics: [], dimensions: [], filters: [], limit: 100 } }, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+    await nextTick()
+    expect(wrapper.find('.source-binding-hint').text()).toContain('接口')
+    expect(wrapper.find('.jdbc-query-config').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="insight.property.metrics"]').exists()).toBe(false)
+    datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
+  })
+
   it('renders only descriptor fields returned for the selected datasource', async () => {
     listSyncedMetricsMock.mockResolvedValue([{ metricName: 'revenue', metricDisplayName: 'Revenue' }])
     listMetricsDimensionDetailsMock.mockResolvedValue([{ dimName: 'region', dimDisplayName: 'Region' }])

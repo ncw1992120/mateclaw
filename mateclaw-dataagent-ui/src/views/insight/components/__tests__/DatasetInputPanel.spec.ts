@@ -25,7 +25,8 @@ const stubs = {
   'el-button': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
   'el-input': { template: '<input />' },
   'el-select': { template: '<select><slot /></select>' },
-  'el-option': { template: '<option><slot /></option>' },
+  'el-option-group': { props: ['label'], template: '<optgroup :label="label"><slot /></optgroup>' },
+  'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
   'el-empty': { template: '<div><slot /></div>' },
   'el-tooltip': { template: '<div><slot /><slot name="content" /></div>' },
   'el-alert': { template: '<div><slot /></div>' },
@@ -39,6 +40,33 @@ function mountPanel(props: Record<string, unknown> = {}) {
 }
 
 describe('DatasetInputPanel', () => {
+  it('hides Python preprocessing until at least two datasets are selected', async () => {
+    const wrapper = mountPanel({ inputs: [{ datasetId: '1', inputName: 'orders' }] })
+    expect(wrapper.find('.script-draft').exists()).toBe(false)
+
+    await wrapper.setProps({ inputs: [
+      { datasetId: '1', inputName: 'orders' },
+      { datasetId: '2', inputName: 'metrics' },
+    ] })
+    expect(wrapper.find('.script-draft').exists()).toBe(true)
+    expect(wrapper.text()).toContain('已选择 2 个输入数据集')
+  })
+
+  it('groups dataset choices by Aloudata, JDBC, API and file categories', async () => {
+    vi.mocked(datasetApi.list).mockResolvedValueOnce([
+      { id: 'j1', name: '业务 MySQL', sourceType: 'mysql' },
+      { id: 'a1', name: '销售指标视图', sourceType: 'ALOUDATA_ANALYSIS_VIEW' },
+      { id: 'f1', name: '订单 Excel', sourceType: 'FILE' },
+    ] as any)
+    const wrapper = mountPanel({ inputs: [{ datasetId: '', inputName: 'input_1' }] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(wrapper.text()).toContain('Aloudata')
+    expect(wrapper.text()).toContain('JDBC')
+    expect(wrapper.text()).toContain('文件')
+    expect(wrapper.text()).toContain('业务 MySQL')
+  })
+
   it('adds a stable input alias and emits the updated list', async () => {
     const wrapper = mountPanel()
     const add = wrapper.findAll('button').find((button) => button.text().includes('添加'))
@@ -54,9 +82,25 @@ describe('DatasetInputPanel', () => {
   })
 
   it('renders the script template action only as a draft action', () => {
-    const wrapper = mountPanel({ inputs: [{ datasetId: '1', inputName: 'orders' }] })
-    expect(wrapper.text()).toContain('插入读取模板')
+    const wrapper = mountPanel({ inputs: [
+      { datasetId: '1', inputName: 'orders' },
+      { datasetId: '2', inputName: 'metrics' },
+    ] })
+    expect(wrapper.text()).toContain('生成 Base Script')
     expect(wrapper.text()).not.toContain('自动执行脚本')
+  })
+
+  it('generates a system script block without overwriting user code', async () => {
+    const wrapper = mountPanel({
+      inputs: [{ datasetId: '1', inputName: 'orders' }, { datasetId: '2', inputName: 'metrics' }],
+      parameters: [{ name: 'status', type: 'string', scope: 'dashboard' }],
+      script: 'result = orders.join(metrics)',
+    })
+    await wrapper.find('button[aria-label="生成 Python Base Script"]').trigger('click')
+    const emitted = wrapper.emitted('update:script')?.at(-1)?.[0] as string
+    expect(emitted).toContain('"operator": "eq"')
+    expect(emitted).toContain('result = orders.join(metrics)')
+    expect(emitted).toContain('系统生成区域')
   })
 
   it('exposes an explicit result binding target selector', () => {
@@ -72,7 +116,10 @@ describe('DatasetInputPanel', () => {
     const wrapper = mountPanel({
       dashboardId: 'dashboard-1',
       script: 'result = []',
-      inputs: [{ datasetId: '1', inputName: 'orders' }],
+      inputs: [
+        { datasetId: '1', inputName: 'orders' },
+        { datasetId: '2', inputName: 'metrics' },
+      ],
       parameters: [
         { name: 'region', type: 'string', scope: 'dashboard' },
         { name: 'region', type: 'string', scope: 'page' },
@@ -92,7 +139,10 @@ describe('DatasetInputPanel', () => {
     const wrapper = mountPanel({
       dashboardId: 'dashboard-1',
       script: 'result = []',
-      inputs: [{ datasetId: '1', inputName: 'orders' }],
+      inputs: [
+        { datasetId: '1', inputName: 'orders' },
+        { datasetId: '2', inputName: 'metrics' },
+      ],
     })
     await wrapper.findAll('button').find((button) => button.text().includes('最终结果预览'))!.trigger('click')
     await nextTick()
@@ -130,7 +180,10 @@ describe('DatasetInputPanel', () => {
     statusMock.mockResolvedValue({ status: 'RESULT_REF' })
     const getExecutionResult = (await import('@/api/insight-dashboard')).getExecutionResult as ReturnType<typeof vi.fn>
     getExecutionResult.mockResolvedValue({ rows: [{ id: 1 }], inline: false, outputRef: { uri: 'object://result' } })
-    const wrapper = mountPanel({ dashboardId: 'dashboard-1', script: 'result = []', inputs: [{ datasetId: '1', inputName: 'orders' }] })
+    const wrapper = mountPanel({ dashboardId: 'dashboard-1', script: 'result = []', inputs: [
+      { datasetId: '1', inputName: 'orders' },
+      { datasetId: '2', inputName: 'metrics' },
+    ] })
     await wrapper.findAll('button').find((button) => button.text().includes('最终结果预览'))!.trigger('click')
     await new Promise((resolve) => setTimeout(resolve, 0))
     await nextTick()

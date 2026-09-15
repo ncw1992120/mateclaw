@@ -196,6 +196,15 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 数据源 ID（前端为 string，服务层转 Long） */
         private String datasourceId;
 
+        /** 来源类型：ALOUDATA/JDBC/HTTP_API/FILE；缺省时兼容旧 Aloudata Schema。 */
+        private String sourceType;
+
+        /** JDBC 来源的只读 SQL 草稿；仅 sourceType=JDBC 时生效。 */
+        private String sql;
+
+        /** 已固化统一数据集 ID（供脚本输入或后续统一预览使用）。 */
+        private String datasetId;
+
         /** 指标名称列表 */
         private List<String> metrics;
 

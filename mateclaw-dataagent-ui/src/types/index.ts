@@ -1181,6 +1181,27 @@ export interface ComponentDataSource {
   timeConstraint?: string
   /** 返回行数限制 */
   limit?: number
+  /** 新版统一数据集绑定；旧 metrics/dimensions 字段保留用于 Aloudata 兼容。 */
+  sourceType?: 'ALOUDATA' | 'JDBC' | 'HTTP_API' | 'FILE' | string
+  datasetId?: string
+  sql?: string
+  analysisViewId?: string
+  apiDefinitionId?: string
+  objectId?: string
+}
+
+/** 组件统一数据集输入绑定（多源 Python 预处理使用）。 */
+export interface DataInputBinding {
+  inputId: string
+  datasetId: string
+  alias: string
+  filters?: DatasetFilter[]
+}
+
+export interface PythonTransformConfig {
+  enabled: boolean
+  code: string
+  parameters?: DashboardScriptParameter[]
 }
 
 /** 仪表盘组件定义 */

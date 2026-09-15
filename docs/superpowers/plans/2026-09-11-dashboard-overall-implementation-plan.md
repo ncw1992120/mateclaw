@@ -523,3 +523,7 @@ make dashboard-verify-local
 **2026-09-15 串行全量与 CDP 基线：** 同一认证、seed 和 Chrome channel 下使用 `--workers=1` 重跑完整矩阵，`36 passed (5.6m)`、无失败/跳过；Google Chrome CDP 重新采集列表、编辑器、Table、ECharts 四页，Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`，视觉证据目录为 `/tmp/mateclaw-dashboard-cdp`。
 
 **2026-09-15 默认 E2E 并发稳定性修复：** Playwright 默认 worker 固定为 `1`，可通过 `MATECLAW_E2E_WORKERS` 显式覆盖；不传 worker 参数执行双源 4 条用例显示使用 1 worker 并 `4 passed (41.6s)`，避免共享 E2E 服务的并行会话争用。
+
+**2026-09-15 数据源感知配置交互实现：** 新增 `data-binding.ts` 来源分类工具，数据集/数据源下拉按 Aloudata、JDBC、接口、文件分组；属性面板根据来源切换配置，Aloudata 保留指标/维度兼容控件，JDBC 显示标准 SQL 草稿区，接口/文件显示统一数据集引导。脚本数据集输入面板改为渐进式交互：单个输入只展示输入预览，添加第二个输入后才展示 Python 预处理区，并保留脚本草稿。UI 单测 `23 files / 71 tests passed`、生产构建通过。JDBC SQL 卡片级预览已由后端受控分支接入，统一数据集输入预览链路不受影响。
+
+**2026-09-15 JDBC 卡片预览实现：** 后端 `InsightDashboardSchemaDTO.DataSource` 增加 `sourceType/sql/datasetId` 契约；`InsightDataBindServiceImpl` 对 `sourceType=JDBC` 的只读 SQL 使用现有 JSqlParser AST 编译器、Hikari 只读连接池、PreparedStatement 参数绑定、30 秒超时和 500 行上限，结果复用既有 KPI/图表/表格渲染器。Aloudata 旧路径保持不变，接口/文件仍通过统一数据集输入执行。新增 DTO 回归测试；前端“验证数据”按钮对 JDBC SQL 可用。

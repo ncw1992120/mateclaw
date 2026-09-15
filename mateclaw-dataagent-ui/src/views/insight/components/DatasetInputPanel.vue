@@ -3,7 +3,7 @@
     <div class="panel-heading">
       <div>
         <h3>脚本结果数据集输入</h3>
-        <p>这是独立于“直接指标绑定”的脚本模式；脚本通过别名调用 datasets.read。</p>
+        <p>{{ inputs.length >= 2 ? `已选择 ${inputs.length} 个输入数据集，可配置 Python 预处理。` : '先选择一个数据集；添加第二个数据集后，可配置 Python 预处理。' }}</p>
         <p class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
         <div class="binding-target-selector">
           <span>结果绑定组件</span>
@@ -24,7 +24,7 @@
           </el-select>
         </div>
       </div>
-      <el-button size="small" type="primary" plain @click="addInput">添加</el-button>
+      <el-button size="small" type="primary" plain aria-label="添加数据集" @click="addInput">添加数据集</el-button>
     </div>
 
     <el-empty v-if="inputs.length === 0" description="暂未配置数据集输入" :image-size="56" />
@@ -43,8 +43,13 @@
         class="full-width"
         @change="(value: string) => changeDataset(index, value)"
       >
-        <el-option v-for="dataset in datasets" :key="dataset.id" :label="dataset.name" :value="dataset.id" />
+        <el-option-group v-for="group in datasetGroups" :key="group.category" :label="group.label">
+          <el-option v-for="dataset in group.datasets" :key="dataset.id" :label="dataset.name" :value="dataset.id" />
+        </el-option-group>
       </el-select>
+      <div v-if="datasetGroups.length" class="dataset-category-hint" aria-label="数据集来源分类">
+        来源分类：{{ datasetGroups.map(group => group.label).join('、') }}
+      </div>
       <el-input
         :model-value="input.inputName"
         class="alias-input"
@@ -109,11 +114,11 @@
       </div>
     </div>
 
-    <div class="script-draft">
+    <div v-if="inputs.length >= 2" class="script-draft">
       <div class="row-header">
         <span>Python 脚本草稿</span>
         <div class="script-actions">
-          <el-button text size="small" @click="insertTemplate">插入读取模板</el-button>
+          <el-button text size="small" aria-label="生成 Python Base Script" @click="insertTemplate">生成 Base Script</el-button>
           <el-button
             type="primary"
             plain
@@ -226,6 +231,8 @@ import {
   assertValidScriptParameters,
   isValidDatasetInputAlias,
 } from '@/utils/dataset-inputs'
+import { groupDatasets } from '@/utils/data-binding'
+import { buildSystemScript, mergeBaseScript } from '@/utils/script-template'
 
 const props = defineProps<{
   inputs: DashboardDatasetInput[]
@@ -244,6 +251,7 @@ const emit = defineEmits<{
 }>()
 
 const datasets = ref<Dataset[]>([])
+const datasetGroups = computed(() => groupDatasets(datasets.value))
 const descriptors = reactive<Record<string, DatasetInputDescriptor>>({})
 const previewResults = reactive<Record<string, DatasetBatch>>({})
 const loadingDatasetId = ref('')
@@ -344,13 +352,14 @@ async function previewInput(input: DashboardDatasetInput): Promise<void> {
 }
 
 function insertTemplate(): void {
-  const first = props.inputs.find((input) => input.datasetId && isValidDatasetInputAlias(input.inputName))
-  if (!first) {
+  const validInputs = props.inputs.filter((input) => input.datasetId && isValidDatasetInputAlias(input.inputName))
+  if (!validInputs.length) {
     ElMessage.warning('请先添加一个合法的数据集输入别名')
     return
   }
-  const template = `# datasets 由 Runner 注入，读取条件会在 DataAgent 侧下推\nresult = datasets.read(\n    input_name="${first.inputName}",\n    columns=[],\n    filters=[],\n).to_polars()\n`
-  emit('update:script', props.script?.trim() ? `${props.script.trim()}\n\n${template}` : template)
+  const generated = buildSystemScript(validInputs, parameters.value)
+  emit('update:script', mergeBaseScript(props.script, generated))
+  ElMessage.success('系统区域已生成，用户处理区域保持不变')
 }
 
 function addParameter(): void {

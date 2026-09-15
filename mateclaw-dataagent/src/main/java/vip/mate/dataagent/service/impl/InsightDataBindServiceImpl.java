@@ -14,6 +14,13 @@ import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.util.InsightChartOptionHelper;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
+import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.DatasourceConnectionPoolService;
+import vip.mate.dataagent.dataset.jdbc.CompiledJdbcQuery;
+import vip.mate.dataagent.dataset.jdbc.SqlValidationService;
+import vip.mate.dataagent.util.JdbcUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +44,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
     private final InsightDashboardService dashboardService;
     private final AloudataService aloudataService;
+    private final DatasourceMapper datasourceMapper;
+    private final DatasourceConnectionPoolService datasourceConnectionPoolService;
+    private final SqlValidationService sqlValidationService;
 
     /** KPI 环比变化格式化模板 */
     private static final String KPI_CHANGE_FORMAT = "%.2f%%";
@@ -291,6 +301,11 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     private InsightComponentDataDTO doBind(Component component, DashboardFilterContextDTO filterContext) {
         DataSource ds = component.getDataSource();
 
+        // JDBC 卡片直接 SQL 预览：复用统一 SQL AST 校验和只读连接池，结果仍走同一组件渲染器。
+        if (isJdbcSql(ds)) {
+            return buildJdbcSqlPreview(component, ds);
+        }
+
         // KPI 多指标模式：每个指标分别查询
         boolean isKpiMultiKpi = "kpi".equals(component.getType())
                 && component.getMultiKpi() != null && component.getMultiKpi()
@@ -363,6 +378,59 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
         // 4. 按组件类型生成渲染数据
         return buildByComponentType(component, columns, rows);
+    }
+
+    private boolean isJdbcSql(DataSource ds) {
+        return ds != null && "JDBC".equalsIgnoreCase(ds.getSourceType())
+                && ds.getSql() != null && !ds.getSql().isBlank();
+    }
+
+    private InsightComponentDataDTO buildJdbcSqlPreview(Component component, DataSource ds) {
+        final long datasourceId;
+        try {
+            datasourceId = Long.parseLong(ds.getDatasourceId());
+        } catch (Exception e) {
+            return buildError(component.getId(), "JDBC 数据源 ID 无效");
+        }
+        DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
+        if (datasource == null) return buildError(component.getId(), "JDBC 数据源不存在");
+        if (Boolean.FALSE.equals(datasource.getEnabled())) return buildError(component.getId(), "JDBC 数据源已禁用");
+
+        int limit = ds.getLimit() == null ? 100 : Math.min(ds.getLimit(), 500);
+        CompiledJdbcQuery compiled;
+        try {
+            compiled = sqlValidationService.compile(ds.getSql(), List.of(), List.of(), limit, 0);
+        } catch (Exception e) {
+            return buildError(component.getId(), "SQL 校验失败: " + e.getMessage());
+        }
+
+        try (java.sql.Connection connection = datasourceConnectionPoolService.getReadOnlyConnection(
+                JdbcUtils.buildJdbcUrl(datasource), datasource.getUsername(),
+                AesPasswordCryptor.decrypt(datasource.getPassword()));
+             java.sql.PreparedStatement statement = connection.prepareStatement(compiled.sql())) {
+            statement.setQueryTimeout(30);
+            for (int i = 0; i < compiled.parameters().size(); i++) {
+                statement.setObject(i + 1, compiled.parameters().get(i));
+            }
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                java.sql.ResultSetMetaData metadata = resultSet.getMetaData();
+                List<String> columns = new ArrayList<>();
+                for (int i = 1; i <= metadata.getColumnCount(); i++) columns.add(metadata.getColumnLabel(i));
+                List<List<String>> rows = new ArrayList<>();
+                while (resultSet.next() && rows.size() < limit) {
+                    List<String> row = new ArrayList<>();
+                    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                        Object value = resultSet.getObject(i);
+                        row.add(value == null ? null : String.valueOf(value));
+                    }
+                    rows.add(row);
+                }
+                return buildByComponentType(component, columns, rows);
+            }
+        } catch (java.sql.SQLException e) {
+            log.warn("JDBC SQL 预览失败，组件 {}: {}", component.getId(), e.getMessage());
+            return buildError(component.getId(), "JDBC 查询失败: " + e.getMessage());
+        }
     }
 
     /**

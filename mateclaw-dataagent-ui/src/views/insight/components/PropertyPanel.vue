@@ -127,16 +127,13 @@
                 style="width: 100%"
                 @change="handleTabDatasourceChange"
               >
-                <el-option
-                  v-for="ds in datasourceStore.datasources"
-                  :key="ds.id"
-                  :label="ds.name"
-                  :value="ds.id"
-                />
+                <el-option-group v-for="group in datasourceGroups" :key="`tab-${group.category}`" :label="group.label">
+                  <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
+                </el-option-group>
               </el-select>
             </div>
 
-            <div v-if="activeTab.dataSource.datasourceId" class="form-group">
+            <div v-if="activeTab.dataSource.datasourceId && classifyDatasourceTypeFor(activeTab.dataSource.datasourceId) === 'aloudata'" class="form-group">
               <label class="form-label">{{ t('insight.property.metrics') }}</label>
               <el-select
                 v-model="activeTab.dataSource.metrics"
@@ -160,7 +157,7 @@
               </el-select>
             </div>
 
-            <div v-if="activeTab.dataSource.datasourceId && activeTab.dataSource.metrics.length" class="form-group">
+            <div v-if="activeTab.dataSource.datasourceId && classifyDatasourceTypeFor(activeTab.dataSource.datasourceId) === 'aloudata' && activeTab.dataSource.metrics.length" class="form-group">
               <label class="form-label">{{ t('insight.property.dimensions') }}</label>
               <el-select
                 v-model="activeTab.dataSource.dimensions"
@@ -196,6 +193,14 @@
                 @change="emitTabChange"
               />
             </div>
+            <div v-if="activeTab.dataSource.datasourceId && classifyDatasourceTypeFor(activeTab.dataSource.datasourceId) === 'jdbc'" class="form-group jdbc-query-config">
+              <label class="form-label">SQL 查询（仅 JDBC）</label>
+              <el-input v-model="activeTab.dataSource.sql" type="textarea" :rows="6" aria-label="JDBC SQL 查询" placeholder="select ... from ..." @change="emitTabChange" />
+              <span class="form-hint">当前 SQL 只在所选 JDBC 数据源上执行；跨源组合请在 Python 预处理中完成。</span>
+            </div>
+            <div v-else-if="activeTab.dataSource.datasourceId" class="form-hint source-binding-hint">
+              {{ datasetCategoryLabel(classifyDatasourceTypeFor(activeTab.dataSource.datasourceId)) }} 数据源请通过下方统一数据集输入进行选择和预览。
+            </div>
           </div>
         </template>
 
@@ -212,16 +217,13 @@
               style="width: 100%"
               @change="handleDatasourceChange"
             >
-              <el-option
-                v-for="ds in datasourceStore.datasources"
-                :key="ds.id"
-                :label="ds.name"
-                :value="ds.id"
-              />
+              <el-option-group v-for="group in datasourceGroups" :key="group.category" :label="group.label">
+                <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
+              </el-option-group>
             </el-select>
           </div>
 
-          <div v-if="localDataSource.datasourceId" class="form-group">
+          <div v-if="localDataSource.datasourceId && selectedDatasourceCategory === 'aloudata'" class="form-group">
             <label class="form-label">{{ t('insight.property.metrics') }}</label>
             <el-select
               v-model="localDataSource.metrics"
@@ -245,7 +247,7 @@
             </el-select>
           </div>
 
-          <div v-if="localDataSource.datasourceId && localDataSource.metrics.length" class="form-group">
+          <div v-if="localDataSource.datasourceId && selectedDatasourceCategory === 'aloudata' && localDataSource.metrics.length" class="form-group">
             <label class="form-label">{{ t('insight.property.dimensions') }}</label>
             <el-select
               v-model="localDataSource.dimensions"
@@ -280,6 +282,15 @@
               style="width: 100%"
               @change="emitChange"
             />
+          </div>
+
+          <div v-if="localDataSource.datasourceId && selectedDatasourceCategory === 'jdbc'" class="form-group jdbc-query-config">
+            <label class="form-label">SQL 查询（仅 JDBC）</label>
+            <el-input v-model="localDataSource.sql" type="textarea" :rows="6" aria-label="JDBC SQL 查询" placeholder="select ... from ..." @change="emitChange" />
+            <span class="form-hint">当前 SQL 只在所选 JDBC 数据源上执行；跨源组合请在 Python 预处理中完成。点击“验证数据”可先预览当前查询，确认后再固化为可复用数据集。</span>
+          </div>
+          <div v-else-if="localDataSource.datasourceId" class="form-hint source-binding-hint">
+            {{ datasetCategoryLabel(selectedDatasourceCategory) }} 数据源请通过下方统一数据集输入进行选择和预览。
           </div>
 
           <!-- 验证数据按钮 -->
@@ -320,12 +331,9 @@
             style="width: 100%"
             @change="handleFilterDatasourceChange"
           >
-            <el-option
-              v-for="ds in datasourceStore.datasources"
-              :key="ds.id"
-              :label="ds.name"
-              :value="ds.id"
-            />
+            <el-option-group v-for="group in datasourceGroups" :key="`filter-${group.category}`" :label="group.label">
+              <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
+            </el-option-group>
           </el-select>
         </div>
 
@@ -567,6 +575,7 @@ import type { InsightComponent, ComponentDataSource, ComponentTab, InsightCompon
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
+import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 
 defineOptions({
   name: 'PropertyPanel',
@@ -588,6 +597,7 @@ const emit = defineEmits<{
 }>()
 
 const datasourceStore = useDatasourceStore()
+const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasources))
 
 /** 本地编辑副本（深拷贝） */
 const localComponent = reactive<InsightComponent>({
@@ -669,10 +679,21 @@ const dimensionsLoading = ref(false)
 const previewLoading = ref(false)
 const previewResult = ref<InsightComponentData | null>(null)
 
-/** 是否可以预览（数据源 + 至少一个指标已配置） */
+function classifyDatasourceTypeFor(datasourceId: string): DatasourceCategory {
+  const datasource = datasourceStore.datasources.find(ds => String(ds.id) === String(datasourceId))
+  return classifyDatasourceType(datasource?.sourceType)
+}
+
+const selectedDatasourceCategory = computed<DatasourceCategory>(() =>
+  classifyDatasourceTypeFor(localDataSource.datasourceId),
+)
+
+/** 是否可以预览（按数据源类型检查对应配置） */
 const canPreview = computed(() => {
-  return localDataSource.datasourceId
-    && localDataSource.metrics.length > 0
+  if (!localDataSource.datasourceId) return false
+  if (selectedDatasourceCategory.value === 'aloudata') return localDataSource.metrics.length > 0
+  if (selectedDatasourceCategory.value === 'jdbc') return Boolean(localDataSource.sql?.trim())
+  return Boolean(localDataSource.datasetId)
 })
 
 /** 可选的目标组件列表（数据组件：kpi/chart/table，排除自身） */
@@ -705,8 +726,10 @@ watch(
     Object.assign(localComponent, JSON.parse(JSON.stringify(newComp)))
     if (newComp.dataSource) {
       Object.assign(localDataSource, JSON.parse(JSON.stringify(newComp.dataSource)))
-      loadMetrics(localDataSource.datasourceId)
-      loadDimensions(localDataSource.datasourceId, localDataSource.metrics)
+      if (classifyDatasourceTypeFor(localDataSource.datasourceId) === 'aloudata') {
+        loadMetrics(localDataSource.datasourceId)
+        loadDimensions(localDataSource.datasourceId, localDataSource.metrics)
+      }
     } else {
       localDataSource.datasourceId = ''
       localDataSource.metrics = []
@@ -910,11 +933,15 @@ async function handlePreviewData(): Promise<void> {
 
 /** 数据源变更时重新加载指标/维度 */
 function handleDatasourceChange(): void {
+  const category = selectedDatasourceCategory.value
+  localDataSource.sourceType = category === 'unknown' ? undefined : category.toUpperCase()
   localDataSource.metrics = []
   localDataSource.dimensions = []
+  localDataSource.sql = category === 'jdbc' ? (localDataSource.sql ?? '') : undefined
+  localDataSource.datasetId = category === 'jdbc' ? localDataSource.datasetId : undefined
   previewResult.value = null
   dimensionsOptions.value = []
-  loadMetrics(localDataSource.datasourceId)
+  if (category === 'aloudata') loadMetrics(localDataSource.datasourceId)
   emitChange()
 }
 
@@ -943,7 +970,10 @@ function emitChange(): void {
   const updated: InsightComponent = {
     ...JSON.parse(JSON.stringify(localComponent)),
     // position 不 emit，由画布拖拽/缩放管理
-    dataSource: tabModeEnabled.value ? undefined : (localDataSource.datasourceId ? JSON.parse(JSON.stringify(localDataSource)) : undefined),
+    dataSource: tabModeEnabled.value ? undefined : (localDataSource.datasourceId ? JSON.parse(JSON.stringify({
+      ...localDataSource,
+      sourceType: selectedDatasourceCategory.value === 'unknown' ? undefined : selectedDatasourceCategory.value.toUpperCase(),
+    })) : undefined),
     tabs: tabModeEnabled.value && localTabs.value.length > 0
       ? JSON.parse(JSON.stringify(localTabs.value))
       : undefined,
@@ -1140,10 +1170,12 @@ watch(activeTabIndex, () => {
 /** Tab 数据源变更时重新加载指标/维度 */
 function handleTabDatasourceChange(): void {
   if (activeTab.value) {
+    const category = classifyDatasourceTypeFor(activeTab.value.dataSource.datasourceId)
+    activeTab.value.dataSource.sourceType = category === 'unknown' ? undefined : category.toUpperCase()
     activeTab.value.dataSource.metrics = []
     activeTab.value.dataSource.dimensions = []
     dimensionsOptions.value = []
-    loadMetrics(activeTab.value.dataSource.datasourceId)
+    if (category === 'aloudata') loadMetrics(activeTab.value.dataSource.datasourceId)
   }
   emitTabChange()
 }

@@ -36,6 +36,8 @@
 
 **2026-09-15 AI 推理折叠语义补充：** 洞察 AI 助手推理过程标题补齐按钮语义、`aria-expanded`、可访问名称及 Enter/Space 操作；UI 全量更新为 `22 files / 63 tests passed`，生产构建和 Chrome CDP 复验通过。
 
+**2026-09-15 仪表盘来源感知交互补充：** 仪表盘属性面板已按数据源类型分组并切换配置：Aloudata 显示既有指标/维度兼容控件，JDBC 显示标准 SQL 草稿，接口/文件引导使用统一数据集输入；数据集列表同样按来源分类。该改动只涉及配置发现性和 Schema 兼容，不改变数据集创建 API。JDBC SQL 卡片级预览在“SQL 保存为数据集”接口接入前保持关闭，避免旧 preview API 误发 Aloudata 请求。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：已关闭 `FE-CLOSE-02` 的“无正式入口”部分。新增 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 路由，配置中心数据配置页增加“数据集管理”入口；列表支持读取已有数据集并进入新建、编辑/预览，路由包装器负责取消、返回和保存后的列表导航。另已将数据源新建从固定 Aloudata 改为先选择 MySQL、PostgreSQL、SQL Server 或 Aloudata，再进入连接表单；文件来源已接入受控上传接口并自动回填 `StoredFileRef.objectId`，不再要求用户手填对象 ID；HTTP/API 改为从所选数据源 `connectionParams.apiDefinitions` 目录下拉选择；编辑器中暂未开放的操作现在会给出明确反馈。仪表盘脚本结果绑定已由 09 子计划的真实 Chrome channel E2E 在本地模拟环境关闭，正式外部数据源联调仍是后续 Gate。
