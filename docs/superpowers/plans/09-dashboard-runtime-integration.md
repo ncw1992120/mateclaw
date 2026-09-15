@@ -394,3 +394,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 报告列表标签语义修复：** 报告分类切换改为标准 `tablist/tab` 语义，支持选中态、roving tabindex 和键盘导航；新增回归覆盖，UI 全量 `21 files / 62 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
 
 **2026-09-15 AI 推理折叠语义修复：** 洞察 AI 助手推理过程标题支持键盘聚焦、Enter/Space 切换，并暴露展开状态；新增回归测试，UI 全量 `22 files / 63 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 本地模拟运行时最终回归：** 按本轮范围不进行真实 Aloudata/正式存储联调，改以本地模拟 Compose 和 Chrome channel 作为唯一运行时验收环境。完整 Playwright `36 passed (7.2m)`；双源 JDBC+模拟 Aloudata 结果严格为 5 行并包含 `120.5`，历史快照差异不再复现。CDP 视觉脚本输出 `/tmp/mateclaw-dashboard-cdp/dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`，ECharts `canvasCount=1` 且标题可见；未发现新的本地运行时回归。

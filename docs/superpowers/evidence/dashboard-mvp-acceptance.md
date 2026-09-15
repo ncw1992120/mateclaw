@@ -1152,3 +1152,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 帮助内容面包屑首页和分类项已补齐按钮语义及 Enter/Space 操作；UI 全量更新为 `21 files / 61 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - 报告列表分类标签已补齐标准 Tab 语义和键盘导航；UI 全量更新为 `21 files / 62 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - AI 助手推理过程折叠标题已补齐按钮语义、展开状态和 Enter/Space 操作；UI 全量更新为 `22 files / 63 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
+
+### 2026-09-15 本地模拟范围最终复验
+
+- 本轮验收范围冻结为本地模拟数据、接口和 Docker 测试栈；不等待真实 Aloudata、正式对象存储或外部权限联调，历史 `EXTERNAL-BLOCKED` 仅作追溯记录。
+- Chrome channel Playwright 完整矩阵 `36 passed (7.2m)`，无失败、无跳过；`scripts/verify-dashboard-design.sh` 返回 `DESIGN-PASS`。
+- Chrome CDP 视觉脚本截图目录 `/tmp/mateclaw-dashboard-cdp`：列表、编辑器、Table、ECharts 四页均成功；Table `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树包含“脚本结果数据集输入”和“最终结果预览”。
+- 本轮未发现新的本地业务、快照或可访问性回归。
