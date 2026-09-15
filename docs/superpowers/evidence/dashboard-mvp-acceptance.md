@@ -1131,3 +1131,9 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 问题：属性面板 Tab 列表按 Space 激活时未取消浏览器默认滚动。
 - 修复：`PropertyPanel.vue` 编辑 Tab 的 Enter/Space 分支补充 `event.preventDefault()`。
 - 验证：修复前定向测试失败，修复后 `PropertyPanel.spec.ts 3 passed`；UI 全量 `16 files / 56 tests passed`，生产构建成功。
+
+### 2026-09-15 API+文件异步结果等待修复
+
+- 完整矩阵并行执行曾出现 API+文件结果表 15 秒内仍为 0 行；串行重跑在 11 秒通过，确认是异步时序而非业务数据错误。
+- 将该用例结果行断言等待延长至 120 秒，仍严格要求 4 行；双源四用例串行 `4 passed (1.1m)`。
+- 用户 Chrome CDP 视觉脚本复验 Table 5 行且含 `120.5`、ECharts `canvasCount=1`，日志：`/tmp/mateclaw-cdp-api-file-wait.log`。

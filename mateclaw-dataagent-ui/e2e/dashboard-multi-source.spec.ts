@@ -69,7 +69,8 @@ test.describe('dashboard multi-source runtime', () => {
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await expect(page.locator('.script-draft textarea')).toHaveValue(/PAID/)
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(4)
+    // API + 文件链路在并行 E2E 下可能晚于 execution-alert 清理完成，使用业务结果的长等待，避免把异步加载误判为失败。
+    await expect(page.locator('.result-table tbody tr')).toHaveCount(4, { timeout: 120_000 })
     await expect(page).toHaveScreenshot('dashboard-api-file.png', {
       fullPage: true,
       mask: [page.locator('.dataset-input-panel')],

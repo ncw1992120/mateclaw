@@ -511,3 +511,5 @@ make dashboard-verify-local
 **2026-09-15 Tab Space 键盘行为修复：** 修复多 Tab 控件按 Space 时未阻止页面滚动的问题，三个运行时组件均补齐默认行为隔离；定向回归、UI 全量 `16 files / 55 tests passed`、构建和 CDP 结果复验通过。
 
 **2026-09-15 属性面板 Tab Space 行为修复：** 补齐属性面板编辑 Tab 的 Space 默认行为隔离，修复后 UI 全量 `16 files / 56 tests passed`，不改变 Tab 配置或查询逻辑。
+
+**2026-09-15 API+文件结果等待修复：** 修正并行 E2E 下 API+文件异步结果断言过短导致的误报，严格业务行数不变；双源串行 `4 passed (1.1m)`，CDP 视觉证据持续通过。

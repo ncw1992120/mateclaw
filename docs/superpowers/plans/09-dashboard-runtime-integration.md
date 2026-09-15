@@ -373,6 +373,8 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 Tab Space 键盘默认行为修复：** 表格、指标卡和图表 Tab 的 Space 激活分支补充 `preventDefault()`，避免页面滚动；修复前回归失败、修复后组件定向 `9 passed`，UI 全量 `16 files / 55 tests passed`，生产构建和用户 Chrome CDP 视觉脚本均通过。
 
 **2026-09-15 属性面板 Tab Space 修复：** 属性面板的可编辑 Tab 同样补充 `preventDefault()`，避免 Space 激活时页面滚动；修复前定向回归失败、修复后 `PropertyPanel.spec.ts 3 passed`，UI 全量 `16 files / 56 tests passed`，构建通过。
+
+**2026-09-15 API+文件并行等待修复：** 完整矩阵并行执行时，API+文件结果行可能晚于错误状态清理，原 15 秒默认断言会将异步加载误判为 0 行；将业务结果行断言等待调整为 120 秒，保留严格 4 行断言。串行双源矩阵 `4 passed (1.1m)`，用户 Chrome CDP 四页视觉脚本仍确认 Table 5 行/`120.5` 与 ECharts canvas。
 **2026-09-15 当前工作树回归修复：** 发现标题 h2 的键盘 Enter 事件未阻止默认行为，可能导致 toolbar-name-input 刚挂载就失焦；改为 .prevent + startNameEditing 后，Chrome channel 的标题键盘编辑断言通过。另将 E2E seed 的 Aloudata 模拟元数据同步改为显式触发并等待完成，避免指标平台分页在异步空态期间缺失。相关定向 E2E 2 passed，完整矩阵待重新 seed 后复跑。
 **2026-09-15 标题键盘回归最终修正：** 复现确认 h2 的 Enter keydown 后，名称输入框同一按键的 keyup 会触发原 blurTarget，导致编辑框立即消失。现将名称/描述输入框提交事件改为 keydown.prevent，Chrome CDP 实测输入框可见且焦点保持；相关定向 E2E 2 passed，双源 CDP 仍为 5 行且含 120.5。
 **2026-09-15 最终 SHA 验收：** 提交 37a1041d 在干净 seed 数据和 MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 下完成 Chrome channel 全量 35 passed (2.1m)，确认同步等待、双源快照和标题键盘修复未引入回归。
