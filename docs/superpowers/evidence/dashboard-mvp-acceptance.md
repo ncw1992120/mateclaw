@@ -1097,3 +1097,6 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 ### 2026-09-15 最终提交矩阵验收
 
 提交 37a1041d 在重新 seed 并注入 Chrome channel 配置后，完整 Playwright E2E 为 35 passed (2.1m)，无失败、无跳过；覆盖双源结果、错误/取消/超时/资源限制、ObjectRef、入口键盘语义和主题对比度。
+### 2026-09-15 扩展 CDP 键盘巡检
+
+当前 Chrome CDP 扫描洞察、问数、报告、帮助、数据集列表/新建及配置中心四个子页，逐页最多执行 160 次 Tab；可见 button/link/input/select/textarea 和带 role 控件均未发现空 AX 名称。该结果是本地控件命名证据，不替代完整键盘顺序、非 Chrome 原生控件、错误关联和跨浏览器验收。
