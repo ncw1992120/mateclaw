@@ -210,11 +210,13 @@
             :inputs="schema.datasetInputs ?? []"
             :script="schema.script"
             :parameters="schema.parameters ?? []"
+            :filter-bindings="schema.scriptFilterBindings ?? []"
             :target-component-id="scriptTargetComponentId"
             :target-components="currentPageComponents"
             @update:inputs="schema.datasetInputs = $event"
             @update:script="schema.script = $event"
             @update:parameters="schema.parameters = $event"
+            @update:filter-bindings="schema.scriptFilterBindings = $event"
             @update:target-component-id="scriptTargetComponentId = $event"
             @apply-result="handleScriptResult"
           />
@@ -355,6 +357,7 @@ const schema = reactive<InsightDashboardSchema>({
   parameters: [],
   executionPolicy: {},
   scriptBindings: [],
+  scriptFilterBindings: [],
 })
 
 /** 脚本结果的临时绑定目标；用户确认应用结果后写入 scriptBindings。 */
@@ -481,6 +484,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.datasetInputs = migrated.datasetInputs ?? []
       schema.script = migrated.script
       schema.parameters = migrated.parameters ?? []
+      schema.scriptFilterBindings = migrated.scriptFilterBindings ?? []
       schema.executionPolicy = migrated.executionPolicy ?? {}
       schema.scriptBindings = migrated.scriptBindings ?? []
       scriptTargetComponentId.value = schema.scriptBindings[0]?.componentId ?? ''
@@ -495,6 +499,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.datasetInputs = []
       schema.script = undefined
       schema.parameters = []
+      schema.scriptFilterBindings = []
       schema.executionPolicy = {}
       schema.scriptBindings = []
       scriptTargetComponentId.value = ''

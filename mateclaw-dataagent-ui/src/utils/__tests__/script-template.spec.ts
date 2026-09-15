@@ -27,4 +27,13 @@ describe('script template', () => {
     expect(merged).toContain('result = orders.join(metrics)')
     expect(merged).not.toContain('\nold\n')
   })
+
+  it('includes dataset-level source filters in the generated read call', () => {
+    const script = buildSystemScript([
+      { datasetId: '1', inputName: 'orders', filters: [{ field: 'status', role: 'dimension', operator: 'eq', value: 'PAID' }] },
+      { datasetId: '2', inputName: 'metrics' },
+    ], [])
+    expect(script).toContain('"field": "status"')
+    expect(script).toContain('"value": "PAID"')
+  })
 })

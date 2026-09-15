@@ -1277,6 +1277,19 @@ export interface DashboardDatasetInput {
   datasetId: string
   inputName: string
   displayName?: string
+  /** 数据集来源模式；缺省按旧数据集表读取。 */
+  sourceType?: DatasetSourceType | string
+  /** 来源配置不包含连接凭据，仅保存查询/视图引用。 */
+  sourceConfig?: {
+    sql?: string
+    analysisViewId?: string
+    apiDefinitionId?: string
+    objectId?: string
+  }
+  /** 最终字段名称映射。 */
+  fieldMappings?: Array<{ source: string; target: string }>
+  /** 当前输入数据集的源端筛选。 */
+  filters?: DatasetFilter[]
 }
 
 /** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */
@@ -1287,6 +1300,13 @@ export interface DashboardScriptParameter {
   defaultValue?: unknown
   required?: boolean
   scope: 'dashboard' | 'page' | 'component'
+}
+
+/** 脚本输入筛选器到数据集的声明式绑定。 */
+export interface DashboardScriptFilterBinding {
+  filterComponentId: string
+  inputNames: string[]
+  fieldMappings?: Record<string, string>
 }
 
 /** Python Runner 执行限制（不包含依赖安装配置）。 */
@@ -1313,6 +1333,7 @@ export interface InsightDashboardSchema {
   script?: string
   /** 脚本参数定义，不包含字段绑定 */
   parameters?: DashboardScriptParameter[]
+  scriptFilterBindings?: DashboardScriptFilterBinding[]
   /** Runner 资源与超时策略 */
   executionPolicy?: DashboardExecutionPolicy
   /** 用户确认后的脚本结果组件绑定 */

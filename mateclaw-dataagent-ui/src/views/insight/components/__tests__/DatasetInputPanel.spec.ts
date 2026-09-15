@@ -90,6 +90,33 @@ describe('DatasetInputPanel', () => {
     expect(wrapper.text()).not.toContain('自动执行脚本')
   })
 
+  it('renders source-aware dataset cards with JDBC SQL and dataset actions', async () => {
+    const wrapper = mountPanel({ inputs: [{ datasetId: 'j1', inputName: 'orders', sourceType: 'JDBC_SQL', sourceConfig: { sql: 'select 1' } }] })
+    expect(wrapper.find('.dataset-source-card').exists()).toBe(true)
+    expect(wrapper.text()).toContain('JDBC SQL')
+    expect(wrapper.text()).toContain('字段映射')
+    expect(wrapper.text()).toContain('输入筛选')
+    expect(wrapper.find('textarea[aria-label="数据集 SQL 查询"]').exists()).toBe(true)
+  })
+
+  it('shows Aloudata mode and unified dataset guidance for API and file inputs', () => {
+    const wrapper = mountPanel({ inputs: [
+      { datasetId: 'a1', inputName: 'metric_view', sourceType: 'ALOUDATA_ANALYSIS_VIEW' },
+      { datasetId: 'f1', inputName: 'file_rows', sourceType: 'FILE' },
+    ] })
+    expect(wrapper.text()).toContain('指标视图')
+    expect(wrapper.text()).toContain('接口/文件数据集使用已创建的数据集')
+  })
+
+  it('separates generated system script from editable user script', () => {
+    const wrapper = mountPanel({ inputs: [
+      { datasetId: 'j1', inputName: 'orders' },
+      { datasetId: 'a1', inputName: 'metrics' },
+    ], script: '# ===== 系统生成区域：输入数据集和筛选绑定（请勿手动修改） =====\norders = datasets.read()\n# ===== 系统生成区域结束 =====\n# ===== 用户处理区域：Join、合并、计算和业务规则 =====\nresult = orders' })
+    expect(wrapper.find('.system-script-preview').exists()).toBe(true)
+    expect(wrapper.find('textarea[aria-label="用户处理脚本"]').exists()).toBe(true)
+  })
+
   it('generates a system script block without overwriting user code', async () => {
     const wrapper = mountPanel({
       inputs: [{ datasetId: '1', inputName: 'orders' }, { datasetId: '2', inputName: 'metrics' }],

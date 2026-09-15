@@ -28,6 +28,24 @@ public class InsightDashboardSchemaDTO implements Serializable {
     /** 仪表盘组件列表（旧格式，向下兼容） */
     private List<Component> components;
 
+    /** 统一数据集编排输入；使用 Map 保留前端来源配置、字段映射和筛选扩展字段。 */
+    private List<Map<String, Object>> datasetInputs;
+
+    /** Python 预处理草稿，系统生成区和用户区域由前端维护。 */
+    private String script;
+
+    /** 脚本参数定义。 */
+    private List<Map<String, Object>> parameters;
+
+    /** 筛选器到数据集输入的声明式绑定。 */
+    private List<Map<String, Object>> scriptFilterBindings;
+
+    /** Runner 执行限制。 */
+    private Map<String, Object> executionPolicy;
+
+    /** 脚本结果到组件的显式绑定。 */
+    private List<Map<String, Object>> scriptBindings;
+
     /** 仪表盘页面列表（新格式，每个页面拥有独立的组件列表） */
     private List<Page> pages;
 

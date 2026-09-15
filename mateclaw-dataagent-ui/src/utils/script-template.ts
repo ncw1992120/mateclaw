@@ -16,6 +16,10 @@ function readExpression(parameter: DashboardScriptParameter): string {
   return `{ "field": ${JSON.stringify(parameter.name)}, "operator": "eq", "value": ${value} }`
 }
 
+function datasetFilterExpression(filter: { field: string; operator: string; value?: unknown }): string {
+  return `{ "field": ${JSON.stringify(filter.field)}, "operator": ${JSON.stringify(filter.operator)}, "value": ${JSON.stringify(filter.value)} }`
+}
+
 /** 生成只读的系统区域；字段默认与参数同名，用户可在脚本中调整映射。 */
 export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: DashboardScriptParameter[]): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
@@ -28,9 +32,11 @@ export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: D
   }
   validInputs.forEach((input) => {
     lines.push('', `${input.inputName} = datasets.read(`, `    input_name=${JSON.stringify(input.inputName)},`, '    columns=[],')
-    if (validParameters.length) {
+    const filters = [...(input.filters || [])]
+    if (validParameters.length || filters.length) {
       lines.push('    filters=[')
       validParameters.forEach(parameter => lines.push(`        ${readExpression(parameter)},`))
+      filters.forEach(filter => lines.push(`        ${datasetFilterExpression(filter)},`))
       lines.push('    ],')
     } else {
       lines.push('    filters=[],')

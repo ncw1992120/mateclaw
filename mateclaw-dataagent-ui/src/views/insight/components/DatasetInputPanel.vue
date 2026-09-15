@@ -29,9 +29,9 @@
 
     <el-empty v-if="inputs.length === 0" description="暂未配置数据集输入" :image-size="56" />
 
-    <div v-for="(input, index) in inputs" :key="`${input.datasetId}-${index}`" class="dataset-input-row">
+    <div v-for="(input, index) in inputs" :key="`${input.datasetId}-${index}`" class="dataset-input-row dataset-source-card">
       <div class="row-header">
-        <span>输入 {{ index + 1 }}</span>
+        <div class="dataset-card-title"><span>输入 {{ index + 1 }}</span><span class="dataset-source-badge">{{ sourceLabel(input) }}</span></div>
         <el-button text type="danger" size="small" @click="removeInput(index)">移除</el-button>
       </div>
       <el-select
@@ -101,6 +101,39 @@
       >
         查看字段
       </el-button>
+      <div v-if="input.datasetId" class="dataset-config-body">
+        <div v-if="sourceType(input) === 'JDBC_SQL' || sourceType(input) === 'JDBC_TABLE'" class="source-config-block">
+          <label class="form-label">JDBC 数据集模式</label>
+          <el-select :model-value="sourceType(input)" aria-label="JDBC 数据集模式" @change="(value: string) => updateInput(index, { sourceType: value })">
+            <el-option label="已有表数据集" value="JDBC_TABLE" /><el-option label="自定义 SQL" value="JDBC_SQL" />
+          </el-select>
+        </div>
+        <div v-if="sourceType(input) === 'JDBC_SQL'" class="source-config-block">
+          <label class="form-label">JDBC SQL</label>
+          <textarea :value="input.sourceConfig?.sql || ''" class="dataset-sql-editor" aria-label="数据集 SQL 查询" rows="4" placeholder="select ... from ..." @input="updateSourceConfig(index, { sql: ($event.target as HTMLTextAreaElement).value })" />
+          <span v-if="input.sourceConfig?.sql && !isReadonlySql(input.sourceConfig.sql)" class="field-error" role="alert">SQL 仅允许单条只读 SELECT/WITH 查询</span>
+          <span class="form-hint">参数使用绑定方式；预览时由后端再次执行只读校验。</span>
+        </div>
+        <div v-else-if="sourceType(input) === 'ALOUDATA_ANALYSIS_VIEW' || sourceType(input) === 'ALOUDATA_METRICS'" class="source-config-block">
+          <label class="form-label">Aloudata 数据获取模式</label>
+          <el-select :model-value="sourceType(input)" aria-label="Aloudata 数据获取模式" @change="(value: string) => updateInput(index, { sourceType: value })">
+            <el-option label="指标视图" value="ALOUDATA_ANALYSIS_VIEW" /><el-option label="指标&维度" value="ALOUDATA_METRICS" />
+          </el-select>
+          <span class="form-hint">指标视图使用已配置的分析视图，不在此处重复创建。</span>
+        </div>
+        <div v-else-if="sourceType(input) === 'HTTP_API' || sourceType(input) === 'FILE'" class="source-config-block unified-source-hint">接口/文件数据集使用已创建的数据集；本页负责选择、字段预览和筛选，不直接访问外部地址。</div>
+        <div class="dataset-card-actions"><el-button text size="small" @click="toggleMapping(index)">字段映射</el-button><el-button text size="small" @click="toggleFilters(index)">输入筛选</el-button></div>
+        <div v-if="mappingOpen[index]" class="inline-editor" aria-label="字段映射编辑器">
+          <div class="inline-editor-title">字段映射（原字段 → 目标字段）</div>
+          <div v-for="column in descriptors[input.datasetId]?.schema || []" :key="column.name" class="mapping-row"><span>{{ column.name }}</span><input :value="mappingTarget(input, column.name)" :aria-label="`${column.name} 目标字段`" placeholder="目标字段" @input="updateMapping(index, column.name, ($event.target as HTMLInputElement).value)" /></div>
+          <span v-if="!descriptors[input.datasetId]?.schema?.length" class="form-hint">先点击“查看字段”获取字段结构。</span>
+        </div>
+        <div v-if="filtersOpen[index]" class="inline-editor" aria-label="输入筛选编辑器">
+          <div class="inline-editor-title">输入筛选（在源数据查询阶段执行）</div>
+          <div v-for="(filter, filterIndex) in input.filters || []" :key="`${filter.field}-${filterIndex}`" class="filter-row"><input :value="filter.field" aria-label="筛选字段" placeholder="字段" @input="updateFilter(index, filterIndex, { field: ($event.target as HTMLInputElement).value })" /><select :value="filter.operator" aria-label="筛选操作符" @change="updateFilter(index, filterIndex, { operator: ($event.target as HTMLSelectElement).value as any })"><option value="eq">等于</option><option value="in">包含</option><option value="between">范围</option></select><input :value="String(filter.value ?? '')" aria-label="筛选值" placeholder="筛选值" @input="updateFilter(index, filterIndex, { value: ($event.target as HTMLInputElement).value })" /></div>
+          <el-button text size="small" @click="addFilter(index)">添加筛选条件</el-button>
+        </div>
+      </div>
       <div v-if="previewResults[previewKey(input)]" class="input-preview-card">
         <div class="preview-meta">输入预览 · {{ previewResults[previewKey(input)].rows.length }} 行</div>
         <div class="preview-table-scroll">
@@ -111,6 +144,17 @@
             </tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div v-if="filterComponents.length && inputs.length" class="filter-binding-panel">
+      <div class="row-header"><div><span>筛选器绑定</span><small>选择筛选器作用于哪些输入数据集</small></div></div>
+      <div v-for="filterComponent in filterComponents" :key="filterComponent.id" class="filter-binding-row">
+        <span class="filter-binding-name">{{ filterComponent.title || filterComponent.id }}</span>
+        <label v-for="input in inputs" :key="`${filterComponent.id}-${input.inputName}`" class="filter-binding-check">
+          <input type="checkbox" :checked="filterBindings.find(binding => binding.filterComponentId === filterComponent.id)?.inputNames.includes(input.inputName)" @change="toggleFilterInput(filterBindings.find(binding => binding.filterComponentId === filterComponent.id), filterComponent.id, input.inputName, ($event.target as HTMLInputElement).checked)" />
+          {{ input.inputName || '未命名输入' }}
+        </label>
       </div>
     </div>
 
@@ -152,15 +196,14 @@
           </el-button>
         </div>
       </div>
-      <el-input
-        :model-value="script"
-        type="textarea"
-        :rows="7"
-        resize="vertical"
-        aria-label="Python 脚本草稿"
-        placeholder="在此维护脚本草稿；平台不会自动生成或直接执行。"
-        @update:model-value="(value: string) => emit('update:script', value)"
-      />
+      <div class="system-script-block">
+        <div class="inline-editor-title">系统生成区域（只读）</div>
+        <textarea :value="systemScript" class="system-script-preview" aria-label="系统生成脚本" rows="8" readonly />
+      </div>
+      <div class="user-script-block">
+        <div class="inline-editor-title">用户处理区域（可编辑）</div>
+        <textarea :value="userScript" class="user-script-editor" aria-label="用户处理脚本" rows="8" placeholder="在此维护 Join、合并、计算和业务规则。" @input="updateUserScript(($event.target as HTMLTextAreaElement).value)" />
+      </div>
       <el-alert v-if="executionError" class="execution-alert" type="error" :closable="false" :title="executionError" />
       <div v-if="executionRows.length > 0" class="result-table-wrap">
         <div v-if="executionOutputRef" class="result-limit-notice">
@@ -223,7 +266,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef, InsightComponent } from '@/types'
+import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef, InsightComponent, DatasetFilter, DashboardScriptFilterBinding } from '@/types'
 import * as datasetApi from '@/api/dataset'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import {
@@ -232,7 +275,8 @@ import {
   isValidDatasetInputAlias,
 } from '@/utils/dataset-inputs'
 import { groupDatasets } from '@/utils/data-binding'
-import { buildSystemScript, mergeBaseScript } from '@/utils/script-template'
+import { buildSystemScript, mergeBaseScript, SYSTEM_SCRIPT_END, SYSTEM_SCRIPT_START, USER_SCRIPT_START } from '@/utils/script-template'
+import { isReadonlySql, normalizeDatasetInput } from '@/utils/dataset-composer'
 
 const props = defineProps<{
   inputs: DashboardDatasetInput[]
@@ -241,12 +285,14 @@ const props = defineProps<{
   parameters?: DashboardScriptParameter[]
   targetComponentId?: string
   targetComponents?: InsightComponent[]
+  filterBindings?: DashboardScriptFilterBinding[]
 }>()
 const emit = defineEmits<{
   (e: 'update:inputs', value: DashboardDatasetInput[]): void
   (e: 'update:script', value: string): void
   (e: 'update:parameters', value: DashboardScriptParameter[]): void
   (e: 'update:target-component-id', value: string): void
+  (e: 'update:filter-bindings', value: DashboardScriptFilterBinding[]): void
   (e: 'apply-result', value: Record<string, unknown>[]): void
 }>()
 
@@ -262,6 +308,8 @@ const executionResult = ref<unknown | null>(null)
 const executionOutputRef = ref<DatasetObjectRef | null>(null)
 const executionId = ref('')
 const cancelRequested = ref(false)
+const mappingOpen = reactive<Record<number, boolean>>({})
+const filtersOpen = reactive<Record<number, boolean>>({})
 const executionRows = computed<Record<string, unknown>[]>(() => {
   if (!Array.isArray(executionResult.value)) return []
   return executionResult.value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
@@ -273,7 +321,21 @@ const executionColumns = computed(() => {
 })
 const parameterTypes: DashboardScriptParameter['type'][] = ['string', 'number', 'boolean', 'date', 'datetime', 'enum', 'date_range', 'string[]', 'number[]']
 const parameters = computed(() => props.parameters ?? [])
+const systemScript = computed(() => {
+  const value = props.script || ''
+  const start = value.indexOf(SYSTEM_SCRIPT_START)
+  const end = value.indexOf(SYSTEM_SCRIPT_END)
+  return start >= 0 && end > start ? value.slice(start, end + SYSTEM_SCRIPT_END.length) : ''
+})
+const userScript = computed(() => {
+  const value = props.script || ''
+  const end = value.indexOf(SYSTEM_SCRIPT_END)
+  if (end >= 0) return value.slice(end + SYSTEM_SCRIPT_END.length).replace(USER_SCRIPT_START, '').trim()
+  return value.trim()
+})
 const targetComponents = computed(() => (props.targetComponents ?? []).filter((component) => ['kpi', 'chart', 'table'].includes(component.type)))
+const filterComponents = computed(() => (props.targetComponents ?? []).filter((component) => ['filter', 'timeFilter'].includes(component.type)))
+const filterBindings = computed(() => props.filterBindings ?? [])
 
 onMounted(async () => {
   try {
@@ -301,6 +363,58 @@ function addInput(): void {
 
 function removeInput(index: number): void {
   emit('update:inputs', props.inputs.filter((_, itemIndex) => itemIndex !== index))
+}
+
+function sourceType(input: DashboardDatasetInput): string {
+  if (input.sourceType) return input.sourceType
+  const dataset = datasets.value.find(item => String(item.id) === String(input.datasetId))
+  const type = String(dataset?.sourceType || 'JDBC_TABLE').toUpperCase()
+  if (/MYSQL|POSTGRES|ORACLE|SQLSERVER|JDBC/.test(type)) return 'JDBC_TABLE'
+  if (type === 'ALOUDATA') return 'ALOUDATA_METRICS'
+  if (type === 'API' || type === 'HTTP') return 'HTTP_API'
+  return type
+}
+
+function sourceLabel(input: DashboardDatasetInput): string {
+  const type = sourceType(input)
+  return ({ JDBC_SQL: 'JDBC SQL', JDBC_TABLE: 'JDBC', ALOUDATA_ANALYSIS_VIEW: 'Aloudata · 指标视图', ALOUDATA_METRICS: 'Aloudata · 指标&维度', HTTP_API: '接口', FILE: '文件' } as Record<string, string>)[type] || type
+}
+
+function toggleFilterInput(binding: DashboardScriptFilterBinding | undefined, filterComponentId: string, inputName: string, checked: boolean): void {
+  const current = binding || { filterComponentId, inputNames: [], fieldMappings: {} }
+  const inputNames = checked ? [...new Set([...current.inputNames, inputName])] : current.inputNames.filter(name => name !== inputName)
+  const next = [...filterBindings.value.filter(item => item.filterComponentId !== filterComponentId), { ...current, filterComponentId, inputNames }]
+  emit('update:filter-bindings', next)
+}
+
+function updateInput(index: number, patch: Partial<DashboardDatasetInput>): void {
+  emit('update:inputs', props.inputs.map((input, itemIndex) => itemIndex === index ? { ...normalizeDatasetInput(input), ...patch } : input))
+}
+
+function updateSourceConfig(index: number, patch: DashboardDatasetInput['sourceConfig']): void {
+  updateInput(index, { sourceType: 'JDBC_SQL', sourceConfig: { ...(props.inputs[index].sourceConfig || {}), ...patch } })
+}
+
+function toggleMapping(index: number): void { mappingOpen[index] = !mappingOpen[index] }
+function toggleFilters(index: number): void { filtersOpen[index] = !filtersOpen[index] }
+
+function mappingTarget(input: DashboardDatasetInput, source: string): string {
+  return input.fieldMappings?.find(item => item.source === source)?.target || source
+}
+
+function updateMapping(index: number, source: string, target: string): void {
+  const current = [...(props.inputs[index].fieldMappings || [])].filter(item => item.source !== source)
+  updateInput(index, { fieldMappings: [...current, { source, target: target || source }] })
+}
+
+function updateFilter(index: number, filterIndex: number, patch: Partial<DatasetFilter>): void {
+  const filters = [...(props.inputs[index].filters || [])]
+  filters[filterIndex] = { ...filters[filterIndex], role: filters[filterIndex].role || 'dimension', ...patch } as DatasetFilter
+  updateInput(index, { filters })
+}
+
+function addFilter(index: number): void {
+  updateInput(index, { filters: [...(props.inputs[index].filters || []), { field: '', role: 'dimension', operator: 'eq', value: '' }] })
 }
 
 function changeDataset(index: number, datasetId: string): void {
@@ -360,6 +474,14 @@ function insertTemplate(): void {
   const generated = buildSystemScript(validInputs, parameters.value)
   emit('update:script', mergeBaseScript(props.script, generated))
   ElMessage.success('系统区域已生成，用户处理区域保持不变')
+}
+
+function updateUserScript(value: string): void {
+  if (systemScript.value) {
+    emit('update:script', `${systemScript.value}\n\n${USER_SCRIPT_START}\n${value}`)
+  } else {
+    emit('update:script', value)
+  }
 }
 
 function addParameter(): void {
@@ -682,4 +804,29 @@ defineExpose({
 }
 
 .binding-target-hint { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 11px; }
+
+.dataset-source-card { padding: 10px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; background: var(--el-bg-color); }
+.dataset-card-title { display: flex; align-items: center; gap: 8px; }
+.dataset-source-badge { padding: 2px 6px; border-radius: 999px; color: var(--el-color-primary); background: var(--el-color-primary-light-9); font-size: 10px; }
+.dataset-config-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--el-border-color-lighter); }
+.source-config-block { display: flex; flex-direction: column; gap: 5px; }
+.source-config-block .form-label { color: var(--el-text-color-secondary); font-size: 11px; font-weight: 600; }
+.dataset-sql-editor { width: 100%; min-height: 84px; padding: 8px; box-sizing: border-box; resize: vertical; border: 1px solid var(--el-border-color); border-radius: 5px; background: var(--el-fill-color-blank); color: var(--el-text-color-primary); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dataset-sql-editor:focus { outline: none; border-color: var(--el-color-primary); box-shadow: 0 0 0 2px var(--el-color-primary-light-8); }
+.dataset-card-actions { display: flex; gap: 4px; margin-top: 6px; }
+.inline-editor { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px; border-radius: 6px; background: var(--el-fill-color-light); }
+.inline-editor-title { color: var(--el-text-color-secondary); font-size: 11px; font-weight: 600; }
+.mapping-row, .filter-row { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px; font-size: 11px; }
+.filter-row { grid-template-columns: 1fr .8fr 1fr; }
+.mapping-row input, .filter-row input, .filter-row select { width: 100%; min-width: 0; padding: 5px 6px; border: 1px solid var(--el-border-color); border-radius: 4px; background: var(--el-bg-color); color: var(--el-text-color-primary); font-size: 11px; box-sizing: border-box; }
+.unified-source-hint { padding: 7px 8px; color: var(--el-text-color-secondary); background: var(--el-fill-color-light); border-radius: 5px; font-size: 11px; line-height: 1.4; }
+.system-script-block, .user-script-block { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.system-script-preview, .user-script-editor { width: 100%; box-sizing: border-box; padding: 8px; resize: vertical; border: 1px solid var(--el-border-color); border-radius: 5px; color: var(--el-text-color-primary); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.system-script-preview { background: var(--el-fill-color-light); color: var(--el-text-color-secondary); }
+.user-script-editor { background: var(--el-fill-color-blank); }
+.system-script-preview:focus, .user-script-editor:focus { outline: none; border-color: var(--el-color-primary); box-shadow: 0 0 0 2px var(--el-color-primary-light-8); }
+.filter-binding-panel { padding: 12px 0; border-top: 1px solid var(--el-border-color-lighter); }
+.filter-binding-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 7px; font-size: 11px; }
+.filter-binding-name { min-width: 72px; color: var(--el-text-color-primary); font-weight: 600; }
+.filter-binding-check { display: inline-flex; align-items: center; gap: 3px; color: var(--el-text-color-secondary); }
 </style>

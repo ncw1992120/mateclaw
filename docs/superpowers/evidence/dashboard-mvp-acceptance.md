@@ -1165,6 +1165,17 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 首次 `make dashboard-verify-local` 退出码 `7` 的原因是遗留 E2E MinIO/WireMock 容器占用模拟栈端口，并非业务断言失败。
 - 清理明确冲突容器并重启标准模拟 Compose 后，前置健康检查、DataAgent、Runner `24 passed`、UI `22 files / 63 tests passed`、生产构建和 `DESIGN-PASS` 全部通过，聚合门禁退出码 `0`。
 
+### 2026-09-15 原型差异整改后的数据集编排 CDP 复验
+
+- 按 `docs/策略解读/原型设计.md` 将脚本输入区改为独立数据集卡片：每个输入显示来源标签、别名、字段查看、字段映射、输入筛选、单独预览和移除。
+- JDBC 输入显示“JDBC 数据集模式（已有表数据集/自定义 SQL）”与 SQL 编辑器；Aloudata 输入显示“指标视图/指标&维度”模式；接口/文件输入明确复用已创建数据集，不在页面直接访问外部地址。
+- 新增“筛选器绑定”区，可对每个筛选器勾选作用的数据集；新增 Python“系统生成区域（只读）/用户处理区域（可编辑）”分层。
+- Chrome channel + Playwright CDP 实测 2 个输入卡片、JDBC SQL、Aloudata 指标视图、字段映射展开、输入筛选展开、筛选器绑定和脚本双区域均可见；AX 树对应名称全部存在。截图：`/tmp/dashboard-dataset-composer-final-cdp.png`。
+- 定向 UI 测试 `18 passed`，生产构建通过；临时注入的模拟 Schema 已恢复，未修改用户原有看板数据。
+- 最终回归：UI 全量 `25 files / 81 tests passed`，`vue-tsc --noEmit` 通过，Vite 生产构建 `EXIT:0`，`git diff --check` 通过。
+
+本轮仍明确保留的后续差异：SQL 尚未拆成独立弹窗/执行记录面板；接口和文件仍通过已创建数据集配置，不在仪表盘页直接填写 Host 或选择本地文件；预览执行信息/处理日志尚未拆成独立 Tab。这些限制符合当前“数据源先固化、页面只编排数据集”的产品边界，不影响本轮数据集编排主流程。
+
 ### 2026-09-15 属性配置 JDBC/Aloudata CDP 视觉复验
 
 - 按附件中的真实用户路径，通过 Chrome channel + Playwright CDP 登录本地环境，进入“洞察 → 仪表盘 → 策略解读 → 编辑”，点击“策略概括”卡片并打开右侧“属性配置”。
