@@ -16,12 +16,23 @@
         <div class="content-header-info">
           <!-- 面包屑导航 -->
           <div class="content-breadcrumb">
-            <span class="breadcrumb-link" @click="handleBreadcrumbHome">{{ t('helpCenter.breadcrumbHome') }}</span>
+            <span
+              class="breadcrumb-link"
+              role="button"
+              tabindex="0"
+              :aria-label="t('helpCenter.breadcrumbHome')"
+              @click="handleBreadcrumbHome"
+              @keydown="handleBreadcrumbHomeKeydown"
+            >{{ t('helpCenter.breadcrumbHome') }}</span>
             <template v-for="(crumb, idx) in breadcrumbPath" :key="idx">
               <el-icon><ArrowRight /></el-icon>
               <span
                 :class="['breadcrumb-item', { 'breadcrumb-current': idx === breadcrumbPath.length - 1 }]"
+                :role="idx < breadcrumbPath.length - 1 ? 'button' : undefined"
+                :tabindex="idx < breadcrumbPath.length - 1 ? 0 : undefined"
+                :aria-label="idx < breadcrumbPath.length - 1 ? `跳转到：${crumb.name}` : undefined"
                 @click="idx < breadcrumbPath.length - 1 && handleBreadcrumbClick(crumb)"
+                @keydown="idx < breadcrumbPath.length - 1 && handleBreadcrumbKeydown($event, crumb)"
               >
                 {{ crumb.name }}
               </span>
@@ -273,9 +284,21 @@ function handleBreadcrumbHome(): void {
   emit('goHome')
 }
 
+function handleBreadcrumbHomeKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleBreadcrumbHome()
+}
+
 /** 面包屑分类点击 */
 function handleBreadcrumbClick(crumb: { id: string; name: string }): void {
   emit('selectCategory', { id: crumb.id, name: crumb.name } as HelpCategory)
+}
+
+function handleBreadcrumbKeydown(event: KeyboardEvent, crumb: { id: string; name: string }): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleBreadcrumbClick(crumb)
 }
 
 /** 搜索结果选择文档 */

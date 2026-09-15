@@ -1149,3 +1149,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - HelpToc 帮助目录条目已补齐按钮语义和 Enter/Space 键盘跳转；UI 全量更新为 `18 files / 58 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - 帮助中心相关文档和搜索结果卡片已补齐按钮语义及 Enter/Space 操作；UI 全量更新为 `19 files / 59 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - 搜索结果面板关闭按钮已补齐“关闭搜索结果”名称，结果卡片支持键盘激活；UI 全量更新为 `20 files / 60 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
+- 帮助内容面包屑首页和分类项已补齐按钮语义及 Enter/Space 操作；UI 全量更新为 `21 files / 61 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
