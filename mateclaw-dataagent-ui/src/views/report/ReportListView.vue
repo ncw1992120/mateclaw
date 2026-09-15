@@ -15,13 +15,17 @@
     </div>
 
     <!-- Tab 切换 -->
-    <div class="tab-bar">
+    <div class="tab-bar" role="tablist" aria-label="报告分类">
       <button
         v-for="tab in tabs"
         :key="tab.key"
         class="tab-btn"
         :class="{ active: activeTab === tab.key }"
+        role="tab"
+        :aria-selected="String(activeTab === tab.key)"
+        :tabindex="activeTab === tab.key ? 0 : -1"
         @click="switchTab(tab.key)"
+        @keydown="handleTabKeydown($event, tab.key)"
       >
         {{ t(tab.label) }}
       </button>
@@ -227,6 +231,26 @@ function switchTab(key: TabKey): void {
   }
   activeTab.value = key
   loadReports()
+}
+
+function handleTabKeydown(event: KeyboardEvent, key: TabKey): void {
+  const currentIndex = tabs.findIndex((tab) => tab.key === key)
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % tabs.length
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex + tabs.length - 1) % tabs.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = tabs.length - 1
+  else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    switchTab(key)
+    return
+  } else return
+  event.preventDefault()
+  const nextKey = tabs[nextIndex].key
+  switchTab(nextKey)
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`.tab-bar .tab-btn:nth-child(${nextIndex + 1})`)?.focus()
+  })
 }
 
 /** 加载报告列表 */

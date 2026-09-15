@@ -32,6 +32,8 @@
 
 **2026-09-15 帮助内容面包屑键盘语义补充：** 首页和可返回分类面包屑补齐按钮语义、名称及 Enter/Space 激活；UI 全量更新为 `21 files / 61 tests passed`，生产构建和 Chrome CDP 复验通过。
 
+**2026-09-15 报告列表标签语义补充：** 报告分类切换补齐 `tablist/tab`、`aria-selected`、roving `tabindex` 和方向键/Home/End 导航；UI 全量更新为 `21 files / 62 tests passed`，生产构建和 Chrome CDP 复验通过。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：已关闭 `FE-CLOSE-02` 的“无正式入口”部分。新增 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 路由，配置中心数据配置页增加“数据集管理”入口；列表支持读取已有数据集并进入新建、编辑/预览，路由包装器负责取消、返回和保存后的列表导航。另已将数据源新建从固定 Aloudata 改为先选择 MySQL、PostgreSQL、SQL Server 或 Aloudata，再进入连接表单；文件来源已接入受控上传接口并自动回填 `StoredFileRef.objectId`，不再要求用户手填对象 ID；HTTP/API 改为从所选数据源 `connectionParams.apiDefinitions` 目录下拉选择；编辑器中暂未开放的操作现在会给出明确反馈。仪表盘脚本结果绑定已由 09 子计划的真实 Chrome channel E2E 在本地模拟环境关闭，正式外部数据源联调仍是后续 Gate。

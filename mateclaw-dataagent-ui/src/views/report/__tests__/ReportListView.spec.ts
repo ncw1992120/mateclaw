@@ -59,4 +59,16 @@ describe('ReportListView keyboard semantics', () => {
     expect(card.attributes('tabindex')).toBe('0')
     expect(card.attributes('aria-label')).toBe('查看报告：销售报告')
   })
+
+  it('exposes report sections as tabs with keyboard navigation', async () => {
+    const wrapper = mount(ReportListView, { global: { plugins: [i18n], stubs } })
+    await vi.waitFor(() => expect(wrapper.find('.report-card').exists()).toBe(true))
+    const tabs = wrapper.findAll('.tab-bar .tab-btn')
+    expect(tabs.length).toBe(3)
+    expect(tabs[0].attributes('role')).toBe('tab')
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    await tabs[0].trigger('keydown', { key: 'ArrowRight' })
+    expect(tabs[1].attributes('aria-selected')).toBe('true')
+    expect(tabs[0].attributes('tabindex')).toBe('-1')
+  })
 })

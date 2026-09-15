@@ -390,3 +390,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 搜索面板语义修复：** 搜索结果面板关闭按钮增加“关闭搜索结果”名称，结果卡片支持按钮语义和 Enter/Space 激活；新增回归测试，UI 全量 `20 files / 60 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
 
 **2026-09-15 帮助内容面包屑语义修复：** 首页和非当前分类面包屑支持键盘聚焦与 Enter/Space 跳转；新增回归测试，UI 全量 `21 files / 61 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 报告列表标签语义修复：** 报告分类切换改为标准 `tablist/tab` 语义，支持选中态、roving tabindex 和键盘导航；新增回归覆盖，UI 全量 `21 files / 62 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
