@@ -51,4 +51,27 @@ describe('ChartWidget', () => {
     expect(tabs[1].attributes('aria-selected')).toBe('true')
     expect(tabs[1].attributes('tabindex')).toBe('0')
   })
+
+  it('resets the active tab when tab definitions are replaced', async () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    await wrapper.findAll('[role="tab"]')[0].trigger('keydown', { key: 'ArrowRight' })
+    await wrapper.setProps({
+      component: {
+        ...component,
+        tabs: [
+          { id: 'summary', title: '汇总' },
+          { id: 'trend', title: '趋势' },
+        ],
+      },
+    })
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs[0].attributes('data-tab-id')).toBe('summary')
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    expect(tabs[0].attributes('tabindex')).toBe('0')
+  })
 })

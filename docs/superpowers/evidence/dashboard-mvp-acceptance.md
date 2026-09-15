@@ -1103,3 +1103,10 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 ### 2026-09-15 数据集预览操作反馈与主题布局复验
 
 当前 Chrome CDP 实测数据集预览中的六个辅助操作均有可见反馈；四主题下 viewport、document、body 和预览容器宽度均为 1440，无横向溢出。该证据关闭本地 FE-CLOSE-06 的“点击无反馈/误操作”风险，并补强 FE-CLOSE-08 的主题布局证据；非 Chrome 原生控件外观仍不在本次结论内。
+
+### 2026-09-15 多 Tab 配置替换回归
+
+- 复现：组件先选中第二个 Tab，再由编辑器替换为不包含该 Tab 的新定义；旧实现保留失效 `activeTabId`，表格、指标卡或图表预览没有活动数据。
+- 修复：三个组件统一根据 Tab ID 集合同步活动项，当前项被删除时回退到首个 Tab；无 Tab 时清空状态。
+- 验证：`WidgetTabs.spec.ts` 与 `ChartWidget.spec.ts` 定向测试 `6 passed`；完整 UI 单测 `16 files / 52 tests passed`，生产构建随后复验通过。
+- Google Chrome CDP `9222` 复验当前数据集编辑页可见控件空 AX 名称为 `0`，截图：`/tmp/mateclaw-cdp-multitab-regression-dataset-20260915.png`。由于当前页面没有多 Tab 运行时 fixture，本次 CDP 证据覆盖页面无回归；多 Tab 状态替换行为由真实组件回归测试覆盖。

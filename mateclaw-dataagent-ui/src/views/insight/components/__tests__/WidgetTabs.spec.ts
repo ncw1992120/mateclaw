@@ -62,4 +62,29 @@ describe('widget tabs', () => {
     expect(tabsInDom[1].attributes('aria-selected')).toBe('true')
     expect(tabsInDom[1].attributes('tabindex')).toBe('0')
   })
+
+  it.each([
+    ['table', DataTableWidget],
+    ['kpi', KpiCardWidget],
+  ])('%s resets the active tab when its tab definitions are replaced', async (_name, Component) => {
+    const wrapper = mount(Component, {
+      props: { component, componentData },
+      global: { plugins: [i18n], stubs },
+    })
+
+    const replacement = {
+      ...component,
+      tabs: [
+        { id: 'summary', title: '汇总' },
+        { id: 'trend', title: '趋势' },
+      ],
+    }
+    await wrapper.setProps({ component: replacement })
+
+    const replacementTabs = wrapper.findAll('[role="tab"]')
+    expect(replacementTabs[0].attributes('data-tab-id')).toBe('summary')
+    expect(replacementTabs[0].attributes('aria-selected')).toBe('true')
+    expect(replacementTabs[0].attributes('tabindex')).toBe('0')
+    expect(replacementTabs[1].attributes('aria-selected')).toBe('false')
+  })
 })

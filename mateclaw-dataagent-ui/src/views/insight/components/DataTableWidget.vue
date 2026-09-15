@@ -146,13 +146,15 @@ function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
   })
 }
 
-// 初始化 / 切换组件时自动选中第一个 Tab
-watch(hasTabs, (val) => {
-  if (val && !activeTabId.value) {
-    activeTabId.value = tabList.value[0]?.id ?? ''
-  }
-  if (!val) {
+// 初始化 / 切换组件或 Tab 定义时自动选中一个仍然存在的 Tab。
+// 不能只监听 hasTabs：编辑器替换 Tab 定义后，旧 activeTabId 可能已经不存在。
+watch(() => tabList.value.map(tab => tab.id).join('|'), () => {
+  if (!hasTabs.value) {
     activeTabId.value = ''
+    return
+  }
+  if (!tabList.value.some(tab => tab.id === activeTabId.value)) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
   }
 }, { immediate: true })
 

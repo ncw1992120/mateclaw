@@ -134,12 +134,14 @@ function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
   })
 }
 
-watch(hasTabs, (val) => {
-  if (val && !activeTabId.value) {
-    activeTabId.value = tabList.value[0]?.id ?? ''
-  }
-  if (!val) {
+// Tab 定义替换时校正失效的 activeTabId，避免组件进入无数据空态。
+watch(() => tabList.value.map(tab => tab.id).join('|'), () => {
+  if (!hasTabs.value) {
     activeTabId.value = ''
+    return
+  }
+  if (!tabList.value.some(tab => tab.id === activeTabId.value)) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
   }
 }, { immediate: true })
 
