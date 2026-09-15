@@ -1114,3 +1114,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 图表多 Tab 真实运行时 fixture 已加入 `dataset-management-entry.spec.ts`；使用用户 Chrome 保存的 JWT/工作区上下文执行 Chrome channel 定向用例 `1 passed (6.2s)`，预览中 ArrowRight 后第二个 Tab 获得焦点并同步 `aria-selected=true`，临时看板已自动清理。
 
 同一认证上下文下入口文件全量执行 `27 passed (1.4m)`；双源专用文件本轮因缺少 `MATECLAW_E2E_API_FILE_DASHBOARD_ID` 等 seed 状态变量而按 fail-fast 停止，未将其误报为业务失败。
+
+补齐同一轮 seed 状态后，双源专用 E2E `4 passed (21.4s)`；用户 Chrome CDP 视觉脚本四页截图全部生成，双源 Table 实测 5 行并包含 `120.5`，ECharts 页面 `canvasCount=1` 且标题可见。
