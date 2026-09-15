@@ -469,6 +469,63 @@ test('仪表盘预览数据表多 Tab 支持键盘切换', async ({ page, reques
   }
 })
 
+test('仪表盘预览图表多 Tab 支持键盘切换', async ({ page, request }) => {
+  const token = required('MATECLAW_E2E_TOKEN')
+  const workspace = required('MATECLAW_E2E_WORKSPACE_ID')
+  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-Id': workspace }
+  const dashboardName = `E2E Chart Tabs ${Date.now()}`
+  const emptySource = { datasourceId: '', metrics: [], dimensions: [], filters: [], limit: 100 }
+  const schemaJson = JSON.stringify({
+    version: '1.1',
+    pages: [{
+      id: 'chart-tabs-page',
+      name: '图表多 Tab',
+      components: [{
+        id: 'chart-tabs-widget',
+        type: 'chart',
+        title: '多 Tab 图表',
+        position: { x: 0, y: 0, w: 12, h: 6 },
+        renderType: 'echarts',
+        dataSource: emptySource,
+        tabs: [
+          { id: 'overview', title: '概览', dataSource: emptySource },
+          { id: 'trend', title: '趋势', dataSource: emptySource },
+        ],
+      }],
+    }],
+    datasetInputs: [],
+    script: '',
+  })
+  const create = await request.post('/dataagent/api/v1/insight/dashboards', {
+    headers,
+    data: { name: dashboardName, description: 'temporary chart tab semantics', schemaJson },
+  })
+  expect(create.ok()).toBeTruthy()
+  const created = await create.json() as { data?: { id?: string } }
+  const dashboardId = created.data?.id
+  expect(dashboardId).toBeTruthy()
+  await page.addInitScript(({ authToken, workspaceId }) => {
+    localStorage.setItem('token', authToken)
+    localStorage.setItem('workspaceId', JSON.stringify(workspaceId))
+  }, { authToken: token, workspaceId: workspace })
+  try {
+    await page.goto('/?nav=insight')
+    const card = page.locator('.dashboard-card').filter({ hasText: dashboardName })
+    await expect(card).toHaveCount(1)
+    await card.getByRole('button', { name: '预览' }).click()
+    await expect(page.locator('.dashboard-preview-view')).toBeVisible()
+    const tabs = page.locator('.chart-widget [role="tab"]')
+    await expect(tabs).toHaveCount(2)
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
+    await tabs.first().focus()
+    await tabs.first().press('ArrowRight')
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs.nth(1)).toBeFocused()
+  } finally {
+    if (dashboardId) await request.delete(`/dataagent/api/v1/insight/dashboards/${dashboardId}`, { headers })
+  }
+})
+
 test('从产品入口创建文件数据集并进入预览', async ({ page, request }) => {
   const token = required('MATECLAW_E2E_TOKEN')
   const workspace = required('MATECLAW_E2E_WORKSPACE_ID')

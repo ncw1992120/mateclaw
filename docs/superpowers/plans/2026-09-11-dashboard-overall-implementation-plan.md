@@ -499,3 +499,5 @@ make dashboard-verify-local
 **2026-09-15 数据集页面视觉补验：** Chrome CDP 在数据集预览页逐一触发暂未开放操作，均显示明确提示；light、warm、eye-care、dark 四主题下文档/页面/预览容器均无横向溢出。该证据进一步收敛本地 FE-CLOSE-06/08，完整跨浏览器和原生控件外观审计仍保持 PARTIAL。
 
 **2026-09-15 多 Tab 状态一致性修复：** 表格、指标卡和图表组件在 Tab 定义被替换后自动校正失效的 `activeTabId`，避免编辑器配置变更导致预览空白；新增回归测试并通过 UI 定向验证。该修复属于本地运行时闭环，不改变外部 Aloudata、对象存储和权限 Gate。
+
+**2026-09-15 图表多 Tab 运行时 fixture 补齐：** 为真实 Chrome channel E2E 增加临时图表多 Tab 看板，覆盖预览中的 `tablist/tab`、ArrowRight 选中态和焦点同步；fixture 在用例结束后自动删除，补齐此前“仅组件单测”的运行时证据缺口。
