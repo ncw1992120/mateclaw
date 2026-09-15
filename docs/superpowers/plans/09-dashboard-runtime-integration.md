@@ -396,3 +396,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 AI 推理折叠语义修复：** 洞察 AI 助手推理过程标题支持键盘聚焦、Enter/Space 切换，并暴露展开状态；新增回归测试，UI 全量 `22 files / 63 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
 
 **2026-09-15 本地模拟运行时最终回归：** 按本轮范围不进行真实 Aloudata/正式存储联调，改以本地模拟 Compose 和 Chrome channel 作为唯一运行时验收环境。完整 Playwright `36 passed (7.2m)`；双源 JDBC+模拟 Aloudata 结果严格为 5 行并包含 `120.5`，历史快照差异不再复现。CDP 视觉脚本输出 `/tmp/mateclaw-dashboard-cdp/dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`，ECharts `canvasCount=1` 且标题可见；未发现新的本地运行时回归。
+
+**2026-09-15 运行时聚合门禁恢复：** 遗留 E2E MinIO/WireMock 容器占用标准模拟端口导致门禁首次退出码 `7`；清理明确冲突容器并重启本地模拟栈后，`make dashboard-verify-local` 退出码 `0`，DataAgent、Runner、UI、构建和设计门禁均通过。后续执行 E2E 前需遵守同一轮 Compose 生命周期，避免跨栈复用端口。

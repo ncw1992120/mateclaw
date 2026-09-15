@@ -1159,3 +1159,8 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome channel Playwright 完整矩阵 `36 passed (7.2m)`，无失败、无跳过；`scripts/verify-dashboard-design.sh` 返回 `DESIGN-PASS`。
 - Chrome CDP 视觉脚本截图目录 `/tmp/mateclaw-dashboard-cdp`：列表、编辑器、Table、ECharts 四页均成功；Table `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树包含“脚本结果数据集输入”和“最终结果预览”。
 - 本轮未发现新的本地业务、快照或可访问性回归。
+
+### 2026-09-15 聚合本地门禁恢复
+
+- 首次 `make dashboard-verify-local` 退出码 `7` 的原因是遗留 E2E MinIO/WireMock 容器占用模拟栈端口，并非业务断言失败。
+- 清理明确冲突容器并重启标准模拟 Compose 后，前置健康检查、DataAgent、Runner `24 passed`、UI `22 files / 63 tests passed`、生产构建和 `DESIGN-PASS` 全部通过，聚合门禁退出码 `0`。

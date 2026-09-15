@@ -494,6 +494,8 @@ make dashboard-verify-local
 **2026-09-15 技能配置页无障碍补充：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序控件补齐可访问标签；UI 单测 `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能配置页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
 
 **2026-09-15 本轮范围冻结与本地模拟最终回归：** 本轮明确只以本地模拟数据、接口和 Docker 测试栈作为实施与验收依据，不等待真实 Aloudata、正式对象存储或外部权限联调；历史 `EXTERNAL-BLOCKED` 记录仅用于追溯，不作为本轮阻塞。当前工作树使用同一轮 seed、JWT、工作区 `1`、`MATECLAW_E2E_ALOUDATA_MODE=simulation` 和 Chrome channel 执行完整 Playwright 矩阵 `36 passed (7.2m)`，无失败、无跳过；`scripts/verify-dashboard-design.sh` 返回 `DESIGN-PASS`。随后 Chrome CDP 视觉脚本成功采集列表、编辑器、Table 和 ECharts：Table `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树含“脚本结果数据集输入”“最终结果预览”等控件，截图目录 `/tmp/mateclaw-dashboard-cdp`。未发现新的本地业务或视觉回归。
+
+**2026-09-15 聚合门禁恢复：** 首次执行 `make dashboard-verify-local` 因遗留 `mateclaw-e2e-minio`/`mateclaw-e2e-http` 占用 19000/18443 端口而退出码 `7`；按明确容器名清理冲突后重新启动标准本地模拟 Compose，前置健康检查、DataAgent、Runner `24 passed`、UI `22 files / 63 tests passed`、生产构建及设计门禁全部通过，`make dashboard-verify-local` 退出码 `0`。该记录将端口占用归类为测试环境生命周期问题，不改变本地实现结论。
 **2026-09-15 继续实施回归修复：** 当前工作树发现并修复两项本地闭环稳定性问题：E2E seed 不等待 Aloudata 模拟元数据同步，导致指标分页控件偶发未渲染；仪表盘标题键盘 Enter 未阻止默认行为，导致名称输入框立即失焦。现已分别加入同步状态轮询和稳定的键盘编辑处理，定向 Chrome channel E2E 2 passed。完整矩阵在重新 seed 后复跑，真实 Aloudata 授权 Gate 仍独立保持 EXTERNAL-BLOCKED。
 **2026-09-15 视觉验收与种子稳定性补充：** 重新 seed 后完整 Chrome channel 矩阵 35 passed (2.2m)；指标分页和标题键盘两个回归定向 2 passed (7.4s)。Chrome CDP 实际双源结果为 5 行、含 120.5、无执行告警，并保存当前截图。seed 脚本现在显式触发同步但以短客户端超时 + 指标/维度可读性作为完成条件，兼容本地缺少 embedding 服务的模拟环境。
 **最终提交验收（2026-09-15）：** 37a1041d 已完成 UI 单测 49/49、生产构建、定向回归 2/2，以及重新 seed 后 Chrome channel 完整 E2E 35/35；Chrome CDP 双源结果 5 行且包含 120.5。真实 Aloudata 授权及正式外部服务 Gate 仍按原计划独立保留。

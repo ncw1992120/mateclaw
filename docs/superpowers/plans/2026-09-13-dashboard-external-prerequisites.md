@@ -402,6 +402,10 @@ bash scripts/e2e/verify-dashboard-mvp-cleanup.sh
 - 使用上述模拟变量运行 `AloudataAnalysisViewExternalIT` 已通过，覆盖目录、详情、模拟基线和筛选结果变化；真实环境仍须使用独立的 HTTPS/truststore 和授权视图重新执行；
 - 清理入口 `./dev-support/local-simulation/scripts/cleanup.sh` 可删除容器、网络和本地测试卷。
 - 根目录统一入口 `./scripts/verify-dashboard-external-prerequisites.sh --local` 已通过；`--simulation` 还会校验本地 Aloudata tenant/view/filter 占位配置；入口会实际列出 MinIO 四个对象并检查 Runner；`--external` 在缺少真实 Aloudata 变量时返回明确 `BLOCKED`（退出码 3），且不打印认证值。
+
+### 2026-09-15 本地模拟门禁恢复记录
+
+首次运行 `make dashboard-verify-local` 时，旧 E2E 容器 `mateclaw-e2e-minio`、`mateclaw-e2e-http` 占用 19000/18443，模拟服务检查退出码 `7`。仅清理这两个明确的历史测试容器后，`dev-support/local-simulation/scripts/start.sh` 成功启动 MySQL、Postgres、MinIO、WireMock 和 Python Runner；随后 `make dashboard-verify-local` 完整退出码 `0`。本地模拟前置条件现已满足，后续应避免同时保留两套映射相同宿主端口的 Compose 栈。
 - 独立 Dashboard E2E 可通过 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 复用 E2E HTTPS WireMock，自动 seed `local_sales_view` 数据源/数据集；该模式只验证本地 Adapter、`datasets.read` 过滤下推和页面编排，不得替代真实 Aloudata 视图授权与 ALO-X02。
 - Runner 网络复验：`/health` 返回 `status=UP`，访问外部 DNS/HTTPS 失败，证明本地 Runner 未获得任意外网访问能力。
 
