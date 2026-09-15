@@ -5,7 +5,7 @@
       <span class="search-count" v-if="results.length > 0">
         {{ t('helpCenter.searchResultCount', { count: results.length }) }}
       </span>
-      <el-button link size="small" @click="$emit('close')">
+      <el-button link size="small" aria-label="关闭搜索结果" @click="emit('close')">
         <el-icon><Close /></el-icon>
       </el-button>
     </div>
@@ -18,7 +18,7 @@
           role="button"
           tabindex="0"
           :aria-label="`打开搜索结果：${item.title}`"
-          @click="$emit('selectDoc', item)"
+          @click="emit('selectDoc', item)"
           @keydown="handleKeydown($event, item)"
         >
           <div class="search-item-title">

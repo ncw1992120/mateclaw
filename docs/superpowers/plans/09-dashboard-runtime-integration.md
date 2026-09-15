@@ -386,3 +386,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 HelpToc 键盘语义修复：** 帮助目录条目由仅鼠标点击改为可聚焦按钮语义，Enter/Space 均可触发跳转；新增回归测试，UI 全量 `18 files / 58 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
 
 **2026-09-15 帮助文档卡片键盘语义修复：** 相关文档和搜索结果卡片补齐按钮语义、动态可访问名称和 Enter/Space 激活；新增回归测试，UI 全量 `19 files / 59 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 搜索面板语义修复：** 搜索结果面板关闭按钮增加“关闭搜索结果”名称，结果卡片支持按钮语义和 Enter/Space 激活；新增回归测试，UI 全量 `20 files / 60 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
