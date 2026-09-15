@@ -5,25 +5,35 @@
       <button class="right-collapse-btn" @click="emit('collapse')" title="折叠右栏" aria-label="折叠右栏">▶</button>
     </div>
 
-    <div class="tabs" style="width: 100%;">
+    <div class="tabs" style="width: 100%;" role="tablist" aria-label="仪表盘视图">
       <button
         class="tab"
         :class="activeTab === 'dashboard' ? 'active' : 'inactive'"
+        role="tab"
+        aria-controls="dashboard-panel-view"
+        :aria-selected="String(activeTab === 'dashboard')"
+        :tabindex="activeTab === 'dashboard' ? 0 : -1"
         @click="activeTab = 'dashboard'"
+        @keydown="handleTabKeydown($event, 'dashboard')"
       >
         {{ t('dashboard.tabDashboard') }}
       </button>
       <button
         class="tab"
         :class="activeTab === 'rawdata' ? 'active' : 'inactive'"
+        role="tab"
+        aria-controls="dashboard-panel-rawdata"
+        :aria-selected="String(activeTab === 'rawdata')"
+        :tabindex="activeTab === 'rawdata' ? 0 : -1"
         @click="activeTab = 'rawdata'"
+        @keydown="handleTabKeydown($event, 'rawdata')"
       >
         {{ t('dashboard.tabRawData') }}
       </button>
     </div>
 
     <!-- Dashboard View -->
-    <div v-show="activeTab === 'dashboard'" class="view-dashboard" style="width: 100%; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+    <div id="dashboard-panel-view" v-show="activeTab === 'dashboard'" role="tabpanel" aria-label="仪表盘" class="view-dashboard" style="width: 100%; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
       <div class="dashboard-content" style="width: 100%; flex: 1; overflow-y: auto; overflow-x: hidden;">
       <div class="section-label" style="width: 100%;">
         <span class="text">{{ t('dashboard.kpiOverview') }}</span>
@@ -111,7 +121,7 @@
     </div>
 
     <!-- Raw Data View -->
-    <div v-show="activeTab === 'rawdata'" class="view-rawdata" style="width: 100%; flex: 1; overflow-y: auto; overflow-x: hidden;">
+    <div id="dashboard-panel-rawdata" v-show="activeTab === 'rawdata'" role="tabpanel" aria-label="原始数据" class="view-rawdata" style="width: 100%; flex: 1; overflow-y: auto; overflow-x: hidden;">
       <table class="data-table" style="width:100%">
         <thead>
           <tr>
@@ -219,6 +229,27 @@ function deferredInit(): void {
 function switchChart(type: string): void {
   activeChartType.value = type
   setChartOption(type)
+}
+
+function handleTabKeydown(event: KeyboardEvent, tab: 'dashboard' | 'rawdata'): void {
+  const tabs: Array<'dashboard' | 'rawdata'> = ['dashboard', 'rawdata']
+  const currentIndex = tabs.indexOf(tab)
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % tabs.length
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex + tabs.length - 1) % tabs.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = tabs.length - 1
+  else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    activeTab.value = tab
+    return
+  } else return
+  event.preventDefault()
+  activeTab.value = tabs[nextIndex]
+  nextTick(() => {
+    const target = document.querySelector<HTMLElement>(`.tabs .tab:nth-child(${nextIndex + 1})`)
+    target?.focus()
+  })
 }
 
 /** 设置图表配置 */

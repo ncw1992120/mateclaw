@@ -380,3 +380,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 最终 SHA 验收：** 提交 37a1041d 在干净 seed 数据和 MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 下完成 Chrome channel 全量 35 passed (2.1m)，确认同步等待、双源快照和标题键盘修复未引入回归。
 
 **2026-09-15 当前提交全量基线：** 同一认证、seed 和 Chrome channel 以单 worker 重跑 36 条用例，结果 `36 passed (5.6m)`，无失败、无跳过；Google Chrome CDP 四页截图和 AX 摘要同步通过，双源 Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`。共享服务的并行会话争用记录为测试基础设施边界，不改变串行产品验收结论。
+
+**2026-09-15 DashboardPanel 标签语义修复：** 右侧“仪表盘/原始数据”切换由普通按钮补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键及 Home/End 导航；新增组件回归，UI 全量 `17 files / 57 tests passed`，生产构建和 Chrome CDP 四页视觉验收通过。
