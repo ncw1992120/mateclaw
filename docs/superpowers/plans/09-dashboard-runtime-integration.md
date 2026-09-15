@@ -382,3 +382,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 当前提交全量基线：** 同一认证、seed 和 Chrome channel 以单 worker 重跑 36 条用例，结果 `36 passed (5.6m)`，无失败、无跳过；Google Chrome CDP 四页截图和 AX 摘要同步通过，双源 Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`。共享服务的并行会话争用记录为测试基础设施边界，不改变串行产品验收结论。
 
 **2026-09-15 DashboardPanel 标签语义修复：** 右侧“仪表盘/原始数据”切换由普通按钮补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键及 Home/End 导航；新增组件回归，UI 全量 `17 files / 57 tests passed`，生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 HelpToc 键盘语义修复：** 帮助目录条目由仅鼠标点击改为可聚焦按钮语义，Enter/Space 均可触发跳转；新增回归测试，UI 全量 `18 files / 58 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。

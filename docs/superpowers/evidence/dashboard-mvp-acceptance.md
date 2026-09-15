@@ -1146,3 +1146,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 本轮 Google Chrome CDP 视觉脚本成功生成列表、编辑器、Table 和 ECharts 截图；Table 实测 `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树包含“脚本结果数据集输入”“最终结果预览”等控件。截图目录：`/tmp/mateclaw-dashboard-cdp`。
 - 为避免计划默认命令重复触发共享服务并发争用，Playwright 默认 worker 已固定为 `1`，仍可用 `MATECLAW_E2E_WORKERS` 显式覆盖；不传 worker 参数运行双源 4 条用例实际显示 `Running 4 tests using 1 worker`，结果 `4 passed (41.6s)`。
 - DashboardPanel 右侧“仪表盘/原始数据”标签已补齐标准 `tablist/tab` 与方向键导航；UI 全量 `17 files / 57 tests passed`、生产构建通过。CDP 四页复验仍为 Table 5 行且含 `120.5`、ECharts `canvasCount=1`，截图目录 `/tmp/mateclaw-dashboard-cdp`。
+- HelpToc 帮助目录条目已补齐按钮语义和 Enter/Space 键盘跳转；UI 全量更新为 `18 files / 58 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。

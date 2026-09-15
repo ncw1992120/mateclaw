@@ -24,6 +24,8 @@
 
 **2026-09-15 DashboardPanel 标签语义补充：** 右侧仪表盘/原始数据切换支持标准 Tab 语义和键盘导航；组件回归通过，UI 全量 `17 files / 57 tests passed`，Chrome CDP 视觉验收保持通过。
 
+**2026-09-15 HelpToc 键盘语义补充：** 帮助目录可点击条目补齐 `role=button`、`tabindex=0`、动态 `aria-label` 和 Enter/Space 激活；UI 全量更新为 `18 files / 58 tests passed`，生产构建和 Chrome CDP 复验通过。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：已关闭 `FE-CLOSE-02` 的“无正式入口”部分。新增 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 路由，配置中心数据配置页增加“数据集管理”入口；列表支持读取已有数据集并进入新建、编辑/预览，路由包装器负责取消、返回和保存后的列表导航。另已将数据源新建从固定 Aloudata 改为先选择 MySQL、PostgreSQL、SQL Server 或 Aloudata，再进入连接表单；文件来源已接入受控上传接口并自动回填 `StoredFileRef.objectId`，不再要求用户手填对象 ID；HTTP/API 改为从所选数据源 `connectionParams.apiDefinitions` 目录下拉选择；编辑器中暂未开放的操作现在会给出明确反馈。仪表盘脚本结果绑定已由 09 子计划的真实 Chrome channel E2E 在本地模拟环境关闭，正式外部数据源联调仍是后续 Gate。
