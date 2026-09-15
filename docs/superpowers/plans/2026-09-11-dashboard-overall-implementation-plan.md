@@ -515,3 +515,5 @@ make dashboard-verify-local
 **2026-09-15 API+文件结果等待修复：** 修正并行 E2E 下 API+文件异步结果断言过短导致的误报，严格业务行数不变；双源串行 `4 passed (1.1m)`，CDP 视觉证据持续通过。
 
 **2026-09-15 并行复验边界：** 修复后 3 workers 全量复验出现共享本地服务的导航/会话超时，不能据此判定产品失败；当前发布门禁以隔离环境串行结果为准，完整矩阵并行化需另行解决 worker 资源隔离。
+
+**2026-09-15 串行全量与 CDP 基线：** 同一认证、seed 和 Chrome channel 下使用 `--workers=1` 重跑完整矩阵，`36 passed (5.6m)`、无失败/跳过；Google Chrome CDP 重新采集列表、编辑器、Table、ECharts 四页，Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`，视觉证据目录为 `/tmp/mateclaw-dashboard-cdp`。

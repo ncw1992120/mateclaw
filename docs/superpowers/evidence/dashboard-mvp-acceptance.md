@@ -1142,3 +1142,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - 在 API+文件结果等待修复后再次以 3 workers 执行 36 条 Chrome channel 用例时，多个用例在共享本地服务的 `page.goto` 阶段出现 120 秒超时，API+文件用例也因并行会话关闭而未得到结果行；这是测试环境并发/会话资源争用，不是视觉快照差异或业务断言回归。
 - 当前可复现的权威证据仍采用串行执行：双源专用 4 条用例 `4 passed (1.1m)`，其中 JDBC+Aloudata 严格快照、5 行及 `120.5` 断言均通过；完整矩阵的并行结果不作为发布门禁，后续应在隔离 worker 或独立服务实例下再评估并行度。
+- 随后使用同一认证、seed 和 Chrome channel 以 `--workers=1` 重跑完整矩阵，结果为 `36 passed (5.6m)`，无失败、无跳过；该串行结果是当前提交的全量验收基线。
+- 本轮 Google Chrome CDP 视觉脚本成功生成列表、编辑器、Table 和 ECharts 截图；Table 实测 `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树包含“脚本结果数据集输入”“最终结果预览”等控件。截图目录：`/tmp/mateclaw-dashboard-cdp`。
