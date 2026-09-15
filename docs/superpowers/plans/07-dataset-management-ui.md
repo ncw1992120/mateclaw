@@ -20,6 +20,8 @@
 
 **2026-09-15 当前验收基线更正：** 上述 `27/27`、`42 tests`、`26 passed` 为历史阶段记录；当前 UI 单测为 `16 files / 49 tests passed`，完整 Chrome channel E2E 为 `29 passed (4.5m)`，以统一验收记录最新章节为准。
 
+**2026-09-15 基线更新：** 在同一认证、seed 和 Chrome channel 下以单 worker 重跑完整矩阵，结果更新为 `36 passed (5.6m)`，无失败、无跳过；并行 worker 因共享本地服务会话争用不作为发布门禁。
+
 ## 前端产品闭环缺口（2026-09-14）
 
 > 2026-09-14 实施进展：已关闭 `FE-CLOSE-02` 的“无正式入口”部分。新增 `/datasets`、`/datasets/new`、`/datasets/:id/edit` 路由，配置中心数据配置页增加“数据集管理”入口；列表支持读取已有数据集并进入新建、编辑/预览，路由包装器负责取消、返回和保存后的列表导航。另已将数据源新建从固定 Aloudata 改为先选择 MySQL、PostgreSQL、SQL Server 或 Aloudata，再进入连接表单；文件来源已接入受控上传接口并自动回填 `StoredFileRef.objectId`，不再要求用户手填对象 ID；HTTP/API 改为从所选数据源 `connectionParams.apiDefinitions` 目录下拉选择；编辑器中暂未开放的操作现在会给出明确反馈。仪表盘脚本结果绑定已由 09 子计划的真实 Chrome channel E2E 在本地模拟环境关闭，正式外部数据源联调仍是后续 Gate。
