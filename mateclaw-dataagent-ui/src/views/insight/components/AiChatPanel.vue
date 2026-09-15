@@ -92,7 +92,15 @@
           <div class="message-content">
             <template v-if="msg.role === 'assistant' && msg.reasoning">
               <div class="reasoning-block">
-                <div class="reasoning-header" @click="toggleReasoning(msg)">
+                <div
+                  class="reasoning-header"
+                  role="button"
+                  tabindex="0"
+                  :aria-expanded="String(!!msg.reasoningExpanded)"
+                  :aria-label="t('insight.aiReasoning')"
+                  @click="toggleReasoning(msg)"
+                  @keydown="handleReasoningKeydown($event, msg)"
+                >
                   <el-icon :class="['reasoning-arrow', { expanded: msg.reasoningExpanded }]"><ArrowRight /></el-icon>
                   <span class="reasoning-label">{{ t('insight.aiReasoning') }}</span>
                   <span class="reasoning-count">{{ (msg.reasoning || '').length }} 字</span>
@@ -409,6 +417,12 @@ function renderMessageContent(content: string): string {
 /** 切换思考过程展开/收起状态 */
 function toggleReasoning(msg: ChatMessage): void {
   msg.reasoningExpanded = !msg.reasoningExpanded
+}
+
+function handleReasoningKeydown(event: KeyboardEvent, msg: ChatMessage): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggleReasoning(msg)
 }
 
 /** 组件卸载时关闭 SSE 连接 */

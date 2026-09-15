@@ -1151,3 +1151,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 搜索结果面板关闭按钮已补齐“关闭搜索结果”名称，结果卡片支持键盘激活；UI 全量更新为 `20 files / 60 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - 帮助内容面包屑首页和分类项已补齐按钮语义及 Enter/Space 操作；UI 全量更新为 `21 files / 61 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
 - 报告列表分类标签已补齐标准 Tab 语义和键盘导航；UI 全量更新为 `21 files / 62 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
+- AI 助手推理过程折叠标题已补齐按钮语义、展开状态和 Enter/Space 操作；UI 全量更新为 `22 files / 63 tests passed`、生产构建通过。Chrome CDP 四页复验仍通过，Table 5 行且含 `120.5`，ECharts `canvasCount=1`。
