@@ -1111,4 +1111,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 验证：`WidgetTabs.spec.ts` 与 `ChartWidget.spec.ts` 定向测试 `6 passed`；完整 UI 单测 `16 files / 52 tests passed`，生产构建随后复验通过。
 - Google Chrome CDP `9222` 复验当前数据集编辑页可见控件空 AX 名称为 `0`，截图：`/tmp/mateclaw-cdp-multitab-regression-dataset-20260915.png`。由于当前页面没有多 Tab 运行时 fixture，本次 CDP 证据覆盖页面无回归；多 Tab 状态替换行为由真实组件回归测试覆盖。
 
-图表多 Tab 真实运行时 fixture 已加入 `dataset-management-entry.spec.ts`，等待下一轮带认证上下文的 Chrome channel 矩阵执行；在此之前不将该新增用例标记为 PASS。
+图表多 Tab 真实运行时 fixture 已加入 `dataset-management-entry.spec.ts`；使用用户 Chrome 保存的 JWT/工作区上下文执行 Chrome channel 定向用例 `1 passed (6.2s)`，预览中 ArrowRight 后第二个 Tab 获得焦点并同步 `aria-selected=true`，临时看板已自动清理。
