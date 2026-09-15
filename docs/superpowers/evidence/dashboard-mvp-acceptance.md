@@ -1116,3 +1116,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 同一认证上下文下入口文件全量执行 `27 passed (1.4m)`；双源专用文件本轮因缺少 `MATECLAW_E2E_API_FILE_DASHBOARD_ID` 等 seed 状态变量而按 fail-fast 停止，未将其误报为业务失败。
 
 补齐同一轮 seed 状态后，双源专用 E2E `4 passed (21.4s)`；用户 Chrome CDP 视觉脚本四页截图全部生成，双源 Table 实测 5 行并包含 `120.5`，ECharts 页面 `canvasCount=1` 且标题可见。
+
+随后在同一认证、seed 和 Chrome channel 配置下重跑完整矩阵，共 `36 passed (2.3m)`，无失败、无跳过。

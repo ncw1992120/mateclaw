@@ -505,3 +505,5 @@ make dashboard-verify-local
 **2026-09-15 入口矩阵复验：** 使用用户 Chrome 保存的 JWT/工作区上下文执行 `dataset-management-entry.spec.ts` 全量 `27 passed (1.4m)`，包含图表多 Tab fixture；双源专用矩阵本轮因缺少 seed Dashboard ID 按 fail-fast 规则停止，不将状态变量缺失记为业务失败。
 
 **2026-09-15 双源与 CDP 最终复验：** 使用同一轮 seed 状态重新执行 `dashboard-multi-source.spec.ts`，结果 `4 passed (21.4s)`；内置 CDP 视觉脚本生成列表、编辑器、Table 和 ECharts 四页截图，Table 实测 `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见。
+
+**2026-09-15 全量矩阵最终复跑：** 注入同一轮 seed 状态后完整 Chrome channel E2E 为 `36 passed (2.3m)`，无失败、无跳过；包含 27 条入口用例、4 条双源用例和错误/兼容场景。
