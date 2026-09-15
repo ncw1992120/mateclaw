@@ -290,3 +290,8 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 **2026-09-15 配置中心分类 Tab 语义：** 配置中心分类按钮补齐 `tablist/tab`、选中态和 roving focus，支持方向键/Home/End 切换；定向 Chrome E2E `1 passed`，CDP 现场确认 7 个分类的焦点与选中态同步。
 
 **2026-09-15 工作空间二级菜单语义：** 工作空间子菜单补齐 `tablist/tab`、`aria-selected`、roving focus 和 Enter/Space/方向键切换；定向 Chrome E2E `1 passed`，CDP 现场确认 5 个子菜单焦点与选中态同步。
+### 2026-09-15 指标分页同步竞态与最终入口验收
+
+重新建立本地模拟 Aloudata 数据源时发现，元数据同步为异步流程，页面可能在指标/维度列表尚未可读时进入空态，导致分页 combobox 不存在。E2E seed 现显式触发同步，并等待指标、维度分页数据可读后再创建数据集；本地没有 embedding 服务时只等待页面所需元数据，不等待后置向量索引。Chrome channel 定向用例验证“指标每页条数”“维度每页条数”均可访问。
+
+最终提交 1b7d4e35 在重新 seed 后完成入口/数据源/数据集/仪表盘完整 E2E 35 passed (2.1m)；该结果覆盖当前数据配置入口，历史异步空态记录不再代表当前实现。
