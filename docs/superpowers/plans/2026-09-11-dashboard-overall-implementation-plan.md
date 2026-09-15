@@ -517,3 +517,5 @@ make dashboard-verify-local
 **2026-09-15 并行复验边界：** 修复后 3 workers 全量复验出现共享本地服务的导航/会话超时，不能据此判定产品失败；当前发布门禁以隔离环境串行结果为准，完整矩阵并行化需另行解决 worker 资源隔离。
 
 **2026-09-15 串行全量与 CDP 基线：** 同一认证、seed 和 Chrome channel 下使用 `--workers=1` 重跑完整矩阵，`36 passed (5.6m)`、无失败/跳过；Google Chrome CDP 重新采集列表、编辑器、Table、ECharts 四页，Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`，视觉证据目录为 `/tmp/mateclaw-dashboard-cdp`。
+
+**2026-09-15 默认 E2E 并发稳定性修复：** Playwright 默认 worker 固定为 `1`，可通过 `MATECLAW_E2E_WORKERS` 显式覆盖；不传 worker 参数执行双源 4 条用例显示使用 1 worker 并 `4 passed (41.6s)`，避免共享 E2E 服务的并行会话争用。

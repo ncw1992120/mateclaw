@@ -1144,3 +1144,4 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 当前可复现的权威证据仍采用串行执行：双源专用 4 条用例 `4 passed (1.1m)`，其中 JDBC+Aloudata 严格快照、5 行及 `120.5` 断言均通过；完整矩阵的并行结果不作为发布门禁，后续应在隔离 worker 或独立服务实例下再评估并行度。
 - 随后使用同一认证、seed 和 Chrome channel 以 `--workers=1` 重跑完整矩阵，结果为 `36 passed (5.6m)`，无失败、无跳过；该串行结果是当前提交的全量验收基线。
 - 本轮 Google Chrome CDP 视觉脚本成功生成列表、编辑器、Table 和 ECharts 截图；Table 实测 `5` 行且包含 `120.5`，ECharts `canvasCount=1` 且标题可见，编辑器 AX 树包含“脚本结果数据集输入”“最终结果预览”等控件。截图目录：`/tmp/mateclaw-dashboard-cdp`。
+- 为避免计划默认命令重复触发共享服务并发争用，Playwright 默认 worker 已固定为 `1`，仍可用 `MATECLAW_E2E_WORKERS` 显式覆盖；不传 worker 参数运行双源 4 条用例实际显示 `Running 4 tests using 1 worker`，结果 `4 passed (41.6s)`。
