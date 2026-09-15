@@ -361,3 +361,4 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 技能配置分页 AX 补齐：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序补齐标签；UI `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
 **2026-09-15 当前工作树回归修复：** 发现标题 h2 的键盘 Enter 事件未阻止默认行为，可能导致 toolbar-name-input 刚挂载就失焦；改为 .prevent + startNameEditing 后，Chrome channel 的标题键盘编辑断言通过。另将 E2E seed 的 Aloudata 模拟元数据同步改为显式触发并等待完成，避免指标平台分页在异步空态期间缺失。相关定向 E2E 2 passed，完整矩阵待重新 seed 后复跑。
 **2026-09-15 标题键盘回归最终修正：** 复现确认 h2 的 Enter keydown 后，名称输入框同一按键的 keyup 会触发原 blurTarget，导致编辑框立即消失。现将名称/描述输入框提交事件改为 keydown.prevent，Chrome CDP 实测输入框可见且焦点保持；相关定向 E2E 2 passed，双源 CDP 仍为 5 行且含 120.5。
+**2026-09-15 最终 SHA 验收：** 提交 37a1041d 在干净 seed 数据和 MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 下完成 Chrome channel 全量 35 passed (2.1m)，确认同步等待、双源快照和标题键盘修复未引入回归。

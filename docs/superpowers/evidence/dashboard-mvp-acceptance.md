@@ -1094,3 +1094,6 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 进一步复验发现，标题 h2 的 Enter keydown 会挂载名称输入框；若输入框监听 keyup，同一按键的 keyup 会立即触发失焦。最终将名称和描述输入框的回车提交监听统一改为 keydown.prevent，Chrome CDP 实测 input.toolbar-name-input 可见且焦点保持在该输入框。指标平台两个分页内部 combobox 也实测分别拥有“指标每页条数”“维度每页条数”。
 
 双源仪表盘在当前 Chrome CDP 中实际执行后得到 5 行、包含 120.5、execution-alert=0，截图：/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915-r2.png。标题键盘截图：/tmp/mateclaw-cdp-title-keyboard-20260915-r3.png；指标分页截图：/tmp/mateclaw-cdp-metric-pagination-20260915-r2.png。
+### 2026-09-15 最终提交矩阵验收
+
+提交 37a1041d 在重新 seed 并注入 Chrome channel 配置后，完整 Playwright E2E 为 35 passed (2.1m)，无失败、无跳过；覆盖双源结果、错误/取消/超时/资源限制、ObjectRef、入口键盘语义和主题对比度。
