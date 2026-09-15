@@ -1305,6 +1305,23 @@ datasourceStore.fetchDatasources().catch(() => {
   gap: 6px;
 }
 
+/* SQL 是多行编辑场景，始终独占一行，避免被属性面板的标签列压缩。 */
+.form-group.jdbc-query-config {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.form-group.jdbc-query-config > .form-label {
+  width: auto;
+  min-width: 0;
+}
+
+.form-group.jdbc-query-config :deep(.el-textarea),
+.form-group.jdbc-query-config :deep(.el-textarea__inner) {
+  width: 100%;
+}
+
 /* 行内模式：标签固定宽度，控件占满剩余空间 */
 .form-group:not(.form-group-column) > .form-label {
   flex-shrink: 0;

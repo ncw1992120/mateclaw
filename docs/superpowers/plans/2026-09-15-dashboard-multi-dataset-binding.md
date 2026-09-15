@@ -69,7 +69,7 @@
 - Modify: `docs/superpowers/evidence/dashboard-mvp-acceptance.md`
 
 - [x] Run UI unit tests and production build.
-- [ ] Run local simulation Playwright with one worker and assert a JDBC card shows SQL while an Aloudata card shows its own controls.
-- [ ] Run the CDP visual script and capture editor AX/screenshot evidence for one-source and two-source states.
+- [x] Run local simulation Playwright with one worker and assert a JDBC card shows SQL while an Aloudata card shows its own controls.
+- [x] Run the CDP visual script and capture editor AX/screenshot evidence for one-source and two-source states.
 - [x] Update plans with exact results and document the remaining JDBC card-preview integration gate.
 - [ ] Run `git diff --check`, stage named files only, commit in Chinese, and push after local/remote SHA parity verification.

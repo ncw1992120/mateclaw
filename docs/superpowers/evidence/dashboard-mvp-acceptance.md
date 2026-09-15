@@ -1164,3 +1164,11 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 
 - 首次 `make dashboard-verify-local` 退出码 `7` 的原因是遗留 E2E MinIO/WireMock 容器占用模拟栈端口，并非业务断言失败。
 - 清理明确冲突容器并重启标准模拟 Compose 后，前置健康检查、DataAgent、Runner `24 passed`、UI `22 files / 63 tests passed`、生产构建和 `DESIGN-PASS` 全部通过，聚合门禁退出码 `0`。
+
+### 2026-09-15 属性配置 JDBC/Aloudata CDP 视觉复验
+
+- 按附件中的真实用户路径，通过 Chrome channel + Playwright CDP 登录本地环境，进入“洞察 → 仪表盘 → 策略解读 → 编辑”，点击“策略概括”卡片并打开右侧“属性配置”。
+- 选择数据源下拉项 `JDBC / testdb1` 后，AX 树包含“SQL 查询（仅 JDBC）”和“JDBC SQL 查询”，指标字段不可见；SQL 多行编辑框可见，尺寸约 `310×118px`，截图：`/tmp/dashboard-jdbc-cdp-fixed.png`。
+- 输入 `select * from sales where region = :region` 后重新切换 `Aloudata / 指标平台测试0001`，指标控件恢复且 SQL 控件消失，证明按数据源类型渐进式切换没有残留配置。
+- 初次复验发现 SQL 文本域被行内标签布局压缩；已将 `.jdbc-query-config` 改为纵向独占布局并补充全宽 textarea 样式。UI 定向测试 `17 passed`，生产构建成功，`git diff --check` 通过。
+- 本轮验证使用本地模拟服务；未依赖用户 Chrome `9222` 端口（当前 CUA/9222 不可用），但 CDP 协议会话、截图和完整 AX 树均已实际读取。
