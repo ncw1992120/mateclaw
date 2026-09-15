@@ -15,7 +15,11 @@
           v-for="item in results"
           :key="item.id"
           class="search-item"
+          role="button"
+          tabindex="0"
+          :aria-label="`打开搜索结果：${item.title}`"
           @click="$emit('selectDoc', item)"
+          @keydown="handleKeydown($event, item)"
         >
           <div class="search-item-title">
             <el-icon><Document /></el-icon>
@@ -53,10 +57,16 @@ defineProps<{
   loading: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'close'): void
   (e: 'selectDoc', doc: HelpSearchResult): void
 }>()
+
+function handleKeydown(event: KeyboardEvent, item: HelpSearchResult): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  emit('selectDoc', item)
+}
 </script>
 
 <style scoped>

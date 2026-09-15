@@ -6,7 +6,11 @@
         v-for="doc in documents"
         :key="doc.id"
         class="related-item"
+        role="button"
+        tabindex="0"
+        :aria-label="`打开相关文档：${doc.title}`"
         @click="$emit('selectDoc', doc)"
+        @keydown="handleKeydown($event, doc)"
       >
         <el-icon><Document /></el-icon>
         <span class="related-item-title">{{ doc.title }}</span>
@@ -33,9 +37,15 @@ defineProps<{
   documents: HelpDocument[]
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'selectDoc', doc: HelpDocument): void
 }>()
+
+function handleKeydown(event: KeyboardEvent, doc: HelpDocument): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  emit('selectDoc', doc)
+}
 </script>
 
 <style scoped>

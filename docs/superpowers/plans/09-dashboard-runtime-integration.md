@@ -384,3 +384,5 @@ Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健�
 **2026-09-15 DashboardPanel 标签语义修复：** 右侧“仪表盘/原始数据”切换由普通按钮补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键及 Home/End 导航；新增组件回归，UI 全量 `17 files / 57 tests passed`，生产构建和 Chrome CDP 四页视觉验收通过。
 
 **2026-09-15 HelpToc 键盘语义修复：** 帮助目录条目由仅鼠标点击改为可聚焦按钮语义，Enter/Space 均可触发跳转；新增回归测试，UI 全量 `18 files / 58 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 帮助文档卡片键盘语义修复：** 相关文档和搜索结果卡片补齐按钮语义、动态可访问名称和 Enter/Space 激活；新增回归测试，UI 全量 `19 files / 59 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
