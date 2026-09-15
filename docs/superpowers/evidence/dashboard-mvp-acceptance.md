@@ -1100,3 +1100,6 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 ### 2026-09-15 扩展 CDP 键盘巡检
 
 当前 Chrome CDP 扫描洞察、问数、报告、帮助、数据集列表/新建及配置中心四个子页，逐页最多执行 160 次 Tab；可见 button/link/input/select/textarea 和带 role 控件均未发现空 AX 名称。该结果是本地控件命名证据，不替代完整键盘顺序、非 Chrome 原生控件、错误关联和跨浏览器验收。
+### 2026-09-15 数据集预览操作反馈与主题布局复验
+
+当前 Chrome CDP 实测数据集预览中的六个辅助操作均有可见反馈；四主题下 viewport、document、body 和预览容器宽度均为 1440，无横向溢出。该证据关闭本地 FE-CLOSE-06 的“点击无反馈/误操作”风险，并补强 FE-CLOSE-08 的主题布局证据；非 Chrome 原生控件外观仍不在本次结论内。

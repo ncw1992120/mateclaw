@@ -298,3 +298,6 @@ Aloudata 指标/维度类目树节点改为可聚焦 `treeitem`，补充 `aria-s
 ### 2026-09-15 扩展键盘巡检边界校正
 
 使用用户 Chrome CDP 对数据集列表、数据集新建、配置中心技能配置/数据配置/业务词典/业务知识库等页面执行最多 160 次 Tab，当前可见 button/link/input/select/textarea 和带 role 控件均能取得可访问名称，未发现空名称控件。该结果补强控件级证据，但不等同于完整键盘顺序、错误关联、非 Chrome 原生控件或跨浏览器验收，因此 FE-CLOSE-09 仍保持 PARTIAL，计划边界不提前关闭。
+### 2026-09-15 暂未开放操作与四主题视觉复验
+
+Chrome CDP 打开 HTTP/API 数据集预览，依次触发“来源表”“新建计算字段”“分组依据”“聚合编辑器”“字段设置”“更多操作”，均显示明确中文反馈，不改变当前数据。四主题 light、warm、eye-care、dark 下，数据集预览页 document/body/preview 容器宽度均为 1440，与 viewport 一致，未出现横向溢出。截图分别保存在 /tmp/mateclaw-cdp-dataset-light-20260915.png、/tmp/mateclaw-cdp-dataset-warm-20260915.png、/tmp/mateclaw-cdp-dataset-eye-care-20260915.png、/tmp/mateclaw-cdp-dataset-dark-20260915.png。
