@@ -501,3 +501,5 @@ make dashboard-verify-local
 **2026-09-15 多 Tab 状态一致性修复：** 表格、指标卡和图表组件在 Tab 定义被替换后自动校正失效的 `activeTabId`，避免编辑器配置变更导致预览空白；新增回归测试并通过 UI 定向验证。该修复属于本地运行时闭环，不改变外部 Aloudata、对象存储和权限 Gate。
 
 **2026-09-15 图表多 Tab 运行时 fixture 补齐：** 为真实 Chrome channel E2E 增加临时图表多 Tab 看板，覆盖预览中的 `tablist/tab`、ArrowRight 选中态和焦点同步；使用用户 Chrome 保存的 JWT/工作区上下文定向执行 `1 passed (6.2s)`，fixture 在用例结束后自动删除，补齐此前“仅组件单测”的运行时证据缺口。
+
+**2026-09-15 入口矩阵复验：** 使用用户 Chrome 保存的 JWT/工作区上下文执行 `dataset-management-entry.spec.ts` 全量 `27 passed (1.4m)`，包含图表多 Tab fixture；双源专用矩阵本轮因缺少 seed Dashboard ID 按 fail-fast 规则停止，不将状态变量缺失记为业务失败。

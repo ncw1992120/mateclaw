@@ -1112,3 +1112,5 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Google Chrome CDP `9222` 复验当前数据集编辑页可见控件空 AX 名称为 `0`，截图：`/tmp/mateclaw-cdp-multitab-regression-dataset-20260915.png`。由于当前页面没有多 Tab 运行时 fixture，本次 CDP 证据覆盖页面无回归；多 Tab 状态替换行为由真实组件回归测试覆盖。
 
 图表多 Tab 真实运行时 fixture 已加入 `dataset-management-entry.spec.ts`；使用用户 Chrome 保存的 JWT/工作区上下文执行 Chrome channel 定向用例 `1 passed (6.2s)`，预览中 ArrowRight 后第二个 Tab 获得焦点并同步 `aria-selected=true`，临时看板已自动清理。
+
+同一认证上下文下入口文件全量执行 `27 passed (1.4m)`；双源专用文件本轮因缺少 `MATECLAW_E2E_API_FILE_DASHBOARD_ID` 等 seed 状态变量而按 fail-fast 停止，未将其误报为业务失败。
