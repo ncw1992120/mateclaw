@@ -492,3 +492,5 @@ make dashboard-verify-local
 **2026-09-15 问数运行时无障碍补充：** 为图表全屏、灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠图标操作补齐可访问名称；UI 单测 `16 files / 49 tests passed`、生产构建成功，Chrome CDP 问数入口扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。
 
 **2026-09-15 技能配置页无障碍补充：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序控件补齐可访问标签；UI 单测 `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能配置页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
+**2026-09-15 继续实施回归修复：** 当前工作树发现并修复两项本地闭环稳定性问题：E2E seed 不等待 Aloudata 模拟元数据同步，导致指标分页控件偶发未渲染；仪表盘标题键盘 Enter 未阻止默认行为，导致名称输入框立即失焦。现已分别加入同步状态轮询和稳定的键盘编辑处理，定向 Chrome channel E2E 2 passed。完整矩阵在重新 seed 后复跑，真实 Aloudata 授权 Gate 仍独立保持 EXTERNAL-BLOCKED。
+**2026-09-15 视觉验收与种子稳定性补充：** 重新 seed 后完整 Chrome channel 矩阵 35 passed (2.2m)；指标分页和标题键盘两个回归定向 2 passed (7.4s)。Chrome CDP 实际双源结果为 5 行、含 120.5、无执行告警，并保存当前截图。seed 脚本现在显式触发同步但以短客户端超时 + 指标/维度可读性作为完成条件，兼容本地缺少 embedding 服务的模拟环境。

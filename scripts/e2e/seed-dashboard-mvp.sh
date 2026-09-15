@@ -131,6 +131,25 @@ if [[ "$aloudata_mode" == "simulation" ]]; then
     --arg connectionParams "$aloudata_connection_params" \
     --arg password "$(encrypt_field local-simulation-auth)" \
     '{name:"E2E Aloudata Simulation",description:"dashboard MVP simulated Aloudata",sourceType:"aloudata",host:"e2e-http",port:8443,productHost:"https://e2e-http",semanticHost:"https://e2e-http",username:"local-tenant",password:$password,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
+  # 创建后显式触发同步，并等待指标/维度元数据可读。同步还会尝试生成向量，
+  # 本地环境可能没有外部 embedding 服务，因此只等待页面所需的分页数据，不等待
+  # 后置索引任务；短超时断开客户端不会取消服务端已启动的同步。
+  curl --max-time 3 --silent --show-error -X POST \
+    -H "$AUTH_HEADER" -H "$WORKSPACE_HEADER" "$BASE_URL/v1/datasources/${aloudata_ds}/aloudata/sync" >/dev/null || true
+  metadata_ready=false
+  for attempt in $(seq 1 30); do
+    metric_count=$(api GET "/v1/datasources/${aloudata_ds}/aloudata/synced-metrics?pageNumber=1&pageSize=1" | jq '.data | length')
+    dimension_count=$(api GET "/v1/datasources/${aloudata_ds}/aloudata/synced-dimensions?pageNumber=1&pageSize=1" | jq '.data | length')
+    if [[ "$metric_count" -gt 0 && "$dimension_count" -gt 0 ]]; then
+      metadata_ready=true
+      break
+    fi
+    sleep 1
+  done
+  [[ "$metadata_ready" == true ]] || {
+    echo "Timed out waiting for Aloudata simulation metric/dimension metadata" >&2
+    exit 1
+  }
   aloudata_dataset_id=$(api POST /v1/datasets "$(jq -cn --arg ds "$aloudata_ds" \
     '{name:"E2E Aloudata Metrics Dataset",description:"dashboard MVP simulated metric view",sourceDefinition:{sourceType:"ALOUDATA_ANALYSIS_VIEW",datasourceId:($ds|tonumber),analysisViewId:"local_sales_view"}}')" | id_from)
 elif [[ -n "$aloudata_dataset_id" ]]; then

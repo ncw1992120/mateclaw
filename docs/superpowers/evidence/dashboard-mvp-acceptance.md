@@ -1081,3 +1081,16 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - Chrome CDP 进入配置 → 技能配置后发现 Element Plus 分页的“每页条数”内部 combobox 未继承分页容器名称。
 - 增加稳定的分页尺寸选择器 `aria-label` 补偿逻辑，并为技能搜索/排序控件补齐名称；不改变分页和筛选行为。
 - UI 单测 `16 files / 49 tests passed`、生产构建成功；Chrome CDP 现场读取两个分页 combobox 名称为“技能分页每页条数1”，可见无名控件数为 `0`。截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
+### 2026-09-15 seed 同步等待与标题键盘编辑回归修复
+
+当前工作树复跑曾出现两项真实回归：指标平台页面在 Aloudata 模拟元数据尚未完成异步同步时没有渲染分页 combobox；仪表盘标题通过键盘 Enter 进入编辑时，h2 默认按键行为会使刚挂载的名称输入框立即失焦。修复如下：
+
+- scripts/e2e/seed-dashboard-mvp.sh 在创建模拟 Aloudata 数据源后显式调用 /aloudata/sync，轮询 /aloudata/sync-status 至 completed/success，失败或超时直接退出；
+- InsightDashboardEditorView.vue 将标题的 Enter/Space 处理改为 .prevent 的 startNameEditing，保证键盘编辑状态稳定。
+
+使用当前 Chrome channel、真实 DataAgent/API（无 route mock）定向复验 dataset-management-entry.spec.ts -g '指标平台分页控件|仪表盘页面树更多操作按钮'：2 passed (7.6s)；bash -n scripts/e2e/seed-dashboard-mvp.sh 与 git diff --check 通过。完整矩阵需在重新 seed 后继续复跑。
+### 2026-09-15 标题键盘事件最终修正与 CDP 复验
+
+进一步复验发现，标题 h2 的 Enter keydown 会挂载名称输入框；若输入框监听 keyup，同一按键的 keyup 会立即触发失焦。最终将名称和描述输入框的回车提交监听统一改为 keydown.prevent，Chrome CDP 实测 input.toolbar-name-input 可见且焦点保持在该输入框。指标平台两个分页内部 combobox 也实测分别拥有“指标每页条数”“维度每页条数”。
+
+双源仪表盘在当前 Chrome CDP 中实际执行后得到 5 行、包含 120.5、execution-alert=0，截图：/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915-r2.png。标题键盘截图：/tmp/mateclaw-cdp-title-keyboard-20260915-r3.png；指标分页截图：/tmp/mateclaw-cdp-metric-pagination-20260915-r2.png。

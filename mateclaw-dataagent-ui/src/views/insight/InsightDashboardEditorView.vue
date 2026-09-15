@@ -15,7 +15,7 @@
             :placeholder="t('insight.editor')"
             autofocus
             @blur="commitName"
-            @keyup.enter="blurTarget"
+            @keydown.enter.prevent="blurTarget"
           />
           <h2
             v-else
@@ -24,8 +24,8 @@
             tabindex="0"
             :title="t('insight.editor')"
             @click="editingName = true"
-            @keydown.enter="editingName = true"
-            @keydown.space.prevent="editingName = true"
+            @keydown.enter.prevent="startNameEditing"
+            @keydown.space.prevent="startNameEditing"
           >
             {{ dashboardName || t('insight.editor') }}
           </h2>
@@ -37,7 +37,7 @@
             :placeholder="t('insight.description')"
             autofocus
             @blur="commitDesc"
-            @keyup.enter="blurTarget"
+            @keydown.enter.prevent="blurTarget"
           />
           <div
             v-else
@@ -319,6 +319,11 @@ const editingDesc = ref(false)
 function commitName(): void {
   editingName.value = false
   handleNameChange()
+}
+
+/** 通过键盘进入名称编辑；阻止 h2 的默认按键行为，避免输入框刚挂载就失焦。 */
+function startNameEditing(): void {
+  editingName.value = true
 }
 
 /** 完成描述编辑（失焦/回车） */
