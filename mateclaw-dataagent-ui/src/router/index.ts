@@ -35,6 +35,13 @@ const router = createRouter({
       component: DatasetEditRoute,
       props: (route) => ({ datasetId: route.params.id, mode: 'preview' }),
     },
+    {
+      // 洞察·仪表盘·卡片属性配置 原型（已对接 dataagent 后端，独立于真实编辑器，便于验证原型交互）
+      path: '/insight-prototype',
+      name: 'insight-prototype',
+      component: () => import('@/views/insight/prototype/InsightPrototypeDashboard.vue'),
+      meta: { public: true, title: '洞察原型' },
+    },
   ],
 })
 
