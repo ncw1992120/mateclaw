@@ -24,7 +24,7 @@
 import { ElMessage } from 'element-plus'
 import { useInsight } from '../../useInsight'
 
-const { state, confirmJdbc, openPreview } = useInsight()
+const { state, confirmJdbc, openInputFilter, getDataset } = useInsight()
 const ui = state.ui
 
 // [MOCK] 停止修改 SQL 3 秒后，自动生成/刷新数据集表单（文档 3.1 规则 5）
@@ -36,11 +36,14 @@ function onSqlInput() {
   }, 3000)
 }
 
-// 筛选预览：先保存当前定义，再预览当前输入数据集（文档 3.1 规则 4）
-async function onPreview() {
-  const ok = await confirmJdbc()
-  if (!ok) return
-  openPreview('dataset', null) // datasetId=null 时预览最新数据集
+// 筛选预览：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
+// 再弹出「输入筛选」弹窗，保存后自动打开对应数据集的数据预览
+function onPreview() {
+  const editingId = state.ui.editingDatasetId
+  confirmJdbc()
+  // 解析本次提交的数据集 id：编辑时沿用 editingId，新增时取最新提交的数据集
+  const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
+  openInputFilter(id)
 }
 
 // [MOCK] 执行记录占位

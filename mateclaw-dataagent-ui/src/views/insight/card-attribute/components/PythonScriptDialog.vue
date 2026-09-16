@@ -30,7 +30,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight, MOCK_PYTHON_SYSTEM } from '../useInsight'
 
-const { state, savePython, openPreview } = useInsight()
+const { state, savePython, openInputFilter } = useInsight()
 const ui = state.ui
 const userCode = ref('')
 
@@ -49,9 +49,11 @@ function regenSystem() {
 function save() {
   savePython(state.pythonSystem, userCode.value)
 }
+// 筛选预览：先持久化 Python 脚本（关闭 Python 弹窗），再弹出「输入筛选」弹窗，
+// 保存后自动打开「预处理结果预览」
 function onPreview() {
   save()
-  openPreview('result', null)
+  openInputFilter(undefined, { previewKind: 'result' })
 }
 function onExec() {
   ElMessage.info('[MOCK] Python 执行记录：Join 耗时 12ms，输入 4 行，输出 4 行')

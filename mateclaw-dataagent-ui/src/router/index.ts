@@ -36,11 +36,18 @@ const router = createRouter({
       props: (route) => ({ datasetId: route.params.id, mode: 'preview' }),
     },
     {
-      // 洞察·仪表盘·卡片属性配置
+      // 洞察·仪表盘·卡片属性配置（正式入口）
       path: '/insight/dashboard/editor',
       name: 'insight-dashboard-editor',
-      component: () => import('@/views/insight/prototype/InsightPrototypeDashboard.vue'),
+      component: () => import('@/views/insight/card-attribute/InsightCardAttributeEditor.vue'),
       meta: { title: '洞察仪表盘' },
+    },
+    {
+      // 洞察·卡片属性配置 免登录预览（仅供交互体验验证，与正式入口同一组件）
+      path: '/insight/dashboard/editor-preview',
+      name: 'insight-dashboard-editor-preview',
+      component: () => import('@/views/insight/card-attribute/InsightCardAttributeEditor.vue'),
+      meta: { public: true, title: '洞察仪表盘预览' },
     },
   ],
 })

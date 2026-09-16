@@ -36,11 +36,29 @@ function isNoValueOp(op: string) {
   return op === 'is null' || op === 'is not null'
 }
 
+/**
+ * 解析本次「输入筛选」作用的目标数据集与预览方式：
+ *  - dataset 模式（卡片数据集 / SQL 配置）：编辑指定 datasetId 的筛选条件，预览该数据集。
+ *  - result 模式（Python 脚本）：编辑「最后添加的数据集」的筛选条件，
+ *    与 getPreviewPayload 的读取口径一致，使结果预览能反映输入筛选；
+ *    预览时打开「预处理结果预览」。
+ */
+function resolveTarget(): { datasetId: string; previewKind: 'dataset' | 'result' } {
+  const previewKind = ui.inputFilter.previewKind ?? 'dataset'
+  if (previewKind === 'result') {
+    const last = state.datasets[state.datasets.length - 1]
+    return { datasetId: last?.id ?? '', previewKind }
+  }
+  return { datasetId: ui.inputFilter.datasetId, previewKind }
+}
+
 watch(
   () => ui.inputFilter.visible,
   (v) => {
     if (v) {
-      const ds = getDataset(ui.inputFilter.datasetId)
+      const { datasetId } = resolveTarget()
+      ui.inputFilter.datasetId = datasetId // 确保 saveInputFilter 写入正确数据集
+      const ds = getDataset(datasetId)
       list.value = JSON.parse(JSON.stringify(ds?.filters ?? []))
     }
   },
@@ -53,12 +71,17 @@ function removeRow(i: number) {
   list.value.splice(i, 1)
 }
 function save() {
-  // 保存筛选条件到当前数据集，并关闭输入弹窗
-  const targetId = ui.inputFilter.datasetId
+  // 保存筛选条件到目标数据集，并关闭输入弹窗
+  const { datasetId, previewKind } = resolveTarget()
+  ui.inputFilter.datasetId = datasetId // 确保 saveInputFilter 写入正确数据集
   saveInputFilter(list.value)
   ui.inputFilter.visible = false
-  // 配置完后弹出预览数据表格（分页 + 关闭），让用户直接看到筛选结果
-  openPreview('dataset', targetId, 'data')
+  // 配置完后弹出预览：SQL/卡片走数据集预览，Python 走结果预览
+  if (previewKind === 'result') {
+    openPreview('result', null)
+  } else {
+    openPreview('dataset', datasetId, 'data')
+  }
 }
 </script>
 

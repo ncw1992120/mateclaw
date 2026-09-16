@@ -22,6 +22,7 @@
           <el-switch v-model="activeCard.multiTab" />
         </div>
       </template>
+      <div v-else class="field note">当前为「{{ typeLabel(activeCard.type) }}」，不显示「多指标模式 / 多TAB模式」。</div>
 
       <!-- 4. 数据集配置 -->
       <div class="section">
