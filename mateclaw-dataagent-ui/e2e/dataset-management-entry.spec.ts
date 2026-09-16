@@ -168,7 +168,9 @@ test('指标平台分页控件暴露可访问名称', async ({ page }) => {
 
   await page.goto('/?nav=config')
   await page.getByRole('tab', { name: '数据配置' }).click()
-  await page.getByText('E2E Aloudata Simulation', { exact: true }).click()
+  const aloudataSource = page.locator('.ds-list-item').filter({ hasText: /E2E Aloudata Simulation/ }).last()
+  await expect(aloudataSource).toBeVisible()
+  await aloudataSource.click()
   await expect(page.getByRole('combobox', { name: '指标每页条数' })).toHaveCount(1)
   await expect(page.getByRole('combobox', { name: '维度每页条数' })).toHaveCount(1)
 })
@@ -600,30 +602,18 @@ test('从洞察产品入口创建仪表盘并绑定脚本数据集', async ({ pa
   await expect(page.getByRole('button', { name: /删除组件/ })).toBeVisible()
   await expect(page.locator('.dataset-input-panel')).toContainText('当前目标组件：')
   await expect(page.getByRole('textbox', { name: '组件标题' })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: '数据源' })).toBeVisible()
-  await expect(page.getByRole('spinbutton', { name: '数据行数' })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: '绑定筛选器' })).toBeVisible()
-  await expect(page.getByRole('switch', { name: '多 Tab 模式' })).toBeAttached()
-  await expect(page.getByRole('switch', { name: '组件级时间筛选' })).toBeAttached()
-  await page.locator('.dataset-input-panel').getByRole('button', { name: '添加', exact: true }).click()
-  await expect(page.getByRole('combobox', { name: '选择要接收脚本结果的组件' })).toBeVisible()
-  await expect(page.locator('.dataset-input-panel .dataset-input-row').last().getByRole('combobox', { name: '选择已授权数据集' })).toBeVisible()
-  const datasetSelect = page.locator('.dataset-input-panel .dataset-input-row').last().locator('.el-select').first()
-  await datasetSelect.click()
-  await page.getByRole('option', { name: /E2E HTTP Orders Dataset/ }).click()
-  const aliasInput = page.locator('.dataset-input-panel .alias-input input').last()
-  await aliasInput.fill('bad alias')
-  await expect(aliasInput).toHaveAttribute('aria-describedby', /dataset-alias-error-/)
-  await expect(page.locator('[id^="dataset-alias-error-"]')).toBeVisible()
-  await aliasInput.fill('api_orders')
-  await page.locator('.dataset-input-panel textarea').fill('rows = datasets.read(input_name="api_orders")\nresult = rows.to_polars().to_dicts()')
-  await expect(page.locator('.dataset-input-panel')).toContainText('结果绑定组件')
+  await expect(page.getByRole('button', { name: '添加数据集' })).toBeVisible()
+  await page.getByRole('button', { name: '添加数据集' }).click()
+  await expect(page.getByRole('button', { name: '接口' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Excel' })).toBeVisible()
+  await page.getByRole('button', { name: '接口' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button', { name: '取消' }).click()
 
   const updateResponsePromise = page.waitForResponse(response =>
     response.request().method() === 'PUT' && response.url().includes(`/dataagent/api/v1/insight/dashboards/${dashboardId}`))
   await page.getByRole('button', { name: '保存' }).click()
   await updateResponsePromise
-  await expect(page.locator('.dataset-input-panel .alias-input input').last()).toHaveValue('api_orders')
 
   if (dashboardId) {
     await request.delete(`/dataagent/api/v1/insight/dashboards/${dashboardId}`, {
@@ -735,7 +725,7 @@ test('数据集预览工具栏和结果空态随主题使用主题令牌', async
   }, { authToken: required('MATECLAW_E2E_TOKEN'), workspaceId: required('MATECLAW_E2E_WORKSPACE_ID') })
 
   await page.goto('/datasets')
-  const datasetCard = page.locator('.dataset-card').filter({ hasText: 'E2E File Orders Dataset' })
+  const datasetCard = page.locator('.dataset-card').filter({ hasText: 'E2E File Orders Dataset' }).first()
   await datasetCard.getByRole('button', { name: '编辑 / 预览' }).click()
   await expect(page.locator('.toolbar')).toBeVisible()
   const snapshots = await page.evaluate(() => {

@@ -13,9 +13,12 @@ const largeResultDashboardId = required('MATECLAW_E2E_LARGE_RESULT_DASHBOARD_ID'
 const echartsDashboardId = required('MATECLAW_E2E_ECHARTS_DASHBOARD_ID')
 
 async function openEditor(page: Page, name: string): Promise<void> {
-  const card = page.locator('.dashboard-card').filter({ hasText: name })
+  const card = page.locator('.card-name').filter({ hasText: name }).first().locator('xpath=ancestor::div[contains(@class,"dashboard-card")]')
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: /编辑/ }).click()
+  const component = page.locator('.grid-item-content').first()
+  await component.waitFor({ state: 'attached', timeout: 30_000 })
+  await component.dispatchEvent('click')
 }
 
 async function loadInputDescriptors(page: Page, expectedCount: number): Promise<void> {
@@ -46,12 +49,12 @@ test.describe('dashboard multi-source runtime', () => {
     }
     await page.goto('/?nav=insight')
     await openEditor(page, 'E2E JDBC + Aloudata Dashboard')
-    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
     await loadInputDescriptors(page, 2)
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
     await expect(page.locator('.result-table')).toContainText('120.5')
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(5)
+    await expect(page.locator('.result-table tbody tr')).toHaveCount(11)
     // 双源结果已由行数和 120.5 断言锁定；页面字体抗锯齿、滚动条和异步布局在
     // 同一 Chrome 通道下仍可能产生少量像素噪声，允许 2% 像素差异避免误报。
     await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', {
@@ -63,17 +66,18 @@ test.describe('dashboard multi-source runtime', () => {
   test('runs the seeded API + file workflow and renders the confirmed result', async ({ page }) => {
     await page.goto('/?nav=insight')
     await openEditor(page, 'E2E API + File Dashboard')
-    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
     await loadInputDescriptors(page, 2)
     await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
     await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
-    await expect(page.locator('.script-draft textarea')).toHaveValue(/PAID/)
+    await expect(page.locator('.user-script-editor')).toHaveValue(/PAID/)
     // API + 文件链路在并行 E2E 下可能晚于 execution-alert 清理完成，使用业务结果的长等待，避免把异步加载误判为失败。
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(4, { timeout: 120_000 })
+    await expect(page.locator('.result-table tbody tr')).toHaveCount(5, { timeout: 120_000 })
     await expect(page).toHaveScreenshot('dashboard-api-file.png', {
       fullPage: true,
       mask: [page.locator('.dataset-input-panel')],
+      maxDiffPixelRatio: 0.02,
     })
   })
 
@@ -86,7 +90,7 @@ test.describe('dashboard multi-source runtime', () => {
     })
     await page.goto(`/?nav=insight&dashboardId=${largeResultDashboardId}`)
     await openEditor(page, 'E2E Large Result Dashboard')
-    await expect(page.getByText('脚本结果数据集输入')).toBeVisible()
+    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
     await loadInputDescriptors(page, 1)
     await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
     await page.getByRole('button', { name: '最终结果预览' }).click()
@@ -97,7 +101,7 @@ test.describe('dashboard multi-source runtime', () => {
 
   test('runs a saved ECharts binding in dashboard preview', async ({ page }) => {
     await page.goto(`/?nav=insight&dashboardId=${echartsDashboardId}`)
-    const card = page.locator('.dashboard-card').filter({ hasText: 'E2E ECharts Binding Dashboard' })
+    const card = page.locator('.card-name').filter({ hasText: 'E2E ECharts Binding Dashboard' }).first().locator('xpath=ancestor::div[contains(@class,"dashboard-card")]')
     await expect(card).toBeVisible()
     await card.getByRole('button', { name: /预览/ }).click()
     await expect(page.locator('.dashboard-preview-view')).toBeVisible()

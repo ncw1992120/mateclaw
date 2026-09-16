@@ -1183,3 +1183,19 @@ DataAgent 服务端对 `JDBC_TABLE/JDBC_SQL` 绑定 `sourceType=api` 等非 JDBC
 - 输入 `select * from sales where region = :region` 后重新切换 `Aloudata / 指标平台测试0001`，指标控件恢复且 SQL 控件消失，证明按数据源类型渐进式切换没有残留配置。
 - 初次复验发现 SQL 文本域被行内标签布局压缩；已将 `.jdbc-query-config` 改为纵向独占布局并补充全宽 textarea 样式。UI 定向测试 `17 passed`，生产构建成功，`git diff --check` 通过。
 - 本轮验证使用本地模拟服务；未依赖用户 Chrome `9222` 端口（当前 CUA/9222 不可用），但 CDP 协议会话、截图和完整 AX 树均已实际读取。
+
+### 2026-09-15 数据集编排双源运行态复验补充
+
+- 使用 Docker 模拟 MySQL、WireMock HTTP、MinIO 和 Python Runner，DataAgent 通过宿主机端口运行；种子脚本改为时间后缀，避免重复执行冲突。
+- API + 文件双输入：从“洞察仪表盘 → 编辑 → 选中卡片 → 数据集配置”进入，确认 2 个输入后执行“最终结果预览”，返回 5 行，`execution-alert=0`，截图 `/tmp/cdp-api-file-result.png`。
+- JDBC + Aloudata 模拟双输入：Aloudata 模拟服务返回指标视图数据，最终预览返回 11 行，`execution-alert=0`，结果包含 JDBC `120.5`，截图 `/tmp/cdp-jdbc-aloudata-result.png`；页面 AX 树通过 CDP `Accessibility.getFullAXTree` 读取 119 个节点，截图 `/tmp/cdp-aloudata-final.png`。
+- 为本地模拟 Aloudata 使用 HTTP 宿主机端口（生产仍使用正式 HTTPS），并允许开发 Runner 通过 `host.docker.internal` 访问 DataAgent；这些开关仅用于本地测试，未改变生产默认安全策略。
+- 结果反馈区已补齐四个可访问 Tab：`数据预览`、`字段结构`、`执行信息`、`处理日志`。Chrome CDP 实测四个 Tab 均可见，结果 5 行、`execution-alert=0`，AX 树 733 节点，截图 `/tmp/cdp-preview-tabs.png`。
+- 新增反馈 Tab 后 UI 全量 Vitest 为 `27 files / 86 tests passed`，Vite 生产构建通过；JDK 21 定向 DataAgent 测试为 `32 tests, 0 failures, 0 errors`（含五种文件格式、Aloudata 指标&维度和 HTTP 安全矩阵）。
+
+### 2026-09-15 原型交互整改后最终回归
+
+- 入口 E2E 已按 `原型设计.md` 的当前交互更新：属性面板不再断言旧的多 Tab/时间筛选开关或旧别名控件；来源树文件节点使用原型实际名称 `Excel`，接口仍验证为点击后直接打开配置弹窗。
+- Chrome channel 串行完整矩阵：`36 passed (2.7m)`，无失败、无跳过；覆盖历史兼容、JDBC + Aloudata、API + 文件、ObjectRef、大结果、ECharts、数据集入口和主题/键盘可访问性用例。
+- 前端单元测试：`27 files / 86 tests passed`；生产构建含 `vue-tsc --noEmit` 成功。DataAgent JDK 21 定向测试：`32 tests, 0 failures, 0 errors`。`git diff --check` 通过。
+- CDP 视觉证据沿用本轮已采集的 `/tmp/cdp-api-file-result.png`、`/tmp/cdp-jdbc-aloudata-result.png`、`/tmp/cdp-preview-tabs.png`：双源结果可见且 `execution-alert=0`，反馈 Tab 为“数据预览 / 字段结构 / 执行信息 / 处理日志”，AX 树已读取；本次仅调整测试断言，不改变运行时 UI 结构。

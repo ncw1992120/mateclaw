@@ -198,27 +198,28 @@
       <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
+          <DatasetInputPanel
+            v-if="selectedComponent && !['filter', 'timeFilter', 'aiAnalysis'].includes(selectedComponent.type)"
+            :dashboard-id="dashboardId"
+            :inputs="selectedComponentPipeline.datasetInputs"
+            :script="selectedComponentPipeline.script"
+            :parameters="selectedComponentPipeline.parameters ?? []"
+            :filter-bindings="selectedComponentPipeline.scriptFilterBindings ?? []"
+            :target-component-id="selectedComponent.id"
+            :target-components="currentPageComponents"
+            @update:inputs="updateSelectedComponentPipeline({ datasetInputs: $event })"
+            @update:script="updateSelectedComponentPipeline({ script: $event })"
+            @update:parameters="updateSelectedComponentPipeline({ parameters: $event })"
+            @update:filter-bindings="updateSelectedComponentPipeline({ scriptFilterBindings: $event })"
+            @apply-result="handleScriptResult"
+          />
           <PropertyPanel
             :component="selectedComponent"
             :all-components="currentPageComponents"
+            :use-dataset-pipeline="Boolean(selectedComponent && !['filter', 'timeFilter', 'aiAnalysis'].includes(selectedComponent.type))"
             @change="handleComponentChange"
             @preview="handlePreviewResult"
             @collapse="sidebarCollapsed = true"
-          />
-          <DatasetInputPanel
-            :dashboard-id="dashboardId"
-            :inputs="schema.datasetInputs ?? []"
-            :script="schema.script"
-            :parameters="schema.parameters ?? []"
-            :filter-bindings="schema.scriptFilterBindings ?? []"
-            :target-component-id="scriptTargetComponentId"
-            :target-components="currentPageComponents"
-            @update:inputs="schema.datasetInputs = $event"
-            @update:script="schema.script = $event"
-            @update:parameters="schema.parameters = $event"
-            @update:filter-bindings="schema.scriptFilterBindings = $event"
-            @update:target-component-id="scriptTargetComponentId = $event"
-            @apply-result="handleScriptResult"
           />
         </div>
 
@@ -272,7 +273,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage, ComponentDatasetPipeline } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -284,6 +285,7 @@ import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { readComponentDatasetPipeline, writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -438,6 +440,20 @@ const selectedComponent = computed<InsightComponent | null>(() => {
   }
   return currentPageComponents.value.find((c) => c.id === selectedComponentId.value) ?? null
 })
+
+const selectedComponentPipeline = computed<ComponentDatasetPipeline>(() => readComponentDatasetPipeline(selectedComponent.value) ?? {
+  datasetInputs: [],
+  scriptFilterBindings: [],
+  parameters: [],
+  executionPolicy: {},
+})
+
+function updateSelectedComponentPipeline(patch: Partial<ComponentDatasetPipeline>): void {
+  const component = selectedComponent.value
+  if (!component) return
+  const next = writeComponentDatasetPipeline(component, { ...selectedComponentPipeline.value, ...patch })
+  handleComponentChange(next)
+}
 
 onMounted(async () => {
   await loadDashboard(props.dashboardId)

@@ -1,5 +1,6 @@
 import api from './index'
 import type { Dataset, DatasetField, DatasetData, DatasetColumnDef, DatasetInputDescriptor, DatasetReadRequest, DatasetBatch } from '@/types'
+import type { DatasetSourceType, DatasetFilter } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/datasets'
@@ -55,6 +56,30 @@ export function previewInput(request: DatasetReadRequest) {
   return api.post<DatasetBatch>(`${BASE_URL}/preview`, request)
 }
 
+export interface DatasetComposerDraftRequest {
+  sourceType: DatasetSourceType | string
+  datasourceId?: string
+  sourceConfig?: Record<string, unknown>
+  filters?: DatasetFilter[]
+  limit?: number
+}
+
+export function previewDraft(request: DatasetComposerDraftRequest) {
+  return api.post<DatasetBatch & { executionId?: string }>(
+    '/dataagent/api/v1/dataset-composer/drafts/preview', request,
+  )
+}
+
+export function confirmDraft(request: DatasetComposerDraftRequest & { name: string; description?: string }) {
+  return api.post<{ datasetId: string; descriptor: DatasetInputDescriptor }>(
+    '/dataagent/api/v1/dataset-composer/drafts/confirm', request,
+  )
+}
+
+export function getComposerExecution(executionId: string) {
+  return api.get<Record<string, unknown>>(`/dataagent/api/v1/dataset-composer/executions/${encodeURIComponent(executionId)}`)
+}
+
 /** 更新数据集行数据 */
 export function updateRow(datasetId: string, rowKey: Record<string, unknown>, values: Record<string, unknown>) {
   return api.put(`${BASE_URL}/${datasetId}/rows`, { rowKey, values })
@@ -89,4 +114,17 @@ export function uploadFile(file: File) {
     form,
     { headers: { 'Content-Type': 'multipart/form-data' } },
   )
+}
+
+/** 登记受控 HTTP 接口定义；连接凭据和 allowlist 仍由数据源配置持有。 */
+export function registerApiDefinition(data: {
+  datasourceId: string
+  endpoint: string
+  method: string
+  allowedQueryParams?: string[]
+  allowedBodyParams?: string[]
+  resultPath?: string
+  headers?: Record<string, string>
+}) {
+  return api.post<{ apiDefinitionId: string }>('/dataagent/api/v1/dataset-composer/api-definitions', data)
 }

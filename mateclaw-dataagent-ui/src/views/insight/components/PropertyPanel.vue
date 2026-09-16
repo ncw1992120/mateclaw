@@ -49,7 +49,7 @@
       </div>
 
       <!-- 数据绑定（kpi/chart/table 组件；筛选器与时间筛选无需数据源/指标） -->
-      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter'">
+      <template v-if="!useDatasetPipeline && component.type !== 'filter' && component.type !== 'timeFilter'">
         <div class="binding-mode-hint">当前面板配置的是“直接指标绑定”；需要 Python 预处理时，请在下方“脚本数据集输入”中选择已创建的数据集。</div>
         <!-- 多指标模式开关（仅 kpi 组件） -->
         <div v-if="component.type === 'kpi'" class="form-group">
@@ -588,7 +588,11 @@ const props = defineProps<{
   component: InsightComponent | null
   /** 仪表盘所有组件列表（用于筛选器绑定配置） */
   allComponents?: InsightComponent[]
+  /** 展示组件是否使用新的组件级数据集编排入口。 */
+  useDatasetPipeline?: boolean
 }>()
+
+const useDatasetPipeline = computed(() => Boolean(props.useDatasetPipeline))
 
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void

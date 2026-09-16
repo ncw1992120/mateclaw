@@ -1,4 +1,4 @@
-import type { DashboardDatasetInput, DashboardScriptParameter } from '@/types'
+import type { DashboardDatasetInput, DashboardScriptParameter, DashboardScriptFilterBinding } from '@/types'
 
 export const SYSTEM_SCRIPT_START = '# ===== 系统生成区域：输入数据集和筛选绑定（请勿手动修改） ====='
 export const SYSTEM_SCRIPT_END = '# ===== 系统生成区域结束 ====='
@@ -21,7 +21,7 @@ function datasetFilterExpression(filter: { field: string; operator: string; valu
 }
 
 /** 生成只读的系统区域；字段默认与参数同名，用户可在脚本中调整映射。 */
-export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: DashboardScriptParameter[]): string {
+export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: DashboardScriptParameter[], bindings: DashboardScriptFilterBinding[] = []): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const validParameters = parameters.filter(parameter => parameter.name.trim())
   const lines = [SYSTEM_SCRIPT_START, '# 页面筛选参数会通过 datasets.params 注入，并在 datasets.read 时下推。']
@@ -33,9 +33,15 @@ export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: D
   validInputs.forEach((input) => {
     lines.push('', `${input.inputName} = datasets.read(`, `    input_name=${JSON.stringify(input.inputName)},`, '    columns=[],')
     const filters = [...(input.filters || [])]
-    if (validParameters.length || filters.length) {
+    const boundParameterNames = new Set<string>()
+    bindings.filter(binding => binding.inputNames.includes(input.inputName)).forEach(binding => {
+      const mapped = binding.fieldMappings?.[input.inputName]
+      if (mapped) boundParameterNames.add(mapped)
+    })
+    const scopedParameters = bindings.length === 0 ? validParameters : validParameters.filter(parameter => boundParameterNames.has(parameter.name))
+    if (scopedParameters.length || filters.length) {
       lines.push('    filters=[')
-      validParameters.forEach(parameter => lines.push(`        ${readExpression(parameter)},`))
+      scopedParameters.forEach(parameter => lines.push(`        ${readExpression(parameter)},`))
       filters.forEach(filter => lines.push(`        ${datasetFilterExpression(filter)},`))
       lines.push('    ],')
     } else {

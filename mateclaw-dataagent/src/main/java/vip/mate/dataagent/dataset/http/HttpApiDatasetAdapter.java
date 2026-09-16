@@ -62,7 +62,15 @@ public class HttpApiDatasetAdapter implements DatasetSourceAdapter {
     public DatasetBatch read(DatasetAccessContext context, DatasetReadRequest request) {
         DatasetEntity dataset = requireDataset(context, request.datasetId());
         HttpApiDatasetDefinition definition = definition(dataset);
-        List<String> hosts = allowedHosts(dataset);
+        return readResolved(request, definition, allowedHosts(dataset));
+    }
+
+    /** 草稿预览使用同一套安全策略，但不要求先创建 DatasetEntity。 */
+    public DatasetBatch readDraft(DatasetReadRequest request, HttpApiDatasetDefinition definition, List<String> allowedHosts) {
+        return readResolved(request, definition, allowedHosts == null ? List.of() : allowedHosts);
+    }
+
+    private DatasetBatch readResolved(DatasetReadRequest request, HttpApiDatasetDefinition definition, List<String> hosts) {
         try {
             policy.validate(definition.endpoint(), hosts);
         } catch (IllegalArgumentException e) {

@@ -10,10 +10,16 @@ import vip.mate.dataagent.objectref.ObjectRefService;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Row;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -62,6 +68,41 @@ class FileDatasetAdapterTest {
                         new DatasetFilter("amount", "measure", "between", List.of(10, 40))), 10, 0, Map.of()));
 
         assertEquals(List.of(Map.of("id", 1), Map.of("id", 3)), batch.rows());
+    }
+
+    @Test
+    void readsTabSeparatedTxt() throws Exception {
+        DatasetMapper datasets = mock(DatasetMapper.class); DatasetFieldMapper fields = mock(DatasetFieldMapper.class); ObjectRefService refs = mock(ObjectRefService.class);
+        DatasetEntity d = dataset(15L, "orders.txt", "txt", 1); when(datasets.selectById(15L)).thenReturn(d);
+        when(refs.open(any(), any())).thenReturn(new ByteArrayInputStream("id\tstatus\n1\tPAID\n2\tCANCELLED\n".getBytes(StandardCharsets.UTF_8)));
+        DatasetBatch batch = new FileDatasetAdapter(datasets, fields, refs, new ObjectMapper()).read(context(15L),
+                new DatasetReadRequest(15L, "orders", List.of(), List.of(), 10, 0, Map.of()));
+        assertEquals(2, batch.rows().size());
+        assertEquals("PAID", batch.rows().getFirst().get("status"));
+    }
+
+    @Test
+    void readsExcelXlsxAndXlsSamples() throws Exception {
+        for (String format : List.of("xlsx", "xls")) {
+            DatasetMapper datasets = mock(DatasetMapper.class); DatasetFieldMapper fields = mock(DatasetFieldMapper.class); ObjectRefService refs = mock(ObjectRefService.class);
+            DatasetEntity d = dataset(16L, "orders." + format, format, 1); when(datasets.selectById(16L)).thenReturn(d);
+            Workbook workbook = "xlsx".equals(format) ? new XSSFWorkbook() : new HSSFWorkbook();
+            Sheet sheet = workbook.createSheet("orders"); Row header = sheet.createRow(0); header.createCell(0).setCellValue("id"); header.createCell(1).setCellValue("status"); Row data = sheet.createRow(1); data.createCell(0).setCellValue(1); data.createCell(1).setCellValue("PAID");
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(); workbook.write(bytes); workbook.close();
+            when(refs.open(any(), any())).thenReturn(new ByteArrayInputStream(bytes.toByteArray()));
+            DatasetBatch batch = new FileDatasetAdapter(datasets, fields, refs, new ObjectMapper()).read(context(16L), new DatasetReadRequest(16L, "orders", List.of(), List.of(), 10, 0, Map.of()));
+            assertEquals("1", String.valueOf(batch.rows().getFirst().get("id"))); assertEquals("PAID", batch.rows().getFirst().get("status"));
+        }
+    }
+
+    @Test
+    void previewsUploadedStoredRefWithoutCreatingDataset() {
+        DatasetMapper datasets = mock(DatasetMapper.class); DatasetFieldMapper fields = mock(DatasetFieldMapper.class); ObjectRefService refs = mock(ObjectRefService.class);
+        StoredFileRef stored = new StoredFileRef("datasets/1/file-1", 1L, 2L, "orders.csv", "csv", 32, "sha256:x");
+        when(refs.open(any(), any())).thenReturn(new ByteArrayInputStream("id,status\n1,PAID\n".getBytes(StandardCharsets.UTF_8)));
+        DatasetBatch batch = new FileDatasetAdapter(datasets, fields, refs, new ObjectMapper()).previewDraft(context(99L), stored, "csv", 20);
+        assertEquals(List.of(Map.of("id", "1", "status", "PAID")), batch.rows());
+        verifyNoInteractions(datasets, fields);
     }
 
     @Test

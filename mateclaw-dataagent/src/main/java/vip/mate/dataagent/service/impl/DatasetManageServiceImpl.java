@@ -198,6 +198,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             case DatasetSourceDefinition.JdbcTableDefinition value -> value.datasourceId();
             case DatasetSourceDefinition.JdbcSqlDefinition value -> value.datasourceId();
             case DatasetSourceDefinition.AloudataViewDefinition value -> value.datasourceId();
+            case DatasetSourceDefinition.AloudataMetricsDefinition value -> value.datasourceId();
             case DatasetSourceDefinition.HttpApiDefinition value -> value.datasourceId();
             case DatasetSourceDefinition.FileDefinition ignored -> null;
         };
@@ -277,7 +278,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
                 || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && !jdbc) {
             throw new IllegalArgumentException("JDBC 数据集必须绑定 JDBC 数据源");
         }
-        if (definition instanceof DatasetSourceDefinition.AloudataViewDefinition && !aloudata) {
+        if ((definition instanceof DatasetSourceDefinition.AloudataViewDefinition
+                || definition instanceof DatasetSourceDefinition.AloudataMetricsDefinition) && !aloudata) {
             throw new IllegalArgumentException("Aloudata 指标视图必须绑定 Aloudata 数据源");
         }
         if (definition instanceof DatasetSourceDefinition.HttpApiDefinition && !httpApi) {

@@ -106,6 +106,40 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         }
     }
 
+    /** 草稿视图预览：沿用正式读取的 Aloudata 查询端点，但不依赖已落库 DatasetEntity。 */
+    public DatasetBatch previewDraft(DatasetAccessContext context, Long datasourceId, String viewName, DatasetReadRequest request) {
+        if (context == null || datasourceId == null || viewName == null || viewName.isBlank())
+            throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "Aloudata 指标视图参数不完整");
+        DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
+        if (datasource == null) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "Aloudata 数据源不存在");
+        int limit = request.limit() == null ? 100 : Math.min(request.limit(), MAX_PAGE_SIZE);
+        Map<String, Object> params = new LinkedHashMap<>();
+        String endpoint;
+        PushdownReport report;
+        if (request.filters().isEmpty()) {
+            endpoint = "analysis_view_query_data";
+            params.put("viewName", viewName); params.put("pageSize", limit); params.put("pageIndex", 0); params.put("queryResultType", "DATA");
+            report = new PushdownReport(List.of(), List.of(), true, true, null);
+        } else {
+            endpoint = "metrics_query";
+            AloudataAnalysisViewDetail view = viewDetail(datasourceId, viewName);
+            params.putAll(queryCompiler.compile(view, request));
+            report = new PushdownReport(request.filters(), List.of(), true, true, null);
+        }
+        try {
+            ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
+            Map<String, Object> body = response == null || response.getBody() == null ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
+            String code = string(body, "code");
+            if ("SM_02_0038".equals(code)) throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "VIEW_ACCESS_DENIED");
+            if (Boolean.FALSE.equals(body.get("success"))) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
+                    Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
+            List<Map<String,Object>> rows = rows(body);
+            return new DatasetBatch(rows, null, rows.size(), true, report);
+        } catch (DatasetReadException e) { throw e; }
+        catch (ResourceAccessException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_TIMEOUT, "Aloudata 请求超时", e); }
+        catch (RestClientException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "Aloudata 服务不可用", e); }
+    }
+
     private DatasetEntity requireDataset(DatasetAccessContext context, long datasetId) {
         if (context == null || !context.canRead(datasetId)) {
             throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "无权读取数据集");

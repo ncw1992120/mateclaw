@@ -5,6 +5,7 @@ public enum DatasetSourceType {
     JDBC_TABLE,
     JDBC_SQL,
     ALOUDATA_ANALYSIS_VIEW,
+    ALOUDATA_METRICS,
     HTTP_API,
     FILE
 }

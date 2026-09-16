@@ -37,8 +37,9 @@ public final class HttpApiRequestPolicy {
         if (host == null || host.isBlank() || endpoint.getUserInfo() != null) {
             throw new IllegalArgumentException("endpoint host is invalid");
         }
-        if (allowTlsTestEndpoint && "e2e-http".equalsIgnoreCase(host)
-                && "https".equalsIgnoreCase(endpoint.getScheme()) && endpoint.getPort() != 8443) {
+        if (allowTlsTestEndpoint && isLocalTlsTestHost(host)
+                && "https".equalsIgnoreCase(endpoint.getScheme()) && endpoint.getPort() != 8443
+                && endpoint.getPort() != 18443) {
             throw new IllegalArgumentException("TLS test endpoint must use port 8443");
         }
         List<String> hosts = allowedHosts == null ? List.of() : allowedHosts.stream().map(String::toLowerCase).toList();
@@ -57,10 +58,15 @@ public final class HttpApiRequestPolicy {
     }
 
     private boolean isTestEndpoint(URI endpoint) {
-        if (!"e2e-http".equalsIgnoreCase(endpoint.getHost())) return false;
+        if (!isLocalTlsTestHost(endpoint.getHost())) return false;
         if ("http".equalsIgnoreCase(endpoint.getScheme())) return allowInsecureTestEndpoint;
         return "https".equalsIgnoreCase(endpoint.getScheme())
-                && endpoint.getPort() == 8443 && allowTlsTestEndpoint;
+                && (endpoint.getPort() == 8443 || endpoint.getPort() == 18443) && allowTlsTestEndpoint;
+    }
+
+    private boolean isLocalTlsTestHost(String host) {
+        return "e2e-http".equalsIgnoreCase(host) || "host.docker.internal".equalsIgnoreCase(host)
+                || "127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host);
     }
 
     public Map<String, Object> mapFilters(HttpApiDatasetDefinition definition, List<DatasetFilter> filters) {

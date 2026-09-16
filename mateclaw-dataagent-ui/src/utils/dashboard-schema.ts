@@ -24,6 +24,7 @@ export function migrateInsightDashboardSchema(parsed: unknown, firstPageName: st
       datasetInputs: Array.isArray(value.datasetInputs) ? value.datasetInputs as InsightDashboardSchema['datasetInputs'] : [],
       script: typeof value.script === 'string' ? value.script : undefined,
       parameters: Array.isArray(value.parameters) ? value.parameters as InsightDashboardSchema['parameters'] : [],
+      scriptFilterBindings: Array.isArray(value.scriptFilterBindings) ? value.scriptFilterBindings as InsightDashboardSchema['scriptFilterBindings'] : [],
       executionPolicy: value.executionPolicy && typeof value.executionPolicy === 'object'
         ? value.executionPolicy as InsightDashboardSchema['executionPolicy']
         : {},

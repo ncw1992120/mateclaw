@@ -13,6 +13,7 @@ import java.util.List;
         @JsonSubTypes.Type(value = DatasetSourceDefinition.JdbcTableDefinition.class, name = "JDBC_TABLE"),
         @JsonSubTypes.Type(value = DatasetSourceDefinition.JdbcSqlDefinition.class, name = "JDBC_SQL"),
         @JsonSubTypes.Type(value = DatasetSourceDefinition.AloudataViewDefinition.class, name = "ALOUDATA_ANALYSIS_VIEW"),
+        @JsonSubTypes.Type(value = DatasetSourceDefinition.AloudataMetricsDefinition.class, name = "ALOUDATA_METRICS"),
         @JsonSubTypes.Type(value = DatasetSourceDefinition.HttpApiDefinition.class, name = "HTTP_API"),
         @JsonSubTypes.Type(value = DatasetSourceDefinition.FileDefinition.class, name = "FILE")
 })
@@ -20,6 +21,7 @@ public sealed interface DatasetSourceDefinition
         permits DatasetSourceDefinition.JdbcTableDefinition,
         DatasetSourceDefinition.JdbcSqlDefinition,
         DatasetSourceDefinition.AloudataViewDefinition,
+        DatasetSourceDefinition.AloudataMetricsDefinition,
         DatasetSourceDefinition.HttpApiDefinition,
         DatasetSourceDefinition.FileDefinition {
 
@@ -53,6 +55,16 @@ public sealed interface DatasetSourceDefinition
         }
 
         @Override public String sourceType() { return "ALOUDATA_ANALYSIS_VIEW"; }
+    }
+
+    record AloudataMetricsDefinition(Long datasourceId, List<String> metrics, List<String> dimensions) implements DatasetSourceDefinition {
+        public AloudataMetricsDefinition {
+            requireDatasource(datasourceId);
+            metrics = metrics == null ? List.of() : List.copyOf(metrics);
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+            if (metrics.isEmpty()) throw new IllegalArgumentException("Aloudata metrics are required");
+        }
+        @Override public String sourceType() { return "ALOUDATA_METRICS"; }
     }
 
     record HttpApiDefinition(Long datasourceId, String apiDefinitionId) implements DatasetSourceDefinition {

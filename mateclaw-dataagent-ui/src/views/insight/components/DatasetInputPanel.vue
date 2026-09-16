@@ -2,10 +2,10 @@
   <section class="dataset-input-panel">
     <div class="panel-heading">
       <div>
-        <h3>脚本结果数据集输入</h3>
+        <h3>数据集配置</h3>
         <p>{{ inputs.length >= 2 ? `已选择 ${inputs.length} 个输入数据集，可配置 Python 预处理。` : '先选择一个数据集；添加第二个数据集后，可配置 Python 预处理。' }}</p>
-        <p class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
-        <div class="binding-target-selector">
+        <p v-if="targetComponents?.length" class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
+        <div v-if="targetComponents?.length" class="binding-target-selector">
           <span>结果绑定组件</span>
           <el-select
             :model-value="targetComponentId"
@@ -24,7 +24,19 @@
           </el-select>
         </div>
       </div>
-      <el-button size="small" type="primary" plain aria-label="添加数据集" @click="addInput">添加数据集</el-button>
+      <div class="add-dataset-entry">
+        <el-button size="small" type="primary" plain aria-label="添加数据集" @click="pickerOpen = !pickerOpen">+ 添加数据集</el-button>
+        <el-button text size="small" aria-label="搜索数据集来源" @click="pickerOpen = true">🔍 搜索</el-button>
+        <div v-show="pickerOpen" class="dataset-picker-popover">
+          <DatasetSourcePicker :available-datasets="datasets" :available-datasources="datasources" @select="handleSourceSelection" />
+        </div>
+      </div>
+      <DatasetSourceDialog
+        v-if="sourceSelection"
+        v-model="sourceDialogOpen"
+        :selection="sourceSelection"
+        @confirm="confirmSource"
+      />
     </div>
 
     <el-empty v-if="inputs.length === 0" description="暂未配置数据集输入" :image-size="56" />
@@ -34,7 +46,8 @@
         <div class="dataset-card-title"><span>输入 {{ index + 1 }}</span><span class="dataset-source-badge">{{ sourceLabel(input) }}</span></div>
         <el-button text type="danger" size="small" @click="removeInput(index)">移除</el-button>
       </div>
-      <el-select
+      <div v-if="input.datasetId" class="dataset-source-display">数据源：{{ sourceLabel(input) }}<span v-if="datasetName(input)"> · {{ datasetName(input) }}</span></div>
+      <el-select v-else
         :model-value="input.datasetId"
         filterable
         clearable
@@ -101,7 +114,9 @@
       >
         查看字段
       </el-button>
-      <div v-if="input.datasetId" class="dataset-config-body">
+      <div v-if="input.datasetId || input.sourceType" class="dataset-config-body">
+        <div v-if="input.datasetId" class="configured-source-hint">查询配置已保存；可通过“筛选预览”查看当前输入结果。</div>
+        <template v-if="!input.datasetId || !targetComponents?.length">
         <div v-if="sourceType(input) === 'JDBC_SQL' || sourceType(input) === 'JDBC_TABLE'" class="source-config-block">
           <label class="form-label">JDBC 数据集模式</label>
           <el-select :model-value="sourceType(input)" aria-label="JDBC 数据集模式" @change="(value: string) => updateInput(index, { sourceType: value })">
@@ -122,17 +137,20 @@
           <span class="form-hint">指标视图使用已配置的分析视图，不在此处重复创建。</span>
         </div>
         <div v-else-if="sourceType(input) === 'HTTP_API' || sourceType(input) === 'FILE'" class="source-config-block unified-source-hint">接口/文件数据集使用已创建的数据集；本页负责选择、字段预览和筛选，不直接访问外部地址。</div>
-        <div class="dataset-card-actions"><el-button text size="small" @click="toggleMapping(index)">字段映射</el-button><el-button text size="small" @click="toggleFilters(index)">输入筛选</el-button></div>
-        <div v-if="mappingOpen[index]" class="inline-editor" aria-label="字段映射编辑器">
+        </template>
+        <div class="dataset-card-actions"><el-button text size="small" @click="toggleMapping(index)">字段名称</el-button><el-button text size="small" @click="toggleFilters(index)">筛选预览</el-button></div>
+        <el-dialog v-model="mappingOpen[index]" title="修改字段名称" width="520px" aria-label="字段映射编辑器">
           <div class="inline-editor-title">字段映射（原字段 → 目标字段）</div>
-          <div v-for="column in descriptors[input.datasetId]?.schema || []" :key="column.name" class="mapping-row"><span>{{ column.name }}</span><input :value="mappingTarget(input, column.name)" :aria-label="`${column.name} 目标字段`" placeholder="目标字段" @input="updateMapping(index, column.name, ($event.target as HTMLInputElement).value)" /></div>
+          <div v-for="column in descriptors[input.datasetId]?.schema || []" :key="column.name" class="mapping-row"><span>{{ column.name }}</span><input :value="mappingTarget(index, input, column.name)" :aria-label="`${column.name} 目标字段`" placeholder="目标字段" @input="updateMapping(index, column.name, ($event.target as HTMLInputElement).value)" /></div>
           <span v-if="!descriptors[input.datasetId]?.schema?.length" class="form-hint">先点击“查看字段”获取字段结构。</span>
-        </div>
-        <div v-if="filtersOpen[index]" class="inline-editor" aria-label="输入筛选编辑器">
+          <template #footer><el-button @click="cancelMapping(index)">取消</el-button><el-button type="primary" @click="commitMapping(index)">确定</el-button></template>
+        </el-dialog>
+        <el-dialog v-model="filtersOpen[index]" title="输入筛选" width="520px" aria-label="输入筛选编辑器">
           <div class="inline-editor-title">输入筛选（在源数据查询阶段执行）</div>
-          <div v-for="(filter, filterIndex) in input.filters || []" :key="`${filter.field}-${filterIndex}`" class="filter-row"><input :value="filter.field" aria-label="筛选字段" placeholder="字段" @input="updateFilter(index, filterIndex, { field: ($event.target as HTMLInputElement).value })" /><select :value="filter.operator" aria-label="筛选操作符" @change="updateFilter(index, filterIndex, { operator: ($event.target as HTMLSelectElement).value as any })"><option value="eq">等于</option><option value="in">包含</option><option value="between">范围</option></select><input :value="String(filter.value ?? '')" aria-label="筛选值" placeholder="筛选值" @input="updateFilter(index, filterIndex, { value: ($event.target as HTMLInputElement).value })" /></div>
+          <div v-for="(filter, filterIndex) in (filterDrafts[index] || input.filters || [])" :key="`${filter.field}-${filterIndex}`" class="filter-row"><input :value="filter.field" aria-label="筛选字段" placeholder="字段" @input="updateFilter(index, filterIndex, { field: ($event.target as HTMLInputElement).value })" /><select :value="filter.operator" aria-label="筛选操作符" @change="updateFilter(index, filterIndex, { operator: ($event.target as HTMLSelectElement).value as any })"><option value="eq">等于</option><option value="in">包含</option><option value="between">范围</option></select><input :value="String(filter.value ?? '')" aria-label="筛选值" placeholder="筛选值" @input="updateFilter(index, filterIndex, { value: ($event.target as HTMLInputElement).value })" /></div>
           <el-button text size="small" @click="addFilter(index)">添加筛选条件</el-button>
-        </div>
+          <template #footer><el-button @click="cancelFilters(index)">取消</el-button><el-button type="primary" @click="commitFilters(index)">确定</el-button></template>
+        </el-dialog>
       </div>
       <div v-if="previewResults[previewKey(input)]" class="input-preview-card">
         <div class="preview-meta">输入预览 · {{ previewResults[previewKey(input)].rows.length }} 行</div>
@@ -158,7 +176,7 @@
       </div>
     </div>
 
-    <div v-if="inputs.length >= 2" class="script-draft">
+    <div v-if="inputs.length >= 2 || Boolean(script?.trim())" class="script-draft">
       <div class="row-header">
         <span>Python 脚本草稿</span>
         <div class="script-actions">
@@ -209,14 +227,26 @@
         <div v-if="executionOutputRef" class="result-limit-notice">
           仅展示受限预览；完整结果已保存为 ObjectRef：{{ executionOutputRef.uri || executionOutputRef.objectId || '受控引用' }}
         </div>
-        <table class="result-table">
-          <thead><tr><th v-for="column in executionColumns" :key="column">{{ column }}</th></tr></thead>
-          <tbody>
-            <tr v-for="(row, rowIndex) in executionRows" :key="rowIndex">
-              <td v-for="column in executionColumns" :key="column">{{ formatCell(row[column]) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="preview-tabs" role="tablist" aria-label="预览反馈">
+          <button v-for="tab in resultTabs" :key="tab.key" class="preview-tab" :class="{ active: resultTab === tab.key }" role="tab" :aria-selected="resultTab === tab.key" @click="resultTab = tab.key">{{ tab.label }}</button>
+        </div>
+        <div v-if="resultTab === 'data'" role="tabpanel" aria-label="数据预览">
+          <table class="result-table">
+            <thead><tr><th v-for="column in executionColumns" :key="column">{{ column }}</th></tr></thead>
+            <tbody>
+              <tr v-for="(row, rowIndex) in executionRows" :key="rowIndex">
+                <td v-for="column in executionColumns" :key="column">{{ formatCell(row[column]) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else-if="resultTab === 'schema'" class="execution-feedback" role="tabpanel" aria-label="字段结构">
+          <div v-for="column in executionColumns" :key="column" class="feedback-row"><span>{{ column }}</span><span>{{ inferDataType(executionRows[0]?.[column]) }}</span></div>
+        </div>
+        <div v-else-if="resultTab === 'execution'" class="execution-feedback" role="tabpanel" aria-label="执行信息">
+          <div class="feedback-row"><span>执行 ID</span><span>{{ executionId || '—' }}</span></div><div class="feedback-row"><span>输入行数</span><span>{{ inputs.length }} 个数据集</span></div><div class="feedback-row"><span>输出行数</span><span>{{ executionRows.length }}</span></div><div class="feedback-row"><span>扫描量</span><span>来源未提供</span></div>
+        </div>
+        <div v-else class="execution-feedback" role="tabpanel" aria-label="处理日志"><div class="feedback-log">已完成数据集读取、Python 预处理和结果绑定。</div><div v-if="executionOutputRef" class="feedback-log">结果已写入受控 ObjectRef。</div></div>
       </div>
       <div v-else-if="executionResult !== null" class="input-preview-card execution-result">
         <div class="preview-meta">最终结果预览</div>
@@ -268,6 +298,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { Dataset, DatasetInputDescriptor, DatasetInputColumn, DashboardDatasetInput, DatasetBatch, DashboardScriptParameter, DatasetObjectRef, InsightComponent, DatasetFilter, DashboardScriptFilterBinding } from '@/types'
 import * as datasetApi from '@/api/dataset'
+import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import {
   assertUniqueDatasetInputAliases,
@@ -277,6 +308,8 @@ import {
 import { groupDatasets } from '@/utils/data-binding'
 import { buildSystemScript, mergeBaseScript, SYSTEM_SCRIPT_END, SYSTEM_SCRIPT_START, USER_SCRIPT_START } from '@/utils/script-template'
 import { isReadonlySql, normalizeDatasetInput } from '@/utils/dataset-composer'
+import DatasetSourcePicker, { type DatasetSourceSelection } from './DatasetSourcePicker.vue'
+import DatasetSourceDialog from './DatasetSourceDialog.vue'
 
 const props = defineProps<{
   inputs: DashboardDatasetInput[]
@@ -297,6 +330,7 @@ const emit = defineEmits<{
 }>()
 
 const datasets = ref<Dataset[]>([])
+const datasources = ref<import('@/types').Datasource[]>([])
 const datasetGroups = computed(() => groupDatasets(datasets.value))
 const descriptors = reactive<Record<string, DatasetInputDescriptor>>({})
 const previewResults = reactive<Record<string, DatasetBatch>>({})
@@ -307,9 +341,18 @@ const executionError = ref('')
 const executionResult = ref<unknown | null>(null)
 const executionOutputRef = ref<DatasetObjectRef | null>(null)
 const executionId = ref('')
+const resultTab = ref<'data' | 'schema' | 'execution' | 'log'>('data')
+const resultTabs = [
+  { key: 'data', label: '数据预览' },
+  { key: 'schema', label: '字段结构' },
+  { key: 'execution', label: '执行信息' },
+  { key: 'log', label: '处理日志' },
+] as const
 const cancelRequested = ref(false)
 const mappingOpen = reactive<Record<number, boolean>>({})
 const filtersOpen = reactive<Record<number, boolean>>({})
+const mappingDrafts = reactive<Record<number, DashboardDatasetInput['fieldMappings']>>({})
+const filterDrafts = reactive<Record<number, DatasetFilter[]>>({})
 const executionRows = computed<Record<string, unknown>[]>(() => {
   if (!Array.isArray(executionResult.value)) return []
   return executionResult.value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
@@ -336,18 +379,21 @@ const userScript = computed(() => {
 const targetComponents = computed(() => (props.targetComponents ?? []).filter((component) => ['kpi', 'chart', 'table'].includes(component.type)))
 const filterComponents = computed(() => (props.targetComponents ?? []).filter((component) => ['filter', 'timeFilter'].includes(component.type)))
 const filterBindings = computed(() => props.filterBindings ?? [])
+const pickerOpen = ref(false)
+const sourceDialogOpen = ref(false)
+const sourceSelection = ref<DatasetSourceSelection | null>(null)
 
 onMounted(async () => {
+  // 字段探测不依赖来源目录，先启动，避免目录接口慢时卡住已有输入的字段状态。
+  for (const input of props.inputs) {
+    if (input.datasetId) void loadDescriptor(input.datasetId)
+  }
   try {
     datasets.value = await datasetApi.list() as unknown as Dataset[]
   } catch {
     // API 层已经展示错误；面板保留空状态，避免影响旧仪表盘编辑。
   }
-  for (const input of props.inputs) {
-    if (input.datasetId) {
-      void loadDescriptor(input.datasetId)
-    }
-  }
+  try { datasources.value = await datasourceApi.list() as unknown as import('@/types').Datasource[] } catch { datasources.value = [] }
 })
 
 function addInput(): void {
@@ -359,6 +405,41 @@ function addInput(): void {
     inputName = `dataset_${suffix}`
   }
   emit('update:inputs', [...props.inputs, { datasetId: '', inputName }])
+}
+
+function handleSourceSelection(selection: DatasetSourceSelection): void {
+  pickerOpen.value = false
+  if (!selection.datasetId) {
+    sourceSelection.value = selection
+    sourceDialogOpen.value = true
+    return
+  }
+  const used = new Set(props.inputs.map((input) => input.inputName))
+  let suffix = props.inputs.length + 1
+  let inputName = `dataset_${suffix}`
+  while (used.has(inputName)) { suffix += 1; inputName = `dataset_${suffix}` }
+  emit('update:inputs', [...props.inputs, {
+    datasetId: selection.datasetId || '',
+    inputName,
+    sourceType: selection.datasetId ? selection.sourceType : (selection.sourceType === 'JDBC_TABLE' ? 'JDBC_SQL' : selection.sourceType),
+    sourceConfig: selection.datasourceId ? { datasourceId: selection.datasourceId } : undefined,
+  }])
+}
+
+function confirmSource(value: DatasetSourceSelection & { sourceConfig?: Record<string, unknown>; displayName?: string }): void {
+  const used = new Set(props.inputs.map((input) => input.inputName))
+  let suffix = props.inputs.length + 1
+  let inputName = `dataset_${suffix}`
+  while (used.has(inputName)) { suffix += 1; inputName = `dataset_${suffix}` }
+  emit('update:inputs', [...props.inputs, {
+    datasetId: value.datasetId || '',
+    inputName,
+    sourceType: value.sourceType,
+    displayName: value.displayName,
+    sourceConfig: value.sourceConfig,
+  }])
+  sourceDialogOpen.value = false
+  sourceSelection.value = null
 }
 
 function removeInput(index: number): void {
@@ -380,6 +461,10 @@ function sourceLabel(input: DashboardDatasetInput): string {
   return ({ JDBC_SQL: 'JDBC SQL', JDBC_TABLE: 'JDBC', ALOUDATA_ANALYSIS_VIEW: 'Aloudata · 指标视图', ALOUDATA_METRICS: 'Aloudata · 指标&维度', HTTP_API: '接口', FILE: '文件' } as Record<string, string>)[type] || type
 }
 
+function datasetName(input: DashboardDatasetInput): string {
+  return datasets.value.find(item => String(item.id) === String(input.datasetId))?.name || input.displayName || ''
+}
+
 function toggleFilterInput(binding: DashboardScriptFilterBinding | undefined, filterComponentId: string, inputName: string, checked: boolean): void {
   const current = binding || { filterComponentId, inputNames: [], fieldMappings: {} }
   const inputNames = checked ? [...new Set([...current.inputNames, inputName])] : current.inputNames.filter(name => name !== inputName)
@@ -395,27 +480,51 @@ function updateSourceConfig(index: number, patch: DashboardDatasetInput['sourceC
   updateInput(index, { sourceType: 'JDBC_SQL', sourceConfig: { ...(props.inputs[index].sourceConfig || {}), ...patch } })
 }
 
-function toggleMapping(index: number): void { mappingOpen[index] = !mappingOpen[index] }
-function toggleFilters(index: number): void { filtersOpen[index] = !filtersOpen[index] }
+function toggleMapping(index: number): void {
+  mappingDrafts[index] = [...(props.inputs[index].fieldMappings || [])].map(item => ({ ...item }))
+  mappingOpen[index] = !mappingOpen[index]
+}
+function toggleFilters(index: number): void {
+  filterDrafts[index] = [...(props.inputs[index].filters || [])].map(item => ({ ...item }))
+  filtersOpen[index] = !filtersOpen[index]
+}
 
-function mappingTarget(input: DashboardDatasetInput, source: string): string {
-  return input.fieldMappings?.find(item => item.source === source)?.target || source
+function mappingTarget(index: number, input: DashboardDatasetInput, source: string): string {
+  return mappingDrafts[index]?.find(item => item.source === source)?.target || input.fieldMappings?.find(item => item.source === source)?.target || source
 }
 
 function updateMapping(index: number, source: string, target: string): void {
-  const current = [...(props.inputs[index].fieldMappings || [])].filter(item => item.source !== source)
-  updateInput(index, { fieldMappings: [...current, { source, target: target || source }] })
+  const current = [...(mappingDrafts[index] || props.inputs[index].fieldMappings || [])].filter(item => item.source !== source)
+  mappingDrafts[index] = [...current, { source, target: target || source }]
 }
 
 function updateFilter(index: number, filterIndex: number, patch: Partial<DatasetFilter>): void {
-  const filters = [...(props.inputs[index].filters || [])]
+  const filters = [...(filterDrafts[index] || props.inputs[index].filters || [])]
   filters[filterIndex] = { ...filters[filterIndex], role: filters[filterIndex].role || 'dimension', ...patch } as DatasetFilter
-  updateInput(index, { filters })
+  filterDrafts[index] = filters
 }
 
 function addFilter(index: number): void {
-  updateInput(index, { filters: [...(props.inputs[index].filters || []), { field: '', role: 'dimension', operator: 'eq', value: '' }] })
+  filterDrafts[index] = [...(filterDrafts[index] || props.inputs[index].filters || []), { field: '', role: 'dimension', operator: 'eq', value: '' }]
 }
+
+function commitMapping(index: number): void {
+  const mappings = mappingDrafts[index] || []
+  const sourceFields = new Set((descriptors[props.inputs[index].datasetId]?.schema || []).map(column => column.name))
+  const targets = mappings.map(item => item.target.trim())
+  if (mappings.some(item => !item.source.trim() || !sourceFields.has(item.source) || !item.target.trim())) { ElMessage.warning('字段映射必须引用当前数据集字段，目标名称不能为空'); return }
+  if (new Set(targets).size !== targets.length) { ElMessage.warning('目标字段名称不能重复'); return }
+  updateInput(index, { fieldMappings: mappings }); mappingOpen[index] = false
+}
+function cancelMapping(index: number): void { mappingOpen[index] = false; delete mappingDrafts[index] }
+function commitFilters(index: number): void {
+  const filters = filterDrafts[index] || []
+  const fields = new Set((descriptors[props.inputs[index].datasetId]?.schema || []).map(column => column.name))
+  if (filters.some(filter => !filter.field.trim() || !fields.has(filter.field))) { ElMessage.warning('筛选字段必须属于当前数据集'); return }
+  if (filters.some(filter => (filter.operator === 'between' || filter.operator === 'in') && (!Array.isArray(filter.value) && !String(filter.value ?? '').trim()))) { ElMessage.warning('多选或范围筛选需要填写值'); return }
+  updateInput(index, { filters }); filtersOpen[index] = false
+}
+function cancelFilters(index: number): void { filtersOpen[index] = false; delete filterDrafts[index] }
 
 function changeDataset(index: number, datasetId: string): void {
   const next = props.inputs.map((input, itemIndex) => itemIndex === index ? { ...input, datasetId } : input)
@@ -471,7 +580,7 @@ function insertTemplate(): void {
     ElMessage.warning('请先添加一个合法的数据集输入别名')
     return
   }
-  const generated = buildSystemScript(validInputs, parameters.value)
+  const generated = buildSystemScript(validInputs, parameters.value, filterBindings.value)
   emit('update:script', mergeBaseScript(props.script, generated))
   ElMessage.success('系统区域已生成，用户处理区域保持不变')
 }
@@ -536,6 +645,10 @@ function hydrateDescriptor(datasetId: string, batch: DatasetBatch): void {
 
 async function executeScriptPreview(): Promise<void> {
   if (!props.dashboardId || !props.script?.trim()) return
+  if (props.inputs.length >= 2 && !userScript.value.trim()) {
+    executionError.value = '请在用户处理区域补充 Join、合并或计算逻辑后再预览'
+    return
+  }
   executionLoading.value = true
   executionError.value = ''
   executionResult.value = null
@@ -548,7 +661,9 @@ async function executeScriptPreview(): Promise<void> {
       throw new Error('每个数据集输入都必须选择数据集')
     }
     assertValidScriptParameters(parameters.value)
-    const created = await insightDashboardApi.execute(props.dashboardId)
+    const created = props.targetComponentId
+      ? await insightDashboardApi.executeComponent(props.dashboardId, props.targetComponentId)
+      : await insightDashboardApi.execute(props.dashboardId)
     executionId.value = (created as unknown as { executionId: string }).executionId
     if (!executionId.value) throw new Error('未获取到执行 ID')
     for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -760,6 +875,14 @@ defineExpose({
   border-radius: 4px;
 }
 
+.preview-tabs { display: flex; gap: 2px; padding: 4px; background: var(--el-fill-color-light); border-bottom: 1px solid var(--el-border-color-lighter); }
+.preview-tab { border: 0; padding: 5px 9px; color: var(--el-text-color-secondary); background: transparent; cursor: pointer; font-size: 11px; border-radius: 3px; }
+.preview-tab.active { color: var(--el-color-primary); background: var(--el-bg-color); font-weight: 600; box-shadow: 0 0 0 1px var(--el-color-primary-light-8); }
+.execution-feedback { padding: 8px 10px; min-height: 70px; background: var(--el-bg-color); font-size: 11px; }
+.feedback-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--el-border-color-extra-light); }
+.feedback-row span:last-child { color: var(--el-text-color-secondary); text-align: right; word-break: break-all; }
+.feedback-log { padding: 4px 0; color: var(--el-text-color-secondary); }
+
 .result-table {
   width: 100%;
   border-collapse: collapse;
@@ -806,6 +929,8 @@ defineExpose({
 .binding-target-hint { margin: 4px 0 0; color: var(--el-text-color-secondary); font-size: 11px; }
 
 .dataset-source-card { padding: 10px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; background: var(--el-bg-color); }
+.add-dataset-entry { position: relative; display: flex; align-items: center; gap: 4px; }
+.dataset-picker-popover { position: absolute; z-index: 20; top: 34px; right: 0; width: 300px; padding: 10px; border: 1px solid var(--el-border-color-light); border-radius: 8px; background: var(--el-bg-color-overlay); box-shadow: var(--el-box-shadow-light); }
 .dataset-card-title { display: flex; align-items: center; gap: 8px; }
 .dataset-source-badge { padding: 2px 6px; border-radius: 999px; color: var(--el-color-primary); background: var(--el-color-primary-light-9); font-size: 10px; }
 .dataset-config-body { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--el-border-color-lighter); }

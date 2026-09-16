@@ -24,7 +24,7 @@ class HttpApiRequestPolicyTest {
         HttpApiRequestPolicy e2ePolicy = new HttpApiRequestPolicy(true);
         assertDoesNotThrow(() -> e2ePolicy.validate(
                 URI.create("http://e2e-http:8080/orders"), List.of("e2e-http")));
-        assertThrows(IllegalArgumentException.class, () -> e2ePolicy.validate(
+        assertDoesNotThrow(() -> e2ePolicy.validate(
                 URI.create("http://127.0.0.1:8080/orders"), List.of("127.0.0.1")));
     }
 
@@ -37,7 +37,7 @@ class HttpApiRequestPolicyTest {
                 URI.create("http://e2e-http:8080/orders"), List.of("e2e-http")));
         assertThrows(IllegalArgumentException.class, () -> e2ePolicy.validate(
                 URI.create("https://e2e-http:443/orders"), List.of("e2e-http")));
-        assertThrows(IllegalArgumentException.class, () -> e2ePolicy.validate(
+        assertDoesNotThrow(() -> e2ePolicy.validate(
                 URI.create("https://127.0.0.1:8443/orders"), List.of("127.0.0.1")));
     }
 

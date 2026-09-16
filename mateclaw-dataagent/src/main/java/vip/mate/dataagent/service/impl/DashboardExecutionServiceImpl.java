@@ -64,13 +64,16 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     public Map<String, Object> submit(long dashboardId, DashboardExecutionRequest request) {
         InsightDashboardVO dashboard = dashboards.getDashboard(dashboardId);
         JsonNode schema = parseSchema(dashboard.getSchemaJson());
-        String script = text(schema, "script");
+        JsonNode pipeline = request == null ? null : findComponentPipeline(schema, request.componentId());
+        JsonNode executionSchema = pipeline == null ? schema : pipeline;
+        String script = text(executionSchema, "script");
         if (script == null || script.isBlank()) {
             throw new IllegalArgumentException("dashboard script is required");
         }
-        Map<String, Long> inputs = parseInputs(schema.path("datasetInputs"));
+        Map<String, Long> inputs = parseInputs(executionSchema.path("datasetInputs"));
+        validateFilterBindings(executionSchema.path("scriptFilterBindings"), inputs.keySet());
         Map<String, Object> parameters = resolveParameters(
-                schema.path("parameters"), request == null ? Map.of() : request.parameters());
+                executionSchema.path("parameters"), request == null ? Map.of() : request.parameters());
         String taskId = "dashboard-" + dashboardId + "-" + UUID.randomUUID();
         ScriptTaskPreparationService.PreparedTask prepared = preparation.prepare(
                 taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
@@ -112,6 +115,24 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         response.put("dashboardId", dashboardId);
         response.put("status", result.getOrDefault("status", "RUNNING"));
         return response;
+    }
+
+    /** 组件级数据集编排优先，旧仪表盘继续从根级 Schema 执行。 */
+    private JsonNode findComponentPipeline(JsonNode schema, String componentId) {
+        if (componentId == null || componentId.isBlank()) return null;
+        JsonNode pages = schema.path("pages");
+        if (!pages.isArray()) return null;
+        for (JsonNode page : pages) {
+            JsonNode components = page.path("components");
+            if (!components.isArray()) continue;
+            for (JsonNode component : components) {
+                if (componentId.equals(text(component, "id"))) {
+                    JsonNode pipeline = component.path("config").path("datasetPipeline");
+                    return pipeline.isObject() ? pipeline : null;
+                }
+            }
+        }
+        return null;
     }
 
     @Override
@@ -256,6 +277,25 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             result.put(alias, datasetId);
         }
         return result;
+    }
+
+    private void validateFilterBindings(JsonNode node, Set<String> inputNames) {
+        if (node == null || !node.isArray()) return;
+        for (JsonNode binding : node) {
+            JsonNode names = binding.path("inputNames");
+            if (!names.isArray()) throw new IllegalArgumentException("script filter binding inputNames are required");
+            for (JsonNode name : names) {
+                if (!name.isTextual() || !inputNames.contains(name.asText()))
+                    throw new IllegalArgumentException("script filter binding references an unknown input");
+            }
+            JsonNode mappings = binding.path("fieldMappings");
+            if (mappings.isObject()) {
+                var fields = mappings.fieldNames();
+                while (fields.hasNext()) {
+                    if (!inputNames.contains(fields.next())) throw new IllegalArgumentException("script filter field mapping references an unknown input");
+                }
+            }
+        }
     }
 
     /**

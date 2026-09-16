@@ -70,7 +70,8 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
             switch (definition.format().toLowerCase(Locale.ROOT)) {
                 case "json" -> scanJson(in, consumer);
                 case "csv" -> scanCsv(in, consumer);
-                case "xlsx" -> scanXlsx(in, consumer);
+                case "txt" -> scanTxt(in, consumer);
+                case "xls", "excel", "xlsx" -> scanXlsx(in, consumer);
                 case "parquet" -> parquetResult[0] = scanParquet(in, consumer, request);
                 default -> throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "不支持的文件格式: " + definition.format());
             }
@@ -81,6 +82,37 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
                 : new PushdownReport(parquetResult[0].pushedFilters(), parquetResult[0].residualFilters(),
                 parquetResult[0].projectionPushed(), parquetResult[0].limitPushed(), parquetResult[0].sourceQueryDigest());
         return new DatasetBatch(rows, null, rows.size(), true, report);
+    }
+
+    /** 上传后的文件草稿样本读取；只接受受控 StoredFileRef，不创建 DatasetEntity。 */
+    public DatasetBatch previewDraft(DatasetAccessContext context, StoredFileRef stored, String format, int limit) {
+        if (stored == null || context == null || !Objects.equals(context.workspaceId(), stored.workspaceId()))
+            throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "文件引用上下文不匹配");
+        String resolved = format == null || format.isBlank() ? stored.format() : format;
+        if (!stored.format().equalsIgnoreCase(resolved))
+            throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "文件格式与上传对象不一致");
+        List<Map<String,Object>> rows = new ArrayList<>();
+        int max = Math.min(Math.max(limit, 1), 100);
+        try (InputStream in = openStored(context, stored)) {
+            RowConsumer consumer = row -> { if (rows.size() < max) rows.add(row); };
+            switch (resolved.toLowerCase(Locale.ROOT)) {
+                case "json" -> scanJson(in, consumer);
+                case "csv" -> scanCsv(in, consumer);
+                case "txt" -> scanTxt(in, consumer);
+                case "xls", "excel", "xlsx" -> scanXlsx(in, consumer);
+                case "parquet" -> scanParquet(in, consumer, new DatasetReadRequest(0L, "draft", List.of(), List.of(), max, 0, Map.of()));
+                default -> throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "不支持的文件格式: " + resolved);
+            }
+        } catch (DatasetReadException e) { throw e; }
+        catch (IOException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "文件草稿预览失败", e); }
+        return new DatasetBatch(rows, null, rows.size(), true,
+                new PushdownReport(List.of(), List.of(), false, false, "file-draft-preview"));
+    }
+
+    private InputStream openStored(DatasetAccessContext context, StoredFileRef stored) {
+        ObjectRef ref = new ObjectRef(stored.objectId(), stored.workspaceId(), "upload-" + stored.ownerId(), stored.format(), stored.digest(),
+                System.currentTimeMillis() + 86_400_000L);
+        return objectRefService.open(context, ref);
     }
 
     private DatasetEntity require(DatasetAccessContext context, long id) {
@@ -108,6 +140,22 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
         List<String> names=parse(h); String line;
         while((line=r.readLine())!=null){ if(line.isBlank()) continue; List<String> vals=parse(line); if(vals.size()!=names.size()) throw new IOException("CSV row mismatch"); Map<String,Object> row=new LinkedHashMap<>(); for(int i=0;i<names.size();i++) row.put(names.get(i), vals.get(i).isBlank()?null:vals.get(i)); consumer.accept(row); }
     }
+    /** TXT 按首行探测逗号、制表符或分号分隔，仍使用受限 UTF-8 流式读取。 */
+    private void scanTxt(InputStream in, RowConsumer consumer) throws IOException {
+        BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        String header = r.readLine(); if (header == null) return;
+        char delimiter = header.indexOf('\t') >= 0 ? '\t' : (header.indexOf(';') >= 0 ? ';' : ',');
+        List<String> names = splitLine(header, delimiter); String line;
+        while ((line = r.readLine()) != null) {
+            if (line.isBlank()) continue;
+            List<String> values = splitLine(line, delimiter);
+            if (values.size() != names.size()) throw new IOException("TXT row mismatch");
+            Map<String,Object> row = new LinkedHashMap<>();
+            for (int i = 0; i < names.size(); i++) row.put(names.get(i), values.get(i).isBlank() ? null : values.get(i));
+            consumer.accept(row);
+        }
+    }
+    private List<String> splitLine(String line, char delimiter) { return Arrays.asList(line.split(java.util.regex.Pattern.quote(String.valueOf(delimiter)), -1)); }
     private void scanXlsx(InputStream in, RowConsumer consumer) throws IOException {
         try (Workbook workbook = WorkbookFactory.create(in)) {
             if (workbook.getNumberOfSheets() == 0) throw new IOException("XLSX contains no sheet");

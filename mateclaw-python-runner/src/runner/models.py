@@ -26,7 +26,9 @@ class TaskRequest(BaseModel):
         parsed = urlparse(value)
         if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password or parsed.path == "":
             raise ValueError("datasetReadEndpoint must be a plain HTTP(S) URL")
-        allowed = {"dataagent", "mateclaw-dataagent", "mateclaw-server", "localhost", "127.0.0.1"}
+        # Docker Desktop 本地联调时，Runner 容器通过 host.docker.internal
+        # 回调宿主机上的 DataAgent；生产环境仍应使用 dataagent 内部服务名。
+        allowed = {"dataagent", "mateclaw-dataagent", "mateclaw-server", "localhost", "127.0.0.1", "host.docker.internal"}
         if parsed.hostname not in allowed:
             raise ValueError("datasetReadEndpoint host is not allowlisted")
         return value.rstrip("/")

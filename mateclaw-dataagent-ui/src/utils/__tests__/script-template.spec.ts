@@ -36,4 +36,16 @@ describe('script template', () => {
     expect(script).toContain('"field": "status"')
     expect(script).toContain('"value": "PAID"')
   })
+
+  it('scopes page parameters to bound inputs instead of broadcasting them', () => {
+    const script = buildSystemScript(inputs, [
+      { name: 'region', type: 'string', scope: 'dashboard' },
+      { name: 'status', type: 'string', scope: 'dashboard' },
+    ], [{ filterComponentId: 'filter-1', inputNames: ['orders'], fieldMappings: { orders: 'region' } }])
+    const reads = script.split('datasets.read(').slice(1)
+    expect(reads[0]).toContain('"region"')
+    expect(reads[0]).not.toContain('"status"')
+    expect(reads[1]).not.toContain('"region"')
+    expect(reads[1]).not.toContain('"status"')
+  })
 })

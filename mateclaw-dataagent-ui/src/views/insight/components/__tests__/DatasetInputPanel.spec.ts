@@ -29,7 +29,7 @@ const stubs = {
   'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
   'el-empty': { template: '<div><slot /></div>' },
   'el-tooltip': { template: '<div><slot /><slot name="content" /></div>' },
-  'el-alert': { template: '<div><slot /></div>' },
+  'el-alert': { props: ['title'], template: '<div><slot />{{ title }}</div>' },
 }
 
 function mountPanel(props: Record<string, unknown> = {}) {
@@ -67,12 +67,14 @@ describe('DatasetInputPanel', () => {
     expect(wrapper.text()).toContain('业务 MySQL')
   })
 
-  it('adds a stable input alias and emits the updated list', async () => {
+  it('opens the source picker before creating an input card', async () => {
     const wrapper = mountPanel()
-    const add = wrapper.findAll('button').find((button) => button.text().includes('添加'))
+    const add = wrapper.find('button[aria-label="添加数据集"]')
     expect(add).toBeDefined()
     await add!.trigger('click')
-    expect(wrapper.emitted('update:inputs')?.[0]).toEqual([[{ datasetId: '', inputName: 'dataset_1' }]])
+    await nextTick()
+    expect(wrapper.find('.dataset-source-picker').exists()).toBe(true)
+    expect(wrapper.emitted('update:inputs')).toBeUndefined()
   })
 
   it('does not expose field-binding controls in the parameter editor', () => {
@@ -157,6 +159,18 @@ describe('DatasetInputPanel', () => {
     await preview!.trigger('click')
     await nextTick()
     expect(executeMock).not.toHaveBeenCalled()
+  })
+
+  it('blocks two-input execution when only the generated system region exists', async () => {
+    const wrapper = mountPanel({
+      dashboardId: 'dashboard-1',
+      inputs: [{ datasetId: '1', inputName: 'orders' }, { datasetId: '2', inputName: 'metrics' }],
+      script: '# ===== 系统生成区域：输入数据集和筛选绑定（请勿手动修改） =====\norders = datasets.read()\n# ===== 系统生成区域结束 =====',
+    })
+    await wrapper.findAll('button').find((button) => button.text().includes('最终结果预览'))!.trigger('click')
+    await nextTick()
+    expect(executeMock).not.toHaveBeenCalled()
+    expect(wrapper.find('.execution-alert').text()).toContain('用户处理区域')
   })
 
   it('exposes cancel and retry paths for an asynchronous preview', async () => {

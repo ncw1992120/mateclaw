@@ -140,6 +140,19 @@ public class DataAgentInsightDashboardController {
         return R.ok(executionService.submit(id, request));
     }
 
+    /** 按当前组件的数据集编排执行；未配置组件管道时由服务端返回明确错误。 */
+    @PostMapping("/{id}/components/{componentId}/executions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "创建组件数据集执行", description = "按组件级 datasetPipeline 执行 Python 预处理")
+    public R<Map<String, Object>> executeComponent(
+            @PathVariable Long id,
+            @PathVariable String componentId,
+            @RequestBody(required = false) DashboardExecutionRequest request) {
+        DashboardExecutionRequest scoped = new DashboardExecutionRequest(
+                request == null ? Map.of() : request.parameters(), componentId);
+        return R.ok(executionService.submit(id, scoped));
+    }
+
     @GetMapping("/executions/{executionId}")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "查询仪表盘执行状态")

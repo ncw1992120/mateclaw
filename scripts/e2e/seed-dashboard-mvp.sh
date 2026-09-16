@@ -8,6 +8,13 @@ aloudata_mode="${MATECLAW_E2E_ALOUDATA_MODE:-}"
 BASE_URL="${MATECLAW_E2E_API_BASE_URL:-http://127.0.0.1:18189/dataagent/api}"
 FIXTURE="${MATECLAW_E2E_ORDERS_FIXTURE:-mateclaw-dataagent-ui/e2e/fixtures/orders.csv}"
 STATE_FILE="${MATECLAW_E2E_STATE_FILE:-/tmp/mateclaw-dashboard-mvp-state-${MATECLAW_E2E_WORKSPACE_ID}.json}"
+RUN_SUFFIX="${MATECLAW_E2E_RUN_SUFFIX:-$(date +%s)}"
+JDBC_HOST="${MATECLAW_E2E_JDBC_HOST:-127.0.0.1}"
+JDBC_PORT="${MATECLAW_E2E_JDBC_PORT:-13306}"
+JDBC_DATABASE="${MATECLAW_E2E_JDBC_DATABASE:-mateclaw}"
+JDBC_USERNAME="${MATECLAW_E2E_JDBC_USERNAME:-mateclaw}"
+HTTP_ENDPOINT="${MATECLAW_E2E_HTTP_ENDPOINT:-https://e2e-http:8443/orders}"
+HTTP_ALLOWED_HOST="${MATECLAW_E2E_HTTP_ALLOWED_HOST:-e2e-http}"
 AUTH_HEADER="Authorization: Bearer ${MATECLAW_E2E_TOKEN:-}"
 WORKSPACE_HEADER="X-Workspace-Id: ${MATECLAW_E2E_WORKSPACE_ID}"
 
@@ -64,25 +71,27 @@ curl --fail --silent --show-error "$BASE_URL/actuator/health" >/dev/null
 
 jdbc_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg password "$(encrypt_field "${MATECLAW_E2E_JDBC_PASSWORD:-e2e-user-password}")" \
-  '{name:"E2E JDBC Orders",description:"dashboard MVP E2E",sourceType:"mysql",host:"e2e-mysql",port:3306,databaseName:"mateclaw",username:"mateclaw",password:$password,enabled:true,metaShared:true}')" | id_from)
-jdbc_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$jdbc_ds" \
-  '{name:"E2E JDBC Orders Dataset",description:"dashboard MVP JDBC source",sourceDefinition:{sourceType:"JDBC_SQL",datasourceId:($ds|tonumber),sql:"SELECT id, order_date, region, status, amount FROM orders"}}')" | id_from)
+  --arg suffix "$RUN_SUFFIX" \
+  --arg host "$JDBC_HOST" --argjson port "$JDBC_PORT" \
+  --arg database "$JDBC_DATABASE" --arg username "$JDBC_USERNAME" \
+  '{name:("E2E JDBC Orders " + $suffix),description:"dashboard MVP E2E",sourceType:"mysql",host:$host,port:$port,databaseName:$database,username:$username,password:$password,enabled:true,metaShared:true}')" | id_from)
+jdbc_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$jdbc_ds" --arg suffix "$RUN_SUFFIX" \
+  '{name:("E2E JDBC Orders Dataset " + $suffix),description:"dashboard MVP JDBC source",sourceDefinition:{sourceType:"JDBC_SQL",datasourceId:$ds,sql:"SELECT id, customer_id, order_date, status, amount FROM orders WHERE id > 0"}}')" | id_from)
 
-http_connection_params=$(jq -cn '{apiDefinitions:{orders:{endpoint:"https://e2e-http:8443/orders",method:"GET",allowedHosts:["e2e-http"],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data",schema:[
+http_connection_params=$(jq -cn --arg endpoint "$HTTP_ENDPOINT" --arg allowedHost "$HTTP_ALLOWED_HOST" '{apiDefinitions:{orders:{endpoint:$endpoint,method:"GET",allowedHosts:[$allowedHost],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data",schema:[
   {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
   {name:"order_date",title:"订单日期",dataType:"DATE",role:"dimension"},
-  {name:"region",title:"区域",dataType:"STRING",role:"dimension"},
   {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
   {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
 ]}}}')
 http_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg connectionParams "$http_connection_params" \
-  '{name:"E2E HTTP Orders",description:"dashboard MVP E2E",sourceType:"api",host:"e2e-http",port:8443,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
-http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" \
-  '{name:"E2E HTTP Orders Dataset",description:"dashboard MVP HTTP source",sourceDefinition:{sourceType:"HTTP_API",datasourceId:($ds|tonumber),apiDefinitionId:"orders",schema:[
+  --arg suffix "$RUN_SUFFIX" \
+  '{name:("E2E HTTP Orders " + $suffix),description:"dashboard MVP E2E",sourceType:"api",host:"e2e-http",port:8443,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
+http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" --arg suffix "$RUN_SUFFIX" \
+  '{name:("E2E HTTP Orders Dataset " + $suffix),description:"dashboard MVP HTTP source",sourceDefinition:{sourceType:"HTTP_API",datasourceId:$ds,apiDefinitionId:"orders",schema:[
     {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
     {name:"order_date",title:"订单日期",dataType:"DATE",role:"dimension"},
-    {name:"region",title:"区域",dataType:"STRING",role:"dimension"},
     {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
     {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
   ]}}')" | id_from)
@@ -91,14 +100,14 @@ file_ref=$(curl --fail-with-body --silent --show-error -X POST \
   -H "$AUTH_HEADER" -H "$WORKSPACE_HEADER" \
   -F "file=@${FIXTURE};type=text/csv" "$BASE_URL/v1/dataset-files" | jq -er '.data')
 file_object_id=$(jq -er '.objectId' <<<"$file_ref")
-file_dataset=$(api POST /v1/datasets "$(jq -cn --arg object "$file_object_id" \
-  '{name:"E2E File Orders Dataset",description:"dashboard MVP file source",sourceDefinition:{sourceType:"FILE",objectId:$object,format:"CSV",schemaVersion:1}}')" | id_from)
+file_dataset=$(api POST /v1/datasets "$(jq -cn --arg object "$file_object_id" --arg suffix "$RUN_SUFFIX" \
+  '{name:("E2E File Orders Dataset " + $suffix),description:"dashboard MVP file source",sourceDefinition:{sourceType:"FILE",objectId:$object,format:"CSV",schemaVersion:1}}')" | id_from)
 
 dashboard_schema() {
   local left_id="$1" left_name="$2" right_id="$3" right_name="$4" script="$5"
   jq -cn --arg l "$left_id" --arg ln "$left_name" --arg r "$right_id" --arg rn "$right_name" --arg script "$script" '{
     version:"1.1",
-    pages:[{id:"e2e-page",name:"E2E",components:[{id:"e2e-table",type:"table",title:"E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100}}]}],
+    pages:[{id:"e2e-page",name:"E2E",components:[{id:"e2e-table",type:"table",title:"E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:[{datasetId:$l,inputName:$ln},{datasetId:$r,inputName:$rn}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
     datasetInputs:[{datasetId:$l,inputName:$ln},{datasetId:$r,inputName:$rn}],
     script:$script,
     parameters:[],
@@ -111,7 +120,7 @@ echarts_dashboard_schema() {
   local dataset_id="$1" script="$2"
   jq -cn --arg dataset "$dataset_id" --arg script "$script" '{
     version:"1.1",
-    pages:[{id:"e2e-chart-page",name:"E2E Chart",components:[{id:"e2e-chart",type:"chart",title:"E2E Script Chart",position:{x:0,y:0,w:12,h:6},renderType:"echarts",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100}}]}],
+    pages:[{id:"e2e-chart-page",name:"E2E Chart",components:[{id:"e2e-chart",type:"chart",title:"E2E Script Chart",position:{x:0,y:0,w:12,h:6},renderType:"echarts",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
     datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],
     script:$script,
     parameters:[],
@@ -126,11 +135,15 @@ api_file_script=$'paid_filter = {"field": "status", "operator": "eq", "value": "
 multi_dashboard=""
 aloudata_ds=""
 if [[ "$aloudata_mode" == "simulation" ]]; then
-  aloudata_connection_params=$(jq -cn '{anymetricsHost:"https://e2e-http",semanticHost:"https://e2e-http",anymetricsPort:8443,semanticPort:8443,authType:"UID"}')
+  # 本机模拟服务通过宿主机端口暴露；使用 HTTP 避免 WireMock 自签名 TLS 在 JVM
+  # 中的证书握手问题。生产环境仍应填写真实的 HTTPS 产品层/语义层地址。
+  aloudata_connection_params=$(jq -cn --arg host "${MATECLAW_E2E_ALOUDATA_HOST:-127.0.0.1}" --argjson port "${MATECLAW_E2E_ALOUDATA_PORT:-18081}" '{anymetricsHost:("http://" + $host),semanticHost:("http://" + $host),anymetricsPort:$port,semanticPort:$port,authType:"UID"}')
   aloudata_ds=$(api POST /v1/datasources "$(jq -cn \
     --arg connectionParams "$aloudata_connection_params" \
     --arg password "$(encrypt_field local-simulation-auth)" \
-    '{name:"E2E Aloudata Simulation",description:"dashboard MVP simulated Aloudata",sourceType:"aloudata",host:"e2e-http",port:8443,productHost:"https://e2e-http",semanticHost:"https://e2e-http",username:"local-tenant",password:$password,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
+    --arg suffix "$RUN_SUFFIX" \
+    --arg host "${MATECLAW_E2E_ALOUDATA_HOST:-127.0.0.1}" --argjson port "${MATECLAW_E2E_ALOUDATA_PORT:-18081}" \
+    '{name:("E2E Aloudata Simulation " + $suffix),description:"dashboard MVP simulated Aloudata",sourceType:"aloudata",host:$host,port:$port,productHost:("http://" + $host),semanticHost:("http://" + $host),username:"local-tenant",password:$password,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
   # 创建后显式触发同步，并等待指标/维度元数据可读。同步还会尝试生成向量，
   # 本地环境可能没有外部 embedding 服务，因此只等待页面所需的分页数据，不等待
   # 后置索引任务；短超时断开客户端不会取消服务端已启动的同步。
@@ -150,8 +163,8 @@ if [[ "$aloudata_mode" == "simulation" ]]; then
     echo "Timed out waiting for Aloudata simulation metric/dimension metadata" >&2
     exit 1
   }
-  aloudata_dataset_id=$(api POST /v1/datasets "$(jq -cn --arg ds "$aloudata_ds" \
-    '{name:"E2E Aloudata Metrics Dataset",description:"dashboard MVP simulated metric view",sourceDefinition:{sourceType:"ALOUDATA_ANALYSIS_VIEW",datasourceId:($ds|tonumber),analysisViewId:"local_sales_view"}}')" | id_from)
+  aloudata_dataset_id=$(api POST /v1/datasets "$(jq -cn --arg ds "$aloudata_ds" --arg suffix "$RUN_SUFFIX" \
+    '{name:("E2E Aloudata Metrics Dataset " + $suffix),description:"dashboard MVP simulated metric view",sourceDefinition:{sourceType:"ALOUDATA_ANALYSIS_VIEW",datasourceId:$ds,analysisViewId:"local_sales_view"}}')" | id_from)
 elif [[ -n "$aloudata_dataset_id" ]]; then
   aloudata_mode="live"
 fi
@@ -163,19 +176,19 @@ else
 fi
 api_file_schema=$(dashboard_schema "$http_dataset" api_orders "$file_dataset" file_orders "$api_file_script")
 api_file_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$api_file_schema" '{name:"E2E API + File Dashboard",description:"dashboard MVP API and file flow",schemaJson:$schema}')" | id_from)
-echarts_script=$'rows = datasets.read(input_name="jdbc_orders", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nresult = rows.to_polars().select(["region", "amount"]).to_dicts()'
+echarts_script=$'rows = datasets.read(input_name="jdbc_orders", filters=[{"field": "status", "operator": "eq", "value": "PAID"}])\nresult = rows.to_polars().select(["status", "amount"]).to_dicts()'
 echarts_schema=$(echarts_dashboard_schema "$jdbc_dataset" "$echarts_script")
 echarts_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$echarts_schema" '{name:"E2E ECharts Binding Dashboard",description:"dashboard MVP ECharts script binding flow",schemaJson:$schema}')" | id_from)
 compat_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema '{"version":"1.0","components":[]}' '{name:"E2E Legacy Compatibility Dashboard",description:"dashboard MVP legacy schema",schemaJson:$schema}')" | id_from)
-error_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-error-page",name:"E2E Error",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"raise RuntimeError(\"e2e expected script failure\")",parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
+error_schema=$(jq -cn --arg dataset "$http_dataset" --arg script 'raise RuntimeError("e2e expected script failure")' '{version:"1.1",pages:[{id:"e2e-error-page",name:"E2E Error",components:[{id:"e2e-error-table",type:"table",title:"E2E Error",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 error_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$error_schema" '{name:"E2E Script Error Dashboard",description:"dashboard MVP controlled script failure",schemaJson:$schema}')" | id_from)
-cancel_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-cancel-page",name:"E2E Cancel",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"import time\ntime.sleep(30)\nresult = []",parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
+cancel_schema=$(jq -cn --arg dataset "$http_dataset" --arg script $'import time\ntime.sleep(30)\nresult = []' '{version:"1.1",pages:[{id:"e2e-cancel-page",name:"E2E Cancel",components:[{id:"e2e-cancel-table",type:"table",title:"E2E Cancel",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 cancel_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$cancel_schema" '{name:"E2E Cancellation Dashboard",description:"dashboard MVP controlled long-running script",schemaJson:$schema}')" | id_from)
-timeout_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-timeout-page",name:"E2E Timeout",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"import time\ntime.sleep(5)\nresult = []",parameters:[],executionPolicy:{timeoutSeconds:1,maxOutputBytes:50000}}')
+timeout_schema=$(jq -cn --arg dataset "$http_dataset" --arg script $'import time\ntime.sleep(5)\nresult = []' '{version:"1.1",pages:[{id:"e2e-timeout-page",name:"E2E Timeout",components:[{id:"e2e-timeout-table",type:"table",title:"E2E Timeout",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:1,maxOutputBytes:50000}}')
 timeout_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$timeout_schema" '{name:"E2E Script Timeout Dashboard",description:"dashboard MVP controlled script timeout",schemaJson:$schema}')" | id_from)
-resource_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-resource-page",name:"E2E Resource",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"print(\"x\" * 60000)\nresult = []",parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
+resource_schema=$(jq -cn --arg dataset "$http_dataset" --arg script $'print("x" * 60000)\nresult = []' '{version:"1.1",pages:[{id:"e2e-resource-page",name:"E2E Resource",components:[{id:"e2e-resource-table",type:"table",title:"E2E Resource",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 resource_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$resource_schema" '{name:"E2E Resource Limit Dashboard",description:"dashboard MVP controlled stdout limit",schemaJson:$schema}')" | id_from)
-large_schema=$(jq -cn --arg dataset "$http_dataset" '{version:"1.1",pages:[{id:"e2e-large-page",name:"E2E Large Result",components:[]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:"result = [{\"id\": i, \"payload\": \"x\" * 2000} for i in range(1000)]",parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
+large_schema=$(jq -cn --arg dataset "$http_dataset" --arg script 'result = [{"id": i, "payload": "x" * 2000} for i in range(1000)]' '{version:"1.1",pages:[{id:"e2e-large-page",name:"E2E Large Result",components:[{id:"e2e-large-table",type:"table",title:"E2E Large Result",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large_schema" '{name:"E2E Large Result Dashboard",description:"dashboard MVP ObjectRef result flow",schemaJson:$schema}')" | id_from)
 
 jq -n \

@@ -18,6 +18,8 @@ export function classifyDatasourceType(sourceType?: string): DatasourceCategory 
   if (['file', 'excel', 'csv', 'txt', 'json', 'parquet', 'object_storage'].includes(normalized)) return 'file'
   if (
     normalized === 'jdbc'
+    || normalized === 'jdbc_table'
+    || normalized === 'jdbc_sql'
     || normalized.includes('mysql')
     || normalized.includes('postgres')
     || normalized.includes('doris')

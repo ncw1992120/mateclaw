@@ -1236,6 +1236,15 @@ export interface InsightComponent {
   multiKpi?: boolean
 }
 
+/** 当前组件的数据集编排配置；输入归属于组件，不再使用仪表盘根级脚本输入。 */
+export interface ComponentDatasetPipeline {
+  datasetInputs: DashboardDatasetInput[]
+  scriptFilterBindings?: DashboardScriptFilterBinding[]
+  script?: string
+  parameters?: DashboardScriptParameter[]
+  executionPolicy?: DashboardExecutionPolicy
+}
+
 /** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
 export interface ComponentTab {
   /** Tab 唯一 ID */
@@ -1281,6 +1290,7 @@ export interface DashboardDatasetInput {
   sourceType?: DatasetSourceType | string
   /** 来源配置不包含连接凭据，仅保存查询/视图引用。 */
   sourceConfig?: {
+    datasourceId?: string
     sql?: string
     analysisViewId?: string
     apiDefinitionId?: string
