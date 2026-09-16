@@ -33,11 +33,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Search, Folder, Coin } from '@element-plus/icons-vue'
-import { useInsight, MOCK_DATA_SOURCE_TREE } from '../useInsight'
+import { useInsight } from '../useInsight'
 
 const { state, onSelectLeaf } = useInsight()
 const ui = state.ui
-const treeData = MOCK_DATA_SOURCE_TREE as any[]
+const treeData = state.treeData
 const treeProps = { label: 'label', children: 'children' }
 const search = ref('')
 const treeRef = ref()

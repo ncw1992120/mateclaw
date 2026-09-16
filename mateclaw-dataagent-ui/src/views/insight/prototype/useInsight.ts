@@ -17,6 +17,7 @@
  */
 import { reactive, computed } from 'vue'
 import * as backend from './useInsightBackend'
+import * as datasourceApi from '@/api/datasource'
 import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, InsightComponent, InsightDashboardSchema } from '@/types'
 
 /* ============================ 类型定义 ============================ */
@@ -77,6 +78,7 @@ export interface FilterBinding {
 }
 
 interface UiState {
+  treeData: any[]
   treeVisible: boolean // 数据源选择树弹窗
   editingDatasetId: string | null // 正在编辑（重新配置）的数据集 id；null=新增
   // 各配置弹窗状态
@@ -277,6 +279,7 @@ function nextAlias() {
 }
 
 const state = reactive({
+  treeData: [] as any[],
   cards: MOCK_CARDS as CardItem[],
   activeCardId: 'card-kpi-1',
   datasets: [] as DatasetConfig[],
@@ -336,8 +339,33 @@ function selectCard(id: string) {
   state.filterBindings = []
 }
 
-function openDataSourceTree() {
+async function openDataSourceTree() {
   state.ui.editingDatasetId = null
+  try {
+    const sources = (await datasourceApi.list()) as unknown as Array<{ id: string; name: string; sourceType?: string; enabled?: boolean }>
+    const jdbc = (sources || [])
+      .filter((s) => (s.sourceType || '').toUpperCase().includes('JDBC') && s.enabled !== false)
+      .map((s) => ({ label: s.name, type: 'jdbc', db: String(s.id), datasourceId: String(s.id) }))
+    const aloudata = (sources || []).find((s) => (s.sourceType || '').toUpperCase().includes('ALOUDATA') && s.enabled !== false)
+    state.treeData = [
+      { label: 'Aloudata', type: 'category', children: [
+        { label: '指标视图', type: 'aloudata', mode: 'metric-view', datasourceId: aloudata?.id },
+        { label: '指标&维度', type: 'aloudata', mode: 'metric-dim', datasourceId: aloudata?.id },
+      ] },
+      { label: 'JDBC', type: 'category', children: jdbc },
+      { label: '接口', type: 'api' },
+      { label: '文件', type: 'category', children: [
+        { label: 'Excel', type: 'file', fileType: 'Excel' },
+        { label: 'CSV', type: 'file', fileType: 'CSV' },
+        { label: 'TXT', type: 'file', fileType: 'TXT' },
+        { label: 'JSON', type: 'file', fileType: 'JSON' },
+        { label: 'Parquet', type: 'file', fileType: 'Parquet' },
+      ] },
+    ]
+  } catch {
+    // 模拟服务未启动时保留开发树，页面仍可进行交互验证
+    state.treeData = MOCK_DATA_SOURCE_TREE as any[]
+  }
   state.ui.treeVisible = true
 }
 
@@ -352,7 +380,7 @@ function onSelectLeaf(node: any) {
     const existing = state.ui.editingDatasetId ? getDataset(state.ui.editingDatasetId) : undefined
     state.ui.jdbc = {
       visible: true,
-      db: node.db,
+      db: node.datasourceId ?? node.db,
       sql: existing?.jdbc?.sql ?? MOCK_JDBC_SQL,
     }
   } else if (type === 'aloudata') {
@@ -498,16 +526,54 @@ function renameDataset(id: string, newAlias: string) {
 
 /* ---- JDBC ---- */
 function openJdbc(db: string) {
-  state.ui.jdbc = { visible: true, db, sql: MOCK_JDBC_SQL }
+    state.ui.jdbc = { visible: true, db, sql: MOCK_JDBC_SQL }
 }
-function confirmJdbc() {
+async function confirmJdbc(): Promise<boolean> {
   const { db, sql } = state.ui.jdbc
+  const editing = state.ui.editingDatasetId ? getDataset(state.ui.editingDatasetId) : undefined
+  const alias = editing?.alias ?? nextAlias()
+  try {
+    const preview = await backend.previewDatasetDraft({
+      sourceType: 'JDBC_SQL',
+      datasourceId: String(db),
+      sourceConfig: { sql },
+      filters: [],
+      limit: 100,
+    })
+    const result = await backend.confirmDatasetDraft({
+      sourceType: 'JDBC_SQL',
+      datasourceId: String(db),
+      sourceConfig: { sql },
+      filters: [],
+      limit: 100,
+      name: alias,
+      description: '洞察卡片 JDBC SQL 数据集',
+    })
+    commitDataset({
+      sourceType: 'jdbc',
+      sourceLabel: `JDBC · ${db}`,
+      alias,
+      backendDatasetId: result.datasetId,
+      jdbc: { db, sql },
+      fieldMapping: (preview as any)?.schema?.map((name: string) => ({ source: name, desc: '', target: name })) ?? [],
+      filters: [],
+    })
+    state.backend.lastError = ''
+    state.ui.jdbc.visible = false
+    return true
+  } catch (e) {
+    state.backend.lastError = (e as Error)?.message || 'JDBC 数据集保存失败'
+    return false
+  }
+  /* istanbul ignore next -- local simulation fallback is intentionally unreachable when API is available */
+  /*
   commitDataset({
     sourceType: 'jdbc',
     sourceLabel: `JDBC · ${db}`,
     jdbc: { db, sql },
   })
   state.ui.jdbc.visible = false
+  */
 }
 
 /* ---- Aloudata ---- */

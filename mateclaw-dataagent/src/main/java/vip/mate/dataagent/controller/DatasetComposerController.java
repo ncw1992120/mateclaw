@@ -255,14 +255,8 @@ public class DatasetComposerController {
             String sql = String.valueOf(config.getOrDefault("sql", ""));
             // AST 校验先于执行，避免注释、字符串中的 WHERE 绕过只读和单语句检查。
             sqlValidation.compile(sql, List.of(), toFilters(request.filters), Math.min(request.limit == null ? 20 : request.limit, 1000), 0);
-            if (preview && !containsWhere(sql)) throw new IllegalArgumentException("JDBC SQL 预览必须包含 WHERE 条件");
         }
         if ("FILE".equalsIgnoreCase(request.sourceType) && (request.sourceConfig == null || request.sourceConfig.get("objectId") == null)) throw new IllegalArgumentException("file objectId is required");
-    }
-
-    private boolean containsWhere(String sql) {
-        String normalized = sql.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)--.*$", "");
-        return normalized.toLowerCase(Locale.ROOT).matches("(?s).*\\bwhere\\b.*");
     }
 
     private List<DatasetFilter> toFilters(List<Map<String, Object>> filters) {

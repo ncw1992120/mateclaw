@@ -30,8 +30,8 @@ import type {
   InsightComponentData,
 } from '@/types'
 
-/** 原型联调使用的仪表盘名称（首次进入自动创建） */
-export const PROTOTYPE_DASHBOARD_NAME = '洞察原型-卡片属性配置'
+/** 卡片属性配置编辑器使用的仪表盘名称（首次进入自动创建） */
+export const PROTOTYPE_DASHBOARD_NAME = '洞察仪表盘-卡片属性配置'
 
 /** 是否已登录（本地存在 token） */
 export function hasAuth(): boolean {
@@ -45,7 +45,7 @@ export async function ensurePrototypeDashboard(): Promise<string> {
   if (found) return String(found.id)
   const created = (await dashboardApi.create({
     name: PROTOTYPE_DASHBOARD_NAME,
-    description: '洞察-仪表盘-卡片属性配置 原型联调',
+    description: '洞察-仪表盘-卡片属性配置',
   })) as unknown as { id: string }
   return String(created.id)
 }

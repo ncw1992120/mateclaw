@@ -27,7 +27,6 @@
 
     <template #footer>
       <el-button @click="ui.aloudata.visible = false">取消</el-button>
-      <el-button type="primary" @click="confirmAloudata">确定</el-button>
     </template>
   </el-dialog>
 </template>
@@ -53,7 +52,8 @@ let timer: any
 function onAuto() {
   clearTimeout(timer)
   timer = setTimeout(() => {
-    ElMessage.info('[MOCK] 已自动生成 Aloudata 数据集表单')
+    confirmAloudata()
+    ElMessage.success('已根据 Aloudata 配置生成数据集')
   }, 3000)
 }
 </script>

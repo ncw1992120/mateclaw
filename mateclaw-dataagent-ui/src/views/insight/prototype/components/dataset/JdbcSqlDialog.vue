@@ -37,8 +37,9 @@ function onSqlInput() {
 }
 
 // 筛选预览：先保存当前定义，再预览当前输入数据集（文档 3.1 规则 4）
-function onPreview() {
-  confirmJdbc()
+async function onPreview() {
+  const ok = await confirmJdbc()
+  if (!ok) return
   openPreview('dataset', null) // datasetId=null 时预览最新数据集
 }
 
