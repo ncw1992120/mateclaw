@@ -748,15 +748,19 @@ function applyPipeline(resp: InsightDashboardSchema): void {
   })
 }
 
-/** 打开原型时对接后端：找到/创建仪表盘并回显已保存配置 */
-async function bootstrapDashboard(): Promise<boolean> {
+/**
+ * 打开时对接后端：
+ *   - 传入 dashboardId → 加载指定仪表盘并回显已保存配置（真实入口场景）
+ *   - 不传 dashboardId → 回退到原型仪表盘（独立预览路由 / 首次联调）
+ */
+async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
   if (!backend.hasAuth()) {
     state.backend.lastError = '未登录：请先登录后再联调后端'
     return false
   }
   state.backend.loading = true
   try {
-    const id = await backend.ensurePrototypeDashboard()
+    const id = dashboardId ?? (await backend.ensurePrototypeDashboard())
     state.backend.dashboardId = id
     const schema = await backend.loadDashboardSchema(id)
     const cardComp = schema.pages?.[0]?.components?.find((c) => c.type !== 'filter')

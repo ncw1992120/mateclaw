@@ -327,8 +327,8 @@
   </div>
 </template>
 
-    <!-- 编辑器模式 -->
-    <InsightDashboardEditorView
+    <!-- 编辑器模式：卡片属性配置（新版本，接真实后端） -->
+    <InsightCardAttributeEditor
       v-else-if="mode === 'editor'"
       :dashboard-id="currentDashboardId"
       @back="handleBackToList"
@@ -357,7 +357,7 @@ import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { useUserStore } from '@/stores/useUserStore'
-import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
+import InsightCardAttributeEditor from '../insight/card-attribute/InsightCardAttributeEditor.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 
