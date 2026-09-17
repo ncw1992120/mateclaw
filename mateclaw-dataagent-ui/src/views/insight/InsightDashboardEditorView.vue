@@ -198,25 +198,20 @@
       <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty || showAiChat }">
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
-          <DatasetInputPanel
+          <!-- 数据组件（kpi/chart/table）：原型版「卡片属性配置」面板（docs/策略解读/原型设计.md §10~§12 唯一交互依据） -->
+          <CardAttributeSidebar
             v-if="selectedComponent && !['filter', 'timeFilter', 'aiAnalysis'].includes(selectedComponent.type)"
+            :component="selectedComponent"
             :dashboard-id="dashboardId"
-            :inputs="selectedComponentPipeline.datasetInputs"
-            :script="selectedComponentPipeline.script"
-            :parameters="selectedComponentPipeline.parameters ?? []"
-            :filter-bindings="selectedComponentPipeline.scriptFilterBindings ?? []"
-            :target-component-id="selectedComponent.id"
-            :target-components="currentPageComponents"
-            @update:inputs="updateSelectedComponentPipeline({ datasetInputs: $event })"
-            @update:script="updateSelectedComponentPipeline({ script: $event })"
-            @update:parameters="updateSelectedComponentPipeline({ parameters: $event })"
-            @update:filter-bindings="updateSelectedComponentPipeline({ scriptFilterBindings: $event })"
-            @apply-result="handleScriptResult"
+            :filter-components="filterComponents"
+            @change="handleComponentChange"
           />
+          <!-- 筛选/时间筛选/AI分析组件：沿用正式属性面板 -->
           <PropertyPanel
+            v-else
             :component="selectedComponent"
             :all-components="currentPageComponents"
-            :use-dataset-pipeline="Boolean(selectedComponent && !['filter', 'timeFilter', 'aiAnalysis'].includes(selectedComponent.type))"
+            :use-dataset-pipeline="false"
             @change="handleComponentChange"
             @preview="handlePreviewResult"
             @collapse="sidebarCollapsed = true"
@@ -273,19 +268,18 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage, ComponentDatasetPipeline } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
-import DatasetInputPanel from './components/DatasetInputPanel.vue'
+import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
-import { readComponentDatasetPipeline, writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -441,19 +435,10 @@ const selectedComponent = computed<InsightComponent | null>(() => {
   return currentPageComponents.value.find((c) => c.id === selectedComponentId.value) ?? null
 })
 
-const selectedComponentPipeline = computed<ComponentDatasetPipeline>(() => readComponentDatasetPipeline(selectedComponent.value) ?? {
-  datasetInputs: [],
-  scriptFilterBindings: [],
-  parameters: [],
-  executionPolicy: {},
-})
-
-function updateSelectedComponentPipeline(patch: Partial<ComponentDatasetPipeline>): void {
-  const component = selectedComponent.value
-  if (!component) return
-  const next = writeComponentDatasetPipeline(component, { ...selectedComponentPipeline.value, ...patch })
-  handleComponentChange(next)
-}
+/** 当前页面内的筛选器组件（仅 type==='filter'，用于原型面板「筛选器绑定」命名与回显） */
+const filterComponents = computed<InsightComponent[]>(() =>
+  currentPageComponents.value.filter((c) => c.type === 'filter'),
+)
 
 onMounted(async () => {
   await loadDashboard(props.dashboardId)

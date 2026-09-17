@@ -1,0 +1,104 @@
+<template>
+  <div class="card-attr-sidebar">
+    <!-- 原型版「卡片属性配置」面板（唯一交互依据：docs/策略解读/原型设计.md §10~§12） -->
+    <AttributePanel />
+
+    <!-- 各配置弹窗：内部各自绑定 state.ui.*.visible，由 AttributePanel / DatasetCard 触发 -->
+    <DataSourceTreeDialog />
+    <JdbcSqlDialog />
+    <AloudataDialog />
+    <ApiConfigDialog />
+    <FileConfigDialog />
+    <FieldMappingDialog />
+    <InputFilterDialog />
+    <FilterBindingDialog />
+    <PythonScriptDialog />
+    <PreviewDialog />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, nextTick } from 'vue'
+import type { InsightComponent } from '@/types'
+import { useInsight } from './useInsight'
+import { hydratePanel, panelToPipeline, buildComponentPatch } from './useCardAttributeBridge'
+import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import AttributePanel from './AttributePanel.vue'
+import DataSourceTreeDialog from './DataSourceTreeDialog.vue'
+import JdbcSqlDialog from './dataset/JdbcSqlDialog.vue'
+import AloudataDialog from './dataset/AloudataDialog.vue'
+import ApiConfigDialog from './dataset/ApiConfigDialog.vue'
+import FileConfigDialog from './dataset/FileConfigDialog.vue'
+import FieldMappingDialog from './FieldMappingDialog.vue'
+import InputFilterDialog from './InputFilterDialog.vue'
+import FilterBindingDialog from './FilterBindingDialog.vue'
+import PythonScriptDialog from './PythonScriptDialog.vue'
+import PreviewDialog from './PreviewDialog.vue'
+
+const props = defineProps<{
+  /** 当前选中的数据组件（kpi / chart / table） */
+  component: InsightComponent | null
+  /** 仪表盘 ID（用于后端联调态与回显） */
+  dashboardId: string
+  /** 当前页面内的筛选器组件（timeFilter 不计入），用于筛选器绑定命名 */
+  filterComponents?: InsightComponent[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'change', component: InsightComponent): void
+}>()
+
+const { state } = useInsight()
+
+/** 灌入中标记：避免 hydrate 重置 state 时误触发回写 */
+const hydrating = ref(false)
+
+/** 选中组件变化时，把该组件的 datasetPipeline + 字段回显到面板单例 state */
+function hydrate(): void {
+  const component = props.component
+  if (!component) return
+  hydrating.value = true
+  hydratePanel(component, props.dashboardId, props.filterComponents ?? [])
+  // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
+  nextTick(() => {
+    hydrating.value = false
+  })
+}
+
+watch(() => props.component?.id, hydrate, { immediate: true })
+
+/** 面板状态变更 → 回写为组件级 datasetPipeline + 组件字段补丁 */
+let emitTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleEmit(): void {
+  if (hydrating.value || !props.component) return
+  if (emitTimer) clearTimeout(emitTimer)
+  emitTimer = setTimeout(() => {
+    if (!props.component) return
+    const pipeline = panelToPipeline()
+    const patch = buildComponentPatch(props.component)
+    const next = writeComponentDatasetPipeline(patch, pipeline)
+    emit('change', next)
+  }, 300)
+}
+
+// 仅监听数据字段（datasets / 筛选器绑定 / Python / 卡片元信息），避开 state.ui 弹窗开关引发的噪声
+watch(
+  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards],
+  () => scheduleEmit(),
+  { deep: true },
+)
+</script>
+
+<style scoped>
+.card-attr-sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.card-attr-sidebar :deep(.attr-panel) {
+  flex: 1;
+  min-height: 0;
+  border-left: none;
+}
+</style>
