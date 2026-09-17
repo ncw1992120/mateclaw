@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.dto.AloudataAnalysisViewDetail;
+import vip.mate.dataagent.dto.AloudataAnalysisViewItem;
 import vip.mate.dataagent.dto.AloudataAnalysisViewSummary;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceEntity;
@@ -33,6 +34,35 @@ public class AloudataAnalysisViewServiceImpl implements AloudataAnalysisViewServ
         Map<String, Object> body = call("analysis_view_tree", datasource, Map.of());
         List<AloudataAnalysisViewSummary> result = new ArrayList<>();
         flattenTree(body, null, null, result);
+        return List.copyOf(result);
+    }
+
+    @Override
+    public List<AloudataAnalysisViewItem> listViews(Long datasourceId, String keyword, boolean onlyMine) {
+        DatasourceEntity datasource = requireAloudataDatasource(datasourceId);
+        // 实测：keyword 不传会返回 AM_00_0000（文档称「不传则查所有」，与实现不符），
+        // 故空关键字时用单字符通配 "_" 查询全量。
+        String kw = (keyword == null || keyword.isBlank()) ? "_" : keyword.trim();
+        Map<String, Object> body = call("analysis_view_list", datasource,
+                Map.of("keyword", kw, "pageNumber", 1, "pageSize", 200));
+        Map<String, Object> data = asMap(body.get("data"));
+        // owner 为 Aloudata UID；当前认证值（数据源级 auth-value）即「我」的 UID
+        String me = configHelper.parseConfig(datasource).getAuthValue();
+        List<AloudataAnalysisViewItem> result = new ArrayList<>();
+        for (Map<String, Object> item : mapList(data.get("data"))) {
+            Map<String, Object> basic = asMap(item.get("basicAttributes"));
+            String owner = stringValue(basic, "owner");
+            boolean mine = me != null && !me.isBlank() && me.equals(owner);
+            if (onlyMine && !mine) continue;
+            String displayName = stringValue(item, "displayName", "viewDisplayName");
+            if (displayName == null) displayName = stringValue(basic, "viewDisplayName");
+            result.add(new AloudataAnalysisViewItem(
+                    stringValue(item, "id", "viewId"),
+                    stringValue(item, "viewName", "name"),
+                    displayName,
+                    stringValue(item, "description"),
+                    owner, mine));
+        }
         return List.copyOf(result);
     }
 

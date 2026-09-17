@@ -469,6 +469,23 @@ public class DataAgentDatasourceController {
         return R.ok(aloudataAnalysisViewService.listTree(datasourceId));
     }
 
+    /**
+     * 平铺查询 Aloudata 指标视图列表（支持关键字搜索与「只看我的」）。
+     * <p>
+     * 与 {@code /analysis-views}（树状目录）不同：本接口返回平铺列表并携带
+     * {@code owner}/{@code mine} 归属信息。注意 Aloudata 列表接口本身不过滤权限，
+     * 「只看我的」（按 owner == 当前认证值）是近似判断，不等价于「一定取数成功」。
+     */
+    @GetMapping("/{datasourceId}/analysis-views/list")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图列表", description = "平铺查询指标视图，支持关键字搜索与「只看我的」")
+    public R<List<AloudataAnalysisViewItem>> listAnalysisViewsFlat(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "视图名称关键字") @RequestParam(required = false) String keyword,
+            @Parameter(description = "仅返回当前账号创建的视图") @RequestParam(required = false, defaultValue = "false") boolean onlyMine) {
+        return R.ok(aloudataAnalysisViewService.listViews(datasourceId, keyword, onlyMine));
+    }
+
     /** 获取 Aloudata 已有指标视图定义（只读）。 */
     @GetMapping("/{datasourceId}/analysis-views/{viewName}")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)

@@ -95,6 +95,30 @@ export function listAnalysisViews(datasourceId: string | number) {
   return api.get<AloudataAnalysisViewSummary[]>(`${BASE_URL}/${datasourceId}/analysis-views`)
 }
 
+/** Aloudata 指标视图平铺列表项（带归属信息，用于「只看我的」） */
+export interface AloudataAnalysisViewItem {
+  id: string
+  viewName: string
+  displayName: string
+  description?: string
+  /** 视图创建者（Aloudata UID） */
+  owner?: string
+  /** 是否归属当前认证账号 */
+  mine?: boolean
+}
+
+/**
+ * 平铺查询 Aloudata 指标视图（支持关键字搜索与「只看我的」）。
+ * 注意：Aloudata 列表接口本身不过滤权限，「只看我的」按 owner 近似过滤，
+ * 不等价于「一定有取数权限」。
+ */
+export function searchAnalysisViews(
+  datasourceId: string | number,
+  params: { keyword?: string; onlyMine?: boolean } = {},
+) {
+  return api.get<AloudataAnalysisViewItem[]>(`${BASE_URL}/${datasourceId}/analysis-views/list`, { params })
+}
+
 /** 查询已选 Aloudata 指标视图详情 */
 export function getAnalysisView(datasourceId: string | number, viewName: string) {
   return api.get(`${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}`)

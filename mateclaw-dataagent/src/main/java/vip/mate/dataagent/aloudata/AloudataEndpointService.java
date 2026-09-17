@@ -123,6 +123,14 @@ public class AloudataEndpointService {
                         new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY"),
                         new ApiParam("pageIndex", "Integer", false, "0", "页码", "QUERY"),
                         new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "QUERY")))));
+        // 指标视图平铺列表（支持关键字模糊搜索）。相比 treeList，响应额外携带
+        // basicAttributes.owner，可用于识别「我的视图」。注意：实测不传 keyword 会返回
+        // AM_00_0000（与文档「不传则查所有」不符），需用单字符通配 "_" 查询全量。
+        endpoints.put("analysis_view_list", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/list", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("keyword", "String", false, null, "指标视图名称关键字（空则用 _ 查全量）", "QUERY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "200", "每页条数", "QUERY")))));
         endpoints.put("category_list", endpoint("anymetrics", "/anymetrics/api/v1/category/list", "GET",
                 mergeParams(headers, List.of(new ApiParam("categoryType", "String", true, null, "类目类型", "QUERY")))));
         endpoints.put("metric_list", endpoint("anymetrics", "/anymetrics/api/v1/metrics/list", "GET",

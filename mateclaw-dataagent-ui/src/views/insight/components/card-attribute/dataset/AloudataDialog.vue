@@ -88,11 +88,33 @@
       </template>
     </template>
 
-    <!-- 指标视图：从后端 datasource.listAnalysisViews 拉取真实视图列表 -->
+    <!-- 指标视图：平铺列表 + 关键字搜索 + 「只看我的」（来自后端 analysis-views/list） -->
     <template v-else>
-      <p class="hint">只能选择一个有权限的指标视图。</p>
-      <el-select v-model="ui.aloudata.metricView" placeholder="请选择指标视图" style="width: 100%">
-        <el-option v-for="v in analysisViews" :key="v.viewName" :label="v.displayName || v.viewName" :value="v.viewName" />
+      <p class="hint">
+        默认只展示「我的」指标视图（按创建者归属过滤）；关闭开关可查看全部，他人的视图可能无取数权限。
+      </p>
+      <div class="toolbar">
+        <el-input
+          v-model="viewKeyword"
+          placeholder="搜索指标视图名称"
+          clearable
+          style="width: 240px"
+          @input="onViewKeywordInput"
+        />
+        <el-checkbox v-model="onlyMine" @change="loadAnalysisViews">只看我的</el-checkbox>
+        <span class="count">{{ viewsLoading ? '加载中…' : `共 ${analysisViews.length} 个` }}</span>
+      </div>
+      <el-select
+        v-model="ui.aloudata.metricView"
+        placeholder="请选择指标视图"
+        style="width: 100%"
+        :loading="viewsLoading"
+        filterable
+      >
+        <el-option v-for="v in analysisViews" :key="v.viewName" :label="v.displayName || v.viewName" :value="v.viewName">
+          <span class="opt-name">{{ v.displayName || v.viewName }}</span>
+          <span class="opt-tag" :class="v.mine ? 'is-mine' : 'is-other'">{{ v.mine ? '我的' : '他人' }}</span>
+        </el-option>
       </el-select>
     </template>
 
@@ -132,8 +154,13 @@ const syncing = ref(false)
 const metricTableRef = ref<any>()
 const dimTableRef = ref<any>()
 
-/** 指标视图列表（来自后端 datasource.listAnalysisViews，非假数据） */
-const analysisViews = ref<{ id: string; viewName: string; displayName: string; categoryId?: string; categoryName?: string }[]>([])
+/** 指标视图列表（来自后端 analysis-views/list，非假数据；带 owner/mine 归属） */
+const analysisViews = ref<datasourceApi.AloudataAnalysisViewItem[]>([])
+/** 指标视图搜索关键字 */
+const viewKeyword = ref('')
+/** 只看我创建的指标视图（按 owner 归属过滤） */
+const onlyMine = ref(true)
+const viewsLoading = ref(false)
 
 const metricPage = reactive<AloudataMetricPage>({
   records: [],
@@ -161,6 +188,8 @@ function open() {
   datasourceId.value = ui.aloudata.datasourceId
   keyword.value = ''
   categoryId.value = ''
+  viewKeyword.value = ''
+  onlyMine.value = true
   if (!datasourceId.value) {
     ElMessage.warning('未关联到数据源，无法加载指标/维度')
     return
@@ -175,12 +204,28 @@ function open() {
 }
 
 async function loadAnalysisViews() {
+  if (!datasourceId.value) {
+    analysisViews.value = []
+    return
+  }
+  viewsLoading.value = true
   try {
-    analysisViews.value = await datasourceApi.listAnalysisViews(datasourceId.value)
+    analysisViews.value = await datasourceApi.searchAnalysisViews(datasourceId.value, {
+      keyword: viewKeyword.value || undefined,
+      onlyMine: onlyMine.value,
+    })
   } catch {
     analysisViews.value = []
     ElMessage.error('加载指标视图失败')
+  } finally {
+    viewsLoading.value = false
   }
+}
+
+let viewKwTimer: any
+function onViewKeywordInput() {
+  clearTimeout(viewKwTimer)
+  viewKwTimer = setTimeout(() => loadAnalysisViews(), 300)
 }
 
 async function loadCategories() {
@@ -319,5 +364,22 @@ function onDimPageChange(p: number) {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   margin: 0 0 12px;
+}
+.opt-name {
+  margin-right: 8px;
+}
+.opt-tag {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 4px;
+  line-height: 18px;
+}
+.opt-tag.is-mine {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+.opt-tag.is-other {
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
 }
 </style>

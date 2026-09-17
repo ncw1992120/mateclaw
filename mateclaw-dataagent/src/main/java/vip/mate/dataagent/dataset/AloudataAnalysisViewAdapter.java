@@ -243,11 +243,30 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
     }
 
     private List<Map<String, Object>> extractRowsFromContainer(Object container) {
-        if (container == null) return null;
+        return extractRows(container, 0);
+    }
+
+    /**
+     * 递归抽取行数据。真实响应存在多层包络：指标视图结果查询为
+     * {@code data.analysisView.columns}，指标数据查询为 {@code data.table.columns}
+     * （官方文档示例写作 {@code data.table.columns}）。因此这里先下钻
+     * {@code analysisView} / {@code table} 子容器，再匹配行式（rows/...）或列式（columns）。
+     * 任一环抽取不到都返回 null 交上层兜底，绝不抛异常。
+     */
+    private List<Map<String, Object>> extractRows(Object container, int depth) {
+        if (container == null || depth > 4) return null;
         if (container instanceof List<?> list) {
             return objectMapper.convertValue(list, new TypeReference<>() {});
         }
         if (container instanceof Map<?, ?> map) {
+            // 0) 嵌套包络下钻：analysisView（指标视图结果）/ table（指标数据查询）
+            for (String nested : List.of("analysisView", "table")) {
+                Object child = map.get(nested);
+                if (child instanceof Map<?, ?> || child instanceof List<?>) {
+                    List<Map<String, Object>> inner = extractRows(child, depth + 1);
+                    if (inner != null) return inner;
+                }
+            }
             // 1) 行式：显式行容器
             for (String key : List.of("rows", "rowData", "rowDatas", "rowDataList", "records", "list", "result", "items")) {
                 Object candidate = map.get(key);
