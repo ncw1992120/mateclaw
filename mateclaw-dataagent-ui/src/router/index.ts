@@ -3,6 +3,7 @@ import MainLayout from '@/views/layout/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import DatasetListView from '@/views/dataset/DatasetListView.vue'
 import DatasetEditRoute from '@/views/dataset/DatasetEditRoute.vue'
+import InsightDashboardEditorView from '@/views/insight/InsightDashboardEditorView.vue'
 
 const router = createRouter({
   // 与 vite base（/dataagent/api/）保持一致：路由路径在部署基座下解析
@@ -39,15 +40,24 @@ const router = createRouter({
       // 洞察·仪表盘·卡片属性配置（正式入口）
       path: '/insight/dashboard/editor',
       name: 'insight-dashboard-editor',
-      component: () => import('@/views/insight/card-attribute/InsightCardAttributeEditor.vue'),
+      component: InsightDashboardEditorView,
+      props: (route) => ({ dashboardId: String(route.query.dashboardId ?? '') }),
       meta: { title: '洞察仪表盘' },
     },
     {
       // 洞察·卡片属性配置 免登录预览（仅供交互体验验证，与正式入口同一组件）
       path: '/insight/dashboard/editor-preview',
       name: 'insight-dashboard-editor-preview',
-      component: () => import('@/views/insight/card-attribute/InsightCardAttributeEditor.vue'),
+      component: InsightDashboardEditorView,
+      props: (route) => ({ dashboardId: String(route.query.dashboardId ?? '') }),
       meta: { public: true, title: '洞察仪表盘预览' },
+    },
+    {
+      // 洞察·组合卡片（卡片容器）前端交互原型（免登录，仅供交互体验验证）
+      path: '/insight/card-container-prototype',
+      name: 'insight-card-container-prototype',
+      component: () => import('@/views/insight/CardContainerPrototype.vue'),
+      meta: { public: true, title: '组合卡片原型' },
     },
   ],
 })

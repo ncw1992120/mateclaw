@@ -39,7 +39,7 @@ import { useInsight } from '../useInsight'
 const { state, confirmApi, openPreview } = useInsight()
 const ui = state.ui
 
-// [MOCK] 确认后保存受控接口定义引用；敏感认证信息只引用凭据，不写入页面配置或日志
+// 确认后保存受控接口定义引用；敏感认证信息只引用凭据（通过数据源/凭据中心登记），不写入页面配置或日志
 function onPreview() {
   confirmApi()
   openPreview('dataset', null)

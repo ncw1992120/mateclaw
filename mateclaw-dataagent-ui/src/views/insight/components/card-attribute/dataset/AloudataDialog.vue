@@ -88,11 +88,11 @@
       </template>
     </template>
 
-    <!-- 指标视图：仍使用指标视图列表（MOCK 占位，待接入分析视图 API） -->
+    <!-- 指标视图：从后端 datasource.listAnalysisViews 拉取真实视图列表 -->
     <template v-else>
       <p class="hint">只能选择一个有权限的指标视图。</p>
       <el-select v-model="ui.aloudata.metricView" placeholder="请选择指标视图" style="width: 100%">
-        <el-option v-for="v in MOCK_ALOUDATA_METRIC_VIEWS" :key="v" :label="v" :value="v" />
+        <el-option v-for="v in analysisViews" :key="v.viewName" :label="v.displayName || v.viewName" :value="v.viewName" />
       </el-select>
     </template>
 
@@ -106,7 +106,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useInsight, MOCK_ALOUDATA_METRIC_VIEWS } from '../useInsight'
+import { useInsight } from '../useInsight'
+import * as datasourceApi from '@/api/datasource'
 import {
   pageAloudataMetrics,
   pageAloudataDimensions,
@@ -130,6 +131,9 @@ const dimsLoading = ref(false)
 const syncing = ref(false)
 const metricTableRef = ref<any>()
 const dimTableRef = ref<any>()
+
+/** 指标视图列表（来自后端 datasource.listAnalysisViews，非假数据） */
+const analysisViews = ref<{ id: string; viewName: string; displayName: string; categoryId?: string; categoryName?: string }[]>([])
 
 const metricPage = reactive<AloudataMetricPage>({
   records: [],
@@ -161,9 +165,22 @@ function open() {
     ElMessage.warning('未关联到数据源，无法加载指标/维度')
     return
   }
+  if (ui.aloudata.mode === 'metric-view') {
+    loadAnalysisViews()
+    return
+  }
   loadCategories()
   loadMetrics(1)
   loadDims(1)
+}
+
+async function loadAnalysisViews() {
+  try {
+    analysisViews.value = await datasourceApi.listAnalysisViews(datasourceId.value)
+  } catch {
+    analysisViews.value = []
+    ElMessage.error('加载指标视图失败')
+  }
 }
 
 async function loadCategories() {

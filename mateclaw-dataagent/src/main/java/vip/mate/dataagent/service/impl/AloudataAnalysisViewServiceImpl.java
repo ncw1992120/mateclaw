@@ -99,16 +99,34 @@ public class AloudataAnalysisViewServiceImpl implements AloudataAnalysisViewServ
         for (Map<String, Object> child : mapList(node.get("subCategory"))) {
             flattenTree(child, currentId, currentName, out);
         }
+        // Aloudata analysis_view_tree 真实响应：树根列表位于 data.analysisViewRoots，
+        // 每个根节点含 categoryId/categoryName/analysisViewList/subCategory。
+        for (Map<String, Object> child : mapList(node.get("analysisViewRoots"))) {
+            flattenTree(child, currentId, currentName, out);
+        }
         for (Map<String, Object> child : mapList(node.get("data"))) {
-            if (child.containsKey("subCategory") || child.containsKey("analysisViewList")) {
+            if (child.containsKey("subCategory") || child.containsKey("analysisViewList")
+                    || child.containsKey("analysisViewRoots")) {
                 flattenTree(child, currentId, currentName, out);
             }
         }
     }
 
+    /**
+     * 容错地把 Aloudata 响应字段转换为节点列表：数组直接转换；单个对象包装为
+     * 单元素列表（真实 analysis_view_tree 的 data 即树根对象而非数组）；其余返回空列表。
+     * 任何情况下不抛 Jackson 反序列化异常，避免「指标视图目录」接口 500。
+     */
     private List<Map<String, Object>> mapList(Object value) {
         if (value == null) return List.of();
-        return objectMapper.convertValue(value, new TypeReference<List<Map<String, Object>>>() {});
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> single = objectMapper.convertValue(value, new TypeReference<Map<String, Object>>() {});
+            return List.of(single);
+        }
+        if (value instanceof List<?>) {
+            return objectMapper.convertValue(value, new TypeReference<List<Map<String, Object>>>() {});
+        }
+        return List.of();
     }
 
     private Map<String, Object> asMap(Object value) {

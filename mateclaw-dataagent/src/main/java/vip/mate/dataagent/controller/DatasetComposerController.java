@@ -144,7 +144,9 @@ public class DatasetComposerController {
         DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                 "draft-view-" + UUID.randomUUID(), Set.of());
         DatasetBatch batch = aloudataViewAdapter.previewDraft(context, longId(request.datasourceId), view,
-                new vip.mate.dataagent.dataset.DatasetReadRequest(0L, "draft", List.of(), toFilters(request.filters),
+                // 草稿预览不依赖已落库数据集；datasetId 传占位值 1L 以通过 record 参数校验，
+                // adapter.previewDraft 只消费 filters/limit，不读取 datasetId。
+                new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", List.of(), toFilters(request.filters),
                         Math.min(request.limit == null ? 20 : request.limit, 100), 0, Map.of()));
         List<Map<String,Object>> rows = batch.rows() == null ? List.of() : batch.rows();
         return Map.of("rows", rows, "schema", rows.isEmpty() ? List.of() : new ArrayList<>(rows.getFirst().keySet()),

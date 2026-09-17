@@ -22,14 +22,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useInsight } from './useInsight'
 import type { InputFilter } from './useInsight'
 
 const { state, saveInputFilter, openPreview, getDataset } = useInsight()
 const ui = state.ui
+// 运算符为原型 §4.2 的固定枚举，非假数据
 const OPS = ['=', '!=', 'contains', 'in', 'between', 'is null', 'is not null', '最近 N 天']
-const fieldOptions = ['event_date', 'status', 'strategy_id', 'delivery_count', 'strategy_type']
+// 字段选项：来自目标数据集的真实字段（字段映射「目标名称」优先，回退到源字段名 / 文件列名）。
+// 无已知字段时列表为空，下拉框可输入（filterable），由用户按真实字段填写，不预置任何假字段。
+const fieldOptions = computed<string[]>(() => {
+  const { datasetId } = resolveTarget()
+  const ds = getDataset(datasetId)
+  if (!ds) return []
+  const fm = ds.fieldMapping ?? []
+  if (fm.length) {
+    const targets = fm.map((m) => m.target).filter(Boolean)
+    if (targets.length) return targets as string[]
+    return fm.map((m) => m.source).filter(Boolean) as string[]
+  }
+  if (ds.file?.columns?.length) return ds.file.columns.map((c) => c.name)
+  return []
+})
 const list = ref<InputFilter[]>([])
 
 function isNoValueOp(op: string) {
@@ -40,8 +55,7 @@ function isNoValueOp(op: string) {
  * 解析本次「输入筛选」作用的目标数据集与预览方式：
  *  - dataset 模式（卡片数据集 / SQL 配置）：编辑指定 datasetId 的筛选条件，预览该数据集。
  *  - result 模式（Python 脚本）：编辑「最后添加的数据集」的筛选条件，
- *    与 getPreviewPayload 的读取口径一致，使结果预览能反映输入筛选；
- *    预览时打开「预处理结果预览」。
+ *    预览时打开「预处理结果预览」（真实后端执行，反映输入筛选下推效果）。
  */
 function resolveTarget(): { datasetId: string; previewKind: 'dataset' | 'result' } {
   const previewKind = ui.inputFilter.previewKind ?? 'dataset'

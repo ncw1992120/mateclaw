@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { Dataset, Datasource, DatasetSourceType } from '@/types'
 import * as datasetApi from '@/api/dataset'
 import * as datasourceApi from '@/api/datasource'
@@ -35,15 +35,19 @@ const keyword = ref('')
 const datasets = ref<Dataset[]>(props.availableDatasets || [])
 const datasources = ref<Datasource[]>(props.availableDatasources || [])
 
+watch(() => props.availableDatasets, (value) => { if (value) datasets.value = value }, { deep: true })
+watch(() => props.availableDatasources, (value) => { if (value) datasources.value = value }, { deep: true })
+
 const sourceItems = computed(() => {
+  const aloudataDatasourceId = datasources.value.find(item => classifyDatasourceType(item.sourceType) === 'aloudata')?.id
   const items = [
     ...datasets.value.map((item) => ({ id: `dataset-${item.id}`, name: item.name, meta: item.datasourceName || item.sourceType || '数据集', category: classifyDatasourceType(item.sourceType), selection: { sourceType: (item.sourceType || 'JDBC_TABLE') as DatasetSourceType, datasourceId: item.datasourceId, datasetId: item.id } as DatasetSourceSelection })),
-    ...datasources.value.map((item) => ({ id: `datasource-${item.id}`, name: item.name, meta: item.sourceType || '数据源', category: classifyDatasourceType(item.sourceType), selection: { sourceType: 'JDBC_TABLE' as DatasetSourceType, datasourceId: item.id } })),
+    ...datasources.value.map((item) => ({ id: `datasource-${item.id}`, name: item.name, meta: `${item.sourceType || '数据源'} · 输入 SQL`, category: classifyDatasourceType(item.sourceType), selection: { sourceType: 'JDBC_SQL' as DatasetSourceType, datasourceId: item.id } })),
   ]
   // 原型中的固定节点不是“已配置列表”：它们直接进入对应配置弹窗。
   items.push(
-    { id: 'aloudata-view', name: '指标视图', meta: '选择已有视图', category: 'aloudata', selection: { sourceType: 'ALOUDATA_ANALYSIS_VIEW' as DatasetSourceType } },
-    { id: 'aloudata-metrics', name: '指标&维度', meta: '配置指标与维度', category: 'aloudata', selection: { sourceType: 'ALOUDATA_METRICS' as DatasetSourceType } },
+    { id: 'aloudata-view', name: '指标视图', meta: '选择已有视图', category: 'aloudata', selection: { sourceType: 'ALOUDATA_ANALYSIS_VIEW' as DatasetSourceType, datasourceId: aloudataDatasourceId } },
+    { id: 'aloudata-metrics', name: '指标&维度', meta: '配置指标与维度', category: 'aloudata', selection: { sourceType: 'ALOUDATA_METRICS' as DatasetSourceType, datasourceId: aloudataDatasourceId } },
     ...['Excel', 'CSV', 'TXT', 'JSON', 'Parquet'].map(format => ({ id: `file-${format}`, name: format, meta: '文件数据集', category: 'file', selection: { sourceType: 'FILE' as DatasetSourceType, fileFormat: format } })),
     { id: 'http-api', name: '接口', meta: '', category: 'api', selection: { sourceType: 'HTTP_API' as DatasetSourceType } },
   )

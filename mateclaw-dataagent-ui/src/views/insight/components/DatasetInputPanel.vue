@@ -116,7 +116,6 @@
       </el-button>
       <div v-if="input.datasetId || input.sourceType" class="dataset-config-body">
         <div v-if="input.datasetId" class="configured-source-hint">查询配置已保存；可通过“筛选预览”查看当前输入结果。</div>
-        <template v-if="!input.datasetId || !targetComponents?.length">
         <div v-if="sourceType(input) === 'JDBC_SQL' || sourceType(input) === 'JDBC_TABLE'" class="source-config-block">
           <label class="form-label">JDBC 数据集模式</label>
           <el-select :model-value="sourceType(input)" aria-label="JDBC 数据集模式" @change="(value: string) => updateInput(index, { sourceType: value })">
@@ -137,7 +136,6 @@
           <span class="form-hint">指标视图使用已配置的分析视图，不在此处重复创建。</span>
         </div>
         <div v-else-if="sourceType(input) === 'HTTP_API' || sourceType(input) === 'FILE'" class="source-config-block unified-source-hint">接口/文件数据集使用已创建的数据集；本页负责选择、字段预览和筛选，不直接访问外部地址。</div>
-        </template>
         <div class="dataset-card-actions"><el-button text size="small" @click="toggleMapping(index)">字段名称</el-button><el-button text size="small" @click="toggleFilters(index)">筛选预览</el-button></div>
         <el-dialog v-model="mappingOpen[index]" title="修改字段名称" width="520px" aria-label="字段映射编辑器">
           <div class="inline-editor-title">字段映射（原字段 → 目标字段）</div>
@@ -561,6 +559,8 @@ async function previewInput(input: DashboardDatasetInput): Promise<void> {
     const batch = await datasetApi.previewInput({
       datasetId: input.datasetId,
       inputName: input.inputName,
+      columns: input.fieldMappings?.map(mapping => mapping.source),
+      filters: input.filters,
       limit: 20,
     }) as unknown as DatasetBatch
     previewResults[key] = batch

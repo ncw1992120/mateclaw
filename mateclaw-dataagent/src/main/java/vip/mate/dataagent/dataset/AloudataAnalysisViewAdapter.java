@@ -3,6 +3,7 @@ package vip.mate.dataagent.dataset;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -22,6 +23,7 @@ import java.util.*;
 /** 将 Aloudata 已有指标视图转换为统一 DatasetSourceAdapter。 */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
     private static final int MAX_PAGE_SIZE = 10_000;
 
@@ -212,12 +214,81 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         return new DatasetColumn(name, title, Optional.ofNullable(string(definition, "dataType", "originDataType")).orElse("STRING"), true, role);
     }
 
+    /**
+     * 从 Aloudata 指标视图查询响应中抽取行数据。
+     * 真实响应包络多样：行式（{@code data.rows} / {@code analysisView.rows}）、列式
+     * （{@code data.columns}）或整包络即数组。为保证“添加数据集-指标视图”预览不
+     * 因响应结构不符而抛 Jackson 反序列化异常，这里做容错抽取：
+     * 1) 优先取 {@code data}（标准包络），其次 {@code analysisView}；
+     * 2) 容器为数组直接用；为对象则先找显式行容器（rows/rowData/...），再试列式 columns；
+     * 3) 任何情况下都不抛反序列化异常，抽取不到返回空列表并告警。
+     */
     private List<Map<String, Object>> rows(Map<String, Object> body) {
-        Object value = body.get("analysisView");
-        if (value == null) value = body.get("data");
-        if (value == null) return List.of();
-        if (value instanceof Map<?, ?> map && map.get("rows") != null) value = map.get("rows");
-        return objectMapper.convertValue(value, new TypeReference<>() {});
+        if (body == null) return List.of();
+        Object container = body.get("data");
+        if (!(container instanceof Map<?, ?>)) container = body.get("analysisView");
+        if (!(container instanceof Map<?, ?>)) container = body;
+
+        List<Map<String, Object>> result = extractRowsFromContainer(container);
+        if (result != null) return result;
+
+        // 兜底：直接在 body 任意层级找第一个 List<Map>
+        for (Object v : body.values()) {
+            if (v instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?>) {
+                return objectMapper.convertValue(list, new TypeReference<>() {});
+            }
+        }
+        log.warn("Aloudata 指标视图响应未解析到行数据，已返回空结果。响应 keys={}", body.keySet());
+        return List.of();
+    }
+
+    private List<Map<String, Object>> extractRowsFromContainer(Object container) {
+        if (container == null) return null;
+        if (container instanceof List<?> list) {
+            return objectMapper.convertValue(list, new TypeReference<>() {});
+        }
+        if (container instanceof Map<?, ?> map) {
+            // 1) 行式：显式行容器
+            for (String key : List.of("rows", "rowData", "rowDatas", "rowDataList", "records", "list", "result", "items")) {
+                Object candidate = map.get(key);
+                if (candidate instanceof List<?> list && !list.isEmpty()) {
+                    return objectMapper.convertValue(list, new TypeReference<>() {});
+                }
+            }
+            // 2) 列式：columns = { colName: [ {value,flag,count}, ... ] }
+            Object columns = map.get("columns");
+            if (columns instanceof Map<?, ?> columnMap && !columnMap.isEmpty()) {
+                return convertColumnar(columnMap);
+            }
+        }
+        return null;
+    }
+
+    /** 列式数据 columns = { colName: [ {value,flag,count}, ... ] } → 行式 List<Map> */
+    private List<Map<String, Object>> convertColumnar(Map<?, ?> columnMap) {
+        int size = 0;
+        for (Object v : columnMap.values()) {
+            if (v instanceof List<?> list) size = Math.max(size, list.size());
+        }
+        if (size == 0) return List.of();
+        List<Map<String, Object>> rows = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : columnMap.entrySet()) {
+                String col = String.valueOf(entry.getKey());
+                Object cellList = entry.getValue();
+                if (cellList instanceof List<?> list && i < list.size()) {
+                    Object cell = list.get(i);
+                    if (cell instanceof Map<?, ?> cellMap && cellMap.containsKey("value")) {
+                        row.put(col, cellMap.get("value"));
+                    } else {
+                        row.put(col, cell);
+                    }
+                }
+            }
+            rows.add(row);
+        }
+        return rows;
     }
 
     private String string(Map<String, Object> body, String... keys) {

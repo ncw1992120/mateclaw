@@ -19,7 +19,7 @@
         <!-- 筛选器（仪表盘参数） -->
         <div class="fb-section">
           <div class="fb-label">筛选器（仪表盘参数）</div>
-          <el-select v-model="d.filterName" placeholder="选择筛选器" style="width: 100%">
+          <el-select v-model="d.filterName" placeholder="选择筛选器" style="width: 100%" filterable @change="onFilterNameChange(d)">
             <el-option v-for="f in FILTERS" :key="f" :label="f" :value="f" />
           </el-select>
         </div>
@@ -34,12 +34,12 @@
 
         <!-- 字段映射：自动匹配 + 手动映射 -->
         <div class="fb-section">
-          <div class="fb-label">字段映射（系统自动匹配，需手动映射的可编辑目标字段）</div>
+          <div class="fb-label">字段映射（基于数据集真实字段名自动推断，需手动映射的可编辑目标字段）</div>
           <div class="fm-row" v-for="ds in state.datasets" :key="ds.id">
             <span class="ds-alias">数据集 {{ ds.alias }}</span>
             <el-input v-model="d.fieldMap[ds.id]" size="small" placeholder="匹配到的字段名" />
-            <span class="match-tag" :class="matched(ds.alias) ? 'ok' : 'warn'">
-              {{ matched(ds.alias) ? '✓ 自动匹配' : '⚠ 需手动映射' }}
+            <span class="match-tag" :class="matched(ds, d.filterName) ? 'ok' : 'warn'">
+              {{ matched(ds, d.filterName) ? '✓ 自动匹配' : '⚠ 需手动映射' }}
             </span>
           </div>
         </div>
@@ -54,20 +54,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useInsight } from './useInsight'
+import type { DatasetConfig } from './useInsight'
 
 const { state, saveFilterBindings } = useInsight()
 const ui = state.ui
-const FILTERS = ['策略类型', '渠道', '日期', '地域']
-// [MOCK] 根据数据集别名给出自动匹配的字段（真实场景由后端做字段名推断）
-const MOCK_MATCH: Record<string, string> = {
-  table1: 'strategy_id',
-  table2: 'strategy_code',
-  table3: '策略 ID',
+
+/** 仪表盘参数名候选：来自当前仪表盘真实的筛选器组件（由 hydratePanel 注入 state.filterCatalog）。
+ *  无可用筛选器时列表为空，下拉框可输入（filterable），由用户按真实参数名填写，不预置任何假词表。 */
+const FILTERS = computed<string[]>(() => state.filterCatalog.map((f) => f.title))
+
+/** 真实字段名推断：基于数据集已有的字段映射（源/目标）与筛选器名做关键字匹配 */
+function inferField(ds: DatasetConfig, filterName: string): string {
+  const fields = (ds.fieldMapping || [])
+    .flatMap((m) => [m.source, m.target])
+    .filter((f): f is string => !!f)
+  const exact = fields.find((f) => f === filterName)
+  if (exact) return exact
+  const partial = fields.find((f) => f && (f.includes(filterName) || filterName.includes(f)))
+  return partial || ''
 }
-function matched(alias: string) {
-  return !!MOCK_MATCH[alias]
+
+/** 是否可自动匹配（基于真实字段推断） */
+function matched(ds: DatasetConfig, filterName: string): boolean {
+  return !!inferField(ds, filterName)
 }
 
 /** 单条筛选器绑定草稿（对话框内部维护） */
@@ -78,16 +89,16 @@ interface FBDraft {
 }
 
 /** 按当前数据集构造一份「全选作用范围 + 自动匹配字段」的空草稿 */
-function emptyFieldMap(): Record<string, string> {
+function emptyFieldMap(filterName: string): Record<string, string> {
   const fm: Record<string, string> = {}
-  state.datasets.forEach((ds) => (fm[ds.id] = MOCK_MATCH[ds.alias] ?? ''))
+  state.datasets.forEach((ds) => (fm[ds.id] = inferField(ds, filterName)))
   return fm
 }
 function emptyDraft(): FBDraft {
   return {
     filterName: '',
     scopeKeys: state.datasets.map((d) => d.id),
-    fieldMap: emptyFieldMap(),
+    fieldMap: emptyFieldMap(''),
   }
 }
 
@@ -103,7 +114,7 @@ watch(
         const fm: Record<string, string> = {}
         state.datasets.forEach((ds) => {
           const found = b.fieldMap.find((m) => m.datasetId === ds.id)
-          fm[ds.id] = found ? found.field : MOCK_MATCH[ds.alias] ?? ''
+          fm[ds.id] = found ? found.field : inferField(ds, b.filterName)
         })
         return {
           filterName: b.filterName,
@@ -117,6 +128,11 @@ watch(
     }
   },
 )
+
+/** 筛选器变更时，基于真实字段重新推断各数据集的映射字段 */
+function onFilterNameChange(d: FBDraft) {
+  d.fieldMap = emptyFieldMap(d.filterName)
+}
 
 /** 继续绑定一个筛选器 */
 function addBinding() {
@@ -137,7 +153,7 @@ function save() {
       const fm = state.datasets.map((ds) => ({
         datasetId: ds.id,
         field: d.fieldMap[ds.id] ?? '',
-        matched: matched(ds.alias),
+        matched: matched(ds, d.filterName),
       }))
       return { filterName: d.filterName, scope, fieldMap: fm }
     })

@@ -1,7 +1,7 @@
 /**
  * useInsightBackend —— 洞察原型（prototype）与 mateclaw-dataagent 后端的对接层
  * =====================================================================
- * 原型此前是一套纯前端假数据演示（useInsight.ts 中的 [MOCK]）。本文件把原型
+ * 原型此前是一套纯前端演示数据。本文件把原型
  * 与后端「真实接口」打通，复用 ui 既有的 api 封装与 utils，避免重复造轮子：
  *
  *   - 仪表盘：  @/api/insight-dashboard（list/get/create/update/executeComponent/...）

@@ -112,6 +112,8 @@ export function hydratePanel(
   state.pythonUser = script
   state.hasPython = Boolean(script.trim())
   state.filterBindings = filterBindingsFromPipeline(pipeline?.scriptFilterBindings ?? [], state.datasets, filterComponents)
+  // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
+  state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
 
   state.backend.dashboardId = dashboardId
   state.backend.componentId = component.id

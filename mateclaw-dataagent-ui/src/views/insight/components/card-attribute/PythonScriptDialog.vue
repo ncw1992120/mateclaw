@@ -12,14 +12,13 @@
     <!-- 用户处理区域（可编辑） -->
     <div class="py-block">
       <div class="py-title">用户处理区域（可编辑）</div>
-      <!-- [MOCK] 此处用 textarea 占位，后续可替换为 Monaco 编辑器 -->
       <el-input v-model="userCode" type="textarea" :rows="10" class="py-edit" />
     </div>
 
     <template #footer>
       <el-button @click="ui.python.visible = false">取消</el-button>
       <el-button @click="onPreview">筛选预览</el-button>
-      <el-button @click="onExec">执行记录</el-button>
+      <el-button @click="onExec" :loading="executing">执行记录</el-button>
       <el-button type="primary" @click="save">确定</el-button>
     </template>
   </el-dialog>
@@ -28,11 +27,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useInsight, MOCK_PYTHON_SYSTEM } from './useInsight'
+import { useInsight, buildPythonSystemRegion } from './useInsight'
 
-const { state, savePython, openInputFilter } = useInsight()
+const { state, savePython, openInputFilter, runComponentPreview } = useInsight()
 const ui = state.ui
 const userCode = ref('')
+const executing = ref(false)
 
 watch(
   () => ui.python.visible,
@@ -41,13 +41,14 @@ watch(
   },
 )
 
-// [MOCK] 修改筛选器绑定后重新生成系统区域，且不覆盖用户处理区域
+// 重新生成系统区域（基于真实数据集 + 筛选器绑定），不覆盖用户处理区域
 function regenSystem() {
-  state.pythonSystem = MOCK_PYTHON_SYSTEM
+  state.pythonSystem = buildPythonSystemRegion()
   ElMessage.success('已重新生成系统区域（用户处理区域保持不变）')
 }
 function save() {
-  savePython(state.pythonSystem, userCode.value)
+  // 保存时以最新系统区域 + 用户代码组合为完整脚本
+  savePython(buildPythonSystemRegion(), userCode.value)
 }
 // 筛选预览：先持久化 Python 脚本（关闭 Python 弹窗），再弹出「输入筛选」弹窗，
 // 保存后自动打开「预处理结果预览」
@@ -55,8 +56,15 @@ function onPreview() {
   save()
   openInputFilter(undefined, { previewKind: 'result' })
 }
-function onExec() {
-  ElMessage.info('[MOCK] Python 执行记录：Join 耗时 12ms，输入 4 行，输出 4 行')
+async function onExec() {
+  executing.value = true
+  try {
+    const { ok, message } = await runComponentPreview()
+    if (ok) ElMessage.success(`已提交执行，executionId=${message}`)
+    else ElMessage.error(message || '执行提交失败')
+  } finally {
+    executing.value = false
+  }
 }
 </script>
 

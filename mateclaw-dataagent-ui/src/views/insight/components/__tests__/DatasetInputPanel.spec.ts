@@ -101,6 +101,15 @@ describe('DatasetInputPanel', () => {
     expect(wrapper.find('textarea[aria-label="数据集 SQL 查询"]').exists()).toBe(true)
   })
 
+  it('keeps JDBC SQL configuration visible for a selected canvas component', () => {
+    const wrapper = mountPanel({
+      inputs: [{ datasetId: 'j1', inputName: 'orders', sourceType: 'JDBC_SQL', sourceConfig: { sql: 'select 1' } }],
+      targetComponents: [{ id: 'kpi-1', type: 'kpi', title: '策略下发概览', position: { x: 0, y: 0, w: 4, h: 3 } }],
+      targetComponentId: 'kpi-1',
+    })
+    expect(wrapper.find('textarea[aria-label="数据集 SQL 查询"]').exists()).toBe(true)
+  })
+
   it('shows Aloudata mode and unified dataset guidance for API and file inputs', () => {
     const wrapper = mountPanel({ inputs: [
       { datasetId: 'a1', inputName: 'metric_view', sourceType: 'ALOUDATA_ANALYSIS_VIEW' },
