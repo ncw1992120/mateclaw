@@ -48,7 +48,7 @@ export interface DatasetConfig {
   filters: InputFilter[]
   // 各类型专属配置（假数据占位）
   jdbc?: { db: string; sql: string }
-  aloudata?: { mode: 'metric-dim' | 'metric-view'; metricView?: string; metrics?: string[]; dims?: string[] }
+  aloudata?: { mode: 'metric-dim' | 'metric-view'; datasourceId?: string; metricView?: string; metrics?: string[]; dims?: string[] }
   api?: { host: string; path: string; method: string; timeout: number; headers: string; params: string }
   file?: { fileName: string; fileType: string; columns: { name: string; type: string }[]; rows: Record<string, string>[] }
   /** [后端联调] 真实数据集 ID：数据集配置经后端 confirmDraft 落库后回填 */
@@ -81,7 +81,7 @@ interface UiState {
   editingDatasetId: string | null // 正在编辑（重新配置）的数据集 id；null=新增
   // 各配置弹窗状态
   jdbc: { visible: boolean; db: string; sql: string }
-  aloudata: { visible: boolean; mode: 'metric-dim' | 'metric-view'; metricView: string; metrics: string[]; dims: string[] }
+  aloudata: { visible: boolean; mode: 'metric-dim' | 'metric-view'; datasourceId: string; metricView: string; metrics: string[]; dims: string[] }
   api: { visible: boolean; host: string; path: string; method: string; timeout: number; headers: string; params: string }
   file: { visible: boolean; fileType: string; fileName: string; columns: { name: string; type: string }[]; rows: Record<string, string>[] }
   fieldMapping: { visible: boolean; datasetId: string }
@@ -300,7 +300,7 @@ const state = reactive({
     treeVisible: false,
     editingDatasetId: null as string | null,
     jdbc: { visible: false, db: 'db1', sql: MOCK_JDBC_SQL },
-    aloudata: { visible: false, mode: 'metric-dim', metricView: '', metrics: [], dims: [] },
+    aloudata: { visible: false, mode: 'metric-dim', datasourceId: '', metricView: '', metrics: [], dims: [] },
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
     file: { visible: false, fileType: 'Excel', fileName: '', columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
@@ -360,6 +360,7 @@ function onSelectLeaf(node: any) {
     state.ui.aloudata = {
       visible: true,
       mode: node.mode,
+      datasourceId: node.db ?? existing?.aloudata?.datasourceId ?? '',
       metricView: existing?.aloudata?.metricView ?? '',
       metrics: existing?.aloudata?.metrics ?? [],
       dims: existing?.aloudata?.dims ?? [],
@@ -430,6 +431,7 @@ function reconfigureDataset(id: string) {
     state.ui.aloudata = {
       visible: true,
       mode: ds.aloudata?.mode ?? 'metric-dim',
+      datasourceId: ds.aloudata?.datasourceId ?? '',
       metricView: ds.aloudata?.metricView ?? '',
       metrics: ds.aloudata?.metrics ?? [],
       dims: ds.aloudata?.dims ?? [],
@@ -512,12 +514,12 @@ function confirmJdbc() {
 
 /* ---- Aloudata ---- */
 function confirmAloudata() {
-  const { mode, metricView, metrics, dims } = state.ui.aloudata
+  const { mode, datasourceId, metricView, metrics, dims } = state.ui.aloudata
   const label = mode === 'metric-view' ? 'Aloudata · 指标视图' : 'Aloudata · 指标&维度'
   commitDataset({
     sourceType: 'aloudata',
     sourceLabel: label,
-    aloudata: { mode, metricView, metrics: [...metrics], dims: [...dims] },
+    aloudata: { mode, datasourceId, metricView, metrics: [...metrics], dims: [...dims] },
   })
   state.ui.aloudata.visible = false
 }
@@ -644,7 +646,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     displayName: ds.alias,
     sourceType: mapSourceTypeOut(ds),
     sourceConfig: {
-      datasourceId: ds.jdbc?.db,
+      datasourceId: ds.aloudata?.datasourceId ?? ds.jdbc?.db,
       sql: ds.jdbc?.sql,
       analysisViewId: ds.aloudata?.metricView,
       apiDefinitionId: ds.api?.path,

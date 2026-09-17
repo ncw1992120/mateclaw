@@ -1,46 +1,118 @@
 <template>
-  <el-dialog v-model="ui.aloudata.visible" :title="aloudataTitle" width="560px" :close-on-click-modal="false">
-    <!-- 指标&维度 -->
+  <el-dialog v-model="ui.aloudata.visible" :title="aloudataTitle" width="780px" :close-on-click-modal="false">
+    <!-- 指标&维度：从 Aloudata 已同步数据真实取数 + 勾选 -->
     <template v-if="ui.aloudata.mode === 'metric-dim'">
-      <p class="hint">配置指标、维度和查询筛选条件；停止修改 3 秒后自动生成数据集表单，无额外确认按钮。</p>
-      <div class="block">
-        <div class="block-title">指标</div>
-        <el-checkbox-group v-model="ui.aloudata.metrics" @change="onAuto">
-          <el-checkbox v-for="m in MOCK_ALOUDATA_METRICS" :key="m" :label="m" />
-        </el-checkbox-group>
-      </div>
-      <div class="block">
-        <div class="block-title">维度</div>
-        <el-checkbox-group v-model="ui.aloudata.dims" @change="onAuto">
-          <el-checkbox v-for="d in MOCK_ALOUDATA_DIMS" :key="d" :label="d" />
-        </el-checkbox-group>
-      </div>
+      <el-alert
+        v-if="!datasourceId"
+        type="warning"
+        :closable="false"
+        title="未关联到数据源，无法加载指标/维度"
+        style="margin-bottom: 12px"
+      />
+      <template v-else>
+        <div class="toolbar">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索指标/维度名称"
+            clearable
+            style="width: 220px"
+            @input="onKeywordInput"
+          />
+          <el-select
+            v-model="categoryId"
+            placeholder="全部类目"
+            clearable
+            style="width: 200px"
+            @change="onCategoryChange"
+          >
+            <el-option v-for="c in categoryOptions" :key="c.value" :label="c.label" :value="c.value" />
+          </el-select>
+          <span class="count">已选 指标 {{ ui.aloudata.metrics.length }} · 维度 {{ ui.aloudata.dims.length }}</span>
+        </div>
+
+        <div class="grid">
+          <div class="grid-col">
+            <div class="grid-title">指标</div>
+            <el-table
+              ref="metricTableRef"
+              :data="metricPage.records"
+              v-loading="metricsLoading"
+              height="320"
+              row-key="metricName"
+              size="small"
+              @selection-change="onMetricSelectionChange"
+            >
+              <el-table-column type="selection" width="42" :reserve-selection="true" />
+              <el-table-column prop="metricName" label="名称" show-overflow-tooltip />
+              <el-table-column prop="metricDisplayName" label="显示名" show-overflow-tooltip />
+              <el-table-column prop="metricCategoryName" label="类目" width="110" />
+            </el-table>
+            <el-pagination
+              class="pager"
+              layout="prev, pager, next"
+              :total="metricPage.total"
+              :page-size="pageSize"
+              :current-page="metricPage.current"
+              @current-change="onMetricPageChange"
+              small
+            />
+          </div>
+
+          <div class="grid-col">
+            <div class="grid-title">维度</div>
+            <el-table
+              ref="dimTableRef"
+              :data="dimPage.records"
+              v-loading="dimsLoading"
+              height="320"
+              row-key="dimName"
+              size="small"
+              @selection-change="onDimSelectionChange"
+            >
+              <el-table-column type="selection" width="42" :reserve-selection="true" />
+              <el-table-column prop="dimName" label="名称" show-overflow-tooltip />
+              <el-table-column prop="dimDisplayName" label="显示名" show-overflow-tooltip />
+              <el-table-column prop="configType" label="类型" width="100" />
+            </el-table>
+            <el-pagination
+              class="pager"
+              layout="prev, pager, next"
+              :total="dimPage.total"
+              :page-size="pageSize"
+              :current-page="dimPage.current"
+              @current-change="onDimPageChange"
+              small
+            />
+          </div>
+        </div>
+      </template>
     </template>
 
-    <!-- 指标视图 -->
+    <!-- 指标视图：仍使用指标视图列表（MOCK 占位，待接入分析视图 API） -->
     <template v-else>
-      <p class="hint">只能选择一个有权限的指标视图；停止选择 3 秒后自动生成数据集表单。</p>
-      <el-select v-model="ui.aloudata.metricView" placeholder="请选择指标视图" @change="onAuto" style="width: 100%">
+      <p class="hint">只能选择一个有权限的指标视图。</p>
+      <el-select v-model="ui.aloudata.metricView" placeholder="请选择指标视图" style="width: 100%">
         <el-option v-for="v in MOCK_ALOUDATA_METRIC_VIEWS" :key="v" :label="v" :value="v" />
       </el-select>
     </template>
 
     <template #footer>
       <el-button @click="ui.aloudata.visible = false">取消</el-button>
-      <el-button type="primary" @click="confirmAloudata">确定</el-button>
+      <el-button type="primary" :disabled="!datasourceId" @click="confirmAloudata">确定</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useInsight, MOCK_ALOUDATA_METRIC_VIEWS } from '../useInsight'
 import {
-  useInsight,
-  MOCK_ALOUDATA_METRICS,
-  MOCK_ALOUDATA_DIMS,
-  MOCK_ALOUDATA_METRIC_VIEWS,
-} from '../useInsight'
+  pageAloudataMetrics,
+  pageAloudataDimensions,
+  listAloudataCategoryCounts,
+} from '@/api/semantic-model'
+import type { AloudataMetricPage, AloudataDimensionPage, AloudataCategoryCount } from '@/types'
 
 const { state, confirmAloudata } = useInsight()
 const ui = state.ui
@@ -48,28 +120,187 @@ const aloudataTitle = computed(() =>
   ui.aloudata.mode === 'metric-view' ? 'Aloudata · 指标视图' : 'Aloudata · 指标&维度',
 )
 
-// [MOCK] 停止选择/修改 3 秒后自动生成数据集表单（文档 3.2）
-let timer: any
-function onAuto() {
-  clearTimeout(timer)
-  timer = setTimeout(() => {
-    ElMessage.info('[MOCK] 已自动生成 Aloudata 数据集表单')
-  }, 3000)
+const pageSize = 20
+const datasourceId = ref('')
+const keyword = ref('')
+const categoryId = ref('')
+const categoryOptions = ref<{ label: string; value: string }[]>([])
+const metricsLoading = ref(false)
+const dimsLoading = ref(false)
+const syncing = ref(false)
+const metricTableRef = ref<any>()
+const dimTableRef = ref<any>()
+
+const metricPage = reactive<AloudataMetricPage>({
+  records: [],
+  total: 0,
+  size: pageSize,
+  current: 1,
+  pages: 0,
+})
+const dimPage = reactive<AloudataDimensionPage>({
+  records: [],
+  total: 0,
+  size: pageSize,
+  current: 1,
+  pages: 0,
+})
+
+watch(
+  () => ui.aloudata.visible,
+  (v) => {
+    if (v) open()
+  },
+)
+
+function open() {
+  datasourceId.value = ui.aloudata.datasourceId
+  keyword.value = ''
+  categoryId.value = ''
+  if (!datasourceId.value) {
+    ElMessage.warning('未关联到数据源，无法加载指标/维度')
+    return
+  }
+  loadCategories()
+  loadMetrics(1)
+  loadDims(1)
+}
+
+async function loadCategories() {
+  try {
+    const [m, d] = await Promise.all([
+      listAloudataCategoryCounts(datasourceId.value, 'metric'),
+      listAloudataCategoryCounts(datasourceId.value, 'dimension'),
+    ])
+    const opts: { label: string; value: string }[] = []
+    ;(m as AloudataCategoryCount[]).forEach((c) =>
+      opts.push({ label: `指标·${c.categoryName} (${c.count})`, value: c.categoryId }),
+    )
+    ;(d as AloudataCategoryCount[]).forEach((c) =>
+      opts.push({ label: `维度·${c.categoryName} (${c.count})`, value: c.categoryId }),
+    )
+    categoryOptions.value = opts
+  } catch {
+    categoryOptions.value = []
+  }
+}
+
+async function loadMetrics(page: number) {
+  if (!datasourceId.value) return
+  metricsLoading.value = true
+  syncing.value = true
+  try {
+    metricTableRef.value?.clearSelection()
+    const data = await pageAloudataMetrics(datasourceId.value, {
+      pageNumber: page,
+      pageSize,
+      keyword: keyword.value || undefined,
+      categoryId: categoryId.value || undefined,
+    })
+    metricPage.records = data.records
+    metricPage.total = data.total
+    metricPage.current = data.current
+    metricPage.size = data.size
+    metricPage.pages = data.pages
+    await nextTick()
+    metricPage.records.forEach((r) => {
+      if (ui.aloudata.metrics.includes(r.metricName)) metricTableRef.value?.toggleRowSelection(r, true)
+    })
+  } catch {
+    ElMessage.error('加载指标失败')
+  } finally {
+    syncing.value = false
+    metricsLoading.value = false
+  }
+}
+
+async function loadDims(page: number) {
+  if (!datasourceId.value) return
+  dimsLoading.value = true
+  syncing.value = true
+  try {
+    dimTableRef.value?.clearSelection()
+    const data = await pageAloudataDimensions(datasourceId.value, {
+      pageNumber: page,
+      pageSize,
+      keyword: keyword.value || undefined,
+      categoryId: categoryId.value || undefined,
+    })
+    dimPage.records = data.records
+    dimPage.total = data.total
+    dimPage.current = data.current
+    dimPage.size = data.size
+    dimPage.pages = data.pages
+    await nextTick()
+    dimPage.records.forEach((r) => {
+      if (ui.aloudata.dims.includes(r.dimName)) dimTableRef.value?.toggleRowSelection(r, true)
+    })
+  } catch {
+    ElMessage.error('加载维度失败')
+  } finally {
+    syncing.value = false
+    dimsLoading.value = false
+  }
+}
+
+function onMetricSelectionChange(rows: any[]) {
+  if (syncing.value) return
+  ui.aloudata.metrics = rows.map((r) => r.metricName)
+}
+function onDimSelectionChange(rows: any[]) {
+  if (syncing.value) return
+  ui.aloudata.dims = rows.map((r) => r.dimName)
+}
+
+let kwTimer: any
+function onKeywordInput() {
+  clearTimeout(kwTimer)
+  kwTimer = setTimeout(() => {
+    loadMetrics(1)
+    loadDims(1)
+  }, 300)
+}
+function onCategoryChange() {
+  loadMetrics(1)
+  loadDims(1)
+}
+function onMetricPageChange(p: number) {
+  loadMetrics(p)
+}
+function onDimPageChange(p: number) {
+  loadDims(p)
 }
 </script>
 
 <style scoped>
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.grid-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.pager {
+  margin-top: 8px;
+  justify-content: flex-end;
+}
 .hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   margin: 0 0 12px;
-}
-.block {
-  margin-bottom: 14px;
-}
-.block-title {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
 }
 </style>
