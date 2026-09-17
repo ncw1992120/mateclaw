@@ -110,6 +110,7 @@ const ICONS = {
   filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="4,4 20,4 14,12 14,20 10,18 10,12"/></svg>',
   timeFilter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12,6 12,12 16,14"/></svg>',
   aiAnalysis: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+  combination: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="5" height="5" rx="1" fill="currentColor" opacity="0.4"/><rect x="14" y="7" width="3" height="10" rx="1" fill="currentColor" opacity="0.4"/><rect x="7" y="14" width="5" height="3" rx="1" fill="currentColor" opacity="0.4"/></svg>',
 } as const
 
 /** 按语义分组的物料列表 */
@@ -123,6 +124,7 @@ const groups: PaletteGroup[] = [
       { type: 'filter', icon: ICONS.filter, labelKey: 'insight.component.filter' },
       { type: 'timeFilter', icon: ICONS.timeFilter, labelKey: 'insight.component.timeFilter' },
       { type: 'aiAnalysis', icon: ICONS.aiAnalysis, labelKey: 'insight.component.aiAnalysis' },
+      { type: 'combination', icon: ICONS.combination, labelKey: 'insight.component.combination' },
     ],
   },
   {

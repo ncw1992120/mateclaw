@@ -526,6 +526,7 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
     filter: t('insight.component.filter'),
     timeFilter: t('insight.component.timeFilter'),
     aiAnalysis: t('insight.component.aiAnalysis'),
+    combination: t('insight.component.combination'),
   }
   const key = type === 'chart' && chartType ? `chart-${chartType}` : type
   return titleMap[key] ?? type
@@ -544,7 +545,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     title: getDefaultTitle(payload.type, payload.chartType),
     position: { x: 0, y: maxY, w: 6, h: 4 },
     chartType: payload.chartType,
-    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' ? {
+    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' && payload.type !== 'combination' ? {
       datasourceId: '',
       metrics: [],
       dimensions: [],
@@ -556,6 +557,19 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
       availablePresets: ['today', '7d', '30d', '90d', 'custom'],
     } : payload.type === 'aiAnalysis' ? {
       autoGenerate: false,
+    } : undefined,
+    // 组合卡片：默认空子卡片 + 容器配置
+    children: payload.type === 'combination' ? [] : undefined,
+    containerConfig: payload.type === 'combination' ? {
+      title: '',
+      showTitle: true,
+      background: '#ffffff',
+      radius: 12,
+      padding: 16,
+      layoutMode: 'free',
+      tabs: [],
+      activeTab: undefined,
+      style: { border: { enabled: false, color: 'transparent' } },
     } : undefined,
   }
   page.components.push(newComponent)

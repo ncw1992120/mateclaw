@@ -1146,7 +1146,7 @@ export interface HelpCategory {
 // ==================== 洞察仪表盘 ====================
 
 /** 洞察仪表盘组件类型 */
-export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'aiAnalysis'
+export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'aiAnalysis' | 'combination'
 
 /** 筛选器作用范围 */
 export type FilterScope = 'global' | 'scoped'
@@ -1234,6 +1234,77 @@ export interface InsightComponent {
   perspectiveIds?: string[]
   /** 是否启用多指标模式（仅 kpi 类型，开启后卡片同时展示多个指标） */
   multiKpi?: boolean
+  /** 组合卡片：子卡片列表（默认 Tab / 无页签时生效） */
+  children?: InsightCombinationChild[]
+  /** 组合卡片：容器配置（标题、背景、圆角、内边距、布局模式、页签等） */
+  containerConfig?: InsightCombinationConfig
+}
+
+/** 组合卡片子卡片自由布局坐标（相对容器内容区左上角，单位 px） */
+export interface CombinationChildLayout {
+  /** 距内容区左边 px */
+  x: number
+  /** 距内容区顶部 px */
+  y: number
+  /** 宽度列数（1~12，渲染为百分比宽） */
+  col: number
+  /** 高度 px（可选，缺省由内容自适应） */
+  h?: number
+}
+
+/** 组合卡片子卡片（本质是精简版仪表盘组件，定位用 layout 而非栅格 position） */
+export interface InsightCombinationChild {
+  /** 子卡片唯一 ID */
+  id: string
+  /** 子卡片类型（复用顶层组件类型） */
+  type: InsightComponentType
+  /** 子卡片标题 */
+  title: string
+  /** 图表子类型（仅 chart） */
+  chartType?: ChartType
+  /** 组件扩展配置 */
+  config?: Record<string, unknown>
+  /** 数据绑定配置（v1 暂未接入取数，结构预留） */
+  dataSource?: ComponentDataSource
+  /** 自由布局坐标 */
+  layout: CombinationChildLayout
+}
+
+/** 组合卡片页签（每个页签拥有独立的子卡片集合） */
+export interface CombinationTab {
+  /** 页签唯一 ID */
+  id: string
+  /** 页签标题 */
+  title: string
+  /** 该页签下的子卡片 */
+  children: InsightCombinationChild[]
+}
+
+/** 组合卡片容器配置 */
+export interface InsightCombinationConfig {
+  /** 容器标题 */
+  title: string
+  /** 是否显示标题 */
+  showTitle: boolean
+  /** 背景色（CSS color） */
+  background: string
+  /** 圆角 px */
+  radius: number
+  /** 内边距 px */
+  padding: number
+  /** 内部布局模式：自由布局 / 栅格 / 垂直流 */
+  layoutMode: 'free' | 'grid' | 'vertical'
+  /** 页签列表（非空时启用多页签） */
+  tabs: CombinationTab[]
+  /** 当前激活页签 ID（tabs 非空时生效） */
+  activeTab?: string
+  /** 容器边框样式 */
+  style: {
+    border: {
+      enabled: boolean
+      color: string
+    }
+  }
 }
 
 /** 当前组件的数据集编排配置；输入归属于组件，不再使用仪表盘根级脚本输入。 */

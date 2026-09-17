@@ -19,6 +19,56 @@
         <el-input v-model="localComponent.title" :aria-label="t('insight.property.componentTitle')" @change="emitChange" />
       </div>
 
+      <!-- 组合卡片：容器配置 -->
+      <template v-if="component.type === 'combination' && localComponent.containerConfig">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.title') }}</label>
+          <el-input v-model="localComponent.containerConfig.title" :aria-label="t('insight.combination.title')" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.showTitle') }}</label>
+          <el-switch v-model="localComponent.containerConfig.showTitle" :aria-label="t('insight.combination.showTitle')" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.background') }}</label>
+          <el-color-picker v-model="localComponent.containerConfig.background" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.radius') }}</label>
+          <el-input-number v-model="localComponent.containerConfig.radius" :min="0" :max="48" :aria-label="t('insight.combination.radius')" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.padding') }}</label>
+          <el-input-number v-model="localComponent.containerConfig.padding" :min="0" :max="48" :aria-label="t('insight.combination.padding')" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.combination.layoutMode') }}</label>
+          <el-radio-group v-model="localComponent.containerConfig.layoutMode" @change="emitChange">
+            <el-radio value="free">{{ t('insight.combination.layoutFree') }}</el-radio>
+            <el-radio value="grid">{{ t('insight.combination.layoutGrid') }}</el-radio>
+            <el-radio value="vertical">{{ t('insight.combination.layoutVertical') }}</el-radio>
+          </el-radio-group>
+        </div>
+        <!-- 页签管理 -->
+        <div class="form-group form-group-column">
+          <label class="form-label">{{ t('insight.combination.tabs') }}</label>
+          <div class="combination-tab-editor">
+            <div
+              v-for="tab in localComponent.containerConfig.tabs"
+              :key="tab.id"
+              class="combination-tab-row"
+              :class="{ active: localComponent.containerConfig.activeTab === tab.id }"
+            >
+              <el-input v-model="tab.title" size="small" :aria-label="t('insight.combination.tabName')" @change="emitChange" />
+              <button class="combination-tab-set" :class="{ on: localComponent.containerConfig.activeTab === tab.id }" @click="localComponent.containerConfig!.activeTab = tab.id; emitChange()">{{ t('insight.combination.activeTab') }}</button>
+              <button class="combination-tab-del" @click="deleteCombinationTab(tab.id)">✕</button>
+            </div>
+            <button class="combination-tab-add" @click="addCombinationTab">{{ t('insight.combination.addTab') }}</button>
+          </div>
+        </div>
+        <div class="binding-mode-hint">{{ t('insight.combination.childDataHint') }}</div>
+      </template>
+
       <!-- 图表类型（仅 chart 组件） -->
       <div v-if="component.type === 'chart'" class="form-group">
         <label class="form-label">{{ t('insight.property.chartType') }}</label>
@@ -1105,6 +1155,38 @@ function emitAiAnalysisConfigChange(): void {
   emit('change', updated)
 }
 
+/** 组合卡片：添加页签 */
+function addCombinationTab(): void {
+  if (!localComponent.containerConfig) {
+    localComponent.containerConfig = {
+      title: '',
+      showTitle: true,
+      background: '#ffffff',
+      radius: 12,
+      padding: 16,
+      layoutMode: 'free',
+      tabs: [],
+      activeTab: undefined,
+      style: { border: { enabled: false, color: 'transparent' } },
+    }
+  }
+  const cfg = localComponent.containerConfig
+  const id = 'tab_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+  cfg.tabs.push({ id, title: `页签 ${cfg.tabs.length + 1}`, children: [] })
+  cfg.activeTab = id
+  emitChange()
+}
+
+/** 组合卡片：删除页签 */
+function deleteCombinationTab(id: string): void {
+  const cfg = localComponent.containerConfig
+  if (!cfg) return
+  const idx = cfg.tabs.findIndex((t) => t.id === id)
+  if (idx >= 0) cfg.tabs.splice(idx, 1)
+  if (cfg.activeTab === id) cfg.activeTab = cfg.tabs[0]?.id
+  emitChange()
+}
+
 /** 多 Tab 模式开关切换 */
 function handleTabModeToggle(): void {
   if (tabModeEnabled.value) {
@@ -1472,6 +1554,65 @@ datasourceStore.fetchDatasources().catch(() => {
 
 .tab-item-row :deep(.el-button:hover) {
   color: var(--el-color-danger);
+}
+
+.combination-tab-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.combination-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.combination-tab-row :deep(.el-input) {
+  flex: 1;
+}
+.combination-tab-set {
+  border: 1px solid var(--db-border);
+  background: transparent;
+  color: var(--db-text-muted);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.combination-tab-set.on {
+  border-color: var(--db-accent);
+  color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+}
+.combination-tab-del {
+  border: none;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.combination-tab-del:hover {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
+}
+.combination-tab-add {
+  align-self: flex-start;
+  border: 1px dashed var(--db-border);
+  background: transparent;
+  color: var(--db-accent);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.combination-tab-add:hover {
+  border-color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
 }
 
 .tab-datasource-section {

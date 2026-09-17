@@ -115,6 +115,13 @@
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />
+              <CombinationCardWidget
+                v-else-if="getComponent(item.i)?.type === 'combination'"
+                :component="getComponent(item.i)!"
+                :component-data-map="componentDataMap"
+                :editable="editable"
+                :selected="selectedId === item.i"
+              />
             </template>
           </div>
         </div>
@@ -138,6 +145,7 @@ import DataTableWidget from './DataTableWidget.vue'
 import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
+import CombinationCardWidget from './CombinationCardWidget.vue'
 
 defineOptions({
   name: 'DashboardCanvas',
