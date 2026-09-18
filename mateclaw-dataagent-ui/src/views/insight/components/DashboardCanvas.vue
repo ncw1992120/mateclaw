@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="canvasRef"
     class="dashboard-canvas"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
@@ -174,8 +175,11 @@ const props = withDefaults(defineProps<{
   aiAnalysisGeneratingIds: () => new Set(),
 })
 
+/** 画布根元素（drop 落点换算用） */
+const canvasRef = ref<HTMLElement | null>(null)
+
 const emit = defineEmits<{
-  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
+  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void
   (e: 'update-layout', payload: Array<{ id: string; x: number; y: number; w: number; h: number }>): void
   (e: 'select-component', id: string): void
   (e: 'select-child', payload: { containerId: string; childId: string | null }): void
@@ -338,7 +342,34 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
-/** 从物料面板拖入新组件 */
+/** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
+const GRID_COLS = 24
+const GRID_ROW_HEIGHT = 30
+const GRID_GAP = 12
+
+/**
+ * 鼠标 drop 位置 → 栅格坐标。
+ * 换算公式与 grid-layout-plus 的排布一致：
+ *   colWidth = (容器宽 - margin × (cols + 1)) / cols；left = margin + col × (colWidth + margin)
+ * 优先用 .vgl-layout 网格容器的边界换算（列宽随画布宽度自适应），
+ * 空画布没有网格容器时退化为画布根元素边界。列坐标钳制到 [0, COLS-1]，
+ * 行坐标只钳下界（画布可向下无限增长）。
+ */
+function dropToGrid(event: DragEvent): { x: number; y: number } {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const rect = (grid ?? canvasRef.value)?.getBoundingClientRect()
+  if (!rect) return { x: 0, y: 0 }
+  const colWidth = (rect.width - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
+  if (colWidth <= 0) return { x: 0, y: 0 }
+  const col = Math.floor(((event.clientX - rect.left) - GRID_GAP) / (colWidth + GRID_GAP))
+  const row = Math.floor(((event.clientY - rect.top) - GRID_GAP) / (GRID_ROW_HEIGHT + GRID_GAP))
+  return {
+    x: Math.max(0, Math.min(col, GRID_COLS - 1)),
+    y: Math.max(0, row),
+  }
+}
+
+/** 从物料面板拖入新组件（携带鼠标落点的栅格坐标，由编辑器按此放置） */
 function handleDrop(event: DragEvent): void {
   if (!event.dataTransfer) {
     return
@@ -349,7 +380,7 @@ function handleDrop(event: DragEvent): void {
   }
   try {
     const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
-    emit('add-component', payload)
+    emit('add-component', { ...payload, position: dropToGrid(event) })
   } catch (e) {
     console.error('[DashboardCanvas] drop parse error:', e)
   }

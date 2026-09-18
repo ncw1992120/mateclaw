@@ -608,18 +608,23 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
   return titleMap[key] ?? type
 }
 
-/** 添加新组件到当前页面 */
-function handleAddComponent(payload: { type: InsightComponentType; chartType?: ChartType }): void {
+/** 添加新组件到当前页面（拖入时携带鼠标落点的栅格坐标，点选物料面板时落到画布底部） */
+function handleAddComponent(payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void {
   const page = schema.pages.find((p) => p.id === activePageId.value)
   if (!page) {
     return
   }
   const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
+  const w = 6
+  const h = 4
+  // 拖入落点优先：新组件放在鼠标松开的位置（列钳制到画布内），与物料面板点选的「追加到底部」区分
+  const x = payload.position ? Math.max(0, Math.min(payload.position.x, 24 - w)) : 0
+  const y = payload.position ? Math.max(0, payload.position.y) : maxY
   const newComponent: InsightComponent = {
     id: generateId('comp'),
     type: payload.type,
     title: getDefaultTitle(payload.type, payload.chartType),
-    position: { x: 0, y: maxY, w: 6, h: 4 },
+    position: { x, y, w, h },
     chartType: payload.chartType,
     dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' && payload.type !== 'combination' ? {
       datasourceId: '',
