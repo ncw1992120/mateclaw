@@ -28,7 +28,11 @@
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.background') }}</label>
           <div class="combination-color-row">
-            <el-color-picker v-model="localComponent.containerConfig.background" @change="emitChange" />
+            <el-color-picker
+              v-model="localComponent.containerConfig.background"
+              :predefine="COMBINATION_BG_PRESETS"
+              @change="emitChange"
+            />
             <el-input
               v-model="localComponent.containerConfig.background"
               placeholder="#ffffff"
@@ -659,6 +663,18 @@ const emit = defineEmits<{
 
 const datasourceStore = useDatasourceStore()
 const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasources))
+
+/** 组合卡片背景色 · 常用暖色预设（取色器弹出面板可直选） */
+const COMBINATION_BG_PRESETS = [
+  '#FFF8F0', // 奶油白
+  '#FBF0DC', // 米黄
+  '#FAE7CE', // 浅杏
+  '#FBE3C8', // 杏橘
+  '#FFE3D0', // 浅珊瑚
+  '#F6DFD2', // 藕粉
+  '#F2E8DA', // 亚麻
+  '#EFE0CB', // 浅驼
+]
 
 /** 本地编辑副本（深拷贝） */
 const localComponent = reactive<InsightComponent>({

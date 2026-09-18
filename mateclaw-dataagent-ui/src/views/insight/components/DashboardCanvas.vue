@@ -485,6 +485,13 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 </script>
 
 <style scoped>
+/* 覆盖 grid-layout-plus 默认拖拽占位色（库内联 --vgl-placeholder-bg: red / opacity 20%）
+   → 拖动时不再出现粉红色残影 */
+.dashboard-canvas :deep(.vgl-layout) {
+  --vgl-placeholder-bg: transparent;
+  --vgl-placeholder-opacity: 0;
+}
+
 .dashboard-canvas {
   width: 100%;
   height: 100%;
