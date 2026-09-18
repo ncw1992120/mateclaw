@@ -573,7 +573,8 @@ python3 dev-support/local-simulation/scripts/generate-aloudata-fixtures.py
 展示名 `dimDisplayName`、描述 `dimDescription`（**实测可能为 null**）、类型 `originDataType`。
 注意条目里还有一个 `name`（形如 `dm7de2b44d79e7161ea948a209cd4a2c` 的内部标识），**不要**当成字段名。
 
-**`analysisView/query`**：列式 `data.analysisView.columns = {列名: [{value, flag, count}]}`，并带 `data.metas[]`。
+**`analysisView/query`**：列式 `data.table.columns = {列名: [{value, flag, count}]}`，并带 `data.metas[]`、`data.queryId`、`data.warning`。
+（本仓早期一版夹具曾误写成 `data.analysisView.columns`，已于本轮修正为与官方文档一致的 `data.table.columns`。）
 
 ### 6.1 `analysis_view_tree`
 
@@ -840,7 +841,11 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
 
 `GET /semantic/api/v1.1/analysisView/query?viewName=cljd_zcl_zb_view&pageSize=20&pageIndex=0&queryResultType=DATA`
 
-真实结构为**列式**：`data.analysisView.columns = { 列名: [ {value, flag, count}, ... ] }`。
+真实结构为**列式**：`data.table.columns = { 列名: [ {value, flag, count}, ... ] }`，并携带 `data.metas[]`、`data.queryId`、`data.warning`、`data.total`（顶层，等于行数）。
+
+> **端口配置（已就绪，无需改代码）**：该接口在 `AloudataEndpointService.getDefaultEndpoints()` 中已注册为端点键 `analysis_view_query_data`（`AloudataEndpointService.java` 第 120 行；`semantic` 服务、GET、`/semantic/api/v1.1/analysisView/query`），本仓自带，无需新增配置。
+>
+> ⚠️ **不支持按维度值筛选**：`analysisView/query` 是**无筛选的全量结果查询**；带筛选条件时本仓改走 `metrics_query`（见 §6.7）。本仓早期一版夹具曾误写成 `data.analysisView.columns`，已于本轮修正为与官方「指标视图结果查询」一致的 `data.table.columns`。
 
 ```json
 {
@@ -850,7 +855,10 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
   "detailErrorMsg": null,
   "traceId": "mock-trace-data-zb",
   "data": {
-    "analysisView": {
+    "total": 6,
+    "queryId": "mock-query-cljd_zcl_zb_view",
+    "warning": null,
+    "table": {
       "total": 6,
       "columns": {
         "metric_time": [{"value":"2026-09-01","flag":0,"count":1},{"value":"2026-09-01","flag":0,"count":1},{"value":"2026-09-01","flag":0,"count":1},{"value":"2026-09-02","flag":0,"count":1},{"value":"2026-09-02","flag":0,"count":1},{"value":"2026-09-02","flag":0,"count":1}],
@@ -871,7 +879,27 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
         "digo_cnt_cust_code_new_brok": [{"value":154,"flag":0,"count":1},{"value":119,"flag":0,"count":1},{"value":179,"flag":0,"count":1},{"value":163,"flag":0,"count":1},{"value":126,"flag":0,"count":1},{"value":190,"flag":0,"count":1}],
         "digo_cust_valid_new_yxh": [{"value":91,"flag":0,"count":1},{"value":68,"flag":0,"count":1},{"value":108,"flag":0,"count":1},{"value":97,"flag":0,"count":1},{"value":73,"flag":0,"count":1},{"value":115,"flag":0,"count":1}],
         "digo_cust_asset_in10000": [{"value":43,"flag":0,"count":1},{"value":32,"flag":0,"count":1},{"value":51,"flag":0,"count":1},{"value":46,"flag":0,"count":1},{"value":35,"flag":0,"count":1},{"value":55,"flag":0,"count":1}]
-      }
+      },
+      "metas": [
+        {"name":"metric_time","dataType":null,"dataTypeName":"TIMESTAMP","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"attribution_plan_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"attribution_strategy_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"platform_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"channel","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_trd_fund_amt_inout_cy_jjgr","dataType":null,"dataTypeName":"DECIMAL","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_trd_fund_amt_inout_cy_jjgr_pb","dataType":null,"dataTypeName":"DECIMAL","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_pbcnt_kgdb_a566_fh_jjgr","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_fund_trd_amt_a566_fh_kgdb_jj0","dataType":null,"dataTypeName":"DECIMAL","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_pub_fh_kgdb_trdamt_ppcadd_jjgr","dataType":null,"dataTypeName":"DECIMAL","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_cust_asset_in","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_new_cust_asset_in","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_cnt_cust_code_new_brok","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_cust_valid_new_yxh","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"},
+        {"name":"digo_cust_asset_in10000","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_zb"}
+      ]
     }
   }
 }
@@ -884,7 +912,10 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
   "code": "200",
   "success": true,
   "data": {
-    "analysisView": {
+    "total": 18,
+    "queryId": "mock-query-cljd_zcl_wd_view",
+    "warning": null,
+    "table": {
       "total": 18,
       "columns": {
         "metric_time": [{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-01"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"},{"value":"2026-09-02"}],
@@ -906,7 +937,28 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
         "digo_distr_user_cnt_a": [150,150,150, 105,105,105, 150,150,150, 150,150,150, 105,105,105, 150,150,150],
         "digo_touch_cnt_1": [120,120,120, 88,88,88, 120,120,120, 120,120,120, 88,88,88, 120,120,120],
         "digo_touch_user_cnt_1": [96,96,96, 71,71,71, 96,96,96, 96,96,96, 71,71,71, 96,96,96]
-      }
+      },
+      "metas": [
+        {"name":"metric_time","dataType":null,"dataTypeName":"TIMESTAMP","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_plan_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_plan_name","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_plan_um_account","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_strategy_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_strategy_name","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"attribution_over_by","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"platform_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"platform_name","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"create_by","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"channel","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"metric_id","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"metric_name","dataType":null,"dataTypeName":"VARCHAR","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_strategy_cnt","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_strategy_cnt_distr_1","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_distr_count_1","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_distr_user_cnt_a","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_touch_cnt_1","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"},
+        {"name":"digo_touch_user_cnt_1","dataType":null,"dataTypeName":"BIGINT","displaySize":null,"schemaName":"default","scale":null,"precision":null,"tableName":"cljd_zcl_wd"}
+      ]
     }
   }
 }
@@ -921,7 +973,7 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
   "code": "200",
   "success": true,
   "data": {
-    "analysisView": {
+    "table": {
       "rows": [
         { "metric_time": "2026-09-01", "attribution_plan_id": "PLAN-001", "channel": "APP", "digo_cust_asset_in": 186 },
         { "metric_time": "2026-09-01", "attribution_plan_id": "PLAN-001", "channel": "SMS", "digo_cust_asset_in": 143 }

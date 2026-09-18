@@ -134,7 +134,8 @@ public class LocalAloudataFixtures {
         return envelope;
     }
 
-    /** 视图结果查询：按 viewName 命中结果集，支持 pageSize / pageIndex 分页（零基页号）。 */
+    /** 视图结果查询：按 viewName 命中结果集，支持 pageSize / pageIndex 分页（零基页号）。
+     *  真实 analysisView/query 响应为 data.table.columns + data.metas + data.queryId/warning。 */
     private Map<String, Object> queryData(String owner, Map<String, Object> params) {
         String viewName = firstString(params.get("viewName"));
         Map<String, Object> container = copy(load("analysis_view_query_data.json"));
@@ -144,19 +145,21 @@ public class LocalAloudataFixtures {
             return accessDenied(envelope.isEmpty() ? container : envelope);
         }
         replacePlaceholder(envelope, OWNER_PLACEHOLDER, owner);
-        Map<String, Object> analysisView = asMap(asMap(envelope.get("data")).get("analysisView"));
-        Map<String, Object> columns = asMap(analysisView.get("columns"));
-        long total = longValue(analysisView.get("total"), columnRowCount(columns));
+        Map<String, Object> data = asMap(envelope.get("data"));
+        Map<String, Object> table = asMap(data.get("table"));
+        Map<String, Object> columns = asMap(table.get("columns"));
+        long total = longValue(data.get("total"), columnRowCount(columns));
         int pageSize = intValue(params.get("pageSize"), (int) total);
         int pageIndex = intValue(params.get("pageIndex"), 0);
         int from = Math.max(0, pageIndex * pageSize);
         int to = (int) Math.min(total, (long) from + pageSize);
         if (from > 0 || to < total) {
-            analysisView.put("columns", sliceColumns(columns, from, to));
+            table.put("columns", sliceColumns(columns, from, to));
         }
-        analysisView.put("total", total);
-        analysisView.put("pageSize", pageSize);
-        analysisView.put("pageIndex", pageIndex);
+        table.put("total", total);
+        table.put("pageSize", pageSize);
+        table.put("pageIndex", pageIndex);
+        data.put("total", total);
         return envelope;
     }
 
@@ -170,8 +173,8 @@ public class LocalAloudataFixtures {
         replacePlaceholder(source, OWNER_PLACEHOLDER, owner);
 
         Map<String, Object> sourceData = asMap(source.get("data"));
-        Map<String, Object> sourceView = asMap(sourceData.get("analysisView"));
-        Map<String, Object> sourceColumns = asMap(sourceView.get("columns"));
+        Map<String, Object> sourceTable = asMap(sourceData.get("table"));
+        Map<String, Object> sourceColumns = asMap(sourceTable.get("columns"));
 
         Set<String> requested = new LinkedHashSet<>();
         requested.addAll(nameSet(params.get("dimensions")));
@@ -221,7 +224,7 @@ public class LocalAloudataFixtures {
         for (String view : VIEW_ORDER) {
             Map<String, Object> candidate = asMap(container.get(view));
             if (candidate.isEmpty()) continue;
-            Set<String> available = asMap(asMap(asMap(candidate.get("data")).get("analysisView")).get("columns")).keySet();
+            Set<String> available = asMap(asMap(asMap(candidate.get("data")).get("table")).get("columns")).keySet();
             if (available.containsAll(requested)) {
                 return candidate;
             }

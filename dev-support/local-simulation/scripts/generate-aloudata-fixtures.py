@@ -13,7 +13,8 @@
 报文结构严格对齐真实 Aloudata 响应（实测自 demo 租户）：
   - 顶层固定为 data / success / code / errorMsg / detailErrorMsg / traceId，code 是字符串 "200"
   - 视图详情的 metrics/dimensions 是**字符串数组**，展示名单独放在 displayNameMap
-  - 结果查询是列式 data.analysisView.columns = {列名: [{value, flag, count}]}
+  - 结果查询是列式 data.table.columns = {列名: [{value, flag, count}]}（与官方「指标视图结果查询」一致，
+    另含 data.metas / data.queryId / data.warning）
 
 用法：
     python3 generate-aloudata-fixtures.py [--out <dir>]
@@ -390,8 +391,23 @@ def cell(value) -> dict:
     return {"value": value, "flag": 0, "count": 1}
 
 
+# 指标视图结果查询（analysisView/query）实测 DECIMAL 类型的指标（其余 measures 为 BIGINT）。
+DECIMAL_METRICS = {
+    "digo_trd_fund_amt_inout_cy_jjgr",   # 经纪个人客户场内公募非货当年净买入
+    "digo_trd_fund_amt_inout_cy_jjgr_pb",  # 经纪个人场内公募非货破冰客户当年净买入
+    "digo_fund_trd_amt_a566_fh_kgdb_jj0",  # 经纪个人场内公募非货交易量
+    "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr",  # 经纪个人场内公募非货加仓交易量
+}
+
+
 def query_data_payload(view: str) -> dict:
-    """指标视图结果查询：列式 data.analysisView.columns + data.metas。"""
+    """指标视图结果查询（analysisView/query）：列式 data.table.columns + data.metas + queryId/warning。
+
+    严格对齐官方文档（API-指标视图结果查询）：
+      - 真实响应包络为 {data:{queryId, warning, table:{columns:{列名:[{value,flag,count}]}}, metas:[...]}}
+      - metas[] 含 name / dataType(null) / dataTypeName / displaySize / schemaName / scale /
+        precision / tableName
+    """
     columns = VIEW_COLUMNS[view]
     rows = VIEW_ROWS[view]
     by_name = {m[0]: m[1] for m in METRICS}
@@ -404,30 +420,39 @@ def query_data_payload(view: str) -> dict:
         if column in by_name:
             metas.append({
                 "name": column,
-                "displayName": by_name[column],
-                "dataTypeName": "DECIMAL" if any(
-                    token in column for token in ("amt", "asset_in_")) and "cnt" not in column else "BIGINT",
-                "role": "measure",
+                "dataType": None,
+                "dataTypeName": "DECIMAL" if column in DECIMAL_METRICS else "BIGINT",
+                "displaySize": None,
+                "schemaName": "default",
+                "scale": None,
+                "precision": None,
+                "tableName": SOURCE_TABLE[view],
             })
         else:
             metas.append({
                 "name": column,
-                "displayName": next(d[1] for d in DIMENSIONS if d[0] == column),
+                "dataType": None,
                 "dataTypeName": by_dim.get(column, "VARCHAR"),
-                "role": "dimension",
+                "displaySize": None,
+                "schemaName": "default",
+                "scale": None,
+                "precision": None,
+                "tableName": SOURCE_TABLE[view],
             })
     return {
-        "analysisView": {"columns": column_map, "total": len(rows)},
+        "table": {"columns": column_map, "total": len(rows)},
         "metas": metas,
         "total": len(rows),
+        "queryId": f"mock-query-{view}",
+        "warning": None,
     }
 
 
 def metrics_query_payload() -> dict:
-    """指标数据查询：列式 data.table.columns（结构同 analysisView，键名不同）。"""
+    """指标数据查询（metrics/query）：与 analysisView/query 同构，真实也是 data.table.columns + metas。"""
     body = query_data_payload(ZB_VIEW)
     return {
-        "table": body["analysisView"],
+        "table": body["table"],
         "metas": body["metas"],
         "total": body["total"],
     }

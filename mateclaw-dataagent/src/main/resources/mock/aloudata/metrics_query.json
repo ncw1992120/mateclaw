@@ -584,111 +584,183 @@
     "metas": [
       {
         "name": "metric_time",
-        "displayName": "指标日期",
+        "dataType": null,
         "dataTypeName": "TIMESTAMP",
-        "role": "dimension"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "attribution_plan_id",
-        "displayName": "计划id",
+        "dataType": null,
         "dataTypeName": "VARCHAR",
-        "role": "dimension"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "attribution_strategy_id",
-        "displayName": "策略id",
+        "dataType": null,
         "dataTypeName": "VARCHAR",
-        "role": "dimension"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "platform_id",
-        "displayName": "子策略id",
+        "dataType": null,
         "dataTypeName": "VARCHAR",
-        "role": "dimension"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "channel",
-        "displayName": "触达渠道",
+        "dataType": null,
         "dataTypeName": "VARCHAR",
-        "role": "dimension"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_trd_fund_amt_inout_cy_jjgr",
-        "displayName": "经纪个人客户场内公募非货当年净买入",
+        "dataType": null,
         "dataTypeName": "DECIMAL",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt",
-        "displayName": "经纪个人客户场内公募非货当年净买入-转化客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_trd_fund_amt_inout_cy_jjgr_pb",
-        "displayName": "经纪个人场内公募非货破冰客户当年净买入",
+        "dataType": null,
         "dataTypeName": "DECIMAL",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_pbcnt_kgdb_a566_fh_jjgr",
-        "displayName": "经纪个人场内公募非货破冰客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0",
-        "displayName": "经纪个人场内公募非货交易量",
+        "dataType": null,
         "dataTypeName": "DECIMAL",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt",
-        "displayName": "经纪个人场内公募非货交易量-转化客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr",
-        "displayName": "经纪个人场内公募非货加仓交易量",
+        "dataType": null,
         "dataTypeName": "DECIMAL",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt",
-        "displayName": "经纪个人场内公募非货加仓交易量-转化客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_cust_asset_in",
-        "displayName": "入金客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_new_cust_asset_in",
-        "displayName": "新客入金数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_cnt_cust_code_new_brok",
-        "displayName": "新增客户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_cust_valid_new_yxh",
-        "displayName": "新增有效户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       },
       {
         "name": "digo_cust_asset_in10000",
-        "displayName": "万元入金户数",
+        "dataType": null,
         "dataTypeName": "BIGINT",
-        "role": "measure"
+        "displaySize": null,
+        "schemaName": "default",
+        "scale": null,
+        "precision": null,
+        "tableName": "cljd_zcl_zb"
       }
     ],
     "total": 6

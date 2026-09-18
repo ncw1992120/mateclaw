@@ -120,12 +120,12 @@ class LocalAloudataFixturesTest {
     void viewResultIsColumnarAndSupportsPaging() {
         Map<String, Object> body = fixtures.payload("analysis_view_query_data",
                 Map.of("viewName", "cljd_zcl_zb_view", "pageSize", 2, "pageIndex", 1), null);
-        Map<String, Object> analysisView =
-                (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("analysisView");
-        Map<String, Object> columns = (Map<String, Object>) analysisView.get("columns");
+        Map<String, Object> table =
+                (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("table");
+        Map<String, Object> columns = (Map<String, Object>) table.get("columns");
 
         assertEquals(18, columns.size(), "zb 视图应为 5 维度 + 13 指标");
-        assertEquals(6L, analysisView.get("total"));
+        assertEquals(6L, table.get("total"));
         for (Object column : columns.values()) {
             assertEquals(2, ((List<?>) column).size(), "分页后每列应为 2 行");
         }
@@ -140,12 +140,12 @@ class LocalAloudataFixturesTest {
     void wdViewProducesEighteenRowsAcrossNineteenColumns() {
         Map<String, Object> body = fixtures.payload("analysis_view_query_data",
                 Map.of("viewName", "cljd_zcl_wd_view", "pageSize", 100, "pageIndex", 0), null);
-        Map<String, Object> analysisView =
-                (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("analysisView");
-        Map<String, Object> columns = (Map<String, Object>) analysisView.get("columns");
+        Map<String, Object> table =
+                (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("table");
+        Map<String, Object> columns = (Map<String, Object>) table.get("columns");
 
         assertEquals(19, columns.size(), "wd 视图应为 13 维度 + 6 指标");
-        assertEquals(18L, analysisView.get("total"), "6 组 × 3 个 metric_id");
+        assertEquals(18L, table.get("total"), "6 组 × 3 个 metric_id");
         for (Object column : columns.values()) {
             assertEquals(18, ((List<?>) column).size());
         }
