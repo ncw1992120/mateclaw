@@ -13,14 +13,17 @@
 |---|---|
 | 前端是否直连 Aloudata？ | **否**。全部经 `mateclaw-dataagent` 后端中转，前端只感知 dataagent 的 `/dataagent/api/v1/**` 接口 |
 | 「字段名称默认值」是不是一个独立接口？ | **不是**。它就是 `GET /v1/datasources/{id}/analysis-views/{viewName}/fields`，前端按 `displayName` 生成默认值 |
-| Mock 应该切在哪一层？ | **`AloudataApiClient.callWithParams`**（`@Profile("local-mock")` + `@Primary` 覆写），一处收口覆盖全部 7 个上游端点 |
-| 需要 mock 几个上游端点？ | **7 个**：`analysis_view_tree` / `analysis_view_list` / `analysis_view_query_by_name` / `metric_batch_detail` / `dimension_list` / `analysis_view_query_data` / `metrics_query` |
-| mock 报文格式依据 | **真实 Aloudata 实测响应**（§6 附实测样本；夹具由脚本按同一结构生成） |
+| Mock 应该切在哪一层？ | **`AloudataApiClient#send`**（`@Profile("local-mock")` + `@Primary`），**请求构建仍走真实 `prepare()`**，一处收口覆盖全部上游端点 |
+| 本地与正式的差异是什么？ | **只有 ip:port**。默认（`ALOUDATA_MOCK=on`）后端用真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务：路径、query/body、请求方式、状态码、业务码全部一致；不起服务则用 `ALOUDATA_MOCK=embed` 走内置夹具 |
+| 需要 mock 几个上游端点？ | **7 个业务端点**由夹具覆盖（`analysis_view_tree` / `analysis_view_list` / `analysis_view_query_by_name` / `metric_batch_detail` / `dimension_list` / `analysis_view_query_data` / `metrics_query`）；本地 HTTP 服务另注册 11 条 anymetrics + semantic 路由（含 `metrics/list` / `dimensionAlld` / `category/list` / `dimension/detail`） |
+| 本地会不会掩盖真机问题？ | **不会**（这是本轮重点）：请求方式配错 → 405、端点未注册 → `SM_04_0004`、视图无权限 → `SM_02_0038`、`filters` 用了结构化对象 → `SM99002`，本地一律复现真实失败形状 |
+| mock 报文格式依据 | **真实 Aloudata 实测响应**（§6 附实测样本；夹具由脚本按同一结构生成，Java 与 Python 两侧共用同一批夹具） |
 | `queryByName` 的 `metrics`/`dimensions` 形状 | **已实测定论：字符串数组**（`["AUM", ...]`），展示名单独在 `data.displayNameMap`。本仓 `listFields` 的读法正确，`getByName` 的 `mapList` 是 bug（详情接口会 500），已修，见 §8-P0-1 |
 | 上游 `id` 与 `viewName` 的关系 | 真实 `id` 是 **int**（实测 `824`），`viewName` 是名称（实测 `cs202609161430`）→ **两者不相等**，§8-P0-2 的坑实测存在 |
 | 是否零代码改动？ | 否。需要修 `getByName` 的字符串数组解析（P0-1）；P0-3 已在 mock 层消除（owner 跟随数据源认证值） |
 
-**非目标**：不改动真实 Aloudata 调用路径的默认行为（未激活 `local-mock` 时该 Bean 不会被创建）；不引入 WireMock/Hoverfly 等外部进程；不模拟登录、工作区、权限体系（这些走本地真实后端）。
+**非目标**：不改动真实 Aloudata 调用路径的默认行为（未激活 `local-mock` 时该 Bean 不会被创建）；不模拟登录、工作区、权限体系（这些走本地真实后端）。
+**保真目标（本轮新增）**：本地 mock 必须与正式"只差 ip:port"——接口路径、参数名、请求方式、参数校验、失败码全部一致，不允许用"宽松兜底"制造本地假绿。
 
 ---
 
@@ -38,9 +41,13 @@
   ├─ AloudataAnalysisViewServiceImpl   ← 目录 / 列表 / 字段 / 详情
   ├─ AloudataAnalysisViewAdapter       ← 草稿预览取数、数据集字段描述
   ▼
-  └─ AloudataApiClient.callWithParams(endpointName, config, params)
-       ▼  ← ★ Mock 切点：覆写这里，按 endpointName 返回内置报文
-     真实 Aloudata（anymetrics :8083 / semantic :8085）
+  └─ AloudataApiClient
+       ├─ prepare(endpointName, config, params)   ← ★ 唯一的请求构建逻辑（默认值/校验/QUERY|BODY 分发/拼 URL+方法）
+       └─ send(prepared)
+            ▼  ← ★ Mock 切点：只接管「发送」这一步
+           ├─ 方案 A（默认）：真实 RestTemplate 发 HTTP → http://127.0.0.1:18081（仅 ip:port 不同）
+           ├─ 方案 B（embed）：LocalAloudataFixtures 直接返回内置夹具
+           └─ 生产：真实 Aloudata（anymetrics :8083 / semantic :8085）
 ```
 
 ### 1.1 前端动作 → dataagent 接口 → 上游端点
@@ -380,22 +387,28 @@ target      = userEdited ? prevTarget : defaultTargetOf(field)
 
 ### 5.1 切面候选对比
 
-| 方案 | 做法 | 覆盖度 | mock 报文格式 | 是否锻炼真实逻辑 | 结论 |
+| 方案 | 做法 | 覆盖度 | 请求保真度 | 是否锻炼真实逻辑 | 结论 |
 |---|---|---|---|---|---|
-| A. 覆写 `AloudataApiClient.callWithParams` | `@Profile("local-mock") @Primary` 子类，按 `endpointName` 返回内置报文 | 全 6 端点一处收口 | **真实上游格式** | ✅ `flattenTree`/`listFields` 聚合/`rows` 容错全跑 | ★ **推荐** |
-| B. 替换 `AloudataAnalysisViewService` 实现 | mock 直接返回 DTO | 需同时替换 Adapter + `AloudataService`，3 个类 | dataagent DTO 格式（非上游格式） | ❌ 绕过聚合逻辑 | 备选 |
-| C. WireMock 模拟上游 | 数据源 host 指向 18081 | 需补 mapping，且缺 `analysisview/list` | 真实上游格式 | ✅ | 本次不采用（要起外部进程） |
+| A. 本地 HTTP mock 服务（`aloudata-mock-server.py`） | 后端**不启用** mock 类，数据源 host 指向 `127.0.0.1:18081`，真实 `RestTemplate` 发 HTTP | 11 个端点（含 anymetrics + semantic） | ★★★ 路径/方法/query/body/状态码全真，**只有 ip:port 不同** | ✅ 全链路真跑 | ★ **推荐（默认 `ALOUDATA_MOCK=on`）** |
+| B. 覆写 `send(PreparedRequest)` 返回内置夹具 | `@Profile("local-mock") @Primary` 子类，**复用真实 `prepare()`** 构建请求后只把"发送"换成夹具 | 全端点一处收口 | ★★ 参数/校验/URL 全真，但不发 HTTP | ✅ `flattenTree`/`listFields` 聚合/`rows` 容错全跑 | ★ **零依赖兜底（`ALOUDATA_MOCK=embed`）** |
+| C. 替换 `AloudataAnalysisViewService` 实现 | mock 直接返回 DTO | 需同时替换 Adapter + `AloudataService`，3 个类 | ✗ 绕过参数构建与校验 | ❌ 绕过聚合逻辑 | 不采用 |
+| D. WireMock 静态 mapping | 数据源 host 指向 18081 | 缺 `analysisview/list` 等 mapping，静态响应无分页/筛选 | ★★★ | ✅ | 不采用（无法做参数感知，已由方案 A 的脚本替代） |
 
-采用 **方案 A**。理由：mock 报文就是真实 Aloudata 报文，能同时验证 `flattenTree` 的树解析、`listFields` 的三段聚合、`rows()` 的行式/列式容错；且新增视图只需加一份 JSON。
+采用 **A（默认）+ B（兜底）**。两者的共同点（也是本方案的核心约定）：
+
+1. **请求构建只有一份代码**：`AloudataApiClient#prepare()`（端点声明 → 默认值 → 必填/枚举校验 → HEADER/QUERY/BODY 分发 → 拼 URL + HTTP 方法）。A、B 与真实调用都走它，因此本地不会掩盖「参数名写错 / 请求方式配错 / 必填缺失 / 请求体形状错误」。
+2. **服务端只替换"数据来源"**：A 由 Python 脚本按真实契约应答，B 由 `LocalAloudataFixtures` 直接吐夹具。
+3. **失败形状也必须真**：未知端点、错误请求方式、未授权视图、非法 `filters` 形状，本地一律复现真实业务码（`SM_04_0004` / 405 / `SM_02_0038` / `SM99002`），不伪装成"成功但无数据"。
 
 ### 5.2 文件布局
 
 ```
 mateclaw-dataagent/src/main/java/vip/mate/dataagent/aloudata/local/
 ├── LocalAloudataApiClient.java          # @Profile("local-mock") @Primary extends AloudataApiClient
+│                                        # 仅覆写 send()：配了 ALOUDATA_MOCK_SERVER 就真发 HTTP（改写 host:port），否则吐夹具
 └── LocalAloudataFixtures.java           # 按 endpointName 读取 classpath fixture 并做事后处理
 
-mateclaw-dataagent/src/main/resources/mock/aloudata/
+mateclaw-dataagent/src/main/resources/mock/aloudata/     # 夹具唯一来源，A/B 共用
 ├── analysis_view_tree.json
 ├── analysis_view_list.json
 ├── analysis_view_query_by_name.json     # 两个视图的详情，按 viewName 索引
@@ -403,6 +416,12 @@ mateclaw-dataagent/src/main/resources/mock/aloudata/
 ├── dimension_list.json
 ├── analysis_view_query_data.json        # 按 viewName 索引结果集
 └── metrics_query.json
+
+dev-support/local-simulation/scripts/
+├── aloudata-mock-server.py              # ★ 本地 HTTP mock 服务（方案 A），读同一批夹具
+└── generate-aloudata-fixtures.py        # 从 generated_cljd_zcl.sql 生成夹具
+
+docs/策略解读/restart-dataagent-backend.sh  # ALOUDATA_MOCK=on 自动拉起 mock 服务并注入 ALOUDATA_MOCK_SERVER
 ```
 
 ### 5.3 代码骨架（已落地）
@@ -416,49 +435,58 @@ mateclaw-dataagent/src/main/resources/mock/aloudata/
 public class LocalAloudataApiClient extends AloudataApiClient {
 
     private final LocalAloudataFixtures fixtures;
+    private final String mockServerUrl;   // ALOUDATA_MOCK_SERVER，如 http://127.0.0.1:18081
 
-    public LocalAloudataApiClient(AloudataEndpointService endpointService,
-                                 LocalAloudataFixtures fixtures) {
-        super(endpointService);
-        this.fixtures = fixtures;
-        log.warn("★ local-mock 已启用：...");
-    }
-
+    /** 只接管「把已构建好的请求发出去」这一步；prepare() 仍是真实实现。 */
     @Override
-    public ResponseEntity<Map> callWithParams(String endpointName, AloudataConfigDTO config,
-                                              Map<String, Object> params) {
-        return ResponseEntity.ok(fixtures.payload(endpointName, params, config.getAuthValue()));
-    }
-```
-
-    /** 少数调用方走不带参数规范的 call(...)，同样短路，避免漏网打真上游。 */
-    @Override
-    public ResponseEntity<Map> call(String endpointName, AloudataConfigDTO config,
-                                   Map<String, String> pathVariables, Object requestBody) {
-        return ResponseEntity.ok(fixtures.payload(endpointName, Map.of()));
+    protected ResponseEntity<Map> send(PreparedRequest request) {
+        if (!mockServerUrl.isEmpty()) {
+            // 方案 A：真实 HTTP，仅把 scheme://host:port 换成本地 mock 服务
+            String url = mockServerUrl + URI.create(request.url()).getRawPath()
+                    + query(request.url());
+            return exchange(url, request.method(), new HttpEntity<>(bodyOrNull(request), request.headers()));
+        }
+        // 方案 B：内置夹具（参数已由真实 prepare() 分发完毕）
+        Map<String, Object> params = new LinkedHashMap<>(request.queryParams());
+        params.putAll(request.bodyParams());
+        return ResponseEntity.ok(fixtures.payload(request.endpointName(), params, authValue(request)));
     }
 }
 ```
 
+`AloudataApiClient` 为此新增了 `prepare()`（protected）与 `send()`（protected），`callWithParams` / `call` 都改为
+`prepare → send`；`exchange(url, method, entity)` 是最底层发送口，供 mock 改写 host:port 后复用。
+
 `LocalAloudataFixtures#payload` 的职责：
 
 1. 按 `endpointName` 选 fixture 文件；
-2. 按 `params` 做 **参数感知过滤**：
-   - `analysis_view_query_by_name` / `analysis_view_query_data`：按 `viewName` 选视图；未知 viewName → 返回 `{"code":"SM_02_0038","success":false,"message":"用户&资源没有权限"}`
+2. 按 `params`（**已由真实 `prepare()` 分发完毕**的 QUERY + BODY 参数）做参数感知处理：
+   - `analysis_view_query_by_name` / `analysis_view_query_data`：按 `viewName` 选视图；未知 viewName → `{"code":"SM_02_0038","success":false,"errorMsg":"用户&资源没有权限"}`
    - `metric_batch_detail`：按 `metricNames` 过滤（`params` 里是重复 query 参数展开后的 `List`，或单值 `String`，两种都要兼容）
-   - `analysis_view_list`：按 `keyword` 做包含匹配（`_` 视为全量）；`onlyMine` 不进 params，仅由 dataagent 侧过滤，mock 只管返回带 `basicAttributes.owner` 的全量
-   - `analysis_view_query_data` / `metrics_query`：按 `pageSize` / `pageIndex` 做真分页，`rows` 超限时截断并置 `last=false`
+   - `analysis_view_list`：按 `keyword` 做包含匹配（`_` 视为全量）+ 按 `pageNumber`/`pageSize` 分页
+   - `dimension_list`：按 body 的 `pager{pageNumber,pageSize}` 分页
+   - `analysis_view_query_data`：按 `pageSize` / `pageIndex` 做真分页
+   - `metrics_query`：按请求字段反查视图 → 列投影 → **按表达式字符串解析筛选** → `limit`/`offset`
+   - 未注册端点：返回 `SM_04_0004` 失败包络（不伪装成"成功但无数据"）
 3. 返回 `LinkedHashMap`（保序），键结构与真实报文一致。
 
 > 实现时务必返回 **可变** `Map`（`LinkedHashMap`），不要把 fixture 直接反序列化成 `Map.of(...)`，避免下游 `putAll` 抛 `UnsupportedOperationException`。
 
 ### 5.4 开关与启动
 
-**方式一（推荐）：用日常启动脚本，mock 默认开** —— `docs/策略解读/restart-dataagent-backend.sh` 已支持 `ALOUDATA_MOCK` 开关：
+**方式一（推荐）：用日常启动脚本，本地 mock 默认开** —— `docs/策略解读/restart-dataagent-backend.sh` 支持 `ALOUDATA_MOCK` 三态：
 
 ```bash
-./docs/策略解读/restart-dataagent-backend.sh                      # 默认 pgsql,local-mock，上游全走 mock
-ALOUDATA_MOCK=off ./docs/策略解读/restart-dataagent-backend.sh     # 切回真实 Aloudata 上游
+./docs/策略解读/restart-dataagent-backend.sh                   # 默认 on：自动拉起本地 mock 服务(127.0.0.1:18081)，只换 ip:port
+ALOUDATA_MOCK=embed ./docs/策略解读/restart-dataagent-backend.sh  # 不起 HTTP 服务，走内置夹具（零依赖）
+ALOUDATA_MOCK=off ./docs/策略解读/restart-dataagent-backend.sh    # 切回真实 Aloudata 上游
+ALOUDATA_MOCK_PORT=18082 ./docs/策略解读/restart-dataagent-backend.sh  # 换 mock 服务端口
+```
+
+单独起 mock 服务（前端联调或只想验证上游契约时）：
+
+```bash
+python3 dev-support/local-simulation/scripts/aloudata-mock-server.py --port 18081
 ```
 
 **方式二：手动指定 profile**
@@ -467,19 +495,35 @@ ALOUDATA_MOCK=off ./docs/策略解读/restart-dataagent-backend.sh     # 切回�
 # 数据源连接信息 + mock profile
 export DB_HOST=... DB_PORT=... DB_NAME=... DB_USERNAME=... DB_PASSWORD=...
 export SPRING_PROFILES_ACTIVE=pgsql,local-mock
+export ALOUDATA_MOCK_SERVER=http://127.0.0.1:18081   # 不设则退回内置夹具
 export AI_DASHSCOPE_API_KEY=sk-placeholder
 
 java -jar mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar
 ```
 
-启动日志应出现醒目 WARN 与夹具装载日志，用于确认 profile 与资源都生效：
+启动日志应出现醒目 WARN 与夹具装载日志，用于确认生效模式：
 
 ```
-WARN  v.m.d.aloudata.local.LocalAloudataApiClient - ★ local-mock 已启用：Aloudata 上游调用全部返回内置 mock 报文，不会发起任何真实 HTTP 请求
+# 方案 A：真实 HTTP 打到本地 mock 服务（只差 ip:port）
+WARN  v.m.d.aloudata.local.LocalAloudataApiClient - ★ local-mock 已启用（HTTP mock）：真实 HTTP 发送到 http://127.0.0.1:18081，仅 host:port 与正式不同
+# 方案 B：内置夹具
+WARN  v.m.d.aloudata.local.LocalAloudataApiClient - ★ local-mock 已启用（内置夹具）：请求构建与真实一致，HTTP 发送替换为内置夹具报文
 INFO  v.m.d.aloudata.local.LocalAloudataFixtures  - [local-mock] 已装载 Aloudata 夹具 mock/aloudata/analysis_view_tree.json
 ```
 
-每次调用还会打一行 `[local-mock] <endpointName> params=[...]`，便于观察走了哪条分支。
+每次调用会打一行含方法、端点路径与完整 URL 的日志，可直接与真实环境对账：
+
+```
+[local-mock] GET /anymetrics/api/v1/analysisview/queryByName -> http://127.0.0.1:18081/anymetrics/api/v1/analysisview/queryByName?viewName=cljd_zcl_zb_view
+[local-mock] POST /semantic/api/v1.1/metrics/query -> http://127.0.0.1:18081/semantic/api/v1.1/metrics/query
+[local-mock] GET /semantic/api/v1.1/analysisView/query -> http://127.0.0.1:18081/semantic/api/v1.1/analysisView/query?viewName=cljd_zcl_zb_view&pageIndex=0&pageSize=20&queryResultType=DATA
+```
+
+mock 服务端同样会打印收到的请求（路径 + query + body 摘要），两端日志一比即可确认契约：
+
+```
+[mock] POST /semantic/api/v1.1/metrics/query body={"metrics": "13 项", "dimensions": "5 项", "filters": ["[metric_time] = \"2026-09-01\""], "limit": 20, "offset": 0, "queryResultType": "DATA"}
+```
 
 前端：
 
@@ -502,9 +546,10 @@ python3 dev-support/local-simulation/scripts/generate-aloudata-fixtures.py
 2. 该数据源对当前工作区可见（`meta_shared=true` 或 `owner_id` = 当前用户）；
 3. 前端 `DatasetSourcePicker` 能在 `/v1/datasources` 里找到它。
 
-> 若确实想造一条专用 mock 数据源，注意 `host` / `port` / `connection_params` 在 local-mock 下**不参与网络请求**
-> （`callWithParams` 已被短路），保留只为让 `parseConfig` 走通；真正有语义的只有
-> `source_type`、`username`（tenantId）、`password`（auth-value）。
+> 若确实想造一条专用 mock 数据源，注意两种模式下 host/port 都不必指向本地：
+> 方案 A 会把已构建 URL 的 `scheme://host:port` 改写成 `ALOUDATA_MOCK_SERVER`，方案 B 直接短路不发请求。
+> 因此**现有指向真实域名的数据源可原样使用**，切回 `ALOUDATA_MOCK=off` 即打真实域名。
+> 真正有语义的字段是 `source_type`、`username`（tenantId）、`password`（auth-value）。
 
 真实环境对照（仅本地探测用，mock 下不生效）：
 
@@ -989,19 +1034,28 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
 
 `POST /semantic/api/v1.1/metrics/query`（带筛选时走此路径；`AloudataAnalysisViewQueryCompiler` 生成的 body）
 
-请求示例：
+请求示例（**filters 必须是表达式字符串数组**，见下方「⚠️ 契约」）：
 
 ```json
 {
-  "metrics": ["digo_cust_asset_in", "digo_new_cust_asset_in"],
+  "metrics": ["digo_trd_fund_amt_inout_cy_jjgr", "digo_cust_asset_in"],
   "dimensions": ["metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel"],
-  "filters": [{ "field": "channel", "operator": "eq", "value": "APP" }],
-  "timeConstraint": "(metric_time >= '2026-09-01' AND metric_time <= '2026-09-30')",
+  "filters": ["[channel] = \"APP\"", "([metric_time] >= \"2026-09-01\" AND [metric_time] <= \"2026-09-30\")"],
+  "timeConstraint": "(((dateTrunc(['metric_time'], \"DAY\")) >= (DATEADD(DateTrunc(TODAY(), \"DAY\"), -(364), \"DAY\")))) AND ...",
   "limit": 20,
   "offset": 0,
   "queryResultType": "DATA"
 }
 ```
+
+> ⚠️ **契约（demo 实测三连，勿改回结构化）**：
+> - 结构化 `filters: [{field, operator, value}]` → ❌ `SM99002 系统异常`；
+> - 表达式串 `filters: ["[维度] = \"值\""]` → ✅ 出数据；
+> - 支持 `= <> > >= < <= IN(...) NotIn(...) startWith contains` + `AND/OR/()`；维度可写 `[dim]` 或 `['dim']`。
+>
+> 因此 `AloudataAnalysisViewQueryCompiler` 直接产出表达式串（`eq → [f] = "v"`、`in → [f] IN ("a","b")`、
+> `between → ([f] >= a AND [f] <= b)`；`is_null` / `is_not_null` 无法等价表达 → 直接拒绝，不静默丢弃）。
+> 本地 mock 同步该契约：收到结构化 filters 一样返回 `SM99002`，避免本地假绿。
 
 响应（真实结构 `data.table.columns`）：
 
@@ -1029,7 +1083,10 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
 }
 ```
 
-> mock 侧建议实现**最简筛选语义**：只处理 `operator=eq` 且 `field` 属维度的条件（对 `analysis_view_query_data` 的数据行做 JVM 内过滤），其余条件忽略并在响应 `message` 里保持 `null`。目标是让前端「预览」不报错、数据量随筛选变化可感知，**不需要**实现完整 SQL 语义。
+> mock 侧实现的筛选语义与真实表达式语法一致：解析 `[字段] 运算符 值`、`IN/NotIn`、`AND` 组合与括号，
+> 支持 `= <> > >= < <=`，对 `analysis_view_query_data` 的列式数据做 JVM 内过滤；
+> 实现位于 `LocalAloudataFixtures#parseConditions`（Java）与 `aloudata-mock-server.py#parse_conditions`（Python），两侧行为保持一致。
+> 目标是让前端「预览」与正式请求形状完全对齐、筛选结果可感知。
 
 ---
 
@@ -1233,6 +1290,32 @@ curl -s "${H[@]}" -H 'Content-Type: application/json' -X POST "$BASE/v1/dataset-
   -d '{"sourceType":"ALOUDATA_ANALYSIS_VIEW","datasourceId":"9001","sourceConfig":{"analysisViewId":"cljd_zcl_zb_view"},"filters":[],"limit":20}' \
   | jq '.data.rowCount, (.data.schema|length), (.data.rows[0]|keys|length)'
 # 期望：6 / 18 / 18
+
+# 6) 带筛选预览（走 metrics/query，filters 为表达式串）→ 3 行
+curl -s "${H[@]}" -H 'Content-Type: application/json' -X POST "$BASE/v1/dataset-composer/drafts/preview" \
+  -d '{"sourceType":"ALOUDATA_ANALYSIS_VIEW","datasourceId":"9001","sourceConfig":{"analysisViewId":"cljd_zcl_zb_view"},
+       "filters":[{"field":"metric_time","role":"dimension","operator":"eq","value":"2026-09-01"}],"limit":20}' \
+  | jq '.data.rowCount, (.data.rows|length)'
+# 期望：3 / 3（filters 也接受 op:"=" 简写）
+```
+
+**契约对账（方案 A：只差 ip:port）**
+
+```bash
+# 后端日志（方法 + 端点路径 + 完整 URL）
+grep '\[local-mock\]' logs/mateclaw.log | tail
+# mock 服务端日志（收到的路径 + query + body）
+[MOCK_LOG=/tmp/aloudata-mock-server-18081.log]   # 脚本启动时写在这里；手动起则看终端
+grep '\[mock\]' "$MOCK_LOG" | tail
+
+# 直接对 mock 服务断言真实契约（不经过后端）
+H=(-H tenant-id:tn_27436 -H auth-type:UID -H auth-value:466909774693269504)
+curl -s "${H[@]}" "http://127.0.0.1:18081/semantic/api/v1.1/analysisView/query?viewName=cljd_zcl_zb_view&pageSize=2&pageIndex=0&queryResultType=DATA" | jq '.code, .data.total'
+curl -s "${H[@]}" -X POST -H 'Content-Type: application/json' \
+  -d '{"metrics":["digo_cust_asset_in"],"dimensions":["channel"],"filters":["[channel] = \"APP\""],"limit":10,"queryResultType":"DATA"}' \
+  "http://127.0.0.1:18081/semantic/api/v1.1/metrics/query" | jq '.code, .data.total'
+# 请求方式不符 → HTTP 405；未注册端点 → HTTP 404
+curl -s -o /dev/null -w '%{http_code}\n' "${H[@]}" -X POST "http://127.0.0.1:18081/semantic/api/v1.1/analysisView/query"
 ```
 
 ### 9.2 前端人工验收（需硬刷新，避免缓存）

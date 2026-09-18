@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""Aloudata 本地 mock 服务：路径、参数、请求方式与真实环境完全一致，只有 ip:port 不同。
+
+用法：
+    python3 aloudata-mock-server.py [--port 18081] [--fixtures <夹具目录>]
+
+把数据源的语义层/产品层地址指向本机即可（connection_params）：
+    {"anymetricsHost": "http://127.0.0.1", "anymetricsPort": 18081,
+     "semanticHost": "http://127.0.0.1", "semanticPort": 18081, "authType": "UID"}
+然后**不再启用 local-mock profile**，后端会用真实的 AloudataApiClient 打到本服务。
+
+行为对齐真实服务（故意不"兜底"，避免本地假绿）：
+  * 请求方式不匹配 → 405；
+  * 必填参数缺失 → 400 + success=false；
+  * 未知视图 → SM_02_0038（无权限）；
+  * metrics/query 的 filters 必须是表达式字符串数组，结构化对象 → SM99002。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_FIXTURES = os.path.abspath(
+    os.path.join(HERE, "..", "..", "..", "mateclaw-dataagent", "src", "main", "resources", "mock", "aloudata")
+)
+
+ANYMETRICS = "/anymetrics/api/v1"
+SEMANTIC = "/semantic/api/v1.1"
+
+OWNER_PLACEHOLDER = "__OWNER__"
+DEFAULT_OWNER = "mock-uid-001"
+
+# 视图名 → 结果集夹具；顺序即 metrics/query 反查视图时的优先级
+VIEW_ORDER = ["cljd_zcl_zb_view", "cljd_zcl_wd_view"]
+
+CONDITION = re.compile(r"\['?([^'\]]+)'?\]\s*(<>|>=|<=|=|>|<|IN|NotIn)\s*(.+)", re.IGNORECASE)
+
+
+def load_fixture(name: str) -> dict:
+    path = os.path.join(FIXTURES_DIR, name)
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def envelope(data, code="200", success=True, error=None, trace_id="mock-trace"):
+    return {
+        "data": data,
+        "success": success,
+        "code": code,
+        "errorMsg": error,
+        "detailErrorMsg": error,
+        "traceId": trace_id,
+    }
+
+
+def replace_owner(node, owner):
+    if isinstance(node, dict):
+        for key, value in list(node.items()):
+            if value == OWNER_PLACEHOLDER:
+                node[key] = owner
+            else:
+                replace_owner(value, owner)
+    elif isinstance(node, list):
+        for item in node:
+            replace_owner(item, owner)
+    return node
+
+
+def as_int(value, fallback):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return fallback
+
+
+def paginate(items, page_number, page_size, one_based=True):
+    size = page_size if page_size and page_size > 0 else len(items)
+    number = max(1, page_number or 1)
+    start = min(len(items), (number - 1) * size if one_based else number * size)
+    end = min(len(items), start + size)
+    return items[start:end]
+
+
+def columns_to_rows(columns: dict) -> list:
+    size = max((len(v) for v in columns.values() if isinstance(v, list)), default=0)
+    rows = [{} for _ in range(size)]
+    for name, cells in columns.items():
+        if not isinstance(cells, list):
+            continue
+        for index, cell in enumerate(cells):
+            rows[index][name] = cell.get("value") if isinstance(cell, dict) and "value" in cell else cell
+    return rows
+
+
+def rows_to_columns(rows: list, names) -> dict:
+    return {
+        name: [{"value": row.get(name), "flag": 0, "count": 1} for row in rows]
+        for name in names
+    }
+
+
+def unquote_values(raw: str) -> list:
+    text = raw.strip()
+    if text.startswith("(") and text.endswith(")"):
+        text = text[1:-1]
+    values = []
+    for part in text.split(","):
+        value = part.strip()
+        if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        if value:
+            values.append(value.replace('\\"', '"'))
+    return values
+
+
+def parse_conditions(expression: str) -> list:
+    """解析 `[字段] 运算符 值`，支持 AND 组合与括号。"""
+    text = expression.strip()
+    while text.startswith("(") and text.endswith(")"):
+        text = text[1:-1].strip()
+    conditions = []
+    for clause in re.split(r"(?i)\s+AND\s+", text):
+        clause = clause.strip()
+        while clause.startswith("(") and clause.endswith(")"):
+            clause = clause[1:-1].strip()
+        if not clause:
+            continue
+        matched = CONDITION.match(clause)
+        if not matched:
+            return []
+        conditions.append((matched.group(1), matched.group(2).upper(), unquote_values(matched.group(3))))
+    return conditions
+
+
+def matches(actual, operator, values) -> bool:
+    text = "" if actual is None else str(actual)
+
+    def compare():
+        if not values:
+            return 0
+        try:
+            return (float(text) > float(values[0])) - (float(text) < float(values[0]))
+        except ValueError:
+            return (text > values[0]) - (text < values[0])
+
+    if operator == "=":
+        return len(values) == 1 and text == values[0]
+    if operator == "<>":
+        return len(values) == 1 and text != values[0]
+    if operator == ">":
+        return compare() > 0
+    if operator == ">=":
+        return compare() >= 0
+    if operator == "<":
+        return compare() < 0
+    if operator == "<=":
+        return compare() <= 0
+    if operator == "IN":
+        return text in values
+    if operator == "NOTIN":
+        return text not in values
+    return True
+
+
+def apply_filters(rows: list, filters) -> list:
+    for expression in filters or []:
+        conditions = parse_conditions(expression)
+        if not conditions:
+            continue
+        kept = []
+        for row in rows:
+            if all(matches(row.get(field), operator, values) for field, operator, values in conditions):
+                kept.append(row)
+        rows = kept
+    return rows
+
+
+def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
+    container = load_fixture("analysis_view_query_data.json")
+    wanted = set(requested_metrics) | set(requested_dimensions)
+    if not wanted:
+        return container[VIEW_ORDER[0]]
+    for view in VIEW_ORDER:
+        candidate = container.get(view) or {}
+        available = set(((candidate.get("data") or {}).get("table") or {}).get("columns", {}).keys())
+        if available and wanted.issubset(available):
+            return candidate
+    return container[VIEW_ORDER[0]]
+
+
+# --------------------------------------------------------------------- 端点实现
+
+
+def handle_tree_list(query, body, headers):
+    return replace_owner(load_fixture("analysis_view_tree.json"), headers.get("auth-value") or DEFAULT_OWNER)
+
+
+def handle_view_list(query, body, headers):
+    envelope_body = replace_owner(load_fixture("analysis_view_list.json"), headers.get("auth-value") or DEFAULT_OWNER)
+    data = envelope_body["data"]
+    items = data.get("data", [])
+    keyword = (query.get("keyword") or [""])[0].strip()
+    if keyword and keyword != "_":
+        needle = keyword.lower()
+        items = [
+            item for item in items
+            if needle in str(item.get("viewName", "")).lower() or needle in str(item.get("displayName", "")).lower()
+        ]
+    page_size = as_int((query.get("pageSize") or [None])[0], len(items))
+    page_number = as_int((query.get("pageNumber") or [None])[0], 1)
+    data["data"] = paginate(items, page_number, page_size)
+    data["pageNumber"] = page_number
+    data["pageSize"] = page_size
+    data["totalPageSize"] = len(items)
+    return envelope_body
+
+
+def handle_query_by_name(query, body, headers):
+    view_name = (query.get("viewName") or [None])[0]
+    container = load_fixture("analysis_view_query_by_name.json")
+    payload = container.get(view_name)
+    if not payload:
+        return envelope(None, code="SM_02_0038", success=False, error="用户&资源没有权限",
+                        trace_id="mock-trace-access-denied")
+    return replace_owner(payload, headers.get("auth-value") or DEFAULT_OWNER)
+
+
+def handle_analysis_view_query(query, body, headers):
+    view_name = (query.get("viewName") or [None])[0]
+    container = load_fixture("analysis_view_query_data.json")
+    payload = container.get(view_name)
+    if not payload:
+        return envelope(None, code="SM_02_0038", success=False, error="用户&资源没有权限",
+                        trace_id="mock-trace-access-denied")
+    payload = replace_owner(payload, headers.get("auth-value") or DEFAULT_OWNER)
+    data = payload.setdefault("data", {})
+    table = data.setdefault("table", {})
+    columns = table.get("columns", {})
+    total = data.get("total") or max((len(v) for v in columns.values() if isinstance(v, list)), default=0)
+    page_size = as_int((query.get("pageSize") or [None])[0], total)
+    page_index = as_int((query.get("pageIndex") or [None])[0], 0)
+    start = max(0, page_index * page_size)
+    end = min(total, start + page_size)
+    if start > 0 or end < total:
+        table["columns"] = {name: cells[start:end] for name, cells in columns.items() if isinstance(cells, list)}
+    table["total"] = total
+    table["pageSize"] = page_size
+    table["pageIndex"] = page_index
+    data["total"] = total
+    return payload
+
+
+def handle_metrics_query(query, body, headers):
+    metrics = body.get("metrics") or []
+    dimensions = body.get("dimensions") or []
+    filters = body.get("filters") or []
+    if any(not isinstance(item, str) for item in filters):
+        return envelope(None, code="SM99002", success=False, error="系统异常: filters 仅支持表达式字符串数组",
+                        trace_id="mock-trace-SM99002")
+
+    source = resolve_view_for_metrics(metrics, dimensions)
+    source = replace_owner(source, headers.get("auth-value") or DEFAULT_OWNER)
+    source_data = source.get("data") or {}
+    source_columns = ((source_data.get("table") or {}).get("columns")) or {}
+    requested = [name for name in list(dimensions) + list(metrics)]
+
+    projected = {name: cells for name, cells in source_columns.items() if not requested or name in requested}
+    rows = apply_filters(columns_to_rows(projected), filters)
+
+    offset = as_int(body.get("offset"), 0)
+    limit = as_int(body.get("limit"), len(rows))
+    rows = rows[offset:offset + limit] if limit >= 0 else rows[offset:]
+
+    metas = source_data.get("metas") or []
+    kept_metas = [meta for meta in metas if not requested or meta.get("name") in requested]
+    return envelope({"table": {"columns": rows_to_columns(rows, projected.keys()), "total": len(rows)},
+                     "metas": kept_metas, "total": len(rows)}, trace_id=source.get("traceId", "mock-trace"))
+
+
+def handle_batch_detail(query, body, headers):
+    payload = replace_owner(load_fixture("metric_batch_detail.json"), headers.get("auth-value") or DEFAULT_OWNER)
+    requested = set(query.get("metricNames") or [])
+    if not requested:
+        return payload
+    payload["data"] = [item for item in payload.get("data", []) if item.get("metricName") in requested]
+    return payload
+
+
+def handle_dimension_list(query, body, headers):
+    payload = replace_owner(load_fixture("dimension_list.json"), headers.get("auth-value") or DEFAULT_OWNER)
+    data = payload["data"]
+    items = data.get("data", [])
+    pager = body.get("pager") or {}
+    page_size = as_int(pager.get("pageSize"), len(items))
+    page_number = as_int(pager.get("pageNumber"), 1)
+    page = paginate(items, page_number, page_size)
+    data["data"] = page
+    data["pageNumber"] = page_number
+    data["pageSize"] = page_size
+    data["total"] = len(items)
+    data["hasNext"] = (page_number * page_size) < len(items)
+    return payload
+
+
+def handle_metric_list(query, body, headers):
+    payload = replace_owner(load_fixture("metric_batch_detail.json"), headers.get("auth-value") or DEFAULT_OWNER)
+    data = payload.get("data", [])
+    page_size = as_int((query.get("pageSize") or [None])[0], len(data))
+    page_number = as_int((query.get("pageNumber") or [None])[0], 1)
+    return envelope({"total": len(data), "pageNumber": page_number, "pageSize": page_size,
+                     "hasNext": page_number * page_size < len(data),
+                     "data": paginate(data, page_number, page_size)})
+
+
+def handle_dimension_all(query, body, headers):
+    payload = replace_owner(load_fixture("dimension_list.json"), headers.get("auth-value") or DEFAULT_OWNER)
+    return envelope(payload.get("data", {}).get("data", []))
+
+
+def handle_category_list(query, body, headers):
+    return envelope([])
+
+
+def handle_dimension_detail(query, body, headers):
+    return envelope(None)
+
+
+ROUTES = {
+    ("GET", f"{ANYMETRICS}/analysisview/treeList"): handle_tree_list,
+    ("GET", f"{ANYMETRICS}/analysisview/list"): handle_view_list,
+    ("GET", f"{ANYMETRICS}/analysisview/queryByName"): handle_query_by_name,
+    ("GET", f"{ANYMETRICS}/metrics/batchDetail"): handle_batch_detail,
+    ("GET", f"{ANYMETRICS}/metrics/list"): handle_metric_list,
+    ("GET", f"{ANYMETRICS}/metrics/dimensionAll"): handle_dimension_all,
+    ("POST", f"{ANYMETRICS}/dimension/list"): handle_dimension_list,
+    ("GET", f"{ANYMETRICS}/dimension/detail"): handle_dimension_detail,
+    ("GET", f"{ANYMETRICS}/category/list"): handle_category_list,
+    ("GET", f"{SEMANTIC}/analysisView/query"): handle_analysis_view_query,
+    ("POST", f"{SEMANTIC}/metrics/query"): handle_metrics_query,
+}
+
+
+def summarize_body(body: dict) -> str:
+    """请求体摘要：列表字段只报条数，筛选/分页等关键字段原样打印，便于与正式请求对账。"""
+    summary = {}
+    for key, value in body.items():
+        if isinstance(value, list):
+            summary[key] = ("%d 项" % len(value)) if key in ("metrics", "dimensions") else value
+        else:
+            summary[key] = value
+    return json.dumps(summary, ensure_ascii=False)
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        sys.stderr.write("[mock] %s %s\n" % (self.command, self.path))
+
+    def _send(self, status, payload):
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json;charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _read_body(self) -> bytes:
+        """读取请求体：RestTemplate 发 Map body 时用 chunked 编码且不带 Content-Length。"""
+        encoding = (self.headers.get("Transfer-Encoding") or "").lower()
+        if "chunked" in encoding:
+            chunks = []
+            while True:
+                line = self.rfile.readline().strip().split(b";")[0]
+                size = int(line or b"0", 16)
+                if size == 0:
+                    self.rfile.readline()
+                    break
+                chunks.append(self.rfile.read(size))
+                self.rfile.read(2)
+            return b"".join(chunks)
+        length = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(length) if length else b""
+
+    def _handle(self):
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        raw = self._read_body()
+        body = json.loads(raw) if raw else {}
+        detail = []
+        if query:
+            detail.append("query=" + json.dumps({k: v[0] if len(v) == 1 else v for k, v in query.items()}, ensure_ascii=False))
+        if body:
+            detail.append("body=" + summarize_body(body))
+        if detail:
+            sys.stderr.write("[mock] %s %s %s\n" % (self.command, parsed.path, " ".join(detail)))
+        handler = ROUTES.get((self.command, parsed.path))
+        if handler is None:
+            methods_for_path = sorted({method for method, path in ROUTES if path == parsed.path})
+            if methods_for_path:
+                self._send(405, envelope(None, code="SM_04_0001", success=False,
+                                         error=f"不支持的请求方式 {self.command} {parsed.path}，"
+                                               f"该端点仅支持 {methods_for_path}"))
+            else:
+                self._send(404, envelope(None, code="SM_04_0004", success=False,
+                                         error=f"未 mock 的端点 {self.command} {parsed.path}"))
+            return
+        self._send(200, handler(query, body, self.headers))
+
+    do_GET = _handle
+    do_POST = _handle
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Aloudata 本地 mock 服务（路径/参数/请求方式与真实一致）")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("MOCK_PORT", "18081")))
+    parser.add_argument("--fixtures", default=os.environ.get("MOCK_FIXTURES", DEFAULT_FIXTURES))
+    parser.add_argument("--host", default=os.environ.get("MOCK_HOST", "127.0.0.1"))
+    args = parser.parse_args()
+
+    FIXTURES_DIR = os.path.abspath(args.fixtures)
+    if not os.path.isdir(FIXTURES_DIR):
+        sys.exit("夹具目录不存在: %s" % FIXTURES_DIR)
+
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print("Aloudata mock 服务已启动: http://%s:%d（夹具目录 %s）" % (args.host, args.port, FIXTURES_DIR))
+    print("已注册端点：")
+    for method, path in ROUTES:
+        print("  %-4s %s" % (method, path))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        server.server_close()

@@ -28,6 +28,7 @@ import vip.mate.dataagent.dataset.http.HttpApiDatasetDefinition;
 import vip.mate.dataagent.dataset.file.FileDatasetAdapter;
 import vip.mate.dataagent.dataset.file.StoredFileRef;
 import vip.mate.dataagent.dataset.AloudataAnalysisViewAdapter;
+import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
 import vip.mate.dataagent.service.AloudataService;
@@ -84,7 +85,12 @@ public class DatasetComposerController {
         Map<String, Object> config = request.sourceConfig == null ? Map.of() : request.sourceConfig;
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
         query.setMetrics(strings(config.get("metrics"))); query.setDimensions(strings(config.get("dimensions")));
-        query.setFilters((request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream().map(f -> "[" + f.get("field") + "] " + String.valueOf(f.getOrDefault("operator", "eq")).toUpperCase(Locale.ROOT) + " (\"" + String.valueOf(f.get("value")).replace("\"", "\\\"") + "\")").toList());
+        // filters 必须是 Aloudata 表达式字符串（如 ["[region] = \"华东\""]）；统一由
+        // AloudataFilterExpressions 生成 —— 历史的 `[f] EQ ("v")` 与结构化对象在真实服务都会失败。
+        query.setFilters((request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream()
+                .map(AloudataFilterExpressions::of)
+                .filter(Objects::nonNull)
+                .toList());
         query.setLimit(Math.min(request.limit == null ? 20 : request.limit, 100)); query.setOffset(0);
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(longId(request.datasourceId), query);
         List<Map<String, Object>> rows = response == null || response.getData() == null || response.getData().getRows() == null ? List.of() : response.getData().getRows();

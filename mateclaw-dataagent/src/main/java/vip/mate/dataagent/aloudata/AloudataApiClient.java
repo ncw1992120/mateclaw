@@ -75,10 +75,13 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         HttpMethod method = resolveMethod(endpointName);
-        HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
+        Map<String, Object> body = requestBody instanceof Map<?, ?> map ? asObjectMap(map) : Map.of();
+        return send(new PreparedRequest(endpointName, method, path, url, Map.of(), body, headers));
+    }
 
-        log.debug("调用 Aloudata API: {} {}", method, url);
-        return restTemplate.exchange(url, method, entity, Map.class);
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asObjectMap(Map<?, ?> source) {
+        return (Map<String, Object>) source;
     }
 
     /**
@@ -99,8 +102,26 @@ public class AloudataApiClient {
      * @param params       参数 Map，key 为参数名，value 为参数值
      * @return 原始响应体
      */
+    /**
+     * 基于参数规范的 API 调用
+     * <p>
+     * 与正式调用唯一的分叉点：本方法只负责「按端点声明把参数变成一次 HTTP 请求」，
+     * 真正的发送在 {@link #send(PreparedRequest)}；本地 mock 复用的正是这一段，
+     * 因此 mock 与正式在路径、参数、请求方式、参数校验上完全一致，只有 host:port 不同。
+     */
     public ResponseEntity<Map> callWithParams(String endpointName, AloudataConfigDTO config,
                                               Map<String, Object> params) {
+        return send(prepare(endpointName, config, params));
+    }
+
+    /**
+     * 按端点声明构造请求：默认值填充 → 必填/枚举校验 → 按 paramLocation 分发 → 拼 URL。
+     * <p>
+     * 这是「一次 Aloudata 调用」的唯一契约来源；本地 mock 与真实调用共用，避免 mock 与
+     * 正式环境在参数名、请求方式、参数校验上出现漂移（历史 bug 的主要来源）。
+     */
+    protected PreparedRequest prepare(String endpointName, AloudataConfigDTO config,
+                                      Map<String, Object> params) {
         ApiEndpoint endpoint = endpointService.getEndpoint(endpointName);
         if (endpoint == null) {
             throw new IllegalArgumentException("未定义的 API 端点: " + endpointName);
@@ -123,7 +144,8 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         Map<String, String> pathVariables = new LinkedHashMap<>();
-        List<String[]> queryParams = new ArrayList<>();
+        List<String[]> rawQueryParams = new ArrayList<>();
+        Map<String, Object> queryParams = new LinkedHashMap<>();
         Map<String, Object> bodyParams = new LinkedHashMap<>();
 
         for (ApiParam paramDef : endpoint.getRequestParams()) {
@@ -143,19 +165,20 @@ public class AloudataApiClient {
                     if (value instanceof Collection<?> collection) {
                         for (Object item : collection) {
                             if (item != null) {
-                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                                rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
                             }
                         }
                     } else if (value.getClass().isArray()) {
                         for (int i = 0; i < java.lang.reflect.Array.getLength(value); i++) {
                             Object item = java.lang.reflect.Array.get(value, i);
                             if (item != null) {
-                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                                rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
                             }
                         }
                     } else {
-                        queryParams.add(new String[]{paramDef.getName(), String.valueOf(value)});
+                        rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(value)});
                     }
+                    queryParams.put(paramDef.getName(), value);
                 }
                 case "BODY" -> bodyParams.put(paramDef.getName(), value);
                 default -> log.warn("未知的参数位置类型 [{}]: {}", paramDef.getName(), location);
@@ -167,19 +190,44 @@ public class AloudataApiClient {
         String url = buildUrl(endpointName, path, config, pathVariables);
 
         // 追加查询参数
-        if (!queryParams.isEmpty()) {
-            String queryString = queryParams.stream()
+        if (!rawQueryParams.isEmpty()) {
+            String queryString = rawQueryParams.stream()
                     .map(pair -> pair[0] + "=" + pair[1])
                     .collect(Collectors.joining("&"));
             url += (url.contains("?") ? "&" : "?") + queryString;
         }
 
-        Object requestBody = bodyParams.isEmpty() ? null : bodyParams;
         HttpMethod method = resolveMethod(endpointName);
-        HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
+        return new PreparedRequest(endpointName, method, path, url, queryParams, bodyParams, headers);
+    }
 
-        log.debug("调用 Aloudata API (参数规范): {} {}", method, url);
+    /** 真正发起 HTTP；本地 mock 只覆写这一步，URL/参数/方法均由 {@link #prepare} 保证一致。 */
+    protected ResponseEntity<Map> send(PreparedRequest request) {
+        Object requestBody = request.bodyParams().isEmpty() ? null : request.bodyParams();
+        HttpEntity<?> entity = new HttpEntity<>(requestBody, request.headers());
+        log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
+        return exchange(request.url(), request.method(), entity);
+    }
+
+    /** 底层发送：便于本地 mock 仅改写 host:port 后复用同一套 HTTP 行为（超时、头、反序列化）。 */
+    protected ResponseEntity<Map> exchange(String url, HttpMethod method, HttpEntity<?> entity) {
         return restTemplate.exchange(url, method, entity, Map.class);
+    }
+
+    /**
+     * 构造完成、待发送的 Aloudata 请求。
+     *
+     * @param endpointName 端点名
+     * @param method       HTTP 方法（来自端点声明）
+     * @param path         端点路径（可被数据源级 apiOverrides 覆盖）
+     * @param url          完整 URL（含 query；host:port 由数据源连接参数决定）
+     * @param queryParams  分发到 QUERY 的参数（Array 参数为集合）
+     * @param bodyParams   分发到 BODY 的参数
+     * @param headers      请求头（含认证头）
+     */
+    public record PreparedRequest(String endpointName, HttpMethod method, String path, String url,
+                                  Map<String, Object> queryParams, Map<String, Object> bodyParams,
+                                  HttpHeaders headers) {
     }
 
     /**

@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 本地 mock 的 Aloudata 报文仓库。
@@ -45,6 +47,13 @@ public class LocalAloudataFixtures {
     /** 视图无权限业务码（与真实 Aloudata 一致）。 */
     private static final String CODE_VIEW_ACCESS_DENIED = "SM_02_0038";
 
+    /** 系统异常业务码（真实服务对非法请求形状的返回）。 */
+    private static final String CODE_SYSTEM_ERROR = "SM99002";
+
+    /** 筛选表达式：{@code [字段] 运算符 值}，字段可用 {@code ['字段']} 形式。 */
+    private static final Pattern CONDITION = Pattern.compile(
+            "\\['?([^'\\]]+)'?\\]\\s*(<>|>=|<=|=|>|<|IN|NotIn)\\s*(.+)", Pattern.CASE_INSENSITIVE);
+
     /** 视图名 → 结果集夹具文件内的键；顺序即 metrics_query 反查的优先级。 */
     private static final List<String> VIEW_ORDER = List.of("cljd_zcl_zb_view", "cljd_zcl_wd_view");
 
@@ -58,11 +67,11 @@ public class LocalAloudataFixtures {
         String owner = (authValue == null || authValue.isBlank()) ? DEFAULT_OWNER : authValue;
         Map<String, Object> safeParams = params == null ? Map.of() : params;
         return switch (endpointName == null ? "" : endpointName) {
-            case "analysis_view_tree" -> copy(load("analysis_view_tree.json"));
+            case "analysis_view_tree" -> treeList(owner);
             case "analysis_view_list" -> listViews(owner, safeParams);
             case "analysis_view_query_by_name" -> viewByName(owner, safeParams);
             case "metric_batch_detail" -> metricBatchDetail(owner, safeParams);
-            case "dimension_list" -> copy(load("dimension_list.json"));
+            case "dimension_list" -> dimensionList(owner, safeParams);
             case "analysis_view_query_data" -> queryData(owner, safeParams);
             case "metrics_query" -> metricsQuery(owner, safeParams);
             default -> unknownEndpoint(endpointName);
@@ -71,7 +80,14 @@ public class LocalAloudataFixtures {
 
     // ------------------------------------------------------------------ 端点实现
 
-    /** 指标视图平铺列表：按 keyword 模糊匹配 viewName / displayName，"_" 视为全量。 */
+    /** 视图目录树：与真实一致替换 owner 占位符（「只看我的」依赖 owner）。 */
+    private Map<String, Object> treeList(String owner) {
+        Map<String, Object> envelope = copy(load("analysis_view_tree.json"));
+        replacePlaceholder(envelope, OWNER_PLACEHOLDER, owner);
+        return envelope;
+    }
+
+    /** 指标视图平铺列表：按 keyword 模糊匹配 viewName / displayName，"_" 视为全量；支持 pageNumber/pageSize。 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> listViews(String owner, Map<String, Object> params) {
         Map<String, Object> envelope = copy(load("analysis_view_list.json"));
@@ -81,10 +97,10 @@ public class LocalAloudataFixtures {
 
         String keyword = firstString(params.get("keyword"));
         boolean all = keyword == null || keyword.isBlank() || "_".equals(keyword);
-        List<Map<String, Object>> kept = new ArrayList<>();
+        List<Map<String, Object>> matched = new ArrayList<>();
         for (Map<String, Object> item : items) {
             if (all) {
-                kept.add(item);
+                matched.add(item);
                 continue;
             }
             String viewName = firstString(item.get("viewName"));
@@ -92,11 +108,36 @@ public class LocalAloudataFixtures {
             String needle = keyword.toLowerCase(Locale.ROOT);
             if ((viewName != null && viewName.toLowerCase(Locale.ROOT).contains(needle))
                     || (displayName != null && displayName.toLowerCase(Locale.ROOT).contains(needle))) {
-                kept.add(item);
+                matched.add(item);
             }
         }
-        data.put("data", kept);
-        data.put("totalPageSize", kept.size());
+        int pageSize = intValue(params.get("pageSize"), matched.size());
+        int pageNumber = Math.max(1, intValue(params.get("pageNumber"), 1));
+        int from = Math.min(matched.size(), (pageNumber - 1) * Math.max(pageSize, 0));
+        int to = Math.min(matched.size(), from + Math.max(pageSize, 0));
+        data.put("data", pageSize <= 0 ? List.of() : new ArrayList<>(matched.subList(from, to)));
+        data.put("pageNumber", pageNumber);
+        data.put("pageSize", pageSize);
+        data.put("totalPageSize", matched.size());
+        return envelope;
+    }
+
+    /** 维度列表：按 body 里的 {@code pager{pageNumber,pageSize}} 分页（真实接口同样是 POST + pager）。 */
+    private Map<String, Object> dimensionList(String owner, Map<String, Object> params) {
+        Map<String, Object> envelope = copy(load("dimension_list.json"));
+        replacePlaceholder(envelope, OWNER_PLACEHOLDER, owner);
+        Map<String, Object> data = asMap(envelope.get("data"));
+        List<Map<String, Object>> all = asMapList(data.get("data"));
+        Map<String, Object> pager = asMap(params.get("pager"));
+        int pageSize = intValue(pager.get("pageSize"), all.size());
+        int pageNumber = Math.max(1, intValue(pager.get("pageNumber"), 1));
+        int from = Math.min(all.size(), (pageNumber - 1) * Math.max(pageSize, 0));
+        int to = Math.min(all.size(), from + Math.max(pageSize, 0));
+        data.put("data", pageSize <= 0 ? List.of() : new ArrayList<>(all.subList(from, to)));
+        data.put("pageNumber", pageNumber);
+        data.put("pageSize", pageSize);
+        data.put("total", all.size());
+        data.put("hasNext", to < all.size());
         return envelope;
     }
 
@@ -165,9 +206,19 @@ public class LocalAloudataFixtures {
 
     /**
      * 指标数据查询：入参没有 viewName，按「请求的指标 + 维度」落在哪个视图上反查，
-     * 再做列投影、等值筛选、limit/offset。与真实响应一致使用 {@code data.table.columns}。
+     * 再做列投影、筛选、limit/offset。与真实响应一致使用 {@code data.table.columns}。
+     * <p>
+     * 与正式契约一致：{@code filters} 必须是**表达式字符串数组**（如 {@code [region] = "华东"}）；
+     * 传结构化 {@code {field,operator,value}} 时真实服务返回 {@code SM99002}，这里同样返回该
+     * 业务码，避免本地假绿掩盖请求形状错误。
      */
     private Map<String, Object> metricsQuery(String owner, Map<String, Object> params) {
+        List<String> expressions = filterExpressions(params.get("filters"));
+        if (expressions == null) {
+            log.warn("[local-mock] metrics_query 收到非表达式形态的 filters={}，按真实服务行为返回 SM99002",
+                    params.get("filters"));
+            return systemError("SM99002", "系统异常: filters 仅支持表达式字符串数组");
+        }
         Map<String, Object> container = copy(load("analysis_view_query_data.json"));
         Map<String, Object> source = resolveViewForMetrics(container, params);
         replacePlaceholder(source, OWNER_PLACEHOLDER, owner);
@@ -187,7 +238,7 @@ public class LocalAloudataFixtures {
         }
 
         List<Map<String, Object>> rows = toRows(projected);
-        rows = filterRows(rows, params.get("filters"));
+        rows = filterRows(rows, expressions);
         int offset = intValue(params.get("offset"), 0);
         int limit = intValue(params.get("limit"), rows.size());
         if (offset > 0 || limit < rows.size()) {
@@ -233,30 +284,121 @@ public class LocalAloudataFixtures {
         return fallback;
     }
 
-    private List<Map<String, Object>> filterRows(List<Map<String, Object>> rows, Object filters) {
-        for (Map<String, Object> filter : asMapList(filters)) {
-            String field = firstString(filter.get("field"));
-            String operator = firstString(filter.get("operator"));
-            Object value = filter.get("value");
-            if (field == null || operator == null || value == null) continue;
+    /**
+     * filters → 表达式字符串数组；元素不是字符串（结构化形态）时返回 null，
+     * 由调用方按真实服务行为返回 {@code SM99002}。
+     */
+    private List<String> filterExpressions(Object filters) {
+        List<String> expressions = new ArrayList<>();
+        if (filters == null) return expressions;
+        if (filters instanceof String single) {
+            if (!single.isBlank()) expressions.add(single);
+            return expressions;
+        }
+        if (!(filters instanceof List<?> list)) {
+            return null;
+        }
+        for (Object item : list) {
+            if (item == null) continue;
+            if (!(item instanceof String expression)) return null;
+            if (!expression.isBlank()) expressions.add(expression);
+        }
+        return expressions;
+    }
+
+    /** 按真实 Aloudata 筛选表达式过滤行：{@code [dim] = "值"} / {@code [dim] IN ("a","b")}，支持 AND。 */
+    private List<Map<String, Object>> filterRows(List<Map<String, Object>> rows, List<String> expressions) {
+        for (String expression : expressions) {
+            List<Condition> conditions = parseConditions(expression);
+            if (conditions.isEmpty()) {
+                log.warn("[local-mock] 无法解析筛选表达式，已忽略: {}", expression);
+                continue;
+            }
             List<Map<String, Object>> kept = new ArrayList<>();
             for (Map<String, Object> row : rows) {
-                Object actual = row.get(field);
-                boolean hit = switch (operator) {
-                    case "eq" -> String.valueOf(actual).equals(String.valueOf(value));
-                    case "neq" -> !String.valueOf(actual).equals(String.valueOf(value));
-                    case "in", "not_in" -> {
-                        Collection<?> allowed = value instanceof Collection<?> c ? c : List.of(value);
-                        boolean contains = allowed.stream().anyMatch(v -> String.valueOf(v).equals(String.valueOf(actual)));
-                        yield "in".equals(operator) == contains;
+                boolean hit = true;
+                for (Condition condition : conditions) {
+                    if (!condition.matches(row.get(condition.field()))) {
+                        hit = false;
+                        break;
                     }
-                    default -> true;
-                };
+                }
                 if (hit) kept.add(row);
             }
             rows = kept;
         }
         return rows;
+    }
+
+    /**
+     * 解析筛选表达式。仅覆盖本仓会生成的语法：
+     * {@code [字段] 运算符 值}，多个条件用 {@code AND} 连接，允许整体与条件各自带括号。
+     */
+    private List<Condition> parseConditions(String expression) {
+        List<Condition> conditions = new ArrayList<>();
+        String normalized = expression.trim();
+        while (normalized.startsWith("(") && normalized.endsWith(")")) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        for (String part : normalized.split("(?i)\\s+AND\\s+")) {
+            String clause = part.trim();
+            while (clause.startsWith("(") && clause.endsWith(")")) {
+                clause = clause.substring(1, clause.length() - 1).trim();
+            }
+            if (clause.isBlank()) continue;
+            Matcher matcher = CONDITION.matcher(clause);
+            if (!matcher.matches()) {
+                log.warn("[local-mock] 筛选表达式片段无法解析: {}", clause);
+                return List.of();
+            }
+            conditions.add(new Condition(matcher.group(1), matcher.group(2).toUpperCase(Locale.ROOT),
+                    unquote(matcher.group(3))));
+        }
+        return conditions;
+    }
+
+    private List<String> unquote(String raw) {
+        String text = raw.trim();
+        if (text.startsWith("(") && text.endsWith(")")) {
+            text = text.substring(1, text.length() - 1);
+        }
+        List<String> values = new ArrayList<>();
+        for (String part : text.split(",")) {
+            String value = part.trim();
+            if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+                value = value.substring(1, value.length() - 1);
+            }
+            if (!value.isEmpty()) values.add(value.replace("\\\"", "\""));
+        }
+        return values;
+    }
+
+    /** 单个筛选条件：字段 + 运算符 + 取值列表（IN/NotIn 多个，其余取首个）。 */
+    private record Condition(String field, String operator, List<String> values) {
+        private boolean matches(Object actual) {
+            String text = actual == null ? "" : String.valueOf(actual);
+            return switch (operator) {
+                case "=" -> values.size() == 1 && text.equals(values.get(0));
+                case "<>" -> values.size() == 1 && !text.equals(values.get(0));
+                case ">" -> compare(text, values) > 0;
+                case ">=" -> compare(text, values) >= 0;
+                case "<" -> compare(text, values) < 0;
+                case "<=" -> compare(text, values) <= 0;
+                case "IN" -> values.contains(text);
+                case "NOTIN" -> !values.contains(text);
+                default -> true;
+            };
+        }
+
+        private int compare(String left, List<String> right) {
+            if (right.isEmpty()) return 0;
+            String other = right.get(0);
+            try {
+                return Double.compare(Double.parseDouble(left), Double.parseDouble(other));
+            } catch (NumberFormatException e) {
+                return left.compareTo(other);
+            }
+        }
     }
 
     /** 列式 → 行式（cell 为 {@code {value, flag, count}} 时取 value）。 */
@@ -332,8 +474,21 @@ public class LocalAloudataFixtures {
     }
 
     private Map<String, Object> unknownEndpoint(String endpointName) {
-        log.warn("[local-mock] 未提供端点 {} 的 mock 报文，按空响应返回", endpointName);
-        return envelope(Map.of(), "mock-trace-" + endpointName);
+        // 真实环境打到未注册端点会 404；这里返回失败包络而不是空成功，避免把「端点写错」
+        // 伪装成「查询无数据」——本地必须能暴露真机必炸的问题。
+        log.warn("[local-mock] 未提供端点 {} 的 mock 报文，按真实行为返回失败包络", endpointName);
+        return systemError("SM_04_0004", "未 mock 的端点: " + endpointName);
+    }
+
+    private Map<String, Object> systemError(String code, String message) {
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put("data", null);
+        envelope.put("success", false);
+        envelope.put("code", code);
+        envelope.put("errorMsg", message);
+        envelope.put("detailErrorMsg", message);
+        envelope.put("traceId", "mock-trace-" + code);
+        return envelope;
     }
 
     private Map<String, Object> accessDenied(Map<String, Object> template) {

@@ -21,18 +21,49 @@ if [[ ! -f "$JAR_PATH" ]]; then
 fi
 
 # Aloudata 上游临时指向本地 mock（docs/策略解读/mock.md）：
-#   默认开启 local-mock —— 指标视图目录/列表/字段/详情/预览全部返回内置夹具数据，
-#   不发起任何真实 Aloudata 请求，也无需在 Aloudata 侧造数据或授权。
+#   默认开启 local-mock —— 后端仍按真实端点声明构建请求（路径/参数/请求方式/校验全一致），
+#   只把已构建好的请求发到本地 mock 服务（默认 127.0.0.1:18081），即**只有 ip:port 不同**。
+#   本地 mock 服务不存在时自动拉起（dev-support/local-simulation/scripts/aloudata-mock-server.py）。
+#   要退回内置夹具（不起 HTTP 服务）：ALOUDATA_MOCK=embed ./restart-dataagent-backend.sh
 #   要切回真实上游：ALOUDATA_MOCK=off ./restart-dataagent-backend.sh
 #   （也可用 SPRING_PROFILES_ACTIVE=pgsql 显式覆盖整组 profile）
 MOCK_SWITCH="${ALOUDATA_MOCK:-on}"
 case "$MOCK_SWITCH" in
   on|ON|true|TRUE|1)
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"
-    echo "★ Aloudata 上游 = 本地 mock（local-mock profile）。切回真实上游：ALOUDATA_MOCK=off 重启。"
+    export ALOUDATA_MOCK_PORT="${ALOUDATA_MOCK_PORT:-18081}"
+    export ALOUDATA_MOCK_SERVER="${ALOUDATA_MOCK_SERVER:-http://127.0.0.1:${ALOUDATA_MOCK_PORT}}"
+    MOCK_SERVER_SCRIPT="$PROJECT_ROOT/dev-support/local-simulation/scripts/aloudata-mock-server.py"
+    if ! lsof -tiTCP:"$ALOUDATA_MOCK_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+      if [[ -f "$MOCK_SERVER_SCRIPT" ]]; then
+        echo "启动本地 Aloudata mock 服务：$ALOUDATA_MOCK_SERVER"
+        nohup python3 "$MOCK_SERVER_SCRIPT" --port "$ALOUDATA_MOCK_PORT" \
+          >"/tmp/aloudata-mock-server-${ALOUDATA_MOCK_PORT}.log" 2>&1 &
+        for _ in {1..20}; do
+          if lsof -tiTCP:"$ALOUDATA_MOCK_PORT" -sTCP:LISTEN >/dev/null 2>&1; then break; fi
+          sleep 0.5
+        done
+      else
+        echo "警告：未找到 mock 服务脚本 $MOCK_SERVER_SCRIPT，将退回内置夹具。" >&2
+        unset ALOUDATA_MOCK_SERVER
+      fi
+    fi
+    if [[ -n "${ALOUDATA_MOCK_SERVER:-}" ]]; then
+      echo "★ Aloudata 上游 = 本地 mock 服务 ${ALOUDATA_MOCK_SERVER} （请求方式/路径/参数与正式一致，只有 ip:port 不同）。"
+      echo "  停止 mock 服务：lsof -tiTCP:${ALOUDATA_MOCK_PORT} -sTCP:LISTEN | xargs kill"
+    else
+      echo "★ Aloudata 上游 = 内置夹具（不发起 HTTP，参数/请求方式仍走真实构建逻辑）。"
+    fi
+    echo "  切回真实上游：ALOUDATA_MOCK=off 重启；切内置夹具：ALOUDATA_MOCK=embed 重启。"
+    ;;
+  embed|EMBED|embed-on|2)
+    export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"
+    unset ALOUDATA_MOCK_SERVER
+    echo "★ Aloudata 上游 = 内置夹具（不发起 HTTP，参数/请求方式仍走真实构建逻辑）。切回真实上游：ALOUDATA_MOCK=off 重启。"
     ;;
   *)
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql}"
+    unset ALOUDATA_MOCK_SERVER
     echo "Aloudata 上游 = 真实环境（未启用 local-mock）。"
     ;;
 esac

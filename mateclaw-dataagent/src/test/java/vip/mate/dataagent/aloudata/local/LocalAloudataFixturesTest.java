@@ -155,14 +155,14 @@ class LocalAloudataFixturesTest {
         assertEquals("trd_fund_amt_inout_cy_jjgr", metricId.get(3).get("value"));
     }
 
-    /** metrics_query 无 viewName，应按请求字段反查视图、投影列、做等值筛选。 */
+    /** metrics_query 无 viewName，应按请求字段反查视图、投影列、并按表达式筛选。 */
     @Test
     @SuppressWarnings("unchecked")
     void metricsQueryProjectsColumnsAndAppliesEqFilter() {
         Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
                 "metrics", List.of("digo_cust_asset_in"),
                 "dimensions", List.of("channel"),
-                "filters", List.of(Map.of("field", "channel", "operator", "eq", "value", "APP"))), null);
+                "filters", List.of("[channel] = \"APP\"")), null);
         Map<String, Object> table = (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("table");
         Map<String, Object> columns = (Map<String, Object>) table.get("columns");
 
@@ -172,11 +172,49 @@ class LocalAloudataFixturesTest {
         assertTrue(channel.stream().allMatch(cell -> "APP".equals(cell.get("value"))));
     }
 
+    /** 结构化 filters 是真实服务的非法形态（SM99002），本地必须同样失败，杜绝「本地假绿」。 */
+    @Test
+    void structuredFiltersAreRejectedLikeTheRealService() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_cust_asset_in"),
+                "filters", List.of(Map.of("field", "channel", "operator", "eq", "value", "APP"))), null);
+
+        assertEquals("SM99002", body.get("code"));
+        assertEquals(false, body.get("success"));
+        assertNull(body.get("data"));
+    }
+
+    /** 范围筛选编译成 `([f] >= "a" AND [f] <= "b")`，mock 必须能解析 AND 组合。 */
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQuerySupportsRangeAndInExpressions() {
+        Map<String, Object> ranged = fixtures.payload("metrics_query", Map.of(
+                "dimensions", List.of("metric_time"),
+                "filters", List.of("([metric_time] >= \"2026-09-02\" AND [metric_time] <= \"2026-09-03\")")), null);
+        Map<String, Object> columns = (Map<String, Object>)
+                ((Map<String, Object>) ((Map<String, Object>) ranged.get("data")).get("table")).get("columns");
+        List<Map<String, Object>> times = (List<Map<String, Object>>) columns.get("metric_time");
+        assertTrue(times.stream().allMatch(cell ->
+                String.valueOf(cell.get("value")).compareTo("2026-09-02") >= 0
+                        && String.valueOf(cell.get("value")).compareTo("2026-09-03") <= 0));
+
+        Map<String, Object> inList = fixtures.payload("metrics_query", Map.of(
+                "dimensions", List.of("channel"),
+                "filters", List.of("[channel] IN (\"APP\",\"WAP\")")), null);
+        Map<String, Object> inColumns = (Map<String, Object>)
+                ((Map<String, Object>) ((Map<String, Object>) inList.get("data")).get("table")).get("columns");
+        List<Map<String, Object>> channels = (List<Map<String, Object>>) inColumns.get("channel");
+        assertTrue(channels.stream().allMatch(cell ->
+                "APP".equals(cell.get("value")) || "WAP".equals(cell.get("value"))));
+    }
+
     @Test
     void unknownEndpointReturnsEmptyEnvelopeInsteadOfFailing() {
         Map<String, Object> body = fixtures.payload("no_such_endpoint", Map.of(), null);
 
-        assertEquals("200", body.get("code"));
+        // 真实环境打到未注册端点是失败（404 语义），mock 不能伪装成「成功但无数据」
+        assertEquals("SM_04_0004", body.get("code"));
+        assertEquals(false, body.get("success"));
         assertNotNull(body.get("traceId"));
     }
 }
