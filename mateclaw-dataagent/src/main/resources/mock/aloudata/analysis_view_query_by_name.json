@@ -1,0 +1,180 @@
+{
+  "cljd_zcl_zb_view": {
+    "data": {
+      "id": 9001,
+      "guid": {
+        "catalog": "mock_tenant_aloudata_datasource",
+        "schema": "default",
+        "table": "cljd_zcl_zb",
+        "validTableGuid": true,
+        "validSchemaGuid": true,
+        "validCatalogGuid": true
+      },
+      "viewName": "cljd_zcl_zb_view",
+      "displayName": "策略解读-子策略-指标",
+      "description": "策略解读：子策略粒度的策略归因指标宽表（计划/策略/子策略/渠道）",
+      "categoryId": "CAT_CLJD",
+      "metrics": [
+        "digo_trd_fund_amt_inout_cy_jjgr",
+        "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt",
+        "digo_trd_fund_amt_inout_cy_jjgr_pb",
+        "digo_pbcnt_kgdb_a566_fh_jjgr",
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0",
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt",
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr",
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt",
+        "digo_cust_asset_in",
+        "digo_new_cust_asset_in",
+        "digo_cnt_cust_code_new_brok",
+        "digo_cust_valid_new_yxh",
+        "digo_cust_asset_in10000"
+      ],
+      "dimensions": [
+        "metric_time",
+        "attribution_plan_id",
+        "attribution_strategy_id",
+        "platform_id",
+        "channel"
+      ],
+      "timeConstraint": "(((dateTrunc(['metric_time'], \"DAY\")) >= (DATEADD(DateTrunc(TODAY(), \"DAY\"), -(364), \"DAY\")))) AND (((dateTrunc(['metric_time'], \"DAY\")) <= (DATEADD(DateTrunc(TODAY(), \"DAY\"), 0, \"DAY\"))))",
+      "filters": [],
+      "resultFilters": [],
+      "orders": [],
+      "createFrom": "WEBUI",
+      "queryType": null,
+      "sourceTableQuery": null,
+      "metricDefinitions": null,
+      "displayNameMap": {
+        "digo_trd_fund_amt_inout_cy_jjgr": "经纪个人客户场内公募非货当年净买入",
+        "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt": "经纪个人客户场内公募非货当年净买入-转化客户数",
+        "digo_trd_fund_amt_inout_cy_jjgr_pb": "经纪个人场内公募非货破冰客户当年净买入",
+        "digo_pbcnt_kgdb_a566_fh_jjgr": "经纪个人场内公募非货破冰客户数",
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0": "经纪个人场内公募非货交易量",
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt": "经纪个人场内公募非货交易量-转化客户数",
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr": "经纪个人场内公募非货加仓交易量",
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt": "经纪个人场内公募非货加仓交易量-转化客户数",
+        "digo_cust_asset_in": "入金客户数",
+        "digo_new_cust_asset_in": "新客入金数",
+        "digo_cnt_cust_code_new_brok": "新增客户数",
+        "digo_cust_valid_new_yxh": "新增有效户数",
+        "digo_cust_asset_in10000": "万元入金户数",
+        "metric_time": "指标日期",
+        "attribution_plan_id": "计划id",
+        "attribution_strategy_id": "策略id",
+        "platform_id": "子策略id",
+        "channel": "触达渠道"
+      },
+      "dimensionToMetricRelations": {},
+      "dynamicConditions": {},
+      "fullDimensionConfig": null,
+      "basicAttributes": {
+        "owner": "__OWNER__",
+        "viewName": "cljd_zcl_zb_view",
+        "viewDisplayName": "策略解读-子策略-指标",
+        "createTime": 1758100000000,
+        "modifyTime": 1758100000000
+      },
+      "businessAttributes": {
+        "viewDescription": "策略解读：子策略粒度的策略归因指标宽表（计划/策略/子策略/渠道）",
+        "viewCategoryId": "CAT_CLJD"
+      },
+      "technicalAttributes": {},
+      "managementAttributes": {}
+    },
+    "success": true,
+    "code": "200",
+    "errorMsg": null,
+    "detailErrorMsg": null,
+    "traceId": "mock-trace-detail-cljd_zcl_zb_view"
+  },
+  "cljd_zcl_wd_view": {
+    "data": {
+      "id": 9002,
+      "guid": {
+        "catalog": "mock_tenant_aloudata_datasource",
+        "schema": "default",
+        "table": "cljd_zcl_wd",
+        "validTableGuid": true,
+        "validSchemaGuid": true,
+        "validCatalogGuid": true
+      },
+      "viewName": "cljd_zcl_wd_view",
+      "displayName": "策略解读-子策略-维度",
+      "description": "策略解读：子策略维度的下发/触达指标",
+      "categoryId": "CAT_CLJD",
+      "metrics": [
+        "digo_strategy_cnt",
+        "digo_strategy_cnt_distr_1",
+        "digo_distr_count_1",
+        "digo_distr_user_cnt_a",
+        "digo_touch_cnt_1",
+        "digo_touch_user_cnt_1"
+      ],
+      "dimensions": [
+        "metric_time",
+        "attribution_plan_id",
+        "attribution_plan_name",
+        "attribution_plan_um_account",
+        "attribution_strategy_id",
+        "attribution_strategy_name",
+        "attribution_over_by",
+        "platform_id",
+        "platform_name",
+        "create_by",
+        "channel",
+        "metric_id",
+        "metric_name"
+      ],
+      "timeConstraint": "(((dateTrunc(['metric_time'], \"DAY\")) >= (DATEADD(DateTrunc(TODAY(), \"DAY\"), -(364), \"DAY\")))) AND (((dateTrunc(['metric_time'], \"DAY\")) <= (DATEADD(DateTrunc(TODAY(), \"DAY\"), 0, \"DAY\"))))",
+      "filters": [],
+      "resultFilters": [],
+      "orders": [],
+      "createFrom": "WEBUI",
+      "queryType": null,
+      "sourceTableQuery": null,
+      "metricDefinitions": null,
+      "displayNameMap": {
+        "digo_strategy_cnt": "下挂策略数",
+        "digo_strategy_cnt_distr_1": "下发策略数",
+        "digo_distr_count_1": "下发次数",
+        "digo_distr_user_cnt_a": "下发人数",
+        "digo_touch_cnt_1": "触达人数",
+        "digo_touch_user_cnt_1": "触达次数",
+        "metric_time": "指标日期",
+        "attribution_plan_id": "计划id",
+        "attribution_plan_name": "计划名称",
+        "attribution_plan_um_account": "计划负责人",
+        "attribution_strategy_id": "策略id",
+        "attribution_strategy_name": "策略名称",
+        "attribution_over_by": "策略负责人",
+        "platform_id": "子策略id",
+        "platform_name": "子策略名称",
+        "create_by": "子策略创建人",
+        "channel": "触达渠道",
+        "metric_id": "转化指标id",
+        "metric_name": "转化指标名称"
+      },
+      "dimensionToMetricRelations": {},
+      "dynamicConditions": {},
+      "fullDimensionConfig": null,
+      "basicAttributes": {
+        "owner": "__OWNER__",
+        "viewName": "cljd_zcl_wd_view",
+        "viewDisplayName": "策略解读-子策略-维度",
+        "createTime": 1758100000000,
+        "modifyTime": 1758100000000
+      },
+      "businessAttributes": {
+        "viewDescription": "策略解读：子策略维度的下发/触达指标",
+        "viewCategoryId": "CAT_CLJD"
+      },
+      "technicalAttributes": {},
+      "managementAttributes": {}
+    },
+    "success": true,
+    "code": "200",
+    "errorMsg": null,
+    "detailErrorMsg": null,
+    "traceId": "mock-trace-detail-cljd_zcl_wd_view"
+  }
+}

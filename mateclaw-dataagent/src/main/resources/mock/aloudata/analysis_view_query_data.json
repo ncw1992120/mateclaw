@@ -1,0 +1,2582 @@
+{
+  "cljd_zcl_zb_view": {
+    "data": {
+      "analysisView": {
+        "columns": {
+          "metric_time": [
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_plan_id": [
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_strategy_id": [
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "platform_id": [
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "channel": [
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_trd_fund_amt_inout_cy_jjgr": [
+            {
+              "value": 1250000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 980000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 1480000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 1320000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 1040000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 1550000.0,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt": [
+            {
+              "value": 128,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 101,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 152,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 136,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 109,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 161,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_trd_fund_amt_inout_cy_jjgr_pb": [
+            {
+              "value": 420000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 315000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 510000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 450000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 338000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 536000.0,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_pbcnt_kgdb_a566_fh_jjgr": [
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 81,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 112,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 103,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 87,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 121,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_fund_trd_amt_a566_fh_kgdb_jj0": [
+            {
+              "value": 860000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 640000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 930000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 905000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 690000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 982000.0,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt": [
+            {
+              "value": 74,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 57,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 79,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 62,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 94,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr": [
+            {
+              "value": 210000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 175000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 265000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 230000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 188000.0,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 279000.0,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt": [
+            {
+              "value": 39,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 31,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 46,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 42,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 34,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 49,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_cust_asset_in": [
+            {
+              "value": 186,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 143,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 211,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 194,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 151,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 223,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_new_cust_asset_in": [
+            {
+              "value": 72,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 55,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 84,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 78,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 60,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 90,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_cnt_cust_code_new_brok": [
+            {
+              "value": 154,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 119,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 179,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 163,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 126,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 190,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_cust_valid_new_yxh": [
+            {
+              "value": 91,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 68,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 108,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 97,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 73,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 115,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_cust_asset_in10000": [
+            {
+              "value": 43,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 32,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 51,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 46,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 35,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 55,
+              "flag": 0,
+              "count": 1
+            }
+          ]
+        },
+        "total": 6
+      },
+      "metas": [
+        {
+          "name": "metric_time",
+          "displayName": "指标日期",
+          "dataTypeName": "TIMESTAMP",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_plan_id",
+          "displayName": "计划id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_strategy_id",
+          "displayName": "策略id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "platform_id",
+          "displayName": "子策略id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "channel",
+          "displayName": "触达渠道",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "digo_trd_fund_amt_inout_cy_jjgr",
+          "displayName": "经纪个人客户场内公募非货当年净买入",
+          "dataTypeName": "DECIMAL",
+          "role": "measure"
+        },
+        {
+          "name": "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt",
+          "displayName": "经纪个人客户场内公募非货当年净买入-转化客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_trd_fund_amt_inout_cy_jjgr_pb",
+          "displayName": "经纪个人场内公募非货破冰客户当年净买入",
+          "dataTypeName": "DECIMAL",
+          "role": "measure"
+        },
+        {
+          "name": "digo_pbcnt_kgdb_a566_fh_jjgr",
+          "displayName": "经纪个人场内公募非货破冰客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0",
+          "displayName": "经纪个人场内公募非货交易量",
+          "dataTypeName": "DECIMAL",
+          "role": "measure"
+        },
+        {
+          "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt",
+          "displayName": "经纪个人场内公募非货交易量-转化客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr",
+          "displayName": "经纪个人场内公募非货加仓交易量",
+          "dataTypeName": "DECIMAL",
+          "role": "measure"
+        },
+        {
+          "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt",
+          "displayName": "经纪个人场内公募非货加仓交易量-转化客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_cust_asset_in",
+          "displayName": "入金客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_new_cust_asset_in",
+          "displayName": "新客入金数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_cnt_cust_code_new_brok",
+          "displayName": "新增客户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_cust_valid_new_yxh",
+          "displayName": "新增有效户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_cust_asset_in10000",
+          "displayName": "万元入金户数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        }
+      ],
+      "total": 6
+    },
+    "success": true,
+    "code": "200",
+    "errorMsg": null,
+    "detailErrorMsg": null,
+    "traceId": "mock-trace-data-cljd_zcl_zb_view"
+  },
+  "cljd_zcl_wd_view": {
+    "data": {
+      "analysisView": {
+        "columns": {
+          "metric_time": [
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-01",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "2026-09-02",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_plan_id": [
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "PLAN-001",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_plan_name": [
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "策略解读示例计划",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_plan_um_account": [
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "plan_owner",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_strategy_id": [
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "STR-002",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_strategy_name": [
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "高净值客户触达策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客增长策略",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "attribution_over_by": [
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_a",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "strategy_owner_b",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "platform_id": [
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-001",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SUB-002",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "platform_name": [
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "场内公募非货子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "新客入金子策略",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "create_by": [
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "data_owner",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "channel": [
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "SMS",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "APP",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "metric_id": [
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "trd_fund_amt_inout_cy_jjgr",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "fund_trd_amt_a566_fh_kgdb_jj0",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "pub_fh_kgdb_trdamt_ppcadd_jjgr",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "metric_name": [
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人客户场内公募非货当年净买入",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货交易量",
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": "经纪个人场内公募非货加仓交易量",
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_strategy_cnt": [
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_strategy_cnt_distr_1": [
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 2,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 3,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_distr_count_1": [
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 130,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 180,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_distr_user_cnt_a": [
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 105,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 150,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_touch_cnt_1": [
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 88,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 120,
+              "flag": 0,
+              "count": 1
+            }
+          ],
+          "digo_touch_user_cnt_1": [
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 71,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            },
+            {
+              "value": 96,
+              "flag": 0,
+              "count": 1
+            }
+          ]
+        },
+        "total": 18
+      },
+      "metas": [
+        {
+          "name": "metric_time",
+          "displayName": "指标日期",
+          "dataTypeName": "TIMESTAMP",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_plan_id",
+          "displayName": "计划id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_plan_name",
+          "displayName": "计划名称",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_plan_um_account",
+          "displayName": "计划负责人",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_strategy_id",
+          "displayName": "策略id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_strategy_name",
+          "displayName": "策略名称",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "attribution_over_by",
+          "displayName": "策略负责人",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "platform_id",
+          "displayName": "子策略id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "platform_name",
+          "displayName": "子策略名称",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "create_by",
+          "displayName": "子策略创建人",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "channel",
+          "displayName": "触达渠道",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "metric_id",
+          "displayName": "转化指标id",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "metric_name",
+          "displayName": "转化指标名称",
+          "dataTypeName": "VARCHAR",
+          "role": "dimension"
+        },
+        {
+          "name": "digo_strategy_cnt",
+          "displayName": "下挂策略数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_strategy_cnt_distr_1",
+          "displayName": "下发策略数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_distr_count_1",
+          "displayName": "下发次数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_distr_user_cnt_a",
+          "displayName": "下发人数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_touch_cnt_1",
+          "displayName": "触达人数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        },
+        {
+          "name": "digo_touch_user_cnt_1",
+          "displayName": "触达次数",
+          "dataTypeName": "BIGINT",
+          "role": "measure"
+        }
+      ],
+      "total": 18
+    },
+    "success": true,
+    "code": "200",
+    "errorMsg": null,
+    "detailErrorMsg": null,
+    "traceId": "mock-trace-data-cljd_zcl_wd_view"
+  }
+}

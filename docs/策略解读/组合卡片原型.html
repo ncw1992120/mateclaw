@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>洞察仪表盘 · 组合卡片原型</title>
+<!--
+  ============================================================================
+  组合卡片 / 卡片容器 前端交互原型
+  ----------------------------------------------------------------------------
+  来源：docs/策略解读/组合卡片原型设计.md
+  目的：在「洞察 → 仪表盘 → 组件」中验证组合卡片的完整前端交互体验。
+  数据：全部为前端假数据（见 FAKE_DATA 与各处 `// 数据对接点` 注释）。
+        后续接入后端时，只需替换 fake 读取逻辑为真实接口，state 模型可直接复用。
+  运行：双击本文件即可在浏览器打开，无需构建 / 无需联网。
+  技术：纯原生 HTML + CSS + JS（零依赖，便于直接验证交互）。
+  ============================================================================
+-->
+<style>
+  /* ── 设计 Token（对齐 src/assets/dashboard-design.css）────────────────── */
+  :root {
+    --main-orange: #FF7A18;
+    --dark-orange: #E8650A;
+    --light-orange: #FFF3E9;
+    --very-light-orange: #FFE9D6;
+    --success-color: #21BA72;
+    --danger-color: #F5483B;
+    --warning-color: #FAAD14;
+
+    --theme-bg: #F5F7FA;
+    --theme-surface: #FFFFFF;
+    --theme-surface-elevated: #FFFFFF;
+    --theme-surface-hover: #F2F5F9;
+    --theme-text: #1D2129;
+    --theme-text-secondary: #4E5969;
+    --theme-text-muted: #86909C;
+    --theme-border: #E5EAF2;
+    --theme-border-strong: #C9D0DC;
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-card-hover: 0 6px 16px rgba(0,0,0,0.10);
+    --shadow-dropdown: 0 8px 28px rgba(0,0,0,0.14);
+
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 24px;
+
+    --transition-fast: 150ms ease;
+    --transition-base: 250ms ease;
+
+    --accent: var(--main-orange);
+    --accent-soft: var(--light-orange);
+  }
+  html[data-theme="dark"] {
+    --theme-bg: #0F1115;
+    --theme-surface: #1A1D24;
+    --theme-surface-elevated: #20242D;
+    --theme-surface-hover: #262B35;
+    --theme-text: #E6E9EF;
+    --theme-text-secondary: #A9B0BD;
+    --theme-text-muted: #6B7280;
+    --theme-border: #2A2F3A;
+    --theme-border-strong: #3A4150;
+    --light-orange: #3A2415;
+    --very-light-orange: #4A2E18;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.5);
+    --shadow-card-hover: 0 6px 16px rgba(0,0,0,0.6);
+    --shadow-dropdown: 0 8px 28px rgba(0,0,0,0.6);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--theme-bg);
+    color: var(--theme-text);
+    font-size: 13px;
+    overflow: hidden;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea {
+    font-family: inherit; font-size: 13px; color: var(--theme-text);
+    background: var(--theme-surface); border: 1px solid var(--theme-border);
+    border-radius: var(--radius-sm); padding: 6px 8px; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--theme-border-strong); border-radius: 4px; }
+
+  /* ── 顶栏 ──────────────────────────────────────────────────────────── */
+  .topbar {
+    height: 52px; display: flex; align-items: center; gap: var(--space-md);
+    padding: 0 var(--space-lg); background: var(--theme-surface);
+    border-bottom: 1px solid var(--theme-border); flex-shrink: 0;
+  }
+  .topbar .dash-title {
+    font-size: 15px; font-weight: 600; border: 1px solid transparent;
+    background: transparent; padding: 4px 6px; border-radius: var(--radius-sm);
+    min-width: 160px;
+  }
+  .topbar .dash-title:hover { border-color: var(--theme-border); }
+  .topbar .spacer { flex: 1; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px;
+    padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--theme-border);
+    background: var(--theme-surface); color: var(--theme-text); font-size: 13px;
+    transition: all var(--transition-fast);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--dark-orange); border-color: var(--dark-orange); color:#fff; }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ghost:hover { background: var(--theme-surface-hover); }
+  .icon-btn {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm); border: 1px solid transparent; background: transparent; color: var(--theme-text-secondary);
+  }
+  .icon-btn:hover { background: var(--theme-surface-hover); color: var(--accent); }
+
+  /* ── 三栏布局 ──────────────────────────────────────────────────────── */
+  .editor { display: flex; height: calc(100% - 52px); }
+  .palette {
+    width: 220px; flex-shrink: 0; background: var(--theme-surface);
+    border-right: 1px solid var(--theme-border); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .canvas-wrap { flex: 1; overflow: auto; padding: var(--space-xl); background: var(--theme-bg); }
+  .property {
+    width: 300px; flex-shrink: 0; background: var(--theme-surface);
+    border-left: 1px solid var(--theme-border); overflow-y: auto;
+  }
+
+  .panel-title {
+    font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--theme-text-muted); padding: 12px 14px; border-bottom: 1px solid var(--theme-border);
+  }
+  .palette-group { border-bottom: 1px solid var(--theme-border); }
+  .palette-group > .gh {
+    display: flex; align-items: center; gap: 6px; width: 100%; padding: 10px 14px;
+    background: transparent; border: none; text-align: left; color: var(--theme-text-secondary); font-size: 12px; font-weight: 600;
+  }
+  .palette-group > .gh .cnt { margin-left: auto; color: var(--theme-text-muted); font-weight: 400; }
+  .palette-items { padding: 4px 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .palette-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 1px solid transparent; cursor: grab; color: var(--theme-text); user-select: none; transition: all var(--transition-fast);
+  }
+  .palette-item:hover { background: var(--theme-surface-hover); border-color: var(--theme-border); }
+  .palette-item:active { cursor: grabbing; }
+  .palette-item .pi { width: 18px; height: 18px; color: var(--theme-text-secondary); display:flex; }
+  .palette-item.layout { border: 1px dashed var(--accent); background: var(--accent-soft); }
+
+  /* ── 组合卡片容器 ──────────────────────────────────────────────────── */
+  .stage { min-height: 100%; display: flex; align-items: flex-start; justify-content: center; }
+  .card-container {
+    position: relative; background: var(--cc-bg, var(--theme-surface));
+    border: 1px solid var(--cc-border-color, var(--theme-border));
+    border-radius: var(--cc-radius, var(--radius-lg)); padding: var(--cc-pad, 16px);
+    width: var(--cc-w, 760px); min-height: var(--cc-h, 360px);
+    box-shadow: var(--shadow-card); transition: box-shadow var(--transition-base);
+  }
+  .card-container.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--very-light-orange); }
+  .cc-header { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
+  .cc-title { font-size: 15px; font-weight: 600; flex: 0 0 auto; }
+  .cc-toolbar { margin-left: auto; display: flex; gap: 6px; }
+  .cc-toolbar .tbtn {
+    height: 28px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--theme-border);
+    background: var(--theme-surface); color: var(--theme-text-secondary); font-size: 12px; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .cc-toolbar .tbtn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .cc-tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--theme-border); margin-bottom: var(--space-md); flex-wrap: wrap; }
+  .cc-tab {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: none; background: transparent;
+    color: var(--theme-text-secondary); font-size: 13px; border-bottom: 2px solid transparent; cursor: pointer; position: relative;
+  }
+  .cc-tab:hover { color: var(--accent); }
+  .cc-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .cc-tab .tab-edit { width: 64px; border: 1px solid var(--accent); padding: 2px 4px; font-size: 12px; }
+  .cc-tab-add { border: none; background: transparent; color: var(--theme-text-muted); font-size: 18px; width: 28px; height: 28px; border-radius: var(--radius-sm); }
+  .cc-tab-add:hover { background: var(--theme-surface-hover); color: var(--accent); }
+
+  .cc-body { min-height: 120px; }
+  .cc-grid { display: grid; gap: var(--cc-gap, 12px); grid-template-columns: repeat(var(--cc-cols, 12)); }
+  .cc-grid.mode-vertical { display: flex; flex-direction: column; }
+
+  .cc-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    min-height: 160px; color: var(--theme-text-muted); text-align: center; border: 1px dashed var(--theme-border); border-radius: var(--radius-md); padding: 24px;
+  }
+
+  /* 缩放手柄 */
+  .resize-handle { position: absolute; width: 12px; height: 12px; background: var(--accent); border: 2px solid #fff; border-radius: 50%; z-index: 5; }
+  .resize-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }
+  .resize-handle.ne { right: -6px; top: -6px; cursor: nesw-resize; }
+  .resize-handle.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+  .resize-handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+  .size-tip {
+    position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; pointer-events: none;
+  }
+
+  /* ── 子组件通用 ────────────────────────────────────────────────────── */
+  .widget {
+    grid-column: span var(--w-col, 6); border: 1px solid var(--theme-border); border-radius: var(--radius-md);
+    background: var(--theme-surface); padding: 12px; position: relative; min-height: 90px;
+    transition: box-shadow var(--transition-base), transform var(--transition-base); cursor: pointer;
+  }
+  .widget:hover { box-shadow: var(--shadow-card-hover); }
+  .widget.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--very-light-orange); }
+  .widget .w-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .widget .w-title { font-size: 13px; font-weight: 600; }
+  .widget .w-del { margin-left: auto; border: none; background: transparent; color: var(--theme-text-muted); font-size: 14px; }
+  .widget .w-del:hover { color: var(--danger-color); }
+  .widget .w-resize { position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px; background: var(--accent); border-radius: 50%; border: 2px solid #fff; cursor: nwse-resize; z-index: 4; }
+  .widget.dragging { opacity: .4; }
+  .widget.drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+
+  /* KPI */
+  .kpi-val { font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .kpi-label { color: var(--theme-text-secondary); font-size: 12px; margin-top: 2px; }
+  .kpi-trend { font-size: 12px; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
+  .kpi-trend.up { color: var(--success-color); }
+  .kpi-trend.down { color: var(--danger-color); }
+
+  /* 图表（内联 SVG 假数据） */
+  .chart-svg { width: 100%; height: 120px; display: block; }
+
+  /* 表格 */
+  table.mini { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.mini th, table.mini td { border: 1px solid var(--theme-border); padding: 5px 8px; text-align: left; }
+  table.mini th { background: var(--theme-surface-hover); font-weight: 600; }
+
+  /* AI 分析 */
+  .ai-box { font-size: 12px; line-height: 1.7; color: var(--theme-text-secondary); }
+  .ai-box h4 { margin: 8px 0 2px; font-size: 12px; color: var(--theme-text); }
+  .ai-disclaimer { margin-top: 8px; font-size: 11px; color: var(--theme-text-muted); border-top: 1px dashed var(--theme-border); padding-top: 6px; }
+
+  /* 筛选器 / 时间筛选 / 按钮 */
+  .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); overflow: hidden; }
+  .seg button { border: none; background: var(--theme-surface); padding: 5px 10px; font-size: 12px; color: var(--theme-text-secondary); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .op-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: 6px 14px; font-size: 13px; }
+  .op-btn:hover { background: var(--dark-orange); }
+
+  /* 状态：加载 / 空 / 失败 */
+  .skeleton { background: linear-gradient(90deg, var(--theme-surface-hover) 25%, var(--theme-surface) 37%, var(--theme-surface-hover) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; border-radius: var(--radius-sm); }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  .state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 110px; color: var(--theme-text-muted); text-align: center; }
+  .state-box .err-ic { color: var(--danger-color); font-size: 22px; }
+
+  /* ── 属性面板 ──────────────────────────────────────────────────────── */
+  .prop-section { border-bottom: 1px solid var(--theme-border); }
+  .prop-section > .sh { display: flex; align-items: center; width: 100%; padding: 11px 14px; background: transparent; border: none; text-align: left; font-size: 13px; font-weight: 600; color: var(--theme-text); }
+  .prop-section > .sh .ar { margin-left: auto; transition: transform var(--transition-fast); color: var(--theme-text-muted); }
+  .prop-section.collapsed > .sh .ar { transform: rotate(-90deg); }
+  .prop-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .prop-section.collapsed .prop-body { display: none; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field > label { font-size: 12px; color: var(--theme-text-secondary); }
+  .field.row { flex-direction: row; align-items: center; gap: 8px; }
+  .field.row > label { flex: 1; }
+  .field .inline { display: flex; align-items: center; gap: 6px; }
+  .field .inline input { width: 72px; }
+  .switch { position: relative; width: 36px; height: 20px; background: var(--theme-border-strong); border-radius: 10px; border: none; transition: background var(--transition-fast); flex-shrink: 0; }
+  .switch.on { background: var(--accent); }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform var(--transition-fast); }
+  .switch.on::after { transform: translateX(16px); }
+
+  .tab-row { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); }
+  .tab-row .grip { cursor: grab; color: var(--theme-text-muted); }
+  .tab-row .nm { flex: 1; }
+  .tab-row .nm input { width: 100%; }
+  .tab-row .mini { border: none; background: transparent; color: var(--theme-text-secondary); font-size: 12px; padding: 2px 6px; border-radius: 4px; }
+  .tab-row .mini:hover { background: var(--theme-surface-hover); color: var(--accent); }
+  .tab-row .mini.danger:hover { color: var(--danger-color); }
+  .add-link { border: none; background: transparent; color: var(--accent); font-size: 12px; padding: 6px 2px; align-self: flex-start; }
+
+  .bind-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center; }
+  .bind-row select { width: 100%; padding: 4px 6px; font-size: 12px; }
+  .scope-tree { font-size: 12px; color: var(--theme-text-secondary); line-height: 1.9; background: var(--theme-surface-hover); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .scope-tree .node { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--dark-orange); border: 1px solid var(--very-light-orange); }
+  .scope-tree .lvl1 { padding-left: 16px; }
+  .scope-tree .lvl2 { padding-left: 32px; }
+  .conflict-tip { font-size: 12px; color: var(--warning-color); background: #FFFBE6; border: 1px solid #FFE58F; border-radius: var(--radius-sm); padding: 8px 10px; }
+  html[data-theme="dark"] .conflict-tip { background: #3a2f12; border-color: #5c4a16; }
+
+  /* ── 弹层 / 遮罩 ───────────────────────────────────────────────────── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { background: var(--theme-surface); border-radius: var(--radius-lg); width: 420px; max-width: 92vw; box-shadow: var(--shadow-dropdown); overflow: hidden; }
+  .modal-head { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--theme-border); display: flex; align-items: center; }
+  .modal-head .target { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--accent); }
+  .modal-body { padding: 14px 16px; max-height: 60vh; overflow-y: auto; }
+  .modal-foot { padding: 12px 16px; border-top: 1px solid var(--theme-border); display: flex; justify-content: flex-end; gap: 8px; }
+  .picker-group { margin-bottom: 14px; }
+  .picker-group > .pg-title { font-size: 12px; font-weight: 600; color: var(--theme-text-muted); margin-bottom: 8px; }
+  .picker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .picker-item { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--theme-border); border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition-fast); }
+  .picker-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .picker-item .pi { width: 18px; height: 18px; color: var(--theme-text-secondary); }
+  .picker-item .pl { font-size: 13px; }
+
+  /* Toast */
+  .toast-wrap { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { background: var(--theme-surface); border: 1px solid var(--theme-border); border-left: 3px solid var(--accent); box-shadow: var(--shadow-dropdown); padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; animation: toastIn .2s ease; max-width: 80vw; }
+  .toast.ok { border-left-color: var(--success-color); }
+  .toast.err { border-left-color: var(--danger-color); }
+  .toast.warn { border-left-color: var(--warning-color); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+  /* demo 状态条 */
+  .demo-bar { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 6px; background: var(--theme-surface); border: 1px solid var(--theme-border); border-radius: 20px; padding: 6px 10px; box-shadow: var(--shadow-dropdown); }
+  .demo-bar .lbl { font-size: 12px; color: var(--theme-text-muted); }
+  .demo-bar select { border: none; background: var(--theme-surface-hover); padding: 4px 8px; border-radius: 12px; }
+
+  .preview-only { display: none; }
+  body.mode-preview .edit-only { display: none !important; }
+  body.mode-preview .preview-only { display: inline-flex; }
+  body.mode-preview .card-container { cursor: default; }
+  body.mode-preview .resize-handle, body.mode-preview .w-resize, body.mode-preview .w-del { display: none !important; }
+  body.mode-preview .cc-toolbar, body.mode-preview .palette, body.mode-preview .property { display: none !important; }
+  body.mode-preview .canvas-wrap { width: 100%; }
+</style>
+</head>
+<body class="mode-edit">
+  <!-- ── 顶栏 ─────────────────────────────────────────────────────── -->
+  <div class="topbar">
+    <input class="dash-title" id="dashTitle" value="策略执行情况看板" aria-label="仪表盘名称" />
+    <button class="btn ghost" title="撤销" disabled>↶ 撤销</button>
+    <button class="btn ghost" title="重做" disabled>↷ 重做</button>
+    <div class="spacer"></div>
+    <button class="btn" id="btnPreview">▶ 预览</button>
+    <button class="btn" id="btnTheme" title="切换主题">🌓</button>
+    <button class="btn primary" id="btnSave">保存</button>
+  </div>
+
+  <!-- ── 三栏 ─────────────────────────────────────────────────────── -->
+  <div class="editor">
+    <aside class="palette" id="palette"></aside>
+    <main class="canvas-wrap">
+      <div class="stage">
+        <div id="canvas"></div>
+      </div>
+    </main>
+    <aside class="property" id="property"></aside>
+  </div>
+
+  <div class="demo-bar edit-only">
+    <span class="lbl">演示子组件状态：</span>
+    <select id="demoState">
+      <option value="loaded">正常加载</option>
+      <option value="loading">加载中（骨架屏）</option>
+      <option value="empty">无数据</option>
+      <option value="error">加载失败</option>
+    </select>
+  </div>
+
+  <div class="toast-wrap" id="toasts"></div>
+  <div id="overlayHost"></div>
+
+<script>
+/* ==========================================================================
+ * 组合卡片原型 · 状态模型
+ * --------------------------------------------------------------------------
+ * 该 state 模型与后端 schema 一一对应（见设计文档 §十三 配置结果结构示意）。
+ * 后续接入后端时：用后端返回的对象替换 FAKE_* 即可，渲染层无需改动。
+ * ======================================================================== */
+const uid = (p) => p + '_' + Math.random().toString(36).slice(2, 7);
+
+const FAKE_DATA = {
+  // 数据对接点：子组件的真实数据应来自后端数据集 / 筛选上下文，此处为固定假数据。
+  kpi: [
+    { id: 'kpi-1', label: '关联计划数', value: '12',     trend: '+2', dir: 'up' },
+    { id: 'kpi-2', label: '关联策略数', value: '38',     trend: '+5', dir: 'up' },
+    { id: 'kpi-3', label: '下发策略数', value: '24,680', trend: '+12%', dir: 'up' },
+    { id: 'kpi-4', label: '触达策略数', value: '19,420', trend: '-3%',  dir: 'down' },
+  ],
+  chart: { categories: ['周一','周二','周三','周四','周五','周六','周日'], values: [120, 200, 150, 80, 170, 210, 140] },
+  table: { head: ['策略', '触达', '转化'], rows: [['新客拉新','8,420','1,210'],['召回','5,300','640'],['沉睡唤醒','3,120','280']] },
+  ai: { blocks: [ { h: '整体结论', p: '本周策略整体触达 19,420 次，转化率较上周提升 1.8pct，新客拉新贡献最大。' }, { h: '风险提示', p: '沉睡唤醒策略转化偏低，建议优化触达时段与文案。' } ] },
+};
+
+// 容器（组合卡片）配置 —— 对应文档 §十三 card-container
+const state = {
+  mode: 'edit',                 // edit | preview
+  selection: { kind: 'container' }, // container | child | null
+  selectedChildId: null,
+  demoState: 'loaded',          // 仅用于演示子组件状态
+  container: {
+    id: 'cc-1',
+    title: '策略执行情况',
+    showTitle: true,
+    size: { width: 760, height: 420 },
+    style: { background: '#FFFFFF', border: { enabled: true, color: '#E5EAF2', width: 1 }, radius: 12, padding: 16, shadow: 'none' },
+    layout: { mode: 'grid', columns: 12, gap: 12, align: 'left' },
+    activeTab: 'tab-summary',
+    defaultTab: 'tab-summary',
+    tabs: [
+      { id: 'tab-summary', title: '策略概括', children: ['kpi-1','kpi-2','kpi-3','kpi-4'] },
+      { id: 'tab-exec',    title: '策略执行', children: ['chart-1','table-1'] },
+      { id: 'tab-contrib', title: '策略贡献', children: ['ai-1'] },
+    ],
+    scope: {
+      parameters: [ { id:'p1', name:'时间范围', source:'仪表盘时间筛选', scope:'全部子组件', overridable:true } ],
+      events: [ { id:'e1', trigger:'时间筛选', action:'刷新数据', target:'当前容器' } ],
+    },
+  },
+  children: {
+    'kpi-1': { id:'kpi-1', type:'kpi', title:'关联计划数', col:6, data: FAKE_DATA.kpi[0] },
+    'kpi-2': { id:'kpi-2', type:'kpi', title:'关联策略数', col:6, data: FAKE_DATA.kpi[1] },
+    'kpi-3': { id:'kpi-3', type:'kpi', title:'下发策略数', col:6, data: FAKE_DATA.kpi[2] },
+    'kpi-4': { id:'kpi-4', type:'kpi', title:'触达策略数', col:6, data: FAKE_DATA.kpi[3] },
+    'chart-1': { id:'chart-1', type:'chart', title:'触达趋势', col:7, data: FAKE_DATA.chart },
+    'table-1': { id:'table-1', type:'table', title:'策略明细', col:5, data: FAKE_DATA.table },
+    'ai-1':   { id:'ai-1', type:'ai', title:'AI 分析', col:12, data: FAKE_DATA.ai },
+  },
+};
+
+/* ── 物料面板定义（数据对接点：真实应从后端组件目录拉取）────────────── */
+const PALETTE = [
+  { group: '基础组件', items: [
+    { type:'kpi', label:'KPI 卡片' }, { type:'chart', label:'图表' }, { type:'table', label:'数据表格' },
+    { type:'filter', label:'筛选项' }, { type:'timeFilter', label:'时间筛选' }, { type:'ai', label:'AI 分析' },
+  ]},
+  { group: '布局组件', items: [ { type:'container', label:'组合卡片 / 卡片容器', layout:true } ] },
+];
+const ICON = {
+  kpi:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="12" y="15" text-anchor="middle" font-size="9" fill="currentColor" stroke="none">K</text></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="4" height="10"/><rect x="10" y="6" width="4" height="14"/><rect x="16" y="14" width="4" height="6"/></svg>',
+  table:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/></svg>',
+  filter:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="4,4 20,4 14,12 14,20 10,18 10,12"/></svg>',
+  timeFilter:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12,6 12,12 16,14"/></svg>',
+  ai:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>',
+  container:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><rect x="6" y="12" width="5" height="6"/><rect x="13" y="12" width="5" height="6"/></svg>',
+};
+
+/* ==========================================================================
+ * 渲染
+ * ====================================================================== */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function renderPalette(){
+  const html = PALETTE.map(g => `
+    <div class="palette-group">
+      <button class="gh">${esc(g.group)}<span class="cnt">${g.items.length}</span></button>
+      <div class="palette-items">
+        ${g.items.map(it => `
+          <div class="palette-item ${it.layout?'layout':''}" draggable="true" data-palette="${it.type}">
+            <span class="pi">${ICON[it.type]||''}</span><span>${esc(it.label)}</span>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+  $('#palette').innerHTML = `<div class="panel-title">组件面板</div>` + html;
+}
+
+function renderTabs(){
+  const c = state.container;
+  return `<div class="cc-tabs">
+    ${c.tabs.map(t => `
+      <div class="cc-tab ${t.id===c.activeTab?'active':''}" data-tab="${t.id}">
+        ${ (state.selection.kind==='container' && state._editingTab===t.id)
+            ? `<input class="tab-edit" data-tab-rename="${t.id}" value="${esc(t.title)}" />`
+            : `<span>${esc(t.title)}</span>` }
+      </div>`).join('')}
+    <button class="cc-tab-add" data-action="add-tab" title="添加页签">+</button>
+  </div>`;
+}
+
+function widgetHTML(child){
+  const c = state.container;
+  const sel = (state.selection.kind==='child' && state.selectedChildId===child.id);
+  const ds = state.demoState;
+  // 演示状态：骨架 / 空 / 失败（仅数据区，不阻塞其他子组件）
+  if (ds === 'loading') return `<div class="widget ${sel?'selected':''}" data-child="${child.id}" draggable="true" style="--w-col:${child.col}">
+      ${sel?'<span class="w-resize"></span>':''}<div class="skeleton" style="height:14px;width:50%"></div><div class="skeleton" style="height:40px;margin-top:10px"></div><div class="skeleton" style="height:20px;margin-top:8px;width:70%"></div></div>`;
+  if (ds === 'empty') return `<div class="widget ${sel?'selected':''}" data-child="${child.id}" draggable="true" style="--w-col:${child.col}">
+      ${sel?'<span class="w-resize"></span>':''}<div class="state-box">📭<div>当前组件暂无数据</div></div></div>`;
+  if (ds === 'error') return `<div class="widget ${sel?'selected':''}" data-child="${child.id}" draggable="true" style="--w-col:${child.col}">
+      ${sel?'<span class="w-resize"></span>':''}<div class="state-box"><span class="err-ic">⚠</span><div>数据加载失败</div><div style="font-size:12px">请检查数据集配置或筛选条件</div>
+      <div style="display:flex;gap:8px"><button class="btn" data-action="retry">重试</button><button class="btn ghost" data-action="view-cfg">查看配置</button></div></div></div>`;
+
+  let inner = '';
+  if (child.type === 'kpi'){
+    const d = child.data;
+    inner = `<div class="kpi-val">${esc(d.value)}</div><div class="kpi-label">${esc(d.label)}</div>
+      <div class="kpi-trend ${d.dir}">${d.dir==='up'?'▲':'▼'} ${esc(d.trend)}</div>`;
+  } else if (child.type === 'chart'){
+    inner = chartSVG(child.data);
+  } else if (child.type === 'table'){
+    const d = child.data;
+    inner = `<table class="mini"><thead><tr>${d.head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${d.rows.map(r=>`<tr>${r.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  } else if (child.type === 'ai'){
+    const d = child.data;
+    inner = `<div class="ai-box">${d.blocks.map(b=>`<h4>${esc(b.h)}</h4><p>${esc(b.p)}</p>`).join('')}
+      <div class="ai-disclaimer">* 本分析由 AI 基于当前数据集生成，仅供参考。</div></div>`;
+  } else if (child.type === 'filter'){
+    inner = `<div class="filter-row">${['全部','新客','召回','沉睡'].map((o,i)=>`<button class="seg-btn ${i===0?'on':''}" data-seg>${o}</button>`).join('')}</div>`;
+  } else if (child.type === 'timeFilter'){
+    inner = `<div class="filter-row"><input type="date" value="2026-09-01"/><span>~</span><input type="date" value="2026-09-16"/><button class="btn" data-action="apply-time">应用</button></div>`;
+  } else if (child.type === 'button'){
+    inner = `<button class="op-btn" data-action="op-click">${esc(child.title||'操作按钮')}</button>`;
+  }
+  return `<div class="widget ${sel?'selected':''}" data-child="${child.id}" draggable="true" style="--w-col:${child.col}">
+    <div class="w-head"><span class="w-title">${esc(child.title||child.type)}</span>
+      ${state.mode==='edit'?`<button class="w-del" data-del-child="${child.id}" title="删除">✕</button>`:''}</div>
+    ${inner}
+    ${sel&&state.mode==='edit'?'<span class="w-resize" data-resize-child="'+child.id+'"></span>':''}
+  </div>`;
+}
+
+function chartSVG(d){
+  const max = Math.max(...d.values), w = 240, h = 110, pad = 6;
+  const bw = (w - pad*2) / d.values.length;
+  const bars = d.values.map((v,i)=>{
+    const bh = (v/max) * (h - 20);
+    const x = pad + i*bw, y = h - bh - 4;
+    return `<rect x="${x+2}" y="${y}" width="${bw-4}" height="${bh}" rx="2" fill="var(--accent)" opacity="${0.55+0.45*(v/max)}"/>`;
+  }).join('');
+  return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${bars}</svg>`;
+}
+
+function renderCanvas(){
+  const c = state.container;
+  const sel = state.selection.kind === 'container';
+  const st = c.style;
+  const cssVars = [
+    `--cc-w:${c.size.width}px`, `--cc-h:${c.size.height}px`,
+    `--cc-bg:${st.background}`, `--cc-radius:${st.radius}px`, `--cc-pad:${st.padding}px`,
+    `--cc-border-color:${st.border.enabled?st.border.color:'transparent'}`,
+    `--cc-gap:${c.layout.gap}px`, `--cc-cols:${c.layout.columns}`,
+  ].join(';');
+  const tab = c.tabs.find(t => t.id === c.activeTab);
+  const kids = (tab ? tab.children : []).map(id => state.children[id]).filter(Boolean);
+  const body = kids.length
+    ? `<div class="cc-grid ${c.layout.mode==='vertical'?'mode-vertical':''}">${kids.map(widgetHTML).join('')}</div>`
+    : `<div class="cc-empty"><div>🧩 当前页签暂无组件</div><div style="font-size:12px">拖入组件或点击下方按钮开始配置</div>
+        ${state.mode==='edit'?`<button class="btn primary" data-action="add-component">添加组件</button>`:''}</div>`;
+
+  const handles = sel && state.mode==='edit'
+    ? `<span class="resize-handle nw" data-rz="nw"></span><span class="resize-handle ne" data-rz="ne"></span>
+       <span class="resize-handle sw" data-rz="sw"></span><span class="resize-handle se" data-rz="se"></span>
+       <span class="size-tip" id="sizeTip">宽 ${c.size.width}px × 高 ${c.size.height}px</span>` : '';
+
+  $('#canvas').innerHTML = `
+    <div class="card-container ${sel?'selected':''}" id="cc" style="${cssVars}" data-container>
+      <div class="cc-header">
+        ${c.showTitle?`<span class="cc-title">${esc(c.title)}</span>`:`<span class="cc-title" style="color:var(--theme-text-muted)">（标题已隐藏）</span>`}
+        ${state.mode==='edit'?`<div class="cc-toolbar">
+          <button class="tbtn" data-action="add-component">＋ 添加组件</button>
+          <button class="tbtn" data-action="add-tab">＋ 页签</button>
+          <button class="tbtn" data-action="open-settings">⚙ 设置</button>
+          <button class="tbtn" data-action="more">⋯ 更多</button>
+        </div>`:''}
+      </div>
+      ${renderTabs()}
+      <div class="cc-body">${body}</div>
+      ${handles}
+    </div>`;
+}
+
+function renderProperty(){
+  const host = $('#property');
+  if (state.selection.kind === 'child'){ host.innerHTML = childPropHTML(state.children[state.selectedChildId]); return; }
+  if (state.selection.kind === 'container'){ host.innerHTML = containerPropHTML(); return; }
+  host.innerHTML = `<div class="panel-title">属性配置</div><div style="padding:16px;color:var(--theme-text-muted)">点击画布中的组合卡片或子组件以编辑其属性。<br><br>当前：仪表盘属性（占位）。</div>`;
+}
+
+/* ── 容器属性面板 ──────────────────────────────────────────────────── */
+function section(title, body, id){
+  const collapsed = state._collapsed && state._collapsed[id];
+  return `<div class="prop-section ${collapsed?'collapsed':''}" data-section="${id}">
+    <button class="sh" data-toggle-section="${id}">${esc(title)}<span class="ar">▾</span></button>
+    <div class="prop-body">${body}</div></div>`;
+}
+
+function containerPropHTML(){
+  const c = state.container, st = c.style, lo = c.layout;
+  const basic = `
+    <div class="field"><label>容器标题</label><input id="f-title" value="${esc(c.title)}" /></div>
+    <div class="field"><label>容器描述</label><input id="f-desc" placeholder="展示策略执行相关指标" /></div>
+    <div class="field row"><label>显示标题</label><button class="switch ${c.showTitle?'on':''}" data-toggle="showTitle"></button></div>`;
+
+  const size = `
+    <div class="field"><label>尺寸（px）</label><div class="inline">
+      <span>宽</span><input id="f-w" type="number" value="${c.size.width}"/><span>高</span><input id="f-h" type="number" value="${c.size.height}"/></div></div>
+    <div class="field"><label>位置（px，演示用）</label><div class="inline">
+      <span>X</span><input id="f-x" type="number" value="24"/><span>Y</span><input id="f-y" type="number" value="180"/></div></div>
+    <div class="field row"><label>适应内容高度</label><button class="switch" data-toggle="fit"></button></div>
+    <div class="field row"><label>锁定宽高比</label><button class="switch" data-toggle="lock"></button></div>`;
+
+  const layout = `
+    <div class="field"><label>布局方式</label>
+      <select id="f-layoutmode">
+        <option value="grid" ${lo.mode==='grid'?'selected':''}>网格布局</option>
+        <option value="vertical" ${lo.mode==='vertical'?'selected':''}>垂直流式</option>
+        <option value="free" ${lo.mode==='free'?'selected':''}>自由布局（即将支持）</option>
+      </select></div>
+    <div class="field row"><label>列数</label><input id="f-cols" type="number" value="${lo.columns}" style="width:72px"/></div>
+    <div class="field row"><label>行间距(px)</label><input id="f-gap-y" type="number" value="${lo.gap}" style="width:72px"/></div>
+    <div class="field row"><label>列间距(px)</label><input id="f-gap-x" type="number" value="${lo.gap}" style="width:72px"/></div>
+    <div class="field"><label>子组件对齐</label><select id="f-align">
+      <option ${lo.align==='left'?'selected':''}>左对齐</option><option ${lo.align==='center'?'selected':''}>居中</option><option ${lo.align==='right'?'selected':''}>右对齐</option></select></div>`;
+
+  const appear = `
+    <div class="field"><label>背景</label><select id="f-bg">
+      <option value="#FFFFFF" ${st.background==='#FFFFFF'?'selected':''}>白色</option>
+      <option value="var(--theme-surface)" ${st.background.includes('surface')?'selected':''}>跟随主题</option>
+      <option value="var(--light-orange)" ${st.background.includes('orange')?'selected':''}>浅橙</option></select></div>
+    <div class="field row"><label>显示边框</label><button class="switch ${st.border.enabled?'on':''}" data-toggle="border"></button>
+      <input id="f-border-color" value="${st.border.color}" style="width:80px"/><input id="f-border-w" type="number" value="${st.border.width}" style="width:48px"/></div>
+    <div class="field row"><label>圆角(px)</label><input id="f-radius" type="number" value="${st.radius}" style="width:72px"/></div>
+    <div class="field row"><label>内边距(px)</label><input id="f-pad" type="number" value="${st.padding}" style="width:72px"/></div>
+    <div class="field"><label>阴影</label><select id="f-shadow">
+      <option value="none" ${st.shadow==='none'?'selected':''}>无</option>
+      <option value="card" ${st.shadow==='card'?'selected':''}>卡片阴影</option></select></div>
+    <div class="field"><label>标题对齐</label><select id="f-title-align"><option>左对齐</option><option>居中</option></select></div>`;
+
+  const tabCfg = `
+    ${c.tabs.map(t => `
+      <div class="tab-row" data-tabrow="${t.id}">
+        <span class="grip">⠿</span>
+        <span class="nm"><input value="${esc(t.title)}" data-tab-name="${t.id}"/></span>
+        ${t.id===c.defaultTab?'<span style="font-size:11px;color:var(--accent)">默认</span>':`<button class="mini" data-set-default="${t.id}">设默认</button>`}
+        <button class="mini" data-copy-tab="${t.id}">复制</button>
+        <button class="mini danger" data-del-tab="${t.id}">删除</button>
+      </div>`).join('')}
+    <button class="add-link" data-action="add-tab">＋ 添加页签</button>
+    <div style="font-size:11px;color:var(--theme-text-muted)">提示：至少保留 1 个页签；删除当前页签前需先切换。</div>`;
+
+  const scope = `
+    <div class="field"><label>参数绑定</label></div>
+    ${c.scope.parameters.map(p=>`
+      <div class="bind-row">
+        <select disabled><option>${esc(p.name)}</option></select>
+        <select disabled><option>${esc(p.source)}</option></select>
+        <select disabled><option>${esc(p.scope)}</option></select>
+        <button class="mini" data-del-param="${p.id}">✕</button>
+      </div>`).join('')}
+    <button class="add-link" data-action="add-param">＋ 添加参数绑定</button>
+    <div class="field" style="margin-top:6px"><label>事件绑定</label></div>
+    ${c.scope.events.map(e=>`
+      <div class="bind-row">
+        <select disabled><option>${esc(e.trigger)}</option></select>
+        <select disabled><option>${esc(e.action)}</option></select>
+        <select disabled><option>${esc(e.target)}</option></select>
+        <button class="mini" data-del-event="${e.id}">✕</button>
+      </div>`).join('')}
+    <button class="add-link" data-action="add-event">＋ 添加事件绑定</button>
+    <div class="scope-tree">
+      <div>［时间范围］</div>
+      <div class="lvl1">│ 作用于</div>
+      <div class="lvl1">└─ <span class="node">${esc(c.title)}</span></div>
+      <div class="lvl2">├─ 策略概括</div><div class="lvl2">├─ 策略执行</div><div class="lvl2">└─ 策略贡献</div>
+    </div>
+    <div class="conflict-tip">⚠ 当前参数同时绑定到容器和子组件，子组件配置将覆盖容器配置。<button class="btn ghost" style="font-size:11px;padding:0 4px">查看绑定关系</button></div>`;
+
+  return `<div class="panel-title">组合容器属性</div>` +
+    section('基础信息', basic, 'basic') +
+    section('尺寸与位置', size, 'size') +
+    section('内部布局', layout, 'layout') +
+    section('外观样式', appear, 'appear') +
+    section('页签配置', tabCfg, 'tabs') +
+    section('参数与事件作用域', scope, 'scope');
+}
+
+function childPropHTML(child){
+  return `<div class="panel-title">子组件属性 · ${esc(childTypeLabel(child.type))}</div>` +
+    section('基础', `<div class="field"><label>标题</label><input id="cf-title" value="${esc(child.title||'')}"/></div>
+      <div class="field"><label>占用列数(1-12)</label><input id="cf-col" type="number" value="${child.col}" min="1" max="12"/></div>`, 'cb') +
+    section('数据（假数据·待对接）', `<div class="conflict-tip" style="border-color:var(--theme-border);background:var(--theme-surface-hover);color:var(--theme-text-muted)">
+      数据对接点：此处子组件数据来自 <code>FAKE_DATA</code>，接入后端后由数据集 / 筛选上下文提供。</div>`, 'cd');
+}
+
+function childTypeLabel(t){ return ({kpi:'KPI 卡片',chart:'图表',table:'数据表格',ai:'AI 分析',filter:'筛选项',timeFilter:'时间筛选',button:'操作按钮',container:'组合卡片'})[t]||t; }
+
+/* ==========================================================================
+ * 交互绑定
+ * ====================================================================== */
+function bindGlobal(){
+  // 顶栏
+  $('#btnPreview').addEventListener('click', togglePreview);
+  $('#btnSave').addEventListener('click', doSave);
+  $('#btnTheme').addEventListener('click', () => {
+    const h = document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark';
+  });
+  $('#dashTitle').addEventListener('input', e => { /* 数据对接点：仪表盘名称变更 */ });
+  $('#demoState').addEventListener('change', e => { state.demoState = e.target.value; renderCanvas(); });
+
+  // 物料拖拽 → 生成组合卡片（演示：点击布局组件也触发"添加容器"提示）
+  document.addEventListener('dragstart', e => {
+    const el = e.target.closest('[data-palette]');
+    if (el) e.dataTransfer.setData('text/plain', el.dataset.palette);
+  });
+  $('#canvas').addEventListener('dragover', e => e.preventDefault());
+
+  // 画布事件委托
+  $('#canvas').addEventListener('click', onCanvasClick);
+  $('#canvas').addEventListener('dblclick', e => {
+    const tab = e.target.closest('[data-tab]'); if (tab && state.mode==='edit'){ state._editingTab = tab.dataset.tab; renderCanvas(); $('#property').querySelector('[data-toggle-section="tabs"]')?.click(); }
+  });
+  $('#canvas').addEventListener('input', onCanvasInput);
+  $('#canvas').addEventListener('change', onCanvasChange);
+
+  // 属性面板委托
+  $('#property').addEventListener('click', onPropClick);
+  $('#property').addEventListener('input', onPropInput);
+  $('#property').addEventListener('change', onPropChange);
+
+  // 缩放手柄（容器）
+  document.addEventListener('pointerdown', onResizeDown);
+  // 子组件拖拽排序
+  $('#canvas').addEventListener('dragstart', onChildDragStart);
+  $('#canvas').addEventListener('dragover', onChildDragOver);
+  $('#canvas').addEventListener('drop', onChildDrop);
+
+  // 点击画布空白处 → 选中容器
+  $('.canvas-wrap').addEventListener('click', e => {
+    if (e.target.closest('#cc') || e.target.closest('.demo-bar')) return;
+    // 点击画布空白区：保持容器选中（文档：点击空白显示仪表盘属性；此处简化为保持容器）
+  });
+}
+
+function onCanvasClick(e){
+  // 选中容器（点容器非子组件区域）
+  if (e.target.closest('[data-container]') && !e.target.closest('[data-child]') && !e.target.closest('[data-action]') && !e.target.closest('[data-tab]')){
+    selectContainer(); return;
+  }
+  // 选中子组件
+  const w = e.target.closest('[data-child]');
+  if (w && !e.target.closest('[data-del-child]') && !e.target.closest('[data-action]')){ selectChild(w.dataset.child); return; }
+  // 页签切换
+  const tab = e.target.closest('[data-tab]');
+  if (tab){ state.container.activeTab = tab.dataset.tab; renderCanvas(); return; }
+
+  const act = e.target.closest('[data-action]')?.dataset.action;
+  if (act) handleAction(act, e);
+  const del = e.target.closest('[data-del-child]');
+  if (del){ deleteChild(del.dataset.delChild); }
+}
+
+function handleAction(act, e){
+  switch(act){
+    case 'add-component': return openAddComponent();
+    case 'add-tab': return addTab();
+    case 'open-settings': state._collapsed={}; renderProperty(); toast('已打开容器设置（见右侧属性面板）'); return;
+    case 'more': return openMore();
+    case 'retry': return toast('正在重试加载…', 'ok');
+    case 'view-cfg': return toast('打开组件配置（待对接）');
+    case 'apply-time': return toast('时间筛选已应用，触发容器刷新（事件联动演示）', 'ok');
+    case 'op-click': return toast('操作按钮被点击（事件：可配置导出/下钻/跳转）', 'ok');
+  }
+}
+
+function selectContainer(){ state.selection={kind:'container'}; state.selectedChildId=null; renderCanvas(); renderProperty(); }
+function selectChild(id){ state.selection={kind:'child'}; state.selectedChildId=id; renderCanvas(); renderProperty(); }
+
+function addTab(){
+  const c = state.container;
+  if (c.tabs.length >= 8){ toast('已达页签数量上限', 'warn'); return; } // 数据对接点：后端可配置上限
+  const id = uid('tab');
+  c.tabs.push({ id, title: '页签 ' + (c.tabs.length+1), children: [] });
+  c.activeTab = id;
+  renderCanvas(); renderProperty(); toast('已添加页签');
+}
+
+function deleteChild(id){
+  const c = state.container;
+  c.tabs.forEach(t => { t.children = t.children.filter(x => x !== id); });
+  delete state.children[id];
+  if (state.selectedChildId === id) selectContainer();
+  else { renderCanvas(); renderProperty(); }
+  toast('已删除子组件');
+}
+
+/* ── 添加组件面板 ──────────────────────────────────────────────────── */
+function openAddComponent(){
+  const target = state.container.tabs.find(t=>t.id===state.container.activeTab);
+  const groups = [
+    { g:'数据展示', items:[ {type:'kpi',label:'KPI 卡片'},{type:'chart',label:'图表'},{type:'table',label:'数据表格'} ] },
+    { g:'交互组件', items:[ {type:'filter',label:'筛选项'},{type:'timeFilter',label:'时间筛选'},{type:'button',label:'操作按钮'} ] },
+    { g:'智能分析', items:[ {type:'ai',label:'AI 分析'} ] },
+    { g:'布局组件', items:[ {type:'container',label:'组合卡片 / 卡片容器'} ] },
+  ];
+  const body = groups.map(gr=>`
+    <div class="picker-group"><div class="pg-title">${esc(gr.g)}</div>
+    <div class="picker-grid">${gr.items.map(it=>`
+      <div class="picker-item" data-pick="${it.type}"><span class="pi">${ICON[it.type]||''}</span><span class="pl">${esc(it.label)}</span></div>`).join('')}</div></div>`).join('');
+  showOverlay(`<div class="modal"><div class="modal-head">添加到：组合卡片 / ${esc(target.title)}<button class="btn ghost" style="margin-left:auto" data-close>✕</button></div>
+    <div class="modal-body">${body}</div></div>`);
+  $$('[data-pick]').forEach(el => el.addEventListener('click', () => { addChild(el.dataset.pick); closeOverlay(); }));
+  $('[data-close]').addEventListener('click', closeOverlay);
+}
+
+function addChild(type){
+  const c = state.container;
+  const id = uid(type);
+  const defaults = {
+    kpi:{ title:'新指标', col:6, data:{ value:'—', label:'新指标', trend:'', dir:'up' } },
+    chart:{ title:'新图表', col:7, data:FAKE_DATA.chart },
+    table:{ title:'新表格', col:5, data:FAKE_DATA.table },
+    ai:{ title:'AI 分析', col:12, data:FAKE_DATA.ai },
+    filter:{ title:'筛选项', col:6, data:null },
+    timeFilter:{ title:'时间筛选', col:6, data:null },
+    button:{ title:'操作按钮', col:4, data:null },
+    container:{ title:'嵌套组合卡片', col:12, data:null },
+  };
+  state.children[id] = { id, type, ...defaults[type] };
+  const tab = c.tabs.find(t=>t.id===c.activeTab);
+  tab.children.push(id);
+  selectChild(id);
+  toast('已添加 1 个组件到「' + tab.title + '」', 'ok');
+}
+
+/* ── 更多菜单 ──────────────────────────────────────────────────────── */
+function openMore(){
+  const host = document.createElement('div');
+  host.innerHTML = `<div class="modal" style="width:240px"><div class="modal-head">容器操作</div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:6px">
+      <button class="btn" data-m="copy">复制容器</button>
+      <button class="btn" data-m="top">置于顶层</button>
+      <button class="btn" data-m="del" style="color:var(--danger-color)">删除容器</button>
+    </div></div>`;
+  showOverlay(host.innerHTML);
+  $$('[data-m]').forEach(b => b.addEventListener('click', () => {
+    const m = b.dataset.m; closeOverlay();
+    if (m==='copy') toast('已复制容器（演示）', 'ok');
+    else if (m==='top') toast('已置于顶层（演示）', 'ok');
+    else if (m==='del') confirmDeleteContainer();
+  }));
+}
+
+function confirmDeleteContainer(){
+  showOverlay(`<div class="modal" style="width:360px"><div class="modal-head">删除容器</div>
+    <div class="modal-body">删除容器后，内部组件配置也会一并删除。确认删除「${esc(state.container.title)}」？</div>
+    <div class="modal-foot"><button class="btn" data-close>取消</button><button class="btn primary" data-ok style="background:var(--danger-color);border-color:var(--danger-color)">删除</button></div></div>`);
+  $('[data-close]').addEventListener('click', closeOverlay);
+  $('[data-ok]').addEventListener('click', () => { closeOverlay(); toast('容器已删除（演示：保留以便继续验证）', 'warn'); });
+}
+
+/* ── 预览 / 保存 ──────────────────────────────────────────────────── */
+function togglePreview(){
+  const toPreview = state.mode === 'edit';
+  state.mode = toPreview ? 'preview' : 'edit';
+  document.body.classList.toggle('mode-preview', toPreview);
+  $('#btnPreview').textContent = toPreview ? '✎ 返回编辑' : '▶ 预览';
+  $('#btnSave').style.display = toPreview ? '' : '';
+  renderCanvas(); renderProperty();
+  toast(toPreview ? '已进入预览态（隐藏编辑控件，保留真实交互）' : '已返回编辑态');
+}
+
+function doSave(){
+  const c = state.container;
+  const errs = [];
+  if (c.showTitle && !c.title.trim()) errs.push('容器已开启显示标题，请补充标题');
+  const names = c.tabs.map(t=>t.title.trim());
+  if (names.some(n=>!n)) errs.push('存在空页签名称');
+  const dup = names.filter((n,i)=>names.indexOf(n)!==i);
+  if (dup.length) errs.push('页签名称重复：' + dup.join('、'));
+  if (c.tabs.some(t=>t.children.length===0)) errs.push('存在空页签（非阻塞提醒，仍可保存）');
+  // 数据对接点：保存时应把 state.container + 各 children 配置 POST 给后端。
+
+  // 严重校验（阻止保存）：标题缺失、页签空名、页签重名
+  const blocking = errs.filter(e => e.includes('标题') || e.includes('重复') || e.includes('空页签名称'));
+  if (blocking.length){
+    toast('保存失败：' + blocking.join('；'), 'err');
+    state.selection = { kind:'container' }; renderProperty();
+    $('[data-toggle-section="tabs"]')?.click();
+    return;
+  }
+  if (errs.length){ toast('已保存（提醒：' + errs.join('；') + '）', 'warn'); }
+  else toast('正在保存仪表盘…');
+  setTimeout(()=> toast('保存成功，已更新组合卡片「' + c.title + '」', 'ok'), 600);
+}
+
+/* ── 缩放（容器四角）──────────────────────────────────────────────── */
+let rz = null;
+function onResizeDown(e){
+  const h = e.target.closest('[data-rz]'); if (!h) return;
+  e.preventDefault();
+  const c = state.container;
+  rz = { corner: h.dataset.rz, x: e.clientX, y: e.clientY, w: c.size.width, h: c.size.height };
+  document.addEventListener('pointermove', onResizeMove);
+  document.addEventListener('pointerup', onResizeUp);
+}
+function onResizeMove(e){
+  if (!rz) return;
+  const dx = e.clientX - rz.x, dy = e.clientY - rz.y;
+  let w = rz.w, h = rz.h;
+  if (rz.corner.includes('e')) w = Math.max(360, rz.w + dx);
+  if (rz.corner.includes('w')) w = Math.max(360, rz.w - dx);
+  if (rz.corner.includes('s')) h = Math.max(160, rz.h + dy);
+  if (rz.corner.includes('n')) h = Math.max(160, rz.h - dy);
+  state.container.size = { width: Math.round(w), height: Math.round(h) };
+  const box = $('#cc'); if (box){ box.style.setProperty('--cc-w', w+'px'); box.style.setProperty('--cc-h', h+'px'); }
+  const tip = $('#sizeTip'); if (tip) tip.textContent = `宽 ${Math.round(w)}px × 高 ${Math.round(h)}px`;
+}
+function onResizeUp(){
+  rz = null; document.removeEventListener('pointermove', onResizeMove); document.removeEventListener('pointerup', onResizeUp);
+  renderCanvas(); renderProperty();
+}
+
+/* ── 子组件拖拽排序 ────────────────────────────────────────────────── */
+let dragId = null;
+function onChildDragStart(e){ const w = e.target.closest('[data-child]'); if (w){ dragId = w.dataset.child; w.classList.add('dragging'); } }
+function onChildDragOver(e){ e.preventDefault(); const w = e.target.closest('[data-child]'); $$('.widget.drop-target').forEach(x=>x.classList.remove('drop-target')); if (w && w.dataset.child!==dragId) w.classList.add('drop-target'); }
+function onChildDrop(e){
+  e.preventDefault();
+  const tgt = e.target.closest('[data-child]');
+  $$('.widget.drop-target').forEach(x=>x.classList.remove('drop-target'));
+  if (!tgt || !dragId || tgt.dataset.child===dragId) return;
+  const tab = state.container.tabs.find(t=>t.id===state.container.activeTab);
+  const from = tab.children.indexOf(dragId), to = tab.children.indexOf(tgt.dataset.child);
+  if (from<0||to<0) return;
+  tab.children.splice(from,1); tab.children.splice(to,0,dragId);
+  dragId = null; renderCanvas(); toast('已调整子组件顺序');
+}
+
+/* ── 属性面板事件 ──────────────────────────────────────────────────── */
+function onPropClick(e){
+  const ts = e.target.closest('[data-toggle-section]');
+  if (ts){ state._collapsed = state._collapsed||{}; state._collapsed[ts.dataset.toggleSection] = !state._collapsed[ts.dataset.toggleSection]; renderProperty(); return; }
+  const tg = e.target.closest('[data-toggle]');
+  if (tg){ const k = tg.dataset.toggle;
+    if (k==='showTitle') state.container.showTitle=!state.container.showTitle;
+    if (k==='border') state.container.style.border.enabled=!state.container.style.border.enabled;
+    if (k==='fit'||k==='lock') toast('该选项为演示占位');
+    renderCanvas(); renderProperty(); return;
+  }
+  // 页签操作
+  const setDef = e.target.closest('[data-set-default]'); if (setDef){ state.container.defaultTab=setDef.dataset.setDefault; renderCanvas(); renderProperty(); return; }
+  const copyT = e.target.closest('[data-copy-tab]'); if (copyT){ const t=state.container.tabs.find(x=>x.id===copyT.dataset.copyTab); const id=uid('tab'); state.container.tabs.push({id,title:t.title+'-副本',children:[...t.children]}); state.container.activeTab=id; renderCanvas(); renderProperty(); toast('已复制页签'); return; }
+  const delT = e.target.closest('[data-del-tab]'); if (delT){ delTab(delT.dataset.delTab); return; }
+  const addP = e.target.closest('[data-action="add-param"]'); if (addP){ state.container.scope.parameters.push({id:uid('p'),name:'新参数',source:'固定值',scope:'全部子组件',overridable:true}); renderProperty(); return; }
+  const addE = e.target.closest('[data-action="add-event"]'); if (addE){ state.container.scope.events.push({id:uid('e'),trigger:'点击',action:'刷新当前容器',target:'当前容器'}); renderProperty(); return; }
+  const dP = e.target.closest('[data-del-param]'); if (dP){ state.container.scope.parameters=state.container.scope.parameters.filter(p=>p.id!==dP.dataset.delParam); renderProperty(); return; }
+  const dE = e.target.closest('[data-del-event]'); if (dE){ state.container.scope.events=state.container.scope.events.filter(x=>x.id!==dE.dataset.delEvent); renderProperty(); return; }
+  const addT = e.target.closest('[data-action="add-tab"]'); if (addT){ addTab(); return; }
+}
+function delTab(id){
+  const c = state.container;
+  if (c.tabs.length<=1){ toast('至少保留 1 个页签，无法删除', 'warn'); return; }
+  if (id===c.activeTab){ toast('请先切换到其他页签再删除当前页签', 'warn'); return; }
+  c.tabs = c.tabs.filter(t=>t.id!==id);
+  renderCanvas(); renderProperty(); toast('已删除页签');
+}
+function onPropInput(e){
+  // 文本输入：只更新 state 与画布，不重渲染面板（保焦点）
+  const t = e.target.id;
+  if (t==='f-title'){ state.container.title=e.target.value; renderCanvas(); }
+  if (t==='cf-title'){ const ch=state.children[state.selectedChildId]; if(ch) ch.title=e.target.value; renderCanvas(); }
+}
+function onPropChange(e){
+  const t = e.target.id; const c = state.container;
+  if (t==='f-w'){ c.size.width=+e.target.value||c.size.width; renderCanvas(); }
+  if (t==='f-h'){ c.size.height=+e.target.value||c.size.height; renderCanvas(); }
+  if (t==='f-cols'){ c.layout.columns=Math.min(12,Math.max(1,+e.target.value||12)); renderCanvas(); }
+  if (t==='f-gap-y'||t==='f-gap-x'){ c.layout.gap=+e.target.value||c.layout.gap; renderCanvas(); }
+  if (t==='f-radius'){ c.style.radius=+e.target.value||c.style.radius; renderCanvas(); }
+  if (t==='f-pad'){ c.style.padding=+e.target.value||c.style.padding; renderCanvas(); }
+  if (t==='f-border-w'){ c.style.border.width=+e.target.value||1; renderCanvas(); }
+  if (t==='f-border-color'){ c.style.border.color=e.target.value; renderCanvas(); }
+  if (t==='f-layoutmode'){ c.layout.mode=e.target.value; renderCanvas(); }
+  if (t==='f-align'){ c.layout.align=e.target.value; renderCanvas(); }
+  if (t==='f-bg'){ c.style.background=e.target.value; renderCanvas(); }
+  if (t==='f-shadow'){ c.style.shadow=e.target.value; renderCanvas(); }
+  if (t==='cf-col'){ const ch=state.children[state.selectedChildId]; if(ch) ch.col=Math.min(12,Math.max(1,+e.target.value||6)); renderCanvas(); }
+}
+function onCanvasInput(e){
+  const rn = e.target.closest('[data-tab-rename]');
+  if (rn){ const t=state.container.tabs.find(x=>x.id===rn.dataset.tabRename); if(t) t.title=rn.value; renderCanvas(); }
+}
+function onCanvasChange(e){
+  const tn = e.target.closest('[data-tab-name]');
+  if (tn){ const t=state.container.tabs.find(x=>x.id===tn.dataset.tabName); if(t) t.title=tn.value; renderProperty(); }
+  // 筛选器分段切换（演示联动）
+  const seg = e.target.closest('[data-seg]');
+  if (seg){ const row=seg.parentElement; $$('[data-seg]',row).forEach(b=>b.classList.remove('on')); seg.classList.add('on'); }
+}
+
+/* ── 遮罩 / Toast ──────────────────────────────────────────────────── */
+function showOverlay(html){ $('#overlayHost').innerHTML = `<div class="overlay" data-overlay>${html}</div>`; $('#overlayHost').querySelector('[data-overlay]').addEventListener('click', e=>{ if(e.target.dataset.overlay!==undefined && e.target.classList.contains('overlay')) closeOverlay(); }); }
+function closeOverlay(){ $('#overlayHost').innerHTML=''; }
+let toastTimer=[];
+function toast(msg, kind=''){ const w=$('#toasts'); const el=document.createElement('div'); el.className='toast '+kind; el.textContent=msg; w.appendChild(el); setTimeout(()=>{ el.style.opacity='0'; setTimeout(()=>el.remove(),200); }, 2600); }
+
+/* ── 启动 ──────────────────────────────────────────────────────────── */
+function init(){ renderPalette(); renderCanvas(); renderProperty(); bindGlobal(); }
+init();
+</script>
+</body>
+</html>

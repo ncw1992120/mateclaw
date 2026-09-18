@@ -20,7 +20,23 @@ if [[ ! -f "$JAR_PATH" ]]; then
   exit 1
 fi
 
-export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql}"
+# Aloudata 上游临时指向本地 mock（docs/策略解读/mock.md）：
+#   默认开启 local-mock —— 指标视图目录/列表/字段/详情/预览全部返回内置夹具数据，
+#   不发起任何真实 Aloudata 请求，也无需在 Aloudata 侧造数据或授权。
+#   要切回真实上游：ALOUDATA_MOCK=off ./restart-dataagent-backend.sh
+#   （也可用 SPRING_PROFILES_ACTIVE=pgsql 显式覆盖整组 profile）
+MOCK_SWITCH="${ALOUDATA_MOCK:-on}"
+case "$MOCK_SWITCH" in
+  on|ON|true|TRUE|1)
+    export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"
+    echo "★ Aloudata 上游 = 本地 mock（local-mock profile）。切回真实上游：ALOUDATA_MOCK=off 重启。"
+    ;;
+  *)
+    export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql}"
+    echo "Aloudata 上游 = 真实环境（未启用 local-mock）。"
+    ;;
+esac
+
 export DB_HOST="${DB_HOST:-14.22.85.76}"
 export DB_PORT="${DB_PORT:-5432}"
 export DB_NAME="${DB_NAME:-testdb}"

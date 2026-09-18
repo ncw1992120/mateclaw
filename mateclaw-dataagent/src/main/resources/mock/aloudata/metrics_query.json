@@ -1,0 +1,701 @@
+{
+  "data": {
+    "table": {
+      "columns": {
+        "metric_time": [
+          {
+            "value": "2026-09-01",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "2026-09-01",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "2026-09-01",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "2026-09-02",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "2026-09-02",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "2026-09-02",
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "attribution_plan_id": [
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "PLAN-001",
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "attribution_strategy_id": [
+          {
+            "value": "STR-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "STR-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "STR-002",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "STR-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "STR-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "STR-002",
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "platform_id": [
+          {
+            "value": "SUB-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SUB-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SUB-002",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SUB-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SUB-001",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SUB-002",
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "channel": [
+          {
+            "value": "APP",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SMS",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "APP",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "APP",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "SMS",
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": "APP",
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_trd_fund_amt_inout_cy_jjgr": [
+          {
+            "value": 1250000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 980000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 1480000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 1320000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 1040000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 1550000.0,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt": [
+          {
+            "value": 128,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 101,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 152,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 136,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 109,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 161,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_trd_fund_amt_inout_cy_jjgr_pb": [
+          {
+            "value": 420000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 315000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 510000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 450000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 338000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 536000.0,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_pbcnt_kgdb_a566_fh_jjgr": [
+          {
+            "value": 96,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 81,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 112,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 103,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 87,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 121,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0": [
+          {
+            "value": 860000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 640000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 930000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 905000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 690000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 982000.0,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt": [
+          {
+            "value": 74,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 57,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 88,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 79,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 62,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 94,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr": [
+          {
+            "value": 210000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 175000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 265000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 230000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 188000.0,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 279000.0,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt": [
+          {
+            "value": 39,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 31,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 46,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 42,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 34,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 49,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_cust_asset_in": [
+          {
+            "value": 186,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 143,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 211,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 194,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 151,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 223,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_new_cust_asset_in": [
+          {
+            "value": 72,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 55,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 84,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 78,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 60,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 90,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_cnt_cust_code_new_brok": [
+          {
+            "value": 154,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 119,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 179,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 163,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 126,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 190,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_cust_valid_new_yxh": [
+          {
+            "value": 91,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 68,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 108,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 97,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 73,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 115,
+            "flag": 0,
+            "count": 1
+          }
+        ],
+        "digo_cust_asset_in10000": [
+          {
+            "value": 43,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 32,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 51,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 46,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 35,
+            "flag": 0,
+            "count": 1
+          },
+          {
+            "value": 55,
+            "flag": 0,
+            "count": 1
+          }
+        ]
+      },
+      "total": 6
+    },
+    "metas": [
+      {
+        "name": "metric_time",
+        "displayName": "指标日期",
+        "dataTypeName": "TIMESTAMP",
+        "role": "dimension"
+      },
+      {
+        "name": "attribution_plan_id",
+        "displayName": "计划id",
+        "dataTypeName": "VARCHAR",
+        "role": "dimension"
+      },
+      {
+        "name": "attribution_strategy_id",
+        "displayName": "策略id",
+        "dataTypeName": "VARCHAR",
+        "role": "dimension"
+      },
+      {
+        "name": "platform_id",
+        "displayName": "子策略id",
+        "dataTypeName": "VARCHAR",
+        "role": "dimension"
+      },
+      {
+        "name": "channel",
+        "displayName": "触达渠道",
+        "dataTypeName": "VARCHAR",
+        "role": "dimension"
+      },
+      {
+        "name": "digo_trd_fund_amt_inout_cy_jjgr",
+        "displayName": "经纪个人客户场内公募非货当年净买入",
+        "dataTypeName": "DECIMAL",
+        "role": "measure"
+      },
+      {
+        "name": "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt",
+        "displayName": "经纪个人客户场内公募非货当年净买入-转化客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_trd_fund_amt_inout_cy_jjgr_pb",
+        "displayName": "经纪个人场内公募非货破冰客户当年净买入",
+        "dataTypeName": "DECIMAL",
+        "role": "measure"
+      },
+      {
+        "name": "digo_pbcnt_kgdb_a566_fh_jjgr",
+        "displayName": "经纪个人场内公募非货破冰客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0",
+        "displayName": "经纪个人场内公募非货交易量",
+        "dataTypeName": "DECIMAL",
+        "role": "measure"
+      },
+      {
+        "name": "digo_fund_trd_amt_a566_fh_kgdb_jj0_trans_user_cnt",
+        "displayName": "经纪个人场内公募非货交易量-转化客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr",
+        "displayName": "经纪个人场内公募非货加仓交易量",
+        "dataTypeName": "DECIMAL",
+        "role": "measure"
+      },
+      {
+        "name": "digo_pub_fh_kgdb_trdamt_ppcadd_jjgr_trans_user_cnt",
+        "displayName": "经纪个人场内公募非货加仓交易量-转化客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_cust_asset_in",
+        "displayName": "入金客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_new_cust_asset_in",
+        "displayName": "新客入金数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_cnt_cust_code_new_brok",
+        "displayName": "新增客户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_cust_valid_new_yxh",
+        "displayName": "新增有效户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      },
+      {
+        "name": "digo_cust_asset_in10000",
+        "displayName": "万元入金户数",
+        "dataTypeName": "BIGINT",
+        "role": "measure"
+      }
+    ],
+    "total": 6
+  },
+  "success": true,
+  "code": "200",
+  "errorMsg": null,
+  "detailErrorMsg": null,
+  "traceId": "mock-trace-metrics-query"
+}

@@ -1850,6 +1850,9 @@ export default {
       tabName: '页签名称',
       activeTab: '当前页签',
       deleteTab: '删除页签',
+      deleteTabConfirm: '页签「{name}」内有 {count} 个组件，删除页签后这些组件也会被一并删除，是否继续？',
+      tabMigratedHint: '已将容器内 {count} 个组件放入「{name}」',
+      tabChildrenBackHint: '已删除最后一个页签，页签内 {count} 个组件已移回容器',
       childDataHint: '子卡片的数据源配置将在下个版本接入，当前仅展示结构与交互',
     },
     aiAnalysis: {

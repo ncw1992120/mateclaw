@@ -1,7 +1,7 @@
 <template>
   <div
     class="combination-card"
-    :class="{ editing: editable, selected, 'cc-drop': editable && paletteOver }"
+    :class="{ editing: editable, selected, 'cc-drop': editable && paletteOver, 'cc-interacting': movingId !== null || resizingId !== null }"
     :style="rootStyle"
     @click="onRootClick"
     @dragenter="onBodyDragEnter"
@@ -9,8 +9,8 @@
     @dragover.prevent="onBodyDragOver"
     @drop.stop.prevent="onBodyDrop"
   >
-    <!-- 容器标题（cfg.showTitle） -->
-    <div v-if="cfg.showTitle" class="cc-head">
+    <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
+    <div v-if="!editable && cfg.showTitle" class="cc-head">
       <span class="cc-title">{{ cfg.title || component.title }}</span>
     </div>
 
@@ -57,6 +57,7 @@
         @mouseenter="hoverChildId = child.id"
         @mouseleave="hoverChildId = null"
         @mousedown="onChildMouseDown($event, child)"
+        @dragstart.stop.prevent
       >
         <div class="cc-child-head">
           <span class="cc-child-title">{{ child.title }}</span>
@@ -117,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type {
   InsightComponent,
@@ -143,6 +144,15 @@ const props = withDefaults(
   }>(),
   { editable: false, selected: false },
 )
+
+const emit = defineEmits<{
+  /** 子组件选中/取消选中（childId=null 表示回到容器自身），供编辑器属性面板联动 */
+  (e: 'select-child', payload: { containerId: string; childId: string | null }): void
+  /** 新增页签（首次新增时由编辑器把容器内已有子卡片平移进该页签） */
+  (e: 'add-tab', payload: { containerId: string }): void
+  /** 删除页签（编辑器负责二次确认与「最后一个页签组件平移回容器」） */
+  (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
+}>()
 
 const { t } = useI18n()
 
@@ -300,90 +310,155 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
   selectedChildId.value = child.id
 }
 
-// ── 子组件自由拖动（鼠标事件，实时跟随）──────────────────
-let mv: { id: string; sx: number; sy: number; ox: number; oy: number } | null = null
+// ── 子组件自由拖动（鼠标事件）──────────────────────────
+// 抖动/卡顿根因修复要点：
+// 1) mousedown stopPropagation：阻断事件冒泡到 GridItem，否则 grid-layout-plus 会同时发起
+//    容器级拖拽，导致拖子组件时整个组合卡片跟着抖动；
+// 2) mousedown preventDefault：阻止文本选中/原生图片拖拽；
+// 3) 拖动过程直接改 DOM style + requestAnimationFrame 节流，不写响应式 layout，
+//    避免每帧触发整卡重渲染造成卡顿；
+// 4) mouseup 时才把最终位置一次性提交回响应式 layout（触发面板/持久化同步）。
+let mv: { id: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null } | null = null
+let mvRaf = 0
+let mvLast: { x: number; y: number } | null = null
+
 function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   if (!props.editable) return
   const target = e.target as HTMLElement
   if (target.closest('.cc-child-del, .rs, button, input, select, textarea')) return
+  e.preventDefault()
+  e.stopPropagation()
   selectChild(child.id)
-  mv = { id: child.id, sx: e.clientX, sy: e.clientY, ox: child.layout.x, oy: child.layout.y }
+  mv = {
+    id: child.id,
+    sx: e.clientX,
+    sy: e.clientY,
+    ox: child.layout.x,
+    oy: child.layout.y,
+    el: document.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null,
+  }
   movingId.value = child.id
   window.addEventListener('mousemove', onChildMouseMove)
   window.addEventListener('mouseup', onChildMouseUp)
 }
 function onChildMouseMove(e: MouseEvent) {
   if (!mv) return
-  const dx = e.clientX - mv.sx
-  const dy = e.clientY - mv.sy
-  const child = getActiveChildren().find((c) => c.id === mv!.id)
-  if (!child) return
-  const rect = ccBodyRef.value?.getBoundingClientRect()
-  let nx = mv.ox + dx
-  let ny = mv.oy + dy
-  if (rect) {
-    const el = document.querySelector(`[data-child="${mv.id}"]`) as HTMLElement | null
-    const elW = el?.offsetWidth ?? 0
-    const elH = el?.offsetHeight ?? 90
-    nx = Math.max(0, Math.min(nx, Math.max(0, rect.width - elW)))
-    ny = Math.max(0, Math.min(ny, Math.max(0, rect.height - elH)))
-  }
-  child.layout.x = Math.round(nx)
-  child.layout.y = Math.round(ny)
+  mvLast = { x: e.clientX, y: e.clientY }
+  if (mvRaf) return
+  mvRaf = requestAnimationFrame(() => {
+    mvRaf = 0
+    if (!mv || !mvLast) return
+    let nx = mv.ox + mvLast.x - mv.sx
+    let ny = mv.oy + mvLast.y - mv.sy
+    const rect = ccBodyRef.value?.getBoundingClientRect()
+    if (rect && mv.el) {
+      nx = Math.max(0, Math.min(nx, Math.max(0, rect.width - mv.el.offsetWidth)))
+      ny = Math.max(0, Math.min(ny, Math.max(0, rect.height - mv.el.offsetHeight)))
+    }
+    mv.el?.style.setProperty('left', Math.round(nx) + 'px')
+    mv.el?.style.setProperty('top', Math.round(ny) + 'px')
+  })
 }
 function onChildMouseUp() {
+  if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0 }
+  if (mv?.el) {
+    const child = getActiveChildren().find((c) => c.id === mv!.id)
+    const nx = parseInt(mv.el.style.left, 10)
+    const ny = parseInt(mv.el.style.top, 10)
+    if (child) {
+      if (Number.isFinite(nx)) child.layout.x = nx
+      if (Number.isFinite(ny)) child.layout.y = ny
+    }
+    // 移除拖动期的内联覆盖，交还给响应式 style 绑定（同 tick 内 Vue 会先 flush 再绘制）
+    mv.el.style.removeProperty('left')
+    mv.el.style.removeProperty('top')
+  }
   mv = null
   movingId.value = null
   window.removeEventListener('mousemove', onChildMouseMove)
   window.removeEventListener('mouseup', onChildMouseUp)
 }
 
-// ── 八向缩放 ───────────────────────────────────────────
-let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number } | null = null
+// ── 八向缩放（与拖动同策略：过程改 DOM，落点提交）──────
+let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null } | null = null
+let rzRaf = 0
+let rzLast: { x: number; y: number } | null = null
+
 function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: string) {
   if (!props.editable) return
+  e.preventDefault()
+  e.stopPropagation()
   selectChild(child.id)
-  rz = { id: child.id, dir, sx: e.clientX, sy: e.clientY, ox: child.layout.x, oy: child.layout.y, ocol: child.layout.col, oh: child.layout.h ?? 120 }
+  rz = {
+    id: child.id,
+    dir,
+    sx: e.clientX,
+    sy: e.clientY,
+    ox: child.layout.x,
+    oy: child.layout.y,
+    ocol: child.layout.col,
+    oh: child.layout.h ?? 120,
+    el: document.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null,
+  }
   resizingId.value = child.id
   window.addEventListener('mousemove', onChildResizeMove)
   window.addEventListener('mouseup', onChildResizeUp)
 }
 function onChildResizeMove(e: MouseEvent) {
   if (!rz) return
-  const child = getActiveChildren().find((c) => c.id === rz!.id)
-  if (!child) return
-  const dx = e.clientX - rz.sx
-  const dy = e.clientY - rz.sy
-  const rect = ccBodyRef.value?.getBoundingClientRect()
-  const cols = 12
-  const colW = rect ? rect.width / cols : 40
-  const dh = 6 // 高度步进 px
-  const dir = rz.dir
-  let { ox, oy, ocol, oh } = rz
-  if (dir.includes('e')) ocol = Math.max(1, Math.min(cols, rz.ocol + Math.round(dx / colW)))
-  if (dir.includes('w')) {
-    const dCol = Math.round(dx / colW)
-    ocol = Math.max(1, Math.min(cols, rz.ocol - dCol))
-    ox = rz.ox + dCol * colW
-  }
-  if (dir.includes('s')) oh = Math.max(60, rz.oh + dy)
-  if (dir.includes('n')) {
-    oh = Math.max(60, rz.oh - dy)
-    oy = rz.oy + dy
-  }
-  // 边界保护
-  if (ox < 0) ox = 0
-  if (oy < 0) oy = 0
-  if (rect) {
-    if (ox > rect.width - colW) ox = rect.width - colW
-    if (oy > rect.height - 60) oy = rect.height - 60
-  }
-  child.layout.col = ocol
-  child.layout.x = Math.round(ox)
-  child.layout.y = Math.round(oy)
-  child.layout.h = Math.round(oh)
+  rzLast = { x: e.clientX, y: e.clientY }
+  if (rzRaf) return
+  rzRaf = requestAnimationFrame(() => {
+    rzRaf = 0
+    if (!rz || !rzLast || !rz.el) return
+    const rect = ccBodyRef.value?.getBoundingClientRect()
+    const colW = rect ? rect.width / 12 : 40
+    const dx = rzLast.x - rz.sx
+    const dy = rzLast.y - rz.sy
+    const dir = rz.dir
+    let { ox, oy, ocol, oh } = rz
+    if (dir.includes('e')) ocol = Math.max(1, Math.min(12, rz.ocol + Math.round(dx / colW)))
+    if (dir.includes('w')) {
+      const dCol = Math.round(dx / colW)
+      ocol = Math.max(1, Math.min(12, rz.ocol - dCol))
+      ox = rz.ox + dCol * colW
+    }
+    if (dir.includes('s')) oh = Math.max(60, rz.oh + dy)
+    if (dir.includes('n')) {
+      oh = Math.max(60, rz.oh - dy)
+      oy = rz.oy + dy
+    }
+    // 边界保护
+    if (ox < 0) ox = 0
+    if (oy < 0) oy = 0
+    if (rect) {
+      if (ox > rect.width - colW) ox = rect.width - colW
+      if (oy > rect.height - 60) oy = rect.height - 60
+    }
+    rz.el.style.setProperty('left', Math.round(ox) + 'px')
+    rz.el.style.setProperty('top', Math.round(oy) + 'px')
+    rz.el.style.setProperty('width', Math.round(ocol * colW) + 'px')
+    rz.el.style.setProperty('height', Math.round(oh) + 'px')
+  })
 }
 function onChildResizeUp() {
+  if (rzRaf) { cancelAnimationFrame(rzRaf); rzRaf = 0 }
+  if (rz?.el) {
+    const child = getActiveChildren().find((c) => c.id === rz!.id)
+    const rect = ccBodyRef.value?.getBoundingClientRect()
+    const colW = rect ? rect.width / 12 : 40
+    if (child) {
+      const nx = parseInt(rz.el.style.left, 10)
+      const ny = parseInt(rz.el.style.top, 10)
+      const nw = parseInt(rz.el.style.width, 10)
+      const nh = parseInt(rz.el.style.height, 10)
+      if (Number.isFinite(nx)) child.layout.x = nx
+      if (Number.isFinite(ny)) child.layout.y = ny
+      if (Number.isFinite(nw)) child.layout.col = Math.max(1, Math.min(12, Math.round(nw / colW)))
+      if (Number.isFinite(nh)) child.layout.h = nh
+    }
+    ;['left', 'top', 'width', 'height'].forEach((p) => rz!.el!.style.removeProperty(p))
+  }
   rz = null
   resizingId.value = null
   window.removeEventListener('mousemove', onChildResizeMove)
@@ -391,33 +466,44 @@ function onChildResizeUp() {
 }
 
 // ── 选中 / 删除 ───────────────────────────────────────
-function selectChild(id: string) { selectedChildId.value = id }
+function selectChild(id: string) {
+  selectedChildId.value = id
+  emit('select-child', { containerId: props.component.id, childId: id })
+}
 function deleteChild(id: string) {
   const arr = getActiveChildren()
   const i = arr.findIndex((c) => c.id === id)
   if (i >= 0) arr.splice(i, 1)
-  if (selectedChildId.value === id) selectedChildId.value = null
+  if (selectedChildId.value === id) {
+    selectedChildId.value = null
+    emit('select-child', { containerId: props.component.id, childId: null })
+  }
 }
 function onRootClick() {
-  if (props.editable) selectedChildId.value = null
+  if (props.editable && selectedChildId.value !== null) {
+    selectedChildId.value = null
+    emit('select-child', { containerId: props.component.id, childId: null })
+  }
 }
 
-// ── 页签 ───────────────────────────────────────────────
+/** 容器失去选中态时，同步清掉内部子组件选中，避免高亮残留 */
+watch(() => props.selected, (v) => {
+  if (!v && selectedChildId.value !== null) selectedChildId.value = null
+})
+
+// ── 页签（增删统一交由编辑器对 schema 执行）─────────────
+// 页签增删涉及「首次加页签把容器内已有子卡片平移进页签」「删页签需二次确认」
+// 「删最后一个页签把组件平移回容器」等跨组件逻辑，统一在编辑器里做，避免画布/属性面板两处入口行为不一致。
 function addTab() {
-  const c = props.component
-  if (!c.containerConfig) c.containerConfig = defaultConfig()
-  const id = genId('tab')
-  c.containerConfig.tabs.push({ id, title: `页签 ${c.containerConfig.tabs.length + 1}`, children: [] })
-  c.containerConfig.activeTab = id
+  emit('add-tab', { containerId: props.component.id })
 }
 function deleteTab(id: string) {
-  const c = props.component
-  if (!c.containerConfig) return
-  const i = c.containerConfig.tabs.findIndex((t) => t.id === id)
-  if (i >= 0) c.containerConfig.tabs.splice(i, 1)
-  if (c.containerConfig.activeTab === id) {
-    c.containerConfig.activeTab = c.containerConfig.tabs[0]?.id
+  // 被删页签内的子卡片若正被选中，先取消选中，避免残留高亮
+  const tab = props.component.containerConfig?.tabs.find((x) => x.id === id)
+  if (tab && selectedChildId.value && tab.children.some((c) => c.id === selectedChildId.value)) {
+    selectedChildId.value = null
   }
+  emit('remove-tab', { containerId: props.component.id, tabId: id })
 }
 function selectTab(id: string) {
   if (props.component.containerConfig) props.component.containerConfig.activeTab = id
@@ -436,6 +522,8 @@ function selectTab(id: string) {
 }
 .combination-card.editing {
   cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .cc-head {
   flex-shrink: 0;
@@ -494,7 +582,9 @@ function selectTab(id: string) {
   background: var(--db-card);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* overflow 必须可见：八向缩放手柄有 7px 探出子卡片边界，hidden 会把可点击区域裁掉，
+     导致按在手柄边界上时命中不到手柄（表现为误拖整个容器） */
+  overflow: visible;
   cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.15s;
 }
@@ -504,12 +594,19 @@ function selectTab(id: string) {
 .cc-child-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 10px; background: var(--db-hover); border-bottom: 1px solid var(--db-border);
+  border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }
 .cc-child-title { font-size: 12px; font-weight: 500; color: var(--db-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; font-size: 13px; padding: 1px 5px; border-radius: 4px; line-height: 1; }
 .cc-child-del:hover { background: var(--db-danger-bg); color: var(--db-danger); }
-.cc-child-body { flex: 1; overflow: hidden; min-height: 0; }
+.cc-child-body { flex: 1; overflow: hidden; min-height: 0; border-radius: 0 0 7px 7px; }
+
+/* 拖动/缩放期间：屏蔽子卡片内部（图表/表格等）的鼠标事件，避免图表自身 mousemove 处理造成掉帧 */
+.combination-card.cc-interacting .cc-child-body { pointer-events: none; }
+.combination-card.cc-interacting .cc-child { cursor: grabbing; }
+.combination-card.cc-interacting .cc-child img,
+.combination-card.cc-interacting .cc-child canvas { -webkit-user-drag: none; }
 
 /* 八向缩放手柄 */
 .rs {

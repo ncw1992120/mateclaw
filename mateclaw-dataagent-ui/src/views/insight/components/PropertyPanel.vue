@@ -22,16 +22,20 @@
       <!-- 组合卡片：容器配置 -->
       <template v-if="component.type === 'combination' && localComponent.containerConfig">
         <div class="form-group">
-          <label class="form-label">{{ t('insight.combination.title') }}</label>
-          <el-input v-model="localComponent.containerConfig.title" :aria-label="t('insight.combination.title')" @change="emitChange" />
-        </div>
-        <div class="form-group">
           <label class="form-label">{{ t('insight.combination.showTitle') }}</label>
           <el-switch v-model="localComponent.containerConfig.showTitle" :aria-label="t('insight.combination.showTitle')" @change="emitChange" />
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.background') }}</label>
-          <el-color-picker v-model="localComponent.containerConfig.background" @change="emitChange" />
+          <div class="combination-color-row">
+            <el-color-picker v-model="localComponent.containerConfig.background" @change="emitChange" />
+            <el-input
+              v-model="localComponent.containerConfig.background"
+              placeholder="#ffffff"
+              :aria-label="t('insight.combination.background')"
+              @change="emitChange"
+            />
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.radius') }}</label>
@@ -66,7 +70,6 @@
             <button class="combination-tab-add" @click="addCombinationTab">{{ t('insight.combination.addTab') }}</button>
           </div>
         </div>
-        <div class="binding-mode-hint">{{ t('insight.combination.childDataHint') }}</div>
       </template>
 
       <!-- 图表类型（仅 chart 组件） -->
@@ -98,8 +101,8 @@
         </el-select>
       </div>
 
-      <!-- 数据绑定（kpi/chart/table 组件；筛选器与时间筛选无需数据源/指标） -->
-      <template v-if="!useDatasetPipeline && component.type !== 'filter' && component.type !== 'timeFilter'">
+      <!-- 数据绑定（kpi/chart/table 组件；筛选器、时间筛选与组合卡片无需数据源/指标） -->
+      <template v-if="!useDatasetPipeline && component.type !== 'filter' && component.type !== 'timeFilter' && component.type !== 'combination'">
         <div class="binding-mode-hint">当前面板配置的是“直接指标绑定”；需要 Python 预处理时，请在下方“脚本数据集输入”中选择已创建的数据集。</div>
         <!-- 多指标模式开关（仅 kpi 组件） -->
         <div v-if="component.type === 'kpi'" class="form-group">
@@ -579,8 +582,8 @@
         </div>
       </template>
 
-      <!-- 数据组件绑定筛选器（kpi/chart/table 组件） -->
-      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter' && component.type !== 'aiAnalysis'">
+      <!-- 数据组件绑定筛选器（kpi/chart/table 组件；组合卡片容器本身不参与筛选绑定） -->
+      <template v-if="component.type !== 'filter' && component.type !== 'timeFilter' && component.type !== 'aiAnalysis' && component.type !== 'combination'">
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.boundFilters') }}</label>
           <el-select
@@ -648,6 +651,10 @@ const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void
   (e: 'preview', data: InsightComponentData): void
   (e: 'collapse'): void
+  /** 组合卡片：请求新增页签（由编辑器对 schema 执行，含首次添加时的子卡片平移） */
+  (e: 'combination-add-tab'): void
+  /** 组合卡片：请求删除页签（由编辑器执行二次确认与最后一个页签的组件平移） */
+  (e: 'combination-remove-tab', tabId: string): void
 }>()
 
 const datasourceStore = useDatasourceStore()
@@ -769,10 +776,21 @@ let metricsSearchTimer: ReturnType<typeof setTimeout> | null = null
 let dimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
 let filterDimensionsSearchTimer: ReturnType<typeof setTimeout> | null = null
 
-/** 监听外部 component 变化，同步到本地（仅在引用变化时触发，避免 emitChange 导致的循环） */
+/**
+ * 结构签名：组合卡片的容器内结构（页签 id + 各自子卡片数 + 顶层 children 数）。
+ * 画布内的容器组件会「原地」增删子卡片/页签（props.component 引用不变），
+ * 只依赖引用变化会让本地副本过期，之后任意 emitChange 会把旧 children 覆盖回 schema，导致子卡片丢失。
+ */
+function componentSignature(c: InsightComponent | null | undefined): string {
+  if (!c || c.type !== 'combination' || !c.containerConfig) return ''
+  const tabs = (c.containerConfig.tabs ?? []).map((t) => `${t.id}:${t.children?.length ?? 0}`).join(',')
+  return `${tabs}|${c.children?.length ?? 0}`
+}
+
+/** 监听外部 component 变化（引用或组合卡片结构变化），同步到本地，避免 emitChange 导致的循环 */
 watch(
-  () => props.component,
-  (newComp) => {
+  () => [props.component, componentSignature(props.component)] as const,
+  ([newComp]) => {
     if (!newComp) {
       return
     }
@@ -1155,36 +1173,14 @@ function emitAiAnalysisConfigChange(): void {
   emit('change', updated)
 }
 
-/** 组合卡片：添加页签 */
+/** 组合卡片：添加页签（交由编辑器执行：首次添加时会把容器内已有子卡片平移进该页签） */
 function addCombinationTab(): void {
-  if (!localComponent.containerConfig) {
-    localComponent.containerConfig = {
-      title: '',
-      showTitle: true,
-      background: '#ffffff',
-      radius: 12,
-      padding: 16,
-      layoutMode: 'free',
-      tabs: [],
-      activeTab: undefined,
-      style: { border: { enabled: false, color: 'transparent' } },
-    }
-  }
-  const cfg = localComponent.containerConfig
-  const id = 'tab_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-  cfg.tabs.push({ id, title: `页签 ${cfg.tabs.length + 1}`, children: [] })
-  cfg.activeTab = id
-  emitChange()
+  emit('combination-add-tab')
 }
 
-/** 组合卡片：删除页签 */
+/** 组合卡片：删除页签（交由编辑器执行：二次确认 + 删最后一个页签时组件平移回容器） */
 function deleteCombinationTab(id: string): void {
-  const cfg = localComponent.containerConfig
-  if (!cfg) return
-  const idx = cfg.tabs.findIndex((t) => t.id === id)
-  if (idx >= 0) cfg.tabs.splice(idx, 1)
-  if (cfg.activeTab === id) cfg.activeTab = cfg.tabs[0]?.id
-  emitChange()
+  emit('combination-remove-tab', id)
 }
 
 /** 多 Tab 模式开关切换 */
@@ -1613,6 +1609,15 @@ datasourceStore.fetchDatasources().catch(() => {
 .combination-tab-add:hover {
   border-color: var(--db-accent);
   background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+}
+/* 背景色：色块 + 可输入颜色参数，双向联动 */
+.combination-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.combination-color-row :deep(.el-input) {
+  flex: 1;
 }
 
 .tab-datasource-section {

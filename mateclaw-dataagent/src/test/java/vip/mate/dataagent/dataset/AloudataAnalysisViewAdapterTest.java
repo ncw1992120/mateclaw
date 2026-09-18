@@ -206,7 +206,9 @@ class AloudataAnalysisViewAdapterTest {
                 new DatasetReadRequest(7L, "sales", List.of(), List.of(), 5, 0, Map.of())));
 
         assertEquals(DatasetReadErrorCode.ACCESS_DENIED, error.code());
-        assertEquals("VIEW_ACCESS_DENIED", error.getMessage());
+        // 文案已改为中文提示（含 VIEW_ACCESS_DENIED 标识），这里只断言标识，不锁具体措辞
+        assertTrue(error.getMessage() != null && error.getMessage().contains("VIEW_ACCESS_DENIED"),
+                "应保留 VIEW_ACCESS_DENIED 标识，实际为: " + error.getMessage());
     }
 
     @Test
