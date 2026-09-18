@@ -59,17 +59,7 @@
         </div>
       </div>
 
-      <!-- 5.5 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单） -->
-      <div v-if="isKpiCard" class="section">
-        <div class="section-head">
-          <span class="section-title">指标配置</span>
-          <span v-if="kpiMetricCount" class="metric-count">{{ kpiMetricCount }} 个指标</span>
-        </div>
-        <el-button size="small" type="primary" @click="openMetricConfig">配置指标</el-button>
-        <div class="metric-hint">指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。</div>
-      </div>
-
-      <!-- 6. 筛选器绑定（绑定到当前选中的 KPI/指标卡，无独立组件级时间筛选） -->
+      <!-- 5. 筛选器绑定（绑定到当前选中的 KPI/指标卡，无独立组件级时间筛选） -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">筛选器绑定</span>
@@ -87,7 +77,8 @@
         </div>
       </div>
 
-      <!-- 6. Python 预处理（位于所有数据集与筛选器绑定之后） -->
+      <!-- 6. Python 预处理（位于数据集、筛选器绑定之后，指标配置之前：指标来自最终结果集，
+           而结果集可能由用户处理区产生，故面板顺序与数据流保持一致） -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">Python 预处理</span>
@@ -117,6 +108,18 @@
             <el-button size="small" type="danger" text @click="removePython">移除 Python 脚本</el-button>
           </div>
         </div>
+      </div>
+
+      <!-- 7. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
+           排在 Python 预处理之后：指标由「最终结果集」字段投影而来，而结果集可能由
+           Python 用户处理区产生，放最后才符合「先出结果集、再配置指标」的使用顺序。 -->
+      <div v-if="isKpiCard" class="section">
+        <div class="section-head">
+          <span class="section-title">指标配置</span>
+          <span v-if="kpiMetricCount" class="metric-count">{{ kpiMetricCount }} 个指标</span>
+        </div>
+        <el-button size="small" type="primary" @click="openMetricConfig">配置指标</el-button>
+        <div class="metric-hint">指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。</div>
       </div>
     </div>
   </div>
