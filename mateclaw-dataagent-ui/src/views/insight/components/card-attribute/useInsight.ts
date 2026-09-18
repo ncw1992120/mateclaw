@@ -18,6 +18,15 @@
 import { reactive, computed } from 'vue'
 import * as backend from './useInsightBackend'
 import * as datasetApi from '@/api/dataset'
+import * as datasourceApi from '@/api/datasource'
+import { listAloudataMetrics, listAloudataDimensions } from '@/api/semantic-model'
+import {
+  buildFieldMappingRows,
+  toSourceFilters,
+  validateFieldMappingRows,
+  type DatasetSchemaField,
+  type FieldMappingRow,
+} from '@/utils/field-mapping'
 import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema } from '@/types'
 
 /* ============================ 类型定义 ============================ */
@@ -25,12 +34,8 @@ import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFi
 export type DataSourceLeafType = 'jdbc' | 'aloudata' | 'api' | 'file'
 export type CardType = 'kpi' | 'table' | 'chart'
 
-/** 字段映射：源字段名 → 目标字段名 */
-export interface FieldMapping {
-  source: string // 源字段名（数据库/接口原始字段）
-  desc: string // 字段描述
-  target: string // 目标字段名（最终数据集使用的名称）
-}
+/** 字段映射：源字段名 → 目标字段名（结构见 @/utils/field-mapping） */
+export type FieldMapping = FieldMappingRow
 
 /** 输入筛选条件（当前数据集查询条件，应下推到源查询） */
 export interface InputFilter {
@@ -46,12 +51,22 @@ export interface DatasetConfig {
   sourceLabel: string // 例："JDBC · db1"
   alias: string // 数据集别名，例：table1
   fieldMapping: FieldMapping[]
+  /** 数据集 schema 缓存（字段名 + 显示名），由草稿预览预取；「字段名称」弹窗据此生成映射行 */
+  schema?: DatasetSchemaField[]
   filters: InputFilter[]
   // 各类型专属配置（由对应配置弹窗填充，均来自真实后端）
   jdbc?: { db: string; sql: string }
   aloudata?: { mode: 'metric-dim' | 'metric-view'; datasourceId?: string; metricView?: string; metrics?: string[]; dims?: string[] }
   api?: { host: string; path: string; method: string; timeout: number; headers: string; params: string }
-  file?: { fileName: string; fileType: string; objectId?: string; columns: { name: string; type: string }[]; rows: Record<string, string>[] }
+  file?: {
+    fileName: string
+    fileType: string
+    objectId?: string
+    /** 受控文件引用（StoredFileRef 原样回传）；草稿预览与 schema 预取需要 */
+    fileRef?: Record<string, unknown>
+    columns: { name: string; type: string }[]
+    rows: Record<string, string>[]
+  }
   /** [后端联调] 真实数据集 ID：数据集配置经后端 confirmDraft 落库后回填 */
   backendDatasetId?: string
 }
@@ -84,7 +99,15 @@ interface UiState {
   jdbc: { visible: boolean; db: string; sql: string }
   aloudata: { visible: boolean; mode: 'metric-dim' | 'metric-view'; datasourceId: string; metricView: string; metrics: string[]; dims: string[] }
   api: { visible: boolean; host: string; path: string; method: string; timeout: number; headers: string; params: string }
-  file: { visible: boolean; fileType: string; fileName: string; objectId?: string; columns: { name: string; type: string }[]; rows: Record<string, string>[] }
+  file: {
+    visible: boolean
+    fileType: string
+    fileName: string
+    objectId?: string
+    fileRef?: Record<string, unknown>
+    columns: { name: string; type: string }[]
+    rows: Record<string, string>[]
+  }
   fieldMapping: { visible: boolean; datasetId: string }
   inputFilter: { visible: boolean; datasetId: string; previewKind?: 'dataset' | 'result' }
   filterBinding: { visible: boolean }
@@ -184,7 +207,7 @@ const state = reactive({
     jdbc: { visible: false, db: '', sql: '' },
     aloudata: { visible: false, mode: 'metric-dim', datasourceId: '', metricView: '', metrics: [], dims: [] },
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
-    file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', columns: [], rows: [] },
+    file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', fileRef: undefined, columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
     inputFilter: { visible: false, datasetId: '', previewKind: 'dataset' },
     filterBinding: { visible: false },
@@ -264,6 +287,8 @@ function onSelectLeaf(node: any) {
       visible: true,
       fileType: node.fileType,
       fileName: existing?.file?.fileName ?? '',
+      objectId: existing?.file?.objectId ?? '',
+      fileRef: existing?.file?.fileRef,
       columns: existing?.file?.columns ?? [],
       rows: existing?.file?.rows ?? [],
     }
@@ -272,14 +297,16 @@ function onSelectLeaf(node: any) {
   state.ui.treeVisible = false
 }
 
-/** 从配置弹窗确认 → 新增或更新数据集 */
-function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourceLeafType; sourceLabel: string }) {
+/** 从配置弹窗确认 → 新增或更新数据集，返回数据集 id（新增时立即异步预取 schema） */
+function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourceLeafType; sourceLabel: string }): string {
   const editingId = state.ui.editingDatasetId
+  let id: string
   if (editingId) {
     const ds = getDataset(editingId)
     if (ds) Object.assign(ds, payload)
+    id = editingId
   } else {
-    const id = `ds-${Date.now()}`
+    id = `ds-${Date.now()}`
     state.datasets.push({
       id,
       sourceType: payload.sourceType,
@@ -291,6 +318,10 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
     } as DatasetConfig)
   }
   state.ui.editingDatasetId = null
+  // 配置确定后异步预取数据集 schema，自动生成「字段名称」映射；
+  // 不阻塞主流程，失败静默（打开弹窗时仍会兜底重试）。
+  void refreshDatasetSchema(id, { silent: true })
+  return id
 }
 
 function removeDataset(id: string) {
@@ -333,6 +364,8 @@ function reconfigureDataset(id: string) {
       visible: true,
       fileType: ds.file?.fileType ?? 'Excel',
       fileName: ds.file?.fileName ?? '',
+      objectId: ds.file?.objectId ?? '',
+      fileRef: ds.file?.fileRef,
       columns: ds.file?.columns ?? [],
       rows: ds.file?.rows ?? [],
     }
@@ -423,19 +456,231 @@ function confirmFile() {
   commitDataset({
     sourceType: 'file',
     sourceLabel: '文件',
-    file: { fileName: f.fileName, fileType: f.fileType, objectId: f.objectId, columns: f.columns, rows: f.rows },
+    file: {
+      fileName: f.fileName,
+      fileType: f.fileType,
+      objectId: f.objectId,
+      fileRef: f.fileRef,
+      columns: f.columns,
+      rows: f.rows,
+    },
   })
   state.ui.file.visible = false
+}
+
+/* ---- 数据集 schema（「字段名称」自动填充） ---- */
+/**
+ * 「字段名称」弹窗的字段不再手工新增，而是由数据集 schema 自动生成：
+ *   配置确定 → 异步预取 schema 并生成映射行；打开弹窗时若缓存为空再兜底拉一次。
+ * schema 全部来自后端草稿预览（JDBC / Aloudata 指标&维度 / 指标视图 / 文件均返回字段结构），
+ * 显示名来自 Aloudata 语义层（指标/维度显示名、指标视图定义），无显示名时回落源字段名。
+ * 契约见 docs/策略解读/原型设计.md §4.1。
+ */
+
+/** 从草稿预览响应取字段名列表（优先 schema，回落首行 key） */
+function readSchemaNames(batch: { schema?: string[]; rows?: Record<string, unknown>[] } | null | undefined): string[] {
+  if (!batch) return []
+  if (batch.schema?.length) return batch.schema.map((n) => String(n)).filter(Boolean)
+  const first = batch.rows?.[0]
+  return first ? Object.keys(first) : []
+}
+
+/** 从候选键里取第一个非空值（Aloudata 视图定义为平台原始 Map，键名不稳定） */
+function pickKey(obj: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key]
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim()
+  }
+  return ''
+}
+
+/** 指标视图定义 → 名称/显示名映射 */
+function viewDisplayNameMap(detail: unknown): Record<string, string> {
+  const map: Record<string, string> = {}
+  const source = detail as { metrics?: unknown[]; dimensions?: unknown[] } | null
+  const take = (list: unknown[] | undefined) => {
+    ;(list ?? []).forEach((item) => {
+      if (!item || typeof item !== 'object') return
+      const row = item as Record<string, unknown>
+      const name = pickKey(row, ['metricName', 'dimName', 'name', 'code', 'fieldName'])
+      const display = pickKey(row, ['metricDisplayName', 'dimDisplayName', 'displayName', 'display_name', 'label', 'title', 'comment'])
+      if (name && display) map[name] = display
+    })
+  }
+  take(source?.metrics)
+  take(source?.dimensions)
+  return map
+}
+
+/**
+ * 已同步语义层的名称 → 显示名映射（失败只影响描述列，不影响字段名）。
+ * 后端 `aloudata/synced-metrics|dimensions` 返回列表（同时兼容 { records } 分页结构）；
+ * 单次取 1000 条，超出部分回落源字段名作为目标名称。
+ */
+async function aloudataLabelMap(
+  datasourceId: string,
+  names: string[],
+  kind: 'metric' | 'dimension',
+): Promise<Record<string, string>> {
+  if (!datasourceId || !names.length) return {}
+  try {
+    const res = (kind === 'metric'
+      ? await listAloudataMetrics(datasourceId, 1, 1000)
+      : await listAloudataDimensions(datasourceId, 1, 1000)) as unknown
+    const records: Record<string, unknown>[] = Array.isArray(res)
+      ? (res as Record<string, unknown>[])
+      : ((res as { records?: Record<string, unknown>[] })?.records ?? [])
+    const map: Record<string, string> = {}
+    records.forEach((row) => {
+      const name = kind === 'metric' ? row.metricName : row.dimName
+      const display = kind === 'metric' ? row.metricDisplayName : row.dimDisplayName
+      if (name && display) map[String(name)] = String(display)
+    })
+    return map
+  } catch {
+    return {}
+  }
+}
+
+/** 文件草稿来源配置：objectId（后端校验用）+ fileRef（真实读取用的受控引用） */
+function fileSourceConfig(file: NonNullable<DatasetConfig['file']>): Record<string, unknown> {
+  return {
+    objectId: file.objectId,
+    fileName: file.fileName,
+    format: file.fileType,
+    ...(file.fileRef ? { fileRef: file.fileRef } : {}),
+  }
+}
+
+/** 该数据集的配置是否足以拉取字段结构（接口类型需先登记受控接口定义，暂不支持） */
+function canFetchDatasetSchema(ds: DatasetConfig | undefined): boolean {
+  if (!ds) return false
+  if (ds.sourceType === 'jdbc') return !!(ds.jdbc?.db && ds.jdbc?.sql)
+  if (ds.sourceType === 'aloudata') {
+    if (!ds.aloudata?.datasourceId) return false
+    return ds.aloudata.mode === 'metric-view'
+      ? !!ds.aloudata.metricView
+      : !!(ds.aloudata.metrics?.length || ds.aloudata.dims?.length)
+  }
+  if (ds.sourceType === 'file') return !!ds.file?.objectId
+  return false
+}
+
+/** 按数据集来源拉取真实字段结构（字段名 + 显示名） */
+async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField[]> {
+  if (ds.sourceType === 'jdbc') {
+    if (!ds.jdbc?.db || !ds.jdbc?.sql) return []
+    const batch = await backend.previewDatasetDraft({
+      sourceType: 'JDBC_SQL',
+      datasourceId: ds.jdbc.db,
+      sourceConfig: { sql: ds.jdbc.sql },
+      filters: [],
+    })
+    return readSchemaNames(batch).map((name) => ({ name }))
+  }
+
+  if (ds.sourceType === 'aloudata') {
+    const datasourceId = ds.aloudata?.datasourceId
+    if (!datasourceId) return []
+    if (ds.aloudata?.mode === 'metric-view') {
+      const view = ds.aloudata.metricView ?? ''
+      if (!view) return []
+      // 指标视图字段：一次拿全「字段名 / 展示名 / 描述 / 角色」
+      // （后端聚合视图详情 + 指标批量详情 + 维度列表）
+      const fields = await datasourceApi.listAnalysisViewFields(datasourceId, view)
+      if (fields.length) {
+        return fields.map((f) => ({
+          name: f.name,
+          displayName: f.displayName,
+          description: f.description,
+          role: f.role,
+        }))
+      }
+      // 兜底：字段接口未返回时，退回「预览列名 + 视图展示名映射」
+      const batch = await backend.previewDatasetDraft({
+        sourceType: 'ALOUDATA_ANALYSIS_VIEW',
+        datasourceId,
+        sourceConfig: { analysisViewId: view },
+        filters: [],
+      })
+      let labels: Record<string, string> = {}
+      try {
+        labels = viewDisplayNameMap(await datasourceApi.getAnalysisView(datasourceId, view))
+      } catch {
+        labels = {}
+      }
+      return readSchemaNames(batch).map((name) => ({ name, displayName: labels[name] }))
+    }
+    const metrics = ds.aloudata?.metrics ?? []
+    const dims = ds.aloudata?.dims ?? []
+    if (!metrics.length && !dims.length) return []
+    const batch = await backend.previewDatasetDraft({
+      sourceType: 'ALOUDATA_METRICS',
+      datasourceId,
+      sourceConfig: { metrics, dimensions: dims },
+      filters: [],
+    })
+    const [metricLabels, dimLabels] = await Promise.all([
+      aloudataLabelMap(datasourceId, metrics, 'metric'),
+      aloudataLabelMap(datasourceId, dims, 'dimension'),
+    ])
+    return readSchemaNames(batch).map((name) => ({
+      name,
+      displayName: metricLabels[name] ?? dimLabels[name],
+      // 命中维度映射的视为维度，供「筛选预览」预置维度筛选条件
+      role: dimLabels[name] ? 'dimension' : 'measure',
+    }))
+  }
+
+  if (ds.sourceType === 'file') {
+    if (!ds.file?.objectId) return []
+    const batch = await backend.previewDatasetDraft({ sourceType: 'FILE', sourceConfig: fileSourceConfig(ds.file) })
+    return readSchemaNames(batch).map((name) => ({ name }))
+  }
+
+  // 接口类型：需先登记受控接口定义（含数据源与地址白名单），原型阶段不做草稿预览
+  return []
+}
+
+/**
+ * 刷新数据集 schema 并按增量合并规则重建字段映射：
+ * 用户改过的目标名称保留，未改动的跟随最新显示名，新增字段追加、消失字段移除。
+ * silent=true 时用于后台预取，不向外抛出错误（调用方自行决定提示）。
+ */
+async function refreshDatasetSchema(
+  id: string,
+  opts?: { silent?: boolean },
+): Promise<{ ok: boolean; message: string }> {
+  const ds = getDataset(id)
+  if (!ds) return { ok: false, message: '未找到数据集' }
+  if (!canFetchDatasetSchema(ds)) {
+    return { ok: false, message: '当前配置无法获取字段结构，请先完成数据源配置' }
+  }
+  try {
+    const schema = await fetchDatasetSchema(ds)
+    if (!schema.length) return { ok: false, message: '未获取到字段结构，请检查数据源或查询条件' }
+    ds.schema = schema
+    ds.fieldMapping = buildFieldMappingRows(schema, ds.fieldMapping)
+    return { ok: true, message: `已获取 ${schema.length} 个字段` }
+  } catch (e) {
+    return { ok: false, message: (e as Error)?.message || '获取字段结构失败' }
+  }
 }
 
 /* ---- 字段映射 ---- */
 function openFieldMapping(id: string) {
   state.ui.fieldMapping = { visible: true, datasetId: id }
 }
-function saveFieldMapping(list: FieldMapping[]) {
+/** 保存字段映射；返回可展示的错误文案，null 表示保存成功并已关闭弹窗 */
+function saveFieldMapping(list: FieldMapping[]): string | null {
+  const error = validateFieldMappingRows(list)
+  if (error) return error
   const ds = getDataset(state.ui.fieldMapping.datasetId)
-  if (ds) ds.fieldMapping = list
+  if (ds) {
+    ds.fieldMapping = list.map((m) => ({ source: m.source, desc: m.desc, target: (m.target ?? '').trim() }))
+  }
   state.ui.fieldMapping.visible = false
+  return null
 }
 
 /* ---- 输入筛选 ---- */
@@ -536,6 +781,8 @@ export function buildPipeline(): ComponentDatasetPipeline {
       objectId: ds.file?.fileName,
     },
     fieldMappings: ds.fieldMapping.map((m) => ({ source: m.source, target: m.target })),
+    // 按原型设计 §4.1，筛选条件使用「最终数据集字段名（目标名称）」；后端当前不消费此处 filters
+    // （仅 scriptFilterBindings 的 fieldMappings 被读取），真正下推到数据源的路径见 draftRequestForDataset。
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
   }))
 
@@ -746,21 +993,24 @@ const previewState = reactive<{ loading: boolean; error: string; payload: Previe
 
 /** 把本地数据集配置转换为后端 DatasetComposerDraftRequest（JDBC / Aloudata / File 支持预览） */
 function draftRequestForDataset(ds: DatasetConfig): datasetApi.DatasetComposerDraftRequest | null {
+  // 筛选条件的字段名需要反解回「源字段名」再下推：字段重命名目前只落在前端展示层，
+  // 数据源上仍然是原始列名（见 @/utils/field-mapping 与原型设计 §4.1）。
+  const sourceFilters = toSourceFilters(ds.fieldMapping, ds.filters) as unknown as DatasetFilter[]
   switch (ds.sourceType) {
     case 'jdbc':
       return {
         sourceType: 'JDBC_SQL',
         datasourceId: ds.jdbc?.db,
         sourceConfig: { sql: ds.jdbc?.sql },
-        filters: (ds.filters as unknown as DatasetFilter[]) ?? [],
+        filters: sourceFilters,
       }
     case 'aloudata':
       return ds.aloudata?.mode === 'metric-view'
-        ? { sourceType: 'ALOUDATA_ANALYSIS_VIEW', datasourceId: ds.aloudata.datasourceId, sourceConfig: { analysisViewId: ds.aloudata.metricView } }
-        : { sourceType: 'ALOUDATA_METRICS', datasourceId: ds.aloudata.datasourceId, sourceConfig: { metrics: ds.aloudata.metrics, dimensions: ds.aloudata.dims } }
+        ? { sourceType: 'ALOUDATA_ANALYSIS_VIEW', datasourceId: ds.aloudata.datasourceId, sourceConfig: { analysisViewId: ds.aloudata.metricView }, filters: sourceFilters }
+        : { sourceType: 'ALOUDATA_METRICS', datasourceId: ds.aloudata.datasourceId, sourceConfig: { metrics: ds.aloudata.metrics, dimensions: ds.aloudata.dims }, filters: sourceFilters }
     case 'file':
       return ds.file?.objectId
-        ? { sourceType: 'FILE', sourceConfig: { objectId: ds.file.objectId, fileName: ds.file.fileName, format: ds.file.fileType } }
+        ? { sourceType: 'FILE', sourceConfig: fileSourceConfig(ds.file), filters: sourceFilters }
         : null
     default:
       // API 类型需先登记 API 定义，原型暂不在此预览
@@ -921,6 +1171,9 @@ export function useInsight() {
     // field mapping
     openFieldMapping,
     saveFieldMapping,
+    // dataset schema（「字段名称」自动填充）
+    canFetchDatasetSchema,
+    refreshDatasetSchema,
     // input filter
     openInputFilter,
     saveInputFilter,

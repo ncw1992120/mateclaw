@@ -119,6 +119,25 @@ export function searchAnalysisViews(
   return api.get<AloudataAnalysisViewItem[]>(`${BASE_URL}/${datasourceId}/analysis-views/list`, { params })
 }
 
+/** Aloudata 指标视图字段（指标/维度）的名称、展示名与描述 */
+export interface AloudataAnalysisViewField {
+  name: string
+  displayName?: string
+  description?: string
+  /** measure（指标）| dimension（维度） */
+  role?: string
+}
+
+/**
+ * 查询指标视图的字段清单（指标 + 维度，含展示名与描述）。
+ * 视图详情只返回名称数组，展示名/描述由后端聚合指标详情与维度列表补齐。
+ */
+export function listAnalysisViewFields(datasourceId: string | number, viewName: string) {
+  return api.get<AloudataAnalysisViewField[]>(
+    `${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}/fields`,
+  )
+}
+
 /** 查询已选 Aloudata 指标视图详情 */
 export function getAnalysisView(datasourceId: string | number, viewName: string) {
   return api.get(`${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}`)

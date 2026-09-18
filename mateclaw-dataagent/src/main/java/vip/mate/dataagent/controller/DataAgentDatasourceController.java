@@ -300,6 +300,18 @@ public class DataAgentDatasourceController {
     }
 
     /**
+     * 实时获取单个指标详情（同义词、关联维度等），用于弹窗「懒加载详情」。
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/detail")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标详情", description = "实时获取指定指标的同义词、关联维度等详情（懒加载）")
+    public R<AloudataMetricSemanticDTO> getMetricDetail(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标英文名") @PathVariable String metricName) {
+        return R.ok(aloudataSyncService.getMetricDetail(datasourceId, metricName));
+    }
+
+    /**
      * 查询指标关联的维度详情列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimension-details")
@@ -484,6 +496,20 @@ public class DataAgentDatasourceController {
             @Parameter(description = "视图名称关键字") @RequestParam(required = false) String keyword,
             @Parameter(description = "仅返回当前账号创建的视图") @RequestParam(required = false, defaultValue = "false") boolean onlyMine) {
         return R.ok(aloudataAnalysisViewService.listViews(datasourceId, keyword, onlyMine));
+    }
+
+    /**
+     * 指标视图的字段清单（指标 + 维度），含字段名 / 展示名 / 描述。
+     * <p>
+     * 供「字段名称」弹窗默认填充（字段名/描述/展示名）与「筛选预览」维度预置使用。
+     */
+    @GetMapping("/{datasourceId}/analysis-views/{viewName}/fields")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图字段", description = "获取指标视图包含的指标/维度的字段名、展示名与描述")
+    public R<List<AloudataAnalysisViewField>> listAnalysisViewFields(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标视图名称") @PathVariable String viewName) {
+        return R.ok(aloudataAnalysisViewService.listFields(datasourceId, viewName));
     }
 
     /** 获取 Aloudata 已有指标视图定义（只读）。 */

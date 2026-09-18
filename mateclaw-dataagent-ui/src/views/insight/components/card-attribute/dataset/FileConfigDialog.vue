@@ -88,11 +88,18 @@ async function onFile(e: Event) {
     ui.file.fileName = f.name
     ui.file.fileType = format
     ui.file.objectId = String(objectId)
+    // 保留受控文件引用（StoredFileRef）原样回传：草稿预览与 schema 预取必须携带 fileRef
+    ui.file.fileRef = up.objectId ? (up as unknown as Record<string, unknown>) : undefined
 
     // 2) 用真实后端识别并预览（受控行集，不把文件内容写入配置）
     const batch = await datasetApi.previewDraft({
       sourceType: 'FILE',
-      sourceConfig: { objectId: String(objectId), fileName: f.name, format },
+      sourceConfig: {
+        objectId: String(objectId),
+        fileName: f.name,
+        format,
+        ...(ui.file.fileRef ? { fileRef: ui.file.fileRef } : {}),
+      },
     })
     const rows = (batch.rows as Record<string, unknown>[] | null) ?? []
     ui.file.rows = rows.map((r) =>

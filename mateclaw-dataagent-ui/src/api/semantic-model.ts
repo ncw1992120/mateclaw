@@ -3,6 +3,7 @@ import type {
   AloudataCategoryCount,
   AloudataDimensionPage,
   AloudataMetricPage,
+  AloudataSyncedMetric,
   SemanticModel,
   SemanticModelCreateRequest,
   SemanticModelUpdateRequest,
@@ -121,6 +122,13 @@ export function pageAloudataDimensions(
   return api.get<AloudataDimensionPage>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/page`, {
     params,
   })
+}
+
+/** 实时获取单个指标详情（同义词、关联维度等，懒加载用） */
+export function getAloudataMetricDetail(datasourceId: string, metricName: string) {
+  return api.get<AloudataSyncedMetric>(
+    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/detail`,
+  )
 }
 
 /** 查询 Aloudata 类目数量统计 */

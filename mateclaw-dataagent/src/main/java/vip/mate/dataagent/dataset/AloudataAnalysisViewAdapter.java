@@ -91,7 +91,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                     ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
             String code = string(body, "code");
             if ("SM_02_0038".equals(code)) {
-                throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "VIEW_ACCESS_DENIED");
+                throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "当前账号无权访问该指标视图，请在 Aloudata 指标平台为该账号授予该视图的权限（VIEW_ACCESS_DENIED）");
             }
             if (Boolean.FALSE.equals(body.get("success"))) {
                 throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
@@ -132,7 +132,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
             Map<String, Object> body = response == null || response.getBody() == null ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
             String code = string(body, "code");
-            if ("SM_02_0038".equals(code)) throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "VIEW_ACCESS_DENIED");
+            if ("SM_02_0038".equals(code)) throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "当前账号无权访问该指标视图，请在 Aloudata 指标平台为该账号授予该视图的权限（VIEW_ACCESS_DENIED）");
             if (Boolean.FALSE.equals(body.get("success"))) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
                     Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
             List<Map<String,Object>> rows = rows(body);

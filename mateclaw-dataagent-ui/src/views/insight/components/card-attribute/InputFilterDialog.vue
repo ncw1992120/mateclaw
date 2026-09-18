@@ -25,6 +25,7 @@
 import { ref, watch, computed } from 'vue'
 import { useInsight } from './useInsight'
 import type { InputFilter } from './useInsight'
+import type { DatasetSchemaField } from '@/utils/field-mapping'
 
 const { state, saveInputFilter, openPreview, getDataset } = useInsight()
 const ui = state.ui
@@ -69,14 +70,37 @@ function resolveTarget(): { datasetId: string; previewKind: 'dataset' | 'result'
 watch(
   () => ui.inputFilter.visible,
   (v) => {
-    if (v) {
-      const { datasetId } = resolveTarget()
-      ui.inputFilter.datasetId = datasetId // 确保 saveInputFilter 写入正确数据集
-      const ds = getDataset(datasetId)
-      list.value = JSON.parse(JSON.stringify(ds?.filters ?? []))
+    if (!v) return
+    const { datasetId } = resolveTarget()
+    ui.inputFilter.datasetId = datasetId // 确保 saveInputFilter 写入正确数据集
+    const ds = getDataset(datasetId)
+    const saved = ds?.filters ?? []
+    if (saved.length) {
+      list.value = JSON.parse(JSON.stringify(saved))
+      return
     }
+    // 尚未配置过筛选条件时：默认用数据集的维度字段预置条件行
+    // （字段名已填，运算符/取值待用户补全），无维度字段时不预置任何条件。
+    list.value = defaultDimensionFilters(ds)
   },
 )
+
+/**
+ * 用数据集 schema 中的维度字段生成默认筛选条件行。
+ * 字段取该维度的「目标名称」（用户可在「字段名称」弹窗中修改），
+ * 回退到展示名、再回退到源字段名。
+ */
+function defaultDimensionFilters(
+  ds: { schema?: DatasetSchemaField[]; fieldMapping?: { source?: string; target?: string }[] } | undefined,
+): InputFilter[] {
+  const dims = (ds?.schema ?? []).filter((f) => f.role === 'dimension')
+  if (!dims.length) return []
+  const mapping = ds?.fieldMapping ?? []
+  return dims.map((f) => {
+    const target = (mapping.find((m) => m.source === f.name)?.target ?? '').trim()
+    return { field: target || f.displayName || f.name, op: '=', value: '' }
+  })
+}
 
 function addRow() {
   list.value.push({ field: '', op: '=', value: '' })

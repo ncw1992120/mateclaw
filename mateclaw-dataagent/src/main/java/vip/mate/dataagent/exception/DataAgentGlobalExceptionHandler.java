@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import vip.mate.common.result.R;
+import vip.mate.dataagent.dataset.DatasetReadException;
 import vip.mate.exception.MateClawException;
 
 /**
@@ -62,6 +63,27 @@ public class DataAgentGlobalExceptionHandler {
             httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
         }
         return ResponseEntity.status(httpStatus).body(R.fail(code, e.getMessage()));
+    }
+
+    /**
+     * 处理数据集读取异常：按错误码映射 HTTP 状态，避免统一兜底成 500。
+     * <p>
+     * 典型场景：指标视图无权限（Aloudata SM_02_0038 → ACCESS_DENIED）应返回 403 + 中文提示，
+     * 而非 500「服务器内部错误」。
+     */
+    @ExceptionHandler(DatasetReadException.class)
+    public ResponseEntity<R<Void>> handleDatasetReadException(DatasetReadException e) {
+        HttpStatus httpStatus = switch (e.code()) {
+            case ACCESS_DENIED -> HttpStatus.FORBIDDEN;
+            case INVALID_REQUEST, UNSUPPORTED_FILTER -> HttpStatus.BAD_REQUEST;
+            case SCHEMA_MISMATCH -> HttpStatus.CONFLICT;
+            case RESULT_LIMIT_EXCEEDED -> HttpStatus.PAYLOAD_TOO_LARGE;
+            case SOURCE_TIMEOUT -> HttpStatus.GATEWAY_TIMEOUT;
+            case SOURCE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+        };
+        String message = (e.getMessage() != null && !e.getMessage().isBlank()) ? e.getMessage() : "数据集读取失败";
+        log.warn("数据集读取异常: code={}, msg={}", e.code(), message);
+        return ResponseEntity.status(httpStatus).body(R.fail(httpStatus.value(), message));
     }
 
     /**

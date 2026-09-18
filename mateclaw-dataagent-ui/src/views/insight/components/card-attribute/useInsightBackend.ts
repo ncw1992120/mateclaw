@@ -90,10 +90,11 @@ export async function confirmDatasetDraft(
   return res
 }
 
-/** 预览数据集草稿（不落库，返回受控预览行） */
+/** 预览数据集草稿（不落库，返回受控预览行 + 字段结构） */
 export async function previewDatasetDraft(req: datasetApi.DatasetComposerDraftRequest) {
   return (await datasetApi.previewDraft(req)) as unknown as {
     columns?: string[]
+    schema?: string[]
     rows?: Record<string, unknown>[]
   }
 }

@@ -242,6 +242,8 @@ export interface AloudataSyncedMetric {
   synonyms: string[]
   metricCategoryName: string
   unit: string
+  owner?: string
+  status?: string
   availableDimensions: string[]
 }
 
@@ -255,6 +257,7 @@ export interface AloudataSyncedDimension {
   configType: string
   isTimeDimension: boolean
   exampleValues: string
+  datasetName?: string
 }
 
 /** Aloudata 指标分页结果 */
@@ -774,6 +777,8 @@ export interface DatasetReadRequest {
 /** 统一数据集读取结果 */
 export interface DatasetBatch {
   rows?: Record<string, unknown>[] | null
+  /** 字段结构（列名列表）；后端草稿预览对 JDBC/Aloudata/接口/文件均会返回 */
+  schema?: string[] | null
   objectRef?: DatasetObjectRef | null
   rowCount: number
   last: boolean

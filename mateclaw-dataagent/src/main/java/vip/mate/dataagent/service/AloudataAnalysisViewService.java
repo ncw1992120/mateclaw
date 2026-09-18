@@ -1,6 +1,7 @@
 package vip.mate.dataagent.service;
 
 import vip.mate.dataagent.dto.AloudataAnalysisViewDetail;
+import vip.mate.dataagent.dto.AloudataAnalysisViewField;
 import vip.mate.dataagent.dto.AloudataAnalysisViewItem;
 import vip.mate.dataagent.dto.AloudataAnalysisViewSummary;
 
@@ -18,6 +19,18 @@ public interface AloudataAnalysisViewService {
      * @return 平铺列表，元素带 owner/mine 归属信息
      */
     List<AloudataAnalysisViewItem> listViews(Long datasourceId, String keyword, boolean onlyMine);
+
+    /**
+     * 指标视图的字段清单（指标 + 维度），含字段名 / 展示名 / 描述。
+     * <p>
+     * 视图详情（queryByName）只返回名称数组，展示名与描述由指标详情
+     * （metrics/batchDetail）与维度列表（dimension/list）补齐。
+     *
+     * @param datasourceId 数据源 ID
+     * @param viewName     指标视图名称
+     * @return 字段列表，顺序为「先指标后维度」
+     */
+    List<AloudataAnalysisViewField> listFields(Long datasourceId, String viewName);
 
     AloudataAnalysisViewDetail getByName(Long datasourceId, String viewName);
 }
