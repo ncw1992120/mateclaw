@@ -633,6 +633,7 @@ import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
 
 defineOptions({
   name: 'PropertyPanel',
@@ -664,17 +665,8 @@ const emit = defineEmits<{
 const datasourceStore = useDatasourceStore()
 const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasources))
 
-/** 组合卡片背景色 · 常用暖色预设（取色器弹出面板可直选） */
-const COMBINATION_BG_PRESETS = [
-  '#FFF8F0', // 奶油白
-  '#FBF0DC', // 米黄
-  '#FAE7CE', // 浅杏
-  '#FBE3C8', // 杏橘
-  '#FFE3D0', // 浅珊瑚
-  '#F6DFD2', // 藕粉
-  '#F2E8DA', // 亚麻
-  '#EFE0CB', // 浅驼
-]
+/** 组合卡片背景色预设 · 统一收敛到 utils/color-presets.ts（与指标样式弹窗共用一处来源） */
+const COMBINATION_BG_PRESETS = CARD_BG_PRESETS
 
 /** 本地编辑副本（深拷贝） */
 const localComponent = reactive<InsightComponent>({

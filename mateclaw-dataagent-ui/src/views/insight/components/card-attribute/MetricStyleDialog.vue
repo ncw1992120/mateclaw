@@ -83,6 +83,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
 import { KPI_FIELD_LABELS, KPI_FONT_OPTIONS, KPI_METRIC_FIELDS, normalizeHexColor, styleToCss } from '@/utils/kpi-metrics'
+import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import type { KpiMetricField } from '@/utils/kpi-metrics'
 
 const { state } = useInsight()
@@ -92,21 +93,8 @@ const metric = computed(() => state.kpiMetrics.find((m) => m.fieldKey === ui.met
 const currentField = computed(() => (ui.metricStyle.field as KpiMetricField) || 'value')
 const style = computed(() => metric.value?.styles?.[currentField.value])
 
-/** 取色器预设色板：暖色系常用色（红/橙/琥珀/暖黄/暖棕），点击色块后可选，配合 HEX 输入使用 */
-const PRESET_COLORS = [
-  '#e5484d', // 红
-  '#ef4444', // 亮红
-  '#f43f5e', // 玫红
-  '#f76b15', // 橙
-  '#f97316', // 亮橙
-  '#fb923c', // 浅橙
-  '#f59e0b', // 琥珀
-  '#ffb224', // 金黄
-  '#ffd60a', // 暖黄
-  '#d97706', // 深琥珀
-  '#c2410c', // 砖橙
-  '#a0522d', // 暖棕
-]
+/** 取色器预设色板 · 统一收敛到 utils/color-presets.ts（与属性面板背景色板共用一处来源） */
+const PRESET_COLORS = TEXT_COLOR_PRESETS
 
 /** HEX 输入框草稿（打开/切换字段时同步当前颜色） */
 const hexInput = ref('')

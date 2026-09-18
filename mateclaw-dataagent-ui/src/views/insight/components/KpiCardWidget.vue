@@ -1,5 +1,5 @@
 <template>
-  <div class="kpi-card-widget">
+  <div ref="rootRef" class="kpi-card-widget">
     <div class="kpi-card-inner">
       <div class="kpi-card-header">
         <div class="kpi-title-row">
@@ -10,7 +10,6 @@
             v-model="localDateRange"
             type="daterange"
             size="small"
-            style="width: 200px"
             value-format="YYYY-MM-DD"
             unlink-panels
             :shortcuts="dateShortcuts"
@@ -22,7 +21,7 @@
       </div>
 
       <!-- Tab 栏（多 Tab 模式） -->
-      <div v-if="hasTabs" class="widget-tabs" role="tablist" aria-label="指标卡分页">
+      <div v-if="hasTabs" class="widget-tabs" role="tablist" :aria-label="t('insight.kpiTabsLabel')">
         <div
           v-for="tab in tabList"
           :key="tab.id"
@@ -30,10 +29,10 @@
           :class="{ active: activeTabId === tab.id }"
           role="tab"
           :aria-selected="activeTabId === tab.id"
-          :tabindex="activeTabId === tab.id ? 0 : -1"
+          :tabindex="activeTabId === tab.id || (!activeTabId && tab.id === tabList[0]?.id) ? 0 : -1"
           :data-tab-id="tab.id"
           @click="selectTab(tab.id)"
-          @keydown="handleTabKeydown($event, tab.id)"
+          @keydown="onTabKeydown($event, tab.id)"
         >
           {{ tab.title }}
         </div>
@@ -62,10 +61,12 @@
           <button
             v-if="editable"
             class="kpi-metric-style-btn"
-            title="配置字段样式"
+            :title="t('insight.kpiMetricStyle')"
             @mousedown.stop.prevent
             @click.stop="openMetricStyle(metric)"
-          >:</button>
+          >
+            <el-icon :size="12"><MoreFilled /></el-icon>
+          </button>
 
           <!-- 八向缩放手柄（编辑态 + 选中/悬停/拖动时显示） -->
           <template v-if="editable && (selectedKey === metric.fieldKey || hoverKey === metric.fieldKey || resizingId === metric.fieldKey || movingId === metric.fieldKey)">
@@ -115,11 +116,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab } from '@/types'
 import { styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
+import { useFreeInteraction } from '../composables/useFreeInteraction'
+import { useTabKeyboard } from '../composables/useTabKeyboard'
 
 defineOptions({
   name: 'KpiCardWidget',
@@ -159,31 +162,18 @@ const hasTabs = computed(() => {
 })
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
 const activeTabId = ref('')
+const rootRef = ref<HTMLElement | null>(null)
 
 function selectTab(tabId: string): void {
   activeTabId.value = tabId
 }
 
-function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
-  const currentIndex = tabList.value.findIndex(tab => tab.id === tabId)
-  if (currentIndex < 0 || tabList.value.length < 2) return
-  let nextIndex = currentIndex
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % tabList.value.length
-  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + tabList.value.length) % tabList.value.length
-  else if (event.key === 'Home') nextIndex = 0
-  else if (event.key === 'End') nextIndex = tabList.value.length - 1
-  else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTab(tabId); return }
-  else return
-  event.preventDefault()
-  const nextTab = tabList.value[nextIndex]
-  if (!nextTab) return
-  selectTab(nextTab.id)
-  nextTick(() => {
-    const tab = Array.from(document.querySelectorAll<HTMLElement>('.kpi-card-widget [role="tab"]'))
-      .find(candidate => candidate.dataset.tabId === nextTab.id)
-    tab?.focus()
-  })
-}
+/** 页签键盘导航（WAI-ARIA tabs 模式，逻辑抽到 composable 与组合卡片复用） */
+const { onTabKeydown } = useTabKeyboard(
+  () => tabList.value,
+  selectTab,
+  (id) => rootRef.value?.querySelector(`[role="tab"][data-tab-id="${id}"]`) ?? null,
+)
 
 // Tab 定义替换时校正失效的 activeTabId，避免组件进入无数据空态。
 watch(() => tabList.value.map(tab => tab.id).join('|'), () => {
@@ -280,12 +270,36 @@ function openMetricStyle(metric: KpiMetricConfig): void {
   emit('open-metric-style', { componentId: props.component.id, fieldKey: metric.fieldKey, field: 'value' })
 }
 
-// ── 指标自由拖动（鼠标事件）──────────────────────────────
+// ── 指标自由拖动/八向缩放（共享交互内核）──────────────────
 // 与组合卡片同策略：mousedown 阻断冒泡（否则触发 GridItem 的容器拖拽）+
-// 过程只改 DOM style 并 rAF 节流，mouseup 才把最终位置提交回响应式 kpiMetrics。
-let mv: { key: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null } | null = null
-let mvRaf = 0
-let mvLast: { x: number; y: number } | null = null
+// 过程只改 DOM style 并 rAF 节流，mouseup 由 useFreeInteraction 用「最后一次鼠标
+// 坐标 + 纯函数」重算落点提交 —— 禁止回读 DOM style，否则取消 pending rAF 后
+// 会丢掉末帧位移（快速甩动时指标差一点没到位）。
+// 元素引用直接来自 e.currentTarget / closest，避免全局 querySelector 跨卡串元素。
+const interaction = useFreeInteraction()
+
+/** 把计算出的 CSS 属性写到元素内联样式（过程渲染与落点同步共用） */
+function applyCss(el: HTMLElement | null, props: Record<string, string>): void {
+  if (!el) return
+  for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v)
+}
+
+/** 指标分组容器的边界快照（宽/高） */
+interface MetricBounds { w: number; h: number }
+
+/**
+ * 读一次指标分组容器尺寸。
+ *
+ * ⚠️ **只允许在鼠标按下时调用一次，绝不要在 `compute` 里每帧调用**：
+ * `getBoundingClientRect()` / `offsetWidth` 会强制浏览器立即同步布局（forced reflow），
+ * 而 rAF 回调里「先读布局 → 再写 left/top」会让每一帧都被迫完整重排，
+ * 卡片内指标多、同页图表多时就会把帧预算吃满，表现为**拖动发涩、跟手迟滞**。
+ * 本次拖动/缩放期间容器尺寸不会变化，按下时取一次即可（过程与落点共用同一份）。
+ */
+function readGroupBounds(): MetricBounds | null {
+  const r = groupRef.value?.getBoundingClientRect()
+  return r ? { w: r.width, h: r.height } : null
+}
 
 function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
   if (!props.editable) return
@@ -294,69 +308,76 @@ function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
   e.preventDefault()
   e.stopPropagation()
   selectMetric(metric.fieldKey)
-  mv = {
-    key: metric.fieldKey,
-    sx: e.clientX,
-    sy: e.clientY,
-    ox: metric.x,
-    oy: metric.y,
-    el: document.querySelector(`[data-metric="${metric.fieldKey}"]`) as HTMLElement | null,
-  }
+  const el = e.currentTarget as HTMLElement | null
+  // 按下时读一次布局，拖动过程与落点提交共用（详见 readGroupBounds 注释）
+  const bounds = readGroupBounds()
+  const elW = el?.offsetWidth ?? 0
+  const elH = el?.offsetHeight ?? 0
+  const start = { sx: e.clientX, sy: e.clientY, ox: metric.x, oy: metric.y }
   movingId.value = metric.fieldKey
-  window.addEventListener('mousemove', onMetricMouseMove)
-  window.addEventListener('mouseup', onMetricMouseUp)
-}
-
-function onMetricMouseMove(e: MouseEvent): void {
-  if (!mv) return
-  mvLast = { x: e.clientX, y: e.clientY }
-  if (mvRaf) return
-  mvRaf = requestAnimationFrame(() => {
-    mvRaf = 0
-    if (!mv || !mvLast) return
-    let nx = mv.ox + mvLast.x - mv.sx
-    let ny = mv.oy + mvLast.y - mv.sy
-    const rect = groupRef.value?.getBoundingClientRect()
-    if (rect && mv.el) {
-      nx = Math.max(0, Math.min(nx, Math.max(0, rect.width - mv.el.offsetWidth)))
-      ny = Math.max(0, Math.min(ny, Math.max(0, rect.height - mv.el.offsetHeight)))
-    }
-    mv.el?.style.setProperty('left', Math.round(nx) + 'px')
-    mv.el?.style.setProperty('top', Math.round(ny) + 'px')
+  interaction.begin<Record<string, string>>({
+    compute: (last) => {
+      let nx = start.ox + last.x - start.sx
+      let ny = start.oy + last.y - start.sy
+      if (bounds) {
+        nx = Math.max(0, Math.min(nx, Math.max(0, bounds.w - elW)))
+        ny = Math.max(0, Math.min(ny, Math.max(0, bounds.h - elH)))
+      }
+      return { left: Math.round(nx) + 'px', top: Math.round(ny) + 'px' }
+    },
+    apply: (p) => applyCss(el, p),
+    commit: (p) => {
+      const m = (props.component.kpiMetrics ?? []).find((x) => x.fieldKey === metric.fieldKey)
+      if (m) {
+        m.x = parseInt(p.left, 10)
+        m.y = parseInt(p.top, 10)
+      }
+      // 保留内联值而非 removeProperty：纯点击未拖动时，Vue 不会重发未变化的 style，
+      // 移除内联值会瞬间丢失定位。
+      applyCss(el, p)
+    },
   })
 }
 
-function onMetricMouseUp(): void {
-  if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0 }
-  if (mv?.el) {
-    const metric = (props.component.kpiMetrics ?? []).find((m) => m.fieldKey === mv!.key)
-    const nx = parseInt(mv.el.style.left, 10)
-    const ny = parseInt(mv.el.style.top, 10)
-    if (metric) {
-      if (Number.isFinite(nx)) metric.x = nx
-      if (Number.isFinite(ny)) metric.y = ny
-    }
-    mv.el.style.removeProperty('left')
-    mv.el.style.removeProperty('top')
+/** 缩放起点 + 当前鼠标坐标 → 目标盒子（过程与落点共用同一纯函数） */
+function computeMetricResize(
+  start: { dir: string; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number },
+  last: { x: number; y: number },
+  bounds: MetricBounds | null,
+): Record<string, string> {
+  const dx = last.x - start.sx
+  const dy = last.y - start.sy
+  const dir = start.dir
+  let ox = start.ox, oy = start.oy, ow = start.ow, oh = start.oh
+  if (dir.includes('e')) ow = start.ow + dx
+  if (dir.includes('s')) oh = start.oh + dy
+  if (dir.includes('w')) { ow = start.ow - dx; ox = start.ox + dx }
+  if (dir.includes('n')) { oh = start.oh - dy; oy = start.oy + dy }
+  if (ow < 120) { if (dir.includes('w')) ox -= 120 - ow; ow = 120 }
+  if (oh < 56) { if (dir.includes('n')) oy -= 56 - oh; oh = 56 }
+  if (ox < 0) { ow += ox; ox = 0 }
+  if (oy < 0) { oh += oy; oy = 0 }
+  if (bounds) {
+    if (ox + ow > bounds.w) ow = bounds.w - ox
+    if (oy + oh > bounds.h) oh = bounds.h - oy
   }
-  mv = null
-  movingId.value = null
-  window.removeEventListener('mousemove', onMetricMouseMove)
-  window.removeEventListener('mouseup', onMetricMouseUp)
+  return {
+    left: Math.round(ox) + 'px',
+    top: Math.round(oy) + 'px',
+    width: Math.round(ow) + 'px',
+    height: Math.round(oh) + 'px',
+  }
 }
-
-// ── 指标八向缩放（同拖动策略）────────────────────────────
-let rz: { key: string; dir: string; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number; el: HTMLElement | null } | null = null
-let rzRaf = 0
-let rzLast: { x: number; y: number } | null = null
 
 function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string): void {
   if (!props.editable) return
   e.preventDefault()
   e.stopPropagation()
   selectMetric(metric.fieldKey)
-  rz = {
-    key: metric.fieldKey,
+  const el = (e.currentTarget as HTMLElement).closest('.kpi-metric') as HTMLElement | null
+  // 同上：按下时读一次布局，缩放过程与落点提交共用
+  const bounds = readGroupBounds()
+  const start = {
     dir,
     sx: e.clientX,
     sy: e.clientY,
@@ -364,64 +385,22 @@ function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string)
     oy: metric.y,
     ow: metric.w,
     oh: metric.h,
-    el: document.querySelector(`[data-metric="${metric.fieldKey}"]`) as HTMLElement | null,
   }
   resizingId.value = metric.fieldKey
-  window.addEventListener('mousemove', onMetricResizeMove)
-  window.addEventListener('mouseup', onMetricResizeUp)
-}
-
-function onMetricResizeMove(e: MouseEvent): void {
-  if (!rz) return
-  rzLast = { x: e.clientX, y: e.clientY }
-  if (rzRaf) return
-  rzRaf = requestAnimationFrame(() => {
-    rzRaf = 0
-    if (!rz || !rzLast || !rz.el) return
-    const dx = rzLast.x - rz.sx
-    const dy = rzLast.y - rz.sy
-    const dir = rz.dir
-    let { ox, oy, ow, oh } = rz
-    if (dir.includes('e')) ow = rz.ow + dx
-    if (dir.includes('s')) oh = rz.oh + dy
-    if (dir.includes('w')) { ow = rz.ow - dx; ox = rz.ox + dx }
-    if (dir.includes('n')) { oh = rz.oh - dy; oy = rz.oy + dy }
-    const rect = groupRef.value?.getBoundingClientRect()
-    if (ow < 120) { if (dir.includes('w')) ox -= 120 - ow; ow = 120 }
-    if (oh < 56) { if (dir.includes('n')) oy -= 56 - oh; oh = 56 }
-    if (ox < 0) { ow += ox; ox = 0 }
-    if (oy < 0) { oh += oy; oy = 0 }
-    if (rect) {
-      if (ox + ow > rect.width) ow = rect.width - ox
-      if (oy + oh > rect.height) oh = rect.height - oy
-    }
-    rz.el.style.setProperty('left', Math.round(ox) + 'px')
-    rz.el.style.setProperty('top', Math.round(oy) + 'px')
-    rz.el.style.setProperty('width', Math.round(ow) + 'px')
-    rz.el.style.setProperty('height', Math.round(oh) + 'px')
+  interaction.begin<Record<string, string>>({
+    compute: (last) => computeMetricResize(start, last, bounds),
+    apply: (p) => applyCss(el, p),
+    commit: (p) => {
+      const m = (props.component.kpiMetrics ?? []).find((x) => x.fieldKey === metric.fieldKey)
+      if (m) {
+        m.x = parseInt(p.left, 10)
+        m.y = parseInt(p.top, 10)
+        m.w = parseInt(p.width, 10)
+        m.h = parseInt(p.height, 10)
+      }
+      applyCss(el, p)
+    },
   })
-}
-
-function onMetricResizeUp(): void {
-  if (rzRaf) { cancelAnimationFrame(rzRaf); rzRaf = 0 }
-  if (rz?.el) {
-    const metric = (props.component.kpiMetrics ?? []).find((m) => m.fieldKey === rz!.key)
-    const nx = parseInt(rz.el.style.left, 10)
-    const ny = parseInt(rz.el.style.top, 10)
-    const nw = parseInt(rz.el.style.width, 10)
-    const nh = parseInt(rz.el.style.height, 10)
-    if (metric) {
-      if (Number.isFinite(nx)) metric.x = nx
-      if (Number.isFinite(ny)) metric.y = ny
-      if (Number.isFinite(nw)) metric.w = nw
-      if (Number.isFinite(nh)) metric.h = nh
-    }
-    ;['left', 'top', 'width', 'height'].forEach((p) => rz!.el!.style.removeProperty(p))
-  }
-  rz = null
-  resizingId.value = null
-  window.removeEventListener('mousemove', onMetricResizeMove)
-  window.removeEventListener('mouseup', onMetricResizeUp)
 }
 
 /** 退出编辑态时清掉内部选中，避免高亮残留 */
@@ -505,6 +484,11 @@ function handleDateChange(val: [string, string] | null): void {
   flex-shrink: 0;
 }
 
+/* 时间筛选宽度统一走类规则（替代原行内 style="width: 200px"） */
+.kpi-time-filter :deep(.el-date-editor) {
+  width: 200px;
+}
+
 .widget-tabs {
   display: flex;
   align-items: center;
@@ -583,13 +567,13 @@ function handleDateChange(val: [string, string] | null): void {
 }
 
 .kpi-chg.up {
-  color: var(--db-positive);
-  background: var(--db-positive-bg);
+  color: var(--db-up);
+  background: var(--db-up-bg);
 }
 
 .kpi-chg.down {
-  color: var(--db-danger);
-  background: var(--db-danger-bg);
+  color: var(--db-down);
+  background: var(--db-down-bg);
 }
 
 .kpi-trend-icon {
@@ -700,6 +684,12 @@ function handleDateChange(val: [string, string] | null): void {
   line-height: 1.2;
 }
 
+/* 数值排版：等宽数字，拖拽/缩放过程中宽度不抖动 */
+.kpi-metric-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
 .kpi-metric-valuerow {
   display: flex;
   align-items: baseline;
@@ -745,9 +735,15 @@ function handleDateChange(val: [string, string] | null): void {
 .kpi-metric.selected .kpi-metric-style-btn { opacity: 1; }
 .kpi-metric-style-btn:hover { background: var(--db-accent); color: #fff; }
 
-.kpi-metric-group.interacting .kpi-metric { cursor: grabbing; }
+/* 拖动/缩放期间：cursor 提示 + **禁用 hover 过渡**。
+   指针在拖动中会扫过其它指标，每一次 :hover 进出都会重新启动 background / box-shadow
+   的 0.15s 过渡，指标多时是可见的重绘抖动源 —— 交互期间直接关掉过渡最省。 */
+.kpi-metric-group.interacting .kpi-metric {
+  cursor: grabbing;
+  transition: none;
+}
 
-/* 八向缩放手柄 */
+/* 八向缩放手柄（::after 扩大触达热区，视觉尺寸不变） */
 .kpi-rs {
   position: absolute;
   width: 12px;
@@ -757,6 +753,12 @@ function handleDateChange(val: [string, string] | null): void {
   border-radius: 50%;
   z-index: 6;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
+.kpi-rs::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
 }
 .kpi-rs.nw { left: -6px; top: -6px; cursor: nwse-resize; }
 .kpi-rs.n  { left: 50%; top: -6px; transform: translateX(-50%); cursor: ns-resize; }
@@ -785,7 +787,7 @@ function handleDateChange(val: [string, string] | null): void {
   }
 
   .kpi-time-filter :deep(.el-date-editor) {
-    width: 100% !important;
+    width: 100%;
   }
 }
 </style>

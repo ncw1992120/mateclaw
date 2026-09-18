@@ -486,10 +486,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 
 <style scoped>
 /* 覆盖 grid-layout-plus 默认拖拽占位色（库内联 --vgl-placeholder-bg: red / opacity 20%）
-   → 拖动时不再出现粉红色残影 */
+   → 改为品牌强调色低透明：既无粉红残影，又保留「松手会落在哪里」的落点反馈 */
 .dashboard-canvas :deep(.vgl-layout) {
-  --vgl-placeholder-bg: transparent;
-  --vgl-placeholder-opacity: 0;
+  --vgl-placeholder-bg: var(--db-accent);
+  --vgl-placeholder-opacity: 0.08;
+  --vgl-placeholder-radius: 8px;
 }
 
 .dashboard-canvas {

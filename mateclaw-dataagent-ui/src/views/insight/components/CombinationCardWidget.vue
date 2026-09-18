@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="rootRef"
     class="combination-card"
     :class="{ editing: editable, selected, 'cc-drop': editable && paletteOver, 'cc-interacting': movingId !== null || resizingId !== null }"
     :style="rootStyle"
@@ -14,14 +15,19 @@
       <span class="cc-title">{{ cfg.title || component.title }}</span>
     </div>
 
-    <!-- 页签栏 -->
-    <div v-if="cfg.tabs.length" class="cc-tabs">
+    <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
+    <div v-if="cfg.tabs.length || editable" class="cc-tabs" role="tablist" :aria-label="t('insight.combination.tabs')">
       <div
         v-for="tab in cfg.tabs"
         :key="tab.id"
         class="cc-tab"
         :class="{ active: tab.id === cfg.activeTab }"
+        role="tab"
+        :aria-selected="tab.id === cfg.activeTab"
+        :tabindex="tab.id === cfg.activeTab || (!cfg.activeTab && tab.id === cfg.tabs[0]?.id) ? 0 : -1"
+        :data-tab-id="tab.id"
         @click.stop="selectTab(tab.id)"
+        @keydown="onTabKeydown($event, tab.id)"
       >
         <input
           v-if="editable && editingTab === tab.id"
@@ -32,18 +38,25 @@
           @blur="editingTab = null"
           @keyup.enter="editingTab = null"
         />
-        <span v-else @dblclick.stop="editable && (editingTab = tab.id)">{{ tab.title }}</span>
-        <button v-if="editable" class="tab-x" @click.stop="deleteTab(tab.id)" title="删除页签">✕</button>
+        <template v-else>
+          <span @dblclick.stop="editable && (editingTab = tab.id)">{{ tab.title }}</span>
+          <!-- 重命名 affordance：hover 淡入铅笔图标，提示该页签可双击重命名 -->
+          <el-icon v-if="editable" class="tab-rename-hint" :size="11"><EditPen /></el-icon>
+        </template>
+        <button v-if="editable" class="tab-x" @click.stop="deleteTab(tab.id)" :title="t('insight.combination.deleteTab')">
+          <el-icon :size="10"><Close /></el-icon>
+        </button>
       </div>
-      <button v-if="editable" class="cc-tab-add" @click.stop="addTab" title="添加页签">+</button>
+      <button v-if="editable" class="cc-tab-add" @click.stop="addTab" :title="t('insight.combination.addTab')">
+        <el-icon :size="14"><Plus /></el-icon>
+      </button>
     </div>
 
     <!-- 主体：自由布局作为绝对定位参考系；整卡为拖入落区 -->
     <div ref="ccBodyRef" class="cc-body" :class="{ 'mode-free': cfg.layoutMode === 'free', 'mode-grid': cfg.layoutMode === 'grid', 'mode-vertical': cfg.layoutMode === 'vertical' }">
-      <!-- 空状态 -->
+      <!-- 空状态（共享 EmptyState 组件，线性图标替代 emoji） -->
       <div v-if="activeChildren.length === 0" class="cc-empty">
-        <div class="empty-icon">🗂️</div>
-        <div class="empty-text">{{ editable ? '从左侧组件库拖入子组件' : '暂无子组件' }}</div>
+        <EmptyState :text="editable ? t('insight.combination.emptyEditable') : t('insight.combination.empty')" />
       </div>
 
       <div
@@ -61,7 +74,9 @@
       >
         <div class="cc-child-head">
           <span class="cc-child-title">{{ child.title }}</span>
-          <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" title="删除子组件">✕</button>
+          <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
+            <el-icon :size="10"><Close /></el-icon>
+          </button>
         </div>
         <!-- 子组件真实渲染（复用顶层 widget 组件；v1 子卡片数据接入下轮） -->
         <div class="cc-child-body">
@@ -121,6 +136,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessageBox } from 'element-plus'
+import { Close, Plus, EditPen } from '@element-plus/icons-vue'
 import type {
   InsightComponent,
   InsightComponentType,
@@ -135,6 +152,8 @@ import DataTableWidget from './DataTableWidget.vue'
 import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
+import EmptyState from './EmptyState.vue'
+import { useTabKeyboard } from '../composables/useTabKeyboard'
 
 const props = withDefaults(
   defineProps<{
@@ -158,6 +177,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const ccBodyRef = ref<HTMLElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
 const selectedChildId = ref<string | null>(null)
 const hoverChildId = ref<string | null>(null)
 const movingId = ref<string | null>(null)
@@ -342,14 +362,29 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
 //    overflow:hidden 裁掉，用户就抓不到 se/e/ne 手柄 —— 那才是「缩放用不了」的真凶。
 const MIN_CHILD_H = 60    // 子组件最小高度
 
+/** 容器边界快照：**只在鼠标按下时读一次**，绝不在每帧的 compute 里读 DOM。 */
+interface ChildBounds { width: number; height: number }
+
+/**
+ * 读一次容器边界。
+ *
+ * ⚠️ `getBoundingClientRect()` 会强制浏览器立即同步布局（forced reflow）；若放在每帧的
+ * `compute` 里，rAF 回调就变成「读布局 → 写 left/top」的读写交错，每一帧都被迫完整重排，
+ * 拖起来发涩。本次拖动/缩放期间容器尺寸不变，按下时取一次即可（过程与落点共用同一份）。
+ */
+function readChildBounds(): ChildBounds | null {
+  const r = ccBodyRef.value?.getBoundingClientRect()
+  return r ? { width: r.width, height: r.height } : null
+}
+
 /** 位置钳制：保证子组件整体可见 —— 这也保证八向手柄永远落在容器里、永远抓得到 */
 function clampBox(
-  rect: DOMRect | undefined,
+  bounds: ChildBounds | undefined,
   x: number, y: number, w: number, h: number,
 ): { x: number; y: number } {
-  if (!rect) return { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) }
-  const maxX = Math.max(0, rect.width - w)
-  const maxY = Math.max(0, rect.height - h)
+  if (!bounds) return { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) }
+  const maxX = Math.max(0, bounds.width - w)
+  const maxY = Math.max(0, bounds.height - h)
   return {
     x: Math.round(Math.min(Math.max(x, 0), maxX)),
     y: Math.round(Math.min(Math.max(y, 0), maxY)),
@@ -363,16 +398,19 @@ function clampCol(col: number): number {
 let lastInteractAt = 0
 function markInteracted(): void { lastInteractAt = Date.now() }
 
-let mv: { id: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null } | null = null
+let mv: { id: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null; bounds: ChildBounds | null; elW: number; elH: number } | null = null
 let mvRaf = 0
 let mvLast: { x: number; y: number } | null = null
 
-/** 起点 + 当前鼠标坐标 → 目标位置（拖动过程与落点共用，保证两者完全一致） */
+/** 起点 + 当前鼠标坐标 → 目标位置（拖动过程与落点共用，保证两者完全一致）。全程不读 DOM。 */
 function computeMove(start: NonNullable<typeof mv>, last: { x: number; y: number }): { x: number; y: number } {
-  const rect = ccBodyRef.value?.getBoundingClientRect()
-  const w = start.el?.offsetWidth ?? 0
-  const h = start.el?.offsetHeight ?? 0
-  return clampBox(rect, start.ox + last.x - start.sx, start.oy + last.y - start.sy, w, h)
+  return clampBox(
+    start.bounds ?? undefined,
+    start.ox + last.x - start.sx,
+    start.oy + last.y - start.sy,
+    start.elW,
+    start.elH,
+  )
 }
 
 function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
@@ -382,13 +420,18 @@ function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   e.preventDefault()
   e.stopPropagation()
   selectChild(child.id)
+  const el = (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null
   mv = {
     id: child.id,
     sx: e.clientX,
     sy: e.clientY,
     ox: child.layout.x,
     oy: child.layout.y,
-    el: (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null,
+    el,
+    // 按下时一次性读布局，过程与落点提交复用（详见 readChildBounds 注释）
+    bounds: readChildBounds(),
+    elW: el?.offsetWidth ?? 0,
+    elH: el?.offsetHeight ?? 0,
   }
   mvLast = { x: e.clientX, y: e.clientY }
   markInteracted()
@@ -431,17 +474,16 @@ function onChildMouseUp() {
 }
 
 // ── 八向缩放（与拖动同策略：过程改 DOM，落点提交）──────
-let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null } | null = null
+let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null; bounds: ChildBounds | null; colW: number } | null = null
 let rzRaf = 0
 let rzLast: { x: number; y: number } | null = null
 
-/** 起点 + 当前鼠标坐标 → 目标盒子（缩放过程与落点共用）。col/h/位置三者联动一致。 */
+/** 起点 + 当前鼠标坐标 → 目标盒子（缩放过程与落点共用）。col/h/位置三者联动一致，全程不读 DOM。 */
 function computeResize(
   start: NonNullable<typeof rz>,
   last: { x: number; y: number },
 ): { x: number; y: number; col: number; h: number } {
-  const rect = ccBodyRef.value?.getBoundingClientRect()
-  const colW = rect ? rect.width / 12 : 40
+  const colW = start.colW
   const dx = last.x - start.sx
   const dy = last.y - start.sy
   const dir = start.dir
@@ -462,7 +504,7 @@ function computeResize(
     oy = start.oy + (start.oh - next)
     h = next
   }
-  const box = clampBox(rect, ox, oy, col * colW, h)
+  const box = clampBox(start.bounds ?? undefined, ox, oy, col * colW, h)
   return { x: box.x, y: box.y, col, h: Math.round(h) }
 }
 
@@ -471,6 +513,7 @@ function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: s
   e.preventDefault()
   e.stopPropagation()
   selectChild(child.id)
+  const bounds = readChildBounds()
   rz = {
     id: child.id,
     dir,
@@ -481,6 +524,9 @@ function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: s
     ocol: child.layout.col,
     oh: child.layout.h ?? 120,
     el: (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null,
+    // 按下时一次性读布局：列宽基准与边界都在此固定，缩放过程不再触发同步布局
+    bounds,
+    colW: bounds ? bounds.width / 12 : 40,
   }
   rzLast = { x: e.clientX, y: e.clientY }
   markInteracted()
@@ -495,8 +541,7 @@ function onChildResizeMove(e: MouseEvent) {
   rzRaf = requestAnimationFrame(() => {
     rzRaf = 0
     if (!rz || !rzLast || !rz.el) return
-    const rect = ccBodyRef.value?.getBoundingClientRect()
-    const colW = rect ? rect.width / 12 : 40
+    const colW = rz.colW
     const box = computeResize(rz, rzLast)
     rz.el.style.setProperty('left', box.x + 'px')
     rz.el.style.setProperty('top', box.y + 'px')
@@ -509,8 +554,7 @@ function onChildResizeUp() {
   if (rz && rzLast) {
     const child = getActiveChildren().find((c) => c.id === rz!.id)
     if (child) {
-      const rect = ccBodyRef.value?.getBoundingClientRect()
-      const colW = rect ? rect.width / 12 : 40
+      const colW = rz.colW
       const box = computeResize(rz, rzLast)
       child.layout.x = box.x
       child.layout.y = box.y
@@ -535,7 +579,21 @@ function selectChild(id: string) {
   selectedChildId.value = id
   emit('select-child', { containerId: props.component.id, childId: id })
 }
-function deleteChild(id: string) {
+async function deleteChild(id: string) {
+  const child = getActiveChildren().find((c) => c.id === id)
+  try {
+    await ElMessageBox.confirm(
+      t('insight.combination.deleteChildConfirm', { name: child?.title ?? id }),
+      '',
+      {
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning',
+      },
+    )
+  } catch {
+    return // 用户取消
+  }
   const arr = getActiveChildren()
   const i = arr.findIndex((c) => c.id === id)
   if (i >= 0) arr.splice(i, 1)
@@ -575,6 +633,13 @@ function deleteTab(id: string) {
 function selectTab(id: string) {
   if (props.component.containerConfig) props.component.containerConfig.activeTab = id
 }
+
+/** 页签键盘导航（与 KPI 卡共用同一 composable；容器内局部查找，避免跨卡串元素） */
+const { onTabKeydown } = useTabKeyboard(
+  () => cfg.value.tabs,
+  selectTab,
+  (id) => rootRef.value?.querySelector(`[role="tab"][data-tab-id="${id}"]`) ?? null,
+)
 </script>
 
 <style scoped>
@@ -613,6 +678,7 @@ function selectTab(id: string) {
 .cc-tab {
   display: inline-flex;
   align-items: center;
+  gap: 3px;
   padding: 6px 10px;
   border: none;
   background: transparent;
@@ -623,12 +689,16 @@ function selectTab(id: string) {
 }
 .cc-tab:hover { color: var(--db-accent); }
 .cc-tab.active { color: var(--db-accent); border-bottom-color: var(--db-accent); font-weight: 600; }
+.cc-tab:focus-visible { outline: 2px solid var(--db-accent-border); border-radius: 4px; }
 .tab-edit { width: 64px; border: 1px solid var(--db-accent); border-radius: 4px; padding: 2px 4px; font-size: 12px; }
-.cc-tab-add { border: none; background: transparent; color: var(--db-text-muted); font-size: 18px; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; }
+.cc-tab-add { border: none; background: transparent; color: var(--db-text-muted); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .cc-tab-add:hover { background: var(--db-hover); color: var(--db-accent); }
-.tab-x { margin-left: 6px; border: none; background: transparent; color: var(--db-text-muted); font-size: 12px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+/* 重命名 affordance：hover 页签时淡入铅笔图标，提示可双击重命名 */
+.tab-rename-hint { color: var(--db-text-muted); opacity: 0; transition: opacity 0.15s; }
+.cc-tab:hover .tab-rename-hint { opacity: 0.7; }
+.tab-x { margin-left: 2px; border: none; background: transparent; color: var(--db-text-muted); line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.15s; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border-radius: 4px; }
 .cc-tab:hover .tab-x, .cc-tab.active .tab-x { opacity: 1; }
-.tab-x:hover { color: var(--db-danger); }
+.tab-x:hover { color: var(--db-danger); background: var(--db-danger-bg); }
 
 .cc-body { flex: 1 1 auto; position: relative; min-height: 120px; }
 .cc-body.mode-grid { display: grid; gap: 12px; grid-template-columns: repeat(12, 1fr); align-content: start; }
@@ -636,11 +706,9 @@ function selectTab(id: string) {
 
 .cc-empty {
   position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; color: var(--db-text-muted); text-align: center;
   border: 1px dashed var(--db-border); border-radius: 8px;
 }
-.cc-empty .empty-icon { font-size: 32px; }
+/* 空态内容（图标 + 文案）由共享 EmptyState 组件渲染 */
 
 .cc-child {
   box-sizing: border-box;
@@ -665,13 +733,15 @@ function selectTab(id: string) {
   flex-shrink: 0;
 }
 .cc-child-title { font-size: 12px; font-weight: 500; color: var(--db-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; font-size: 13px; padding: 1px 5px; border-radius: 4px; line-height: 1; }
+.cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .cc-child-del:hover { background: var(--db-danger-bg); color: var(--db-danger); }
 .cc-child-body { flex: 1; overflow: hidden; min-height: 0; border-radius: 0 0 7px 7px; }
 
-/* 拖动/缩放期间：屏蔽子卡片内部（图表/表格等）的鼠标事件，避免图表自身 mousemove 处理造成掉帧 */
+/* 拖动/缩放期间：屏蔽子卡片内部（图表/表格等）的鼠标事件，并关掉子卡片的过渡动画
+   —— 指针移动会让 :hover 在子卡片之间反复进出，每次都会重启 box-shadow 过渡，指标/子组件
+   多时是可见的重绘抖动源。 */
 .combination-card.cc-interacting .cc-child-body { pointer-events: none; }
-.combination-card.cc-interacting .cc-child { cursor: grabbing; }
+.combination-card.cc-interacting .cc-child { cursor: grabbing; transition: none; }
 .combination-card.cc-interacting .cc-child img,
 .combination-card.cc-interacting .cc-child canvas { -webkit-user-drag: none; }
 
@@ -688,6 +758,7 @@ function selectTab(id: string) {
 .rs.s  { left: 50%; bottom: -7px; transform: translateX(-50%); cursor: ns-resize; }
 .rs.sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
 .rs.w  { left: -7px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.rs::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; }
 .rs:hover { background: var(--db-accent-strong, #4f46e5); }
 
 /* 拖入落区高亮 */

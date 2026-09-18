@@ -7,7 +7,7 @@ import KpiCardWidget from '../KpiCardWidget.vue'
 const i18n = createI18n({
   legacy: false,
   locale: 'zh-CN',
-  messages: { 'zh-CN': {} },
+  messages: { 'zh-CN': { insight: { kpiTabsLabel: '指标卡分页' } } },
   missingWarn: false,
   fallbackWarn: false,
 })

@@ -43,6 +43,14 @@
   --db-positive-bg: rgba(34, 197, 94, 0.08);
   --db-danger: #ef4444;
   --db-danger-bg: rgba(239, 68, 68, 0.08);
+
+  /* 涨跌方向色（国内金融惯例：涨红跌绿；与「好坏语义」的 positive/danger 分离，
+     面向海外场景时只需在此调整映射，组件内统一引用方向 token） */
+  --db-up: #ef4444;
+  --db-up-bg: rgba(239, 68, 68, 0.08);
+  --db-down: #22c55e;
+  --db-down-bg: rgba(34, 197, 94, 0.08);
+
   --db-warning: #f59e0b;
   --db-status-success-bg: #e7f8ef;
   --db-status-success-fg: #166534;
@@ -141,6 +149,8 @@ html[data-theme='dark'] {
   --db-accent-border: rgba(99, 102, 241, 0.3);
   --db-positive-bg: rgba(34, 197, 94, 0.14);
   --db-danger-bg: rgba(239, 68, 68, 0.14);
+  --db-up-bg: rgba(239, 68, 68, 0.14);
+  --db-down-bg: rgba(34, 197, 94, 0.14);
   --db-status-success-bg: #163b2a;
   --db-status-success-fg: #57d38c;
   --db-status-warning-bg: #3a2a1b;
