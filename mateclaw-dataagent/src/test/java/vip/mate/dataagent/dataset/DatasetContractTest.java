@@ -45,4 +45,26 @@ class DatasetContractTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new DatasetFilter("id", "dimension", "contains-anything", 1));
     }
+
+    @Test
+    void jsonEntryAcceptsOpAliasSymbolOperatorAndDefaultRole() {
+        DatasetFilter filter = objectMapper.convertValue(
+                Map.of("field", "metric_time", "op", "=", "value", "2026-09-01"), DatasetFilter.class);
+        assertEquals("metric_time", filter.field());
+        assertEquals("dimension", filter.role());
+        assertEquals("eq", filter.operator());
+        assertEquals("2026-09-01", filter.value());
+
+        DatasetFilter gte = objectMapper.convertValue(
+                Map.of("field", "amount", "operator", ">=", "value", 10, "role", "measure"), DatasetFilter.class);
+        assertEquals("gte", gte.operator());
+        assertEquals("measure", gte.role());
+    }
+
+    @Test
+    void jsonEntryRejectsUnknownOperatorWithReadableMessage() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> objectMapper.convertValue(Map.of("field", "id", "op", "contains"), DatasetFilter.class));
+        assertTrue(error.getMessage().contains("unsupported filter operator"), error.getMessage());
+    }
 }

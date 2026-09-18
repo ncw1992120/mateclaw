@@ -1,6 +1,11 @@
 package vip.mate.dataagent.dataset;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 由 Python SDK 显式表达、可审计的过滤条件。
@@ -31,5 +36,53 @@ public record DatasetFilter(String field, String role, String operator, Object v
         if (value == null && !normalizedOperator.equals("is_null") && !normalizedOperator.equals("is_not_null")) {
             throw new IllegalArgumentException("filter value must not be null for operator: " + operator);
         }
+    }
+
+    private static final Map<String, String> ROLE_ALIASES = Map.of(
+            "dim", "dimension", "dimension", "dimension",
+            "metric", "measure", "measure", "measure");
+
+    private static final Map<String, String> OPERATOR_ALIASES = Map.ofEntries(
+            Map.entry("=", "eq"), Map.entry("==", "eq"), Map.entry("eq", "eq"), Map.entry("equal", "eq"),
+            Map.entry("!=", "neq"), Map.entry("<>", "neq"), Map.entry("neq", "neq"),
+            Map.entry(">", "gt"), Map.entry("gt", "gt"),
+            Map.entry(">=", "gte"), Map.entry("gte", "gte"),
+            Map.entry("<", "lt"), Map.entry("lt", "lt"),
+            Map.entry("<=", "lte"), Map.entry("lte", "lte"),
+            Map.entry("in", "in"),
+            Map.entry("not_in", "not_in"), Map.entry("not in", "not_in"), Map.entry("nin", "not_in"),
+            Map.entry("between", "between"),
+            Map.entry("is_null", "is_null"), Map.entry("is null", "is_null"), Map.entry("null", "is_null"),
+            Map.entry("is_not_null", "is_not_null"), Map.entry("is not null", "is_not_null"),
+            Map.entry("not_null", "is_not_null"));
+
+    /**
+     * JSON 反序列化入口：容忍 {@code op} 别名、符号运算符与缺省 role。
+     * 内部调用方请直接使用构造器，保持下推条件显式可审计。
+     */
+    @JsonCreator
+    static DatasetFilter fromJson(@JsonProperty("field") String field,
+                                  @JsonProperty("role") String role,
+                                  @JsonProperty("operator") @JsonAlias({"op", "operatorType"}) String operator,
+                                  @JsonProperty("value") Object value) {
+        return new DatasetFilter(field, normalizeRole(role), normalizeOperator(operator), value);
+    }
+
+    private static String normalizeRole(String role) {
+        if (role == null || role.isBlank()) return "dimension";
+        String normalized = role.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        return ROLE_ALIASES.getOrDefault(normalized, role);
+    }
+
+    private static String normalizeOperator(String operator) {
+        if (operator == null || operator.isBlank()) {
+            throw new IllegalArgumentException("filter operator is required（可用: eq(=), neq(!=), gt(>), gte(>=), lt(<), lte(<=), in, not_in, between, is_null, is_not_null）");
+        }
+        String normalized = operator.trim().toLowerCase(Locale.ROOT);
+        String mapped = OPERATOR_ALIASES.get(normalized);
+        if (mapped == null) mapped = OPERATOR_ALIASES.get(normalized.replace(' ', '_'));
+        if (mapped != null) return mapped;
+        throw new IllegalArgumentException(
+                "unsupported filter operator: " + operator + "（可用: eq(=), neq(!=), gt(>), gte(>=), lt(<), lte(<=), in, not_in, between, is_null, is_not_null）");
     }
 }
