@@ -92,7 +92,21 @@ const metric = computed(() => state.kpiMetrics.find((m) => m.fieldKey === ui.met
 const currentField = computed(() => (ui.metricStyle.field as KpiMetricField) || 'value')
 const style = computed(() => metric.value?.styles?.[currentField.value])
 
-const PRESET_COLORS = ['#1f2329', '#646a73', '#8f959e', '#6366f1', '#0f62fe', '#12b76a', '#f59e0b', '#e5484d']
+/** 取色器预设色板：暖色系常用色（红/橙/琥珀/暖黄/暖棕），点击色块后可选，配合 HEX 输入使用 */
+const PRESET_COLORS = [
+  '#e5484d', // 红
+  '#ef4444', // 亮红
+  '#f43f5e', // 玫红
+  '#f76b15', // 橙
+  '#f97316', // 亮橙
+  '#fb923c', // 浅橙
+  '#f59e0b', // 琥珀
+  '#ffb224', // 金黄
+  '#ffd60a', // 暖黄
+  '#d97706', // 深琥珀
+  '#c2410c', // 砖橙
+  '#a0522d', // 暖棕
+]
 
 /** HEX 输入框草稿（打开/切换字段时同步当前颜色） */
 const hexInput = ref('')
