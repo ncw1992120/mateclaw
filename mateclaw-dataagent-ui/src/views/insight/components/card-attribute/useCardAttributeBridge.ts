@@ -17,7 +17,16 @@ import type {
   DashboardScriptFilterBinding,
   InsightComponent,
 } from '@/types'
-import { buildPipeline, kpiResultFields, mapSourceTypeIn, useInsight } from './useInsight'
+import {
+  buildPipeline,
+  datasetFromInput,
+  kpiResultFields,
+  mapSourceTypeIn,
+  materializedKpiMetrics,
+  migrateKpiMetrics,
+  normalizeFieldRef,
+  useInsight,
+} from './useInsight'
 import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useInsight'
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
 
@@ -31,34 +40,12 @@ function toCardType(type: unknown): CardType {
   return 'chart'
 }
 
-/** 数据源类型的展示名（原型卡片标题行「数据源」右侧显示） */
-const SOURCE_LABEL: Record<string, string> = {
-  jdbc: 'JDBC',
-  aloudata: 'Aloudata',
-  api: '接口',
-  file: '文件',
-}
-
 /** pipeline.datasetInputs → 面板数据集卡片（保留后端数据集 ID，保存时回写） */
 export function inputToDatasetConfig(input: DashboardDatasetInput, index: number): DatasetConfig {
-  const sourceType = mapSourceTypeIn(input.sourceType)
+  // 字段注册表 + 存量引用归一统一走 datasetFromInput，避免两处各写一份
+  const ds = datasetFromInput(input, index)
   const datasetId = input.datasetId ? String(input.datasetId) : ''
-  return {
-    id: `${datasetId || 'ds'}-${index}`,
-    backendDatasetId: datasetId || undefined,
-    sourceType,
-    sourceLabel: input.displayName || SOURCE_LABEL[sourceType] || String(input.sourceType ?? ''),
-    alias: input.inputName || `table${index + 1}`,
-    fieldMapping: (input.fieldMappings ?? []).map((mapping) => ({
-      source: mapping.source,
-      desc: mapping.source,
-      target: mapping.target,
-    })),
-    filters: (input.filters ?? []) as unknown as InputFilter[],
-    jdbc: input.sourceConfig?.sql
-      ? { db: String(input.sourceConfig.datasourceId ?? ''), sql: input.sourceConfig.sql }
-      : undefined,
-  }
+  return { ...ds, id: `${datasetId || 'ds'}-${index}` }
 }
 
 /** pipeline.scriptFilterBindings → 面板筛选器绑定（作用范围按数据集逐项展开） */
@@ -72,11 +59,12 @@ function filterBindingsFromPipeline(
     datasets.forEach((ds) => {
       scope[ds.id] = (binding.inputNames ?? []).includes(ds.alias)
     })
-    const fieldMap = datasets.map((ds) => ({
-      datasetId: ds.id,
-      field: binding.fieldMappings?.[ds.alias] ?? '',
-      matched: Boolean(binding.fieldMappings?.[ds.alias]),
-    }))
+    const fieldMap = datasets.map((ds) => {
+      // 老绑定里存的是展示名 → 归一为字段名（决策 4），改名后绑定关系依然有效
+      const raw = binding.fieldMappings?.[ds.alias] ?? ''
+      const field = raw ? normalizeFieldRef(raw) : ''
+      return { datasetId: ds.id, field, matched: Boolean(field) }
+    })
     const matchedComponent = filterComponents.find((c) => c.id === binding.filterComponentId)
     return {
       filterName: matchedComponent?.title || binding.filterComponentId || `筛选器${index + 1}`,
@@ -116,9 +104,10 @@ export function hydratePanel(
   // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
 
-  // KPI 指标分组：由结果集字段增量投影（保留组件已有配置；schema 为空时原样保留，不清空用户配置）
+  // KPI 指标分组：由结果集字段增量投影（保留组件已有配置；结果集为空时原样保留，不清空用户配置）
+  // 迁移：fieldKey 归一为字段名、旧展示名/单位写入注册表，随后由注册表统一具化
   if (component.type === 'kpi') {
-    state.kpiMetrics = buildKpiMetrics(kpiResultFields(), component.kpiMetrics ?? [])
+    state.kpiMetrics = buildKpiMetrics(kpiResultFields(), migrateKpiMetrics(component.kpiMetrics ?? []))
   } else {
     state.kpiMetrics = []
   }
@@ -163,8 +152,9 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
   const patch: InsightComponent = { ...component, title: card.title }
   if (card.type === 'kpi') {
     patch.multiKpi = card.multiMetric
-    // 指标分组配置随面板状态整体回写（hydrate 时已按结果集投影增量合并）
-    patch.kpiMetrics = JSON.parse(JSON.stringify(state.kpiMetrics)) as InsightComponent['kpiMetrics']
+    // 指标分组配置随面板状态整体回写（hydrate 时已按结果集投影增量合并）。
+    // 展示名 / 单位以字段注册表为准具化后再持久化，保证「一处改、处处生效」落到后端与画布渲染。
+    patch.kpiMetrics = materializedKpiMetrics() as InsightComponent['kpiMetrics']
   }
 
   const hasTabs = Array.isArray(component.tabs) && component.tabs.length > 0

@@ -21,11 +21,15 @@ import * as datasetApi from '@/api/dataset'
 import * as datasourceApi from '@/api/datasource'
 import { listAloudataMetrics, listAloudataDimensions } from '@/api/semantic-model'
 import {
-  buildFieldMappingRows,
-  toSourceFilters,
-  validateFieldMappingRows,
+  fieldMetasFromMappings,
+  normalizeLegacyFieldRefs,
+  reconcileFieldMetas,
+  resolveFieldLabel,
+  resolveFieldName,
+  toFieldMappings,
+  validateFieldMetas,
+  type DatasetFieldMeta,
   type DatasetSchemaField,
-  type FieldMappingRow,
 } from '@/utils/field-mapping'
 import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
@@ -35,12 +39,10 @@ import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 export type DataSourceLeafType = 'jdbc' | 'aloudata' | 'api' | 'file'
 export type CardType = 'kpi' | 'table' | 'chart'
 
-/** 字段映射：源字段名 → 目标字段名（结构见 @/utils/field-mapping） */
-export type FieldMapping = FieldMappingRow
-
 /** 输入筛选条件（当前数据集查询条件，应下推到源查询） */
 export interface InputFilter {
-  field: string // 字段（使用最终数据集字段名）
+  /** 字段名（技术主键、下推唯一依据；**不存展示名**） */
+  field: string
   op: string // 操作符：=、!=、contains、in、between、is null、is not null、最近 N 天
   value: string // 条件值
 }
@@ -51,10 +53,20 @@ export interface DatasetConfig {
   sourceType: DataSourceLeafType
   sourceLabel: string // 例："JDBC · db1"
   alias: string // 数据集别名，例：table1
-  fieldMapping: FieldMapping[]
-  /** 数据集 schema 缓存（字段名 + 显示名），由草稿预览预取；「字段名称」弹窗据此生成映射行 */
+  /**
+   * 字段注册表（唯一事实源）：字段名不可变，展示名 / 单位在此唯一登记。
+   * 「字段名称」弹窗与「指标配置」弹窗读写的是同一份注册表 → 一处改、处处生效。
+   * 契约见 docs/策略解读/字段名与展示名契约-实施计划.md。
+   */
+  fields: DatasetFieldMeta[]
+  /**
+   * 数据集 schema 缓存：后端**最近一次返回的原始清单**（不可变输入），
+   * 仅用于 diff（新增 / 消失字段）与重绑提示，不承接用户编辑。
+   */
   schema?: DatasetSchemaField[]
   filters: InputFilter[]
+  /** 存量归一后仍未识别的字段引用（决策 4：面板顶部告警，引导手动修复） */
+  unresolvedFields?: string[]
   // 各类型专属配置（由对应配置弹窗填充，均来自真实后端）
   jdbc?: { db: string; sql: string }
   aloudata?: { mode: 'metric-dim' | 'metric-view'; datasourceId?: string; metricView?: string; metrics?: string[]; dims?: string[] }
@@ -113,7 +125,14 @@ interface UiState {
   inputFilter: { visible: boolean; datasetId: string; previewKind?: 'dataset' | 'result' }
   filterBinding: { visible: boolean }
   python: { visible: boolean }
-  preview: { visible: boolean; kind: 'dataset' | 'result' | 'component'; datasetId: string | null; tab?: string }
+  preview: {
+    visible: boolean
+    kind: 'dataset' | 'result' | 'component'
+    datasetId: string | null
+    tab?: string
+    /** 表头显示字段名（默认关：显示展示名，悬停 tooltip 显示字段名） */
+    showFieldNames?: boolean
+  }
   // KPI 指标分组弹窗
   metricConfig: { visible: boolean }
   metricStyle: { visible: boolean; fieldKey: string; field: string }
@@ -218,7 +237,13 @@ const state = reactive({
     inputFilter: { visible: false, datasetId: '', previewKind: 'dataset' },
     filterBinding: { visible: false },
     python: { visible: false },
-    preview: { visible: false, kind: 'dataset' as 'dataset' | 'result' | 'component', datasetId: null as string | null, tab: 'data' },
+    preview: {
+      visible: false,
+      kind: 'dataset' as 'dataset' | 'result' | 'component',
+      datasetId: null as string | null,
+      tab: 'data',
+      showFieldNames: false,
+    },
     metricConfig: { visible: false },
     metricStyle: { visible: false, fieldKey: '', field: 'value' },
   } as UiState,
@@ -320,7 +345,7 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
       sourceType: payload.sourceType,
       sourceLabel: payload.sourceLabel,
       alias: nextAlias(),
-      fieldMapping: [],
+      fields: [],
       filters: [],
       ...payload,
     } as DatasetConfig)
@@ -667,25 +692,120 @@ async function refreshDatasetSchema(
   try {
     const schema = await fetchDatasetSchema(ds)
     if (!schema.length) return { ok: false, message: '未获取到字段结构，请检查数据源或查询条件' }
+    // ds.schema 作为「上一版后端清单」参与 diff，用于判断用户是否手工改过展示名
+    ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
     ds.schema = schema
-    ds.fieldMapping = buildFieldMappingRows(schema, ds.fieldMapping)
     return { ok: true, message: `已获取 ${schema.length} 个字段` }
   } catch (e) {
     return { ok: false, message: (e as Error)?.message || '获取字段结构失败' }
   }
 }
 
-/* ---- 字段映射 ---- */
+/* ---- 字段注册表（唯一事实源） ---- */
+/** 在全部数据集中按字段名查找注册表条目 */
+export function findFieldMeta(name: string): DatasetFieldMeta | undefined {
+  const key = (name ?? '').trim()
+  if (!key) return undefined
+  for (const ds of state.datasets) {
+    const hit = (ds.fields ?? []).find((f) => f.name === key)
+    if (hit) return hit
+  }
+  return undefined
+}
+
+/** 某字段所属数据集的注册表（供展示名唯一性校验构造候选集） */
+function findOwnerFields(name: string): DatasetFieldMeta[] | undefined {
+  const key = (name ?? '').trim()
+  for (const ds of state.datasets) {
+    if ((ds.fields ?? []).some((f) => f.name === key)) return ds.fields
+  }
+  return undefined
+}
+
+/**
+ * 取（必要时创建）某字段的注册表条目 —— 指标配置弹窗的写入口。
+ * 字段不在任何数据集注册表中时（如 schema 尚未拉取），落到第一个数据集，保证双入口写同一份。
+ */
+export function ensureFieldMeta(name: string): DatasetFieldMeta | undefined {
+  const key = (name ?? '').trim()
+  if (!key) return undefined
+  const found = findFieldMeta(key)
+  if (found) return found
+  const ds = state.datasets[0]
+  if (!ds) return undefined
+  if (!ds.fields) ds.fields = []
+  const created: DatasetFieldMeta = { name: key }
+  ds.fields.push(created)
+  return created
+}
+
+/** 跨数据集把老引用（展示名 / 旧目标名）归一为字段名 */
+export function normalizeFieldRef(ref: string): string {
+  const key = (ref ?? '').trim()
+  if (!key) return key
+  for (const ds of state.datasets) {
+    const resolved = resolveFieldName(ds.fields, key)
+    if (resolved !== key) return resolved
+  }
+  return key
+}
+
+/** 字段引用 → 渲染标签（跨数据集解析，未命中回退字段名） */
+export function labelOfField(name: string): string {
+  const key = (name ?? '').trim()
+  if (!key) return key
+  for (const ds of state.datasets) {
+    if ((ds.fields ?? []).some((f) => f.name === key)) return resolveFieldLabel(ds.fields, key)
+  }
+  return key
+}
+
+/**
+ * 写展示名（决策 1 唯一性拦截）：先写入注册表，再具化到 kpiMetrics 镜像。
+ * 返回错误文案（null 表示写入成功）。
+ */
+export function setFieldDisplayName(name: string, value: string): string | null {
+  const meta = ensureFieldMeta(name)
+  if (!meta) return null
+  const next = (value ?? '').trim()
+  // 用「同数据集内的整份注册表 + 本次改动」做唯一性预检，避免写出重名展示名
+  const draft = findOwnerFields(name) ?? [meta]
+  const candidate = draft.map((f) => (f.name === meta.name ? { ...f, displayName: next || undefined } : f))
+  const error = validateFieldMetas(candidate)
+  if (error) return error
+  meta.displayName = next || undefined
+  syncKpiMetricsFromFields()
+  return null
+}
+
+/** 写单位（字段级展示配置），并具化到 kpiMetrics 镜像 */
+export function setFieldUnit(name: string, value: string): void {
+  const meta = ensureFieldMeta(name)
+  if (!meta) return
+  meta.unit = (value ?? '').trim() || undefined
+  syncKpiMetricsFromFields()
+}
+
+/* ---- 字段名称弹窗（注册表编辑器） ---- */
 function openFieldMapping(id: string) {
   state.ui.fieldMapping = { visible: true, datasetId: id }
 }
-/** 保存字段映射；返回可展示的错误文案，null 表示保存成功并已关闭弹窗 */
-function saveFieldMapping(list: FieldMapping[]): string | null {
-  const error = validateFieldMappingRows(list)
+
+/** 保存字段注册表；返回可展示的错误文案，null 表示保存成功并已关闭弹窗 */
+function saveFieldMetas(list: DatasetFieldMeta[]): string | null {
+  const normalized = list.map((f) => ({
+    ...f,
+    name: (f.name ?? '').trim(),
+    displayName: (f.displayName ?? '').trim() || undefined,
+    unit: (f.unit ?? '').trim() || undefined,
+  }))
+  const error = validateFieldMetas(normalized)
   if (error) return error
   const ds = getDataset(state.ui.fieldMapping.datasetId)
   if (ds) {
-    ds.fieldMapping = list.map((m) => ({ source: m.source, desc: m.desc, target: (m.target ?? '').trim() }))
+    ds.fields = normalized
+    // 展示名可能刚变 → 立即具化指标镜像，保证「指标配置」里同步生效
+    syncKpiMetricsFromFields()
   }
   state.ui.fieldMapping.visible = false
   return null
@@ -745,32 +865,57 @@ function closePreview() {
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
 
 /**
- * 由数据集 schema + 字段映射推导「最终结果集」字段（指标投影来源）。
- * 字段名以映射目标名称为准（最终数据集字段名），显示名跟随 schema（Aloudata 语义层）。
+ * 由数据集「字段注册表」推导「最终结果集」字段（指标投影来源）。
+ * 字段名恒为技术主键（不再被改名），展示名 / 单位来自注册表。
  */
-export function kpiResultFields(): DatasetSchemaField[] {
-  const fields: DatasetSchemaField[] = []
+export function kpiResultFields(): DatasetFieldMeta[] {
+  const fields: DatasetFieldMeta[] = []
   state.datasets.forEach((ds) => {
-    if (ds.schema?.length) {
-      ds.schema.forEach((f) => {
-        const hit = ds.fieldMapping.find((m) => m.source === f.name)
-        const name = (hit?.target || f.name).trim() || f.name
-        fields.push({ name, displayName: f.displayName })
-      })
+    if (ds.fields?.length) {
+      ds.fields.forEach((f) => fields.push({ ...f }))
       return
     }
-    // schema 未取到时回落字段映射行（最终名称已由映射维护）
-    ds.fieldMapping.forEach((m) => {
-      const name = (m.target || m.source).trim()
-      if (name) fields.push({ name })
-    })
+    // 注册表尚未建立（schema 未拉取）时回落后端最近一次原始清单
+    ;(ds.schema ?? []).forEach((f) => fields.push({ ...f }))
   })
   return fields
 }
 
-/** 按最新结果集字段增量重建指标（命中保留用户配置、新增追加、消失移除；schema 为空不清空） */
+/** 按最新结果集字段增量重建指标（命中保留用户配置、新增追加、消失移除；结果集为空不清空） */
 function rebuildKpiMetrics() {
   state.kpiMetrics = buildKpiMetrics(kpiResultFields(), state.kpiMetrics)
+}
+
+/**
+ * 把注册表的展示名 / 单位具化到 kpiMetrics 镜像。
+ * kpiMetrics 保留的是「指标在卡片上的投影配置」（辅助说明 / 显示 / 布局 / 样式）；
+ * 展示名与单位只存在注册表一份，镜像用于画布渲染与后端持久化。
+ */
+function syncKpiMetricsFromFields(): void {
+  if (!state.kpiMetrics.length) return
+  const fields = kpiResultFields()
+  const byName = new Map(fields.map((f) => [f.name, f]))
+  state.kpiMetrics.forEach((m) => {
+    const hit = byName.get(m.fieldKey)
+    if (!hit) return
+    m.displayName = resolveFieldLabel(fields, m.fieldKey)
+    m.unit = (hit.unit ?? '').trim()
+  })
+}
+
+/** 序列化用：返回具化后的指标副本（不改 state，避免与自动保存互相触发） */
+export function materializedKpiMetrics(): KpiMetricConfig[] {
+  const fields = kpiResultFields()
+  const byName = new Map(fields.map((f) => [f.name, f]))
+  return JSON.parse(
+    JSON.stringify(
+      state.kpiMetrics.map((m) => {
+        const hit = byName.get(m.fieldKey)
+        if (!hit) return m
+        return { ...m, displayName: resolveFieldLabel(fields, m.fieldKey), unit: (hit.unit ?? '').trim() }
+      }),
+    ),
+  ) as KpiMetricConfig[]
 }
 
 function openMetricConfig() {
@@ -810,6 +955,70 @@ export function mapSourceTypeIn(s?: string | null): DataSourceLeafType {
   return 'jdbc'
 }
 
+/** 数据源类型的展示名（卡片标题行「数据源」右侧显示） */
+export const SOURCE_LABEL: Record<string, string> = {
+  jdbc: 'JDBC',
+  aloudata: 'Aloudata',
+  api: '接口',
+  file: '文件',
+}
+
+/**
+ * 后端 datasetInput → 面板数据集配置。
+ * 字段注册表由后端 fieldMappings 恢复（source=字段名、target=展示名），
+ * 再对引用处的老值做惰性归一（决策 4）。
+ */
+export function datasetFromInput(input: DashboardDatasetInput, index = 0): DatasetConfig {
+  const sourceType = mapSourceTypeIn(input.sourceType)
+  const ds: DatasetConfig = {
+    id: input.datasetId ? String(input.datasetId) : `ds-${index}`,
+    backendDatasetId: input.datasetId ? String(input.datasetId) : undefined,
+    sourceType,
+    sourceLabel: input.displayName || SOURCE_LABEL[sourceType] || String(input.sourceType ?? ''),
+    alias: input.inputName || `table${index + 1}`,
+    fields: fieldMetasFromMappings(input.fieldMappings),
+    filters: (input.filters ?? []) as unknown as InputFilter[],
+    jdbc: input.sourceConfig?.sql
+      ? { db: String(input.sourceConfig.datasourceId ?? ''), sql: input.sourceConfig.sql }
+      : undefined,
+  }
+  normalizeDatasetFields(ds)
+  return ds
+}
+
+/**
+ * 存量归一（决策 4）：把 filters 等处存歪的「展示名 / 旧目标名」反解回字段名并就地写回；
+ * 未识别的引用收集到 ds.unresolvedFields，由属性面板顶部告警引导手动修复。
+ */
+export function normalizeDatasetFields(ds: DatasetConfig): void {
+  const refs = (ds.filters ?? []).map((f) => f.field ?? '')
+  const { names, unresolved } = normalizeLegacyFieldRefs(ds.fields, undefined, refs)
+  ds.filters = (ds.filters ?? []).map((f, i) => ({ ...f, field: names[i] ?? f.field }))
+  ds.unresolvedFields = unresolved.length ? unresolved : undefined
+}
+
+/**
+ * kpiMetrics 迁移（决策 4）：fieldKey 归一为字段名；
+ * 旧的展示名 / 单位写入注册表（以 kpiMetrics 现值为准，用户最后编辑的即权威），
+ * 随后统一由注册表具化回镜像，完成物理归一。
+ */
+export function migrateKpiMetrics(metrics: KpiMetricConfig[]): KpiMetricConfig[] {
+  return metrics.map((m) => {
+    const fieldKey = normalizeFieldRef(m.fieldKey)
+    const meta = findFieldMeta(fieldKey)
+    if (meta) {
+      // 冲突时以 kpiMetrics 现值为准（用户最后编辑的即权威，见契约 §7）
+      const display = (m.displayName ?? '').trim()
+      if (display && display !== fieldKey && display !== (meta.displayName ?? '').trim()) {
+        meta.displayName = display
+      }
+      const unit = (m.unit ?? '').trim()
+      if (unit && unit !== (meta.unit ?? '').trim()) meta.unit = unit
+    }
+    return { ...m, fieldKey }
+  })
+}
+
 /** 组合最终脚本：系统生成区域（只读）+ 用户处理区域；用户区域为空视为未配置 Python */
 function buildPipelineScript(): string | undefined {
   if (!state.hasPython) return undefined
@@ -833,9 +1042,9 @@ export function buildPipeline(): ComponentDatasetPipeline {
       apiDefinitionId: ds.api?.path,
       objectId: ds.file?.fileName,
     },
-    fieldMappings: ds.fieldMapping.map((m) => ({ source: m.source, target: m.target })),
-    // 按原型设计 §4.1，筛选条件使用「最终数据集字段名（目标名称）」；后端当前不消费此处 filters
-    // （仅 scriptFilterBindings 的 fieldMappings 被读取），真正下推到数据源的路径见 draftRequestForDataset。
+    // 契约定版（§4.3）：source=字段名（后端下推唯一依据），target=展示名（仅导出表头等展示场景）
+    fieldMappings: toFieldMappings(ds.fields ?? []),
+    // filters[].field 自本版本起恒为字段名（存展示名的老配置在读入时已惰性归一，见 normalizeDatasetFields）
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
   }))
 
@@ -902,18 +1111,7 @@ function applyPipeline(resp: InsightDashboardSchema): void {
   const cardComp = components.find((c) => c.type !== 'filter')
   const pipeline = backend.pipelineOf(cardComp)
   const inputs = pipeline?.datasetInputs ?? resp.datasetInputs ?? []
-  state.datasets = inputs.map((inp, i) => ({
-    id: inp.datasetId ? String(inp.datasetId) : `ds-${i}`,
-    backendDatasetId: inp.datasetId ? String(inp.datasetId) : undefined,
-    sourceType: mapSourceTypeIn(inp.sourceType),
-    sourceLabel: String(inp.sourceType ?? '数据集'),
-    alias: inp.inputName || `table${i + 1}`,
-    fieldMapping: (inp.fieldMappings ?? []).map((m) => ({ source: m.source, desc: m.source, target: m.target })),
-    filters: (inp.filters ?? []) as unknown as InputFilter[],
-    jdbc: inp.sourceConfig?.sql
-      ? { db: String(inp.sourceConfig.datasourceId ?? ''), sql: inp.sourceConfig.sql }
-      : undefined,
-  }))
+  state.datasets = inputs.map((inp, i) => datasetFromInput(inp, i))
   const script = (pipeline?.script ?? resp.script ?? '').toString().trim()
   if (script) {
     const idx = script.indexOf(PYTHON_USER_REGION_MARKER)
@@ -937,11 +1135,12 @@ function applyPipeline(resp: InsightDashboardSchema): void {
   state.filterBindings = bindings.map((b, i) => {
     const scope: Record<string, boolean> = {}
     state.datasets.forEach((ds) => (scope[ds.id] = (b.inputNames ?? []).includes(ds.alias)))
-    const fieldMap: FilterBindingFieldMap[] = state.datasets.map((ds) => ({
-      datasetId: ds.id,
-      field: b.fieldMappings?.[ds.alias] ?? '',
-      matched: !!b.fieldMappings?.[ds.alias],
-    }))
+    const fieldMap: FilterBindingFieldMap[] = state.datasets.map((ds) => {
+      // 老绑定里存的是展示名 → 归一为字段名（决策 4），保证改名后绑定关系仍有效
+      const raw = b.fieldMappings?.[ds.alias] ?? ''
+      const field = raw ? normalizeFieldRef(raw) : ''
+      return { datasetId: ds.id, field, matched: !!field }
+    })
     return { filterName: filterComps[i]?.title || `筛选器${i + 1}`, scope, fieldMap }
   })
 }
@@ -1022,7 +1221,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
 export interface PreviewPayload {
   dataColumns: { name: string; type: string }[]
   dataRows: Record<string, unknown>[]
-  fieldStruct: { name: string; type: string; desc: string; nullable: boolean }[]
+  fieldStruct: { name: string; type: string; displayName: string; desc: string; nullable: boolean }[]
   execInfo: {
     inputDatasets: string[]
     queryConditions: string
@@ -1046,9 +1245,8 @@ const previewState = reactive<{ loading: boolean; error: string; payload: Previe
 
 /** 把本地数据集配置转换为后端 DatasetComposerDraftRequest（JDBC / Aloudata / File 支持预览） */
 function draftRequestForDataset(ds: DatasetConfig): datasetApi.DatasetComposerDraftRequest | null {
-  // 筛选条件的字段名需要反解回「源字段名」再下推：字段重命名目前只落在前端展示层，
-  // 数据源上仍然是原始列名（见 @/utils/field-mapping 与原型设计 §4.1）。
-  const sourceFilters = toSourceFilters(ds.fieldMapping, ds.filters) as unknown as DatasetFilter[]
+  // 筛选条件存的已经是字段名（技术主键），可直接下推，无需反解展示名。
+  const sourceFilters = (ds.filters ?? []) as unknown as DatasetFilter[]
   switch (ds.sourceType) {
     case 'jdbc':
       return {
@@ -1088,6 +1286,33 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/**
+ * 预览「字段结构」：展示名来自字段注册表（未命中回退字段名）。
+ * 指定数据集时只查该数据集的注册表；结果集预览则跨数据集解析。
+ */
+function previewFieldStruct(
+  columns: { name: string; type: string }[],
+  ds?: DatasetConfig,
+): PreviewPayload['fieldStruct'] {
+  const fields = ds?.fields ?? state.datasets.flatMap((d) => d.fields ?? [])
+  return columns.map((c) => ({
+    name: c.name,
+    type: c.type,
+    displayName: resolveFieldLabel(fields, c.name),
+    desc: (fields.find((f) => f.name === c.name)?.description ?? '').trim() || c.name,
+    nullable: true,
+  }))
+}
+
+/** 预览表头解析用的字段注册表：指定数据集优先，否则取全部数据集并集 */
+export function previewFieldMetas(datasetId?: string | null): DatasetFieldMeta[] {
+  if (datasetId) {
+    const ds = getDataset(datasetId)
+    if (ds?.fields?.length) return ds.fields
+  }
+  return state.datasets.flatMap((d) => d.fields ?? [])
+}
+
 function normalizeResultRows(res: unknown): Record<string, unknown>[] {
   if (!res) return []
   const r = res as Record<string, unknown>
@@ -1112,7 +1337,7 @@ async function loadDatasetPreview(datasetId: string): Promise<void> {
     previewState.payload = {
       dataColumns: columns,
       dataRows: rows,
-      fieldStruct: columns.map((c) => ({ name: c.name, type: c.type, desc: c.name, nullable: true })),
+      fieldStruct: previewFieldStruct(columns, ds),
       execInfo: {
         inputDatasets: [ds.sourceLabel],
         queryConditions: batch.pushdownReport?.sourceQueryDigest || '',
@@ -1154,7 +1379,7 @@ async function loadResultPreview(): Promise<void> {
     previewState.payload = {
       dataColumns: columns,
       dataRows: rows,
-      fieldStruct: columns.map((c) => ({ name: c.name, type: c.type, desc: c.name, nullable: true })),
+      fieldStruct: previewFieldStruct(columns),
       execInfo: {
         inputDatasets: state.datasets.map((d) => d.sourceLabel),
         queryConditions: '',
@@ -1221,10 +1446,19 @@ export function useInsight() {
     confirmApi,
     // file
     confirmFile,
-    // field mapping
+    // 字段注册表（唯一事实源）
     openFieldMapping,
-    saveFieldMapping,
-    // dataset schema（「字段名称」自动填充）
+    saveFieldMetas,
+    resolveFieldLabel,
+    resolveFieldName,
+    validateFieldMetas,
+    findFieldMeta,
+    ensureFieldMeta,
+    normalizeFieldRef,
+    labelOfField,
+    setFieldDisplayName,
+    setFieldUnit,
+    // dataset schema（「字段名称」自动填充 + diff）
     canFetchDatasetSchema,
     refreshDatasetSchema,
     // input filter
@@ -1245,9 +1479,11 @@ export function useInsight() {
     // preview
     openPreview,
     closePreview,
+    previewFieldMetas,
     // KPI 指标分组（结果集优先投影）
     kpiResultFields,
     rebuildKpiMetrics,
+    syncKpiMetricsFromFields,
     openMetricConfig,
     openMetricStyle,
     syncKpiMetricStyles,

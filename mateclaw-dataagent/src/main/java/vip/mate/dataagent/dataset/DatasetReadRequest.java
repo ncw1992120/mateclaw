@@ -3,7 +3,13 @@ package vip.mate.dataagent.dataset;
 import java.util.List;
 import java.util.Map;
 
-/** 统一读取请求；filters 是唯一的下推条件表达方式。 */
+/**
+ * 统一读取请求；filters 是唯一的下推条件表达方式。
+ * <p>
+ * 字段名与展示名契约（定版见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
+ * {@code filters[].field} 是<b>数据源字段名</b>（技术主键），不是用户改过的展示名；
+ * 展示名只参与前端渲染与导出表头，下推链路一律使用字段名。
+ */
 public record DatasetReadRequest(
         long datasetId,
         String inputName,

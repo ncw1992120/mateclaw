@@ -1,20 +1,29 @@
 <template>
-  <el-dialog v-model="ui.fieldMapping.visible" title="修改字段名称" width="600px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.fieldMapping.visible" title="修改字段名称" width="640px" :close-on-click-modal="false">
     <div v-loading="loading" class="fm-body">
       <template v-if="list.length">
         <div class="fm-head">
           <span>字段名</span>
           <span>字段描述</span>
-          <span>目标名称</span>
+          <span>展示名</span>
         </div>
-        <div class="fm-row" v-for="(m, i) in list" :key="m.source || i">
-          <el-input v-model="m.source" size="small" readonly class="fm-readonly" />
-          <el-input v-model="m.desc" size="small" readonly class="fm-readonly" placeholder="—" />
-          <el-input v-model="m.target" size="small" placeholder="目标名称" />
+        <div class="fm-row" v-for="(m, i) in list" :key="m.name || i">
+          <el-tooltip :content="m.name" placement="top" :show-after="300">
+            <el-input :model-value="m.name" size="small" readonly class="fm-readonly" />
+          </el-tooltip>
+          <el-input :model-value="descOf(m)" size="small" readonly class="fm-readonly" placeholder="—" />
+          <el-input
+            v-model="m.displayName"
+            size="small"
+            :class="{ 'fm-invalid': dupNames.has(m.name) }"
+            :placeholder="m.name"
+          />
         </div>
+        <p v-if="error" class="hint hint-error">{{ error }}</p>
         <p class="hint">
           字段来自数据集 schema（{{ list.length }} 个字段），不支持手工新增；只读列由数据源自动带出。
-          最终数据集字段名称以「目标名称」为准，后续筛选器绑定应使用最终数据集字段名称。
+          <b>字段名</b>为技术主键（下推 / 脚本 / Join 均按它），不可修改；<b>展示名</b>为表现层标签，
+          数据集内需唯一，清空即回退字段名。展示名改动对筛选条件、绑定筛选器、指标配置、预览表头<b>立即生效</b>。
         </p>
       </template>
 
@@ -30,7 +39,7 @@
 
     <template #footer>
       <el-button @click="ui.fieldMapping.visible = false">取消</el-button>
-      <el-button type="primary" :disabled="loading" @click="save">确定</el-button>
+      <el-button type="primary" :disabled="loading || !!error" @click="save">确定</el-button>
     </template>
   </el-dialog>
 </template>
@@ -39,25 +48,34 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
-import type { FieldMapping } from './useInsight'
-import { buildFieldMappingRows } from '@/utils/field-mapping'
+import { duplicateFieldNames, validateFieldMetas, type DatasetFieldMeta } from '@/utils/field-mapping'
 
-const { state, saveFieldMapping, getDataset, canFetchDatasetSchema, refreshDatasetSchema } = useInsight()
+const { state, saveFieldMetas, getDataset, canFetchDatasetSchema, refreshDatasetSchema } = useInsight()
 const ui = state.ui
-const list = ref<FieldMapping[]>([])
+/** 注册表草稿：三列读写同一份条目（字段名只读、描述只读、展示名可编辑） */
+const list = ref<DatasetFieldMeta[]>([])
 const loading = ref(false)
 
 const canFetch = computed(() => canFetchDatasetSchema(getDataset(ui.fieldMapping.datasetId)))
 
-/** 用数据集 schema 缓存 + 已保存映射重建表格（无缓存时列表为空 → 空态） */
+/** 展示名重复 / 与字段名冲突的行（决策 1：重复即拦截） */
+const dupNames = computed(() => duplicateFieldNames(list.value))
+const error = computed(() => validateFieldMetas(list.value))
+
+/** 字段描述列：真实描述优先，缺失时回退展示名（数据源只提供这些，只读） */
+function descOf(m: DatasetFieldMeta): string {
+  return (m.description ?? '').trim() || (m.displayName ?? '').trim()
+}
+
+/** 用数据集字段注册表重建表格（无注册表时列表为空 → 空态） */
 function rebuild() {
   const ds = getDataset(ui.fieldMapping.datasetId)
-  list.value = buildFieldMappingRows(ds?.schema ?? [], ds?.fieldMapping ?? [])
+  list.value = (ds?.fields ?? []).map((f) => ({ ...f }))
 }
 
 /**
  * 重新拉取字段结构：用于配置确定后预取失败、或缓存为空时的兜底。
- * 合并结果会写回数据集（保留用户已改过的目标名称）；silent=true 时不打扰用户。
+ * 合并结果会写回注册表（保留用户已改过的展示名）；silent=true 时不打扰用户。
  */
 async function reload(silent = false) {
   loading.value = true
@@ -85,8 +103,12 @@ watch(
 )
 
 function save() {
-  const error = saveFieldMapping(list.value)
-  if (error) ElMessage.error(error)
+  const err = saveFieldMetas(list.value)
+  if (err) {
+    ElMessage.error(err)
+    return
+  }
+  ElMessage.success(`已保存 ${list.value.length} 个字段的展示名`)
 }
 </script>
 
@@ -113,11 +135,17 @@ function save() {
   color: var(--el-text-color-regular);
   cursor: default;
 }
+.fm-invalid :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+}
 .hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   margin: 10px 0 0;
   line-height: 1.6;
+}
+.hint-error {
+  color: var(--el-color-danger);
 }
 .fm-empty {
   text-align: center;

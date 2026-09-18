@@ -28,7 +28,18 @@ public class InsightDashboardSchemaDTO implements Serializable {
     /** 仪表盘组件列表（旧格式，向下兼容） */
     private List<Component> components;
 
-    /** 统一数据集编排输入；使用 Map 保留前端来源配置、字段映射和筛选扩展字段。 */
+    /**
+     * 统一数据集编排输入；使用 Map 保留前端来源配置、字段映射和筛选扩展字段。
+     * <p>
+     * 字段名与展示名契约（定版见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
+     * <ul>
+     *   <li>{@code fieldMappings[].source} = <b>字段名</b>（技术主键，组件生命周期内不可变），
+     *       未来实现下推时<b>只读 source</b>；</li>
+     *   <li>{@code fieldMappings[].target} = <b>展示名</b>（表现层标签，数据集内唯一、可空回退 source），
+     *       <b>仅</b>透传给导出表头等展示场景，不得用于下推 SQL；</li>
+     *   <li>{@code filters[].field} 自本版本起恒为 <b>字段名</b>（老配置的展示名由前端读入时惰性归一）。</li>
+     * </ul>
+     */
     private List<Map<String, Object>> datasetInputs;
 
     /** Python 预处理草稿，系统生成区和用户区域由前端维护。 */

@@ -288,6 +288,8 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 if (!name.isTextual() || !inputNames.contains(name.asText()))
                     throw new IllegalArgumentException("script filter binding references an unknown input");
             }
+            // fieldMappings: 别名 → 字段名（技术主键）；此处只校验 key 是已知输入别名，
+            // 不校验 value —— 展示名不进下推链路（契约见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）。
             JsonNode mappings = binding.path("fieldMappings");
             if (mappings.isObject()) {
                 var fields = mappings.fieldNames();

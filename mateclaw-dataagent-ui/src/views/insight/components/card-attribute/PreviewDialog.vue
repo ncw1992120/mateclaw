@@ -14,8 +14,23 @@
       <el-tabs v-model="tab">
         <!-- 数据预览 -->
         <el-tab-pane label="数据预览" name="data">
+          <div class="preview-toolbar">
+            <el-checkbox v-model="showFieldNames">显示字段名</el-checkbox>
+            <span class="preview-toolbar-hint">
+              {{ showFieldNames ? '表头显示字段名（附展示名）' : '表头显示展示名（悬停查看字段名）' }}
+            </span>
+          </div>
           <el-table :data="pagedRows" border size="small" max-height="320">
-            <el-table-column v-for="c in payload.dataColumns" :key="c.name" :prop="c.name" :label="c.name" />
+            <el-table-column v-for="c in payload.dataColumns" :key="c.name" :prop="c.name">
+              <template #header>
+                <el-tooltip :content="`字段名：${c.name}`" placement="top" :show-after="200">
+                  <span class="th-cell">
+                    <span class="th-main">{{ headerMain(c.name) }}</span>
+                    <span v-if="headerSub(c.name)" class="th-sub">{{ headerSub(c.name) }}</span>
+                  </span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
           </el-table>
           <div class="preview-pager">
             <el-pagination
@@ -35,6 +50,7 @@
         <el-tab-pane label="字段结构" name="struct">
           <el-table :data="payload.fieldStruct" border size="small" max-height="320">
             <el-table-column prop="name" label="字段名" />
+            <el-table-column prop="displayName" label="展示名" />
             <el-table-column prop="type" label="类型" />
             <el-table-column prop="desc" label="描述" />
             <el-table-column label="可空">
@@ -78,12 +94,35 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
+import { resolveFieldLabel } from '@/utils/field-mapping'
 
-const { state, previewState, loadDatasetPreview, loadResultPreview } = useInsight()
+const { state, previewState, loadDatasetPreview, loadResultPreview, previewFieldMetas } = useInsight()
 const ui = state.ui
 const tab = ref('data')
 const page = ref(1)
 const pageSize = ref(5)
+
+/** 表头解析用的字段注册表（当前预览数据集优先，否则全部数据集并集） */
+const fields = computed(() => previewFieldMetas(ui.preview.datasetId))
+
+/** 「显示字段名」开关（决策 3）：默认关 → 表头显示展示名，悬停 tooltip 显示字段名 */
+const showFieldNames = computed({
+  get: () => !!ui.preview.showFieldNames,
+  set: (v: boolean) => {
+    ui.preview.showFieldNames = v
+  },
+})
+
+/** 表头主文案：默认展示名；开启开关后为字段名 */
+function headerMain(name: string): string {
+  return showFieldNames.value ? name : resolveFieldLabel(fields.value, name)
+}
+/** 表头副文案：开启开关时补展示名，便于对照 */
+function headerSub(name: string): string {
+  if (!showFieldNames.value) return ''
+  const label = resolveFieldLabel(fields.value, name)
+  return label === name ? '' : label
+}
 
 const title = computed(() => {
   const map: Record<string, string> = {
@@ -132,6 +171,28 @@ function onSizeChange(size: number) {
 <style scoped>
 .preview-loading {
   min-height: 200px;
+}
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.preview-toolbar-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.th-cell {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.th-main {
+  font-size: 12px;
+}
+.th-sub {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 .preview-pager {
   display: flex;

@@ -5,6 +5,20 @@
 
     <!-- 可滚动内容 -->
     <div class="panel-body">
+      <!-- 字段契约告警（决策 4/5）：存量引用未识别 / 字段在数据源中已消失，均可关闭 -->
+      <el-alert
+        v-if="fieldWarnings.length && !warningsDismissed"
+        class="field-alert"
+        type="warning"
+        :closable="true"
+        title="字段引用需要确认"
+        @close="warningsDismissed = true"
+      >
+        <ul class="field-alert-list">
+          <li v-for="(w, i) in fieldWarnings" :key="i">{{ w }}</li>
+        </ul>
+      </el-alert>
+
       <!-- 1. 组件标题 -->
       <div class="field">
         <label class="field-label">组件标题</label>
@@ -109,13 +123,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
 import DatasetCard from './DatasetCard.vue'
+import { resolveFieldLabel } from '@/utils/field-mapping'
 
 const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython, openMetricConfig } = useInsight()
 
 const kpiMetricCount = computed(() => state.kpiMetrics.length)
+
+/** 告警被用户关闭后不再重复打扰（切换卡片时应重新提示） */
+const warningsDismissed = ref(false)
+watch(() => state.cards[0]?.id, () => {
+  warningsDismissed.value = false
+})
+
+/**
+ * 字段契约告警（决策 4 / 决策 5）：
+ *   - 存量归一后仍未识别的引用：老配置里的名字在字段注册表中找不到，需手动修复；
+ *   - 字段在数据源中已消失：注册表保留配置并打 stale 标记，提示重绑（不静默删除用户编辑）。
+ */
+const fieldWarnings = computed<string[]>(() => {
+  const out: string[] = []
+  state.datasets.forEach((ds) => {
+    ;(ds.unresolvedFields ?? []).forEach((name) => {
+      out.push(`数据集 ${ds.alias}：字段引用「${name}」无法识别，请在筛选条件 / 绑定筛选器中重新选择字段`)
+    })
+    ;(ds.fields ?? []).forEach((f) => {
+      if (!f.stale) return
+      const label = resolveFieldLabel(ds.fields, f.name)
+      out.push(`数据集 ${ds.alias}：字段「${label}」（${f.name}）已不存在，请重新绑定或移除相关配置`)
+    })
+  })
+  return out
+})
 
 function typeLabel(t: string) {
   return t === 'kpi' ? 'KPI/指标卡' : t === 'table' ? '表格卡' : '图表卡'
@@ -146,6 +187,15 @@ function typeLabel(t: string) {
   flex: 1;
   overflow: auto;
   padding: 16px;
+}
+.field-alert {
+  margin-bottom: 14px;
+}
+.field-alert-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
 }
 .field {
   margin-bottom: 14px;

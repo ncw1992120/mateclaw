@@ -37,7 +37,14 @@ import java.util.*;
 import java.sql.*;
 import java.net.URI;
 
-/** 原型“添加数据集”使用的来源草稿接口。草稿预览不落库，确定后才创建可复用 Dataset。 */
+/**
+ * 原型“添加数据集”使用的来源草稿接口。草稿预览不落库，确定后才创建可复用 Dataset。
+ * <p>
+ * 字段名与展示名契约（定版见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
+ * 本控制器只消费 {@code filters}，其 {@code field} 为<b>数据源字段名</b>（技术主键）；
+ * 用户在前端改的展示名只是表现层标签，不会进入本链路（前端在提交前已归一为字段名）。
+ * 请求体中不存在 fieldMappings —— 字段映射仅存于仪表盘 Schema 的 datasetInputs（后端当前未消费）。
+ */
 @RestController
 @RequestMapping("/v1/dataset-composer")
 @RequiredArgsConstructor

@@ -7,9 +7,9 @@ import {
   styleToCss,
   syncMetricStylesToAll,
 } from '../kpi-metrics'
-import type { DatasetSchemaField } from '../field-mapping'
+import type { DatasetFieldMeta } from '../field-mapping'
 
-const schema: DatasetSchemaField[] = [
+const schema: DatasetFieldMeta[] = [
   { name: 'plan_count', displayName: '关联计划数' },
   { name: 'sent_count', displayName: '下发策略数' },
   { name: 'touch_rate', displayName: '触达率' },
@@ -51,27 +51,36 @@ describe('kpi-metrics · 结果集投影（增量合并）', () => {
     expect(metrics[0].styles.value.bold).toBe('bold')
   })
 
-  it('再次投影保留用户配置（展示列名/单位/辅助说明/显示/布局/样式）', () => {
+  it('再次投影保留用户配置（辅助说明/显示/布局/样式）', () => {
     const first = buildKpiMetrics(schema)
-    first[0].displayName = '我改过的名字'
-    first[0].unit = '个'
     first[0].helperText = '较上期'
     first[0].visible = false
     first[0].x = 42
     first[0].styles.value.size = 40
 
     const second = buildKpiMetrics(schema, first)
-    expect(second[0].displayName).toBe('我改过的名字')
-    expect(second[0].unit).toBe('个')
     expect(second[0].helperText).toBe('较上期')
     expect(second[0].visible).toBe(false)
     expect(second[0].x).toBe(42)
     expect(second[0].styles.value.size).toBe(40)
   })
 
+  it('展示名与单位不属于投影配置，每次投影从字段注册表重新解析（一处改、处处生效）', () => {
+    const first = buildKpiMetrics(schema)
+    expect(first[0].displayName).toBe('关联计划数')
+    const renamed: DatasetFieldMeta[] = [
+      { name: 'plan_count', displayName: '计划数', unit: '个' },
+      { name: 'sent_count', displayName: '下发策略数' },
+      { name: 'touch_rate', displayName: '触达率' },
+    ]
+    const second = buildKpiMetrics(renamed, first)
+    expect(second[0].displayName).toBe('计划数')
+    expect(second[0].unit).toBe('个')
+  })
+
   it('新增字段追加、消失字段移除、顺序以 schema 为准', () => {
     const first = buildKpiMetrics(schema)
-    const changed: DatasetSchemaField[] = [
+    const changed: DatasetFieldMeta[] = [
       { name: 'touch_rate', displayName: '触达率' },
       { name: 'conv_amount', displayName: '转化金额' },
     ]

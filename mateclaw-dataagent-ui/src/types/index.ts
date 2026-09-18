@@ -1273,11 +1273,19 @@ export interface KpiMetricStyles {
 
 /** KPI 指标（由结果集字段逐列投影；字段映射不可编辑，仅展示配置可编辑） */
 export interface KpiMetricConfig {
-  /** 结果集字段名（来源字段，只读标识，作为指标稳定 key） */
+  /** 结果集字段名（技术主键、只读标识，作为指标稳定 key；**不存展示名**） */
   fieldKey: string
-  /** 展示列名（用户可编辑） */
+  /**
+   * 展示列名。
+   * @deprecated 展示名唯一登记在**数据集字段注册表**（`DatasetConfig.fields[].displayName`）一份；
+   * 本字段是序列化 / 画布渲染用的**具化镜像**，读写请走注册表（useInsight 的 `setFieldDisplayName`），
+   * 持久化时由 `materializedKpiMetrics()` 统一具化。见 docs/策略解读/字段名与展示名契约-实施计划.md。
+   */
   displayName: string
-  /** 单位（用户手动填写，留空不显示） */
+  /**
+   * 单位（字段级展示配置，留空不显示）。
+   * @deprecated 同 displayName：唯一登记在字段注册表（`DatasetConfig.fields[].unit`），本字段为其镜像。
+   */
   unit: string
   /** 辅助说明（固定文本，用户可编辑） */
   helperText: string
@@ -1422,9 +1430,14 @@ export interface DashboardDatasetInput {
     apiDefinitionId?: string
     objectId?: string
   }
-  /** 最终字段名称映射。 */
+  /**
+   * 字段映射（契约定版，见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
+   *   - `source` = **字段名**（技术主键，组件生命周期内不可变），后端下推 SQL / 脚本取值**唯一依据**；
+   *   - `target` = **展示名**（表现层标签，数据集内唯一、可空回退 source），**仅**用于导出表头等展示场景，
+   *     后端**不得**用它下推。
+   */
   fieldMappings?: Array<{ source: string; target: string }>
-  /** 当前输入数据集的源端筛选。 */
+  /** 当前输入数据集的源端筛选；`field` 自本版本起恒为**字段名**（老配置的展示名在读入时惰性归一）。 */
   filters?: DatasetFilter[]
 }
 
@@ -1442,6 +1455,7 @@ export interface DashboardScriptParameter {
 export interface DashboardScriptFilterBinding {
   filterComponentId: string
   inputNames: string[]
+  /** 别名 → 绑定的字段名（技术主键；不存展示名，改名不影响绑定关系）。 */
   fieldMappings?: Record<string, string>
 }
 

@@ -34,10 +34,11 @@
 
         <!-- 字段映射：自动匹配 + 手动映射 -->
         <div class="fb-section">
-          <div class="fb-label">字段映射（基于数据集真实字段名自动推断，需手动映射的可编辑目标字段）</div>
+          <div class="fb-label">字段映射（按数据集字段名自动推断，需手动映射的可编辑目标字段）</div>
           <div class="fm-row" v-for="ds in state.datasets" :key="ds.id">
             <span class="ds-alias">数据集 {{ ds.alias }}</span>
             <el-input v-model="d.fieldMap[ds.id]" size="small" placeholder="匹配到的字段名" />
+            <span class="fb-label-hint">{{ labelOf(ds, d.fieldMap[ds.id]) }}</span>
             <span class="match-tag" :class="matched(ds, d.filterName) ? 'ok' : 'warn'">
               {{ matched(ds, d.filterName) ? '✓ 自动匹配' : '⚠ 需手动映射' }}
             </span>
@@ -57,6 +58,7 @@
 import { ref, watch, computed } from 'vue'
 import { useInsight } from './useInsight'
 import type { DatasetConfig } from './useInsight'
+import { resolveFieldLabel, type DatasetFieldMeta } from '@/utils/field-mapping'
 
 const { state, saveFilterBindings } = useInsight()
 const ui = state.ui
@@ -65,15 +67,35 @@ const ui = state.ui
  *  无可用筛选器时列表为空，下拉框可输入（filterable），由用户按真实参数名填写，不预置任何假词表。 */
 const FILTERS = computed<string[]>(() => state.filterCatalog.map((f) => f.title))
 
-/** 真实字段名推断：基于数据集已有的字段映射（源/目标）与筛选器名做关键字匹配 */
+/** 回填时把老引用（展示名 / 旧目标名）归一为字段名（决策 4） */
+function toFieldName(ds: DatasetConfig, ref: string): string {
+  const key = (ref ?? '').trim()
+  if (!key) return ''
+  const fields: DatasetFieldMeta[] = ds.fields ?? []
+  // 已经是字段名 → 原样；否则按展示名反解（展示名唯一，反解无歧义）
+  if (fields.some((f) => f.name === key)) return key
+  const hit = fields.find((f) => (f.displayName ?? '').trim() === key)
+  return hit ? hit.name : key
+}
+
+/** 映射框旁的可读名（展示名；未设置时回退字段名） */
+function labelOf(ds: DatasetConfig, field: string): string {
+  const key = (field ?? '').trim()
+  if (!key) return ''
+  const label = resolveFieldLabel(ds.fields, key)
+  return label === key ? '' : label
+}
+
+/**
+ * 真实字段名推断：候选为数据集字段注册表的「字段名 + 展示名」，
+ * 与筛选器名做精确 / 包含匹配；**返回值恒为字段名**（改名不影响已保存的绑定）。
+ */
 function inferField(ds: DatasetConfig, filterName: string): string {
-  const fields = (ds.fieldMapping || [])
-    .flatMap((m) => [m.source, m.target])
-    .filter((f): f is string => !!f)
+  const fields = (ds.fields || []).flatMap((f) => [f.name, f.displayName]).filter((f): f is string => !!f)
   const exact = fields.find((f) => f === filterName)
-  if (exact) return exact
-  const partial = fields.find((f) => f && (f.includes(filterName) || filterName.includes(f)))
-  return partial || ''
+  const candidate = exact ?? fields.find((f) => f && (f.includes(filterName) || filterName.includes(f)))
+  // 命中的可能是展示名 → 统一反解成字段名
+  return candidate ? toFieldName(ds, candidate) : ''
 }
 
 /** 是否可自动匹配（基于真实字段推断） */
@@ -114,7 +136,8 @@ watch(
         const fm: Record<string, string> = {}
         state.datasets.forEach((ds) => {
           const found = b.fieldMap.find((m) => m.datasetId === ds.id)
-          fm[ds.id] = found ? found.field : inferField(ds, b.filterName)
+          const raw = found?.field ?? inferField(ds, b.filterName)
+          fm[ds.id] = toFieldName(ds, raw)
         })
         return {
           filterName: b.filterName,
@@ -152,7 +175,8 @@ function save() {
       state.datasets.forEach((ds) => (scope[ds.id] = d.scopeKeys.includes(ds.id)))
       const fm = state.datasets.map((ds) => ({
         datasetId: ds.id,
-        field: d.fieldMap[ds.id] ?? '',
+        // 存字段名（技术主键）：展示名改了绑定关系依然有效
+        field: toFieldName(ds, d.fieldMap[ds.id] ?? ''),
         matched: matched(ds, d.filterName),
       }))
       return { filterName: d.filterName, scope, fieldMap: fm }
@@ -216,6 +240,15 @@ function save() {
   width: 110px;
   font-size: 13px;
   flex-shrink: 0;
+}
+.fb-label-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .match-tag {
   font-size: 12px;

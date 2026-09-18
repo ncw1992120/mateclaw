@@ -12,7 +12,7 @@
  */
 
 import type { KpiMetricConfig, KpiMetricFieldStyle, KpiMetricStyles } from '@/types'
-import type { DatasetSchemaField } from './field-mapping'
+import type { DatasetFieldMeta } from './field-mapping'
 
 /** 指标可配置字段 */
 export type KpiMetricField = 'name' | 'value' | 'unit' | 'helper'
@@ -106,32 +106,38 @@ export function defaultMetricLayout(index: number): Pick<KpiMetricConfig, 'x' | 
 }
 
 /** 结果集字段 → 指标默认展示列名（显示名优先，回落字段名） */
-export function defaultDisplayName(field: DatasetSchemaField): string {
+export function defaultDisplayName(field: DatasetFieldMeta): string {
   const display = (field.displayName ?? '').trim()
   return display || field.name
 }
 
 /**
- * 按最新结果集 schema 投影指标（按 fieldKey 增量合并）：
- *   - 命中已有指标：**保留**用户的展示列名/单位/辅助说明/显示状态/布局/样式；
+ * 按最新结果集字段投影指标（按 fieldKey 增量合并）：
+ *   - 命中已有指标：**保留**用户的辅助说明/显示状态/布局/样式；
+ *   - 展示名 / 单位**不属于投影配置**：它们只存在「字段注册表」一份，
+ *     每次投影都从结果集字段重新解析（保证「一处改、处处生效」，见字段名与展示名契约）；
  *   - 新增字段：追加新指标并按默认布局与默认样式初始化；
  *   - 消失字段：移除对应指标；
- *   - 顺序以 schema 为准；
- *   - schema 为空（未取到字段）时原样保留已有指标，不清空用户配置。
+ *   - 顺序以结果集为准；
+ *   - 结果集为空（未取到字段）时原样保留已有指标，不清空用户配置。
  */
 export function buildKpiMetrics(
-  schema: DatasetSchemaField[],
+  fields: DatasetFieldMeta[],
   existing: KpiMetricConfig[] = [],
 ): KpiMetricConfig[] {
-  if (!schema.length) return existing.map((m) => ({ ...m, styles: cloneStyles(m.styles) }))
+  if (!fields.length) return existing.map((m) => ({ ...m, styles: cloneStyles(m.styles) }))
   const byKey = new Map(existing.map((m) => [m.fieldKey, m]))
-  return schema.map((field, index) => {
+  return fields.map((field, index) => {
+    const displayName = defaultDisplayName(field)
+    const unit = (field.unit ?? '').trim()
     const prev = byKey.get(field.name)
-    if (prev) return { ...prev, styles: cloneStyles(prev.styles) }
+    if (prev) {
+      return { ...prev, displayName, unit, styles: cloneStyles(prev.styles) }
+    }
     return {
       fieldKey: field.name,
-      displayName: defaultDisplayName(field),
-      unit: '',
+      displayName,
+      unit,
       helperText: '',
       visible: true,
       ...defaultMetricLayout(index),

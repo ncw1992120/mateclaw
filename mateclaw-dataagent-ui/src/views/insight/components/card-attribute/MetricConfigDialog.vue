@@ -13,16 +13,32 @@
         </div>
         <div v-for="m in metrics" :key="m.fieldKey" class="mc-row">
           <el-switch v-model="m.visible" size="small" />
-          <el-input v-model="m.displayName" size="small" placeholder="展示列名" />
-          <el-input :model-value="m.fieldKey" size="small" readonly class="mc-readonly" />
-          <el-input v-model="m.unit" size="small" placeholder="如：万元" />
+          <!-- 展示名 / 单位写入「字段注册表」（与「字段名称」弹窗同一份事实源） -->
+          <el-input
+            :model-value="m.displayName"
+            size="small"
+            placeholder="展示列名"
+            @update:model-value="(v: string) => onDisplayName(m.fieldKey, v)"
+          />
+          <el-tooltip :content="m.fieldKey" placement="top" :show-after="300">
+            <el-input :model-value="m.fieldKey" size="small" readonly class="mc-readonly" />
+          </el-tooltip>
+          <el-input
+            :model-value="m.unit"
+            size="small"
+            placeholder="如：万元"
+            @update:model-value="(v: string) => setFieldUnit(m.fieldKey, v)"
+          />
           <el-input v-model="m.helperText" size="small" placeholder="辅助说明" />
           <button class="mc-style-btn" :title="`配置「${m.displayName || m.fieldKey}」字段样式`" @click="openMetricStyle(m.fieldKey)">:</button>
           <el-button size="small" text type="primary" @click="syncKpiMetricStyles(m.fieldKey)">同步</el-button>
         </div>
         <p class="hint">
           指标由最终结果集字段自动投影生成（{{ metrics.length }} 个），不支持手工新增 / 删除；
-          「指标值」为结果集字段（只读，运行时取值）。「同步」把该指标的整套字段样式复制到所有指标。
+          「指标值」为结果集字段名（只读，下推与脚本取值均按它）。
+          「展示列名」与「单位」存在<b>字段注册表</b>唯一一份，与「字段名称」弹窗同源 —— 改一处，
+          筛选条件 / 绑定筛选器 / 预览表头立即同步；展示名需唯一，清空即回退字段名。
+          「同步」把该指标的整套字段样式复制到所有指标。
         </p>
       </template>
 
@@ -41,13 +57,23 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
 
-const { state, openMetricStyle, syncKpiMetricStyles, rebuildKpiMetrics } = useInsight()
+const { state, openMetricStyle, syncKpiMetricStyles, rebuildKpiMetrics, setFieldDisplayName, setFieldUnit } = useInsight()
 const ui = state.ui
 
 const metrics = computed(() => state.kpiMetrics)
 const rebuilding = ref(false)
+
+/**
+ * 展示名写入字段注册表（双入口合一）：与「字段名称」弹窗读写同一份，
+ * 唯一性冲突时拦截并提示（决策 1），不做广播同步。
+ */
+function onDisplayName(fieldKey: string, value: string) {
+  const error = setFieldDisplayName(fieldKey, value)
+  if (error) ElMessage.error(error)
+}
 
 async function rebuild() {
   rebuilding.value = true

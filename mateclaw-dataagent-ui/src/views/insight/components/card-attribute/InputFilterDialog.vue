@@ -3,7 +3,7 @@
     <div class="filter-list">
       <div class="filter-row" v-for="(f, i) in list" :key="i">
         <el-select v-model="f.field" placeholder="字段" filterable class="c-field">
-          <el-option v-for="c in fieldOptions" :key="c" :label="c" :value="c" />
+          <el-option v-for="c in fieldOptions" :key="c.value" :label="c.label" :value="c.value" />
         </el-select>
         <el-select v-model="f.op" class="c-op">
           <el-option v-for="o in OPS" :key="o" :label="o" :value="o" />
@@ -25,25 +25,26 @@
 import { ref, watch, computed } from 'vue'
 import { useInsight } from './useInsight'
 import type { InputFilter } from './useInsight'
-import type { DatasetSchemaField } from '@/utils/field-mapping'
+import { resolveFieldLabel, resolveFieldName, type DatasetFieldMeta } from '@/utils/field-mapping'
 
 const { state, saveInputFilter, openPreview, getDataset } = useInsight()
 const ui = state.ui
 // 运算符为原型 §4.2 的固定枚举，非假数据
 const OPS = ['=', '!=', 'contains', 'in', 'between', 'is null', 'is not null', '最近 N 天']
-// 字段选项：来自目标数据集的真实字段（字段映射「目标名称」优先，回退到源字段名 / 文件列名）。
-// 无已知字段时列表为空，下拉框可输入（filterable），由用户按真实字段填写，不预置任何假字段。
-const fieldOptions = computed<string[]>(() => {
+/**
+ * 字段下拉：来自目标数据集的**字段注册表**。
+ * value 恒为字段名（技术主键，下推唯一依据），label 为展示名（未设置时回退字段名）。
+ * 无已知字段时列表为空，下拉框可输入（filterable），由用户按真实字段填写，不预置任何假字段。
+ */
+const fieldOptions = computed<{ value: string; label: string }[]>(() => {
   const { datasetId } = resolveTarget()
   const ds = getDataset(datasetId)
   if (!ds) return []
-  const fm = ds.fieldMapping ?? []
-  if (fm.length) {
-    const targets = fm.map((m) => m.target).filter(Boolean)
-    if (targets.length) return targets as string[]
-    return fm.map((m) => m.source).filter(Boolean) as string[]
+  const fields = ds.fields ?? []
+  if (fields.length) {
+    return fields.map((f) => ({ value: f.name, label: resolveFieldLabel(fields, f.name) }))
   }
-  if (ds.file?.columns?.length) return ds.file.columns.map((c) => c.name)
+  if (ds.file?.columns?.length) return ds.file.columns.map((c) => ({ value: c.name, label: c.name }))
   return []
 })
 const list = ref<InputFilter[]>([])
@@ -76,7 +77,11 @@ watch(
     const ds = getDataset(datasetId)
     const saved = ds?.filters ?? []
     if (saved.length) {
-      list.value = JSON.parse(JSON.stringify(saved))
+      // 存量归一（决策 4）：老配置里存的是展示名 / 旧目标名 → 打开时就地反解为字段名
+      list.value = JSON.parse(JSON.stringify(saved)).map((f: InputFilter) => ({
+        ...f,
+        field: resolveFieldName(ds?.fields, f.field),
+      }))
       return
     }
     // 尚未配置过筛选条件时：默认用数据集的维度字段预置条件行
@@ -86,20 +91,13 @@ watch(
 )
 
 /**
- * 用数据集 schema 中的维度字段生成默认筛选条件行。
- * 字段取该维度的「目标名称」（用户可在「字段名称」弹窗中修改），
- * 回退到展示名、再回退到源字段名。
+ * 用数据集字段注册表中的维度字段生成默认筛选条件行。
+ * 字段名恒为技术主键（`f.name`），下拉展示的是展示名（见 fieldOptions）。
  */
-function defaultDimensionFilters(
-  ds: { schema?: DatasetSchemaField[]; fieldMapping?: { source?: string; target?: string }[] } | undefined,
-): InputFilter[] {
-  const dims = (ds?.schema ?? []).filter((f) => f.role === 'dimension')
+function defaultDimensionFilters(ds: { fields?: DatasetFieldMeta[] } | undefined): InputFilter[] {
+  const dims = (ds?.fields ?? []).filter((f) => f.role === 'dimension')
   if (!dims.length) return []
-  const mapping = ds?.fieldMapping ?? []
-  return dims.map((f) => {
-    const target = (mapping.find((m) => m.source === f.name)?.target ?? '').trim()
-    return { field: target || f.displayName || f.name, op: '=', value: '' }
-  })
+  return dims.map((f) => ({ field: f.name, op: '=', value: '' }))
 }
 
 function addRow() {
