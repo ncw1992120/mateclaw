@@ -109,6 +109,7 @@
             class="rs"
             :class="dir"
             @mousedown.stop.prevent="onChildResizeDown($event, child, dir)"
+            @click.stop
             @dragstart.stop.prevent
           />
         </template>
@@ -245,17 +246,25 @@ function onBodyDrop(e: DragEvent) {
   if (!raw) return
   try {
     const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
-    addChild(payload.type, payload.chartType, dropPosFromEvent(e))
+    const size = defaultSize(payload.type)
+    addChild(payload.type, payload.chartType, dropPosFromEvent(e, size.col, size.h))
   } catch (err) {
     console.error('[CombinationCardWidget] drop parse error:', err)
   }
   paletteOver.value = false
 }
-function dropPosFromEvent(e: DragEvent): { x: number; y: number } {
+/**
+ * 落点 → 合法初始位置。
+ * 必须用**新子组件的真实默认宽高**换算可放置范围：早期版本用硬编码 200/90 估算，
+ * 落点会超出「完整可见」的合法区间（例如容器 530 宽、子组件 265 宽时合法上限只有 265，
+ * 却允许落到 330），结果子组件一放上去就贴在边界上，向右再也拖不动。
+ */
+function dropPosFromEvent(e: DragEvent, col: number, h: number): { x: number; y: number } {
   const rect = ccBodyRef.value?.getBoundingClientRect()
   if (!rect) return { x: 24, y: 24 }
-  const x = Math.max(0, Math.min(e.clientX - rect.left, Math.max(0, rect.width - 200)))
-  const y = Math.max(0, Math.min(e.clientY - rect.top, Math.max(0, rect.height - 90)))
+  const w = (col / 12) * rect.width
+  const x = Math.min(Math.max(e.clientX - rect.left, 0), Math.max(0, rect.width - w))
+  const y = Math.min(Math.max(e.clientY - rect.top, 0), Math.max(0, rect.height - h))
   return { x: Math.round(x), y: Math.round(y) }
 }
 
@@ -282,8 +291,17 @@ function genId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** 子组件默认尺寸（col 为 12 栅格列数，h 为像素高）—— 落点换算与新增子组件共用同一来源 */
+function defaultSize(type: InsightComponentType): { col: number; h: number } {
+  return {
+    col: type === 'chart' || type === 'table' ? 7 : 6,
+    h: type === 'kpi' ? 96 : type === 'aiAnalysis' ? 160 : 180,
+  }
+}
+
 function addChild(type: InsightComponentType, chartType: ChartType | undefined, pos: { x: number; y: number }): void {
   const arr = getActiveChildren()
+  const size = defaultSize(type)
   const child: InsightCombinationChild = {
     id: genId('cc'),
     type,
@@ -302,8 +320,8 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
     layout: {
       x: pos.x,
       y: pos.y,
-      col: type === 'chart' || type === 'table' ? 7 : 6,
-      h: type === 'kpi' ? 96 : type === 'aiAnalysis' ? 160 : 180,
+      col: size.col,
+      h: size.h,
     },
   }
   arr.push(child)
@@ -311,16 +329,51 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
 }
 
 // ── 子组件自由拖动（鼠标事件）──────────────────────────
-// 抖动/卡顿根因修复要点：
+// 交互要点：
 // 1) mousedown stopPropagation：阻断事件冒泡到 GridItem，否则 grid-layout-plus 会同时发起
 //    容器级拖拽，导致拖子组件时整个组合卡片跟着抖动；
 // 2) mousedown preventDefault：阻止文本选中/原生图片拖拽；
 // 3) 拖动过程直接改 DOM style + requestAnimationFrame 节流，不写响应式 layout，
 //    避免每帧触发整卡重渲染造成卡顿；
-// 4) mouseup 时才把最终位置一次性提交回响应式 layout（触发面板/持久化同步）。
+// 4) **过程与落点共用同一套纯计算**（computeMove）：mouseup 时用最后一次鼠标坐标重算一次，
+//    即使取消了 pending 的 rAF 也不会丢掉最后一段位移（原来直接读 DOM style 会少算一帧）；
+// 5) 边界钳制让子组件**完整留在容器内**（而不是「保留多少像素在容器内」）：
+//    组合卡片是固定容器，一旦允许子组件探出右/下边界，八向缩放手柄会被容器的
+//    overflow:hidden 裁掉，用户就抓不到 se/e/ne 手柄 —— 那才是「缩放用不了」的真凶。
+const MIN_CHILD_H = 60    // 子组件最小高度
+
+/** 位置钳制：保证子组件整体可见 —— 这也保证八向手柄永远落在容器里、永远抓得到 */
+function clampBox(
+  rect: DOMRect | undefined,
+  x: number, y: number, w: number, h: number,
+): { x: number; y: number } {
+  if (!rect) return { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) }
+  const maxX = Math.max(0, rect.width - w)
+  const maxY = Math.max(0, rect.height - h)
+  return {
+    x: Math.round(Math.min(Math.max(x, 0), maxX)),
+    y: Math.round(Math.min(Math.max(y, 0), maxY)),
+  }
+}
+function clampCol(col: number): number {
+  return Math.max(1, Math.min(12, Math.round(col)))
+}
+
+/** 刚发生过拖动/缩放的时间戳：用于抑制紧随 mouseup 的 click，避免八向手柄刚拉完就被清掉选中态 */
+let lastInteractAt = 0
+function markInteracted(): void { lastInteractAt = Date.now() }
+
 let mv: { id: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null } | null = null
 let mvRaf = 0
 let mvLast: { x: number; y: number } | null = null
+
+/** 起点 + 当前鼠标坐标 → 目标位置（拖动过程与落点共用，保证两者完全一致） */
+function computeMove(start: NonNullable<typeof mv>, last: { x: number; y: number }): { x: number; y: number } {
+  const rect = ccBodyRef.value?.getBoundingClientRect()
+  const w = start.el?.offsetWidth ?? 0
+  const h = start.el?.offsetHeight ?? 0
+  return clampBox(rect, start.ox + last.x - start.sx, start.oy + last.y - start.sy, w, h)
+}
 
 function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   if (!props.editable) return
@@ -335,8 +388,10 @@ function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
     sy: e.clientY,
     ox: child.layout.x,
     oy: child.layout.y,
-    el: document.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null,
+    el: (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null,
   }
+  mvLast = { x: e.clientX, y: e.clientY }
+  markInteracted()
   movingId.value = child.id
   window.addEventListener('mousemove', onChildMouseMove)
   window.addEventListener('mouseup', onChildMouseUp)
@@ -348,32 +403,28 @@ function onChildMouseMove(e: MouseEvent) {
   mvRaf = requestAnimationFrame(() => {
     mvRaf = 0
     if (!mv || !mvLast) return
-    let nx = mv.ox + mvLast.x - mv.sx
-    let ny = mv.oy + mvLast.y - mv.sy
-    const rect = ccBodyRef.value?.getBoundingClientRect()
-    if (rect && mv.el) {
-      nx = Math.max(0, Math.min(nx, Math.max(0, rect.width - mv.el.offsetWidth)))
-      ny = Math.max(0, Math.min(ny, Math.max(0, rect.height - mv.el.offsetHeight)))
-    }
-    mv.el?.style.setProperty('left', Math.round(nx) + 'px')
-    mv.el?.style.setProperty('top', Math.round(ny) + 'px')
+    const p = computeMove(mv, mvLast)
+    mv.el?.style.setProperty('left', p.x + 'px')
+    mv.el?.style.setProperty('top', p.y + 'px')
   })
 }
 function onChildMouseUp() {
   if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0 }
-  if (mv?.el) {
+  if (mv && mvLast) {
     const child = getActiveChildren().find((c) => c.id === mv!.id)
-    const nx = parseInt(mv.el.style.left, 10)
-    const ny = parseInt(mv.el.style.top, 10)
     if (child) {
-      if (Number.isFinite(nx)) child.layout.x = nx
-      if (Number.isFinite(ny)) child.layout.y = ny
+      const p = computeMove(mv, mvLast)
+      child.layout.x = p.x
+      child.layout.y = p.y
+      // 同步写回 DOM。这里不能 removeProperty：Vue 的 style patch 只下发「发生变化」的
+      // 属性，若移除内联值而 layout 又没变（例如纯点击未拖动），元素会瞬间丢失 left/top
+      // 定位。保留内联值更稳，后续 layout 变化时 Vue 自然会覆盖它。
+      mv.el?.style.setProperty('left', p.x + 'px')
+      mv.el?.style.setProperty('top', p.y + 'px')
     }
-    // 移除拖动期的内联覆盖，交还给响应式 style 绑定（同 tick 内 Vue 会先 flush 再绘制）
-    mv.el.style.removeProperty('left')
-    mv.el.style.removeProperty('top')
   }
   mv = null
+  mvLast = null
   movingId.value = null
   window.removeEventListener('mousemove', onChildMouseMove)
   window.removeEventListener('mouseup', onChildMouseUp)
@@ -383,6 +434,37 @@ function onChildMouseUp() {
 let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null } | null = null
 let rzRaf = 0
 let rzLast: { x: number; y: number } | null = null
+
+/** 起点 + 当前鼠标坐标 → 目标盒子（缩放过程与落点共用）。col/h/位置三者联动一致。 */
+function computeResize(
+  start: NonNullable<typeof rz>,
+  last: { x: number; y: number },
+): { x: number; y: number; col: number; h: number } {
+  const rect = ccBodyRef.value?.getBoundingClientRect()
+  const colW = rect ? rect.width / 12 : 40
+  const dx = last.x - start.sx
+  const dy = last.y - start.sy
+  const dir = start.dir
+  let ox = start.ox, oy = start.oy, col = start.ocol, h = start.oh
+
+  if (dir.includes('e')) col = clampCol(start.ocol + dx / colW)
+  if (dir.includes('w')) {
+    // 向左拉伸：列数与左边位置联动。必须按**实际生效**的列数回算左边位置，
+    // 否则列数被 clamp 停住后左边还会继续跟着鼠标跑，宽度与位置脱节。
+    const next = clampCol(start.ocol - dx / colW)
+    ox = start.ox + (start.ocol - next) * colW
+    col = next
+  }
+  if (dir.includes('s')) h = Math.max(MIN_CHILD_H, start.oh + dy)
+  if (dir.includes('n')) {
+    // 向上拉伸同理：高度被最小高度夹停时，顶边不应继续下移
+    const next = Math.max(MIN_CHILD_H, start.oh - dy)
+    oy = start.oy + (start.oh - next)
+    h = next
+  }
+  const box = clampBox(rect, ox, oy, col * colW, h)
+  return { x: box.x, y: box.y, col, h: Math.round(h) }
+}
 
 function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: string) {
   if (!props.editable) return
@@ -398,8 +480,10 @@ function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: s
     oy: child.layout.y,
     ocol: child.layout.col,
     oh: child.layout.h ?? 120,
-    el: document.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null,
+    el: (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null,
   }
+  rzLast = { x: e.clientX, y: e.clientY }
+  markInteracted()
   resizingId.value = child.id
   window.addEventListener('mousemove', onChildResizeMove)
   window.addEventListener('mouseup', onChildResizeUp)
@@ -413,53 +497,34 @@ function onChildResizeMove(e: MouseEvent) {
     if (!rz || !rzLast || !rz.el) return
     const rect = ccBodyRef.value?.getBoundingClientRect()
     const colW = rect ? rect.width / 12 : 40
-    const dx = rzLast.x - rz.sx
-    const dy = rzLast.y - rz.sy
-    const dir = rz.dir
-    let { ox, oy, ocol, oh } = rz
-    if (dir.includes('e')) ocol = Math.max(1, Math.min(12, rz.ocol + Math.round(dx / colW)))
-    if (dir.includes('w')) {
-      const dCol = Math.round(dx / colW)
-      ocol = Math.max(1, Math.min(12, rz.ocol - dCol))
-      ox = rz.ox + dCol * colW
-    }
-    if (dir.includes('s')) oh = Math.max(60, rz.oh + dy)
-    if (dir.includes('n')) {
-      oh = Math.max(60, rz.oh - dy)
-      oy = rz.oy + dy
-    }
-    // 边界保护
-    if (ox < 0) ox = 0
-    if (oy < 0) oy = 0
-    if (rect) {
-      if (ox > rect.width - colW) ox = rect.width - colW
-      if (oy > rect.height - 60) oy = rect.height - 60
-    }
-    rz.el.style.setProperty('left', Math.round(ox) + 'px')
-    rz.el.style.setProperty('top', Math.round(oy) + 'px')
-    rz.el.style.setProperty('width', Math.round(ocol * colW) + 'px')
-    rz.el.style.setProperty('height', Math.round(oh) + 'px')
+    const box = computeResize(rz, rzLast)
+    rz.el.style.setProperty('left', box.x + 'px')
+    rz.el.style.setProperty('top', box.y + 'px')
+    rz.el.style.setProperty('width', Math.round(box.col * colW) + 'px')
+    rz.el.style.setProperty('height', box.h + 'px')
   })
 }
 function onChildResizeUp() {
   if (rzRaf) { cancelAnimationFrame(rzRaf); rzRaf = 0 }
-  if (rz?.el) {
+  if (rz && rzLast) {
     const child = getActiveChildren().find((c) => c.id === rz!.id)
-    const rect = ccBodyRef.value?.getBoundingClientRect()
-    const colW = rect ? rect.width / 12 : 40
     if (child) {
-      const nx = parseInt(rz.el.style.left, 10)
-      const ny = parseInt(rz.el.style.top, 10)
-      const nw = parseInt(rz.el.style.width, 10)
-      const nh = parseInt(rz.el.style.height, 10)
-      if (Number.isFinite(nx)) child.layout.x = nx
-      if (Number.isFinite(ny)) child.layout.y = ny
-      if (Number.isFinite(nw)) child.layout.col = Math.max(1, Math.min(12, Math.round(nw / colW)))
-      if (Number.isFinite(nh)) child.layout.h = nh
+      const rect = ccBodyRef.value?.getBoundingClientRect()
+      const colW = rect ? rect.width / 12 : 40
+      const box = computeResize(rz, rzLast)
+      child.layout.x = box.x
+      child.layout.y = box.y
+      child.layout.col = box.col
+      child.layout.h = box.h
+      // 与拖动同理：保留内联值而非 removeProperty，避免纯点击时丢失定位
+      rz.el?.style.setProperty('left', box.x + 'px')
+      rz.el?.style.setProperty('top', box.y + 'px')
+      rz.el?.style.setProperty('width', Math.round(box.col * colW) + 'px')
+      rz.el?.style.setProperty('height', box.h + 'px')
     }
-    ;['left', 'top', 'width', 'height'].forEach((p) => rz!.el!.style.removeProperty(p))
   }
   rz = null
+  rzLast = null
   resizingId.value = null
   window.removeEventListener('mousemove', onChildResizeMove)
   window.removeEventListener('mouseup', onChildResizeUp)
@@ -480,10 +545,12 @@ function deleteChild(id: string) {
   }
 }
 function onRootClick() {
-  if (props.editable && selectedChildId.value !== null) {
-    selectedChildId.value = null
-    emit('select-child', { containerId: props.component.id, childId: null })
-  }
+  if (!props.editable || selectedChildId.value === null) return
+  // 拖动/缩放结束会紧跟一个 click 冒泡到根节点；若此刻清空选中态，八向手柄会被立刻
+  // 取消渲染，用户拉完一次就再也抓不到手柄（表现为「缩放用不了」）。这里留一个短窗口忽略。
+  if (Date.now() - lastInteractAt < 300) return
+  selectedChildId.value = null
+  emit('select-child', { containerId: props.component.id, childId: null })
 }
 
 /** 容器失去选中态时，同步清掉内部子组件选中，避免高亮残留 */
