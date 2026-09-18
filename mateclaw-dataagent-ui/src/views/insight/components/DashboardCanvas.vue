@@ -47,6 +47,7 @@
         :w="item.w"
         :h="item.h"
         :static="!editable"
+        :drag-ignore-from="'a, button, .cc-child'"
         @click.stop="handleSelectComponent(item.i)"
       >
         <div
@@ -62,7 +63,7 @@
             <div class="resize-handle resize-handle-left" @mousedown.stop="startResize($event, item.i, 'left')" />
           </template>
           <div v-if="editable" class="grid-item-toolbar">
-            <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+            <span v-if="isToolbarTitleVisible(item.i)" class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
             <button
               class="grid-item-delete"
               :aria-label="`删除组件 ${getComponentTitle(item.i)}`"
@@ -79,6 +80,8 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable"
+                :editable="editable"
+                @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <ChartWidget
@@ -121,6 +124,9 @@
                 :component-data-map="componentDataMap"
                 :editable="editable"
                 :selected="selectedId === item.i"
+                @select-child="handleSelectChild"
+                @add-tab="(p) => emit('combination-add-tab', p)"
+                @remove-tab="(p) => emit('combination-remove-tab', p)"
               />
             </template>
           </div>
@@ -172,11 +178,15 @@ const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
   (e: 'update-layout', payload: Array<{ id: string; x: number; y: number; w: number; h: number }>): void
   (e: 'select-component', id: string): void
+  (e: 'select-child', payload: { containerId: string; childId: string | null }): void
+  (e: 'combination-add-tab', payload: { containerId: string }): void
+  (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
   (e: 'delete-component', id: string): void
   (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'ai-analysis-generate', componentId: string): void
+  (e: 'open-metric-style', payload: { componentId: string; fieldKey: string }): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */
@@ -307,6 +317,15 @@ function getComponentTitle(id: string): string {
   return getComponent(id)?.title ?? ''
 }
 
+/** 编辑态工具栏标题是否展示（组合卡片「显示标题」关闭时隐藏，让开关在编辑态可见生效） */
+function isToolbarTitleVisible(id: string): boolean {
+  const comp = getComponent(id)
+  if (comp?.type === 'combination') {
+    return comp.containerConfig?.showTitle !== false
+  }
+  return true
+}
+
 /** 根据 ID 获取组件渲染数据 */
 function getComponentData(id: string): InsightComponentData | undefined {
   return props.componentDataMap?.[id]
@@ -339,6 +358,11 @@ function handleDrop(event: DragEvent): void {
 /** 选中组件 */
 function handleSelectComponent(id: string): void {
   emit('select-component', id)
+}
+
+/** 组合卡片子组件选中/取消（透传给编辑器，联动属性面板） */
+function handleSelectChild(payload: { containerId: string; childId: string | null }): void {
+  emit('select-child', payload)
 }
 
 /** 删除组件 */

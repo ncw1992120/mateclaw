@@ -1243,6 +1243,56 @@ export interface InsightComponent {
   children?: InsightCombinationChild[]
   /** 组合卡片：容器配置（标题、背景、圆角、内边距、布局模式、页签等） */
   containerConfig?: InsightCombinationConfig
+  /** KPI 指标分组：指标列表（由「最终结果集」字段逐列投影生成，不可手动新增/删除） */
+  kpiMetrics?: KpiMetricConfig[]
+}
+
+/** KPI 指标 · 单字段样式（展示名 / 指标值 / 单位 / 辅助说明 各自独立） */
+export interface KpiMetricFieldStyle {
+  /** 字号 px */
+  size: number
+  /** 字体键（映射见 utils/kpi-metrics.ts 的 KPI_FONT_FAMILY） */
+  family: string
+  /** 颜色（HEX，如 #1f2329） */
+  color: string
+  /** 字重 */
+  bold: 'bold' | 'normal'
+}
+
+/** KPI 指标 · 四个字段的样式集合 */
+export interface KpiMetricStyles {
+  /** 展示名样式 */
+  name: KpiMetricFieldStyle
+  /** 指标值样式 */
+  value: KpiMetricFieldStyle
+  /** 单位样式 */
+  unit: KpiMetricFieldStyle
+  /** 辅助说明样式 */
+  helper: KpiMetricFieldStyle
+}
+
+/** KPI 指标（由结果集字段逐列投影；字段映射不可编辑，仅展示配置可编辑） */
+export interface KpiMetricConfig {
+  /** 结果集字段名（来源字段，只读标识，作为指标稳定 key） */
+  fieldKey: string
+  /** 展示列名（用户可编辑） */
+  displayName: string
+  /** 单位（用户手动填写，留空不显示） */
+  unit: string
+  /** 辅助说明（固定文本，用户可编辑） */
+  helperText: string
+  /** 是否在卡片中展示 */
+  visible: boolean
+  /** 自由布局：距卡片内容区左侧 px */
+  x: number
+  /** 自由布局：距卡片内容区顶部 px */
+  y: number
+  /** 自由布局：宽 px */
+  w: number
+  /** 自由布局：高 px */
+  h: number
+  /** 各字段样式 */
+  styles: KpiMetricStyles
 }
 
 /** 组合卡片子卡片自由布局坐标（相对容器内容区左上角，单位 px） */
@@ -1485,6 +1535,24 @@ export interface ChatHistoryMessage {
   content: string
 }
 
+/** KPI 单条指标渲染数据（后端取数结果） */
+export interface KpiItemData {
+  /** 指标名（后端返回；前端优先用 kpiMetrics.displayName 覆盖） */
+  name: string
+  /** 指标值（已格式化字符串） */
+  value: string
+  /** 环比/趋势百分比 */
+  chg?: string
+  /** 趋势方向 */
+  up?: boolean
+  /** 来源结果集字段名（KPI 指标分组按此与 kpiMetrics 对齐） */
+  fieldKey?: string
+  /** 单位（后端可选下发；缺省时用 kpiMetrics.unit） */
+  unit?: string
+  /** 辅助说明（后端可选下发；缺省时用 kpiMetrics.helperText） */
+  helperText?: string
+}
+
 /** 组件渲染数据（后端取数 + 图表构建后返回） */
 export interface InsightComponentData {
   /** 对应组件 ID */
@@ -1494,19 +1562,9 @@ export interface InsightComponentData {
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
-  kpi?: {
-    name: string
-    value: string
-    chg?: string
-    up?: boolean
-  }
+  kpi?: KpiItemData
   /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时，按指标逐列展示） */
-  kpiList?: Array<{
-    name: string
-    value: string
-    chg?: string
-    up?: boolean
-  }>
+  kpiList?: KpiItemData[]
   /** 表格数据（renderType=table 时） */
   table?: {
     columns: string[]
@@ -1532,9 +1590,9 @@ export interface ComponentTabData {
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
-  kpi?: { name: string; value: string; chg?: string; up?: boolean }
+  kpi?: KpiItemData
   /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时） */
-  kpiList?: Array<{ name: string; value: string; chg?: string; up?: boolean }>
+  kpiList?: KpiItemData[]
   /** 表格数据（renderType=table 时） */
   table?: { columns: string[]; rows: string[][] }
   /** 取数失败时的错误信息 */

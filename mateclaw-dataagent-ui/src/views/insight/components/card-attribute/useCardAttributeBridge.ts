@@ -17,8 +17,9 @@ import type {
   DashboardScriptFilterBinding,
   InsightComponent,
 } from '@/types'
-import { buildPipeline, mapSourceTypeIn, useInsight } from './useInsight'
+import { buildPipeline, kpiResultFields, mapSourceTypeIn, useInsight } from './useInsight'
 import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useInsight'
+import { buildKpiMetrics } from '@/utils/kpi-metrics'
 
 export type { ComponentDatasetPipeline }
 
@@ -115,6 +116,13 @@ export function hydratePanel(
   // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
 
+  // KPI 指标分组：由结果集字段增量投影（保留组件已有配置；schema 为空时原样保留，不清空用户配置）
+  if (component.type === 'kpi') {
+    state.kpiMetrics = buildKpiMetrics(kpiResultFields(), component.kpiMetrics ?? [])
+  } else {
+    state.kpiMetrics = []
+  }
+
   state.backend.dashboardId = dashboardId
   state.backend.componentId = component.id
   state.backend.online = Boolean(dashboardId)
@@ -134,6 +142,8 @@ export function hydratePanel(
   state.ui.filterBinding.visible = false
   state.ui.python.visible = false
   state.ui.preview.visible = false
+  state.ui.metricConfig.visible = false
+  state.ui.metricStyle.visible = false
 }
 
 /** 面板状态 → 组件级 pipeline（沿用原型 buildPipeline 的字段映射） */
@@ -151,7 +161,11 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
   if (!card) return component
 
   const patch: InsightComponent = { ...component, title: card.title }
-  if (card.type === 'kpi') patch.multiKpi = card.multiMetric
+  if (card.type === 'kpi') {
+    patch.multiKpi = card.multiMetric
+    // 指标分组配置随面板状态整体回写（hydrate 时已按结果集投影增量合并）
+    patch.kpiMetrics = JSON.parse(JSON.stringify(state.kpiMetrics)) as InsightComponent['kpiMetrics']
+  }
 
   const hasTabs = Array.isArray(component.tabs) && component.tabs.length > 0
   if (card.multiTab && !hasTabs) {

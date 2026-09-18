@@ -124,6 +124,96 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 是否启用多指标模式（仅 kpi 类型，开启后卡片同时展示多个指标） */
         private Boolean multiKpi;
+
+        /**
+         * KPI 指标分组配置（仅 kpi 类型）。
+         * <p>
+         * 口径（docs/策略解读/指标分组卡片原型设计.md）：「结果集优先」，指标由最终结果集字段
+         * 逐列投影生成，fieldKey 为稳定 key。Schema 必须显式声明该字段：复制组件 / AI 修改
+         * 会把 schema_json 反序列化为 DTO 再序列化，未声明的字段会被静默丢弃。
+         */
+        private List<KpiMetric> kpiMetrics;
+    }
+
+    /**
+     * KPI 指标配置（结果集优先：由最终结果集字段逐列投影生成，fieldKey 为稳定 key）
+     */
+    @Data
+    public static class KpiMetric implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** 结果集字段名（稳定 key，只读标识） */
+        private String fieldKey;
+
+        /** 展示列名（用户可编辑） */
+        private String displayName;
+
+        /** 单位（用户手动填写，留空不显示） */
+        private String unit;
+
+        /** 辅助说明（用户可编辑） */
+        private String helperText;
+
+        /** 是否在卡片中展示 */
+        private Boolean visible;
+
+        /** 自由布局：距卡片内容区左侧 px（拖动可能产生小数，用 Double 保真回传） */
+        private Double x;
+
+        /** 自由布局：距卡片内容区顶部 px */
+        private Double y;
+
+        /** 自由布局：宽 px */
+        private Double w;
+
+        /** 自由布局：高 px */
+        private Double h;
+
+        /** 各字段样式（展示名 / 指标值 / 单位 / 辅助说明） */
+        private KpiMetricStyles styles;
+    }
+
+    /**
+     * KPI 指标四个字段的样式集合
+     */
+    @Data
+    public static class KpiMetricStyles implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** 展示名样式 */
+        private KpiMetricFieldStyle name;
+
+        /** 指标值样式 */
+        private KpiMetricFieldStyle value;
+
+        /** 单位样式 */
+        private KpiMetricFieldStyle unit;
+
+        /** 辅助说明样式 */
+        private KpiMetricFieldStyle helper;
+    }
+
+    /**
+     * KPI 指标单字段样式（大小 / 字体 / 颜色 / 字重）
+     */
+    @Data
+    public static class KpiMetricFieldStyle implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        /** 字号 px */
+        private Double size;
+
+        /** 字体键（前端映射 CSS font-family） */
+        private String family;
+
+        /** 颜色（HEX，如 #1f2329） */
+        private String color;
+
+        /** 字重：bold / normal */
+        private String bold;
     }
 
     /**

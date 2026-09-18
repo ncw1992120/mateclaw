@@ -45,7 +45,17 @@
         </div>
       </div>
 
-      <!-- 5. 筛选器绑定（绑定到当前选中的 KPI/指标卡，无独立组件级时间筛选） -->
+      <!-- 5.5 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单） -->
+      <div v-if="isKpiCard" class="section">
+        <div class="section-head">
+          <span class="section-title">指标配置</span>
+          <span v-if="kpiMetricCount" class="metric-count">{{ kpiMetricCount }} 个指标</span>
+        </div>
+        <el-button size="small" type="primary" @click="openMetricConfig">配置指标</el-button>
+        <div class="metric-hint">指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。</div>
+      </div>
+
+      <!-- 6. 筛选器绑定（绑定到当前选中的 KPI/指标卡，无独立组件级时间筛选） -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">筛选器绑定</span>
@@ -99,10 +109,13 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useInsight } from './useInsight'
 import DatasetCard from './DatasetCard.vue'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython, openMetricConfig } = useInsight()
+
+const kpiMetricCount = computed(() => state.kpiMetrics.length)
 
 function typeLabel(t: string) {
   return t === 'kpi' ? 'KPI/指标卡' : t === 'table' ? '表格卡' : '图表卡'
@@ -186,6 +199,16 @@ function typeLabel(t: string) {
 }
 .add-bottom {
   align-self: flex-start;
+}
+.metric-count {
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+.metric-hint {
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 1.6;
+  margin-top: 8px;
 }
 .fb-box {
   display: flex;

@@ -1280,6 +1280,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         c.setConfig(op.getConfig());
         c.setTabs(op.getTabs());
         c.setBoundFilterIds(op.getBoundFilterIds());
+        c.setKpiMetrics(op.getKpiMetrics());
         c.setPosition(op.getPosition());
         // timeFilter 默认 config
         if ("timeFilter".equals(op.getType()) && c.getConfig() == null) {
@@ -1318,6 +1319,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         if (op.getBoundFilterIds() != null) {
             c.setBoundFilterIds(op.getBoundFilterIds());
+        }
+        if (op.getKpiMetrics() != null) {
+            c.setKpiMetrics(op.getKpiMetrics());
         }
     }
 

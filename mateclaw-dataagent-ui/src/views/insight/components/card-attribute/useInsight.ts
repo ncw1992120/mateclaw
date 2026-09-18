@@ -27,7 +27,8 @@ import {
   type DatasetSchemaField,
   type FieldMappingRow,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema } from '@/types'
+import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 
 /* ============================ 类型定义 ============================ */
 
@@ -113,6 +114,9 @@ interface UiState {
   filterBinding: { visible: boolean }
   python: { visible: boolean }
   preview: { visible: boolean; kind: 'dataset' | 'result' | 'component'; datasetId: string | null; tab?: string }
+  // KPI 指标分组弹窗
+  metricConfig: { visible: boolean }
+  metricStyle: { visible: boolean; fieldKey: string; field: string }
 }
 
 /* ============================ 数据来源说明（已接入真实后端） ============================ */
@@ -189,6 +193,8 @@ const state = reactive({
   pythonUser: '' as string,
   // 筛选器绑定（支持同时绑定多个筛选器）
   filterBindings: [] as FilterBinding[],
+  // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
+  kpiMetrics: [] as KpiMetricConfig[],
   // 仪表盘可用筛选器组件（来自筛选器绑定弹窗的真实参数名来源；由 hydratePanel 注入）
   filterCatalog: [] as { id: string; title: string }[],
   // [后端联调] 与 mateclaw-dataagent 的联动状态
@@ -213,6 +219,8 @@ const state = reactive({
     filterBinding: { visible: false },
     python: { visible: false },
     preview: { visible: false, kind: 'dataset' as 'dataset' | 'result' | 'component', datasetId: null as string | null, tab: 'data' },
+    metricConfig: { visible: false },
+    metricStyle: { visible: false, fieldKey: '', field: 'value' },
   } as UiState,
 })
 
@@ -734,6 +742,51 @@ function closePreview() {
   state.ui.preview.visible = false
 }
 
+/* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
+
+/**
+ * 由数据集 schema + 字段映射推导「最终结果集」字段（指标投影来源）。
+ * 字段名以映射目标名称为准（最终数据集字段名），显示名跟随 schema（Aloudata 语义层）。
+ */
+export function kpiResultFields(): DatasetSchemaField[] {
+  const fields: DatasetSchemaField[] = []
+  state.datasets.forEach((ds) => {
+    if (ds.schema?.length) {
+      ds.schema.forEach((f) => {
+        const hit = ds.fieldMapping.find((m) => m.source === f.name)
+        const name = (hit?.target || f.name).trim() || f.name
+        fields.push({ name, displayName: f.displayName })
+      })
+      return
+    }
+    // schema 未取到时回落字段映射行（最终名称已由映射维护）
+    ds.fieldMapping.forEach((m) => {
+      const name = (m.target || m.source).trim()
+      if (name) fields.push({ name })
+    })
+  })
+  return fields
+}
+
+/** 按最新结果集字段增量重建指标（命中保留用户配置、新增追加、消失移除；schema 为空不清空） */
+function rebuildKpiMetrics() {
+  state.kpiMetrics = buildKpiMetrics(kpiResultFields(), state.kpiMetrics)
+}
+
+function openMetricConfig() {
+  rebuildKpiMetrics()
+  state.ui.metricConfig.visible = true
+}
+
+function openMetricStyle(fieldKey: string, field: string = 'value') {
+  state.ui.metricStyle = { visible: true, fieldKey, field }
+}
+
+/** 把某指标的整套样式同步到所有指标（只同步样式，不同步文本/映射） */
+function syncKpiMetricStyles(fieldKey: string) {
+  state.kpiMetrics = syncMetricStylesToAll(state.kpiMetrics, fieldKey)
+}
+
 /* ===================== 后端对接（mateclaw-dataagent） ===================== */
 /**
  * 说明：本节把原型本地状态与后端「组件级 datasetPipeline」互相转换，
@@ -1192,6 +1245,12 @@ export function useInsight() {
     // preview
     openPreview,
     closePreview,
+    // KPI 指标分组（结果集优先投影）
+    kpiResultFields,
+    rebuildKpiMetrics,
+    openMetricConfig,
+    openMetricStyle,
+    syncKpiMetricStyles,
     // 后端对接（mateclaw-dataagent）
     bootstrapDashboard,
     saveDashboard,

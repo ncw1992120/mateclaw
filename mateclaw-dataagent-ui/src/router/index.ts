@@ -59,6 +59,13 @@ const router = createRouter({
       component: () => import('@/views/insight/CardContainerPrototype.vue'),
       meta: { public: true, title: '组合卡片原型' },
     },
+    {
+      // 洞察·KPI 指标分组卡片 前端交互原型（免登录，按「结果集优先」设计文档，仅供交互体验验证）
+      path: '/insight/kpi-metric-group-card-prototype',
+      name: 'insight-kpi-metric-group-card-prototype',
+      component: () => import('@/views/insight/KpiMetricGroupCardPrototype.vue'),
+      meta: { public: true, title: 'KPI 指标分组卡片原型' },
+    },
   ],
 })
 

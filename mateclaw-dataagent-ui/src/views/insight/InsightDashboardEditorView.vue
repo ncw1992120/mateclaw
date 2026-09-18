@@ -190,7 +190,11 @@
           @add-component="handleAddComponent"
           @update-layout="handleUpdateLayout"
           @select-component="handleSelectComponent"
+          @select-child="handleSelectChild"
+          @combination-add-tab="handleCombinationAddTab"
+          @combination-remove-tab="handleCombinationRemoveTab"
           @delete-component="handleDeleteComponent"
+          @open-metric-style="handleOpenMetricStyle"
         />
       </div>
 
@@ -199,9 +203,10 @@
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
           <!-- 数据组件（kpi/chart/table）：原型版「卡片属性配置」面板（docs/策略解读/原型设计.md §10~§12 唯一交互依据） -->
+          <!-- combination（组合卡片容器）与筛选类组件走 PropertyPanel（容器配置/页签管理在其内部） -->
           <CardAttributeSidebar
-            v-if="selectedComponent && !['filter', 'timeFilter', 'aiAnalysis'].includes(selectedComponent.type)"
-            :component="selectedComponent"
+            v-if="panelComponent && !['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(panelComponent.type)"
+            :component="panelComponent"
             :dashboard-id="dashboardId"
             :filter-components="filterComponents"
             @change="handleComponentChange"
@@ -209,11 +214,13 @@
           <!-- 筛选/时间筛选/AI分析组件：沿用正式属性面板 -->
           <PropertyPanel
             v-else
-            :component="selectedComponent"
+            :component="panelComponent"
             :all-components="currentPageComponents"
             :use-dataset-pipeline="false"
             @change="handleComponentChange"
             @preview="handlePreviewResult"
+            @combination-add-tab="handleCombinationAddTabFromPanel"
+            @combination-remove-tab="handleCombinationRemoveTabFromPanel"
             @collapse="sidebarCollapsed = true"
           />
         </div>
@@ -265,10 +272,10 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -276,10 +283,12 @@ import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
+import { useInsight } from './components/card-attribute/useInsight'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -298,6 +307,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const store = useInsightDashboardStore()
 const { canModifyResource } = usePermission()
+// KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
+const { openMetricStyle } = useInsight()
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
@@ -416,6 +427,7 @@ const pageTreeRef = ref<any>(null)
 
 /** activePageId 变化时同步 el-tree 高亮 */
 watch(activePageId, (newId) => {
+  selectedChildInfo.value = null
   nextTick(() => {
     pageTreeRef.value?.setCurrentKey(newId)
   })
@@ -434,6 +446,36 @@ const selectedComponent = computed<InsightComponent | null>(() => {
   }
   return currentPageComponents.value.find((c) => c.id === selectedComponentId.value) ?? null
 })
+
+// ── 组合卡片子组件选中 → 属性面板联动 ──────────────────
+/** 选中子组件信息（画布内点选子卡片时设置） */
+const selectedChildInfo = ref<{ containerId: string; childId: string } | null>(null)
+
+/** 在容器（children 或页签 children）中查找子组件 */
+function findCombinationChild(container: InsightComponent, childId: string): InsightCombinationChild | null {
+  if (container.children) {
+    const hit = container.children.find((c) => c.id === childId)
+    if (hit) return hit
+  }
+  for (const tab of container.containerConfig?.tabs ?? []) {
+    const hit = tab.children.find((c) => c.id === childId)
+    if (hit) return hit
+  }
+  return null
+}
+
+/** 选中子组件的合成组件（供属性面板编辑；position 仅占位，不参与写回） */
+const selectedChildComponent = computed<InsightComponent | null>(() => {
+  const info = selectedChildInfo.value
+  if (!info) return null
+  const container = currentPageComponents.value.find((c) => c.id === info.containerId)
+  const child = container ? findCombinationChild(container, info.childId) : null
+  if (!child) return null
+  return { ...child, position: { x: 0, y: 0, w: 6, h: 4 } }
+})
+
+/** 属性面板当前编辑对象：优先画布选中的子组件，其次顶层组件 */
+const panelComponent = computed<InsightComponent | null>(() => selectedChildComponent.value ?? selectedComponent.value)
 
 /** 当前页面内的筛选器组件（仅 type==='filter'，用于原型面板「筛选器绑定」命名与回显） */
 const filterComponents = computed<InsightComponent[]>(() =>
@@ -574,6 +616,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
   }
   page.components.push(newComponent)
   selectedComponentId.value = newComponent.id
+  selectedChildInfo.value = null
   // 新增组件后立即作为脚本结果的默认目标，避免用户还要再次点击画布组件。
   if (!scriptTargetComponentId.value) {
     scriptTargetComponentId.value = newComponent.id
@@ -594,12 +637,104 @@ function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w:
   })
 }
 
-/** 选中组件 */
+/** 选中组件（顶层） */
 function handleSelectComponent(id: string): void {
   selectedComponentId.value = id
+  selectedChildInfo.value = null
   if (!scriptTargetComponentId.value) {
     scriptTargetComponentId.value = id
   }
+}
+
+/** 画布 KPI 指标「:」直入口：先选中该组件（触发属性面板 hydrate），再打开字段样式弹窗 */
+function handleOpenMetricStyle(payload: { componentId: string; fieldKey: string; field: string }): void {
+  handleSelectComponent(payload.componentId)
+  const targetId = payload.componentId
+  nextTick(() => {
+    if (selectedComponentId.value === targetId) {
+      openMetricStyle(payload.fieldKey, payload.field)
+    }
+  })
+}
+
+/** 画布内组合卡片子组件选中/取消（childId=null 表示回到容器） */
+function handleSelectChild(payload: { containerId: string; childId: string | null }): void {
+  selectedChildInfo.value = payload.childId
+    ? { containerId: payload.containerId, childId: payload.childId }
+    : null
+}
+
+// ── 组合卡片页签增删（画布与属性面板两个入口统一走这里，操作 schema）──
+/** 新增页签：首次添加时把容器内已有子卡片平移进第一个页签，避免已配置的组件丢失 */
+function addTabToContainer(container: InsightComponent): void {
+  const res = addCombinationTab(container)
+  if (!res.tab) return
+  if (res.migratedFromContainer) {
+    ElMessage.success(t('insight.combination.tabMigratedHint', { count: res.migratedCount, name: res.tab.title }))
+  }
+}
+
+/**
+ * 删除页签：
+ * - 页签内有组件且不是最后一个页签 → 二次确认（组件会随页签一并删除）；
+ * - 删除最后一个页签 → 页签内组件平移回容器（回到无页签态），不丢配置。
+ */
+async function removeTabFromContainer(container: InsightComponent, tabId: string): Promise<void> {
+  const cfg = container.containerConfig
+  if (!cfg) return
+  const tab = cfg.tabs.find((x) => x.id === tabId)
+  if (!tab) return
+  const isLastTab = cfg.tabs.length === 1
+  if (!isLastTab && tab.children.length > 0) {
+    try {
+      await ElMessageBox.confirm(
+        t('insight.combination.deleteTabConfirm', { name: tab.title, count: tab.children.length }),
+        '',
+        {
+          confirmButtonText: t('common.confirm'),
+          cancelButtonText: t('common.cancel'),
+          type: 'warning',
+        },
+      )
+    } catch {
+      return // 用户取消
+    }
+  }
+  const res = removeCombinationTab(container, tabId)
+  if (!res.removed) return
+  // 选中的子卡片若随页签一起没了，清掉面板选中态
+  if (selectedChildInfo.value?.containerId === container.id) {
+    if (!findCombinationChild(container, selectedChildInfo.value.childId)) {
+      selectedChildInfo.value = null
+    }
+  }
+  if (res.migrated && res.migratedCount > 0) {
+    ElMessage.success(t('insight.combination.tabChildrenBackHint', { count: res.migratedCount }))
+  }
+}
+
+/** 画布内页签栏「+」 */
+function handleCombinationAddTab(payload: { containerId: string }): void {
+  const container = currentPageComponents.value.find((c) => c.id === payload.containerId)
+  if (container?.type === 'combination') addTabToContainer(container)
+}
+
+/** 画布内页签栏「✕」 */
+function handleCombinationRemoveTab(payload: { containerId: string; tabId: string }): void {
+  const container = currentPageComponents.value.find((c) => c.id === payload.containerId)
+  if (container?.type === 'combination') void removeTabFromContainer(container, payload.tabId)
+}
+
+/** 属性面板「添加页签」 */
+function handleCombinationAddTabFromPanel(): void {
+  const container = selectedComponent.value
+  if (container?.type === 'combination') addTabToContainer(container)
+}
+
+/** 属性面板页签行「✕」 */
+function handleCombinationRemoveTabFromPanel(tabId: string): void {
+  const container = selectedComponent.value
+  if (container?.type === 'combination') void removeTabFromContainer(container, tabId)
 }
 
 /** 删除组件 */
@@ -614,11 +749,54 @@ function handleDeleteComponent(id: string): void {
     if (selectedComponentId.value === id) {
       selectedComponentId.value = ''
     }
+    // 删除的是组合卡片容器时，同步清掉子组件选中态
+    if (selectedChildInfo.value?.containerId === id) {
+      selectedChildInfo.value = null
+    }
   }
+}
+
+/**
+ * 组合卡片容器配置合并：面板只负责外观/页签元信息，页签内的子卡片数据一律以 schema（画布侧）为准，
+ * 避免属性面板的本地副本过期时把子卡片配置覆盖掉。
+ */
+function mergeCombinationConfig(
+  existing: InsightComponent,
+  updated: InsightComponent,
+): InsightCombinationConfig | undefined {
+  const exCfg = existing.containerConfig
+  const upCfg = updated.containerConfig
+  if (!exCfg) return upCfg
+  if (!upCfg) return exCfg
+  const tabs = upCfg.tabs.map((t) => {
+    const ex = exCfg.tabs.find((x) => x.id === t.id)
+    return ex ? { ...t, children: ex.children } : t
+  })
+  // 面板副本若没回显到画布侧新增的页签，这里补回，避免回写把新页签弄丢
+  for (const ex of exCfg.tabs) {
+    if (!tabs.some((t) => t.id === ex.id)) tabs.push(ex)
+  }
+  return { ...exCfg, ...upCfg, tabs }
 }
 
 /** 组件属性变更（保留画布管理的 position） */
 function handleComponentChange(updated: InsightComponent): void {
+  // 组合卡片子组件：把面板编辑结果写回容器内的 child（只同步数据字段；
+  // 位置/尺寸由容器自由布局管理，子组件不承载 tabs/containerConfig/position）
+  if (selectedChildInfo.value) {
+    const container = currentPageComponents.value.find((c) => c.id === selectedChildInfo.value!.containerId)
+    const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
+    if (child) {
+      child.title = updated.title
+      child.chartType = updated.chartType
+      child.config = updated.config
+      child.dataSource = updated.dataSource
+      child.boundFilterIds = updated.boundFilterIds
+      child.enableTimeFilter = updated.enableTimeFilter
+      child.multiKpi = updated.multiKpi
+    }
+    return
+  }
   const page = schema.pages.find((p) => p.id === activePageId.value)
   if (!page) {
     return
@@ -630,6 +808,14 @@ function handleComponentChange(updated: InsightComponent): void {
       ...updated,
       // 保留画布拖拽/缩放管理的 position，不被属性面板覆盖
       position: existing.position,
+      // 组合卡片：children（子卡片）只在画布内维护，属性面板不参与编辑，
+      // 回写时一律保留 schema 中的现有值，避免被面板的本地副本覆盖为空
+      ...(existing.type === 'combination'
+        ? {
+            children: existing.children ?? [],
+            containerConfig: mergeCombinationConfig(existing, updated),
+          }
+        : {}),
     }
   }
   // 数据源变更时触发自动预览

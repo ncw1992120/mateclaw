@@ -111,6 +111,10 @@ public class InsightDashboardPatchOp implements Serializable {
     @Schema(description = "绑定的筛选器ID列表")
     private List<String> boundFilterIds;
 
+    /** KPI 指标分组配置（add/update 可选，仅 kpi 类型；由结果集字段逐列投影） */
+    @Schema(description = "KPI指标分组配置（kpi组件）")
+    private List<InsightDashboardSchemaDTO.KpiMetric> kpiMetrics;
+
     // ---- 页面操作字段（add-page / rename-page） ----
 
     /** 页面名称（add-page 必填，rename-page 必填） */

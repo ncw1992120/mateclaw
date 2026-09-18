@@ -63,6 +63,15 @@ public class InsightComponentDataDTO implements Serializable {
 
         /** 是否上升 */
         private Boolean up;
+
+        /** 来源结果集字段名（KPI 指标分组按此与 schema_json 的 kpiMetrics 对齐），可为 null */
+        private String fieldKey;
+
+        /** 单位（可选下发；缺省时前端用 kpiMetrics.unit） */
+        private String unit;
+
+        /** 辅助说明（可选下发；缺省时前端用 kpiMetrics.helperText） */
+        private String helperText;
     }
 
     /**

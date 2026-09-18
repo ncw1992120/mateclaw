@@ -14,6 +14,8 @@
     <FilterBindingDialog />
     <PythonScriptDialog />
     <PreviewDialog />
+    <MetricConfigDialog />
+    <MetricStyleDialog />
   </div>
 </template>
 
@@ -34,6 +36,8 @@ import InputFilterDialog from './InputFilterDialog.vue'
 import FilterBindingDialog from './FilterBindingDialog.vue'
 import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
+import MetricConfigDialog from './MetricConfigDialog.vue'
+import MetricStyleDialog from './MetricStyleDialog.vue'
 
 const props = defineProps<{
   /** 当前选中的数据组件（kpi / chart / table） */
@@ -67,6 +71,27 @@ function hydrate(): void {
 
 watch(() => props.component?.id, hydrate, { immediate: true })
 
+/**
+ * 画布上的指标拖拽/缩放会【原地】修改组件的 kpiMetrics 布局（x/y/w/h），
+ * 这里把布局增量同步回面板 state，避免「指标配置」弹窗重建投影时用旧布局覆盖画布改动。
+ * 仅在值真正变化时写入，防止 state → 组件回写 → watcher 再触发的循环。
+ */
+watch(
+  () => props.component?.kpiMetrics,
+  (metrics) => {
+    if (hydrating.value || !metrics) return
+    metrics.forEach((m) => {
+      const s = state.kpiMetrics.find((x) => x.fieldKey === m.fieldKey)
+      if (!s) return
+      if (s.x !== m.x) s.x = m.x
+      if (s.y !== m.y) s.y = m.y
+      if (s.w !== m.w) s.w = m.w
+      if (s.h !== m.h) s.h = m.h
+    })
+  },
+  { deep: true },
+)
+
 /** 面板状态变更 → 回写为组件级 datasetPipeline + 组件字段补丁 */
 let emitTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleEmit(): void {
@@ -81,9 +106,9 @@ function scheduleEmit(): void {
   }, 300)
 }
 
-// 仅监听数据字段（datasets / 筛选器绑定 / Python / 卡片元信息），避开 state.ui 弹窗开关引发的噪声
+// 仅监听数据字段（datasets / 筛选器绑定 / Python / 卡片元信息 / KPI 指标分组），避开 state.ui 弹窗开关引发的噪声
 watch(
-  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards],
+  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards, state.kpiMetrics],
   () => scheduleEmit(),
   { deep: true },
 )
