@@ -16,6 +16,7 @@ import type {
   DashboardDatasetInput,
   DashboardScriptFilterBinding,
   InsightComponent,
+  InsightComponentType,
 } from '@/types'
 import {
   buildPipeline,
@@ -31,6 +32,18 @@ import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useI
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
 
 export type { ComponentDatasetPipeline }
+
+/**
+ * 「筛选器绑定」所需的筛选器最小信息。
+ * 顶层筛选器与**组合卡片容器内的子筛选器**统一成这个形状：容器内子卡片是
+ * `InsightCombinationChild`，没有 `position` 等 `InsightComponent` 的必填字段，
+ * 而本场景只消费 `id` / `title` / `type`。
+ */
+export interface PanelFilterComponent {
+  id: string
+  type: InsightComponentType
+  title: string
+}
 
 /** 正式组件类型 → 原型卡片类型 */
 function toCardType(type: unknown): CardType {
@@ -52,7 +65,7 @@ export function inputToDatasetConfig(input: DashboardDatasetInput, index: number
 function filterBindingsFromPipeline(
   bindings: DashboardScriptFilterBinding[],
   datasets: DatasetConfig[],
-  filterComponents: InsightComponent[],
+  filterComponents: PanelFilterComponent[],
 ): FilterBinding[] {
   return bindings.map((binding, index) => {
     const scope: Record<string, boolean> = {}
@@ -81,7 +94,7 @@ function filterBindingsFromPipeline(
 export function hydratePanel(
   component: InsightComponent,
   dashboardId = '',
-  filterComponents: InsightComponent[] = [],
+  filterComponents: PanelFilterComponent[] = [],
 ): void {
   const { state } = useInsight()
   const pipeline = readComponentDatasetPipeline(component)

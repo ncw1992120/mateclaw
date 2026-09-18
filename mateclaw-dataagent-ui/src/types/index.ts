@@ -1331,6 +1331,18 @@ export interface InsightCombinationChild {
   dataSource?: ComponentDataSource
   /** 自由布局坐标 */
   layout: CombinationChildLayout
+  /**
+   * 以下三个字段与 `InsightComponent` 同名语义一致：容器内的子卡片同样是可配置组件，
+   * 需要承载「绑定的筛选器 / 组件级时间筛选 / 多指标模式」。
+   * 此前类型未声明而代码已在赋值（`handleComponentChange` 写回 child 时），
+   * 导致 vue-tsc 报 TS2339，实际运行正常。
+   */
+  /** 绑定的筛选器 ID 列表（绑定后仅响应专属筛选器） */
+  boundFilterIds?: string[]
+  /** 是否启用组件级时间筛选（右上角时间选择器） */
+  enableTimeFilter?: boolean
+  /** 是否启用多指标模式（仅 kpi 子卡片） */
+  multiKpi?: boolean
 }
 
 /** 组合卡片页签（每个页签拥有独立的子卡片集合） */

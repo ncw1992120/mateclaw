@@ -24,6 +24,7 @@ import { ref, watch, nextTick } from 'vue'
 import type { InsightComponent } from '@/types'
 import { useInsight } from './useInsight'
 import { hydratePanel, panelToPipeline, buildComponentPatch } from './useCardAttributeBridge'
+import type { PanelFilterComponent } from './useCardAttributeBridge'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import AttributePanel from './AttributePanel.vue'
 import DataSourceTreeDialog from './DataSourceTreeDialog.vue'
@@ -44,8 +45,8 @@ const props = defineProps<{
   component: InsightComponent | null
   /** 仪表盘 ID（用于后端联调态与回显） */
   dashboardId: string
-  /** 当前页面内的筛选器组件（timeFilter 不计入），用于筛选器绑定命名 */
-  filterComponents?: InsightComponent[]
+  /** 当前页面内的筛选类组件（filter / timeFilter，含组合卡片容器内的子筛选器），用于筛选器绑定命名与候选 */
+  filterComponents?: PanelFilterComponent[]
 }>()
 
 const emit = defineEmits<{

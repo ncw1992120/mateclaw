@@ -276,6 +276,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage } from '@/types'
+import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
@@ -477,9 +478,42 @@ const selectedChildComponent = computed<InsightComponent | null>(() => {
 /** 属性面板当前编辑对象：优先画布选中的子组件，其次顶层组件 */
 const panelComponent = computed<InsightComponent | null>(() => selectedChildComponent.value ?? selectedComponent.value)
 
-/** 当前页面内的筛选器组件（仅 type==='filter'，用于原型面板「筛选器绑定」命名与回显） */
-const filterComponents = computed<InsightComponent[]>(() =>
-  currentPageComponents.value.filter((c) => c.type === 'filter'),
+/**
+ * 递归收集页面内所有筛选类组件，供「筛选器绑定」弹窗做参数名候选。
+ *
+ * 覆盖三类此前收集不到的筛选器（2026-09-18 修）：
+ *  1. **组合卡片容器内**的子筛选器 —— 旧实现只看 `currentPageComponents`（顶层），
+ *     容器内的 `children` 与 `containerConfig.tabs[].children` 完全扫不到；
+ *  2. **各页签内**的子筛选器（同一容器不同页签下的筛选器都要能绑定）；
+ *  3. **时间筛选器**（`type === 'timeFilter'`）—— 旧实现只认 `'filter'`，
+ *     导致「所有时间筛选器都选不到」。
+ */
+function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
+  const out: PanelFilterComponent[] = []
+  const seen = new Set<string>()
+  const push = (item: { id: string; type: InsightComponentType; title: string }) => {
+    if (!item.id || seen.has(item.id)) return
+    seen.add(item.id)
+    out.push({ id: String(item.id), type: item.type, title: item.title || String(item.id) })
+  }
+  const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'
+  const walkChildren = (children?: Array<{ id: string; type: InsightComponentType; title: string }>) => {
+    ;(children ?? []).forEach((child) => {
+      if (isFilterLike(child.type)) push(child)
+    })
+  }
+  list.forEach((c) => {
+    if (isFilterLike(c.type)) push(c)
+    // 组合卡片容器：默认 Tab 的子卡片 + 每个页签各自的子卡片
+    walkChildren(c.children)
+    c.containerConfig?.tabs?.forEach((tab) => walkChildren(tab.children))
+  })
+  return out
+}
+
+/** 当前页面内的筛选类组件（filter / timeFilter，含组合卡片容器与页签内的子筛选器） */
+const filterComponents = computed<PanelFilterComponent[]>(() =>
+  collectPanelFilters(currentPageComponents.value),
 )
 
 onMounted(async () => {
