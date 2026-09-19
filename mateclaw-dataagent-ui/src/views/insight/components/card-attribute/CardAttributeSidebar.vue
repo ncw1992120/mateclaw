@@ -23,6 +23,7 @@
 import { ref, watch, nextTick } from 'vue'
 import type { InsightComponent } from '@/types'
 import { useInsight } from './useInsight'
+import type { ResultSetStatus } from './useInsight'
 import { hydratePanel, panelToPipeline, buildComponentPatch } from './useCardAttributeBridge'
 import type { PanelFilterComponent } from './useCardAttributeBridge'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
@@ -49,11 +50,21 @@ const props = defineProps<{
   filterComponents?: PanelFilterComponent[]
 }>()
 
+/** 结果集状态变化负载：交给画布侧渲染卡片或标记数据过期 */
+export interface ResultSetEmitPayload {
+  componentId: string
+  status: ResultSetStatus
+  source: 'dataset' | 'script'
+  rows: Record<string, unknown>[]
+  error: string
+}
+
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void
+  (e: 'resultset', payload: ResultSetEmitPayload): void
 }>()
 
-const { state } = useInsight()
+const { state, scheduleResultSet } = useInsight()
 
 /** 灌入中标记：避免 hydrate 重置 state 时误触发回写 */
 const hydrating = ref(false)
@@ -112,6 +123,34 @@ watch(
   () => [state.datasets, state.filterBindings, state.pythonUser, state.cards, state.kpiMetrics],
   () => scheduleEmit(),
   { deep: true },
+)
+
+/**
+ * 输入配置变更 → 结果集标记过期；无脚本时防抖自动重算，有脚本时等用户点「生成结果集」。
+ * 只监听「产出结果集的输入」（数据集 / 筛选器绑定 / 脚本），卡片标题等元信息不影响数据。
+ */
+watch(
+  () => [state.datasets, state.filterBindings, state.pythonUser, state.hasPython],
+  () => {
+    if (hydrating.value) return
+    scheduleResultSet()
+  },
+  { deep: true },
+)
+
+/** 结果集状态变化 → 推给画布（卡片唯一数据来源） */
+watch(
+  () => state.resultSet.status,
+  (status) => {
+    if (hydrating.value || !props.component) return
+    emit('resultset', {
+      componentId: props.component.id,
+      status,
+      source: state.resultSet.source,
+      rows: state.resultSet.rows,
+      error: state.resultSet.error,
+    })
+  },
 )
 </script>
 

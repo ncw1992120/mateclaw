@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 
 /* ============================ 类型定义 ============================ */
@@ -138,6 +138,38 @@ interface UiState {
   metricStyle: { visible: boolean; fieldKey: string; field: string }
 }
 
+/* ============================ 结果集（卡片唯一数据来源） ============================ */
+
+/**
+ * 结果集状态机的五个状态（契约见 docs/策略解读/卡片数据链路与结果集交互方案-讨论稿.md §4）：
+ *
+ *   empty ──添加数据集──▶ stale ──生成──▶ running ──成功──▶ ready
+ *                          ▲                │
+ *                          │                └──失败──▶ failed
+ *                          └──────配置变更─────┘
+ *
+ * 「改完配置结果集就旧了，刷新一下就新了」——无脚本时同步零成本，自动刷新；
+ * 有脚本时是异步 Runner 执行，等用户点「生成结果集」。
+ */
+export type ResultSetStatus = 'empty' | 'stale' | 'running' | 'ready' | 'failed'
+
+/** 结果集运行期状态：持久化只落元数据（无 rows），行数据靠回读或重算获得 */
+export interface ResultSetState {
+  status: ResultSetStatus
+  source: 'dataset' | 'script'
+  /** 结果集字段结构：指标配置的候选字段唯一来源 */
+  columns: { name: string; type: string }[]
+  /** 行数据（运行期内存态，不写入 Schema） */
+  rows: Record<string, unknown>[]
+  rowCount: number
+  /** 生成时间（ISO 字符串） */
+  generatedAt: string
+  elapsedMs: number
+  /** 脚本结果的执行 ID（source=script 时用于回读行数据） */
+  executionId: string
+  error: string
+}
+
 /* ============================ 数据来源说明（已接入真实后端） ============================ */
 
 // 画布卡片由 useCardAttributeBridge.hydratePanel 从「当前选中组件」注入，不再使用假数据。
@@ -216,6 +248,18 @@ const state = reactive({
   kpiMetrics: [] as KpiMetricConfig[],
   // 仪表盘可用筛选器组件（来自筛选器绑定弹窗的真实参数名来源；由 hydratePanel 注入）
   filterCatalog: [] as { id: string; title: string }[],
+  // 结果集：卡片唯一数据来源（数据集 / 筛选 / 脚本都只是产出它的手段）
+  resultSet: {
+    status: 'empty',
+    source: 'dataset',
+    columns: [],
+    rows: [],
+    rowCount: 0,
+    generatedAt: '',
+    elapsedMs: 0,
+    executionId: '',
+    error: '',
+  } as ResultSetState,
   // [后端联调] 与 mateclaw-dataagent 的联动状态
   backend: {
     dashboardId: '', // 后端仪表盘 ID
@@ -257,6 +301,17 @@ const datasetCount = computed(() => state.datasets.length)
 // 2 个及以上数据集时 Python 用户处理区必填；1 个时可选
 const pythonRequired = computed(() => state.datasets.length >= 2)
 
+/** 结果集是否可用于渲染卡片 */
+const resultSetReady = computed(() => state.resultSet.status === 'ready')
+/** 结果集是否已过期（输入配置变更后；卡片沿用旧渲染并提示刷新） */
+const resultSetStale = computed(() => state.resultSet.status === 'stale')
+/** 是否自动刷新结果集：无脚本时同步零成本自动跑；有脚本要起 Runner，等用户点按钮 */
+const resultSetAuto = computed(() => !state.hasPython)
+/** 结果集来源标签 */
+const resultSetSourceLabel = computed(() => (state.resultSet.source === 'script' ? 'Python 输出' : '数据集直通'))
+/** 结果集是否已有过一次产出（含已过期，用于决定是否展示旧数据行数） */
+const resultSetHasOutput = computed(() => ['ready', 'stale', 'failed'].includes(state.resultSet.status))
+
 function getDataset(id: string) {
   return state.datasets.find((d) => d.id === id)
 }
@@ -272,6 +327,7 @@ function selectCard(id: string) {
   state.pythonSystem = ''
   state.pythonUser = ''
   state.filterBindings = []
+  resetResultSet('empty')
 }
 
 function openDataSourceTree() {
@@ -865,10 +921,29 @@ function closePreview() {
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
 
 /**
- * 由数据集「字段注册表」推导「最终结果集」字段（指标投影来源）。
- * 字段名恒为技术主键（不再被改名），展示名 / 单位来自注册表。
+ * 「最终结果集」字段（指标投影来源）。
+ *
+ * 结果集优先（契约见 docs/策略解读/卡片数据链路与结果集交互方案-讨论稿.md §3.1）：
+ * 有结果集 schema 时，指标只能来源于结果集真实存在的列，避免「结果长什么样还不知道就配指标」；
+ * 结果集尚未产出时回退到数据集字段注册表并集，作为首次配置的候选来源。
+ * 展示名 / 单位始终从字段注册表解析（注册表是全站唯一登记处）。
  */
 export function kpiResultFields(): DatasetFieldMeta[] {
+  const rs = state.resultSet
+  if ((rs.status === 'ready' || rs.status === 'stale') && rs.columns.length) {
+    const registry = datasetRegistryFields()
+    const byName = new Map(registry.map((f) => [f.name, f]))
+    return rs.columns.map((c) => {
+      const hit = byName.get(c.name)
+      // 命中注册表 → 保留展示名 / 单位；脚本新产出的列尚未登记 → 用字段名兜底
+      return hit ? { ...hit } : ({ name: c.name } as DatasetFieldMeta)
+    })
+  }
+  return datasetRegistryFields()
+}
+
+/** 数据集字段注册表并集（结果集尚未产出时的回退候选来源） */
+function datasetRegistryFields(): DatasetFieldMeta[] {
   const fields: DatasetFieldMeta[] = []
   state.datasets.forEach((ds) => {
     if (ds.fields?.length) {
@@ -970,6 +1045,8 @@ export const SOURCE_LABEL: Record<string, string> = {
  */
 export function datasetFromInput(input: DashboardDatasetInput, index = 0): DatasetConfig {
   const sourceType = mapSourceTypeIn(input.sourceType)
+  const rawType = String(input.sourceType ?? '').toUpperCase()
+  const cfg = input.sourceConfig ?? {}
   const ds: DatasetConfig = {
     id: input.datasetId ? String(input.datasetId) : `ds-${index}`,
     backendDatasetId: input.datasetId ? String(input.datasetId) : undefined,
@@ -978,9 +1055,37 @@ export function datasetFromInput(input: DashboardDatasetInput, index = 0): Datas
     alias: input.inputName || `table${index + 1}`,
     fields: fieldMetasFromMappings(input.fieldMappings),
     filters: (input.filters ?? []) as unknown as InputFilter[],
-    jdbc: input.sourceConfig?.sql
-      ? { db: String(input.sourceConfig.datasourceId ?? ''), sql: input.sourceConfig.sql }
+    jdbc: cfg.sql
+      ? { db: String(cfg.datasourceId ?? ''), sql: cfg.sql }
       : undefined,
+  }
+  // 按来源类型恢复各自配置：重开仪表盘要据 sourceConfig 原样重建查询，
+  // 缺指标/维度清单等关键项时会取不出数（返回「暂不支持取数」而不是静默给空）。
+  if (sourceType === 'aloudata') {
+    ds.aloudata = {
+      mode: rawType.includes('ANALYSIS_VIEW') ? 'metric-view' : 'metric-dim',
+      datasourceId: cfg.datasourceId != null ? String(cfg.datasourceId) : undefined,
+      metricView: cfg.analysisViewId != null ? String(cfg.analysisViewId) : undefined,
+      metrics: cfg.metrics,
+      dims: cfg.dimensions,
+    }
+  } else if (sourceType === 'api') {
+    ds.api = {
+      host: '',
+      path: String(cfg.apiDefinitionId ?? ''),
+      method: 'POST',
+      timeout: 5000,
+      headers: '',
+      params: '',
+    }
+  } else if (sourceType === 'file') {
+    ds.file = {
+      fileName: String(cfg.objectId ?? ''),
+      fileType: 'Excel',
+      objectId: cfg.objectId != null ? String(cfg.objectId) : undefined,
+      columns: [],
+      rows: [],
+    }
   }
   normalizeDatasetFields(ds)
   return ds
@@ -1041,6 +1146,9 @@ export function buildPipeline(): ComponentDatasetPipeline {
       analysisViewId: ds.aloudata?.metricView,
       apiDefinitionId: ds.api?.path,
       objectId: ds.file?.fileName,
+      // 指标 & 维度模式必须带上指标/维度清单：重开仪表盘要据此重建结果集（否则无从查询）
+      metrics: ds.aloudata?.metrics,
+      dimensions: ds.aloudata?.dims,
     },
     // 契约定版（§4.3）：source=字段名（后端下推唯一依据），target=展示名（仅导出表头等展示场景）
     fieldMappings: toFieldMappings(ds.fields ?? []),
@@ -1064,6 +1172,8 @@ export function buildPipeline(): ComponentDatasetPipeline {
     script: buildPipelineScript(),
     parameters: [],
     executionPolicy: {},
+    // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
+    resultSet: resultSetMeta(),
   }
 }
 
@@ -1244,7 +1354,7 @@ const previewState = reactive<{ loading: boolean; error: string; payload: Previe
 })
 
 /** 把本地数据集配置转换为后端 DatasetComposerDraftRequest（JDBC / Aloudata / File 支持预览） */
-function draftRequestForDataset(ds: DatasetConfig): datasetApi.DatasetComposerDraftRequest | null {
+export function draftRequestForDataset(ds: DatasetConfig): datasetApi.DatasetComposerDraftRequest | null {
   // 筛选条件存的已经是字段名（技术主键），可直接下推，无需反解展示名。
   const sourceFilters = (ds.filters ?? []) as unknown as DatasetFilter[]
   switch (ds.sourceType) {
@@ -1364,18 +1474,24 @@ async function loadDatasetPreview(datasetId: string): Promise<void> {
   }
 }
 
-/** 预处理结果预览：执行组件级 Python 预处理并轮询结果（对应原型「预处理结果预览」） */
+/**
+ * 结果集预览（弹窗的「数据预览 / 字段结构 / 执行信息 / 处理日志」四页签）。
+ *
+ * 与卡片共用同一个结果集：未就绪或已过期时先生成，再展示。
+ * 这样预览所见即卡片所见，不再出现「弹窗里有数据、卡片却是空的」这种错位。
+ */
 async function loadResultPreview(): Promise<void> {
   previewState.loading = true
   previewState.error = ''
   previewState.payload = null
   try {
-    const { ok, message } = await runComponentPreview()
-    if (!ok) throw new Error(message)
-    const executionId = state.backend.executionId
-    const res = await pollExecution(executionId)
-    const rows = normalizeResultRows(res)
-    const columns = rowsToColumns(rows)
+    // 已就绪且未过期时直接复用，避免重复执行有成本的脚本
+    if (state.resultSet.status !== 'ready') {
+      const { ok, message } = await generateResultSet()
+      if (!ok) throw new Error(message)
+    }
+    const rows = state.resultSet.rows
+    const columns = state.resultSet.columns
     previewState.payload = {
       dataColumns: columns,
       dataRows: rows,
@@ -1385,13 +1501,24 @@ async function loadResultPreview(): Promise<void> {
         queryConditions: '',
         pushedFilters: [],
         scanned: '-',
-        returned: `${rows.length}`,
-        pythonTime: '-',
-        inRows: rows.length,
-        outRows: rows.length,
-        error: '',
+        returned: `${state.resultSet.rowCount}`,
+        pythonTime: state.resultSet.source === 'script'
+          ? `${(state.resultSet.elapsedMs / 1000).toFixed(1)}s`
+          : '-',
+        inRows: state.resultSet.rowCount,
+        outRows: state.resultSet.rowCount,
+        error: state.resultSet.error,
       },
-      logs: [{ time: nowHms(), level: 'INFO', msg: `执行组件 Python 预处理（executionId=${executionId}）` }],
+      logs: [
+        {
+          time: nowHms(),
+          level: 'INFO',
+          msg: `结果集来源：${state.resultSet.source === 'script' ? 'Python 输出' : '数据集直通'}（${state.resultSet.rowCount} 行）`,
+        },
+        ...(state.resultSet.executionId
+          ? [{ time: nowHms(), level: 'INFO', msg: `executionId=${state.resultSet.executionId}` }]
+          : []),
+      ],
     }
   } catch (e) {
     previewState.error = (e as Error)?.message || '执行失败'
@@ -1415,6 +1542,183 @@ async function pollExecution(executionId: string, timeoutMs = 20000): Promise<un
     await sleep(1000)
   }
   throw new Error('执行超时，请稍后到执行记录查看结果')
+}
+
+/* ===================== 结果集：生成 / 过期 / 持久化 ===================== */
+
+/** 生成中的重入保护（自动刷新与手动点击可能并发） */
+let resultSetRunning = false
+let autoResultSetTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 清空结果集 */
+function resetResultSet(status: ResultSetStatus = 'empty'): void {
+  state.resultSet.status = status
+  state.resultSet.columns = []
+  state.resultSet.rows = []
+  state.resultSet.rowCount = 0
+  state.resultSet.generatedAt = ''
+  state.resultSet.elapsedMs = 0
+  state.resultSet.executionId = ''
+  state.resultSet.error = ''
+}
+
+/**
+ * 输入配置变更：已有结果集标记过期（保留旧行数据供卡片沿用），失败态回到空态。
+ * 本函数不取数——取数由 scheduleResultSet 或用户点按钮触发。
+ */
+export function markResultSetStale(): void {
+  const s = state.resultSet.status
+  if (s === 'ready') {
+    state.resultSet.status = 'stale'
+  } else if (s === 'failed') {
+    // 上次失败后又改了配置：没有可沿用的数据，回到空态
+    state.resultSet.status = 'empty'
+  }
+}
+
+/**
+ * 配置变更入口：标记过期，并在「无脚本」时防抖自动生成。
+ * 有脚本时不自动跑（Runner 执行有真实成本），等用户点「生成结果集」。
+ */
+export function scheduleResultSet(): void {
+  // 数据集被清空：没有输入就没有结果集，回到空态（而不是「已过期」）
+  if (!state.datasets.length) {
+    resetResultSet('empty')
+    return
+  }
+  markResultSetStale()
+  if (!resultSetAuto.value) return
+  if (autoResultSetTimer) clearTimeout(autoResultSetTimer)
+  autoResultSetTimer = setTimeout(() => {
+    autoResultSetTimer = null
+    void generateResultSet()
+  }, 800)
+}
+
+/** 产物提交：写入结果集并置为就绪（status 最后置位，保证观察者看到 ready 时其余字段已就绪） */
+function commitResultSet(payload: {
+  source: 'dataset' | 'script'
+  rows: Record<string, unknown>[]
+  executionId?: string
+  elapsedMs: number
+}): void {
+  state.resultSet.source = payload.source
+  state.resultSet.columns = rowsToColumns(payload.rows)
+  state.resultSet.rows = payload.rows
+  state.resultSet.rowCount = payload.rows.length
+  state.resultSet.generatedAt = new Date().toISOString()
+  state.resultSet.elapsedMs = payload.elapsedMs
+  state.resultSet.executionId = payload.executionId ?? ''
+  state.resultSet.error = ''
+  state.resultSet.status = 'ready'
+}
+
+/** 生成失败：记录失败态与原因（是否沿用旧渲染由画布侧决定） */
+function failResultSet(source: 'dataset' | 'script', message: string): void {
+  state.resultSet.source = source
+  state.resultSet.error = message
+  state.resultSet.columns = []
+  state.resultSet.rows = []
+  state.resultSet.rowCount = 0
+  state.resultSet.status = 'failed'
+}
+
+/**
+ * 生成结果集（统一入口）。
+ * 无脚本：结果集 = 单个数据集的查询结果（直通）；
+ * 有脚本：结果集 = 组件级 Python 预处理的输出。
+ */
+async function generateResultSet(): Promise<{ ok: boolean; message: string }> {
+  if (resultSetRunning) return { ok: false, message: '结果集正在生成中' }
+  if (!state.datasets.length) {
+    resetResultSet('empty')
+    return { ok: false, message: '尚未配置数据集' }
+  }
+  resultSetRunning = true
+  try {
+    return state.hasPython ? await generateResultSetByScript() : await generateResultSetByDataset()
+  } finally {
+    resultSetRunning = false
+  }
+}
+
+/** 无脚本：数据集直通（同步、毫秒级） */
+async function generateResultSetByDataset(): Promise<{ ok: boolean; message: string }> {
+  if (state.datasets.length > 1) {
+    const msg = '多数据集时必须配置 Python 脚本'
+    failResultSet('dataset', msg)
+    return { ok: false, message: msg }
+  }
+  const ds = state.datasets[0]
+  const started = Date.now()
+  state.resultSet.status = 'running'
+  state.resultSet.error = ''
+  try {
+    const req = draftRequestForDataset(ds)
+    if (!req) throw new Error('该类型数据集暂不支持取数（需登记数据源 / 接口定义）')
+    const batch = await backend.previewDatasetDraft(req)
+    const rows = (batch.rows as Record<string, unknown>[] | null) ?? []
+    commitResultSet({ source: 'dataset', rows, elapsedMs: Date.now() - started })
+    return { ok: true, message: `${rows.length} 行` }
+  } catch (e) {
+    const msg = (e as Error)?.message || '生成结果集失败'
+    failResultSet('dataset', msg)
+    return { ok: false, message: msg }
+  }
+}
+
+/** 有脚本：先保存 Schema 再提交执行，轮询取回输出 */
+async function generateResultSetByScript(): Promise<{ ok: boolean; message: string }> {
+  const started = Date.now()
+  state.resultSet.status = 'running'
+  state.resultSet.error = ''
+  try {
+    const { ok, message } = await runComponentPreview()
+    if (!ok) throw new Error(message)
+    const executionId = state.backend.executionId
+    const res = await pollExecution(executionId)
+    const rows = normalizeResultRows(res)
+    commitResultSet({ source: 'script', rows, executionId, elapsedMs: Date.now() - started })
+    return { ok: true, message: `${rows.length} 行` }
+  } catch (e) {
+    const msg = (e as Error)?.message || '生成结果集失败'
+    failResultSet('script', msg)
+    return { ok: false, message: msg }
+  }
+}
+
+/** 结果集元数据 → 持久化进组件 pipeline（不含行数据；行数据靠回读或重算） */
+export function resultSetMeta(): ComponentResultSet | undefined {
+  const s = state.resultSet
+  // running / empty 不落盘；stale 落的是「上一次成功」的元数据（保留 executionId 供重开回读）
+  if (s.status === 'empty' || s.status === 'running') return undefined
+  return {
+    source: s.source,
+    status: s.status === 'failed' ? 'failed' : 'ready',
+    columns: s.columns,
+    rowCount: s.rowCount,
+    generatedAt: s.generatedAt,
+    elapsedMs: s.elapsedMs || undefined,
+    executionId: s.executionId || undefined,
+    error: s.error || undefined,
+  }
+}
+
+/** 从持久化元数据回填结果集（切换组件 / 重开仪表盘）；行数据留空，由回读或重算补齐 */
+export function hydrateResultSet(meta?: ComponentResultSet): void {
+  if (!meta) {
+    resetResultSet('empty')
+    return
+  }
+  state.resultSet.status = meta.status === 'failed' ? 'failed' : 'ready'
+  state.resultSet.source = meta.source
+  state.resultSet.columns = meta.columns ?? []
+  state.resultSet.rows = []
+  state.resultSet.rowCount = meta.rowCount ?? 0
+  state.resultSet.generatedAt = meta.generatedAt ?? ''
+  state.resultSet.elapsedMs = meta.elapsedMs ?? 0
+  state.resultSet.executionId = meta.executionId ?? ''
+  state.resultSet.error = meta.error ?? ''
 }
 
 export function useInsight() {
@@ -1480,6 +1784,18 @@ export function useInsight() {
     openPreview,
     closePreview,
     previewFieldMetas,
+    // 结果集（卡片唯一数据来源）
+    resultSetReady,
+    resultSetStale,
+    resultSetAuto,
+    resultSetSourceLabel,
+    resultSetHasOutput,
+    generateResultSet,
+    markResultSetStale,
+    scheduleResultSet,
+    resetResultSet,
+    hydrateResultSet,
+    resultSetMeta,
     // KPI 指标分组（结果集优先投影）
     kpiResultFields,
     rebuildKpiMetrics,

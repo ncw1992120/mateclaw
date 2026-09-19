@@ -21,6 +21,7 @@ import type {
 import {
   buildPipeline,
   datasetFromInput,
+  hydrateResultSet,
   kpiResultFields,
   mapSourceTypeIn,
   materializedKpiMetrics,
@@ -116,6 +117,10 @@ export function hydratePanel(
   state.filterBindings = filterBindingsFromPipeline(pipeline?.scriptFilterBindings ?? [], state.datasets, filterComponents)
   // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
+
+  // 结果集：回填持久化元数据（行数据留空，由画布侧回读或重算补齐）。
+  // 必须在 kpiMetrics 投影之前 —— 指标候选字段以结果集 schema 为准。
+  hydrateResultSet(pipeline?.resultSet)
 
   // KPI 指标分组：由结果集字段增量投影（保留组件已有配置；结果集为空时原样保留，不清空用户配置）
   // 迁移：fieldKey 归一为字段名、旧展示名/单位写入注册表，随后由注册表统一具化

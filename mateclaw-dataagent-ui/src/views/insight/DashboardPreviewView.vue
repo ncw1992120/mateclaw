@@ -169,6 +169,7 @@ import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { rowsToComponentData } from '@/utils/dataset-result'
+import { restoreResultSetData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 
 defineOptions({
@@ -342,9 +343,23 @@ async function loadDashboard(): Promise<void> {
     }
     await reloadComponentData(filterContext.value)
     await reloadScriptBindings(filterContext.value)
+    // 管道组件的结果集恢复（有脚本回读执行结果、无脚本回源重算）
+    await reloadPipelineResults()
     // 加载已生成的报告
     await loadReport()
   }
+}
+
+/**
+ * 管道组件的结果集恢复。
+ * 必须排在 reloadComponentData 之后：后端预览只认旧版直连 dataSource 的组件，
+ * 而管道组件的唯一数据来源是结果集，这里按持久化元数据把它补齐。
+ */
+async function reloadPipelineResults(): Promise<void> {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  if (!page) return
+  const data = await restoreResultSetData(page.components)
+  componentDataMap.value = { ...componentDataMap.value, ...data }
 }
 
 /** 加载已生成的报告 */

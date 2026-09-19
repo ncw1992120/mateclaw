@@ -210,6 +210,7 @@
             :dashboard-id="dashboardId"
             :filter-components="filterComponents"
             @change="handleComponentChange"
+            @resultset="handleComponentResultSet"
           />
           <!-- 筛选/时间筛选/AI分析组件：沿用正式属性面板 -->
           <PropertyPanel
@@ -285,9 +286,11 @@ import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
+import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 
@@ -585,6 +588,8 @@ async function loadDashboard(id: string): Promise<void> {
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
+    // 结果集持久化（决策 B）：按各组件已保存的结果集恢复画布数据，不阻塞编辑器打开
+    void restorePipelineResults()
   }
 }
 
@@ -893,6 +898,49 @@ function schedulePreview(): void {
   }, 500)
 }
 
+/* ── 结果集：卡片唯一数据来源 ─────────────────────────────── */
+
+/**
+ * 结果集回写：把属性面板产出的结果集渲染到卡片上。
+ *
+ * 结果集是卡片唯一的数据来源（数据集 / 筛选 / 脚本只是产出它的手段），
+ * 所以这里不设任何「直连数据源」的旁路，保证「预览所见 = 卡片所见」。
+ */
+function handleComponentResultSet(payload: {
+  componentId: string
+  status: string
+  source: 'dataset' | 'script'
+  rows: Record<string, unknown>[]
+  error: string
+}): void {
+  const component = currentPageComponents.value.find((item) => item.id === payload.componentId)
+  if (!component) return
+  if (payload.status === 'ready') {
+    componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows)
+    return
+  }
+  if (payload.status === 'stale' || payload.status === 'running') {
+    // 沿用上一次渲染（不动 componentDataMap）：配置微调时不闪白；
+    // 「已过期」提示由属性面板的结果集节点呈现
+    return
+  }
+  if (payload.status === 'failed' && payload.error) {
+    ElMessage.warning(payload.error)
+  }
+}
+
+/**
+ * 打开仪表盘 / 切换页面时恢复结果集（决策 B：结果集持久化）。
+ * 回读策略见 composables/useResultSetRestore：有脚本按 executionId 回读、
+ * 无脚本回源重算；取不到就保持空态，不阻塞编辑器打开。
+ */
+async function restorePipelineResults(): Promise<void> {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  if (!page) return
+  const data = await restoreResultSetData(page.components)
+  Object.assign(componentDataMap.value, data)
+}
+
 /** 为当前页面所有已配置数据源的组件获取预览数据 */
 async function previewAllConfiguredComponents(): Promise<void> {
   const page = schema.pages.find((p) => p.id === activePageId.value)
@@ -900,7 +948,11 @@ async function previewAllConfiguredComponents(): Promise<void> {
     return
   }
   const tasks = page.components
-    .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
+    // 管道卡片由「结果集」链路取数（面板产出结果集 → 回写画布）；
+    // 这里只处理旧版直连 dataSource 的卡片，避免两条取数路径互相覆盖
+    .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter'
+      && c.dataSource?.datasourceId && c.dataSource?.metrics?.length
+      && !readComponentDatasetPipeline(c))
     .map(async (c) => {
       try {
         const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData

@@ -1,4 +1,4 @@
-import type { ComponentDatasetPipeline, InsightComponent } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, InsightComponent } from '@/types'
 
 const PIPELINE_KEY = 'datasetPipeline'
 
@@ -17,6 +17,28 @@ export function readComponentDatasetPipeline(component: InsightComponent | null 
     script: typeof value.script === 'string' ? value.script : undefined,
     parameters: Array.isArray(value.parameters) ? value.parameters as ComponentDatasetPipeline['parameters'] : [],
     executionPolicy: value.executionPolicy && typeof value.executionPolicy === 'object' ? value.executionPolicy as ComponentDatasetPipeline['executionPolicy'] : {},
+    resultSet: readResultSet(value.resultSet),
+  }
+}
+
+/**
+ * 读取持久化的结果集元数据；结构不合法（缺 columns / rowCount）时视为没有结果集，
+ * 避免历史 schema 的半成品字段被当成可用结果集渲染到卡片。
+ */
+function readResultSet(value: unknown): ComponentResultSet | undefined {
+  const raw = asRecord(value)
+  if (!Array.isArray(raw.columns)) return undefined
+  if (raw.source !== 'dataset' && raw.source !== 'script') return undefined
+  if (raw.status !== 'ready' && raw.status !== 'failed') return undefined
+  return {
+    source: raw.source,
+    status: raw.status,
+    columns: raw.columns as ComponentResultSet['columns'],
+    rowCount: typeof raw.rowCount === 'number' ? raw.rowCount : 0,
+    generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : '',
+    elapsedMs: typeof raw.elapsedMs === 'number' ? raw.elapsedMs : undefined,
+    executionId: typeof raw.executionId === 'string' ? raw.executionId : undefined,
+    error: typeof raw.error === 'string' ? raw.error : undefined,
   }
 }
 
@@ -32,6 +54,8 @@ export function writeComponentDatasetPipeline(component: InsightComponent, pipel
         script: pipeline.script,
         parameters: pipeline.parameters || [],
         executionPolicy: pipeline.executionPolicy || {},
+        // 结果集元数据持久化：重开仪表盘时据此回显或刷新（决策 B）
+        ...(pipeline.resultSet ? { resultSet: pipeline.resultSet } : {}),
       },
     },
   }

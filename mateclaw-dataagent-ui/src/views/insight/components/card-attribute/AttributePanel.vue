@@ -75,14 +75,19 @@
           </template>
           <el-button v-else size="small" @click="openFilterBinding">绑定筛选器</el-button>
         </div>
+        <!-- 绑定的去向随脚本存在与否变化：有脚本时作为脚本入参下推，无脚本时直通到数据集筛选条件 -->
+        <div class="fb-hint">
+          {{ state.hasPython
+            ? '筛选条件在 Python 执行时下推到数据集查询'
+            : '无 Python 脚本时，筛选条件直通到数据集的筛选条件中' }}
+        </div>
       </div>
 
-      <!-- 6. Python 预处理（位于数据集、筛选器绑定之后，指标配置之前：指标来自最终结果集，
-           而结果集可能由用户处理区产生，故面板顺序与数据流保持一致） -->
+      <!-- 6. Python 预处理（位于数据集、筛选器绑定之后、结果集之前：
+           有脚本时结果集由用户处理区产出，面板顺序与数据流保持一致） -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">Python 预处理</span>
-          <el-button size="small" text type="primary" @click="openPreview('result')">筛选预览</el-button>
         </div>
 
         <!-- 未配置：提供入口（1 个数据集时可选；2+ 时用户处理区必填） -->
@@ -110,7 +115,55 @@
         </div>
       </div>
 
-      <!-- 7. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
+      <!-- 7. 结果集：管道唯一出口，也是卡片唯一的数据来源 —— 就绪后卡片才会显示数据 -->
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">结果集</span>
+          <span class="rs-status" :class="resultSetStatusClass">
+            <span class="rs-dot"></span>{{ resultSetStatusText }}
+          </span>
+        </div>
+
+        <!-- 未配置数据集：结果集没有输入 -->
+        <div v-if="state.resultSet.status === 'empty'" class="empty">添加数据集后自动生成</div>
+
+        <template v-else>
+          <div class="rs-box" :class="resultSetStatusClass">
+            <div class="rs-line">
+              <span class="rs-source">{{ resultSetSourceLabel }}</span>
+              <span class="rs-meta">{{ state.resultSet.columns.length }} 字段 · {{ resultSetRowText }}</span>
+            </div>
+            <div v-if="resultSetTimeText" class="rs-time">{{ resultSetTimeText }}</div>
+          </div>
+
+          <el-alert
+            v-if="state.resultSet.status === 'failed' && state.resultSet.error"
+            class="rs-error"
+            type="error"
+            :closable="false"
+            :title="state.resultSet.error"
+          />
+
+          <div class="rs-actions">
+            <el-button size="small" :disabled="state.resultSet.status === 'running'" @click="openPreview('result')">
+              预览结果集
+            </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="state.resultSet.status === 'running'"
+              @click="generateResultSet()"
+            >
+              {{ resultSetActionText }}
+            </el-button>
+          </div>
+
+          <div v-if="resultSetStale" class="rs-hint">输入已变更，卡片仍在用上一次的数据</div>
+          <div v-else-if="!resultSetAuto" class="rs-hint">有 Python 脚本时需手动生成（执行有成本）</div>
+        </template>
+      </div>
+
+      <!-- 8. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
            排在 Python 预处理之后：指标由「最终结果集」字段投影而来，而结果集可能由
            Python 用户处理区产生，放最后才符合「先出结果集、再配置指标」的使用顺序。 -->
       <div v-if="isKpiCard" class="section">
@@ -118,8 +171,12 @@
           <span class="section-title">指标配置</span>
           <span v-if="kpiMetricCount" class="metric-count">{{ kpiMetricCount }} 个指标</span>
         </div>
-        <el-button size="small" type="primary" @click="openMetricConfig">配置指标</el-button>
-        <div class="metric-hint">指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。</div>
+        <el-button size="small" type="primary" :disabled="!resultSetHasOutput" @click="openMetricConfig">配置指标</el-button>
+        <div class="metric-hint">
+          {{ resultSetHasOutput
+            ? '指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。'
+            : '请先生成结果集：指标候选字段以结果集 schema 为准。' }}
+        </div>
       </div>
     </div>
   </div>
@@ -131,9 +188,36 @@ import { useInsight } from './useInsight'
 import DatasetCard from './DatasetCard.vue'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython, openMetricConfig } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
 
 const kpiMetricCount = computed(() => state.kpiMetrics.length)
+
+/* ── 结果集节点：管道唯一出口，也是卡片唯一的数据来源 ── */
+
+const RESULT_SET_STATUS_LABEL: Record<string, string> = {
+  empty: '未配置',
+  stale: '已过期',
+  running: '生成中',
+  ready: '就绪',
+  failed: '失败',
+}
+
+const resultSetStatusText = computed(() => RESULT_SET_STATUS_LABEL[state.resultSet.status] ?? state.resultSet.status)
+const resultSetStatusClass = computed(() => `rs-${state.resultSet.status}`)
+const resultSetRowText = computed(() =>
+  state.resultSet.status === 'running' ? '生成中…' : `${state.resultSet.rowCount} 行`,
+)
+/** 生成时间 + 耗时；过期态额外标注输入已变更，避免被误认为当前配置的结果 */
+const resultSetTimeText = computed(() => {
+  const rs = state.resultSet
+  if (rs.status === 'running') return '正在执行…'
+  if (!rs.generatedAt) return ''
+  const time = new Date(rs.generatedAt).toLocaleTimeString('zh-CN', { hour12: false })
+  const cost = rs.elapsedMs ? ` · 耗时 ${(rs.elapsedMs / 1000).toFixed(1)}s` : ''
+  const stale = rs.status === 'stale' ? '（输入已变更）' : ''
+  return `${time} 生成${cost}${stale}`
+})
+const resultSetActionText = computed(() => (state.resultSet.status === 'ready' ? '重新生成' : '生成结果集'))
 
 /** 告警被用户关闭后不再重复打扰（切换卡片时应重新提示） */
 const warningsDismissed = ref(false)
@@ -263,11 +347,85 @@ function typeLabel(t: string) {
   line-height: 1.6;
   margin-top: 8px;
 }
+
+/* ── 结果集节点（管道唯一出口，卡片唯一数据来源） ── */
+.rs-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+.rs-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.rs-status.rs-ready { color: var(--db-positive); }
+.rs-status.rs-stale { color: var(--db-warning); }
+.rs-status.rs-running { color: var(--db-accent); }
+.rs-status.rs-failed { color: var(--db-danger); }
+.rs-box {
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: var(--db-muted);
+}
+.rs-box.rs-failed {
+  border-color: var(--db-danger);
+}
+.rs-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--db-text);
+}
+.rs-source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rs-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+.rs-time {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+}
+.rs-error {
+  margin-top: 8px;
+}
+.rs-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rs-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--db-warning);
+  line-height: 1.6;
+}
 .fb-box {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   min-height: 32px;
+}
+.fb-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--db-text-muted);
+  line-height: 1.6;
 }
 .fb-tags {
   display: flex;

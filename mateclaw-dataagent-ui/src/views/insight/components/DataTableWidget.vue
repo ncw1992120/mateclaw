@@ -414,10 +414,12 @@ function escapeCsvField(field: string): string {
   padding: 8px 12px;
 }
 
+/* 只隐藏 Element Plus 用来画外框的装饰元素。
+   注意：不要在这里带上 `.el-table--border .el-table__cell` —— 那是所有 td/th，
+   一旦 display:none 整张表格会塌成 0 高度、只剩空壳（2026-09-18 修复）。 */
 .table-wrapper :deep(.el-table--border::after),
 .table-wrapper :deep(.el-table--border::before),
-.table-wrapper :deep(.el-table__border-left-patch),
-.table-wrapper :deep(.el-table--border .el-table__cell) {
+.table-wrapper :deep(.el-table__border-left-patch) {
   display: none;
 }
 

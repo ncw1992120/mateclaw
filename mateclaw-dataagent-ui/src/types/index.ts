@@ -1382,6 +1382,34 @@ export interface InsightCombinationConfig {
   }
 }
 
+/**
+ * 结果集：一次成功产出的、可直接驱动卡片渲染的数据集合。
+ * <p>
+ * 设计契约见 docs/策略解读/卡片数据链路与结果集交互方案-讨论稿.md：
+ * - 卡片只能从结果集取数；数据集 / 筛选条件 / Python 脚本都只是「怎么产出结果集」的手段；
+ * - 无脚本时结果集 = 单个数据集的查询结果（source=dataset）；
+ * - 有脚本时结果集 = 脚本输出（source=script，行数据由 executionId 向后端回读）；
+ * - 输入配置变更后旧结果集标记为过期（stale），卡片沿用旧渲染并提示刷新。
+ */
+export interface ComponentResultSet {
+  /** 结果集来源：数据集直通 / 脚本输出 */
+  source: 'dataset' | 'script'
+  /** 结果集状态（持久化只保留 ready / failed，stale 与 running 属运行期状态） */
+  status: 'ready' | 'failed'
+  /** 结果集字段结构（「指标配置」的候选字段唯一来源） */
+  columns: { name: string; type: string }[]
+  /** 结果集行数 */
+  rowCount: number
+  /** 生成时间（ISO 字符串） */
+  generatedAt: string
+  /** 生成耗时（毫秒） */
+  elapsedMs?: number
+  /** 脚本结果的执行 ID（source=script 时用于回读行数据） */
+  executionId?: string
+  /** 失败原因（status=failed 时） */
+  error?: string
+}
+
 /** 当前组件的数据集编排配置；输入归属于组件，不再使用仪表盘根级脚本输入。 */
 export interface ComponentDatasetPipeline {
   datasetInputs: DashboardDatasetInput[]
@@ -1389,6 +1417,8 @@ export interface ComponentDatasetPipeline {
   script?: string
   parameters?: DashboardScriptParameter[]
   executionPolicy?: DashboardExecutionPolicy
+  /** 最近一次产出的结果集（元数据持久化，行数据由后端 executionId 或前端重算获得） */
+  resultSet?: ComponentResultSet
 }
 
 /** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
@@ -1441,6 +1471,10 @@ export interface DashboardDatasetInput {
     analysisViewId?: string
     apiDefinitionId?: string
     objectId?: string
+    /** Aloudata「指标 & 维度」模式的指标列表（重开仪表盘时据此重建结果集） */
+    metrics?: string[]
+    /** Aloudata「指标 & 维度」模式的维度列表 */
+    dimensions?: string[]
   }
   /**
    * 字段映射（契约定版，见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：

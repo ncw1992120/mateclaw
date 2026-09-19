@@ -26,10 +26,18 @@
       />
     </div>
 
-    <!-- 操作行：字段名称 / 筛选预览 / 移除 -->
+    <!-- 操作行：字段名称 / 查看数据（单个输入的数据与筛选条件） / 移除。
+         注意与管道末端「预览结果集」（最终输出）区分命名，两者看的是不同层级的数据。 -->
     <div class="ds-actions">
       <el-button size="small" text bg @click="openFieldMapping(dataset.id)">字段名称</el-button>
-      <el-button size="small" text bg @click="openInputFilter(dataset.id)">筛选预览</el-button>
+      <el-button
+        size="small"
+        text bg
+        title="查看该输入数据集的数据并配置筛选条件"
+        @click="openInputFilter(dataset.id)"
+      >
+        查看数据
+      </el-button>
       <el-button size="small" text bg type="danger" @click="removeDataset(dataset.id)">移除</el-button>
     </div>
   </div>
