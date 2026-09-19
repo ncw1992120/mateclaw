@@ -474,16 +474,40 @@ public class LocalAloudataApiClient extends AloudataApiClient {
 
 ### 5.4 开关与启动
 
-**方式一（推荐）：用日常启动脚本，本地 mock 默认开** —— `docs/策略解读/restart-dataagent-backend.sh` 支持 `ALOUDATA_MOCK` 三态：
+**方式一（推荐）：一个脚本同时管后端与本地 mock 服务** —— `docs/策略解读/restart-dataagent-backend.sh`：
 
 ```bash
-./docs/策略解读/restart-dataagent-backend.sh                   # 默认 on：自动拉起本地 mock 服务(127.0.0.1:18081)，只换 ip:port
-ALOUDATA_MOCK=embed ./docs/策略解读/restart-dataagent-backend.sh  # 不起 HTTP 服务，走内置夹具（零依赖）
-ALOUDATA_MOCK=off ./docs/策略解读/restart-dataagent-backend.sh    # 切回真实 Aloudata 上游
-ALOUDATA_MOCK_PORT=18082 ./docs/策略解读/restart-dataagent-backend.sh  # 换 mock 服务端口
+./docs/策略解读/restart-dataagent-backend.sh               # 重启 mock 服务（默认）+ 后端
+./docs/策略解读/restart-dataagent-backend.sh mock          # ★ 只重启 mock 服务（不动后端，改完 mock 脚本/夹具后用它）
+./docs/策略解读/restart-dataagent-backend.sh stop-mock     # 只停止 mock 服务
+./docs/策略解读/restart-dataagent-backend.sh help          # 用法
+
+# 上游模式（ALOUDATA_MOCK）
+./docs/策略解读/restart-dataagent-backend.sh               # on（默认）：本地 mock 服务，只换 ip:port
+ALOUDATA_MOCK=embed ./docs/策略解读/restart-dataagent-backend.sh   # 内置夹具，不起 HTTP 服务（零依赖）
+ALOUDATA_MOCK=off   ./docs/策略解读/restart-dataagent-backend.sh   # 切回真实 Aloudata 上游
+
+# 其它开关
+ALOUDATA_MOCK_PORT=18082 ./docs/策略解读/restart-dataagent-backend.sh          # 换 mock 服务端口
+ALOUDATA_MOCK_RESTART=keep ./docs/策略解读/restart-dataagent-backend.sh        # 保留已在跑的 mock 进程，不重启它
+ALOUDATA_MOCK_FORCE_KILL=1 ./docs/策略解读/restart-dataagent-backend.sh mock   # 端口被非脚本进程占用时强制接管
 ```
 
-单独起 mock 服务（前端联调或只想验证上游契约时）：
+脚本对 mock 服务的生命周期管理：
+
+| 行为 | 说明 |
+|---|---|
+| 重启范围 | 默认每次运行都**先停旧 mock 服务再起新的**（`always`），确保运行的始终是当前版本的脚本与夹具 |
+| 进程识别 | 先比对 `/tmp/aloudata-mock-server-<port>.pid`，再比对命令行含 `aloudata-mock-server.py`；两者都不匹配（端口被别的服务占）→ **拒绝 kill** 并打印占用者，避免误杀 |
+| 启动校验 | 启动后轮询端口最多 10s；仍未监听则打印日志路径，并**降级为内置夹具**同时在横幅标注（不静默） |
+| 故障提示 | mock 服务中途退出时，接口返回 **503「上游服务不可达」**（含 URL 与恢复命令），不是 500 |
+| 日志/PID | `/tmp/aloudata-mock-server-<port>.log`、`/tmp/aloudata-mock-server-<port>.pid` |
+
+> ⚠️ **mock 服务是本地运行时依赖**：由 agent 会话/一次性终端启动的进程会随会话结束被回收，此后接口会 503。
+> 要长期常驻，在自己的终端里执行 `./docs/策略解读/restart-dataagent-backend.sh mock`（脚本用 `nohup` + `disown` 脱离终端）。
+> 不方便常驻时用 `ALOUDATA_MOCK=embed`（内置夹具，零外部依赖）。
+
+单独起 mock 服务（不想由脚本托管，或只想验证上游契约）：
 
 ```bash
 python3 dev-support/local-simulation/scripts/aloudata-mock-server.py --port 18081

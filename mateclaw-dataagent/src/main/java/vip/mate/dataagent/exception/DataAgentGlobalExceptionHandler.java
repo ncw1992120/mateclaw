@@ -5,9 +5,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.dataset.DatasetReadException;
 import vip.mate.exception.MateClawException;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * DataAgent 全局异常处理器
@@ -84,6 +89,43 @@ public class DataAgentGlobalExceptionHandler {
         String message = (e.getMessage() != null && !e.getMessage().isBlank()) ? e.getMessage() : "数据集读取失败";
         log.warn("数据集读取异常: code={}, msg={}", e.code(), message);
         return ResponseEntity.status(httpStatus).body(R.fail(httpStatus.value(), message));
+    }
+
+    /**
+     * 处理上游调用失败：连接层不可达（含本地 mock 服务没起）返回 503 而非 500
+     * <p>
+     * 典型场景：local-mock 模式把请求发给本地 mock 服务，若该服务未启动，RestTemplate 会抛
+     * {@link ResourceAccessException}（{@code Connection refused}），此前会被兜底成
+     * 500「服务器内部错误」，看不出是上游不可达还是代码 bug。
+     */
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<R<Void>> handleResourceAccessException(ResourceAccessException e) {
+        String target = extractUpstreamTarget(e.getMessage());
+        String message = "上游服务不可达" + (target == null ? "" : "：" + target)
+                + "。请确认上游地址可访问；本地 mock 模式请确认 mock 服务已启动"
+                + "（python3 dev-support/local-simulation/scripts/aloudata-mock-server.py --port 18081，"
+                + "或重跑 docs/策略解读/restart-dataagent-backend.sh 自动拉起）";
+        log.warn("上游不可达: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(R.fail(503, message));
+    }
+
+    /**
+     * 其他 RestClient 异常（上游返回非 2xx、响应不可解析等）按网关错误返回，避免与本地故障混淆。
+     */
+    @ExceptionHandler(RestClientException.class)
+    public ResponseEntity<R<Void>> handleRestClientException(RestClientException e) {
+        String target = extractUpstreamTarget(e.getMessage());
+        String message = "上游调用失败" + (target == null ? "" : "：" + target) + "。"
+                + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+        log.warn("上游调用失败: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(R.fail(502, message));
+    }
+
+    /** 从 RestTemplate 异常消息中提取目标 URL（形如 {@code for "http://host:port/path"}）。 */
+    private String extractUpstreamTarget(String message) {
+        if (message == null) return null;
+        Matcher matcher = Pattern.compile("\"([^\"]+)\"").matcher(message);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /**
