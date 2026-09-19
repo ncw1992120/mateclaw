@@ -225,6 +225,12 @@ public final class DataAgentConstants {
     /** Aloudata 同步：批量 Upsert 大小 */
     public static final int ALOUDATA_SYNC_BATCH_UPSERT_SIZE = 500;
 
+    /** UID 映射来源：定时同步（JDBC 拉取外部用户系统） */
+    public static final String UID_SYNC_SOURCE_JDBC = "jdbc_sync";
+
+    /** UID 映射来源：手动录入 */
+    public static final String UID_SYNC_SOURCE_MANUAL = "manual";
+
     /** Aloudata 语义检索默认 Top-K */
     public static final int ALOUDATA_SEARCH_DEFAULT_TOP_K = 10;
 

@@ -253,3 +253,35 @@ export interface DatasourceAccountVO {
   createTime?: string
   updateTime?: string
 }
+
+// ==================== 用户 Aloudata UID 自动映射 ====================
+
+const UID_MAPPING_BASE_URL = '/dataagent/api/v1/user-uid-mappings'
+
+/** 查询当前用户全部启用的 UID 自动映射概要（租户 + 最近同步时间） */
+export function listMyUidMappings() {
+  return api.get<UserUidMappingStatusVO[]>(`${UID_MAPPING_BASE_URL}/status`)
+}
+
+/** 用户 UID 自动映射状态视图对象 */
+export interface UserUidMappingStatusVO {
+  tenantId: string
+  syncTime?: string
+}
+
+/** 管理员手动触发一次全量同步（与定时任务共用分布式锁），返回同步统计结果 */
+export function syncUidMappings() {
+  return api.post<UserUidSyncResultVO>(`${UID_MAPPING_BASE_URL}/sync`)
+}
+
+/** UID 映射同步统计结果视图对象 */
+export interface UserUidSyncResultVO {
+  /** 从源库拉取的有效映射条数（去除空值与重复后） */
+  fetched: number
+  /** 本次 upsert 写入条数 */
+  upserted: number
+  /** 源库中已不存在而被置为停用的条数 */
+  disabled: number
+  /** 跳过的无效行数（关键字段为空或超长） */
+  skipped: number
+}

@@ -33,6 +33,22 @@
           <p class="ds-content-desc">{{ t('configCenter.dataDesc') }}</p>
         </div>
         <div class="header-actions">
+          <button
+            v-if="userStore.isAdmin"
+            type="button"
+            class="toolbar-btn"
+            :disabled="uidSyncing"
+            :title="t('datasourcePage.uidSyncBtnTitle')"
+            @click="handleSyncUidMapping"
+          >
+            <span v-if="uidSyncing" class="btn-spinner" />
+            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            <span class="btn-text">{{ uidSyncing ? t('datasourcePage.uidSyncing') : t('datasourcePage.uidSyncBtn') }}</span>
+          </button>
           <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" type="button" class="btn-create-pill" @click="handleCreateDatasource">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -229,6 +245,10 @@
     >
       <div v-if="selectedDs" class="account-dialog-body">
         <p class="account-hint">{{ t('datasourcePage.queryAccountHint') }}</p>
+        <!-- UID 自动映射命中提示：手动绑定优先，未绑定时才使用同步的 UID -->
+        <div v-if="selectedAutoMapping" class="account-automap-hint">
+          {{ t('datasourcePage.uidAutoMappedHint', { time: selectedAutoMapping.syncTime || '-' }) }}
+        </div>
         <el-form label-width="100px" label-position="right">
           <el-form-item v-if="!isAloudataDatasource" :label="t('datasourcePage.queryUsername')">
             <el-input v-model="accountForm.queryUsername" :placeholder="t('datasourcePage.queryUsernamePlaceholder')" />
@@ -266,7 +286,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import { useUserStore } from '@/stores/useUserStore'
 import * as datasourceApi from '@/api/datasource'
-import type { DatasourceAccountVO } from '@/api/datasource'
+import type { DatasourceAccountVO, UserUidMappingStatusVO } from '@/api/datasource'
 import { useDebouncedFn } from '@/composables/useDebouncedFn'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import type { Datasource } from '@/types'
@@ -297,8 +317,11 @@ const syncing = ref(false)
 /** 当前用户在各数据源上的查询账号绑定状态映射（key=datasourceId, value=账号 VO） */
 const accountStatusMap = ref<Map<string, DatasourceAccountVO>>(new Map())
 
-/** 当前用户是否可同步元数据（复用权限体系） */
-const canSyncMetadata = computed<boolean>(() => hasPermission(PERMISSION.DATASOURCE_SYNC))
+/** 当前用户已启用的 UID 自动映射映射表（key=租户 ID, value=映射状态 VO） */
+const uidMappingMap = ref<Map<string, UserUidMappingStatusVO>>(new Map())
+
+/** 是否可同步元数据（后端 /aloudata/sync 实际挂 @RequireGlobalAdmin，工作区 admin/owner 点了会被拒，按钮可见性与之对齐） */
+const canSyncMetadata = computed<boolean>(() => userStore.isAdmin)
 
 /** 仅展示指标平台数据源 */
 const metricPlatformList = computed<Datasource[]>(() => {
@@ -330,10 +353,53 @@ const statusCounts = computed(() => ({
 }))
 
 onMounted(async () => {
-  // 并行加载数据源列表与当前用户的查询账号绑定状态
-  await Promise.allSettled([store.fetchDatasources(), loadAccountStatus()])
+  // 并行加载数据源列表、查询账号绑定状态与 UID 自动映射状态
+  await Promise.allSettled([store.fetchDatasources(), loadAccountStatus(), loadUidMappingStatus()])
   statsReady.value = true
 })
+
+/** 加载当前用户所有已启用的 UID 自动映射，构建 租户 ID → 映射状态 映射 */
+async function loadUidMappingStatus(): Promise<void> {
+  try {
+    const mappings = await datasourceApi.listMyUidMappings()
+    const map = new Map<string, UserUidMappingStatusVO>()
+    if (Array.isArray(mappings)) {
+      for (const mapping of mappings) {
+        map.set(mapping.tenantId, mapping)
+      }
+    }
+    uidMappingMap.value = map
+  } catch {
+    // 加载失败不阻塞主流程，徽标按手动绑定状态显示
+  }
+}
+
+/** UID 映射手动同步进行中（页头同步按钮专用，与元数据 syncing 互不影响） */
+const uidSyncing = ref(false)
+
+/**
+ * 管理员手动触发一次 UID 映射全量同步。
+ * <p>与定时任务共用分布式锁：并发触发由后端 409 拒绝，错误文案（未配置源 /
+ * 正在执行中 / 拉取失败）由响应拦截器统一提示，此处仅重置按钮状态。
+ */
+async function handleSyncUidMapping(): Promise<void> {
+  if (uidSyncing.value) return
+  uidSyncing.value = true
+  try {
+    const result = await datasourceApi.syncUidMappings()
+    ElMessage.success(t('datasourcePage.uidSyncDone', {
+      fetched: result.fetched,
+      upserted: result.upserted,
+      disabled: result.disabled,
+      skipped: result.skipped,
+    }))
+    await loadUidMappingStatus()
+  } catch {
+    // 拦截器已提示错误，这里吞掉以保证按钮状态正常复位
+  } finally {
+    uidSyncing.value = false
+  }
+}
 
 /** 加载当前用户所有已绑定的查询账号，构建 datasourceId → account VO 映射 */
 async function loadAccountStatus(): Promise<void> {
@@ -377,16 +443,30 @@ function removeAccountStatus(datasourceId: string | number): void {
   accountStatusMap.value = map
 }
 
-/** 解析数据源对应的账号绑定状态文案与样式类 */
+/** 判断数据源是否为 Aloudata 类型（租户 ID 存于 username，仅该类型参与 UID 自动映射） */
+function isAloudataDs(ds: Datasource | undefined | null): boolean {
+  return ds?.sourceType?.toLowerCase() === 'aloudata'
+}
+
+/**
+ * 解析数据源对应的账号绑定状态文案与样式类
+ * <p>与后端认证值解析链保持一致：手动绑定优先，UID 自动映射兜底。
+ */
 function resolveAccountBadge(dsId: string): { text: string; dotClass: string; testOk: boolean | null } {
+  const ds = datasources.value.find((d) => d.id === dsId)
   const acc = accountStatusMap.value.get(dsId)
-  if (!acc) {
-    return { text: '未绑定', dotClass: 'dot-unbound', testOk: null }
-  }
-  if (acc.status === 1) {
+  // 手动绑定优先：启用中的绑定就是问数实际使用的账号
+  if (acc && acc.status === 1) {
     return { text: '已绑定', dotClass: 'dot-bound', testOk: acc.lastTestOk ?? null }
   }
-  return { text: '已停用', dotClass: 'dot-disabled', testOk: acc.lastTestOk ?? null }
+  // 自动映射兜底：仅 Aloudata 数据源参与，且租户命中当前用户的映射
+  if (isAloudataDs(ds) && ds?.username && uidMappingMap.value.has(ds.username)) {
+    return { text: '已自动同步', dotClass: 'dot-bound', testOk: null }
+  }
+  if (acc) {
+    return { text: '已停用', dotClass: 'dot-disabled', testOk: acc.lastTestOk ?? null }
+  }
+  return { text: '未绑定', dotClass: 'dot-unbound', testOk: null }
 }
 
 /** 跳转到新建数据源 */
@@ -592,6 +672,14 @@ const isAloudataDatasource = computed<boolean>(() => {
   return selectedDs.value?.sourceType?.toLowerCase() === 'aloudata'
 })
 
+/** 当前选中数据源命中的 UID 自动映射（已自动同步提示展示用） */
+const selectedAutoMapping = computed<UserUidMappingStatusVO | null>(() => {
+  if (!selectedDs.value || !isAloudataDatasource.value || !selectedDs.value.username) {
+    return null
+  }
+  return uidMappingMap.value.get(selectedDs.value.username) || null
+})
+
 /** 保存按钮是否可用：Aloudata 类型仅需认证值，JDBC 类型需要用户名和密码 */
 const canSaveAccount = computed<boolean>(() => {
   if (isAloudataDatasource.value) {
@@ -608,6 +696,8 @@ async function handleOpenAccountDialog(): Promise<void> {
   accountForm.value = { queryUsername: '', queryPassword: '' }
   accountHasExisting.value = false
 
+  // 并行刷新自动映射状态：页面常驻期间管理员可能刚触发过同步
+  void loadUidMappingStatus()
   try {
     const account = await datasourceApi.getDatasourceAccount(selectedDs.value.id)
     if (account) {
@@ -1218,6 +1308,16 @@ async function handleTestAccountConnection(): Promise<void> {
   font-size: 13px;
   color: var(--db-text-muted);
   line-height: 1.6;
+}
+
+.account-automap-hint {
+  margin: -8px 0 16px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9, rgba(103, 194, 58, 0.1));
 }
 
 .account-test-result {

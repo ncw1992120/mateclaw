@@ -500,14 +500,15 @@ public class AloudataCallTool {
             AloudataConfigDTO config = configHelper.parseConfig(entity);
 
             // 用户查询时必须使用自己的 Aloudata 认证值（auth-value），不允许使用数据源管理员的认证值
-            // tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值
+            // tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户自己的认证值
+            // （解析链：手动绑定优先，UID 自动映射兜底，见 resolveAloudataAuthValue）
             Long currentUserId = UserContextHolder.getUserId();
             if (currentUserId == null) {
                 return error("当前用户未登录，无法执行 Aloudata 查询");
             }
             String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
             if (userAuthValue == null) {
-                return error("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号后再执行查询");
+                return error("当前用户未配置 Aloudata 认证值（未手动绑定且 UID 自动映射未命中），请在数据源页面绑定查询账号，或联系管理员同步 UID 映射后再执行查询");
             }
             config.setAuthValue(userAuthValue);
             log.info("用户 {} 使用自定义 Aloudata 认证值访问数据源 {}", currentUserId, datasourceId);

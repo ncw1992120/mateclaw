@@ -468,6 +468,12 @@ export default {
     accountSaveBtn: 'Save',
     accountTestOk: 'Connection successful',
     accountTestFail: 'Connection failed',
+    /** UID auto mapping */
+    uidAutoMappedHint: 'Your UID has been auto-synced (synced at: {time}). A manual binding takes precedence; queries use this mapping only when no manual binding is configured.',
+    uidSyncBtn: 'Sync UID Mappings',
+    uidSyncing: 'Syncing…',
+    uidSyncBtnTitle: 'Fetch the latest username → Aloudata UID mappings from the external user system (also synced automatically at 2:00 AM daily)',
+    uidSyncDone: 'Sync finished: fetched {fetched}, upserted {upserted}, disabled {disabled}, skipped {skipped}',
   },
   browseDrawer: {
     subtitle: 'Browse metrics and dimensions of this datasource',
