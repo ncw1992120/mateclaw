@@ -145,7 +145,6 @@ export function hydratePanel(
   state.ui.api.visible = false
   state.ui.file.visible = false
   state.ui.fieldMapping.visible = false
-  state.ui.inputFilter.visible = false
   state.ui.filterBinding.visible = false
   state.ui.python.visible = false
   state.ui.preview.visible = false

@@ -34,6 +34,7 @@
 
     <template #footer>
       <el-button @click="ui.file.visible = false">取消</el-button>
+      <el-button :disabled="!ui.file.objectId" @click="onPreview">查看数据</el-button>
       <el-button type="primary" :disabled="!ui.file.objectId" @click="confirmFile">确定</el-button>
     </template>
   </el-dialog>
@@ -45,9 +46,18 @@ import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as datasetApi from '@/api/dataset'
 
-const { state, confirmFile } = useInsight()
+const { state, confirmFile, openWorkbench, getDataset } = useInsight()
 const ui = state.ui
 const fileInput = ref<HTMLInputElement>()
+
+// 查看数据：先提交文件配置（写入数据集并关闭弹窗），再打开全屏工作台。
+// 文件的筛选项是解析选项（工作表 / 编码 / 分隔符 / 表头行），由工作台从类型自动给出
+function onPreview() {
+  const editingId = state.ui.editingDatasetId
+  confirmFile()
+  const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
+  if (id) openWorkbench(id)
+}
 const pageSize = 3
 const page = ref(1)
 const uploading = ref(false)

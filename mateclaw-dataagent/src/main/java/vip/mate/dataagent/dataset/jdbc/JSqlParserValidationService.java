@@ -21,10 +21,19 @@ public class JSqlParserValidationService implements SqlValidationService {
     @Override
     public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
                                      int limit, int offset) {
-        String normalized = normalize(baseSql);
+        return compile(baseSql, columns, filters, limit, offset, Map.of());
+    }
+
+    @Override
+    public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
+                                     int limit, int offset, Map<String, Object> namedParameters) {
+        // 命名参数必须在**解析之前**换成 ? —— JSqlParser 认不出 `:name`，带占位符的 SQL 直接解析不过去。
+        // 值按出现顺序收集，与随后追加的 filters / limit / offset 拼成一个有序参数列表。
+        List<Object> parameters = new ArrayList<>();
+        String bound = bindNamedParameters(normalize(baseSql), namedParameters, parameters);
         Statement statement;
         try {
-            Statements statements = CCJSqlParserUtil.parseStatements(normalized);
+            Statements statements = CCJSqlParserUtil.parseStatements(bound);
             if (statements == null || statements.getStatements().size() != 1) {
                 throw new IllegalArgumentException("multiple SQL statements are not allowed");
             }
@@ -54,7 +63,6 @@ public class JSqlParserValidationService implements SqlValidationService {
             projection.append(String.join(", ", columns));
         }
 
-        List<Object> parameters = new ArrayList<>();
         StringBuilder predicate = new StringBuilder();
         for (DatasetFilter filter : filters == null ? List.<DatasetFilter>of() : filters) {
             if (!allowedColumns.isEmpty() && !allowedColumns.contains(filter.field().toLowerCase(Locale.ROOT))) {
@@ -71,6 +79,10 @@ public class JSqlParserValidationService implements SqlValidationService {
                     appendPlaceholders(predicate, filter.value(), parameters, true);
                 } else if (operator.equals("between")) {
                     appendPlaceholders(predicate, filter.value(), parameters, false);
+                } else if (operator.equals("contains")) {
+                    // 包含子串：值两侧自动补通配符 —— 用户填纯文本即可，不必自己写 %（也不会被当通配符注入）
+                    predicate.append(" ?");
+                    parameters.add("%" + filter.value() + "%");
                 } else {
                     predicate.append(" ?");
                     parameters.add(filter.value());
@@ -91,6 +103,54 @@ public class JSqlParserValidationService implements SqlValidationService {
     private String normalize(String sql) {
         if (sql == null || sql.isBlank()) throw new IllegalArgumentException("base SQL must not be blank");
         return sql.trim();
+    }
+
+    /**
+     * 把 SQL 里的 {@code :name} 绑成 {@code ?}，并按出现顺序把值收进 {@code out}。
+     * <p>
+     * 用引号感知的扫描而不是纯正则：字符串字面量里的冒号（如 {@code ':notice'}）不是参数，
+     * 纯正则替换会把 SQL 改坏。同时天然跳过 {@code ::} 类型转换（前一个字符是冒号）
+     * 与 {@code :30}（冒号后不是标识符起始字符）。
+     * <p>
+     * 占位符没有对应值时直接报错，而不是塞 null —— 静默传 null 会让查询返回空结果，
+     * 用户很难判断是"没数据"还是"参数没传进来"。
+     */
+    private String bindNamedParameters(String sql, Map<String, Object> namedParameters, List<Object> out) {
+        Map<String, Object> values = namedParameters == null ? Map.of() : namedParameters;
+        StringBuilder result = new StringBuilder(sql.length());
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        for (int i = 0; i < sql.length(); i++) {
+            char current = sql.charAt(i);
+            if (current == '\'' && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+                result.append(current);
+                continue;
+            }
+            if (current == '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+                result.append(current);
+                continue;
+            }
+            boolean isPlaceholder = current == ':' && !inSingleQuote && !inDoubleQuote
+                    && i + 1 < sql.length()
+                    && (i == 0 || sql.charAt(i - 1) != ':')
+                    && Character.isJavaIdentifierStart(sql.charAt(i + 1));
+            if (!isPlaceholder) {
+                result.append(current);
+                continue;
+            }
+            int end = i + 1;
+            while (end < sql.length() && Character.isJavaIdentifierPart(sql.charAt(end))) end++;
+            String name = sql.substring(i + 1, end);
+            if (!values.containsKey(name)) {
+                throw new IllegalArgumentException("missing SQL parameter: " + name);
+            }
+            result.append('?');
+            out.add(values.get(name));
+            i = end - 1;
+        }
+        return result.toString();
     }
 
     private boolean needsValue(String operator) {
@@ -119,6 +179,7 @@ public class JSqlParserValidationService implements SqlValidationService {
             case "in" -> "IN";
             case "not_in" -> "NOT IN";
             case "between" -> "BETWEEN";
+            case "contains" -> "LIKE";
             case "is_null" -> "IS NULL";
             case "is_not_null" -> "IS NOT NULL";
             default -> throw new IllegalArgumentException("unsupported filter operator: " + operator);

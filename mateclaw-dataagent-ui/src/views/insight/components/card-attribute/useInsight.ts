@@ -43,7 +43,7 @@ export type CardType = 'kpi' | 'table' | 'chart'
 export interface InputFilter {
   /** 字段名（技术主键、下推唯一依据；**不存展示名**） */
   field: string
-  op: string // 操作符：=、!=、contains、in、between、is null、is not null、最近 N 天
+  op: string // 操作符：=、!=、contains、in、between、is null、is not null
   value: string // 条件值
 }
 
@@ -122,7 +122,6 @@ interface UiState {
     rows: Record<string, string>[]
   }
   fieldMapping: { visible: boolean; datasetId: string }
-  inputFilter: { visible: boolean; datasetId: string; previewKind?: 'dataset' | 'result' }
   filterBinding: { visible: boolean }
   python: { visible: boolean }
   preview: {
@@ -136,6 +135,8 @@ interface UiState {
   // KPI 指标分组弹窗
   metricConfig: { visible: boolean }
   metricStyle: { visible: boolean; fieldKey: string; field: string }
+  /** 全屏「查看数据」工作台（Hue 式：上定义 / 中参数 / 下结果） */
+  workbench: { visible: boolean; datasetId: string }
 }
 
 /* ============================ 结果集（卡片唯一数据来源） ============================ */
@@ -278,7 +279,6 @@ const state = reactive({
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
     file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', fileRef: undefined, columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
-    inputFilter: { visible: false, datasetId: '', previewKind: 'dataset' },
     filterBinding: { visible: false },
     python: { visible: false },
     preview: {
@@ -290,6 +290,7 @@ const state = reactive({
     },
     metricConfig: { visible: false },
     metricStyle: { visible: false, fieldKey: '', field: 'value' },
+    workbench: { visible: false, datasetId: '' },
   } as UiState,
 })
 
@@ -867,16 +868,6 @@ function saveFieldMetas(list: DatasetFieldMeta[]): string | null {
   return null
 }
 
-/* ---- 输入筛选 ---- */
-function openInputFilter(id?: string, opts?: { previewKind?: 'dataset' | 'result' }) {
-  state.ui.inputFilter = { visible: true, datasetId: id ?? '', previewKind: opts?.previewKind ?? 'dataset' }
-}
-function saveInputFilter(list: InputFilter[]) {
-  const ds = getDataset(state.ui.inputFilter.datasetId)
-  if (ds) ds.filters = list
-  state.ui.inputFilter.visible = false
-}
-
 /* ---- 筛选器绑定（支持多个） ---- */
 function openFilterBinding() {
   // 首开不预置假数据；筛选器绑定弹窗按需创建空草稿（作用范围默认全选当前数据集）
@@ -916,6 +907,14 @@ function openPreview(kind: 'dataset' | 'result' | 'component', datasetId: string
 }
 function closePreview() {
   state.ui.preview.visible = false
+}
+
+/** 打开全屏「查看数据」工作台（定义 / 参数 / 结果三段，参数从定义自动提取） */
+function openWorkbench(datasetId: string): void {
+  state.ui.workbench = { visible: true, datasetId }
+}
+function closeWorkbench(): void {
+  state.ui.workbench.visible = false
 }
 
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
@@ -1765,9 +1764,6 @@ export function useInsight() {
     // dataset schema（「字段名称」自动填充 + diff）
     canFetchDatasetSchema,
     refreshDatasetSchema,
-    // input filter
-    openInputFilter,
-    saveInputFilter,
     // filter binding
     openFilterBinding,
     saveFilterBindings,
@@ -1784,6 +1780,9 @@ export function useInsight() {
     openPreview,
     closePreview,
     previewFieldMetas,
+    // 全屏「查看数据」工作台
+    openWorkbench,
+    closeWorkbench,
     // 结果集（卡片唯一数据来源）
     resultSetReady,
     resultSetStale,

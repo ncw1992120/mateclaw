@@ -26,15 +26,15 @@
       />
     </div>
 
-    <!-- 操作行：字段名称 / 查看数据（单个输入的数据与筛选条件） / 移除。
-         注意与管道末端「预览结果集」（最终输出）区分命名，两者看的是不同层级的数据。 -->
+    <!-- 操作行：字段名称 / 查看数据 / 移除。
+         「查看数据」打开全屏工作台（定义 / 参数 / 结果），不再走「先填筛选再看数据」的弹窗套弹窗。 -->
     <div class="ds-actions">
       <el-button size="small" text bg @click="openFieldMapping(dataset.id)">字段名称</el-button>
       <el-button
         size="small"
         text bg
-        title="查看该输入数据集的数据并配置筛选条件"
-        @click="openInputFilter(dataset.id)"
+        title="打开「查看数据」工作台：定义 / 参数 / 结果"
+        @click="openWorkbench(dataset.id)"
       >
         查看数据
       </el-button>
@@ -50,7 +50,7 @@ import { useInsight } from './useInsight'
 import type { DatasetConfig } from './useInsight'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
-const { openFieldMapping, openInputFilter, removeDataset, reconfigureDataset, renameDataset } = useInsight()
+const { openFieldMapping, openWorkbench, removeDataset, reconfigureDataset, renameDataset } = useInsight()
 
 /* ---- 别名内联编辑 ---- */
 const editingAlias = ref(false)

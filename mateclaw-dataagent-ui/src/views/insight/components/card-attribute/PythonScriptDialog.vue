@@ -17,7 +17,7 @@
 
     <template #footer>
       <el-button @click="ui.python.visible = false">取消</el-button>
-      <el-button @click="onPreview">筛选预览</el-button>
+      <el-button @click="onPreview">查看数据</el-button>
       <el-button @click="onExec" :loading="executing">执行记录</el-button>
       <el-button type="primary" @click="save">确定</el-button>
     </template>
@@ -29,7 +29,7 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight, buildPythonSystemRegion } from './useInsight'
 
-const { state, savePython, openInputFilter, runComponentPreview } = useInsight()
+const { state, savePython, openPreview, runComponentPreview } = useInsight()
 const ui = state.ui
 const userCode = ref('')
 const executing = ref(false)
@@ -50,11 +50,12 @@ function save() {
   // 保存时以最新系统区域 + 用户代码组合为完整脚本
   savePython(buildPythonSystemRegion(), userCode.value)
 }
-// 筛选预览：先持久化 Python 脚本（关闭 Python 弹窗），再弹出「输入筛选」弹窗，
-// 保存后自动打开「预处理结果预览」
+// 查看数据：先持久化 Python 脚本（关闭弹窗），再打开结果集预览。
+// 脚本是**管道级**的（作用于多个数据集求最终输出），所以这里看的是结果集、不是某个输入数据集，
+// 与数据集卡片上的「查看数据」（打开数据集工作台）层级不同
 function onPreview() {
   save()
-  openInputFilter(undefined, { previewKind: 'result' })
+  openPreview('result')
 }
 async function onExec() {
   executing.value = true

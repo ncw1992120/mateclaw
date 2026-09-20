@@ -209,7 +209,9 @@ public class DatasetComposerController {
             throw new IllegalArgumentException("无权访问该 JDBC 数据源");
         }
         var compiled = sqlValidation.compile(String.valueOf(config.getOrDefault("sql", "")), List.of(),
-                toFilters(request.filters), Math.min(request.limit == null ? 20 : request.limit, 100), 0);
+                toFilters(request.filters), Math.min(request.limit == null ? 20 : request.limit, 100),
+                Math.max(request.offset == null ? 0 : request.offset, 0),
+                request.parameters);
         try (Connection connection = DriverManager.getConnection(JdbcUtils.buildJdbcUrl(datasource), datasource.getUsername(), AesPasswordCryptor.decrypt(datasource.getPassword()));
              PreparedStatement statement = connection.prepareStatement(compiled.sql())) {
             statement.setQueryTimeout(30);
@@ -291,6 +293,14 @@ public class DatasetComposerController {
         private Map<String, Object> sourceConfig;
         private List<Map<String, Object>> filters;
         private Integer limit;
+        /** 分页偏移（配合 limit 做服务端滚动加载；单次上限仍受编译器的 MAX_LIMIT 约束） */
+        private Integer offset;
+        /**
+         * SQL 命名参数值（对应 baseSql 里的 {@code :name} 占位符）。
+         * <p>
+         * 与 filters 是两回事：filters 按列名追加外层谓词，parameters 是绑进 SQL 内部的占位符，互不替代。
+         */
+        private Map<String, Object> parameters;
     }
     @Data
     public static class ConfirmRequest extends DraftRequest { private String name; private String description; }

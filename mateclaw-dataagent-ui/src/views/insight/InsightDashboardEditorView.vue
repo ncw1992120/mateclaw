@@ -260,6 +260,13 @@
         </el-button>
       </div>
 
+      <!-- 全屏「查看数据」工作台：定义 / 参数 / 结果（Hue 式，参数从定义自动提取） -->
+      <DataWorkbench
+        v-if="insightState.ui.workbench.visible && workbenchDataset"
+        :dataset="workbenchDataset"
+        @close="closeWorkbench()"
+      />
+
       <!-- 移动端面板遮罩 -->
       <div
         v-if="showMobilePages || showMobilePalette || showMobileProperty"
@@ -287,6 +294,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
+import DataWorkbench from './components/DataWorkbench.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
@@ -312,7 +320,12 @@ const { t } = useI18n()
 const store = useInsightDashboardStore()
 const { canModifyResource } = usePermission()
 // KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
-const { openMetricStyle } = useInsight()
+const { openMetricStyle, closeWorkbench, state: insightState } = useInsight()
+
+/** 全屏「查看数据」工作台：数据集不存在时（如刚被移除）不渲染 */
+const workbenchDataset = computed(
+  () => insightState.datasets.find((item) => item.id === insightState.ui.workbench.datasetId) ?? null,
+)
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)

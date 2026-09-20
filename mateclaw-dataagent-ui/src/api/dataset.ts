@@ -62,6 +62,13 @@ export interface DatasetComposerDraftRequest {
   sourceConfig?: Record<string, unknown>
   filters?: DatasetFilter[]
   limit?: number
+  /** 分页偏移（配合 limit 做服务端滚动加载） */
+  offset?: number
+  /**
+   * SQL 命名参数值（对应 baseSql 里的 `:name` 占位符）。
+   * 与 filters 是两回事：filters 按列名追加外层谓词，parameters 绑进 SQL 内部的占位符，互不替代。
+   */
+  parameters?: Record<string, unknown>
 }
 
 export function previewDraft(request: DatasetComposerDraftRequest) {

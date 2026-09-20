@@ -10,7 +10,6 @@
     <ApiConfigDialog />
     <FileConfigDialog />
     <FieldMappingDialog />
-    <InputFilterDialog />
     <FilterBindingDialog />
     <PythonScriptDialog />
     <PreviewDialog />
@@ -34,7 +33,6 @@ import AloudataDialog from './dataset/AloudataDialog.vue'
 import ApiConfigDialog from './dataset/ApiConfigDialog.vue'
 import FileConfigDialog from './dataset/FileConfigDialog.vue'
 import FieldMappingDialog from './FieldMappingDialog.vue'
-import InputFilterDialog from './InputFilterDialog.vue'
 import FilterBindingDialog from './FilterBindingDialog.vue'
 import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'

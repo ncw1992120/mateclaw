@@ -14,7 +14,7 @@
     />
     <template #footer>
       <el-button @click="ui.jdbc.visible = false">取消</el-button>
-      <el-button :loading="refreshing" @click="onPreview">筛选预览</el-button>
+      <el-button @click="onPreview">查看数据</el-button>
       <el-button type="primary" @click="confirmJdbc">确定</el-button>
     </template>
   </el-dialog>
@@ -26,7 +26,7 @@ import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as backend from '../useInsightBackend'
 
-const { state, confirmJdbc, openInputFilter, getDataset } = useInsight()
+const { state, confirmJdbc, openWorkbench, getDataset } = useInsight()
 const ui = state.ui
 
 // 停止修改 SQL 800ms 后，真实向数据源预览一次：校验 SQL 并返回字段列（原型 3.1 规则 5）。
@@ -59,14 +59,14 @@ function onSqlInput() {
   }, 800)
 }
 
-// 筛选预览：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
-// 再弹出「输入筛选」弹窗，保存后自动打开对应数据集的数据预览
+// 查看数据：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
+// 再打开全屏工作台 —— 参数从 SQL 的 :param 自动提取，不再「先填筛选框、确定后才给看」
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmJdbc()
   // 解析本次提交的数据集 id：编辑时沿用 editingId，新增时取最新提交的数据集
   const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
-  openInputFilter(id)
+  if (id) openWorkbench(id)
 }
 </script>
 

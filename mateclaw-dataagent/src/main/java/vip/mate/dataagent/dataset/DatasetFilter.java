@@ -28,7 +28,8 @@ public record DatasetFilter(String field, String role, String operator, Object v
         }
         String normalizedOperator = operator == null ? "" : operator.toLowerCase(Locale.ROOT);
         if (!switch (normalizedOperator) {
-            case "eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "between", "is_null", "is_not_null" -> true;
+            case "eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "between", "contains",
+                 "is_null", "is_not_null" -> true;
             default -> false;
         }) {
             throw new IllegalArgumentException("unsupported filter operator: " + operator);
@@ -52,6 +53,8 @@ public record DatasetFilter(String field, String role, String operator, Object v
             Map.entry("in", "in"),
             Map.entry("not_in", "not_in"), Map.entry("not in", "not_in"), Map.entry("nin", "not_in"),
             Map.entry("between", "between"),
+            // contains 是「包含子串」，编译成 LIKE '%value%'；不用 like 做别名 —— 那个语义是用户自带通配符，容易混
+            Map.entry("contains", "contains"), Map.entry("has", "contains"),
             Map.entry("is_null", "is_null"), Map.entry("is null", "is_null"), Map.entry("null", "is_null"),
             Map.entry("is_not_null", "is_not_null"), Map.entry("is not null", "is_not_null"),
             Map.entry("not_null", "is_not_null"));
