@@ -70,6 +70,7 @@
           </template>
           {{ t('insight.aiAssistant') }}
         </el-button>
+        <el-button class="toolbar-btn" aria-label="主题外观" @click="showThemePanel = true">主题外观</el-button>
         <el-button class="toolbar-btn" @click="handleSave" :loading="saving">
           <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
           {{ t('insight.save') }}
@@ -186,6 +187,7 @@
           :components="currentPageComponents"
           :component-data-map="componentDataMap"
           :editable="true"
+          :dashboard-theme="dashboardTheme"
           :selected-id="selectedComponentId"
           @add-component="handleAddComponent"
           @update-layout="handleUpdateLayout"
@@ -266,6 +268,15 @@
       <!-- 「筛选预览」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
       <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
 
+      <DashboardThemePanel
+        ref="themePanelRef"
+        :model-value="schema.theme ?? { mode: 'preset', presetId: 'blue' }"
+        :visible="showThemePanel"
+        @update:model-value="updateThemeDraft"
+        @update:visible="showThemePanel = $event"
+        @confirm-theme-switch="confirmThemeSwitch"
+      />
+
       <!-- 移动端面板遮罩 -->
       <div
         v-if="showMobilePages || showMobilePalette || showMobileProperty"
@@ -331,6 +342,8 @@ import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
+import DashboardThemePanel from './components/DashboardThemePanel.vue'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -380,6 +393,8 @@ const componentContextMenuStyle = computed(() => {
 
 /** AI对话面板可见性 */
 const showAiChat = ref(false)
+const showThemePanel = ref(false)
+const themePanelRef = ref<InstanceType<typeof DashboardThemePanel> | null>(null)
 
 /** topbar 标题/描述点击编辑状态 */
 const editingName = ref(false)
@@ -427,6 +442,21 @@ const schema = reactive<InsightDashboardSchema>({
   scriptBindings: [],
   scriptFilterBindings: [],
 })
+
+const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
+
+function updateThemeDraft(value: InsightDashboardSchema['theme']): void {
+  schema.theme = value
+}
+
+async function confirmThemeSwitch(presetId: string): Promise<void> {
+  try {
+    await ElMessageBox.confirm('切换预设会清除当前主题级颜色、圆角和阴影覆盖，但不会影响指标级视觉例外和数据配置。是否继续？', '切换主题预设', { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' })
+    themePanelRef.value?.applyPreset(presetId)
+  } catch {
+    // 用户取消时保留当前草稿
+  }
+}
 
 /** 脚本结果的临时绑定目标；用户确认应用结果后写入 scriptBindings。 */
 const scriptTargetComponentId = ref('')
@@ -751,6 +781,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.scriptFilterBindings = migrated.scriptFilterBindings ?? []
       schema.executionPolicy = migrated.executionPolicy ?? {}
       schema.scriptBindings = migrated.scriptBindings ?? []
+      schema.theme = migrated.theme
       scriptTargetComponentId.value = schema.scriptBindings[0]?.componentId ?? ''
     } catch {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
@@ -766,6 +797,7 @@ async function loadDashboard(id: string): Promise<void> {
       schema.scriptFilterBindings = []
       schema.executionPolicy = {}
       schema.scriptBindings = []
+      schema.theme = undefined
       scriptTargetComponentId.value = ''
     }
     // 默认选中第一个页面
@@ -1274,6 +1306,7 @@ async function handleAiDashboardUpdated(): Promise<void> {
   // 4. 应用新 schema
   schema.version = newSchema.version
   schema.pages = newSchema.pages
+  schema.theme = newSchema.theme
 
   // 5. 增量预览：只对新增或签名变化的组件重新取数，未变组件保留已有数据
   scheduleIncrementalPreview(oldSignatures)

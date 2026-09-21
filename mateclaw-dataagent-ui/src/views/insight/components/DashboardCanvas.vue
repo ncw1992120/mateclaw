@@ -91,6 +91,7 @@
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 :editable="editable"
+                :dashboard-theme="dashboardTheme"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
@@ -156,7 +157,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
-import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig } from '@/types'
+import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -181,6 +182,8 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   /** 当前选中的组件 ID */
   selectedId?: string
+  /** 当前仪表盘解析后的主题 */
+  dashboardTheme?: ResolvedDashboardTheme
   /** 正在生成 AI 分析的组件 ID 集合 */
   aiAnalysisGeneratingIds?: Set<string>
 }>(), {
