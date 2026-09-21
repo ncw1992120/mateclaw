@@ -796,6 +796,15 @@ function componentSignature(c: InsightComponent | null | undefined): string {
 }
 
 /** 监听外部 component 变化（引用或组合卡片结构变化），同步到本地，避免 emitChange 导致的循环 */
+function replaceLocalComponent(component: InsightComponent): void {
+  const next = JSON.parse(JSON.stringify(component)) as InsightComponent
+  const localRecord = localComponent as unknown as Record<string, unknown>
+  for (const key of Object.keys(localRecord)) {
+    if (!(key in next)) delete localRecord[key]
+  }
+  Object.assign(localComponent, next)
+}
+
 watch(
   () => [props.component, componentSignature(props.component)] as const,
   ([newComp]) => {
@@ -803,7 +812,7 @@ watch(
       return
     }
     previewResult.value = null
-    Object.assign(localComponent, JSON.parse(JSON.stringify(newComp)))
+    replaceLocalComponent(newComp)
     if (newComp.dataSource) {
       Object.assign(localDataSource, JSON.parse(JSON.stringify(newComp.dataSource)))
       if (classifyDatasourceTypeFor(localDataSource.datasourceId) === 'aloudata') {

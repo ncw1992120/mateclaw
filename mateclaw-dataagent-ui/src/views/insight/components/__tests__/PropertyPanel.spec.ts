@@ -36,7 +36,10 @@ const stubs = {
     props: ['label', 'value'],
     template: '<option :value="value">{{ label }}</option>',
   },
-  'el-switch': { template: '<input type="checkbox" v-bind="$attrs" />' },
+  'el-switch': {
+    props: ['modelValue'],
+    template: '<button class="el-switch-stub" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)">toggle</button>',
+  },
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio-button': { template: '<button><slot /></button>' },
   'el-checkbox-group': { template: '<div><slot /></div>' },
@@ -158,5 +161,53 @@ describe('PropertyPanel', () => {
     expect(tab.exists()).toBe(true)
     const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
     expect(tab.element.dispatchEvent(event)).toBe(false)
+  })
+
+  it('does not carry the outer combination children into a newly selected inner combination', async () => {
+    const outerChildren = [{
+      id: 'outer-child',
+      type: 'kpi' as const,
+      title: '外层指标',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }]
+    const outer = {
+      id: 'outer-combination',
+      type: 'combination' as const,
+      title: '外层组合',
+      children: outerChildren,
+      containerConfig: {
+        title: '外层组合',
+        showTitle: true,
+        background: '#fff',
+        radius: 12,
+        padding: 16,
+        layoutMode: 'free' as const,
+        tabs: [],
+        style: { border: { enabled: false, color: 'transparent' } },
+      },
+      position: { x: 0, y: 0, w: 12, h: 8 },
+    }
+    const inner = {
+      id: 'inner-combination',
+      type: 'combination' as const,
+      title: '内层组合',
+      containerConfig: { ...outer.containerConfig, title: '内层组合' },
+      position: { x: 0, y: 0, w: 6, h: 4 },
+    }
+    const wrapper = mount(PropertyPanel, {
+      props: { component: outer, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.setProps({ component: inner })
+    await nextTick()
+    await wrapper.find('.el-switch-stub').trigger('click')
+
+    const emitted = wrapper.emitted('change') ?? []
+    expect(emitted.at(-1)?.[0]).toMatchObject({
+      id: 'inner-combination',
+      containerConfig: { showTitle: false },
+    })
+    expect((emitted.at(-1)?.[0] as any).children).toBeUndefined()
   })
 })
