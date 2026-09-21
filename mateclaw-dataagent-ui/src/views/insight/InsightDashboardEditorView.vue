@@ -276,6 +276,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
@@ -297,6 +298,7 @@ import { rowsToComponentData } from '@/utils/dataset-result'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
+import { insightDashboardListLocation } from './insightDashboardNavigation'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -313,6 +315,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const store = useInsightDashboardStore()
 const { canModifyResource } = usePermission()
 // KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
@@ -1034,7 +1038,7 @@ function handlePreview(): void {
 
 /** 返回列表 */
 function handleBack(): void {
-  emit('back')
+  void router.push(insightDashboardListLocation(route.query))
 }
 
 /** 切换AI对话面板 */
