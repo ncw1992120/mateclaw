@@ -27,7 +27,7 @@
     </el-form>
     <template #footer>
       <el-button @click="ui.api.visible = false">取消</el-button>
-      <el-button @click="onPreview">查看数据</el-button>
+      <el-button @click="onPreview">筛选预览</el-button>
       <el-button type="primary" @click="confirmApi">确定</el-button>
     </template>
   </el-dialog>
@@ -40,7 +40,7 @@ const { state, confirmApi, openDataDialog, getDataset } = useInsight()
 const ui = state.ui
 
 // 确认后保存受控接口定义引用；敏感认证信息只引用凭据（通过数据源/凭据中心登记），不写入页面配置或日志。
-// 随后打开「查看数据」弹窗 —— 占位符参数从接口配置里的 {{name}} / :name 自动提取
+// 随后打开「筛选预览」弹窗 —— 占位符参数从接口配置里的 {{name}} / :name 自动提取
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmApi()

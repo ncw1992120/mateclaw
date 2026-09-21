@@ -34,7 +34,7 @@
 
     <template #footer>
       <el-button @click="ui.file.visible = false">取消</el-button>
-      <el-button :disabled="!ui.file.objectId" @click="onPreview">查看数据</el-button>
+      <el-button :disabled="!ui.file.objectId" @click="onPreview">筛选预览</el-button>
       <el-button type="primary" :disabled="!ui.file.objectId" @click="confirmFile">确定</el-button>
     </template>
   </el-dialog>
@@ -50,7 +50,7 @@ const { state, confirmFile, openDataDialog, getDataset } = useInsight()
 const ui = state.ui
 const fileInput = ref<HTMLInputElement>()
 
-// 查看数据：先提交文件配置（写入数据集并关闭弹窗），再打开「查看数据」弹窗。
+// 筛选预览：先提交文件配置（写入数据集并关闭弹窗），再打开「筛选预览」弹窗。
 // 文件类型上游不做筛选下推（后端只把它们记进 residualFilters），所以弹窗里不给筛选条件入口，
 // 避免做出「能配但不生效」的假象。
 function onPreview() {

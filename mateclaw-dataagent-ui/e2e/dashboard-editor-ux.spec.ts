@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 /**
  * 洞察仪表盘编辑器 UX 收敛回归（implementation-plan Task 9）。
  *
- * 前置：与既有真实 E2E 相同 —— 由 docker-compose 测试栈提供 UI/DataAgent/测试数据，
+ * 前置：由本机 UI/DataAgent 与本地模拟数据提供服务，
  * 通过环境变量注入登录态与已 seed 的仪表盘；禁止用 route mock 替代 DataAgent。
  * 需要的 seed：MATECLAW_E2E_UX_DASHBOARD_ID 指向含一个 KPI 卡、未配置数据集的仪表盘。
  */
@@ -53,26 +53,30 @@ test.describe('dashboard editor UX convergence', () => {
     await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
     await expect(page.getByText(HELP_TEXT)).toHaveCount(0)
 
-    // 添加数据集：来源树按 已有数据集 / 四类来源 分组
+    // 添加数据集：来源树按 Aloudata / JDBC / 接口 / 文件分组；空的“已有数据集”不强行展示。
     await page.getByRole('button', { name: '添加数据集' }).first().click()
-    await expect(page.getByText('已有数据集')).toBeVisible()
-    await page.getByText('JDBC', { exact: false }).first().click()
+    await expect(page.getByText('Aloudata', { exact: true })).toBeVisible()
+    await expect(page.getByText('JDBC', { exact: true })).toBeVisible()
+    await expect(page.getByText('接口', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('文件', { exact: true }).first()).toBeVisible()
+    await page.getByText('testdb1', { exact: false }).first().click()
 
-    // 单层弹窗内完成 SQL 配置与筛选预览，不出现叠加 Dialog
-    const sourceDialog = page.locator('.el-dialog').filter({ hasText: '配置数据集来源' })
-    await expect(sourceDialog).toBeVisible()
-    await sourceDialog.getByLabel('输入 SQL').fill('SELECT order_date, region, amount FROM orders')
-    await sourceDialog.getByLabel('筛选预览').click()
-    await expect(sourceDialog).toBeVisible()
-    await expect(page.locator('.el-dialog')).toHaveCount(1)
+    // JDBC SQL 弹窗完成配置；筛选预览进入当前输入数据集的预览工作台。
+    const sqlDialog = page.getByRole('dialog', { name: '输入 SQL' })
+    await expect(sqlDialog).toBeVisible()
+    await sqlDialog.locator('.sql-editor textarea').fill('SELECT order_date, region, amount FROM orders')
+    await sqlDialog.getByRole('button', { name: '筛选预览' }).click()
+    await expect(sqlDialog).toBeHidden()
+    await expect(page.getByRole('dialog', { name: /筛选预览/ })).toBeVisible()
 
-    // 确认添加 → 数据集出现在侧栏 → 保存 → 刷新后配置仍在
-    await sourceDialog.getByRole('button', { name: '确认添加' }).click()
-    await expect(page.getByText('orders', { exact: false }).first()).toBeVisible()
+    // 关闭预览 → 数据集出现在侧栏 → 保存 → 刷新后配置仍在
+    await page.locator('.dataset-data-dialog .el-dialog__headerbtn').click()
+    await expect(page.locator('.dataset-card').first()).toBeVisible()
     await page.getByRole('button', { name: '保存' }).click()
     await page.reload()
     await openEditor(page)
-    await expect(page.getByText('orders', { exact: false }).first()).toBeVisible()
+    await selectFirstCanvasCard(page)
+    await expect(page.locator('.dataset-card').first()).toBeVisible()
   })
 
   test('keeps the page free of horizontal overflow across breakpoints', async ({ page }) => {
@@ -93,11 +97,12 @@ test.describe('dashboard editor UX convergence', () => {
 
     // 方向键移动选中卡片：布局属性发生变化且页面不滚动
     const card = page.locator('[data-component-id]').first()
-    const before = await card.evaluate((el) => el.getAttribute('style') ?? '')
+    const before = await card.boundingBox()
     await card.focus()
     await page.keyboard.press('ArrowRight')
-    const after = await card.evaluate((el) => el.getAttribute('style') ?? '')
-    expect(after).not.toBe(before)
+    await page.waitForTimeout(100)
+    const after = await card.boundingBox()
+    expect(after?.x).not.toBe(before?.x)
     expect(await page.evaluate(() => window.scrollY)).toBe(0)
 
     // Info 帮助可通过键盘打开，Esc 关闭
@@ -110,7 +115,7 @@ test.describe('dashboard editor UX convergence', () => {
 
     // Esc 关闭来源弹窗
     await page.getByRole('button', { name: '添加数据集' }).first().click()
-    const sourceDialog = page.locator('.el-dialog').filter({ hasText: '配置数据集来源' })
+    const sourceDialog = page.getByRole('dialog', { name: '添加数据集' })
     await expect(sourceDialog).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(sourceDialog).toBeHidden()

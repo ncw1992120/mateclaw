@@ -26,17 +26,17 @@
       />
     </div>
 
-    <!-- 操作行：字段名称 / 查看数据 / 移除。
-         「查看数据」打开弹窗：在里面添加筛选条件 → 点查询 → 条件下推到源查询后出结果。 -->
+    <!-- 操作行：字段名称 / 筛选预览 / 移除。
+         「筛选预览」打开弹窗：填写本次条件后查询，并将条件下推到源查询。 -->
     <div class="ds-actions">
       <el-button size="small" text bg @click="openFieldMapping(dataset.id)">字段名称</el-button>
       <el-button
         size="small"
         text bg
-        title="查看该输入数据集的数据：可添加筛选条件下推后查询"
+        title="筛选预览该输入数据集：可添加条件下推后查询"
         @click="openDataDialog(dataset.id)"
       >
-        查看数据
+        筛选预览
       </el-button>
       <el-button size="small" text bg type="danger" @click="removeDataset(dataset.id)">移除</el-button>
     </div>

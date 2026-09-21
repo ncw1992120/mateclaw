@@ -1,5 +1,5 @@
 <template>
-  <div class="insight-editor-view">
+  <div class="insight-editor-view" @click="closeComponentContextMenu">
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
@@ -194,6 +194,9 @@
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
           @delete-component="handleDeleteComponent"
+          @copy-component="handleCopyComponent"
+          @paste-component="handlePasteComponent"
+          @context-menu="handleComponentContextMenu"
           @open-metric-style="handleOpenMetricStyle"
         />
       </div>
@@ -260,7 +263,7 @@
         </el-button>
       </div>
 
-      <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
+      <!-- 「筛选预览」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
       <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
 
       <!-- 移动端面板遮罩 -->
@@ -269,12 +272,39 @@
         class="mobile-panel-backdrop"
         @click="closeAllMobilePanels"
       />
+
+      <!-- 画布组件右键菜单：复制当前组件或粘贴到当前页面 -->
+      <div
+        v-if="componentContextMenu"
+        class="component-context-menu"
+        :style="componentContextMenuStyle"
+        role="menu"
+        @click.stop
+        @contextmenu.stop.prevent
+      >
+        <button
+          v-if="componentContextMenu.componentId"
+          type="button"
+          role="menuitem"
+          @click="copyFromContextMenu"
+        >
+          <span>复制组件</span><kbd>⌘ / Ctrl + C</kbd>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          :disabled="!clipboardComponent"
+          @click="pasteFromContextMenu"
+        >
+          <span>粘贴组件</span><kbd>⌘ / Ctrl + V</kbd>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -283,6 +313,7 @@ import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage } from '@/types'
 import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
+import { useUserStore } from '@/stores/useUserStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
@@ -299,6 +330,7 @@ import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
+import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -318,11 +350,12 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useInsightDashboardStore()
+const userStore = useUserStore()
 const { canModifyResource } = usePermission()
 // KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
 const { openMetricStyle, state: insightState } = useInsight()
 
-/** 全屏「查看数据」工作台：数据集不存在时（如刚被移除）不渲染 */
+/** 全屏「筛选预览」工作台：数据集不存在时（如刚被移除）不渲染 */
 const dataDialogDataset = computed(
   () => insightState.datasets.find((item) => item.id === insightState.ui.dataDialog.datasetId) ?? null,
 )
@@ -333,6 +366,17 @@ const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
+
+type ComponentContextMenu = { componentId: string | null; x: number; y: number }
+const componentContextMenu = ref<ComponentContextMenu | null>(null)
+const clipboardComponent = ref<InsightComponent | null>(null)
+const componentContextMenuStyle = computed(() => {
+  if (!componentContextMenu.value) return undefined
+  return {
+    left: `${componentContextMenu.value.x}px`,
+    top: `${componentContextMenu.value.y}px`,
+  }
+})
 
 /** AI对话面板可见性 */
 const showAiChat = ref(false)
@@ -533,7 +577,12 @@ const filterComponents = computed<PanelFilterComponent[]>(() =>
 )
 
 onMounted(async () => {
+  document.addEventListener('keydown', handleEditorClipboardKeydown)
   await loadDashboard(props.dashboardId)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleEditorClipboardKeydown)
 })
 
 /** 监听 dashboardId 变化时重新加载 */
@@ -551,6 +600,76 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 }
 
+function closeComponentContextMenu(): void {
+  componentContextMenu.value = null
+}
+
+function handleComponentContextMenu(payload: ComponentContextMenu): void {
+  if (payload.componentId) {
+    handleSelectComponent(payload.componentId)
+  }
+  componentContextMenu.value = payload
+}
+
+function handleCopyComponent(id: string): void {
+  const source = currentPageComponents.value.find((component) => component.id === id)
+  if (!source) return
+  clipboardComponent.value = JSON.parse(JSON.stringify(source)) as InsightComponent
+  selectedComponentId.value = id
+  selectedChildInfo.value = null
+  closeComponentContextMenu()
+  ElMessage.success('组件已复制')
+}
+
+function handlePasteComponent(): void {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  const source = clipboardComponent.value
+  if (!page || !source) return
+
+  const pasted = cloneInsightComponentForPaste(source, generateId)
+  let x = pasted.position.x
+  let y = pasted.position.y
+  const overlaps = (left: number, top: number): boolean => page.components.some((component) => (
+    left < component.position.x + component.position.w
+      && left + pasted.position.w > component.position.x
+      && top < component.position.y + component.position.h
+      && top + pasted.position.h > component.position.y
+  ))
+  while (overlaps(x, y)) {
+    x += 1
+    if (x + pasted.position.w > 24) {
+      x = 0
+      y += 1
+    }
+  }
+  pasted.position = { ...pasted.position, x, y }
+  page.components.push(pasted)
+  selectedComponentId.value = pasted.id
+  selectedChildInfo.value = null
+  scriptTargetComponentId.value ||= pasted.id
+  closeComponentContextMenu()
+  ElMessage.success('组件已粘贴')
+}
+
+function copyFromContextMenu(): void {
+  const id = componentContextMenu.value?.componentId
+  if (id) handleCopyComponent(id)
+}
+
+function pasteFromContextMenu(): void {
+  handlePasteComponent()
+}
+
+function handleEditorClipboardKeydown(event: KeyboardEvent): void {
+  if (!event.ctrlKey && !event.metaKey) return
+  if (event.altKey || event.key.toLowerCase() !== 'v') return
+  const target = event.target as HTMLElement | null
+  if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  if (!clipboardComponent.value) return
+  event.preventDefault()
+  handlePasteComponent()
+}
+
 /** 迁移旧 Schema（单 components 数组 → pages[0]） */
 function migrateSchema(parsed: any): InsightDashboardSchema {
   return migrateInsightDashboardSchema(parsed, t('insight.firstPageName'))
@@ -558,6 +677,14 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
 
 /** 加载仪表盘数据 */
 async function loadDashboard(id: string): Promise<void> {
+  // App.vue 会异步恢复 /auth/me；编辑器不能在 userId 尚未恢复时先做归属校验，
+  // 否则真实刷新或 E2E 直达编辑器会把创建者误判成无权限并留下空画布。
+  if (userStore.token && userStore.userId == null) {
+    await userStore.fetchCurrentUser()
+  }
+  if (!userStore.token) {
+    return
+  }
   await store.selectDashboard(id)
   // 归属守卫：非创建者且非工作区管理员不可进入编辑（防止 localStorage 残留的编辑模式）
   if (dashboard.value && !canModifyResource(dashboard.value.ownerId)) {
@@ -1752,6 +1879,49 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   background: var(--db-bg);
   border: 1px solid var(--db-border);
   border-radius: 12px;
+}
+
+.component-context-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 188px;
+  padding: 6px;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-dropdown, 0 12px 32px rgba(24, 39, 75, 0.16));
+}
+
+.component-context-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: transparent;
+  color: var(--db-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.component-context-menu button:hover:not(:disabled) {
+  background: var(--db-hover);
+  color: var(--db-accent);
+}
+
+.component-context-menu button:disabled {
+  color: var(--db-text-muted);
+  cursor: not-allowed;
+}
+
+.component-context-menu kbd {
+  color: var(--db-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .editor-right-sidebar {

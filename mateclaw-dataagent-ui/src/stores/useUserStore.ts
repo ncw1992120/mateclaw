@@ -40,7 +40,9 @@ export const useUserStore = defineStore('user', () => {
    * 应用登录响应数据到状态
    */
   function applyLoginResponse(data: LoginResponse | CurrentUserInfo): void {
-    token.value = data.token
+    // `/auth/me` intentionally does not return the JWT；恢复用户资料时必须保留
+    // 页面初始化前已存在的 token，否则后续编辑器加载会被误判成未登录。
+    token.value = data.token ?? token.value
     userId.value = data.id
     username.value = data.username
     nickname.value = data.nickname

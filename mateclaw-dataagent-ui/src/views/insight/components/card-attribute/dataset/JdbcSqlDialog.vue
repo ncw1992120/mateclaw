@@ -14,7 +14,7 @@
     />
     <template #footer>
       <el-button @click="ui.jdbc.visible = false">取消</el-button>
-      <el-button @click="onPreview">查看数据</el-button>
+      <el-button @click="onPreview">筛选预览</el-button>
       <el-button type="primary" @click="confirmJdbc">确定</el-button>
     </template>
   </el-dialog>
@@ -59,8 +59,8 @@ function onSqlInput() {
   }, 800)
 }
 
-// 查看数据：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
-// 再打开「查看数据」弹窗 —— 在那里添加筛选条件后点查询，条件下推到源查询
+// 筛选预览：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
+// 再打开「筛选预览」弹窗 —— 在那里添加筛选条件后点查询，条件下推到源查询
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmJdbc()
