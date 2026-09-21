@@ -347,8 +347,11 @@ def handle_orders(query, body, headers):
         {"id": 1010, "customer_id": 101, "region": "east", "status": "PROCESSING", "amount": 300.00},
     ]
     status = (query.get("status") or [None])[0]
+    order_id = (query.get("id") or [None])[0]
     if status:
         rows = [row for row in rows if row["status"] == status]
+    if order_id:
+        rows = [row for row in rows if str(row["id"]) == order_id]
     return {"data": rows}
 
 
@@ -390,8 +393,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json;charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(raw)
+        self.wfile.flush()
 
     def _read_body(self) -> bytes:
         """读取请求体：RestTemplate 发 Map body 时用 chunked 编码且不带 Content-Length。"""

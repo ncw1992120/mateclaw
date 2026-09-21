@@ -23,6 +23,7 @@ HTTP_DATASOURCE_ID="${MATECLAW_E2E_HTTP_DATASOURCE_ID:-}"
 HTTP_DATASET_ID="${MATECLAW_E2E_HTTP_DATASET_ID:-}"
 FILE_DATASET_ID="${MATECLAW_E2E_FILE_DATASET_ID:-}"
 FILE_DATASET_FALLBACK_ID="${MATECLAW_E2E_FILE_DATASET_FALLBACK_ID:-}"
+FILE_DATASET_FALLBACK_TO_HTTP="${MATECLAW_E2E_FILE_DATASET_FALLBACK_TO_HTTP:-false}"
 AUTH_HEADER="Authorization: Bearer ${MATECLAW_E2E_TOKEN:-}"
 WORKSPACE_HEADER="X-Workspace-Id: ${MATECLAW_E2E_WORKSPACE_ID}"
 
@@ -101,7 +102,7 @@ jdbc_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$jdbc_ds" --arg suffix 
   '{name:("E2E JDBC Orders Dataset " + $suffix),description:"dashboard MVP JDBC source",sourceDefinition:{sourceType:"JDBC_SQL",datasourceId:$ds,sql:"SELECT id, customer_id, order_date, status, amount FROM orders WHERE id > 0"}}')" | id_from)
 fi
 
-http_connection_params=$(jq -cn --arg endpoint "$HTTP_ENDPOINT" --arg allowedHost "$HTTP_ALLOWED_HOST" '{apiDefinitions:{orders:{endpoint:$endpoint,method:"GET",allowedHosts:[$allowedHost],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data",schema:[
+http_connection_params=$(jq -cn --arg endpoint "$HTTP_ENDPOINT" --arg allowedHost "$HTTP_ALLOWED_HOST" '{apiDefinitions:{orders:{endpoint:$endpoint,method:"GET",allowedHosts:[$allowedHost],allowedQueryParams:["status","id"],paginationMode:"none",resultPath:"$.data",schema:[
   {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
   {name:"order_date",title:"订单日期",dataType:"DATE",role:"dimension"},
   {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
@@ -126,7 +127,11 @@ http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" --arg suffix 
   ]}}')" | id_from)
 fi
 
-if [[ -n "$FILE_DATASET_ID" ]]; then
+if [[ "$FILE_DATASET_FALLBACK_TO_HTTP" == "true" ]]; then
+  file_object_id=""
+  file_dataset="$http_dataset"
+  echo "Using HTTP dataset for file-shaped E2E input: $file_dataset"
+elif [[ -n "$FILE_DATASET_ID" ]]; then
   file_object_id=""
   file_dataset="$FILE_DATASET_ID"
   echo "Using existing file dataset: $file_dataset"
@@ -253,8 +258,8 @@ python_filter_script=$'rows = datasets.read(input_name="python_orders")\nresult 
 python_filter_schema=$(python_dashboard_schema "$http_dataset" python_orders "$python_filter_script" generated 'python_orders = datasets.read(input_name="python_orders", filters=[])' 'result = python_orders.to_polars().to_dicts()' '' '' '指标时间筛选')
 python_filter_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_filter_schema" '{name:"Python Filter Dashboard",description:"Python runtime filter template dashboard",schemaJson:$schema}')" | id_from)
 
-python_ab_script=$'left = datasets.read(input_name="dataset_a")\nkeys = left.to_polars().select(["id"]).to_dicts()\nright = datasets.read(input_name="dataset_b", filters=[{"field":"id","operator":"in","value":[row["id"] for row in keys]}])\nresult = right.to_polars().to_dicts()'
-python_ab_schema=$(python_dashboard_schema "$http_dataset" dataset_a "$python_ab_script" generated 'dataset_a = datasets.read(input_name="dataset_a", filters=[])' 'result = dataset_a.to_polars().to_dicts()' "$file_dataset" dataset_b)
+python_ab_script=$'left = datasets.read(input_name="dataset_a")\nkeys = left.to_polars().select(["id"]).to_dicts()\nfilters = [{"field":"id","operator":"eq","value":keys[0]["id"]}] if keys else []\nright = datasets.read(input_name="dataset_b", filters=filters)\nresult = right.to_polars().to_dicts()'
+python_ab_schema=$(python_dashboard_schema "$http_dataset" dataset_a "$python_ab_script" generated 'dataset_a = datasets.read(input_name="dataset_a", filters=[])' "$python_ab_script" "$file_dataset" dataset_b)
 python_ab_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_ab_schema" '{name:"Python A-to-B Dashboard",description:"Python dataset A to B filtering dashboard",schemaJson:$schema}')" | id_from)
 
 python_managed_schema=$(python_dashboard_schema "$http_dataset" managed_orders 'managed_orders = datasets.read(input_name="managed_orders")\nresult = managed_orders.to_polars().to_dicts()' managed 'managed_orders = custom_read()' 'result = managed_orders')
@@ -263,7 +268,7 @@ python_managed_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schem
 python_output_schema=$(python_dashboard_schema "$http_dataset" output_orders 'result = [{"status":"PAID"}]' generated 'output_orders = datasets.read(input_name="output_orders")' 'result = [{"status":"PAID"}]')
 python_output_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_output_schema" '{name:"Python Output Contract Dashboard",description:"Python output envelope dashboard",schemaJson:$schema}')" | id_from)
 
-python_output_error_schema=$(python_dashboard_schema "$http_dataset" error_orders 'result = {"schemaVersion":"9.9","kind":"unknown","data":{},"meta":{}}' generated 'error_orders = datasets.read(input_name="error_orders")' 'result = error_orders.to_polars().to_dicts()')
+python_output_error_schema=$(python_dashboard_schema "$http_dataset" error_orders 'result = {"schemaVersion":"9.9","kind":"unknown","data":{},"meta":{}}' generated 'error_orders = datasets.read(input_name="error_orders")' 'result = {"schemaVersion":"9.9","kind":"unknown","data":{},"meta":{}}')
 python_output_error_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_output_error_schema" '{name:"Python Output Error Dashboard",description:"Python output contract error dashboard",schemaJson:$schema}')" | id_from)
 
 python_large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large_schema" '{name:"Python Large Result Dashboard",description:"Python large result dashboard",schemaJson:$schema}')" | id_from)
