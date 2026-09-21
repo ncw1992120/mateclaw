@@ -168,4 +168,18 @@ class InsightDashboardSchemaDTOTest {
         assertEquals("orders", config.at("/datasetPipeline/datasetInputs/0/inputName").asText());
         assertTrue(config.at("/extensionField/keep").asBoolean());
     }
+
+    @Test
+    void themeAndMetricVisualSurviveFixtureRoundTrip() throws Exception {
+        String json = java.nio.file.Files.readString(java.nio.file.Path.of("../docs/plans/fixtures/insight-dashboard-theme-schema.json"));
+        ObjectMapper mapper = new ObjectMapper();
+        InsightDashboardSchemaDTO schema = mapper.readValue(json, InsightDashboardSchemaDTO.class);
+        JsonNode written = mapper.readTree(mapper.writeValueAsString(schema));
+
+        assertEquals("teal", written.at("/theme/presetId").asText());
+        assertEquals("chart-bar", written.at("/pages/0/components/0/kpiMetrics/0/visual/iconKey").asText());
+        assertEquals("custom", written.at("/pages/0/components/0/kpiMetrics/0/styles/value/colorMode").asText());
+        assertEquals("#102030", written.at("/theme/overrides/metricPalette/0").asText());
+        assertEquals("large", written.at("/pages/0/components/0/config/density").asText());
+    }
 }

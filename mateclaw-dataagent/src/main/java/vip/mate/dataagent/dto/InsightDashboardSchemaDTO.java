@@ -22,6 +22,9 @@ public class InsightDashboardSchemaDTO implements Serializable {
     /** Schema 版本号 */
     private String version;
 
+    /** 仪表盘级主题配置（旧 Schema 缺失时保持旧视觉） */
+    private Theme theme;
+
     /** 仪表盘视角列表（顶层 Tab 配置） */
     private List<Perspective> perspectives;
 
@@ -183,6 +186,17 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 各字段样式（展示名 / 指标值 / 单位 / 辅助说明） */
         private KpiMetricStyles styles;
+
+        /** 指标图标与强调色配置 */
+        private KpiMetricVisual visual;
+    }
+
+    @Data
+    public static class KpiMetricVisual implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String iconKey;
+        private String colorMode;
+        private String accentColor;
     }
 
     /**
@@ -225,6 +239,40 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         /** 字重：bold / normal */
         private String bold;
+
+        /** theme = 跟随主题，custom = 固定颜色；缺省按旧固定 HEX 兼容 */
+        private String colorMode;
+    }
+
+    /** 仪表盘主题配置 */
+    @Data
+    public static class Theme implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String mode;
+        private String presetId;
+        private ThemeOverrides overrides;
+        private String density;
+    }
+
+    /** 主题局部覆盖；使用显式字段避免任意 CSS 注入。 */
+    @Data
+    public static class ThemeOverrides implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String pageBackground;
+        private String cardBackground;
+        private String border;
+        private String text;
+        private String textSecondary;
+        private String textMuted;
+        private String primary;
+        private String positive;
+        private String negative;
+        private String warning;
+        private String info;
+        private List<String> metricPalette;
+        private List<String> chartPalette;
+        private String radius;
+        private String shadow;
     }
 
     /**

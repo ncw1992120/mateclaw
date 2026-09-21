@@ -13,6 +13,7 @@ export interface DashboardIconDefinition {
 
 export const DASHBOARD_ICON_REGISTRY: DashboardIconDefinition[] = [
   { key: 'trend-charts', label: '趋势', component: TrendCharts },
+  { key: 'chart-bar', label: '图表', component: Histogram },
   { key: 'data-analysis', label: '分析', component: DataAnalysis },
   { key: 'data-line', label: '数据线', component: DataLine },
   { key: 'histogram', label: '柱状图', component: Histogram },

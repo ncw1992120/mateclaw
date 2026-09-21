@@ -32,6 +32,7 @@ import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.InsightDashboardService;
+import vip.mate.dataagent.service.DashboardThemeValidator;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 
 import java.util.ArrayList;
@@ -243,6 +244,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     @Override
     public InsightDashboardVO createDashboard(InsightDashboardCreateRequest request) {
+        validateSchemaJson(request.getSchemaJson());
         InsightDashboardEntity entity = new InsightDashboardEntity();
         entity.setName(request.getName());
         entity.setDescription(request.getDescription());
@@ -268,6 +270,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             entity.setDescription(request.getDescription());
         }
         if (request.getSchemaJson() != null) {
+            validateSchemaJson(request.getSchemaJson());
             entity.setSchemaJson(request.getSchemaJson());
         }
         if (request.getReportContent() != null) {
@@ -384,6 +387,17 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         } catch (Exception e) {
             log.warn("复制仪表盘时 Schema ID 重映射失败，保留原始 Schema: {}", e.getMessage());
             return schemaJson;
+        }
+    }
+
+    private void validateSchemaJson(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) return;
+        try {
+            DashboardThemeValidator.validate(objectMapper.readValue(schemaJson, InsightDashboardSchemaDTO.class));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, "仪表盘主题配置不合法: " + e.getMessage());
+        } catch (Exception e) {
+            throw new BusinessException(400, "仪表盘 Schema 格式不合法");
         }
     }
 
