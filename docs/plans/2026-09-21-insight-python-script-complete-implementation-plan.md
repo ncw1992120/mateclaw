@@ -893,6 +893,8 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
+**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务的 E2E（6 个种子仪表盘 + pipeline/错误/兼容三个 spec）需要完整运行栈（DataAgent + PostgreSQL + Python Runner + ObjectRef 存储）同时在沙箱内可用。当前沙箱无 Docker/Testcontainers、无法拉起 Runner 与对象存储，按 §3.5 记 BLOCKED，待本地全栈环境（Makefile 门禁：dashboard-dataagent-test / dashboard-runner-test / dashboard-ui-test / dashboard-ui-build / dashboard-verify-local）就绪后补跑，不得以模拟结果替代。
+
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
 - Modify: `mateclaw-dataagent-ui/e2e/dashboard-multi-source.spec.ts`
@@ -957,6 +959,8 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 ```
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
+
+**状态：BLOCKED（依赖 Task 8 种子数据与登录态）**——CDP 脚本模式已在 `dev-support/local-simulation/scripts/repro/_cdp_verify_python.mjs` 验证可行（接管 9222 Chrome 读取面板状态），但 12 张截图的完整视觉验收链路依赖 Task 8 的动态仪表盘种子与登录凭据，需在用户本地全栈环境执行。按 §3.5 记 BLOCKED。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -1146,3 +1150,24 @@ git diff --check
 9. Task 9 在 9222 Google Chrome 做视觉验收并固化证据。
 
 以上任务是同一次产品交付的工程顺序；任一任务未完成或任一强制门禁失败，都不能宣称“编辑 Python 脚本”能力完成。
+
+---
+
+## 5. 执行 Ledger（2026-09-21）
+
+| Task | 状态 | 提交 | 验证 |
+| --- | --- | --- | --- |
+| 1 契约类型 | 已完成（先行会话） | 1d8b1515 之前 | 前端定向 7/7、DTO 4/4 |
+| 2 筛选模板与运行值 | 已完成（先行会话） | 1d8b1515 | 前端 37/37、后端 5/5 |
+| 3 系统区接管/差异/恢复 | 已完成 | 78acf910 | python-script-template 4/4、python-system-region 9/9（含弹窗真实点击与卡片隔离）、前端全量 255/255、TSC 0 错误 |
+| 4 A→B 跨数据集 + 读取策略 | 已完成 | a6052f71 | Runner 21/21、Java 8/8（超限 verifyNoInteractions(adapter)） |
+| 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
+| 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
+| 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
+| 8 E2E 全链路 | BLOCKED | — | 需全栈环境（Docker/Runner/对象存储） |
+| 9 CDP 视觉验收 | BLOCKED | — | 依赖 Task 8 种子与登录态 |
+
+执行备注：
+- 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
+- Runner 的 `TaskResponse.result` 已从 JSON 字符串改为结构化 envelope dict；DataAgent `result()` 响应从 `{rows}` 改为 `{envelope,inline,outputRef?}` —— 前端已同步，旧 `rows` 字段不再输出。
+- 遗留：dataset-result.ts 的 echarts 猜测路径仍服务旧 scriptBindings 渲染；预览页执行参数 fail-closed（筛选值 → 脚本参数的最后一公里需产品确认参数声明策略后打通）。
