@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { getExecutionResult } from '@/api/insight-dashboard'
@@ -49,6 +49,13 @@ import {
 
 export type DataSourceLeafType = 'jdbc' | 'aloudata' | 'api' | 'file'
 export type CardType = 'kpi' | 'table' | 'chart'
+
+/** 打开仪表盘时读取的执行策略；保存编辑内容时必须原样保留。 */
+let loadedExecutionPolicy: DashboardExecutionPolicy = {}
+
+export function setLoadedExecutionPolicy(policy: DashboardExecutionPolicy | undefined): void {
+  loadedExecutionPolicy = { ...(policy ?? {}) }
+}
 
 /** 输入筛选条件（当前数据集查询条件，应下推到源查询） */
 export interface InputFilter {
@@ -1300,7 +1307,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     script: buildPipelineScript(),
     systemScript: state.pythonSystemState ?? undefined,
     parameters: [],
-    executionPolicy: {},
+    executionPolicy: loadedExecutionPolicy,
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
     resultSet: resultSetMeta(),
   }
@@ -1340,7 +1347,7 @@ function buildSchema(): InsightDashboardSchema {
     script: pipeline.script,
     scriptFilterBindings: pipeline.scriptFilterBindings,
     parameters: [],
-    executionPolicy: {},
+    executionPolicy: loadedExecutionPolicy,
   }
 }
 
@@ -1349,6 +1356,10 @@ function applyPipeline(resp: InsightDashboardSchema): void {
   const components = resp.pages?.[0]?.components ?? []
   const cardComp = components.find((c) => c.type !== 'filter')
   const pipeline = backend.pipelineOf(cardComp)
+  loadedExecutionPolicy = {
+    ...(resp.executionPolicy ?? {}),
+    ...(pipeline?.executionPolicy ?? {}),
+  }
   const inputs = pipeline?.datasetInputs ?? resp.datasetInputs ?? []
   state.datasets = inputs.map((inp, i) => datasetFromInput(inp, i))
   const script = (pipeline?.script ?? resp.script ?? '').toString().trim()

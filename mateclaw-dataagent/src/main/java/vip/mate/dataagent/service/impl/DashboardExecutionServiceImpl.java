@@ -84,7 +84,12 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                 inputs, script, parameters);
 
+        // 新版组件编排把执行策略随 pipeline 持久化；旧版仪表盘仍放在根级。
+        // 根级为空时回退到实际执行的 pipeline，避免编辑器保存后丢失超时/输出限制。
         JsonNode policy = schema.path("executionPolicy");
+        if ((!policy.isObject() || policy.size() == 0) && executionSchema != schema) {
+            policy = executionSchema.path("executionPolicy");
+        }
         Map<String, Object> limits = new LinkedHashMap<>();
         limits.put("timeout_seconds", boundedInt(policy, "timeoutSeconds", Integer.parseInt(DEFAULT_TIMEOUT_SECONDS), 1, 900));
         limits.put("max_stdout_bytes", boundedInt(policy, "maxOutputBytes", Integer.parseInt(DEFAULT_MAX_OUTPUT_BYTES), 1, 5_000_000));

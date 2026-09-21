@@ -18,6 +18,7 @@ import type {
   DashboardScriptFilterBinding,
   InsightComponent,
   InsightComponentType,
+  InsightDashboardSchema,
 } from '@/types'
 import {
   buildPipeline,
@@ -28,6 +29,7 @@ import {
   materializedKpiMetrics,
   migrateKpiMetrics,
   normalizeFieldRef,
+  setLoadedExecutionPolicy,
   useInsight,
 } from './useInsight'
 import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useInsight'
@@ -103,9 +105,11 @@ export function hydratePanel(
   component: InsightComponent,
   dashboardId = '',
   filterComponents: PanelFilterComponent[] = [],
+  executionPolicy?: InsightDashboardSchema['executionPolicy'],
 ): void {
   const { state } = useInsight()
   const pipeline = readComponentDatasetPipeline(component)
+  setLoadedExecutionPolicy(executionPolicy ?? pipeline?.executionPolicy)
   const inputs = pipeline?.datasetInputs ?? []
   const script = pipeline?.script ?? ''
 

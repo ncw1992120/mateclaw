@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import type { InsightComponent } from '@/types'
+import type { InsightComponent, InsightDashboardSchema } from '@/types'
 import { useInsight } from './useInsight'
 import type { ResultSetStatus } from './useInsight'
 import { hydratePanel, panelToPipeline, buildComponentPatch } from './useCardAttributeBridge'
@@ -45,6 +45,7 @@ const props = defineProps<{
   component: InsightComponent | null
   /** 仪表盘 ID（用于后端联调态与回显） */
   dashboardId: string
+  executionPolicy?: InsightDashboardSchema['executionPolicy']
   /** 当前页面内的筛选类组件（filter / timeFilter，含组合卡片容器内的子筛选器），用于筛选器绑定命名与候选 */
   filterComponents?: PanelFilterComponent[]
 }>()
@@ -76,7 +77,7 @@ function hydrate(): void {
   const component = props.component
   if (!component) return
   hydrating.value = true
-  hydratePanel(component, props.dashboardId, props.filterComponents ?? [])
+  hydratePanel(component, props.dashboardId, props.filterComponents ?? [], props.executionPolicy)
   propertyDraft.load(component)
   // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
   nextTick(() => {

@@ -59,9 +59,38 @@ class DashboardExecutionServiceTest {
         var captor = org.mockito.ArgumentCaptor.forClass(Map.class);
         verify(runner).submit(captor.capture());
         Map<?, ?> runnerRequest = captor.getValue();
+        Map<?, ?> limits = (Map<?, ?>) runnerRequest.get("limits");
+        assertEquals(120, limits.get("timeout_seconds"));
         assertEquals("http://mateclaw-dataagent:18089/dataagent/api/internal/v1/script-tasks/" + executionId + "/datasets/read", runnerRequest.get("datasetReadEndpoint"));
         assertEquals("secret-token", runnerRequest.get("readToken"));
         assertFalse(runnerRequest.containsKey("requirements"));
+    }
+
+    @Test
+    void usesComponentPipelineExecutionPolicyWhenRootPolicyIsEmpty() {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        ObjectRefService objectRefs = mock(ObjectRefService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        when(guard.currentUserId()).thenReturn(8L);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setId(42L);
+        dashboard.setSchemaJson("{\"executionPolicy\":{},\"pages\":[{\"components\":[{\"id\":\"card-1\",\"type\":\"table\",\"config\":{\"datasetPipeline\":{\"datasetInputs\":[{\"datasetId\":9,\"inputName\":\"orders\"}],\"script\":\"result=[]\",\"executionPolicy\":{\"timeoutSeconds\":3}}}}]}]}");
+        when(dashboards.getDashboard(42L)).thenReturn(dashboard);
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(), anyMap()))
+                .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result=[]", Map.of(), Map.of(), "token"));
+        when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
+
+        new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs,
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088")
+                .submit(42L, new DashboardExecutionRequest(Map.of(), "card-1"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(runner).submit(captor.capture());
+        assertEquals(3, ((Map<?, ?>) captor.getValue().get("limits")).get("timeout_seconds"));
     }
 
     @Test

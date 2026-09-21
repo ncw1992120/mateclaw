@@ -1226,3 +1226,10 @@ git diff --check
 - 修复正式预览 `DashboardPreviewView` 仅读取根级 `schema.parameters`、遗漏组件级 `scriptFilterBindings` 的问题：绑定条件现在会把维度值和时间范围的单边/双边值映射为 `datasets.params`，未填写参数仍不提交。
 - 新增 `script-parameters.spec.ts` 回归覆盖：隐式绑定参数、仅 `startDate`、`startDate + endDate`、`in` 集合条件和既有显式参数白名单行为；定向测试 4/4，UI production build 通过。
 - 代码变更后的真实 Chrome 主 Python E2E 再跑 6/6 通过（28.7s），覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误和 ObjectRef 大结果。
+
+### 后续补充进度（2026-09-22，执行策略保留与错误矩阵复验）
+
+- 修复 `useInsight` / 正式属性面板在回显组件时未带入仪表盘根级 `executionPolicy` 的问题：编辑 Python 脚本并保存时不再把 `timeoutSeconds`、`maxOutputBytes` 重置为空策略；后端 `DashboardExecutionServiceImpl` 同时兼容根级策略和组件 `datasetPipeline.executionPolicy`，根级为空时回退到实际执行 pipeline。
+- 新增 `DashboardExecutionServiceTest` 的组件级策略回退断言；本机 JDK 21.0.12 + Maven 3.9.16 定向测试为 6/6 PASS。
+- 旧错误兼容 E2E 已按当前“编辑 Python 脚本 → 筛选预览 → 数据预览”路径迁移：真实 Chrome 4/4 PASS（脚本异常、兼容性截图、超时、stdout 超限）；取消用例标记为 SKIP，因为当前 Python 编辑器没有取消按钮，取消契约由 Runner/DataAgent 集成层承担。兼容性截图基线已在视觉检查确认当前编辑器布局后更新。
+- 旧 `dashboard-multi-source.spec.ts` 仍使用已废弃的仪表盘列表卡片和 `.dataset-input-row` 交互，且当前状态文件没有对应双源看板，Chrome 复跑为 0/4；该结果记录为旧 E2E 夹具/选择器阻塞，不作为当前 Python 主链路失败证据，后续需按现行编辑器入口重写。

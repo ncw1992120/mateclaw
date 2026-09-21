@@ -213,6 +213,7 @@
             v-if="panelComponent && !['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(panelComponent.type)"
             :component="panelComponent"
             :dashboard-id="dashboardId"
+            :execution-policy="schema.executionPolicy"
             :filter-components="filterComponents"
             @change="handleComponentChange"
             @resultset="handleComponentResultSet"
