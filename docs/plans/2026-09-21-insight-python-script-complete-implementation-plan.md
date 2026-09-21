@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-**状态：BLOCKED（真实登录态与外部数据源前置）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，Java 使用本机 JDK 21/Maven 3.9.16 的关键契约测试 `20/20` 通过，新增 Aloudata 时间戳兼容测试与本地 fixture 测试 `2/2` 通过，DataAgent `package -DskipTests` 构建通过；本机 DataAgent 已能连接本地 Runner，真实执行已从 `python runner unavailable` 推进到数据读取阶段，且已修复 mock 返回毫秒时间戳导致的同步失败。文件对象存储不可用、Chrome JWT 失效仍阻断完整 E2E。全量 Java 仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
+**状态：BLOCKED（真实外部依赖未完全满足）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，Java 使用本机 JDK 21/Maven 3.9.16 的关键契约测试 `20/20` 通过，新增 Aloudata 时间戳兼容测试与本地 fixture 测试 `2/2` 通过，DataAgent `package -DskipTests` 构建通过；登录后真实提交接口已从 `python runner unavailable` 推进到 Runner 执行成功并返回 `kind=table` 的 6 行结果。完整自动化仍受文件对象存储不可用、部分 DataAgent 外部依赖和无 Docker 的 3 个 Testcontainers 用例阻断；本次没有用 Docker 代替本机环境，也没有把单测或局部真实执行结果冒充完整 E2E PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
@@ -946,7 +946,7 @@ MATECLAW_E2E_BROWSER_CHANNEL=chrome npm --prefix mateclaw-dataagent-ui run test:
 # `dashboard-verify-local` 仍包含 Docker/Testcontainers，仅在用户明确提供该环境时执行；本次不调用它。
 ```
 
-Expected: 可执行的本机命令退出 0；无 skipped/only；当前 Java 全量受 Docker/Testcontainers 缺失与既有 2 个失败阻塞，Runner/UI 定向门禁可独立验证；模拟环境结果只能标记为本地合约 PASS，不能代替真实 Aloudata 权限验收。
+Expected: 可执行的本机命令退出 0；无 skipped/only；当前 Java 全量受 Docker/Testcontainers 缺失与外部依赖失败阻塞，Runner/UI 定向门禁可独立验证；模拟环境结果只能标记为本地合约 PASS，不能代替真实 Aloudata 权限验收。已完成的局部证据为 Runner `46/46`、Java 关键契约 `20/20`、Aloudata 时间戳/fixture `2/2` 和 DataAgent 打包成功；因此本步骤仍不得标记完成。
 
 - [ ] **Step 5: 精确提交**
 
@@ -962,7 +962,7 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
 
-**状态：BLOCKED（真实登录态与执行结果仍不完整）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令；脚本增加了单步骤可配置超时，避免单个 UI 等待无限阻塞。上一轮真实 Chrome 已产出 9 张截图，覆盖筛选器默认行、单边界输入、系统生成区、用户接管区、系统差异、A→B 编辑态和输出预览入口。本轮确认 UI `5174`、DataAgent `18089`、Runner `18080` 均可启动，但 DataAgent 重启后 Chrome 被带到 `/login`，当前没有可安全复用的凭据；未形成 12 张完整截图、AX/console/network 报告，故按 §3.5 保持 BLOCKED，不能把局部视觉证据记为完整 PASS。
+**状态：BLOCKED（真实执行预览依赖未恢复）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并增加单步骤可配置超时。本轮使用真实登录态完成了 12 张截图、AX/console/network 报告：脚本生成模式、用户接管/系统差异和保存页 4 项 PASS；筛选器默认/单边界、A→B、输出预览、table/KPI/chart、输出错误等 8 项因 `/dataagent/api/v1/models/active` 请求 `timeout of 60000ms exceeded` 未完成，页面对应结果仍显示“暂无表格数据”。报告记录 1 个控制台/API 失败，AX 节点数为 `28`。因此 UI 编辑路径有真实视觉证据，但真实数据预览尚不能标记 PASS；没有用 headless Chromium 或静态截图替代 9222 验收。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -1007,7 +1007,9 @@ curl --fail --silent http://127.0.0.1:9222/json/version
 
 Expected: 返回包含 `Google Chrome` 的 Browser 字段和 `webSocketDebuggerUrl`；否则视觉验收为 BLOCKED，不得改用 headless Chromium 冒充。
 
-- [ ] **Step 4: 执行真实用户路径并采集证据**
+- [x] **Step 4: 执行真实用户路径并采集证据（部分通过，按结果保留 BLOCKED）**
+- 真实命令使用本机 JDK/Maven 启动的 UI、DataAgent、Runner，并通过 `MATECLAW_CDP_ENDPOINT=http://127.0.0.1:9222` 连接 Google Chrome；本轮生成 `12` 张截图和 `visual-report.json`。证据目录为 `docs/superpowers/evidence/2026-09-21-python-pipeline-real/`（该目录按仓库忽略规则保留为本机验收产物）。
+- 验证结果：`03-python-generated-mode`、`04-python-managed-mode`、`05-python-system-diff`、`12-saved-dashboard-preview` 为 `PASS`；其余 `8` 项为 `FAIL`，统一原因为每步 `120000ms` 上限内未等到真实执行结果，根因证据为 `/dataagent/api/v1/models/active` 的 `60000ms` 超时。`consoleErrors=1`、`failedRequests=1`、`axNodeCount=28`。
 
 ```bash
 MATECLAW_CDP_ENDPOINT=http://127.0.0.1:9222 \
@@ -1166,8 +1168,8 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；Java 关键契约 20/20；Aloudata 时间戳兼容定向 2/2；DataAgent 已连通本地 Runner，但对象存储与 Chrome JWT 失效仍阻断真实 E2E；全量仍有 3 个 Testcontainers errors（无 Docker） |
-| 9 CDP 视觉验收 | BLOCKED（部分完成） | 348c68ee | 真实 Chrome 9222 + UI 5174 已产出 9 张截图；本轮补充单步骤超时；第 10–12 项与 AX/console/network 完整报告仍等待登录态和真实结果 |
+| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；Java 关键契约 20/20；Aloudata 时间戳兼容定向 2/2；真实提交已返回 `kind=table`/6 行，但完整自动化仍受对象存储、外部依赖与 3 个 Testcontainers errors（无 Docker）阻断 |
+| 9 CDP 视觉验收 | BLOCKED（部分完成） | 6d1b6eda | 真实 Chrome 9222 + UI 5174 已产出 12 张截图和完整报告；4 项 PASS、8 项因 `/dataagent/api/v1/models/active` 60 秒超时失败；`consoleErrors=1`、`failedRequests=1`、AX `28` |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
