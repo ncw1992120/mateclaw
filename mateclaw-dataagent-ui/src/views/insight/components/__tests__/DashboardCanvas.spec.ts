@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
+import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dashboardCanvasConstants'
 
 const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
@@ -39,5 +40,16 @@ describe('DashboardCanvas keyboard interaction', () => {
   it('offers one add-component action in an empty canvas', () => {
     const wrapper = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
     expect(wrapper.get('[aria-label="从组件库添加组件"]').exists()).toBe(true)
+  })
+
+  it('keeps an expanded workspace so the canvas can scroll in both directions', () => {
+    expect(DASHBOARD_CANVAS_MIN_WIDTH).toBeGreaterThan(1024)
+    expect(DASHBOARD_CANVAS_MIN_HEIGHT).toBeGreaterThan(768)
+
+    const wrapper = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
+    const canvas = wrapper.get('.dashboard-canvas')
+    expect(canvas.attributes('data-canvas-workspace')).toBe('expanded')
+    expect(canvas.attributes('style')).toContain(`min-width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
+    expect(canvas.attributes('style')).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
   })
 })

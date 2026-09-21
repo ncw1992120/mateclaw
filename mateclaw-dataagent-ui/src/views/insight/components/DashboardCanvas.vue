@@ -2,6 +2,8 @@
   <div
     ref="canvasRef"
     class="dashboard-canvas"
+    data-canvas-workspace="expanded"
+    :style="canvasWorkspaceStyle"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
   >
@@ -157,6 +159,7 @@ import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
+import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -181,6 +184,14 @@ const props = withDefaults(defineProps<{
 
 /** 画布根元素（drop 落点换算用） */
 const canvasRef = ref<HTMLElement | null>(null)
+
+const canvasWorkspaceStyle = computed(() => {
+  if (!props.editable) return undefined
+  return {
+    minWidth: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+    minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+  }
+})
 
 const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void

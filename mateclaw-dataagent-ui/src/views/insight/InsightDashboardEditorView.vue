@@ -1743,7 +1743,8 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-canvas {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
+  overflow: auto;
   background: var(--db-bg);
   border: 1px solid var(--db-border);
   border-radius: 12px;
