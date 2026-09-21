@@ -4,8 +4,11 @@
     class="dashboard-canvas"
     data-canvas-workspace="expanded"
     :style="canvasWorkspaceStyle"
+    tabindex="0"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
+    @keydown="handleCanvasKeydown"
+    @contextmenu.prevent="handleCanvasContextMenu"
   >
     <!-- 全局联动栏（仅预览态且有全局筛选器时显示） -->
     <div v-if="!editable && globalFilterComponents.length > 0" class="global-filter-bar">
@@ -60,6 +63,7 @@
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
           :style="{ animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
+          @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
           <!-- 四边拖动热区（仅编辑态） -->
           <template v-if="editable">
@@ -201,6 +205,9 @@ const emit = defineEmits<{
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
   (e: 'delete-component', id: string): void
+  (e: 'copy-component', id: string): void
+  (e: 'paste-component'): void
+  (e: 'context-menu', payload: { componentId: string | null; x: number; y: number }): void
   (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
@@ -408,6 +415,20 @@ function handleSelectComponent(id: string): void {
 
 function handleComponentKeydown(event: KeyboardEvent, id: string): void {
   if (!props.editable) return
+  if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+    if (event.key.toLowerCase() === 'c') {
+      event.preventDefault()
+      event.stopPropagation()
+      emit('copy-component', id)
+      return
+    }
+    if (event.key.toLowerCase() === 'v') {
+      event.preventDefault()
+      event.stopPropagation()
+      emit('paste-component')
+      return
+    }
+  }
   const item = gridLayout.value.find((entry) => entry.i === id)
   if (!item) return
   const direction = event.key
@@ -427,6 +448,25 @@ function handleComponentKeydown(event: KeyboardEvent, id: string): void {
   }
   gridLayout.value = gridLayout.value.map((entry) => entry.i === id ? next : entry)
   emit('update-layout', gridLayout.value.map((entry) => ({ id: entry.i, x: entry.x, y: entry.y, w: entry.w, h: entry.h })))
+}
+
+function handleComponentContextMenu(event: MouseEvent, id: string): void {
+  if (!props.editable) return
+  emit('context-menu', { componentId: id, x: event.clientX, y: event.clientY })
+}
+
+function handleCanvasKeydown(event: KeyboardEvent): void {
+  if (!props.editable || event.target !== canvasRef.value) return
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'v') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('paste-component')
+  }
+}
+
+function handleCanvasContextMenu(event: MouseEvent): void {
+  if (!props.editable) return
+  emit('context-menu', { componentId: null, x: event.clientX, y: event.clientY })
 }
 
 /** 组合卡片子组件选中/取消（透传给编辑器，联动属性面板） */
