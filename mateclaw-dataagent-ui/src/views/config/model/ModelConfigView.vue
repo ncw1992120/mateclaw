@@ -229,6 +229,31 @@
                 >
                   {{ t('modelConfig.testConnection') }}
                 </el-button>
+                <!-- 设为默认（按类型互斥，is_default=1；已默认的不重复展示） -->
+                <el-button
+                  v-if="model.modelType !== 'embedding' && !model.isDefault"
+                  size="small"
+                  class="action-capsule action-set-default"
+                  @click="handleSetDefault(model.id)"
+                >
+                  {{ t('modelConfig.setDefaultChat') }}
+                </el-button>
+                <el-button
+                  v-if="model.modelType === 'embedding' && !model.isDefault"
+                  size="small"
+                  class="action-capsule action-set-embedding"
+                  @click="handleSetDefaultEmbedding(model.id)"
+                >
+                  {{ t('modelConfig.setDefaultEmbedding') }}
+                </el-button>
+                <el-button
+                  v-if="model.modelType === 'rerank' && !model.isDefault"
+                  size="small"
+                  class="action-capsule action-set-rerank"
+                  @click="handleSetDefaultRerank(model.id)"
+                >
+                  {{ t('modelConfig.setDefaultRerank') }}
+                </el-button>
                 <el-button size="small" class="action-capsule" :icon="EditPen" @click="openEditModel(model)">
                   {{ t('modelConfig.edit') }}
                 </el-button>
