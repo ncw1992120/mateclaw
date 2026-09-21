@@ -100,6 +100,127 @@
   --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Insight editor convergence tokens and low-noise property primitives. */
+.insight-editor-view {
+  --insight-control-height: 32px;
+  --insight-sidebar-width: 360px;
+  --insight-radius-control: 6px;
+  --insight-radius-card: 8px;
+  --insight-space-section: 16px;
+  --insight-space-field: 8px;
+  --insight-motion-fast: 160ms;
+}
+
+.insight-property-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--db-border, #edf0f5);
+}
+
+.insight-property-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.insight-property-section__title {
+  margin: 0;
+  color: var(--db-text-primary, #20242d);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.insight-property-section__body {
+  margin-top: 12px;
+}
+
+.insight-inline-help {
+  position: relative;
+  display: inline-flex;
+}
+
+.insight-inline-help__trigger {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #cbd2de;
+  border-radius: 50%;
+  color: #7d8795;
+  background: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: help;
+}
+
+.insight-inline-help__trigger:hover,
+.insight-inline-help__trigger:focus-visible {
+  border-color: #5284ff;
+  color: #3164e8;
+  outline: 2px solid rgba(82, 132, 255, 0.18);
+  outline-offset: 1px;
+}
+
+.insight-inline-help__content {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  padding: 8px 10px;
+  border: 1px solid #e1e6ef;
+  border-radius: 6px;
+  color: #536071;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(32, 44, 64, 0.12);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.insight-editor-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px 16px;
+  color: #929aa8;
+  text-align: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-editor-empty-state__icon {
+  color: #c6ccd6;
+  font-size: 28px;
+  line-height: 28px;
+}
+
+.insight-editor-empty-state__description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.insight-editor-empty-state__action {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #5284ff;
+  border-radius: 6px;
+  color: #3164e8;
+  background: #fff;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-editor-view *,
+  .insight-editor-view *::before,
+  .insight-editor-view *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
 /* ===== 洞察/报告跟随应用主题 =====
  * 默认浅色主题使用上面的固定亮色；切换到暖色/护眼/暗黑主题时，
  * 让 --db-* 设计 Token 跟随 --theme-* 全局变量，使背景/文字随主题切换。
