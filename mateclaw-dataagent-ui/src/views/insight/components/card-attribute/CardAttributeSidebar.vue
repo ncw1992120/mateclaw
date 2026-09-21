@@ -38,6 +38,7 @@ import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
 import MetricConfigDialog from './MetricConfigDialog.vue'
 import MetricStyleDialog from './MetricStyleDialog.vue'
+import { useComponentPropertyDraft } from '../property/useComponentPropertyDraft'
 
 const props = defineProps<{
   /** 当前选中的数据组件（kpi / chart / table） */
@@ -63,6 +64,9 @@ const emit = defineEmits<{
 }>()
 
 const { state, scheduleResultSet } = useInsight()
+// 面板仍复用 useInsight 的领域动作，但最终组件回写经过独立草稿控制器，
+// 避免切换组件时把未确认的配置引用带到下一张卡片。
+const propertyDraft = useComponentPropertyDraft()
 
 /** 灌入中标记：避免 hydrate 重置 state 时误触发回写 */
 const hydrating = ref(false)
@@ -73,6 +77,7 @@ function hydrate(): void {
   if (!component) return
   hydrating.value = true
   hydratePanel(component, props.dashboardId, props.filterComponents ?? [])
+  propertyDraft.load(component)
   // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
   nextTick(() => {
     hydrating.value = false
@@ -112,7 +117,8 @@ function scheduleEmit(): void {
     const pipeline = panelToPipeline()
     const patch = buildComponentPatch(props.component)
     const next = writeComponentDatasetPipeline(patch, pipeline)
-    emit('change', next)
+    propertyDraft.load(next)
+    emit('change', propertyDraft.commit() ?? next)
   }, 300)
 }
 
