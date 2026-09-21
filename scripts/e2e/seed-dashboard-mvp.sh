@@ -129,6 +129,16 @@ echarts_dashboard_schema() {
   }'
 }
 
+python_dashboard_schema() {
+  local dataset_id="$1" input_name="$2" script="$3" system_mode="$4" system_code="$5" user_code="$6" right_id="${7:-}" right_input="${8:-}"
+  jq -cn --arg dataset "$dataset_id" --arg input "$input_name" --arg script "$script" \
+    --arg mode "$system_mode" --arg system "$system_code" --arg user "$user_code" --arg right "$right_id" --arg rightInput "$right_input" ' {
+    version:"1.1",
+    pages:[{id:"python-page",name:"Python E2E",components:[{id:"python-table",type:"table",title:"Python E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,parameters:[],scriptFilterBindings:[],systemScript:{mode:$mode,generatedCode:$system,managedCode:(if $mode == "managed" then $system else null end),generatedFingerprint:"seed",userCode:$user}}}}]}],
+    datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000},scriptBindings:[{componentId:"python-table",renderType:"table"}]
+  }'
+}
+
 jdbc_aloudata_script=$'left = datasets.read(input_name="jdbc_orders")\nright = datasets.read(input_name="aloudata_metrics", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nresult = left.to_polars().to_dicts() + right.to_polars().to_dicts()'
 api_file_script=$'paid_filter = {"field": "status", "operator": "eq", "value": "PAID"}\napi_rows = datasets.read(input_name="api_orders", filters=[paid_filter])\nfile_rows = datasets.read(input_name="file_orders", filters=[paid_filter])\nresult = api_rows.to_polars().to_dicts() + file_rows.to_polars().to_dicts()'
 
@@ -191,6 +201,26 @@ resource_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$re
 large_schema=$(jq -cn --arg dataset "$http_dataset" --arg script 'result = [{"id": i, "payload": "x" * 2000} for i in range(1000)]' '{version:"1.1",pages:[{id:"e2e-large-page",name:"E2E Large Result",components:[{id:"e2e-large-table",type:"table",title:"E2E Large Result",position:{x:0,y:0,w:12,h:6},renderType:"table",config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],datasetInputs:[{datasetId:$dataset,inputName:"api_orders"}],script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000}}')
 large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large_schema" '{name:"E2E Large Result Dashboard",description:"dashboard MVP ObjectRef result flow",schemaJson:$schema}')" | id_from)
 
+# Python 编排专项种子：名称和 ID 均写入状态文件，E2E 不硬编码资源 ID。
+python_filter_script=$'rows = datasets.read(input_name="python_orders")\nresult = rows.to_polars().to_dicts()'
+python_filter_schema=$(python_dashboard_schema "$http_dataset" python_orders "$python_filter_script" generated 'python_orders = datasets.read(input_name="python_orders", filters=[])' 'result = python_orders.to_polars().to_dicts()')
+python_filter_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_filter_schema" '{name:"Python Filter Dashboard",description:"Python runtime filter template dashboard",schemaJson:$schema}')" | id_from)
+
+python_ab_script=$'left = datasets.read(input_name="dataset_a")\nkeys = left.to_polars().select(["id"]).to_dicts()\nright = datasets.read(input_name="dataset_b", filters=[{"field":"id","operator":"in","value":[row["id"] for row in keys]}])\nresult = right.to_polars().to_dicts()'
+python_ab_schema=$(python_dashboard_schema "$http_dataset" dataset_a "$python_ab_script" generated 'dataset_a = datasets.read(input_name="dataset_a", filters=[])' 'result = dataset_a.to_polars().to_dicts()' "$file_dataset" dataset_b)
+python_ab_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_ab_schema" '{name:"Python A-to-B Dashboard",description:"Python dataset A to B filtering dashboard",schemaJson:$schema}')" | id_from)
+
+python_managed_schema=$(python_dashboard_schema "$http_dataset" managed_orders 'managed_orders = datasets.read(input_name="managed_orders")\nresult = managed_orders.to_polars().to_dicts()' managed 'managed_orders = custom_read()' 'result = managed_orders')
+python_managed_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_managed_schema" '{name:"Python Managed System Dashboard",description:"Python managed system region dashboard",schemaJson:$schema}')" | id_from)
+
+python_output_schema=$(python_dashboard_schema "$http_dataset" output_orders 'result = {"schemaVersion":"1.0","kind":"table","data":{"columns":[{"name":"status","title":"状态","dataType":"string","nullable":true}],"rows":[{"status":"PAID"}]},"meta":{"rowCount":1,"truncated":false,"sourceInputs":["output_orders"]}}' generated 'output_orders = datasets.read(input_name="output_orders")' 'result = output_orders.to_polars().to_dicts()')
+python_output_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_output_schema" '{name:"Python Output Contract Dashboard",description:"Python output envelope dashboard",schemaJson:$schema}')" | id_from)
+
+python_output_error_schema=$(python_dashboard_schema "$http_dataset" error_orders 'result = {"schemaVersion":"9.9","kind":"unknown","data":{},"meta":{}}' generated 'error_orders = datasets.read(input_name="error_orders")' 'result = error_orders.to_polars().to_dicts()')
+python_output_error_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_output_error_schema" '{name:"Python Output Error Dashboard",description:"Python output contract error dashboard",schemaJson:$schema}')" | id_from)
+
+python_large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large_schema" '{name:"Python Large Result Dashboard",description:"Python large result dashboard",schemaJson:$schema}')" | id_from)
+
 jq -n \
   --arg jdbcDatasourceId "$jdbc_ds" --arg jdbcDatasetId "$jdbc_dataset" \
   --arg aloudataDatasourceId "$aloudata_ds" --arg aloudataDatasetId "$aloudata_dataset_id" \
@@ -202,7 +232,10 @@ jq -n \
   --arg cancelDashboardId "$cancel_dashboard" \
   --arg timeoutDashboardId "$timeout_dashboard" --arg resourceDashboardId "$resource_dashboard" \
   --arg largeDashboardId "$large_dashboard" \
-  '{jdbcDatasourceId:$jdbcDatasourceId,jdbcDatasetId:$jdbcDatasetId,aloudataDatasourceId:$aloudataDatasourceId,aloudataDatasetId:$aloudataDatasetId,httpDatasourceId:$httpDatasourceId,httpDatasetId:$httpDatasetId,fileObjectId:$fileObjectId,fileDatasetId:$fileDatasetId,multiSourceDashboardId:$multiSourceDashboardId,apiFileDashboardId:$apiFileDashboardId,echartsDashboardId:$echartsDashboardId,compatibilityDashboardId:$compatibilityDashboardId,errorDashboardId:$errorDashboardId,cancelDashboardId:$cancelDashboardId,timeoutDashboardId:$timeoutDashboardId,resourceDashboardId:$resourceDashboardId,largeDashboardId:$largeDashboardId}' > "$STATE_FILE"
+  --arg pythonFilterDashboardId "$python_filter_dashboard" --arg pythonAToBDashboardId "$python_ab_dashboard" \
+  --arg pythonManagedDashboardId "$python_managed_dashboard" --arg pythonOutputDashboardId "$python_output_dashboard" \
+  --arg pythonOutputErrorDashboardId "$python_output_error_dashboard" --arg pythonLargeDashboardId "$python_large_dashboard" \
+  '{jdbcDatasourceId:$jdbcDatasourceId,jdbcDatasetId:$jdbcDatasetId,aloudataDatasourceId:$aloudataDatasourceId,aloudataDatasetId:$aloudataDatasetId,httpDatasourceId:$httpDatasourceId,httpDatasetId:$httpDatasetId,fileObjectId:$fileObjectId,fileDatasetId:$fileDatasetId,multiSourceDashboardId:$multiSourceDashboardId,apiFileDashboardId:$apiFileDashboardId,echartsDashboardId:$echartsDashboardId,compatibilityDashboardId:$compatibilityDashboardId,errorDashboardId:$errorDashboardId,cancelDashboardId:$cancelDashboardId,timeoutDashboardId:$timeoutDashboardId,resourceDashboardId:$resourceDashboardId,largeDashboardId:$largeDashboardId,pythonFilterDashboardId:$pythonFilterDashboardId,pythonAToBDashboardId:$pythonAToBDashboardId,pythonManagedDashboardId:$pythonManagedDashboardId,pythonOutputDashboardId:$pythonOutputDashboardId,pythonOutputErrorDashboardId:$pythonOutputErrorDashboardId,pythonLargeDashboardId:$pythonLargeDashboardId}' > "$STATE_FILE"
 
 cat <<EOF
 Seed completed. State: $STATE_FILE

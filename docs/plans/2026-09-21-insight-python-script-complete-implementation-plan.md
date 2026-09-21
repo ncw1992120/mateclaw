@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务的 E2E（6 个种子仪表盘 + pipeline/错误/兼容三个 spec）需要完整运行栈（DataAgent + PostgreSQL + Python Runner + ObjectRef 存储）同时在沙箱内可用。当前沙箱无 Docker/Testcontainers、无法拉起 Runner 与对象存储，按 §3.5 记 BLOCKED，待本地全栈环境（Makefile 门禁：dashboard-dataagent-test / dashboard-runner-test / dashboard-ui-test / dashboard-ui-build / dashboard-verify-local）就绪后补跑，不得以模拟结果替代。
+**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec，但完整 E2E 仍需要登录凭据、数据库/对象存储和 Runner 同时可用。当前本机 Runner 单测已通过，Java 全量只能用本机 JDK 21/Maven 3.9.16 执行；其中 4 个 Testcontainers 用例因无 Docker、2 个既有数据契约测试失败。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
@@ -906,7 +906,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 - Consumes: Tasks 1–7 的完整 API/UI。
 - Produces: 可重复创建的单输入、双输入、筛选器、managed 系统代码、错误输出和大结果测试仪表盘。
 
-- [ ] **Step 1: 扩展确定性测试种子**
+- [x] **Step 1: 扩展确定性测试种子**
 
 创建以下看板，ID 从 API 响应读取并写状态文件，不硬编码：
 
@@ -921,18 +921,20 @@ Python Large Result Dashboard
 
 测试凭据只从环境变量读取，种子和日志不得写默认密码。
 
-- [ ] **Step 2: 编写核心 E2E**
+- [x] **Step 2: 编写核心 E2E**
 
 `dashboard-python-pipeline.spec.ts` 覆盖：打开 Python 编辑器、模板条件回填、四种时间输入组合、A→B、解锁系统代码、配置变化后的差异、恢复、table/scalar/message、错误诊断、保存刷新和正式预览。
 
-- [ ] **Step 3: 编写错误与兼容回归**
+- [x] **Step 3: 编写错误与兼容回归**
 
 覆盖旧单输入脚本、旧根级 script、空表、重复列、混合类型、未知对象、超时、取消、结果超限、ObjectRef、另一个组件不刷新。所有错误断言可见提示，不接受仅断言 HTTP 200。
 
 - [ ] **Step 4: 运行全量自动化门禁**
 
 ```bash
-make dashboard-dataagent-test
+JDK21_HOME='/Users/srant/.jdks/jdk-21.0.12+8/Contents/Home'; MAVEN_HOME='/Users/srant/.maven/apache-maven-3.9.16'
+export JAVA_HOME="$JDK21_HOME"; export PATH="$MAVEN_HOME/bin:$JAVA_HOME/bin:$PATH"
+mvn -o -f mateclaw-dataagent/pom.xml test
 make dashboard-runner-test
 make dashboard-ui-test
 make dashboard-ui-build
@@ -941,10 +943,10 @@ MATECLAW_E2E_BROWSER_CHANNEL=chrome npm --prefix mateclaw-dataagent-ui run test:
   e2e/dashboard-multi-source.spec.ts \
   e2e/dashboard-errors-and-compatibility.spec.ts \
   --reporter=line
-make dashboard-verify-local
+# `dashboard-verify-local` 仍包含 Docker/Testcontainers，仅在用户明确提供该环境时执行；本次不调用它。
 ```
 
-Expected: 所有命令退出 0；无 skipped/only；模拟环境结果只能标记为本地合约 PASS，不能代替真实 Aloudata 权限验收。
+Expected: 可执行的本机命令退出 0；无 skipped/only；当前 Java 全量受 Docker/Testcontainers 缺失与既有 2 个失败阻塞，Runner/UI 定向门禁可独立验证；模拟环境结果只能标记为本地合约 PASS，不能代替真实 Aloudata 权限验收。
 
 - [ ] **Step 5: 精确提交**
 
@@ -960,7 +962,7 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
 
-**状态：BLOCKED（依赖 Task 8 种子数据与登录态）**——CDP 脚本模式已在 `dev-support/local-simulation/scripts/repro/_cdp_verify_python.mjs` 验证可行（接管 9222 Chrome 读取面板状态），但 12 张截图的完整视觉验收链路依赖 Task 8 的动态仪表盘种子与登录凭据，需在用户本地全栈环境执行。按 §3.5 记 BLOCKED。
+**状态：BLOCKED（依赖 Task 8 登录态与 UI 服务）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令；当前 9222 `/json/version` 可读，但本机 UI `15174` 未启动且没有 E2E 状态文件/登录凭据，12 张截图不能伪造 PASS。按 §3.5 记 BLOCKED。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -972,7 +974,7 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 - Consumes: 已启动的真实 Google Chrome，CDP endpoint `http://127.0.0.1:9222`，以及 E2E 状态文件中的动态 dashboard ID。
 - Produces: 页面截图、完整 AX Tree 摘要、关键 DOM 文本、控制台错误、网络失败和可复验 JSON 报告。
 
-- [ ] **Step 1: 写 CDP 脚本并强制连接 9222，不自行启动 Chromium**
+- [x] **Step 1: 写 CDP 脚本并强制连接 9222，不自行启动 Chromium**
 
 ```js
 import { chromium } from '@playwright/test'
@@ -985,7 +987,7 @@ if (!context) throw new Error('9222 上没有可用 Google Chrome context')
 
 脚本读取 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和状态文件，不含固定用户名、密码、Chrome 可执行路径或 dashboard ID。
 
-- [ ] **Step 2: 增加 npm 命令**
+- [x] **Step 2: 增加 npm 命令**
 
 ```json
 {
@@ -993,7 +995,7 @@ if (!context) throw new Error('9222 上没有可用 Google Chrome context')
 }
 ```
 
-- [ ] **Step 3: 启动真实 Google Chrome 并确认端口**
+- [x] **Step 3: 启动真实 Google Chrome 并确认端口**
 
 ```bash
 open -na "Google Chrome" --args \

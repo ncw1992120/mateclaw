@@ -21,5 +21,11 @@ jq -er '
   export("MATECLAW_E2E_CANCEL_DASHBOARD_ID"; .cancelDashboardId),
   export("MATECLAW_E2E_TIMEOUT_DASHBOARD_ID"; .timeoutDashboardId),
   export("MATECLAW_E2E_RESOURCE_DASHBOARD_ID"; .resourceDashboardId),
-  export("MATECLAW_E2E_LARGE_RESULT_DASHBOARD_ID"; .largeDashboardId)
+  export("MATECLAW_E2E_LARGE_RESULT_DASHBOARD_ID"; .largeDashboardId),
+  export("MATECLAW_E2E_PYTHON_FILTER_DASHBOARD_ID"; .pythonFilterDashboardId),
+  export("MATECLAW_E2E_PYTHON_A_TO_B_DASHBOARD_ID"; .pythonAToBDashboardId),
+  export("MATECLAW_E2E_PYTHON_MANAGED_DASHBOARD_ID"; .pythonManagedDashboardId),
+  export("MATECLAW_E2E_PYTHON_OUTPUT_DASHBOARD_ID"; .pythonOutputDashboardId),
+  export("MATECLAW_E2E_PYTHON_OUTPUT_ERROR_DASHBOARD_ID"; .pythonOutputErrorDashboardId),
+  export("MATECLAW_E2E_PYTHON_LARGE_DASHBOARD_ID"; .pythonLargeDashboardId)
 ' "$STATE_FILE"
