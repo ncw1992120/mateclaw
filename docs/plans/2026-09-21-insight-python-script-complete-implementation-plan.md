@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-> 2026-09-21 追加：主 Python Playwright spec 已按真实正式 UI 更新为“编辑 Python 脚本 → 筛选预览 → 数据预览”路径，移除已废弃的 `最终结果预览`、`.result-table`、`.execution-alert` 断言；凭据缺失、ObjectRef/S3 Testcontainers 无 Docker 等外部门禁仍按 BLOCKED 记录，不以选择器修复冒充全链路通过。
+> 2026-09-21 追加：主 Python Playwright spec 已按真实正式 UI 更新为“编辑 Python 脚本 → 筛选预览 → 数据预览”路径，移除已废弃的 `最终结果预览`、`.result-table`、`.execution-alert` 断言；本地真实执行已注入 Chrome 会话 token 和动态 dashboard ID，但 6 个用例均在浏览器启动前因 Playwright Chromium headless executable 缺失而失败，未进入业务断言。凭据/浏览器运行时、ObjectRef/S3 Testcontainers 无 Docker 等外部门禁仍按 BLOCKED 记录，不以选择器修复冒充全链路通过。
 
 **状态：BLOCKED（真实外部依赖未完全满足）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，前端全量回归 `52` 个文件/`280` 个测试通过，Java 使用本机 JDK 21/Maven 3.9.16 的完整测试为 `224` 个用例、`0` failures、`3` Testcontainers errors（均为 ObjectRef/S3 容器依赖），UI `vue-tsc` 与 Vite build 通过；Playwright 三个真实 E2E spec 在显式缺少 `MATECLAW_E2E_TOKEN` 时按 guard 退出，未使用路由 mock。登录后真实提交接口已从 `python runner unavailable` 推进到 Runner 执行成功并返回 `kind=table` 的 6 行结果。为避免洞察编辑/预览被不消费的顶部 active-model 可选请求拖死，新增 Insight 路由跳过该请求的定向门控，并保留非 Insight 路由行为；同时修复数据集查看接口在 PostgreSQL 下把 `ORDER BY id` 带入 `COUNT(*)` 的 SQL 错误，并新增回归测试。这不是后端模型配置查询的根治。完整自动化仍受文件对象存储、部分 DataAgent 外部依赖、无 Docker 的 3 个 Testcontainers 用例及真实 E2E 凭据/数据环境阻断；本次没有用 Docker 代替本机环境，也没有把单测或局部真实执行结果冒充完整 E2E PASS。
 
@@ -1182,7 +1182,7 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；UI 52 文件/280 测试；Java 224 用例、0 failures、3 个 Testcontainers errors；Playwright 因缺少 token guard 退出；Insight 路由 active-model 门控与 PostgreSQL 数据集 count 回归已补单测与实现 |
+| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；UI 54 文件/293 测试；Java 224 用例、0 failures、3 个 Testcontainers errors；主 Python Playwright 6 个用例已收集但均因本机缺少 Chromium headless executable 在启动前失败；Insight 路由 active-model 门控与 PostgreSQL 数据集 count 回归已补单测与实现 |
 | 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见 |
 
 执行备注：
