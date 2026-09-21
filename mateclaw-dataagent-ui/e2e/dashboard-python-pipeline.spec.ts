@@ -75,7 +75,7 @@ test.describe('Python pipeline real DataAgent flow', () => {
   test('runs dataset A to B filtering without exposing an arbitrary query path', async ({ page }) => {
     await openEditor(page, aToBDashboardId)
     await openPythonPreview(page)
-    await expect(page.locator('[aria-label="数据预览"] .el-table')).toBeVisible({ timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toBeVisible({ timeout: 120_000 })
   })
 
   test('unlocks, diffs, preserves and restores the system-generated region', async ({ page }) => {
@@ -87,6 +87,8 @@ test.describe('Python pipeline real DataAgent flow', () => {
     await page.getByTestId('diff-toggle').click().catch(() => {})
     if (await page.getByTestId('restore-generated').count()) {
       await page.getByTestId('restore-generated').click()
+      const confirm = page.getByRole('dialog').filter({ hasText: '恢复系统生成' })
+      if (await confirm.count()) await confirm.getByRole('button', { name: '恢复', exact: true }).click()
       await expect(page.getByTestId('system-mode-tag')).toContainText('系统生成')
     }
   })
@@ -94,14 +96,14 @@ test.describe('Python pipeline real DataAgent flow', () => {
   test('renders a valid table envelope in the component preview', async ({ page }) => {
     await openEditor(page, outputDashboardId)
     await openPythonPreview(page)
-    await expect(page.locator('[aria-label="数据预览"] .el-table')).toContainText('PAID', { timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toContainText('PAID', { timeout: 120_000 })
   })
 
   test('shows a readable output contract error instead of a blank success', async ({ page }) => {
     await openEditor(page, outputErrorDashboardId)
     await openPythonPreview(page)
     await expect(page.locator('.insight-dialog--preview .el-alert')).toBeVisible({ timeout: 120_000 })
-    await expect(page.locator('.insight-dialog--preview .el-alert')).toContainText(/OUTPUT_CONTRACT_ERROR|schemaVersion|结果契约/)
+    await expect(page.locator('.insight-dialog--preview .el-alert')).toContainText(/OUTPUT_CONTRACT_ERROR|schemaVersion|结果契约|输出契约错误/)
   })
 
   test('reads the large result through the typed ObjectRef result API', async ({ page }) => {
