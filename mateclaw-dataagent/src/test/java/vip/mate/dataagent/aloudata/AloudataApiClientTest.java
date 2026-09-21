@@ -18,6 +18,31 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AloudataApiClientTest {
 
     @Test
+    void callPreservesNonMapRequestBody() {
+        AloudataEndpointService endpoints = mock(AloudataEndpointService.class);
+        when(endpoints.getEndpoint("batch")).thenReturn(new AloudataApiProperties.ApiEndpoint(
+                "batch", "/batch", "POST", "test", List.of(), List.of()));
+        RestTemplate restTemplate = new RestTemplate();
+        AloudataApiClient client = new AloudataApiClient(endpoints);
+        ReflectionTestUtils.setField(client, "restTemplate", restTemplate);
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        server.expect(requestTo("https://semantic.example:8085/batch"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$[0]").value("metric-a"))
+                .andRespond(withSuccess("{\"code\":\"200\",\"success\":true}",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        config.setSemanticHost("https://semantic.example");
+        config.setTenantId("tn-test");
+        config.setAuthType("UID");
+        config.setAuthValue("uid-test");
+
+        client.call("batch", config, Map.of(), List.of("metric-a"));
+        server.verify();
+    }
+
+    @Test
     void callWithParamsInjectsConnectionAuthenticationBeforeValidation() {
         AloudataEndpointService endpoints = mock(AloudataEndpointService.class);
         AloudataApiProperties.ApiEndpoint endpoint = new AloudataApiProperties.ApiEndpoint(

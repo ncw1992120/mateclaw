@@ -23,7 +23,14 @@ async def submit(request: TaskRequest):
                 request.parameters)
             token = request.readToken
             def redact(value): return (value or "").replace(token, "[REDACTED]")
-            tasks[request.taskId] = TaskResponse(taskId=request.taskId, status=result["status"], output=redact(result["output"]), result=redact(result.get("result")), outputRef=result.get("outputRef"), error=redact(result["error"]), stats={"returncode": result["returncode"]})
+            # result 为结构化 envelope（dict）；字符串仅在异常路径兜底
+            result_value = result.get("result")
+            error_value = result.get("error")
+            tasks[request.taskId] = TaskResponse(taskId=request.taskId, status=result["status"], output=redact(result["output"]),
+                result=result_value if isinstance(result_value, dict) else None,
+                outputRef=result.get("outputRef"),
+                error=redact(error_value) if isinstance(error_value, str) else str(error_value or "")[:10_000],
+                stats={"returncode": result["returncode"]})
         except Exception as error:
             # Never leave a task in RUNNING when the worker itself crashes.
             # The control plane needs a terminal state so callers can retry

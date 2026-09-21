@@ -69,12 +69,20 @@ public class LocalAloudataApiClient extends AloudataApiClient {
     protected ResponseEntity<Map> send(PreparedRequest request) {
         if (!mockServerUrl.isEmpty()) {
             String url = rewriteBase(request.url(), mockServerUrl);
-            Object body = request.bodyParams().isEmpty() ? null : request.bodyParams();
             log.info("[local-mock] {} {} -> {}", request.method(), request.path(), url);
-            return exchange(url, request.method(), new HttpEntity<>(body, request.headers()));
+            return exchange(url, request.method(), new HttpEntity<>(request.body(), request.headers()));
         }
         Map<String, Object> params = new LinkedHashMap<>(request.queryParams());
-        params.putAll(request.bodyParams());
+        if (request.body() instanceof Map<?, ?> body) {
+            for (Map.Entry<?, ?> entry : body.entrySet()) {
+                if (entry.getKey() != null) {
+                    params.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+        } else if (request.body() != null) {
+            throw new IllegalArgumentException("内置 Aloudata mock 仅支持 Map 请求体: "
+                    + request.body().getClass().getName());
+        }
         if (log.isInfoEnabled()) {
             log.info("[local-mock] {} {} -> {} params={}", request.method(), request.path(),
                     request.url(), params.keySet());

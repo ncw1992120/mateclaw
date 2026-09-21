@@ -75,13 +75,7 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         HttpMethod method = resolveMethod(endpointName);
-        Map<String, Object> body = requestBody instanceof Map<?, ?> map ? asObjectMap(map) : Map.of();
-        return send(new PreparedRequest(endpointName, method, path, url, Map.of(), body, headers));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> asObjectMap(Map<?, ?> source) {
-        return (Map<String, Object>) source;
+        return send(new PreparedRequest(endpointName, method, path, url, Map.of(), requestBody, headers));
     }
 
     /**
@@ -203,8 +197,7 @@ public class AloudataApiClient {
 
     /** 真正发起 HTTP；本地 mock 只覆写这一步，URL/参数/方法均由 {@link #prepare} 保证一致。 */
     protected ResponseEntity<Map> send(PreparedRequest request) {
-        Object requestBody = request.bodyParams().isEmpty() ? null : request.bodyParams();
-        HttpEntity<?> entity = new HttpEntity<>(requestBody, request.headers());
+        HttpEntity<?> entity = new HttpEntity<>(request.body(), request.headers());
         log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
         return exchange(request.url(), request.method(), entity);
     }
@@ -222,11 +215,11 @@ public class AloudataApiClient {
      * @param path         端点路径（可被数据源级 apiOverrides 覆盖）
      * @param url          完整 URL（含 query；host:port 由数据源连接参数决定）
      * @param queryParams  分发到 QUERY 的参数（Array 参数为集合）
-     * @param bodyParams   分发到 BODY 的参数
+     * @param body         请求体；既可以是参数 Map，也可以是 {@link #call} 传入的任意 JSON 结构
      * @param headers      请求头（含认证头）
      */
     public record PreparedRequest(String endpointName, HttpMethod method, String path, String url,
-                                  Map<String, Object> queryParams, Map<String, Object> bodyParams,
+                                  Map<String, Object> queryParams, Object body,
                                   HttpHeaders headers) {
     }
 

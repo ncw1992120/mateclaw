@@ -184,6 +184,17 @@ class LocalAloudataFixturesTest {
         assertNull(body.get("data"));
     }
 
+    @Test
+    void unsupportedFilterExpressionIsRejectedInsteadOfBeingIgnored() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_cust_asset_in"),
+                "filters", List.of("([channel] = \"APP\" OR [channel] = \"WAP\")")), null);
+
+        assertEquals("SM99002", body.get("code"));
+        assertEquals(false, body.get("success"));
+        assertNull(body.get("data"));
+    }
+
     /** 范围筛选编译成 `([f] >= "a" AND [f] <= "b")`，mock 必须能解析 AND 组合。 */
     @Test
     @SuppressWarnings("unchecked")

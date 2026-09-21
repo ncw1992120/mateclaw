@@ -238,7 +238,13 @@ public class LocalAloudataFixtures {
         }
 
         List<Map<String, Object>> rows = toRows(projected);
-        rows = filterRows(rows, expressions);
+        try {
+            rows = filterRows(rows, expressions);
+        } catch (InvalidFilterExpressionException e) {
+            log.warn("[local-mock] metrics_query 收到无法解析的 filters={}，按真实服务行为返回 SM99002",
+                    params.get("filters"));
+            return systemError("SM99002", "系统异常: filters 表达式无法解析");
+        }
         int offset = intValue(params.get("offset"), 0);
         int limit = intValue(params.get("limit"), rows.size());
         if (offset > 0 || limit < rows.size()) {
@@ -311,8 +317,7 @@ public class LocalAloudataFixtures {
         for (String expression : expressions) {
             List<Condition> conditions = parseConditions(expression);
             if (conditions.isEmpty()) {
-                log.warn("[local-mock] 无法解析筛选表达式，已忽略: {}", expression);
-                continue;
+                throw new InvalidFilterExpressionException(expression);
             }
             List<Map<String, Object>> kept = new ArrayList<>();
             for (Map<String, Object> row : rows) {
@@ -349,12 +354,18 @@ public class LocalAloudataFixtures {
             Matcher matcher = CONDITION.matcher(clause);
             if (!matcher.matches()) {
                 log.warn("[local-mock] 筛选表达式片段无法解析: {}", clause);
-                return List.of();
+                throw new InvalidFilterExpressionException(expression);
             }
             conditions.add(new Condition(matcher.group(1), matcher.group(2).toUpperCase(Locale.ROOT),
                     unquote(matcher.group(3))));
         }
         return conditions;
+    }
+
+    private static final class InvalidFilterExpressionException extends RuntimeException {
+        private InvalidFilterExpressionException(String expression) {
+            super(expression);
+        }
     }
 
     private List<String> unquote(String raw) {
