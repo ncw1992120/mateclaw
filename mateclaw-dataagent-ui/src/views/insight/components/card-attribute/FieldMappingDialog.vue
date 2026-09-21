@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.fieldMapping.visible" title="修改字段名称" width="640px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.fieldMapping.visible" class="insight-dialog--lg" title="修改字段名称" width="640px" destroy-on-close :close-on-click-modal="false" aria-label="修改字段名称">
     <div v-loading="loading" class="fm-body">
       <template v-if="list.length">
         <div class="fm-head">

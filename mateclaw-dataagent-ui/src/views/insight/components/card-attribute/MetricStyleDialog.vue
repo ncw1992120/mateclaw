@@ -1,9 +1,12 @@
 <template>
   <el-dialog
     v-model="ui.metricStyle.visible"
+    class="insight-dialog--md"
     :title="`字段样式 · ${metric ? metric.displayName || metric.fieldKey : ''}`"
     width="760px"
+    destroy-on-close
     :close-on-click-modal="false"
+    aria-label="指标样式"
   >
     <div v-if="metric" class="ms-body">
       <!-- 左侧：样式配置 -->

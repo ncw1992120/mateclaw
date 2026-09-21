@@ -212,6 +212,45 @@
   cursor: pointer;
 }
 
+.insight-dialog--sm .el-dialog__body,
+.insight-dialog--md .el-dialog__body,
+.insight-dialog--lg .el-dialog__body,
+.insight-dialog--preview .el-dialog__body {
+  padding: 20px 24px;
+}
+
+.insight-dialog--sm .el-dialog__footer,
+.insight-dialog--md .el-dialog__footer,
+.insight-dialog--lg .el-dialog__footer,
+.insight-dialog--preview .el-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--db-border, #edf0f5);
+}
+
+.insight-dialog--sm .el-input__wrapper,
+.insight-dialog--md .el-input__wrapper,
+.insight-dialog--lg .el-input__wrapper,
+.insight-dialog--preview .el-input__wrapper,
+.insight-dialog--sm .el-button,
+.insight-dialog--md .el-button,
+.insight-dialog--lg .el-button,
+.insight-dialog--preview .el-button {
+  min-height: var(--insight-control-height, 32px);
+}
+
+.insight-dialog--sm .hint,
+.insight-dialog--md .hint,
+.insight-dialog--lg .hint,
+.insight-dialog--preview .hint {
+  margin: 0;
+  color: var(--db-text-muted, #7d8795);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .insight-editor-view *,
   .insight-editor-view *::before,

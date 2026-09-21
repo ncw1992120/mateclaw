@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.preview.visible" :title="title" width="780px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.preview.visible" class="insight-dialog--preview" :title="title" width="780px" destroy-on-close :close-on-click-modal="false" aria-label="数据预览">
     <div v-if="previewState.loading" v-loading="true" element-loading-text="正在拉取预览数据…" class="preview-loading" />
 
     <el-alert

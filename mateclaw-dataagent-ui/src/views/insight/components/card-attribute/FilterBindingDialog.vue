@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.filterBinding.visible" title="绑定筛选器" width="720px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.filterBinding.visible" class="insight-dialog--lg" title="绑定筛选器" width="720px" destroy-on-close :close-on-click-modal="false" aria-label="绑定筛选器">
     <!-- 顶部工具条：统计 + 继续添加 -->
     <div class="fb-toolbar">
       <span class="fb-count">已绑定 {{ drafts.length }} 个筛选器</span>

@@ -8,7 +8,7 @@ import type { DatasetFieldMeta } from '@/utils/field-mapping'
 const { state } = useInsight()
 
 const stubs = {
-  'el-dialog': { template: '<div><slot /><slot name="footer" /></div>' },
+  'el-dialog': { template: '<div class="el-dialog" v-bind="$attrs"><slot /><slot name="footer" /></div>' },
   'el-tooltip': { template: '<div><slot /></div>' },
   'el-input': {
     props: ['modelValue'],
@@ -48,6 +48,12 @@ beforeEach(() => {
 })
 
 describe('字段名称弹窗 · 注册表驱动', () => {
+  it('uses the shared large dialog size and one primary confirmation action', async () => {
+    const wrapper = await openWith(dataset({ fields: [{ name: 'amount' }] }))
+    expect(wrapper.get('.el-dialog').classes()).toContain('insight-dialog--lg')
+    expect(wrapper.findAll('button').filter((button) => button.text() === '确定')).toHaveLength(1)
+  })
+
   it('按数据集字段注册表铺出字段名/描述/展示名三列', async () => {
     const wrapper = await openWith(
       dataset({

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.python.visible" title="编辑 Python 脚本" width="760px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.python.visible" class="insight-dialog--preview" title="编辑 Python 脚本" width="760px" destroy-on-close :close-on-click-modal="false" aria-label="编辑 Python 脚本">
     <!-- 系统生成区域（只读） -->
     <div class="py-block">
       <div class="py-title">

@@ -16,7 +16,7 @@
 - [x] Task 2：统一属性草稿状态与保存边界（定向 12 tests 通过；全量测试当前受既有 DatasetDataDialog 失败阻塞，Task 4 处理）
 - [x] Task 3：收敛卡片属性配置布局与信息层级（定向 2 files / 22 tests 通过；正式洞察组件视觉 Emoji 已清理）
 - [x] Task 4：收敛数据集来源选择与配置弹窗（来源/弹窗 3 tests；全量 UI 43 files / 241 tests 通过）
-- [ ] Task 5：统一 Python、筛选器、结果集交互
+- [x] Task 5：统一弹窗、表单、按钮和反馈样式（6 个测试文件 / 38 tests 通过；统一 dialog 尺寸、销毁和 footer 令牌）
 - [ ] Task 6：统一画布、组件库与页面树交互
 - [ ] Task 7：补强后端 Schema、预览、保存与执行契约回归
 - [ ] Task 8：正式路由隔离与原型页边界
