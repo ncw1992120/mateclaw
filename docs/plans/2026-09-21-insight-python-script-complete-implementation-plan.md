@@ -1198,7 +1198,7 @@ git diff --check
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
 - Runner 的 `TaskResponse.result` 已从 JSON 字符串改为结构化 envelope dict；DataAgent `result()` 响应从 `{rows}` 改为 `{envelope,inline,outputRef?}` —— 前端已同步，旧 `rows` 字段不再输出。
-- 遗留：dataset-result.ts 的 echarts 猜测路径仍服务旧 scriptBindings 渲染；预览页执行参数 fail-closed（筛选值 → 脚本参数的最后一公里需产品确认参数声明策略后打通）。
+- 兼容说明：`dataset-result.ts` 的 ECharts 兼容路径仍服务旧 `scriptBindings` 渲染，但新组件级 pipeline 统一走 `ScriptResultEnvelope`；正式预览已通过 `scriptFilterBindings` 将筛选值映射为 `datasets.params`，未声明或未填写的参数继续 fail-closed。
 
 ### 本轮实施进度（2026-09-21）
 
