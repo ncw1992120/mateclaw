@@ -380,11 +380,13 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             columnDefs.add(colDef);
         }
         result.setColumns(columnDefs);
+        LambdaQueryWrapper<DatasetDataEntity> countWrapper = new LambdaQueryWrapper<>();
+        countWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
+        long total = datasetDataMapper.selectCount(countWrapper);
+        result.setTotal(total);
         LambdaQueryWrapper<DatasetDataEntity> dataWrapper = new LambdaQueryWrapper<>();
         dataWrapper.eq(DatasetDataEntity::getDatasetId, datasetId);
         dataWrapper.orderByAsc(DatasetDataEntity::getId);
-        long total = datasetDataMapper.selectCount(dataWrapper);
-        result.setTotal(total);
         dataWrapper.last("LIMIT " + size + " OFFSET " + (page - 1) * size);
         List<DatasetDataEntity> dataEntities = datasetDataMapper.selectList(dataWrapper);
         List<Map<String, Object>> rows = new ArrayList<>();

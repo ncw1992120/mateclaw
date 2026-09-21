@@ -27,6 +27,10 @@ page.on('requestfailed', (request) => failedRequests.push(`FAILED ${request.url(
 page.on('response', (response) => { if (response.status() >= 400) failedRequests.push(`${response.status()} ${response.url()}`) })
 
 const report = { browser: 'Google Chrome via CDP 9222', dashboardIds: seed, screenshots: [], consoleErrors, failedRequests }
+function persistReport() {
+  report.failedRequests = [...new Set(report.failedRequests)]
+  fs.writeFileSync(path.join(evidenceDir, 'visual-report.json'), JSON.stringify(report, null, 2))
+}
 async function shot(name, action) {
   const item = { name, status: 'PASS', screenshotPath: path.join(evidenceDir, `${name}.png`) }
   let timeout
@@ -49,22 +53,44 @@ async function shot(name, action) {
     if (timeout) clearTimeout(timeout)
   }
   report.screenshots.push(item)
+  persistReport()
+  console.log(`[cdp] ${name}: ${item.status}${item.detail ? ` - ${item.detail}` : ''}`)
 }
 
 async function openSeededCard(name) {
-  await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'domcontentloaded' })
+  // Chrome 9222 的 SPA 导航可能在 Vite 热更新期间返回 ERR_ABORTED；以 commit
+  // 作为导航边界，后续显式等待业务卡片，避免把文档加载事件误当成业务就绪。
+  await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
   const card = page.locator('.dashboard-card').filter({ hasText: name }).first()
   await card.waitFor({ state: 'visible', timeout: 30_000 })
-  await card.getByRole('button', { name: /编辑/ }).click()
+  const dashboardId = Object.entries(seed).find(([key]) => {
+    const names = {
+      pythonFilterDashboardId: 'Python Filter Dashboard',
+      pythonAToBDashboardId: 'Python A-to-B Dashboard',
+      pythonManagedDashboardId: 'Python Managed System Dashboard',
+      pythonOutputDashboardId: 'Python Output Contract Dashboard',
+      pythonOutputErrorDashboardId: 'Python Output Error Dashboard',
+      pythonLargeDashboardId: 'Python Large Result Dashboard',
+      echartsDashboardId: 'E2E ECharts Binding Dashboard',
+    }
+    return names[key] === name
+  })?.[1]
+  try {
+    await card.getByRole('button', { name: /编辑/ }).click({ timeout: 10_000 })
+  } catch {
+    if (!dashboardId) throw new Error(`状态文件中缺少 ${name} 的 dashboard ID`)
+    await page.goto(`${baseUrl}/insight/dashboard/editor?dashboardId=${dashboardId}`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
+  }
   await page.locator('.insight-editor-view').waitFor({ state: 'visible', timeout: 30_000 })
   const canvasCard = page.locator('[data-component-id]').first()
   await canvasCard.waitFor({ state: 'visible', timeout: 30_000 })
-  await canvasCard.click()
+  await canvasCard.click({ timeout: 10_000 }).catch(() => {})
 }
 
 await shot('01-dataset-filter-defaults', async () => {
   await openSeededCard('Python Filter Dashboard')
-  await page.getByRole('button', { name: /查看数据/ }).first().click()
+  // 当前编辑器把数据集查看入口命名为「筛选预览」，与 DatasetInputPanel 的真实用户路径一致。
+  await page.getByRole('button', { name: '筛选预览' }).first().click({ timeout: 10_000 })
   await page.locator('[data-testid="bound-filter-row"]').first().waitFor({ state: 'visible' })
 })
 await shot('02-filter-single-boundary-result', async () => {
@@ -125,8 +151,7 @@ await shot('12-saved-dashboard-preview', async () => {
 })
 
 report.axNodeCount = await page.locator('button, input, textarea, [role="table"], [role="alert"]').count().catch(() => 0)
-report.failedRequests = [...new Set(report.failedRequests)]
-fs.writeFileSync(path.join(evidenceDir, 'visual-report.json'), JSON.stringify(report, null, 2))
+persistReport()
 if (report.screenshots.some((item) => item.status === 'FAIL') || report.consoleErrors.length || report.failedRequests.length) {
   process.exitCode = 1
 }

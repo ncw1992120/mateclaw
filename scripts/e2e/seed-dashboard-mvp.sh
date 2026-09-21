@@ -130,12 +130,19 @@ echarts_dashboard_schema() {
 }
 
 python_dashboard_schema() {
-  local dataset_id="$1" input_name="$2" script="$3" system_mode="$4" system_code="$5" user_code="$6" right_id="${7:-}" right_input="${8:-}"
+  local dataset_id="$1" input_name="$2" script="$3" system_mode="$4" system_code="$5" user_code="$6" right_id="${7:-}" right_input="${8:-}" filter_name="${9:-}"
   jq -cn --arg dataset "$dataset_id" --arg input "$input_name" --arg script "$script" \
-    --arg mode "$system_mode" --arg system "$system_code" --arg user "$user_code" --arg right "$right_id" --arg rightInput "$right_input" ' {
+    --arg mode "$system_mode" --arg system "$system_code" --arg user "$user_code" --arg right "$right_id" --arg rightInput "$right_input" --arg filterName "$filter_name" --arg filterId "python-time-filter" '
+    (if $filterName == "" then [] else [{filterComponentId:$filterId,inputNames:[$input],fieldMappings:{($input):"metric_time"},conditions:[
+      {inputName:$input,field:"metric_time",operator:"gte",parameterNames:["startDate"],required:false},
+      {inputName:$input,field:"metric_time",operator:"lt",parameterNames:["endDate"],required:false}
+    ]}] end) as $filterBindings |
+    {
     version:"1.1",
-    pages:[{id:"python-page",name:"Python E2E",components:[{id:"python-table",type:"table",title:"Python E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,parameters:[],scriptFilterBindings:[],systemScript:{mode:$mode,generatedCode:$system,managedCode:(if $mode == "managed" then $system else null end),generatedFingerprint:"seed",userCode:$user}}}}]}],
-    datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000},scriptBindings:[{componentId:"python-table",renderType:"table"}]
+    pages:[{id:"python-page",name:"Python E2E",components:([
+      {id:"python-table",type:"table",title:"Python E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,parameters:[],scriptFilterBindings:$filterBindings,systemScript:{mode:$mode,generatedCode:$system,managedCode:(if $mode == "managed" then $system else null end),generatedFingerprint:"seed",userCode:$user}}}}
+    ] + (if $filterName == "" then [] else [{id:$filterId,type:"timeFilter",title:$filterName,position:{x:0,y:7,w:6,h:2},config:{field:"metric_time",availablePresets:["today","7d","30d","90d","custom"]}}] end))}],
+    datasetInputs:([ {datasetId:$dataset,inputName:$input} ] + (if $right != "" then [{datasetId:$right,inputName:$rightInput}] else [] end)),script:$script,scriptFilterBindings:$filterBindings,parameters:[],executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000},scriptBindings:[{componentId:"python-table",renderType:"table"}]
   }'
 }
 
@@ -203,7 +210,7 @@ large_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$large
 
 # Python 编排专项种子：名称和 ID 均写入状态文件，E2E 不硬编码资源 ID。
 python_filter_script=$'rows = datasets.read(input_name="python_orders")\nresult = rows.to_polars().to_dicts()'
-python_filter_schema=$(python_dashboard_schema "$http_dataset" python_orders "$python_filter_script" generated 'python_orders = datasets.read(input_name="python_orders", filters=[])' 'result = python_orders.to_polars().to_dicts()')
+python_filter_schema=$(python_dashboard_schema "$http_dataset" python_orders "$python_filter_script" generated 'python_orders = datasets.read(input_name="python_orders", filters=[])' 'result = python_orders.to_polars().to_dicts()' '' '' '指标时间筛选')
 python_filter_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_filter_schema" '{name:"Python Filter Dashboard",description:"Python runtime filter template dashboard",schemaJson:$schema}')" | id_from)
 
 python_ab_script=$'left = datasets.read(input_name="dataset_a")\nkeys = left.to_polars().select(["id"]).to_dicts()\nright = datasets.read(input_name="dataset_b", filters=[{"field":"id","operator":"in","value":[row["id"] for row in keys]}])\nresult = right.to_polars().to_dicts()'

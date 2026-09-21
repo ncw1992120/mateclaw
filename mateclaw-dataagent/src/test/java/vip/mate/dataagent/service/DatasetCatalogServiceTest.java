@@ -13,6 +13,7 @@ import vip.mate.dataagent.dto.DatasetCreateRequest;
 import vip.mate.dataagent.dto.DatasetSourceDefinition;
 import vip.mate.dataagent.dto.DatasetUpdateRequest;
 import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.model.DatasetDataEntity;
 import vip.mate.dataagent.model.DatasetEntity;
 import vip.mate.dataagent.repository.DatasetDataMapper;
 import vip.mate.dataagent.repository.DatasetFieldMapper;
@@ -162,6 +163,25 @@ class DatasetCatalogServiceTest {
 
         assertThrows(RuntimeException.class, () -> service.createDataset(request));
         verify(datasetMapper, never()).insert(any(DatasetEntity.class));
+    }
+
+    @Test
+    void countsDatasetRowsWithoutCarryingPaginationOrderIntoPostgresCount() {
+        DatasetManageServiceImpl service = newService();
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L);
+        dataset.setWorkspaceId(11L);
+        dataset.setOwnerId(99L);
+        when(datasetMapper.selectById(7L)).thenReturn(dataset);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+        when(datasetFieldMapper.selectList(any())).thenReturn(List.of());
+        when(datasetDataMapper.selectCount(any())).thenReturn(0L);
+        when(datasetDataMapper.selectList(any())).thenReturn(List.of());
+
+        service.getDatasetData(7L, 1, 20);
+
+        verify(datasetDataMapper).selectCount(argThat(wrapper ->
+                wrapper.getExpression().getOrderBy().isEmpty()));
     }
 
     @Test
