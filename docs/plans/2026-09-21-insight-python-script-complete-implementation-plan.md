@@ -962,7 +962,7 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
 
-**状态：BLOCKED（依赖 Task 8 登录态与 UI 服务）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令；当前 9222 `/json/version` 可读，但本机 UI `15174` 未启动且没有 E2E 状态文件/登录凭据，12 张截图不能伪造 PASS。按 §3.5 记 BLOCKED。
+**状态：BLOCKED（真实执行数据仍不完整）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并在当前本地登录态下完成一次真实浏览器验收。Chrome `http://127.0.0.1:9222`、本地 UI `http://localhost:5174` 和 DataAgent 均可用；通过真实登录态创建了仅用于本轮验收的临时专项仪表盘，产出 9 张截图，覆盖筛选器默认行、单边界输入、系统生成区、用户接管区、系统差异、A→B 编辑态和输出预览入口。第 10 项以后因本地临时数据集没有可用的真实执行结果而进入等待，未形成 12 张完整截图、AX/console/network 报告，故按 §3.5 保持 BLOCKED，不能把局部视觉证据记为完整 PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -1019,7 +1019,7 @@ npm --prefix mateclaw-dataagent-ui run test:e2e:cdp:python
 
 脚本必须按真实 UI 完成：仪表盘列表 → 编辑 → 选中卡片 → 数据集配置 → 查看数据 → 填单边/双边筛选 → 编辑 Python → 解锁系统区 → 查看差异 → 跨数据集执行 → 输出检查 → 组件预览 → 保存 → 正式预览。
 
-- [ ] **Step 5: 固定视觉断言与截图清单**
+- [~] **Step 5: 固定视觉断言与截图清单**——已实际产出 `docs/superpowers/evidence/2026-09-21-python-pipeline/01-*.png` 至 `09-*.png` 共 9 张；第 10–12 项依赖可执行的真实结果数据，未完成。
 
 必须生成：
 
@@ -1040,11 +1040,11 @@ npm --prefix mateclaw-dataagent-ui run test:e2e:cdp:python
 
 每张截图配套断言：主要按钮没有遮挡；弹窗在 1440×1000 视口内可操作；代码区横纵滚动可用；错误路径与建议可读；空值条件显示但不生效；图表存在真实 canvas；AX Tree 中按钮、textbox、table、alert 有可读名称；页面无未处理 `pageerror` 和失败 API 请求。
 
-- [ ] **Step 6: 视觉证据复核**
+- [~] **Step 6: 视觉证据复核**——已复核 01、05、06 截图，确认真实 Chrome 页面包含筛选绑定、只读/接管状态、候选版本与 A→B 数据集配置；因缺少完整报告，console/network/AX 的全量门禁仍未通过。
 
 使用本地图片查看工具逐张检查，不能只依赖脚本退出码。`visual-report.json` 记录 screenshotPath、axNodeCount、关键 DOM 摘要、consoleErrors、failedRequests、dashboardId 和执行 ID。
 
-- [ ] **Step 7: 提交 CDP 脚本与可审查证据**
+- [x] **Step 7: 提交 CDP 脚本与可审查证据**——CDP 脚本、seed/export 脚本和 E2E spec 已随 `348c68ee` 提交；截图目录被 `.gitignore` 排除，不进入代码提交，避免把用户登录态或本地数据证据混入仓库。
 
 ```bash
 git add -- mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs \
@@ -1166,8 +1166,8 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | BLOCKED | — | 需全栈环境（Docker/Runner/对象存储） |
-| 9 CDP 视觉验收 | BLOCKED | — | 依赖 Task 8 种子与登录态 |
+| 8 E2E 全链路 | BLOCKED | 87d2ad6b | 本机 Runner 46/46；Java 222 tests、0 failures、3 个 Testcontainers errors（无 Docker）；真实 DataAgent E2E 仍缺登录态导出的专项种子、数据库/对象存储执行数据 |
+| 9 CDP 视觉验收 | BLOCKED（部分完成） | 348c68ee | 真实 Chrome 9222 + UI 5174 已产出 9 张截图；第 10–12 项等待真实结果，缺 AX/console/network 完整报告 |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
