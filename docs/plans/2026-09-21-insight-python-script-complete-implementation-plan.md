@@ -895,6 +895,8 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 > 2026-09-21 追加：主 Python Playwright spec 已按真实正式 UI 更新为“编辑 Python 脚本 → 筛选预览 → 数据预览”路径，移除已废弃的 `最终结果预览`、`.result-table`、`.execution-alert` 断言；默认 Chromium 缺失后改用本机已安装 Google Chrome channel（未下载 Chromium），真实注入 Chrome 会话 token 和动态 dashboard ID。筛选边界、A→B、系统区恢复、输出契约错误 4 个用例已单独通过；全量剩余失败来自旧状态文件的 `value=1` 输出种子和未形成 ObjectRef 的大结果，重新 seed 又受本地 JDBC `127.0.0.1:13306` 不可用返回 400 阻断。凭据/数据 seed、ObjectRef/S3 Testcontainers 无 Docker 等外部门禁仍按 BLOCKED 记录，不以局部通过冒充全链路通过。
 
+> seed 适配：`seed-dashboard-mvp.sh` 新增 `MATECLAW_E2E_JDBC_DATASET_ID`、`MATECLAW_E2E_HTTP_DATASET_ID`、`MATECLAW_E2E_FILE_DATASET_ID`，可复用已有数据集而跳过本地 JDBC 创建和对象存储上传，默认未设置时保持原行为。rerun-34 使用该路径成功生成全新状态；由于复用数据集无字段/行数据，主 Python E2E 为 3/6（筛选、系统区、输出表格通过），A→B、契约错误、大结果仍在数据集读取阶段失败，未将其误判为前端通过。
+
 **状态：BLOCKED（真实外部依赖未完全满足）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，前端全量回归 `52` 个文件/`280` 个测试通过，Java 使用本机 JDK 21/Maven 3.9.16 的完整测试为 `224` 个用例、`0` failures、`3` Testcontainers errors（均为 ObjectRef/S3 容器依赖），UI `vue-tsc` 与 Vite build 通过；Playwright 三个真实 E2E spec 在显式缺少 `MATECLAW_E2E_TOKEN` 时按 guard 退出，未使用路由 mock。登录后真实提交接口已从 `python runner unavailable` 推进到 Runner 执行成功并返回 `kind=table` 的 6 行结果。为避免洞察编辑/预览被不消费的顶部 active-model 可选请求拖死，新增 Insight 路由跳过该请求的定向门控，并保留非 Insight 路由行为；同时修复数据集查看接口在 PostgreSQL 下把 `ORDER BY id` 带入 `COUNT(*)` 的 SQL 错误，并新增回归测试。这不是后端模型配置查询的根治。完整自动化仍受文件对象存储、部分 DataAgent 外部依赖、无 Docker 的 3 个 Testcontainers 用例及真实 E2E 凭据/数据环境阻断；本次没有用 Docker 代替本机环境，也没有把单测或局部真实执行结果冒充完整 E2E PASS。
 
 **Files:**

@@ -13,8 +13,13 @@ JDBC_HOST="${MATECLAW_E2E_JDBC_HOST:-127.0.0.1}"
 JDBC_PORT="${MATECLAW_E2E_JDBC_PORT:-13306}"
 JDBC_DATABASE="${MATECLAW_E2E_JDBC_DATABASE:-mateclaw}"
 JDBC_USERNAME="${MATECLAW_E2E_JDBC_USERNAME:-mateclaw}"
+JDBC_DATASOURCE_ID="${MATECLAW_E2E_JDBC_DATASOURCE_ID:-}"
+JDBC_DATASET_ID="${MATECLAW_E2E_JDBC_DATASET_ID:-}"
 HTTP_ENDPOINT="${MATECLAW_E2E_HTTP_ENDPOINT:-https://e2e-http:8443/orders}"
 HTTP_ALLOWED_HOST="${MATECLAW_E2E_HTTP_ALLOWED_HOST:-e2e-http}"
+HTTP_DATASOURCE_ID="${MATECLAW_E2E_HTTP_DATASOURCE_ID:-}"
+HTTP_DATASET_ID="${MATECLAW_E2E_HTTP_DATASET_ID:-}"
+FILE_DATASET_ID="${MATECLAW_E2E_FILE_DATASET_ID:-}"
 AUTH_HEADER="Authorization: Bearer ${MATECLAW_E2E_TOKEN:-}"
 WORKSPACE_HEADER="X-Workspace-Id: ${MATECLAW_E2E_WORKSPACE_ID}"
 
@@ -78,6 +83,11 @@ for attempt in $(seq 1 20); do
   sleep 1
 done
 
+if [[ -n "$JDBC_DATASET_ID" ]]; then
+  jdbc_ds="$JDBC_DATASOURCE_ID"
+  jdbc_dataset="$JDBC_DATASET_ID"
+  echo "Using existing JDBC dataset: $jdbc_dataset"
+else
 jdbc_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg password "$(encrypt_field "${MATECLAW_E2E_JDBC_PASSWORD:-e2e-user-password}")" \
   --arg suffix "$RUN_SUFFIX" \
@@ -86,6 +96,7 @@ jdbc_ds=$(api POST /v1/datasources "$(jq -cn \
   '{name:("E2E JDBC Orders " + $suffix),description:"dashboard MVP E2E",sourceType:"mysql",host:$host,port:$port,databaseName:$database,username:$username,password:$password,enabled:true,metaShared:true}')" | id_from)
 jdbc_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$jdbc_ds" --arg suffix "$RUN_SUFFIX" \
   '{name:("E2E JDBC Orders Dataset " + $suffix),description:"dashboard MVP JDBC source",sourceDefinition:{sourceType:"JDBC_SQL",datasourceId:$ds,sql:"SELECT id, customer_id, order_date, status, amount FROM orders WHERE id > 0"}}')" | id_from)
+fi
 
 http_connection_params=$(jq -cn --arg endpoint "$HTTP_ENDPOINT" --arg allowedHost "$HTTP_ALLOWED_HOST" '{apiDefinitions:{orders:{endpoint:$endpoint,method:"GET",allowedHosts:[$allowedHost],allowedQueryParams:["status"],paginationMode:"none",resultPath:"$.data",schema:[
   {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
@@ -93,6 +104,11 @@ http_connection_params=$(jq -cn --arg endpoint "$HTTP_ENDPOINT" --arg allowedHos
   {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
   {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
 ]}}}')
+if [[ -n "$HTTP_DATASET_ID" ]]; then
+  http_ds="$HTTP_DATASOURCE_ID"
+  http_dataset="$HTTP_DATASET_ID"
+  echo "Using existing HTTP dataset: $http_dataset"
+else
 http_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg connectionParams "$http_connection_params" \
   --arg suffix "$RUN_SUFFIX" \
@@ -104,13 +120,20 @@ http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" --arg suffix 
     {name:"status",title:"状态",dataType:"STRING",role:"dimension"},
     {name:"amount",title:"金额",dataType:"DECIMAL",role:"measure"}
   ]}}')" | id_from)
+fi
 
+if [[ -n "$FILE_DATASET_ID" ]]; then
+  file_object_id=""
+  file_dataset="$FILE_DATASET_ID"
+  echo "Using existing file dataset: $file_dataset"
+else
 file_ref=$(curl --fail-with-body --silent --show-error -X POST \
   -H "$AUTH_HEADER" -H "$WORKSPACE_HEADER" \
   -F "file=@${FIXTURE};type=text/csv" "$BASE_URL/v1/dataset-files" | jq -er '.data')
 file_object_id=$(jq -er '.objectId' <<<"$file_ref")
 file_dataset=$(api POST /v1/datasets "$(jq -cn --arg object "$file_object_id" --arg suffix "$RUN_SUFFIX" \
   '{name:("E2E File Orders Dataset " + $suffix),description:"dashboard MVP file source",sourceDefinition:{sourceType:"FILE",objectId:$object,format:"CSV",schemaVersion:1}}')" | id_from)
+fi
 
 dashboard_schema() {
   local left_id="$1" left_name="$2" right_id="$3" right_name="$4" script="$5"
