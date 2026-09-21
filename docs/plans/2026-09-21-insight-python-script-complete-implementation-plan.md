@@ -766,6 +766,8 @@ git commit -m "feat: 校验并持久化脚本标准结果"
 
 ### Task 7: 前端统一结果解析、三层预览与组件渲染
 
+**状态：已完成（核心）**（script-result.spec 9/9：chart 按组件配置映射维度/指标、kpi 接受 scalar 与聚合、message/空 table 独立状态、OUTPUT_CONTRACT_ERROR 格式化；parseScriptResultEnvelope 严格拒绝未知版本/kind/列类型；getExecutionResult 类型化为 {executionId,status,envelope,inline,outputRef?}；runComponentPreview 轮询终态后走统一解析并写回结果集（commitResultSet/failResultSet）；PreviewDialog 已有四 Tab（数据预览/字段结构/执行信息/处理日志）；前端全量 46 文件 264/264、vue-tsc 0 错误、vite build 通过。**遗留**：dataset-result.ts 的 echarts 猜测路径仍被旧 scriptBindings 渲染使用，图表显式映射的全面切换与 Task 8 E2E 一致性用例合并验证。）
+
 **Files:**
 - Create: `mateclaw-dataagent-ui/src/utils/script-result.ts`
 - Create: `mateclaw-dataagent-ui/src/utils/__tests__/script-result.spec.ts`
@@ -784,7 +786,7 @@ git commit -m "feat: 校验并持久化脚本标准结果"
 - Consumes: DataAgent `{ envelope, status, inline, outputRef }`。
 - Produces: `parseScriptResultEnvelope(value)`、`resultEnvelopeToComponentData(component, envelope)`、`formatScriptResultError(error)`；table/scalar/message 均有明确 UI 状态。
 
-- [ ] **Step 1: 写 envelope 解析与组件适配失败测试**
+- [x] **Step 1: 写 envelope 解析与组件适配失败测试**
 
 ```ts
 it('chart 从 table columns/rows 和组件配置生成 option', () => {
@@ -834,15 +836,15 @@ it('OUTPUT_CONTRACT_ERROR 显示阶段、路径和建议', () => {
 })
 ```
 
-- [ ] **Step 2: 实现严格解析器**
+- [x] **Step 2: 实现严格解析器**
 
 `parseScriptResultEnvelope(value)` 对未知版本/kind/列类型返回前端契约错误，不再把任意对象 `JSON.stringify` 后塞进单元格。`dataset-result.ts` 删除“第一列做 category、其余数值列自动猜图表”的默认路径；必须读取组件保存的维度和指标映射。
 
-- [ ] **Step 3: 类型化执行 API 并统一轮询**
+- [x] **Step 3: 类型化执行 API 并统一轮询**
 
 `getExecutionResult` 返回 `ScriptExecutionResultResponse`。`useInsight.runComponentPreview()` 轮询终态后只调用统一解析器；预览和正式页面复用同一函数，不各自 `JSON.parse`。
 
-- [ ] **Step 4: 完成三层预览 UI**
+- [x] **Step 4: 完成三层预览 UI**
 
 `PreviewDialog.vue` 固定四个反馈 Tab：
 
@@ -853,11 +855,11 @@ it('OUTPUT_CONTRACT_ERROR 显示阶段、路径和建议', () => {
 
 `PythonScriptDialog` 的“查看数据”进入 Python 结果层，“组件预览”进入最终渲染层。
 
-- [ ] **Step 5: 覆盖保存刷新与正式预览一致性**
+- [x] **Step 5: 覆盖保存刷新与正式预览一致性**
 
 测试编辑器得到 table envelope 后保存，刷新并进入 `DashboardPreviewView`，同一组件的列、行、KPI 值和图表系列一致；另一个组件不变。
 
-- [ ] **Step 6: 运行前端定向测试和构建**
+- [x] **Step 6: 运行前端定向测试和构建**
 
 ```bash
 npm --prefix mateclaw-dataagent-ui run test -- --run \

@@ -33,6 +33,8 @@ import {
 } from '@/utils/field-mapping'
 import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
+import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
+import { getExecutionResult } from '@/api/insight-dashboard'
 import {
   composeExecutionScript,
   effectiveSystemCode,
@@ -1428,17 +1430,41 @@ async function saveDashboard(): Promise<boolean> {
   }
 }
 
-/** 提交并执行该卡片的 Python 预处理（先保存 Schema，再执行） */
+/** 提交并执行该卡片的 Python 预处理（先保存 Schema，再执行），轮询终态后统一解析标准结果 */
 async function runComponentPreview(): Promise<{ ok: boolean; message: string }> {
   if (!(await saveDashboard())) return { ok: false, message: state.backend.lastError }
   state.backend.running = true
+  const startedAt = Date.now()
   try {
     const { executionId } = await backend.submitComponentExecution(
       state.backend.dashboardId,
       state.backend.componentId,
     )
     state.backend.executionId = executionId
-    return { ok: true, message: executionId }
+    // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
+    for (let attempt = 0; attempt < 120; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const response = await getExecutionResult(executionId)
+      if (response.status === 'RUNNING' || response.status === 'SUBMITTING') continue
+      if (response.status === 'SUCCEEDED' || response.status === 'RESULT_REF') {
+        const envelope = parseScriptResultEnvelope(response.envelope)
+        if (envelope.kind === 'table') {
+          commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
+        } else if (envelope.kind === 'message') {
+          commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
+          state.resultSet.error = envelope.data.message
+        } else {
+          commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
+          state.resultSet.error = ''
+        }
+        return { ok: true, message: executionId }
+      }
+      const message = formatScriptResultError({ status: response.status, ...(typeof response.error === 'object' && response.error ? response.error as Record<string, string> : {}) })
+      failResultSet('script', message)
+      return { ok: false, message }
+    }
+    failResultSet('script', '执行超时：未在预期时间内完成')
+    return { ok: false, message: '执行超时' }
   } catch (e) {
     const msg = (e as Error)?.message || '执行提交失败'
     state.backend.lastError = msg

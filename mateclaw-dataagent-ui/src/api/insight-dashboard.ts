@@ -66,7 +66,8 @@ export function getExecutionLogs(executionId: string) {
 
 /** 读取执行结果预览（大结果由 DataAgent 受控读取 ObjectRef 后返回受限行集） */
 export function getExecutionResult(executionId: string) {
-  return api.get<{ executionId: string; status: string; rows: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`)
+  // 统一结构化结果：envelope 为 table/scalar/message 标准信封（内联与 ObjectRef 引用同构）
+  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`)
 }
 
 /** 取消脚本执行（幂等由 Runner 保证） */
