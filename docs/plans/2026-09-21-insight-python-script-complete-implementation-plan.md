@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-**状态：BLOCKED（真实登录态与外部数据源前置）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，Java 使用本机 JDK 21/Maven 3.9.16 的关键契约测试 `20/20` 通过，新增 Aloudata 时间戳兼容测试与本地 fixture 测试 `2/2` 通过；本机 DataAgent 已能连接本地 Runner，真实执行已从 `python runner unavailable` 推进到数据读取阶段，且已修复 mock 返回毫秒时间戳导致的同步失败。文件对象存储不可用、Chrome JWT 失效仍阻断完整 E2E。全量 Java 仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
+**状态：BLOCKED（真实登录态与外部数据源前置）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，Java 使用本机 JDK 21/Maven 3.9.16 的关键契约测试 `20/20` 通过，新增 Aloudata 时间戳兼容测试与本地 fixture 测试 `2/2` 通过，DataAgent `package -DskipTests` 构建通过；本机 DataAgent 已能连接本地 Runner，真实执行已从 `python runner unavailable` 推进到数据读取阶段，且已修复 mock 返回毫秒时间戳导致的同步失败。文件对象存储不可用、Chrome JWT 失效仍阻断完整 E2E。全量 Java 仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
