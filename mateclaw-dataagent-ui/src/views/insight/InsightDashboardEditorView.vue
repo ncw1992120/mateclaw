@@ -513,27 +513,71 @@ const selectedComponent = computed<InsightComponent | null>(() => {
 const selectedChildInfo = ref<{ containerId: string; childId: string } | null>(null)
 
 /** 在容器（children 或页签 children）中查找子组件 */
-function findCombinationChild(container: InsightComponent, childId: string): InsightCombinationChild | null {
-  if (container.children) {
-    const hit = container.children.find((c) => c.id === childId)
-    if (hit) return hit
+type CombinationContainer = {
+  id: string
+  type: InsightComponentType
+  children?: InsightCombinationChild[]
+  containerConfig?: InsightComponent['containerConfig']
+}
+
+function findCombinationChild(container: CombinationContainer, childId: string): InsightCombinationChild | null {
+  const direct = container.children?.find((c) => c.id === childId)
+  if (direct) return direct
+  for (const child of container.children ?? []) {
+    if (child.type === 'combination') {
+      const nested = findCombinationChild(child, childId)
+      if (nested) return nested
+    }
   }
   for (const tab of container.containerConfig?.tabs ?? []) {
     const hit = tab.children.find((c) => c.id === childId)
     if (hit) return hit
+    for (const child of tab.children) {
+      if (child.type === 'combination') {
+        const nested = findCombinationChild(child, childId)
+        if (nested) return nested
+      }
+    }
   }
   return null
+}
+
+function findCombinationContainer(containerId: string): CombinationContainer | null {
+  const walk = (items: CombinationContainer[]): CombinationContainer | null => {
+    for (const item of items) {
+      if (item.id === containerId) return item
+      const nested = walk([
+        ...(item.children ?? []).filter((child) => child.type === 'combination'),
+        ...((item.containerConfig?.tabs ?? []).flatMap((tab) => tab.children).filter((child) => child.type === 'combination')),
+      ])
+      if (nested) return nested
+    }
+    return null
+  }
+  return walk(currentPageComponents.value.filter((component) => component.type === 'combination'))
 }
 
 /** 选中子组件的合成组件（供属性面板编辑；position 仅占位，不参与写回） */
 const selectedChildComponent = computed<InsightComponent | null>(() => {
   const info = selectedChildInfo.value
   if (!info) return null
-  const container = currentPageComponents.value.find((c) => c.id === info.containerId)
+  const container = findCombinationContainer(info.containerId)
   const child = container ? findCombinationChild(container, info.childId) : null
   if (!child) return null
   return { ...child, position: { x: 0, y: 0, w: 6, h: 4 } }
 })
+
+/** 属性面板中的「页签」操作应作用于当前选中的组合卡片，而不是它的父容器。 */
+function selectedCombinationContainer(): InsightComponent | null {
+  const info = selectedChildInfo.value
+  if (info) {
+    const parent = findCombinationContainer(info.containerId)
+    const child = parent ? findCombinationChild(parent, info.childId) : null
+    if (child?.type === 'combination') return child as InsightComponent
+    return parent as InsightComponent | null
+  }
+  return selectedComponent.value?.type === 'combination' ? selectedComponent.value : null
+}
 
 /** 属性面板当前编辑对象：优先画布选中的子组件，其次顶层组件 */
 const panelComponent = computed<InsightComponent | null>(() => selectedChildComponent.value ?? selectedComponent.value)
@@ -899,25 +943,25 @@ async function removeTabFromContainer(container: InsightComponent, tabId: string
 
 /** 画布内页签栏「+」 */
 function handleCombinationAddTab(payload: { containerId: string }): void {
-  const container = currentPageComponents.value.find((c) => c.id === payload.containerId)
-  if (container?.type === 'combination') addTabToContainer(container)
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') addTabToContainer(container as InsightComponent)
 }
 
 /** 画布内页签栏「✕」 */
 function handleCombinationRemoveTab(payload: { containerId: string; tabId: string }): void {
-  const container = currentPageComponents.value.find((c) => c.id === payload.containerId)
-  if (container?.type === 'combination') void removeTabFromContainer(container, payload.tabId)
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') void removeTabFromContainer(container as InsightComponent, payload.tabId)
 }
 
 /** 属性面板「添加页签」 */
 function handleCombinationAddTabFromPanel(): void {
-  const container = selectedComponent.value
+  const container = selectedCombinationContainer()
   if (container?.type === 'combination') addTabToContainer(container)
 }
 
 /** 属性面板页签行「✕」 */
 function handleCombinationRemoveTabFromPanel(tabId: string): void {
-  const container = selectedComponent.value
+  const container = selectedCombinationContainer()
   if (container?.type === 'combination') void removeTabFromContainer(container, tabId)
 }
 
@@ -945,8 +989,8 @@ function handleDeleteComponent(id: string): void {
  * 避免属性面板的本地副本过期时把子卡片配置覆盖掉。
  */
 function mergeCombinationConfig(
-  existing: InsightComponent,
-  updated: InsightComponent,
+  existing: Pick<InsightComponent, 'containerConfig'>,
+  updated: Pick<InsightComponent, 'containerConfig'>,
 ): InsightCombinationConfig | undefined {
   const exCfg = existing.containerConfig
   const upCfg = updated.containerConfig
@@ -965,10 +1009,9 @@ function mergeCombinationConfig(
 
 /** 组件属性变更（保留画布管理的 position） */
 function handleComponentChange(updated: InsightComponent): void {
-  // 组合卡片子组件：把面板编辑结果写回容器内的 child（只同步数据字段；
-  // 位置/尺寸由容器自由布局管理，子组件不承载 tabs/containerConfig/position）
+  // 组合卡片子组件：把面板编辑结果写回容器内的 child；位置/尺寸仍由容器布局管理。
   if (selectedChildInfo.value) {
-    const container = currentPageComponents.value.find((c) => c.id === selectedChildInfo.value!.containerId)
+    const container = findCombinationContainer(selectedChildInfo.value!.containerId)
     const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
     if (child) {
       child.title = updated.title
@@ -978,6 +1021,10 @@ function handleComponentChange(updated: InsightComponent): void {
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
       child.multiKpi = updated.multiKpi
+      if (child.type === 'combination') {
+        child.children = child.children ?? updated.children ?? []
+        child.containerConfig = mergeCombinationConfig(child, updated)
+      }
     }
     return
   }

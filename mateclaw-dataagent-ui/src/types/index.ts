@@ -1329,6 +1329,10 @@ export interface InsightCombinationChild {
   config?: Record<string, unknown>
   /** 数据绑定配置（v1 暂未接入取数，结构预留） */
   dataSource?: ComponentDataSource
+  /** 嵌套组合卡片的子卡片 */
+  children?: InsightCombinationChild[]
+  /** 嵌套组合卡片的容器配置 */
+  containerConfig?: InsightCombinationConfig
   /** 自由布局坐标 */
   layout: CombinationChildLayout
   /**

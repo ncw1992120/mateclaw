@@ -114,6 +114,16 @@
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
           />
+          <CombinationCardWidget
+            v-else-if="child.type === 'combination'"
+            :component="toWidgetComponent(child)"
+            :component-data-map="componentDataMap"
+            :editable="editable"
+            :selected="selectedChildId === child.id"
+            @select-child="(payload) => emit('select-child', payload)"
+            @add-tab="(payload) => emit('add-tab', payload)"
+            @remove-tab="(payload) => emit('remove-tab', payload)"
+          />
         </div>
 
         <!-- 八向缩放手柄（编辑态 + 选中/悬停/拖动时显示） -->
@@ -154,6 +164,9 @@ import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import EmptyState from './EmptyState.vue'
 import { useTabKeyboard } from '../composables/useTabKeyboard'
+import { calculateCombinationChildResize } from './combinationChildLayout'
+
+defineOptions({ name: 'CombinationCardWidget' })
 
 const props = withDefaults(
   defineProps<{
@@ -229,6 +242,11 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     chartType: child.chartType,
     config: child.config,
     dataSource: child.dataSource,
+    children: child.children,
+    containerConfig: child.containerConfig,
+    boundFilterIds: child.boundFilterIds,
+    enableTimeFilter: child.enableTimeFilter,
+    multiKpi: child.multiKpi,
   }
 }
 
@@ -337,6 +355,8 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
       type !== 'filter' && type !== 'timeFilter' && type !== 'aiAnalysis'
         ? { datasourceId: '', metrics: [], dimensions: [], filters: [], limit: 100 }
         : undefined,
+    children: type === 'combination' ? [] : undefined,
+    containerConfig: type === 'combination' ? defaultConfig() : undefined,
     layout: {
       x: pos.x,
       y: pos.y,
@@ -360,8 +380,6 @@ function addChild(type: InsightComponentType, chartType: ChartType | undefined, 
 // 5) 边界钳制让子组件**完整留在容器内**（而不是「保留多少像素在容器内」）：
 //    组合卡片是固定容器，一旦允许子组件探出右/下边界，八向缩放手柄会被容器的
 //    overflow:hidden 裁掉，用户就抓不到 se/e/ne 手柄 —— 那才是「缩放用不了」的真凶。
-const MIN_CHILD_H = 60    // 子组件最小高度
-
 /** 容器边界快照：**只在鼠标按下时读一次**，绝不在每帧的 compute 里读 DOM。 */
 interface ChildBounds { width: number; height: number }
 
@@ -390,10 +408,6 @@ function clampBox(
     y: Math.round(Math.min(Math.max(y, 0), maxY)),
   }
 }
-function clampCol(col: number): number {
-  return Math.max(1, Math.min(12, Math.round(col)))
-}
-
 /** 刚发生过拖动/缩放的时间戳：用于抑制紧随 mouseup 的 click，避免八向手柄刚拉完就被清掉选中态 */
 let lastInteractAt = 0
 function markInteracted(): void { lastInteractAt = Date.now() }
@@ -483,29 +497,21 @@ function computeResize(
   start: NonNullable<typeof rz>,
   last: { x: number; y: number },
 ): { x: number; y: number; col: number; h: number } {
-  const colW = start.colW
-  const dx = last.x - start.sx
-  const dy = last.y - start.sy
-  const dir = start.dir
-  let ox = start.ox, oy = start.oy, col = start.ocol, h = start.oh
-
-  if (dir.includes('e')) col = clampCol(start.ocol + dx / colW)
-  if (dir.includes('w')) {
-    // 向左拉伸：列数与左边位置联动。必须按**实际生效**的列数回算左边位置，
-    // 否则列数被 clamp 停住后左边还会继续跟着鼠标跑，宽度与位置脱节。
-    const next = clampCol(start.ocol - dx / colW)
-    ox = start.ox + (start.ocol - next) * colW
-    col = next
-  }
-  if (dir.includes('s')) h = Math.max(MIN_CHILD_H, start.oh + dy)
-  if (dir.includes('n')) {
-    // 向上拉伸同理：高度被最小高度夹停时，顶边不应继续下移
-    const next = Math.max(MIN_CHILD_H, start.oh - dy)
-    oy = start.oy + (start.oh - next)
-    h = next
-  }
-  const box = clampBox(start.bounds ?? undefined, ox, oy, col * colW, h)
-  return { x: box.x, y: box.y, col, h: Math.round(h) }
+  const box = calculateCombinationChildResize(
+    {
+      direction: start.dir,
+      startX: start.sx,
+      startY: start.sy,
+      originX: start.ox,
+      originY: start.oy,
+      originCol: start.ocol,
+      originHeight: start.oh,
+      bounds: start.bounds,
+      columnWidth: start.colW,
+    },
+    last,
+  )
+  return { x: box.x, y: box.y, col: box.col, h: box.height }
 }
 
 function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: string) {
