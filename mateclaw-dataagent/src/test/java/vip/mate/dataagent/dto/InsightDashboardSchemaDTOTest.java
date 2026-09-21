@@ -150,4 +150,22 @@ class InsightDashboardSchemaDTOTest {
         assertEquals("bold", back.get("styles").get("value").get("bold").asText());
         assertEquals("#646a73", back.get("styles").get("name").get("color").asText());
     }
+
+    @Test
+    void preservesComponentDatasetPipelineAndUnknownConfigFieldsAcrossRoundTrip() throws Exception {
+        String json = """
+                {"version":"1.1","pages":[{"id":"page-1","components":[{
+                  "id":"kpi-1","type":"kpi","title":"订单数",
+                  "position":{"x":0,"y":0,"w":4,"h":3},
+                  "config":{"datasetPipeline":{"datasetInputs":[{"datasetId":"orders","inputName":"orders"}]},"extensionField":{"keep":true}}
+                }]}]}
+                """;
+        ObjectMapper mapper = new ObjectMapper();
+        InsightDashboardSchemaDTO schema = mapper.readValue(json, InsightDashboardSchemaDTO.class);
+        JsonNode config = mapper.readTree(mapper.writeValueAsString(schema))
+                .at("/pages/0/components/0/config");
+
+        assertEquals("orders", config.at("/datasetPipeline/datasetInputs/0/inputName").asText());
+        assertTrue(config.at("/extensionField/keep").asBoolean());
+    }
 }

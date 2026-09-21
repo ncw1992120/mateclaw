@@ -20,6 +20,23 @@ import static org.mockito.Mockito.*;
 
 class DatasetComposerControllerTest {
     @Test
+    void rejectsFilePreviewWithoutObjectReferenceBeforeAdapterCall() {
+        FileDatasetAdapter fileAdapter = mock(FileDatasetAdapter.class);
+        DatasetComposerController controller = new DatasetComposerController(
+                mock(DatasetManageService.class), mock(SqlValidationService.class), new ObjectMapper(),
+                mock(WorkspaceGuard.class), mock(DatasourceMapper.class), new HttpApiRequestPolicy(true),
+                mock(AloudataService.class), mock(HttpApiDatasetAdapter.class), fileAdapter,
+                mock(AloudataAnalysisViewAdapter.class));
+        DatasetComposerController.DraftRequest request = new DatasetComposerController.DraftRequest();
+        request.setSourceType("FILE");
+        request.setSourceConfig(Map.of());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> controller.preview(request));
+        assertEquals("file objectId is required", error.getMessage());
+        verifyNoInteractions(fileAdapter);
+    }
+
+    @Test
     void registersControlledApiDefinitionAndPersistsOnlyDeclaration() throws Exception {
         DatasourceMapper mapper = mock(DatasourceMapper.class); WorkspaceGuard guard = mock(WorkspaceGuard.class);
         DatasourceEntity source = source(); source.setConnectionParams("{\"allowedHosts\":[\"e2e-http\"]}");

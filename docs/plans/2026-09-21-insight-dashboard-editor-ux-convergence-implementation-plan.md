@@ -18,7 +18,7 @@
 - [x] Task 4：收敛数据集来源选择与配置弹窗（来源/弹窗 3 tests；全量 UI 43 files / 241 tests 通过）
 - [x] Task 5：统一弹窗、表单、按钮和反馈样式（6 个测试文件 / 38 tests 通过；统一 dialog 尺寸、销毁和 footer 令牌）
 - [x] Task 6：统一画布、组件库与页面树交互（全量 UI 44 files / 246 tests 通过；方向键移动、Shift 调整尺寸、空画布入口和响应式溢出规则已验证）
-- [ ] Task 7：补强后端 Schema、预览、保存与执行契约回归
+- [x] Task 7：补强后端 Schema、预览、保存与执行契约回归（Java 21 + Maven 定向 13 tests 通过；全量因禁止启动 Docker 的 Testcontainers 及既有 Aloudata 失败项标记 BLOCKED）
 - [ ] Task 8：正式路由隔离与原型页边界
 - [ ] Task 9：单元测试、集成测试与测试数据补全
 - [ ] Task 10：Chrome CDP 9222 视觉验收与可访问性检查
