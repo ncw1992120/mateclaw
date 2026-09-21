@@ -89,7 +89,7 @@
                 v-if="getComponent(item.i)?.type === 'kpi'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 :editable="editable"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
@@ -98,33 +98,34 @@
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <DataTableWidget
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-header="getComponent(item.i)?.showHeader !== false"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
                 v-else-if="getComponent(item.i)?.type === 'aiAnalysis'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />
@@ -346,10 +347,9 @@ function getComponentTitle(id: string): string {
 /** 编辑态工具栏标题是否展示（组合卡片「显示标题」关闭时隐藏，让开关在编辑态可见生效） */
 function isToolbarTitleVisible(id: string): boolean {
   const comp = getComponent(id)
-  if (comp?.type === 'combination') {
-    return comp.containerConfig?.showTitle !== false
-  }
-  return true
+  if (!comp) return true
+  if (comp.type === 'combination') return comp.containerConfig?.showTitle !== false && comp.showTitle !== false
+  return comp.showTitle !== false
 }
 
 /** 根据 ID 获取组件渲染数据 */

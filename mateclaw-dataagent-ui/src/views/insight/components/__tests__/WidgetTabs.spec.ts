@@ -33,7 +33,7 @@ const componentData = {
 } as any
 
 const stubs = {
-  'el-table': { template: '<div><slot /></div>' },
+  'el-table': { props: ['showHeader'], template: '<div :data-show-header="String(showHeader)"><slot /></div>' },
   'el-table-column': { template: '<span />' },
   'el-pagination': { template: '<div />' },
   'el-tooltip': { template: '<slot />' },
@@ -43,6 +43,21 @@ const stubs = {
 }
 
 describe('widget tabs', () => {
+  it('hides the table header when configured', () => {
+    const wrapper = mount(DataTableWidget, {
+      props: {
+        component: { ...component, tabs: [] },
+        showTitle: true,
+        showHeader: false,
+        componentData: { table: { columns: ['订单'], rows: [['A']] } },
+      },
+      global: { plugins: [i18n], stubs },
+    })
+
+    expect(wrapper.find('.table-title').exists()).toBe(true)
+    expect(wrapper.find('[data-show-header="false"]').exists()).toBe(true)
+  })
+
   it.each([
     ['table', DataTableWidget, '数据表分页'],
     ['kpi', KpiCardWidget, '指标卡分页'],

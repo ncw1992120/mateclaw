@@ -1015,6 +1015,8 @@ function handleComponentChange(updated: InsightComponent): void {
     const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
     if (child) {
       child.title = updated.title
+      child.showTitle = updated.showTitle
+      child.showHeader = updated.showHeader
       child.chartType = updated.chartType
       child.config = updated.config
       child.dataSource = updated.dataSource

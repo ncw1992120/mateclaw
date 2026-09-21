@@ -100,6 +100,8 @@ export interface CardItem {
   id: string
   type: CardType
   title: string
+  showTitle: boolean
+  showHeader: boolean
   multiMetric: boolean // 多指标模式（仅 KPI/指标卡）
   multiTab: boolean // 多 TAB 模式（仅 KPI/指标卡）
 }

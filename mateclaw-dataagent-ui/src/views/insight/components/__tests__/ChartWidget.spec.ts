@@ -30,6 +30,15 @@ const component = {
 } as any
 
 describe('ChartWidget', () => {
+  it('hides the component title when configured', () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component, showTitle: false },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    expect(wrapper.find('.chart-title').exists()).toBe(false)
+  })
+
   it('exposes widget tabs as keyboard-operable tabs', async () => {
     const wrapper = mount(ChartWidget, {
       props: { component },

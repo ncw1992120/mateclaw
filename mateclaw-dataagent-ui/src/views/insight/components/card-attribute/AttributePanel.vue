@@ -25,6 +25,15 @@
         <el-input v-model="activeCard.title" placeholder="请输入组件标题" aria-label="组件标题" />
       </div>
 
+      <div class="field row">
+        <span class="field-label">显示标题</span>
+        <el-switch v-model="activeCard.showTitle" aria-label="显示标题" />
+      </div>
+      <div v-if="activeCard.type === 'table'" class="field row">
+        <span class="field-label">显示表头</span>
+        <el-switch v-model="activeCard.showHeader" aria-label="显示表头" />
+      </div>
+
       <!-- 2/3. 多指标模式 / 多TAB模式（仅 KPI/指标卡显示，本轮只实现 KPI 卡） -->
       <template v-if="isKpiCard">
         <div class="field row">

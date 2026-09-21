@@ -78,4 +78,54 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.findAll('.combination-card')).toHaveLength(2)
     expect(wrapper.findAll('.cc-child-title').map((item) => item.text())).toContain('内层组合')
   })
+
+  it('switches an inner combination tab without starting the parent child drag', async () => {
+    const innerConfig = {
+      ...containerConfig,
+      title: '内层组合',
+      tabs: [
+        { id: 'tab-one', title: '页签一', children: [] },
+        { id: 'tab-two', title: '页签二', children: [] },
+      ],
+      activeTab: 'tab-one',
+    }
+    const inner = {
+      ...nestedCombination,
+      containerConfig: innerConfig,
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'outer-combination',
+          type: 'combination',
+          title: '外层组合',
+          children: [inner],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const innerCard = wrapper.findAll('.combination-card')[1]
+    const secondTab = innerCard.findAll('.cc-tab')[1]
+    await secondTab.trigger('mousedown', { clientX: 10, clientY: 10 })
+    expect(wrapper.find('.cc-child.moving').exists()).toBe(false)
+
+    await secondTab.trigger('click')
+    expect(innerConfig.activeTab).toBe('tab-two')
+  })
 })

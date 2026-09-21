@@ -73,7 +73,7 @@
         @dragstart.stop.prevent
       >
         <div class="cc-child-head">
-          <span class="cc-child-title">{{ child.title }}</span>
+          <span v-if="child.showTitle !== false" class="cc-child-title">{{ child.title }}</span>
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
           </button>
@@ -84,35 +84,36 @@
             v-if="child.type === 'kpi'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
+            :show-header="child.showHeader !== false"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="toWidgetComponent(child)"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="false"
+            :show-title="!editable && child.showTitle !== false"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
@@ -238,6 +239,8 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     id: child.id,
     type: child.type,
     title: child.title,
+    showTitle: child.showTitle,
+    showHeader: child.showHeader,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
     config: child.config,
@@ -430,7 +433,9 @@ function computeMove(start: NonNullable<typeof mv>, last: { x: number; y: number
 function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   if (!props.editable) return
   const target = e.target as HTMLElement
-  if (target.closest('.cc-child-del, .rs, button, input, select, textarea')) return
+  // 子卡片内部的交互控件（尤其是嵌套组合的页签）不能被父级自由布局拖拽接管。
+  // 否则父级 mousedown 的 preventDefault 会阻止浏览器继续派发 click，页签看似可点但无法切换。
+  if (target.closest('.cc-child-del, .rs, .cc-tabs, .cc-tab, .cc-tab-add, button, input, select, textarea')) return
   e.preventDefault()
   e.stopPropagation()
   selectChild(child.id)

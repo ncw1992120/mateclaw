@@ -1,6 +1,6 @@
 <template>
   <div class="time-filter-widget">
-    <div v-if="showTitle" class="time-filter-label">{{ component.title }}</div>
+    <div v-if="showTitle !== false" class="time-filter-label">{{ component.title }}</div>
     <el-date-picker
       v-model="customDateRange"
       type="daterange"

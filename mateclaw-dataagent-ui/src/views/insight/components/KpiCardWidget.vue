@@ -3,7 +3,7 @@
     <div class="kpi-card-inner">
       <div class="kpi-card-header">
         <div class="kpi-title-row">
-          <span v-if="showTitle" class="kpi-header-title">{{ component.title }}</span>
+          <span v-if="showTitle !== false" class="kpi-header-title">{{ component.title }}</span>
         </div>
         <div v-if="showTimeFilter" class="kpi-time-filter">
           <el-date-picker
@@ -104,7 +104,7 @@
       <!-- 单指标模式 -->
       <div v-else class="kpi-body">
         <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
-        <div v-if="showTitle && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
+        <div v-if="showTitle !== false && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
         <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
           <el-icon class="kpi-trend-icon"><component :is="activeKpiData.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
           <span>{{ activeKpiData.chg }}</span>

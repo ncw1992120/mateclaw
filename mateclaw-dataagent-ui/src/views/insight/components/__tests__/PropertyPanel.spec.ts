@@ -201,7 +201,7 @@ describe('PropertyPanel', () => {
 
     await wrapper.setProps({ component: inner })
     await nextTick()
-    await wrapper.find('.el-switch-stub').trigger('click')
+    await wrapper.findAll('.el-switch-stub')[1].trigger('click')
 
     const emitted = wrapper.emitted('change') ?? []
     expect(emitted.at(-1)?.[0]).toMatchObject({

@@ -1,7 +1,7 @@
 <template>
   <div class="chart-widget">
     <div class="chart-header">
-      <div v-if="showTitle" class="chart-title">{{ component.title }}</div>
+      <div v-if="showTitle !== false" class="chart-title">{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"

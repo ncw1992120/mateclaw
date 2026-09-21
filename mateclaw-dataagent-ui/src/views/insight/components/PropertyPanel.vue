@@ -19,6 +19,15 @@
         <el-input v-model="localComponent.title" :aria-label="t('insight.property.componentTitle')" @change="emitChange" />
       </div>
 
+      <div class="form-group form-group-row">
+        <label class="form-label">显示标题</label>
+        <el-switch v-model="localComponent.showTitle" aria-label="显示标题" @change="emitChange" />
+      </div>
+      <div v-if="component.type === 'table'" class="form-group form-group-row">
+        <label class="form-label">显示表头</label>
+        <el-switch v-model="localComponent.showHeader" aria-label="显示表头" @change="emitChange" />
+      </div>
+
       <!-- 组合卡片：容器配置 -->
       <template v-if="component.type === 'combination' && localComponent.containerConfig">
         <div class="form-group">

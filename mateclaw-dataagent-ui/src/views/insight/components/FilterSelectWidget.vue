@@ -1,6 +1,6 @@
 <template>
   <div class="filter-select-widget">
-    <div v-if="showTitle" class="filter-label">{{ component.title }}</div>
+    <div v-if="showTitle !== false" class="filter-label">{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"

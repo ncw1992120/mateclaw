@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
     <div class="analysis-header">
-      <span v-if="showTitle" class="analysis-title">{{ component.title }}</span>
+      <span v-if="showTitle !== false" class="analysis-title">{{ component.title }}</span>
       <el-button
         v-if="!generating"
         type="primary"

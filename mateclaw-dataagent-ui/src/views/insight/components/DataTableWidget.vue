@@ -2,7 +2,7 @@
   <div class="data-table-widget">
     <div class="table-header">
       <div class="table-header-left">
-        <div v-if="showTitle" class="table-title">{{ component.title }}</div>
+        <div v-if="showTitle !== false" class="table-title">{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">
@@ -48,6 +48,7 @@
         border
         size="small"
         height="100%"
+        :show-header="showHeader !== false"
         style="width: 100%"
       >
         <el-table-column
@@ -97,6 +98,8 @@ const props = defineProps<{
   componentData?: InsightComponentData
   /** 是否显示标题 */
   showTitle?: boolean
+  /** 是否显示表头 */
+  showHeader?: boolean
 }>()
 
 const emit = defineEmits<{

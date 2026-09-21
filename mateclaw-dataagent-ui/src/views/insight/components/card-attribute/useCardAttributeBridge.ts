@@ -113,6 +113,8 @@ export function hydratePanel(
     id: component.id,
     type: toCardType(component.type),
     title: component.title || '',
+    showTitle: component.showTitle !== false,
+    showHeader: component.showHeader !== false,
     multiMetric: Boolean(component.multiKpi),
     multiTab: Array.isArray(component.tabs) && component.tabs.length > 0,
   }]
@@ -184,7 +186,12 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
   const card = state.cards[0]
   if (!card) return component
 
-  const patch: InsightComponent = { ...component, title: card.title }
+  const patch: InsightComponent = {
+    ...component,
+    title: card.title,
+    showTitle: card.showTitle,
+    showHeader: card.showHeader,
+  }
   if (card.type === 'kpi') {
     patch.multiKpi = card.multiMetric
     // 指标分组配置随面板状态整体回写（hydrate 时已按结果集投影增量合并）。

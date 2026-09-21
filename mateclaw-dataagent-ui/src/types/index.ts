@@ -1217,6 +1217,10 @@ export interface InsightComponent {
   type: InsightComponentType
   /** 组件标题 */
   title: string
+  /** 是否显示组件标题（默认显示） */
+  showTitle?: boolean
+  /** 数据表是否显示表头（默认显示） */
+  showHeader?: boolean
   /** 栅格位置 */
   position: ComponentPosition
   /** 数据绑定配置 */
@@ -1323,6 +1327,10 @@ export interface InsightCombinationChild {
   type: InsightComponentType
   /** 子卡片标题 */
   title: string
+  /** 是否显示子卡片标题（默认显示） */
+  showTitle?: boolean
+  /** 数据表子卡片是否显示表头（默认显示） */
+  showHeader?: boolean
   /** 图表子类型（仅 chart） */
   chartType?: ChartType
   /** 组件扩展配置 */
