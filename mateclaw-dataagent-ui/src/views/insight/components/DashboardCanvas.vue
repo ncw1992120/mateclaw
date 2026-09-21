@@ -209,7 +209,7 @@ const emit = defineEmits<{
   (e: 'copy-component', id: string): void
   (e: 'paste-component'): void
   (e: 'context-menu', payload: { componentId: string | null; x: number; y: number }): void
-  (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
+  (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'ai-analysis-generate', componentId: string): void
@@ -583,7 +583,7 @@ function handleResizeEnd(): void {
 }
 
 /** 筛选组件值变化 */
-function handleFilterChange(componentId: string, payload: { field: string; value: string }): void {
+function handleFilterChange(componentId: string, payload: { field: string; value: string | string[] | undefined }): void {
   emit('filter-change', { componentId, field: payload.field, value: payload.value })
 }
 

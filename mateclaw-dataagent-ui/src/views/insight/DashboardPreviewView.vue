@@ -297,6 +297,7 @@ const {
   filterContext,
   setTimeRange,
   setDimensionFilter,
+  initializeDefaults,
 } = useDashboardFilterContext(
   () => currentPageComponents.value,
   (context) => scheduleReloadWithFilters(context),
@@ -341,6 +342,7 @@ async function loadDashboard(): Promise<void> {
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
+    initializeDefaults()
     await reloadComponentData(filterContext.value)
     await reloadScriptBindings(filterContext.value)
     // 管道组件的结果集恢复（有脚本回读执行结果、无脚本回源重算）
@@ -450,7 +452,7 @@ function scheduleReloadWithFilters(context: DashboardFilterContext): void {
 }
 
 /** 筛选组件值变化 */
-function handleFilterChange(payload: { componentId: string; field: string; value: string }): void {
+function handleFilterChange(payload: { componentId: string; field: string; value: string | string[] | undefined }): void {
   if (!payload.field) {
     return
   }

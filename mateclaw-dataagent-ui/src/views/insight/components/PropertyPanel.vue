@@ -446,6 +446,48 @@
           </div>
         </div>
 
+        <!-- 选择行为：按业务字段决定是否允许多选、全部和不筛选 -->
+        <div class="form-group form-group-column">
+          <label class="form-label">{{ t('insight.property.filterSelectionMode') }}</label>
+          <el-radio-group v-model="localFilterSelectionMode" @change="emitFilterConfigChange">
+            <el-radio-button value="single">{{ t('insight.property.filterSelectionSingle') }}</el-radio-button>
+            <el-radio-button value="multiple">{{ t('insight.property.filterSelectionMultiple') }}</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <div class="form-group form-group-column">
+          <label class="form-label">{{ t('insight.property.filterSelectionOptions') }}</label>
+          <el-checkbox v-model="localFilterAllowSelectAll" @change="emitFilterConfigChange">
+            {{ t('insight.property.filterAllowSelectAll') }}
+          </el-checkbox>
+          <el-checkbox v-model="localFilterAllowNoFilter" @change="emitFilterConfigChange">
+            {{ t('insight.property.filterAllowNoFilter') }}
+          </el-checkbox>
+          <span class="form-hint">{{ t('insight.property.filterSelectionHint') }}</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterDefaultValue') }}</label>
+          <el-select
+            v-model="localFilterDefaultValue"
+            :multiple="localFilterSelectionMode === 'multiple'"
+            :clearable="localFilterAllowNoFilter"
+            :placeholder="t('insight.property.filterDefaultValuePlaceholder')"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+            @change="emitFilterConfigChange"
+          >
+            <el-option
+              v-for="opt in localFilterConfig.staticOptions ?? []"
+              :key="opt.value"
+              :label="opt.label || opt.value"
+              :value="opt.value"
+            />
+          </el-select>
+        </div>
+
         <!-- 静态选项编辑（仅静态来源）-->
         <div v-if="localFilterConfig.optionSource === 'static'" class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
@@ -699,6 +741,10 @@ const localFilterConfig = reactive<FilterComponentConfig>({
   optionSource: 'static',
   staticOptions: [],
 })
+const localFilterSelectionMode = ref<'single' | 'multiple'>('single')
+const localFilterAllowSelectAll = ref(false)
+const localFilterAllowNoFilter = ref(true)
+const localFilterDefaultValue = ref<string | string[] | null>(null)
 /** 筛选器数据源 ID */
 const localFilterDatasourceId = ref<string>('')
 /** 筛选器维度选项与加载状态 */
@@ -869,6 +915,12 @@ watch(
       localFilterConfig.field = config?.field ?? ''
       localFilterConfig.optionSource = config?.optionSource ?? 'static'
       localFilterConfig.staticOptions = config?.staticOptions ? JSON.parse(JSON.stringify(config.staticOptions)) : []
+      localFilterSelectionMode.value = config?.selectionMode ?? 'single'
+      localFilterAllowSelectAll.value = config?.allowSelectAll ?? false
+      localFilterAllowNoFilter.value = config?.allowNoFilter ?? true
+      localFilterDefaultValue.value = config?.defaultValue == null
+        ? null
+        : (Array.isArray(config.defaultValue) ? [...config.defaultValue] : config.defaultValue)
       // 同步筛选器数据源 ID（优先使用 config.datasourceId，兼容旧数据）
       localFilterDatasourceId.value = config?.datasourceId ?? ''
       if (localFilterDatasourceId.value) {
@@ -1168,6 +1220,10 @@ function emitFilterConfigChange(): void {
     staticOptions: localFilterConfig.optionSource === 'static'
       ? JSON.parse(JSON.stringify(localFilterConfig.staticOptions))
       : undefined,
+    selectionMode: localFilterSelectionMode.value,
+    allowSelectAll: localFilterAllowSelectAll.value,
+    allowNoFilter: localFilterAllowNoFilter.value,
+    defaultValue: localFilterDefaultValue.value,
     scope: localFilterScope.value,
     targetComponentIds: localFilterScope.value === 'scoped' ? [...localTargetComponentIds.value] : undefined,
   }

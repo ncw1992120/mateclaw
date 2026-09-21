@@ -1775,6 +1775,14 @@ export interface FilterComponentConfig {
   datasourceId?: string
   /** 动态选项维度名（optionSource=dynamic 时使用，已废弃，直接使用 field） */
   dimension?: string
+  /** 选择方式；缺省为单选，兼容旧仪表盘配置 */
+  selectionMode?: 'single' | 'multiple'
+  /** 是否展示“全部”选项；选中后不下发该字段筛选条件 */
+  allowSelectAll?: boolean
+  /** 是否允许清空为不筛选；缺省为允许，兼容旧仪表盘配置 */
+  allowNoFilter?: boolean
+  /** 初始选中值；null 表示初始不筛选 */
+  defaultValue?: string | string[] | null
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */

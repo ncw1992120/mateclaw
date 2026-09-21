@@ -119,19 +119,27 @@ export function useDashboardFilterContext(
   /**
    * 设置维度筛选值（由筛选器组件触发，支持作用范围）
    */
-  function setDimensionFilter(field: string, value: string | string[], sourceFilterId?: string): void {
+  function setDimensionFilter(field: string, value: string | string[] | undefined, sourceFilterId?: string): void {
     if (sourceFilterId) {
       const { scope } = getFilterScope(sourceFilterId)
       if (scope === 'scoped') {
         if (!scopedFilterStates[sourceFilterId]) {
           scopedFilterStates[sourceFilterId] = { dimensionFilters: {} }
         }
-        scopedFilterStates[sourceFilterId].dimensionFilters[field] = value
+        if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+          delete scopedFilterStates[sourceFilterId].dimensionFilters[field]
+        } else {
+          scopedFilterStates[sourceFilterId].dimensionFilters[field] = value
+        }
         emitScopedFilterChange(sourceFilterId)
         return
       }
     }
-    globalDimensionFilterMap[field] = value
+    if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+      delete globalDimensionFilterMap[field]
+    } else {
+      globalDimensionFilterMap[field] = value
+    }
     onFilterChange({ ...filterContext.value })
   }
 
@@ -166,6 +174,29 @@ export function useDashboardFilterContext(
       delete scopedFilterStates[key]
     })
     onFilterChange(filterContext.value)
+  }
+
+  /** 将筛选器配置中的默认值装载为初始运行态；不触发多次网络请求。 */
+  function initializeDefaults(): void {
+    globalTimeRange.value = undefined
+    Object.keys(globalDimensionFilterMap).forEach((key) => delete globalDimensionFilterMap[key])
+    Object.keys(scopedFilterStates).forEach((key) => delete scopedFilterStates[key])
+
+    for (const comp of components()) {
+      if (comp.type !== 'filter') continue
+      const config = comp.config as FilterComponentConfig | undefined
+      const value = config?.defaultValue
+      if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) continue
+      const scope = config?.scope ?? 'global'
+      if (!config?.field) continue
+      if (scope === 'scoped') {
+        scopedFilterStates[comp.id] = {
+          dimensionFilters: { [config.field]: value },
+        }
+      } else {
+        globalDimensionFilterMap[config.field] = value
+      }
+    }
   }
 
   /**
@@ -216,6 +247,7 @@ export function useDashboardFilterContext(
     setTimeRange,
     setDimensionFilter,
     resetFilters,
+    initializeDefaults,
     getFilterScope,
     isComponentAffectedByFilter,
     getEffectiveFilterContextForComponent,

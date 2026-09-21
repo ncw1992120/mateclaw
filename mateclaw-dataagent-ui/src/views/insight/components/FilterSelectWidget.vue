@@ -5,8 +5,10 @@
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
       :aria-label="component.title || t('insight.filterPlaceholder')"
-      clearable
+      :clearable="selectionBehavior.allowNoFilter"
       filterable
+      :multiple="selectionBehavior.selectionMode === 'multiple'"
+      :collapse-tags="selectionBehavior.selectionMode === 'multiple'"
       :remote="isDynamic"
       :remote-method="handleRemoteSearch"
       :loading="dynamicLoading"
@@ -15,6 +17,11 @@
       @change="handleChange"
       @visible-change="handleVisibleChange"
     >
+      <el-option
+        v-if="selectionBehavior.allowSelectAll"
+        :label="t('insight.filterAllOption')"
+        :value="FILTER_ALL_VALUE"
+      />
       <el-option
         v-for="opt in resolvedOptions"
         :key="opt.value"
@@ -30,6 +37,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, FilterComponentConfig } from '@/types'
 import * as datasourceApi from '@/api/datasource'
+import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
 
 defineOptions({
   name: 'FilterSelectWidget',
@@ -45,12 +53,12 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'change', payload: { field: string; value: string }): void
+  (e: 'change', payload: { field: string; value: string | string[] | undefined }): void
 }>()
 
 const { t } = useI18n()
 
-const selectedValue = ref<string>('')
+const selectedValue = ref<string | string[]>('')
 const dynamicLoading = ref(false)
 const dynamicOptions = ref<Array<{ label: string; value: string }>>([])
 
@@ -58,6 +66,8 @@ const dynamicOptions = ref<Array<{ label: string; value: string }>>([])
 const filterConfig = computed<FilterComponentConfig | undefined>(() => {
   return props.component.config as FilterComponentConfig | undefined
 })
+
+const selectionBehavior = computed(() => getFilterSelectionBehavior(filterConfig.value))
 
 /** 是否为动态选项模式 */
 const isDynamic = computed<boolean>(() => {
@@ -110,16 +120,25 @@ function handleVisibleChange(visible: boolean): void {
 
 /** 组件配置变化时重置动态选项和选中值 */
 watch(
-  () => filterConfig.value?.field,
+  () => [filterConfig.value?.field, filterConfig.value?.defaultValue, filterConfig.value?.selectionMode] as const,
   () => {
-    selectedValue.value = ''
+    const defaultValue = filterConfig.value?.defaultValue
+    selectedValue.value = defaultValue == null
+      ? (selectionBehavior.value.selectionMode === 'multiple' ? [] : '')
+      : (Array.isArray(defaultValue) ? [...defaultValue] : defaultValue)
     dynamicOptions.value = []
-  }
+  },
+  { immediate: true },
 )
 
-function handleChange(value: string): void {
+function handleChange(value: string | string[]): void {
   const field = filterConfig.value?.field ?? ''
-  emit('change', { field, value })
+  let nextValue: string | string[] = value
+  if (Array.isArray(value) && selectionBehavior.value.allowSelectAll && value.includes(FILTER_ALL_VALUE)) {
+    nextValue = value.filter((item) => item !== FILTER_ALL_VALUE)
+    selectedValue.value = nextValue
+  }
+  emit('change', { field, value: normalizeFilterSelection(nextValue, filterConfig.value) })
 }
 </script>
 
