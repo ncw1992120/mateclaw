@@ -978,6 +978,8 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 > rerun-33 复验结论：修正脚本从仪表盘列表进入正式展示态预览，并在切换列表模式后再定位种子卡片；12/12 步骤通过，`consoleErrors=[]`、`failedRequests=[]`，人工复核 `10-chart-component-preview.png` 可见真实 ECharts 折线与 canvas，`12-saved-dashboard-preview.png` 可见真实表格数据。Task 9 视觉验收完成。
 
+> Task 9 最终状态更正：上方早期 `BLOCKED` 描述仅保留历史证据；以 rerun-33 为当前结论，Task 9 已完成。
+
 **状态：BLOCKED（真实执行预览依赖未恢复）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并增加单步骤可配置超时、逐步落盘报告及真实页面路径回退。最新真实验收目录为 `mateclaw-dataagent-ui/docs/superpowers/evidence/2026-09-21-python-pipeline-real-rerun-11/`：`01` 筛选器默认带入、`02` 单边界查询、`03` 系统生成、`04` 用户接管、`05` 差异查看、`12` 保存页共 6 项 PASS；`06`–`11` 因真实 A→B/输出预览请求返回 `400 base SQL must not be blank` 或等待结果超时而 FAIL。最新报告未发现 `failedRequests`，但记录了该 400 业务错误；根因是当前种子看板的跨数据集/输出预览草稿没有可执行的 base SQL，不能将此报告标记为完整 PASS。此前 `/dataagent/api/v1/models/active` 超时的可选请求已通过 Insight 路由门控绕开，数据集 PostgreSQL `COUNT(*) ORDER BY` 也已修复并有回归测试。真实数据预览仍受 DataAgent/对象存储/种子数据链路影响；没有用 headless Chromium 或静态截图替代 9222 验收。
 
 **Files:**
