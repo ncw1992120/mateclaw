@@ -115,7 +115,7 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 渲染类型：echarts / kpi / table */
         private String renderType;
 
-        /** 组件扩展配置 */
+        /** 组件扩展配置；datasetPipeline 内的 systemScript/conditions 通过 Map 原样保留。 */
         private Map<String, Object> config;
 
         /** 绑定的筛选器 ID 列表（绑定后该组件仅响应专属筛选器，不再受全局筛选器影响） */

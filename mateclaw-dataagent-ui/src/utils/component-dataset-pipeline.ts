@@ -1,9 +1,43 @@
-import type { ComponentDatasetPipeline, ComponentResultSet, InsightComponent } from '@/types'
+import type {
+  ComponentDatasetPipeline,
+  ComponentResultSet,
+  DashboardScriptFilterBinding,
+  DashboardSystemScriptState,
+  InsightComponent,
+} from '@/types'
 
 const PIPELINE_KEY = 'datasetPipeline'
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function readSystemScript(value: unknown): DashboardSystemScriptState | undefined {
+  const raw = asRecord(value)
+  if (raw.mode !== 'generated' && raw.mode !== 'managed') return undefined
+  if (typeof raw.generatedCode !== 'string' || typeof raw.generatedFingerprint !== 'string' || typeof raw.userCode !== 'string') {
+    return undefined
+  }
+  return {
+    mode: raw.mode,
+    generatedCode: raw.generatedCode,
+    managedCode: typeof raw.managedCode === 'string' ? raw.managedCode : undefined,
+    generatedFingerprint: raw.generatedFingerprint,
+    userCode: raw.userCode,
+  }
+}
+
+function readFilterBinding(value: unknown): DashboardScriptFilterBinding | undefined {
+  const raw = asRecord(value)
+  if (typeof raw.filterComponentId !== 'string') return undefined
+  return {
+    filterComponentId: raw.filterComponentId,
+    conditions: Array.isArray(raw.conditions) ? raw.conditions as DashboardScriptFilterBinding['conditions'] : [],
+    inputNames: Array.isArray(raw.inputNames) ? raw.inputNames.filter((item): item is string => typeof item === 'string') : [],
+    fieldMappings: raw.fieldMappings && typeof raw.fieldMappings === 'object'
+      ? raw.fieldMappings as Record<string, string>
+      : undefined,
+  }
 }
 /** 只读取当前组件的数据集编排，不把旧根级输入猜测分配给组件。 */
 export function readComponentDatasetPipeline(component: InsightComponent | null | undefined): ComponentDatasetPipeline | undefined {
@@ -11,10 +45,14 @@ export function readComponentDatasetPipeline(component: InsightComponent | null 
   const config = asRecord(component.config)
   const value = asRecord(config[PIPELINE_KEY])
   if (!Array.isArray(value.datasetInputs)) return undefined
+  const bindings = Array.isArray(value.scriptFilterBindings)
+    ? value.scriptFilterBindings.map(readFilterBinding).filter((binding): binding is DashboardScriptFilterBinding => Boolean(binding))
+    : []
   return {
     datasetInputs: value.datasetInputs as ComponentDatasetPipeline['datasetInputs'],
-    scriptFilterBindings: Array.isArray(value.scriptFilterBindings) ? value.scriptFilterBindings as ComponentDatasetPipeline['scriptFilterBindings'] : [],
+    scriptFilterBindings: bindings,
     script: typeof value.script === 'string' ? value.script : undefined,
+    systemScript: readSystemScript(value.systemScript),
     parameters: Array.isArray(value.parameters) ? value.parameters as ComponentDatasetPipeline['parameters'] : [],
     executionPolicy: value.executionPolicy && typeof value.executionPolicy === 'object' ? value.executionPolicy as ComponentDatasetPipeline['executionPolicy'] : {},
     resultSet: readResultSet(value.resultSet),
@@ -50,8 +88,12 @@ export function writeComponentDatasetPipeline(component: InsightComponent, pipel
       ...(component.config || {}),
       [PIPELINE_KEY]: {
         datasetInputs: pipeline.datasetInputs,
-        scriptFilterBindings: pipeline.scriptFilterBindings || [],
+        scriptFilterBindings: (pipeline.scriptFilterBindings || []).map(binding => ({
+          ...binding,
+          conditions: binding.conditions || [],
+        })),
         script: pipeline.script,
+        ...(pipeline.systemScript ? { systemScript: pipeline.systemScript } : {}),
         parameters: pipeline.parameters || [],
         executionPolicy: pipeline.executionPolicy || {},
         // 结果集元数据持久化：重开仪表盘时据此回显或刷新（决策 B）

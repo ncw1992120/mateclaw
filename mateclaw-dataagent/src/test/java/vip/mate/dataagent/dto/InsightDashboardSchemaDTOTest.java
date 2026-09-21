@@ -33,6 +33,55 @@ class InsightDashboardSchemaDTOTest {
         assertEquals("result = []", schema.getScript());
     }
 
+    @Test
+    void componentPipelineRoundTripsManagedScriptAndOptionalFilterConditions() throws Exception {
+        String json = """
+                {
+                  "version": "1.1",
+                  "pages": [{
+                    "id": "page_0",
+                    "name": "首页",
+                    "components": [{
+                      "id": "comp_chart_1",
+                      "type": "chart",
+                      "title": "趋势",
+                      "position": {"x": 0, "y": 0, "w": 12, "h": 8},
+                      "config": {
+                        "datasetPipeline": {
+                          "datasetInputs": [],
+                          "scriptFilterBindings": [{
+                            "filterComponentId": "time_filter",
+                            "conditions": [{
+                              "inputName": "orders",
+                              "field": "metric_time",
+                              "operator": "gte",
+                              "parameterNames": ["startDate"],
+                              "required": false
+                            }]
+                          }],
+                          "systemScript": {
+                            "mode": "managed",
+                            "generatedCode": "orders = datasets.read(\\\"orders\\\")",
+                            "managedCode": "orders = custom_read()",
+                            "generatedFingerprint": "fp-1",
+                            "userCode": "result = orders"
+                          }
+                        }
+                      }
+                    }]
+                  }]
+                }
+                """;
+
+        ObjectMapper mapper = new ObjectMapper();
+        InsightDashboardSchemaDTO schema = mapper.readValue(json, InsightDashboardSchemaDTO.class);
+        String written = mapper.writeValueAsString(schema);
+
+        assertTrue(written.contains("\"mode\":\"managed\""));
+        assertTrue(written.contains("\"parameterNames\":[\"startDate\"]"));
+        assertTrue(written.contains("\"managedCode\":\"orders = custom_read()\""));
+    }
+
     /**
      * KPI 指标分组防丢测试：复制组件 / AI 修改会把 schema_json 反序列化为 DTO 再序列化，
      * kpiMetrics 必须在 roundtrip 后逐字段保留（含嵌套 styles 与小数布局坐标）。

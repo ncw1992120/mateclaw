@@ -1415,6 +1415,8 @@ export interface ComponentDatasetPipeline {
   datasetInputs: DashboardDatasetInput[]
   scriptFilterBindings?: DashboardScriptFilterBinding[]
   script?: string
+  /** 系统生成区和用户处理区的持久化状态；缺失时保持旧脚本整体语义。 */
+  systemScript?: DashboardSystemScriptState
   parameters?: DashboardScriptParameter[]
   executionPolicy?: DashboardExecutionPolicy
   /** 最近一次产出的结果集（元数据持久化，行数据由后端 executionId 或前端重算获得） */
@@ -1500,10 +1502,69 @@ export interface DashboardScriptParameter {
 /** 脚本输入筛选器到数据集的声明式绑定。 */
 export interface DashboardScriptFilterBinding {
   filterComponentId: string
+  /** 新版显式筛选模板；旧 Schema 缺失时由读取层归一化为空数组。 */
+  conditions?: DashboardScriptFilterCondition[]
   inputNames: string[]
   /** 别名 → 绑定的字段名（技术主键；不存展示名，改名不影响绑定关系）。 */
   fieldMappings?: Record<string, string>
 }
+
+/** 绑定筛选器产生的、尚未携带运行时值的结构化条件模板。 */
+export interface DashboardScriptFilterCondition {
+  inputName: string
+  field: string
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+    | 'in' | 'not_in' | 'between' | 'contains'
+    | 'starts_with' | 'ends_with' | 'is_null' | 'is_not_null'
+  parameterNames: string[]
+  required?: boolean
+}
+
+/** 系统生成 Python 区域的接管状态。 */
+export interface DashboardSystemScriptState {
+  mode: 'generated' | 'managed'
+  generatedCode: string
+  managedCode?: string
+  generatedFingerprint: string
+  userCode: string
+}
+
+export type ScriptDataType = 'string' | 'number' | 'boolean' | 'date' | 'datetime'
+
+export interface ScriptResultColumn {
+  name: string
+  title: string
+  dataType: ScriptDataType
+  role?: 'dimension' | 'measure'
+  nullable: boolean
+}
+
+export interface ScriptResultMeta {
+  rowCount: number
+  truncated: boolean
+  sourceInputs: string[]
+  [key: string]: unknown
+}
+
+export type ScriptResultEnvelope =
+  | {
+    schemaVersion: '1.0'
+    kind: 'table'
+    data: { columns: ScriptResultColumn[]; rows: Record<string, unknown>[] }
+    meta: ScriptResultMeta
+  }
+  | {
+    schemaVersion: '1.0'
+    kind: 'scalar'
+    data: { value: string | number | boolean; label?: string; dataType: ScriptDataType; unit?: string }
+    meta: ScriptResultMeta
+  }
+  | {
+    schemaVersion: '1.0'
+    kind: 'message'
+    data: { level: 'info' | 'warning'; message: string }
+    meta: ScriptResultMeta
+  }
 
 /** Python Runner 执行限制（不包含依赖安装配置）。 */
 export interface DashboardExecutionPolicy {
