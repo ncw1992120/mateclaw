@@ -7,12 +7,16 @@ const endpoint = process.env.MATECLAW_CDP_ENDPOINT ?? 'http://127.0.0.1:9222'
 const baseUrl = process.env.MATECLAW_UI_BASE_URL ?? 'http://127.0.0.1:15174'
 const stateFile = process.env.MATECLAW_E2E_STATE_FILE
 const evidenceDir = process.env.MATECLAW_CDP_EVIDENCE_DIR ?? path.resolve('docs/superpowers/evidence/2026-09-21-python-pipeline')
+const stepTimeoutMs = Number(process.env.MATECLAW_CDP_STEP_TIMEOUT_MS ?? 15_000)
 if (!stateFile || !fs.existsSync(stateFile)) throw new Error('缺少 MATECLAW_E2E_STATE_FILE；视觉验收不得使用硬编码 dashboard ID')
+if (!Number.isFinite(stepTimeoutMs) || stepTimeoutMs <= 0) throw new Error('MATECLAW_CDP_STEP_TIMEOUT_MS 必须是正数')
 const seed = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
 const browser = await chromium.connectOverCDP(endpoint)
 const context = browser.contexts()[0]
 if (!context) throw new Error('9222 上没有可用 Google Chrome context')
 const page = await context.newPage()
+page.setDefaultTimeout(stepTimeoutMs)
+page.setDefaultNavigationTimeout(stepTimeoutMs)
 fs.mkdirSync(evidenceDir, { recursive: true })
 
 const consoleErrors = []
@@ -25,13 +29,24 @@ page.on('response', (response) => { if (response.status() >= 400) failedRequests
 const report = { browser: 'Google Chrome via CDP 9222', dashboardIds: seed, screenshots: [], consoleErrors, failedRequests }
 async function shot(name, action) {
   const item = { name, status: 'PASS', screenshotPath: path.join(evidenceDir, `${name}.png`) }
+  let timeout
   try {
-    await action()
+    await new Promise(async (resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error(`视觉步骤超过 ${stepTimeoutMs}ms`)), stepTimeoutMs)
+      try {
+        await action()
+        resolve()
+      } catch (error) {
+        reject(error)
+      }
+    })
     await page.screenshot({ path: item.screenshotPath, fullPage: true })
   } catch (error) {
     item.status = 'FAIL'
     item.detail = String(error.message || error)
     await page.screenshot({ path: item.screenshotPath, fullPage: true }).catch(() => {})
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
   report.screenshots.push(item)
 }

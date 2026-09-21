@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec，但完整 E2E 仍需要登录凭据、数据库/对象存储和 Runner 同时可用。当前本机 Runner 单测已通过，Java 使用本机 JDK 21/Maven 3.9.16 后普通契约失败已清零；全量仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
+**状态：BLOCKED（真实登录态与外部数据源前置）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，Java 使用本机 JDK 21/Maven 3.9.16 的关键契约测试 `20/20` 通过；本机 DataAgent 已能连接本地 Runner，真实执行已从 `python runner unavailable` 推进到数据读取阶段，但文件对象存储不可用、Aloudata mock 同步存在既有类型错误，且 DataAgent 重启后 Chrome JWT 失效，完整 E2E 仍未形成。全量 Java 仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
@@ -962,7 +962,7 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
 
-**状态：BLOCKED（真实执行数据仍不完整）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并在当前本地登录态下完成一次真实浏览器验收。Chrome `http://127.0.0.1:9222`、本地 UI `http://localhost:5174` 和 DataAgent 均可用；通过真实登录态创建了仅用于本轮验收的临时专项仪表盘，产出 9 张截图，覆盖筛选器默认行、单边界输入、系统生成区、用户接管区、系统差异、A→B 编辑态和输出预览入口。第 10 项以后因本地临时数据集没有可用的真实执行结果而进入等待，未形成 12 张完整截图、AX/console/network 报告，故按 §3.5 保持 BLOCKED，不能把局部视觉证据记为完整 PASS。
+**状态：BLOCKED（真实登录态与执行结果仍不完整）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令；脚本增加了单步骤可配置超时，避免单个 UI 等待无限阻塞。上一轮真实 Chrome 已产出 9 张截图，覆盖筛选器默认行、单边界输入、系统生成区、用户接管区、系统差异、A→B 编辑态和输出预览入口。本轮确认 UI `5174`、DataAgent `18089`、Runner `18080` 均可启动，但 DataAgent 重启后 Chrome 被带到 `/login`，当前没有可安全复用的凭据；未形成 12 张完整截图、AX/console/network 报告，故按 §3.5 保持 BLOCKED，不能把局部视觉证据记为完整 PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -1166,8 +1166,8 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | BLOCKED | 87d2ad6b | 本机 Runner 46/46；Java 222 tests、0 failures、3 个 Testcontainers errors（无 Docker）；真实 DataAgent E2E 仍缺登录态导出的专项种子、数据库/对象存储执行数据 |
-| 9 CDP 视觉验收 | BLOCKED（部分完成） | 348c68ee | 真实 Chrome 9222 + UI 5174 已产出 9 张截图；第 10–12 项等待真实结果，缺 AX/console/network 完整报告 |
+| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；Java 关键契约 20/20；DataAgent 已连通本地 Runner，但对象存储、Aloudata mock 类型错误和 Chrome JWT 失效仍阻断真实 E2E；全量仍有 3 个 Testcontainers errors（无 Docker） |
+| 9 CDP 视觉验收 | BLOCKED（部分完成） | 348c68ee | 真实 Chrome 9222 + UI 5174 已产出 9 张截图；本轮补充单步骤超时；第 10–12 项与 AX/console/network 完整报告仍等待登录态和真实结果 |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
