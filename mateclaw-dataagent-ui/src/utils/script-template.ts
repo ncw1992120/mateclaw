@@ -20,11 +20,22 @@ function datasetFilterExpression(filter: { field: string; operator: string; valu
   return `{ "field": ${JSON.stringify(filter.field)}, "operator": ${JSON.stringify(filter.operator)}, "value": ${JSON.stringify(filter.value)} }`
 }
 
+const OPTIONAL_FILTER_RUNTIME = `def _optional_filter(field, operator, parameter_name=None):
+    """可选运行时筛选：参数未填写时返回空条件，不改变全量查询语义。"""
+    if operator in ("is_null", "is_not_null"):
+        return [{"field": field, "operator": operator}]
+    value = datasets.params.get(parameter_name)
+    if value is None or value == "" or (isinstance(value, (list, tuple)) and len(value) == 0):
+        return []
+    return [{"field": field, "operator": operator, "value": value}]`
+
 /** 生成只读的系统区域；字段默认与参数同名，用户可在脚本中调整映射。 */
 export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: DashboardScriptParameter[], bindings: DashboardScriptFilterBinding[] = []): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const validParameters = parameters.filter(parameter => parameter.name.trim())
   const lines = [SYSTEM_SCRIPT_START, '# 页面筛选参数会通过 datasets.params 注入，并在 datasets.read 时下推。']
+  const hasExplicitConditions = bindings.some(binding => (binding.conditions || []).some(condition => condition.field && condition.operator))
+  if (hasExplicitConditions) lines.push(OPTIONAL_FILTER_RUNTIME, '# 未填写时不下推绑定筛选条件。')
   if (validParameters.length) {
     lines.push('# 默认约定：参数名与数据集字段名相同；多选使用 in，日期范围使用 between。')
   } else {
@@ -33,14 +44,20 @@ export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: D
   validInputs.forEach((input) => {
     lines.push('', `${input.inputName} = datasets.read(`, `    input_name=${JSON.stringify(input.inputName)},`, '    columns=[],')
     const filters = [...(input.filters || [])]
+    const boundConditions = bindings
+      .filter(binding => binding.inputNames.includes(input.inputName))
+      .flatMap(binding => (binding.conditions || []).filter(condition => condition.inputName === input.inputName && condition.field))
     const boundParameterNames = new Set<string>()
     bindings.filter(binding => binding.inputNames.includes(input.inputName)).forEach(binding => {
       const mapped = binding.fieldMappings?.[input.inputName]
       if (mapped) boundParameterNames.add(mapped)
     })
     const scopedParameters = bindings.length === 0 ? validParameters : validParameters.filter(parameter => boundParameterNames.has(parameter.name))
-    if (scopedParameters.length || filters.length) {
+    if (boundConditions.length || scopedParameters.length || filters.length) {
       lines.push('    filters=[')
+      boundConditions.forEach(condition => lines.push(
+        `        *_optional_filter(${JSON.stringify(condition.field)}, ${JSON.stringify(condition.operator)}, ${JSON.stringify(condition.parameterNames[0])}),`,
+      ))
       scopedParameters.forEach(parameter => lines.push(`        ${readExpression(parameter)},`))
       filters.forEach(filter => lines.push(`        ${datasetFilterExpression(filter)},`))
       lines.push('    ],')

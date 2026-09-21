@@ -79,11 +79,17 @@ function filterBindingsFromPipeline(
       const field = raw ? normalizeFieldRef(raw) : ''
       return { datasetId: ds.id, field, matched: Boolean(field) }
     })
+    // 绑定名回显：优先按组件 id 精确匹配；历史数据可能存的是筛选器名本身
+    // （保存侧找不到组件 id 时回退存名），再按 title 兜底命中。
+    // 旧版合成的 filter-N id 名字已丢失：画布仅一个筛选器候选时唯一可对，自动恢复。
     const matchedComponent = filterComponents.find((c) => c.id === binding.filterComponentId)
+      ?? filterComponents.find((c) => c.title === binding.filterComponentId)
+      ?? (filterComponents.length === 1 && /^filter-\d+$/.test(binding.filterComponentId) ? filterComponents[0] : undefined)
     return {
       filterName: matchedComponent?.title || binding.filterComponentId || `筛选器${index + 1}`,
       scope,
       fieldMap,
+      conditions: binding.conditions ?? [],
     }
   })
 }

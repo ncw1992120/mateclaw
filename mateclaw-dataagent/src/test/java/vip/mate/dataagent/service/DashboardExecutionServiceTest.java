@@ -126,4 +126,33 @@ class DashboardExecutionServiceTest {
         verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(),
                 eq(Map.of("window", Map.of("preset", "7d"))));
     }
+
+    @Test
+    void omitsUnsetOptionalBoundParameterInsteadOfPassingAnEmptyValue() {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        ObjectRefService objectRefs = mock(ObjectRefService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        when(guard.currentUserId()).thenReturn(8L);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setId(42L);
+        dashboard.setSchemaJson("{\"script\":\"result=[]\",\"datasetInputs\":[{\"datasetId\":9,\"inputName\":\"orders\"}],"
+                + "\"parameters\":[{\"name\":\"startDate\",\"type\":\"date\",\"scope\":\"dashboard\"},"
+                + "{\"name\":\"endDate\",\"type\":\"date\",\"scope\":\"dashboard\"}]}" );
+        when(dashboards.getDashboard(42L)).thenReturn(dashboard);
+        var prepared = new ScriptTaskPreparationService.PreparedTask("task", "result=[]", Map.of(), Map.of("startDate", "2026-09-01"), "token");
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(),
+                eq(Map.of("startDate", "2026-09-01")))).thenReturn(prepared);
+        when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
+
+        new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs,
+                "http://mateclaw-server:18088").submit(42L,
+                new DashboardExecutionRequest(Map.of("startDate", "2026-09-01")));
+
+        verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(),
+                eq(Map.of("startDate", "2026-09-01")));
+    }
 }

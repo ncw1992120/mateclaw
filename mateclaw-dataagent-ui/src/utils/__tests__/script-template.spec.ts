@@ -48,4 +48,23 @@ describe('script template', () => {
     expect(reads[1]).not.toContain('"region"')
     expect(reads[1]).not.toContain('"status"')
   })
+
+  it('uses explicit bound operators and parameter names for optional runtime filters', () => {
+    const script = buildSystemScript(
+      [{ datasetId: '1', inputName: 'orders' }],
+      [],
+      [{
+        filterComponentId: 'filter-1',
+        inputNames: ['orders'],
+        fieldMappings: { orders: 'metric_time' },
+        conditions: [
+          { inputName: 'orders', field: 'metric_time', operator: 'gte', parameterNames: ['startDate'] },
+          { inputName: 'orders', field: 'metric_time', operator: 'lt', parameterNames: ['endDate'] },
+        ],
+      }],
+    )
+    expect(script).toContain('_optional_filter("metric_time", "gte", "startDate")')
+    expect(script).toContain('_optional_filter("metric_time", "lt", "endDate")')
+    expect(script).toContain('未填写时不下推')
+  })
 })

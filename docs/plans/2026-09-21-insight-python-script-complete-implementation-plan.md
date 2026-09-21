@@ -248,6 +248,8 @@ git commit -m "feat: 定义 Python 编排与输出契约"
 
 ### Task 2: 绑定筛选器模板、查看数据运行值和操作符适配
 
+**状态：已完成**（定向前端 37/37、脚本生成 10/10、后端 JUnit 5/5、前端构建通过；全量前端基线有 2 个既有 DashboardCanvas 失败，详见执行 ledger）。
+
 **Files:**
 - Create: `mateclaw-dataagent-ui/src/utils/runtime-filter-bindings.ts`
 - Create: `mateclaw-dataagent-ui/src/utils/__tests__/runtime-filter-bindings.spec.ts`
@@ -256,14 +258,17 @@ git commit -m "feat: 定义 Python 编排与输出契约"
 - Modify: `mateclaw-dataagent-ui/src/views/insight/components/DatasetDataDialog.vue`
 - Modify: `mateclaw-dataagent-ui/src/views/insight/components/__tests__/DatasetDataDialog.spec.ts`
 - Modify: `mateclaw-dataagent-ui/src/views/insight/components/card-attribute/useInsight.ts`
-- Modify: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/impl/DashboardExecutionServiceImpl.java`
+- Modify: `mateclaw-dataagent-ui/src/views/insight/components/card-attribute/useCardAttributeBridge.ts`
+- Modify: `mateclaw-dataagent-ui/src/utils/script-template.ts`
+- Test: `mateclaw-dataagent-ui/src/utils/__tests__/script-template.spec.ts`
+- Test: `mateclaw-dataagent-ui/src/views/insight/components/card-attribute/__tests__/python-system-region.spec.ts`
 - Test: `mateclaw-dataagent/src/test/java/vip/mate/dataagent/service/DashboardExecutionServiceTest.java`
 
 **Interfaces:**
 - Consumes: Task 1 的 `DashboardScriptFilterCondition`。
 - Produces: `defaultRuntimeRows(inputName, bindings)`、`buildExecutionParameters(rows)`、`toDatasetFilters(rows)`；执行参数只包含完整条件。
 
-- [ ] **Step 1: 写纯函数失败测试，固定空值和单边时间语义**
+- [x] **Step 1: 写纯函数失败测试，固定空值和单边时间语义**
 
 ```ts
 it('时间范围模板默认带入但空值不形成参数或过滤条件', () => {
@@ -283,7 +288,7 @@ it('只填开始时间只生成 gte', () => {
 })
 ```
 
-- [ ] **Step 2: 扩展类型化操作符矩阵**
+- [x] **Step 2: 扩展类型化操作符矩阵**
 
 实现 `operatorsFor(dataType, sourceType)`：
 
@@ -298,7 +303,7 @@ operatorsFor('date', 'ALOUDATA_ANALYSIS_VIEW')
 
 Aloudata 不展示其表达式编译器不支持的 `contains/starts_with/ends_with/is_null/is_not_null`。
 
-- [ ] **Step 3: 改造查看数据弹窗并写组件测试**
+- [x] **Step 3: 改造查看数据弹窗并写组件测试**
 
 弹窗分成“绑定筛选条件（本次查询）”和“附加筛选条件”两组。绑定模板打开即出现，值为空时显示“可选，未填写不参与查询”；删除只影响当前弹窗草稿；点击查询时调用 `previewDatasetDraft`，但不把运行值写入 `dataset.filters` 或 Dashboard Schema。
 
@@ -310,7 +315,7 @@ expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
 expect(dataset.filters).toEqual(originalStaticFilters)
 ```
 
-- [ ] **Step 4: 生成系统代码时使用显式 operator/parameterNames**
+- [x] **Step 4: 生成系统代码时使用显式 operator/parameterNames**
 
 生成结果固定为：
 
@@ -323,24 +328,27 @@ dataset_a = datasets.read("dataset_a", filters=filters_dataset_a).to_pandas()
 
 `_optional_filter` 对缺失、空字符串和空集合返回 `[]`；`is_null/is_not_null` 不读取参数。
 
-- [ ] **Step 5: 后端固定参数缺失规则并补 JUnit**
+- [x] **Step 5: 后端固定参数缺失规则并补 JUnit**
 
 `DashboardExecutionServiceImpl.resolveParameters` 保持：`required=false` 且无值时不放入 resolved map；提供未知参数拒绝；提供值时按类型校验。新增断言：只提交 `startDate` 时 Runner 请求的 `parameters` 不含 `endDate`。
 
-- [ ] **Step 6: 运行前端与后端定向测试**
+- [x] **Step 6: 运行前端与后端定向测试**
 
 ```bash
 npm --prefix mateclaw-dataagent-ui run test -- --run \
   src/utils/__tests__/runtime-filter-bindings.spec.ts \
   src/utils/__tests__/filter-conditions.spec.ts \
-  src/views/insight/components/__tests__/DatasetDataDialog.spec.ts
-docker run --rm -v "$PWD:/workspace" -v "$HOME/.m2:/root/.m2" -w /workspace maven:3.9-eclipse-temurin-21 \
-  mvn -o -f mateclaw-dataagent/pom.xml -Dtest=DashboardExecutionServiceTest test
+  src/utils/__tests__/script-template.spec.ts \
+  src/views/insight/components/__tests__/DatasetDataDialog.spec.ts \
+  src/views/insight/components/card-attribute/__tests__/python-system-region.spec.ts
+JDK21_HOME='/Users/srant/.jdks/jdk-21.0.12+8/Contents/Home'; MAVEN_HOME='/Users/srant/.maven/apache-maven-3.9.16'; \
+export JAVA_HOME="$JDK21_HOME"; export PATH="$MAVEN_HOME/bin:$JAVA_HOME/bin:$PATH"; \
+mvn -o -f mateclaw-dataagent/pom.xml -Dtest=DashboardExecutionServiceTest test
 ```
 
-Expected: 全部退出 0；四种时间输入组合均有断言。
+Expected: 定向命令全部退出 0；四种时间输入组合均有断言。前端 `npm run build` 通过；全量前端回归为 43/44 文件、244/246 测试通过，2 个既有 `DashboardCanvas` 测试失败，失败与 Task 2 文件无关，记录在执行 ledger。
 
-- [ ] **Step 7: 精确提交**
+- [x] **Step 7: 精确提交**
 
 ```bash
 git add -- mateclaw-dataagent-ui/src/utils/runtime-filter-bindings.ts \
@@ -349,8 +357,11 @@ git add -- mateclaw-dataagent-ui/src/utils/runtime-filter-bindings.ts \
   mateclaw-dataagent-ui/src/utils/__tests__/filter-conditions.spec.ts \
   mateclaw-dataagent-ui/src/views/insight/components/DatasetDataDialog.vue \
   mateclaw-dataagent-ui/src/views/insight/components/__tests__/DatasetDataDialog.spec.ts \
+  mateclaw-dataagent-ui/src/utils/script-template.ts \
+  mateclaw-dataagent-ui/src/utils/__tests__/script-template.spec.ts \
   mateclaw-dataagent-ui/src/views/insight/components/card-attribute/useInsight.ts \
-  mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/impl/DashboardExecutionServiceImpl.java \
+  mateclaw-dataagent-ui/src/views/insight/components/card-attribute/useCardAttributeBridge.ts \
+  mateclaw-dataagent-ui/src/views/insight/components/card-attribute/__tests__/python-system-region.spec.ts \
   mateclaw-dataagent/src/test/java/vip/mate/dataagent/service/DashboardExecutionServiceTest.java
 git diff --cached --check
 git commit -m "feat: 支持运行时筛选模板与可选入参"

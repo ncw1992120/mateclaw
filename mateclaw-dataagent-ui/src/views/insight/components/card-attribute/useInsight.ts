@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 
 /* ============================ 类型定义 ============================ */
@@ -103,6 +103,8 @@ export interface FilterBinding {
   filterName: string // 仪表盘参数名，例：策略类型
   scope: Record<string, boolean> // 数据集 id -> 是否作用到该数据集
   fieldMap: FilterBindingFieldMap[]
+  /** 筛选器绑定到数据集后的运行时条件模板，值在查看数据时临时注入。 */
+  conditions?: DashboardScriptFilterCondition[]
 }
 
 interface UiState {
@@ -135,8 +137,8 @@ interface UiState {
   // KPI 指标分组弹窗
   metricConfig: { visible: boolean }
   metricStyle: { visible: boolean; fieldKey: string; field: string }
-  /** 全屏「查看数据」工作台（Hue 式：上定义 / 中参数 / 下结果） */
-  workbench: { visible: boolean; datasetId: string }
+  /** 「查看数据」弹窗：定义 / 筛选条件 / 参数 / 结果 —— 条件由用户显式「添加」后点查询下推 */
+  dataDialog: { visible: boolean; datasetId: string }
 }
 
 /* ============================ 结果集（卡片唯一数据来源） ============================ */
@@ -206,24 +208,82 @@ function toIdentifier(alias: string): string {
   return /^[0-9]/.test(cleaned) ? `ds_${cleaned}` : cleaned
 }
 
+/**
+ * 绑定筛选器的运行时下推辅助代码（随系统区域生成，供 datasets.read 使用）。
+ *
+ * 契约：页面筛选值经执行参数注入 `datasets.params`（key = 筛选器标题）。
+ * operator="auto"（默认）按值形状自适应：
+ *   - 字符串含 % 或 * → contains（模糊查询；后端编译为 LIKE '%value%'，* 归一为 %）
+ *   - 列表 → in；{start,end} 字典 → between；其余标量 → eq
+ * 未选值（None/空串/空列表）时不下推该条件，读全量。
+ * 绑定若需强制某种匹配方式，可在生成处传显式 operator（如 "contains"）覆盖自适应。
+ */
+const PYTHON_FILTER_RUNTIME = `def _bind_param(name):
+    # 页面筛选值由执行参数注入（datasets.params）；本地无 Runner 时 datasets 为 None
+    return datasets.params.get(name) if datasets is not None else None
+
+def _cond(field, name, operator="auto"):
+    """绑定筛选器 → datasets.read 的 filters 条件（列表）；未选值时返回 []。"""
+    v = _bind_param(name)
+    if v is None or v == "" or (isinstance(v, (list, tuple)) and len(v) == 0):
+        return []
+    if operator == "auto":
+        # 模糊查询：值自带 % 或 * 通配符时按 contains 下推（LIKE '%value%'）
+        if isinstance(v, str) and ("%" in v or "*" in v):
+            return [{"field": field, "operator": "contains", "value": v.replace("*", "%")}]
+        operator = "in" if isinstance(v, (list, tuple)) else ("between" if isinstance(v, dict) else "eq")
+    return [{"field": field, "operator": operator, "value": v}]`
+
 export function buildPythonSystemRegion(): string {
   const lines = ['# ===== 系统生成区域：输入数据集和筛选绑定', '']
-  state.datasets.forEach((ds) => {
-    lines.push(`${toIdentifier(ds.alias)} = inputs["${ds.alias}"]`)
-  })
-  lines.push('')
-  if (state.filterBindings.length) {
-    state.filterBindings.forEach((b) => {
-      const inScope = state.datasets.filter((ds) => b.scope[ds.id])
-      inScope.forEach((ds) => {
-        const hit = b.fieldMap.find((m) => m.datasetId === ds.id)
-        const f = hit && hit.field ? hit.field : '<未映射字段>'
-        lines.push(`# ${b.filterName} → ${ds.alias}.${f}`)
-      })
-    })
-    lines.push('# 绑定筛选条件将在数据源查询阶段下推')
-    lines.push('')
+  const hasBoundFilters = state.filterBindings.some((b) =>
+    state.datasets.some((ds) => b.scope[ds.id] && b.fieldMap.some((m) => m.datasetId === ds.id && m.field)),
+  )
+  if (hasBoundFilters) {
+    lines.push(PYTHON_FILTER_RUNTIME, '')
   }
+  state.datasets.forEach((ds) => {
+    // 绑定到该数据集的筛选器：fieldMap 命中真实字段名的才生成下推条件
+    const bound: { name: string; field: string; conditions: DashboardScriptFilterCondition[] }[] = []
+    state.filterBindings.forEach((b) => {
+      if (!b.scope[ds.id]) return
+      const hit = b.fieldMap.find((m) => m.datasetId === ds.id)
+      if (!hit?.field) return
+      const explicitConditions = (b.conditions ?? []).filter((condition) =>
+        (condition.inputName === ds.alias || b.inputNames?.includes(condition.inputName)) && condition.field,
+      )
+      bound.push({ name: b.filterName, field: hit.field, conditions: explicitConditions })
+    })
+    if (bound.length) {
+      bound.forEach((b) => {
+        lines.push(`# 筛选器「${b.name}」→ ${toIdentifier(ds.alias)}.${b.field}（经 datasets.params 注入，未选值时不下推）`)
+      })
+      const condArgs = bound.flatMap((b) => {
+        if (b.conditions.length) {
+          return b.conditions.map((condition) =>
+            `_cond(${JSON.stringify(condition.field)}, ${JSON.stringify(condition.parameterNames[0])}, ${JSON.stringify(condition.operator)})`,
+          )
+        }
+        return [`_cond(${JSON.stringify(b.field)}, ${JSON.stringify(b.name)})`]
+      }).join(' + ')
+      lines.push(
+        `${toIdentifier(ds.alias)} = datasets.read(`,
+        `    input_name=${JSON.stringify(ds.alias)},`,
+        '    columns=[],',
+        `    filters=${condArgs},`,
+        ').to_polars()',
+      )
+    } else {
+      lines.push(
+        `${toIdentifier(ds.alias)} = datasets.read(`,
+        `    input_name=${JSON.stringify(ds.alias)},`,
+        '    columns=[],',
+        '    filters=[],',
+        ').to_polars()',
+      )
+    }
+    lines.push('')
+  })
   return lines.join('\n')
 }
 
@@ -290,7 +350,7 @@ const state = reactive({
     },
     metricConfig: { visible: false },
     metricStyle: { visible: false, fieldKey: '', field: 'value' },
-    workbench: { visible: false, datasetId: '' },
+    dataDialog: { visible: false, datasetId: '' },
   } as UiState,
 })
 
@@ -909,12 +969,12 @@ function closePreview() {
   state.ui.preview.visible = false
 }
 
-/** 打开全屏「查看数据」工作台（定义 / 参数 / 结果三段，参数从定义自动提取） */
-function openWorkbench(datasetId: string): void {
-  state.ui.workbench = { visible: true, datasetId }
+/** 打开「查看数据」弹窗（定义 / 筛选条件 / 结果；点查询才取数） */
+function openDataDialog(datasetId: string): void {
+  state.ui.dataDialog = { visible: true, datasetId }
 }
-function closeWorkbench(): void {
-  state.ui.workbench.visible = false
+function closeDataDialog(): void {
+  state.ui.dataDialog.visible = false
 }
 
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
@@ -1155,14 +1215,23 @@ export function buildPipeline(): ComponentDatasetPipeline {
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
   }))
 
-  const scriptFilterBindings: DashboardScriptFilterBinding[] = state.filterBindings.map((b, i) => {
+  const scriptFilterBindings: DashboardScriptFilterBinding[] = state.filterBindings.map((b) => {
     const inScope = state.datasets.filter((ds) => b.scope[ds.id] ?? b.scope[ds.alias])
     const fieldMappings: Record<string, string> = {}
     inScope.forEach((ds) => {
       const hit = b.fieldMap.find((m) => m.datasetId === ds.id || m.datasetId === ds.alias)
       if (hit?.field) fieldMappings[ds.alias] = hit.field
     })
-    return { filterComponentId: `filter-${i}`, inputNames: inScope.map((ds) => ds.alias), fieldMappings }
+    // filterComponentId 必须存画布真实筛选器组件 id（此前合成 filter-N，回显时按 id 找
+    // 不到组件 → 绑定名丢失成 "filter-0"，连带 params 取值 key 失效）。
+    // 找不到对应组件时回退存绑定名本身：回显侧按 title 兜底命中。
+    const catalogHit = state.filterCatalog.find((f) => f.title === b.filterName)
+    return {
+      filterComponentId: catalogHit?.id ?? b.filterName,
+      inputNames: inScope.map((ds) => ds.alias),
+      fieldMappings,
+      conditions: b.conditions ?? [],
+    }
   })
 
   return {
@@ -1781,8 +1850,8 @@ export function useInsight() {
     closePreview,
     previewFieldMetas,
     // 全屏「查看数据」工作台
-    openWorkbench,
-    closeWorkbench,
+    openDataDialog,
+    closeDataDialog,
     // 结果集（卡片唯一数据来源）
     resultSetReady,
     resultSetStale,
