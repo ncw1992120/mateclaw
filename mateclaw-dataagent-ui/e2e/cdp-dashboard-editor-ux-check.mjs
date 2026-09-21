@@ -117,9 +117,9 @@ async function openJdbcSqlDialog(sql) {
   return sqlDialog
 }
 
-/** SQL 弹窗点「查看数据」→ 等待「查看数据」工作弹窗出现 */
+/** SQL 弹窗点「筛选预览」→ 等待「筛选预览」工作弹窗出现 */
 async function openDataDialogFromSql(sqlDialog) {
-  await sqlDialog.getByRole('button', { name: '查看数据' }).click()
+  await sqlDialog.getByRole('button', { name: '筛选预览' }).click()
   const dataDialog = page.locator('.dataset-data-dialog:visible')
   await dataDialog.waitFor({ state: 'visible', timeout: 15_000 })
   await dataDialog.getByRole('button', { name: '查询' }).click()

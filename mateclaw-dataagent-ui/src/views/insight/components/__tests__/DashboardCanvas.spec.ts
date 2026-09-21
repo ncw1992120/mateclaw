@@ -52,4 +52,28 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(canvas.attributes('style')).toContain(`min-width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
     expect(canvas.attributes('style')).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
   })
+
+  it('emits copy and paste commands from canvas keyboard shortcuts', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true, selectedId: 'kpi-1' },
+      global: { stubs, plugins: [i18n] },
+    })
+    const card = wrapper.get('[data-component-id="kpi-1"]')
+
+    await card.trigger('keydown', { key: 'c', ctrlKey: true })
+    await card.trigger('keydown', { key: 'v', metaKey: true })
+
+    expect(wrapper.emitted('copy-component')).toEqual([['kpi-1']])
+    expect(wrapper.emitted('paste-component')).toEqual([[]])
+  })
+
+  it('opens the component context menu at the browser pointer position', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    await wrapper.get('[data-component-id="kpi-1"]').trigger('contextmenu', { clientX: 120, clientY: 240 })
+
+    expect(wrapper.emitted('context-menu')).toEqual([[{ componentId: 'kpi-1', x: 120, y: 240 }]])
+  })
 })
