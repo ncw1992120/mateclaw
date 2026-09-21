@@ -1247,3 +1247,9 @@ git diff --check
 - 修复多源 E2E 断言：结果接口断言统一 envelope 的 `meta.rowCount=11`，数据预览按系统受控预览上限断言可见 10 行；避免把“真实总行数”和“预览返回行数”混为一谈。
 - 使用本地 JDK 21.0.12、Maven 3.9.16、UI 5174、DataAgent 18089、Aloudata mock 18081，不使用 Docker；真实 Google Chrome `channel=chrome` 全量运行 `dashboard-multi-source.spec.ts`，4/4 PASS：JDBC+Aloudata、API+File、ObjectRef 大结果、ECharts 组件预览；截图基线已在同一 Chrome 通道更新并复跑通过。
 - 本地 Docker/Testcontainers 集成项仍按用户约束保持 `BLOCKED/NOT RUN`，不能用本地 mock 结果替代真实 Aloudata 生产环境的权限拒绝与字段不存在用例；当前结论为“本地模拟全链路 PASS，外部真实 Aloudata/Docker 集成未执行”。
+
+### 本轮追加进度（2026-09-22，提交后本地回归）
+
+- 在提交 `b217f6f1` 后重新执行不依赖 Docker 的门禁：Runner `46 passed`；前端 `58 files / 304 tests passed`；`vue-tsc` 与 Vite production build 均通过。
+- 再次执行本地真实 Google Chrome `channel=chrome` 的 `dashboard-multi-source.spec.ts`：4/4 PASS，覆盖 JDBC + Aloudata、API + File、ObjectRef 大结果和 ECharts 组件预览；结果接口仍确认双源总行数 11，弹窗受控展示 10 行。
+- 本轮没有新增代码阻塞；Docker/Testcontainers 与真实外部 Aloudata 权限拒绝/字段不存在用例仍按计划明确为 `BLOCKED/NOT RUN`，不使用 Docker，也不把本地模拟结果表述为真实外部环境 PASS。
