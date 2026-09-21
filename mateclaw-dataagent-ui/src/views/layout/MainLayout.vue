@@ -56,6 +56,7 @@ import { useAgentStore } from '@/stores/useAgentStore'
 import { useChatStore } from '@/stores/useChatStore'
 import { useModelStore } from '@/stores/useModelStore'
 import { useUserStore } from '@/stores/useUserStore'
+import { shouldLoadActiveModel } from './mainLayoutModelLoad'
 import TopNavBar from './TopNavBar.vue'
 import WorkbenchView from '../WorkbenchView.vue'
 import DashboardListView from '../insight/DashboardListView.vue'
@@ -94,7 +95,9 @@ onMounted(async () => {
     chatStore.fetchConversations(),
     userStore.isAdmin ? modelStore.fetchProviders() : Promise.resolve(),
   ])
-  modelStore.fetchActiveModel()
+  if (shouldLoadActiveModel(activeNav.value)) {
+    modelStore.fetchActiveModel()
+  }
 
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
   // tryResumeStream 内部对已完成对话会直接用 listMessages 渲染（不走 SSE 回放），
