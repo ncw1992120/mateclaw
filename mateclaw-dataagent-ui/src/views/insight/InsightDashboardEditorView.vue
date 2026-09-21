@@ -260,12 +260,8 @@
         </el-button>
       </div>
 
-      <!-- 全屏「查看数据」工作台：定义 / 参数 / 结果（Hue 式，参数从定义自动提取） -->
-      <DataWorkbench
-        v-if="insightState.ui.workbench.visible && workbenchDataset"
-        :dataset="workbenchDataset"
-        @close="closeWorkbench()"
-      />
+      <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
+      <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
 
       <!-- 移动端面板遮罩 -->
       <div
@@ -294,7 +290,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
-import DataWorkbench from './components/DataWorkbench.vue'
+import DatasetDataDialog from './components/DatasetDataDialog.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
@@ -320,11 +316,11 @@ const { t } = useI18n()
 const store = useInsightDashboardStore()
 const { canModifyResource } = usePermission()
 // KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
-const { openMetricStyle, closeWorkbench, state: insightState } = useInsight()
+const { openMetricStyle, state: insightState } = useInsight()
 
 /** 全屏「查看数据」工作台：数据集不存在时（如刚被移除）不渲染 */
-const workbenchDataset = computed(
-  () => insightState.datasets.find((item) => item.id === insightState.ui.workbench.datasetId) ?? null,
+const dataDialogDataset = computed(
+  () => insightState.datasets.find((item) => item.id === insightState.ui.dataDialog.datasetId) ?? null,
 )
 
 const dashboard = computed(() => store.currentDashboard)
@@ -1815,6 +1811,11 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 /* ─── 悬浮折叠按钮（样式在 PanelFloatButton.vue 内） ─────────────────────────────────── */
 
 @media (max-width: 1279px) {
+  .editor-canvas {
+    min-width: 0;
+    overflow: auto;
+  }
+
   .editor-pages,
   .editor-palette {
     width: 56px;
@@ -1878,6 +1879,12 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 @media (max-width: 767px) {
+  .editor-canvas {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
   .editor-toolbar {
     padding: 0 var(--space-md);
     min-height: auto;

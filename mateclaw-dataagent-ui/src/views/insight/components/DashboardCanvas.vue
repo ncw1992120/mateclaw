@@ -53,8 +53,11 @@
       >
         <div
           class="grid-item-content mc-card grid-item-animated"
+          :data-component-id="item.i"
+          tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
           :style="{ animationDelay: `${index * 40}ms` }"
+          @keydown="handleComponentKeydown($event, item.i)"
         >
           <!-- 四边拖动热区（仅编辑态） -->
           <template v-if="editable">
@@ -137,6 +140,7 @@
     <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
       <div class="empty-icon" aria-hidden="true">—</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
+      <button v-if="editable" type="button" class="canvas-empty-action" aria-label="从组件库添加组件" @click="emit('add-component', { type: 'kpi' })">从组件库添加组件</button>
     </div>
   </div>
 </template>
@@ -389,6 +393,29 @@ function handleDrop(event: DragEvent): void {
 /** 选中组件 */
 function handleSelectComponent(id: string): void {
   emit('select-component', id)
+}
+
+function handleComponentKeydown(event: KeyboardEvent, id: string): void {
+  if (!props.editable) return
+  const item = gridLayout.value.find((entry) => entry.i === id)
+  if (!item) return
+  const direction = event.key
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(direction)) return
+  event.preventDefault()
+  const next = { ...item }
+  if (event.shiftKey) {
+    if (direction === 'ArrowRight') next.w += 1
+    if (direction === 'ArrowLeft') next.w = Math.max(1, next.w - 1)
+    if (direction === 'ArrowDown') next.h += 1
+    if (direction === 'ArrowUp') next.h = Math.max(1, next.h - 1)
+  } else {
+    if (direction === 'ArrowRight') next.x += 1
+    if (direction === 'ArrowLeft') next.x = Math.max(0, next.x - 1)
+    if (direction === 'ArrowDown') next.y += 1
+    if (direction === 'ArrowUp') next.y = Math.max(0, next.y - 1)
+  }
+  gridLayout.value = gridLayout.value.map((entry) => entry.i === id ? next : entry)
+  emit('update-layout', gridLayout.value.map((entry) => ({ id: entry.i, x: entry.x, y: entry.y, w: entry.w, h: entry.h })))
 }
 
 /** 组合卡片子组件选中/取消（透传给编辑器，联动属性面板） */
