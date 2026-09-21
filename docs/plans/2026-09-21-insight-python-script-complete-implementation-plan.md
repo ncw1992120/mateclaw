@@ -1253,3 +1253,8 @@ git diff --check
 - 在提交 `b217f6f1` 后重新执行不依赖 Docker 的门禁：Runner `46 passed`；前端 `58 files / 304 tests passed`；`vue-tsc` 与 Vite production build 均通过。
 - 再次执行本地真实 Google Chrome `channel=chrome` 的 `dashboard-multi-source.spec.ts`：4/4 PASS，覆盖 JDBC + Aloudata、API + File、ObjectRef 大结果和 ECharts 组件预览；结果接口仍确认双源总行数 11，弹窗受控展示 10 行。
 - 本轮没有新增代码阻塞；Docker/Testcontainers 与真实外部 Aloudata 权限拒绝/字段不存在用例仍按计划明确为 `BLOCKED/NOT RUN`，不使用 Docker，也不把本地模拟结果表述为真实外部环境 PASS。
+
+### 外部门禁复核（2026-09-22）
+
+- 执行 `./scripts/verify-dashboard-external-prerequisites.sh --external`，权威结果为 `BLOCKED: ALOU_DATA_EXTERNAL_TEST=true 未设置`；因此没有向真实 Aloudata 地址发起请求，也没有暴露或猜测凭据。
+- 使用本机 JDK `/Users/srant/.jdks/jdk-21.0.12+8/Contents/Home` 与 Maven `/Users/srant/.maven/apache-maven-3.9.16` 执行 `mvn -o -f mateclaw-dataagent/pom.xml test -q`：229 tests，0 failures，3 errors；错误全部来自 `ObjectRefServiceTest`、`ScriptDatasetReadObjectRefIntegrationTest`、`S3DatasetFileStorageServiceTest` 无 Docker 环境初始化失败。该结果不改变本地无 Docker 门禁 PASS，也不宣称 Docker 集成 PASS。
