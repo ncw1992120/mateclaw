@@ -120,7 +120,15 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         PushdownReport report;
         if (request.filters().isEmpty()) {
             endpoint = "analysis_view_query_data";
-            params.put("viewName", viewName); params.put("pageSize", limit); params.put("pageIndex", 0); params.put("queryResultType", "DATA");
+            params.put("viewName", viewName); params.put("pageSize", limit);
+            // DatasetReadRequest.offset 是行偏移，而结果查询端点要的是零基页号 ——
+            // 这里恒写 0 会让「查看数据」滚动加载第二页拿到重复的第一页。
+            int offset = request.offset() == null ? 0 : request.offset();
+            if (offset % limit != 0) {
+                throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,
+                        "Aloudata 分页仅支持按 pageSize 对齐的 offset");
+            }
+            params.put("pageIndex", offset / limit); params.put("queryResultType", "DATA");
             report = new PushdownReport(List.of(), List.of(), true, true, null);
         } else {
             endpoint = "metrics_query";

@@ -46,17 +46,18 @@ import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as datasetApi from '@/api/dataset'
 
-const { state, confirmFile, openWorkbench, getDataset } = useInsight()
+const { state, confirmFile, openDataDialog, getDataset } = useInsight()
 const ui = state.ui
 const fileInput = ref<HTMLInputElement>()
 
-// 查看数据：先提交文件配置（写入数据集并关闭弹窗），再打开全屏工作台。
-// 文件的筛选项是解析选项（工作表 / 编码 / 分隔符 / 表头行），由工作台从类型自动给出
+// 查看数据：先提交文件配置（写入数据集并关闭弹窗），再打开「查看数据」弹窗。
+// 文件类型上游不做筛选下推（后端只把它们记进 residualFilters），所以弹窗里不给筛选条件入口，
+// 避免做出「能配但不生效」的假象。
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmFile()
   const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
-  if (id) openWorkbench(id)
+  if (id) openDataDialog(id)
 }
 const pageSize = 3
 const page = ref(1)

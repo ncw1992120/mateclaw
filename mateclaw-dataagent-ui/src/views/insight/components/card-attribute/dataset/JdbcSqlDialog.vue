@@ -26,7 +26,7 @@ import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as backend from '../useInsightBackend'
 
-const { state, confirmJdbc, openWorkbench, getDataset } = useInsight()
+const { state, confirmJdbc, openDataDialog, getDataset } = useInsight()
 const ui = state.ui
 
 // 停止修改 SQL 800ms 后，真实向数据源预览一次：校验 SQL 并返回字段列（原型 3.1 规则 5）。
@@ -60,13 +60,13 @@ function onSqlInput() {
 }
 
 // 查看数据：先提交当前 SQL 配置（新增/更新数据集并关闭 SQL 弹窗），
-// 再打开全屏工作台 —— 参数从 SQL 的 :param 自动提取，不再「先填筛选框、确定后才给看」
+// 再打开「查看数据」弹窗 —— 在那里添加筛选条件后点查询，条件下推到源查询
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmJdbc()
   // 解析本次提交的数据集 id：编辑时沿用 editingId，新增时取最新提交的数据集
   const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
-  if (id) openWorkbench(id)
+  if (id) openDataDialog(id)
 }
 </script>
 

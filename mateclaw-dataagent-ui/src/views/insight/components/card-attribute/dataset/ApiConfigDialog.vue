@@ -36,16 +36,16 @@
 <script setup lang="ts">
 import { useInsight } from '../useInsight'
 
-const { state, confirmApi, openWorkbench, getDataset } = useInsight()
+const { state, confirmApi, openDataDialog, getDataset } = useInsight()
 const ui = state.ui
 
 // 确认后保存受控接口定义引用；敏感认证信息只引用凭据（通过数据源/凭据中心登记），不写入页面配置或日志。
-// 随后打开全屏工作台 —— 参数从接口配置里的 {{name}} / :name 自动提取
+// 随后打开「查看数据」弹窗 —— 占位符参数从接口配置里的 {{name}} / :name 自动提取
 function onPreview() {
   const editingId = state.ui.editingDatasetId
   confirmApi()
   const id = editingId && getDataset(editingId) ? editingId : state.datasets[state.datasets.length - 1]?.id ?? ''
-  if (id) openWorkbench(id)
+  if (id) openDataDialog(id)
 }
 </script>
 
