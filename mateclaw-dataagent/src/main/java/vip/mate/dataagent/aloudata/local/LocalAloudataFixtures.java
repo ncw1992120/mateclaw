@@ -351,6 +351,10 @@ public class LocalAloudataFixtures {
                 clause = clause.substring(1, clause.length() - 1).trim();
             }
             if (clause.isBlank()) continue;
+            if (clause.matches(".*(?i)\\s+OR\\s+.*")) {
+                log.warn("[local-mock] 筛选表达式不支持 OR: {}", clause);
+                throw new InvalidFilterExpressionException(expression);
+            }
             Matcher matcher = CONDITION.matcher(clause);
             if (!matcher.matches()) {
                 log.warn("[local-mock] 筛选表达式片段无法解析: {}", clause);

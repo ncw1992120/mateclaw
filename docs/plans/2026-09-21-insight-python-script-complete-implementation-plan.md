@@ -893,7 +893,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 ### Task 8: 全链路自动化、历史兼容与错误矩阵
 
-**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec，但完整 E2E 仍需要登录凭据、数据库/对象存储和 Runner 同时可用。当前本机 Runner 单测已通过，Java 全量只能用本机 JDK 21/Maven 3.9.16 执行；其中 4 个 Testcontainers 用例因无 Docker、2 个既有数据契约测试失败。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
+**状态：BLOCKED（待全栈环境）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec，但完整 E2E 仍需要登录凭据、数据库/对象存储和 Runner 同时可用。当前本机 Runner 单测已通过，Java 使用本机 JDK 21/Maven 3.9.16 后普通契约失败已清零；全量仍剩 3 个 Testcontainers 用例因无 Docker。没有用 Docker 代替本机环境，也没有把单测结果冒充真实 E2E PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`

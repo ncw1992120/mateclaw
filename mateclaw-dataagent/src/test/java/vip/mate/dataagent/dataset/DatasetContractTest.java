@@ -64,7 +64,7 @@ class DatasetContractTest {
     @Test
     void jsonEntryRejectsUnknownOperatorWithReadableMessage() {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> objectMapper.convertValue(Map.of("field", "id", "op", "contains"), DatasetFilter.class));
+                () -> objectMapper.convertValue(Map.of("field", "id", "op", "not-a-real-operator"), DatasetFilter.class));
         assertTrue(error.getMessage().contains("unsupported filter operator"), error.getMessage());
     }
 }

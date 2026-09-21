@@ -21,7 +21,7 @@ class AloudataApiClientTest {
     void callPreservesNonMapRequestBody() {
         AloudataEndpointService endpoints = mock(AloudataEndpointService.class);
         when(endpoints.getEndpoint("batch")).thenReturn(new AloudataApiProperties.ApiEndpoint(
-                "batch", "/batch", "POST", "test", List.of(), List.of()));
+                "semantic", "/batch", "POST", "batch", List.of(), List.of()));
         RestTemplate restTemplate = new RestTemplate();
         AloudataApiClient client = new AloudataApiClient(endpoints);
         ReflectionTestUtils.setField(client, "restTemplate", restTemplate);
