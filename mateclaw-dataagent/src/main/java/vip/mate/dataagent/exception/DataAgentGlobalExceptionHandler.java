@@ -52,7 +52,7 @@ public class DataAgentGlobalExceptionHandler {
      */
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<R<Void>> handleIllegalStateException(IllegalStateException e) {
-        log.warn("状态异常: {}", e.getMessage());
+        log.warn("状态异常: {}", e.getMessage(), e);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(R.fail(409, e.getMessage()));
     }
 

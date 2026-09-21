@@ -39,6 +39,24 @@ class DatasetContractTest {
     }
 
     @Test
+    void objectRefAcceptsRunnerOutputMetadataExtensions() {
+        ObjectRef ref = objectMapper.convertValue(Map.of(
+                "objectId", "task-2/object",
+                "workspaceId", 1,
+                "taskId", "task-2",
+                "format", "parquet",
+                "digest", "sha256:x",
+                "expiresAt", 1000,
+                "schemaVersion", "1.0",
+                "kind", "table",
+                "columns", List.of(Map.of("name", "id", "dataType", "number")),
+                "rowCount", 1000), ObjectRef.class);
+
+        assertEquals("task-2/object", ref.objectId());
+        assertEquals("parquet", ref.format());
+    }
+
+    @Test
     void unknownFilterRoleAndOperatorAreRejected() {
         assertThrows(IllegalArgumentException.class,
                 () -> new DatasetFilter("id", "unknown", "eq", 1));

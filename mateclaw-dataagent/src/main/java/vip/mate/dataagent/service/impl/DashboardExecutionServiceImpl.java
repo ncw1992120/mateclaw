@@ -195,7 +195,8 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             DatasetAccessContext context = new DatasetAccessContext(execution.getWorkspaceId(), 0L, execution.getExecutionId(), Set.of());
             List<Map<String, Object>> rows = DatasetBatchCodec.readRows(context, reference, objectRefs, RESULT_PREVIEW_MAX_ROWS);
             ScriptResultContractService.ValidatedEnvelope rebuilt = resultContract.rebuildTable(refMeta, rows);
-            response.put("envelope", previewEnvelope(rebuilt));
+            response.put("envelope", mapper.convertValue(
+                    resultContract.preview(rebuilt, RESULT_PREVIEW_MAX_ROWS).toEnvelope(), Map.class));
             response.put("inline", false);
             response.put("outputRef", reference);
             return response;

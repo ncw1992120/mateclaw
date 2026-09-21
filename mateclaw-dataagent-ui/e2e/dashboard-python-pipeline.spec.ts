@@ -115,6 +115,7 @@ test.describe('Python pipeline real DataAgent flow', () => {
     })
     await openPythonPreview(page)
     await resultResponse
-    await expect(page.locator('[aria-label="数据预览"] .el-table tbody tr')).toHaveCount(10, { timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toBeVisible({ timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"]')).toContainText('共 10 条')
   })
 })

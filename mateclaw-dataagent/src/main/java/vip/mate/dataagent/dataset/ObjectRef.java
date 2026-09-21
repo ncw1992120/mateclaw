@@ -1,6 +1,9 @@
 package vip.mate.dataagent.dataset;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /** 受控对象存储引用；不包含连接凭据。 */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ObjectRef(
         String objectId,
         Long workspaceId,

@@ -1190,7 +1190,7 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；UI 54 文件/293 测试；Java 224 用例、0 failures、3 个 Testcontainers errors；主 Python Playwright 6 个用例已收集但均因本机缺少 Chromium headless executable 在启动前失败；Insight 路由 active-model 门控与 PostgreSQL 数据集 count 回归已补单测与实现 |
+| 8 E2E 全链路 | 已完成（本地无 Docker） | 87d2ad6b + 本轮 | Runner 46/46；Java 定向 14/14；真实 Chrome 主 Python Playwright 6/6；覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误、ObjectRef 大结果；ObjectRef/Testcontainers 专项集成仍因用户明确不使用 Docker 保留 BLOCKED |
 | 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见 |
 
 执行备注：
@@ -1205,3 +1205,14 @@ git diff --check
 - 修复已保存数据集的查看数据路径：未修改定义时使用统一 `/v1/datasets/preview`（携带真实 datasetId、运行时筛选和参数）；只有用户在弹窗内修改 SQL 时才使用草稿预览，避免仅有 datasetId 的仪表盘触发 `base SQL must be blank`。
 - 视觉验收：`/tmp/mateclaw-cdp-rerun-33/visual-report.json`，真实 Chrome `http://127.0.0.1:9222`、UI `http://127.0.0.1:5174`，12/12 PASS，`consoleErrors=[]`、`failedRequests=[]`；10、12 截图已人工复核。
 - 本轮前端验证：`npm run build` 通过；`DatasetDataDialog.spec.ts` 16/16 通过；此前全量 UI 回归 53 files / 284 tests 通过。Java/Runner 仍按上方 JDK 21 + Maven 3.9.16、无 Docker 的证据执行。
+
+### 本轮补充进度（2026-09-21，ObjectRef 与真实 Chrome E2E）
+
+- 新增本地 S3 兼容对象存储模拟器 `dev-support/local-simulation/scripts/s3-object-ref-mock.py`，仅用于无 Docker 的本地 ObjectRef 验证；支持 bucket/object 的 HEAD、PUT、GET、DELETE，并返回稳定 `ETag`。
+- 修复 `DashboardExecutionServiceImpl.result()` 的 ObjectRef 结果预览边界：`rebuildTable()` 已返回 `ValidatedEnvelope`，不能再次交给只接受原始 Map 的 `validate()`；现在直接执行受控 preview，结果 API 正确返回 `inline=false`、`outputRef`、统一 table envelope 和真实 `rowCount`。
+- `ObjectRef` 忽略 Runner 输出元数据扩展字段，并新增兼容元数据的单测；结果异常日志保留完整 cause，便于定位 409 而不改变对外错误契约。
+- 本地验证命令及结果：
+  - `mvn -o -f mateclaw-dataagent/pom.xml -DskipTests package`：BUILD SUCCESS（JDK 21.0.12 + Maven 3.9.16）。
+  - `mvn -o -f mateclaw-dataagent/pom.xml -Dtest=DatasetContractTest,ScriptResultContractServiceTest test`：14/14 PASS。
+  - `npx playwright test e2e/dashboard-python-pipeline.spec.ts`：真实 Google Chrome CDP/UI 路径 6/6 PASS，28.0s；大结果用例验证 `inline=false`、ObjectRef 读取和“共 10 条”预览。
+- 视觉复核发现 E2E 原断言把默认“5 条/页”误判为必须渲染 10 行，已改为断言真实表格可见且总数为 10；产品分页行为保持不变。
