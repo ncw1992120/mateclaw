@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
 
 defineOptions({
@@ -58,6 +58,8 @@ const props = defineProps<{
   componentData?: InsightComponentData
   /** 是否显示标题 */
   showTitle?: boolean
+  /** 仪表盘级主题；不传时保持旧图表视觉 */
+  dashboardTheme?: ResolvedDashboardTheme
 }>()
 
 const emit = defineEmits<{
@@ -175,7 +177,7 @@ async function render(): Promise<void> {
     chartContainerRef.value.innerHTML = ''
     return
   }
-  renderECharts(chartContainerRef.value, effectiveOption.value)
+  renderECharts(chartContainerRef.value, effectiveOption.value, props.dashboardTheme)
 }
 
 onMounted(() => {

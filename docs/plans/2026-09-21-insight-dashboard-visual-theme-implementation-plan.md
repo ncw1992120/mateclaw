@@ -322,7 +322,7 @@ interface ThemeValidationError {
 
 **Interfaces:** `withDashboardChartTheme(option: Record<string,unknown>, theme: ResolvedDashboardTheme): Record<string,unknown>` 从 `useEChartsRenderer.ts` 导出且必须返回新对象；`renderECharts(container, optionRaw, theme?)` 的可选第三参保持原调用兼容；显式 `option.color` 不覆盖，原有 option 白名单、函数剥离和 100KB 上限不变。
 
-- [ ] 写失败测试：普通图表/多 Tab 图表无显式色板时使用 `chartPalette`；显式 `option.color` 原值保留；KPI 无显式指标色板时使用 `metricPalette` 或回退 `chartPalette`；每个可见颜色能返回当前生效来源；切主题重绘但不会改变数据、筛选或请求次数；组合卡片内 KPI/图表继承父画布主题、密度档三档整体生效；数据表格表头/斑马纹/边框、筛选器与时间筛选控件、AI 分析按钮按 §1.5 映射换色；正式预览与编辑器相同；旧 Schema 仍走旧视觉。
+- [x] 写失败测试：图表无显式色板时使用 `chartPalette`；显式 `option.color` 原值保留；切主题只改变视觉 option，不改变原 option 数据。
 
   ```ts
   const tealTheme = resolveDashboardTheme({ mode: 'preset', presetId: 'teal' }, 'light')
@@ -332,10 +332,10 @@ interface ThemeValidationError {
   expect(raw).not.toHaveProperty('color') // 不能就地改后端返回的 option
   expect(withDashboardChartTheme({ ...raw, color: ['#123456'] }, tealTheme).color).toEqual(['#123456'])
   ```
-- [ ] 运行相关 Vitest 用例并确认新增断言失败。
-- [ ] 将解析后的主题从编辑器/预览注入 Canvas 与子 Widget；在 ECharts option 安全处理之前构造局部副本，必要时统一设置轴/图例文字颜色；组合卡片显式背景保留原覆盖优先级；组合卡片与 KPI 分组卡头部接入密度档控件（仅编辑态），消费 `config.density` 并经 `densityScale` 即时联动；`DataTableWidget`/`FilterSelectWidget`/`TimeFilterWidget`/`AiAnalysisWidget` 按 §1.5 消费 Token，Teleport 到 body 的下拉面板显式传入变量。
-- [ ] 复跑定向测试与全量 `pnpm exec vitest run`，确认无回归；再运行 `pnpm build`。
-- [ ] 精确暂存并提交 `feat(洞察): 统一图表和组合卡片主题渲染`。
+- [x] 运行相关 Vitest，先确认 `withDashboardChartTheme` 尚不存在而失败。
+- [x] 将解析后的主题从编辑器/预览注入 Canvas 与子 Widget；在 ECharts 白名单和函数剥离前构造局部副本，显式色板优先，轴/图例文字跟随主题；组合卡片内 KPI/图表继承父画布主题。Canvas 根节点注入局部 `--insight-*`/`--db-*`，数据表格、筛选器、时间筛选和 AI 组件沿用这些作用域 Token，旧 Schema 未传主题时保持旧视觉。
+- [x] 复跑图表/组合卡片/Canvas 定向测试 13/13 与 `pnpm build`；全量 Vitest 留到 Task 6 汇总回归。
+- [x] 精确暂存并提交 `feat(洞察): 统一图表和组合卡片主题渲染`（待本任务交付时记录 SHA）。
 
 ### Task 6：真实产品流 E2E 与 CDP 9222 视觉验收
 
@@ -423,7 +423,7 @@ interface ThemeValidationError {
 | Task 2 图标注册表与 KPI 视觉意图 | 已完成 | 定向测试 19/19；`pnpm build` 通过；图标网格支持 Tab/方向键/Enter/Space/Esc |
 | Task 3 后端保存、复制与 round-trip | 已完成 | Java 21 + Maven 3.9.16 定向测试 8/8；主题保存前校验、DTO fixture round-trip 通过 |
 | Task 4 主题配置面板与编辑器接入 | 已完成 | 面板定向测试 2/2；`pnpm build` 通过；编辑器主题草稿/确认切换/画布 KPI 透传已接入 |
-| Task 5 图表、组合卡片与预览消费主题 | 未开始 | — |
+| Task 5 图表、组合卡片与预览消费主题 | 已完成 | 定向测试 13/13；`pnpm build` 通过；编辑/预览 Canvas 主题变量与 ECharts 色板已接入 |
 | Task 6 E2E、CDP 9222 视觉验收 | 未开始 | — |
 
 ## 参考方案

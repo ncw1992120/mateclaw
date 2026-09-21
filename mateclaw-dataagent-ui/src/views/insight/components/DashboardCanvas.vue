@@ -3,7 +3,7 @@
     ref="canvasRef"
     class="dashboard-canvas"
     data-canvas-workspace="expanded"
-    :style="canvasWorkspaceStyle"
+    :style="{ ...canvasWorkspaceStyle, ...dashboardThemeVariables }"
     tabindex="0"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
@@ -100,6 +100,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :dashboard-theme="dashboardTheme"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <DataTableWidget
@@ -136,6 +137,7 @@
                 :component-data-map="componentDataMap"
                 :editable="editable"
                 :selected="selectedId === item.i"
+                :dashboard-theme="dashboardTheme"
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
@@ -166,6 +168,7 @@ import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
+import { themeCssVariables } from '@/utils/dashboard-theme'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -200,6 +203,7 @@ const canvasWorkspaceStyle = computed(() => {
     minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
   }
 })
+const dashboardThemeVariables = computed(() => props.dashboardTheme ? themeCssVariables(props.dashboardTheme) : {})
 
 const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void

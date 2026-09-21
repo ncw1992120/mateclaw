@@ -85,12 +85,14 @@
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="!editable && child.showTitle !== false"
+            :dashboard-theme="dashboardTheme"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="!editable && child.showTitle !== false"
+            :dashboard-theme="dashboardTheme"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
@@ -121,6 +123,7 @@
             :component-data-map="componentDataMap"
             :editable="editable"
             :selected="selectedChildId === child.id"
+            :dashboard-theme="dashboardTheme"
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
@@ -156,6 +159,7 @@ import type {
   InsightCombinationConfig,
   ChartType,
   InsightComponentData,
+  ResolvedDashboardTheme,
 } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
@@ -175,6 +179,7 @@ const props = withDefaults(
     componentDataMap?: Record<string, InsightComponentData>
     editable?: boolean
     selected?: boolean
+    dashboardTheme?: ResolvedDashboardTheme
   }>(),
   { editable: false, selected: false },
 )

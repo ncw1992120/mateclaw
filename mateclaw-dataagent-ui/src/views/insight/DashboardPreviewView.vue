@@ -116,6 +116,7 @@
         :components="currentPageComponents"
         :component-data-map="componentDataMap"
         :editable="false"
+        :dashboard-theme="dashboardTheme"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
@@ -171,6 +172,7 @@ import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { restoreResultSetData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -195,6 +197,7 @@ const store = useInsightDashboardStore()
 const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
+const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
 const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
@@ -331,6 +334,7 @@ async function loadDashboard(): Promise<void> {
       schema.parameters = migrated.parameters ?? []
       schema.executionPolicy = migrated.executionPolicy ?? {}
       schema.scriptBindings = migrated.scriptBindings ?? []
+      schema.theme = migrated.theme
     } catch {
       schema.pages = [{
         id: generateId('page'),
