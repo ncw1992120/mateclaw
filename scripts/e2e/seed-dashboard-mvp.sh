@@ -149,11 +149,11 @@ file_dataset=$(api POST /v1/datasets "$(jq -cn --arg object "$file_object_id" --
 fi
 
 dashboard_schema() {
-  local left_id="$1" left_name="$2" right_id="$3" right_name="$4" script="$5"
-  jq -cn --arg l "$left_id" --arg ln "$left_name" --arg r "$right_id" --arg rn "$right_name" --arg script "$script" '{
+  local left_id="$1" left_name="$2" right_id="$3" right_name="$4" script="$5" left_type="${6:-}" right_type="${7:-}"
+  jq -cn --arg l "$left_id" --arg ln "$left_name" --arg r "$right_id" --arg rn "$right_name" --arg script "$script" --arg lt "$left_type" --arg rt "$right_type" '{
     version:"1.1",
-    pages:[{id:"e2e-page",name:"E2E",components:[{id:"e2e-table",type:"table",title:"E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:[{datasetId:$l,inputName:$ln},{datasetId:$r,inputName:$rn}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
-    datasetInputs:[{datasetId:$l,inputName:$ln},{datasetId:$r,inputName:$rn}],
+    pages:[{id:"e2e-page",name:"E2E",components:[{id:"e2e-table",type:"table",title:"E2E Result",position:{x:0,y:0,w:12,h:6},renderType:"table",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:[{datasetId:$l,inputName:$ln,sourceType:$lt},{datasetId:$r,inputName:$rn,sourceType:$rt}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
+    datasetInputs:[{datasetId:$l,inputName:$ln,sourceType:$lt},{datasetId:$r,inputName:$rn,sourceType:$rt}],
     script:$script,
     parameters:[],
     executionPolicy:{timeoutSeconds:60,maxOutputBytes:50000},
@@ -191,7 +191,7 @@ python_dashboard_schema() {
   }'
 }
 
-jdbc_aloudata_script=$'left = datasets.read(input_name="jdbc_orders")\nright = datasets.read(input_name="aloudata_metrics", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nresult = left.to_polars().to_dicts() + right.to_polars().to_dicts()'
+jdbc_aloudata_script=$'left = datasets.read(input_name="jdbc_orders")\nright = datasets.read(input_name="aloudata_metrics", filters=[{"field": "region", "operator": "eq", "value": "east"}])\nleft_rows = left.to_polars().to_dicts()\nright_rows = right.to_polars().to_dicts()\nresult = ([{"region": row.get("region", ""), "order_date": "", "revenue": row.get("amount", 0)} for row in left_rows] + [{"region": row.get("region", ""), "order_date": str(row.get("order_date", "")), "revenue": row.get("revenue", 0)} for row in right_rows])'
 api_file_script=$'paid_filter = {"field": "status", "operator": "eq", "value": "PAID"}\napi_rows = datasets.read(input_name="api_orders", filters=[paid_filter])\nfile_rows = datasets.read(input_name="file_orders", filters=[paid_filter])\nresult = api_rows.to_polars().to_dicts() + file_rows.to_polars().to_dicts()'
 
 multi_dashboard=""
@@ -231,12 +231,12 @@ elif [[ -n "$aloudata_dataset_id" ]]; then
   aloudata_mode="live"
 fi
 if [[ -n "$aloudata_dataset_id" ]]; then
-  multi_schema=$(dashboard_schema "$jdbc_dataset" jdbc_orders "$aloudata_dataset_id" aloudata_metrics "$jdbc_aloudata_script")
+  multi_schema=$(dashboard_schema "$jdbc_dataset" jdbc_orders "$aloudata_dataset_id" aloudata_metrics "$jdbc_aloudata_script" JDBC_SQL ALOUDATA_ANALYSIS_VIEW)
   multi_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$multi_schema" '{name:"E2E JDBC + Aloudata Dashboard",description:"dashboard MVP real dual-source flow",schemaJson:$schema}')" | id_from)
 else
   echo 'Aloudata dataset ID not provided; JDBC + Aloudata dashboard will not be seeded (set MATECLAW_E2E_ALOUDATA_MODE=simulation or provide MATECLAW_E2E_ALOUDATA_DATASET_ID).' >&2
 fi
-api_file_schema=$(dashboard_schema "$http_dataset" api_orders "$file_dataset" file_orders "$api_file_script")
+api_file_schema=$(dashboard_schema "$http_dataset" api_orders "$file_dataset" file_orders "$api_file_script" HTTP_API FILE)
 api_file_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$api_file_schema" '{name:"E2E API + File Dashboard",description:"dashboard MVP API and file flow",schemaJson:$schema}')" | id_from)
 echarts_script=$'rows = datasets.read(input_name="jdbc_orders", filters=[{"field": "status", "operator": "eq", "value": "PAID"}])\nresult = rows.to_polars().select(["status", "amount"]).to_dicts()'
 echarts_schema=$(echarts_dashboard_schema "$jdbc_dataset" "$echarts_script")

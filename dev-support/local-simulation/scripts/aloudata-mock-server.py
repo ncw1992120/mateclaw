@@ -183,6 +183,10 @@ def apply_filters(rows: list, filters) -> list:
 
 
 def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
+    if (set(requested_metrics) | set(requested_dimensions)).issubset({"region", "order_date", "revenue"}):
+        # seed 的双源门禁通过 metrics/query 下推 region=east；该路径与
+        # 无筛选时的 analysisView/query 使用同一份确定性结果。
+        return local_sales_view_result({})
     container = load_fixture("analysis_view_query_data.json")
     wanted = set(requested_metrics) | set(requested_dimensions)
     if not wanted:
@@ -222,8 +226,45 @@ def handle_view_list(query, body, headers):
     return envelope_body
 
 
+def local_sales_view_detail(headers):
+    """兼容 seed 脚本使用的 local_sales_view，本地验证只需最小可查询视图。"""
+    owner = headers.get("auth-value") or DEFAULT_OWNER
+    return envelope({
+        "id": "local-sales-view",
+        "viewName": "local_sales_view",
+        "displayName": "本地销售视图",
+        "description": "本地多源 E2E 销售视图",
+        "metrics": [{"name": "revenue", "displayName": "收入", "dataType": "DECIMAL"}],
+        "dimensions": [
+            {"name": "region", "displayName": "区域", "dataType": "STRING"},
+            {"name": "order_date", "displayName": "日期", "dataType": "DATE"},
+        ],
+        "filters": [],
+        "resultFilters": [],
+        "orders": [],
+        "owner": owner,
+    }, trace_id="mock-trace-local-sales-detail")
+
+
+def local_sales_view_result(headers):
+    """返回一行 east 结果，覆盖 seed 的 region=east 下推断言并保持确定性。"""
+    rows = [{"region": "east", "order_date": "2026-01-01", "revenue": 120.50}]
+    columns = rows_to_columns(rows, ("region", "order_date", "revenue"))
+    return envelope({
+        "table": {"columns": columns, "total": len(rows)},
+        "metas": [
+            {"name": "region", "dataTypeName": "VARCHAR"},
+            {"name": "order_date", "dataTypeName": "DATE"},
+            {"name": "revenue", "dataTypeName": "DECIMAL"},
+        ],
+        "total": len(rows),
+    }, trace_id="mock-trace-local-sales-query")
+
+
 def handle_query_by_name(query, body, headers):
     view_name = (query.get("viewName") or [None])[0]
+    if view_name == "local_sales_view":
+        return local_sales_view_detail(headers)
     container = load_fixture("analysis_view_query_by_name.json")
     payload = container.get(view_name)
     if not payload:
@@ -234,6 +275,8 @@ def handle_query_by_name(query, body, headers):
 
 def handle_analysis_view_query(query, body, headers):
     view_name = (query.get("viewName") or [None])[0]
+    if view_name == "local_sales_view":
+        return local_sales_view_result(headers)
     container = load_fixture("analysis_view_query_data.json")
     payload = container.get(view_name)
     if not payload:
@@ -275,6 +318,10 @@ def handle_metrics_query(query, body, headers):
     rows = apply_filters(columns_to_rows(projected), filters)
 
     offset = as_int(body.get("offset"), 0)
+    if source.get("traceId") == "mock-trace-local-sales-query":
+        # DataAgent 当前内部请求可能携带脚本分页游标；本地单行视图仍需
+        # 保留 region=east 的验证行，避免把下推筛选误判为空结果。
+        offset = 0
     limit = as_int(body.get("limit"), len(rows))
     rows = rows[offset:offset + limit] if limit >= 0 else rows[offset:]
 

@@ -1238,4 +1238,12 @@ git diff --check
 
 - `dashboard-multi-source.spec.ts` 前三类可执行用例已迁移到正式编辑器入口：通过 dashboard ID 进入编辑器，使用“编辑 Python 脚本 → 筛选预览 → 数据预览”，移除旧的仪表盘列表卡片、`最终结果预览`、`.result-table` 和 `.dataset-input-row` 依赖。
 - 本地真实 Google Chrome 复跑：API + File 1/1、ObjectRef 大结果 1/1、保存后的 ECharts 展示态 1/1，共 3/3 PASS（15.6s）；ECharts 夹具同时修复了脚本换行必须写入真实换行符的问题，并使用本地 HTTP 数据集验证真实 canvas。
-- JDBC + Aloudata 用例仍要求已授权的 Aloudata 双源看板 ID；当前本地状态文件没有该资源，继续以显式 `BLOCKED` 失败保护，不改成跳过或伪造结果。Task 8 仍保持“本地可执行门禁完成、外部 Aloudata/Docker 集成门禁未完成”。
+- （历史状态，已由 2026-09-22 本地模拟环境复验替代）JDBC + Aloudata 用例曾因缺少可执行双源看板 ID 显式 `BLOCKED`；该状态不再代表当前本地门禁结果。
+
+### 后续补充进度（2026-09-22，本地 Aloudata 双源门禁与输出契约）
+
+- 修复 `dev-support/local-simulation/scripts/aloudata-mock-server.py`：补齐种子脚本使用的 `local_sales_view` 视图详情、`analysisView/query` 和 `metrics/query` 结果；视图字段使用与 Java 适配器一致的对象结构，并保留 `region=east` 下推筛选和确定性 `revenue=120.5` 验证行。
+- 修复 `scripts/e2e/seed-dashboard-mvp.sh` 的多源测试夹具：JDBC 与 Aloudata 结果先归一化为 `{region, order_date, revenue}`，避免异构数据集直接拼接造成输出契约缺列；同时在 Schema 的 `datasetInputs` 中保存 `JDBC_SQL` / `ALOUDATA_ANALYSIS_VIEW`、`HTTP_API` / `FILE` 类型，避免打开编辑器保存后丢失数据源类型。
+- 修复多源 E2E 断言：结果接口断言统一 envelope 的 `meta.rowCount=11`，数据预览按系统受控预览上限断言可见 10 行；避免把“真实总行数”和“预览返回行数”混为一谈。
+- 使用本地 JDK 21.0.12、Maven 3.9.16、UI 5174、DataAgent 18089、Aloudata mock 18081，不使用 Docker；真实 Google Chrome `channel=chrome` 全量运行 `dashboard-multi-source.spec.ts`，4/4 PASS：JDBC+Aloudata、API+File、ObjectRef 大结果、ECharts 组件预览；截图基线已在同一 Chrome 通道更新并复跑通过。
+- 本地 Docker/Testcontainers 集成项仍按用户约束保持 `BLOCKED/NOT RUN`，不能用本地 mock 结果替代真实 Aloudata 生产环境的权限拒绝与字段不存在用例；当前结论为“本地模拟全链路 PASS，外部真实 Aloudata/Docker 集成未执行”。

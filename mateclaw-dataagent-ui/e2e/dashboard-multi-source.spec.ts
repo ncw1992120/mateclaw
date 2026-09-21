@@ -45,9 +45,15 @@ test.describe('dashboard multi-source runtime', () => {
     }
     const dashboardId = process.env.MATECLAW_E2E_MULTI_SOURCE_DASHBOARD_ID
     if (!dashboardId) throw new Error('BLOCKED: 当前状态文件未提供可执行的 JDBC + Aloudata 双源看板 ID')
+    const resultResponse = page.waitForResponse(async (response) =>
+      response.url().includes('/executions/') && response.url().endsWith('/result') && response.request().method() === 'GET',
+    )
     await openPythonPreview(page, dashboardId)
-    await expect(page.locator('[aria-label="数据预览"] .el-table')).toContainText('120.5')
-    await expect(page.locator('[aria-label="数据预览"]')).toContainText(/共 11 条|11 条/)
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toContainText('120.5')
+    const resultBody = await (await resultResponse).json() as { data?: { envelope?: { meta?: { rowCount?: number } } } }
+    // 结果接口保留真实总行数；弹窗按预览上限展示前 10 行，避免把受控预览误判成执行丢行。
+    expect(resultBody.data?.envelope?.meta?.rowCount).toBe(11)
+    await expect(page.locator('[aria-label="数据预览"]')).toContainText(/共 10 条|10 条/)
     // 双源结果已由行数和 120.5 断言锁定；页面字体抗锯齿、滚动条和异步布局在
     // 同一 Chrome 通道下仍可能产生少量像素噪声，允许 2% 像素差异避免误报。
     await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', {
