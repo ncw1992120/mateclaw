@@ -51,12 +51,15 @@
           @click.stop="selectMetric(metric.fieldKey)"
           @dragstart.stop.prevent
         >
-          <div class="kpi-metric-name" :style="css(metric.styles.name)">{{ metric.displayName }}</div>
-          <div class="kpi-metric-valuerow">
-            <span class="kpi-metric-value" :style="css(metric.styles.value)">{{ metricValue(metric) }}</span>
-            <span v-if="metric.unit" class="kpi-metric-unit" :style="css(metric.styles.unit)">{{ metric.unit }}</span>
+          <div class="kpi-metric-name" :style="css(metric.styles.name, metricVisual(metric).textColors.name)">
+            <el-icon v-if="metricIcon(metric)" class="kpi-metric-icon" :style="{ color: metricVisual(metric).accentColor }" aria-hidden="true"><component :is="metricIcon(metric)" /></el-icon>
+            <span>{{ metric.displayName }}</span>
           </div>
-          <div v-if="metric.helperText" class="kpi-metric-helper" :style="css(metric.styles.helper)">{{ metric.helperText }}</div>
+          <div class="kpi-metric-valuerow">
+            <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value)">{{ metricValue(metric) }}</span>
+            <span v-if="metric.unit" class="kpi-metric-unit" :style="css(metric.styles.unit, metricVisual(metric).textColors.unit)">{{ metric.unit }}</span>
+          </div>
+          <div v-if="metric.helperText" class="kpi-metric-helper" :style="css(metric.styles.helper, metricVisual(metric).textColors.helper)">{{ metric.helperText }}</div>
 
           <button
             v-if="editable"
@@ -119,8 +122,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab } from '@/types'
-import { styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
+import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
+import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { useFreeInteraction } from '../composables/useFreeInteraction'
 import { useTabKeyboard } from '../composables/useTabKeyboard'
 
@@ -139,6 +144,8 @@ const props = withDefaults(defineProps<{
   showTitle?: boolean
   /** 是否编辑态（编辑态下指标可拖拽 / 缩放 / 打开样式弹窗） */
   editable?: boolean
+  /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
+  dashboardTheme?: ResolvedDashboardTheme
 }>(), {
   editable: false,
 })
@@ -248,8 +255,19 @@ function metricValue(metric: KpiMetricConfig): string {
   return kpiData.value?.value ?? '--'
 }
 
-function css(style: KpiMetricConfig['styles']['name']): string {
-  return styleToCss(style)
+const dashboardTheme = computed(() => props.dashboardTheme ?? resolveDashboardTheme(undefined, 'light'))
+
+function metricVisual(metric: KpiMetricConfig, index?: number) {
+  const metricIndex = index ?? (props.component.kpiMetrics ?? []).findIndex((item) => item.fieldKey === metric.fieldKey)
+  return resolveMetricVisual(metric, undefined, dashboardTheme.value, Math.max(0, metricIndex))
+}
+
+function metricIcon(metric: KpiMetricConfig) {
+  return resolveDashboardIcon(metricVisual(metric).iconKey)
+}
+
+function css(style: KpiMetricConfig['styles']['name'], themeColor?: string): string {
+  return styleToCss(style, themeColor)
 }
 
 function metricStyle(metric: KpiMetricConfig): Record<string, string> {

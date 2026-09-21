@@ -11,8 +11,9 @@
  * 本文件只做确定性计算，不访问后端、不依赖 Vue，便于单测覆盖。
  */
 
-import type { KpiMetricConfig, KpiMetricFieldStyle, KpiMetricStyles } from '@/types'
+import type { KpiMetricConfig, KpiMetricFieldStyle, KpiMetricStyles, KpiMetricVisualConfig, ResolvedDashboardTheme } from '@/types'
 import type { DatasetFieldMeta } from './field-mapping'
+import { DASHBOARD_ICON_REGISTRY } from './dashboard-icon-registry'
 
 /** 指标可配置字段 */
 export type KpiMetricField = 'name' | 'value' | 'unit' | 'helper'
@@ -69,16 +70,16 @@ export const KPI_FONT_OPTIONS: Array<{ key: string; label: string }> = [
 
 /** 单个字段样式 */
 export function fieldStyle(size: number, color: string, bold: 'bold' | 'normal' = 'normal'): KpiMetricFieldStyle {
-  return { size, family: 'system', color, bold }
+  return { size, family: 'system', color, colorMode: color ? 'custom' : 'theme', bold }
 }
 
 /** 默认样式：指标值加粗，其余常规 */
 export function defaultMetricStyles(): KpiMetricStyles {
   return {
-    name: fieldStyle(14, '#646a73', 'normal'),
-    value: fieldStyle(28, '#1f2329', 'bold'),
-    unit: fieldStyle(15, '#646a73', 'normal'),
-    helper: fieldStyle(12, '#8f959e', 'normal'),
+    name: fieldStyle(14, '', 'normal'),
+    value: fieldStyle(28, '', 'bold'),
+    unit: fieldStyle(15, '', 'normal'),
+    helper: fieldStyle(12, '', 'normal'),
   }
 }
 
@@ -93,9 +94,30 @@ export function cloneStyles(styles: KpiMetricStyles): KpiMetricStyles {
 }
 
 /** 字段样式 → 内联 CSS（供卡片渲染） */
-export function styleToCss(style: KpiMetricFieldStyle): string {
+export function styleToCss(style: KpiMetricFieldStyle, themeColor?: string): string {
   const family = KPI_FONT_FAMILY[style.family] ?? KPI_FONT_FAMILY.system
-  return `font-size:${style.size}px;color:${style.color};font-family:${family};font-weight:${style.bold || 'normal'};`
+  const color = style.colorMode === 'theme' && themeColor ? themeColor : style.color
+  return `font-size:${style.size}px;color:${color};font-family:${family};font-weight:${style.bold || 'normal'};`
+}
+
+/** 解析指标的图标、强调色和四个文字字段颜色；不访问数据源。 */
+export function resolveMetricVisual(
+  metric: KpiMetricConfig,
+  componentVisual: KpiMetricVisualConfig | undefined,
+  theme: ResolvedDashboardTheme,
+  index: number,
+): { iconKey: string | null; accentColor: string; textColors: Record<KpiMetricField, string> } {
+  const visual = componentVisual ?? metric.visual
+  const accentColor = visual?.colorMode === 'custom' && visual.accentColor ? visual.accentColor : theme.metricPalette[index % Math.max(theme.metricPalette.length, 1)] ?? theme.primary
+  const fieldColor = (field: KpiMetricField): string => {
+    const style = metric.styles[field]
+    return style.colorMode === 'theme' || !style.colorMode && !style.color ? accentColor : style.color
+  }
+  return {
+    iconKey: visual?.iconKey === null ? null : visual?.iconKey ?? DASHBOARD_ICON_REGISTRY[index % DASHBOARD_ICON_REGISTRY.length]?.key ?? null,
+    accentColor,
+    textColors: { name: fieldColor('name'), value: fieldColor('value'), unit: fieldColor('unit'), helper: fieldColor('helper') },
+  }
 }
 
 /** 单个指标的默认自由布局（两列错落） */

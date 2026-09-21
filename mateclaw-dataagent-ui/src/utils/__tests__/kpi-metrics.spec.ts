@@ -6,7 +6,9 @@ import {
   normalizeHexColor,
   styleToCss,
   syncMetricStylesToAll,
+  resolveMetricVisual,
 } from '../kpi-metrics'
+import { resolveDashboardTheme } from '../dashboard-theme'
 import type { DatasetFieldMeta } from '../field-mapping'
 
 const schema: DatasetFieldMeta[] = [
@@ -22,6 +24,17 @@ describe('kpi-metrics · 默认样式', () => {
     expect(styles.name.bold).toBe('normal')
     expect(styles.unit.bold).toBe('normal')
     expect(styles.helper.bold).toBe('normal')
+    expect(styles.value.colorMode).toBe('theme')
+    expect(styles.value.color).toBe('')
+  })
+
+  it('主题模式使用解析后的指标色，旧固定 HEX 仍保持自定义色', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+    const metric = buildKpiMetrics(schema)[0]
+    expect(resolveMetricVisual(metric, undefined, theme, 0).textColors.value).toBe(theme.metricPalette[0])
+    metric.styles.value.color = '#1f2329'
+    delete metric.styles.value.colorMode
+    expect(resolveMetricVisual(metric, undefined, theme, 0).textColors.value).toBe('#1f2329')
   })
 
   it('styleToCss 输出四个属性且字体名用单引号', () => {

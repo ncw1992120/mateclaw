@@ -1259,8 +1259,17 @@ export interface KpiMetricFieldStyle {
   family: string
   /** 颜色（HEX，如 #1f2329） */
   color: string
+  /** theme = 跟随仪表盘指标色；缺省且有 HEX 时按旧配置自定义处理 */
+  colorMode?: 'theme' | 'custom'
   /** 字重 */
   bold: 'bold' | 'normal'
+}
+
+/** KPI 指标图标与强调色；只保存注册表 key，不保存任意组件或 SVG。 */
+export interface KpiMetricVisualConfig {
+  iconKey?: string | null
+  colorMode?: 'theme' | 'custom'
+  accentColor?: string
 }
 
 /** KPI 指标 · 四个字段的样式集合 */
@@ -1305,6 +1314,7 @@ export interface KpiMetricConfig {
   h: number
   /** 各字段样式 */
   styles: KpiMetricStyles
+  visual?: KpiMetricVisualConfig
 }
 
 /** 组合卡片子卡片自由布局坐标（相对容器内容区左上角，单位 px） */

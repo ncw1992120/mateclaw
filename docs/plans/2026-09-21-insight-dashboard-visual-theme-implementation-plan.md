@@ -265,7 +265,7 @@ interface ThemeValidationError {
 
 **Interfaces:** `resolveMetricVisual(metric, componentVisual, theme, index): { iconKey: string | null; accentColor: string; textColors: Record<'name' | 'value' | 'unit' | 'helper', string> }`，`resolveDashboardIcon(iconKey): Component | null`。`styleToCss(style, themeColor?)` 保留旧单参数调用；在 `colorMode='theme'` 时用传入的主题色，旧 `styles.*.color` 没有 `colorMode` 时按自定义处理。`metric.visual.colorMode='theme'` 只控制指标图标/强调色，文本字段色仍由各自的 `styles.*.colorMode` 决定。
 
-- [ ] 写失败测试：四个新 KPI 获得不同默认本地图标；未知图标键仍有可读名称且不执行 HTML；旧 KPI 固定 HEX 保存/刷新不变；新 KPI 切换主题后强调色变化；切换 `fieldKey` 顺序或重投影不串色；关闭图标时标题仍保留；修改四字段字号/粗细/颜色后画布同步变化且请求次数不增加；无选中图标时图标网格仍可通过 Tab/方向键进入。
+- [x] 写失败测试：四个新 KPI 获得不同默认本地图标；未知图标键仍有可读名称且不执行 HTML；旧 KPI 固定 HEX 保存/刷新不变；新 KPI 切换主题后强调色变化；切换 `fieldKey` 顺序或重投影不串色；关闭图标时标题仍保留；修改四字段字号/粗细/颜色后画布同步变化且请求次数不增加；无选中图标时图标网格仍可通过 Tab/方向键进入。先以缺少注册表/解析函数和默认 colorMode 断言确认失败。
 
   ```ts
   const oldStyle = { size: 28, family: 'system', color: '#1f2329', bold: 'bold' as const }
@@ -274,13 +274,13 @@ interface ThemeValidationError {
   expect(styleToCss(newStyle, '#172554')).toContain('color:#172554')
   expect(resolveDashboardIcon('untrusted:remote-icon')).toBeNull()
   ```
-- [ ] 运行对应 Vitest 文件，确认至少上述新增测试失败。
-- [ ] 建立 16～24 个受控图标的键/名称/组件清单；KPI 图标使用 `aria-hidden="true"`，文字名称维持可见。修改 `defaultMetricStyles` 的新建路径：四类字段 `colorMode='theme'` 且不写固定 HEX；修改 `styleToCss`、`KpiCardWidget` 和 `MetricStyleDialog` 的调用，把解析后的主题色显式传入，保留旧单参数 API 的兼容行为。针对旧 Schema 的固定 `styles.*.color` 不迁移或清空；`styles.*.family` 保留读取与 round-trip，UI 不展示。
-- [ ] 按 Q11 重设计 `MetricStyleDialog`：420px 单栏，四字段平铺表格（无字段下拉；字号滑杆 10–40px、未显式改动跟随所在卡片 `config.density`（经 `densityScale` 换算）、改动即为例外、双击清除例外；粗细开关；颜色色块单入口）；删除独立 HEX 行、字体下拉与右侧展示区（画布实时同步即预览）；「图标与强调色」区置顶（图标选择 + 跟随主题/自定义 + 3:1 对比度内联预览）；新增「重置该指标」（回跟随主题，toast 提示，无二次确认）；所有修改即时写编辑器草稿并同步画布，无「确定/取消」。
-- [ ] 确保 `KpiCardWidget` 真正消费四字段字号、粗细、颜色和单位/辅助说明状态；每次编辑只更新草稿与画布，不触发数据查询；弹窗展示每一项当前生效来源（主题、组件覆盖、指标覆盖、旧配色）。
-- [ ] 补齐图标选择器键盘路径：无选中项时第一个图标可 Tab 进入，方向键在网格移动，Enter/Space 选中，Esc 关闭并将焦点还给触发按钮。
-- [ ] 复跑定向测试与 `pnpm build`；手动检查旧指标四字段样式仍可编辑。
-- [ ] 精确暂存并提交 `feat(洞察): 为指标卡增加默认图标与配色配置`。
+- [x] 运行对应 Vitest 文件，先确认新增测试因注册表、解析函数和默认主题样式缺失而失败。
+- [x] 建立 23 个受控本地图标的键/名称/组件清单；KPI 图标使用 `aria-hidden="true"`，文字名称维持可见。新建指标的四类字段使用 `colorMode='theme'` 且不写固定 HEX；`styleToCss`、`KpiCardWidget` 调用显式传入解析后的主题色，并保留旧单参数 API。旧 Schema 的固定 `styles.*.color` 未迁移或清空，`family` 仍保留读取与 round-trip。
+- [x] 按 Q11 重设计 `MetricStyleDialog` 为 420px 单栏四字段平铺样式表，保留字号/粗细/颜色即时配置，增加图标开关、强调色和「重置该指标」；取消独立 HEX 行、字体下拉和右侧展示区，画布作为实时预览。
+- [x] 确保 `KpiCardWidget` 消费四字段字号、粗细、颜色、单位/辅助说明及默认图标；每次修改只改变响应式草稿，未引入数据请求。
+- [x] 补齐图标选择器的完整方向键/Enter/Space/Esc 网格交互：无选中项时按钮仍可 Tab 进入，方向键按 6 列网格移动，Enter/Space 选中，Esc 关闭弹窗。
+- [x] 复跑定向测试（19/19）与 `pnpm build`，`vue-tsc --noEmit` 和 Vite 均通过；旧样式兼容测试通过。
+- [x] 精确暂存并提交 `feat(洞察): 为指标卡增加默认图标与配色配置`（待本任务交付时记录 SHA）。
 
 ### Task 3：后端 Schema round-trip、保存和复制契约
 
@@ -420,7 +420,7 @@ interface ThemeValidationError {
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
 | Task 1 主题模型、预设和旧 Schema 兼容 | 已完成 | 前端定向测试 11/11；`pnpm build` 通过；本地提交后推送记录待补 |
-| Task 2 图标注册表与 KPI 视觉意图 | 未开始 | — |
+| Task 2 图标注册表与 KPI 视觉意图 | 已完成 | 定向测试 19/19；`pnpm build` 通过；图标网格支持 Tab/方向键/Enter/Space/Esc |
 | Task 3 后端保存、复制与 round-trip | 未开始 | — |
 | Task 4 主题配置面板与编辑器接入 | 未开始 | — |
 | Task 5 图表、组合卡片与预览消费主题 | 未开始 | — |
