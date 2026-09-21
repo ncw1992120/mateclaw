@@ -57,7 +57,7 @@ class ScriptDatasetReadObjectRefIntegrationTest {
         ObjectRefService refs = new S3ObjectRefService(endpoint(), ACCESS, SECRET, "mateclaw-test", 3600);
         ScriptDatasetReadTokenService tokens = new ScriptDatasetReadTokenService("integration-secret");
         ScriptDatasetReadController controller = new ScriptDatasetReadController(
-                new ScriptTaskInputRegistry(), tokens, List.of(), refs);
+                new ScriptTaskInputRegistry(), tokens, List.of(), refs, new vip.mate.dataagent.service.code.ScriptDatasetReadPolicy());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
 
         String response = mvc.perform(post("/internal/v1/script-tasks/task-upload/result")

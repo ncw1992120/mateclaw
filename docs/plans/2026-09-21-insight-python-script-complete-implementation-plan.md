@@ -458,6 +458,8 @@ git commit -m "feat: 支持接管系统 Python 区域"
 
 ### Task 4: 数据集 A 结果筛选数据集 B 与脚本读取策略
 
+**状态：已完成**（Runner test_dataset_sdk+test_executor 21/21，含跨数据集 in 筛选、空集短路不访问 B、1001 值拒绝、50 条上限、between 形状校验；Java ScriptDatasetReadPolicyTest 5/5 + ScriptDatasetReadControllerTest 3/3（超限用例 verifyNoInteractions(adapter)）；SDK 与 DataAgent 双侧防御，contains 模糊运算符同步开放。）
+
 **Files:**
 - Modify: `mateclaw-python-runner/src/mateclaw/datasets.py`
 - Modify: `mateclaw-python-runner/src/mateclaw/filters.py`
@@ -472,7 +474,7 @@ git commit -m "feat: 支持接管系统 Python 区域"
 - Consumes: `DatasetClient.read(input_name, columns, filters)` 与 DataAgent `DatasetReadRequest`。
 - Produces: 结构化跨输入筛选；最多 50 条条件、单个 `in/not_in` 最多 1000 个值、请求 JSON 最大 256 KiB。
 
-- [ ] **Step 1: 写 Runner SDK 跨数据集失败测试**
+- [x] **Step 1: 写 Runner SDK 跨数据集失败测试**
 
 ```python
 def test_result_from_dataset_a_filters_dataset_b():
@@ -485,11 +487,11 @@ def test_result_from_dataset_a_filters_dataset_b():
 
 同时覆盖空 `ids` 不访问数据集 B、1001 个值抛出 `ValueError("filter value count exceeds 1000")`。
 
-- [ ] **Step 2: 在 SDK 发送 HTTP 前验证过滤条件**
+- [x] **Step 2: 在 SDK 发送 HTTP 前验证过滤条件**
 
 只接受 `Filter` 或 mapping；字段不能为空；操作符必须在固定集合；`in/not_in/between` 的值形状严格校验。空 `in` 直接返回空 `DatasetInput`，避免源端把空集合误解释为不过滤。
 
-- [ ] **Step 3: 写 DataAgent 策略失败测试**
+- [x] **Step 3: 写 DataAgent 策略失败测试**
 
 ```java
 assertThrows(IllegalArgumentException.class, () -> policy.validate(
@@ -497,11 +499,11 @@ assertThrows(IllegalArgumentException.class, () -> policy.validate(
 verifyNoInteractions(adapter);
 ```
 
-- [ ] **Step 4: 在 Controller 调 Adapter 前执行策略**
+- [x] **Step 4: 在 Controller 调 Adapter 前执行策略**
 
 超过条件数、集合值数或请求大小时返回稳定业务错误；日志记录 taskId、inputName 和限制项，不记录实际筛选值。
 
-- [ ] **Step 5: 运行 Runner 与 DataAgent 定向测试**
+- [x] **Step 5: 运行 Runner 与 DataAgent 定向测试**
 
 ```bash
 cd mateclaw-python-runner && .venv/bin/pytest -q tests/test_dataset_sdk.py tests/test_executor.py
@@ -512,7 +514,7 @@ docker run --rm -v "$PWD:/workspace" -v "$HOME/.m2:/root/.m2" -w /workspace mave
 
 Expected: 全部退出 0；超限用例验证 Adapter 调用次数为 0。
 
-- [ ] **Step 6: 精确提交**
+- [x] **Step 6: 精确提交**
 
 ```bash
 git add -- mateclaw-python-runner/src/mateclaw/datasets.py \

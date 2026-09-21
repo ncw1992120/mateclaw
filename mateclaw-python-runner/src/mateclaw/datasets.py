@@ -7,6 +7,10 @@ from .filters import Filter
 from .params import Params
 from .types import DatasetColumn, DatasetInput
 
+# 单次读取的条件数上限（与 DataAgent 读取策略一致）
+MAX_FILTERS = 50
+
+
 class DatasetClient:
     def __init__(self, endpoint: str, read_token: str, parameters: dict[str, Any] | None = None, timeout: float = 60):
         if not endpoint.startswith("http://") and not endpoint.startswith("https://"):
@@ -26,6 +30,13 @@ class DatasetClient:
                 normalized.append(Filter(value.get("field"), value.get("operator"), value.get("value"), value.get("role", "dimension")).as_dict())
             else:
                 raise ValueError("filter must be a Filter or mapping")
+        if len(normalized) > MAX_FILTERS:
+            raise ValueError(f"too many filters: {len(normalized)} exceeds {MAX_FILTERS}")
+        # 空 in/not_in 集合直接返回合法空结果：源端不会把空集合误解释为「不过滤」，
+        # 典型场景是数据集 A 的结果筛空后不再访问数据集 B。
+        for value in normalized:
+            if value["operator"] in {"in", "not_in"} and isinstance(value["value"], (list, tuple)) and len(value["value"]) == 0:
+                return DatasetInput(input_name, (), ())
         payload = {"inputName": input_name, "columns": list(columns or []),
                    "filters": normalized, "parameters": dict(self.params)}
         request = urllib.request.Request(self._endpoint, data=json.dumps(payload).encode(), method="POST",

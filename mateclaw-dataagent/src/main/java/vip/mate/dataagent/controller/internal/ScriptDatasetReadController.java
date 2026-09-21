@@ -15,20 +15,30 @@ import java.util.*;
 @RequestMapping("/internal/v1/script-tasks")
 @RequiredArgsConstructor
 public class ScriptDatasetReadController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScriptDatasetReadController.class);
     private final ScriptTaskInputRegistry registry;
     private final ScriptDatasetReadTokenService tokens;
     private final List<DatasetSourceAdapter> adapters;
     private final ObjectRefService objectRefs;
+    private final ScriptDatasetReadPolicy readPolicy;
 
     @PostMapping("/{taskId}/datasets/read")
     public R<DatasetBatch> read(@PathVariable String taskId, @RequestHeader("Authorization") String authorization,
-                                @RequestBody ReadBody body) {
+                                HttpServletRequest request, @RequestBody ReadBody body) {
         if (authorization == null || !authorization.startsWith("Bearer ")) throw new IllegalArgumentException("Bearer token required");
         var claims=tokens.verify(authorization.substring(7)); if(!taskId.equals(claims.taskId())) throw new IllegalArgumentException("token task mismatch");
+        List<DatasetFilter> filters=body.filters()==null?List.of():body.filters().stream().map(f->new DatasetFilter(f.field(),f.role(),f.operator(),f.value())).toList();
+        long requestBytes=request.getContentLengthLong() < 0 ? 0 : request.getContentLengthLong();
+        try {
+            // 策略校验必须在 Adapter 之前：超限请求不允许触达数据源
+            readPolicy.validate(filters, requestBytes);
+        } catch (IllegalArgumentException e) {
+            log.warn("[script-read] policy rejected taskId={} inputName={} limit={}", taskId, body.inputName(), e.getMessage());
+            throw e;
+        }
         DatasetInputDescriptor descriptor=registry.require(taskId,body.inputName());
         DatasetSourceAdapter adapter=adapters.stream().filter(a->a.supports(descriptor.sourceType())).findFirst().orElseThrow(()->new IllegalArgumentException("no adapter"));
         DatasetAccessContext context=new DatasetAccessContext(claims.workspaceId(),0L,taskId,Set.of(descriptor.datasetId()));
-        List<DatasetFilter> filters=body.filters()==null?List.of():body.filters().stream().map(f->new DatasetFilter(f.field(),f.role(),f.operator(),f.value())).toList();
         return R.ok(adapter.read(context,new DatasetReadRequest(descriptor.datasetId(),body.inputName(),body.columns(),filters,body.limit(),body.offset(),body.parameters())));
     }
 
