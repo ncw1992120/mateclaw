@@ -327,14 +327,6 @@
   </div>
 </template>
 
-    <!-- 编辑器模式：复用正式四栏编辑器，右侧数据集配置走真实后端 -->
-    <InsightDashboardEditorView
-      v-else-if="mode === 'editor'"
-      :dashboard-id="currentDashboardId"
-      @back="handleBackToList"
-      @preview="handlePreviewFromEditor"
-    />
-
     <!-- 预览模式 -->
     <DashboardPreviewView
       v-else-if="mode === 'preview'"
@@ -347,6 +339,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
@@ -357,7 +350,6 @@ import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { useUserStore } from '@/stores/useUserStore'
-import InsightDashboardEditorView from './InsightDashboardEditorView.vue'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
 
@@ -366,6 +358,7 @@ defineOptions({
 })
 
 const { t } = useI18n()
+const router = useRouter()
 const store = useInsightDashboardStore()
 const { hasPermission, canModifyResource } = usePermission()
 const userStore = useUserStore()
@@ -474,7 +467,7 @@ function toggleAiPanel(): void {
 function handleAiDashboardUpdated(dashboardId: string): void {
   if (dashboardId) {
     currentDashboardId.value = dashboardId
-    mode.value = 'editor'
+    void router.push({ name: 'insight-dashboard-editor', query: { dashboardId } })
   }
   showAiPanel.value = false
   store.fetchDashboards().catch(() => {
@@ -490,7 +483,7 @@ async function handleCreate(): Promise<void> {
       description: '',
     })
     currentDashboardId.value = created.id
-    mode.value = 'editor'
+    void router.push({ name: 'insight-dashboard-editor', query: { dashboardId: created.id } })
   } catch {
     ElMessage.error(t('insight.createFailed'))
   }
@@ -499,7 +492,7 @@ async function handleCreate(): Promise<void> {
 /** 编辑仪表盘 */
 function handleEdit(id: string): void {
   currentDashboardId.value = id
-  mode.value = 'editor'
+  void router.push({ name: 'insight-dashboard-editor', query: { dashboardId: id } })
 }
 
 /** 预览仪表盘 */
@@ -508,11 +501,6 @@ function handlePreview(id: string): void {
   mode.value = 'preview'
 }
 
-/** 从编辑器进入预览 */
-function handlePreviewFromEditor(dashboardId: string): void {
-  currentDashboardId.value = dashboardId
-  mode.value = 'preview'
-}
 
 /** 发布仪表盘 */
 async function handlePublish(dashboard: InsightDashboard): Promise<void> {

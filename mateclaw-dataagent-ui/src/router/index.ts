@@ -3,7 +3,24 @@ import MainLayout from '@/views/layout/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import DatasetListView from '@/views/dataset/DatasetListView.vue'
 import DatasetEditRoute from '@/views/dataset/DatasetEditRoute.vue'
-import InsightDashboardEditorView from '@/views/insight/InsightDashboardEditorView.vue'
+const InsightDashboardEditorView = () => import('@/views/insight/InsightDashboardEditorView.vue')
+
+const developmentRoutes = import.meta.env.DEV
+  ? [
+      {
+        path: '/insight/card-container-prototype',
+        name: 'insight-card-container-prototype',
+        component: () => import('@/views/insight/CardContainerPrototype.vue'),
+        meta: { public: true, title: '组合卡片原型' },
+      },
+      {
+        path: '/insight/kpi-metric-group-card-prototype',
+        name: 'insight-kpi-metric-group-card-prototype',
+        component: () => import('@/views/insight/KpiMetricGroupCardPrototype.vue'),
+        meta: { public: true, title: 'KPI 指标分组卡片原型' },
+      },
+    ]
+  : []
 
 const router = createRouter({
   // 与 vite base（/dataagent/api/）保持一致：路由路径在部署基座下解析
@@ -52,20 +69,7 @@ const router = createRouter({
       props: (route) => ({ dashboardId: String(route.query.dashboardId ?? '') }),
       meta: { public: true, title: '洞察仪表盘预览' },
     },
-    {
-      // 洞察·组合卡片（卡片容器）前端交互原型（免登录，仅供交互体验验证）
-      path: '/insight/card-container-prototype',
-      name: 'insight-card-container-prototype',
-      component: () => import('@/views/insight/CardContainerPrototype.vue'),
-      meta: { public: true, title: '组合卡片原型' },
-    },
-    {
-      // 洞察·KPI 指标分组卡片 前端交互原型（免登录，按「结果集优先」设计文档，仅供交互体验验证）
-      path: '/insight/kpi-metric-group-card-prototype',
-      name: 'insight-kpi-metric-group-card-prototype',
-      component: () => import('@/views/insight/KpiMetricGroupCardPrototype.vue'),
-      meta: { public: true, title: 'KPI 指标分组卡片原型' },
-    },
+    ...developmentRoutes,
   ],
 })
 
