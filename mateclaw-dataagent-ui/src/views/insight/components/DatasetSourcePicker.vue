@@ -41,7 +41,7 @@ watch(() => props.availableDatasources, (value) => { if (value) datasources.valu
 const sourceItems = computed(() => {
   const aloudataDatasourceId = datasources.value.find(item => classifyDatasourceType(item.sourceType) === 'aloudata')?.id
   const items = [
-    ...datasets.value.map((item) => ({ id: `dataset-${item.id}`, name: item.name, meta: item.datasourceName || item.sourceType || '数据集', category: classifyDatasourceType(item.sourceType), selection: { sourceType: (item.sourceType || 'JDBC_TABLE') as DatasetSourceType, datasourceId: item.datasourceId, datasetId: item.id } as DatasetSourceSelection })),
+    ...datasets.value.map((item) => ({ id: `dataset-${item.id}`, name: item.name, meta: item.datasourceName || item.sourceType || '数据集', category: 'existing', selection: { sourceType: (item.sourceType || 'JDBC_TABLE') as DatasetSourceType, datasourceId: item.datasourceId, datasetId: item.id } as DatasetSourceSelection })),
     ...datasources.value.map((item) => ({ id: `datasource-${item.id}`, name: item.name, meta: `${item.sourceType || '数据源'} · 输入 SQL`, category: classifyDatasourceType(item.sourceType), selection: { sourceType: 'JDBC_SQL' as DatasetSourceType, datasourceId: item.id } })),
   ]
   // 原型中的固定节点不是“已配置列表”：它们直接进入对应配置弹窗。
@@ -58,11 +58,12 @@ const visibleGroups = computed(() => {
   const query = keyword.value.trim().toLowerCase()
   const grouped = new Map<string, { category: string; label: string; items: Array<{ id: string; name: string; meta: string; selection: DatasetSourceSelection }> }>()
   sourceItems.value.filter(item => !query || `${item.name} ${item.meta}`.toLowerCase().includes(query)).forEach((item) => {
-    const group = grouped.get(item.category) || { category: item.category, label: datasetCategoryLabel(item.category), items: [] }
+    const labels: Record<string, string> = { existing: '已有数据集' }
+    const group = grouped.get(item.category) || { category: item.category, label: labels[item.category] || datasetCategoryLabel(item.category), items: [] }
     group.items.push(item)
     grouped.set(item.category, group)
   })
-  const categories = ['aloudata', 'jdbc', 'api', 'file']
+  const categories = ['existing', 'aloudata', 'jdbc', 'api', 'file']
   return categories.map(category => grouped.get(category) || { category, label: datasetCategoryLabel(category as any), items: [] })
     .filter(group => !query || group.items.length > 0)
 })

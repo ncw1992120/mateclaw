@@ -30,4 +30,19 @@ describe('DatasetSourcePicker', () => {
     await interfaceButton!.trigger('click')
     expect(wrapper.emitted('select')?.at(-1)).toEqual([{ sourceType: 'HTTP_API' }])
   })
+
+  it('separates reusable datasets from create-from-source actions', () => {
+    const wrapper = mount(DatasetSourcePicker, {
+      props: {
+        availableDatasets: [{ id: 'orders', name: 'orders', sourceType: 'JDBC_TABLE', datasourceName: 'mysql-prod' }],
+        availableDatasources: [{ id: 'j1', name: 'mysql-prod', sourceType: 'mysql' }],
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.text()).toContain('已有数据集')
+    expect(wrapper.text()).toContain('orders')
+    expect(wrapper.text()).toContain('JDBC')
+    expect(wrapper.text()).toContain('接口')
+  })
 })

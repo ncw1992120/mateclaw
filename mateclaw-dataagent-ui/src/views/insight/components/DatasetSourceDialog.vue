@@ -1,6 +1,6 @@
 <template>
   <el-dialog v-model="visible" :title="title" width="560px" aria-label="配置数据集来源" @close="cancel">
-    <div class="source-dialog-body">
+    <div v-if="activeView === 'config'" class="source-dialog-body">
       <template v-if="draft.sourceType === 'JDBC_SQL'">
         <div class="source-caption">JDBC · {{ draft.datasourceName || draft.datasourceId }}</div>
         <el-button v-if="!sqlEditing" type="primary" plain @click="sqlEditing = true">输入 SQL</el-button>
@@ -35,19 +35,17 @@
         <p v-if="draft.fileName" class="form-hint">已选择：{{ draft.fileName }}</p>
       </template>
     </div>
+    <div v-else class="preview-pane" role="tabpanel" aria-label="预览结果">
+      <div v-if="previewError" class="preview-error">{{ previewError }}</div>
+      <table v-else-if="previewRows.length" class="preview-table"><tbody><tr v-for="(row, i) in previewRows" :key="i"><td v-for="(value, key) in row" :key="key">{{ value }}</td></tr></tbody></table>
+      <el-empty v-else description="暂无预览数据" />
+    </div>
     <template #footer>
-      <el-button @click="cancel">取消</el-button>
-      <el-button plain :loading="previewing" @click="preview">筛选预览</el-button>
-      <el-button v-if="draft.sourceType === 'JDBC_SQL'" text @click="showExecution = true">执行记录</el-button>
-      <el-button type="primary" @click="confirm">确定</el-button>
+      <el-button @click="activeView === 'config' ? cancel() : (activeView = 'config')">{{ activeView === 'config' ? '取消' : '返回配置' }}</el-button>
+      <el-button v-if="activeView === 'config'" plain :loading="previewing" aria-label="筛选预览" @click="preview">筛选预览</el-button>
+      <el-button type="primary" @click="confirm">确认添加</el-button>
     </template>
   </el-dialog>
-  <el-dialog v-model="previewVisible" title="当前数据集预览" width="720px" aria-label="当前数据集预览">
-    <div v-if="previewError" class="preview-error">{{ previewError }}</div>
-    <table v-else-if="previewRows.length" class="preview-table"><tbody><tr v-for="(row, i) in previewRows" :key="i"><td v-for="(value, key) in row" :key="key">{{ value }}</td></tr></tbody></table>
-    <el-empty v-else description="暂无预览数据" />
-  </el-dialog>
-  <el-dialog v-model="showExecution" title="执行记录" width="520px"><p>当前草稿执行记录将在确认后保留查询摘要、状态和耗时。</p></el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -64,15 +62,15 @@ const draft = ref<any>({ sourceType: props.selection.sourceType, datasourceId: p
 const analysisViews = ref<any[]>([])
 const sqlEditing = ref(false)
 const previewing = ref(false)
-const previewVisible = ref(false)
+const activeView = ref<'config' | 'preview'>('config')
 const previewRows = ref<Record<string, unknown>[]>([])
 const previewError = ref('')
-const showExecution = ref(false)
 const fileFormats = ['Excel', 'CSV', 'TXT', 'JSON', 'Parquet']
 const title = computed(() => ({ JDBC_SQL: '输入 SQL', ALOUDATA_ANALYSIS_VIEW: '配置指标视图', ALOUDATA_METRICS: '配置指标&维度', HTTP_API: '配置接口', FILE: '配置文件' } as Record<string, string>)[draft.value.sourceType] || '配置数据集')
 
 watch(() => props.selection, async selection => {
   draft.value = { sourceType: selection.sourceType, datasourceId: selection.datasourceId, datasetId: selection.datasetId, method: 'GET', timeoutMs: 30000, fileFormat: 'CSV' }
+  activeView.value = 'config'
   sqlEditing.value = false
   if (selection.sourceType === 'ALOUDATA_ANALYSIS_VIEW' && selection.datasourceId) {
     try { analysisViews.value = await datasourceApi.listAnalysisViews(selection.datasourceId) as any[] } catch { analysisViews.value = [] }
@@ -85,7 +83,7 @@ function selectFile(event: Event): void {
 }
 
 async function preview(): Promise<void> {
-  previewing.value = true; previewError.value = ''; previewVisible.value = true
+  previewing.value = true; previewError.value = ''
   try {
     if (draft.value.datasetId) {
       const result = await datasetApi.previewInput({ datasetId: draft.value.datasetId, inputName: 'draft', filters: [], limit: 20 }) as any
@@ -102,7 +100,7 @@ async function preview(): Promise<void> {
       if (result.error || result.data?.error) previewError.value = result.error || result.data.error
     }
   } catch (error: any) { previewError.value = error?.message || '预览失败'; previewRows.value = [] }
-  finally { previewing.value = false }
+  finally { previewing.value = false; activeView.value = 'preview' }
 }
 
 async function confirm(): Promise<void> {
