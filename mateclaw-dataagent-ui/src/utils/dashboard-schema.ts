@@ -31,6 +31,9 @@ export function migrateInsightDashboardSchema(parsed: unknown, firstPageName: st
       scriptBindings: Array.isArray(value.scriptBindings)
         ? value.scriptBindings as InsightDashboardSchema['scriptBindings']
         : [],
+      theme: value.theme && typeof value.theme === 'object'
+        ? value.theme as InsightDashboardSchema['theme']
+        : undefined,
     }
   }
   return {

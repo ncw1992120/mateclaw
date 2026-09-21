@@ -3,6 +3,19 @@
  * 仅用于洞察（insight）模块，避免覆盖全局主题变量
  */
 :root {
+  /* 仪表盘主题配置层；由 dashboard-theme.ts 在仪表盘根节点注入，缺失时继续走旧 --db-*。 */
+  --insight-page-bg: var(--db-bg);
+  --insight-card-bg: var(--db-card);
+  --insight-border: var(--db-border);
+  --insight-text: var(--db-text);
+  --insight-text-secondary: var(--db-text-secondary);
+  --insight-text-muted: var(--db-text-muted);
+  --insight-primary: var(--db-accent);
+  --insight-positive: var(--db-positive);
+  --insight-negative: var(--db-danger);
+  --insight-warning: var(--db-warning);
+  --insight-info: var(--db-accent);
+
   /* 圆角 */
   --radius-sm: 6px;
   --radius-md: 10px;

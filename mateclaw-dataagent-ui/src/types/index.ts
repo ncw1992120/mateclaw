@@ -1471,6 +1471,66 @@ export interface DashboardPage {
   components: InsightComponent[]
 }
 
+export type DashboardThemeMode = 'preset' | 'custom'
+export type DashboardThemePresetId =
+  | 'blue' | 'indigo' | 'teal' | 'amber' | 'dark-data'
+  | 'rose' | 'coral' | 'orange' | 'gold' | 'burgundy'
+export type DashboardDensity = 'compact' | 'standard' | 'large'
+
+/** 仪表盘级主题配置；缺失时保持旧版 --db-* 视觉。 */
+export interface DashboardThemeOverrides {
+  pageBackground?: string
+  cardBackground?: string
+  border?: string
+  text?: string
+  textSecondary?: string
+  textMuted?: string
+  primary?: string
+  positive?: string
+  negative?: string
+  warning?: string
+  info?: string
+  metricPalette?: string[]
+  chartPalette?: string[]
+  radius?: 'small' | 'medium' | 'large'
+  shadow?: 'none' | 'subtle' | 'elevated'
+}
+
+export interface DashboardThemeConfig {
+  mode: DashboardThemeMode
+  presetId?: DashboardThemePresetId | string
+  overrides?: DashboardThemeOverrides
+  density?: DashboardDensity | string
+}
+
+export interface ResolvedDashboardTheme {
+  source: 'legacy' | 'configured'
+  presetId?: DashboardThemePresetId
+  mode: 'light' | 'warm' | 'eye-care' | 'dark'
+  pageBackground: string
+  cardBackground: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  primary: string
+  positive: string
+  negative: string
+  warning: string
+  info: string
+  metricPalette: string[]
+  chartPalette: string[]
+  radius: 'small' | 'medium' | 'large'
+  shadow: 'none' | 'subtle' | 'elevated'
+  overrides: DashboardThemeOverrides
+}
+
+export interface ThemeValidationError {
+  code: 'invalid_preset' | 'invalid_color' | 'contrast_too_low' | 'invalid_palette'
+  field: string
+  message: string
+}
+
 /** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */
 export interface DashboardDatasetInput {
   datasetId: string
@@ -1607,6 +1667,8 @@ export interface InsightDashboardSchema {
   executionPolicy?: DashboardExecutionPolicy
   /** 用户确认后的脚本结果组件绑定 */
   scriptBindings?: DashboardScriptBinding[]
+  /** 仪表盘级主题；旧 Schema 缺失时不写回、不改变既有视觉。 */
+  theme?: DashboardThemeConfig
 }
 
 /** 洞察仪表盘实体 */

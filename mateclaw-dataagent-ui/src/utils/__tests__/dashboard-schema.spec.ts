@@ -32,4 +32,19 @@ describe('dashboard schema compatibility', () => {
     expect(schema.executionPolicy?.timeoutSeconds).toBe(30)
     expect(schema.scriptBindings?.[0].componentId).toBe('table-1')
   })
+
+  it('preserves dashboard theme when migrating a current schema', () => {
+    const schema = migrateInsightDashboardSchema({
+      version: '1.2',
+      theme: { mode: 'preset', presetId: 'rose', overrides: { radius: 'large' } },
+      pages: [{ id: 'page-1', name: '销售', components: [] }],
+    }, '首页')
+
+    expect(schema.theme).toEqual({ mode: 'preset', presetId: 'rose', overrides: { radius: 'large' } })
+  })
+
+  it('does not invent theme for legacy components schema', () => {
+    const schema = migrateInsightDashboardSchema({ components: [] }, '首页')
+    expect(schema.theme).toBeUndefined()
+  })
 })
