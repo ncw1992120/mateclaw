@@ -300,7 +300,7 @@ watch(chartContainerRef, (el) => {
 }
 
 .chart-placeholder::before {
-  content: '📊';
+  content: '—';
   font-size: 32px;
   opacity: 0.6;
 }

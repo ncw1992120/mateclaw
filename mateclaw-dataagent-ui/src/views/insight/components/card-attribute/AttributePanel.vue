@@ -36,7 +36,6 @@
           <el-switch v-model="activeCard.multiTab" />
         </div>
       </template>
-      <div v-else class="field note">当前为「{{ typeLabel(activeCard.type) }}」，不显示「多指标模式 / 多TAB模式」。</div>
 
       <!-- 4. 数据集配置 -->
       <div class="section">
@@ -63,6 +62,7 @@
       <div class="section">
         <div class="section-head">
           <span class="section-title">筛选器绑定</span>
+          <InlineHelp label="筛选器绑定" content="将仪表盘筛选条件绑定到当前卡片的数据集，查询时按字段下推。" />
         </div>
         <div class="fb-box">
           <template v-if="state.filterBindings && state.filterBindings.length">
@@ -75,12 +75,6 @@
           </template>
           <el-button v-else size="small" @click="openFilterBinding">绑定筛选器</el-button>
         </div>
-        <!-- 绑定的去向随脚本存在与否变化：有脚本时作为脚本入参下推，无脚本时直通到数据集筛选条件 -->
-        <div class="fb-hint">
-          {{ state.hasPython
-            ? '筛选条件在 Python 执行时下推到数据集查询'
-            : '无 Python 脚本时，筛选条件直通到数据集的筛选条件中' }}
-        </div>
       </div>
 
       <!-- 6. Python 预处理（位于数据集、筛选器绑定之后、结果集之前：
@@ -88,6 +82,7 @@
       <div class="section">
         <div class="section-head">
           <span class="section-title">Python 预处理</span>
+          <InlineHelp label="Python 预处理" content="系统区域由平台生成，用户区域用于 Join、合并、计算和业务规则。" />
         </div>
 
         <!-- 未配置：提供入口（1 个数据集时可选；2+ 时用户处理区必填） -->
@@ -119,6 +114,7 @@
       <div class="section">
         <div class="section-head">
           <span class="section-title">结果集</span>
+          <InlineHelp label="结果集" content="结果集是卡片展示的唯一数据出口；配置变化后会标记为过期。" />
           <span class="rs-status" :class="resultSetStatusClass">
             <span class="rs-dot"></span>{{ resultSetStatusText }}
           </span>
@@ -185,6 +181,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
+import InlineHelp from '../property/InlineHelp.vue'
 import DatasetCard from './DatasetCard.vue'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 

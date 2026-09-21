@@ -135,7 +135,7 @@
       </GridItem>
     </GridLayout>
     <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
-      <div class="empty-icon">🎨</div>
+      <div class="empty-icon" aria-hidden="true">—</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
     </div>
   </div>

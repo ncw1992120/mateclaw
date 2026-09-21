@@ -3,30 +3,9 @@
     <div class="panel-heading">
       <div>
         <h3>数据集配置</h3>
-        <p>{{ inputs.length >= 2 ? `已选择 ${inputs.length} 个输入数据集，可配置 Python 预处理。` : '先选择一个数据集；添加第二个数据集后，可配置 Python 预处理。' }}</p>
-        <p v-if="targetComponents?.length" class="binding-target-hint">{{ targetComponentId ? `当前目标组件：${targetComponentId}` : '当前未选择目标组件，执行结果不会覆盖画布。' }}</p>
-        <div v-if="targetComponents?.length" class="binding-target-selector">
-          <span>结果绑定组件</span>
-          <el-select
-            :model-value="targetComponentId"
-            clearable
-            filterable
-            aria-label="选择要接收脚本结果的组件"
-            placeholder="选择要接收脚本结果的组件"
-            @change="(value: string) => emit('update:target-component-id', value || '')"
-          >
-            <el-option
-              v-for="component in targetComponents"
-              :key="component.id"
-              :label="component.title || component.id"
-              :value="component.id"
-            />
-          </el-select>
-        </div>
       </div>
       <div class="add-dataset-entry">
         <el-button size="small" type="primary" plain aria-label="添加数据集" @click="pickerOpen = !pickerOpen">+ 添加数据集</el-button>
-        <el-button text size="small" aria-label="搜索数据集来源" @click="pickerOpen = true">🔍 搜索</el-button>
         <div v-show="pickerOpen" class="dataset-picker-popover">
           <DatasetSourcePicker :available-datasets="datasets" :available-datasources="datasources" @select="handleSourceSelection" />
         </div>

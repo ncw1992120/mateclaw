@@ -49,7 +49,7 @@ describe('DatasetInputPanel', () => {
       { datasetId: '2', inputName: 'metrics' },
     ] })
     expect(wrapper.find('.script-draft').exists()).toBe(true)
-    expect(wrapper.text()).toContain('已选择 2 个输入数据集')
+    expect(wrapper.text()).not.toContain('添加第二个数据集后')
   })
 
   it('groups dataset choices by Aloudata, JDBC, API and file categories', async () => {
@@ -141,13 +141,14 @@ describe('DatasetInputPanel', () => {
     expect(emitted).toContain('系统生成区域')
   })
 
-  it('exposes an explicit result binding target selector', () => {
+  it('does not expose a separate result binding target selector or top-level search action', () => {
     const wrapper = mountPanel({
       targetComponents: [{ id: 'table-1', type: 'table', title: '订单表', position: { x: 0, y: 0, w: 4, h: 3 } }],
       targetComponentId: 'table-1',
     })
-    expect(wrapper.text()).toContain('结果绑定组件')
-    expect(wrapper.text()).toContain('当前目标组件：table-1')
+    expect(wrapper.text()).not.toContain('结果绑定组件')
+    expect(wrapper.text()).not.toContain('当前目标组件')
+    expect(wrapper.find('.add-dataset-entry > button[aria-label="搜索数据集来源"]').exists()).toBe(false)
   })
 
   it('blocks execution when script parameter definitions are invalid', async () => {

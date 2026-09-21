@@ -14,7 +14,7 @@
 
 - [x] Task 1：统一属性配置基础视觉组件（Vitest 单测 41 files / 235 tests 通过；commit 待创建）
 - [x] Task 2：统一属性草稿状态与保存边界（定向 12 tests 通过；全量测试当前受既有 DatasetDataDialog 失败阻塞，Task 4 处理）
-- [ ] Task 3：收敛卡片属性配置布局与信息层级
+- [x] Task 3：收敛卡片属性配置布局与信息层级（定向 2 files / 22 tests 通过；正式洞察组件视觉 Emoji 已清理）
 - [ ] Task 4：收敛数据集来源选择与配置弹窗
 - [ ] Task 5：统一 Python、筛选器、结果集交互
 - [ ] Task 6：统一画布、组件库与页面树交互
