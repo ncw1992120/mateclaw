@@ -22,7 +22,7 @@
       <!-- 1. 组件标题 -->
       <div class="field">
         <label class="field-label">组件标题</label>
-        <el-input v-model="activeCard.title" placeholder="请输入组件标题" />
+        <el-input v-model="activeCard.title" placeholder="请输入组件标题" aria-label="组件标题" />
       </div>
 
       <!-- 2/3. 多指标模式 / 多TAB模式（仅 KPI/指标卡显示，本轮只实现 KPI 卡） -->

@@ -4,6 +4,7 @@
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
+      :aria-label="component.title || t('insight.filterPlaceholder')"
       clearable
       filterable
       :remote="isDynamic"
