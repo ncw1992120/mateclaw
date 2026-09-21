@@ -403,7 +403,7 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
   try {
     const created = await insightDashboardApi.execute(
       props.dashboardId,
-      buildScriptParameters(schema.parameters ?? [], context),
+      buildScriptParameters(schema.parameters ?? [], context, schema.scriptFilterBindings ?? []),
     )
     const executionId = (created as unknown as { executionId?: string }).executionId
     if (!executionId) throw new Error('未获取到脚本执行 ID')

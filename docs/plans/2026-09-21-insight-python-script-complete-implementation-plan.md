@@ -1192,7 +1192,7 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | 已完成（本地无 Docker） | 87d2ad6b + 10992ad0 + 本轮 | Runner 46/46；UI 58 文件/302 测试；Java 全量 228 用例、0 failures、3 个明确 Docker/Testcontainers errors；真实 Chrome 主 Python Playwright 6/6；覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误、ObjectRef 大结果；容器集成专项因用户明确不使用 Docker 保留 BLOCKED/NOT RUN |
+| 8 E2E 全链路 | 已完成（本地无 Docker） | 87d2ad6b + 10992ad0 + 本轮 | Runner 46/46；UI 58 文件/304 测试；Java 全量 228 用例、0 failures、3 个明确 Docker/Testcontainers errors；真实 Chrome 主 Python Playwright 6/6；覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误、ObjectRef 大结果；容器集成专项因用户明确不使用 Docker 保留 BLOCKED/NOT RUN |
 | 9 CDP 视觉验收 | 已完成 | 348c68ee + 10992ad0 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见；rerun-40 主 Python E2E 6/6 PASS |
 
 执行备注：
@@ -1219,4 +1219,10 @@ git diff --check
   - `npx playwright test e2e/dashboard-python-pipeline.spec.ts`：真实 Google Chrome CDP/UI 路径 6/6 PASS，28.0s；大结果用例验证 `inline=false`、ObjectRef 读取和“共 10 条”预览。
 - 视觉复核发现 E2E 原断言把默认“5 条/页”误判为必须渲染 10 行，已改为断言真实表格可见且总数为 10；产品分页行为保持不变。
 
-- 全量门禁复核（本轮）：`make dashboard-runner-test` 为 46/46；`make dashboard-ui-test` 为 58 个文件、302 个测试；`make dashboard-ui-build` 通过；`make dashboard-prerequisites-contract-test` 通过。`mvn -o -f mateclaw-dataagent/pom.xml test` 为 228 个用例、0 failures、3 errors，错误均为无 Docker 导致的 Testcontainers 初始化失败（ObjectRef/S3 三个集成测试）。按用户约束未执行 Docker 目标，已在 Task 8 标注为集成门禁 BLOCKED/NOT RUN。
+- 全量门禁复核（本轮）：`make dashboard-runner-test` 为 46/46；`make dashboard-ui-test` 为 58 个文件、304 个测试；`make dashboard-ui-build` 通过；`make dashboard-prerequisites-contract-test` 通过。`mvn -o -f mateclaw-dataagent/pom.xml test` 为 228 个用例、0 failures、3 errors，错误均为无 Docker 导致的 Testcontainers 初始化失败（ObjectRef/S3 三个集成测试）。按用户约束未执行 Docker 目标，已在 Task 8 标注为集成门禁 BLOCKED/NOT RUN。
+
+### 后续补充进度（2026-09-22，正式预览参数闭环）
+
+- 修复正式预览 `DashboardPreviewView` 仅读取根级 `schema.parameters`、遗漏组件级 `scriptFilterBindings` 的问题：绑定条件现在会把维度值和时间范围的单边/双边值映射为 `datasets.params`，未填写参数仍不提交。
+- 新增 `script-parameters.spec.ts` 回归覆盖：隐式绑定参数、仅 `startDate`、`startDate + endDate`、`in` 集合条件和既有显式参数白名单行为；定向测试 4/4，UI production build 通过。
+- 代码变更后的真实 Chrome 主 Python E2E 再跑 6/6 通过（28.7s），覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误和 ObjectRef 大结果。
