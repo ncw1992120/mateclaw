@@ -901,7 +901,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 > rerun-38/39 根因修复与复验：本地 DataAgent 以 `MATECLAW_DATASET_HTTP_ALLOW_INSECURE_TEST_ENDPOINT=true` 启动，mock 响应增加 `Connection: close`、显式 flush；seed 增加 `id` 查询参数和动态 `MATECLAW_E2E_FILE_DATASET_FALLBACK_TO_HTTP`，A→B 用户脚本改为读取 A 的首个 id 后以等值条件查询 B，且修正了 A→B/输出契约种子的错误 userCode。真实统一数据集预览返回 10 行；Chrome channel 主 Python E2E 中前 5/6 用例通过（25.9s）：筛选边界、A→B、系统区恢复、表格 envelope、`OUTPUT_CONTRACT_ERROR` 均通过。第 6 条大结果执行状态为 `RESULT_LIMIT`，未返回 `inline=false + outputRef`，原因是当前环境未提供 S3/MinIO ObjectRef 服务；该门禁仍 BLOCKED。
 
-**状态：BLOCKED（真实外部依赖未完全满足）**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。当前本机 Runner 单测 `46 passed`，前端全量回归 `52` 个文件/`280` 个测试通过，Java 使用本机 JDK 21/Maven 3.9.16 的完整测试为 `224` 个用例、`0` failures、`3` Testcontainers errors（均为 ObjectRef/S3 容器依赖），UI `vue-tsc` 与 Vite build 通过；Playwright 三个真实 E2E spec 在显式缺少 `MATECLAW_E2E_TOKEN` 时按 guard 退出，未使用路由 mock。登录后真实提交接口已从 `python runner unavailable` 推进到 Runner 执行成功并返回 `kind=table` 的 6 行结果。为避免洞察编辑/预览被不消费的顶部 active-model 可选请求拖死，新增 Insight 路由跳过该请求的定向门控，并保留非 Insight 路由行为；同时修复数据集查看接口在 PostgreSQL 下把 `ORDER BY id` 带入 `COUNT(*)` 的 SQL 错误，并新增回归测试。这不是后端模型配置查询的根治。完整自动化仍受文件对象存储、部分 DataAgent 外部依赖、无 Docker 的 3 个 Testcontainers 用例及真实 E2E 凭据/数据环境阻断；本次没有用 Docker 代替本机环境，也没有把单测或局部真实执行结果冒充完整 E2E PASS。
+**状态：本地可执行门禁完成；Docker 集成门禁按约束未执行**——Task 1–7 的代码与单测已全部落地；本任务已补齐 6 个 Python 专项种子、状态文件导出和真实 DataAgent E2E spec。使用本机 JDK 21/Maven 3.9.16 执行 `mvn -o -f mateclaw-dataagent/pom.xml test` 得到 228 个用例、0 failures、3 errors；三项错误均由无 Docker 环境导致：`ObjectRefServiceTest`、`S3DatasetFileStorageServiceTest`、`ScriptDatasetReadObjectRefIntegrationTest`，没有发现新的代码失败。Runner `make dashboard-runner-test` 为 46/46，UI `make dashboard-ui-test` 为 58 文件/302 测试，`make dashboard-ui-build` 通过，外部前置契约检查通过；真实 Google Chrome 主 Python E2E 为 6/6。Docker/Testcontainers 集成门禁依照用户“不使用 Docker”的约束保留为 NOT RUN/BLOCKED，不把本地等价验证冒充容器集成 PASS。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts`
@@ -943,7 +943,7 @@ Python Large Result Dashboard
 
 覆盖旧单输入脚本、旧根级 script、空表、重复列、混合类型、未知对象、超时、取消、结果超限、ObjectRef、另一个组件不刷新。所有错误断言可见提示，不接受仅断言 HTTP 200。
 
-- [ ] **Step 4: 运行全量自动化门禁**
+- [~] **Step 4: 运行全量自动化门禁**——本机可执行门禁已完成；Docker 集成项按用户约束未运行。
 
 ```bash
 JDK21_HOME='/Users/srant/.jdks/jdk-21.0.12+8/Contents/Home'; MAVEN_HOME='/Users/srant/.maven/apache-maven-3.9.16'
@@ -960,9 +960,9 @@ MATECLAW_E2E_BROWSER_CHANNEL=chrome npm --prefix mateclaw-dataagent-ui run test:
 # `dashboard-verify-local` 仍包含 Docker/Testcontainers，仅在用户明确提供该环境时执行；本次不调用它。
 ```
 
-Expected: 可执行的本机命令退出 0；无 skipped/only；当前 Java 全量受 Docker/Testcontainers 缺失与外部依赖失败阻塞，Runner/UI 定向门禁可独立验证；模拟环境结果只能标记为本地合约 PASS，不能代替真实 Aloudata 权限验收。已完成的局部证据为 Runner `46/46`、Java 关键契约 `20/20`、Aloudata 时间戳/fixture `2/2` 和 DataAgent 打包成功；因此本步骤仍不得标记完成。
+Expected: 可执行的本机命令退出 0；无 skipped/only；Java 全量只剩 3 个明确的 Docker/Testcontainers errors，Runner/UI/构建/外部前置契约均通过；真实 Aloudata 权限验收仍需外部环境，不能用模拟结果替代。当前证据：Runner `46/46`、UI `58 files/302 tests`、UI build PASS、Java `228 tests/0 failures/3 Docker errors`、主 Python Chrome E2E `6/6`。
 
-- [ ] **Step 5: 精确提交**
+- [x] **Step 5: 精确提交**——本轮相关修改已精确暂存并提交，未带入工作区其他未跟踪文件；本轮提交为 `10992ad0`，并已推送 `origin/feature/dev_fu`。
 
 ```bash
 git add -- mateclaw-dataagent-ui/e2e/dashboard-python-pipeline.spec.ts \
@@ -984,7 +984,9 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 > Task 9 最终状态更正：上方早期 `BLOCKED` 描述仅保留历史证据；以 rerun-33 为当前结论，Task 9 已完成。
 
-**状态：BLOCKED（真实执行预览依赖未恢复）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并增加单步骤可配置超时、逐步落盘报告及真实页面路径回退。最新真实验收目录为 `mateclaw-dataagent-ui/docs/superpowers/evidence/2026-09-21-python-pipeline-real-rerun-11/`：`01` 筛选器默认带入、`02` 单边界查询、`03` 系统生成、`04` 用户接管、`05` 差异查看、`12` 保存页共 6 项 PASS；`06`–`11` 因真实 A→B/输出预览请求返回 `400 base SQL must not be blank` 或等待结果超时而 FAIL。最新报告未发现 `failedRequests`，但记录了该 400 业务错误；根因是当前种子看板的跨数据集/输出预览草稿没有可执行的 base SQL，不能将此报告标记为完整 PASS。此前 `/dataagent/api/v1/models/active` 超时的可选请求已通过 Insight 路由门控绕开，数据集 PostgreSQL `COUNT(*) ORDER BY` 也已修复并有回归测试。真实数据预览仍受 DataAgent/对象存储/种子数据链路影响；没有用 headless Chromium 或静态截图替代 9222 验收。
+**当前状态：已完成。** 早期 rerun-11 的 BLOCKED 描述仅保留历史记录；以 rerun-33 的 12/12 Chrome CDP 视觉通过、`consoleErrors=[]`、`failedRequests=[]`，以及 rerun-40 主 Python E2E 6/6 通过为当前结论。
+
+**历史状态：BLOCKED（真实执行预览依赖未恢复）**——该段仅记录 rerun-11 的历史失败；当前以 rerun-33 的 12/12 Chrome CDP 视觉通过和 rerun-40 主 Python E2E 6/6 通过为准。
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-python-pipeline-visual-check.mjs`
@@ -1029,9 +1031,9 @@ curl --fail --silent http://127.0.0.1:9222/json/version
 
 Expected: 返回包含 `Google Chrome` 的 Browser 字段和 `webSocketDebuggerUrl`；否则视觉验收为 BLOCKED，不得改用 headless Chromium 冒充。
 
-- [x] **Step 4: 执行真实用户路径并采集证据（部分通过，按结果保留 BLOCKED）**
+- [x] **Step 4: 执行真实用户路径并采集证据**
 - 真实命令使用本机 JDK/Maven 启动的 UI、DataAgent、Runner，并通过 `MATECLAW_CDP_ENDPOINT=http://127.0.0.1:9222` 连接 Google Chrome；最新报告生成 12 张截图，证据目录为 `mateclaw-dataagent-ui/docs/superpowers/evidence/2026-09-21-python-pipeline-real-rerun-11/`（该目录按仓库忽略规则保留为本机验收产物）。
-- 验证结果：`01`–`05`、`12` 为 PASS；`06`–`11` 仍未形成可渲染的真实结果，报告记录 `400 base SQL must be blank /dataagent/api/v1/dataset-composer/drafts/preview`，没有 failed request，但有 2 条 console error。脚本已经固定真实 UI 入口「筛选预览」、动态 dashboard ID 和逐步报告落盘；待种子草稿补齐可执行 base SQL 后才能把 A→B、输出契约、组件渲染和错误态提升为 PASS。
+- 验证结果：历史 rerun-11 的 `400 base SQL must be blank` 已由后续种子和本地 HTTP/ObjectRef 夹具修复；当前 rerun-33 的 12 个视觉步骤和 rerun-40 的 6 个主 Python E2E 用例均通过，失败请求与控制台错误为 0。
 
 ```bash
 MATECLAW_CDP_ENDPOINT=http://127.0.0.1:9222 \
@@ -1043,7 +1045,7 @@ npm --prefix mateclaw-dataagent-ui run test:e2e:cdp:python
 
 脚本必须按真实 UI 完成：仪表盘列表 → 编辑 → 选中卡片 → 数据集配置 → 查看数据 → 填单边/双边筛选 → 编辑 Python → 解锁系统区 → 查看差异 → 跨数据集执行 → 输出检查 → 组件预览 → 保存 → 正式预览。
 
-- [~] **Step 5: 固定视觉断言与截图清单**——已实际产出最新报告的 12 张截图；`01`–`05`、`12` 的交互断言通过，`06`–`11` 仍依赖可执行的真实结果数据，未完成。
+- [x] **Step 5: 固定视觉断言与截图清单**——已实际产出并人工复核 12 张截图；图表 canvas、表格结果、筛选模板、系统接管、差异和错误态均有对应断言。
 
 必须生成：
 
@@ -1064,7 +1066,7 @@ npm --prefix mateclaw-dataagent-ui run test:e2e:cdp:python
 
 每张截图配套断言：主要按钮没有遮挡；弹窗在 1440×1000 视口内可操作；代码区横纵滚动可用；错误路径与建议可读；空值条件显示但不生效；图表存在真实 canvas；AX Tree 中按钮、textbox、table、alert 有可读名称；页面无未处理 `pageerror` 和失败 API 请求。
 
-- [~] **Step 6: 视觉证据复核**——已复核最新 01、03、04、05、12 截图，确认真实 Chrome 页面包含筛选绑定、只读/接管状态、候选版本和保存路径；06–11 的错误截图确认是后端草稿 400，不是静态截图或无头浏览器替代。console/network/AX 的全量门禁仍未通过。
+- [x] **Step 6: 视觉证据复核**——已逐项检查 12 张截图和 `visual-report.json`；确认真实 Chrome 页面包含筛选绑定、只读/接管状态、候选版本、A→B/输出结果、错误提示、图表 canvas 和保存后表格；`consoleErrors=[]`、`failedRequests=[]`。
 
 使用本地图片查看工具逐张检查，不能只依赖脚本退出码。`visual-report.json` 记录 screenshotPath、axNodeCount、关键 DOM 摘要、consoleErrors、failedRequests、dashboardId 和执行 ID。
 
@@ -1190,8 +1192,8 @@ git diff --check
 | 5 Runner 输出契约 | 已完成 | 4c899d7c | test_result_contract 14/14、Runner 全量 43/43 |
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
-| 8 E2E 全链路 | 已完成（本地无 Docker） | 87d2ad6b + 本轮 | Runner 46/46；Java 定向 14/14；真实 Chrome 主 Python Playwright 6/6；覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误、ObjectRef 大结果；ObjectRef/Testcontainers 专项集成仍因用户明确不使用 Docker 保留 BLOCKED |
-| 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见 |
+| 8 E2E 全链路 | 已完成（本地无 Docker） | 87d2ad6b + 10992ad0 + 本轮 | Runner 46/46；UI 58 文件/302 测试；Java 全量 228 用例、0 failures、3 个明确 Docker/Testcontainers errors；真实 Chrome 主 Python Playwright 6/6；覆盖筛选边界、A→B、系统区接管、合法 table、输出契约错误、ObjectRef 大结果；容器集成专项因用户明确不使用 Docker 保留 BLOCKED/NOT RUN |
+| 9 CDP 视觉验收 | 已完成 | 348c68ee + 10992ad0 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见；rerun-40 主 Python E2E 6/6 PASS |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
@@ -1216,3 +1218,5 @@ git diff --check
   - `mvn -o -f mateclaw-dataagent/pom.xml -Dtest=DatasetContractTest,ScriptResultContractServiceTest test`：14/14 PASS。
   - `npx playwright test e2e/dashboard-python-pipeline.spec.ts`：真实 Google Chrome CDP/UI 路径 6/6 PASS，28.0s；大结果用例验证 `inline=false`、ObjectRef 读取和“共 10 条”预览。
 - 视觉复核发现 E2E 原断言把默认“5 条/页”误判为必须渲染 10 行，已改为断言真实表格可见且总数为 10；产品分页行为保持不变。
+
+- 全量门禁复核（本轮）：`make dashboard-runner-test` 为 46/46；`make dashboard-ui-test` 为 58 个文件、302 个测试；`make dashboard-ui-build` 通过；`make dashboard-prerequisites-contract-test` 通过。`mvn -o -f mateclaw-dataagent/pom.xml test` 为 228 个用例、0 failures、3 errors，错误均为无 Docker 导致的 Testcontainers 初始化失败（ObjectRef/S3 三个集成测试）。按用户约束未执行 Docker 目标，已在 Task 8 标注为集成门禁 BLOCKED/NOT RUN。
