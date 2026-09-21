@@ -897,7 +897,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 > seed 适配：`seed-dashboard-mvp.sh` 新增 `MATECLAW_E2E_JDBC_DATASET_ID`、`MATECLAW_E2E_HTTP_DATASET_ID`、`MATECLAW_E2E_FILE_DATASET_ID`，可复用已有数据集而跳过本地 JDBC 创建和对象存储上传，默认未设置时保持原行为。rerun-34 使用该路径成功生成全新状态；由于复用数据集无字段/行数据，主 Python E2E 为 3/6（筛选、系统区、输出表格通过），A→B、契约错误、大结果仍在数据集读取阶段失败，未将其误判为前端通过。
 
-> 本轮本地无 Docker 补齐：`dev-support/local-simulation/scripts/aloudata-mock-server.py` 增加 `/orders` HTTP fixture（10 行，支持 `status` 等值过滤）；`seed-dashboard-mvp.sh` 增加 `MATECLAW_E2E_HTTP_HOST`、`MATECLAW_E2E_HTTP_PORT` 与 `MATECLAW_E2E_FILE_DATASET_FALLBACK_ID`，可将 A/B 及文件形状输入指向本机 HTTP mock。使用 JDK 21/Maven 之外的本地 Python mock 启动于 `127.0.0.1:18082`，rerun-35 seed 成功生成 6 个 Python 看板，夹具静态验证为全量 10 行 / PAID 3 行；但真实 Chrome channel 的 A→B 用例在 `[aria-label="数据预览"]` 等待阶段超时，未将数据夹具可用误判为端到端执行通过，Task 8 继续 BLOCKED。
+> 历史记录（rerun-35）：本地无 Docker 补齐时，`dev-support/local-simulation/scripts/aloudata-mock-server.py` 增加 `/orders` HTTP fixture（10 行，支持 `status` 等值过滤）；`seed-dashboard-mvp.sh` 增加 `MATECLAW_E2E_HTTP_HOST`、`MATECLAW_E2E_HTTP_PORT` 与 `MATECLAW_E2E_FILE_DATASET_FALLBACK_ID`。当时 A→B 在 `[aria-label="数据预览"]` 等待阶段超时，未将数据夹具可用误判为端到端执行通过；后续 rerun-40 已通过主 Python E2E 6/6，当前结论以文末补充进度为准。
 
 > rerun-38/39 根因修复与复验：本地 DataAgent 以 `MATECLAW_DATASET_HTTP_ALLOW_INSECURE_TEST_ENDPOINT=true` 启动，mock 响应增加 `Connection: close`、显式 flush；seed 增加 `id` 查询参数和动态 `MATECLAW_E2E_FILE_DATASET_FALLBACK_TO_HTTP`，A→B 用户脚本改为读取 A 的首个 id 后以等值条件查询 B，且修正了 A→B/输出契约种子的错误 userCode。真实统一数据集预览返回 10 行；Chrome channel 主 Python E2E 中前 5/6 用例通过（25.9s）：筛选边界、A→B、系统区恢复、表格 envelope、`OUTPUT_CONTRACT_ERROR` 均通过。第 6 条大结果执行状态为 `RESULT_LIMIT`，未返回 `inline=false + outputRef`，原因是当前环境未提供 S3/MinIO ObjectRef 服务；该门禁仍 BLOCKED。
 
