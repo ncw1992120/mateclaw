@@ -210,4 +210,24 @@ describe('PropertyPanel', () => {
     })
     expect((emitted.at(-1)?.[0] as any).children).toBeUndefined()
   })
+
+  it('shows the full combination configuration for an inner combination without persisted container config', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'inner-combination',
+          type: 'combination',
+          title: '内层组合',
+          position: { x: 0, y: 0, w: 6, h: 4 },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('.el-switch-stub').exists()).toBe(true)
+    expect(wrapper.find('.combination-tab-add').exists()).toBe(true)
+  })
 })

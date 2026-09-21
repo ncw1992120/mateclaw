@@ -796,8 +796,36 @@ function componentSignature(c: InsightComponent | null | undefined): string {
 }
 
 /** 监听外部 component 变化（引用或组合卡片结构变化），同步到本地，避免 emitChange 导致的循环 */
+function defaultCombinationConfig(): NonNullable<InsightComponent['containerConfig']> {
+  return {
+    title: '',
+    showTitle: true,
+    background: '#ffffff',
+    radius: 12,
+    padding: 16,
+    layoutMode: 'free',
+    tabs: [],
+    activeTab: undefined,
+    style: { border: { enabled: false, color: 'transparent' } },
+  }
+}
+
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
+  if (next.type === 'combination') {
+    const defaults = defaultCombinationConfig()
+    const config = next.containerConfig ?? {}
+    next.containerConfig = {
+      ...defaults,
+      ...config,
+      tabs: config.tabs ?? defaults.tabs,
+      style: {
+        ...defaults.style,
+        ...config.style,
+        border: { ...defaults.style.border, ...config.style?.border },
+      },
+    }
+  }
   const localRecord = localComponent as unknown as Record<string, unknown>
   for (const key of Object.keys(localRecord)) {
     if (!(key in next)) delete localRecord[key]
