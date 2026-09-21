@@ -1062,8 +1062,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             entity.setCanUsage((Boolean) metricData.get("canUsage"));
             entity.setCanAuth((Boolean) metricData.get("canAuth"));
             entity.setCanTransfer((Boolean) metricData.get("canTransfer"));
-            entity.setGmtCreate((String) metricData.get("gmtCreate"));
-            entity.setGmtUpdate((String) metricData.get("gmtUpdate"));
+            entity.setGmtCreate(stringValue(metricData.get("gmtCreate")));
+            entity.setGmtUpdate(stringValue(metricData.get("gmtUpdate")));
             entity.setSyncVersion(syncVersion);
 
             // properties JSON 数组
@@ -1092,6 +1092,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             entities.add(entity);
         }
         return entities;
+    }
+
+    /** Aloudata 的时间字段既可能是字符串，也可能是毫秒时间戳。 */
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /**
