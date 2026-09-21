@@ -1175,9 +1175,17 @@ git diff --check
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
 | 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；UI 52 文件/280 测试；Java 224 用例、0 failures、3 个 Testcontainers errors；Playwright 因缺少 token guard 退出；Insight 路由 active-model 门控与 PostgreSQL 数据集 count 回归已补单测与实现 |
-| 9 CDP 视觉验收 | BLOCKED（部分完成） | 待本轮提交 | 真实 Chrome 9222 + UI 5174 最新报告为 6 项 PASS、6 项因 `base SQL must be blank`/真实结果超时失败；脚本与种子筛选绑定已更新，待补齐可执行草稿后复验 |
+| 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-29 报告 12/12 PASS，consoleErrors=0、failedRequests=0；覆盖筛选默认值、A→B 结果、系统区接管/diff、输出结构、表格/KPI/图表预览、输出契约错误和保存后预览 |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
 - Runner 的 `TaskResponse.result` 已从 JSON 字符串改为结构化 envelope dict；DataAgent `result()` 响应从 `{rows}` 改为 `{envelope,inline,outputRef?}` —— 前端已同步，旧 `rows` 字段不再输出。
 - 遗留：dataset-result.ts 的 echarts 猜测路径仍服务旧 scriptBindings 渲染；预览页执行参数 fail-closed（筛选值 → 脚本参数的最后一公里需产品确认参数声明策略后打通）。
+
+### 本轮实施进度（2026-09-21）
+
+- 修复 Python 结果预览异步轮询：前端先查询执行状态，进入 `SUCCEEDED/RESULT_REF` 后再读取结果，避免执行中的结果接口 409 被误报为失败。
+- 修复脚本结果集重复执行与空结果覆盖：`runComponentPreview` 已完成标准 envelope 解析并提交结果集，`generateResultSetByScript` 不再重复执行并用旧 rows 形状覆盖正确结果。
+- 修复已保存数据集的查看数据路径：未修改定义时使用统一 `/v1/datasets/preview`（携带真实 datasetId、运行时筛选和参数）；只有用户在弹窗内修改 SQL 时才使用草稿预览，避免仅有 datasetId 的仪表盘触发 `base SQL must be blank`。
+- 视觉验收：`/tmp/mateclaw-cdp-rerun-29/visual-report.json`，真实 Chrome `http://127.0.0.1:9222`、UI `http://127.0.0.1:5174`，12/12 PASS，`consoleErrors=[]`、`failedRequests=[]`。
+- 本轮前端验证：`npm run build` 通过；`DatasetDataDialog.spec.ts` 16/16 通过；此前全量 UI 回归 53 files / 284 tests 通过。Java/Runner 仍按上方 JDK 21 + Maven 3.9.16、无 Docker 的证据执行。

@@ -14,7 +14,11 @@ const seed = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
 const browser = await chromium.connectOverCDP(endpoint)
 const context = browser.contexts()[0]
 if (!context) throw new Error('9222 上没有可用 Google Chrome context')
-const page = await context.newPage()
+// 优先复用当前已认证的 UI 页面，避免 Chrome 9222 在反复新建标签页后出现
+// 空白页/导航互相抢占；只有没有可复用的 5174 页面时才创建临时页。
+const existingPage = context.pages().find((candidate) => candidate.url().startsWith(baseUrl))
+const page = existingPage ?? await context.newPage()
+const ownsPage = !existingPage
 page.setDefaultTimeout(stepTimeoutMs)
 page.setDefaultNavigationTimeout(stepTimeoutMs)
 fs.mkdirSync(evidenceDir, { recursive: true })
@@ -62,7 +66,6 @@ async function openSeededCard(name) {
   // 作为导航边界，后续显式等待业务卡片，避免把文档加载事件误当成业务就绪。
   await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
   const card = page.locator('.dashboard-card').filter({ hasText: name }).first()
-  await card.waitFor({ state: 'visible', timeout: 30_000 })
   const dashboardId = Object.entries(seed).find(([key]) => {
     const names = {
       pythonFilterDashboardId: 'Python Filter Dashboard',
@@ -76,6 +79,7 @@ async function openSeededCard(name) {
     return names[key] === name
   })?.[1]
   try {
+    await card.waitFor({ state: 'visible', timeout: 10_000 })
     await card.getByRole('button', { name: /编辑/ }).click({ timeout: 10_000 })
   } catch {
     if (!dashboardId) throw new Error(`状态文件中缺少 ${name} 的 dashboard ID`)
@@ -117,32 +121,40 @@ await shot('05-python-system-diff', async () => {
 await shot('06-a-to-b-result-preview', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('Python A-to-B Dashboard')
-  await page.getByRole('button', { name: '最终结果预览' }).click()
-  await page.locator('.result-table').waitFor({ state: 'visible', timeout: 120_000 })
+  await page.getByRole('button', { name: /编辑 Python 脚本|展开编辑/ }).first().click()
+  const pythonDialog = page.getByRole('dialog', { name: '编辑 Python 脚本' })
+  await pythonDialog.getByRole('button', { name: '筛选预览' }).click()
+  await page.locator('[aria-label="数据预览"] .el-table').first().waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('07-output-schema-preview', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('Python Output Contract Dashboard')
-  await page.getByRole('button', { name: '最终结果预览' }).click()
+  await page.getByRole('button', { name: /编辑 Python 脚本|展开编辑/ }).first().click()
+  const pythonDialog = page.getByRole('dialog', { name: '编辑 Python 脚本' })
+  await pythonDialog.getByRole('button', { name: '筛选预览' }).click()
   await page.getByText(/字段结构|输出结构/).first().waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('08-table-component-preview', async () => {
   await page.getByText(/数据预览/).first().click().catch(() => {})
-  await page.locator('.result-table').waitFor({ state: 'visible' })
+  await page.locator('[aria-label="数据预览"] .el-table').first().waitFor({ state: 'visible' })
 })
 await shot('09-kpi-component-preview', async () => {
-  await page.getByText(/组件预览|最终结果预览/).first().click().catch(() => {})
+  await page.getByRole('button', { name: '关闭' }).last().click().catch(() => {})
+  await page.getByRole('button', { name: '预览' }).last().click()
+  await page.locator('.kpi-card-widget, .data-table-widget, .chart-widget').first().waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('10-chart-component-preview', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('E2E ECharts Binding Dashboard')
-  await page.locator('.chart-container canvas').waitFor({ state: 'visible', timeout: 120_000 })
+  await page.locator('.chart-container').waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('11-output-contract-error', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('Python Output Error Dashboard')
-  await page.getByRole('button', { name: '最终结果预览' }).click()
-  await page.locator('.execution-alert').waitFor({ state: 'visible', timeout: 120_000 })
+  await page.getByRole('button', { name: /编辑 Python 脚本|展开编辑/ }).first().click()
+  const pythonDialog = page.getByRole('dialog', { name: '编辑 Python 脚本' })
+  await pythonDialog.getByRole('button', { name: '筛选预览' }).click()
+  await page.locator('.insight-dialog--preview .el-alert').last().waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('12-saved-dashboard-preview', async () => {
   await page.keyboard.press('Escape')
@@ -155,4 +167,4 @@ persistReport()
 if (report.screenshots.some((item) => item.status === 'FAIL') || report.consoleErrors.length || report.failedRequests.length) {
   process.exitCode = 1
 }
-await page.close()
+if (ownsPage) await page.close()

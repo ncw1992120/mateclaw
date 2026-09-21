@@ -1446,9 +1446,13 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
     for (let attempt = 0; attempt < 120; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 500))
-      const response = await getExecutionResult(executionId)
-      if (response.status === 'RUNNING' || response.status === 'SUBMITTING') continue
-      if (response.status === 'SUCCEEDED' || response.status === 'RESULT_REF') {
+      // 结果接口在执行仍为 RUNNING 时会返回 409。先查询状态接口，让 DataAgent
+      // 同步 Runner 的终态，再读取结果，避免把正常的异步执行误报成预览失败。
+      const statusResponse = await backend.fetchExecutionStatus(executionId)
+      const status = String(statusResponse.status || '').toUpperCase()
+      if (status === 'RUNNING' || status === 'SUBMITTING' || !status) continue
+      if (status === 'SUCCEEDED' || status === 'RESULT_REF' || status === 'COMPLETED' || status === 'FINISHED') {
+        const response = await getExecutionResult(executionId)
         const envelope = parseScriptResultEnvelope(response.envelope)
         if (envelope.kind === 'table') {
           commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
@@ -1461,7 +1465,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
         }
         return { ok: true, message: executionId }
       }
-      const message = formatScriptResultError({ status: response.status, ...(typeof response.error === 'object' && response.error ? response.error as Record<string, string> : {}) })
+      const message = formatScriptResultError({ status, ...(typeof statusResponse.error === 'object' && statusResponse.error ? statusResponse.error as Record<string, string> : {}) })
       failResultSet('script', message)
       return { ok: false, message }
     }
@@ -1576,14 +1580,6 @@ export function previewFieldMetas(datasetId?: string | null): DatasetFieldMeta[]
   return state.datasets.flatMap((d) => d.fields ?? [])
 }
 
-function normalizeResultRows(res: unknown): Record<string, unknown>[] {
-  if (!res) return []
-  const r = res as Record<string, unknown>
-  if (Array.isArray(r.rows)) return r.rows as Record<string, unknown>[]
-  if (Array.isArray((r as any).dataRows)) return (r as any).dataRows as Record<string, unknown>[]
-  return []
-}
-
 /** 当前数据集预览：仅执行该输入数据集的查询（对应原型「当前数据集预览」） */
 async function loadDatasetPreview(datasetId: string): Promise<void> {
   const ds = getDataset(datasetId)
@@ -1678,23 +1674,6 @@ async function loadResultPreview(): Promise<void> {
   } finally {
     previewState.loading = false
   }
-}
-
-/** 轮询执行状态（最多约 20 秒） */
-async function pollExecution(executionId: string, timeoutMs = 20000): Promise<unknown> {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const status = await backend.fetchExecutionStatus(executionId)
-    const s = String(status.status || '').toUpperCase()
-    if (s === 'SUCCEEDED' || s === 'COMPLETED' || s === 'FINISHED') {
-      return await backend.fetchExecutionResult(executionId)
-    }
-    if (s === 'FAILED' || s === 'ERROR') {
-      throw new Error((status.error as string) || '执行失败')
-    }
-    await sleep(1000)
-  }
-  throw new Error('执行超时，请稍后到执行记录查看结果')
 }
 
 /* ===================== 结果集：生成 / 过期 / 持久化 ===================== */
@@ -1822,17 +1801,14 @@ async function generateResultSetByDataset(): Promise<{ ok: boolean; message: str
 
 /** 有脚本：先保存 Schema 再提交执行，轮询取回输出 */
 async function generateResultSetByScript(): Promise<{ ok: boolean; message: string }> {
-  const started = Date.now()
   state.resultSet.status = 'running'
   state.resultSet.error = ''
   try {
     const { ok, message } = await runComponentPreview()
     if (!ok) throw new Error(message)
-    const executionId = state.backend.executionId
-    const res = await pollExecution(executionId)
-    const rows = normalizeResultRows(res)
-    commitResultSet({ source: 'script', rows, executionId, elapsedMs: Date.now() - started })
-    return { ok: true, message: `${rows.length} 行` }
+    // runComponentPreview 已完成唯一一次执行、解析标准 envelope 并提交结果集。
+    // 不再重复轮询/执行，否则会用旧的 rows 形状覆盖正确结果。
+    return { ok: true, message: `${state.resultSet.rowCount} 行` }
   } catch (e) {
     const msg = (e as Error)?.message || '生成结果集失败'
     failResultSet('script', msg)

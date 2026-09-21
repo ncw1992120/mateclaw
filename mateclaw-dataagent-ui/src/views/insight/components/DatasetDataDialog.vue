@@ -189,6 +189,7 @@ import { ElMessage } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
+import { previewInput } from '@/api/dataset'
 import { draftRequestForDataset } from './card-attribute/useInsight'
 import type { DatasetConfig } from './card-attribute/useInsight'
 import { listAnalysisViewFields } from '@/api/datasource'
@@ -425,11 +426,23 @@ async function fetchRows(reset: boolean): Promise<void> {
       rows.value = []
       return
     }
-    request.parameters = { ...namedParameters(), ...buildExecutionParameters(boundRows.value) }
-    request.limit = PAGE_SIZE
-    request.offset = reset ? 0 : rows.value.length
-
-    const batch = await previewDatasetDraft(request)
+    const parameters = { ...namedParameters(), ...buildExecutionParameters(boundRows.value) }
+    const offset = reset ? 0 : rows.value.length
+    // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
+    // 不应要求前端重新携带 SQL 才能查看数据。用户在弹窗内修改 SQL 后，
+    // 才降级到草稿预览，以保留“改完点查询”的编辑能力。
+    const savedDefinitionUnchanged = Boolean(props.dataset.backendDatasetId)
+      && (!isSql.value || sql.value === (props.dataset.jdbc?.sql ?? ''))
+    const batch = savedDefinitionUnchanged
+      ? await previewInput({
+          datasetId: props.dataset.backendDatasetId as string,
+          inputName: props.dataset.alias,
+          filters: filters as DatasetConfig['filters'],
+          limit: PAGE_SIZE,
+          offset,
+          parameters,
+        })
+      : await previewDatasetDraft({ ...request, parameters, limit: PAGE_SIZE, offset })
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
     rows.value = reset ? nextRows : [...rows.value, ...nextRows]
     if (reset) {

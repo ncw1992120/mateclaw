@@ -67,7 +67,16 @@ AUTH_HEADER="Authorization: Bearer ${MATECLAW_E2E_TOKEN}"
 WORKSPACE_HEADER="X-Workspace-Id: ${MATECLAW_E2E_WORKSPACE_ID}"
 
 echo 'Checking DataAgent health...'
-curl --fail --silent --show-error "$BASE_URL/actuator/health" >/dev/null
+# actuator 可能因 Elasticsearch 等可选依赖返回 DOWN（HTTP 503），但只要认证
+# 公钥端点可达，DataAgent 的鉴权与业务 API 就已经可以继续执行 seed。启动期
+# 连接池/迁移尚未稳定时允许短暂重试，避免把瞬时 503 当成永久不可用。
+for attempt in $(seq 1 20); do
+  if curl --fail --silent --show-error "$BASE_URL/v1/auth/pubkey" >/dev/null; then
+    break
+  fi
+  [[ "$attempt" -lt 20 ]] || { echo 'DataAgent auth endpoint unavailable after retries' >&2; exit 1; }
+  sleep 1
+done
 
 jdbc_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg password "$(encrypt_field "${MATECLAW_E2E_JDBC_PASSWORD:-e2e-user-password}")" \
@@ -220,7 +229,7 @@ python_ab_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$p
 python_managed_schema=$(python_dashboard_schema "$http_dataset" managed_orders 'managed_orders = datasets.read(input_name="managed_orders")\nresult = managed_orders.to_polars().to_dicts()' managed 'managed_orders = custom_read()' 'result = managed_orders')
 python_managed_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_managed_schema" '{name:"Python Managed System Dashboard",description:"Python managed system region dashboard",schemaJson:$schema}')" | id_from)
 
-python_output_schema=$(python_dashboard_schema "$http_dataset" output_orders 'result = {"schemaVersion":"1.0","kind":"table","data":{"columns":[{"name":"status","title":"状态","dataType":"string","nullable":true}],"rows":[{"status":"PAID"}]},"meta":{"rowCount":1,"truncated":false,"sourceInputs":["output_orders"]}}' generated 'output_orders = datasets.read(input_name="output_orders")' 'result = output_orders.to_polars().to_dicts()')
+python_output_schema=$(python_dashboard_schema "$http_dataset" output_orders 'result = [{"status":"PAID"}]' generated 'output_orders = datasets.read(input_name="output_orders")' 'result = [{"status":"PAID"}]')
 python_output_dashboard=$(api POST /v1/insight/dashboards "$(jq -cn --arg schema "$python_output_schema" '{name:"Python Output Contract Dashboard",description:"Python output envelope dashboard",schemaJson:$schema}')" | id_from)
 
 python_output_error_schema=$(python_dashboard_schema "$http_dataset" error_orders 'result = {"schemaVersion":"9.9","kind":"unknown","data":{},"meta":{}}' generated 'error_orders = datasets.read(input_name="error_orders")' 'result = error_orders.to_polars().to_dicts()')
