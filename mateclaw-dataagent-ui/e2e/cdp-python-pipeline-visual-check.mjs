@@ -64,6 +64,10 @@ async function shot(name, action) {
 async function openSeededCard(name) {
   // Chrome 9222 的 SPA 导航可能在 Vite 热更新期间返回 ERR_ABORTED；以 commit
   // 作为导航边界，后续显式等待业务卡片，避免把文档加载事件误当成业务就绪。
+  await page.evaluate(() => {
+    localStorage.setItem('mc-insight-view-mode', 'list')
+    localStorage.removeItem('mc-insight-dashboard-id')
+  })
   await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
   const card = page.locator('.dashboard-card').filter({ hasText: name }).first()
   const dashboardId = Object.entries(seed).find(([key]) => {
@@ -89,6 +93,19 @@ async function openSeededCard(name) {
   const canvasCard = page.locator('[data-component-id]').first()
   await canvasCard.waitFor({ state: 'visible', timeout: 30_000 })
   await canvasCard.click({ timeout: 10_000 }).catch(() => {})
+}
+
+/** 从仪表盘列表进入真实展示态预览，而不是编辑器内的保存按钮。 */
+async function openSeededPreviewCard(name) {
+  await page.evaluate(() => {
+    localStorage.setItem('mc-insight-view-mode', 'list')
+    localStorage.removeItem('mc-insight-dashboard-id')
+  })
+  await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
+  const card = page.locator('.dashboard-card').filter({ hasText: name }).first()
+  await card.waitFor({ state: 'visible', timeout: 30_000 })
+  await card.getByRole('button', { name: '预览' }).click({ timeout: 10_000 })
+  await page.locator('.dashboard-preview-view').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
 await shot('01-dataset-filter-defaults', async () => {
@@ -145,8 +162,7 @@ await shot('09-kpi-component-preview', async () => {
 })
 await shot('10-chart-component-preview', async () => {
   await page.keyboard.press('Escape')
-  await openSeededCard('E2E ECharts Binding Dashboard')
-  await page.getByRole('button', { name: '预览' }).last().click()
+  await openSeededPreviewCard('E2E ECharts Binding Dashboard')
   await page.locator('.chart-container').waitFor({ state: 'visible', timeout: 120_000 })
   await page.locator('.chart-container canvas').waitFor({ state: 'visible', timeout: 120_000 })
 })
@@ -160,9 +176,7 @@ await shot('11-output-contract-error', async () => {
 })
 await shot('12-saved-dashboard-preview', async () => {
   await page.keyboard.press('Escape')
-  await openSeededCard('Python Large Result Dashboard')
-  await page.getByRole('button', { name: '保存' }).click().catch(() => {})
-  await page.getByRole('button', { name: '预览' }).last().click()
+  await openSeededPreviewCard('Python Large Result Dashboard')
   await page.locator('.data-table-widget, .chart-widget, .kpi-card-widget').first().waitFor({ state: 'visible', timeout: 120_000 })
 })
 

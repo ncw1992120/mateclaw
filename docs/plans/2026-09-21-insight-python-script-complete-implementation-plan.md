@@ -972,6 +972,8 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 
 > rerun-31 复验：将第 10、12 步改为点击“预览”后再断言；01–09、11–12 通过，console/network 仍为 0，但第 10 步在 120 秒内未出现真实 `canvas`，第 12 步截图仍停留在筛选预览弹窗叠层，故视觉完整门禁继续保持部分完成。重新 seed 因本地 JDBC `127.0.0.1:13306` 不可用在创建数据集阶段返回 400，未将该环境失败归因于代码。
 
+> rerun-33 复验结论：修正脚本从仪表盘列表进入正式展示态预览，并在切换列表模式后再定位种子卡片；12/12 步骤通过，`consoleErrors=[]`、`failedRequests=[]`，人工复核 `10-chart-component-preview.png` 可见真实 ECharts 折线与 canvas，`12-saved-dashboard-preview.png` 可见真实表格数据。Task 9 视觉验收完成。
+
 **状态：BLOCKED（真实执行预览依赖未恢复）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并增加单步骤可配置超时、逐步落盘报告及真实页面路径回退。最新真实验收目录为 `mateclaw-dataagent-ui/docs/superpowers/evidence/2026-09-21-python-pipeline-real-rerun-11/`：`01` 筛选器默认带入、`02` 单边界查询、`03` 系统生成、`04` 用户接管、`05` 差异查看、`12` 保存页共 6 项 PASS；`06`–`11` 因真实 A→B/输出预览请求返回 `400 base SQL must not be blank` 或等待结果超时而 FAIL。最新报告未发现 `failedRequests`，但记录了该 400 业务错误；根因是当前种子看板的跨数据集/输出预览草稿没有可执行的 base SQL，不能将此报告标记为完整 PASS。此前 `/dataagent/api/v1/models/active` 超时的可选请求已通过 Insight 路由门控绕开，数据集 PostgreSQL `COUNT(*) ORDER BY` 也已修复并有回归测试。真实数据预览仍受 DataAgent/对象存储/种子数据链路影响；没有用 headless Chromium 或静态截图替代 9222 验收。
 
 **Files:**
@@ -1179,7 +1181,7 @@ git diff --check
 | 6 DataAgent 校验/持久化/API | 已完成 | cc931e9e | 定向 20/20；ObjectRef 集成测试 BLOCKED（无 Docker） |
 | 7 前端统一解析/预览/渲染 | 已完成（核心） | 7426a774 | script-result 9/9、前端全量 264/264、TSC 0 错误、build 通过 |
 | 8 E2E 全链路 | BLOCKED | 87d2ad6b | Runner 46/46；UI 52 文件/280 测试；Java 224 用例、0 failures、3 个 Testcontainers errors；Playwright 因缺少 token guard 退出；Insight 路由 active-model 门控与 PostgreSQL 数据集 count 回归已补单测与实现 |
-| 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-29 报告 12/12 PASS，consoleErrors=0、failedRequests=0；覆盖筛选默认值、A→B 结果、系统区接管/diff、输出结构、表格/KPI/图表预览、输出契约错误和保存后预览 |
+| 9 CDP 视觉验收 | 已完成 | 待本轮提交 | 真实 Google Chrome CDP 9222 + UI 5174 的 rerun-33 报告 12/12 PASS，consoleErrors=0、failedRequests=0；人工复核确认图表 canvas 与保存后表格数据真实可见 |
 
 执行备注：
 - 本地工具链：`JAVA_HOME=~/.jdks/jdk-21.0.12+8/Contents/Home`、`PATH=~/.maven/apache-maven-3.9.16/bin:$PATH`，Maven 全程 `-o` 离线。
@@ -1191,5 +1193,5 @@ git diff --check
 - 修复 Python 结果预览异步轮询：前端先查询执行状态，进入 `SUCCEEDED/RESULT_REF` 后再读取结果，避免执行中的结果接口 409 被误报为失败。
 - 修复脚本结果集重复执行与空结果覆盖：`runComponentPreview` 已完成标准 envelope 解析并提交结果集，`generateResultSetByScript` 不再重复执行并用旧 rows 形状覆盖正确结果。
 - 修复已保存数据集的查看数据路径：未修改定义时使用统一 `/v1/datasets/preview`（携带真实 datasetId、运行时筛选和参数）；只有用户在弹窗内修改 SQL 时才使用草稿预览，避免仅有 datasetId 的仪表盘触发 `base SQL must be blank`。
-- 视觉验收：`/tmp/mateclaw-cdp-rerun-29/visual-report.json`，真实 Chrome `http://127.0.0.1:9222`、UI `http://127.0.0.1:5174`，12/12 PASS，`consoleErrors=[]`、`failedRequests=[]`。
+- 视觉验收：`/tmp/mateclaw-cdp-rerun-33/visual-report.json`，真实 Chrome `http://127.0.0.1:9222`、UI `http://127.0.0.1:5174`，12/12 PASS，`consoleErrors=[]`、`failedRequests=[]`；10、12 截图已人工复核。
 - 本轮前端验证：`npm run build` 通过；`DatasetDataDialog.spec.ts` 16/16 通过；此前全量 UI 回归 53 files / 284 tests 通过。Java/Runner 仍按上方 JDK 21 + Maven 3.9.16、无 Docker 的证据执行。
