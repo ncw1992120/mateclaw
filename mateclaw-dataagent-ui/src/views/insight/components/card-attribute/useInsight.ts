@@ -33,6 +33,15 @@ import {
 } from '@/utils/field-mapping'
 import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
+import {
+  composeExecutionScript,
+  effectiveSystemCode,
+  fingerprintSystemSource,
+  generateSystemScript,
+  reconcileSystemScript,
+  restoreGenerated,
+  type PythonSystemSource,
+} from '@/utils/python-script-template'
 
 /* ============================ 类型定义 ============================ */
 
@@ -287,6 +296,31 @@ export function buildPythonSystemRegion(): string {
   return lines.join('\n')
 }
 
+export function currentPythonSource(): PythonSystemSource {
+  const inputs: DashboardDatasetInput[] = state.datasets.map((ds) => ({
+    datasetId: ds.backendDatasetId ?? ds.id,
+    inputName: ds.alias,
+    displayName: ds.alias,
+    sourceType: mapSourceTypeOut(ds),
+    filters: ds.filters as unknown as DashboardDatasetInput['filters'],
+  }))
+  const bindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => {
+    const scoped = state.datasets.filter((ds) => binding.scope[ds.id] ?? binding.scope[ds.alias])
+    const fieldMappings: Record<string, string> = {}
+    scoped.forEach((ds) => {
+      const hit = binding.fieldMap.find((field) => field.datasetId === ds.id || field.datasetId === ds.alias)
+      if (hit?.field) fieldMappings[ds.alias] = hit.field
+    })
+    return {
+      filterComponentId: binding.filterName,
+      inputNames: scoped.map((ds) => ds.alias),
+      fieldMappings,
+      conditions: binding.conditions ?? [],
+    }
+  })
+  return { inputs, bindings }
+}
+
 /* ============================ 状态单例 ============================ */
 
 let aliasSeq = 0
@@ -303,6 +337,7 @@ const state = reactive({
   hasPython: false,
   pythonSystem: '' as string,
   pythonUser: '' as string,
+  pythonSystemState: null as import('@/utils/python-script-template').ReconciledSystemScript | null,
   // 筛选器绑定（支持同时绑定多个筛选器）
   filterBindings: [] as FilterBinding[],
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
@@ -940,8 +975,15 @@ function saveFilterBindings(arr: FilterBinding[]) {
 
 /* ---- Python 预处理 ---- */
 function openPython() {
-  // 每次打开都根据最新数据集 + 筛选器绑定重新生成系统区域；用户处理区域保留
-  state.pythonSystem = buildPythonSystemRegion()
+  // generated 模式可自动刷新；managed 模式只更新候选版本，不覆盖用户接管代码。
+  const source = currentPythonSource()
+  if (!state.pythonSystemState) {
+    const generatedCode = generateSystemScript(source)
+    state.pythonSystemState = { mode: 'generated', generatedCode, generatedFingerprint: fingerprintSystemSource(source), userCode: state.pythonUser }
+  } else {
+    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, source)
+  }
+  state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   if (!state.hasPython) {
     state.pythonUser = ''
     state.hasPython = true
@@ -951,6 +993,14 @@ function openPython() {
 function savePython(system: string, user: string) {
   state.pythonSystem = system
   state.pythonUser = user
+  const source = currentPythonSource()
+  const current = state.pythonSystemState ?? {
+    mode: 'generated' as const,
+    generatedCode: system,
+    generatedFingerprint: fingerprintSystemSource(source),
+    userCode: user,
+  }
+  state.pythonSystemState = { ...current, userCode: user }
   state.hasPython = true
   state.ui.python.visible = false
 }
@@ -959,6 +1009,7 @@ function removePython() {
   state.pythonUser = ''
   state.pythonSystem = ''
   state.hasPython = false
+  state.pythonSystemState = null
 }
 
 /* ---- 预览 ---- */
@@ -1186,10 +1237,15 @@ export function migrateKpiMetrics(metrics: KpiMetricConfig[]): KpiMetricConfig[]
 /** 组合最终脚本：系统生成区域（只读）+ 用户处理区域；用户区域为空视为未配置 Python */
 function buildPipelineScript(): string | undefined {
   if (!state.hasPython) return undefined
-  const system = buildPythonSystemRegion()
-  const user = (state.pythonUser || '').trim()
-  if (!user) return undefined
-  return `${system}\n\n${user}`.trim()
+  const scriptState = state.pythonSystemState ?? {
+    mode: 'generated' as const,
+    generatedCode: state.pythonSystem || buildPythonSystemRegion(),
+    generatedFingerprint: fingerprintSystemSource(currentPythonSource()),
+    userCode: state.pythonUser,
+  }
+  state.pythonSystemState = scriptState
+  const script = composeExecutionScript(scriptState)
+  return script || undefined
 }
 
 /** 本地状态 → 组件级 datasetPipeline（后端契约） */
@@ -1238,6 +1294,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     datasetInputs,
     scriptFilterBindings,
     script: buildPipelineScript(),
+    systemScript: state.pythonSystemState ?? undefined,
     parameters: [],
     executionPolicy: {},
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）

@@ -369,6 +369,8 @@ git commit -m "feat: 支持运行时筛选模板与可选入参"
 
 ### Task 3: 系统生成区域解锁、用户接管、差异与恢复
 
+**状态：已完成**（python-script-template 4/4、python-system-region 9/9 含弹窗真实点击与卡片隔离、component-dataset-pipeline 定向通过；前端全量 45 文件 255/255、vue-tsc 0 错误。回显侧补充：hydratePanel 恢复 systemScript 状态，旧 Schema 整段按用户代码读取。）
+
 **Files:**
 - Create: `mateclaw-dataagent-ui/src/utils/python-script-template.ts`
 - Create: `mateclaw-dataagent-ui/src/utils/__tests__/python-script-template.spec.ts`
@@ -381,7 +383,7 @@ git commit -m "feat: 支持运行时筛选模板与可选入参"
 - Consumes: Task 1 的 `DashboardSystemScriptState`、Task 2 的显式筛选条件。
 - Produces: `generateSystemScript(pipelineSource)`、`fingerprintSystemSource(source)`、`effectiveSystemCode(state)`、`composeExecutionScript(state)`。
 
-- [ ] **Step 1: 写脚本状态机失败测试**
+- [x] **Step 1: 写脚本状态机失败测试**
 
 ```ts
 it('managed 模式下配置变化只产生候选版本，不覆盖用户代码', () => {
@@ -397,11 +399,11 @@ it('恢复系统版本必须显式调用 restoreGenerated', () => {
 })
 ```
 
-- [ ] **Step 2: 从 `useInsight.ts` 抽出确定性模板生成器**
+- [x] **Step 2: 从 `useInsight.ts` 抽出确定性模板生成器**
 
 模板输入只能包含数据集别名、白名单字段和结构化绑定；生成器不得读取 DOM、全局组件状态或运行时值。`generatedFingerprint` 使用稳定排序后的输入 JSON 计算非安全用途指纹，确保相同配置产生相同值。
 
-- [ ] **Step 3: 实现编辑器交互**
+- [x] **Step 3: 实现编辑器交互**
 
 `PythonScriptDialog.vue` 增加：
 
@@ -414,7 +416,7 @@ it('恢复系统版本必须显式调用 restoreGenerated', () => {
 
 组件测试必须点击真实按钮并断言 textarea、标签与确认事件，不只测试字符串函数。
 
-- [ ] **Step 4: 修正保存与执行脚本组合**
+- [x] **Step 4: 修正保存与执行脚本组合**
 
 ```ts
 function composeExecutionScript(state: DashboardSystemScriptState): string {
@@ -425,11 +427,11 @@ function composeExecutionScript(state: DashboardSystemScriptState): string {
 
 当前 `buildPipelineScript()` 每次重新调用生成器的行为必须删除；保存和执行都从持久化的 `systemScript` 状态得到同一脚本。
 
-- [ ] **Step 5: 验证刷新、复制和卡片切换不串状态**
+- [x] **Step 5: 验证刷新、复制和卡片切换不串状态**
 
 测试两个卡片：A 为 managed，B 为 generated；保存、刷新、复制 A 后保持 managed，切到 B 不出现 A 的代码。
 
-- [ ] **Step 6: 运行定向测试与类型检查**
+- [x] **Step 6: 运行定向测试与类型检查**
 
 ```bash
 npm --prefix mateclaw-dataagent-ui run test -- --run \
@@ -441,7 +443,7 @@ npm --prefix mateclaw-dataagent-ui exec vue-tsc -- --noEmit
 
 Expected: 测试和类型检查均退出 0。
 
-- [ ] **Step 7: 精确提交**
+- [x] **Step 7: 精确提交**
 
 ```bash
 git add -- mateclaw-dataagent-ui/src/utils/python-script-template.ts \
@@ -638,7 +640,7 @@ make dashboard-runner-test
 
 Expected: 全部 pytest 通过；不存在把 `status["result"]` 当作 JSON 字符串比较或再次反序列化的旧断言。
 
-- [ ] **Step 7: 精确提交**
+- [x] **Step 7: 精确提交**
 
 ```bash
 git add -- mateclaw-python-runner/src/mateclaw/results.py \
@@ -862,7 +864,7 @@ npm --prefix mateclaw-dataagent-ui run build
 
 Expected: Vitest、`vue-tsc --noEmit`、Vite build 全部退出 0。
 
-- [ ] **Step 7: 精确提交**
+- [x] **Step 7: 精确提交**
 
 ```bash
 git add -- mateclaw-dataagent-ui/src/utils/script-result.ts \

@@ -10,6 +10,7 @@
  *  2. buildPipeline / buildComponentPatch：面板 state → 回写组件（沿用正式编辑器的持久化口）
  */
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { effectiveSystemCode } from '@/utils/python-script-template'
 import type {
   ComponentDatasetPipeline,
   ComponentTab,
@@ -117,9 +118,20 @@ export function hydratePanel(
   }]
   state.activeCardId = component.id
   state.datasets = inputs.map(inputToDatasetConfig)
-  state.pythonSystem = ''
-  state.pythonUser = script
-  state.hasPython = Boolean(script.trim())
+  // 系统脚本状态：新 Schema 带systemScript（generated/managed + 候选指纹），原样恢复，
+  // 展示区显示实际生效代码；旧 Schema 只有 script 时整体按历史用户代码读取，不猜测拆分。
+  const systemState = pipeline?.systemScript
+  if (systemState) {
+    state.pythonSystemState = systemState
+    state.pythonSystem = effectiveSystemCode(systemState)
+    state.pythonUser = systemState.userCode
+    state.hasPython = Boolean(systemState.userCode.trim() || state.pythonSystem.trim())
+  } else {
+    state.pythonSystemState = null
+    state.pythonSystem = ''
+    state.pythonUser = script
+    state.hasPython = Boolean(script.trim())
+  }
   state.filterBindings = filterBindingsFromPipeline(pipeline?.scriptFilterBindings ?? [], state.datasets, filterComponents)
   // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))

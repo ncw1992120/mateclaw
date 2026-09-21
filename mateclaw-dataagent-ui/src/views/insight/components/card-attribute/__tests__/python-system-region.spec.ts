@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { buildPythonSystemRegion, useInsight } from '../useInsight'
+import { hydratePanel } from '../useCardAttributeBridge'
+import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+
+// 弹窗内的确认框在测试中直接通过
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return { ...actual, ElMessageBox: { ...actual.ElMessageBox, confirm: vi.fn().mockResolvedValue(true) } }
+})
+const { ElMessageBox } = await import('element-plus')
 
 const { state } = useInsight()
 
@@ -97,5 +108,148 @@ describe('buildPythonSystemRegion', () => {
     // table3 不在作用域内 → 全量读取
     const table3Block = code.slice(code.indexOf('input_name="table3"'))
     expect(table3Block).toContain('filters=[]')
+  })
+})
+
+/* ── PythonScriptDialog：解锁 / 接管 / 差异 / 恢复（点击真实按钮）───────── */
+
+import PythonScriptDialog from '../PythonScriptDialog.vue'
+
+const elInputStub = {
+  name: 'el-input',
+  props: ['modelValue', 'type', 'rows'],
+  emits: ['update:modelValue'],
+  template: `<textarea v-bind="$attrs" :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
+}
+const elButtonStub = {
+  name: 'el-button',
+  props: ['size', 'type', 'plain', 'text', 'loading'],
+  emits: ['click'],
+  template: `<button v-bind="$attrs" @click="$emit('click')"><slot /></button>`,
+}
+const elTagStub = { name: 'el-tag', template: '<span v-bind="$attrs"><slot /></span>' }
+const elDialogStub = {
+  name: 'el-dialog',
+  props: ['modelValue'],
+  template: '<div><slot /><slot name="footer" /></div>',
+}
+
+async function mountDialog() {
+  const wrapper = mount(PythonScriptDialog, {
+    global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub } },
+  })
+  state.ui.python.visible = true
+  await nextTick()
+  return wrapper
+}
+
+describe('PythonScriptDialog 系统区接管交互', () => {
+  beforeEach(() => {
+    vi.mocked(ElMessageBox.confirm).mockClear()
+    state.ui.python.visible = false
+    state.datasets = [{ id: 'ds1', alias: 'dataset_a' }] as never
+    state.filterBindings = []
+    state.pythonUser = 'result = 1'
+  })
+
+  it('generated 模式：只读展示 + 解锁进入用户接管（用户区不受影响）', async () => {
+    state.pythonSystemState = {
+      mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1',
+      userCode: 'result = 1', hasGeneratedUpdate: false,
+    }
+    state.pythonSystem = 'GEN_CODE'
+    const wrapper = await mountDialog()
+
+    expect(wrapper.find('[data-testid="system-code-readonly"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('系统生成')
+
+    await wrapper.find('[data-testid="unlock-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('用户接管')
+    const managed = wrapper.find('[data-testid="system-code-managed"]')
+    expect(managed.exists()).toBe(true)
+    expect((managed.element as HTMLTextAreaElement).value).toBe('GEN_CODE')
+    // 用户处理区域保持独立
+    expect((wrapper.find('[data-testid="user-code"]').element as HTMLTextAreaElement).value).toBe('result = 1')
+    wrapper.unmount()
+  })
+
+  it('managed 模式：配置变化产生候选提示，保留当前版本不覆盖用户代码', async () => {
+    state.pythonSystemState = {
+      mode: 'managed', generatedCode: 'OLD', managedCode: 'dataset_a = custom_read()',
+      generatedFingerprint: 'old-fp', userCode: 'result = 1', hasGeneratedUpdate: false,
+    }
+    state.pythonSystem = 'dataset_a = custom_read()'
+    const wrapper = await mountDialog()
+
+    // 数据集变化后 reconcile 产生候选版本（openPython 内部走 reconcileSystemScript）
+    state.datasets = [{ id: 'ds1', alias: 'dataset_a' }, { id: 'ds2', alias: 'dataset_b' }] as never
+    useInsight().openPython()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="diff-toggle"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="diff-toggle"]').trigger('click')
+    const diff = wrapper.find('[data-testid="system-diff"]')
+    expect(diff.exists()).toBe(true)
+    expect(diff.text()).toContain('dataset_a = custom_read()')
+    expect(diff.text()).toContain('dataset_b')
+
+    await wrapper.find('[data-testid="keep-current"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="diff-toggle"]').exists()).toBe(false)
+    // 用户接管代码未被覆盖
+    expect(state.pythonSystemState?.managedCode).toBe('dataset_a = custom_read()')
+    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('用户接管')
+    wrapper.unmount()
+  })
+
+  it('恢复系统生成：mode 回到 generated，用户处理区域保留', async () => {
+    state.pythonSystemState = {
+      mode: 'managed', generatedCode: 'GEN_NEW', managedCode: 'custom()',
+      generatedFingerprint: 'fp', userCode: 'result = 2', hasGeneratedUpdate: true,
+    }
+    state.pythonSystem = 'custom()'
+    state.pythonUser = 'result = 2'
+    const wrapper = await mountDialog()
+
+    await wrapper.find('[data-testid="restore-generated"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('系统生成')
+    expect(wrapper.find('[data-testid="system-code-readonly"]').text()).toContain('GEN_NEW')
+    expect((wrapper.find('[data-testid="user-code"]').element as HTMLTextAreaElement).value).toBe('result = 2')
+    wrapper.unmount()
+  })
+
+  it('卡片切换不串状态：A managed / B generated 互不影响', () => {
+    const userMarker = '# ===== 用户处理区域 ====='
+    const compA = writeComponentDatasetPipeline(
+      { id: 'card-a', type: 'table', title: 'A', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },
+      {
+        datasetInputs: [], scriptFilterBindings: [], parameters: [], executionPolicy: {},
+        script: `managed-a\n\n${userMarker}\nresult = 1`,
+        systemScript: { mode: 'managed', generatedCode: 'gen-a', managedCode: 'managed-a', generatedFingerprint: 'fa', userCode: 'result = 1' },
+      },
+    )
+    const compB = writeComponentDatasetPipeline(
+      { id: 'card-b', type: 'table', title: 'B', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },
+      {
+        datasetInputs: [], scriptFilterBindings: [], parameters: [], executionPolicy: {},
+        script: `gen-b\n\n${userMarker}\nresult = 2`,
+        systemScript: { mode: 'generated', generatedCode: 'gen-b', generatedFingerprint: 'fb', userCode: 'result = 2' },
+      },
+    )
+    hydratePanel(compA as never)
+    expect(state.pythonSystemState?.mode).toBe('managed')
+    expect(state.pythonSystem).toBe('managed-a')
+    hydratePanel(compB as never)
+    expect(state.pythonSystemState?.mode).toBe('generated')
+    expect(state.pythonSystem).toBe('gen-b')
+    expect(state.pythonSystem).not.toContain('managed-a')
+    hydratePanel(compA as never)
+    expect(state.pythonSystemState?.mode).toBe('managed')
+    expect(state.pythonSystem).toBe('managed-a')
   })
 })
