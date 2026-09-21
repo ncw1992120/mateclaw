@@ -531,6 +531,8 @@ git commit -m "feat: 支持跨数据集结构化筛选"
 
 ### Task 5: Runner 统一输出标准化与错误契约
 
+**状态：已完成**（test_result_contract 14/14 矩阵 + test_executor/test_dataset_sdk/test_runner_api 全量 43/43；TaskResponse.result 改为结构化 envelope dict；新增 OUTPUT_CONTRACT_ERROR 状态（结构化 stage/path/expected/actual/suggestion，资源类错误 OUTPUT_LIMIT/RESULT_LIMIT 优先级更高）；Parquet 引用只写 table.data.rows 且 outputRef 合并 schemaVersion/kind/columns/rowCount；scalar/message 永不走 Parquet。）
+
 **Files:**
 - Create: `mateclaw-python-runner/src/mateclaw/results.py`
 - Create: `mateclaw-python-runner/tests/test_result_contract.py`
@@ -545,7 +547,7 @@ git commit -m "feat: 支持跨数据集结构化筛选"
 - Consumes: 用户脚本全局变量 `result`。
 - Produces: `normalize_result(value, source_inputs=()) -> dict`；失败抛 `ResultContractError(path, expected, actual, suggestion)`，Runner 状态为 `OUTPUT_CONTRACT_ERROR`。
 
-- [ ] **Step 1: 写标准化失败测试矩阵**
+- [x] **Step 1: 写标准化失败测试矩阵**
 
 ```python
 def test_dataframe_normalizes_to_table_envelope():
@@ -594,7 +596,7 @@ def test_explicit_message_envelope_is_validated():
     assert envelope["data"]["message"] == "没有满足条件的数据"
 ```
 
-- [ ] **Step 2: 实现 `results.py`**
+- [x] **Step 2: 实现 `results.py`**
 
 类型规则固定为：
 
@@ -605,7 +607,7 @@ def test_explicit_message_envelope_is_validated():
 - datetime/date → ISO 8601；列类型从所有非空值推断，不能只看第一行；
 - meta 至少包含 `rowCount`、`truncated=false`、`sourceInputs`。
 
-- [ ] **Step 3: 改造 Executor，删除 `default=str`**
+- [x] **Step 3: 改造 Executor，删除 `default=str`**
 
 子进程包装代码改为：
 
@@ -621,7 +623,7 @@ except ResultContractError as exc:
 
 父进程检测契约错误文件，返回 `status=OUTPUT_CONTRACT_ERROR`、结构化 `error`，不伪装为 `SUCCEEDED`。
 
-- [ ] **Step 4: 更新 FastAPI 响应模型和 API 测试**
+- [x] **Step 4: 更新 FastAPI 响应模型和 API 测试**
 
 `TaskResponse.result` 为 `dict[str, Any] | None`。测试轮询后断言：
 
@@ -630,11 +632,11 @@ assert status["result"]["kind"] == "table"
 assert status["result"]["data"]["rows"] == [{"id": 1}]
 ```
 
-- [ ] **Step 5: 保持大结果 Parquet 路径的 envelope 元数据**
+- [x] **Step 5: 保持大结果 Parquet 路径的 envelope 元数据**
 
 写 ObjectRef 时只把 `table.data.rows` 写 Parquet；返回的 `outputRef` 同时包含 `schemaVersion/kind/columns/rowCount`，读取引用后可重建与内联结果一致的 table envelope。scalar/message 永不走 Parquet。
 
-- [ ] **Step 6: 运行 Runner 全量测试**
+- [x] **Step 6: 运行 Runner 全量测试**
 
 ```bash
 make dashboard-runner-test

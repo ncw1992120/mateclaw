@@ -29,13 +29,16 @@ class TaskExecutor:
             f.write("import json\nimport os\nfrom mateclaw.datasets import DatasetClient\n")
             f.write("datasets = DatasetClient(os.environ['MATECLAW_DATASET_ENDPOINT'], os.environ['MATECLAW_READ_TOKEN'], json.loads(os.environ.get('MATECLAW_TASK_PARAMETERS', '{}'))) if os.environ.get('MATECLAW_DATASET_ENDPOINT') and os.environ.get('MATECLAW_READ_TOKEN') else None\n")
             f.write("exec(compile(open('user_script.py', encoding='utf-8').read(), 'user_script.py', 'exec'))\n")
-            f.write("if 'result' in globals():\n")
-            f.write("    value = result\n")
-            f.write("    if hasattr(value, 'to_dicts'): value = value.to_dicts()\n")
-            f.write("    elif hasattr(value, 'to_dict'): value = value.to_dict(orient='records')\n")
-            f.write("    elif isinstance(value, dict): value = [value]\n")
-            f.write("    elif not isinstance(value, list): value = [{'value': value}]\n")
-            f.write("    with open('__mateclaw_result.json', 'w', encoding='utf-8') as output_file: json.dump(value, output_file, ensure_ascii=False, default=str)\n")
+            # 统一输出契约：result 标准化为 envelope；非法输出显式失败，不再 default=str 掩盖
+            f.write("from mateclaw.results import normalize_result, ResultContractError\n")
+            f.write("try:\n")
+            f.write("    envelope = normalize_result(globals().get('result'))\n")
+            f.write("    with open('__mateclaw_result.json', 'w', encoding='utf-8') as output_file:\n")
+            f.write("        json.dump(envelope, output_file, ensure_ascii=False, allow_nan=False)\n")
+            f.write("except ResultContractError as exc:\n")
+            f.write("    with open('__mateclaw_contract_error.json', 'w', encoding='utf-8') as error_file:\n")
+            f.write("        json.dump(exc.as_dict(), error_file, ensure_ascii=False)\n")
+            f.write("    raise\n")
         # Do not copy arbitrary Runner/container secrets into user code. The
         # child only needs a minimal interpreter environment plus the task-scoped
         # SDK variables supplied by the control plane.
@@ -54,23 +57,53 @@ class TaskExecutor:
             result_json = None
             output_ref = None
             result_path = os.path.join(directory, "__mateclaw_result.json")
+            contract_error_path = os.path.join(directory, "__mateclaw_contract_error.json")
+            contract_error = None
+            if os.path.exists(contract_error_path):
+                with open(contract_error_path, "r", encoding="utf-8") as error_file:
+                    contract_error = json.loads(error_file.read())
             if os.path.exists(result_path):
                 result_size = os.path.getsize(result_path)
                 encoded_result = None
                 if result_size <= 100 * 1024 * 1024:
                     with open(result_path, "rb") as result_file:
                         encoded_result = result_file.read()
-                if encoded_result is not None and len(encoded_result) <= max_result:
-                    result_json = encoded_result.decode("utf-8")
-                elif encoded_result is not None and result_upload_endpoint and result_upload_token:
-                    parquet_path = os.path.join(directory, "__mateclaw_result.parquet")
-                    if self._write_parquet(encoded_result, parquet_path):
-                        output_ref = self._upload_result(parquet_path, result_upload_endpoint, result_upload_token)
-                    else:
-                        output_ref = None
+                envelope = json.loads(encoded_result.decode("utf-8")) if encoded_result is not None else None
+                if envelope is not None and len(encoded_result) <= max_result:
+                    result_json = envelope
+                elif envelope is not None and result_upload_endpoint and result_upload_token:
+                    # 只有 table 结果走 Parquet 引用；scalar/message 超限即 RESULT_LIMIT
+                    if envelope.get("kind") == "table":
+                        parquet_path = os.path.join(directory, "__mateclaw_result.parquet")
+                        if self._write_parquet(envelope, parquet_path):
+                            output_ref = self._upload_result(parquet_path, result_upload_endpoint, result_upload_token)
+                            if output_ref is not None:
+                                # 引用结果必须携带重建 envelope 所需元数据
+                                output_ref = {**output_ref,
+                                              "schemaVersion": envelope.get("schemaVersion"),
+                                              "kind": envelope.get("kind"),
+                                              "columns": envelope["data"]["columns"],
+                                              "rowCount": envelope["meta"]["rowCount"]}
+                        else:
+                            output_ref = None
             result_too_large = os.path.exists(result_path) and result_json is None and output_ref is None
-            output_status = "OUTPUT_LIMIT" if len(out.encode()) > max_stdout else ("RESULT_LIMIT" if result_too_large else ("RESULT_REF" if output_ref else ("SUCCEEDED" if process.returncode == 0 else "FAILED")))
-            return {"status": output_status, "output": out[:max_stdout], "result": result_json, "outputRef": output_ref, "error": err[:10_000], "returncode": process.returncode}
+            # 状态优先级：资源类错误（stdout 超限）优先于输出契约错误，避免掩盖真正的失败原因
+            if len(out.encode()) > max_stdout:
+                output_status = "OUTPUT_LIMIT"
+            elif result_too_large:
+                output_status = "RESULT_LIMIT"
+            elif output_ref is not None:
+                output_status = "RESULT_REF"
+            else:
+                output_status = "SUCCEEDED" if process.returncode == 0 else "FAILED"
+            error_value = err[:10_000]
+            if output_status in {"SUCCEEDED", "FAILED"} and contract_error is not None:
+                # 输出不合法：结构化契约错误 + 独立状态，绝不伪装成 SUCCEEDED
+                # （资源类错误如 OUTPUT_LIMIT/RESULT_LIMIT 优先级更高，保留原状态）
+                output_status = "OUTPUT_CONTRACT_ERROR"
+                result_json = None
+                error_value = contract_error
+            return {"status": output_status, "output": out[:max_stdout], "result": result_json, "outputRef": output_ref, "error": error_value, "returncode": process.returncode}
         except subprocess.TimeoutExpired:
             self.cancel(task_id)
             return {"status": "TIMEOUT", "output": "", "error": "task timed out", "returncode": -signal.SIGKILL}
@@ -91,14 +124,12 @@ class TaskExecutor:
         except Exception:
             return None
 
-    def _write_parquet(self, encoded_result: bytes, path: str) -> bool:
+    def _write_parquet(self, envelope: dict, path: str) -> bool:
         try:
             import pyarrow as pa
             import pyarrow.parquet as pq
-            value = json.loads(encoded_result.decode("utf-8"))
-            if not isinstance(value, list):
-                value = [{"value": value}]
-            pq.write_table(pa.Table.from_pylist(value), path, compression="snappy")
+            rows = envelope.get("data", {}).get("rows", [])
+            pq.write_table(pa.Table.from_pylist(rows), path, compression="snappy")
             return True
         except Exception:
             return False

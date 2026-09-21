@@ -12,7 +12,7 @@ def test_health_and_rejects_requirements():
     assert client.post("/v1/tasks", json=payload).status_code == 422
 
 def test_task_runs_and_reports_status():
-    response = client.post("/v1/tasks", json={"taskId":"t2","script":"print('ok', type(datasets).__name__)","datasetReadEndpoint":"http://dataagent/read","readToken":"secret"})
+    response = client.post("/v1/tasks", json={"taskId":"t2","script":"print('ok', type(datasets).__name__)\nresult = 'done'","datasetReadEndpoint":"http://dataagent/read","readToken":"secret"})
     assert response.status_code == 202
     import time
     for _ in range(100):
@@ -39,7 +39,7 @@ def test_task_returns_script_result_separately():
         status = client.get("/v1/tasks/t-result").json()
         if status["status"] != "RUNNING": break
         time.sleep(.02)
-    assert status["status"] == "SUCCEEDED" and status["result"] == '[{"id": 1}]'
+    assert status["status"] == "SUCCEEDED" and status["result"]["kind"] == "table" and status["result"]["data"]["rows"] == [{"id": 1}]
 
 def test_task_parameters_reach_injected_dataset_client():
     response = client.post("/v1/tasks", json={
@@ -56,7 +56,7 @@ def test_task_parameters_reach_injected_dataset_client():
         if status["status"] != "RUNNING": break
         time.sleep(.02)
     assert status["status"] == "SUCCEEDED"
-    assert status["result"] == '[{"region": "east"}]'
+    assert status["status"] == "SUCCEEDED" and status["result"]["data"]["rows"] == [{"region": "east"}]
 
 def test_executor_crash_is_terminal_failure(monkeypatch):
     def crash(*args, **kwargs):

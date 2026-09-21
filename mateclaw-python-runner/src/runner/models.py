@@ -44,7 +44,8 @@ class TaskResponse(BaseModel):
     taskId: str
     status: str
     output: str | None = None
-    result: str | None = None
+    # 结构化 envelope（table/scalar/message）；OUTPUT_CONTRACT_ERROR 时为 None
+    result: dict[str, Any] | None = None
     outputRef: dict[str, Any] | None = None
     stats: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
