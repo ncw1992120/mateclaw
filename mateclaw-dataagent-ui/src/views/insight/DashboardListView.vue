@@ -374,7 +374,7 @@ function canModifyDashboard(dashboard: InsightDashboard): boolean {
   return canModifyResource((dashboard as InsightDashboard & { ownerId?: number | string | null }).ownerId)
 }
 
-type ViewMode = 'list' | 'editor' | 'preview'
+type ViewMode = 'list' | 'preview'
 const mode = usePersistedState<ViewMode>('mc-insight-view-mode', 'list')
 const currentDashboardId = usePersistedState<string>('mc-insight-dashboard-id', '')
 
@@ -440,8 +440,8 @@ onMounted(() => {
   store.fetchDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
-  // 刷新后恢复编辑/预览模式时，需要加载对应仪表盘数据
-  if (mode.value !== 'list' && currentDashboardId.value) {
+  // 刷新后恢复预览模式时，需要加载对应仪表盘数据；编辑器由正式路由负责加载。
+  if (mode.value === 'preview' && currentDashboardId.value) {
     store.selectDashboard(currentDashboardId.value).catch(() => {
       // 仪表盘可能已被删除，回退到列表
       mode.value = 'list'
@@ -676,7 +676,7 @@ function getDashboardIconType(dashboard: InsightDashboard): 'bar' | 'line' | 'pi
   return 'line'
 }
 
-/** 返回列表 */
+/** 返回列表（预览页使用） */
 function handleBackToList(): void {
   mode.value = 'list'
   currentDashboardId.value = ''
