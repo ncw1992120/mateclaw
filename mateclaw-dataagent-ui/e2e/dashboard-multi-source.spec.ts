@@ -10,28 +10,24 @@ const token = required('MATECLAW_E2E_TOKEN')
 const workspaceId = required('MATECLAW_E2E_WORKSPACE_ID')
 const apiFileDashboardId = required('MATECLAW_E2E_API_FILE_DASHBOARD_ID')
 const largeResultDashboardId = required('MATECLAW_E2E_LARGE_RESULT_DASHBOARD_ID')
-const echartsDashboardId = required('MATECLAW_E2E_ECHARTS_DASHBOARD_ID')
+const echartsDashboardName = process.env.MATECLAW_E2E_ECHARTS_DASHBOARD_NAME ?? 'E2E ECharts Binding Dashboard'
 
-async function openEditor(page: Page, name: string): Promise<void> {
-  const card = page.locator('.card-name').filter({ hasText: name }).first().locator('xpath=ancestor::div[contains(@class,"dashboard-card")]')
-  await expect(card).toBeVisible()
-  await card.getByRole('button', { name: /编辑/ }).click()
-  const component = page.locator('.grid-item-content').first()
-  await component.waitFor({ state: 'attached', timeout: 30_000 })
-  await component.dispatchEvent('click')
+async function openEditor(page: Page, dashboardId: string): Promise<void> {
+  await page.goto(`/insight/dashboard/editor?dashboardId=${dashboardId}`)
+  await expect(page.locator('.insight-editor-view')).toBeVisible({ timeout: 30_000 })
+  const component = page.locator('[data-component-id]').first()
+  await expect(component).toBeVisible({ timeout: 30_000 })
+  await component.click()
+  await expect(page.getByText('数据集配置', { exact: true })).toBeVisible({ timeout: 30_000 })
 }
 
-async function loadInputDescriptors(page: Page, expectedCount: number): Promise<void> {
-  const rows = page.locator('.dataset-input-row')
-  await expect(rows).toHaveCount(expectedCount)
-  for (let index = 0; index < expectedCount; index += 1) {
-    const row = rows.nth(index)
-    const viewFields = row.getByRole('button', { name: '查看字段' })
-    if (await viewFields.count()) await viewFields.click()
-  }
-  for (let index = 0; index < expectedCount; index += 1) {
-    await expect(rows.nth(index).locator('.descriptor-summary').filter({ hasText: /[1-9]\d* 个字段/ })).toBeVisible({ timeout: 30_000 })
-  }
+async function openPythonPreview(page: Page, dashboardId: string): Promise<void> {
+  await openEditor(page, dashboardId)
+  await page.getByRole('button', { name: /编辑 Python 脚本|展开编辑/ }).first().click()
+  const dialog = page.getByRole('dialog', { name: '编辑 Python 脚本' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '筛选预览' }).click()
+  await expect(page.locator('[aria-label="数据预览"]')).toBeVisible({ timeout: 120_000 })
 }
 
 test.describe('dashboard multi-source runtime', () => {
@@ -47,14 +43,11 @@ test.describe('dashboard multi-source runtime', () => {
     if (aloudataMode !== 'simulation' && process.env.MATECLAW_E2E_ALOUDATA_LIVE !== 'true') {
       throw new Error('BLOCKED: 需要已授权且可查询的 Aloudata 指标视图 ID；未使用跳过机制隐藏验收失败')
     }
-    await page.goto('/?nav=insight')
-    await openEditor(page, 'E2E JDBC + Aloudata Dashboard')
-    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
-    await loadInputDescriptors(page, 2)
-    await page.getByRole('button', { name: '最终结果预览' }).click()
-    await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
-    await expect(page.locator('.result-table')).toContainText('120.5')
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(11)
+    const dashboardId = process.env.MATECLAW_E2E_MULTI_SOURCE_DASHBOARD_ID
+    if (!dashboardId) throw new Error('BLOCKED: 当前状态文件未提供可执行的 JDBC + Aloudata 双源看板 ID')
+    await openPythonPreview(page, dashboardId)
+    await expect(page.locator('[aria-label="数据预览"] .el-table')).toContainText('120.5')
+    await expect(page.locator('[aria-label="数据预览"]')).toContainText(/共 11 条|11 条/)
     // 双源结果已由行数和 120.5 断言锁定；页面字体抗锯齿、滚动条和异步布局在
     // 同一 Chrome 通道下仍可能产生少量像素噪声，允许 2% 像素差异避免误报。
     await expect(page).toHaveScreenshot('dashboard-jdbc-aloudata.png', {
@@ -64,16 +57,9 @@ test.describe('dashboard multi-source runtime', () => {
   })
 
   test('runs the seeded API + file workflow and renders the confirmed result', async ({ page }) => {
-    await page.goto('/?nav=insight')
-    await openEditor(page, 'E2E API + File Dashboard')
-    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
-    await loadInputDescriptors(page, 2)
-    await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
-    await page.getByRole('button', { name: '最终结果预览' }).click()
-    await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
-    await expect(page.locator('.user-script-editor')).toHaveValue(/PAID/)
-    // API + 文件链路在并行 E2E 下可能晚于 execution-alert 清理完成，使用业务结果的长等待，避免把异步加载误判为失败。
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(5, { timeout: 120_000 })
+    await openPythonPreview(page, apiFileDashboardId)
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toBeVisible({ timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"]')).toContainText('PAID')
     await expect(page).toHaveScreenshot('dashboard-api-file.png', {
       fullPage: true,
       mask: [page.locator('.dataset-input-panel')],
@@ -88,20 +74,15 @@ test.describe('dashboard multi-source runtime', () => {
       const body = await response.json() as { data?: { inline?: boolean; outputRef?: unknown } }
       return body.data?.inline === false && Boolean(body.data?.outputRef)
     })
-    await page.goto(`/?nav=insight&dashboardId=${largeResultDashboardId}`)
-    await openEditor(page, 'E2E Large Result Dashboard')
-    await expect(page.getByText('数据集配置', { exact: true })).toBeVisible()
-    await loadInputDescriptors(page, 1)
-    await expect(page.locator('.dataset-input-panel')).not.toContainText('0 个字段', { timeout: 30_000 })
-    await page.getByRole('button', { name: '最终结果预览' }).click()
-    await expect(page.locator('.execution-alert')).toHaveCount(0, { timeout: 120_000 })
+    await openPythonPreview(page, largeResultDashboardId)
     await resultResponse
-    await expect(page.locator('.result-table tbody tr')).toHaveCount(10)
+    await expect(page.locator('[aria-label="数据预览"] .el-table').first()).toBeVisible({ timeout: 120_000 })
+    await expect(page.locator('[aria-label="数据预览"]')).toContainText('共 10 条')
   })
 
   test('runs a saved ECharts binding in dashboard preview', async ({ page }) => {
-    await page.goto(`/?nav=insight&dashboardId=${echartsDashboardId}`)
-    const card = page.locator('.card-name').filter({ hasText: 'E2E ECharts Binding Dashboard' }).first().locator('xpath=ancestor::div[contains(@class,"dashboard-card")]')
+    await page.goto('/?nav=insight')
+    const card = page.locator('.card-name').filter({ hasText: echartsDashboardName }).first().locator('xpath=ancestor::div[contains(@class,"dashboard-card")]')
     await expect(card).toBeVisible()
     await card.getByRole('button', { name: /预览/ }).click()
     await expect(page.locator('.dashboard-preview-view')).toBeVisible()

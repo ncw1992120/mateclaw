@@ -1233,3 +1233,9 @@ git diff --check
 - 新增 `DashboardExecutionServiceTest` 的组件级策略回退断言；本机 JDK 21.0.12 + Maven 3.9.16 定向测试为 6/6 PASS。
 - 旧错误兼容 E2E 已按当前“编辑 Python 脚本 → 筛选预览 → 数据预览”路径迁移：真实 Chrome 4/4 PASS（脚本异常、兼容性截图、超时、stdout 超限）；取消用例标记为 SKIP，因为当前 Python 编辑器没有取消按钮，取消契约由 Runner/DataAgent 集成层承担。兼容性截图基线已在视觉检查确认当前编辑器布局后更新。
 - 旧 `dashboard-multi-source.spec.ts` 仍使用已废弃的仪表盘列表卡片和 `.dataset-input-row` 交互，且当前状态文件没有对应双源看板，Chrome 复跑为 0/4；该结果记录为旧 E2E 夹具/选择器阻塞，不作为当前 Python 主链路失败证据，后续需按现行编辑器入口重写。
+
+### 后续补充进度（2026-09-22，多源 E2E 现行入口迁移）
+
+- `dashboard-multi-source.spec.ts` 前三类可执行用例已迁移到正式编辑器入口：通过 dashboard ID 进入编辑器，使用“编辑 Python 脚本 → 筛选预览 → 数据预览”，移除旧的仪表盘列表卡片、`最终结果预览`、`.result-table` 和 `.dataset-input-row` 依赖。
+- 本地真实 Google Chrome 复跑：API + File 1/1、ObjectRef 大结果 1/1、保存后的 ECharts 展示态 1/1，共 3/3 PASS（15.6s）；ECharts 夹具同时修复了脚本换行必须写入真实换行符的问题，并使用本地 HTTP 数据集验证真实 canvas。
+- JDBC + Aloudata 用例仍要求已授权的 Aloudata 双源看板 ID；当前本地状态文件没有该资源，继续以显式 `BLOCKED` 失败保护，不改成跳过或伪造结果。Task 8 仍保持“本地可执行门禁完成、外部 Aloudata/Docker 集成门禁未完成”。
