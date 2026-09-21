@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "test:e2e:cdp": "node e2e/cdp-dashboard-visual-check.mjs",
     "test:e2e:cdp:editor-ux": "node e2e/cdp-dashboard-editor-ux-check.mjs",
-    "test:e2e:cdp:python": "node e2e/cdp-python-pipeline-visual-check.mjs"
+    "test:e2e:cdp:python": "node e2e/cdp-python-pipeline-visual-check.mjs",
+    "test:e2e:cdp:theme": "node e2e/cdp-dashboard-theme-visual-check.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

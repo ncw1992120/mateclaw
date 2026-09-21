@@ -341,12 +341,12 @@ interface ThemeValidationError {
 
 **Files:** 新建 `mateclaw-dataagent-ui/e2e/dashboard-theme.spec.ts`、`mateclaw-dataagent-ui/e2e/cdp-dashboard-theme-visual-check.mjs`；必要时给 `package.json` 加 `test:e2e:cdp:theme` 脚本；实施时新建同目录验收记录文档。
 
-- [ ] 编写 E2E：从 `http://127.0.0.1:5174/?nav=insight` 的列表进入真实“策略解读”编辑页；切预设/改一项指标/保存/预览/刷新/复制；断言 Schema 与 computed style、图标及图表色板，不以 toast 作为成功证据。测试使用独立测试仪表盘或事先备份并恢复“策略解读” Schema，避免污染用户配置。
-- [ ] 在测试数据和本地 Java 21 后端就绪时运行 `pnpm exec playwright test e2e/dashboard-theme.spec.ts`，期望全部通过。接口错误、空数据与筛选失败不能伪装成视觉通过。
-- [ ] CDP 脚本只调用 `chromium.connectOverCDP('http://127.0.0.1:9222')`；检查 `/json/version` 确认连到 Google Chrome；只创建/关闭自身 Page，不关闭用户浏览器、不修改用户现有 Tab；登录复用浏览器既有会话，不把 Cookie/JWT/密码写入截图目录。
-- [ ] 采集 light/warm/eye-care/dark × 10 套预设的代表矩阵，以及 375/768/1024/1440 宽度、默认图标/自定义图标、图表/组合卡片、主题抽屉、保存后预览、焦点态与对比度。记录同一候选 SHA 的截图、AX 快照摘要、控制台 error、失败请求、computed style 与 ECharts option.color；视觉审阅确认无截断、低对比度、图标丢失及全站污染。
-- [ ] 产出 `docs/plans/2026-09-21-insight-dashboard-visual-theme-acceptance.md`：写明候选 SHA、Chrome 版本与 CDP 端点、数据准备、场景/截图路径、单测/E2E 命令和结果。若 9222 不可用，记 `BLOCKED`，不能用 Playwright 新开的浏览器冒充真实验收。
-- [ ] 修正验收发现的缺陷后重新跑受影响测试、构建和 CDP 场景；精确暂存并提交 `test(洞察): 补齐仪表盘主题全链路与视觉验收`。
+- [x] 编写 E2E 与 CDP 验收脚本：从 `http://127.0.0.1:5174/?nav=insight` 进入真实“策略解读”编辑页，覆盖主题面板、预设、视口矩阵、AX 和错误采集；Playwright 保存/预览回归脚本已补齐，但运行前仍需独立测试副本或隔离数据。
+- [x] 在本地 Java 21 后端和真实 Chrome CDP 环境下复核产品流；独立 Playwright 浏览器回归为 `BLOCKED`（本机缺少 Playwright Chromium 可执行文件，未擅自下载）。接口错误、空数据与筛选失败均未伪装成视觉通过。
+- [x] CDP 脚本使用 `chromium.connectOverCDP('http://127.0.0.1:9222')`，只创建/关闭自身 Page；已通过 `/json/version` 确认 Google Chrome 153，未写入 Cookie/JWT/密码。
+- [x] 已采集 10 套预设及 375/768/1024/1440 视口，共 16 张截图、AX 摘要、computed style、控制台错误和失败请求；样本“策略解读”当前无可渲染图表数据，因此图表/组合卡片视觉项标记为样本限制，不扩大结论。
+- [x] 产出 `docs/plans/2026-09-21-insight-dashboard-visual-theme-acceptance.md`，记录候选 SHA、Chrome/CDP、截图、单测、构建和阻塞项。
+- [x] 定向修正验收发现的脚本格式问题并复跑 `pnpm exec vitest run`、`pnpm build` 和 CDP 场景；精确暂存并提交 `test(洞察): 补齐仪表盘主题全链路与视觉验收`。
 
 ## 4. 测试工程师用例与预期结果
 
@@ -419,12 +419,12 @@ interface ThemeValidationError {
 
 | 任务 | 状态 | 证据 |
 | --- | --- | --- |
-| Task 1 主题模型、预设和旧 Schema 兼容 | 已完成 | 前端定向测试 11/11；`pnpm build` 通过；本地提交后推送记录待补 |
+| Task 1 主题模型、预设和旧 Schema 兼容 | 已完成 | 前端定向测试 11/11；`pnpm build` 通过；提交 `eb88c1ce` 已推送 |
 | Task 2 图标注册表与 KPI 视觉意图 | 已完成 | 定向测试 19/19；`pnpm build` 通过；图标网格支持 Tab/方向键/Enter/Space/Esc |
 | Task 3 后端保存、复制与 round-trip | 已完成 | Java 21 + Maven 3.9.16 定向测试 8/8；主题保存前校验、DTO fixture round-trip 通过 |
 | Task 4 主题配置面板与编辑器接入 | 已完成 | 面板定向测试 2/2；`pnpm build` 通过；编辑器主题草稿/确认切换/画布 KPI 透传已接入 |
 | Task 5 图表、组合卡片与预览消费主题 | 已完成 | 定向测试 13/13；`pnpm build` 通过；编辑/预览 Canvas 主题变量与 ECharts 色板已接入 |
-| Task 6 E2E、CDP 9222 视觉验收 | 未开始 | — |
+| Task 6 E2E、CDP 9222 视觉验收 | 部分完成 / BLOCKED | CDP 9222：16 张截图、4 个视口、10 套预设、无控制台错误/失败请求/横向溢出；全量 Vitest 302/302；独立 Playwright E2E 因缺少本地浏览器二进制 BLOCKED；详见验收记录 |
 
 ## 参考方案
 
