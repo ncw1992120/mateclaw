@@ -17,9 +17,12 @@ JDBC_DATASOURCE_ID="${MATECLAW_E2E_JDBC_DATASOURCE_ID:-}"
 JDBC_DATASET_ID="${MATECLAW_E2E_JDBC_DATASET_ID:-}"
 HTTP_ENDPOINT="${MATECLAW_E2E_HTTP_ENDPOINT:-https://e2e-http:8443/orders}"
 HTTP_ALLOWED_HOST="${MATECLAW_E2E_HTTP_ALLOWED_HOST:-e2e-http}"
+HTTP_HOST="${MATECLAW_E2E_HTTP_HOST:-e2e-http}"
+HTTP_PORT="${MATECLAW_E2E_HTTP_PORT:-8443}"
 HTTP_DATASOURCE_ID="${MATECLAW_E2E_HTTP_DATASOURCE_ID:-}"
 HTTP_DATASET_ID="${MATECLAW_E2E_HTTP_DATASET_ID:-}"
 FILE_DATASET_ID="${MATECLAW_E2E_FILE_DATASET_ID:-}"
+FILE_DATASET_FALLBACK_ID="${MATECLAW_E2E_FILE_DATASET_FALLBACK_ID:-}"
 AUTH_HEADER="Authorization: Bearer ${MATECLAW_E2E_TOKEN:-}"
 WORKSPACE_HEADER="X-Workspace-Id: ${MATECLAW_E2E_WORKSPACE_ID}"
 
@@ -112,7 +115,8 @@ else
 http_ds=$(api POST /v1/datasources "$(jq -cn \
   --arg connectionParams "$http_connection_params" \
   --arg suffix "$RUN_SUFFIX" \
-  '{name:("E2E HTTP Orders " + $suffix),description:"dashboard MVP E2E",sourceType:"api",host:"e2e-http",port:8443,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
+  --arg host "$HTTP_HOST" --argjson port "$HTTP_PORT" \
+  '{name:("E2E HTTP Orders " + $suffix),description:"dashboard MVP E2E",sourceType:"api",host:$host,port:$port,enabled:true,metaShared:true,connectionParams:$connectionParams}')" | id_from)
 http_dataset=$(api POST /v1/datasets "$(jq -cn --arg ds "$http_ds" --arg suffix "$RUN_SUFFIX" \
   '{name:("E2E HTTP Orders Dataset " + $suffix),description:"dashboard MVP HTTP source",sourceDefinition:{sourceType:"HTTP_API",datasourceId:$ds,apiDefinitionId:"orders",schema:[
     {name:"id",title:"订单 ID",dataType:"INTEGER",role:"dimension"},
@@ -126,6 +130,10 @@ if [[ -n "$FILE_DATASET_ID" ]]; then
   file_object_id=""
   file_dataset="$FILE_DATASET_ID"
   echo "Using existing file dataset: $file_dataset"
+elif [[ -n "$FILE_DATASET_FALLBACK_ID" ]]; then
+  file_object_id=""
+  file_dataset="$FILE_DATASET_FALLBACK_ID"
+  echo "Using fallback dataset for file-shaped E2E input: $file_dataset"
 else
 file_ref=$(curl --fail-with-body --silent --show-error -X POST \
   -H "$AUTH_HEADER" -H "$WORKSPACE_HEADER" \

@@ -332,6 +332,26 @@ def handle_dimension_detail(query, body, headers):
     return envelope(None)
 
 
+def handle_orders(query, body, headers):
+    """订单 HTTP 数据集 fixture，支持 E2E 查询中的 status 等值过滤。"""
+    rows = [
+        {"id": 1001, "customer_id": 101, "region": "east", "status": "PAID", "amount": 120.50},
+        {"id": 1002, "customer_id": 102, "region": "west", "status": "PAID", "amount": 80.00},
+        {"id": 1003, "customer_id": 101, "region": "east", "status": "CANCELLED", "amount": 30.00},
+        {"id": 1004, "customer_id": 103, "region": "south", "status": "PAID", "amount": 210.00},
+        {"id": 1005, "customer_id": 999, "region": "unknown", "status": "PENDING", "amount": 10.00},
+        {"id": 1006, "customer_id": 101, "region": "east", "status": "SHIPPED", "amount": 45.75},
+        {"id": 1007, "customer_id": 102, "region": "west", "status": "CANCELLED", "amount": 66.20},
+        {"id": 1008, "customer_id": 103, "region": "south", "status": "REFUNDED", "amount": 19.99},
+        {"id": 1009, "customer_id": 999, "region": "unknown", "status": "FAILED", "amount": 5.50},
+        {"id": 1010, "customer_id": 101, "region": "east", "status": "PROCESSING", "amount": 300.00},
+    ]
+    status = (query.get("status") or [None])[0]
+    if status:
+        rows = [row for row in rows if row["status"] == status]
+    return {"data": rows}
+
+
 ROUTES = {
     ("GET", f"{ANYMETRICS}/analysisview/treeList"): handle_tree_list,
     ("GET", f"{ANYMETRICS}/analysisview/list"): handle_view_list,
@@ -344,6 +364,7 @@ ROUTES = {
     ("GET", f"{ANYMETRICS}/category/list"): handle_category_list,
     ("GET", f"{SEMANTIC}/analysisView/query"): handle_analysis_view_query,
     ("POST", f"{SEMANTIC}/metrics/query"): handle_metrics_query,
+    ("GET", "/orders"): handle_orders,
 }
 
 
