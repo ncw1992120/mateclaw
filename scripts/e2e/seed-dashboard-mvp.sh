@@ -129,7 +129,7 @@ echarts_dashboard_schema() {
   local dataset_id="$1" script="$2"
   jq -cn --arg dataset "$dataset_id" --arg script "$script" '{
     version:"1.1",
-    pages:[{id:"e2e-chart-page",name:"E2E Chart",components:[{id:"e2e-chart",type:"chart",title:"E2E Script Chart",position:{x:0,y:0,w:12,h:6},renderType:"echarts",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
+    pages:[{id:"e2e-chart-page",name:"E2E Chart",components:[{id:"e2e-chart",type:"chart",title:"E2E Script Chart",position:{x:0,y:0,w:12,h:6},renderType:"echarts",chartType:"line",dataSource:{datasourceId:"",metrics:[],dimensions:[],filters:[],limit:100},config:{dimensionField:"status",metricFields:["amount"],datasetPipeline:{datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],script:$script,parameters:[],scriptFilterBindings:[]}}}]}],
     datasetInputs:[{datasetId:$dataset,inputName:"jdbc_orders"}],
     script:$script,
     parameters:[],

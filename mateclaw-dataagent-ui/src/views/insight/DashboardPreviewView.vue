@@ -168,7 +168,7 @@ import { useDashboardFilterContext } from '@/composables/useDashboardFilterConte
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
-import { rowsToComponentData } from '@/utils/dataset-result'
+import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { restoreResultSetData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 
@@ -403,7 +403,7 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
     )
     const executionId = (created as unknown as { executionId?: string }).executionId
     if (!executionId) throw new Error('未获取到脚本执行 ID')
-    let rows: Record<string, unknown>[] = []
+    let resultEnvelope: unknown
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
         status?: string
@@ -411,14 +411,12 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
         error?: string
       }
       if (status.status === 'SUCCEEDED') {
-        const parsed = status.result ? JSON.parse(status.result) : []
-        rows = Array.isArray(parsed) ? parsed.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object') : []
+        resultEnvelope = status.result ? JSON.parse(status.result) : undefined
         break
       }
       if (status.status === 'RESULT_REF') {
         const result = await insightDashboardApi.getExecutionResult(executionId)
-        const value = (result as unknown as { rows?: unknown }).rows
-        rows = Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object') : []
+        resultEnvelope = (result as unknown as { envelope?: unknown }).envelope
         break
       }
       if (status.status && status.status !== 'RUNNING') {
@@ -429,7 +427,30 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
     for (const binding of schema.scriptBindings) {
       const component = schema.pages.flatMap((page) => page.components).find((item) => item.id === binding.componentId)
       if (!component) continue
-      componentDataMap.value[binding.componentId] = rowsToComponentData(binding.componentId, rows, binding.renderType)
+      const envelope = parseScriptResultEnvelope(resultEnvelope)
+      const adapted = resultEnvelopeToComponentData({
+        id: component.id,
+        type: component.type,
+        chartType: component.chartType,
+        config: component.config,
+      }, envelope)
+      if (adapted.state === 'message') {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, error: adapted.message }
+      } else if (adapted.state === 'empty') {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
+      } else if (binding.renderType === 'echarts') {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', option: adapted.option }
+      } else if (binding.renderType === 'kpi') {
+        const value = adapted.value
+        componentDataMap.value[binding.componentId] = {
+          componentId: binding.componentId,
+          renderType: 'kpi',
+          kpi: value === undefined ? undefined : { fieldKey: 'value', name: '值', value: String(value) },
+          kpiList: value === undefined ? [] : [{ fieldKey: 'value', name: '值', value: String(value) }],
+        }
+      } else {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', table: adapted.table }
+      }
     }
   } catch (error: any) {
     ElMessage.warning(error?.message || '脚本结果加载失败')

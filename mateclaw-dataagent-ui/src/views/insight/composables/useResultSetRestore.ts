@@ -15,6 +15,7 @@ import type {
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { rowsToComponentData, type KpiProjectionField } from '@/utils/dataset-result'
+import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { draftRequestForDataset } from '../components/card-attribute/useInsight'
 import { inputToDatasetConfig } from '../components/card-attribute/useCardAttributeBridge'
 import { previewDatasetDraft } from '../components/card-attribute/useInsightBackend'
@@ -52,8 +53,9 @@ export async function fetchResultSetRows(
   meta: ComponentResultSet,
 ): Promise<Record<string, unknown>[] | null> {
   if (meta.source === 'script' && meta.executionId) {
-    const res = await insightDashboardApi.getExecutionResult(meta.executionId) as { rows?: unknown }
-    return Array.isArray(res?.rows) ? (res.rows as Record<string, unknown>[]) : []
+    const res = await insightDashboardApi.getExecutionResult(meta.executionId) as { envelope?: unknown }
+    const envelope = parseScriptResultEnvelope(res?.envelope)
+    return envelope.kind === 'table' ? envelope.data.rows : []
   }
   const input = pipeline.datasetInputs?.[0]
   if (!input) return null
@@ -61,6 +63,43 @@ export async function fetchResultSetRows(
   if (!req) return null
   const batch = await previewDatasetDraft(req)
   return (batch.rows as Record<string, unknown>[] | null) ?? []
+}
+
+/** 统一执行结果 → 现有画布数据契约，避免展示态重新猜测行列。 */
+function executionEnvelopeToComponentData(
+  component: InsightComponent,
+  envelopeValue: unknown,
+): InsightComponentData {
+  const envelope = parseScriptResultEnvelope(envelopeValue)
+  const result = resultEnvelopeToComponentData({
+    id: component.id,
+    type: component.type,
+    chartType: component.chartType,
+    config: component.config,
+  }, envelope)
+  const renderType = renderTypeOf(component)
+  if (result.state === 'message') {
+    return { componentId: component.id, renderType, error: result.message }
+  }
+  if (result.state === 'empty') {
+    return {
+      componentId: component.id,
+      renderType,
+      ...(renderType === 'table' ? { table: { columns: result.columns.map((column) => column.name), rows: [] } } : {}),
+    }
+  }
+  if (renderType === 'echarts') return { componentId: component.id, renderType, option: result.option }
+  if (renderType === 'kpi') {
+    const value = result.value
+    const fieldKey = component.config?.valueField as string | undefined
+    const kpiList = (result.kpiList ?? (value === undefined ? [] : [{ name: '值', value }])).map((item, index) => ({
+      fieldKey: fieldKey ?? `value_${index}`,
+      name: item.name,
+      value: String(item.value),
+    }))
+    return { componentId: component.id, renderType, kpi: kpiList[0], kpiList }
+  }
+  return { componentId: component.id, renderType, table: result.table }
 }
 
 /**
@@ -78,6 +117,11 @@ export async function restoreResultSetData(
       const pipeline = readComponentDatasetPipeline(component)
       const meta = pipeline?.resultSet
       if (!pipeline || !meta || meta.status !== 'ready') return
+      if (meta.source === 'script' && meta.executionId) {
+        const result = await insightDashboardApi.getExecutionResult(meta.executionId) as { envelope?: unknown }
+        out[component.id] = executionEnvelopeToComponentData(component, result.envelope)
+        return
+      }
       const rows = await fetchResultSetRows(pipeline, meta)
       if (!rows) return
       out[component.id] = toComponentData(component, rows)

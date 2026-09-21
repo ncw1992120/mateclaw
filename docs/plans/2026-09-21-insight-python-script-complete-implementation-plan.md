@@ -766,7 +766,7 @@ git commit -m "feat: 校验并持久化脚本标准结果"
 
 ### Task 7: 前端统一结果解析、三层预览与组件渲染
 
-**状态：已完成（核心）**（script-result.spec 9/9：chart 按组件配置映射维度/指标、kpi 接受 scalar 与聚合、message/空 table 独立状态、OUTPUT_CONTRACT_ERROR 格式化；parseScriptResultEnvelope 严格拒绝未知版本/kind/列类型；getExecutionResult 类型化为 {executionId,status,envelope,inline,outputRef?}；runComponentPreview 轮询终态后走统一解析并写回结果集（commitResultSet/failResultSet）；PreviewDialog 已有四 Tab（数据预览/字段结构/执行信息/处理日志）；前端全量 46 文件 264/264、vue-tsc 0 错误、vite build 通过。**遗留**：dataset-result.ts 的 echarts 猜测路径仍被旧 scriptBindings 渲染使用，图表显式映射的全面切换与 Task 8 E2E 一致性用例合并验证。）
+**状态：已完成（核心）**（script-result.spec 9/9：chart 按组件配置映射维度/指标、kpi 接受 scalar 与聚合、message/空 table 独立状态、OUTPUT_CONTRACT_ERROR 格式化；parseScriptResultEnvelope 严格拒绝未知版本/kind/列类型；getExecutionResult 类型化为 {executionId,status,envelope,inline,outputRef?}；runComponentPreview、结果集恢复、展示态脚本绑定均统一消费 envelope；PreviewDialog 已有四 Tab（数据预览/字段结构/执行信息/处理日志）；前端全量 53 文件 284/284、vue-tsc 0 错误、vite build 通过。）
 
 **Files:**
 - Create: `mateclaw-dataagent-ui/src/utils/script-result.ts`
@@ -838,7 +838,7 @@ it('OUTPUT_CONTRACT_ERROR 显示阶段、路径和建议', () => {
 
 - [x] **Step 2: 实现严格解析器**
 
-`parseScriptResultEnvelope(value)` 对未知版本/kind/列类型返回前端契约错误，不再把任意对象 `JSON.stringify` 后塞进单元格。`dataset-result.ts` 删除“第一列做 category、其余数值列自动猜图表”的默认路径；必须读取组件保存的维度和指标映射。
+`parseScriptResultEnvelope(value)` 对未知版本/kind/列类型返回前端契约错误，不再把任意对象 `JSON.stringify` 后塞进单元格。脚本结果集恢复和展示态绑定必须先解析 envelope，再由 `resultEnvelopeToComponentData` 按组件配置生成数据；数据集直通结果仍使用兼容的行集适配。图表 E2E 种子显式保存 `dimensionField=status`、`metricFields=[amount]`，不依赖列顺序猜测。
 
 - [x] **Step 3: 类型化执行 API 并统一轮询**
 
@@ -967,6 +967,10 @@ git commit -m "test: 覆盖 Python 数据编排完整链路"
 ```
 
 ### Task 9: Google Chrome 9222 CDP 视觉验收与证据
+
+> 状态更正（2026-09-21 rerun-29 人工复核）：脚本 12/12 步骤通过且 `consoleErrors=[]`、`failedRequests=[]`，但 `10-chart-component-preview.png` 与 `12-saved-dashboard-preview.png` 仍显示组件空态。因此本任务当前是“部分完成”，不能把存在 `chart-container` 当成真实图表数据渲染通过。已修复前端 `{envelope}` 结果集恢复链路并补充 ECharts 显式维度/指标映射，需重新 seed、重启本地服务后在 Chrome 9222 复验真实 canvas/data。
+
+> rerun-31 复验：将第 10、12 步改为点击“预览”后再断言；01–09、11–12 通过，console/network 仍为 0，但第 10 步在 120 秒内未出现真实 `canvas`，第 12 步截图仍停留在筛选预览弹窗叠层，故视觉完整门禁继续保持部分完成。重新 seed 因本地 JDBC `127.0.0.1:13306` 不可用在创建数据集阶段返回 400，未将该环境失败归因于代码。
 
 **状态：BLOCKED（真实执行预览依赖未恢复）**——已补齐只连接真实 Google Chrome 9222 的 Python 专项 CDP 脚本和 npm 命令，并增加单步骤可配置超时、逐步落盘报告及真实页面路径回退。最新真实验收目录为 `mateclaw-dataagent-ui/docs/superpowers/evidence/2026-09-21-python-pipeline-real-rerun-11/`：`01` 筛选器默认带入、`02` 单边界查询、`03` 系统生成、`04` 用户接管、`05` 差异查看、`12` 保存页共 6 项 PASS；`06`–`11` 因真实 A→B/输出预览请求返回 `400 base SQL must not be blank` 或等待结果超时而 FAIL。最新报告未发现 `failedRequests`，但记录了该 400 业务错误；根因是当前种子看板的跨数据集/输出预览草稿没有可执行的 base SQL，不能将此报告标记为完整 PASS。此前 `/dataagent/api/v1/models/active` 超时的可选请求已通过 Insight 路由门控绕开，数据集 PostgreSQL `COUNT(*) ORDER BY` 也已修复并有回归测试。真实数据预览仍受 DataAgent/对象存储/种子数据链路影响；没有用 headless Chromium 或静态截图替代 9222 验收。
 

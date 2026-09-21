@@ -146,7 +146,9 @@ await shot('09-kpi-component-preview', async () => {
 await shot('10-chart-component-preview', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('E2E ECharts Binding Dashboard')
+  await page.getByRole('button', { name: '预览' }).last().click()
   await page.locator('.chart-container').waitFor({ state: 'visible', timeout: 120_000 })
+  await page.locator('.chart-container canvas').waitFor({ state: 'visible', timeout: 120_000 })
 })
 await shot('11-output-contract-error', async () => {
   await page.keyboard.press('Escape')
@@ -160,6 +162,8 @@ await shot('12-saved-dashboard-preview', async () => {
   await page.keyboard.press('Escape')
   await openSeededCard('Python Large Result Dashboard')
   await page.getByRole('button', { name: '保存' }).click().catch(() => {})
+  await page.getByRole('button', { name: '预览' }).last().click()
+  await page.locator('.data-table-widget, .chart-widget, .kpi-card-widget').first().waitFor({ state: 'visible', timeout: 120_000 })
 })
 
 report.axNodeCount = await page.locator('button, input, textarea, [role="table"], [role="alert"]').count().catch(() => 0)
