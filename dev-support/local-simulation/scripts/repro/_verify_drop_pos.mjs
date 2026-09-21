@@ -1,13 +1,16 @@
 // 验证：洞察仪表盘拖入组件按鼠标位置放置（不再固定落到最下方）
-// 跑法：BASE=http://127.0.0.1:5181 node _verify_drop_pos.mjs
+// 跑法：BASE=http://127.0.0.1:5181 PLAYWRIGHT_EXECUTABLE_PATH=... node _verify_drop_pos.mjs
 import { chromium } from 'playwright'
 
 const BASE = process.env.BASE || 'http://127.0.0.1:5181'
-const EXE = '/Users/srant/Library/Caches/ms-playwright/chromium-1140/chrome-mac/Chromium.app/Contents/MacOS/Chromium'
 
 const envelope = (data) => ({ code: 200, msg: 'ok', data })
 
-const browser = await chromium.launch({ executablePath: EXE })
+const browser = await chromium.launch({
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+    : {}),
+})
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))

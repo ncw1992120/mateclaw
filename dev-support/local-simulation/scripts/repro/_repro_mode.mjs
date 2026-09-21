@@ -1,10 +1,12 @@
 // 复现③：grid / vertical 布局模式下子组件是否可拖动/缩放（假设：用户容器切到了非 free 模式）
 import { chromium } from 'playwright'
 
-const BASE = 'http://localhost:5180'
+const BASE = process.env.BASE || 'http://localhost:5180'
 const browser = await chromium.launch({
   headless: true,
-  executablePath: '/Users/srant/Library/Caches/ms-playwright/chromium-1140/chrome-mac/Chromium.app/Contents/MacOS/Chromium',
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+    : {}),
 })
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
 page.on('pageerror', (e) => console.log('PAGEERROR:', e.message))
