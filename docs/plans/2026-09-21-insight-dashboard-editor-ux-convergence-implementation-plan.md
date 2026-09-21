@@ -12,27 +12,27 @@
 
 ## 实施进度
 
-- [x] Task 1：统一属性配置基础视觉组件（Vitest 单测 41 files / 235 tests 通过；commit 待创建）
-- [x] Task 2：统一属性草稿状态与保存边界（定向 12 tests 通过；全量测试当前受既有 DatasetDataDialog 失败阻塞，Task 4 处理）
+- [x] Task 1：统一属性配置基础视觉组件（Vitest 41 files / 235 tests 通过；commit `819a48bb`）
+- [x] Task 2：统一属性草稿状态与保存边界（定向 12 tests 通过；后续 Task 4 修复 DatasetDataDialog 后纳入全量回归）
 - [x] Task 3：收敛卡片属性配置布局与信息层级（定向 2 files / 22 tests 通过；正式洞察组件视觉 Emoji 已清理）
 - [x] Task 4：收敛数据集来源选择与配置弹窗（来源/弹窗 3 tests；全量 UI 43 files / 241 tests 通过）
 - [x] Task 5：统一弹窗、表单、按钮和反馈样式（6 个测试文件 / 38 tests 通过；统一 dialog 尺寸、销毁和 footer 令牌）
 - [x] Task 6：统一画布、组件库与页面树交互（全量 UI 44 files / 246 tests 通过；方向键移动、Shift 调整尺寸、空画布入口和响应式溢出规则已验证）
 - [x] Task 7：补强后端 Schema、预览、保存与执行契约回归（Java 21 + Maven 定向 13 tests 通过；全量因禁止启动 Docker 的 Testcontainers 及既有 Aloudata 失败项标记 BLOCKED）
-- [x] Task 8：正式路由隔离与原型页边界（router 单测 3/3 通过；vue-tsc 0 错；vite build 成功且编辑器为独立 chunk `InsightDashboardEditorView-*.js 145KB`；commit `26034856`）
+- [x] Task 8：正式路由隔离与原型页边界（router 单测 3/3 通过；`vue-tsc` 0 错；`vite build` 成功且编辑器为独立 chunk `InsightDashboardEditorView-Cs4_RLpi.js` 148.99 kB；正式列表页不再保留编辑模式；相关 commits `26034856`、`761c6ade`）
 - [ ] Task 9：单元测试、集成测试与测试数据补全 —— **BLOCKED（测试代码已入库，commit `49c1d855`）**：
   已新增 `e2e/dashboard-editor-ux.spec.ts`（主流程 / 五视口溢出 / 键盘 / 可访问名称 4 组用例）。
   执行被环境阻塞：docker 不可用 → docker-compose 模拟栈无法启动；`/tmp/mateclaw-dashboard-e2e-state.json` 缺失，
   缺 `MATECLAW_E2E_TOKEN` / `MATECLAW_E2E_WORKSPACE_ID` / `MATECLAW_E2E_UX_DASHBOARD_ID` 等 seed 变量。
   实际执行命令与失败输出已记录；环境就绪后重跑即可勾选。
-- [x] Task 10：Chrome CDP 9222 视觉验收与可访问性检查（commit `54be4684`；候选 SHA `54be4684` 上取证：**14/14 场景 PASS**、AX 无名交互控件 0、控制台错误与失败请求全部来自错误场景的预期 400；截图与 summary 见 `/tmp/mateclaw-dashboard-editor-ux-54be4684/`；验收中发现并修复 2 处缺 aria-label 的可见控件；详见 `docs/superpowers/evidence/dashboard-editor-ux-acceptance.md`）
+- [x] Task 10：Chrome CDP 9222 视觉验收与可访问性检查（commit `54be4684`；候选 SHA `54be4684` 上取证：**14/14 场景 PASS**、AX 无名交互控件 0、控制台错误与失败请求全部来自错误场景的预期 400；截图与 summary 见 `/tmp/mateclaw-dashboard-editor-ux-54be4684/`；验收中发现并修复 2 处缺 aria-label 的可见控件；详见 `docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md`）
 - [x] Task 11：最终回归、证据归档与发布检查 —— **PARTIAL（docker 依赖项 BLOCKED，其余全部执行）**：
-  前端 `vue-tsc` 0 错 / vitest **39 文件 255 用例** 通过 / `vite build` 成功；
+  前端 `vue-tsc` 0 错 / vitest **46 文件 264 用例** 通过 / `vite build` 成功（编辑器独立 chunk 148.99 kB）；
   后端本地 JDK 21 + Maven 3.9.13 直跑契约测试 **13/13**（docker Testcontainers 全量 BLOCKED）；
   `make dashboard-verify-local` BLOCKED（docker 不可用，模拟栈无法启动）；
   CDP 9222 视觉验收 14/14 PASS（见 Task 10）；
   工作树审查：无冲突标记，剩余未提交文件全部归属并行会话（Python 编排 / aloudata / repro 脚本）与环境产物；
-  验收记录：`docs/superpowers/evidence/dashboard-editor-ux-acceptance.md`（最终结论 PASS，含已知限制）。
+  验收记录：`docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md`（最终结论 PASS，含已知限制）。
 
 > 更新规则：每完成一个 Task，必须在本节勾选并记录测试命令、结果和对应中文 commit；未执行或被环境阻塞的项目不得标记为完成。
 
@@ -150,7 +150,7 @@
 | `mateclaw-dataagent-ui/src/views/insight/components/property/__tests__/PropertySection.spec.ts` | 标题、帮助、折叠和无障碍测试。 |
 | `mateclaw-dataagent-ui/e2e/dashboard-editor-ux.spec.ts` | 编辑器信息层级、对话框、键盘、响应式与主题 E2E。 |
 | `mateclaw-dataagent-ui/e2e/cdp-dashboard-editor-ux-check.mjs` | 只连接真实 Google Chrome 9222，采集截图、AX、控制台和网络证据。 |
-| `docs/superpowers/evidence/dashboard-editor-ux-acceptance.md` | 记录候选 SHA、环境、测试输出、截图和结论。 |
+| `docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md` | 记录候选 SHA、环境、测试输出、截图和结论。 |
 
 ### 前端修改文件
 
@@ -929,7 +929,7 @@ git commit -m "test(insight): 补齐编辑器体验回归矩阵"
 **Files:**
 - Create: `mateclaw-dataagent-ui/e2e/cdp-dashboard-editor-ux-check.mjs`
 - Modify: `mateclaw-dataagent-ui/package.json`
-- Create: `docs/superpowers/evidence/dashboard-editor-ux-acceptance.md`
+- Create: `docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md`
 
 **Interfaces:**
 - Consumes: 用户启动的 Google Chrome CDP endpoint `http://127.0.0.1:9222`、同一轮 E2E state 文件、JWT、workspaceId 和 Dashboard ID。
@@ -1039,14 +1039,14 @@ Expected:
 ```bash
 git add -- mateclaw-dataagent-ui/e2e/cdp-dashboard-editor-ux-check.mjs \
   mateclaw-dataagent-ui/package.json \
-  docs/superpowers/evidence/dashboard-editor-ux-acceptance.md
+  docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md
 git commit -m "test(insight): 固化编辑器CDP视觉验收"
 ```
 
 ### Task 11: 聚合门禁、工作树审查和交付
 
 **Files:**
-- Modify: `docs/superpowers/evidence/dashboard-editor-ux-acceptance.md`
+- Modify: `docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md`
 - Modify: `docs/策略解读/原型设计.md`（仅当实现形成新的稳定视觉规则时补充，不改业务需求）
 
 **Interfaces:**
@@ -1093,7 +1093,7 @@ Expected: 无冲突标记和 whitespace error；未提交文件均能归属到�
 - [ ] **Step 6: 文档提交**
 
 ```bash
-git add -- docs/superpowers/evidence/dashboard-editor-ux-acceptance.md docs/策略解读/原型设计.md
+git add -- docs/plans/2026-09-21-insight-dashboard-editor-ux-acceptance.md docs/策略解读/原型设计.md
 git commit -m "docs(insight): 记录编辑器体验验收结果"
 ```
 

@@ -26,10 +26,10 @@
 | Task 5 弹窗表单按钮 | PASS（已完成） | 38 用例 |
 | Task 6 画布键盘响应式 | PASS（已完成） | 246 用例 |
 | Task 7 后端契约 | PASS / 全量 BLOCKED | 定向 13 tests 通过；全量依赖 docker Testcontainers |
-| Task 8 路由收敛 | PASS | `26034856`；router 单测 3/3、build 独立 chunk 145KB |
+| Task 8 路由收敛 | PASS | `26034856` + `761c6ade`；router 单测 3/3、build 独立 chunk 148.99 kB；列表页不再保留编辑模式 |
 | Task 9 E2E 门禁 | **BLOCKED** | 测试已入库（`49c1d855`）但 docker 不可用、seed state 缺失，无法执行 |
 | Task 10 CDP 视觉验收 | **PASS** | 14/14 场景 + summary.json，见下 |
-| Task 11 聚合门禁 | PARTIAL | 前端 tsc/vitest/build 通过；后端契约测试通过；`make dashboard-verify-local` 因 docker 不可用 BLOCKED |
+| Task 11 聚合门禁 | PARTIAL | 前端 `vue-tsc` 0 错、vitest 46 文件 / 264 用例、build 通过；后端契约测试通过；`make dashboard-verify-local` 因 docker 不可用 BLOCKED |
 
 ## Task 10：Google Chrome 9222 CDP 视觉验收（PASS）
 
