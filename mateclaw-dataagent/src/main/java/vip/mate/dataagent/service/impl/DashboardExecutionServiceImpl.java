@@ -18,6 +18,8 @@ import vip.mate.dataagent.service.DashboardExecutionService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.code.ScriptTaskPreparationService;
 import vip.mate.dataagent.service.code.PythonExecutionService;
+import vip.mate.dataagent.service.code.ScriptResultContractException;
+import vip.mate.dataagent.service.code.ScriptResultContractService;
 
 import java.util.*;
 
@@ -39,6 +41,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     private final ObjectMapper mapper;
     private final DashboardExecutionMapper executionMapper;
     private final ObjectRefService objectRefs;
+    private final ScriptResultContractService resultContract;
     private final String datasetReadBaseUrl;
 
     public DashboardExecutionServiceImpl(
@@ -49,6 +52,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             ObjectMapper mapper,
             DashboardExecutionMapper executionMapper,
             ObjectRefService objectRefs,
+            ScriptResultContractService resultContract,
             @Value("${mateclaw.runner.dataset-read-base-url:http://mateclaw-dataagent:18089/dataagent/api}") String datasetReadBaseUrl) {
         this.dashboards = dashboards;
         this.preparation = preparation;
@@ -57,6 +61,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         this.mapper = mapper;
         this.executionMapper = executionMapper;
         this.objectRefs = objectRefs;
+        this.resultContract = resultContract;
         this.datasetReadBaseUrl = datasetReadBaseUrl.replaceAll("/$", "");
     }
 
@@ -174,24 +179,35 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         response.put("status", execution.getStatus());
         try {
             if (execution.getOutputJson() != null && !execution.getOutputJson().isBlank()) {
-                response.put("rows", mapper.readValue(execution.getOutputJson(), Object.class));
+                // 内联结果：校验 + 受控预览（真实 rowCount 保留在 meta）
+                Object envelope = mapper.readValue(execution.getOutputJson(), Object.class);
+                response.put("envelope", previewEnvelope(envelope));
                 response.put("inline", true);
                 return response;
             }
             if (execution.getOutputRefJson() == null || "null".equals(execution.getOutputRefJson())) {
-                response.put("rows", List.of());
+                response.put("envelope", null);
                 response.put("inline", true);
                 return response;
             }
             ObjectRef reference = mapper.readValue(execution.getOutputRefJson(), ObjectRef.class);
+            Map<String, Object> refMeta = mapper.readValue(execution.getOutputRefJson(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             DatasetAccessContext context = new DatasetAccessContext(execution.getWorkspaceId(), 0L, execution.getExecutionId(), Set.of());
-            response.put("rows", DatasetBatchCodec.readRows(context, reference, objectRefs, RESULT_PREVIEW_MAX_ROWS));
+            List<Map<String, Object>> rows = DatasetBatchCodec.readRows(context, reference, objectRefs, RESULT_PREVIEW_MAX_ROWS);
+            ScriptResultContractService.ValidatedEnvelope rebuilt = resultContract.rebuildTable(refMeta, rows);
+            response.put("envelope", previewEnvelope(rebuilt));
             response.put("inline", false);
             response.put("outputRef", reference);
             return response;
         } catch (Exception e) {
             throw new IllegalStateException("dashboard execution result unavailable", e);
         }
+    }
+
+    /** 校验 + 截断到受控预览行数，meta 保留真实 rowCount 与 truncated 标记。 */
+    private Map<String, Object> previewEnvelope(Object envelope) {
+        ScriptResultContractService.ValidatedEnvelope validated = resultContract.validate(envelope);
+        return mapper.convertValue(resultContract.preview(validated, RESULT_PREVIEW_MAX_ROWS).toEnvelope(), Map.class);
     }
 
     private DashboardExecutionEntity requireKnown(String executionId) {
@@ -210,9 +226,27 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         Object status = result.get("status");
         if (status != null) execution.setStatus(String.valueOf(status));
         execution.setLogs(stringValue(result.get("output")));
-        execution.setOutputJson(stringValue(result.get("result")));
+        Object rawResult = result.get("result");
+        if (rawResult instanceof Map<?, ?> envelope) {
+            // 结构化结果：校验通过才持久化；契约失败保持 OUTPUT_CONTRACT_ERROR 且不写结果
+            try {
+                ScriptResultContractService.ValidatedEnvelope validated = resultContract.validate(envelope);
+                execution.setOutputJson(writeJson(validated.toEnvelope()));
+            } catch (ScriptResultContractException e) {
+                execution.setStatus("OUTPUT_CONTRACT_ERROR");
+                execution.setOutputJson(null);
+                execution.setOutputRefJson(null);
+                execution.setErrorMessage(writeJson(e.asMap()));
+                executionMapper.updateById(execution);
+                return;
+            }
+        } else {
+            // 兼容旧 Runner 字符串结果
+            execution.setOutputJson(stringValue(rawResult));
+        }
         execution.setOutputRefJson(writeJson(result.get("outputRef")));
-        execution.setErrorMessage(stringValue(result.get("error")));
+        Object error = result.get("error");
+        execution.setErrorMessage(error instanceof Map<?, ?> ? writeJson(error) : stringValue(error));
         Object returnCode = result.get("stats") instanceof Map<?, ?> stats ? stats.get("returncode") : result.get("returncode");
         if (returnCode instanceof Number number) execution.setReturnCode(number.intValue());
         executionMapper.updateById(execution);

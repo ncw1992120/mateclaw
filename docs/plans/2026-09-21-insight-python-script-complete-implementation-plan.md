@@ -661,6 +661,8 @@ git commit -m "feat: 统一 Python 脚本输出契约"
 
 ### Task 6: DataAgent 防御性校验、持久化与结果 API
 
+**状态：已完成**（ScriptResultContractServiceTest 8/8 + DashboardExecutionServiceTest 5/5 + RunnerPythonExecutionServiceTest 4/4 + ScriptDatasetReadControllerTest 3/3 = 20/20；updateFromRunner 仅在校验通过后写 outputJson，契约失败保持 OUTPUT_CONTRACT_ERROR 并写结构化错误；result API 返回 {executionId,status,envelope,inline,outputRef?}，内联与 ObjectRef 结果同构（重建后同校验器），预览 ≤10 行且 meta 保留真实 rowCount/truncated；Controller OpenAPI 已更新类型化语义。**BLOCKED**：ScriptDatasetReadObjectRefIntegrationTest 需要 Docker/Testcontainers，沙箱不可用，待真实环境补跑。）
+
 **Files:**
 - Create: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/code/ScriptResultContractService.java`
 - Create: `mateclaw-dataagent/src/test/java/vip/mate/dataagent/service/code/ScriptResultContractServiceTest.java`
@@ -675,7 +677,7 @@ git commit -m "feat: 统一 Python 脚本输出契约"
 - Produces: `/v1/insight/dashboards/executions/{id}/result` 返回 `{executionId,status,envelope,inline,outputRef?}`。
 - `ScriptResultContractService.validate(Object raw)` 返回校验后的 `ScriptResultEnvelope`；`preview(ScriptResultEnvelope envelope, int maxRows)` 只截断预览行并保留真实 `rowCount`；`rebuildTable(Map<String,Object> metadata, List<Map<String,Object>> rows)` 重建 ObjectRef 结果。
 
-- [ ] **Step 1: 写防御性校验失败测试**
+- [x] **Step 1: 写防御性校验失败测试**
 
 ```java
 @Test
@@ -718,7 +720,7 @@ void rebuildsEnvelopeFromParquetReferenceMetadata() {
 }
 ```
 
-- [ ] **Step 2: 实现 `ScriptResultContractService`**
+- [x] **Step 2: 实现 `ScriptResultContractService`**
 
 校验版本、kind、列名唯一性、dataType、行字段和组件兼容性；错误对象固定包含：
 
@@ -726,15 +728,15 @@ void rebuildsEnvelopeFromParquetReferenceMetadata() {
 {"stage":"output-validation","path":"result.data.rows[2].amount","expected":"number","actual":"string","suggestion":"统一 amount 列类型"}
 ```
 
-- [ ] **Step 3: 接入 DashboardExecutionService**
+- [x] **Step 3: 接入 DashboardExecutionService**
 
 `updateFromRunner` 仅在校验通过后写 `outputJson`；Runner 契约错误写 `errorMessage` 并保持 `OUTPUT_CONTRACT_ERROR`。`result(executionId)` 对内联和 ObjectRef 返回同一 `envelope` 字段，预览最多 100 行，并在 meta 中保留真实 `rowCount/truncated`。
 
-- [ ] **Step 4: 保持权限、日志和敏感信息边界**
+- [x] **Step 4: 保持权限、日志和敏感信息边界**
 
 工作区/用户校验沿用现有逻辑；错误响应不得包含 readToken、连接字符串、请求头或实际 `in` 值集合。Controller OpenAPI 描述明确空表、契约错误和资源错误。
 
-- [ ] **Step 5: 运行 DataAgent 定向测试**
+- [x] **Step 5: 运行 DataAgent 定向测试**
 
 ```bash
 docker run --rm \
@@ -748,7 +750,7 @@ docker run --rm \
 
 Expected: 0 failures / 0 errors；内联与 ObjectRef 用例 envelope 相同。
 
-- [ ] **Step 6: 精确提交**
+- [x] **Step 6: 精确提交**
 
 ```bash
 git add -- mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/code/ScriptResultContractService.java \

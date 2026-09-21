@@ -169,7 +169,7 @@ public class DataAgentInsightDashboardController {
 
     @GetMapping("/executions/{executionId}/result")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "读取仪表盘执行结果", description = "受工作区权限和 ObjectRef 任务上下文保护，返回页面预览行")
+    @Operation(summary = "读取仪表盘执行结果", description = "受工作区权限和 ObjectRef 任务上下文保护；返回统一结构化结果 {executionId,status,envelope,inline,outputRef?}，envelope 为 table/scalar/message 标准信封（内联与引用结果同构），预览行数受控且 meta 保留真实 rowCount/truncated；输出契约错误返回结构化 stage/path/expected/actual/suggestion")
     public R<Map<String, Object>> executionResult(@PathVariable String executionId) {
         return R.ok(executionService.result(executionId));
     }

@@ -48,7 +48,7 @@ class DashboardExecutionServiceTest {
                 .thenReturn(prepared);
         when(runner.submit(anyMap())).thenReturn(Map.of("taskId", "runner-task", "status", "RUNNING"));
 
-        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs, "http://mateclaw-dataagent:18089/dataagent/api/");
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs, new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-dataagent:18089/dataagent/api/");
         Map<String, Object> response = service.submit(42L, new DashboardExecutionRequest(Map.of("date", "2026-09-12")));
 
         assertEquals(42L, response.get("dashboardId"));
@@ -69,7 +69,7 @@ class DashboardExecutionServiceTest {
         var service = new DashboardExecutionServiceImpl(
                 mock(InsightDashboardService.class), mock(ScriptTaskPreparationService.class),
                 mock(PythonExecutionService.class), mock(WorkspaceGuard.class), new ObjectMapper(), mock(DashboardExecutionMapper.class), mock(ObjectRefService.class),
-                "http://mateclaw-server:18088");
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088");
         assertThrows(IllegalArgumentException.class, () -> service.status("dashboard-42-unknown"));
     }
 
@@ -90,7 +90,7 @@ class DashboardExecutionServiceTest {
                 "\"datasetId\":9,\"inputName\":\"orders\"}]," +
                 "\"parameters\":[{\"name\":\"region\",\"type\":\"string\",\"scope\":\"dashboard\"}]}");
         when(dashboards.getDashboard(42L)).thenReturn(dashboard);
-        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs, "http://mateclaw-server:18088");
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs, new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088");
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> service.submit(42L, new DashboardExecutionRequest(Map.of("unknown", "value"))));
@@ -120,7 +120,7 @@ class DashboardExecutionServiceTest {
         when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
 
         new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs,
-                "http://mateclaw-server:18088").submit(42L,
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088").submit(42L,
                 new DashboardExecutionRequest(Map.of("window", Map.of("preset", "7d"))));
 
         verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(),
@@ -149,7 +149,7 @@ class DashboardExecutionServiceTest {
         when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
 
         new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs,
-                "http://mateclaw-server:18088").submit(42L,
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088").submit(42L,
                 new DashboardExecutionRequest(Map.of("startDate", "2026-09-01")));
 
         verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), anyString(),
