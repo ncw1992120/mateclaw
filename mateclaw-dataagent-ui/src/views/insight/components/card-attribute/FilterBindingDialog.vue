@@ -1,50 +1,28 @@
 <template>
-  <el-dialog v-model="ui.filterBinding.visible" class="insight-dialog--lg" title="绑定筛选器" width="720px" destroy-on-close :close-on-click-modal="false" aria-label="绑定筛选器">
-    <!-- 顶部工具条：统计 + 继续添加 -->
+  <el-dialog v-model="ui.filterBinding.visible" class="insight-dialog--lg" title="绑定筛选器" width="780px" destroy-on-close :close-on-click-modal="false" aria-label="绑定筛选器">
     <div class="fb-toolbar">
-      <span class="fb-count">已绑定 {{ drafts.length }} 个筛选器</span>
-      <el-button size="small" type="primary" plain @click="addBinding">+ 添加筛选器</el-button>
+      <span class="fb-count">已绑定 {{ drafts.length }} 条关系</span>
+      <el-button size="small" type="primary" plain @click="addBinding">+ 绑定筛选器</el-button>
     </div>
 
-    <!-- 多条绑定条目 -->
     <div class="fb-list">
-      <div class="fb-item" v-for="(d, i) in drafts" :key="i">
-        <div class="fb-item-head">
-          <div class="fb-item-title">筛选器 {{ i + 1 }}</div>
-          <el-button size="small" text type="danger" :disabled="drafts.length === 1" @click="removeBinding(i)">
-            删除
-          </el-button>
-        </div>
-
-        <!-- 筛选器（仪表盘参数） -->
-        <div class="fb-section">
-          <div class="fb-label">筛选器（仪表盘参数）</div>
-          <el-select v-model="d.filterName" placeholder="选择筛选器" style="width: 100%" filterable @change="onFilterNameChange(d)">
-            <el-option v-for="f in FILTERS" :key="f" :label="f" :value="f" />
-          </el-select>
-        </div>
-
-        <!-- 作用范围 -->
-        <div class="fb-section">
-          <div class="fb-label">作用范围（勾选该筛选器作用到的数据集）</div>
-          <el-checkbox-group v-model="d.scopeKeys">
-            <el-checkbox v-for="ds in state.datasets" :key="ds.id" :value="ds.id" :label="ds.alias" />
-          </el-checkbox-group>
-        </div>
-
-        <!-- 字段映射：自动匹配 + 手动映射 -->
-        <div class="fb-section">
-          <div class="fb-label">字段映射（按数据集字段名自动推断，需手动映射的可编辑目标字段）</div>
-          <div class="fm-row" v-for="ds in state.datasets" :key="ds.id">
-            <span class="ds-alias">数据集 {{ ds.alias }}</span>
-            <el-input v-model="d.fieldMap[ds.id]" size="small" placeholder="匹配到的字段名" />
-            <span class="fb-label-hint">{{ labelOf(ds, d.fieldMap[ds.id]) }}</span>
-            <span class="match-tag" :class="matched(ds, d.filterName) ? 'ok' : 'warn'">
-              {{ matched(ds, d.filterName) ? '✓ 自动匹配' : '⚠ 需手动映射' }}
-            </span>
-          </div>
-        </div>
+      <div v-for="(draft, index) in drafts" :key="draft.id" class="fb-row" data-testid="filter-binding-row">
+        <div class="fb-row-index">{{ index + 1 }}</div>
+        <el-select v-model="draft.filterName" class="fb-filter" placeholder="仪表盘筛选器" filterable @change="onFilterChange(draft)">
+          <el-option v-for="filter in FILTERS" :key="filter" :label="filter" :value="filter" />
+        </el-select>
+        <el-select v-model="draft.datasetId" class="fb-dataset" placeholder="作用数据集" filterable @change="onDatasetChange(draft)">
+          <el-option v-for="dataset in state.datasets" :key="dataset.id" :label="dataset.alias" :value="dataset.id" />
+        </el-select>
+        <el-select v-model="draft.field" class="fb-field" placeholder="字段映射（维度字段）" filterable :disabled="!draft.datasetId" @change="onFieldChange(draft)">
+          <el-option v-for="field in dimensionFields(datasetFor(draft))" :key="field.name" :label="fieldOptionLabel(field)" :value="field.name" />
+        </el-select>
+        <span v-if="draft.field && draft.matched" class="match-tag ok">✓ 自动匹配</span>
+        <span v-else-if="draft.field" class="match-tag warn">⚠ 手动映射</span>
+        <span v-else class="match-tag empty">待选择</span>
+        <el-button class="fb-remove" size="small" text type="danger" :disabled="drafts.length === 1" @click="removeBinding(index)">删除</el-button>
       </div>
+      <div v-if="!drafts.length" class="fb-empty">暂无绑定关系，点击上方“+ 绑定筛选器”开始配置。</div>
     </div>
 
     <template #footer>
@@ -55,211 +33,151 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
-import type { DatasetConfig } from './useInsight'
+import type { DatasetConfig, FilterBinding } from './useInsight'
 import { resolveFieldLabel, type DatasetFieldMeta } from '@/utils/field-mapping'
 
 const { state, saveFilterBindings } = useInsight()
 const ui = state.ui
+const FILTERS = computed<string[]>(() => state.filterCatalog.map((filter) => filter.title))
 
-/** 仪表盘参数名候选：来自当前仪表盘真实的筛选器组件（由 hydratePanel 注入 state.filterCatalog）。
- *  无可用筛选器时列表为空，下拉框可输入（filterable），由用户按真实参数名填写，不预置任何假词表。 */
-const FILTERS = computed<string[]>(() => state.filterCatalog.map((f) => f.title))
-
-/** 回填时把老引用（展示名 / 旧目标名）归一为字段名（决策 4） */
-function toFieldName(ds: DatasetConfig, ref: string): string {
-  const key = (ref ?? '').trim()
-  if (!key) return ''
-  const fields: DatasetFieldMeta[] = ds.fields ?? []
-  // 已经是字段名 → 原样；否则按展示名反解（展示名唯一，反解无歧义）
-  if (fields.some((f) => f.name === key)) return key
-  const hit = fields.find((f) => (f.displayName ?? '').trim() === key)
-  return hit ? hit.name : key
-}
-
-/** 映射框旁的可读名（展示名；未设置时回退字段名） */
-function labelOf(ds: DatasetConfig, field: string): string {
-  const key = (field ?? '').trim()
-  if (!key) return ''
-  const label = resolveFieldLabel(ds.fields, key)
-  return label === key ? '' : label
-}
-
-/**
- * 真实字段名推断：候选为数据集字段注册表的「字段名 + 展示名」，
- * 与筛选器名做精确 / 包含匹配；**返回值恒为字段名**（改名不影响已保存的绑定）。
- */
-function inferField(ds: DatasetConfig, filterName: string): string {
-  const fields = (ds.fields || []).flatMap((f) => [f.name, f.displayName]).filter((f): f is string => !!f)
-  const exact = fields.find((f) => f === filterName)
-  const candidate = exact ?? fields.find((f) => f && (f.includes(filterName) || filterName.includes(f)))
-  // 命中的可能是展示名 → 统一反解成字段名
-  return candidate ? toFieldName(ds, candidate) : ''
-}
-
-/** 是否可自动匹配（基于真实字段推断） */
-function matched(ds: DatasetConfig, filterName: string): boolean {
-  return !!inferField(ds, filterName)
-}
-
-/** 单条筛选器绑定草稿（对话框内部维护） */
 interface FBDraft {
+  id: string
   filterName: string
-  scopeKeys: string[]
-  fieldMap: Record<string, string> // datasetId -> 映射字段
-}
-
-/** 按当前数据集构造一份「全选作用范围 + 自动匹配字段」的空草稿 */
-function emptyFieldMap(filterName: string): Record<string, string> {
-  const fm: Record<string, string> = {}
-  state.datasets.forEach((ds) => (fm[ds.id] = inferField(ds, filterName)))
-  return fm
-}
-function emptyDraft(): FBDraft {
-  return {
-    filterName: '',
-    scopeKeys: state.datasets.map((d) => d.id),
-    fieldMap: emptyFieldMap(''),
-  }
+  datasetId: string
+  field: string
+  matched: boolean
 }
 
 const drafts = ref<FBDraft[]>([])
+let draftSequence = 0
 
-watch(
-  () => ui.filterBinding.visible,
-  (v) => {
-    if (!v) return
-    if (state.filterBindings && state.filterBindings.length) {
-      // 回填：已有绑定 -> 草稿列表
-      drafts.value = state.filterBindings.map((b) => {
-        const fm: Record<string, string> = {}
-        state.datasets.forEach((ds) => {
-          const found = b.fieldMap.find((m) => m.datasetId === ds.id)
-          const raw = found?.field ?? inferField(ds, b.filterName)
-          fm[ds.id] = toFieldName(ds, raw)
-        })
-        return {
-          filterName: b.filterName,
-          scopeKeys: Object.keys(b.scope).filter((k) => b.scope[k]),
-          fieldMap: fm,
-        }
-      })
-    } else {
-      // 首开：至少一条空草稿
-      drafts.value = [emptyDraft()]
-    }
-  },
-)
-
-/** 筛选器变更时，基于真实字段重新推断各数据集的映射字段 */
-function onFilterNameChange(d: FBDraft) {
-  d.fieldMap = emptyFieldMap(d.filterName)
+function newDraft(partial: Partial<FBDraft> = {}): FBDraft {
+  draftSequence += 1
+  return { id: `binding-${draftSequence}`, filterName: '', datasetId: '', field: '', matched: false, ...partial }
 }
 
-/** 继续绑定一个筛选器 */
-function addBinding() {
-  drafts.value.push(emptyDraft())
-}
-/** 删除某条绑定（至少保留一条） */
-function removeBinding(i: number) {
-  if (drafts.value.length > 1) drafts.value.splice(i, 1)
+function datasetFor(draft: FBDraft): DatasetConfig | undefined {
+  return state.datasets.find((dataset) => dataset.id === draft.datasetId)
 }
 
-function save() {
-  // 仅保存已选筛选器的条目（过滤掉未选择的空草稿）
-  const arr = drafts.value
-    .filter((d) => d.filterName)
-    .map((d) => {
-      const scope: Record<string, boolean> = {}
-      state.datasets.forEach((ds) => (scope[ds.id] = d.scopeKeys.includes(ds.id)))
-      const fm = state.datasets.map((ds) => ({
-        datasetId: ds.id,
-        // 存字段名（技术主键）：展示名改了绑定关系依然有效
-        field: toFieldName(ds, d.fieldMap[ds.id] ?? ''),
-        matched: matched(ds, d.filterName),
+/** 绑定筛选器只允许映射维度字段；缺失 role 的历史字段按维度兼容处理。 */
+function dimensionFields(dataset: DatasetConfig | undefined): DatasetFieldMeta[] {
+  return (dataset?.fields ?? []).filter((field) => {
+    const role = (field.role ?? '').trim().toLowerCase()
+    return !role || role === 'dimension' || role === 'dim'
+  })
+}
+
+function fieldOptionLabel(field: DatasetFieldMeta): string {
+  const displayName = resolveFieldLabel([field], field.name)
+  return displayName === field.name ? field.name : `${field.name} · ${displayName}`
+}
+
+function toFieldName(dataset: DatasetConfig, value: string): string {
+  const key = (value ?? '').trim()
+  if (!key) return ''
+  if ((dataset.fields ?? []).some((field) => field.name === key)) return key
+  return (dataset.fields ?? []).find((field) => (field.displayName ?? '').trim() === key)?.name ?? key
+}
+
+function inferField(dataset: DatasetConfig | undefined, filterName: string): string {
+  const fields = dimensionFields(dataset)
+  const exact = fields.find((field) => field.name === filterName || field.displayName === filterName)
+  if (exact) return exact.name
+  const candidate = fields.find((field) => {
+    const refs = [field.name, field.displayName].filter(Boolean) as string[]
+    return refs.some((value) => value.includes(filterName) || filterName.includes(value))
+  })
+  return candidate?.name ?? ''
+}
+
+function updateAutomaticField(draft: FBDraft): void {
+  const inferred = inferField(datasetFor(draft), draft.filterName)
+  draft.field = inferred
+  draft.matched = !!inferred
+}
+
+function onFilterChange(draft: FBDraft): void { updateAutomaticField(draft) }
+function onDatasetChange(draft: FBDraft): void { updateAutomaticField(draft) }
+
+function onFieldChange(draft: FBDraft): void {
+  const dataset = datasetFor(draft)
+  draft.field = dataset ? toFieldName(dataset, draft.field) : ''
+  draft.matched = !!draft.field && draft.field === inferField(dataset, draft.filterName)
+}
+
+function addBinding(): void { drafts.value.push(newDraft()) }
+function removeBinding(index: number): void { drafts.value.splice(index, 1) }
+
+function restoreDrafts(bindings: FilterBinding[]): void {
+  const rows: FBDraft[] = []
+  bindings.forEach((binding) => {
+    Object.keys(binding.scope ?? {}).filter((id) => binding.scope[id]).forEach((datasetId) => {
+      const dataset = state.datasets.find((item) => item.id === datasetId)
+      const mapped = binding.fieldMap?.find((item) => item.datasetId === datasetId)
+      rows.push(newDraft({
+        filterName: binding.filterName,
+        datasetId,
+        field: dataset ? toFieldName(dataset, mapped?.field ?? '') : mapped?.field ?? '',
+        matched: Boolean(mapped?.matched),
       }))
-      return { filterName: d.filterName, scope, fieldMap: fm }
     })
-  saveFilterBindings(arr)
+  })
+  drafts.value = rows.length ? rows : [newDraft()]
+}
+
+watch(() => ui.filterBinding.visible, (visible) => {
+  if (visible) restoreDrafts(state.filterBindings ?? [])
+})
+
+function save(): void {
+  const validRows = drafts.value.filter((draft) => draft.filterName || draft.datasetId || draft.field)
+  if (!validRows.length) {
+    saveFilterBindings([])
+    return
+  }
+  if (validRows.some((draft) => !draft.filterName || !draft.datasetId || !draft.field)) {
+    ElMessage.warning('请完整配置每条绑定关系：筛选器、数据集和维度字段不能为空')
+    return
+  }
+  const duplicate = validRows.find((draft, index) => validRows.findIndex((item) => item.filterName === draft.filterName && item.datasetId === draft.datasetId) !== index)
+  if (duplicate) {
+    ElMessage.warning('同一个筛选器不能重复绑定同一个数据集')
+    return
+  }
+
+  const grouped = new Map<string, FilterBinding>()
+  validRows.forEach((draft) => {
+    const binding = grouped.get(draft.filterName) ?? { filterName: draft.filterName, scope: {}, fieldMap: [] }
+    binding.scope[draft.datasetId] = true
+    binding.fieldMap.push({ datasetId: draft.datasetId, field: draft.field, matched: draft.matched })
+    grouped.set(draft.filterName, binding)
+  })
+  saveFilterBindings(Array.from(grouped.values()))
 }
 </script>
 
 <style scoped>
-.fb-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.fb-count {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-}
-.fb-list {
-  max-height: 54vh;
-  overflow: auto;
-  padding-right: 4px;
-}
-.fb-item {
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  margin-bottom: 12px;
-  background: var(--db-muted);
-}
-.fb-item-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.fb-item-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--db-text);
-}
-.fb-section {
-  margin-bottom: 14px;
-}
-.fb-section:last-child {
-  margin-bottom: 0;
-}
-.fb-label {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.fm-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.ds-alias {
-  width: 110px;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-.fb-label-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.match-tag {
-  font-size: 12px;
-  flex-shrink: 0;
-  width: 96px;
-  text-align: right;
-}
-.match-tag.ok {
-  color: var(--el-color-success);
-}
-.match-tag.warn {
-  color: var(--el-color-warning);
+.fb-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.fb-count { font-size: 13px; color: var(--el-text-color-secondary); }
+.fb-list { max-height: 54vh; overflow: auto; padding: 2px 4px 2px 0; }
+.fb-row { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid var(--db-border); border-radius: var(--radius-md); background: var(--db-muted); }
+.fb-row-index { width: 20px; color: var(--el-text-color-secondary); font-size: 12px; text-align: center; flex-shrink: 0; }
+.fb-filter { width: 190px; }
+.fb-dataset { width: 150px; }
+.fb-field { min-width: 190px; flex: 1; }
+.match-tag { width: 76px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.match-tag.ok { color: var(--el-color-success); }
+.match-tag.warn { color: var(--el-color-warning); }
+.match-tag.empty { color: var(--el-text-color-placeholder); }
+.fb-remove { flex-shrink: 0; }
+.fb-empty { padding: 28px 0; color: var(--el-text-color-secondary); text-align: center; }
+@media (max-width: 760px) {
+  .fb-row { align-items: stretch; flex-wrap: wrap; }
+  .fb-filter, .fb-dataset, .fb-field { width: calc(50% - 14px); min-width: 0; }
+  .match-tag { width: auto; }
 }
 </style>
