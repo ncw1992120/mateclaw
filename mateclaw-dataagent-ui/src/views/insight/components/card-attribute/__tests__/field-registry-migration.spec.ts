@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  buildAloudataMetricDimSchema,
   buildPipeline,
   datasetFromInput,
   migrateKpiMetrics,
@@ -98,6 +99,23 @@ describe('存量归一（决策 4）· 读入老配置', () => {
     expect(metrics[0].displayName).toBe('策略编号')
     expect(metrics[0].unit).toBe('个')
     expect(metrics[0].helperText).toBe('较上期')
+  })
+})
+
+describe('Aloudata 指标&维度字段结构', () => {
+  it('直接使用已选指标和维度生成字段，不依赖数据查询结果', () => {
+    expect(
+      buildAloudataMetricDimSchema(
+        ['下发人数', '下发次数'],
+        ['指标日期', '转化指标名称'],
+        { 下发人数: '下发人数（展示名）', 指标日期: '指标日期（展示名）' },
+      ),
+    ).toEqual([
+      { name: '指标日期', displayName: '指标日期（展示名）', role: 'dimension' },
+      { name: '转化指标名称', displayName: undefined, role: 'dimension' },
+      { name: '下发人数', displayName: '下发人数（展示名）', role: 'measure' },
+      { name: '下发次数', displayName: undefined, role: 'measure' },
+    ])
   })
 })
 

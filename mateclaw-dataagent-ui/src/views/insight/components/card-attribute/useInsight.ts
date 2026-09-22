@@ -671,7 +671,7 @@ function confirmFile() {
 /**
  * 「字段名称」弹窗的字段不再手工新增，而是由数据集 schema 自动生成：
  *   配置确定 → 异步预取 schema 并生成映射行；打开弹窗时若缓存为空再兜底拉一次。
- * schema 全部来自后端草稿预览（JDBC / Aloudata 指标&维度 / 指标视图 / 文件均返回字段结构），
+ * schema 来自后端草稿预览（JDBC / 指标视图 / 文件）或已选 Aloudata 指标&维度，
  * 显示名来自 Aloudata 语义层（指标/维度显示名、指标视图定义），无显示名时回落源字段名。
  * 契约见 docs/策略解读/原型设计.md §4.1。
  */
@@ -739,6 +739,30 @@ async function aloudataLabelMap(
   } catch {
     return {}
   }
+}
+
+/**
+ * Aloudata「指标&维度」字段结构：字段名直接来自已选项，不依赖实时数据查询。
+ * 技术字段名使用选择器的 value，展示名仅作为可选的语义层补充。
+ */
+export function buildAloudataMetricDimSchema(
+  metrics: string[],
+  dims: string[],
+  labels: Record<string, string> = {},
+): DatasetSchemaField[] {
+  const fields: DatasetSchemaField[] = []
+  const seen = new Set<string>()
+  const append = (names: string[], role: 'dimension' | 'measure') => {
+    names.forEach((rawName) => {
+      const name = String(rawName ?? '').trim()
+      if (!name || seen.has(name)) return
+      seen.add(name)
+      fields.push({ name, displayName: labels[name] || undefined, role })
+    })
+  }
+  append(dims, 'dimension')
+  append(metrics, 'measure')
+  return fields
 }
 
 /** 文件草稿来源配置：objectId（后端校验用）+ fileRef（真实读取用的受控引用） */
@@ -813,22 +837,11 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
     const metrics = ds.aloudata?.metrics ?? []
     const dims = ds.aloudata?.dims ?? []
     if (!metrics.length && !dims.length) return []
-    const batch = await backend.previewDatasetDraft({
-      sourceType: 'ALOUDATA_METRICS',
-      datasourceId,
-      sourceConfig: { metrics, dimensions: dims },
-      filters: [],
-    })
     const [metricLabels, dimLabels] = await Promise.all([
       aloudataLabelMap(datasourceId, metrics, 'metric'),
       aloudataLabelMap(datasourceId, dims, 'dimension'),
     ])
-    return readSchemaNames(batch).map((name) => ({
-      name,
-      displayName: metricLabels[name] ?? dimLabels[name],
-      // 命中维度映射的视为维度，供「筛选预览」预置维度筛选条件
-      role: dimLabels[name] ? 'dimension' : 'measure',
-    }))
+    return buildAloudataMetricDimSchema(metrics, dims, { ...metricLabels, ...dimLabels })
   }
 
   if (ds.sourceType === 'file') {
