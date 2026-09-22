@@ -141,6 +141,17 @@ describe('PropertyPanel', () => {
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { shadow: 'medium' } })
   })
 
+  it('样式设置默认保持收缩状态', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { component, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.get('details.style-settings').attributes('open')).toBeUndefined()
+  })
+
   it('组合卡片只显示统一样式设置，不重复展示容器样式配置', async () => {
     const wrapper = mount(PropertyPanel, {
       props: {

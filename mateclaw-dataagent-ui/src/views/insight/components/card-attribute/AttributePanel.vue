@@ -35,7 +35,7 @@
           <el-option value="section" label="分组标题" />
         </el-select>
       </div>
-      <details open class="style-settings">
+      <details class="style-settings">
         <summary class="section-title visual-style-title">样式设置</summary>
         <div class="style-field-grid">
           <div class="field">
