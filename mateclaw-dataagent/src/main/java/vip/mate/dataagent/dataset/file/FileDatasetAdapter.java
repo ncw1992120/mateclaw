@@ -35,6 +35,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class FileDatasetAdapter implements DatasetSourceAdapter {
     private static final int MAX_PAGE_SIZE = 10_000;
+    private static final int MAX_SCAN_ROWS = 50_000;
     private final DatasetMapper datasetMapper;
     private final DatasetFieldMapper fieldMapper;
     private final ObjectRefService objectRefService;
@@ -57,15 +58,20 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
         if (ref.format() == null || !ref.format().equalsIgnoreCase(definition.format()) || ref.expiresAt() <= System.currentTimeMillis())
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "文件对象引用格式或有效期无效");
         List<Map<String,Object>> rows = new ArrayList<>();
+        final List<Map<String,Object>> scanRows = rows;
         int offset = request.offset() == null ? 0 : request.offset();
         int limit = Math.min(request.limit() == null ? MAX_PAGE_SIZE : request.limit(), MAX_PAGE_SIZE);
         int[] matched = {0};
         ParquetScanResult[] parquetResult = {null};
+        // 文件源端不支持排序：orders 非空时先收集有界全量匹配行，扫描完成后本地排序再切片
+        boolean residualSort = request.orders() != null && !request.orders().isEmpty();
+        int collectLimit = residualSort ? MAX_SCAN_ROWS : limit;
         try (InputStream in = objectRefService.open(context, ref)) {
             RowConsumer consumer = row -> {
                 if (!matches(row, request.filters())) return;
-                if (matched[0]++ < offset || rows.size() >= limit) return;
-                rows.add(project(row, request.columns()));
+                // 残余排序时收集全部匹配行（有界），offset 在排序后统一应用
+                if (matched[0]++ < (residualSort ? 0 : offset) || scanRows.size() >= collectLimit) return;
+                scanRows.add(project(row, request.columns()));
             };
             switch (definition.format().toLowerCase(Locale.ROOT)) {
                 case "json" -> scanJson(in, consumer);
@@ -77,10 +83,19 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
             }
         } catch (DatasetReadException e) { throw e; }
         catch (IOException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "文件读取失败", e); }
+        if (matched[0] - offset > MAX_SCAN_ROWS) {
+            throw new DatasetReadException(DatasetReadErrorCode.RESULT_LIMIT_EXCEEDED,
+                    "文件匹配行数超过有界残余处理上限: " + MAX_SCAN_ROWS);
+        }
+        if (residualSort) {
+            ResidualRowOperations.sort(rows, request.orders());
+            rows = new ArrayList<>(ResidualRowOperations.paginate(rows, limit, offset));
+        }
         PushdownReport report = parquetResult[0] == null
-                ? new PushdownReport(List.of(), request.filters(), !request.columns().isEmpty(), false, "file-stream-scan")
+                ? new PushdownReport(List.of(), request.filters(), List.of(), !request.columns().isEmpty(), !residualSort, false, "file-stream-scan")
                 : new PushdownReport(parquetResult[0].pushedFilters(), parquetResult[0].residualFilters(),
-                parquetResult[0].projectionPushed(), parquetResult[0].limitPushed(), parquetResult[0].sourceQueryDigest());
+                parquetResult[0].ordersPushed(), parquetResult[0].projectionPushed(), parquetResult[0].limitPushed(),
+                false, parquetResult[0].sourceQueryDigest());
         return new DatasetBatch(rows, null, rows.size(), true, report);
     }
 
@@ -253,7 +268,13 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
     private record PushdownPlan(FilterPredicate predicate, List<DatasetFilter> pushedFilters,
                                 List<DatasetFilter> residualFilters, Schema projectionSchema) {}
     private record ParquetScanResult(List<DatasetFilter> pushedFilters, List<DatasetFilter> residualFilters,
-                                     boolean projectionPushed, boolean limitPushed, String sourceQueryDigest) {}
+                                     List<DatasetSort> ordersPushed, boolean projectionPushed,
+                                     boolean limitPushed, String sourceQueryDigest) {
+        ParquetScanResult(List<DatasetFilter> pushedFilters, List<DatasetFilter> residualFilters,
+                          boolean projectionPushed, boolean limitPushed, String sourceQueryDigest) {
+            this(pushedFilters, residualFilters, List.of(), projectionPushed, limitPushed, sourceQueryDigest);
+        }
+    }
     private List<String> parse(String line){ List<String> out=new ArrayList<>(); StringBuilder b=new StringBuilder(); boolean q=false; for(int i=0;i<line.length();i++){char c=line.charAt(i); if(c=='"') q=!q; else if(c==','&&!q){out.add(b.toString());b.setLength(0);} else b.append(c);} if(q) throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,"CSV quote invalid"); out.add(b.toString()); return out; }
     private boolean matches(Map<String,Object> row,List<DatasetFilter> fs){
         for (DatasetFilter f : fs) {

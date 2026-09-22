@@ -29,7 +29,7 @@ class DatasetManagementControllerTest {
 
     @Test
     void createForwardsTypedSourceDefinitionToService() {
-        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard);
+        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard, new vip.mate.dataagent.service.impl.QueryPlannerImpl(), new com.fasterxml.jackson.databind.ObjectMapper());
         DatasetCreateRequest request = new DatasetCreateRequest();
         request.setName("orders");
         request.setSourceDefinition(new DatasetSourceDefinition.JdbcSqlDefinition(3L, "select id from orders"));
@@ -41,7 +41,7 @@ class DatasetManagementControllerTest {
 
     @Test
     void updateForwardsTypedSourceDefinitionToService() {
-        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard);
+        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard, new vip.mate.dataagent.service.impl.QueryPlannerImpl(), new com.fasterxml.jackson.databind.ObjectMapper());
         DatasetUpdateRequest request = new DatasetUpdateRequest();
         request.setSourceDefinition(new DatasetSourceDefinition.AloudataViewDefinition(8L, "view-1"));
         when(datasetService.updateDataset(7L, request)).thenReturn(new DatasetVO());

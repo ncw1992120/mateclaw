@@ -6,6 +6,7 @@ import net.sf.jsqlparser.statement.Statements;
 import net.sf.jsqlparser.statement.select.Select;
 import org.springframework.stereotype.Component;
 import vip.mate.dataagent.dataset.DatasetFilter;
+import vip.mate.dataagent.dataset.DatasetSort;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -21,12 +22,24 @@ public class JSqlParserValidationService implements SqlValidationService {
     @Override
     public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
                                      int limit, int offset) {
-        return compile(baseSql, columns, filters, limit, offset, Map.of());
+        return compile(baseSql, columns, filters, List.of(), limit, offset);
+    }
+
+    @Override
+    public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
+                                     List<DatasetSort> orders, int limit, int offset) {
+        return compile(baseSql, columns, filters, orders, limit, offset, Map.of());
     }
 
     @Override
     public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
                                      int limit, int offset, Map<String, Object> namedParameters) {
+        return compile(baseSql, columns, filters, List.of(), limit, offset, namedParameters);
+    }
+
+    @Override
+    public CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
+                                     List<DatasetSort> orders, int limit, int offset, Map<String, Object> namedParameters) {
         // 命名参数必须在**解析之前**换成 ? —— JSqlParser 认不出 `:name`，带占位符的 SQL 直接解析不过去。
         // 值按出现顺序收集，与随后追加的 filters / limit / offset 拼成一个有序参数列表。
         List<Object> parameters = new ArrayList<>();
@@ -94,6 +107,19 @@ public class JSqlParserValidationService implements SqlValidationService {
         String canonicalSql = statement.toString();
         String sql = "SELECT " + projection + " FROM (" + canonicalSql + ") AS _mateclaw_source";
         if (predicate.length() > 0) sql += " WHERE " + predicate;
+        // 排序字段只允许来自注册表白名单的安全标识符，拼接为受控 ORDER BY（值不参与拼接）
+        StringBuilder orderBy = new StringBuilder();
+        for (DatasetSort sort : orders == null ? List.<DatasetSort>of() : orders) {
+            if (!IDENTIFIER.matcher(sort.field()).matches()) {
+                throw new IllegalArgumentException("unsafe sort column: " + sort.field());
+            }
+            if (!allowedColumns.isEmpty() && !allowedColumns.contains(sort.field().toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("unknown sort column: " + sort.field());
+            }
+            if (orderBy.length() > 0) orderBy.append(", ");
+            orderBy.append(sort.field()).append(' ').append(sort.direction().equalsIgnoreCase("desc") ? "DESC" : "ASC");
+        }
+        if (orderBy.length() > 0) sql += " ORDER BY " + orderBy;
         sql += " LIMIT ? OFFSET ?";
         parameters.add(limit);
         parameters.add(offset);

@@ -60,7 +60,8 @@ public class JdbcDatasetAdapter implements DatasetSourceAdapter {
         }
         List<String> columns = request.columns().isEmpty() ? fieldNames(request.datasetId()) : request.columns();
         CompiledJdbcQuery compiled = sqlValidationService.compile(baseSql(dataset, datasource), columns,
-                request.filters(), Math.min(request.limit() == null ? 100 : request.limit(), MAX_PAGE_SIZE),
+                request.filters(), request.orders(),
+                Math.min(request.limit() == null ? 100 : request.limit(), MAX_PAGE_SIZE),
                 request.offset() == null ? 0 : request.offset());
         try (Connection connection = DriverManager.getConnection(JdbcUtils.buildJdbcUrl(datasource),
                 datasource.getUsername(), AesPasswordCryptor.decrypt(datasource.getPassword()));
@@ -76,8 +77,8 @@ public class JdbcDatasetAdapter implements DatasetSourceAdapter {
                     for (int i = 1; i <= count; i++) row.put(metadata.getColumnLabel(i), resultSet.getObject(i));
                     rows.add(row);
                 }
-                PushdownReport report = new PushdownReport(request.filters(), List.of(),
-                        !columns.isEmpty(), true, compiled.digest());
+                PushdownReport report = new PushdownReport(request.filters(), List.of(), request.orders(),
+                        !columns.isEmpty(), true, false, compiled.digest());
                 return new DatasetBatch(rows, null, rows.size(), true, report);
             }
         } catch (SQLTimeoutException e) {

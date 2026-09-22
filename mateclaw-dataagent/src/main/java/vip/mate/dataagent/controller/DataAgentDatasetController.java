@@ -31,6 +31,8 @@ public class DataAgentDatasetController {
     private final DatasetManageService datasetService;
     private final DatasetExecutionService executionService;
     private final WorkspaceGuard workspaceGuard;
+    private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @GetMapping("/{id}/descriptor")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
@@ -46,6 +48,63 @@ public class DataAgentDatasetController {
     public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request) {
         DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
         return R.ok(executionService.preview(context, request));
+    }
+
+    /**
+     * 查询计划预览：合并查询配置草稿与运行时 QueryContext，返回计划、描述符、受控行集与下推报告。
+     * 预览不落库；显式空集合短路时不访问数据源。
+     */
+    @PostMapping("/query-plan/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询计划预览", description = "编辑器验证单个数据集查询计划，返回 plan/descriptor/rows/pushdownReport")
+    public R<Map<String, Object>> queryPlanPreview(@RequestBody QueryPlanPreviewRequest request) {
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(),
+                workspaceGuard.currentUserId(), "plan-preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
+        DatasetInputDescriptor descriptor = executionService.descriptor(context, request.datasetId(), request.inputName());
+
+        com.fasterxml.jackson.databind.node.ObjectNode input = objectMapper.createObjectNode();
+        input.put("datasetId", String.valueOf(request.datasetId()));
+        input.put("inputName", request.inputName());
+        if (request.queryConfig() != null && request.queryConfig().isObject()) {
+            input.set("queryConfig", request.queryConfig());
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode component = objectMapper.createObjectNode();
+        component.putObject("config").putObject("datasetPipeline")
+                .putArray("datasetInputs").add(input);
+
+        vip.mate.dataagent.dto.DatasetQueryPlanDTO plan =
+                queryPlanner.plan(component, input, request.queryContext(), false);
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("plan", plan);
+        response.put("descriptor", descriptor);
+        response.put("pushdownReport", null);
+        if (plan.shortCircuitEmpty()) {
+            // 显式空集合：短路空结果，不访问数据源
+            response.put("rows", List.of());
+            response.put("rowCount", 0);
+            return R.ok(response);
+        }
+
+        Map<String, String> fieldRoles = new java.util.HashMap<>();
+        descriptor.schema().forEach(column -> fieldRoles.put(column.name(), column.semanticRole()));
+        List<DatasetFilter> filters = plan.filters().stream()
+                .map(f -> new DatasetFilter(f.field(), fieldRoles.getOrDefault(f.field(), "dimension"), f.operator(), f.value()))
+                .toList();
+        List<DatasetSort> sorts = plan.orders().stream()
+                .map(o -> new DatasetSort(o.field(), o.direction()))
+                .toList();
+        Integer limit = plan.pagination() == null ? 100 : plan.pagination().pageSize();
+        Integer offset = plan.pagination() == null ? 0 : plan.pagination().offset();
+        boolean requestTotal = plan.pagination() != null;
+        DatasetReadRequest readRequest = new DatasetReadRequest(request.datasetId(), request.inputName(),
+                plan.columns(), filters, sorts, limit, offset, Map.of(), requestTotal);
+        DatasetBatch batch = executionService.preview(context, readRequest);
+        response.put("rows", batch.rows());
+        response.put("rowCount", batch.rowCount());
+        response.put("pushdownReport", batch.pushdownReport());
+        if (requestTotal && batch.totalCount() != null) response.put("totalCount", batch.totalCount());
+        return R.ok(response);
     }
 
     /**

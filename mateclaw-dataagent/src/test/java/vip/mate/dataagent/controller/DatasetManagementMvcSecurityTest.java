@@ -110,7 +110,7 @@ class DatasetManagementMvcSecurityTest {
     }
 
     private MockMvc mvc() {
-        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard);
+        DataAgentDatasetController controller = new DataAgentDatasetController(datasetService, executionService, workspaceGuard, new vip.mate.dataagent.service.impl.QueryPlannerImpl(), new com.fasterxml.jackson.databind.ObjectMapper());
         return MockMvcBuilders.standaloneSetup(controller)
                 .addInterceptors(new DataAgentWorkspaceInterceptor(runtime))
                 .build();

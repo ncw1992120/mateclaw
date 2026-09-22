@@ -7,23 +7,36 @@ import java.util.Map;
  * 统一读取请求；filters 是唯一的下推条件表达方式。
  * <p>
  * 字段名与展示名契约（定版见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
- * {@code filters[].field} 是<b>数据源字段名</b>（技术主键），不是用户改过的展示名；
+ * {@code filters[].field} 与 {@code orders[].field} 是<b>数据源字段名</b>（技术主键），不是用户改过的展示名；
  * 展示名只参与前端渲染与导出表头，下推链路一律使用字段名。
+ * <p>
+ * {@code orders} 与 {@code requestTotalCount} 是查询计划链路的可选项：
+ * 旧调用方继续使用 7 参构造器（排序/总数缺省为空/false）。
  */
 public record DatasetReadRequest(
         long datasetId,
         String inputName,
         List<String> columns,
         List<DatasetFilter> filters,
+        List<DatasetSort> orders,
         Integer limit,
         Integer offset,
-        Map<String, Object> parameters) {
+        Map<String, Object> parameters,
+        boolean requestTotalCount) {
+
+    /** 旧构造重载：无排序、不请求总数，保持既有调用方行为不变。 */
+    public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
+                              Integer limit, Integer offset, Map<String, Object> parameters) {
+        this(datasetId, inputName, columns, filters, List.of(), limit, offset, parameters, false);
+    }
+
     public DatasetReadRequest {
         if (datasetId <= 0 || inputName == null || inputName.isBlank()) {
             throw new IllegalArgumentException("datasetId and inputName are required");
         }
         columns = columns == null ? List.of() : List.copyOf(columns);
         filters = filters == null ? List.of() : List.copyOf(filters);
+        orders = orders == null ? List.of() : List.copyOf(orders);
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);
         if (limit != null && (limit <= 0 || limit > 1_000_000)) {
             throw new IllegalArgumentException("limit must be between 1 and 1000000");

@@ -76,14 +76,21 @@ public class HttpApiDatasetAdapter implements DatasetSourceAdapter {
         } catch (IllegalArgumentException e) {
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, e.getMessage(), e);
         }
+        // HTTP 源端不支持排序下推：orders 非空时改取有界全量，本地排序后切片（禁止丢语义）
+        boolean residualSort = request.orders() != null && !request.orders().isEmpty();
+        DatasetReadRequest effectiveRequest = residualSort
+                ? new DatasetReadRequest(request.datasetId(), request.inputName(), request.columns(),
+                        request.filters(), List.of(), MAX_RESULT_ROWS, 0, request.parameters(),
+                        request.requestTotalCount())
+                : request;
         Map<String, Object> mapped;
         try {
-            mapped = policy.mapFilters(definition, request.filters());
+            mapped = policy.mapFilters(definition, effectiveRequest.filters());
         } catch (IllegalArgumentException e) {
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, e.getMessage(), e);
         }
-        URI uri = buildUri(definition, mapped, request);
-        HttpEntity<?> entity = new HttpEntity<>(buildBody(definition, mapped, request), new HttpHeaders());
+        URI uri = buildUri(definition, mapped, effectiveRequest);
+        HttpEntity<?> entity = new HttpEntity<>(buildBody(definition, mapped, effectiveRequest), new HttpHeaders());
         try {
             ResponseEntity<String> response = exchangeWithRetry(uri, definition, entity, hosts);
             if (response.getStatusCode().is3xxRedirection()) {
@@ -96,8 +103,15 @@ public class HttpApiDatasetAdapter implements DatasetSourceAdapter {
             }
             Map<String, Object> json = objectMapper.readValue(raw.isBlank() ? "{}" : raw, new TypeReference<>() {});
             List<Map<String, Object>> rows = extractRows(json, definition.resultPath());
-            return new DatasetBatch(rows, null, rows.size(), true,
-                    new PushdownReport(request.filters(), List.of(), true, true, null));
+            PushdownReport report;
+            if (residualSort) {
+                ResidualRowOperations.sort(rows, request.orders());
+                rows = new ArrayList<>(ResidualRowOperations.paginate(rows, request.limit(), request.offset()));
+                report = new PushdownReport(request.filters(), List.of(), List.of(), true, false, false, null);
+            } else {
+                report = new PushdownReport(request.filters(), List.of(), List.of(), true, true, false, null);
+            }
+            return new DatasetBatch(rows, null, rows.size(), true, report);
         } catch (DatasetReadException e) {
             throw e;
         } catch (HttpClientErrorException.TooManyRequests e) {

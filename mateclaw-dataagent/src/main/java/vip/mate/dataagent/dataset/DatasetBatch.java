@@ -11,9 +11,15 @@ public record DatasetBatch(
         ObjectRef objectRef,
         long rowCount,
         boolean last,
-        PushdownReport pushdownReport) {
+        PushdownReport pushdownReport,
+        Long totalCount) {
     public DatasetBatch(List<Map<String, Object>> rows, ObjectRef objectRef, long rowCount, boolean last) {
-        this(rows, objectRef, rowCount, last, null);
+        this(rows, objectRef, rowCount, last, null, null);
+    }
+
+    public DatasetBatch(List<Map<String, Object>> rows, ObjectRef objectRef, long rowCount, boolean last,
+                        PushdownReport pushdownReport) {
+        this(rows, objectRef, rowCount, last, pushdownReport, null);
     }
 
     public DatasetBatch {

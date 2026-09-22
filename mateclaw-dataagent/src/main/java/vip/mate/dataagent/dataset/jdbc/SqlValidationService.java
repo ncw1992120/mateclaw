@@ -1,6 +1,7 @@
 package vip.mate.dataagent.dataset.jdbc;
 
 import vip.mate.dataagent.dataset.DatasetFilter;
+import vip.mate.dataagent.dataset.DatasetSort;
 
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,28 @@ import java.util.Map;
 public interface SqlValidationService {
     CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
                               int limit, int offset);
+
+    /**
+     * 带排序的编译：排序字段必须来自注册表白名单（{@code columns}）且是安全标识符，
+     * 实现负责转换为 ORDER BY 追加到外层 SELECT；不支持排序的实现应抛出异常而不是静默丢弃。
+     */
+    default CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
+                                      List<DatasetSort> orders, int limit, int offset) {
+        if (orders != null && !orders.isEmpty()) {
+            throw new IllegalArgumentException("sorting is not supported for this source");
+        }
+        return compile(baseSql, columns, filters, limit, offset);
+    }
+
+    /** 带排序与命名参数绑定的编译（完整形态）。 */
+    default CompiledJdbcQuery compile(String baseSql, List<String> columns, List<DatasetFilter> filters,
+                                      List<DatasetSort> orders, int limit, int offset,
+                                      Map<String, Object> namedParameters) {
+        if (orders != null && !orders.isEmpty()) {
+            throw new IllegalArgumentException("sorting is not supported for this source");
+        }
+        return compile(baseSql, columns, filters, limit, offset, namedParameters);
+    }
 
     /**
      * 带命名参数绑定的编译：把 baseSql 里的 {@code :name} 占位符绑成 JDBC 参数。
