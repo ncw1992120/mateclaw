@@ -48,6 +48,26 @@ public class DataAgentGlobalExceptionHandler {
     }
 
     /**
+     * 处理请求体反序列化异常（400）：QueryContext 等契约 DTO 的字段校验在构造器中抛出，
+     * Jackson 包装为 HttpMessageNotReadableException —— 必须映射 400 稳定信封而非 500。
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<R<Void>> handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException e) {
+        String detail = e.getCause() instanceof Exception cause ? cause.getMessage() : e.getMessage();
+        log.warn("请求体格式异常: {}", detail);
+        return ResponseEntity.badRequest().body(R.fail(400, String.valueOf(detail)));
+    }
+
+    /**
+     * 处理查询链路业务异常：携带稳定错误码（QUERY_CONTEXT_INVALID 等），映射 400 稳定信封。
+     */
+    @ExceptionHandler(vip.mate.dataagent.service.QueryPlanException.class)
+    public ResponseEntity<R<Void>> handleQueryPlanException(vip.mate.dataagent.service.QueryPlanException e) {
+        log.warn("查询链路业务异常: code={}, msg={}", e.getCode(), e.getMessage());
+        return ResponseEntity.badRequest().body(R.fail(400, e.getCode() + ": " + e.getMessage()));
+    }
+
+    /**
      * 处理状态冲突异常（409）
      */
     @ExceptionHandler(IllegalStateException.class)

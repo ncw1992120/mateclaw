@@ -1,0 +1,32 @@
+{
+  "name": "aloudata-metrics-query-sort-page",
+  "request": {
+    "method": "POST",
+    "urlPath": "/semantic/api/v1.1/metrics/query-sort-page"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "code": "200",
+      "success": true,
+      "data": {
+        "columns": {
+          "metric_date": [{ "value": "2026-09-01", "flag": null, "count": 1 }, { "value": "2026-09-02", "flag": null, "count": 1 }],
+          "strategy_id": [{ "value": "A", "flag": null, "count": 1 }, { "value": "B", "flag": null, "count": 1 }],
+          "region": [{ "value": "east", "flag": null, "count": 1 }, { "value": "east", "flag": null, "count": 1 }],
+          "in_account": [{ "value": 120.5, "flag": null, "count": 1 }, { "value": 80.0, "flag": null, "count": 1 }]
+        },
+        "metas": [],
+        "queryId": "mock-sort-page-001",
+        "warning": null,
+        "total": 2
+      }
+    }
+  },
+  "metadata": {
+    "purpose": "表格详情页查询链路（实施计划任务 8）：Aloudata 指标&维度排序+分页+总数场景",
+    "expects": "请求体应含 metrics/dimensions/filters/timeConstraint/orders/limit/offset/isQueryTotalCount",
+    "coverage": "日期边界 2026-09-01/2026-10-01、重复维度 region=east、分页总数 total=2"
+  }
+}
