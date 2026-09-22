@@ -21,8 +21,6 @@
             :remote-method="onMetricRemote"
             :loading="metricSearchLoading"
             clearable
-            collapse-tags
-            collapse-tags-tooltip
             class="box-select"
             placeholder="搜索并选择指标（实时）"
             @focus="preloadMetrics"
@@ -40,8 +38,17 @@
                 <span class="opt-main" @mouseenter="loadMetricDetail(o.value)">{{ o.label }}</span>
               </el-tooltip>
             </el-option>
-            <template #tag="{ value }">
-              <span>{{ metricLabel(value) }}</span>
+            <template #tag="{ data, deleteTag }">
+              <el-tag
+                v-for="item in data"
+                :key="item.value"
+                class="selected-tag"
+                size="small"
+                closable
+                @close="deleteTag($event, item)"
+              >
+                {{ metricLabel(item.value) }}
+              </el-tag>
             </template>
           </el-select>
         </div>
@@ -55,15 +62,22 @@
             :remote-method="onDimRemote"
             :loading="dimSearchLoading"
             clearable
-            collapse-tags
-            collapse-tags-tooltip
             class="box-select"
             placeholder="搜索并选择维度（实时）"
             @focus="preloadDims"
           >
             <el-option v-for="o in dimOptions" :key="o.value" :label="o.label" :value="o.value" />
-            <template #tag="{ value }">
-              <span>{{ dimLabel(value) }}</span>
+            <template #tag="{ data, deleteTag }">
+              <el-tag
+                v-for="item in data"
+                :key="item.value"
+                class="selected-tag"
+                size="small"
+                closable
+                @close="deleteTag($event, item)"
+              >
+                {{ dimLabel(item.value) }}
+              </el-tag>
             </template>
           </el-select>
         </div>
@@ -376,10 +390,14 @@ async function onMetricRemote(query: string) {
       pageSize: SEARCH_PAGE_SIZE,
       keyword: query || undefined,
     })
-    metricOptions.value = data.records.map((r) => ({ value: r.metricName, label: r.metricDisplayName || r.metricName }))
     data.records.forEach((r) => {
       if (r.metricDisplayName) metricLabelMap[r.metricName] = r.metricDisplayName
     })
+    metricOptions.value = mergeSelectedOptions(
+      data.records.map((r) => ({ value: r.metricName, label: r.metricDisplayName || r.metricName })),
+      ui.aloudata.metrics,
+      metricLabelMap,
+    )
   } catch {
     ElMessage.error('指标搜索失败')
   } finally {
@@ -394,10 +412,14 @@ async function onDimRemote(query: string) {
       pageSize: SEARCH_PAGE_SIZE,
       keyword: query || undefined,
     })
-    dimOptions.value = data.records.map((r) => ({ value: r.dimName, label: r.dimDisplayName || r.dimName }))
     data.records.forEach((r) => {
       if (r.dimDisplayName) dimLabelMap[r.dimName] = r.dimDisplayName
     })
+    dimOptions.value = mergeSelectedOptions(
+      data.records.map((r) => ({ value: r.dimName, label: r.dimDisplayName || r.dimName })),
+      ui.aloudata.dims,
+      dimLabelMap,
+    )
   } catch {
     ElMessage.error('维度搜索失败')
   } finally {
@@ -417,6 +439,19 @@ function metricLabel(v: string) {
 }
 function dimLabel(v: string) {
   return dimLabelMap[v] || v
+}
+function mergeSelectedOptions(
+  options: { value: string; label: string }[],
+  selected: string[],
+  labels: Record<string, string>,
+) {
+  const result = [...options]
+  selected.forEach((value) => {
+    if (!result.some((option) => option.value === value)) {
+      result.push({ value, label: labels[value] || value })
+    }
+  })
+  return result
 }
 
 // ---- 指标详情（懒加载：悬停选项 / 展开行时才请求，结果缓存）----
@@ -516,10 +551,16 @@ async function loadDims(page: number) {
 
 function onMetricSelectionChange(rows: any[]) {
   if (syncing.value) return
+  rows.forEach((r) => {
+    if (r.metricDisplayName) metricLabelMap[r.metricName] = r.metricDisplayName
+  })
   ui.aloudata.metrics = rows.map((r) => r.metricName)
 }
 function onDimSelectionChange(rows: any[]) {
   if (syncing.value) return
+  rows.forEach((r) => {
+    if (r.dimDisplayName) dimLabelMap[r.dimName] = r.dimDisplayName
+  })
   ui.aloudata.dims = rows.map((r) => r.dimName)
 }
 
@@ -561,6 +602,29 @@ function onDimPageChange(p: number) {
 }
 .box-select {
   flex: 1;
+}
+.box-select :deep(.el-select__wrapper) {
+  min-height: 32px;
+  height: auto;
+  align-items: flex-start;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.box-select :deep(.el-select__selection),
+.box-select :deep(.el-select__tags) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+  height: auto;
+  max-width: calc(100% - 24px);
+}
+.box-select :deep(.el-select__selected-item) {
+  max-width: 100%;
+}
+.box-select :deep(.selected-tag) {
+  margin: 0;
+  max-width: 100%;
 }
 .browse-toggle {
   padding-left: 0;
