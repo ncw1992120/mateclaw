@@ -233,6 +233,48 @@ class LocalAloudataFixturesTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void metricsQuerySupportsTimeConstraintOrderingResultFilterAndTotalCount() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_cust_asset_in"),
+                "dimensions", List.of("metric_time", "channel"),
+                "timeConstraint", "([metric_time] >= \"2026-09-02\" AND [metric_time] <= \"2026-09-02\")",
+                "resultFilters", List.of("[channel] <> \"SMS\""),
+                "orders", List.of(Map.of("metric_time", "desc")),
+                "limit", 1,
+                "offset", 0,
+                "isQueryTotalCount", true,
+                "queryResultType", "SQL_AND_DATA",
+                "source", "dashboard-card-001"), null);
+
+        assertEquals(Boolean.TRUE, body.get("success"));
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, Object> table = (Map<String, Object>) data.get("table");
+        Map<String, Object> columns = (Map<String, Object>) table.get("columns");
+        assertEquals(1, ((List<?>) columns.get("metric_time")).size());
+        assertEquals("2026-09-02", ((Map<?, ?>) ((List<?>) columns.get("metric_time")).getFirst()).get("value"));
+        assertEquals(2, data.get("total"), "total 应为结果筛选后的分页前条数");
+        assertEquals("dashboard-card-001", data.get("source"));
+        assertEquals("SQL_AND_DATA", data.get("queryResultType"));
+        assertNotNull(data.get("sql"));
+    }
+
+    @Test
+    void metricsQueryAcceptsAllDocumentedOptionalParameterShapes() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_cust_asset_in"),
+                "metricDefinitions", Map.of("tmp_metric", Map.of("expression", "digo_cust_asset_in")),
+                "specialMvConfig", Map.of("enable", true),
+                "queryResultType", "DATA",
+                "isQueryTotalCount", false,
+                "source", "test-suite"), null);
+
+        assertEquals("200", body.get("code"));
+        assertEquals(Boolean.TRUE, body.get("success"));
+        assertEquals("test-suite", ((Map<?, ?>) body.get("data")).get("source"));
+    }
+
+    @Test
     void unknownEndpointReturnsEmptyEnvelopeInsteadOfFailing() {
         Map<String, Object> body = fixtures.payload("no_such_endpoint", Map.of(), null);
 

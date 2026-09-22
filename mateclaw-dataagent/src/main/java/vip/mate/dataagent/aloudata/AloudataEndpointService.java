@@ -151,12 +151,18 @@ public class AloudataEndpointService {
         endpoints.put("metrics_query", endpoint("semantic", "/semantic/api/v1.1/metrics/query", "POST",
                 mergeParams(headers, List.of(
                         new ApiParam("metrics", "Array", true, null, "指标列表", "BODY"),
+                        new ApiParam("metricDefinitions", "Map", false, null, "临时指标定义", "BODY"),
                         new ApiParam("dimensions", "Array", false, null, "维度列表", "BODY"),
                         new ApiParam("filters", "Array", false, null, "筛选条件", "BODY"),
+                        new ApiParam("specialMvConfig", "Map", false, null, "物化视图加速配置", "BODY"),
+                        new ApiParam("resultFilters", "Array", false, null, "结果筛选条件", "BODY"),
                         new ApiParam("timeConstraint", "String", false, null, "时间约束", "BODY"),
+                        new ApiParam("orders", "Array", false, null, "排序条件", "BODY"),
                         new ApiParam("limit", "Integer", false, "100", "返回行数", "BODY"),
                         new ApiParam("offset", "Integer", false, "0", "偏移量", "BODY"),
-                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "BODY")))));
+                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "BODY", "SQL_AND_DATA,SQL,DATA"),
+                        new ApiParam("source", "String", false, null, "查询来源标识", "BODY"),
+                        new ApiParam("isQueryTotalCount", "Boolean", false, null, "是否返回总条数", "BODY")))));
         return endpoints;
     }
 

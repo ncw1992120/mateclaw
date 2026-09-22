@@ -182,6 +182,20 @@ def apply_filters(rows: list, filters) -> list:
     return rows
 
 
+def sort_rows(rows: list, orders) -> list:
+    """按 Aloudata orders 的字段顺序排序，稳定支持 asc/desc。"""
+    result = list(rows)
+    if not isinstance(orders, list):
+        return result
+    specs = []
+    for item in orders:
+        if isinstance(item, dict):
+            specs.extend((str(field), str(direction).lower() == "desc") for field, direction in item.items())
+    for field, descending in reversed(specs):
+        result.sort(key=lambda row: (row.get(field) is None, row.get(field)), reverse=descending)
+    return result
+
+
 def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
     if (set(requested_metrics) | set(requested_dimensions)).issubset({"region", "order_date", "revenue"}):
         # seed 的双源门禁通过 metrics/query 下推 region=east；该路径与
@@ -316,6 +330,16 @@ def handle_metrics_query(query, body, headers):
 
     projected = {name: cells for name, cells in source_columns.items() if not requested or name in requested}
     rows = apply_filters(columns_to_rows(projected), filters)
+    if body.get("timeConstraint"):
+        rows = apply_filters(rows, [body["timeConstraint"]])
+    result_filters = body.get("resultFilters") or []
+    if any(not isinstance(item, str) for item in result_filters):
+        return envelope(None, code="SM99002", success=False,
+                        error="系统异常: resultFilters 仅支持表达式字符串数组",
+                        trace_id="mock-trace-SM99002")
+    rows = apply_filters(rows, result_filters)
+    rows = sort_rows(rows, body.get("orders"))
+    total_before_paging = len(rows)
 
     offset = as_int(body.get("offset"), 0)
     if source.get("traceId") == "mock-trace-local-sales-query":
@@ -327,8 +351,17 @@ def handle_metrics_query(query, body, headers):
 
     metas = source_data.get("metas") or []
     kept_metas = [meta for meta in metas if not requested or meta.get("name") in requested]
-    return envelope({"table": {"columns": rows_to_columns(rows, projected.keys()), "total": len(rows)},
-                     "metas": kept_metas, "total": len(rows)}, trace_id=source.get("traceId", "mock-trace"))
+    query_result_type = body.get("queryResultType") or "DATA"
+    data = {"table": {"columns": rows_to_columns(rows, projected.keys()), "total": len(rows)},
+            "metas": kept_metas,
+            "total": total_before_paging if body.get("isQueryTotalCount") is True else len(rows),
+            "queryResultType": query_result_type}
+    if body.get("source") is not None:
+        data["source"] = body["source"]
+    if str(query_result_type).upper() in {"SQL", "SQL_AND_DATA"}:
+        select = ", ".join(requested) if requested else "*"
+        data["sql"] = f"SELECT {select} FROM mock_metrics"
+    return envelope(data, trace_id=source.get("traceId", "mock-trace"))
 
 
 def handle_batch_detail(query, body, headers):

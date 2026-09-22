@@ -273,11 +273,21 @@ public class LocalAloudataFixtures {
         List<Map<String, Object>> rows = toRows(projected);
         try {
             rows = filterRows(rows, expressions);
+            String timeConstraint = firstString(params.get("timeConstraint"));
+            if (timeConstraint != null) {
+                rows = filterRows(rows, List.of(timeConstraint));
+            }
+            List<String> resultExpressions = filterExpressions(params.get("resultFilters"));
+            if (resultExpressions == null) {
+                return systemError(CODE_SYSTEM_ERROR, "系统异常: resultFilters 仅支持表达式字符串数组");
+            }
+            rows = filterRows(rows, resultExpressions);
         } catch (InvalidFilterExpressionException e) {
-            log.warn("[local-mock] metrics_query 收到无法解析的 filters={}，按真实服务行为返回 SM99002",
-                    params.get("filters"));
+            log.warn("[local-mock] metrics_query 收到无法解析的筛选条件，按真实服务行为返回 SM99002");
             return systemError("SM99002", "系统异常: filters 表达式无法解析");
         }
+        sortRows(rows, params.get("orders"));
+        int totalBeforePaging = rows.size();
         int offset = intValue(params.get("offset"), 0);
         int limit = intValue(params.get("limit"), rows.size());
         if (offset > 0 || limit < rows.size()) {
@@ -296,9 +306,57 @@ public class LocalAloudataFixtures {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("table", Map.of("columns", columns, "total", rows.size()));
         data.put("metas", metas);
-        data.put("total", rows.size());
+        data.put("total", Boolean.TRUE.equals(params.get("isQueryTotalCount")) ? totalBeforePaging : rows.size());
+        String queryResultType = firstString(params.get("queryResultType"));
+        data.put("queryResultType", queryResultType == null ? "DATA" : queryResultType);
+        String sourceId = firstString(params.get("source"));
+        if (sourceId != null) data.put("source", sourceId);
+        if ("SQL".equalsIgnoreCase(queryResultType) || "SQL_AND_DATA".equalsIgnoreCase(queryResultType)) {
+            data.put("sql", buildMockSql(requested, expressions, params));
+        }
         return envelope(data, source.get("traceId"));
     }
+
+    private void sortRows(List<Map<String, Object>> rows, Object rawOrders) {
+        if (!(rawOrders instanceof Collection<?> orders) || orders.isEmpty()) return;
+        List<OrderSpec> specs = new ArrayList<>();
+        for (Object item : orders) {
+            if (!(item instanceof Map<?, ?> map)) continue;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String field = firstString(entry.getKey());
+                if (field != null) specs.add(new OrderSpec(field, "desc".equalsIgnoreCase(firstString(entry.getValue()))));
+            }
+        }
+        Comparator<Map<String, Object>> comparator = null;
+        for (OrderSpec spec : specs) {
+            Comparator<Map<String, Object>> current = (left, right) -> {
+                int result = compareValues(left.get(spec.field()), right.get(spec.field()));
+                return spec.descending() ? -result : result;
+            };
+            comparator = comparator == null ? current : comparator.thenComparing(current);
+        }
+        if (comparator != null) rows.sort(comparator);
+    }
+
+    private int compareValues(Object left, Object right) {
+        String leftText = left == null ? "" : String.valueOf(left);
+        String rightText = right == null ? "" : String.valueOf(right);
+        try {
+            return Double.compare(Double.parseDouble(leftText), Double.parseDouble(rightText));
+        } catch (NumberFormatException ignored) {
+            return leftText.compareTo(rightText);
+        }
+    }
+
+    private String buildMockSql(Set<String> requested, List<String> filters, Map<String, Object> params) {
+        String select = requested.isEmpty() ? "*" : String.join(", ", requested);
+        StringBuilder sql = new StringBuilder("SELECT ").append(select).append(" FROM mock_metrics");
+        if (!filters.isEmpty()) sql.append(" WHERE ").append(String.join(" AND ", filters));
+        if (params.get("orders") != null) sql.append(" ORDER BY ").append(params.get("orders"));
+        return sql.toString();
+    }
+
+    private record OrderSpec(String field, boolean descending) {}
 
     // ------------------------------------------------------------------ 内部工具
 
