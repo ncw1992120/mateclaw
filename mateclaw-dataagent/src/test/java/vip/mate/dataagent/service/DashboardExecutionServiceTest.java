@@ -22,6 +22,34 @@ import static org.mockito.Mockito.*;
 
 class DashboardExecutionServiceTest {
     @Test
+    void executesTransientPreviewSchemaWithoutReloadingOrSavingDashboardSchema() {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        ObjectRefService objectRefs = mock(ObjectRefService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        when(guard.currentUserId()).thenReturn(8L);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setId(42L);
+        dashboard.setSchemaJson("{\"script\":\"old\",\"datasetInputs\":[]}");
+        when(dashboards.getDashboard(42L)).thenReturn(dashboard);
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), eq(Map.of("orders", 9L)), eq("result=[]"), anyMap()))
+                .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result=[]", Map.of("orders", new DatasetInputDescriptor(9L, "orders", DatasetSourceType.JDBC_TABLE, List.of(), null, Map.of(), null)), Map.of(), "token"));
+        when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
+
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(), executionMapper, objectRefs,
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-dataagent:18089/dataagent/api/");
+        service.submit(42L, new DashboardExecutionRequest(Map.of(), "card-1",
+                "{\"pages\":[{\"components\":[{\"id\":\"card-1\",\"config\":{\"datasetPipeline\":{\"script\":\"result=[]\",\"datasetInputs\":[{\"datasetId\":9,\"inputName\":\"orders\"}]}}}]}]}"));
+
+        verify(dashboards).getDashboard(42L);
+        verifyNoMoreInteractions(dashboards);
+        verify(runner).submit(anyMap());
+    }
+
+    @Test
     void preparesSavedInputsAndSubmitsRunnerWithInternalReadEndpoint() {
         InsightDashboardService dashboards = mock(InsightDashboardService.class);
         ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);

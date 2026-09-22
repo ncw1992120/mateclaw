@@ -1544,6 +1544,7 @@ export interface ResolvedDashboardTheme {
   info: string
   metricPalette: string[]
   chartPalette: string[]
+  iconPalette: string[]
   radius: 'small' | 'medium' | 'large'
   shadow: 'none' | 'subtle' | 'elevated'
   iconMode: DashboardThemeIconMode
@@ -1733,6 +1734,8 @@ export interface InsightDashboardUpdateInput {
   status?: string
   agentId?: string
   ownerName?: string
+  /** 乐观锁：更新前读取到的仪表盘更新时间。 */
+  expectedUpdateTime?: string
 }
 
 /** AI助手对话输入（统一AI生成和AI修改） */

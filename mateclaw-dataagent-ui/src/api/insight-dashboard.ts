@@ -50,8 +50,8 @@ export function execute(id: string, parameters: Record<string, unknown> = {}) {
 }
 
 /** 按组件级 datasetPipeline 创建执行任务。 */
-export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}) {
-  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters })
+export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson })
 }
 
 /** 查询脚本执行状态 */

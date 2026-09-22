@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDashboardTheme, componentThemeStyle, resolveDashboardIcon } from '@/utils/dashboard-theme'
+import { resolveDashboardTheme, componentThemeStyle, componentIconStyle, resolveDashboardIcon } from '@/utils/dashboard-theme'
 
 describe('dashboard component theme standards', () => {
   it('uses standard icon, hierarchy and automatic group color defaults', () => {
@@ -8,10 +8,23 @@ describe('dashboard component theme standards', () => {
     expect(theme.iconMode).toBe('show')
     expect(theme.hierarchy).toBe('standard')
     expect(theme.componentColorMode).toBe('auto')
+    expect(theme.iconPalette).toHaveLength(5)
     expect(componentThemeStyle(theme, 'kpi')).toEqual(expect.objectContaining({
       '--component-group-accent': theme.metricPalette[0],
       '--component-group-border': expect.stringContaining('color-mix'),
     }))
+  })
+
+  it('uses a larger, bold warm semantic icon style instead of inheriting one text color', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+    const metric = componentIconStyle(theme, 'kpi')
+    const ai = componentIconStyle(theme, 'aiAnalysis')
+
+    expect(metric['--dashboard-icon-size']).toBe('18px')
+    expect(metric['--dashboard-icon-weight']).toBe('800')
+    expect(metric['--dashboard-icon-color']).not.toBe(ai['--dashboard-icon-color'])
+    expect(metric['--dashboard-icon-color']).toMatch(/^#[0-9A-F]{6}$/i)
+    expect(componentIconStyle(theme, 'tab', '策略视角')['--dashboard-icon-color']).not.toBe(metric['--dashboard-icon-color'])
   })
 
   it('allows only standard choices to change the rendering policy', () => {

@@ -19,6 +19,7 @@ const candidateSha = execSync('git rev-parse HEAD', { cwd: process.cwd() }).toSt
 const outputDir = process.env.MATECLAW_CDP_SCREENSHOT_DIR
   ?? `/tmp/mateclaw-dashboard-editor-ux-${candidateSha.slice(0, 8)}`
 const HELP_TEXT = '选择已有数据集或创建新数据集'
+if (process.env.MATECLAW_CDP_DISPOSABLE !== 'true') throw new Error('CDP 视觉验收只允许临时测试仪表盘；请设置 MATECLAW_CDP_DISPOSABLE=true')
 
 fs.mkdirSync(outputDir, { recursive: true })
 
@@ -30,6 +31,16 @@ const page = await context.newPage()
 const consoleErrors = []
 const failedRequests = []
 let expectBusinessErrors = false
+const allowMutation = process.env.MATECLAW_CDP_ALLOW_MUTATION === 'true'
+await page.route('**/dataagent/api/v1/insight/dashboards/**', async (route) => {
+  const method = route.request().method().toUpperCase()
+  if (!allowMutation && (['PUT', 'PATCH', 'DELETE'].includes(method) || (method === 'POST' && route.request().url().includes('/copy')))) {
+    await route.abort('blockedbyclient')
+    console.warn(`[cdp] 安全保护：已阻止 ${method} 仪表盘写请求；如需保存请显式设置 MATECLAW_CDP_ALLOW_MUTATION=true`)
+    return
+  }
+  await route.continue()
+})
 
 // about:blank 上读不到 localStorage，先落到位再取原始视口与主题
 await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'domcontentloaded' }).catch(() => {})
@@ -74,10 +85,11 @@ async function gotoInsightList() {
 }
 
 async function openFirstDashboardEditor() {
-  await gotoInsightList()
-  const firstCard = page.locator('.dashboard-card').first()
-  const dashboardName = (await firstCard.locator('.card-name').innerText()).trim()
-  await firstCard.getByRole('button', { name: /编辑/ }).click()
+  const dashboardId = process.env.MATECLAW_CDP_DASHBOARD_ID
+  if (!dashboardId) throw new Error('缺少 MATECLAW_CDP_DASHBOARD_ID；禁止按列表首项操作真实仪表盘')
+  await page.goto(`${baseUrl}/insight/dashboard/editor?dashboardId=${encodeURIComponent(dashboardId)}`, { waitUntil: 'domcontentloaded' })
+  if (!page.url().includes(`dashboardId=${dashboardId}`)) throw new Error(`未进入指定仪表盘 ${dashboardId}`)
+  const dashboardName = process.env.MATECLAW_CDP_DASHBOARD_NAME ?? dashboardId
   await page.locator('.insight-editor-view').waitFor({ state: 'visible', timeout: 30_000 })
   await page.locator('.editor-canvas').waitFor({ state: 'visible', timeout: 30_000 })
   return dashboardName

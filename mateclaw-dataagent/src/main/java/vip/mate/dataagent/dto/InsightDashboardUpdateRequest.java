@@ -32,4 +32,7 @@ public class InsightDashboardUpdateRequest implements Serializable {
 
     /** 负责人名称 */
     private String ownerName;
+
+    /** 乐观锁版本：客户端读取到的 update_time；为空时兼容旧调用方。 */
+    private String expectedUpdateTime;
 }

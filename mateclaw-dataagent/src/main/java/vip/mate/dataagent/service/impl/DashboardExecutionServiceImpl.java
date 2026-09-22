@@ -68,7 +68,9 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     @Override
     public Map<String, Object> submit(long dashboardId, DashboardExecutionRequest request) {
         InsightDashboardVO dashboard = dashboards.getDashboard(dashboardId);
-        JsonNode schema = parseSchema(dashboard.getSchemaJson());
+        // 预览可携带临时 Schema；不落库、不改变仪表盘，只复用其权限与执行上下文。
+        JsonNode schema = parseSchema(request != null && request.schemaJson() != null
+                ? request.schemaJson() : dashboard.getSchemaJson());
         JsonNode pipeline = request == null ? null : findComponentPipeline(schema, request.componentId());
         JsonNode executionSchema = pipeline == null ? schema : pipeline;
         String script = text(executionSchema, "script");

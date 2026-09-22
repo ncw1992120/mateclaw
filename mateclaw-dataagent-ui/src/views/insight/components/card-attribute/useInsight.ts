@@ -35,6 +35,7 @@ import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { getExecutionResult } from '@/api/insight-dashboard'
+import { patchDashboardSchema } from '@/utils/insight-schema-patch'
 import {
   composeExecutionScript,
   effectiveSystemCode,
@@ -52,6 +53,8 @@ export type CardType = 'kpi' | 'table' | 'chart'
 
 /** 打开仪表盘时读取的执行策略；保存编辑内容时必须原样保留。 */
 let loadedExecutionPolicy: DashboardExecutionPolicy = {}
+let loadedDashboardSchema: InsightDashboardSchema | null = null
+let loadedDashboardUpdateTime: string | undefined
 
 export function setLoadedExecutionPolicy(policy: DashboardExecutionPolicy | undefined): void {
   loadedExecutionPolicy = { ...(policy ?? {}) }
@@ -1339,22 +1342,29 @@ function buildSchema(): InsightDashboardSchema {
     position: { x: 0, y: 0, w: 6, h: 2 },
     config: { field: b.filterName, optionSource: 'static', scope: 'scoped' },
   }))
-  return {
+  const patch = {
     version: '1.1',
-    pages: [
-      {
-        id: 'page_0',
-        name: '卡片配置',
-        order: 0,
-        components: [backend.withPipeline(cardComponent, pipeline), ...filterComponents],
-      },
-    ],
+    pages: [{ id: 'page_0', name: '卡片配置', order: 0, components: [backend.withPipeline(cardComponent, pipeline), ...filterComponents] }],
     datasetInputs: pipeline.datasetInputs,
     script: pipeline.script,
     scriptFilterBindings: pipeline.scriptFilterBindings,
     parameters: [],
     executionPolicy: loadedExecutionPolicy,
   }
+  const target = backend.withPipeline(cardComponent, pipeline)
+  const base = loadedDashboardSchema ?? patch
+  const merged = patchDashboardSchema(base, target) as InsightDashboardSchema
+  // 过滤器是当前卡片管道的可视化绑定；只新增缺失的过滤器，不删除其他页面/组件。
+  const firstPage = merged.pages?.[0]
+  if (firstPage && filterComponents.length) {
+    const existingIds = new Set((firstPage.components ?? []).map((item) => String(item.id)))
+    firstPage.components = [...(firstPage.components ?? []), ...filterComponents.filter((item) => !existingIds.has(item.id))]
+  }
+  merged.datasetInputs = pipeline.datasetInputs
+  merged.script = pipeline.script
+  merged.scriptFilterBindings = pipeline.scriptFilterBindings
+  merged.executionPolicy = loadedExecutionPolicy
+  return merged
 }
 
 /** 后端 Schema → 本地状态（打开时回显已保存配置） */
@@ -1415,7 +1425,10 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
   try {
     const id = dashboardId ?? (await backend.ensurePrototypeDashboard())
     state.backend.dashboardId = id
-    const schema = await backend.loadDashboardSchema(id)
+    const snapshot = await backend.loadDashboardSnapshot(id)
+    const schema = snapshot.schema
+    loadedDashboardSchema = schema
+    loadedDashboardUpdateTime = snapshot.updateTime
     const cardComp = schema.pages?.[0]?.components?.find((c) => c.type !== 'filter')
     state.backend.componentId = cardComp?.id ?? ''
     applyPipeline(schema)
@@ -1456,7 +1469,8 @@ async function saveDashboard(): Promise<boolean> {
     await ensurePersistedDatasetInputs()
     const schema = buildSchema()
     if (!state.backend.componentId) state.backend.componentId = schema.pages[0].components[0].id
-    await backend.saveDashboardSchema(state.backend.dashboardId, schema)
+    loadedDashboardUpdateTime = await backend.saveDashboardSchema(state.backend.dashboardId, schema, loadedDashboardUpdateTime)
+    loadedDashboardSchema = schema
     state.backend.lastError = ''
     return true
   } catch (e) {
@@ -1467,15 +1481,21 @@ async function saveDashboard(): Promise<boolean> {
   }
 }
 
-/** 提交并执行该卡片的 Python 预处理（先保存 Schema，再执行），轮询终态后统一解析标准结果 */
+/** 使用当前未保存的组件 Schema 执行 Python 预览；预览本身不保存仪表盘。 */
 async function runComponentPreview(): Promise<{ ok: boolean; message: string }> {
-  if (!(await saveDashboard())) return { ok: false, message: state.backend.lastError }
+  if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
+  if (state.datasets.some((ds) => !isPersistedBackendDatasetId(ds.backendDatasetId))) {
+    return { ok: false, message: '请先保存数据集配置，再执行 Python 筛选预览' }
+  }
+  const previewSchema = buildSchema()
   state.backend.running = true
   const startedAt = Date.now()
   try {
     const { executionId } = await backend.submitComponentExecution(
       state.backend.dashboardId,
       state.backend.componentId,
+      {},
+      JSON.stringify(previewSchema),
     )
     state.backend.executionId = executionId
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则

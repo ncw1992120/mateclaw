@@ -9,6 +9,7 @@ const stateFile = process.env.MATECLAW_E2E_STATE_FILE
 const evidenceDir = process.env.MATECLAW_CDP_EVIDENCE_DIR ?? path.resolve('docs/superpowers/evidence/2026-09-21-python-pipeline')
 const stepTimeoutMs = Number(process.env.MATECLAW_CDP_STEP_TIMEOUT_MS ?? 15_000)
 if (!stateFile || !fs.existsSync(stateFile)) throw new Error('缺少 MATECLAW_E2E_STATE_FILE；视觉验收不得使用硬编码 dashboard ID')
+if (process.env.MATECLAW_CDP_DISPOSABLE !== 'true') throw new Error('CDP 视觉验收只允许临时测试仪表盘；请设置 MATECLAW_CDP_DISPOSABLE=true')
 if (!Number.isFinite(stepTimeoutMs) || stepTimeoutMs <= 0) throw new Error('MATECLAW_CDP_STEP_TIMEOUT_MS 必须是正数')
 const seed = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
 const browser = await chromium.connectOverCDP(endpoint)
@@ -21,6 +22,16 @@ const page = existingPage ?? await context.newPage()
 const ownsPage = !existingPage
 page.setDefaultTimeout(stepTimeoutMs)
 page.setDefaultNavigationTimeout(stepTimeoutMs)
+const allowMutation = process.env.MATECLAW_CDP_ALLOW_MUTATION === 'true'
+await page.route('**/dataagent/api/v1/insight/dashboards/**', async (route) => {
+  const method = route.request().method().toUpperCase()
+  if (!allowMutation && (['PUT', 'PATCH', 'DELETE'].includes(method) || (method === 'POST' && route.request().url().includes('/copy')))) {
+    await route.abort('blockedbyclient')
+    console.warn(`[cdp] 安全保护：已阻止 ${method} 仪表盘写请求；如需保存请显式设置 MATECLAW_CDP_ALLOW_MUTATION=true`)
+    return
+  }
+  await route.continue()
+})
 fs.mkdirSync(evidenceDir, { recursive: true })
 
 const consoleErrors = []
@@ -62,14 +73,6 @@ async function shot(name, action) {
 }
 
 async function openSeededCard(name) {
-  // Chrome 9222 的 SPA 导航可能在 Vite 热更新期间返回 ERR_ABORTED；以 commit
-  // 作为导航边界，后续显式等待业务卡片，避免把文档加载事件误当成业务就绪。
-  await page.evaluate(() => {
-    localStorage.setItem('mc-insight-view-mode', 'list')
-    localStorage.removeItem('mc-insight-dashboard-id')
-  })
-  await page.goto(`${baseUrl}/?nav=insight`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
-  const card = page.locator('.dashboard-card').filter({ hasText: name }).first()
   const dashboardId = Object.entries(seed).find(([key]) => {
     const names = {
       pythonFilterDashboardId: 'Python Filter Dashboard',
@@ -82,13 +85,10 @@ async function openSeededCard(name) {
     }
     return names[key] === name
   })?.[1]
-  try {
-    await card.waitFor({ state: 'visible', timeout: 10_000 })
-    await card.getByRole('button', { name: /编辑/ }).click({ timeout: 10_000 })
-  } catch {
-    if (!dashboardId) throw new Error(`状态文件中缺少 ${name} 的 dashboard ID`)
-    await page.goto(`${baseUrl}/insight/dashboard/editor?dashboardId=${dashboardId}`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
-  }
+  if (!dashboardId) throw new Error(`状态文件中缺少 ${name} 的 dashboard ID；禁止按列表首项操作`)
+  // 视觉验收必须使用明确的种子 ID，禁止因列表排序变化误操作用户仪表盘或备份副本。
+  await page.goto(`${baseUrl}/insight/dashboard/editor?dashboardId=${dashboardId}`, { waitUntil: 'commit', timeout: 15_000 }).catch(() => {})
+  if (!page.url().includes(`dashboardId=${dashboardId}`)) throw new Error(`未进入指定仪表盘 ${dashboardId}`)
   await page.locator('.insight-editor-view').waitFor({ state: 'visible', timeout: 30_000 })
   const canvasCard = page.locator('[data-component-id]').first()
   await canvasCard.waitFor({ state: 'visible', timeout: 30_000 })

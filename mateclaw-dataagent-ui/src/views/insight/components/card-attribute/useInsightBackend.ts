@@ -14,7 +14,7 @@
  *     `component.config.datasetPipeline = { datasetInputs, script, scriptFilterBindings, ... }`。
  *   - datasetInputs[].datasetId 必须是「真实数据集 ID」；datasetInputs[].inputName 即原型别名(alias)。
  *   - 执行入口：POST /v1/insight/dashboards/{id}/components/{componentId}/executions，
- *     随后轮询 status/logs/result。
+ *     预览时可携带临时 schemaJson，随后轮询 status/logs/result，不写回仪表盘。
  *
  * 鉴权：请求拦截器（@/api/index）自动从 localStorage 注入 token 与 X-Workspace-Id，
  * 因此这里无需手动处理认证；未登录时接口会返回 401 并由拦截器跳转登录页。
@@ -51,7 +51,7 @@ export async function ensurePrototypeDashboard(): Promise<string> {
 }
 
 /** 读取并规范化为当前版本 Schema（旧 components 格式自动迁移到 pages） */
-export async function loadDashboardSchema(id: string): Promise<InsightDashboardSchema> {
+export async function loadDashboardSnapshot(id: string): Promise<{ schema: InsightDashboardSchema; updateTime?: string }> {
   const detail = (await dashboardApi.get(id)) as unknown as { schemaJson?: string }
   let parsed: unknown = {}
   if (detail?.schemaJson) {
@@ -61,12 +61,20 @@ export async function loadDashboardSchema(id: string): Promise<InsightDashboardS
       parsed = {}
     }
   }
-  return migrateInsightDashboardSchema(parsed, '卡片配置')
+  return {
+    schema: migrateInsightDashboardSchema(parsed, '卡片配置'),
+    updateTime: (detail as { updateTime?: string }).updateTime,
+  }
+}
+
+export async function loadDashboardSchema(id: string): Promise<InsightDashboardSchema> {
+  return (await loadDashboardSnapshot(id)).schema
 }
 
 /** 保存 Schema（序列化为 schemaJson 字符串） */
-export async function saveDashboardSchema(id: string, schema: InsightDashboardSchema): Promise<void> {
-  await dashboardApi.update(id, { schemaJson: JSON.stringify(schema) })
+export async function saveDashboardSchema(id: string, schema: InsightDashboardSchema, expectedUpdateTime?: string): Promise<string | undefined> {
+  const result = await dashboardApi.update(id, { schemaJson: JSON.stringify(schema), expectedUpdateTime }) as unknown as { updateTime?: string }
+  return result.updateTime
 }
 
 /** 读取组件的组件级数据集编排（复用 ui 工具，保证与真实编辑器一致） */
@@ -104,8 +112,9 @@ export async function submitComponentExecution(
   dashboardId: string,
   componentId: string,
   parameters: Record<string, unknown> = {},
+  schemaJson?: string,
 ): Promise<{ executionId: string; status?: string }> {
-  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters)) as unknown as {
+  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters, schemaJson)) as unknown as {
     executionId: string
     status?: string
   }

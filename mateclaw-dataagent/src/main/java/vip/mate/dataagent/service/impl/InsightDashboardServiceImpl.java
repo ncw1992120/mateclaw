@@ -2,7 +2,10 @@ package vip.mate.dataagent.service.impl;
 
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.message.ContentBlock;
@@ -263,6 +266,13 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     public InsightDashboardVO updateDashboard(Long id, InsightDashboardUpdateRequest request) {
         requireOwnership(id);
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
+        String actualUpdateTime = entity.getUpdateTime() == null ? null : entity.getUpdateTime().toString();
+        if (!matchesExpectedUpdateTime(request.getExpectedUpdateTime(), actualUpdateTime)) {
+            log.warn("仪表盘更新冲突: id={}, expectedUpdateTime={}, actualUpdateTime={}, userId={}",
+                    id, request.getExpectedUpdateTime(), actualUpdateTime, workspaceGuard.currentUserId());
+            throw new IllegalStateException("仪表盘已被其他操作更新，请刷新后再保存");
+        }
+        String changedFields = changedFields(request);
         if (request.getName() != null) {
             entity.setName(request.getName());
         }
@@ -287,7 +297,26 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         entity.setModifier(workspaceGuard.currentUserNickname());
         insightDashboardMapper.updateById(entity);
+        log.info("仪表盘更新审计: dashboardId={}, userId={}, workspaceId={}, fields={}, schemaBytes={}, source=dashboard-api",
+                id, workspaceGuard.currentUserId(), workspaceGuard.currentWorkspaceId(), changedFields,
+                request.getSchemaJson() == null ? 0 : request.getSchemaJson().length());
         return toVO(entity);
+    }
+
+    private String changedFields(InsightDashboardUpdateRequest request) {
+        List<String> fields = new ArrayList<>();
+        if (request.getName() != null) fields.add("name");
+        if (request.getDescription() != null) fields.add("description");
+        if (request.getSchemaJson() != null) fields.add("schemaJson");
+        if (request.getReportContent() != null) fields.add("reportContent");
+        if (request.getStatus() != null) fields.add("status");
+        if (request.getAgentId() != null) fields.add("agentId");
+        if (request.getOwnerName() != null) fields.add("ownerName");
+        return String.join(",", fields);
+    }
+
+    static boolean matchesExpectedUpdateTime(String expected, String actual) {
+        return expected == null || (actual != null && expected.equals(actual));
     }
 
     @Override
@@ -347,42 +376,53 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             return schemaJson;
         }
         try {
-            InsightDashboardSchemaDTO schema = objectMapper.readValue(schemaJson, InsightDashboardSchemaDTO.class);
+            JsonNode schema = objectMapper.readTree(schemaJson);
             Map<String, String> pageIdMap = new HashMap<>();
             Map<String, String> componentIdMap = new HashMap<>();
+            Map<String, String> tabIdMap = new HashMap<>();
             Map<String, String> perspectiveIdMap = new HashMap<>();
 
-            if (schema.getPages() != null) {
-                for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
-                    String oldPageId = page.getId();
+            JsonNode pages = schema.path("pages");
+            if (pages.isArray()) {
+                for (JsonNode page : pages) {
+                    if (!page.isObject()) {
+                        continue;
+                    }
+                    String oldPageId = textValue(page, "id");
                     String newPageId = generateSchemaId("page");
                     pageIdMap.put(oldPageId, newPageId);
-                    page.setId(newPageId);
+                    ((ObjectNode) page).put("id", newPageId);
 
-                    if (page.getComponents() != null) {
-                        for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
-                            remapComponentIds(component, componentIdMap);
+                    JsonNode components = page.path("components");
+                    if (components.isArray()) {
+                        for (JsonNode component : components) {
+                            remapComponentIds(component, componentIdMap, tabIdMap);
                         }
                     }
                 }
             }
 
-            if (schema.getComponents() != null) {
-                for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
-                    remapComponentIds(component, componentIdMap);
+            JsonNode components = schema.path("components");
+            if (components.isArray()) {
+                for (JsonNode component : components) {
+                    remapComponentIds(component, componentIdMap, tabIdMap);
                 }
             }
 
-            if (schema.getPerspectives() != null) {
-                for (InsightDashboardSchemaDTO.Perspective perspective : schema.getPerspectives()) {
-                    String oldPerspectiveId = perspective.getId();
+            JsonNode perspectives = schema.path("perspectives");
+            if (perspectives.isArray()) {
+                for (JsonNode perspective : perspectives) {
+                    if (!perspective.isObject()) {
+                        continue;
+                    }
+                    String oldPerspectiveId = textValue(perspective, "id");
                     String newPerspectiveId = generateSchemaId("persp");
                     perspectiveIdMap.put(oldPerspectiveId, newPerspectiveId);
-                    perspective.setId(newPerspectiveId);
+                    ((ObjectNode) perspective).put("id", newPerspectiveId);
                 }
             }
 
-            updateSchemaReferences(schema, pageIdMap, componentIdMap, perspectiveIdMap);
+            updateSchemaReferences(schema, pageIdMap, componentIdMap, perspectiveIdMap, tabIdMap);
             return objectMapper.writeValueAsString(schema);
         } catch (Exception e) {
             log.warn("复制仪表盘时 Schema ID 重映射失败，保留原始 Schema: {}", e.getMessage());
@@ -404,15 +444,43 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     /**
      * 重新映射单个组件及其 Tab 的 ID
      */
-    private void remapComponentIds(InsightDashboardSchemaDTO.Component component, Map<String, String> componentIdMap) {
-        String oldComponentId = component.getId();
+    private void remapComponentIds(JsonNode component,
+                                   Map<String, String> componentIdMap,
+                                   Map<String, String> tabIdMap) {
+        if (!component.isObject()) {
+            return;
+        }
+        String oldComponentId = textValue(component, "id");
         String newComponentId = generateSchemaId("comp");
         componentIdMap.put(oldComponentId, newComponentId);
-        component.setId(newComponentId);
+        ((ObjectNode) component).put("id", newComponentId);
 
-        if (component.getTabs() != null) {
-            for (InsightDashboardSchemaDTO.Tab tab : component.getTabs()) {
-                tab.setId(generateSchemaId("tab"));
+        remapTabChildren(component.path("tabs"), componentIdMap, tabIdMap);
+        JsonNode containerConfig = component.path("containerConfig");
+        if (containerConfig.isObject()) {
+            remapTabChildren(containerConfig.path("tabs"), componentIdMap, tabIdMap);
+        }
+    }
+
+    private void remapTabChildren(JsonNode tabs,
+                                  Map<String, String> componentIdMap,
+                                  Map<String, String> tabIdMap) {
+        if (!tabs.isArray()) {
+            return;
+        }
+        for (JsonNode tab : tabs) {
+            if (!tab.isObject()) {
+                continue;
+            }
+            String oldTabId = textValue(tab, "id");
+            String newTabId = generateSchemaId("tab");
+            tabIdMap.put(oldTabId, newTabId);
+            ((ObjectNode) tab).put("id", newTabId);
+            JsonNode children = tab.path("children");
+            if (children.isArray()) {
+                for (JsonNode child : children) {
+                    remapComponentIds(child, componentIdMap, tabIdMap);
+                }
             }
         }
     }
@@ -420,25 +488,33 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     /**
      * 更新 Schema 中页面 parentId、组件 boundFilterIds 与 perspectiveIds 等引用
      */
-    private void updateSchemaReferences(InsightDashboardSchemaDTO schema,
+    private void updateSchemaReferences(JsonNode schema,
                                         Map<String, String> pageIdMap,
                                         Map<String, String> componentIdMap,
-                                        Map<String, String> perspectiveIdMap) {
-        if (schema.getPages() != null) {
-            for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
-                if (page.getParentId() != null && !page.getParentId().isBlank()) {
-                    page.setParentId(pageIdMap.getOrDefault(page.getParentId(), page.getParentId()));
-                }
-                if (page.getComponents() != null) {
-                    for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
-                        updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+                                        Map<String, String> perspectiveIdMap,
+                                        Map<String, String> tabIdMap) {
+        JsonNode pages = schema.path("pages");
+        if (pages.isArray()) {
+            for (JsonNode page : pages) {
+                if (page.isObject()) {
+                    ObjectNode pageObject = (ObjectNode) page;
+                    String parentId = textValue(page, "parentId");
+                    if (!parentId.isBlank()) {
+                        pageObject.put("parentId", pageIdMap.getOrDefault(parentId, parentId));
+                    }
+                    JsonNode components = page.path("components");
+                    if (components.isArray()) {
+                        for (JsonNode component : components) {
+                            updateComponentReferences(component, componentIdMap, perspectiveIdMap, tabIdMap);
+                        }
                     }
                 }
             }
         }
-        if (schema.getComponents() != null) {
-            for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
-                updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+        JsonNode components = schema.path("components");
+        if (components.isArray()) {
+            for (JsonNode component : components) {
+                updateComponentReferences(component, componentIdMap, perspectiveIdMap, tabIdMap);
             }
         }
     }
@@ -446,21 +522,68 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     /**
      * 更新组件内部的 ID 引用（boundFilterIds、perspectiveIds）
      */
-    private void updateComponentReferences(InsightDashboardSchemaDTO.Component component,
+    private void updateComponentReferences(JsonNode component,
                                            Map<String, String> componentIdMap,
-                                           Map<String, String> perspectiveIdMap) {
-        if (component.getBoundFilterIds() != null) {
-            List<String> newBoundFilterIds = component.getBoundFilterIds().stream()
-                    .map(oldId -> componentIdMap.getOrDefault(oldId, oldId))
-                    .collect(Collectors.toList());
-            component.setBoundFilterIds(newBoundFilterIds);
+                                           Map<String, String> perspectiveIdMap,
+                                           Map<String, String> tabIdMap) {
+        if (!component.isObject()) {
+            return;
         }
-        if (component.getPerspectiveIds() != null) {
-            List<String> newPerspectiveIds = component.getPerspectiveIds().stream()
-                    .map(oldId -> perspectiveIdMap.getOrDefault(oldId, oldId))
-                    .collect(Collectors.toList());
-            component.setPerspectiveIds(newPerspectiveIds);
+        ObjectNode componentObject = (ObjectNode) component;
+        remapStringArray(componentObject, "boundFilterIds", componentIdMap);
+        remapStringArray(componentObject, "perspectiveIds", perspectiveIdMap);
+
+        JsonNode containerConfig = component.path("containerConfig");
+        if (containerConfig.isObject()) {
+            ObjectNode containerObject = (ObjectNode) containerConfig;
+            String activeTab = textValue(containerConfig, "activeTab");
+            if (!activeTab.isBlank()) {
+                containerObject.put("activeTab", tabIdMap.getOrDefault(activeTab, activeTab));
+            }
+            updateTabChildren(containerConfig.path("tabs"), componentIdMap, perspectiveIdMap, tabIdMap);
         }
+        updateTabChildren(component.path("tabs"), componentIdMap, perspectiveIdMap, tabIdMap);
+        JsonNode children = component.path("children");
+        if (children.isArray()) {
+            for (JsonNode child : children) {
+                updateComponentReferences(child, componentIdMap, perspectiveIdMap, tabIdMap);
+            }
+        }
+    }
+
+    private void updateTabChildren(JsonNode tabs,
+                                   Map<String, String> componentIdMap,
+                                   Map<String, String> perspectiveIdMap,
+                                   Map<String, String> tabIdMap) {
+        if (!tabs.isArray()) {
+            return;
+        }
+        for (JsonNode tab : tabs) {
+            JsonNode children = tab.path("children");
+            if (children.isArray()) {
+                for (JsonNode child : children) {
+                    updateComponentReferences(child, componentIdMap, perspectiveIdMap, tabIdMap);
+                }
+            }
+        }
+    }
+
+    private void remapStringArray(ObjectNode object, String fieldName, Map<String, String> idMap) {
+        JsonNode values = object.path(fieldName);
+        if (!values.isArray()) {
+            return;
+        }
+        ArrayNode remapped = object.arrayNode();
+        for (JsonNode value : values) {
+            String oldId = value.asText();
+            remapped.add(idMap.getOrDefault(oldId, oldId));
+        }
+        object.set(fieldName, remapped);
+    }
+
+    private String textValue(JsonNode object, String fieldName) {
+        JsonNode value = object.get(fieldName);
+        return value != null && value.isTextual() ? value.asText() : "";
     }
 
     /**

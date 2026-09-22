@@ -149,7 +149,8 @@ public class DataAgentInsightDashboardController {
             @PathVariable String componentId,
             @RequestBody(required = false) DashboardExecutionRequest request) {
         DashboardExecutionRequest scoped = new DashboardExecutionRequest(
-                request == null ? Map.of() : request.parameters(), componentId);
+                request == null ? Map.of() : request.parameters(), componentId,
+                request == null ? null : request.schemaJson());
         return R.ok(executionService.submit(id, scoped));
     }
 
