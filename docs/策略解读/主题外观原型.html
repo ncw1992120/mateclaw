@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>洞察仪表盘：主题外观交互原型</title>
+<style>
+  /* ================= 全站外观（模拟 light 全站主题，不受仪表盘主题污染） ================= */
+  :root{
+    --site-bg:#eef1f6; --site-panel:#ffffff; --site-border:#e4e7ed; --site-text:#1f2329;
+    --site-muted:#6b7280; --site-primary:#4c6ef5;
+    --db-up:#ef4444; --db-down:#22c55e;           /* 涨跌色：锁定，永不随主题 */
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+       background:var(--site-bg);color:var(--site-text);font-size:14px;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+  /* ================= 顶栏 ================= */
+  .topbar{height:52px;background:var(--site-panel);border-bottom:1px solid var(--site-border);
+          display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:30}
+  .back-btn{width:28px;height:28px;border:1px solid var(--site-border);border-radius:6px;background:#fff;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;color:var(--site-muted)}
+  .tb-title{display:flex;flex-direction:column;line-height:1.2}
+  .tb-title b{font-size:15px}
+  .tb-title span{font-size:11px;color:var(--site-muted)}
+  .tb-spacer{flex:1}
+  .user-chip{font-size:12px;color:var(--site-muted);border:1px solid var(--site-border);border-radius:14px;padding:4px 10px}
+  .tb-btn{height:30px;padding:0 14px;border-radius:6px;border:1px solid var(--site-border);background:#fff;cursor:pointer;
+          display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--site-text)}
+  .tb-btn:hover{border-color:var(--site-primary);color:var(--site-primary)}
+  .tb-btn.primary{background:var(--site-primary);border-color:var(--site-primary);color:#fff}
+  .tb-btn:disabled{opacity:.45;cursor:not-allowed}
+  .tb-btn:disabled:hover{border-color:var(--site-border);color:var(--site-text)}
+  /* 主题外观入口：色点 + 名称 + 未保存星号 */
+  #themeEntry .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  #themeEntry .star{color:#f59e0b;font-weight:700;margin-left:2px}
+
+  /* ================= 主体三栏 ================= */
+  .main{flex:1;display:flex;min-height:0;position:relative}
+  .side{width:200px;background:var(--site-panel);border-right:1px solid var(--site-border);padding:12px;overflow-y:auto;flex-shrink:0}
+  .side.right{width:220px;border-right:none;border-left:1px solid var(--site-border)}
+  .side h4{font-size:12px;color:var(--site-muted);margin-bottom:10px;display:flex;justify-content:space-between}
+  .side .item{padding:7px 10px;border-radius:6px;font-size:13px;color:var(--site-text);cursor:default;margin-bottom:2px}
+  .side .item.active{background:#eef2ff;color:var(--site-primary)}
+  .side .group{font-size:12px;color:var(--site-muted);margin:14px 0 6px;padding-left:10px}
+  .attr-empty{margin-top:120px;text-align:center;color:#c1c7d0;font-size:12px}
+  .attr-empty .bar{width:32px;height:3px;background:#d4d9e2;border-radius:2px;margin:0 auto 10px}
+
+  /* ================= 画布（受仪表盘主题作用域） ================= */
+  .canvas-wrap{flex:1;overflow:auto;padding:20px 24px;min-width:0;background:var(--site-bg)}
+  .canvas{max-width:920px;margin:0 auto;border-radius:12px;padding:22px 26px 36px;min-height:100%;
+    background:var(--ins-bg,#F5F7FA);color:var(--ins-text,#1F2329);
+    box-shadow:var(--ins-canvas-shadow,0 12px 32px rgba(15,23,42,.06));
+    transition:background .2s ease,color .2s ease,box-shadow .2s ease;position:relative}
+  .canvas::before{content:"";display:block;height:3px;border-radius:999px;background:var(--ins-primary,#1E40AF);opacity:.9;margin:-6px 0 16px}
+  .dashboard-meta{display:flex;align-items:center;gap:8px;margin:-2px 0 14px;color:var(--ins-muted,#6B7280);font-size:11px}
+  .dashboard-meta .theme-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;
+    color:var(--ins-primary,#1E40AF);background:var(--ins-surface-3,#eef2ff);border:1px solid var(--ins-accent-border,#dbeafe);font-weight:600}
+  .dashboard-meta .theme-badge i{width:7px;height:7px;border-radius:50%;background:var(--ins-primary,#1E40AF)}
+  .dashboard-meta .scope{margin-left:auto}
+  .canvas h2{font-size:18px;margin-bottom:4px;color:var(--ins-text,#1F2329)}
+  .canvas .desc{font-size:12px;color:var(--ins-muted,#6B7280);margin-bottom:14px}
+  .tabs{display:flex;gap:24px;border-bottom:1px solid var(--ins-border,#E4E7ED);margin-bottom:14px}
+  .tabs .tab{padding:8px 2px;font-size:13px;cursor:pointer;color:var(--ins-muted,#6B7280);
+             border-bottom:2px solid transparent;transition:color .15s}
+  .tabs .tab.active{color:var(--ins-primary,#1E40AF);border-bottom-color:var(--ins-primary,#1E40AF);font-weight:600}
+  .filter-row{display:flex;gap:10px;margin-bottom:18px}
+  .fake-select{flex:0 0 240px;height:32px;border:1px solid var(--ins-border,#E4E7ED);border-radius:6px;
+               background:var(--ins-card,#fff);color:var(--ins-muted,#6B7280);font-size:12px;
+               display:flex;align-items:center;padding:0 10px;justify-content:space-between}
+  .fake-select.wide{flex:1}
+  .sect-title{font-size:13px;font-weight:600;color:var(--ins-text,#1F2329);margin-bottom:10px;
+              padding-left:8px;border-left:3px solid var(--ins-primary,#1E40AF)}
+  .card{background:var(--ins-surface-2,var(--ins-card,#fff));border:1px solid var(--ins-border,#E4E7ED);
+        border-radius:var(--ins-radius,8px);box-shadow:var(--ins-shadow,0 1px 3px rgba(15,23,42,.06));
+        transition:background .2s,border-color .2s,box-shadow .2s}
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .kpi{padding:14px 14px 12px;position:relative;cursor:pointer}
+  .kpi.selected{outline:2px solid var(--ins-primary,#1E40AF);outline-offset:1px;z-index:7}
+  .kpi .style-btn{position:absolute;top:8px;right:8px;width:24px;height:24px;border:none;border-radius:5px;
+                  background:transparent;color:var(--ins-muted,#6B7280);cursor:pointer;opacity:0;transition:opacity .15s;
+                  display:flex;align-items:center;justify-content:center}
+  .kpi:hover .style-btn{opacity:1}
+  .kpi .style-btn:hover{background:rgba(125,125,125,.12)}
+  .kpi .k-name{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ins-muted,#6B7280)}
+  .kpi .k-icon{width:15px;height:15px;flex-shrink:0}
+  .kpi .k-value{font-size:24px;font-weight:700;margin:6px 0 4px}
+  .kpi .k-delta{font-size:11px}
+  .kpi .k-delta.up{color:var(--db-up)} .kpi .k-delta.down{color:var(--db-down)}
+  .chart-card{padding:16px;margin-bottom:18px}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--ins-muted,#6B7280);margin-bottom:8px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:-1px}
+  .ai-card{padding:16px;text-align:center}
+  .ai-btn{display:inline-flex;align-items:center;gap:6px;background:var(--ins-text,#1F2329);color:var(--ins-card,#fff);
+          font-size:12px;padding:7px 16px;border-radius:14px;border:none;cursor:pointer}
+  .ai-hint{font-size:11px;color:var(--ins-muted,#6B7280);margin-top:8px}
+  .foot-hint{position:absolute;bottom:10px;right:14px;font-size:10px;color:var(--ins-muted,#6B7280);opacity:.7}
+  /* 组合卡片：大量指标（自动循环配色/图标 + 密度档） */
+  .bulk-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--ins-border,#E4E7ED)}
+  .bulk-head>span{font-size:12px;font-weight:600;color:var(--ins-text,#1F2329)}
+  .bulk-seg button{padding:3px 10px;font-size:11px}
+  .bulk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--ins-border,#E4E7ED)}
+  .bm{background:var(--ins-surface-3,var(--ins-card,#fff));padding:var(--bm-pad,10px 12px);display:flex;flex-direction:column;gap:2px;transition:background .2s}
+  .bm .bm-name{font-size:var(--bm-name,11px);color:var(--ins-muted,#6B7280);display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden}
+  .bm .bm-name svg{width:var(--bm-icon,13px);height:var(--bm-icon,13px);flex-shrink:0}
+  .bm .bm-star{font-size:9px;color:#b45309}
+  .bm .bm-value{font-size:var(--bm-value,19px);font-weight:700;transition:font-size .15s}
+  .bulk-note{font-size:10px;color:var(--ins-muted,#6B7280);padding:7px 14px 10px;border-top:1px dashed var(--ins-border,#E4E7ED)}
+  /* 数据表格 */
+  .table-card{padding:0;overflow:hidden}
+  .dtable{width:100%;border-collapse:collapse;font-size:12px}
+  .dtable th{padding:8px 14px;text-align:left;font-weight:600;color:var(--ins-muted,#6B7280);
+             background:var(--ins-surface-3,var(--ins-card,#fff));
+             border-bottom:1px solid var(--ins-border,#E4E7ED);transition:background .2s}
+  .dtable td{padding:7px 14px;color:var(--ins-text,#1F2329);border-bottom:1px solid var(--ins-border,#E4E7ED)}
+  .dtable tbody tr:nth-child(even) td{background:color-mix(in srgb, var(--ins-bg,#F5F7FA) 45%, var(--ins-card,#fff));transition:background .2s}
+  .dtable td.up{color:var(--db-up)} .dtable td.down{color:var(--db-down)}
+  .bar-wrap{display:inline-block;width:90px;height:6px;border-radius:3px;overflow:hidden;vertical-align:middle;
+            background:color-mix(in srgb, var(--ins-border,#E4E7ED) 60%, transparent)}
+  .bar{display:block;height:100%}
+
+  /* ================= 主题外观抽屉 ================= */
+  .drawer{position:fixed;top:52px;right:0;bottom:0;width:360px;background:var(--site-panel);
+          border-left:1px solid var(--site-border);box-shadow:-8px 0 24px rgba(15,23,42,.10);
+          transform:translateX(105%);transition:transform .22s ease;z-index:40;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .dr-head{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;
+           border-bottom:1px solid var(--site-border);font-weight:600;flex-shrink:0}
+  .dr-close{border:none;background:none;font-size:16px;cursor:pointer;color:var(--site-muted);width:26px;height:26px;border-radius:5px}
+  .dr-close:hover{background:#f1f3f8}
+  .dr-body{flex:1;overflow-y:auto;padding:14px 16px 24px}
+  .dr-sect{font-size:12px;font-weight:600;color:var(--site-muted);margin:4px 0 10px;letter-spacing:.5px}
+  .preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .preset-card{border:2px solid var(--site-border);border-radius:8px;padding:6px;cursor:pointer;background:#fff;position:relative}
+  .preset-card:hover{border-color:#b8c0d4}
+  .preset-card[aria-checked="true"]{border-color:var(--site-primary);box-shadow:0 0 0 2px rgba(76,110,245,.15)}
+  .preset-card:focus-visible{outline:2px solid var(--site-primary);outline-offset:2px}
+  .preset-mini{border-radius:5px;overflow:hidden;border:1px solid rgba(0,0,0,.06)}
+  .pm-canvas{height:44px;padding:5px;display:flex;gap:4px}
+  .pm-card{flex:1;border-radius:3px;padding:3px 4px}
+  .pm-card .l{height:3px;width:60%;border-radius:2px;opacity:.35;margin-bottom:3px}
+  .pm-card .v{height:6px;width:70%;border-radius:2px}
+  .pm-name{text-align:center;font-size:11px;padding:5px 0 2px;color:var(--site-text);position:relative}
+  .preset-card[aria-checked="true"] .pm-name::after{content:"✓";position:absolute;right:6px;color:var(--site-primary);font-weight:700}
+  .layer-preview{border:1px solid var(--site-border);border-radius:8px;padding:10px;margin:0 0 16px;background:#fafbfc}
+  .layer-preview-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--site-muted);margin-bottom:8px}
+  .layer-preview-head b{font-size:12px;color:var(--site-text)}
+  .layer-stack{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .layer-stack .layer{height:42px;border-radius:6px;border:1px solid var(--preview-border);background:var(--layer-bg);padding:6px;display:flex;align-items:flex-end;font-size:10px;color:var(--layer-text)}
+  .layer-stack .layer:nth-child(1){background:var(--preview-page);color:var(--preview-muted)}
+  .layer-stack .layer:nth-child(2){background:var(--preview-card);color:var(--preview-text)}
+  .layer-stack .layer:nth-child(3){background:var(--preview-nested);color:var(--preview-text)}
+  .layer-stack .layer span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .custom-toggle{width:100%;text-align:left;border:none;background:none;font-size:13px;font-weight:600;
+                 color:var(--site-text);padding:9px 2px;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .custom-toggle .arr{transition:transform .15s;font-size:11px;color:var(--site-muted)}
+  .custom-toggle.open .arr{transform:rotate(90deg)}
+  .custom-body{display:none;padding:4px 0 0}
+  .custom-body.open{display:block}
+  .color-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;gap:8px}
+  .color-row label{font-size:12px;color:var(--site-text);flex-shrink:0}
+  .color-ctrl{display:flex;align-items:center;gap:6px}
+  .swatch{width:26px;height:20px;border-radius:4px;border:1px solid rgba(0,0,0,.15);cursor:pointer;padding:0;flex-shrink:0}
+  .swatch.err{outline:2px solid #dc2626;outline-offset:1px}
+  .swatch.locked{cursor:not-allowed;opacity:.75}
+  .hex-text{font-size:11px;color:var(--site-muted);font-family:ui-monospace,Menlo,monospace;min-width:58px;text-align:left}
+  .tag-preset{font-size:10px;color:#9aa3b2;border:1px solid #e4e7ed;border-radius:8px;padding:0 6px;line-height:16px}
+  .group-label{font-size:11px;color:#9aa3b2;margin:12px 0 2px;display:flex;justify-content:space-between}
+  .group-label .note{font-weight:400}
+  .seg{display:flex;border:1px solid var(--site-border);border-radius:6px;overflow:hidden;width:fit-content}
+  .seg button{border:none;background:#fff;padding:5px 14px;font-size:12px;cursor:pointer;color:var(--site-muted)}
+  .seg button.on{background:#eef2ff;color:var(--site-primary);font-weight:600}
+  .err-bar{display:none;margin-top:12px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
+           font-size:12px;border-radius:6px;padding:8px 10px;line-height:1.6}
+  .err-bar.show{display:block}
+  .restore-btn{margin-top:16px;width:100%;height:32px;border-radius:6px;border:1px solid var(--site-border);
+               background:#fff;cursor:pointer;font-size:12px;color:var(--site-text)}
+  .restore-btn:hover:not(:disabled){border-color:var(--site-primary);color:var(--site-primary)}
+  .restore-btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ================= 取色 popover ================= */
+  .pop{position:fixed;background:#fff;border:1px solid var(--site-border);border-radius:8px;
+       box-shadow:0 8px 28px rgba(15,23,42,.16);padding:10px;z-index:82;display:none;width:196px}
+  .pop.show{display:block}
+  .pop input.hex{width:100%;height:28px;border:1px solid var(--site-border);border-radius:5px;padding:0 8px;
+                 font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  .pop input.hex.bad{border-color:#dc2626}
+  .pop .sw-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin:9px 0}
+  .pop .sw-grid button{width:18px;height:18px;border-radius:4px;border:1px solid rgba(0,0,0,.12);cursor:pointer;padding:0}
+  .pop .pop-acts{display:flex;gap:6px;justify-content:flex-end}
+  .pop .pop-acts button{height:24px;font-size:11px;padding:0 10px;border-radius:5px;border:1px solid var(--site-border);
+                        background:#fff;cursor:pointer}
+  .pop .pop-acts .ok{background:var(--site-primary);color:#fff;border-color:var(--site-primary)}
+  .pop .pop-msg{font-size:10px;color:#b91c1c;margin-top:5px;display:none}
+  .pop .contrast-note{font-size:10px;color:var(--site-muted);margin-top:6px}
+  .pop .contrast-note.bad{color:#b91c1c}
+
+  /* ================= 指标样式弹窗 ================= */
+  .mask{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:70;display:none}
+  .mask.show{display:block}
+  .dialog{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;max-height:82vh;overflow-y:auto;
+          background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(15,23,42,.25);z-index:71;display:none}
+  .dialog.show{display:block}
+  .dg-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px 10px;font-weight:600;font-size:14px}
+  .dg-body{padding:0 18px}
+  .dg-sect{font-size:12px;font-weight:600;color:var(--site-muted);border-top:1px solid var(--site-border);
+           padding-top:12px;margin-top:12px}
+  .dg-sect:first-child{border-top:none;margin-top:2px;padding-top:0}
+  .dg-row{display:flex;align-items:center;gap:8px;margin:9px 0;font-size:12px;flex-wrap:wrap}
+  .dg-row label{width:48px;color:var(--site-text);flex-shrink:0}
+  .radio-pill{display:inline-flex;border:1px solid var(--site-border);border-radius:6px;overflow:hidden}
+  .radio-pill button{border:none;background:#fff;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--site-muted)}
+  .radio-pill button.on{background:#eef2ff;color:var(--site-primary);font-weight:600}
+  .mini-input{width:52px;height:26px;border:1px solid var(--site-border);border-radius:5px;font-size:11px;padding:0 6px}
+  .mini-select{height:26px;border:1px solid var(--site-border);border-radius:5px;font-size:11px;padding:0 4px}
+  #fieldSections{border:1px solid var(--site-border);border-radius:6px;overflow:hidden;margin-top:8px}
+  .fs-row{display:grid;grid-template-columns:56px 1fr 40px 104px;gap:8px;align-items:center;padding:7px 10px;
+          border-top:1px solid var(--site-border);font-size:12px;color:var(--site-text)}
+  .fs-head{border-top:none;background:#f7f8fa;font-size:11px;color:var(--site-muted)}
+  .fs-range{width:100%;accent-color:var(--site-primary);height:16px;cursor:pointer}
+  .icon-trigger{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--site-border);
+                border-radius:6px;background:#fff;cursor:pointer;font-size:12px}
+  .icon-trigger svg{width:14px;height:14px}
+  .legacy-tag{font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:0 7px;line-height:16px}
+  .accent-preview{display:flex;align-items:center;gap:10px;background:#f7f8fa;border:1px dashed var(--site-border);
+                  border-radius:6px;padding:8px 12px;margin:8px 0 2px}
+  .accent-preview svg{width:18px;height:18px}
+  .accent-preview b{font-size:17px}
+  .preview-err{font-size:10px;color:#b91c1c;display:none}
+  .preview-err.show{display:inline}
+  .dg-foot{display:flex;justify-content:flex-end;gap:10px;padding:14px 18px 16px}
+  .dg-foot button{height:30px;padding:0 16px;border-radius:6px;border:1px solid var(--site-border);background:#fff;
+                  cursor:pointer;font-size:13px}
+  .dg-foot .ok{background:var(--site-primary);color:#fff;border-color:var(--site-primary)}
+  .dg-foot .ok:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ================= 图标选择器 popover ================= */
+  .icon-pop{position:fixed;width:238px;background:#fff;border:1px solid var(--site-border);border-radius:8px;
+            box-shadow:0 8px 28px rgba(15,23,42,.16);padding:10px;z-index:82;display:none}
+  .icon-pop.show{display:block}
+  .icon-pop input{width:100%;height:28px;border:1px solid var(--site-border);border-radius:5px;padding:0 8px;font-size:12px}
+  .icon-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:8px;max-height:168px;overflow-y:auto}
+  .icon-cell{width:32px;height:32px;border:1px solid transparent;border-radius:6px;background:none;cursor:pointer;
+             display:flex;align-items:center;justify-content:center;color:var(--site-muted)}
+  .icon-cell:hover{background:#f1f3f8;color:var(--site-text)}
+  .icon-cell.sel{border-color:var(--site-primary);color:var(--site-primary);background:#eef2ff}
+  .icon-cell:focus-visible{outline:2px solid var(--site-primary)}
+  .icon-cell svg{width:16px;height:16px}
+  .icon-empty{font-size:11px;color:var(--site-muted);text-align:center;padding:14px 0;display:none}
+  .icon-pop .acts{display:flex;justify-content:space-between;margin-top:8px}
+  .icon-pop .acts button{border:none;background:none;font-size:11px;color:var(--site-muted);cursor:pointer;text-decoration:underline}
+
+  /* ================= 确认弹窗 / toast ================= */
+  .confirm-box{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:340px;background:#fff;border-radius:10px;
+               box-shadow:0 20px 60px rgba(15,23,42,.25);z-index:90;padding:20px;display:none}
+  .confirm-box.show{display:block}
+  .confirm-box h5{font-size:14px;margin-bottom:8px}
+  .confirm-box p{font-size:12px;color:var(--site-muted);line-height:1.7;margin-bottom:16px}
+  .confirm-box .acts{display:flex;justify-content:flex-end;gap:10px}
+  .confirm-box .acts button{height:28px;padding:0 14px;border-radius:6px;border:1px solid var(--site-border);background:#fff;cursor:pointer;font-size:12px}
+  .confirm-box .acts .warn{background:#dc2626;border-color:#dc2626;color:#fff}
+  .toast{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-8px);background:#1f2329;color:#fff;
+         font-size:12px;padding:8px 16px;border-radius:6px;opacity:0;transition:all .2s;z-index:99;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (max-width:900px){.side{width:168px}.side.right{display:none}.canvas-wrap{padding:14px}.canvas{padding:18px}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:620px){.side{display:none}.topbar{padding:0 10px}.tb-title span,.topbar .tb-btn:not(#themeEntry):not(#saveBtn){display:none}.canvas{border-radius:0;padding:16px 14px 28px}.canvas-wrap{padding:0}.filter-row{flex-direction:column}.fake-select{flex-basis:32px}.bulk-grid{grid-template-columns:repeat(2,1fr)}.preset-grid{grid-template-columns:repeat(2,1fr)}}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ==================== 顶栏 ==================== -->
+<div class="topbar">
+  <button class="back-btn" aria-label="返回">‹</button>
+  <div class="tb-title"><b>策略解读</b><span>描述</span></div>
+  <div class="tb-spacer"></div>
+  <span class="user-chip">MateClaw Admin</span>
+  <button class="tb-btn" id="themeEntry" aria-label="主题外观">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none"/></svg>
+    主题外观<span id="themeState"></span>
+  </button>
+  <button class="tb-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v3M5.6 5.6l2.1 2.1M3 12h3M5.6 18.4l2.1-2.1M12 18v3M16.3 16.3l2.1 2.1M18 12h3M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="4"/></svg> AI助手</button>
+  <button class="tb-btn" id="saveBtn">保 存</button>
+  <button class="tb-btn primary">预 览</button>
+</div>
+
+<!-- ==================== 主体 ==================== -->
+<div class="main">
+  <aside class="side">
+    <h4>页面 <span>＋ ☰</span></h4>
+    <div class="item active">卡片配置 <span style="float:right;color:#9aa3b2">⋯</span></div>
+    <h4 style="margin-top:16px">组件库 <span>«</span></h4>
+    <div class="group">基础组件 <span>6</span></div>
+    <div class="item">卡片</div><div class="item">数据表格</div><div class="item">筛选器</div>
+    <div class="item">时间筛选</div><div class="item">AI 分析</div><div class="item">组合卡片</div>
+    <div class="group">基础图表 <span>5</span></div>
+    <div class="item">折线图</div><div class="item">柱状图</div><div class="item">饼图</div><div class="item">面积图</div><div class="item">散点图</div>
+    <div class="group">高级图表 <span>17</span></div>
+    <div class="item">雷达图</div><div class="item">热力图</div>
+  </aside>
+
+  <!-- 画布：所有 --ins-* 变量由主题解析结果注入（模拟 DashboardThemeProvider 作用域） -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <div class="canvas" id="canvas">
+      <h2>策略解读</h2>
+      <div class="desc">描述</div>
+      <div class="dashboard-meta">
+        <span class="theme-badge"><i></i><span id="canvasThemeName">云枢蓝</span></span>
+        <span>页面级主题已应用</span>
+        <span class="scope">编辑态 · 草稿预览</span>
+      </div>
+      <div class="tabs" role="tablist">
+        <div class="tab active" role="tab" aria-selected="true" tabindex="0">指标视角</div>
+        <div class="tab" role="tab" aria-selected="false" tabindex="0">计划视角</div>
+        <div class="tab" role="tab" aria-selected="false" tabindex="0">策略视角</div>
+        <div class="tab" style="border:none">＋</div>
+      </div>
+      <div class="filter-row">
+        <div class="fake-select"><span>转化指标名称</span><span>✕</span></div>
+        <div class="fake-select"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg><span style="flex:1;text-align:center">时间范围：2024-04-01 — 2024-04-30</span><span>›</span></div>
+      </div>
+
+      <div class="sect-title">策略执行概况</div>
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="sect-title">策略转化趋势</div>
+      <div class="card chart-card">
+        <div class="legend" id="legend"></div>
+        <svg id="lineChart" width="100%" height="150" viewBox="0 0 760 150" preserveAspectRatio="none" aria-label="策略转化趋势折线图"></svg>
+      </div>
+
+      <div class="sect-title">策略指标总览 <span style="float:right;font-weight:400;font-size:11px;color:var(--ins-muted)">组合卡片 · 12 指标 · 只配了 1 个例外</span></div>
+      <div class="card" id="bulkCard" style="margin-bottom:18px">
+        <div class="bulk-head">
+          <span>核心指标</span>
+          <div class="seg bulk-seg" id="densitySeg" role="group" aria-label="卡片密度档">
+            <button data-d="compact">紧凑</button><button data-d="standard" class="on">标准</button><button data-d="large">大号</button>
+          </div>
+        </div>
+        <div class="bulk-grid" id="bulkGrid"></div>
+        <div class="bulk-note">配色 = 色板按 fieldKey 稳定序号循环 · 图标 = 注册表按序循环 · 字号 = 卡片密度档统一控制（随卡片配置保存，恢复预设不影响）· 仅「成交额 ★」为手动强调例外</div>
+      </div>
+
+      <div class="sect-title">策略明细数据</div>
+      <div class="card table-card" style="margin-bottom:18px">
+        <table class="dtable" id="dtable"></table>
+      </div>
+
+      <div class="sect-title">AI 分析</div>
+      <div class="card ai-card">
+        <button class="ai-btn">✦ AI 分析</button>
+        <div class="ai-hint">点击"生成分析"开始 AI 解读</div>
+      </div>
+      <div class="foot-hint">主题作用域仅限画布 —— 侧栏与顶栏保持全站主题</div>
+    </div>
+  </div>
+
+  <aside class="side right">
+    <h4 style="justify-content:flex-end">属性配置 <span>»</span></h4>
+    <div class="attr-empty"><div class="bar"></div>请选择一个组件进行配置</div>
+  </aside>
+</div>
+
+<!-- ==================== 主题外观抽屉 ==================== -->
+<div class="drawer" id="drawer" role="dialog" aria-label="主题外观" aria-hidden="true">
+  <div class="dr-head"><span>主题外观</span><button class="dr-close" id="drawerClose" aria-label="关闭抽屉">✕</button></div>
+  <div class="dr-body">
+    <div class="dr-sect">预设主题</div>
+    <div class="preset-grid" id="presetGrid" role="radiogroup" aria-label="预设主题选择"></div>
+    <div class="layer-preview" aria-live="polite">
+      <div class="layer-preview-head"><b>页面层级预览</b><span id="layerPreviewHint">主题 Token 即时生效</span></div>
+      <div class="layer-stack">
+        <div class="layer"><span>页面背景</span></div>
+        <div class="layer"><span>组合卡片</span></div>
+        <div class="layer"><span>指标 / 图表</span></div>
+      </div>
+    </div>
+
+    <button class="custom-toggle" id="customToggle" aria-expanded="false"><span class="arr">▶</span>自定义</button>
+    <div class="custom-body" id="customBody">
+      <div class="group-label">基础色</div>
+      <div id="baseColors"></div>
+      <div class="group-label">语义色 <span class="note">涨/跌方向色由组件语义控制，不随主题变化（锁定）</span></div>
+      <div id="semanticColors"></div>
+      <div class="group-label">图表色板 <span class="note">顺序即数据系列顺序</span></div>
+      <div id="paletteColors"></div>
+      <div class="group-label">形状</div>
+      <div class="color-row"><label>圆角</label>
+        <div class="seg" id="radiusSeg"><button data-v="small">小</button><button data-v="medium">中</button><button data-v="large">大</button></div>
+      </div>
+      <div class="color-row"><label>阴影</label>
+        <div class="seg" id="shadowSeg"><button data-v="none">无</button><button data-v="soft">柔和</button><button data-v="strong">明显</button></div>
+      </div>
+      <div class="err-bar" id="errBar" role="alert"></div>
+      <button class="restore-btn" id="restoreBtn">恢复预设</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 取色 popover ==================== -->
+<div class="pop" id="colorPop">
+  <input class="hex" id="hexInput" spellcheck="false" placeholder="#1E40AF">
+  <div class="sw-grid" id="popSwatches"></div>
+  <div class="contrast-note" id="contrastNote"></div>
+  <div class="pop-msg" id="popMsg">HEX 格式不正确，如 #1E40AF</div>
+  <div class="pop-acts">
+    <button id="popReset">还原预设</button>
+    <button class="ok" id="popApply">应用</button>
+  </div>
+</div>
+
+<!-- ==================== 指标样式弹窗 ==================== -->
+<div class="mask" id="mask"></div>
+<div class="dialog" id="styleDialog" role="dialog" aria-label="指标样式">
+  <div class="dg-head"><span>指标样式 ─ <span id="dgMetricName"></span></span><button class="dr-close" id="dgClose" aria-label="关闭">✕</button></div>
+  <div class="dg-body">
+    <div class="dg-sect">图标与强调色</div>
+    <div class="dg-row"><label>图标</label>
+      <button class="icon-trigger" id="iconTrigger"><span id="iconTriggerIcon">—</span><span id="iconTriggerName">默认（按序）</span> ▾</button>
+      <button style="border:none;background:none;font-size:11px;color:var(--site-muted);cursor:pointer;text-decoration:underline" id="iconClear">清除</button>
+    </div>
+    <div class="dg-row"><label>强调色</label>
+      <div class="radio-pill" id="accentPill"><button data-m="theme">跟随主题</button><button data-m="custom">自定义</button></div>
+      <button class="swatch" id="accentSwatch" data-k="__accent__" style="display:none" aria-label="修改强调色"></button>
+      <span class="hex-text" id="accentHex"></span>
+    </div>
+    <div class="dg-row" style="margin:2px 0 0">
+      <div class="accent-preview" style="flex:1">
+        <span id="pvIcon"></span><b id="pvValue">1,284.5 万</b>
+        <span style="font-size:10px;color:var(--site-muted);margin-left:auto">画布同步预览</span>
+        <span class="preview-err" id="pvErr">强调色与卡片背景对比不足 3:1</span>
+      </div>
+    </div>
+    <div class="dg-sect" style="margin-bottom:0">四字段样式 <span style="font-weight:400;color:#9aa3b2">平铺编辑，画布实时同步</span></div>
+    <div class="dg-sect" id="fieldSections" style="border-top:none;margin-top:6px;padding-top:0"></div>
+  </div>
+  <div class="dg-foot">
+    <button id="dgReset" style="margin-right:auto">重置该指标</button>
+    <button id="dgCancel">关 闭</button>
+  </div>
+</div>
+
+<!-- ==================== 图标选择器 ==================== -->
+<div class="icon-pop" id="iconPop" role="dialog" aria-label="选择图标">
+  <input id="iconSearch" placeholder="搜索图标名称或关键词">
+  <div class="icon-grid" id="iconGrid"></div>
+  <div class="icon-empty" id="iconEmpty">没有匹配的图标</div>
+  <div class="acts"><button id="iconPopClear">清除选择</button><button id="iconPopClose">关闭</button></div>
+</div>
+
+<!-- ==================== 确认弹窗 / toast ==================== -->
+<div class="mask" id="mask2" style="z-index:85"></div>
+<div class="confirm-box" id="confirmBox" role="alertdialog" aria-label="恢复预设确认">
+  <h5>恢复预设？</h5>
+  <p>将清除仪表盘级自定义颜色、色板与形状设置，回到当前预设的纯净状态。指标上的单项配色与图标不受影响。</p>
+  <div class="acts"><button id="cfCancel">取消</button><button class="warn" id="cfOk">恢复预设</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+ * 主题外观交互原型 —— 对应 docs/策略解读/主题外观原型设计.md
+ * 仅前端演示：草稿/已保存双状态、预设/自定义、对比度校验、
+ * 图标注册表、指标样式弹窗。无后端请求。
+ * ============================================================ */
+
+/* ---------- 预设主题（与实施计划 §1.4 对齐） ---------- */
+const PRESETS = {
+  blue:        { name:'云枢蓝',   primary:'#1E40AF', background:'#F5F7FA', cardBackground:'#FFFFFF', border:'#E4E7ED', text:'#1F2329', textMuted:'#6B7280', positive:'#16A34A', negative:'#DC2626', warning:'#D97706', info:'#2563EB', chartPalette:['#1E40AF','#7C3AED','#0891B2','#16A34A','#EA580C'] },
+  indigo:      { name:'靛蓝',     primary:'#4F46E5', background:'#F4F5FB', cardBackground:'#FFFFFF', border:'#E0E2F0', text:'#1E1B4B', textMuted:'#6366A5', positive:'#059669', negative:'#DC2626', warning:'#B45309', info:'#4F46E5', chartPalette:['#4F46E5','#0EA5E9','#8B5CF6','#F59E0B','#10B981'] },
+  teal:        { name:'青绿',     primary:'#0F766E', background:'#F2F8F7', cardBackground:'#FFFFFF', border:'#D8E8E6', text:'#134E4A', textMuted:'#4E7370', positive:'#16A34A', negative:'#DC2626', warning:'#D97706', info:'#0E7490', chartPalette:['#0F766E','#0284C7','#F59E0B','#84CC16','#7C3AED'] },
+  amber:       { name:'琥珀',     primary:'#B45309', background:'#FAF6F0', cardBackground:'#FFFFFF', border:'#EDE3D5', text:'#451A03', textMuted:'#92703F', positive:'#16A34A', negative:'#DC2626', warning:'#B45309', info:'#0369A1', chartPalette:['#B45309','#0369A1','#16A34A','#7C2D12','#0E7490'] },
+  'dark-data': { name:'深色数据', primary:'#60A5FA', background:'#0B1220', cardBackground:'#111A2C', border:'#1E293B', text:'#E2E8F0', textMuted:'#94A3B8', positive:'#4ADE80', negative:'#F87171', warning:'#FBBF24', info:'#60A5FA', chartPalette:['#60A5FA','#A78BFA','#22D3EE','#4ADE80','#FBBF24'] },
+  coral:       { name:'珊瑚暖橙', primary:'#C2410C', background:'#FFF7F3', cardBackground:'#FFFFFF', border:'#F3D7CB', text:'#431407', textMuted:'#8B5E4B', positive:'#15803D', negative:'#B91C1C', warning:'#C2410C', info:'#0369A1', chartPalette:['#C2410C','#DB2777','#0F766E','#CA8A04','#7C3AED'] },
+  rose:        { name:'玫瑰暖粉', primary:'#BE185D', background:'#FFF5F7', cardBackground:'#FFFFFF', border:'#F3D6DF', text:'#500724', textMuted:'#8F5D6E', positive:'#15803D', negative:'#BE123C', warning:'#B45309', info:'#0369A1', chartPalette:['#BE185D','#C2410C','#0F766E','#7C3AED','#CA8A04'] },
+  sand:        { name:'砂岩暖灰', primary:'#92400E', background:'#FAF8F3', cardBackground:'#FFFDF8', border:'#E8DFCE', text:'#3F2A18', textMuted:'#806C55', positive:'#166534', negative:'#B91C1C', warning:'#A16207', info:'#0369A1', chartPalette:['#92400E','#B45309','#0F766E','#9F1239','#0369A1'] },
+  pumpkin:     { name:'南瓜橙',   primary:'#C2410C', background:'#FFF8ED', cardBackground:'#FFFFFF', border:'#F3DFC1', text:'#431407', textMuted:'#8C674A', positive:'#15803D', negative:'#B91C1C', warning:'#C2410C', info:'#1D4ED8', chartPalette:['#C2410C','#A16207','#0369A1','#15803D','#BE185D'] },
+  plum:        { name:'梅子紫',   primary:'#86198F', background:'#FBF7FC', cardBackground:'#FFFFFF', border:'#E9D8EC', text:'#3B123F', textMuted:'#806485', positive:'#15803D', negative:'#BE123C', warning:'#B45309', info:'#2563EB', chartPalette:['#86198F','#C2410C','#0F766E','#2563EB','#CA8A04'] },
+};
+const RADIUS = { small:'4px', medium:'8px', large:'14px' };
+const SHADOW = { none:'none', soft:'0 1px 3px rgba(15,23,42,.06)', strong:'0 6px 18px rgba(15,23,42,.14)' };
+const SWATCH_PRESETS = ['#1E40AF','#4F46E5','#0F766E','#B45309','#0F172A','#6B7280','#E4E7ED','#F5F7FA','#16A34A','#DC2626','#F59E0B','#2563EB','#F8FAFC','#134E4A','#78350F','#1E293B'];
+
+/* ---------- 受控图标注册表（16～24 个，模拟 dashboard-icon-registry.ts） ---------- */
+const ICONS = [
+  {key:'trend',  name:'趋势', d:'M3 17l6-6 4 4 8-8M15 7h6v6'},
+  {key:'revenue',name:'收入', d:'M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.6 7 6.5s2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3'},
+  {key:'expense',name:'支出', d:'M4 4h16v5H4zM6 9v11h12V9M10 13h4'},
+  {key:'user',   name:'用户', d:'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-6 8-6s8 2 8 6'},
+  {key:'order',  name:'订单', d:'M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4'},
+  {key:'stock',  name:'库存', d:'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8'},
+  {key:'target', name:'目标', d:'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0M12 12m-5 0a5 5 0 1 0 10 0 5 5 0 1 0-10 0M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0'},
+  {key:'timer',  name:'时间', d:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2'},
+  {key:'switch', name:'转化', d:'M4 7h13M13 3l4 4-4 4M20 17H7M11 21l-4-4 4-4'},
+  {key:'trophy', name:'业绩', d:'M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0zM7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3'},
+  {key:'credit', name:'信用', d:'M2 6h20v13H2zM2 10h20M6 15h4'},
+  {key:'goods',  name:'商品', d:'M4 7l8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10'},
+  {key:'sell',   name:'销售', d:'M20 12l-8 8-9-9V4h7zM7.5 7.5m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0'},
+  {key:'dataline',name:'数据', d:'M3 3v18h18M7 14l4-4 3 3 5-6'},
+  {key:'growth', name:'增长', d:'M12 20V6M5 13l7-7 7 7'},
+  {key:'share',  name:'份额', d:'M12 12m-9 0a9 9 0 1 0 18 0 9 9 0 1 0-18 0M12 3v9l7 6'},
+  {key:'budget', name:'预算', d:'M12 3v3M12 18v3M3 12h3M18 12h3M12 12m-5 0a5 5 0 1 0 10 0 5 5 0 1 0-10 0'},
+  {key:'customer',name:'客户', d:'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5M17 8a2.5 2.5 0 1 1 0 5M18 14.5c2.5.5 4 2.3 4 5.5'},
+];
+
+/* ---------- KPI 指标（fieldKey 为图标/配色的绑定锚） ---------- */
+const METRICS = [
+  { fieldKey:'summary',    name:'策略概括',   value:'32 项',   delta:null,      legacyName:'#1f2329' },
+  { fieldKey:'execution',  name:'策略执行',   value:'87.5%',   delta:null      },
+  { fieldKey:'amount',     name:'当前合同额', value:'1,284.5 万', delta:'+12.4%', up:true },
+  { fieldKey:'conversion', name:'平均转化率', value:'38.2%',   delta:'-3.1%',  up:false },
+];
+const FIELDS = ['name','value','unit','helper'];
+const FIELD_NAMES = { name:'名称', value:'数值', unit:'单位', helper:'辅助' };
+
+/* ---------- 状态：草稿 draft / 已保存 saved ---------- */
+function freshMetricState(){ return { iconKey:null, accentMode:'theme', accentColor:null,
+  fields:Object.fromEntries(FIELDS.map(f=>[f,{colorMode:'theme',color:null}])) }; }
+function freshState(){ return { presetId:'blue', overrides:{}, radius:'medium', shadow:'soft',
+  bulkDensity:'standard',                       /* 组件级 density：组合卡片配置，不随「恢复预设」清除 */
+  metrics:Object.fromEntries(METRICS.map(m=>[m.fieldKey,freshMetricState()])) }; }
+
+let draft = freshState();
+/* 旧指标兼容：策略概括 的「名称」带旧固定 HEX（无 colorMode）→ 按 custom 解释 */
+draft.metrics.summary.fields.name.colorMode = 'custom';
+draft.metrics.summary.fields.name.color = '#1f2329';
+let saved = JSON.parse(JSON.stringify(draft));
+
+const $ = (id)=>document.getElementById(id);
+const clone = (o)=>JSON.parse(JSON.stringify(o));
+
+/* ---------- 对比度（WCAG） ---------- */
+function hex2rgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join('');
+  const n=parseInt(h,16); return [n>>16&255,n>>8&255,n&255]; }
+function luminance(hex){ const [r,g,b]=hex2rgb(hex).map(v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});
+  return .2126*r+.7152*g+.0722*b; }
+function contrast(a,b){ const l1=luminance(a),l2=luminance(b); return (Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05); }
+function isHex(s){ return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s); }
+
+/* ---------- 主题解析（模拟 resolveDashboardTheme） ---------- */
+function resolveTheme(){
+  const base = clone(PRESETS[draft.presetId] || PRESETS.blue);       // 未知 presetId → 回退 blue
+  const ov = draft.overrides || {};
+  for(const k of Object.keys(ov)) if(k!=='chartPalette') base[k]=ov[k];
+  if(ov.chartPalette) base.chartPalette = clone(ov.chartPalette);
+  return base;
+}
+function themeVars(){
+  const t = resolveTheme();
+  return {
+    '--ins-bg':t.background, '--ins-card':t.cardBackground, '--ins-border':t.border,
+    '--ins-text':t.text, '--ins-muted':t.textMuted, '--ins-primary':t.primary,
+    '--ins-positive':t.positive, '--ins-negative':t.negative,
+    '--ins-surface-1':t.background,
+    '--ins-surface-2':t.cardBackground,
+    '--ins-surface-3':`color-mix(in srgb, ${t.cardBackground} 92%, ${t.primary})`,
+    '--ins-accent-border':`color-mix(in srgb, ${t.primary} 24%, ${t.cardBackground})`,
+    '--ins-canvas-shadow':draft.presetId==='dark-data'?'0 14px 34px rgba(2,6,23,.36)':'0 12px 32px rgba(15,23,42,.06)',
+    '--ins-radius':RADIUS[draft.radius]||RADIUS.medium, '--ins-shadow':SHADOW[draft.shadow]||SHADOW.soft,
+  };
+}
+
+/* ---------- 画布渲染（一次性应用，模拟 ECharts setOption） ---------- */
+function renderCanvas(){
+  const c = $('canvas'), vars = themeVars();
+  for(const [k,v] of Object.entries(vars)) c.style.setProperty(k,v);
+  const t = resolveTheme();
+  $('canvasThemeName').textContent = t.name;
+  $('layerPreviewHint').textContent = `${t.name} · 3 层视觉层级`;
+  document.documentElement.style.setProperty('--preview-page', t.background);
+  document.documentElement.style.setProperty('--preview-card', t.cardBackground);
+  document.documentElement.style.setProperty('--preview-nested', `color-mix(in srgb, ${t.cardBackground} 92%, ${t.primary})`);
+  document.documentElement.style.setProperty('--preview-border', t.border);
+  document.documentElement.style.setProperty('--preview-text', t.text);
+  document.documentElement.style.setProperty('--preview-muted', t.textMuted);
+  renderKpis(); renderChart(); renderThemeEntry();
+}
+function metricAccent(i, m){                                   // 指标 custom > 色板[稳定序号] > 主色
+  const st = draft.metrics[m.fieldKey], t = resolveTheme();
+  if(st.accentMode==='custom' && st.accentColor) return st.accentColor;
+  return t.chartPalette[i % t.chartPalette.length];
+}
+function renderKpis(){
+  const grid = $('kpiGrid'); grid.innerHTML='';
+  METRICS.forEach((m,i)=>{
+    const st = draft.metrics[m.fieldKey], t = resolveTheme();
+    const icon = ICONS.find(x=>x.key===st.iconKey) || ICONS[i % ICONS.length];  // iconKey > 按序默认
+    const accent = metricAccent(i,m);
+    const nameColor = st.fields.name.colorMode==='custom' && st.fields.name.color ? st.fields.name.color : t.text;
+    const valueColor = st.fields.value.colorMode==='custom' && st.fields.value.color ? st.fields.value.color : accent;
+    const div = document.createElement('div');
+    div.className='card kpi'; div.tabIndex=0; div.setAttribute('data-field', m.fieldKey);
+    div.innerHTML = `
+      <button class="style-btn" aria-label="配置${m.name}样式" title="指标样式">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      </button>
+      <div class="k-name"><svg class="k-icon" viewBox="0 0 24 24" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icon.d}"/></svg>
+        <span style="color:${nameColor}">${m.name}</span></div>
+      <div class="k-value" style="color:${valueColor}">${m.value}</div>
+      ${m.delta?`<div class="k-delta ${m.up?'up':'down'}">${m.up?'▲':'▼'} ${m.delta} 较上期</div>`:`<div class="k-delta" style="color:var(--ins-muted)">—</div>`}`;
+    div.addEventListener('click',()=>{ document.querySelectorAll('.kpi.selected').forEach(e=>e.classList.remove('selected')); div.classList.add('selected'); });
+    div.querySelector('.style-btn').addEventListener('click',(e)=>{ e.stopPropagation(); openStyleDialog(m.fieldKey); });
+    grid.appendChild(div);
+  });
+}
+function renderChart(){
+  const t = resolveTheme(), svg = $('lineChart');
+  const series = [
+    { c:t.chartPalette[0], pts:[130,110,118,86,92,60,44] },
+    { c:t.chartPalette[1], pts:[140,126,108,100,78,70,52] },
+    { c:t.chartPalette[2], pts:[148,138,126,112,104,88,72] },
+  ];
+  const X = i=>30+i*115, Y = v=>v;
+  svg.innerHTML = [30,70,110,140].map(v=>`<line x1="24" x2="748" y1="${v}" y2="${v}" stroke="${t.border}" stroke-width="1"/>`).join('')
+    + series.map(s=>`<polyline points="${s.pts.map((v,i)=>`${X(i)},${Y(v)}`).join(' ')}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
+      + s.pts.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3" fill="${s.c}"/>`).join('')).join('')
+    + [0,1,2,3,4,5,6].map(i=>`<text x="${X(i)}" y="146" font-size="9" fill="${t.textMuted}" text-anchor="middle">周${i+1}</text>`).join('');
+  $('legend').innerHTML = ['线索量','商机量','成交额'].map((n,i)=>
+    `<span><i style="background:${t.chartPalette[i]}"></i>${n}</span>`).join('');
+}
+function renderThemeEntry(){
+  const same = JSON.stringify(stripSame()) ;
+  const isDirty = JSON.stringify(draft)!==JSON.stringify(saved);
+  const p = PRESETS[draft.presetId];
+  $('themeState').innerHTML = (draft.presetId!=='blue' ? ` <span class="dot" style="background:${p.primary}"></span>${p.name}` : '')
+    + (isDirty ? `<span class="star" title="有未保存的主题配置">*</span>` : '');
+}
+function stripSame(){ return {draft}; }
+
+/* ---------- 抽屉 ---------- */
+function buildPresets(){
+  const grid = $('presetGrid'); grid.innerHTML='';
+  Object.entries(PRESETS).forEach(([id,p],idx)=>{
+    const card = document.createElement('div');
+    card.className='preset-card'; card.setAttribute('role','radio'); card.tabIndex = id===draft.presetId?0:-1;
+    card.setAttribute('aria-checked', id===draft.presetId);
+    card.setAttribute('aria-label', p.name);
+    card.innerHTML = `
+      <div class="preset-mini"><div class="pm-canvas" style="background:${p.background}">
+        <div class="pm-card" style="background:${p.cardBackground};border:1px solid ${p.border}">
+          <div class="l" style="background:${p.textMuted}"></div><div class="v" style="background:${p.primary}"></div></div>
+        <div class="pm-card" style="background:${p.cardBackground};border:1px solid ${p.border}">
+          <div class="l" style="background:${p.textMuted}"></div><div class="v" style="background:${p.chartPalette[1]}"></div></div>
+      </div></div>
+      <div class="pm-name">${p.name}</div>`;
+    card.addEventListener('click',()=>selectPreset(id));
+    card.addEventListener('keydown',(e)=>{                                   // radiogroup 方向键
+      const ids=Object.keys(PRESETS); let n=null;
+      if(e.key==='ArrowRight'||e.key==='ArrowDown') n=ids[(idx+1)%ids.length];
+      if(e.key==='ArrowLeft'||e.key==='ArrowUp') n=ids[(idx-1+ids.length)%ids.length];
+      if(n){ e.preventDefault(); selectPreset(n); $('presetGrid').children[Object.keys(PRESETS).indexOf(n)].focus(); }
+    });
+    grid.appendChild(card);
+  });
+}
+function selectPreset(id){
+  draft.presetId=id; draft.overrides={}; draft.radius='medium'; draft.shadow='soft';   // 换预设丢弃覆盖
+  buildPresets(); buildCustom(); renderCanvas();
+}
+function closeDrawer(){ $('drawer').classList.remove('open'); $('drawer').setAttribute('aria-hidden','true'); }
+$('drawerClose').addEventListener('click',closeDrawer);
+$('themeEntry').addEventListener('click',()=>{ $('drawer').classList.toggle('open');
+  $('drawer').setAttribute('aria-hidden', !$('drawer').classList.contains('open')); });
+
+/* ---------- 自定义层 ---------- */
+const BASE_FIELDS=[['primary','主色'],['background','页面背景'],['cardBackground','卡片背景'],['border','边框'],['text','正文文字'],['textMuted','次要文字']];
+const SEM_FIELDS=[['positive','正向'],['negative','负向'],['warning','警告'],['info','信息']];
+let popTarget=null;   // {path, anchorEl}
+
+function overridden(k){ return draft.overrides && draft.overrides[k]!==undefined; }
+function currentOf(k){ return overridden(k)?draft.overrides[k]:resolveTheme()[k]; }
+
+function buildCustom(){
+  const mkRow=(parent,key,label)=>{
+    const row=document.createElement('div'); row.className='color-row';
+    row.innerHTML=`<label>${label}</label><div class="color-ctrl">
+      <button class="swatch" data-k="${key}" aria-label="修改${label}"></button>
+      <span class="hex-text" data-hex="${key}"></span><span class="tag-preset" data-tag="${key}">预设</span></div>`;
+    parent.appendChild(row);
+  };
+  const b=$('baseColors'); b.innerHTML=''; BASE_FIELDS.forEach(([k,l])=>mkRow(b,k,l));
+  const s=$('semanticColors'); s.innerHTML=''; SEM_FIELDS.forEach(([k,l])=>mkRow(s,k,l));
+  const p=$('paletteColors'); p.innerHTML='';
+  for(let i=0;i<5;i++){
+    const key='chartPalette'; const row=document.createElement('div'); row.className='color-row';
+    row.innerHTML=`<label>系列 ${i+1}</label><div class="color-ctrl">
+      <button class="swatch" data-k="${key}" data-idx="${i}" aria-label="修改图表色板第${i+1}色"></button>
+      <span class="hex-text" data-hex="${key}" data-idx="${i}"></span><span class="tag-preset" data-tag="${key}" data-idx="${i}">预设</span></div>`;
+    p.appendChild(row);
+  }
+  refreshCustom();
+  document.querySelectorAll('#customBody .swatch[data-k]').forEach(el=>{
+    el.addEventListener('click',(e)=>{ e.stopPropagation(); openColorPop(el); });
+  });
+  // 圆角/阴影
+  [['radiusSeg','radius'],['shadowSeg','shadow']].forEach(([segId,field])=>{
+    $(segId).querySelectorAll('button').forEach(btn=>{
+      btn.classList.toggle('on', btn.dataset.v===draft[field]);
+      btn.onclick=()=>{ draft[field]=btn.dataset.v; buildCustom(); renderCanvas(); };
+    });
+  });
+}
+function refreshCustom(){
+  const palette = resolveTheme().chartPalette;
+  document.querySelectorAll('#customBody .swatch[data-k]').forEach(el=>{
+    const k=el.dataset.k, idx=el.dataset.idx;
+    const v = k==='chartPalette' ? (overridden('chartPalette')?draft.overrides.chartPalette[+idx]:palette[+idx])
+                                 : currentOf(k);
+    el.style.background=v; el.dataset.value=v;
+    const hexEl=document.querySelector(`[data-hex="${k}"]${idx!==undefined?`[data-idx="${idx}"]`:''}`);
+    hexEl.textContent=v;
+    const tagEl=document.querySelector(`[data-tag="${k}"]${idx!==undefined?`[data-idx="${idx}"]`:''}`);
+    const isOv = k==='chartPalette' ? overridden('chartPalette') : overridden(k);
+    tagEl.textContent = isOv?'已覆盖':'预设';
+    tagEl.style.color = isOv?'var(--site-primary)':'#9aa3b2';
+  });
+}
+$('customToggle').addEventListener('click',()=>{
+  const open=$('customBody').classList.toggle('open');
+  $('customToggle').classList.toggle('open',open); $('customToggle').setAttribute('aria-expanded',open);
+});
+
+/* ---------- 取色 popover ---------- */
+function buildPopSwatches(){ $('popSwatches').innerHTML=SWATCH_PRESETS.map(c=>
+  `<button style="background:${c}" data-c="${c}" aria-label="${c}"></button>`).join('');
+  $('popSwatches').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    $('hexInput').value=b.dataset.c; $('hexInput').classList.remove('bad'); validatePop(); }));
+}
+function openColorPop(anchor){
+  closeColorPop();
+  popTarget={ key:anchor.dataset.k, idx:anchor.dataset.idx!==undefined?+anchor.dataset.idx:null, anchorEl:anchor };
+  const v = anchor.dataset.value;
+  $('hexInput').value=v; $('hexInput').classList.remove('bad'); $('popMsg').style.display='none';
+  const r=anchor.getBoundingClientRect();
+  $('colorPop').style.left=Math.min(r.left, window.innerWidth-220)+'px';
+  $('colorPop').style.top=(r.bottom+6)+'px'; $('colorPop').classList.add('show');
+  updateContrastNote();
+}
+function closeColorPop(){ $('colorPop').classList.remove('show'); popTarget=null; }
+function validatePop(){ return isHex($('hexInput').value.trim()); }
+function updateContrastNote(){
+  const v=$('hexInput').value.trim(); const note=$('contrastNote');
+  if(!isHex(v)){ note.textContent=''; return; }
+  const card=currentOf('cardBackground'), page=currentOf('background');
+  const r1=contrast(v,card), r2=contrast(v,page);
+  if(popTarget.key==='text'||popTarget.key==='textMuted'){
+    const bad=Math.min(r1,r2)<4.5;
+    note.textContent=`与卡片 ${r1.toFixed(2)}:1 · 与页面 ${r2.toFixed(2)}:1（≥4.5:1）`;
+    note.className='contrast-note'+(bad?' bad':'');
+  } else note.textContent='';
+}
+$('hexInput').addEventListener('input',()=>{ $('hexInput').classList.toggle('bad',!validatePop());
+  $('popMsg').style.display = validatePop()?'none':'block'; updateContrastNote(); });
+$('popApply').addEventListener('click',()=>{
+  if(!validatePop()){ $('popMsg').style.display='block'; return; }
+  const v=$('hexInput').value.trim().toUpperCase();
+  if(popTarget.key==='__accent__'){ editTarget().accentColor=v; refreshDialog(); renderCanvas(); }
+  else if(popTarget.key.startsWith('__field__')){
+    const f=popTarget.key.replace('__field__',''); editTarget().fields[f].color=v; refreshDialog(); renderCanvas();
+  } else if(popTarget.key==='chartPalette'){
+    if(!draft.overrides.chartPalette) draft.overrides.chartPalette=clone(resolveTheme().chartPalette);
+    draft.overrides.chartPalette[popTarget.idx]=v; refreshCustom(); renderCanvas();
+  } else { draft.overrides[popTarget.key]=v; refreshCustom(); renderCanvas(); }
+  closeColorPop();
+});
+$('popReset').addEventListener('click',()=>{
+  if(popTarget.key==='__accent__'){ editTarget().accentMode='theme'; editTarget().accentColor=null; refreshDialog(); renderCanvas(); }
+  else if(popTarget.key.startsWith('__field__')){
+    const f=popTarget.key.replace('__field__',''); editTarget().fields[f].colorMode='theme'; editTarget().fields[f].color=null; refreshDialog(); renderCanvas();
+  } else if(popTarget.key==='chartPalette'){
+    if(draft.overrides.chartPalette) delete draft.overrides.chartPalette; refreshCustom(); renderCanvas();
+  } else { delete draft.overrides[popTarget.key]; refreshCustom(); renderCanvas(); }
+  closeColorPop();
+});
+document.addEventListener('click',(e)=>{                                   // 点外关闭 popover
+  if(popTarget && !$('colorPop').contains(e.target) && e.target!==popTarget.anchorEl) closeColorPop();
+});
+
+/* ---------- 对比度整体校验（三组文字组合 ≥4.5:1） ---------- */
+function validateTheme(){
+  const t=resolveTheme(); const errs=[];
+  const pairs=[[t.text,t.background,'正文文字与页面背景'],[t.text,t.cardBackground,'正文文字与卡片背景'],[t.textMuted,t.cardBackground,'次要文字与卡片背景']];
+  for(const [fg,bg,label] of pairs){ const r=contrast(fg,bg); if(r<4.5) errs.push(`${label}对比度 ${r.toFixed(1)}:1，低于 4.5:1 要求`); }
+  const bar=$('errBar');
+  if(errs.length){ bar.innerHTML='⚠ '+errs.join('；')+'。保存前请调整。'; bar.classList.add('show');
+    $('saveBtn').disabled=true; $('saveBtn').title='存在对比度不合格的自定义颜色'; }
+  else { bar.classList.remove('show'); $('saveBtn').disabled=false; $('saveBtn').title=''; }
+  // 自定义层色块描红
+  document.querySelectorAll('#baseColors .swatch').forEach(el=>{
+    const k=el.dataset.k;
+    if(k==='text'||k==='textMuted'){ const r=contrast(currentOf(k),currentOf(k==='text'?'cardBackground':'cardBackground'));
+      el.classList.toggle('err', r<4.5); }
+  });
+}
+
+/* ---------- 恢复预设（只清 overrides，不动指标单项） ---------- */
+$('restoreBtn').addEventListener('click',()=>{
+  const hasOv = Object.keys(draft.overrides).length>0 || draft.radius!=='medium' || draft.shadow!=='soft';
+  if(!hasOv) return;
+  $('mask2').classList.add('show'); $('confirmBox').classList.add('show');
+});
+$('cfCancel').addEventListener('click',()=>{ $('mask2').classList.remove('show'); $('confirmBox').classList.remove('show'); });
+$('cfOk').addEventListener('click',()=>{
+  draft.overrides={}; draft.radius='medium'; draft.shadow='soft';
+  $('mask2').classList.remove('show'); $('confirmBox').classList.remove('show');
+  buildCustom(); renderCanvas(); toast('已恢复预设，指标单项配色未受影响');
+});
+
+/* ---------- 指标样式弹窗（重设计：四字段平铺 + 即时生效，画布即预览） ---------- */
+let editing=null;      // 当前编辑的 metric fieldKey（直接读写草稿，关闭无确认）
+const STYLE_DEFAULTS={ name:{size:14,bold:'bold'}, value:{size:28,bold:'bold'}, unit:{size:12,bold:'normal'}, helper:{size:12,bold:'normal'} };
+function editTarget(){ return draft.metrics[editing]; }
+function openStyleDialog(fieldKey){
+  editing=fieldKey;
+  $('dgMetricName').textContent=METRICS.find(m=>m.fieldKey===fieldKey).name;
+  buildDialogBody(); refreshDialog();
+  $('mask').classList.add('show'); $('styleDialog').classList.add('show');
+}
+function closeStyleDialog(){ $('mask').classList.remove('show'); $('styleDialog').classList.remove('show'); closeIconPop(); editing=null; }
+$('dgClose').addEventListener('click',closeStyleDialog);
+$('dgCancel').addEventListener('click',closeStyleDialog);
+$('mask').addEventListener('click',closeStyleDialog);
+$('dgReset').addEventListener('click',()=>{
+  const fresh=freshMetricState();
+  FIELDS.forEach(f=>{ fresh.fields[f].size=STYLE_DEFAULTS[f].size; fresh.fields[f].bold=STYLE_DEFAULTS[f].bold; });
+  draft.metrics[editing]=fresh;
+  buildDialogBody(); refreshDialog(); renderCanvas();
+  toast('已重置为跟随主题（草稿，保存仪表盘后生效）');
+});
+
+function buildDialogBody(){
+  const sect=$('fieldSections'); sect.innerHTML='';
+  const head=document.createElement('div'); head.className='fs-row fs-head';
+  head.innerHTML='<span>字段</span><span>字号</span><span style="text-align:center">粗细</span><span>颜色</span>';
+  sect.appendChild(head);
+  FIELDS.forEach(f=>{
+    const row=document.createElement('div'); row.className='fs-row';
+    row.innerHTML=`<span>${FIELD_NAMES[f]}</span>
+      <input type="range" class="fs-range" min="10" max="40" step="1" data-fsize="${f}" aria-label="${FIELD_NAMES[f]}字号" title="双击重置 ${STYLE_DEFAULTS[f].size}px">
+      <input type="checkbox" data-fbold="${f}" style="justify-self:center;accent-color:var(--site-primary)" aria-label="${FIELD_NAMES[f]}加粗">
+      <span style="display:flex;align-items:center;gap:5px">
+        <button class="swatch" data-k="__field__${f}" data-fswatch="${f}" style="width:20px;height:16px" aria-label="修改${FIELD_NAMES[f]}颜色"></button>
+        <span class="hex-text" data-ftag="${f}" style="min-width:0"></span>
+      </span>`;
+    sect.appendChild(row);
+  });
+  sect.querySelectorAll('[data-fsize]').forEach(r=>{
+    r.addEventListener('input',()=>{ editTarget().fields[r.dataset.fsize].size=+r.value; renderCanvas(); });
+    r.addEventListener('dblclick',()=>{ const d=STYLE_DEFAULTS[r.dataset.fsize].size; r.value=d; editTarget().fields[r.dataset.fsize].size=d; renderCanvas(); });
+  });
+  sect.querySelectorAll('[data-fbold]').forEach(c=>{
+    c.addEventListener('change',()=>{ editTarget().fields[c.dataset.fbold].bold=c.checked?'bold':'normal'; renderCanvas(); });
+  });
+  sect.querySelectorAll('[data-fswatch]').forEach(sw=>sw.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    const f=sw.dataset.fswatch, st=editTarget().fields[f];
+    if(st.colorMode!=='custom'){ st.colorMode='custom'; if(!st.color) st.color=resolveTheme().text; refreshDialog(); }
+    openColorPop(sw);                                                     // data-k=__field__X → 取色即写草稿
+  }));
+  // 强调色
+  $('accentPill').querySelectorAll('button').forEach(btn=>btn.addEventListener('click',()=>{
+    const t=editTarget(); t.accentMode=btn.dataset.m;
+    if(btn.dataset.m==='custom'&&!t.accentColor) t.accentColor=resolveTheme().primary;
+    refreshDialog(); renderCanvas();
+  }));
+  $('accentSwatch').addEventListener('click',(e)=>{ e.stopPropagation();
+    const t=editTarget();
+    if(t.accentMode!=='custom'){ t.accentMode='custom'; if(!t.accentColor) t.accentColor=resolveTheme().primary; refreshDialog(); }
+    openColorPop($('accentSwatch'));
+  });
+  $('iconClear').addEventListener('click',()=>{ editTarget().iconKey=null; refreshDialog(); renderCanvas(); });
+  buildIconGrid();
+}
+function refreshDialog(){
+  const t=editTarget(), theme=resolveTheme();
+  const isLegacyMetric=!!METRICS.find(m=>m.fieldKey===editing).legacyName;
+  FIELDS.forEach(f=>{
+    const st=t.fields[f];
+    document.querySelector(`[data-fsize="${f}"]`).value = st.size ?? STYLE_DEFAULTS[f].size;
+    document.querySelector(`[data-fbold="${f}"]`).checked = (st.bold ?? STYLE_DEFAULTS[f].bold)==='bold';
+    const sw=document.querySelector(`[data-fswatch="${f}"]`);
+    const tag=document.querySelector(`[data-ftag="${f}"]`);
+    const isCustom=st.colorMode==='custom'&&st.color;
+    const isLegacy=f==='name'&&isLegacyMetric;
+    sw.style.background=isCustom?st.color:'transparent';
+    sw.style.backgroundImage=isCustom?'none':'repeating-linear-gradient(45deg,#e5e7eb 0 3px,#fff 3px 6px)';
+    sw.dataset.value=isCustom?st.color:'';
+    if(isCustom){ tag.textContent=(isLegacy?'旧配色 ':'')+st.color; tag.style.color=isLegacy?'#b45309':'var(--site-text)'; }
+    else { tag.textContent='主题'; tag.style.color='#9aa3b2'; }
+  });
+  // 强调色行
+  $('accentPill').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.m===t.accentMode));
+  const acc = t.accentMode==='custom'&&t.accentColor ? t.accentColor : metricPreviewAccent();
+  $('accentSwatch').style.display = t.accentMode==='custom'?'':'none';
+  $('accentSwatch').style.background = t.accentColor||'transparent';
+  $('accentSwatch').dataset.value = t.accentColor||'';
+  $('accentHex').textContent = t.accentMode==='custom' ? (t.accentColor||'(未设置)') : '(由仪表盘色板决定)';
+  // 图标触发器 + 内联预览（完整预览在画布，此处仅做 3:1 对比度校验）
+  const icon = ICONS.find(x=>x.key===t.iconKey);
+  $('iconTriggerIcon').innerHTML = icon?iconSvg(icon.d,14,'var(--site-text)'):'—';
+  $('iconTriggerName').textContent = icon?icon.name:'默认（按序）';
+  const accentContrast = contrast(acc, theme.cardBackground);
+  $('pvIcon').innerHTML = iconSvg((icon||ICONS[0]).d,18,acc);
+  $('pvValue').style.color = accentContrast<3 ? '#b91c1c' : acc;
+  $('pvErr').classList.toggle('show', accentContrast<3);
+}
+function metricPreviewAccent(){
+  const i=METRICS.findIndex(m=>m.fieldKey===editing);
+  return resolveTheme().chartPalette[i%5];
+}
+function iconSvg(d,size,color){ return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`; }
+
+/* ---------- 图标选择器 popover ---------- */
+function buildIconGrid(){
+  const grid=$('iconGrid'); grid.innerHTML='';
+  ICONS.forEach(ic=>{
+    const cell=document.createElement('button');
+    cell.className='icon-cell'; cell.tabIndex=-1; cell.dataset.key=ic.key; cell.title=ic.name;
+    cell.innerHTML=iconSvg(ic.d,16,'currentColor');
+    cell.addEventListener('click',()=>{ editTarget().iconKey=ic.key; refreshDialog(); renderCanvas(); closeIconPop(); });
+    grid.appendChild(cell);
+  });
+  // 方向键网格导航
+  grid.addEventListener('keydown',(e)=>{
+    const cells=[...grid.querySelectorAll('.icon-cell')]; const i=cells.indexOf(document.activeElement);
+    let n=null;
+    if(e.key==='ArrowRight')n=i+1; if(e.key==='ArrowLeft')n=i-1;
+    if(e.key==='ArrowDown')n=i+6; if(e.key==='ArrowUp')n=i-6;
+    if(n!==null&&n>=0&&n<cells.length){ e.preventDefault(); cells[n].focus(); }
+  });
+}
+$('iconTrigger').addEventListener('click',(e)=>{
+  e.stopPropagation();
+  const r=$('iconTrigger').getBoundingClientRect();
+  $('iconPop').style.left=Math.min(r.left,window.innerWidth-260)+'px';
+  $('iconPop').style.top=Math.min(r.bottom+6, window.innerHeight-260)+'px';
+  $('iconPop').classList.add('show'); $('iconSearch').value=''; filterIcons('');
+  markIconSel(); $('iconSearch').focus();
+  const sel=$('iconGrid').querySelector('.icon-cell.sel'); if(sel) sel.focus();
+});
+function markIconSel(){
+  $('iconGrid').querySelectorAll('.icon-cell').forEach(c=>c.classList.toggle('sel', editing!=null && c.dataset.key===editTarget().iconKey));
+}
+function filterIcons(q){
+  let shown=0;
+  $('iconGrid').querySelectorAll('.icon-cell').forEach(c=>{
+    const ic=ICONS.find(x=>x.key===c.dataset.key);
+    const hit=!q||ic.name.includes(q)||ic.key.includes(q.toLowerCase());
+    c.style.display=hit?'':'none'; if(hit)shown++;
+  });
+  $('iconEmpty').style.display=shown?'none':'block';
+}
+$('iconSearch').addEventListener('input',e=>filterIcons(e.target.value.trim()));
+$('iconPopClear').addEventListener('click',()=>{ editTarget().iconKey=null; markIconSel(); refreshDialog(); renderCanvas(); });
+$('iconPopClose').addEventListener('click',closeIconPop);
+function closeIconPop(){ $('iconPop').classList.remove('show'); }
+document.addEventListener('click',(e)=>{ if($('iconPop').classList.contains('show')&&!$('iconPop').contains(e.target)) closeIconPop(); });
+
+/* ---------- 保存 ---------- */
+$('saveBtn').addEventListener('click',()=>{
+  if($('saveBtn').disabled) return;
+  saved=clone(draft); renderThemeEntry(); toast('仪表盘已保存，主题与指标视觉随 Schema 入库');
+});
+
+/* ---------- 全局 Esc：popover > 图标选择 > 弹窗 > 抽屉 ---------- */
+document.addEventListener('keydown',(e)=>{
+  if(e.key!=='Escape') return;
+  if($('colorPop').classList.contains('show')) return closeColorPop();
+  if($('iconPop').classList.contains('show')) return closeIconPop();
+  if($('styleDialog').classList.contains('show')) return closeStyleDialog();
+  if($('confirmBox').classList.contains('show')){ $('cfCancel').click(); return; }
+  if($('drawer').classList.contains('open')) $('drawerClose').click();
+});
+
+/* ---------- 页签切换（演示画布可交互） ---------- */
+document.querySelectorAll('.tabs .tab[role="tab"]').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tabs .tab').forEach(t=>{t.classList.remove('active');t.setAttribute('aria-selected','false')});
+    tab.classList.add('active'); tab.setAttribute('aria-selected','true');
+  });
+  tab.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();tab.click();} });
+});
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200); }
+
+/* ---------- 组合卡片：大量指标（稳定序号循环 + 密度档） ---------- */
+const BULK_METRICS=[
+  {k:'leads',n:'线索量',v:'1,024'},{k:'opps',n:'商机量',v:'386'},{k:'quotes',n:'报价量',v:'241'},
+  {k:'deals',n:'成交额',v:'1,284.5 万',custom:'#B45309'},
+  {k:'paid',n:'回款额',v:'986.2 万'},{k:'price',n:'客单价',v:'3.2 万'},{k:'cvr',n:'转化率',v:'38.2%'},{k:'repurchase',n:'复购率',v:'21.4%'},
+  {k:'refund',n:'退货率',v:'2.1%'},{k:'turnover',n:'库存周转',v:'6.8 天'},{k:'fulfill',n:'履约时效',v:'42 小时'},{k:'nps',n:'NPS',v:'67'},
+];
+const DENSITY={
+  compact:{name:'10px',value:'14px',icon:'11px',pad:'7px 10px'},
+  standard:{name:'11px',value:'19px',icon:'13px',pad:'10px 12px'},
+  large:{name:'12px',value:'27px',icon:'16px',pad:'12px 14px'},
+};
+function renderBulk(){
+  const t=resolveTheme(), card=$('bulkCard'), d=DENSITY[draft.bulkDensity]||DENSITY.standard;
+  ['name','value','icon','pad'].forEach(k=>card.style.setProperty('--bm-'+k,d[k]));
+  const grid=$('bulkGrid'); grid.innerHTML='';
+  BULK_METRICS.forEach((m,i)=>{
+    const icon=ICONS[i%ICONS.length];                                  // 图标按序循环
+    const accent=m.custom||t.chartPalette[i%t.chartPalette.length];    // 强调色=例外>色板[稳定序号]
+    const div=document.createElement('div'); div.className='bm';
+    div.innerHTML=`<div class="bm-name"><svg viewBox="0 0 24 24" fill="none" stroke="${accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icon.d}"/></svg>${m.n}${m.custom?'<span class="bm-star" title="手动强调例外">★</span>':''}</div>
+      <div class="bm-value" style="color:${accent}">${m.v}</div>`;
+    grid.appendChild(div);
+  });
+}
+$('densitySeg').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  draft.bulkDensity=b.dataset.d;                     /* 组件级配置：写草稿，未保存计星号 */
+  $('densitySeg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+  renderBulk(); renderThemeEntry();
+}));
+
+/* ---------- 数据表格：全 Token 消费，无自有配置 ---------- */
+const TABLE_ROWS=[
+  ['线索量','1,024','912','+12.3%',true,0.82],
+  ['商机量','386','402','-4.0%',false,0.56],
+  ['成交额','1,284.5 万','1,142.8 万','+12.4%',true,0.91],
+  ['回款额','986.2 万','890.4 万','+10.8%',true,0.74],
+  ['转化率','38.2%','39.5%','-3.1%',false,0.45],
+];
+function renderTable(){
+  const t=resolveTheme();
+  $('dtable').innerHTML=
+    '<thead><tr>'+['指标','本期','上期','环比','贡献度'].map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+
+    TABLE_ROWS.map(r=>`<tr><td>${r[0]}</td><td style="font-weight:600">${r[1]}</td><td style="color:var(--ins-muted)">${r[2]}</td>
+      <td class="${r[4]?'up':'down'}">${r[4]?'▲':'▼'} ${r[3]}</td>
+      <td><span class="bar-wrap"><span class="bar" style="width:${Math.round(r[5]*100)}%;background:${t.chartPalette[0]}"></span></span></td></tr>`).join('')+'</tbody>';
+}
+
+/* ---------- 校验联动 + 初始化 ---------- */
+const _render=renderCanvas;
+renderCanvas = function(){ _render(); renderBulk(); renderTable(); validateTheme(); };
+buildPresets(); buildCustom(); buildPopSwatches(); renderCanvas();
+</script>
+</body>
+</html>
