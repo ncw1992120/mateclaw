@@ -152,6 +152,25 @@ describe('PropertyPanel', () => {
     expect(wrapper.get('details.style-settings').attributes('open')).toBeUndefined()
   })
 
+  it('数据表不再暴露重复的显示表头配置', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'table-1',
+          type: 'table',
+          title: '明细表',
+          position: { x: 0, y: 0, w: 8, h: 6 },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('[aria-label="显示表头"]').exists()).toBe(false)
+  })
+
   it('组合卡片只显示统一样式设置，不重复展示容器样式配置', async () => {
     const wrapper = mount(PropertyPanel, {
       props: {
@@ -161,9 +180,7 @@ describe('PropertyPanel', () => {
           title: '组合卡片',
           position: { x: 0, y: 0, w: 8, h: 6 },
           containerConfig: {
-            title: '组合卡片', showTitle: true, background: '#fff', radius: 12, padding: 16,
-            shadow: 'medium', layoutMode: 'free', tabs: [],
-            style: { border: { enabled: false, color: 'transparent' } },
+            layoutMode: 'free', tabs: [],
           },
         },
         allComponents: [],
@@ -445,14 +462,8 @@ describe('PropertyPanel', () => {
       title: '外层组合',
       children: outerChildren,
       containerConfig: {
-        title: '外层组合',
-        showTitle: true,
-        background: '#fff',
-        radius: 12,
-        padding: 16,
         layoutMode: 'free' as const,
         tabs: [],
-        style: { border: { enabled: false, color: 'transparent' } },
       },
       position: { x: 0, y: 0, w: 12, h: 8 },
     }
@@ -460,7 +471,7 @@ describe('PropertyPanel', () => {
       id: 'inner-combination',
       type: 'combination' as const,
       title: '内层组合',
-      containerConfig: { ...outer.containerConfig, title: '内层组合' },
+      containerConfig: { ...outer.containerConfig },
       position: { x: 0, y: 0, w: 6, h: 4 },
     }
     const wrapper = mount(PropertyPanel, {
@@ -476,8 +487,6 @@ describe('PropertyPanel', () => {
     expect(emitted.at(-1)?.[0]).toMatchObject({
       id: 'inner-combination',
       titleBarStyle: 'hidden',
-      showTitle: false,
-      containerConfig: { showTitle: false },
     })
     expect((emitted.at(-1)?.[0] as any).children).toBeUndefined()
   })

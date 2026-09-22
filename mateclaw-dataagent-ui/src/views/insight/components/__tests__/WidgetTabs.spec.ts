@@ -33,7 +33,7 @@ const componentData = {
 } as any
 
 const stubs = {
-  'el-table': { props: ['showHeader'], template: '<div :data-show-header="String(showHeader)"><slot /></div>' },
+  'el-table': { template: '<div data-show-header="true"><slot /></div>' },
   'el-table-column': { template: '<span />' },
   'el-pagination': { template: '<div />' },
   'el-tooltip': { template: '<slot />' },
@@ -43,19 +43,18 @@ const stubs = {
 }
 
 describe('widget tabs', () => {
-  it('hides the table header when configured', () => {
+  it('always renders the table header', () => {
     const wrapper = mount(DataTableWidget, {
       props: {
         component: { ...component, tabs: [] },
-        showTitle: true,
-        showHeader: false,
+        titleBarStyle: 'standard',
         componentData: { table: { columns: ['订单'], rows: [['A']] } },
       },
       global: { plugins: [i18n], stubs },
     })
 
     expect(wrapper.find('.table-title').exists()).toBe(true)
-    expect(wrapper.find('[data-show-header="false"]').exists()).toBe(true)
+    expect(wrapper.find('[data-show-header="true"]').exists()).toBe(true)
   })
 
   it.each([

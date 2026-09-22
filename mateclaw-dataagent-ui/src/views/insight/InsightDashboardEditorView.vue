@@ -940,17 +940,9 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     // 组合卡片：默认空子卡片 + 容器配置
     children: payload.type === 'combination' ? [] : undefined,
     containerConfig: payload.type === 'combination' ? {
-      title: '',
-      showTitle: true,
-      background: '#ffffff',
-      backgroundMode: 'theme',
-      radius: 12,
-      padding: 16,
-      shadow: 'none',
       layoutMode: 'free',
       tabs: [],
       activeTab: undefined,
-      style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
     } : undefined,
   }
   page.components.push(newComponent)
@@ -976,7 +968,7 @@ function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w:
   })
 }
 
-/** 画布内直接编辑顶层组件标题；组合卡片同步容器标题，保证预览态标题一致。 */
+/** 画布内直接编辑顶层组件标题。 */
 function handleCanvasComponentRename(payload: { componentId: string; title: string }): void {
   const page = schema.pages.find((p) => p.id === activePageId.value)
   const component = page?.components.find((item) => item.id === payload.componentId)
@@ -984,9 +976,6 @@ function handleCanvasComponentRename(payload: { componentId: string; title: stri
   const title = payload.title.trim()
   if (!title) return
   component.title = title
-  if (component.type === 'combination' && component.containerConfig) {
-    component.containerConfig.title = title
-  }
 }
 
 /** 选中组件（顶层） */
@@ -1161,10 +1150,8 @@ function handleComponentChange(updated: InsightComponent): void {
     const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
     if (child) {
       child.title = updated.title
-      child.showTitle = updated.showTitle
       child.titleBarStyle = updated.titleBarStyle
       child.visualStyle = updated.visualStyle
-      child.showHeader = updated.showHeader
       child.chartType = updated.chartType
       child.config = updated.config
       child.dataSource = updated.dataSource

@@ -1,28 +1,5 @@
 import type { ComponentVisualStyle, InsightComponentType } from '@/types'
 
-type LegacyVisualStyle = {
-  border?: {
-    enabled?: boolean
-    color?: string
-    width?: number
-    style?: 'solid' | 'dashed'
-  }
-}
-
-type LegacyCombinationStyle = {
-  background?: string
-  backgroundMode?: 'theme' | 'custom'
-  radius?: number
-  padding?: number
-  shadow?: 'none' | 'subtle' | 'medium'
-  style?: {
-    border?: LegacyVisualStyle['border'] & {
-      mode?: 'theme' | 'visible' | 'hidden'
-      colorMode?: 'theme' | 'custom'
-    }
-  }
-}
-
 const SHADOW_TOKENS: Record<NonNullable<ComponentVisualStyle['shadow']>, string> = {
   none: 'none',
   subtle: 'var(--shadow-card, 0 2px 10px rgba(15, 23, 42, 0.06))',
@@ -41,51 +18,35 @@ export function defaultComponentVisualStyle(type: InsightComponentType): Compone
 }
 
 export function normalizeComponentVisualStyle(
-  style: ComponentVisualStyle | LegacyVisualStyle | undefined,
+  style: ComponentVisualStyle | undefined,
   type: InsightComponentType,
-  legacyCombinationStyle?: LegacyCombinationStyle,
 ): ComponentVisualStyle {
   const defaults = defaultComponentVisualStyle(type)
-  const legacyBorder = style && 'border' in style ? style.border : legacyCombinationStyle?.style?.border
-  const borderMode = 'mode' in (legacyBorder ?? {})
-    ? (legacyBorder as ComponentVisualStyle['border'])?.mode
-    : legacyBorder?.enabled == null
-      ? defaults.border?.mode
-      : legacyBorder.enabled ? 'visible' : 'hidden'
-  const borderColor = legacyBorder?.color
-  const legacyBackgroundMode = legacyCombinationStyle?.backgroundMode
-    ?? (typeof legacyCombinationStyle?.background === 'string' && /^#fff(?:fff)?$/i.test(legacyCombinationStyle.background.trim()) ? 'theme' : 'custom')
-  const legacyBackground = legacyCombinationStyle?.background && legacyBackgroundMode === 'custom'
-    ? { mode: 'custom' as const, color: legacyCombinationStyle.background }
-    : legacyBackgroundMode === 'theme'
-      ? { mode: 'theme' as const }
-      : undefined
+  const borderMode = style?.border?.mode
+  const borderColor = style?.border?.color
   return {
     ...defaults,
     ...style,
-    radius: style?.radius ?? legacyCombinationStyle?.radius ?? defaults.radius,
-    padding: style?.padding ?? legacyCombinationStyle?.padding ?? defaults.padding,
-    shadow: style?.shadow ?? legacyCombinationStyle?.shadow ?? defaults.shadow,
+    radius: style?.radius ?? defaults.radius,
+    padding: style?.padding ?? defaults.padding,
+    shadow: style?.shadow ?? defaults.shadow,
     border: {
       ...defaults.border,
-      ...(legacyBorder as ComponentVisualStyle['border'] | undefined),
       ...(style?.border as ComponentVisualStyle['border'] | undefined),
       mode: borderMode ?? defaults.border?.mode ?? 'theme',
       colorMode: (style?.border as ComponentVisualStyle['border'] | undefined)?.colorMode
-        ?? (legacyBorder as ComponentVisualStyle['border'] | undefined)?.colorMode
         ?? (borderColor ? 'custom' : 'theme'),
       ...(borderColor ? { color: borderColor } : {}),
     },
-    background: { ...defaults.background, ...legacyBackground, ...style?.background },
+    background: { ...defaults.background, ...style?.background },
   }
 }
 
 export function resolveComponentVisualStyle(
-  style: ComponentVisualStyle | LegacyVisualStyle | undefined,
+  style: ComponentVisualStyle | undefined,
   type: InsightComponentType,
-  legacyCombinationStyle?: LegacyCombinationStyle,
 ): Record<string, string> {
-  const normalized = normalizeComponentVisualStyle(style, type, legacyCombinationStyle)
+  const normalized = normalizeComponentVisualStyle(style, type)
   const border = normalized.border ?? { mode: 'hidden' as const }
   const borderColor = border.colorMode === 'custom' && border.color ? border.color : 'var(--db-border)'
   const background = normalized.background?.mode === 'custom' && normalized.background.color

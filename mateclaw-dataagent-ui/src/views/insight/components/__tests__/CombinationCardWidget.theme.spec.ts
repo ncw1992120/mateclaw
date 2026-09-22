@@ -3,7 +3,6 @@ import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 import CombinationCardWidget from '../CombinationCardWidget.vue'
 import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
-import { normalizeCombinationBackgroundMode, resolveCombinationBackground } from '@/utils/combination-theme'
 
 const stubs = {
   KpiCardWidget: { template: '<div class="stub-kpi" />' },
@@ -41,7 +40,6 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       id: 'child-kpi',
       type: 'kpi' as const,
       title: '策略概括',
-      showTitle: true,
       titleBarStyle: 'accent' as const,
       layout: { x: 0, y: 0, col: 6, h: 120 },
     }
@@ -49,10 +47,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       props: {
         editable: true,
         component: {
-          ...component({
-            title: '组合卡片', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
-            layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
-          }),
+          ...component({ layoutMode: 'free', tabs: [] }),
           children: [child],
         },
       },
@@ -60,13 +55,6 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
     })
 
     expect(wrapper.get('.cc-child-head').classes()).toContain('title-bar-accent')
-  })
-
-  it('统一解析新旧组合卡片背景来源', () => {
-    expect(normalizeCombinationBackgroundMode(undefined, '#ffffff')).toBe('theme')
-    expect(normalizeCombinationBackgroundMode(undefined, '#FFE4D6')).toBe('custom')
-    expect(resolveCombinationBackground('#ffffff', 'theme')).toBe('var(--db-surface-container)')
-    expect(resolveCombinationBackground('#FFE4D6', 'custom')).toBe('#FFE4D6')
   })
 
   it('解析主题时提供容器、卡片和控件三层背景 Token', () => {
@@ -81,10 +69,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {
         editable: false,
-        component: component({
-          title: '策略执行情况', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
-          layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
-        }),
+        component: component({ layoutMode: 'free', tabs: [] }),
         dashboardTheme: resolveDashboardTheme({ mode: 'preset', presetId: 'dark-data' }, 'light'),
       },
       global: { stubs, plugins: [i18n] },
@@ -97,10 +82,10 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {
         editable: false,
-        component: component({
-          title: '自定义容器', showTitle: true, background: '#FFE4D6', backgroundMode: 'custom', radius: 12, padding: 16,
-          layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
-        }),
+        component: {
+          ...component({ layoutMode: 'free', tabs: [] }),
+          visualStyle: { background: { mode: 'custom', color: '#FFE4D6' } },
+        },
       },
       global: { stubs, plugins: [i18n] },
     })
@@ -114,10 +99,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       props: {
         editable: false,
         component: {
-          ...component({
-            title: '有阴影容器', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
-            shadow: 'none', layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
-          }),
+          ...component({ layoutMode: 'free', tabs: [] }),
           visualStyle: { shadow: 'medium' },
         },
       },

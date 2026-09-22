@@ -118,10 +118,8 @@ export function hydratePanel(
     id: component.id,
     type: toCardType(component.type),
     title: component.title || '',
-    showTitle: component.showTitle !== false,
-    titleBarStyle: component.showTitle === false ? 'hidden' : component.titleBarStyle ?? 'standard',
-    visualStyle: normalizeComponentVisualStyle(component.visualStyle, component.type, component.containerConfig),
-    showHeader: component.showHeader !== false,
+    titleBarStyle: component.titleBarStyle ?? 'standard',
+    visualStyle: normalizeComponentVisualStyle(component.visualStyle, component.type),
     multiMetric: Boolean(component.multiKpi),
     multiTab: Array.isArray(component.tabs) && component.tabs.length > 0,
   }]
@@ -196,10 +194,8 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
   const patch: InsightComponent = {
     ...component,
     title: card.title,
-    showTitle: card.showTitle,
     titleBarStyle: card.titleBarStyle,
     visualStyle: card.visualStyle,
-    showHeader: card.showHeader,
   }
   if (card.type === 'kpi') {
     patch.multiKpi = card.multiMetric

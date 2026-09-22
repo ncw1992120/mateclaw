@@ -1,6 +1,6 @@
 <template>
-  <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false" class="filter-label">{{ component.title }}</div>
+  <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+    <div v-if="component.titleBarStyle !== 'hidden'" class="filter-label">{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, FilterComponentConfig, ComponentTitleBarStyle } from '@/types'
+import type { InsightComponent, FilterComponentConfig } from '@/types'
 import * as datasourceApi from '@/api/datasource'
 import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
 
@@ -48,9 +48,6 @@ const props = defineProps<{
   component: InsightComponent
   /** 可选项（外部注入，优先级低于 config.staticOptions） */
   options?: Array<{ label: string; value: string }>
-  /** 是否显示标题 */
-  showTitle?: boolean
-  titleBarStyle?: ComponentTitleBarStyle
 }>()
 
 const emit = defineEmits<{

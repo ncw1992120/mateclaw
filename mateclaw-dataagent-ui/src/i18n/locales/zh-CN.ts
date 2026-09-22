@@ -1846,10 +1846,6 @@ export default {
     },
     combination: {
       title: '容器标题',
-      showTitle: '显示标题',
-      background: '背景色',
-      radius: '圆角',
-      padding: '内边距',
       layoutMode: '布局模式',
       layoutFree: '自由布局',
       layoutGrid: '栅格',

@@ -1,9 +1,9 @@
 <template>
   <div ref="rootRef" class="kpi-card-widget">
     <div class="kpi-card-inner">
-      <div v-if="showTitle !== false || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
+      <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
-          <span v-if="showTitle !== false" class="kpi-header-title">{{ component.title }}</span>
+          <span v-if="component.titleBarStyle !== 'hidden'" class="kpi-header-title">{{ component.title }}</span>
         </div>
         <div v-if="showTimeFilter" class="kpi-time-filter">
           <el-date-picker
@@ -107,7 +107,7 @@
       <!-- 单指标模式 -->
       <div v-else class="kpi-body">
         <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
-        <div v-if="showTitle !== false && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
+        <div v-if="component.titleBarStyle !== 'hidden' && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
         <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
           <el-icon class="kpi-trend-icon"><component :is="activeKpiData.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
           <span>{{ activeKpiData.chg }}</span>
@@ -122,7 +122,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme, ComponentTitleBarStyle } from '@/types'
+import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
 import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
 import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
@@ -140,10 +140,6 @@ const props = withDefaults(defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
-  /** 是否显示标题 */
-  showTitle?: boolean
-  /** 标题栏样式 */
-  titleBarStyle?: ComponentTitleBarStyle
   /** 是否编辑态（编辑态下指标可拖拽 / 缩放 / 打开样式弹窗） */
   editable?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
