@@ -384,6 +384,25 @@
 
       <!-- 筛选组件配置（仅 filter 组件） -->
       <template v-if="component.type === 'filter'">
+        <!-- 选项来源优先配置；默认动态，静态模式才展开手动选项编辑。 -->
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.filterOptions') }}</label>
+          <div class="form-group-column" style="display: flex;align-items: unset;">
+            <el-radio-group
+              v-model="localFilterConfig.optionSource"
+              @change="handleFilterOptionSourceChange"
+            >
+              <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
+              <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
+            </el-radio-group>
+            <span class="form-hint">
+              {{ localFilterConfig.optionSource === 'dynamic'
+                ? t('insight.property.filterOptionDynamicHint')
+                : t('insight.property.filterOptionStaticHint') }}
+            </span>
+          </div>
+        </div>
+
         <!-- 数据源（用于加载筛选字段维度列表）-->
         <div class="form-group">
           <label class="form-label">{{ t('insight.property.datasource') }}</label>
@@ -396,7 +415,7 @@
             style="width: 100%"
             @change="handleFilterDatasourceChange"
           >
-            <el-option-group v-for="group in datasourceGroups" :key="`filter-${group.category}`" :label="group.label">
+            <el-option-group v-for="group in filterDatasourceGroups" :key="`filter-${group.category}`" :label="group.label">
               <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
             </el-option-group>
           </el-select>
@@ -415,7 +434,7 @@
             :remote-method="searchFilterDimensions"
             :loading="filterDimensionsLoading"
             style="width: 100%"
-            @change="emitFilterConfigChange"
+            @change="handleFilterFieldChange"
           >
             <el-option
               v-for="d in filterDimensionsOptions"
@@ -424,26 +443,6 @@
               :value="d.dimName"
             />
           </el-select>
-        </div>
-
-        <!-- 选项来源：静态手填 / 动态自动取值 -->
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.property.filterOptions') }}</label>
-          <div class="form-group-column" style="display: flex;align-items: unset;">
-            <el-radio-group
-              v-model="localFilterConfig.optionSource"
-              
-              @change="emitFilterConfigChange"
-            >
-              <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
-              <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
-            </el-radio-group>
-            <span class="form-hint">
-              {{ localFilterConfig.optionSource === 'dynamic'
-                ? t('insight.property.filterOptionDynamicHint')
-                : t('insight.property.filterOptionStaticHint') }}
-            </span>
-          </div>
         </div>
 
         <!-- 选择行为：按业务字段决定是否允许多选、全部和不筛选 -->
@@ -474,13 +473,17 @@
             :clearable="localFilterAllowNoFilter"
             :placeholder="t('insight.property.filterDefaultValuePlaceholder')"
             filterable
-            allow-create
+            :remote="localFilterConfig.optionSource === 'dynamic'"
+            :remote-method="searchFilterDefaultValues"
+            :loading="filterDefaultValuesLoading"
+            :allow-create="localFilterConfig.optionSource === 'static'"
             default-first-option
             style="width: 100%"
             @change="emitFilterConfigChange"
+            @visible-change="handleFilterDefaultVisibleChange"
           >
             <el-option
-              v-for="opt in localFilterConfig.staticOptions ?? []"
+              v-for="opt in filterDefaultOptions"
               :key="opt.value"
               :label="opt.label || opt.value"
               :value="opt.value"
@@ -488,35 +491,34 @@
           </el-select>
         </div>
 
-        <!-- 静态选项编辑（仅静态来源）-->
+        <!-- 静态选项编辑（仅静态来源；列表和添加入口位于“静态选项”标题下方）-->
         <div v-if="localFilterConfig.optionSource === 'static'" class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
-          <div
-            v-for="(opt, idx) in localFilterConfig.staticOptions"
-            :key="idx"
-            class="static-option-row"
-          >
-            <el-input
-              v-model="opt.label"
-              
-              :placeholder="t('insight.property.optionLabel')"
-              style="flex: 1"
-              @change="emitFilterConfigChange"
-            />
-            <el-input
-              v-model="opt.value"
-              
-              :placeholder="t('insight.property.optionValue')"
-              style="flex: 1"
-              @change="emitFilterConfigChange"
-            />
-            <el-button
-              text
-              
-              @click="removeStaticOption(idx)"
+          <div class="static-options-list">
+            <div
+              v-for="(opt, idx) in localFilterConfig.staticOptions"
+              :key="idx"
+              class="static-option-row"
             >
-              ✕
-            </el-button>
+              <el-input
+                v-model="opt.label"
+                :placeholder="t('insight.property.optionLabel')"
+                style="flex: 1"
+                @change="emitFilterConfigChange"
+              />
+              <el-input
+                v-model="opt.value"
+                :placeholder="t('insight.property.optionValue')"
+                style="flex: 1"
+                @change="emitFilterConfigChange"
+              />
+              <el-button
+                text
+                @click="removeStaticOption(idx)"
+              >
+                ✕
+              </el-button>
+            </div>
           </div>
           <el-button
             text
@@ -715,6 +717,8 @@ const emit = defineEmits<{
 
 const datasourceStore = useDatasourceStore()
 const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasources))
+/** 筛选器当前仅支持从 Aloudata 数据源选择维度。 */
+const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(group => group.category === 'aloudata'))
 
 /** 组合卡片背景色预设 · 统一收敛到 utils/color-presets.ts（与指标样式弹窗共用一处来源） */
 const COMBINATION_BG_PRESETS = CARD_BG_PRESETS
@@ -738,7 +742,7 @@ const localDataSource = reactive<ComponentDataSource>({
 /** 筛选组件配置本地副本 */
 const localFilterConfig = reactive<FilterComponentConfig>({
   field: '',
-  optionSource: 'static',
+  optionSource: 'dynamic',
   staticOptions: [],
 })
 const localFilterSelectionMode = ref<'single' | 'multiple'>('single')
@@ -750,6 +754,12 @@ const localFilterDatasourceId = ref<string>('')
 /** 筛选器维度选项与加载状态 */
 const filterDimensionsOptions = ref<Array<{ dimName: string; dimDisplayName: string }>>([])
 const filterDimensionsLoading = ref(false)
+const filterDefaultValues = ref<Array<{ label: string; value: string }>>([])
+const filterDefaultValuesLoading = ref(false)
+let filterDefaultValuesSearchTimer: ReturnType<typeof setTimeout> | null = null
+const filterDefaultOptions = computed(() => localFilterConfig.optionSource === 'static'
+  ? (localFilterConfig.staticOptions ?? [])
+  : filterDefaultValues.value)
 
 /** 时间筛选组件配置本地副本 */
 const localTimeFilterConfig = reactive<TimeFilterComponentConfig>({
@@ -913,7 +923,7 @@ watch(
     if (newComp.type === 'filter') {
       const config = newComp.config as FilterComponentConfig | undefined
       localFilterConfig.field = config?.field ?? ''
-      localFilterConfig.optionSource = config?.optionSource ?? 'static'
+      localFilterConfig.optionSource = config?.optionSource ?? 'dynamic'
       localFilterConfig.staticOptions = config?.staticOptions ? JSON.parse(JSON.stringify(config.staticOptions)) : []
       localFilterSelectionMode.value = config?.selectionMode ?? 'single'
       localFilterAllowSelectAll.value = config?.allowSelectAll ?? false
@@ -927,6 +937,11 @@ watch(
         loadFilterDimensions(localFilterDatasourceId.value)
       } else {
         filterDimensionsOptions.value = []
+      }
+      if (localFilterConfig.optionSource === 'dynamic' && localFilterDatasourceId.value && localFilterConfig.field) {
+        loadFilterDefaultValues()
+      } else {
+        filterDefaultValues.value = []
       }
     }
     // 同步时间筛选组件配置
@@ -1167,15 +1182,76 @@ function emitChange(): void {
 function handleFilterDatasourceChange(): void {
   localFilterConfig.field = ''
   filterDimensionsOptions.value = []
+  filterDefaultValues.value = []
   if (localFilterDatasourceId.value) {
     loadFilterDimensions(localFilterDatasourceId.value)
   }
   emitFilterConfigChange()
 }
 
+/** 维度字段变更后，默认值候选必须来自该维度的真实值。 */
+function handleFilterFieldChange(): void {
+  localFilterDefaultValue.value = localFilterSelectionMode.value === 'multiple' ? [] : null
+  filterDefaultValues.value = []
+  if (localFilterConfig.optionSource === 'dynamic') {
+    loadFilterDefaultValues()
+  }
+  emitFilterConfigChange()
+}
+
+/** 切换选项来源时清理不属于当前来源的默认值并刷新候选。 */
+function handleFilterOptionSourceChange(): void {
+  localFilterDefaultValue.value = localFilterSelectionMode.value === 'multiple' ? [] : null
+  filterDefaultValues.value = []
+  if (localFilterConfig.optionSource === 'dynamic') {
+    loadFilterDefaultValues()
+  }
+  emitFilterConfigChange()
+}
+
+async function loadFilterDefaultValues(keyword?: string): Promise<void> {
+  if (localFilterConfig.optionSource !== 'dynamic' || !localFilterDatasourceId.value || !localFilterConfig.field) {
+    filterDefaultValues.value = []
+    return
+  }
+  filterDefaultValuesLoading.value = true
+  try {
+    const result = await datasourceApi.listDimensionValues(
+      localFilterDatasourceId.value,
+      localFilterConfig.field,
+      keyword?.trim() || undefined,
+      200,
+    )
+    const values = (result as unknown as string[]) ?? []
+    filterDefaultValues.value = values.map(value => ({ label: value, value }))
+  } catch (e) {
+    console.error('[PropertyPanel] load filter default values error:', e)
+    filterDefaultValues.value = []
+  } finally {
+    filterDefaultValuesLoading.value = false
+  }
+}
+
+function searchFilterDefaultValues(query: string): void {
+  if (filterDefaultValuesSearchTimer) clearTimeout(filterDefaultValuesSearchTimer)
+  filterDefaultValuesSearchTimer = setTimeout(() => {
+    loadFilterDefaultValues(query)
+  }, 300)
+}
+
+function handleFilterDefaultVisibleChange(visible: boolean): void {
+  if (visible && localFilterConfig.optionSource === 'dynamic' && filterDefaultValues.value.length === 0) {
+    loadFilterDefaultValues()
+  }
+}
+
 /** 加载筛选器维度选项（复用已同步维度列表接口，支持关键字服务端搜索）*/
 async function loadFilterDimensions(datasourceId: string, keyword?: string): Promise<void> {
   if (!datasourceId) {
+    filterDimensionsOptions.value = []
+    return
+  }
+  if (classifyDatasourceTypeFor(datasourceId) !== 'aloudata') {
     filterDimensionsOptions.value = []
     return
   }
@@ -1754,6 +1830,13 @@ datasourceStore.fetchDatasources().catch(() => {
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
+}
+
+.static-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
 }
 
 .static-option-row :deep(.el-button) {

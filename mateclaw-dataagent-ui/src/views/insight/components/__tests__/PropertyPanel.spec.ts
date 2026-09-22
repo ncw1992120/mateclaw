@@ -6,6 +6,8 @@ import PropertyPanel from '../PropertyPanel.vue'
 
 const listSyncedMetricsMock = vi.hoisted(() => vi.fn())
 const listMetricsDimensionDetailsMock = vi.hoisted(() => vi.fn())
+const listSyncedDimensionsMock = vi.hoisted(() => vi.fn().mockResolvedValue([]))
+const listDimensionValuesMock = vi.hoisted(() => vi.fn())
 const previewComponentMock = vi.hoisted(() => vi.fn())
 const datasourceListMock = vi.hoisted(() => [{ id: '7', name: 'Sales database', sourceType: 'aloudata' }])
 
@@ -19,7 +21,8 @@ vi.mock('@/stores/useDatasourceStore', () => ({
 vi.mock('@/api/datasource', () => ({
   listSyncedMetrics: listSyncedMetricsMock,
   listMetricsDimensionDetails: listMetricsDimensionDetailsMock,
-  listSyncedDimensions: vi.fn().mockResolvedValue([]),
+  listSyncedDimensions: listSyncedDimensionsMock,
+  listDimensionValues: listDimensionValuesMock,
 }))
 
 vi.mock('@/api/insight-dashboard', () => ({
@@ -70,6 +73,81 @@ const i18n = createI18n({
 })
 
 describe('PropertyPanel', () => {
+  it('defaults new filter configuration to dynamic options before datasource setup', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'filter-new',
+          type: 'filter',
+          title: '区域',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect((wrapper.vm as any).localFilterConfig.optionSource).toBe('dynamic')
+    expect(wrapper.find('.static-options-list').exists()).toBe(false)
+    const labels = wrapper.findAll('.form-label').map(label => label.text())
+    expect(labels.indexOf('insight.property.filterOptions')).toBeLessThan(labels.indexOf('insight.property.datasource'))
+  })
+
+  it('shows static options only after switching to static source', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'filter-static',
+          type: 'filter',
+          title: '区域',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: { optionSource: 'static', staticOptions: [{ label: '华东', value: 'east' }] },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('.static-options-list').exists()).toBe(true)
+    expect(wrapper.findAll('.static-options-list input')).toHaveLength(2)
+    expect(wrapper.text()).toContain('+ insight.property.addOption')
+  })
+
+  it('only exposes Aloudata datasources for filter components', async () => {
+    datasourceListMock.splice(0, datasourceListMock.length,
+      { id: 'aloudata-1', name: '指标平台', sourceType: 'aloudata' } as any,
+      { id: 'jdbc-1', name: '业务 MySQL', sourceType: 'mysql' } as any,
+      { id: 'api-1', name: '订单接口', sourceType: 'HTTP_API' } as any,
+    )
+
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'filter-1',
+          type: 'filter',
+          title: '区域',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: { optionSource: 'static', staticOptions: [] },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.findAll('optgroup').map(group => group.attributes('label'))).toEqual(['Aloudata'])
+    expect(wrapper.text()).toContain('指标平台')
+    expect(wrapper.text()).not.toContain('业务 MySQL')
+    expect(wrapper.text()).not.toContain('订单接口')
+
+    datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
+  })
+
   it('shows JDBC SQL controls instead of Aloudata metrics and dimensions', async () => {
     datasourceListMock.splice(0, datasourceListMock.length,
       { id: 'jdbc-1', name: '业务 MySQL', sourceType: 'mysql' } as any,
@@ -116,6 +194,35 @@ describe('PropertyPanel', () => {
     expect(wrapper.text()).toContain('Revenue')
     expect(wrapper.text()).toContain('Region')
     expect(wrapper.text()).not.toContain('password')
+  })
+
+  it('loads dynamic default values from the configured dimension field', async () => {
+    listDimensionValuesMock.mockResolvedValue(['华东', '华南'])
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'filter-1',
+          type: 'filter',
+          title: '区域',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: {
+            datasourceId: '7',
+            field: 'region',
+            optionSource: 'dynamic',
+            defaultValue: null,
+          },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+    await nextTick()
+
+    expect(listDimensionValuesMock).toHaveBeenCalledWith('7', 'region', undefined, 200)
+    expect(wrapper.findAll('option').map(option => option.text())).toContain('华东')
+    expect(wrapper.findAll('option').map(option => option.text())).toContain('华南')
   })
 
   it('uses the component preview API and emits preview data without creating a script execution', async () => {
