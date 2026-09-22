@@ -1,7 +1,7 @@
 server:
   port: 18089
   servlet:
-    context-path: /dataagent/api
+    context-path: /
 
 spring:
   application:
@@ -88,6 +88,7 @@ mateclaw:
     timeout: 5s
     local-fallback-users:
       - admin
+      - PINGANSTOCK
   # 传输加密：无 TLS 部署下对 password/ssoCookie/改密口令做 RSA-OAEP 公钥加密（前端 jsencrypt）。
   # private-key-pem 为 PKCS#8 私钥 PEM；多实例部署必须显式配置共享私钥，留空则启动自动生成内存密钥
   # （重启后公钥变化，前端会重新拉取，但多实例无法互解）。
@@ -153,7 +154,31 @@ dataagent:
     aloudata:
       # Aloudata API HTTP 超时（原实现无超时，下游挂起会拖垮 sseExecutor 线程池）
       connect-timeout-ms: 3000          # 连接超时（毫秒）
-      read-timeout-ms: 60000            # 读取超时（毫秒），须大于下方 slow-call 阈值
+      read-timeout-ms: 600000            # 读取超时（毫秒），须大于下方 slow-call 阈值
+  uid-sync:
+    # 用户 Aloudata UID 映射定时同步：从外部用户系统同步「登录名+租户 → UID」映射，
+    # 问数时使用映射 UID 认证（手动绑定 dataagent_datasource_account 优先，映射兜底）
+    enabled: false                      # 默认关闭，按环境开启
+    cron: "0 0 2 * * *"                 # Spring 6 段 cron，默认每日 02:00
+    # ---- 同步源连接：两种写法二选一 ----
+    # 1) 推荐：分片字段，应用自动拼 JDBC URL（mysql / postgresql）
+    source-type: ${UID_SYNC_SOURCE_TYPE:postgresql}        # 数据库类型：mysql / postgresql
+    source-host: ${UID_SYNC_SOURCE_HOST:localhost}        # 主机
+    source-port: ${UID_SYNC_SOURCE_PORT:5432}        # 端口（MySQL 默认 3306，PG 默认 5432）
+    source-database: ${UID_SYNC_SOURCE_DATABASE:postgres} # 库名（PG 为 database；跨 schema 查询写进 SQL 限定表名）
+    # 2) 高级：完整 JDBC URL（填写时优先于上面的分片字段；可自带连接参数）
+    source-url: ${UID_SYNC_SOURCE_URL:}
+    source-username: ${UID_SYNC_SOURCE_USERNAME:postgres} # 源库用户名
+    source-password: ${UID_SYNC_SOURCE_PASSWORD:root} # 源库密码（环境变量注入）
+    # 拉取 SQL：必须返回 username / tenant_id / aloudata_uid 三列（列名或 as 别名均可），
+    # 按列名取值（大小写不敏感、列序不限），缺列会显式报错并回显实际列名。
+    # 可选返回 nickname 列（昵称，仅展示用），缺失或为空时回落 mate_user.nickname。
+    # 同键（登录名+租户）重复行按结果顺序保留最后一条，需要稳定取舍时 SQL 应带确定性排序（如 ORDER BY）。
+    # 注意：MySQL 的 库.表 与 PG 的 模式.表 语义不同，按源库实际结构书写；
+    # PG 不能跨 database 查询，表在别的库时须让 URL 指向那个库。
+    # 例：SELECT account AS username, tenant_id AS tenant_id, username AS nickname, user_id AS aloudata_uid FROM anymetrics.cip_user
+    query-sql: ${UID_SYNC_QUERY_SQL:select account as username, tenant_id as tenant_id, username as nickname, user_id as aloudata_uid from anymetrics.cip_user}
+    batch-size: 500                     # 单批 upsert 大小
 
 # Resilience4j 熔断器：Aloudata API 专用实例
 # 失败（含超时抛出的异常）计入计数滑动窗口，失败率/慢调用率超阈值后打开熔断，

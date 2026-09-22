@@ -1,6 +1,6 @@
 import api from './index'
 
-const BASE_URL = '/dataagent/api/v1/resource-grants'
+const BASE_URL = '/v1/resource-grants'
 
 /** 资源授权记录 */
 export interface ResourceGrant {

@@ -82,3 +82,9 @@ build-mihomo-gz:
 	  -t $(MIHOMO_GZ_IMAGE) \
 	  --push \
 	  --progress=plain .
+
+# Skill 文档-代码口径一致性检查：methods.md / SKILL.md 是 anomaly_detect.py 的人工镜像，
+# 阈值与参数在两处各写一遍，本目标校验两者一致（漂移时非零码退出，可接入 CI）
+.PHONY: check-skill-docs
+check-skill-docs:
+	python3 mateclaw-dataagent/src/main/resources/skills/aloudata_metric_anomaly_detection/scripts/check_doc_consistency.py

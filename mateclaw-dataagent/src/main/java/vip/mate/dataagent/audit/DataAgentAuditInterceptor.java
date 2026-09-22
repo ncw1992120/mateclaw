@@ -31,7 +31,7 @@ public class DataAgentAuditInterceptor implements HandlerInterceptor {
 
     private static final String ATTR_START_TIME = "DATAAGENT_AUDIT_START_MS";
 
-    /** 高频或纯个人维度路径前缀：不写审计 */
+    /** 高频或纯个人维度路径前缀：不写审计（仅对写请求生效，GET 已在前面直接返回） */
     private static final String[] EXCLUDED_PREFIXES = {
             "/v1/chat", "/v1/chat-optimize", "/v1/chat-upload",
             "/v1/llm", "/v1/agentscope", "/v1/conversations",

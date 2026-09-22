@@ -9,7 +9,7 @@ import type {
 } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/semantic-models'
+const BASE_URL = '/v1/semantic-models'
 
 /** 查询语义模型列表 */
 export function list(datasourceId: string, tableNames?: string) {
@@ -69,38 +69,38 @@ export function syncFromAloudata(datasourceId: string) {
 
 /** 查询已同步的 Aloudata 指标列表（从数据库查） */
 export function listAloudataMetrics(datasourceId: string, pageNumber = 1, pageSize = 100) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-metrics`, {
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/synced-metrics`, {
     params: { pageNumber, pageSize },
   })
 }
 
 /** 查询已同步的 Aloudata 维度列表（从数据库查） */
 export function listAloudataDimensions(datasourceId: string, pageNumber = 1, pageSize = 100) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-dimensions`, {
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/synced-dimensions`, {
     params: { pageNumber, pageSize },
   })
 }
 
 /** 查询已同步的 Aloudata 类目列表 */
 export function listAloudataCategories(datasourceId: string, categoryType?: string) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/synced-categories`, {
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/synced-categories`, {
     params: categoryType ? { categoryType } : {},
   })
 }
 
 /** 查询指标关联的维度名称列表 */
 export function listMetricDimensions(datasourceId: string, metricName: string) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimensions`)
 }
 
 /** 查询指标关联的维度详情列表（含展示名、描述等） */
 export function listMetricDimensionDetails(datasourceId: string, metricName: string) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimension-details`)
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/dimension-details`)
 }
 
 /** 查询维度关联的指标详情列表（含展示名、业务口径等） */
 export function listDimensionMetricDetails(datasourceId: string, dimName: string) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/metric-details`)
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/metric-details`)
 }
 
 /** 分页查询 Aloudata 指标列表 */
@@ -108,7 +108,7 @@ export function pageAloudataMetrics(
   datasourceId: string,
   params: { pageNumber: number; pageSize: number; keyword?: string; categoryId?: string },
 ) {
-  return api.get<AloudataMetricPage>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/page`, {
+  return api.get<AloudataMetricPage>(`/v1/datasources/${datasourceId}/aloudata/metrics/page`, {
     params,
   })
 }
@@ -118,14 +118,14 @@ export function pageAloudataDimensions(
   datasourceId: string,
   params: { pageNumber: number; pageSize: number; keyword?: string; categoryId?: string },
 ) {
-  return api.get<AloudataDimensionPage>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/page`, {
+  return api.get<AloudataDimensionPage>(`/v1/datasources/${datasourceId}/aloudata/dimensions/page`, {
     params,
   })
 }
 
 /** 查询 Aloudata 类目数量统计 */
 export function listAloudataCategoryCounts(datasourceId: string, categoryType: string) {
-  return api.get<AloudataCategoryCount[]>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/categories/counts`, {
+  return api.get<AloudataCategoryCount[]>(`/v1/datasources/${datasourceId}/aloudata/categories/counts`, {
     params: { categoryType },
   })
 }
@@ -135,7 +135,7 @@ export function listMetricsGroupedByCategory(
   datasourceId: string,
   params?: { keyword?: string; categoryId?: string; limitPerCategory?: number },
 ) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/grouped`, {
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/metrics/grouped`, {
     params: params || {},
   })
 }
@@ -145,7 +145,7 @@ export function listDimensionsGroupedByCategory(
   datasourceId: string,
   params?: { keyword?: string; categoryId?: string; limitPerCategory?: number },
 ) {
-  return api.get(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/grouped`, {
+  return api.get(`/v1/datasources/${datasourceId}/aloudata/dimensions/grouped`, {
     params: params || {},
   })
 }

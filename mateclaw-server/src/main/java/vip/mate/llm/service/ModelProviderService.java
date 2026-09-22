@@ -124,11 +124,21 @@ public class ModelProviderService {
     public ProviderInfoDTO updateProviderConfig(String providerId, ProviderConfigRequest request) {
         ModelProviderEntity provider = getProvider(providerId);
         if (StringUtils.hasText(request.getApiKey())) {
-            provider.setApiKey(request.getApiKey().trim());
+            // 列表接口回传的是打码值（maskApiKey 产生 "********"），调用方把
+            // 未改动的 Key 原样送回时不能覆盖库里的真实 Key，按"未修改"忽略
+            if (!request.getApiKey().contains("********")) {
+                provider.setApiKey(request.getApiKey().trim());
+            }
         }
         provider.setBaseUrl(request.getBaseUrl());
-        provider.setChatModel(ModelProtocol.resolveChatModel(request.getProtocol(), request.getChatModel()));
-        provider.setGenerateKwargs(writeJson(request.getGenerateKwargs()));
+        // 卡片编辑等局部调用只携带 baseUrl/apiKey；protocol 与 chatModel 均为空时
+        // 保持现值，避免每次保存都把协议/默认模型重置回 OPENAI_COMPATIBLE
+        if (StringUtils.hasText(request.getProtocol()) || StringUtils.hasText(request.getChatModel())) {
+            provider.setChatModel(ModelProtocol.resolveChatModel(request.getProtocol(), request.getChatModel()));
+        }
+        if (request.getGenerateKwargs() != null) {
+            provider.setGenerateKwargs(writeJson(request.getGenerateKwargs()));
+        }
         if (request.getRequireApiKey() != null) {
             provider.setRequireApiKey(request.getRequireApiKey());
         }
@@ -161,6 +171,10 @@ public class ModelProviderService {
         provider.setProviderId(request.getId());
         provider.setName(request.getName());
         provider.setApiKeyPrefix(request.getApiKeyPrefix());
+        // 添加弹窗收集的初始 Key 直接落库（此前只用于 requireApiKey 布尔值后被丢弃）
+        if (StringUtils.hasText(request.getApiKey())) {
+            provider.setApiKey(request.getApiKey().trim());
+        }
         provider.setChatModel(ModelProtocol.resolveChatModel(request.getProtocol(), request.getChatModel()));
         provider.setBaseUrl(request.getDefaultBaseUrl());
         provider.setGenerateKwargs("{}");

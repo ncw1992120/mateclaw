@@ -2,7 +2,7 @@ import JSEncrypt from 'jsencrypt'
 import api from '@/api'
 
 /** 传输加密公钥接口路径（与后端 DataAgentAuthController 一致） */
-const PUB_KEY_PATH = '/dataagent/api/v1/auth/pubkey'
+const PUB_KEY_PATH = '/v1/auth/pubkey'
 
 /** 传输加密公钥响应结构 */
 export interface PublicKeyInfo {

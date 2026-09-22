@@ -2,7 +2,7 @@ import api from './index'
 import type { Workspace, WorkspaceMember, WorkspaceMemberPage } from '@/types'
 
 /** 工作区 API 基础路径（通过 dataagent 后端 SDK 代理） */
-const BASE_URL = '/dataagent/api/v1/workspaces'
+const BASE_URL = '/v1/workspaces'
 
 /** 获取当前用户可见的工作区列表 */
 export function listWorkspaces() {

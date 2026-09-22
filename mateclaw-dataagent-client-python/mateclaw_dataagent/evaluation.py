@@ -24,7 +24,7 @@ class EvaluationRunner:
     用于批量运行测评用例，收集结果并生成报告。
 
     使用示例:
-        client = DataAgentClient("http://localhost:18089/dataagent/api", workspace_id=1)
+        client = DataAgentClient("http://localhost:18089", workspace_id=1)
         client.login("admin", "admin123")
 
         runner = EvaluationRunner(client)

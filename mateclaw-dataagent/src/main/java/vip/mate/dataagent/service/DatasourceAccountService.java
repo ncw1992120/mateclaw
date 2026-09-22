@@ -32,11 +32,17 @@ public interface DatasourceAccountService {
     /**
      * 解析当前用户在指定 Aloudata 数据源上的认证值（auth-value）
      * <p>
-     * 如果用户绑定了查询账号且状态为启用，返回绑定的认证值；否则返回 null，表示使用数据源默认账号。
+     * 解析顺序：
+     * <ul>
+     *   <li>手动绑定优先：用户手动绑定且启用的查询账号认证值</li>
+     *   <li>自动映射兜底：手动绑定未命中时，按「登录名 + 数据源租户」查询 UID 映射表
+     *       （{@link UserUidMappingService}），命中且启用时返回映射的 UID</li>
+     * </ul>
+     * 两者均未命中时返回 null，表示无可用的用户认证值。
      *
      * @param datasourceId 数据源 ID
      * @param userId       用户 ID
-     * @return 用户的 Aloudata 认证值，未绑定时返回 null
+     * @return 用户的 Aloudata 认证值，未命中任何来源时返回 null
      */
     String resolveAloudataAuthValue(Long datasourceId, Long userId);
 

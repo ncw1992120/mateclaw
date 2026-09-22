@@ -468,6 +468,12 @@ export default {
     accountSaveBtn: '保存',
     accountTestOk: '连接成功',
     accountTestFail: '连接失败',
+    /** UID 自动映射 */
+    uidAutoMappedHint: '已自动同步你的 UID（同步时间：{time}）。手动绑定优先，未绑定查询账号时问数将使用该映射。',
+    uidSyncBtn: '同步 UID 映射',
+    uidSyncing: '同步中…',
+    uidSyncBtnTitle: '从外部用户系统拉取最新的登录名 → Aloudata UID 映射（每天凌晨 2 点也会自动同步）',
+    uidSyncDone: '同步完成：拉取 {fetched} 条，写入 {upserted} 条，停用 {disabled} 条，跳过 {skipped} 条',
   },
   browseDrawer: {
     subtitle: '浏览该数据源下的指标与维度',
@@ -746,6 +752,7 @@ export default {
     providerName: '供应商名称',
     baseUrl: 'Base URL',
     apiKey: 'API Key',
+    apiKeyKeepPlaceholder: '留空则保持原有 Key 不变',
     chatModel: '默认对话模型',
     modelName: '显示名称',
     realModelName: '模型标识',

@@ -10,7 +10,7 @@ data:
   # 数据源回落 H2 且 Flyway 扫描全部方言目录报版本冲突。
   SPRING_PROFILES_ACTIVE: "pgsql"
   # 对应 application-mysql.yml / application-pgsql.yml 中的 ${DB_HOST} 等占位符
-  DB_HOST: "192.168.1.7"
+  DB_HOST: "192.168.1.6"
   DB_PORT: "5432"
   DB_NAME: "postgres"
   # ---- Elasticsearch ----

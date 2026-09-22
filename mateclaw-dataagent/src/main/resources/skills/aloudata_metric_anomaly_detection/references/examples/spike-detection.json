@@ -1,0 +1,122 @@
+/**
+ * 示例1：单指标尖峰检测 — 近30天销售额有没有突增突降
+ * 用户: "近30天销售额有没有异常"
+ *
+ * 工具调用流程:
+ * 1. getCurrentDate() → 2025-06-19（相对时间必须先取真实日期，禁止主观推算）
+ * 2. aloudata_search_semantic(datasourceId=..., keyword="销售额") → metricName="sales_amount"
+ * 3. aloudata_metrics_query(dimensions=["metric_time__day"]、升序、近30天) → 时间序列
+ * 4. runSkillScript(skillName="aloudata_metric_anomaly_detection", scriptPath="scripts/anomaly_detect.py", args=步骤4请求)
+ * 5. 对突增日按 channel 维度下钻定位根因
+ */
+
+/* ========== 步骤3: 取数请求（必须带时间维度并按时间升序）========== */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["metric_time__day"],
+    "timeConstraint": "([metric_time__day]>=DateAdd(Today(),-30,\"DAY\"))",
+    "orders": [{"metric_time__day": "asc"}],
+    "limit": 200
+}
+
+/* ========== 步骤4: 检测请求（直接给序列；透传 queryResult 亦可）========== */
+{
+    "metric": "sales_amount",
+    "granularity": "DAY",
+    "method": "auto",
+    "direction": "both",
+    "series": [
+        {"time": "2025-05-21", "value": 120971},
+        {"time": "2025-05-22", "value": 116954},
+        {"time": "2025-05-23", "value": 120400},
+        {"time": "2025-05-24", "value": 126683},
+        {"time": "2025-05-25", "value": 123070},
+        {"time": "2025-05-26", "value": 122709},
+        {"time": "2025-05-27", "value": 115375},
+        {"time": "2025-05-28", "value": 118239},
+        {"time": "2025-05-29", "value": 123102},
+        {"time": "2025-05-30", "value": 124024},
+        {"time": "2025-05-31", "value": 112974},
+        {"time": "2025-06-01", "value": 119973},
+        {"time": "2025-06-02", "value": 128894},
+        {"time": "2025-06-03", "value": 121601},
+        {"time": "2025-06-04", "value": 295392},
+        {"time": "2025-06-05", "value": 125833},
+        {"time": "2025-06-06", "value": 113165},
+        {"time": "2025-06-07", "value": 119686},
+        {"time": "2025-06-08", "value": 121298},
+        {"time": "2025-06-09", "value": 122893},
+        {"time": "2025-06-10", "value": 125338},
+        {"time": "2025-06-11", "value": 123256},
+        {"time": "2025-06-12", "value": 117617},
+        {"time": "2025-06-13", "value": 53768},
+        {"time": "2025-06-14", "value": 120530},
+        {"time": "2025-06-15", "value": 121381},
+        {"time": "2025-06-16", "value": 121422},
+        {"time": "2025-06-17", "value": 124389},
+        {"time": "2025-06-18", "value": 114806},
+        {"time": "2025-06-19", "value": 122146}
+    ]
+}
+
+/* ========== 步骤4 响应（真实输出，节选）========== */
+{
+    "config": {
+        "method": "auto",
+        "methodsUsed": ["mad", "iqr", "moving"],
+        "minVotes": 2,
+        "direction": "both",
+        "granularity": "DAY",
+        "period": 1,
+        "seasonalAdjusted": false,
+        "seasonalStrength": null,
+        "params": {"madThreshold": 3.5, "zscoreThreshold": 3.0, "iqrK": 1.5, "iqrExtremeK": 3.0, "window": 7, "movingThreshold": 3.5, "ewmaAlpha": 0.3, "ewmaL": 3.0, "minDeviationRatio": 0.03}
+    },
+    "summary": {
+        "anomalyCount": 2,
+        "episodeCount": 2,
+        "severityCounts": {"CRITICAL": 2},
+        "isStable": false,
+        "trendHint": "down",
+        "conclusion": "检出 2 个异常点、2 个异常片段；最显著的是 2025-06-04（CRITICAL，偏离基线约 143.3%，得分 52.43）。"
+    },
+    "anomalies": [
+        {
+            "index": 14, "time": "2025-06-04", "value": 295392, "expected": 121401.5,
+            "score": 52.426, "deviationRatio": 1.4332, "direction": "up",
+            "severity": "CRITICAL", "type": "SPIKE", "methods": ["iqr", "mad", "moving"]
+        },
+        {
+            "index": 23, "time": "2025-06-13", "value": 53768, "expected": 121401.5,
+            "score": -20.379, "deviationRatio": 0.5571, "direction": "down",
+            "severity": "CRITICAL", "type": "DIP", "methods": ["iqr", "mad", "moving"]
+        }
+    ],
+    "episodes": [
+        {
+            "startTime": "2025-06-04", "endTime": "2025-06-04", "length": 1,
+            "type": "SPIKE", "severity": "CRITICAL", "maxScore": 52.426, "meanDeviationRatio": 1.4332
+        },
+        {
+            "startTime": "2025-06-13", "endTime": "2025-06-13", "length": 1,
+            "type": "DIP", "severity": "CRITICAL", "maxScore": 20.379, "meanDeviationRatio": 0.5571
+        }
+    ],
+    "warnings": []
+}
+
+/* ========== 步骤5: 对 06-04 突增按渠道下钻（dimensions 加业务维度）========== */
+{
+    "metrics": ["sales_amount"],
+    "dimensions": ["channel", "metric_time__day"],
+    "timeConstraint": "([metric_time__day]>=DateAdd(Today(),-30,\"DAY\"))",
+    "orders": [{"metric_time__day": "asc"}],
+    "limit": 1000
+}
+
+/* 解读：
+   - 序列无季节结构（period=1），按原序列检测；两个异常点均被 3 个检测器命中 → 高可信
+   - 06-04 销售额 29.5 万、基线 12.1 万，向上偏离 143%（CRITICAL SPIKE）：
+     先确认是否为已知活动日/大促（预期内波动），否则用 channel 维度下钻定位贡献最大的渠道
+   - 06-13 跌至 5.4 万、向下偏离 56%（CRITICAL DIP）：优先排查渠道中断、缺货、支付故障、数据延迟
+   - 两点都是单点脉冲而非持续位移，业务影响小于水平位移 */

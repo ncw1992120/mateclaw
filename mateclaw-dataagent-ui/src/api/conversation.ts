@@ -2,7 +2,7 @@ import api from './index'
 import type { Conversation, MessageVO, ContextUsage } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/conversations'
+const BASE_URL = '/v1/conversations'
 
 /** 获取会话列表 */
 export function listConversations() {

@@ -90,8 +90,10 @@ public class AloudataServiceImpl implements AloudataService {
     /**
      * 解析数据源配置，并使用当前用户的 Aloudata 认证值替换管理员认证值（仅查询场景使用）
      * <p>
-     * tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值。
-     * 用户必须绑定自己的 Aloudata 认证值才能执行查询，未绑定时抛出异常，不允许回退到管理员账号。
+     * tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户自己的认证值；
+     * 认证值解析链为「手动绑定优先，UID 自动映射兜底」（见
+     * {@code DatasourceAccountService#resolveAloudataAuthValue}），
+     * 两者均未命中时抛出异常，不允许回退到管理员账号。
      *
      * @param datasourceId 数据源 ID
      * @return 替换用户认证值后的配置
@@ -108,7 +110,7 @@ public class AloudataServiceImpl implements AloudataService {
         }
         String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
         if (userAuthValue == null) {
-            throw new RuntimeException("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号");
+            throw new RuntimeException("当前用户未配置 Aloudata 认证值（未手动绑定且 UID 自动映射未命中），请在数据源页面绑定查询账号，或联系管理员同步 UID 映射");
         }
         config.setAuthValue(userAuthValue);
         return config;

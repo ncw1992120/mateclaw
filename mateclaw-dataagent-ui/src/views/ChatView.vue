@@ -1868,10 +1868,10 @@ const customRenderer = {
   /** 链接在新窗口打开；指向本站 API 的链接自动追加 token 以通过 JWT 认证 */
   link({ href, title, text }: { href: string; title?: string; text: string }): string {
     const titleAttr = title ? ` title="${title}"` : ''
-    // AI 回复中的生成文件链接走 /api/v1/files/generated/...，需要重写为 dataagent 路径
+    // AI 回复中的生成文件链接走 /api/v1/files/generated/...，重写为 dataagent 实际路径（context-path 为 /，剥离 /api 前缀）
     let resolvedHref = href
     if (href && href.startsWith('/api/v1/files/generated/')) {
-      resolvedHref = '/dataagent' + href
+      resolvedHref = href.substring('/api'.length)
     }
     const finalHref = buildFileUrl(resolvedHref) || resolvedHref
     return `<a href="${finalHref}" target="_blank" rel="noopener noreferrer"${titleAttr}>${text}</a>`
@@ -4277,11 +4277,11 @@ function getUserAttachments(msg: typeof chatStore.messages.value[0]): ChatAttach
 /**
  * 为受 JWT 保护的附件访问地址追加 token 查询参数。
  * <p>
- * 附件端点 `/dataagent/api/v1/chat/files/**` 需要鉴权，而 `<img>` 标签与
+ * 附件端点 `/v1/chat/files/**` 需要鉴权，而 `<img>` 标签与
  * `window.open` 无法携带 Authorization 头；后端 JwtAuthFilter 支持通过
  * `?token=` 传参（与 SSE 一致），故此处在渲染层为本站需鉴权的 API 地址补上 token。
  * <p>
- * 注意：`/api/v1/files/generated/**` 端点无需认证（UUID 即为访问凭证），
+ * 注意：`/v1/files/generated/**` 端点无需认证（UUID 即为访问凭证），
  * 外部链接也不追加 token，避免泄露凭据。
  */
 function buildFileUrl(url: string | undefined): string {
@@ -4289,8 +4289,8 @@ function buildFileUrl(url: string | undefined): string {
   // 仅对本站 API 路径追加 token，外部链接跳过
   const isLocalApi = url.startsWith('/') || url.startsWith(window.location.origin + '/')
   if (!isLocalApi) return url
-  // /api/v1/files/generated/** 端点无需认证，不追加 token
-  if (url.includes('/api/v1/files/generated/')) return url
+  // /v1/files/generated/** 端点无需认证，不追加 token（includes 同时兼容 AI 链接原始的 /api/v1/... 形态）
+  if (url.includes('/v1/files/generated/')) return url
   const token = localStorage.getItem('token')
   if (!token) return url
   const sep = url.includes('?') ? '&' : '?'

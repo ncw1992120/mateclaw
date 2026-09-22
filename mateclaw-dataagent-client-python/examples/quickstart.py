@@ -24,7 +24,7 @@ def main():
     print("=" * 60)
 
     client = DataAgentClient(
-        base_url="http://localhost:18089/dataagent/api",
+        base_url="http://localhost:18089",
         workspace_id=1,
         timeout=60,
     )

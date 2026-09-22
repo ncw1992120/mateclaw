@@ -2,7 +2,7 @@ import api from './index'
 import type { LogicalRelation, LogicalRelationCreateRequest, LogicalRelationUpdateRequest } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/logical-relations'
+const BASE_URL = '/v1/logical-relations'
 
 /** 查询逻辑外键关系列表 */
 export function list(datasourceId: string, tableNames?: string) {

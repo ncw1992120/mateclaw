@@ -1,9 +1,9 @@
 import api from './index'
 import type { ChatRequest, SseEvent } from '@/types'
 
-const CHAT_URL = '/dataagent/api/v1/chat'
-const STREAM_URL = '/dataagent/api/v1/chat/stream'
-const STOP_URL = '/dataagent/api/v1/chat/stream'
+const CHAT_URL = '/v1/chat'
+const STREAM_URL = '/v1/chat/stream'
+const STOP_URL = '/v1/chat/stream'
 
 // 5min：后端 DataAgentStreamTracker 心跳最长 10s（streaming 阶段），
 // 300s 可容忍连续 30 个心跳丢失，排除网络抖动 / 代理缓冲 SSE 导致的误断。
@@ -379,7 +379,7 @@ export async function* reconnectStream(
   }
 }
 
-const UPLOAD_URL = '/dataagent/api/v1/chat/upload'
+const UPLOAD_URL = '/v1/chat/upload'
 
 /** 上传聊天附件结果 */
 export interface ChatUploadResult {
@@ -429,7 +429,7 @@ export async function uploadAttachment(conversationId: string, file: File): Prom
   return result.data
 }
 
-const OPTIMIZE_URL = '/dataagent/api/v1/chat/optimize'
+const OPTIMIZE_URL = '/v1/chat/optimize'
 
 /** 优化结果 */
 export interface OptimizeResult {
@@ -442,8 +442,8 @@ export async function optimizePrompt(input: string): Promise<OptimizeResult> {
   return data as unknown as OptimizeResult
 }
 
-const CHART_METRIC_META_URL = '/dataagent/api/v1/chat/chart/metric-meta'
-const CHART_INTERPRET_URL = '/dataagent/api/v1/chat/chart/interpret'
+const CHART_METRIC_META_URL = '/v1/chat/chart/metric-meta'
+const CHART_INTERPRET_URL = '/v1/chat/chart/interpret'
 
 /** 图表「指标查看」请求：从图表所属消息的 metrics_query 工具入参提取 */
 export interface ChartMetricMetaPayload {
