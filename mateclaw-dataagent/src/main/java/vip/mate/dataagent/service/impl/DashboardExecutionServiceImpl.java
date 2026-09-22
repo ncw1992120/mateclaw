@@ -45,6 +45,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     private final String datasetReadBaseUrl;
     private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public DashboardExecutionServiceImpl(
             InsightDashboardService dashboards,
             ScriptTaskPreparationService preparation,
@@ -55,7 +56,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             ObjectRefService objectRefs,
             ScriptResultContractService resultContract,
             @Value("${mateclaw.runner.dataset-read-base-url:http://mateclaw-dataagent:18089/dataagent/api}") String datasetReadBaseUrl,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) vip.mate.dataagent.service.QueryPlanner queryPlanner) {
+            vip.mate.dataagent.service.QueryPlanner queryPlanner) {
         this.dashboards = dashboards;
         this.preparation = preparation;
         this.runner = runner;
