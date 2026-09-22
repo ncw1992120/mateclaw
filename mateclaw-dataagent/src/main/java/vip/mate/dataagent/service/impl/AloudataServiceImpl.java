@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
@@ -35,6 +36,10 @@ public class AloudataServiceImpl implements AloudataService {
     private final AloudataConfigHelper configHelper;
     private final AloudataEndpointService endpointService;
     private final DatasourceAccountService datasourceAccountService;
+    private final Environment environment;
+
+    private static final String LOCAL_MOCK_PROFILE = "local-mock";
+    private static final String LOCAL_MOCK_AUTH_VALUE = "mock-uid-001";
 
     /** 测试连接使用的 API 端点名 */
     private static final String TEST_CONNECTION_ENDPOINT = "category_list";
@@ -90,7 +95,7 @@ public class AloudataServiceImpl implements AloudataService {
      * 解析数据源配置，并使用当前用户的 Aloudata 认证值替换管理员认证值（仅查询场景使用）
      * <p>
      * tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值。
-     * 用户必须绑定自己的 Aloudata 认证值才能执行查询，未绑定时抛出异常，不允许回退到管理员账号。
+     * 生产环境必须绑定自己的 Aloudata 认证值；local-mock 环境使用固定 mock 身份，不回退到管理员账号。
      *
      * @param datasourceId 数据源 ID
      * @return 替换用户认证值后的配置
@@ -106,11 +111,20 @@ public class AloudataServiceImpl implements AloudataService {
             throw new RuntimeException("当前用户未登录，无法执行 Aloudata 查询");
         }
         String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
+        userAuthValue = resolveAuthValue(userAuthValue, environment.acceptsProfiles(LOCAL_MOCK_PROFILE));
         if (userAuthValue == null) {
             throw new RuntimeException("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号");
         }
         config.setAuthValue(userAuthValue);
         return config;
+    }
+
+    /** 本地夹具没有真实用户账号时使用固定 mock 身份，生产环境仍要求用户绑定 auth-value。 */
+    static String resolveAuthValue(String userAuthValue, boolean localMockActive) {
+        if (userAuthValue == null && localMockActive) {
+            return LOCAL_MOCK_AUTH_VALUE;
+        }
+        return userAuthValue;
     }
 
     /**
