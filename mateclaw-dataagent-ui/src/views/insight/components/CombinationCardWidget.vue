@@ -11,7 +11,7 @@
     @drop.stop.prevent="onBodyDrop"
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
-    <div v-if="!editable && cfg.showTitle" class="cc-head">
+    <div v-if="!editable && cfg.showTitle" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
       <span class="cc-title">{{ cfg.title || component.title }}</span>
     </div>
 
@@ -245,6 +245,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     type: child.type,
     title: child.title,
     showTitle: child.showTitle,
+    titleBarStyle: child.titleBarStyle,
     showHeader: child.showHeader,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,

@@ -848,6 +848,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     title: getDefaultTitle(payload.type, payload.chartType),
     position: { x, y, w, h },
     chartType: payload.chartType,
+    titleBarStyle: 'standard',
     dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' && payload.type !== 'combination' ? {
       datasourceId: '',
       metrics: [],

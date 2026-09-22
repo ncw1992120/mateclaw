@@ -1209,6 +1209,9 @@ export interface PythonTransformConfig {
   parameters?: DashboardScriptParameter[]
 }
 
+/** 组件标题栏的内置样式，避免组件通过任意 CSS 破坏仪表盘一致性。 */
+export type ComponentTitleBarStyle = 'standard' | 'minimal' | 'accent' | 'section'
+
 /** 仪表盘组件定义 */
 export interface InsightComponent {
   /** 组件唯一 ID */
@@ -1219,6 +1222,8 @@ export interface InsightComponent {
   title: string
   /** 是否显示组件标题（默认显示） */
   showTitle?: boolean
+  /** 标题栏样式（默认 standard） */
+  titleBarStyle?: ComponentTitleBarStyle
   /** 数据表是否显示表头（默认显示） */
   showHeader?: boolean
   /** 栅格位置 */
@@ -1339,6 +1344,8 @@ export interface InsightCombinationChild {
   title: string
   /** 是否显示子卡片标题（默认显示） */
   showTitle?: boolean
+  /** 子卡片标题栏样式（默认 standard） */
+  titleBarStyle?: ComponentTitleBarStyle
   /** 数据表子卡片是否显示表头（默认显示） */
   showHeader?: boolean
   /** 图表子类型（仅 chart） */

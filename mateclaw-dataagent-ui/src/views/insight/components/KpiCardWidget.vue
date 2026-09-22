@@ -1,7 +1,7 @@
 <template>
   <div ref="rootRef" class="kpi-card-widget">
     <div class="kpi-card-inner">
-      <div class="kpi-card-header">
+      <div v-if="showTitle !== false || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
           <span v-if="showTitle !== false" class="kpi-header-title">{{ component.title }}</span>
         </div>
@@ -122,7 +122,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme, ComponentTitleBarStyle } from '@/types'
 import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
 import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
@@ -142,6 +142,8 @@ const props = withDefaults(defineProps<{
   componentData?: InsightComponentData
   /** 是否显示标题 */
   showTitle?: boolean
+  /** 标题栏样式 */
+  titleBarStyle?: ComponentTitleBarStyle
   /** 是否编辑态（编辑态下指标可拖拽 / 缩放 / 打开样式弹窗） */
   editable?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */

@@ -91,6 +91,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
@@ -101,6 +102,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :dashboard-theme="dashboardTheme"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
@@ -109,6 +111,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :show-header="getComponent(item.i)?.showHeader !== false"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
@@ -116,12 +119,14 @@
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
@@ -129,6 +134,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />

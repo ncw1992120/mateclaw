@@ -118,6 +118,7 @@ export function hydratePanel(
     type: toCardType(component.type),
     title: component.title || '',
     showTitle: component.showTitle !== false,
+    titleBarStyle: component.titleBarStyle ?? 'standard',
     showHeader: component.showHeader !== false,
     multiMetric: Boolean(component.multiKpi),
     multiTab: Array.isArray(component.tabs) && component.tabs.length > 0,
@@ -194,6 +195,7 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
     ...component,
     title: card.title,
     showTitle: card.showTitle,
+    titleBarStyle: card.titleBarStyle,
     showHeader: card.showHeader,
   }
   if (card.type === 'kpi') {

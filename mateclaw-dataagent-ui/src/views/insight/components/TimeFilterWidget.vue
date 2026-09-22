@@ -1,5 +1,5 @@
 <template>
-  <div class="time-filter-widget">
+    <div class="time-filter-widget" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
     <div v-if="showTitle !== false" class="time-filter-label">{{ component.title }}</div>
     <el-date-picker
       v-model="customDateRange"
@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig } from '@/types'
+import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ComponentTitleBarStyle } from '@/types'
 
 defineOptions({
   name: 'TimeFilterWidget',
@@ -30,6 +30,7 @@ const props = defineProps<{
   component: InsightComponent
   /** 是否显示标题 */
   showTitle?: boolean
+  titleBarStyle?: ComponentTitleBarStyle
 }>()
 
 const emit = defineEmits<{

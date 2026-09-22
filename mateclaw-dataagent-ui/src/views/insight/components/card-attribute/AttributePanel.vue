@@ -26,8 +26,17 @@
       </div>
 
       <div class="field row">
-        <span class="field-label">显示标题</span>
-        <el-switch v-model="activeCard.showTitle" aria-label="显示标题" />
+        <span class="field-label">显示标题栏</span>
+        <el-switch v-model="activeCard.showTitle" aria-label="显示标题栏" />
+      </div>
+      <div class="field">
+        <label class="field-label">标题栏样式</label>
+        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%">
+          <el-option value="standard" label="标准卡片" />
+          <el-option value="minimal" label="简洁文本" />
+          <el-option value="accent" label="强调色" />
+          <el-option value="section" label="分组标题" />
+        </el-select>
       </div>
       <div v-if="activeCard.type === 'table'" class="field row">
         <span class="field-label">显示表头</span>

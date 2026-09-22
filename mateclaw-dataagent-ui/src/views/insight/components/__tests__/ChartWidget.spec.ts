@@ -39,6 +39,24 @@ describe('ChartWidget', () => {
     expect(wrapper.find('.chart-title').exists()).toBe(false)
   })
 
+  it('removes the empty title bar when title and time filter are both hidden', () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component, showTitle: false },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    expect(wrapper.find('.chart-header').exists()).toBe(false)
+  })
+
+  it('applies the configured title bar style', () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component: { ...component, titleBarStyle: 'accent' } as any, showTitle: true },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    expect(wrapper.find('.chart-header').classes()).toContain('title-bar-accent')
+  })
+
   it('exposes widget tabs as keyboard-operable tabs', async () => {
     const wrapper = mount(ChartWidget, {
       props: { component },

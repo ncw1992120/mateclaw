@@ -1,6 +1,6 @@
 <template>
   <div class="data-table-widget">
-    <div class="table-header">
+    <div class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
         <div v-if="showTitle !== false" class="table-title">{{ component.title }}</div>
       </div>
@@ -83,7 +83,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleBarStyle } from '@/types'
 
 defineOptions({
   name: 'DataTableWidget',
@@ -98,6 +98,8 @@ const props = defineProps<{
   componentData?: InsightComponentData
   /** 是否显示标题 */
   showTitle?: boolean
+  /** 标题栏样式 */
+  titleBarStyle?: ComponentTitleBarStyle
   /** 是否显示表头 */
   showHeader?: boolean
 }>()

@@ -73,6 +73,26 @@ const i18n = createI18n({
 })
 
 describe('PropertyPanel', () => {
+  it('exposes the title bar style presets and persists the selection', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { component, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    const styleSelect = wrapper.get('select[aria-label="标题栏样式"]')
+    expect(styleSelect.findAll('option').map(option => option.text())).toEqual([
+      '标准卡片',
+      '简洁文本',
+      '强调色',
+      '分组标题',
+    ])
+
+    await styleSelect.setValue('accent')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ titleBarStyle: 'accent' })
+  })
+
   it('defaults new filter configuration to dynamic options before datasource setup', async () => {
     const wrapper = mount(PropertyPanel, {
       props: {

@@ -1,5 +1,5 @@
 <template>
-  <div class="filter-select-widget">
+  <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
     <div v-if="showTitle !== false" class="filter-label">{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, FilterComponentConfig } from '@/types'
+import type { InsightComponent, FilterComponentConfig, ComponentTitleBarStyle } from '@/types'
 import * as datasourceApi from '@/api/datasource'
 import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
 
@@ -50,6 +50,7 @@ const props = defineProps<{
   options?: Array<{ label: string; value: string }>
   /** 是否显示标题 */
   showTitle?: boolean
+  titleBarStyle?: ComponentTitleBarStyle
 }>()
 
 const emit = defineEmits<{

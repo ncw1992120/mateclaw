@@ -20,8 +20,17 @@
       </div>
 
       <div class="form-group form-group-row">
-        <label class="form-label">显示标题</label>
-        <el-switch v-model="localComponent.showTitle" aria-label="显示标题" @change="emitChange" />
+        <label class="form-label">显示标题栏</label>
+        <el-switch v-model="localComponent.showTitle" aria-label="显示标题栏" @change="emitChange" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">标题栏样式</label>
+        <el-select v-model="localComponent.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="emitChange">
+          <el-option value="standard" label="标准卡片" />
+          <el-option value="minimal" label="简洁文本" />
+          <el-option value="accent" label="强调色" />
+          <el-option value="section" label="分组标题" />
+        </el-select>
       </div>
       <div v-if="component.type === 'table'" class="form-group form-group-row">
         <label class="form-label">显示表头</label>
@@ -868,6 +877,7 @@ function defaultCombinationConfig(): NonNullable<InsightComponent['containerConf
 
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
+  next.titleBarStyle ??= 'standard'
   if (next.type === 'combination') {
     const defaults = defaultCombinationConfig()
     const config = next.containerConfig ?? {}

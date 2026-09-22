@@ -1,6 +1,6 @@
 <template>
   <div class="chart-widget">
-    <div class="chart-header">
+    <div v-if="showTitle !== false || showTimeFilter" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
       <div v-if="showTitle !== false" class="chart-title">{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ResolvedDashboardTheme, ComponentTitleBarStyle } from '@/types'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
 
 defineOptions({
@@ -58,6 +58,8 @@ const props = defineProps<{
   componentData?: InsightComponentData
   /** 是否显示标题 */
   showTitle?: boolean
+  /** 标题栏样式 */
+  titleBarStyle?: ComponentTitleBarStyle
   /** 仪表盘级主题；不传时保持旧图表视觉 */
   dashboardTheme?: ResolvedDashboardTheme
 }>()

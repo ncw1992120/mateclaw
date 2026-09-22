@@ -1,0 +1,25 @@
+/* 组件标题栏预设：只改变视觉表现，不改变组件数据和布局契约。 */
+.title-bar-minimal {
+  background: transparent !important;
+  border-bottom-color: transparent !important;
+}
+
+.title-bar-accent {
+  border-left: 3px solid var(--db-accent) !important;
+  background: color-mix(in srgb, var(--db-accent) 7%, var(--db-card)) !important;
+}
+
+.title-bar-section {
+  background: transparent !important;
+  border-bottom: 1px solid var(--db-border) !important;
+}
+
+.title-bar-section .chart-title,
+.title-bar-section .table-title,
+.title-bar-section .kpi-header-title,
+.title-bar-section .analysis-title,
+.title-bar-section .filter-label,
+.title-bar-section .time-filter-label,
+.title-bar-section .cc-title {
+  font-weight: 600;
+}
