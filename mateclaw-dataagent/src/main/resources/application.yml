@@ -8,6 +8,9 @@ spring:
     name: mateclaw-dataagent
 
 mateclaw:
+  aloudata:
+    # 联调时打印指标视图实际 URL、HTTP 方法、查询参数和请求体；认证值自动脱敏。
+    log-request: ${MATECLAW_ALOUDATA_LOG_REQUEST:false}
   dataset:
     http:
       # 仅供隔离 E2E 测试服务使用；生产默认拒绝 HTTP/私网地址。

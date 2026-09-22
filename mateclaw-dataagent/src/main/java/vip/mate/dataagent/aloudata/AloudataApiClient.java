@@ -2,6 +2,7 @@ package vip.mate.dataagent.aloudata;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -37,6 +38,13 @@ public class AloudataApiClient {
 
     private final AloudataEndpointService endpointService;
     private final RestTemplate restTemplate = new RestTemplate();
+
+    /**
+     * 是否输出 Aloudata 实际请求明细。默认关闭，避免生产日志泄露筛选值；联调时可通过
+     * {@code MATECLAW_ALOUDATA_LOG_REQUEST=true} 打开。认证值始终脱敏。
+     */
+    @Value("${mateclaw.aloudata.log-request:false}")
+    private boolean requestLogEnabled;
 
     /** anymetrics 默认端口 */
     private static final int DEFAULT_ANYMETRICS_PORT = 8083;
@@ -198,8 +206,33 @@ public class AloudataApiClient {
     /** 真正发起 HTTP；本地 mock 只覆写这一步，URL/参数/方法均由 {@link #prepare} 保证一致。 */
     protected ResponseEntity<Map> send(PreparedRequest request) {
         HttpEntity<?> entity = new HttpEntity<>(request.body(), request.headers());
-        log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
+        if (requestLogEnabled) {
+            log.info("{}", formatRequestLog(request));
+        } else {
+            log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
+        }
         return exchange(request.url(), request.method(), entity);
+    }
+
+    /**
+     * 格式化实际发出的请求，供联调日志和测试复用。query/body 是已经经过端点参数规范
+     * 分发后的最终值，不是页面草稿；auth-value 只显示掩码。
+     */
+    public static String formatRequestLog(PreparedRequest request) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (request.headers() != null) {
+            request.headers().forEach((name, values) -> {
+                String value = values == null || values.isEmpty() ? "" : values.get(0);
+                headers.put(name, isSensitiveHeader(name) ? "***" : value);
+            });
+        }
+        return String.format("[aloudata-request] endpoint=%s method=%s url=%s queryParams=%s body=%s headers=%s",
+                request.endpointName(), request.method(), request.url(), request.queryParams(), request.body(), headers);
+    }
+
+    private static boolean isSensitiveHeader(String name) {
+        String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return normalized.equals("auth-value") || normalized.contains("authorization") || normalized.contains("token");
     }
 
     /** 底层发送：便于本地 mock 仅改写 host:port 后复用同一套 HTTP 行为（超时、头、反序列化）。 */

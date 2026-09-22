@@ -69,7 +69,7 @@ public class LocalAloudataApiClient extends AloudataApiClient {
     protected ResponseEntity<Map> send(PreparedRequest request) {
         if (!mockServerUrl.isEmpty()) {
             String url = rewriteBase(request.url(), mockServerUrl);
-            log.info("[local-mock] {} {} -> {}", request.method(), request.path(), url);
+            log.info("[local-mock] {}", requestLog(request, url));
             return exchange(url, request.method(), new HttpEntity<>(request.body(), request.headers()));
         }
         Map<String, Object> params = new LinkedHashMap<>(request.queryParams());
@@ -83,11 +83,18 @@ public class LocalAloudataApiClient extends AloudataApiClient {
             throw new IllegalArgumentException("内置 Aloudata mock 仅支持 Map 请求体: "
                     + request.body().getClass().getName());
         }
-        if (log.isInfoEnabled()) {
-            log.info("[local-mock] {} {} -> {} params={}", request.method(), request.path(),
-                    request.url(), params.keySet());
-        }
+        if (log.isInfoEnabled()) log.info("[local-mock] {}", requestLog(request, request.url(), params));
         return ResponseEntity.ok(fixtures.payload(request.endpointName(), params, authValue(request)));
+    }
+
+    private String requestLog(PreparedRequest request, String url) {
+        return requestLog(request, url, request.body());
+    }
+
+    private String requestLog(PreparedRequest request, String url, Object body) {
+        PreparedRequest rewritten = new PreparedRequest(request.endpointName(), request.method(), request.path(),
+                url, request.queryParams(), body, request.headers());
+        return AloudataApiClient.formatRequestLog(rewritten);
     }
 
     /** 保留路径与查询串，只把 scheme://host:port 换成本地 mock 服务地址。 */

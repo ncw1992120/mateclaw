@@ -18,6 +18,27 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AloudataApiClientTest {
 
     @Test
+    void requestLogContainsActualRequestAndMasksAuthenticationValue() {
+        AloudataApiClient.PreparedRequest request = new AloudataApiClient.PreparedRequest(
+                "metrics_query", HttpMethod.POST, "/semantic/api/v1.1/metrics/query",
+                "https://semantic.example:8085/semantic/api/v1.1/metrics/query",
+                Map.of(), Map.of("metrics", List.of("revenue"), "limit", 100),
+                new org.springframework.http.HttpHeaders());
+        request.headers().set("tenant-id", "tn-test");
+        request.headers().set("auth-type", "UID");
+        request.headers().set("auth-value", "secret-value");
+
+        String log = AloudataApiClient.formatRequestLog(request);
+
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("POST"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains(request.url()));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("metrics"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("revenue"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("***"));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("secret-value"));
+    }
+
+    @Test
     void callPreservesNonMapRequestBody() {
         AloudataEndpointService endpoints = mock(AloudataEndpointService.class);
         when(endpoints.getEndpoint("batch")).thenReturn(new AloudataApiProperties.ApiEndpoint(
