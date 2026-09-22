@@ -34,6 +34,7 @@ import {
 import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
+import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
 import {
@@ -1543,6 +1544,15 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
       if (status === 'SUCCEEDED' || status === 'RESULT_REF' || status === 'COMPLETED' || status === 'FINISHED') {
         const response = await getExecutionResult(executionId)
         const envelope = parseScriptResultEnvelope(response.envelope)
+        // 执行后按组件输出规范提前校验：形状不匹配直接给出精确报错，避免渲染错/静默空态
+        const previewCard = state.cards.find((c) => c.id === state.activeCardId) ?? state.cards[0]
+        const previewSpec = previewCard ? resolveOutputSpec(previewCard.type) : null
+        const previewViolation = previewSpec ? validateComponentOutput(previewSpec, envelope) : null
+        if (previewViolation) {
+          commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
+          state.resultSet.error = formatScriptResultError(previewViolation)
+          return { ok: true, message: executionId }
+        }
         if (envelope.kind === 'table') {
           commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
         } else if (envelope.kind === 'message') {

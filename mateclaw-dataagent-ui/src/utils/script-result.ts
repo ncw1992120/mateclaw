@@ -5,6 +5,9 @@
  * 前端只消费本模块的解析结果，不再对任意对象做猜测式渲染。
  */
 
+import type { ChartType, InsightComponentType } from '@/types'
+import { resolveOutputSpec, validateComponentOutput, type OutputValidationContext } from './component-output-spec'
+
 export type ScriptDataType = 'string' | 'number' | 'boolean' | 'date' | 'datetime'
 
 export interface ScriptResultColumn {
@@ -205,23 +208,64 @@ export function resultEnvelopeToComponentData(
   component: EnvelopeComponentSpec,
   envelope: ScriptResultEnvelope,
 ): EnvelopeComponentResult {
+  // message 对所有组件都是合法的「说明文本」结果，不走规范校验
   if (envelope.kind === 'message') {
     return { state: 'message', message: envelope.data.message, rows: [], columns: [] }
   }
-  if (envelope.kind === 'scalar') {
-    if (component.type === 'kpi') {
-      return { state: 'data', rows: [], columns: [], value: envelope.data.value, kpiList: [{ name: '值', value: envelope.data.value }] }
-    }
-    return { state: 'data', rows: [], columns: [], value: envelope.data.value }
+
+  const spec = resolveOutputSpec(component.type as InsightComponentType, component.chartType as ChartType | undefined)
+  if (!spec) {
+    // 非脚本渲染组件（filter / aiAnalysis / combination 等）：无规范可套，原样空态
+    return { state: 'empty', rows: [], columns: [] }
   }
 
-  const columns = envelope.data.columns
+  // 执行后按组件规范 fail-fast：形状不匹配直接给精确报错，避免渲染错 / 静默空态
+  const ctx: OutputValidationContext = {
+    valueField: component.config?.valueField,
+    metricFields: component.config?.metricFields,
+    dimensionField: component.config?.dimensionField,
+  }
+  const violation = validateComponentOutput(spec, envelope, ctx)
+  if (violation) {
+    return {
+      state: 'error',
+      message: formatScriptResultError(violation),
+      rows: [],
+      columns: envelope.kind === 'table' ? (envelope.data.columns as ScriptResultColumn[]) : [],
+    }
+  }
+
+  if (envelope.kind === 'scalar') {
+    return { state: 'data', rows: [], columns: [], value: envelope.data.value, kpiList: [{ name: '值', value: envelope.data.value }] }
+  }
+
+  const columns = envelope.data.columns as ScriptResultColumn[]
   const rows = envelope.data.rows
   if (rows.length === 0) {
     return { state: 'empty', rows: [], columns }
   }
 
   if (component.type === 'chart') {
+    if (spec.family === 'chartNameValue') {
+      // 饼图/漏斗/仪表盘：名称列 + 数值列（单列时该列直接作为值）
+      const nameField = component.config?.dimensionField
+        || columns.find((column) => column.dataType !== 'number')?.name
+        || columns[0]?.name
+      const valueField = (component.config?.metricFields && component.config.metricFields[0])
+        || columns.find((column) => column.dataType === 'number')?.name
+        || columns[1]?.name
+        || columns[0]?.name
+      const data = rows.map((row) => ({ name: String(row[nameField] ?? ''), value: Number(row[valueField] ?? 0) || 0 }))
+      const seriesType = component.chartType === 'funnel' ? 'funnel' : component.chartType === 'gauge' ? 'gauge' : 'pie'
+      const series: Record<string, unknown> = { type: seriesType, data }
+      if (seriesType === 'gauge') {
+        const max = Math.max(1, ...data.map((item) => Number(item.value) || 0))
+        series.min = 0
+        series.max = Math.ceil(max * 1.2)
+      }
+      return { state: 'data', rows, columns, option: { tooltip: { trigger: 'item' }, series: [series] } }
+    }
+
     const config = component.config ?? {}
     const dimensionField = config.dimensionField || columns[0]?.name
     const numericColumns = columns.filter(isNumericColumn).map((column) => column.name)

@@ -51,6 +51,15 @@
       </div>
     </div>
 
+    <!-- 本组件期望输出：脚本返回形状的规范引导 -->
+    <div v-if="outputSpec" class="py-block py-output-spec">
+      <div class="py-title">
+        <span class="py-title-left">本组件期望输出（{{ componentLabel(outputSpec.componentType) }}）</span>
+      </div>
+      <p class="py-spec-desc">{{ outputSpec.description }}</p>
+      <pre class="py-readonly py-spec-example" data-testid="output-spec-example"><code>{{ outputSpec.example }}</code></pre>
+    </div>
+
     <!-- 用户处理区域（可编辑；系统操作不影响此处） -->
     <div class="py-block">
       <div class="py-title">用户处理区域（可编辑）</div>
@@ -74,6 +83,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useInsight, currentPythonSource } from './useInsight'
 import { effectiveSystemCode, fingerprintSystemSource, generateSystemScript, restoreGenerated } from '@/utils/python-script-template'
+import { resolveOutputSpec, componentLabel } from '@/utils/component-output-spec'
 import { highlightPython } from '@/utils/python-syntax'
 
 const { state, savePython, openPreview, runComponentPreview } = useInsight()
@@ -90,6 +100,13 @@ const highlightedUserCode = computed(() => highlightPython(userCode.value))
 const mode = computed(() => state.pythonSystemState?.mode ?? 'generated')
 const hasUpdate = computed(() => state.pythonSystemState?.hasGeneratedUpdate ?? false)
 const candidateCode = computed(() => state.pythonSystemState?.generatedCode ?? '')
+
+/** 当前编辑的卡片组件类型 → 期望输出规范（编辑器引导用；上下文仅含类型，不含图表子类型） */
+const outputSpec = computed(() => {
+  const card = state.cards.find((item) => item.id === state.activeCardId)
+  if (!card) return null
+  return resolveOutputSpec(card.type)
+})
 
 /** managed 模式下系统代码可编辑，直接绑定到接管副本 */
 const managedCode = computed({
@@ -321,6 +338,22 @@ async function onExec() {
 .py-edit :deep(textarea) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px;
+}
+.py-output-spec {
+  border: 1px dashed var(--el-color-success);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--el-color-success-light-9, rgba(34, 197, 94, 0.06));
+}
+.py-spec-desc {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+}
+.py-spec-example {
+  max-height: 120px;
+  color: var(--el-text-color-primary);
 }
 .py-diff {
   display: grid;

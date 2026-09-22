@@ -81,6 +81,9 @@ function executionEnvelopeToComponentData(
   if (result.state === 'message') {
     return { componentId: component.id, renderType, error: result.message }
   }
+  if (result.state === 'error') {
+    return { componentId: component.id, renderType, error: result.message ?? '输出不符合组件规范' }
+  }
   if (result.state === 'empty') {
     return {
       componentId: component.id,
