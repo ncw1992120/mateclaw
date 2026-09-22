@@ -32,12 +32,25 @@
       </section>
 
       <section class="theme-section">
-        <div class="theme-section-title">自定义颜色</div>
-        <div class="theme-color-grid">
-          <label v-for="item in editableColors" :key="item.key" class="theme-color-field">
-            <span>{{ item.label }}</span>
-            <input type="color" :value="colorValue(item.key)" :aria-label="item.label" @input="updateColor(item.key, ($event.target as HTMLInputElement).value)" />
-          </label>
+        <div class="theme-section-title">标准组件样式</div>
+        <p class="theme-hint">系统会为页签、标题和组件分配语义图标，并按组件层级自动生成相近色阶。</p>
+        <div class="theme-option-group">
+          <span class="theme-option-label">语义图标</span>
+          <div class="theme-option-buttons" role="radiogroup" aria-label="语义图标">
+            <button v-for="item in iconOptions" :key="item.value" type="button" role="radio" :aria-checked="resolved.iconMode === item.value" :class="{ active: resolved.iconMode === item.value }" @click="updateStandardOption('iconMode', item.value)">{{ item.label }}</button>
+          </div>
+        </div>
+        <div class="theme-option-group">
+          <span class="theme-option-label">层次强度</span>
+          <div class="theme-option-buttons" role="radiogroup" aria-label="层次强度">
+            <button v-for="item in hierarchyOptions" :key="item.value" type="button" role="radio" :aria-checked="resolved.hierarchy === item.value" :class="{ active: resolved.hierarchy === item.value }" @click="updateStandardOption('hierarchy', item.value)">{{ item.label }}</button>
+          </div>
+        </div>
+        <div class="theme-option-group">
+          <span class="theme-option-label">同类组件配色</span>
+          <div class="theme-option-buttons" role="radiogroup" aria-label="同类组件配色">
+            <button v-for="item in colorModeOptions" :key="item.value" type="button" role="radio" :aria-checked="resolved.componentColorMode === item.value" :class="{ active: resolved.componentColorMode === item.value }" @click="updateStandardOption('componentColorMode', item.value)">{{ item.label }}</button>
+          </div>
         </div>
         <p v-if="validationMessage" class="theme-error" role="alert">{{ validationMessage }}</p>
       </section>
@@ -45,7 +58,7 @@
       <section class="theme-section theme-preview-section" :style="previewStyle">
         <div class="theme-section-title">即时预览</div>
         <div class="theme-preview-card">
-          <div class="theme-preview-icon" :style="{ background: `${resolved.primary}20`, color: resolved.primary }">↗</div>
+          <div class="theme-preview-icon" :style="{ background: `${resolved.primary}20`, color: resolved.primary }"><DashboardComponentIcon type="kpi" :dashboard-theme="resolved" /></div>
           <div><strong>指标概览</strong><div class="theme-preview-value">12,345</div></div>
         </div>
         <div class="theme-source">当前主色：{{ themeSource(resolved, 'primary') }}</div>
@@ -57,7 +70,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { DashboardThemeConfig, DashboardThemePresetId, ResolvedDashboardTheme } from '@/types'
+import type { DashboardThemeComponentColorMode, DashboardThemeHierarchy, DashboardThemeIconMode } from '@/types'
 import { DASHBOARD_THEME_PRESETS, resolveDashboardTheme, themeSource, validateDashboardTheme } from '@/utils/dashboard-theme'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 const props = defineProps<{
   modelValue: DashboardThemeConfig
@@ -70,12 +85,9 @@ const emit = defineEmits<{
   (event: 'confirm-theme-switch', presetId: string): void
 }>()
 
-const editableColors = [
-  { key: 'primary', label: '主色' },
-  { key: 'pageBackground', label: '页面背景' },
-  { key: 'cardBackground', label: '卡片背景' },
-  { key: 'text', label: '正文文字' },
-] as const
+const iconOptions = [{ value: 'show' as const, label: '显示' }, { value: 'hide' as const, label: '隐藏' }]
+const hierarchyOptions = [{ value: 'soft' as const, label: '柔和' }, { value: 'standard' as const, label: '标准' }, { value: 'strong' as const, label: '增强' }]
+const colorModeOptions = [{ value: 'auto' as const, label: '自动分组' }, { value: 'uniform' as const, label: '统一主色' }]
 
 const resolved = computed<ResolvedDashboardTheme>(() => resolveDashboardTheme(props.modelValue, 'light'))
 const validationMessage = computed(() => {
@@ -106,16 +118,16 @@ function requestPreset(presetId: string): void {
 
 function applyPreset(presetId: string): void {
   if (!DASHBOARD_THEME_PRESETS[presetId]) return
-  emit('update:modelValue', { mode: 'preset', presetId: presetId as DashboardThemePresetId, overrides: {} })
+  emit('update:modelValue', {
+    ...props.modelValue,
+    mode: 'preset',
+    presetId: presetId as DashboardThemePresetId,
+    overrides: {},
+  })
 }
 
-function colorValue(key: keyof NonNullable<DashboardThemeConfig['overrides']>): string {
-  const value = props.modelValue.overrides?.[key]
-  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : resolved.value[key as keyof ResolvedDashboardTheme] as string
-}
-
-function updateColor(key: keyof NonNullable<DashboardThemeConfig['overrides']>, value: string): void {
-  emit('update:modelValue', { ...props.modelValue, mode: 'custom', overrides: { ...props.modelValue.overrides, [key]: value } })
+function updateStandardOption(key: 'iconMode' | 'hierarchy' | 'componentColorMode', value: DashboardThemeIconMode | DashboardThemeHierarchy | DashboardThemeComponentColorMode): void {
+  emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
 function onPresetKeydown(event: KeyboardEvent): void {
@@ -146,9 +158,11 @@ defineExpose({ applyPreset })
 .theme-swatch { display: flex; align-items: end; width: 42px; height: 28px; padding: 4px; border: 1px solid; border-radius: 5px; gap: 2px; }
 .theme-swatch i { width: 8px; height: 18px; border-radius: 2px; }
 .theme-preset-label { font-size: 12px; }
-.theme-color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.theme-color-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.theme-color-field input { width: 32px; height: 24px; padding: 0; border: 0; cursor: pointer; }
+.theme-option-group { display: grid; gap: 7px; margin-top: 12px; }
+.theme-option-label { color: var(--theme-text-secondary); font-size: 12px; }
+.theme-option-buttons { display: flex; gap: 6px; }
+.theme-option-buttons button { flex: 1; padding: 7px 8px; border: 1px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface); color: var(--theme-text-secondary); cursor: pointer; font-size: 12px; }
+.theme-option-buttons button.active, .theme-option-buttons button:hover, .theme-option-buttons button:focus-visible { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 10%, var(--theme-surface)); color: var(--theme-primary); outline: none; }
 .theme-error { color: var(--el-color-danger); font-size: 12px; margin: 10px 0 0; }
 .theme-preview-section { padding: 12px; border: 1px solid; border-radius: 10px; }
 .theme-preview-card { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 8px; background: var(--theme-surface); }

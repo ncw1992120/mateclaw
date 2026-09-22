@@ -3,7 +3,7 @@
     <div class="kpi-card-inner">
       <div v-if="(showTitle !== false && component.titleBarStyle !== 'hidden') || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
-          <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title">{{ component.title }}</span>
+          <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title"><DashboardComponentIcon type="kpi" :dashboard-theme="dashboardTheme" />{{ component.title }}</span>
         </div>
         <div v-if="showTimeFilter" class="kpi-time-filter">
           <el-date-picker
@@ -123,6 +123,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
 import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'

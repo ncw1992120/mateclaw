@@ -1515,7 +1515,17 @@ export interface DashboardThemeConfig {
   presetId?: DashboardThemePresetId | string
   overrides?: DashboardThemeOverrides
   density?: DashboardDensity | string
+  /** 系统标准语义图标：默认展示，用户只能选择显示/隐藏。 */
+  iconMode?: DashboardThemeIconMode
+  /** 组件层级强度：控制同类组件边框、标题栏与背景的色阶。 */
+  hierarchy?: DashboardThemeHierarchy
+  /** 同类组件配色策略：自动分组色或统一主色。 */
+  componentColorMode?: DashboardThemeComponentColorMode
 }
+
+export type DashboardThemeIconMode = 'show' | 'hide'
+export type DashboardThemeHierarchy = 'soft' | 'standard' | 'strong'
+export type DashboardThemeComponentColorMode = 'auto' | 'uniform'
 
 export interface ResolvedDashboardTheme {
   source: 'legacy' | 'configured'
@@ -1536,6 +1546,9 @@ export interface ResolvedDashboardTheme {
   chartPalette: string[]
   radius: 'small' | 'medium' | 'large'
   shadow: 'none' | 'subtle' | 'elevated'
+  iconMode: DashboardThemeIconMode
+  hierarchy: DashboardThemeHierarchy
+  componentColorMode: DashboardThemeComponentColorMode
   overrides: DashboardThemeOverrides
 }
 

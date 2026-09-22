@@ -60,7 +60,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
-          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
+          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi'), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -97,7 +97,7 @@
                 :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
                 @click.stop="startTitleEdit(item.i)"
               >
-                <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+                <span class="grid-item-title"><DashboardComponentIcon :type="getComponent(item.i)?.type ?? 'kpi'" :chart-type="getComponent(item.i)?.chartType" :title="getComponentTitle(item.i)" :dashboard-theme="dashboardTheme" />{{ getComponentTitle(item.i) }}</span>
                 <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
               </button>
             </template>
@@ -132,16 +132,19 @@
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :dashboard-theme="dashboardTheme"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
+                :dashboard-theme="dashboardTheme"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
+                :dashboard-theme="dashboardTheme"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
@@ -149,6 +152,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
+                :dashboard-theme="dashboardTheme"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />
               <CombinationCardWidget
@@ -184,6 +188,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
@@ -193,7 +198,7 @@ import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
-import { themeCssVariables } from '@/utils/dashboard-theme'
+import { themeCssVariables, componentThemeStyle } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
@@ -760,8 +765,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--component-surface, var(--db-surface-card, var(--db-card)));
-  border: var(--component-border, 1px solid var(--db-border));
+  background: var(--component-surface, var(--component-group-surface, var(--db-surface-card, var(--db-card))));
+  border: var(--component-border, 1px solid var(--component-group-border, var(--db-border)));
   border-radius: var(--component-radius, var(--radius-lg));
   box-shadow: var(--component-shadow, var(--shadow-card));
   padding: var(--component-padding, 0px);

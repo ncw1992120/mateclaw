@@ -1,7 +1,7 @@
 <template>
   <div class="chart-widget">
     <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title">{{ component.title }}</div>
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"
@@ -43,6 +43,7 @@
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
 
 defineOptions({

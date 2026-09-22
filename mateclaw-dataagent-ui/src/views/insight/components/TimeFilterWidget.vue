@@ -1,6 +1,6 @@
 <template>
     <div class="time-filter-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label">{{ component.title }}</div>
+    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
     <el-date-picker
       v-model="customDateRange"
       type="daterange"
@@ -19,7 +19,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig } from '@/types'
+import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 defineOptions({
   name: 'TimeFilterWidget',
@@ -30,6 +31,7 @@ const props = defineProps<{
   component: InsightComponent
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  dashboardTheme?: ResolvedDashboardTheme
 }>()
 
 const emit = defineEmits<{

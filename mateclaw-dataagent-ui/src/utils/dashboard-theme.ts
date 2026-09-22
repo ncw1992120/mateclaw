@@ -2,6 +2,11 @@ import type {
   DashboardDensity,
   DashboardThemeConfig,
   DashboardThemeOverrides,
+  DashboardThemeComponentColorMode,
+  DashboardThemeHierarchy,
+  DashboardThemeIconMode,
+  ChartType,
+  InsightComponentType,
   ResolvedDashboardTheme,
   ThemeValidationError,
 } from '@/types'
@@ -58,8 +63,14 @@ export const DASHBOARD_THEME_PRESETS: Record<string, ThemePreset> = {
 }
 
 const LEGACY_THEME: ResolvedDashboardTheme = {
-  source: 'legacy', mode: 'light', pageBackground: '', cardBackground: '', border: '', text: '', textSecondary: '', textMuted: '', primary: '', positive: '', negative: '', warning: '', info: '', metricPalette: [], chartPalette: [], radius: 'medium', shadow: 'subtle', overrides: {},
+  source: 'legacy', mode: 'light', pageBackground: '', cardBackground: '', border: '', text: '', textSecondary: '', textMuted: '', primary: '', positive: '', negative: '', warning: '', info: '', metricPalette: [], chartPalette: [], radius: 'medium', shadow: 'subtle', iconMode: 'show', hierarchy: 'standard', componentColorMode: 'auto', overrides: {},
 }
+
+const STANDARD_THEME_OPTIONS: {
+  iconMode: DashboardThemeIconMode
+  hierarchy: DashboardThemeHierarchy
+  componentColorMode: DashboardThemeComponentColorMode
+} = { iconMode: 'show', hierarchy: 'standard', componentColorMode: 'auto' }
 
 function isColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())
@@ -79,7 +90,16 @@ export function resolveDashboardTheme(config: DashboardThemeConfig | undefined, 
   const presetId = typeof config.presetId === 'string' && DASHBOARD_THEME_PRESETS[config.presetId] ? config.presetId : 'blue'
   const preset = DASHBOARD_THEME_PRESETS[presetId]
   const overrides = config.overrides ?? {}
-  return { ...mergePreset(preset, overrides), source: 'configured', presetId, mode: globalMode, overrides: { ...overrides } }
+  return {
+    ...mergePreset(preset, overrides),
+    source: 'configured',
+    presetId,
+    mode: globalMode,
+    iconMode: config.iconMode ?? STANDARD_THEME_OPTIONS.iconMode,
+    hierarchy: config.hierarchy ?? STANDARD_THEME_OPTIONS.hierarchy,
+    componentColorMode: config.componentColorMode ?? STANDARD_THEME_OPTIONS.componentColorMode,
+    overrides: { ...overrides },
+  }
 }
 
 export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string, string> {
@@ -124,17 +144,69 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
     '--db-chart-preview-bg': mix('var(--insight-text)', 'var(--insight-card-bg)', 5),
     '--db-chart-preview-track': mix('var(--insight-border)', 'var(--insight-card-bg)', 65),
     '--db-mask': 'rgba(0, 0, 0, 0.58)',
+    '--db-theme-icons': theme.iconMode === 'show' ? '1' : '0',
+    '--db-theme-hierarchy': theme.hierarchy,
+    '--db-theme-component-colors': theme.componentColorMode,
   }
   theme.chartPalette.forEach((color, index) => {
     vars[`--insight-chart-${index + 1}`] = color
     vars[`--db-chart-${index + 1}`] = color
   })
   theme.metricPalette.forEach((color, index) => { vars[`--insight-metric-${index + 1}`] = color })
-  const cardColors = ['#4176E6', '#8B52D9', '#18A06E', '#DD8A1D', '#E05260', '#1D9EC4']
-  cardColors.forEach((color, index) => {
-    vars[`--db-card-${['blue', 'violet', 'green', 'orange', 'pink', 'cyan'][index]}-bg`] = mix(color, 'transparent', 18)
+  theme.metricPalette.forEach((color, index) => {
+    vars[`--db-card-group-${index + 1}-bg`] = mix(color, 'transparent', 18)
   })
   return vars
+}
+
+/** 将组件类型归入稳定的系统语义组，避免每个业务页面单独定颜色。 */
+export function componentThemeGroup(type: InsightComponentType): 'metric' | 'chart' | 'filter' | 'data' | 'ai' | 'container' {
+  if (type === 'kpi') return 'metric'
+  if (type === 'chart') return 'chart'
+  if (type === 'filter' || type === 'timeFilter') return 'filter'
+  if (type === 'table') return 'data'
+  if (type === 'aiAnalysis') return 'ai'
+  return 'container'
+}
+
+/** 输出给画布/组合卡片的同类组件层次 Token；显式组件样式可在调用方覆盖。 */
+export function componentThemeStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType, depth = 0): Record<string, string> {
+  if (!theme || theme.source === 'legacy') return {}
+  const groupIndex: Record<ReturnType<typeof componentThemeGroup>, number> = {
+    metric: 0, chart: 1, filter: 2, data: 3, ai: 4, container: 0,
+  }
+  const accent = theme.componentColorMode === 'uniform' ? theme.primary : (theme.metricPalette[groupIndex[componentThemeGroup(type)]] ?? theme.primary)
+  const hierarchyAmount = theme.hierarchy === 'soft' ? 4 : theme.hierarchy === 'strong' ? 12 : 7
+  const nestedAmount = Math.max(2, hierarchyAmount - Math.min(depth, 2) * 2)
+  const mix = (foreground: string, background: string, amount: number): string => `color-mix(in srgb, ${foreground} ${amount}%, ${background})`
+  return {
+    '--component-group-accent': accent,
+    '--component-group-border': mix(accent, 'var(--insight-border)', hierarchyAmount),
+    '--component-group-surface': mix(accent, 'var(--insight-card-bg)', nestedAmount),
+    '--component-group-header-surface': mix(accent, 'var(--insight-card-bg)', hierarchyAmount + 3),
+  }
+}
+
+/** 标准语义图标注册表。返回 Element Plus 图标组件名，业务不配置图标名称。 */
+export function resolveDashboardIcon(type: InsightComponentType | 'tab', chartType?: ChartType, title?: string): string {
+  if (type === 'tab') {
+    if (title?.includes('指标')) return 'DataAnalysis'
+    if (title?.includes('计划')) return 'Calendar'
+    if (title?.includes('策略')) return 'Aim'
+    return 'Collection'
+  }
+  if (type === 'kpi') return 'DataAnalysis'
+  if (type === 'chart') {
+    if (chartType === 'line' || chartType === 'area') return 'TrendCharts'
+    if (chartType === 'bar' || chartType === 'pictorialBar') return 'Histogram'
+    if (chartType === 'pie' || chartType === 'funnel') return 'PieChart'
+    return 'DataAnalysis'
+  }
+  if (type === 'table') return 'Grid'
+  if (type === 'filter') return 'Filter'
+  if (type === 'timeFilter') return 'Calendar'
+  if (type === 'aiAnalysis') return 'MagicStick'
+  return 'Collection'
 }
 
 export function densityScale(density: DashboardDensity | string | undefined): { metricName: number; metricValue: number; icon: number } {

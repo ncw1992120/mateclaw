@@ -35,6 +35,16 @@ const stubs = {
 }
 
 describe('DatasetCard', () => {
+  it('labels the shared dataset query entry as 查看数据', () => {
+    const wrapper = mount(DatasetCard, {
+      props: { dataset },
+      global: { stubs },
+    })
+
+    expect(wrapper.text()).toContain('查看数据')
+    expect(wrapper.text()).not.toContain('筛选预览')
+  })
+
   it('uses one dataset title and separates alias editing from card configuration', async () => {
     const wrapper = mount(DatasetCard, {
       props: { dataset },

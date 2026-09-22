@@ -355,6 +355,12 @@ export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED="${MANAGEMENT_HEALTH_ELASTICSEARC
 export MATECLAW_PILOT_ENABLED="${MATECLAW_PILOT_ENABLED:-false}"
 export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-false}"
 
+# 本地 Python Runner 不走 Docker 服务名：DataAgent 提交脚本、Runner 回读数据
+# 都必须通过宿主机回环地址访问，避免默认的 python-runner:8080 / mateclaw-dataagent
+# 在本机开发环境中解析失败。
+export MATECLAW_RUNNER_URL="${MATECLAW_RUNNER_URL:-http://127.0.0.1:18090}"
+export MATECLAW_RUNNER_DATASET_READ_BASE_URL="${MATECLAW_RUNNER_DATASET_READ_BASE_URL:-http://127.0.0.1:18089/dataagent/api}"
+
 # 没有配置 DashScope 时，使用占位值避免 Spring AI 语音组件阻塞启动。
 export SPRING_AI_DASHSCOPE_API_KEY="${SPRING_AI_DASHSCOPE_API_KEY:-configure-in-admin-ui}"
 export SPRING_AI_DASHSCOPE_AUDIO_SPEECH_API_KEY="${SPRING_AI_DASHSCOPE_AUDIO_SPEECH_API_KEY:-configure-in-admin-ui}"

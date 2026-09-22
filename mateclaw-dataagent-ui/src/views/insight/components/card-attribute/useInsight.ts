@@ -1432,10 +1432,28 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
 }
 
 /** 保存当前卡片配置到后端 Schema */
+async function ensurePersistedDatasetInputs(): Promise<void> {
+  for (const ds of state.datasets) {
+    if (isPersistedBackendDatasetId(ds.backendDatasetId)) continue
+    const request = draftRequestForDataset(ds)
+    if (!request) throw new Error(`数据集「${ds.alias}」尚未落库，当前类型不支持自动保存`)
+    const result = await backend.confirmDatasetDraft({
+      ...request,
+      name: ds.alias,
+      description: `仪表盘组件输入数据集：${ds.alias}`,
+    })
+    ds.backendDatasetId = String(result.datasetId)
+  }
+}
+
 async function saveDashboard(): Promise<boolean> {
   if (!state.backend.dashboardId && !(await bootstrapDashboard())) return false
   state.backend.loading = true
   try {
+    // 执行接口要求 datasetInputs.datasetId 是真实数据集主键。
+    // 编辑器允许先用 ds-* 草稿配置，因此首次保存/查看最终结果时先自动落库，
+    // 后续保存复用 backendDatasetId，避免重复创建数据集。
+    await ensurePersistedDatasetInputs()
     const schema = buildSchema()
     if (!state.backend.componentId) state.backend.componentId = schema.pages[0].components[0].id
     await backend.saveDashboardSchema(state.backend.dashboardId, schema)

@@ -2,7 +2,7 @@
   <el-dialog
     v-model="ui.dataDialog.visible"
     class="dataset-data-dialog"
-    :title="`筛选预览 · ${dataset.alias}`"
+    :title="`查看数据 · ${dataset.alias}`"
     width="1020px"
     top="5vh"
     :close-on-click-modal="false"

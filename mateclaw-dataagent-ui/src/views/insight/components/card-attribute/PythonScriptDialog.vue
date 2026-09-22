@@ -62,7 +62,7 @@
 
     <template #footer>
       <el-button @click="ui.python.visible = false">取消</el-button>
-      <el-button @click="onPreview">筛选预览</el-button>
+      <el-button data-testid="view-python-result" @click="onPreview">查看数据</el-button>
       <el-button @click="onExec" :loading="executing">执行记录</el-button>
       <el-button type="primary" @click="save">确定</el-button>
     </template>
@@ -202,9 +202,9 @@ function save() {
   const system = state.pythonSystemState ? effectiveSystemCode(state.pythonSystemState) : state.pythonSystem
   savePython(system, userCode.value)
 }
-// 筛选预览：先持久化 Python 脚本（关闭弹窗），再打开结果集预览。
+// 查看数据：先持久化 Python 脚本（关闭弹窗），再打开最终结果集预览。
 // 脚本是**管道级**的（作用于多个数据集求最终输出），所以这里看的是结果集、不是某个输入数据集，
-// 与数据集卡片上的「筛选预览」（打开数据集工作台）层级不同
+// 与数据集卡片上的「查看数据」（打开单个输入数据集）层级不同。
 function onPreview() {
   save()
   openPreview('result')

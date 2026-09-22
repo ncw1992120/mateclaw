@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
     <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title">{{ component.title }}</span>
+      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" />{{ component.title }}</span>
       <el-button
         v-if="!generating"
         type="primary"
@@ -31,7 +31,7 @@
 
       <!-- 空状态 -->
       <div v-if="!dataSection && !analysisSection && !generating" class="analysis-placeholder">
-        <div class="placeholder-icon">🤖</div>
+        <div class="placeholder-icon"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :size="28" /></div>
         <div class="placeholder-text">{{ t('insight.aiAnalysis.placeholder') }}</div>
       </div>
     </div>
@@ -47,7 +47,8 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightComponent, InsightComponentData } from '@/types'
+import type { InsightComponent, InsightComponentData, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 defineOptions({
   name: 'AiAnalysisWidget',
@@ -61,6 +62,7 @@ const props = defineProps<{
   generating?: boolean
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  dashboardTheme?: ResolvedDashboardTheme
 }>()
 
 const emit = defineEmits<{

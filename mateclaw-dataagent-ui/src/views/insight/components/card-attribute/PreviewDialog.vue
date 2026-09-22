@@ -20,6 +20,30 @@
               {{ showFieldNames ? '表头显示字段名（附展示名）' : '表头显示展示名（悬停查看字段名）' }}
             </span>
           </div>
+          <section v-if="isResultPreview" class="result-filter-panel" data-testid="result-filter-panel">
+            <div class="result-filter-head">
+              <span class="result-filter-title">筛选条件</span>
+              <span class="preview-toolbar-hint">针对 Python 脚本处理后的最终结果，不会修改输入数据集</span>
+            </div>
+            <div v-if="conditions.length" class="result-filter-rows">
+              <div v-for="(row, index) in conditions" :key="index" class="result-filter-row" data-testid="result-filter-row">
+                <el-select v-model="row.field" class="result-filter-field" size="small" placeholder="字段">
+                  <el-option v-for="field in resultFields" :key="field.name" :label="field.name" :value="field.name" />
+                </el-select>
+                <el-select v-model="row.op" class="result-filter-op" size="small" @change="onOperatorChange(row)">
+                  <el-option v-for="option in resultOperators" :key="option.value" :label="option.label" :value="option.value" />
+                </el-select>
+                <el-input v-model="row.value" class="result-filter-value" size="small" :disabled="!needsValue(row.op)" :placeholder="needsValue(row.op) ? valueHintOf(row.op) : '无需取值'" />
+                <el-button size="small" text type="danger" @click="removeCondition(index)">移除</el-button>
+              </div>
+            </div>
+            <div v-else class="result-filter-empty">暂无筛选条件；不添加条件时展示全部 Python 输出。</div>
+            <div class="result-filter-actions">
+              <el-button size="small" data-testid="add-result-filter" @click="addCondition">添加筛选条件</el-button>
+              <el-button type="primary" size="small" data-testid="query-result-filter" @click="queryResult">查询</el-button>
+              <span class="preview-toolbar-hint">{{ filteredRows.length }} / {{ payload.dataRows.length }} 行</span>
+            </div>
+          </section>
           <el-table :data="pagedRows" border size="small" max-height="320">
             <el-table-column v-for="c in payload.dataColumns" :key="c.name" :prop="c.name">
               <template #header>
@@ -95,6 +119,8 @@
 import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
 import { resolveFieldLabel } from '@/utils/field-mapping'
+import { GENERIC_OPERATORS, completeConditions, emptyCondition, needsValue, valueHintOf, type FilterCondition, type OperatorOption } from '@/utils/filter-conditions'
+import { applyResultFilters } from '@/utils/result-preview-filter'
 
 const { state, previewState, loadDatasetPreview, loadResultPreview, previewFieldMetas } = useInsight()
 const ui = state.ui
@@ -134,13 +160,39 @@ const title = computed(() => {
 })
 
 const payload = computed(() => previewState.payload)
+const isResultPreview = computed(() => ui.preview.kind === 'result')
+const conditions = ref<FilterCondition[]>([])
+const appliedConditions = ref<FilterCondition[]>([])
+const resultFields = computed(() => payload.value?.dataColumns ?? [])
+const resultOperators = computed<OperatorOption[]>(() => GENERIC_OPERATORS)
+const filteredRows = computed(() => {
+  const rows = payload.value?.dataRows ?? []
+  return isResultPreview.value ? applyResultFilters(rows, appliedConditions.value) : rows
+})
 
 // 分页：按当前页切片
 const pagedRows = computed(() => {
-  const rows = payload.value?.dataRows ?? []
+  const rows = filteredRows.value
   const start = (page.value - 1) * pageSize.value
   return rows.slice(start, start + pageSize.value)
 })
+
+function addCondition(): void {
+  conditions.value.push(emptyCondition())
+}
+
+function removeCondition(index: number): void {
+  conditions.value.splice(index, 1)
+}
+
+function onOperatorChange(row: FilterCondition): void {
+  if (!needsValue(row.op)) row.value = ''
+}
+
+function queryResult(): void {
+  appliedConditions.value = completeConditions(conditions.value)
+  page.value = 1
+}
 
 // 打开预览时，根据类型调用真实后端（数据集预览 / 组件执行预览）
 watch(
@@ -149,6 +201,8 @@ watch(
     if (v) {
       tab.value = ui.preview.tab ?? 'data'
       page.value = 1
+      conditions.value = []
+      appliedConditions.value = []
       const dsId = ui.preview.datasetId
       if (ui.preview.kind === 'dataset' && dsId) loadDatasetPreview(dsId)
       else loadResultPreview()
@@ -181,6 +235,53 @@ function onSizeChange(size: number) {
 .preview-toolbar-hint {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.result-filter-panel {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+}
+.result-filter-head,
+.result-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.result-filter-head {
+  margin-bottom: 8px;
+}
+.result-filter-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.result-filter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.result-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.result-filter-field {
+  width: 220px;
+}
+.result-filter-op {
+  width: 130px;
+}
+.result-filter-value {
+  flex: 1;
+}
+.result-filter-empty {
+  padding: 4px 0 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.result-filter-actions {
+  margin-top: 8px;
 }
 .th-cell {
   display: inline-flex;

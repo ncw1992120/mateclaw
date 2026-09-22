@@ -12,7 +12,7 @@
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title">{{ component.title }}</span>
+      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" />{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -40,7 +40,7 @@
           @keyup.enter="commitTabRename(tab)"
         />
         <template v-else>
-          <span @dblclick.stop="editable && startTabRename(tab)">{{ tab.title }}</span>
+          <span class="cc-tab-label" @dblclick.stop="editable && startTabRename(tab)"><DashboardComponentIcon type="tab" :title="tab.title" :dashboard-theme="dashboardTheme" />{{ tab.title }}</span>
           <!-- 重命名 affordance：hover 淡入铅笔图标，提示该页签可双击重命名 -->
           <button
             v-if="editable"
@@ -104,10 +104,10 @@
             :aria-label="`编辑子组件标题 ${child.title}`"
             @click.stop="startChildTitleEdit(child)"
           >
-            <span class="cc-child-title">{{ child.title }}</span>
+            <span class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" />{{ child.title }}</span>
             <el-icon class="cc-child-title-edit" :size="11"><EditPen /></el-icon>
           </button>
-          <span v-else-if="editingChildId !== child.id" class="cc-child-title">{{ child.title }}</span>
+          <span v-else-if="editingChildId !== child.id" class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" />{{ child.title }}</span>
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
           </button>
@@ -133,22 +133,26 @@
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
+            :dashboard-theme="dashboardTheme"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="toWidgetComponent(child)"
             :show-title="false"
+            :dashboard-theme="dashboardTheme"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
             :show-title="false"
+            :dashboard-theme="dashboardTheme"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
+            :dashboard-theme="dashboardTheme"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
@@ -188,6 +192,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import type {
   InsightComponent,
   InsightComponentType,
@@ -198,6 +203,7 @@ import type {
   ResolvedDashboardTheme,
 } from '@/types'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
+import { componentThemeStyle } from '@/utils/dashboard-theme'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -317,6 +323,7 @@ function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boole
 const rootStyle = computed<Record<string, string>>(() => {
   const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
   return {
+    ...componentThemeStyle(props.dashboardTheme, 'combination'),
     ...shared,
   }
 })
@@ -356,8 +363,10 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
+  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1)
   if (cfg.value.layoutMode === 'free') {
     return {
+      ...themeStyle,
       ...visualStyle,
       position: 'absolute',
       left: child.layout.x + 'px',
@@ -367,9 +376,9 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
     }
   }
   if (cfg.value.layoutMode === 'grid') {
-    return { ...visualStyle, gridColumn: `span ${child.layout.col}` }
+    return { ...themeStyle, ...visualStyle, gridColumn: `span ${child.layout.col}` }
   }
-  return visualStyle
+  return { ...themeStyle, ...visualStyle }
 }
 
 // ── 拖拽添加子组件（整卡落区）────────────────────────────
@@ -888,9 +897,9 @@ const { onTabKeydown } = useTabKeyboard(
 
 .cc-child {
   box-sizing: border-box;
-  border: var(--component-border, 1px solid var(--db-border));
+  border: var(--component-border, 1px solid var(--component-group-border, var(--db-border)));
   border-radius: var(--component-radius, 8px);
-  background: var(--component-surface, var(--db-surface-card, var(--db-card)));
+  background: var(--component-surface, var(--component-group-surface, var(--db-surface-card, var(--db-card))));
   box-shadow: var(--component-shadow, none);
   padding: var(--component-padding, 0px);
   display: flex;
@@ -906,7 +915,7 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child.moving { opacity: 0.85; }
 .cc-child-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; background: var(--db-surface-nested, var(--db-hover)); border-bottom: 1px solid var(--db-border);
+  padding: 6px 10px; background: var(--component-group-header-surface, var(--db-surface-nested, var(--db-hover))); border-bottom: 1px solid var(--component-group-border, var(--db-border));
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }

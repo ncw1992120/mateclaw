@@ -270,7 +270,7 @@
         </el-button>
       </div>
 
-      <!-- 「筛选预览」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
+      <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
       <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
 
       <DashboardThemePanel
@@ -375,7 +375,7 @@ const { canModifyResource } = usePermission()
 // KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
 const { openMetricStyle, state: insightState } = useInsight()
 
-/** 全屏「筛选预览」工作台：数据集不存在时（如刚被移除）不渲染 */
+/** 全屏「查看数据」工作台：数据集不存在时（如刚被移除）不渲染 */
 const dataDialogDataset = computed(
   () => insightState.datasets.find((item) => item.id === insightState.ui.dataDialog.datasetId) ?? null,
 )
