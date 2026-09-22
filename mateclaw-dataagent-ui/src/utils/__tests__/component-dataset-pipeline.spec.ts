@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { readComponentDatasetPipeline, writeComponentDatasetPipeline } from '../component-dataset-pipeline'
+import {
+  draftQueryConfigFromLegacyBindings,
+  readComponentDatasetPipeline,
+  writeComponentDatasetPipeline,
+} from '../component-dataset-pipeline'
 
 describe('component dataset pipeline', () => {
   it('reads managed system script state without inferring it from the legacy script', () => {
@@ -104,5 +108,52 @@ describe('component dataset pipeline', () => {
     const component = { id: 'c1', config: {} } as any
     const updated = writeComponentDatasetPipeline(component, { datasetInputs: [] })
     expect((updated.config as any).datasetPipeline.resultSet).toBeUndefined()
+  })
+
+  it('reads and writes queryConfig on dataset inputs (任务 5 契约)', () => {
+    const queryConfig = {
+      displayFields: [{ field: 'metric_date', title: '指标日期', role: 'dimension' }],
+      parameterBindings: [{ filterComponentId: 'date_range', parameterName: 'start_date', field: 'metric_date', operator: 'gte' }],
+      sortPolicy: { enabled: true, mode: 'single', allowedFields: ['in_account'], defaultSort: null },
+      paginationPolicy: { enabled: true, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: true },
+    }
+    const component = {
+      id: 'c1',
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: '42', inputName: 'strategy_data', queryConfig }] } },
+    } as any
+    const read = readComponentDatasetPipeline(component)
+    expect(read?.datasetInputs[0].queryConfig).toEqual(queryConfig)
+    // 写回保留 queryConfig
+    const updated = writeComponentDatasetPipeline(component, { datasetInputs: [{ datasetId: '42', inputName: 'strategy_data', queryConfig }] })
+    expect((updated.config as any).datasetPipeline.datasetInputs[0].queryConfig).toEqual(queryConfig)
+  })
+
+  it('writes boundFilterComponentIds when present', () => {
+    const component = { id: 'c1', config: {} } as any
+    const updated = writeComponentDatasetPipeline(component, {
+      datasetInputs: [],
+      boundFilterComponentIds: ['strategy_type', 'date_range'],
+    } as any)
+    expect((updated.config as any).datasetPipeline.boundFilterComponentIds).toEqual(['strategy_type', 'date_range'])
+  })
+
+  it('draftQueryConfigFromLegacyBindings normalizes legacy scriptFilterBindings', () => {
+    const draft = draftQueryConfigFromLegacyBindings([
+      {
+        filterComponentId: 'strategy_type',
+        inputNames: ['strategy_data'],
+        fieldMappings: { strategy_data: 'strategy_id' },
+        conditions: [
+          { inputName: 'strategy_data', field: 'strategy_id', operator: 'in', parameterNames: ['strategy_ids'] },
+        ],
+      },
+    ])
+    expect(draft.parameterBindings).toEqual([
+      { filterComponentId: 'strategy_type', parameterName: 'strategy_ids', field: 'strategy_id', operator: 'in' },
+    ])
+    // 展示草稿不含字段/排序/分页配置：未经用户确认不得静默生效
+    expect(draft.displayFields).toEqual([])
+    expect(draft.sortPolicy.enabled).toBe(false)
+    expect(draft.paginationPolicy.enabled).toBe(false)
   })
 })

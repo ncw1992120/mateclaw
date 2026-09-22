@@ -1445,8 +1445,96 @@ export interface ComponentDatasetPipeline {
   systemScript?: DashboardSystemScriptState
   parameters?: DashboardScriptParameter[]
   executionPolicy?: DashboardExecutionPolicy
+  /** 组件绑定的筛选器组件 ID 列表；Planner 据此校验绑定归属（被删除的筛选器在 Planner 阶段失败）。 */
+  boundFilterComponentIds?: string[]
   /** 最近一次产出的结果集（元数据持久化，行数据由后端 executionId 或前端重算获得） */
   resultSet?: ComponentResultSet
+}
+
+/** ===== 表格详情页查询链路（契约见 docs/策略解读/plans/2026-09-22-表格详情页查询链路实施计划.md）===== */
+
+/** 查询配置展示字段：field 是技术字段名（权威），title 是展示名（仅表现层）。 */
+export interface QueryDisplayField {
+  field: string
+  title: string
+  role: 'dimension' | 'measure'
+  dataType?: string
+}
+
+/** 查询配置筛选器绑定：页面筛选器参数 → 本输入字段的下推规则。 */
+export interface QueryParameterBinding {
+  filterComponentId: string
+  parameterName: string
+  field: string
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+    | 'in' | 'not_in' | 'between' | 'contains'
+    | 'is_null' | 'is_not_null'
+}
+
+/** 允许排序策略：仅 allowedFields 内字段可下推排序。 */
+export interface QuerySortPolicy {
+  enabled: boolean
+  mode: 'single' | 'multi'
+  allowedFields: string[]
+  defaultSort?: QuerySortSpec | null
+}
+
+/** 分页策略：静态配置归此处，本次页码归运行时。 */
+export interface QueryPaginationPolicy {
+  enabled: boolean
+  defaultPageSize: number
+  maxPageSize: number
+  returnTotalCount: boolean
+}
+
+/** 单个数据集输入的静态查询配置（保存于 datasetInputs[].queryConfig）。 */
+export interface DatasetQueryConfig {
+  displayFields: QueryDisplayField[]
+  parameterBindings: QueryParameterBinding[]
+  sortPolicy: QuerySortPolicy
+  paginationPolicy: QueryPaginationPolicy
+}
+
+/** 运行时排序；direction 仅 asc/desc。 */
+export interface QuerySortSpec {
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+/** 运行时分页；page 从 1 开始。 */
+export interface QueryPaginationSpec {
+  page: number
+  pageSize: number
+}
+
+/**
+ * 页面运行时 QueryContext（设计文档第七节同形 + requestId）。
+ * 只描述本次用户所选筛选值、排序和页码，不持久化。
+ */
+export interface QueryContext {
+  dashboardId?: string
+  componentId?: string
+  datasetId?: string
+  /** 键必须来自已绑定筛选器的参数定义；空选/全部 = 无过滤，显式空集合 = 短路空结果。 */
+  parameters: Record<string, unknown>
+  sort?: QuerySortSpec | null
+  pagination?: QueryPaginationSpec | null
+  /** 链路关联标识，用于丢弃旧请求晚返回的响应。 */
+  requestId?: string
+}
+
+/** 服务端查询计划摘要（pushdown 是服务端计算结果，前端不可伪造）。 */
+export interface DatasetQueryPlanSummary {
+  datasetId?: string
+  inputName?: string
+  columns?: string[]
+  filters?: Array<{ field: string; operator: string; value?: unknown }>
+  orders?: QuerySortSpec[]
+  pagination?: QueryPaginationSpec | null
+  pushdown?: { filters: boolean; sort: boolean; pagination: boolean }
+  residualOperations?: string[]
+  shortCircuitEmpty?: boolean
+  readLimit?: number | null
 }
 
 /** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
@@ -1587,6 +1675,11 @@ export interface DashboardDatasetInput {
   fieldMappings?: Array<{ source: string; target: string }>
   /** 当前输入数据集的源端筛选；`field` 自本版本起恒为**字段名**（老配置的展示名在读入时惰性归一）。 */
   filters?: DatasetFilter[]
+  /**
+   * 新版静态查询配置（本输入的权威配置）：保存后旧 scriptFilterBindings 仅作读取兼容，
+   * 禁止两份规则同时生效。
+   */
+  queryConfig?: DatasetQueryConfig
 }
 
 /** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */

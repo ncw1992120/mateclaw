@@ -3,7 +3,12 @@ import type {
   ComponentResultSet,
   DashboardScriptFilterBinding,
   DashboardSystemScriptState,
+  DatasetQueryConfig,
   InsightComponent,
+  QueryDisplayField,
+  QueryParameterBinding,
+  QueryPaginationPolicy,
+  QuerySortPolicy,
 } from '@/types'
 
 const PIPELINE_KEY = 'datasetPipeline'
@@ -24,6 +29,98 @@ function readSystemScript(value: unknown): DashboardSystemScriptState | undefine
     managedCode: typeof raw.managedCode === 'string' ? raw.managedCode : undefined,
     generatedFingerprint: raw.generatedFingerprint,
     userCode: raw.userCode,
+  }
+}
+
+/** 展示名等表现层字段的宽松读取；field（技术字段名）缺失即丢弃。 */
+function readDisplayField(value: unknown): QueryDisplayField | undefined {
+  const raw = asRecord(value)
+  if (typeof raw.field !== 'string' || !raw.field) return undefined
+  const role = raw.role === 'measure' ? 'measure' : 'dimension'
+  return {
+    field: raw.field,
+    title: typeof raw.title === 'string' && raw.title ? raw.title : raw.field,
+    role,
+    dataType: typeof raw.dataType === 'string' ? raw.dataType : undefined,
+  }
+}
+
+function readParameterBinding(value: unknown): QueryParameterBinding | undefined {
+  const raw = asRecord(value)
+  if (typeof raw.filterComponentId !== 'string' || typeof raw.parameterName !== 'string' || typeof raw.field !== 'string' || typeof raw.operator !== 'string') {
+    return undefined
+  }
+  return {
+    filterComponentId: raw.filterComponentId,
+    parameterName: raw.parameterName,
+    field: raw.field,
+    operator: raw.operator as QueryParameterBinding['operator'],
+  }
+}
+
+function readQueryConfig(value: unknown): DatasetQueryConfig | undefined {
+  const raw = asRecord(value)
+  if (!Array.isArray(raw.displayFields) || !Array.isArray(raw.parameterBindings)) return undefined
+  const displayFields = raw.displayFields.map(readDisplayField).filter((f): f is QueryDisplayField => Boolean(f))
+  if (!displayFields.length) return undefined
+  const parameterBindings = raw.parameterBindings
+    .map(readParameterBinding)
+    .filter((b): b is QueryParameterBinding => Boolean(b))
+  const sortRaw = asRecord(raw.sortPolicy)
+  const sortPolicy: QuerySortPolicy = {
+    enabled: sortRaw.enabled === true,
+    mode: sortRaw.mode === 'multi' ? 'multi' : 'single',
+    allowedFields: Array.isArray(sortRaw.allowedFields)
+      ? sortRaw.allowedFields.filter((f): f is string => typeof f === 'string')
+      : [],
+    defaultSort: null,
+  }
+  const paginationRaw = asRecord(raw.paginationPolicy)
+  const paginationPolicy: QueryPaginationPolicy = {
+    enabled: paginationRaw.enabled === true,
+    defaultPageSize: typeof paginationRaw.defaultPageSize === 'number' ? paginationRaw.defaultPageSize : 100,
+    maxPageSize: typeof paginationRaw.maxPageSize === 'number' ? paginationRaw.maxPageSize : 500,
+    returnTotalCount: paginationRaw.returnTotalCount === true,
+  }
+  return { displayFields, parameterBindings, sortPolicy, paginationPolicy }
+}
+
+/**
+ * 旧 Schema 归一化草稿：把 scriptFilterBindings 转成 queryConfig.parameterBindings 的**展示草稿**，
+ * 仅在编辑器读取层使用；未经用户在查询配置中确认不得写回，更不得静默改变已发布仪表盘的执行结果。
+ */
+export function draftQueryConfigFromLegacyBindings(bindings: DashboardScriptFilterBinding[] | undefined): DatasetQueryConfig {
+  const parameterBindings: QueryParameterBinding[] = []
+  for (const binding of bindings || []) {
+    const conditions = binding.conditions || []
+    if (conditions.length) {
+      for (const condition of conditions) {
+        for (const parameterName of condition.parameterNames || []) {
+          if (parameterName) {
+            parameterBindings.push({
+              filterComponentId: binding.filterComponentId,
+              parameterName,
+              field: condition.field,
+              operator: condition.operator as QueryParameterBinding['operator'],
+            })
+          }
+        }
+      }
+    } else {
+      // 更旧形态：filterComponentId 即参数名，fieldMappings[alias] 是字段
+      parameterBindings.push({
+        filterComponentId: binding.filterComponentId,
+        parameterName: binding.filterComponentId,
+        field: Object.values(binding.fieldMappings || {})[0] || '',
+        operator: 'eq',
+      })
+    }
+  }
+  return {
+    displayFields: [],
+    parameterBindings,
+    sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+    paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
   }
 }
 
@@ -55,6 +152,9 @@ export function readComponentDatasetPipeline(component: InsightComponent | null 
     systemScript: readSystemScript(value.systemScript),
     parameters: Array.isArray(value.parameters) ? value.parameters as ComponentDatasetPipeline['parameters'] : [],
     executionPolicy: value.executionPolicy && typeof value.executionPolicy === 'object' ? value.executionPolicy as ComponentDatasetPipeline['executionPolicy'] : {},
+    boundFilterComponentIds: Array.isArray(value.boundFilterComponentIds)
+      ? value.boundFilterComponentIds.filter((item): item is string => typeof item === 'string')
+      : undefined,
     resultSet: readResultSet(value.resultSet),
   }
 }
@@ -96,6 +196,10 @@ export function writeComponentDatasetPipeline(component: InsightComponent, pipel
         ...(pipeline.systemScript ? { systemScript: pipeline.systemScript } : {}),
         parameters: pipeline.parameters || [],
         executionPolicy: pipeline.executionPolicy || {},
+        // 绑定的筛选器组件 ID：Planner 据此校验绑定归属
+        ...(pipeline.boundFilterComponentIds && pipeline.boundFilterComponentIds.length
+          ? { boundFilterComponentIds: pipeline.boundFilterComponentIds }
+          : {}),
         // 结果集元数据持久化：重开仪表盘时据此回显或刷新（决策 B）
         ...(pipeline.resultSet ? { resultSet: pipeline.resultSet } : {}),
       },

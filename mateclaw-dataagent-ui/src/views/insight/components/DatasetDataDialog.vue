@@ -165,7 +165,7 @@
           <span class="dd-hint">{{ resultHint }}</span>
         </div>
         <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
-          <el-table v-if="columns.length" :data="rows" border size="small" height="100%">
+          <el-table v-if="columns.length" :data="rows" border size="small" height="100%" @sort-change="onSortChange">
             <el-table-column
               v-for="column in columns"
               :key="column"
@@ -173,6 +173,8 @@
               :label="column"
               min-width="120"
               show-overflow-tooltip
+              sortable="custom"
+              :sort-orders="['ascending', 'descending', null]"
             />
           </el-table>
           <el-empty v-else-if="loading" description="查询中…" />
@@ -196,6 +198,7 @@ import { listAnalysisViewFields } from '@/api/datasource'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 import { extractApiParameters, extractSqlParameters, type ExtractedParameter } from '@/utils/parameter-extract'
 import { getCachedQuery, setCachedQuery } from './dataset-data-cache'
+import type { QuerySortSpec } from '@/types'
 import {
   DIMENSION_OPERATORS,
   GENERIC_OPERATORS,
@@ -229,6 +232,10 @@ const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
 const hasMore = ref(false)
 const scrollRef = ref<HTMLElement | null>(null)
+/** 表头三态排序（升序 → 降序 → 取消）；变化时页码回 1 */
+const sortState = ref<QuerySortSpec | null>(null)
+/** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
+let requestSequence = 0
 
 const isSql = computed(() => props.dataset.sourceType === 'jdbc')
 const isApi = computed(() => props.dataset.sourceType === 'api')
@@ -433,6 +440,7 @@ async function fetchRows(reset: boolean): Promise<void> {
     // 才降级到草稿预览，以保留“改完点查询”的编辑能力。
     const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
       && (!isSql.value || sql.value === (props.dataset.jdbc?.sql ?? ''))
+    const currentRequest = ++requestSequence
     const batch = savedDefinitionUnchanged
       ? await previewInput({
           datasetId: props.dataset.backendDatasetId as string,
@@ -443,6 +451,8 @@ async function fetchRows(reset: boolean): Promise<void> {
           parameters,
         })
       : await previewDatasetDraft({ ...request, parameters, limit: PAGE_SIZE, offset })
+    // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
+    if (currentRequest !== requestSequence) return
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
     rows.value = reset ? nextRows : [...rows.value, ...nextRows]
     if (reset) {
@@ -474,6 +484,18 @@ async function fetchRows(reset: boolean): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+/** 表头三态：新字段从升序开始；同字段 asc → desc → 取消；变化后页码回 1 并立即重新查询 */
+function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }): void {
+  const next = order ? elOrderToSortState(prop, order) : null
+  const changed = JSON.stringify(next) !== JSON.stringify(sortState.value)
+  sortState.value = next
+  if (changed) void fetchRows(true)
+}
+
+function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): QuerySortSpec {
+  return { field: prop, direction: order === 'ascending' ? 'asc' : 'desc' }
 }
 
 /** 显式查询：改条件后必须点一下才取数（不再自动跑，避免「一打开数据就出来了」） */

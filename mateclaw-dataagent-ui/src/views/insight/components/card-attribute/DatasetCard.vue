@@ -26,10 +26,11 @@
       />
     </div>
 
-    <!-- 操作行：字段名称 / 查看数据 / 移除。
+    <!-- 操作行：查询配置 / 查看数据 / 移除。
+         「查询配置」打开查询配置弹窗：展示字段、筛选器绑定、允许排序、分页。
          「查看数据」打开统一数据查看弹窗：添加本次条件后查询，并将条件下推到源查询。 -->
     <div class="ds-actions" @click.stop>
-      <el-button size="small" text bg @click="openFieldMapping(dataset.id)">字段名称</el-button>
+      <el-button size="small" text bg @click="openQueryConfig(dataset.id)">查询配置</el-button>
       <el-button
         size="small"
         text bg
@@ -50,7 +51,7 @@ import { useInsight } from './useInsight'
 import type { DatasetConfig } from './useInsight'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
-const { openFieldMapping, openDataDialog, removeDataset, reconfigureDataset, renameDataset } = useInsight()
+const { openQueryConfig, openDataDialog, removeDataset, reconfigureDataset, renameDataset } = useInsight()
 
 /* ---- 别名内联编辑 ---- */
 const editingAlias = ref(false)

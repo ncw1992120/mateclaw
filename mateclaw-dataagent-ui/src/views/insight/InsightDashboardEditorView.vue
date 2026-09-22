@@ -273,6 +273,16 @@
       <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
       <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
 
+      <!-- 「查询配置」弹窗：展示字段 / 筛选器绑定 / 允许排序 / 分页 -->
+      <QueryConfigDialog
+        v-model="insightState.ui.queryConfigDialog.visible"
+        :fields="queryConfigDataset?.fields ?? []"
+        :filter-options="filterOptions"
+        :initial-config="queryConfigDataset?.queryConfig ?? null"
+        :legacy-bindings="queryConfigLegacyBindings"
+        @save="onSaveQueryConfig"
+      />
+
       <DashboardThemePanel
         ref="themePanelRef"
         :model-value="schema.theme ?? { mode: 'preset', presetId: 'blue' }"
@@ -339,6 +349,8 @@ import CardAttributeSidebar from './components/card-attribute/CardAttributeSideb
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
 import DatasetDataDialog from './components/DatasetDataDialog.vue'
+import QueryConfigDialog from './components/card-attribute/QueryConfigDialog.vue'
+import { draftQueryConfigFromLegacyBindings } from '@/utils/component-dataset-pipeline'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
@@ -379,6 +391,31 @@ const { openMetricStyle, state: insightState } = useInsight()
 const dataDialogDataset = computed(
   () => insightState.datasets.find((item) => item.id === insightState.ui.dataDialog.datasetId) ?? null,
 )
+
+/* ---- 查询配置弹窗 ---- */
+const { saveQueryConfig, getLoadedDashboardSchema } = useInsight()
+const queryConfigDataset = computed(
+  () => insightState.datasets.find((item) => item.id === insightState.ui.queryConfigDialog.datasetId) ?? null,
+)
+const filterOptions = computed(() =>
+  insightState.filterCatalog.map((filter) => ({ id: filter.id, title: filter.title })),
+)
+/** 旧 scriptFilterBindings 的展示草稿：仅当该数据集尚无已保存查询配置时预填 */
+const queryConfigLegacyBindings = computed(() => {
+  const dataset = queryConfigDataset.value
+  if (!dataset || dataset.queryConfig) return []
+  const schema = getLoadedDashboardSchema()
+  const cardComp = insightState.backend.componentId
+    ? schema?.pages?.[0]?.components?.find((c) => c.id === insightState.backend.componentId)
+    : null
+  const pipeline = cardComp ? readComponentDatasetPipeline(cardComp) : null
+  const binding = (pipeline?.scriptFilterBindings ?? []).find((b) => !b.inputNames.length || b.inputNames.includes(dataset.alias))
+  if (!binding) return []
+  return draftQueryConfigFromLegacyBindings([binding]).parameterBindings
+})
+function onSaveQueryConfig(config: DatasetQueryConfig): void {
+  saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config)
+}
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)

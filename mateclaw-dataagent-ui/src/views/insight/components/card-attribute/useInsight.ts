@@ -103,6 +103,8 @@ export interface DatasetConfig {
   }
   /** [后端联调] 真实数据集 ID：数据集配置经后端 confirmDraft 落库后回填 */
   backendDatasetId?: string
+  /** 新版静态查询配置（查询配置弹窗保存；datasetInputs[].queryConfig 的本地来源） */
+  queryConfig?: DatasetQueryConfig
 }
 
 /** 卡片（仪表盘画布上的组件） */
@@ -162,6 +164,8 @@ interface UiState {
   metricStyle: { visible: boolean; fieldKey: string; field: string }
   /** 「查看数据」弹窗：定义 / 筛选条件 / 参数 / 结果 —— 条件由用户显式「添加」后点查询下推 */
   dataDialog: { visible: boolean; datasetId: string }
+  /** 「查询配置」弹窗：展示字段 / 筛选器绑定 / 排序 / 分页 */
+  queryConfigDialog: { visible: boolean; datasetId: string }
 }
 
 /* ============================ 结果集（卡片唯一数据来源） ============================ */
@@ -400,6 +404,7 @@ const state = reactive({
     metricConfig: { visible: false },
     metricStyle: { visible: false, fieldKey: '', field: 'value' },
     dataDialog: { visible: false, datasetId: '' },
+    queryConfigDialog: { visible: false, datasetId: '' },
   } as UiState,
 })
 
@@ -1069,6 +1074,35 @@ function closeDataDialog(): void {
   state.ui.dataDialog.visible = false
 }
 
+/** 当前已加载的仪表盘 Schema（编辑器读取旧绑定草稿用） */
+function getLoadedDashboardSchema(): InsightDashboardSchema | null {
+  return loadedDashboardSchema
+}
+
+/** 打开「查询配置」弹窗（展示字段 / 筛选器绑定 / 排序 / 分页） */
+function openQueryConfig(datasetId: string): void {
+  state.ui.queryConfigDialog = { visible: true, datasetId }
+}
+function closeQueryConfig(): void {
+  state.ui.queryConfigDialog.visible = false
+}
+/** 保存查询配置到本地数据集状态（buildPipeline 时写入 datasetInputs[].queryConfig） */
+function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): void {
+  const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
+  if (dataset) dataset.queryConfig = config
+  // 配置变化后系统区生成代码需要刷新（输入 schema 说明变化）
+  if (state.pythonSystemState) {
+    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
+    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
+  }
+}
+/** 当前绑定的筛选器组件 ID（Planner 据此校验绑定归属） */
+function boundFilterComponentIds(): string[] {
+  return state.filterBindings
+    .map((binding) => state.filterCatalog.find((f) => f.title === binding.filterName)?.id ?? binding.filterName)
+    .filter(Boolean)
+}
+
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
 
 /**
@@ -1312,6 +1346,8 @@ export function buildPipeline(): ComponentDatasetPipeline {
       metrics: ds.aloudata?.metrics,
       dimensions: ds.aloudata?.dims,
     },
+    // 新版静态查询配置：保存后以 queryConfig 为本输入的权威配置（旧 scriptFilterBindings 仅读取兼容）
+    ...(ds.queryConfig ? { queryConfig: ds.queryConfig } : {}),
     // 契约定版（§4.3）：source=字段名（后端下推唯一依据），target=展示名（仅导出表头等展示场景）
     fieldMappings: toFieldMappings(ds.fields ?? []),
     // filters[].field 自本版本起恒为字段名（存展示名的老配置在读入时已惰性归一，见 normalizeDatasetFields）
@@ -1344,6 +1380,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     systemScript: state.pythonSystemState ?? undefined,
     parameters: [],
     executionPolicy: loadedExecutionPolicy,
+    boundFilterComponentIds: boundFilterComponentIds(),
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
     resultSet: resultSetMeta(),
   }
@@ -2014,6 +2051,10 @@ export function useInsight() {
     previewFieldMetas,
     // 全屏「查看数据」工作台
     openDataDialog,
+    openQueryConfig,
+    getLoadedDashboardSchema,
+    closeQueryConfig,
+    saveQueryConfig,
     closeDataDialog,
     // 结果集（卡片唯一数据来源）
     resultSetReady,

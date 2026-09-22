@@ -1,5 +1,5 @@
 import api from './index'
-import type { Dataset, DatasetField, DatasetData, DatasetColumnDef, DatasetInputDescriptor, DatasetReadRequest, DatasetBatch } from '@/types'
+import type { Dataset, DatasetField, DatasetData, DatasetColumnDef, DatasetInputDescriptor, DatasetReadRequest, DatasetBatch, QueryContext, DatasetQueryConfig, DatasetQueryPlanSummary } from '@/types'
 import type { DatasetSourceType, DatasetFilter } from '@/types'
 
 /** API 路径常量 */
@@ -54,6 +54,32 @@ export function getInputDescriptor(datasetId: string, inputName: string = 'datas
 /** 使用统一 DatasetSourceAdapter 预览数据，并返回下推审计结果 */
 export function previewInput(request: DatasetReadRequest) {
   return api.post<DatasetBatch>(`${BASE_URL}/preview`, request)
+}
+
+/** 查询计划预览请求：datasetId + 运行时 QueryContext +（可选）未保存的查询配置草稿 */
+export interface QueryPlanPreviewRequest {
+  datasetId: string
+  inputName?: string
+  queryContext: QueryContext
+  queryConfig?: DatasetQueryConfig
+}
+
+/** 查询计划预览响应：plan / descriptor / rows / pushdownReport / totalCount?（预览不落库） */
+export interface QueryPlanPreviewResponse {
+  plan: DatasetQueryPlanSummary
+  descriptor: DatasetInputDescriptor
+  rows: Record<string, unknown>[]
+  rowCount: number
+  pushdownReport?: Record<string, unknown> | null
+  totalCount?: number
+}
+
+/**
+ * 查询计划预览：编辑器验证单个数据集计划并取回受控行集。
+ * 显式空集合短路时 rows 为空且不访问数据源。
+ */
+export function previewQueryPlan(request: QueryPlanPreviewRequest) {
+  return api.post<QueryPlanPreviewResponse>(`${BASE_URL}/query-plan/preview`, request)
 }
 
 export interface DatasetComposerDraftRequest {
