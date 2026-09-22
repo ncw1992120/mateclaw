@@ -4,7 +4,7 @@
 #
 # 用法：
 #   ./restart-dataagent-backend.sh                 # 重启 mock 服务（默认）+ 后端
-#   ./restart-dataagent-backend.sh mock            # 只重启本地 mock 服务（不动后端）
+#   bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
 #   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
@@ -39,7 +39,7 @@ usage() {
   cat <<'TXT'
 用法：
   ./restart-dataagent-backend.sh                 # 重启 mock 服务（默认）+ 后端
-  ./restart-dataagent-backend.sh mock            # 只重启本地 mock 服务（不动后端）
+  bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
 
@@ -167,15 +167,52 @@ esac
 
 # ---------------------------------------------------------------- 后端
 
+java_major_version() {
+  local java_home="$1" version major
+  version="$("$java_home/bin/java" -version 2>&1 | awk -F '"' '/version/ { print $2; exit }')"
+  major="${version%%.*}"
+  if [[ "$major" == "1" ]]; then
+    version="${version#1.}"
+    major="${version%%.*}"
+  fi
+  printf '%s' "$major"
+}
+
+java_home_is_17_or_newer() {
+  local java_home="$1" major
+  [[ -x "$java_home/bin/java" ]] || return 1
+  major="$(java_major_version "$java_home")"
+  [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 17 ))
+}
+
 JAVA_HOME="${JAVA_HOME:-}"
+if ! java_home_is_17_or_newer "$JAVA_HOME"; then
+  JAVA_HOME=""
+fi
 if [[ -z "$JAVA_HOME" && -x /usr/libexec/java_home ]]; then
-  JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
+  candidate_java_home="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
+  if java_home_is_17_or_newer "$candidate_java_home"; then
+    JAVA_HOME="$candidate_java_home"
+  fi
+fi
+if [[ -z "$JAVA_HOME" ]]; then
+  for candidate_java_home in \
+    "$HOME"/.jdks/*/Contents/Home \
+    "$HOME"/Library/Java/JavaVirtualMachines/*/Contents/Home \
+    /Library/Java/JavaVirtualMachines/*/Contents/Home; do
+    if java_home_is_17_or_newer "$candidate_java_home"; then
+      JAVA_HOME="$candidate_java_home"
+      break
+    fi
+  done
 fi
 export JAVA_HOME
 export PATH="$JAVA_HOME/bin:$PATH"
 
-if [[ -z "$JAVA_HOME" || ! -x "$JAVA_HOME/bin/java" ]]; then
-  echo "错误：找不到 JDK 21，请设置 JAVA_HOME。当前值：${JAVA_HOME:-未设置}" >&2
+if ! java_home_is_17_or_newer "$JAVA_HOME"; then
+  echo "错误：找不到 Java 17+，请设置 JAVA_HOME。当前值：${JAVA_HOME:-未设置}" >&2
+  echo "当前系统 java：$(command -v java || echo 未找到)" >&2
+  java -version 2>&1 || true
   exit 1
 fi
 
