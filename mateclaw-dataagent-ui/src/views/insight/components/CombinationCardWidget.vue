@@ -77,8 +77,9 @@
         :data-child="child.id"
         :tabindex="editable ? 0 : undefined"
         :aria-label="editable ? `移动子组件 ${child.title}` : undefined"
-        @click.stop="selectChild(child.id)"
-        @keydown="onChildKeydown($event, child)"
+          @click.stop="selectChild(child.id)"
+          @keydown="onChildKeydown($event, child)"
+          @contextmenu.stop.prevent="onChildContextMenu($event, child)"
         @mouseenter="hoverChildId = child.id"
         @mouseleave="hoverChildId = null"
         @mousedown="onChildMouseDown($event, child)"
@@ -160,6 +161,9 @@
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
+            @copy-child="(payload) => emit('copy-child', payload)"
+            @paste-child="(payload) => emit('paste-child', payload)"
+            @context-menu="(payload) => emit('context-menu', payload)"
           />
         </div>
 
@@ -228,6 +232,10 @@ const emit = defineEmits<{
   (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
   /** 将画布中的已有组件移入当前组合容器/页签 */
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  /** 组合卡片内部子组件剪贴板操作 */
+  (e: 'copy-child', payload: { containerId: string; childId: string }): void
+  (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
+  (e: 'context-menu', payload: { containerId: string; childId: string; x: number; y: number }): void
 }>()
 
 const { t } = useI18n()
@@ -711,9 +719,24 @@ function selectChild(id: string) {
 
 /** 编辑态下，获得焦点的子组件可用方向键微调位置；交互控件保留自身键盘行为。 */
 function onChildKeydown(event: KeyboardEvent, child: InsightCombinationChild): void {
-  if (!props.editable || cfg.value.layoutMode !== 'free') return
+  if (!props.editable) return
   const target = event.target as HTMLElement | null
   if (target?.closest('input, textarea, select, button, [role="tab"]')) return
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'c') {
+    event.preventDefault()
+    event.stopPropagation()
+    selectChild(child.id)
+    emit('copy-child', { containerId: props.component.id, childId: child.id })
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'v') {
+    event.preventDefault()
+    event.stopPropagation()
+    selectChild(child.id)
+    emit('paste-child', { containerId: props.component.id, childId: child.id })
+    return
+  }
+  if (cfg.value.layoutMode !== 'free') return
   if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
 
   event.preventDefault()
@@ -732,6 +755,17 @@ function onChildKeydown(event: KeyboardEvent, child: InsightCombinationChild): v
   child.layout.y = next.y
   childEl?.style.setProperty('left', next.x + 'px')
   childEl?.style.setProperty('top', next.y + 'px')
+}
+
+function onChildContextMenu(event: MouseEvent, child: InsightCombinationChild): void {
+  if (!props.editable) return
+  selectChild(child.id)
+  emit('context-menu', {
+    containerId: props.component.id,
+    childId: child.id,
+    x: event.clientX,
+    y: event.clientY,
+  })
 }
 
 async function deleteChild(id: string) {

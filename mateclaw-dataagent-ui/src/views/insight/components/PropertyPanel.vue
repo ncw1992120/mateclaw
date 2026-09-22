@@ -19,92 +19,93 @@
         <el-input v-model="localComponent.title" :aria-label="t('insight.property.componentTitle')" @change="emitChange" />
       </div>
 
-      <div class="form-group form-group-row">
-        <label class="form-label">显示标题栏</label>
-        <el-switch v-model="localComponent.showTitle" aria-label="显示标题栏" @change="emitChange" />
-      </div>
       <div class="form-group">
         <label class="form-label">标题栏样式</label>
-        <el-select v-model="localComponent.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="emitChange">
+        <el-select v-model="localComponent.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="handleTitleBarStyleChange">
+          <el-option value="hidden" label="隐藏标题栏" />
           <el-option value="standard" label="标准卡片" />
           <el-option value="minimal" label="简洁文本" />
           <el-option value="accent" label="强调色" />
           <el-option value="section" label="分组标题" />
         </el-select>
       </div>
-      <div class="style-section-title">组件展示样式</div>
-      <div class="form-group">
-        <label class="form-label">边框</label>
-        <el-select v-model="localComponent.visualStyle!.border!.mode" aria-label="组件边框" style="width: 100%" @change="emitChange">
-          <el-option value="theme" label="跟随主题" />
-          <el-option value="visible" label="显示" />
-          <el-option value="hidden" label="隐藏" />
-        </el-select>
-      </div>
-      <template v-if="localComponent.visualStyle?.border?.mode === 'visible'">
-        <div class="form-group">
-          <label class="form-label">边框颜色</label>
-          <el-select v-model="localComponent.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%" @change="emitChange">
-            <el-option value="theme" label="跟随主题" />
-            <el-option value="custom" label="自定义颜色" />
-          </el-select>
+      <details open class="style-settings">
+        <summary class="style-section-title">样式设置</summary>
+        <div class="style-field-grid">
+          <div class="form-group">
+            <label class="form-label">边框</label>
+            <el-select v-model="localComponent.visualStyle!.border!.mode" aria-label="组件边框" style="width: 100%" @change="emitChange">
+              <el-option value="theme" label="跟随主题" />
+              <el-option value="visible" label="显示" />
+              <el-option value="hidden" label="隐藏" />
+            </el-select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">背景</label>
+            <el-select v-model="localComponent.visualStyle!.background!.mode" aria-label="组件背景" style="width: 100%" @change="emitChange">
+              <el-option value="theme" label="跟随主题" />
+              <el-option value="transparent" label="透明" />
+              <el-option value="custom" label="自定义颜色" />
+            </el-select>
+          </div>
+          <template v-if="localComponent.visualStyle?.border?.mode === 'visible'">
+            <div class="form-group">
+              <label class="form-label">边框颜色</label>
+              <el-select v-model="localComponent.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%" @change="emitChange">
+                <el-option value="theme" label="跟随主题" />
+                <el-option value="custom" label="自定义颜色" />
+              </el-select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">边框粗细</label>
+              <el-select v-model="localComponent.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%" @change="emitChange">
+                <el-option :value="1" label="1px" />
+                <el-option :value="2" label="2px" />
+              </el-select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">边框样式</label>
+              <el-select v-model="localComponent.visualStyle.border.style" aria-label="组件边框样式" style="width: 100%" @change="emitChange">
+                <el-option value="solid" label="实线" />
+                <el-option value="dashed" label="虚线" />
+              </el-select>
+            </div>
+            <div v-if="localComponent.visualStyle.border.colorMode === 'custom'" class="form-group">
+              <label class="form-label">自定义边框颜色</label>
+              <el-color-picker v-model="localComponent.visualStyle.border.color" aria-label="自定义边框颜色" @change="emitChange" />
+            </div>
+          </template>
+          <div v-if="localComponent.visualStyle?.background?.mode === 'custom'" class="form-group">
+            <label class="form-label">自定义背景色</label>
+            <el-color-picker v-model="localComponent.visualStyle.background.color" aria-label="自定义背景色" @change="emitChange" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">圆角</label>
+            <el-select v-model="localComponent.visualStyle!.radius" aria-label="组件圆角" style="width: 100%" @change="emitChange">
+              <el-option :value="0" label="无圆角" />
+              <el-option :value="8" label="小圆角" />
+              <el-option :value="12" label="标准圆角" />
+              <el-option :value="16" label="大圆角" />
+            </el-select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">阴影</label>
+            <el-select v-model="localComponent.visualStyle!.shadow" aria-label="组件阴影" style="width: 100%" @change="emitChange">
+              <el-option value="none" label="无阴影" />
+              <el-option value="subtle" label="轻微阴影" />
+              <el-option value="medium" label="标准阴影" />
+            </el-select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">内边距</label>
+            <el-select v-model="localComponent.visualStyle!.padding" aria-label="组件内边距" style="width: 100%" @change="emitChange">
+              <el-option :value="0" label="紧凑" />
+              <el-option :value="8" label="标准" />
+              <el-option :value="16" label="宽松" />
+            </el-select>
+          </div>
         </div>
-        <div v-if="localComponent.visualStyle.border.colorMode === 'custom'" class="form-group">
-          <label class="form-label">自定义边框颜色</label>
-          <el-color-picker v-model="localComponent.visualStyle.border.color" aria-label="自定义边框颜色" @change="emitChange" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">边框粗细</label>
-          <el-select v-model="localComponent.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%" @change="emitChange">
-            <el-option :value="1" label="1px" />
-            <el-option :value="2" label="2px" />
-          </el-select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">边框样式</label>
-          <el-select v-model="localComponent.visualStyle.border.style" aria-label="组件边框样式" style="width: 100%" @change="emitChange">
-            <el-option value="solid" label="实线" />
-            <el-option value="dashed" label="虚线" />
-          </el-select>
-        </div>
-      </template>
-      <div class="form-group">
-        <label class="form-label">背景</label>
-        <el-select v-model="localComponent.visualStyle!.background!.mode" aria-label="组件背景" style="width: 100%" @change="emitChange">
-          <el-option value="theme" label="跟随主题" />
-          <el-option value="transparent" label="透明" />
-          <el-option value="custom" label="自定义颜色" />
-        </el-select>
-      </div>
-      <div v-if="localComponent.visualStyle?.background?.mode === 'custom'" class="form-group">
-        <label class="form-label">自定义背景色</label>
-        <el-color-picker v-model="localComponent.visualStyle.background.color" aria-label="自定义背景色" @change="emitChange" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">圆角</label>
-        <el-select v-model="localComponent.visualStyle!.radius" aria-label="组件圆角" style="width: 100%" @change="emitChange">
-          <el-option :value="0" label="无圆角" />
-          <el-option :value="8" label="小圆角" />
-          <el-option :value="12" label="标准圆角" />
-          <el-option :value="16" label="大圆角" />
-        </el-select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">阴影</label>
-        <el-select v-model="localComponent.visualStyle!.shadow" aria-label="组件阴影" style="width: 100%" @change="emitChange">
-          <el-option value="none" label="无阴影" />
-          <el-option value="subtle" label="轻微阴影" />
-          <el-option value="medium" label="标准阴影" />
-        </el-select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">内边距</label>
-        <el-select v-model="localComponent.visualStyle!.padding" aria-label="组件内边距" style="width: 100%" @change="emitChange">
-          <el-option :value="0" label="紧凑" />
-          <el-option :value="8" label="标准" />
-          <el-option :value="16" label="宽松" />
-        </el-select>
-      </div>
+      </details>
       <div v-if="component.type === 'table'" class="form-group form-group-row">
         <label class="form-label">显示表头</label>
         <el-switch v-model="localComponent.showHeader" aria-label="显示表头" @change="emitChange" />
@@ -112,84 +113,6 @@
 
       <!-- 组合卡片：容器配置 -->
       <template v-if="component.type === 'combination' && localComponent.containerConfig">
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.combination.showTitle') }}</label>
-          <el-switch v-model="localComponent.containerConfig.showTitle" :aria-label="t('insight.combination.showTitle')" @change="emitChange" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.combination.background') }}</label>
-          <el-radio-group v-model="localComponent.containerConfig.backgroundMode" aria-label="组合卡片背景来源" @change="emitChange">
-            <el-radio value="theme">跟随主题</el-radio>
-            <el-radio value="custom">自定义颜色</el-radio>
-          </el-radio-group>
-        </div>
-        <div v-if="localComponent.containerConfig.backgroundMode === 'custom'" class="form-group">
-          <label class="form-label">自定义背景色</label>
-          <div class="combination-color-row">
-            <el-color-picker
-              v-model="localComponent.containerConfig.background"
-              :predefine="COMBINATION_BG_PRESETS"
-              @change="emitChange"
-            />
-            <el-input
-              v-model="localComponent.containerConfig.background"
-              placeholder="#ffffff"
-              :aria-label="t('insight.combination.background')"
-              @change="emitChange"
-            />
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">容器边框</label>
-          <el-select v-model="localComponent.containerConfig.style.border.mode" aria-label="组合容器边框" style="width: 100%" @change="handleContainerBorderModeChange">
-            <el-option value="theme" label="跟随主题" />
-            <el-option value="visible" label="显示" />
-            <el-option value="hidden" label="隐藏" />
-          </el-select>
-        </div>
-        <template v-if="localComponent.containerConfig.style.border.mode === 'visible'">
-          <div class="form-group">
-            <label class="form-label">容器边框颜色</label>
-            <el-select v-model="localComponent.containerConfig.style.border.colorMode" aria-label="组合容器边框颜色" style="width: 100%" @change="emitChange">
-              <el-option value="theme" label="跟随主题" />
-              <el-option value="custom" label="自定义颜色" />
-            </el-select>
-          </div>
-          <div v-if="localComponent.containerConfig.style.border.colorMode === 'custom'" class="form-group">
-            <label class="form-label">自定义容器边框颜色</label>
-            <el-color-picker v-model="localComponent.containerConfig.style.border.color" aria-label="自定义容器边框颜色" @change="emitChange" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">容器边框粗细</label>
-            <el-select v-model="localComponent.containerConfig.style.border.width" aria-label="组合容器边框粗细" style="width: 100%" @change="emitChange">
-              <el-option :value="1" label="1px" />
-              <el-option :value="2" label="2px" />
-            </el-select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">容器边框样式</label>
-            <el-select v-model="localComponent.containerConfig.style.border.style" aria-label="组合容器边框样式" style="width: 100%" @change="emitChange">
-              <el-option value="solid" label="实线" />
-              <el-option value="dashed" label="虚线" />
-            </el-select>
-          </div>
-        </template>
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.combination.radius') }}</label>
-          <el-input-number v-model="localComponent.containerConfig.radius" :min="0" :max="48" :aria-label="t('insight.combination.radius')" @change="emitChange" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.combination.padding') }}</label>
-          <el-input-number v-model="localComponent.containerConfig.padding" :min="0" :max="48" :aria-label="t('insight.combination.padding')" @change="emitChange" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">容器阴影</label>
-          <el-select v-model="localComponent.containerConfig.shadow" aria-label="组合容器阴影" style="width: 100%" @change="emitChange">
-            <el-option value="none" label="无" />
-            <el-option value="subtle" label="轻微" />
-            <el-option value="medium" label="明显" />
-          </el-select>
-        </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.layoutMode') }}</label>
           <el-radio-group v-model="localComponent.containerConfig.layoutMode" @change="emitChange">
@@ -809,7 +732,6 @@ import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
-import { CARD_BG_PRESETS } from '@/utils/color-presets'
 import { normalizeCombinationBackgroundMode } from '@/utils/combination-theme'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 import InlineHelp from './property/InlineHelp.vue'
@@ -846,13 +768,9 @@ const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasou
 /** 筛选器当前仅支持从 Aloudata 数据源选择维度。 */
 const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(group => group.category === 'aloudata'))
 
-/** 组合卡片背景色预设 · 统一收敛到 utils/color-presets.ts（与指标样式弹窗共用一处来源） */
-const COMBINATION_BG_PRESETS = CARD_BG_PRESETS
-
-function handleContainerBorderModeChange(mode: 'theme' | 'visible' | 'hidden'): void {
-  if (!localComponent.containerConfig) return
-  localComponent.containerConfig.style.border.enabled = mode === 'visible'
-  localComponent.containerConfig.style.border.colorMode = mode === 'theme' ? 'theme' : localComponent.containerConfig.style.border.colorMode ?? 'custom'
+function handleTitleBarStyleChange(style: InsightComponent['titleBarStyle']): void {
+  localComponent.showTitle = style !== 'hidden'
+  if (localComponent.containerConfig) localComponent.containerConfig.showTitle = localComponent.showTitle
   emitChange()
 }
 
@@ -1013,7 +931,8 @@ function defaultCombinationConfig(): NonNullable<InsightComponent['containerConf
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
   next.titleBarStyle ??= 'standard'
-  next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type)
+  if (next.showTitle === false) next.titleBarStyle = 'hidden'
+  next.showTitle = next.titleBarStyle !== 'hidden'
   if (next.type === 'combination') {
     const defaults = defaultCombinationConfig()
     const config = next.containerConfig ?? {}
@@ -1036,6 +955,9 @@ function replaceLocalComponent(component: InsightComponent): void {
         },
       },
     }
+    next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type, next.containerConfig)
+  } else {
+    next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type)
   }
   const localRecord = localComponent as unknown as Record<string, unknown>
   for (const key of Object.keys(localRecord)) {
@@ -1724,6 +1646,58 @@ datasourceStore.fetchDatasources().catch(() => {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
+}
+
+.style-settings {
+  margin: 4px 0 12px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--db-bg) 50%, transparent);
+}
+
+.style-settings > .style-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--db-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.style-settings > .style-section-title::-webkit-details-marker {
+  display: none;
+}
+
+.style-settings > .style-section-title::after {
+  content: '⌄';
+  color: var(--db-text-muted);
+  transition: transform var(--transition-fast, 0.15s);
+}
+
+.style-settings:not([open]) > .style-section-title::after {
+  transform: rotate(-90deg);
+}
+
+.style-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 0 12px 12px;
+}
+
+.style-field-grid .form-group {
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.style-field-grid .form-label {
+  width: auto;
+  min-width: 0;
 }
 
 /* SQL 是多行编辑场景，始终独占一行，避免被属性面板的标签列压缩。 */

@@ -197,6 +197,8 @@
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
           @move-component-into="handleMoveComponentInto"
+          @copy-child="handleCopyChild"
+          @paste-child="handlePasteChild"
           @delete-component="handleDeleteComponent"
           @copy-component="handleCopyComponent"
           @paste-component="handlePasteComponent"
@@ -297,20 +299,20 @@
         @contextmenu.stop.prevent
       >
         <button
-          v-if="componentContextMenu.componentId"
+          v-if="componentContextMenu.childId || componentContextMenu.componentId"
           type="button"
           role="menuitem"
           @click="copyFromContextMenu"
         >
-          <span>复制组件</span><kbd>⌘ / Ctrl + C</kbd>
+          <span>{{ componentContextMenu.childId ? '复制子组件' : '复制组件' }}</span><kbd>⌘ / Ctrl + C</kbd>
         </button>
         <button
           type="button"
           role="menuitem"
-          :disabled="!clipboardComponent"
+          :disabled="componentContextMenu.childId ? !clipboardChild : !clipboardComponent"
           @click="pasteFromContextMenu"
         >
-          <span>粘贴组件</span><kbd>⌘ / Ctrl + V</kbd>
+          <span>{{ componentContextMenu.childId ? '粘贴子组件' : '粘贴组件' }}</span><kbd>⌘ / Ctrl + V</kbd>
         </button>
       </div>
     </div>
@@ -345,7 +347,7 @@ import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { componentToCombinationChild, defaultCombinationChildLayout } from '@/utils/combination-tabs'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
-import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
+import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
@@ -385,9 +387,10 @@ const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
 
-type ComponentContextMenu = { componentId: string | null; x: number; y: number }
+type ComponentContextMenu = { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }
 const componentContextMenu = ref<ComponentContextMenu | null>(null)
 const clipboardComponent = ref<InsightComponent | null>(null)
+const clipboardChild = ref<InsightCombinationChild | null>(null)
 const componentContextMenuStyle = computed(() => {
   if (!componentContextMenu.value) return undefined
   return {
@@ -684,7 +687,10 @@ function closeComponentContextMenu(): void {
 }
 
 function handleComponentContextMenu(payload: ComponentContextMenu): void {
-  if (payload.componentId) {
+  if (payload.containerId && payload.childId) {
+    selectedComponentId.value = payload.containerId
+    selectedChildInfo.value = { containerId: payload.containerId, childId: payload.childId }
+  } else if (payload.componentId) {
     handleSelectComponent(payload.componentId)
   }
   componentContextMenu.value = payload
@@ -694,10 +700,59 @@ function handleCopyComponent(id: string): void {
   const source = currentPageComponents.value.find((component) => component.id === id)
   if (!source) return
   clipboardComponent.value = JSON.parse(JSON.stringify(source)) as InsightComponent
+  clipboardChild.value = null
   selectedComponentId.value = id
   selectedChildInfo.value = null
   closeComponentContextMenu()
   ElMessage.success('组件已复制')
+}
+
+function getActiveCombinationChildren(container: CombinationContainer): InsightCombinationChild[] {
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (activeTab) return activeTab.children
+  container.children ??= []
+  return container.children
+}
+
+function handleCopyChild(payload: { containerId: string; childId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (!child) return
+  clipboardChild.value = JSON.parse(JSON.stringify(child)) as InsightCombinationChild
+  clipboardComponent.value = null
+  selectedComponentId.value = payload.containerId
+  selectedChildInfo.value = { containerId: payload.containerId, childId: payload.childId }
+  closeComponentContextMenu()
+  ElMessage.success('子组件已复制')
+}
+
+function handlePasteChild(payload: { containerId: string; childId: string | null }): void {
+  const container = findCombinationContainer(payload.containerId)
+  const source = clipboardChild.value
+  if (!container || !source) return
+  const children = getActiveCombinationChildren(container)
+  const pasted = cloneCombinationChildForPaste(source, generateId)
+  const overlaps = (left: number, top: number): boolean => children.some((child) => (
+    left < child.layout.x + child.layout.col * 80
+      && left + pasted.layout.col * 80 > child.layout.x
+      && top < child.layout.y + (child.layout.h ?? 180)
+      && top + (pasted.layout.h ?? 180) > child.layout.y
+  ))
+  let x = pasted.layout.x
+  let y = pasted.layout.y
+  while (overlaps(x, y)) {
+    x += 12
+    if (x + pasted.layout.col * 80 > 960) {
+      x = 0
+      y += 12
+    }
+  }
+  pasted.layout = { ...pasted.layout, x, y }
+  children.push(pasted)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: pasted.id }
+  closeComponentContextMenu()
+  ElMessage.success('子组件已粘贴')
 }
 
 function handlePasteComponent(): void {
@@ -731,11 +786,21 @@ function handlePasteComponent(): void {
 }
 
 function copyFromContextMenu(): void {
+  const childTarget = componentContextMenu.value
+  if (childTarget?.containerId && childTarget.childId) {
+    handleCopyChild({ containerId: childTarget.containerId, childId: childTarget.childId })
+    return
+  }
   const id = componentContextMenu.value?.componentId
   if (id) handleCopyComponent(id)
 }
 
 function pasteFromContextMenu(): void {
+  const childTarget = componentContextMenu.value
+  if (childTarget?.containerId && childTarget.childId) {
+    handlePasteChild({ containerId: childTarget.containerId, childId: childTarget.childId })
+    return
+  }
   handlePasteComponent()
 }
 
@@ -744,6 +809,11 @@ function handleEditorClipboardKeydown(event: KeyboardEvent): void {
   if (event.altKey || event.key.toLowerCase() !== 'v') return
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  if (selectedChildInfo.value && clipboardChild.value) {
+    event.preventDefault()
+    handlePasteChild({ containerId: selectedChildInfo.value.containerId, childId: selectedChildInfo.value.childId })
+    return
+  }
   if (!clipboardComponent.value) return
   event.preventDefault()
   handlePasteComponent()

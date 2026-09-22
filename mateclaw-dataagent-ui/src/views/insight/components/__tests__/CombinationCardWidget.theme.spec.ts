@@ -90,7 +90,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       global: { stubs, plugins: [i18n] },
     })
 
-    expect(wrapper.get('.combination-card').attributes('style')).toContain('var(--db-surface-container)')
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('var(--db-surface-container')
   })
 
   it('容器明确选择自定义背景时保留用户颜色', () => {
@@ -105,22 +105,25 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       global: { stubs, plugins: [i18n] },
     })
 
-    expect(wrapper.get('.combination-card').attributes('style')).toContain('rgb(255, 228, 214)')
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('--component-surface: #FFE4D6')
     expect(wrapper.get('.combination-card').attributes('style')).not.toContain('var(--db-surface-container)')
   })
 
-  it('容器阴影由容器配置控制，而不是复用子组件样式', () => {
+  it('容器阴影使用所有组件共用的 visualStyle 配置', () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {
         editable: false,
-        component: component({
-          title: '有阴影容器', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
-          shadow: 'medium', layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
-        }),
+        component: {
+          ...component({
+            title: '有阴影容器', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
+            shadow: 'none', layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
+          }),
+          visualStyle: { shadow: 'medium' },
+        },
       },
       global: { stubs, plugins: [i18n] },
     })
 
-    expect(wrapper.get('.combination-card').attributes('style')).toContain('box-shadow')
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('--component-shadow: var(--shadow-card-hover')
   })
 })

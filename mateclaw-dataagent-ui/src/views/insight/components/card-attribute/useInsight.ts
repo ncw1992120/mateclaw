@@ -108,7 +108,7 @@ export interface CardItem {
   type: CardType
   title: string
   showTitle: boolean
-  titleBarStyle: 'standard' | 'minimal' | 'accent' | 'section'
+  titleBarStyle: 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
   visualStyle: ComponentVisualStyle
   showHeader: boolean
   multiMetric: boolean // 多指标模式（仅 KPI/指标卡）

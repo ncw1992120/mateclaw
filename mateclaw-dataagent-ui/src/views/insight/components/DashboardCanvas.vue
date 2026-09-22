@@ -177,6 +177,9 @@
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
                 @move-component-into="(p) => emit('move-component-into', p)"
+                @copy-child="(p) => emit('copy-child', p)"
+                @paste-child="(p) => emit('paste-child', p)"
+                @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
               />
             </template>
           </div>
@@ -256,10 +259,12 @@ const emit = defineEmits<{
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  (e: 'copy-child', payload: { containerId: string; childId: string }): void
+  (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
   (e: 'delete-component', id: string): void
   (e: 'copy-component', id: string): void
   (e: 'paste-component'): void
-  (e: 'context-menu', payload: { componentId: string | null; x: number; y: number }): void
+  (e: 'context-menu', payload: { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }): void
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void

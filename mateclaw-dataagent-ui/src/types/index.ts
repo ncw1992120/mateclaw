@@ -1210,7 +1210,7 @@ export interface PythonTransformConfig {
 }
 
 /** 组件标题栏的内置样式，避免组件通过任意 CSS 破坏仪表盘一致性。 */
-export type ComponentTitleBarStyle = 'standard' | 'minimal' | 'accent' | 'section'
+export type ComponentTitleBarStyle = 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
 
 /** 组件通用展示样式；编辑器选中框不属于该配置。 */
 export interface ComponentVisualStyle {

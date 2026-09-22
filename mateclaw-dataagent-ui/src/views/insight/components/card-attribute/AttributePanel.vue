@@ -25,92 +25,93 @@
         <el-input v-model="activeCard.title" placeholder="请输入组件标题" aria-label="组件标题" />
       </div>
 
-      <div class="field row">
-        <span class="field-label">显示标题栏</span>
-        <el-switch v-model="activeCard.showTitle" aria-label="显示标题栏" />
-      </div>
       <div class="field">
         <label class="field-label">标题栏样式</label>
-        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%">
+        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="activeCard.showTitle = activeCard.titleBarStyle !== 'hidden'">
+          <el-option value="hidden" label="隐藏标题栏" />
           <el-option value="standard" label="标准卡片" />
           <el-option value="minimal" label="简洁文本" />
           <el-option value="accent" label="强调色" />
           <el-option value="section" label="分组标题" />
         </el-select>
       </div>
-      <div class="section-title visual-style-title">组件展示样式</div>
-      <div class="field">
-        <label class="field-label">边框</label>
-        <el-select v-model="activeCard.visualStyle.border!.mode" aria-label="组件边框" style="width: 100%">
+      <details open class="style-settings">
+        <summary class="section-title visual-style-title">样式设置</summary>
+        <div class="style-field-grid">
+          <div class="field">
+            <label class="field-label">边框</label>
+            <el-select v-model="activeCard.visualStyle.border!.mode" aria-label="组件边框" style="width: 100%">
           <el-option value="theme" label="跟随主题" />
           <el-option value="visible" label="显示" />
           <el-option value="hidden" label="隐藏" />
-        </el-select>
-      </div>
-      <template v-if="activeCard.visualStyle.border?.mode === 'visible'">
-        <div class="field">
-          <label class="field-label">边框颜色</label>
-          <el-select v-model="activeCard.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%">
+            </el-select>
+          </div>
+          <div class="field">
+            <label class="field-label">背景</label>
+            <el-select v-model="activeCard.visualStyle.background!.mode" aria-label="组件背景" style="width: 100%">
+              <el-option value="theme" label="跟随主题" />
+              <el-option value="transparent" label="透明" />
+              <el-option value="custom" label="自定义颜色" />
+            </el-select>
+          </div>
+          <template v-if="activeCard.visualStyle.border?.mode === 'visible'">
+            <div class="field">
+              <label class="field-label">边框颜色</label>
+              <el-select v-model="activeCard.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%">
             <el-option value="theme" label="跟随主题" />
             <el-option value="custom" label="自定义颜色" />
-          </el-select>
-        </div>
-        <div v-if="activeCard.visualStyle.border.colorMode === 'custom'" class="field">
-          <label class="field-label">自定义边框颜色</label>
-          <el-color-picker v-model="activeCard.visualStyle.border.color" aria-label="自定义边框颜色" />
-        </div>
-        <div class="field">
-          <label class="field-label">边框粗细</label>
-          <el-select v-model="activeCard.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%">
+              </el-select>
+            </div>
+            <div class="field">
+              <label class="field-label">边框粗细</label>
+              <el-select v-model="activeCard.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%">
             <el-option :value="1" label="1px" />
             <el-option :value="2" label="2px" />
-          </el-select>
-        </div>
-        <div class="field">
-          <label class="field-label">边框样式</label>
-          <el-select v-model="activeCard.visualStyle.border.style" aria-label="组件边框样式" style="width: 100%">
+              </el-select>
+            </div>
+            <div class="field">
+              <label class="field-label">边框样式</label>
+              <el-select v-model="activeCard.visualStyle.border.style" aria-label="组件边框样式" style="width: 100%">
             <el-option value="solid" label="实线" />
             <el-option value="dashed" label="虚线" />
-          </el-select>
-        </div>
-      </template>
-      <div class="field">
-        <label class="field-label">背景</label>
-        <el-select v-model="activeCard.visualStyle.background!.mode" aria-label="组件背景" style="width: 100%">
-          <el-option value="theme" label="跟随主题" />
-          <el-option value="transparent" label="透明" />
-          <el-option value="custom" label="自定义颜色" />
-        </el-select>
-      </div>
-      <div v-if="activeCard.visualStyle.background?.mode === 'custom'" class="field">
-        <label class="field-label">自定义背景色</label>
-        <el-color-picker v-model="activeCard.visualStyle.background.color" aria-label="自定义背景色" />
-      </div>
-      <div class="field">
-        <label class="field-label">圆角</label>
-        <el-select v-model="activeCard.visualStyle.radius" aria-label="组件圆角" style="width: 100%">
+              </el-select>
+            </div>
+            <div v-if="activeCard.visualStyle.border.colorMode === 'custom'" class="field">
+              <label class="field-label">自定义边框颜色</label>
+              <el-color-picker v-model="activeCard.visualStyle.border.color" aria-label="自定义边框颜色" />
+            </div>
+          </template>
+          <div v-if="activeCard.visualStyle.background?.mode === 'custom'" class="field">
+            <label class="field-label">自定义背景色</label>
+            <el-color-picker v-model="activeCard.visualStyle.background.color" aria-label="自定义背景色" />
+          </div>
+          <div class="field">
+            <label class="field-label">圆角</label>
+            <el-select v-model="activeCard.visualStyle.radius" aria-label="组件圆角" style="width: 100%">
           <el-option :value="0" label="无圆角" />
           <el-option :value="8" label="小圆角" />
           <el-option :value="12" label="标准圆角" />
           <el-option :value="16" label="大圆角" />
-        </el-select>
-      </div>
-      <div class="field">
-        <label class="field-label">阴影</label>
-        <el-select v-model="activeCard.visualStyle.shadow" aria-label="组件阴影" style="width: 100%">
+            </el-select>
+          </div>
+          <div class="field">
+            <label class="field-label">阴影</label>
+            <el-select v-model="activeCard.visualStyle.shadow" aria-label="组件阴影" style="width: 100%">
           <el-option value="none" label="无阴影" />
           <el-option value="subtle" label="轻微阴影" />
           <el-option value="medium" label="标准阴影" />
-        </el-select>
-      </div>
-      <div class="field">
-        <label class="field-label">内边距</label>
-        <el-select v-model="activeCard.visualStyle.padding" aria-label="组件内边距" style="width: 100%">
+            </el-select>
+          </div>
+          <div class="field">
+            <label class="field-label">内边距</label>
+            <el-select v-model="activeCard.visualStyle.padding" aria-label="组件内边距" style="width: 100%">
           <el-option :value="0" label="紧凑" />
           <el-option :value="8" label="标准" />
           <el-option :value="16" label="宽松" />
-        </el-select>
-      </div>
+            </el-select>
+          </div>
+        </div>
+      </details>
       <div v-if="activeCard.type === 'table'" class="field row">
         <span class="field-label">显示表头</span>
         <el-switch v-model="activeCard.showHeader" aria-label="显示表头" />
@@ -389,6 +390,28 @@ function typeLabel(t: string) {
 .field.row .field-label {
   margin-bottom: 0;
 }
+.style-settings {
+  margin: 4px 0 14px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--db-bg) 50%, transparent);
+}
+.style-settings > .style-section-title {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.style-settings > .style-section-title::-webkit-details-marker { display: none; }
+.style-settings > .style-section-title::after { content: '⌄'; color: var(--db-text-muted); }
+.style-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+  padding: 0 12px 2px;
+}
+.style-field-grid .field { min-width: 0; }
 .field.note {
   font-size: 12px;
   color: var(--db-text-muted);

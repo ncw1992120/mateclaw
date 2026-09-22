@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent } from '@/types'
-import { cloneInsightComponentForPaste } from '../insight-component-clipboard'
+import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '../insight-component-clipboard'
 
 function createComponent(): InsightComponent {
   return {
@@ -47,5 +47,29 @@ describe('Insight component clipboard', () => {
     expect(clone.boundFilterIds).toEqual(['filter-source'])
     expect(clone.containerConfig?.tabs[0].children[0].boundFilterIds).toEqual(['filter-source'])
     expect(source.position).toEqual({ x: 2, y: 3, w: 8, h: 6 })
+  })
+
+  it('clones a combination child with new recursive IDs and an offset layout', () => {
+    const source = {
+      id: 'child-source',
+      type: 'combination' as const,
+      title: '策略执行',
+      visualStyle: { border: { enabled: true, color: '#123456' } },
+      dataSource: { datasourceId: 'source-1', metrics: ['sent_count'] },
+      layout: { x: 24, y: 36, col: 6, h: 180 },
+      children: [{ id: 'nested-child', type: 'kpi' as const, title: '下发次数', layout: { x: 8, y: 8, col: 6, h: 96 } }],
+      containerConfig: { tabs: [{ id: 'tab-source', title: '指标视角', children: [] }], activeTab: 'tab-source' },
+    }
+    let sequence = 0
+    const clone = cloneCombinationChildForPaste(source, (prefix) => `${prefix}-new-${++sequence}`)
+
+    expect(clone.id).toBe('comp-new-1')
+    expect(clone.title).toBe(source.title)
+    expect(clone.visualStyle).toEqual(source.visualStyle)
+    expect(clone.dataSource).toEqual(source.dataSource)
+    expect(clone.layout).toMatchObject({ x: 36, y: 48, col: 6, h: 180 })
+    expect(clone.children?.[0].id).toBe('comp-new-2')
+    expect(clone.containerConfig?.tabs[0].id).toBe('tab-new-3')
+    expect(clone.containerConfig?.activeTab).toBe('tab-source')
   })
 })

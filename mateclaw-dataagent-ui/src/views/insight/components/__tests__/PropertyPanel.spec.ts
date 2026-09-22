@@ -111,6 +111,7 @@ describe('PropertyPanel', () => {
 
     const styleSelect = wrapper.get('select[aria-label="标题栏样式"]')
     expect(styleSelect.findAll('option').map(option => option.text())).toEqual([
+      '隐藏标题栏',
       '标准卡片',
       '简洁文本',
       '强调色',
@@ -119,6 +120,54 @@ describe('PropertyPanel', () => {
 
     await styleSelect.setValue('accent')
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ titleBarStyle: 'accent' })
+  })
+
+  it('所有组件共用样式设置，且不再暴露重复的标题开关', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { component, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('.style-section-title').text()).toBe('样式设置')
+    expect(wrapper.find('[aria-label="显示标题栏"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="显示标题"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="组件阴影"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="组合容器阴影"]').exists()).toBe(false)
+    expect(wrapper.findAll('.style-field-grid').length).toBeGreaterThan(0)
+
+    await wrapper.get('select[aria-label="组件阴影"]').setValue('medium')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { shadow: 'medium' } })
+  })
+
+  it('组合卡片只显示统一样式设置，不重复展示容器样式配置', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'combination-1',
+          type: 'combination',
+          title: '组合卡片',
+          position: { x: 0, y: 0, w: 8, h: 6 },
+          containerConfig: {
+            title: '组合卡片', showTitle: true, background: '#fff', radius: 12, padding: 16,
+            shadow: 'medium', layoutMode: 'free', tabs: [],
+            style: { border: { enabled: false, color: 'transparent' } },
+          },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('[aria-label="组件边框"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="组合容器边框"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="组件阴影"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="组合容器阴影"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="组件圆角"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="组合容器圆角"]').exists()).toBe(false)
   })
 
   it('defaults new filter configuration to dynamic options before datasource setup', async () => {
@@ -410,11 +459,13 @@ describe('PropertyPanel', () => {
 
     await wrapper.setProps({ component: inner })
     await nextTick()
-    await wrapper.findAll('.el-switch-stub')[1].trigger('click')
+    await wrapper.get('select[aria-label="标题栏样式"]').setValue('hidden')
 
     const emitted = wrapper.emitted('change') ?? []
     expect(emitted.at(-1)?.[0]).toMatchObject({
       id: 'inner-combination',
+      titleBarStyle: 'hidden',
+      showTitle: false,
       containerConfig: { showTitle: false },
     })
     expect((emitted.at(-1)?.[0] as any).children).toBeUndefined()
@@ -436,7 +487,7 @@ describe('PropertyPanel', () => {
 
     await nextTick()
 
-    expect(wrapper.find('.el-switch-stub').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="标题栏样式"]').exists()).toBe(true)
     expect(wrapper.find('.combination-tab-add').exists()).toBe(true)
   })
 })
