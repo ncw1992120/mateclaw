@@ -27,7 +27,7 @@ class TaskExecutor:
         with open(user_path, "w", encoding="utf-8") as f: f.write(script)
         with open(path, "w", encoding="utf-8") as f:
             f.write("import json\nimport os\nfrom mateclaw.datasets import DatasetClient\n")
-            f.write("datasets = DatasetClient(os.environ['MATECLAW_DATASET_ENDPOINT'], os.environ['MATECLAW_READ_TOKEN'], json.loads(os.environ.get('MATECLAW_TASK_PARAMETERS', '{}'))) if os.environ.get('MATECLAW_DATASET_ENDPOINT') and os.environ.get('MATECLAW_READ_TOKEN') else None\n")
+            f.write("datasets = DatasetClient(os.environ['MATECLAW_DATASET_ENDPOINT'], os.environ['MATECLAW_READ_TOKEN'], json.loads(os.environ.get('MATECLAW_TASK_PARAMETERS', '{}')), input_endpoint=(os.environ.get('MATECLAW_INPUT_ENDPOINT') or None)) if os.environ.get('MATECLAW_DATASET_ENDPOINT') and os.environ.get('MATECLAW_READ_TOKEN') else None\n")
             f.write("exec(compile(open('user_script.py', encoding='utf-8').read(), 'user_script.py', 'exec'))\n")
             # 统一输出契约：result 标准化为 envelope；非法输出显式失败，不再 default=str 掩盖
             f.write("from mateclaw.results import normalize_result, ResultContractError\n")

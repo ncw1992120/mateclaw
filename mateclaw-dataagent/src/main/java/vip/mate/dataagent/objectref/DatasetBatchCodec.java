@@ -57,6 +57,13 @@ public final class DatasetBatchCodec {
     /** 受控读取 Parquet 结果用于页面预览；正式大结果仍保留 ObjectRef，不一次性加载无限数据。 */
     public static List<Map<String, Object>> readRows(DatasetAccessContext context, ObjectRef reference,
                                                        ObjectRefService refs, int maxRows) {
+        return readRows(context, reference, refs, 0, maxRows);
+    }
+
+    /** 受控分批读取：跳过 offset 行后最多读取 maxRows 行（用于 prepared input 批次游标续读）。 */
+    public static List<Map<String, Object>> readRows(DatasetAccessContext context, ObjectRef reference,
+                                                     ObjectRefService refs, int offset, int maxRows) {
+        if (offset < 0) throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "offset 不能为负");
         if (maxRows <= 0 || maxRows > 10_000) throw new DatasetReadException(DatasetReadErrorCode.RESULT_LIMIT_EXCEEDED, "结果行数超限");
         java.nio.file.Path temp = null;
         try (InputStream in = refs.open(context, reference)) {
@@ -65,7 +72,9 @@ public final class DatasetBatchCodec {
             List<Map<String, Object>> rows = new ArrayList<>();
             try (var reader = AvroParquetReader.<GenericRecord>builder(new Path(temp.toUri())).build()) {
                 GenericRecord record;
+                int skipped = 0;
                 while (rows.size() < maxRows && (record = reader.read()) != null) {
+                    if (skipped++ < offset) continue;
                     Map<String, Object> row = new LinkedHashMap<>();
                     for (Schema.Field field : record.getSchema().getFields()) {
                         Object value = record.get(field.name());

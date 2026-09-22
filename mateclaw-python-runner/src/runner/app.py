@@ -16,7 +16,8 @@ async def submit(request: TaskRequest):
     def run():
         try:
             result = executor.start(request.taskId, request.script,
-                {"MATECLAW_DATASET_ENDPOINT": request.datasetReadEndpoint, "MATECLAW_READ_TOKEN": request.readToken},
+                {"MATECLAW_DATASET_ENDPOINT": request.datasetReadEndpoint, "MATECLAW_READ_TOKEN": request.readToken,
+                 "MATECLAW_INPUT_ENDPOINT": request.datasetInputEndpoint or ""},
                 request.limits.timeout_seconds, request.limits.max_stdout_bytes, request.limits.max_result_bytes,
                 request.resultUploadEndpoint, request.readToken,
                 request.limits.max_memory_mb, request.limits.max_file_bytes,

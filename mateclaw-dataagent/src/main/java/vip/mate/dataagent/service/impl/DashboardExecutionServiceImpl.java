@@ -102,6 +102,8 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         runnerRequest.put("parameters", prepared.parameters());
         runnerRequest.put("limits", limits);
         runnerRequest.put("datasetReadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/read");
+        // 新契约：prepared input 只按 inputName 读取；旧 datasetReadEndpoint 保留供旧脚本兼容
+        runnerRequest.put("datasetInputEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/input");
         runnerRequest.put("resultUploadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/result");
         runnerRequest.put("readToken", prepared.readToken());
         DashboardExecutionEntity execution = new DashboardExecutionEntity();

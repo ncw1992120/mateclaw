@@ -17,6 +17,8 @@ class TaskRequest(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     limits: Limits = Field(default_factory=Limits)
     datasetReadEndpoint: str
+    # 新契约：prepared input 端点（只按 inputName 读取）；旧任务可缺省
+    datasetInputEndpoint: str | None = None
     resultUploadEndpoint: str | None = None
     readToken: str = Field(min_length=1)
 
@@ -32,6 +34,13 @@ class TaskRequest(BaseModel):
         if parsed.hostname not in allowed:
             raise ValueError("datasetReadEndpoint host is not allowlisted")
         return value.rstrip("/")
+
+    @field_validator("datasetInputEndpoint")
+    @classmethod
+    def validate_input_endpoint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return cls.validate_internal_endpoint(value)
 
     @field_validator("resultUploadEndpoint")
     @classmethod
