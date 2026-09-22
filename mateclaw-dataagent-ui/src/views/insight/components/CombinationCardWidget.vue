@@ -165,6 +165,7 @@ import type {
   ResolvedDashboardTheme,
 } from '@/types'
 import { resolveCombinationBackground } from '@/utils/combination-theme'
+import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -216,10 +217,11 @@ function defaultConfig(): InsightCombinationConfig {
     backgroundMode: 'theme',
     radius: 12,
     padding: 16,
+    shadow: 'none',
     layoutMode: 'free',
     tabs: [],
     activeTab: undefined,
-    style: { border: { enabled: false, color: 'transparent' } },
+    style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
   }
 }
 const cfg = computed<InsightCombinationConfig>(() => props.component.containerConfig ?? defaultConfig())
@@ -228,7 +230,16 @@ const rootStyle = computed<Record<string, string>>(() => ({
   background: resolveCombinationBackground(cfg.value.background, cfg.value.backgroundMode),
   borderRadius: cfg.value.radius + 'px',
   padding: cfg.value.padding + 'px',
-  border: cfg.value.style.border.enabled ? `1px solid ${cfg.value.style.border.color}` : '1px solid transparent',
+  border: cfg.value.style.border.mode === 'visible' || (!cfg.value.style.border.mode && cfg.value.style.border.enabled)
+    ? `${cfg.value.style.border.width ?? 1}px ${cfg.value.style.border.style ?? 'solid'} ${cfg.value.style.border.colorMode === 'theme' ? 'var(--db-border)' : cfg.value.style.border.color}`
+    : cfg.value.style.border.mode === 'theme'
+      ? `${cfg.value.style.border.width ?? 1}px ${cfg.value.style.border.style ?? 'solid'} var(--db-border)`
+      : '1px solid transparent',
+  boxShadow: cfg.value.shadow === 'medium'
+    ? 'var(--shadow-card-hover, 0 8px 24px rgba(15, 23, 42, 0.12))'
+    : cfg.value.shadow === 'subtle'
+      ? 'var(--shadow-card, 0 2px 10px rgba(15, 23, 42, 0.06))'
+      : 'none',
 }))
 
 /** 当前激活页签的子卡片数组（无页签则用 component.children） */
@@ -251,6 +262,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     title: child.title,
     showTitle: child.showTitle,
     titleBarStyle: child.titleBarStyle,
+    visualStyle: child.visualStyle,
     showHeader: child.showHeader,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
@@ -266,8 +278,10 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
+  const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
   if (cfg.value.layoutMode === 'free') {
     return {
+      ...visualStyle,
       position: 'absolute',
       left: child.layout.x + 'px',
       top: child.layout.y + 'px',
@@ -276,9 +290,9 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
     }
   }
   if (cfg.value.layoutMode === 'grid') {
-    return { gridColumn: `span ${child.layout.col}` }
+    return { ...visualStyle, gridColumn: `span ${child.layout.col}` }
   }
-  return {}
+  return visualStyle
 }
 
 // ── 拖拽添加子组件（整卡落区）────────────────────────────
@@ -765,9 +779,11 @@ const { onTabKeydown } = useTabKeyboard(
 
 .cc-child {
   box-sizing: border-box;
-  border: 1px solid var(--db-border);
-  border-radius: 8px;
-  background: var(--db-surface-card, var(--db-card));
+  border: var(--component-border, 1px solid var(--db-border));
+  border-radius: var(--component-radius, 8px);
+  background: var(--component-surface, var(--db-surface-card, var(--db-card)));
+  box-shadow: var(--component-shadow, none);
+  padding: var(--component-padding, 0px);
   display: flex;
   flex-direction: column;
   /* overflow 必须可见：八向缩放手柄有 7px 探出子卡片边界，hidden 会把可点击区域裁掉，

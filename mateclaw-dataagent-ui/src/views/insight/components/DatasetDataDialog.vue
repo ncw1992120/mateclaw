@@ -190,7 +190,7 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
 import { previewInput } from '@/api/dataset'
-import { draftRequestForDataset } from './card-attribute/useInsight'
+import { draftRequestForDataset, isPersistedBackendDatasetId } from './card-attribute/useInsight'
 import type { DatasetConfig } from './card-attribute/useInsight'
 import { listAnalysisViewFields } from '@/api/datasource'
 import { resolveFieldLabel } from '@/utils/field-mapping'
@@ -431,7 +431,7 @@ async function fetchRows(reset: boolean): Promise<void> {
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 不应要求前端重新携带 SQL 才能查看数据。用户在弹窗内修改 SQL 后，
     // 才降级到草稿预览，以保留“改完点查询”的编辑能力。
-    const savedDefinitionUnchanged = Boolean(props.dataset.backendDatasetId)
+    const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
       && (!isSql.value || sql.value === (props.dataset.jdbc?.sql ?? ''))
     const batch = savedDefinitionUnchanged
       ? await previewInput({

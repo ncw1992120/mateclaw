@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, ComponentResultSet, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { getExecutionResult } from '@/api/insight-dashboard'
@@ -109,6 +109,7 @@ export interface CardItem {
   title: string
   showTitle: boolean
   titleBarStyle: 'standard' | 'minimal' | 'accent' | 'section'
+  visualStyle: ComponentVisualStyle
   showHeader: boolean
   multiMetric: boolean // 多指标模式（仅 KPI/指标卡）
   multiTab: boolean // 多 TAB 模式（仅 KPI/指标卡）
@@ -1160,6 +1161,11 @@ export const SOURCE_LABEL: Record<string, string> = {
   file: '文件',
 }
 
+/** 后端 DatasetReadRequest.datasetId 是 Long；编辑器本地草稿使用 ds-xxx 临时 ID。 */
+export function isPersistedBackendDatasetId(value: string | undefined | null): boolean {
+  return !!value && /^[1-9]\d*$/.test(value)
+}
+
 /**
  * 后端 datasetInput → 面板数据集配置。
  * 字段注册表由后端 fieldMappings 恢复（source=字段名、target=展示名），
@@ -1169,9 +1175,10 @@ export function datasetFromInput(input: DashboardDatasetInput, index = 0): Datas
   const sourceType = mapSourceTypeIn(input.sourceType)
   const rawType = String(input.sourceType ?? '').toUpperCase()
   const cfg = input.sourceConfig ?? {}
+  const inputDatasetId = input.datasetId ? String(input.datasetId) : undefined
   const ds: DatasetConfig = {
-    id: input.datasetId ? String(input.datasetId) : `ds-${index}`,
-    backendDatasetId: input.datasetId ? String(input.datasetId) : undefined,
+    id: inputDatasetId ?? `ds-${index}`,
+    backendDatasetId: isPersistedBackendDatasetId(inputDatasetId) ? inputDatasetId : undefined,
     sourceType,
     sourceLabel: input.displayName || SOURCE_LABEL[sourceType] || String(input.sourceType ?? ''),
     alias: input.inputName || `table${index + 1}`,

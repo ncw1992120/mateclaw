@@ -1212,6 +1212,24 @@ export interface PythonTransformConfig {
 /** 组件标题栏的内置样式，避免组件通过任意 CSS 破坏仪表盘一致性。 */
 export type ComponentTitleBarStyle = 'standard' | 'minimal' | 'accent' | 'section'
 
+/** 组件通用展示样式；编辑器选中框不属于该配置。 */
+export interface ComponentVisualStyle {
+  border?: {
+    mode: 'theme' | 'visible' | 'hidden'
+    colorMode?: 'theme' | 'custom'
+    color?: string
+    width?: 1 | 2
+    style?: 'solid' | 'dashed'
+  }
+  background?: {
+    mode: 'theme' | 'transparent' | 'custom'
+    color?: string
+  }
+  radius?: number
+  shadow?: 'none' | 'subtle' | 'medium'
+  padding?: number
+}
+
 /** 仪表盘组件定义 */
 export interface InsightComponent {
   /** 组件唯一 ID */
@@ -1224,6 +1242,8 @@ export interface InsightComponent {
   showTitle?: boolean
   /** 标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
+  /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
+  visualStyle?: ComponentVisualStyle
   /** 数据表是否显示表头（默认显示） */
   showHeader?: boolean
   /** 栅格位置 */
@@ -1346,6 +1366,8 @@ export interface InsightCombinationChild {
   showTitle?: boolean
   /** 子卡片标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
+  /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
+  visualStyle?: ComponentVisualStyle
   /** 数据表子卡片是否显示表头（默认显示） */
   showHeader?: boolean
   /** 图表子类型（仅 chart） */
@@ -1398,6 +1420,8 @@ export interface InsightCombinationConfig {
   radius: number
   /** 内边距 px */
   padding: number
+  /** 容器阴影 */
+  shadow?: 'none' | 'subtle' | 'medium'
   /** 内部布局模式：自由布局 / 栅格 / 垂直流 */
   layoutMode: 'free' | 'grid' | 'vertical'
   /** 页签列表（非空时启用多页签） */
@@ -1409,6 +1433,10 @@ export interface InsightCombinationConfig {
     border: {
       enabled: boolean
       color: string
+      mode?: 'theme' | 'visible' | 'hidden'
+      colorMode?: 'theme' | 'custom'
+      width?: 1 | 2
+      style?: 'solid' | 'dashed'
     }
   }
 }

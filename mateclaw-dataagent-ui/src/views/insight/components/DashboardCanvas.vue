@@ -62,7 +62,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
-          :style="{ animationDelay: `${index * 40}ms` }"
+          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -180,6 +180,7 @@ import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 import { themeCssVariables } from '@/utils/dashboard-theme'
+import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
@@ -699,10 +700,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--db-surface-card, var(--db-card));
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  background: var(--component-surface, var(--db-surface-card, var(--db-card)));
+  border: var(--component-border, 1px solid var(--db-border));
+  border-radius: var(--component-radius, var(--radius-lg));
+  box-shadow: var(--component-shadow, var(--shadow-card));
+  padding: var(--component-padding, 0px);
   transition: box-shadow var(--transition-base), border-color var(--transition-fast);
 }
 

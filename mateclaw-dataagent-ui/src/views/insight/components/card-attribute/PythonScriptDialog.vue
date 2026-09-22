@@ -22,7 +22,7 @@
           <el-button v-if="mode === 'generated'" size="small" text type="warning" data-testid="unlock-btn" @click="unlock">解锁编辑系统区域</el-button>
         </span>
       </div>
-      <pre v-if="mode === 'generated'" class="py-readonly" data-testid="system-code-readonly">{{ state.pythonSystem }}</pre>
+      <pre v-if="mode === 'generated'" class="py-readonly py-highlighted" data-testid="system-code-readonly"><code v-html="highlightedSystemCode" /></pre>
       <el-input
         v-else
         v-model="managedCode"
@@ -54,7 +54,10 @@
     <!-- 用户处理区域（可编辑；系统操作不影响此处） -->
     <div class="py-block">
       <div class="py-title">用户处理区域（可编辑）</div>
-      <el-input v-model="userCode" type="textarea" :rows="10" class="py-edit" data-testid="user-code" aria-label="用户处理区域" />
+      <div class="py-editor-shell" data-testid="python-editor">
+        <pre ref="userHighlightRef" class="py-highlight" aria-hidden="true"><code v-html="highlightedUserCode" /></pre>
+        <el-input ref="userEditorRef" v-model="userCode" type="textarea" :rows="10" class="py-edit py-input-overlay" data-testid="user-code" aria-label="用户处理区域" />
+      </div>
     </div>
 
     <template #footer>
@@ -67,16 +70,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useInsight, currentPythonSource } from './useInsight'
 import { effectiveSystemCode, fingerprintSystemSource, generateSystemScript, restoreGenerated } from '@/utils/python-script-template'
+import { highlightPython } from '@/utils/python-syntax'
 
 const { state, savePython, openPreview, runComponentPreview } = useInsight()
 const ui = state.ui
 const userCode = ref('')
 const executing = ref(false)
 const showDiff = ref(false)
+const userEditorRef = ref<unknown>(null)
+const userHighlightRef = ref<HTMLElement | null>(null)
+
+const highlightedSystemCode = computed(() => highlightPython(state.pythonSystem || ''))
+const highlightedUserCode = computed(() => highlightPython(userCode.value))
 
 const mode = computed(() => state.pythonSystemState?.mode ?? 'generated')
 const hasUpdate = computed(() => state.pythonSystemState?.hasGeneratedUpdate ?? false)
@@ -96,9 +105,35 @@ watch(
     if (v) {
       userCode.value = state.pythonUser
       showDiff.value = false
+      void nextTick(bindEditorScroll)
     }
   },
 )
+
+function findUserEditor(): HTMLTextAreaElement | null {
+  const root = userEditorRef.value as { $el?: HTMLElement } | HTMLElement | null
+  if (!root) return null
+  if (root instanceof HTMLTextAreaElement) return root
+  return root.$el?.querySelector('textarea') ?? root.querySelector?.('textarea') ?? null
+}
+
+function syncEditorScroll(): void {
+  const editor = findUserEditor()
+  const highlight = userHighlightRef.value
+  if (!editor || !highlight) return
+  highlight.scrollTop = editor.scrollTop
+  highlight.scrollLeft = editor.scrollLeft
+}
+
+function bindEditorScroll(): void {
+  const editor = findUserEditor()
+  if (!editor) return
+  editor.removeEventListener('scroll', syncEditorScroll)
+  editor.addEventListener('scroll', syncEditorScroll)
+  syncEditorScroll()
+}
+
+onBeforeUnmount(() => findUserEditor()?.removeEventListener('scroll', syncEditorScroll))
 
 // 重新生成系统区域（generated 模式；基于真实数据集 + 筛选器绑定），不覆盖用户处理区域
 function regenSystem() {
@@ -219,6 +254,68 @@ async function onExec() {
   margin: 0;
   max-height: 200px;
   overflow: auto;
+  color: var(--el-text-color-secondary);
+}
+.py-readonly code,
+.py-highlight code {
+  font-family: inherit;
+}
+.py-editor-shell {
+  position: relative;
+  min-height: 214px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color);
+  border-radius: 5px;
+  background: var(--el-fill-color-blank);
+}
+.py-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 11px;
+  overflow: hidden;
+  color: var(--el-text-color-primary);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+.py-input-overlay {
+  position: relative;
+  z-index: 1;
+}
+.py-input-overlay :deep(.el-textarea__inner) {
+  box-sizing: border-box;
+  min-height: 214px !important;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--el-color-primary);
+  -webkit-text-fill-color: transparent;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+.py-input-overlay :deep(.el-textarea__inner:focus) {
+  box-shadow: none;
+}
+.py-highlight :deep(.hljs-keyword),
+.py-highlight :deep(.hljs-built_in),
+.py-highlight :deep(.hljs-title.function_),
+.py-readonly :deep(.hljs-keyword),
+.py-readonly :deep(.hljs-built_in),
+.py-readonly :deep(.hljs-title.function_) {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+.py-highlight :deep(.hljs-string),
+.py-readonly :deep(.hljs-string) {
+  color: var(--el-color-success);
+}
+.py-highlight :deep(.hljs-comment),
+.py-readonly :deep(.hljs-comment) {
   color: var(--el-text-color-secondary);
 }
 .py-edit :deep(textarea) {

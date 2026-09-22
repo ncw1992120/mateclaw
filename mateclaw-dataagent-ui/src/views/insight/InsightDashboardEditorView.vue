@@ -1,5 +1,5 @@
 <template>
-  <div class="insight-editor-view" :style="themeCssVariables(dashboardTheme)" @click="closeComponentContextMenu">
+  <div class="insight-editor-view" @click="closeComponentContextMenu">
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
@@ -344,7 +344,8 @@ import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tab
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
-import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
+import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -849,6 +850,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
     position: { x, y, w, h },
     chartType: payload.chartType,
     titleBarStyle: 'standard',
+    visualStyle: defaultComponentVisualStyle(payload.type),
     dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' && payload.type !== 'combination' ? {
       datasourceId: '',
       metrics: [],
@@ -871,10 +873,11 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
       backgroundMode: 'theme',
       radius: 12,
       padding: 16,
+      shadow: 'none',
       layoutMode: 'free',
       tabs: [],
       activeTab: undefined,
-      style: { border: { enabled: false, color: 'transparent' } },
+      style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
     } : undefined,
   }
   page.components.push(newComponent)
@@ -1052,6 +1055,7 @@ function handleComponentChange(updated: InsightComponent): void {
       child.title = updated.title
       child.showTitle = updated.showTitle
       child.titleBarStyle = updated.titleBarStyle
+      child.visualStyle = updated.visualStyle
       child.showHeader = updated.showHeader
       child.chartType = updated.chartType
       child.config = updated.config

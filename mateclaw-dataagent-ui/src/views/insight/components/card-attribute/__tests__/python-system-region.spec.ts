@@ -176,6 +176,20 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     wrapper.unmount()
   })
 
+  it('用户处理区域显示 Python 关键字高亮，同时保留可编辑文本框', async () => {
+    state.pythonSystemState = {
+      mode: 'generated', generatedCode: 'table1 = datasets.read()', generatedFingerprint: 'fp1',
+      userCode: 'def normalize(value):\n    return len(value)', hasGeneratedUpdate: false,
+    }
+    state.pythonSystem = 'table1 = datasets.read()'
+    state.pythonUser = state.pythonSystemState.userCode
+    const wrapper = await mountDialog()
+
+    expect(wrapper.find('[data-testid="python-editor"] .hljs-keyword').text()).toBe('def')
+    expect(wrapper.find('[data-testid="user-code"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('managed 模式：配置变化产生候选提示，保留当前版本不覆盖用户代码', async () => {
     state.pythonSystemState = {
       mode: 'managed', generatedCode: 'OLD', managedCode: 'dataset_a = custom_read()',

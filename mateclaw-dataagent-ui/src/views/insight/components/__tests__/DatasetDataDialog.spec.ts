@@ -5,10 +5,19 @@ const previewDatasetDraft = vi.fn(async () => ({
   rows: [{ trade_date: '2026-09-01' }] as Record<string, unknown>[],
   schema: ['trade_date'],
 }))
+const previewInput = vi.fn(async () => ({
+  rows: [{ trade_date: '2026-09-01' }] as Record<string, unknown>[],
+  schema: ['trade_date'],
+}))
 
 vi.mock('../card-attribute/useInsightBackend', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../card-attribute/useInsightBackend')>()
   return { ...actual, previewDatasetDraft: (...args: unknown[]) => previewDatasetDraft(...(args as [])) }
+})
+
+vi.mock('@/api/dataset', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/dataset')>()
+  return { ...actual, previewInput: (...args: unknown[]) => previewInput(...(args as [])) }
 })
 
 /** 指标视图字段清单：两个维度 + 一个指标（指标不该出现在筛选项里） */
@@ -91,6 +100,8 @@ beforeEach(() => {
   state.ui.dataDialog = { visible: false, datasetId: '' }
   state.filterBindings = []
   clearAllCachedQueries()
+  previewDatasetDraft.mockClear()
+  previewInput.mockClear()
 })
 
 describe('查看数据弹窗 · 保留最近一次执行结果', () => {
@@ -134,6 +145,16 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     // 条件区展示的是新条件，不是产生缓存结果的那份
     expect(again.find('select.dd-field').element.value).toBe('cust_type')
     again.unmount()
+  })
+
+  it('本地 ds- 临时 ID 不调用 Long 主键接口，而回退草稿预览', async () => {
+    const dataset = metricViewDataset({ backendDatasetId: 'ds-1789983261389' })
+    const wrapper = await openWith(dataset)
+    await runQuery(wrapper)
+
+    expect(previewInput).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('没有缓存时维持空态，不假装查过', async () => {

@@ -32,6 +32,79 @@
           <el-option value="section" label="分组标题" />
         </el-select>
       </div>
+      <div class="style-section-title">组件展示样式</div>
+      <div class="form-group">
+        <label class="form-label">边框</label>
+        <el-select v-model="localComponent.visualStyle!.border!.mode" aria-label="组件边框" style="width: 100%" @change="emitChange">
+          <el-option value="theme" label="跟随主题" />
+          <el-option value="visible" label="显示" />
+          <el-option value="hidden" label="隐藏" />
+        </el-select>
+      </div>
+      <template v-if="localComponent.visualStyle?.border?.mode === 'visible'">
+        <div class="form-group">
+          <label class="form-label">边框颜色</label>
+          <el-select v-model="localComponent.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%" @change="emitChange">
+            <el-option value="theme" label="跟随主题" />
+            <el-option value="custom" label="自定义颜色" />
+          </el-select>
+        </div>
+        <div v-if="localComponent.visualStyle.border.colorMode === 'custom'" class="form-group">
+          <label class="form-label">自定义边框颜色</label>
+          <el-color-picker v-model="localComponent.visualStyle.border.color" aria-label="自定义边框颜色" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">边框粗细</label>
+          <el-select v-model="localComponent.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%" @change="emitChange">
+            <el-option :value="1" label="1px" />
+            <el-option :value="2" label="2px" />
+          </el-select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">边框样式</label>
+          <el-select v-model="localComponent.visualStyle.border.style" aria-label="组件边框样式" style="width: 100%" @change="emitChange">
+            <el-option value="solid" label="实线" />
+            <el-option value="dashed" label="虚线" />
+          </el-select>
+        </div>
+      </template>
+      <div class="form-group">
+        <label class="form-label">背景</label>
+        <el-select v-model="localComponent.visualStyle!.background!.mode" aria-label="组件背景" style="width: 100%" @change="emitChange">
+          <el-option value="theme" label="跟随主题" />
+          <el-option value="transparent" label="透明" />
+          <el-option value="custom" label="自定义颜色" />
+        </el-select>
+      </div>
+      <div v-if="localComponent.visualStyle?.background?.mode === 'custom'" class="form-group">
+        <label class="form-label">自定义背景色</label>
+        <el-color-picker v-model="localComponent.visualStyle.background.color" aria-label="自定义背景色" @change="emitChange" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">圆角</label>
+        <el-select v-model="localComponent.visualStyle!.radius" aria-label="组件圆角" style="width: 100%" @change="emitChange">
+          <el-option :value="0" label="无圆角" />
+          <el-option :value="8" label="小圆角" />
+          <el-option :value="12" label="标准圆角" />
+          <el-option :value="16" label="大圆角" />
+        </el-select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">阴影</label>
+        <el-select v-model="localComponent.visualStyle!.shadow" aria-label="组件阴影" style="width: 100%" @change="emitChange">
+          <el-option value="none" label="无阴影" />
+          <el-option value="subtle" label="轻微阴影" />
+          <el-option value="medium" label="标准阴影" />
+        </el-select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">内边距</label>
+        <el-select v-model="localComponent.visualStyle!.padding" aria-label="组件内边距" style="width: 100%" @change="emitChange">
+          <el-option :value="0" label="紧凑" />
+          <el-option :value="8" label="标准" />
+          <el-option :value="16" label="宽松" />
+        </el-select>
+      </div>
       <div v-if="component.type === 'table'" class="form-group form-group-row">
         <label class="form-label">显示表头</label>
         <el-switch v-model="localComponent.showHeader" aria-label="显示表头" @change="emitChange" />
@@ -45,6 +118,13 @@
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.background') }}</label>
+          <el-radio-group v-model="localComponent.containerConfig.backgroundMode" aria-label="组合卡片背景来源" @change="emitChange">
+            <el-radio value="theme">跟随主题</el-radio>
+            <el-radio value="custom">自定义颜色</el-radio>
+          </el-radio-group>
+        </div>
+        <div v-if="localComponent.containerConfig.backgroundMode === 'custom'" class="form-group">
+          <label class="form-label">自定义背景色</label>
           <div class="combination-color-row">
             <el-color-picker
               v-model="localComponent.containerConfig.background"
@@ -60,12 +140,55 @@
           </div>
         </div>
         <div class="form-group">
+          <label class="form-label">容器边框</label>
+          <el-select v-model="localComponent.containerConfig.style.border.mode" aria-label="组合容器边框" style="width: 100%" @change="handleContainerBorderModeChange">
+            <el-option value="theme" label="跟随主题" />
+            <el-option value="visible" label="显示" />
+            <el-option value="hidden" label="隐藏" />
+          </el-select>
+        </div>
+        <template v-if="localComponent.containerConfig.style.border.mode === 'visible'">
+          <div class="form-group">
+            <label class="form-label">容器边框颜色</label>
+            <el-select v-model="localComponent.containerConfig.style.border.colorMode" aria-label="组合容器边框颜色" style="width: 100%" @change="emitChange">
+              <el-option value="theme" label="跟随主题" />
+              <el-option value="custom" label="自定义颜色" />
+            </el-select>
+          </div>
+          <div v-if="localComponent.containerConfig.style.border.colorMode === 'custom'" class="form-group">
+            <label class="form-label">自定义容器边框颜色</label>
+            <el-color-picker v-model="localComponent.containerConfig.style.border.color" aria-label="自定义容器边框颜色" @change="emitChange" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">容器边框粗细</label>
+            <el-select v-model="localComponent.containerConfig.style.border.width" aria-label="组合容器边框粗细" style="width: 100%" @change="emitChange">
+              <el-option :value="1" label="1px" />
+              <el-option :value="2" label="2px" />
+            </el-select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">容器边框样式</label>
+            <el-select v-model="localComponent.containerConfig.style.border.style" aria-label="组合容器边框样式" style="width: 100%" @change="emitChange">
+              <el-option value="solid" label="实线" />
+              <el-option value="dashed" label="虚线" />
+            </el-select>
+          </div>
+        </template>
+        <div class="form-group">
           <label class="form-label">{{ t('insight.combination.radius') }}</label>
           <el-input-number v-model="localComponent.containerConfig.radius" :min="0" :max="48" :aria-label="t('insight.combination.radius')" @change="emitChange" />
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.padding') }}</label>
           <el-input-number v-model="localComponent.containerConfig.padding" :min="0" :max="48" :aria-label="t('insight.combination.padding')" @change="emitChange" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">容器阴影</label>
+          <el-select v-model="localComponent.containerConfig.shadow" aria-label="组合容器阴影" style="width: 100%" @change="emitChange">
+            <el-option value="none" label="无" />
+            <el-option value="subtle" label="轻微" />
+            <el-option value="medium" label="明显" />
+          </el-select>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('insight.combination.layoutMode') }}</label>
@@ -683,9 +806,12 @@ import { ElMessage } from 'element-plus'
 import type { InsightComponent, ComponentDataSource, ComponentTab, InsightComponentData, FilterComponentConfig, TimeFilterComponentConfig, AIAnalysisComponentConfig, TimeRangePreset, FilterScope } from '@/types'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import * as datasourceApi from '@/api/datasource'
+import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import { normalizeCombinationBackgroundMode } from '@/utils/combination-theme'
+import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 import InlineHelp from './property/InlineHelp.vue'
 
 defineOptions({
@@ -722,6 +848,13 @@ const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(grou
 
 /** 组合卡片背景色预设 · 统一收敛到 utils/color-presets.ts（与指标样式弹窗共用一处来源） */
 const COMBINATION_BG_PRESETS = CARD_BG_PRESETS
+
+function handleContainerBorderModeChange(mode: 'theme' | 'visible' | 'hidden'): void {
+  if (!localComponent.containerConfig) return
+  localComponent.containerConfig.style.border.enabled = mode === 'visible'
+  localComponent.containerConfig.style.border.colorMode = mode === 'theme' ? 'theme' : localComponent.containerConfig.style.border.colorMode ?? 'custom'
+  emitChange()
+}
 
 /** 本地编辑副本（深拷贝） */
 const localComponent = reactive<InsightComponent>({
@@ -866,29 +999,41 @@ function defaultCombinationConfig(): NonNullable<InsightComponent['containerConf
     title: '',
     showTitle: true,
     background: '#ffffff',
+    backgroundMode: 'theme',
     radius: 12,
     padding: 16,
+    shadow: 'none',
     layoutMode: 'free',
     tabs: [],
     activeTab: undefined,
-    style: { border: { enabled: false, color: 'transparent' } },
+    style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
   }
 }
 
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
   next.titleBarStyle ??= 'standard'
+  next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type)
   if (next.type === 'combination') {
     const defaults = defaultCombinationConfig()
     const config = next.containerConfig ?? {}
+    const background = typeof config.background === 'string' ? config.background : defaults.background
+    const backgroundMode = normalizeCombinationBackgroundMode(config.backgroundMode, background)
     next.containerConfig = {
       ...defaults,
       ...config,
+      background,
+      backgroundMode,
       tabs: config.tabs ?? defaults.tabs,
       style: {
         ...defaults.style,
         ...config.style,
-        border: { ...defaults.style.border, ...config.style?.border },
+        border: {
+          ...defaults.style.border,
+          ...config.style?.border,
+          mode: config.style?.border?.mode ?? (config.style?.border?.enabled ? 'visible' : 'hidden'),
+          colorMode: config.style?.border?.colorMode ?? (config.style?.border?.color && config.style.border.color !== 'transparent' ? 'custom' : 'theme'),
+        },
       },
     }
   }
@@ -1261,9 +1406,13 @@ async function loadFilterDimensions(datasourceId: string, keyword?: string): Pro
   }
   filterDimensionsLoading.value = true
   try {
-    const result = await datasourceApi.listSyncedDimensions(datasourceId, 1, 200, keyword)
-    const list = (result as unknown as Array<{ dimName: string; dimDisplayName: string }>) ?? []
-    // 按 dimName 去重（独立维度表可能存在同名多行，见 listSyncedDimensions 无 DISTINCT）
+    const result = await semanticModelApi.pageAloudataDimensions(String(datasourceId), {
+      pageNumber: 1,
+      pageSize: 200,
+      keyword,
+    })
+    const list = ((result as unknown as { records?: Array<{ dimName: string; dimDisplayName: string }> })?.records ?? [])
+    // 按 dimName 去重，避免目录接口返回重复维度。
     const seen = new Set<string>()
     filterDimensionsOptions.value = list.filter((d) => {
       if (!d.dimName || seen.has(d.dimName)) return false

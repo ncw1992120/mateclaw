@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,7 @@ import PropertyPanel from '../PropertyPanel.vue'
 
 const listSyncedMetricsMock = vi.hoisted(() => vi.fn())
 const listMetricsDimensionDetailsMock = vi.hoisted(() => vi.fn())
-const listSyncedDimensionsMock = vi.hoisted(() => vi.fn().mockResolvedValue([]))
+const pageAloudataDimensionsMock = vi.hoisted(() => vi.fn().mockResolvedValue({ records: [] }))
 const listDimensionValuesMock = vi.hoisted(() => vi.fn())
 const previewComponentMock = vi.hoisted(() => vi.fn())
 const datasourceListMock = vi.hoisted(() => [{ id: '7', name: 'Sales database', sourceType: 'aloudata' }])
@@ -21,8 +21,12 @@ vi.mock('@/stores/useDatasourceStore', () => ({
 vi.mock('@/api/datasource', () => ({
   listSyncedMetrics: listSyncedMetricsMock,
   listMetricsDimensionDetails: listMetricsDimensionDetailsMock,
-  listSyncedDimensions: listSyncedDimensionsMock,
+  listSyncedDimensions: vi.fn().mockResolvedValue([]),
   listDimensionValues: listDimensionValuesMock,
+}))
+
+vi.mock('@/api/semantic-model', () => ({
+  pageAloudataDimensions: pageAloudataDimensionsMock,
 }))
 
 vi.mock('@/api/insight-dashboard', () => ({
@@ -33,7 +37,10 @@ const stubs = {
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>' },
   'el-input': { template: '<input v-bind="$attrs" />' },
   'el-input-number': { template: '<input v-bind="$attrs" />' },
-  'el-select': { template: '<select v-bind="$attrs"><slot /></select>' },
+  'el-select': {
+    props: ['modelValue'],
+    template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>',
+  },
   'el-option-group': { props: ['label'], template: '<optgroup :label="label"><slot /></optgroup>' },
   'el-option': {
     props: ['label', 'value'],
@@ -43,7 +50,12 @@ const stubs = {
     props: ['modelValue'],
     template: '<button class="el-switch-stub" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)">toggle</button>',
   },
+  'el-color-picker': {
+    props: ['modelValue'],
+    template: '<input type="color" v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
+  },
   'el-radio-group': { template: '<div><slot /></div>' },
+  'el-radio': { template: '<label><slot /></label>' },
   'el-radio-button': { template: '<button><slot /></button>' },
   'el-checkbox-group': { template: '<div><slot /></div>' },
   'el-checkbox': { template: '<label><slot /></label>' },
@@ -73,6 +85,22 @@ const i18n = createI18n({
 })
 
 describe('PropertyPanel', () => {
+  it('提供组件边框三态和展示样式配置，并将修改写回组件', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { component, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    const borderSelect = wrapper.get('select[aria-label="组件边框"]')
+    expect(borderSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '显示', '隐藏'])
+    await borderSelect.setValue('visible')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { border: { mode: 'visible' } } })
+    expect(wrapper.find('select[aria-label="组件边框颜色"]').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="组件背景"]').exists()).toBe(true)
+  })
+
   it('exposes the title bar style presets and persists the selection', async () => {
     const wrapper = mount(PropertyPanel, {
       props: { component, allComponents: [] },
@@ -183,6 +211,42 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('[aria-label="insight.property.filterField"]').exists()).toBe(true)
     expect(wrapper.find('.static-options-list').exists()).toBe(false)
 
+    datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
+  })
+
+  it('loads dimensions immediately after selecting a dynamic filter datasource', async () => {
+    datasourceListMock.splice(0, datasourceListMock.length,
+      { id: 'aloudata-1', name: '指标平台', sourceType: 'aloudata' } as any,
+    )
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'filter-dimension-values',
+          type: 'filter',
+          title: '转化指标名称',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: { optionSource: 'dynamic', datasourceId: '', field: '' },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+    pageAloudataDimensionsMock.mockClear()
+    pageAloudataDimensionsMock.mockResolvedValueOnce({
+      records: [{ dimName: 'metric_name', dimDisplayName: '转化指标名称' }],
+    })
+
+    await wrapper.find('[aria-label="insight.property.datasource"]').setValue('aloudata-1')
+    await flushPromises()
+
+    expect(pageAloudataDimensionsMock).toHaveBeenCalledWith('aloudata-1', {
+      pageNumber: 1,
+      pageSize: 200,
+      keyword: undefined,
+    })
+    expect(wrapper.find('option[value="metric_name"]').exists()).toBe(true)
     datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
   })
 

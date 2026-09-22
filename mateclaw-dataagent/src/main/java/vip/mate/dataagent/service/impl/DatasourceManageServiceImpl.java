@@ -70,6 +70,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (ownerId == null) {
             LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(DatasourceEntity::getEnabled, true);
+            wrapper.eq(DatasourceEntity::getDeleted, 0);
             List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
             return entities.stream().map(this::toVO).collect(Collectors.toList());
         }
@@ -78,7 +79,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         // 1. 自己创建的数据源
         LambdaQueryWrapper<DatasourceEntity> ownWrapper = new LambdaQueryWrapper<>();
-        ownWrapper.eq(DatasourceEntity::getOwnerId, ownerId);
+        ownWrapper.eq(DatasourceEntity::getOwnerId, ownerId)
+                .eq(DatasourceEntity::getDeleted, 0);
         List<DatasourceEntity> ownEntities = datasourceMapper.selectList(ownWrapper);
         visibleIds.addAll(ownEntities.stream().map(DatasourceEntity::getId).collect(Collectors.toSet()));
 
@@ -113,7 +115,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         // 3. 工作区内元数据共享的数据源（仅 view 权限，用于元数据查询场景）
         LambdaQueryWrapper<DatasourceEntity> sharedWrapper = new LambdaQueryWrapper<>();
         sharedWrapper.eq(DatasourceEntity::getWorkspaceId, workspaceId)
-                .eq(DatasourceEntity::getMetaShared, true);
+                .eq(DatasourceEntity::getMetaShared, true)
+                .eq(DatasourceEntity::getDeleted, 0);
         List<DatasourceEntity> sharedEntities = datasourceMapper.selectList(sharedWrapper);
         visibleIds.addAll(sharedEntities.stream()
                 .map(DatasourceEntity::getId).collect(Collectors.toSet()));
@@ -124,7 +127,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         List<DatasourceEntity> entities = datasourceMapper.selectList(
                 new LambdaQueryWrapper<DatasourceEntity>()
-                        .in(DatasourceEntity::getId, visibleIds));
+                        .in(DatasourceEntity::getId, visibleIds)
+                        .eq(DatasourceEntity::getDeleted, 0));
         return entities.stream()
                 .map(e -> toVO(e, resolveDatasourcePermission(e)))
                 .collect(Collectors.toList());

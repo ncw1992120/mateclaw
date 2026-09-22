@@ -94,8 +94,8 @@ function handleGenerate(): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--db-card);
-  border-radius: var(--radius-lg);
+  background: var(--component-surface, var(--db-card));
+  border-radius: var(--component-radius, var(--radius-lg));
   overflow: hidden;
 }
 

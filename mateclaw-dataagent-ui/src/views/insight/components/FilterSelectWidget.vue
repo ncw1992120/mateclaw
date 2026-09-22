@@ -153,8 +153,8 @@ function handleChange(value: string | string[]): void {
   gap: var(--space-xs);
   padding: var(--space-md);
   box-sizing: border-box;
-  background: var(--db-card);
-  border-radius: var(--radius-lg);
+  background: var(--component-surface, var(--db-card));
+  border-radius: var(--component-radius, var(--radius-lg));
 }
 
 .filter-label {

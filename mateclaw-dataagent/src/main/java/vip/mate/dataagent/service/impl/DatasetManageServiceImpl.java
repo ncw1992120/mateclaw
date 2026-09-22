@@ -111,6 +111,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     public List<DatasetVO> listDatasets() {
         LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasetEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
+        wrapper.eq(DatasetEntity::getDeleted, 0);
         wrapper.orderByDesc(DatasetEntity::getUpdateTime);
         List<DatasetEntity> entities = datasetMapper.selectList(wrapper);
         return entities.stream().map(this::toVO).collect(Collectors.toList());

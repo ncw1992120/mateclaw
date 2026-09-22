@@ -34,6 +34,7 @@ import {
 } from './useInsight'
 import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useInsight'
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
+import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 
 export type { ComponentDatasetPipeline }
 
@@ -119,6 +120,7 @@ export function hydratePanel(
     title: component.title || '',
     showTitle: component.showTitle !== false,
     titleBarStyle: component.titleBarStyle ?? 'standard',
+    visualStyle: normalizeComponentVisualStyle(component.visualStyle, component.type),
     showHeader: component.showHeader !== false,
     multiMetric: Boolean(component.multiKpi),
     multiTab: Array.isArray(component.tabs) && component.tabs.length > 0,
@@ -196,6 +198,7 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
     title: card.title,
     showTitle: card.showTitle,
     titleBarStyle: card.titleBarStyle,
+    visualStyle: card.visualStyle,
     showHeader: card.showHeader,
   }
   if (card.type === 'kpi') {

@@ -108,4 +108,19 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
     expect(wrapper.get('.combination-card').attributes('style')).toContain('rgb(255, 228, 214)')
     expect(wrapper.get('.combination-card').attributes('style')).not.toContain('var(--db-surface-container)')
   })
+
+  it('容器阴影由容器配置控制，而不是复用子组件样式', () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: false,
+        component: component({
+          title: '有阴影容器', showTitle: true, background: '#ffffff', radius: 12, padding: 16,
+          shadow: 'medium', layoutMode: 'free', tabs: [], style: { border: { enabled: false, color: 'transparent' } },
+        }),
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('box-shadow')
+  })
 })
