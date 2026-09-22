@@ -984,6 +984,20 @@ function openFilterBinding() {
 }
 function saveFilterBindings(arr: FilterBinding[]) {
   state.filterBindings = arr
+  if (state.pythonSystemState) {
+    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
+    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
+  } else if (state.hasPython) {
+    const source = currentPythonSource()
+    const generatedCode = generateSystemScript(source)
+    state.pythonSystemState = {
+      mode: 'generated',
+      generatedCode,
+      generatedFingerprint: fingerprintSystemSource(source),
+      userCode: state.pythonUser,
+    }
+    state.pythonSystem = generatedCode
+  }
   state.ui.filterBinding.visible = false
 }
 

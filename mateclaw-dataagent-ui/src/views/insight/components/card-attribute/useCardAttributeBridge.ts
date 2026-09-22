@@ -10,7 +10,7 @@
  *  2. buildPipeline / buildComponentPatch：面板 state → 回写组件（沿用正式编辑器的持久化口）
  */
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
-import { effectiveSystemCode } from '@/utils/python-script-template'
+import { effectiveSystemCode, reconcileSystemScript } from '@/utils/python-script-template'
 import type {
   ComponentDatasetPipeline,
   ComponentTab,
@@ -22,6 +22,7 @@ import type {
 } from '@/types'
 import {
   buildPipeline,
+  currentPythonSource,
   datasetFromInput,
   hydrateResultSet,
   kpiResultFields,
@@ -140,6 +141,10 @@ export function hydratePanel(
     state.hasPython = Boolean(script.trim())
   }
   state.filterBindings = filterBindingsFromPipeline(pipeline?.scriptFilterBindings ?? [], state.datasets, filterComponents)
+  if (state.pythonSystemState && (pipeline?.scriptFilterBindings?.length ?? 0) > 0) {
+    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
+    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
+  }
   // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
 

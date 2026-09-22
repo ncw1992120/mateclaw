@@ -49,6 +49,16 @@ describe('script template', () => {
     expect(reads[1]).not.toContain('"status"')
   })
 
+  it('generates an optional runtime filter for a field-only binding', () => {
+    const script = buildSystemScript(
+      [{ datasetId: '1', inputName: 'orders' }],
+      [],
+      [{ filterComponentId: '指标日期', inputNames: ['orders'], fieldMappings: { orders: 'metric_time' } }],
+    )
+    expect(script).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+    expect(script).toContain('filters=[')
+  })
+
   it('uses explicit bound operators and parameter names for optional runtime filters', () => {
     const script = buildSystemScript(
       [{ datasetId: '1', inputName: 'orders' }],

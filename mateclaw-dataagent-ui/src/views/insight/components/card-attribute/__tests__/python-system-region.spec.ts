@@ -15,6 +15,66 @@ const { ElMessageBox } = await import('element-plus')
 const { state } = useInsight()
 
 describe('buildPythonSystemRegion', () => {
+  it('保存筛选器绑定后立即刷新系统生成区域的过滤条件', () => {
+    const { saveFilterBindings } = useInsight()
+    state.datasets = [{ id: 'ds1', alias: 'table2' }] as never
+    state.filterBindings = []
+    state.filterCatalog = [{ id: 'filter-metric-date', title: '指标日期' }]
+    state.hasPython = true
+    state.pythonUser = 'result = table2'
+    state.pythonSystem = 'table2 = datasets.read(input_name="table2", filters=[]).to_polars()'
+    state.pythonSystemState = {
+      mode: 'generated',
+      generatedCode: state.pythonSystem,
+      generatedFingerprint: 'before-binding',
+      userCode: state.pythonUser,
+    }
+
+    saveFilterBindings([{
+      filterName: '指标日期',
+      scope: { ds1: true },
+      fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
+    }])
+
+    expect(state.pythonSystem).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+    expect(state.pythonSystemState?.generatedCode).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+  })
+
+  it('打开已绑定筛选器的组件时重算过期的系统生成区域', () => {
+    const component = writeComponentDatasetPipeline(
+      { id: 'nested-table', type: 'table', title: '子策略贡献表', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },
+      {
+        datasetInputs: [{
+          datasetId: 'dataset-1',
+          inputName: 'table2',
+          displayName: 'table2',
+          sourceType: 'JDBC_TABLE',
+          fieldMappings: [{ source: 'metric_time', target: 'metric_time' }],
+          filters: [],
+        }],
+        scriptFilterBindings: [{
+          filterComponentId: '指标日期',
+          inputNames: ['table2'],
+          fieldMappings: { table2: 'metric_time' },
+        }],
+        parameters: [],
+        executionPolicy: {},
+        script: 'table2 = datasets.read(input_name="table2", filters=[]).to_polars()',
+        systemScript: {
+          mode: 'generated',
+          generatedCode: 'table2 = datasets.read(input_name="table2", filters=[]).to_polars()',
+          generatedFingerprint: 'stale',
+          userCode: '',
+        },
+      },
+    )
+
+    hydratePanel(component as never)
+
+    expect(state.pythonSystem).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+    expect(state.pythonSystemState?.generatedCode).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+  })
+
   it('无绑定筛选时生成 datasets.read 全量读取（可运行契约，不再生成 inputs[...]）', () => {
     state.datasets = [{ id: 'ds1', alias: 'table1' }] as never
     state.filterBindings = []

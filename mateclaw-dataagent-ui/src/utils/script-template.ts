@@ -34,8 +34,9 @@ export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: D
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const validParameters = parameters.filter(parameter => parameter.name.trim())
   const lines = [SYSTEM_SCRIPT_START, '# 页面筛选参数会通过 datasets.params 注入，并在 datasets.read 时下推。']
+  const hasBoundFields = bindings.some(binding => Object.values(binding.fieldMappings ?? {}).some(Boolean))
   const hasExplicitConditions = bindings.some(binding => (binding.conditions || []).some(condition => condition.field && condition.operator))
-  if (hasExplicitConditions) lines.push(OPTIONAL_FILTER_RUNTIME, '# 未填写时不下推绑定筛选条件。')
+  if (hasBoundFields || hasExplicitConditions) lines.push(OPTIONAL_FILTER_RUNTIME, '# 未填写时不下推绑定筛选条件。')
   if (validParameters.length) {
     lines.push('# 默认约定：参数名与数据集字段名相同；多选使用 in，日期范围使用 between。')
   } else {
@@ -47,16 +48,31 @@ export function buildSystemScript(inputs: DashboardDatasetInput[], parameters: D
     const boundConditions = bindings
       .filter(binding => binding.inputNames.includes(input.inputName))
       .flatMap(binding => (binding.conditions || []).filter(condition => condition.inputName === input.inputName && condition.field))
+    const boundRuntimeFilters = bindings
+      .filter(binding => binding.inputNames.includes(input.inputName))
+      .flatMap(binding => {
+        const field = binding.fieldMappings?.[input.inputName]
+        const hasExplicitCondition = (binding.conditions || []).some(
+          condition => condition.inputName === input.inputName && condition.field,
+        )
+        const hasDeclaredParameter = validParameters.some(parameter => parameter.name === field)
+        return field && !hasExplicitCondition && !hasDeclaredParameter
+          ? [{ field, parameterName: binding.filterComponentId }]
+          : []
+      })
     const boundParameterNames = new Set<string>()
     bindings.filter(binding => binding.inputNames.includes(input.inputName)).forEach(binding => {
       const mapped = binding.fieldMappings?.[input.inputName]
       if (mapped) boundParameterNames.add(mapped)
     })
     const scopedParameters = bindings.length === 0 ? validParameters : validParameters.filter(parameter => boundParameterNames.has(parameter.name))
-    if (boundConditions.length || scopedParameters.length || filters.length) {
+    if (boundConditions.length || boundRuntimeFilters.length || scopedParameters.length || filters.length) {
       lines.push('    filters=[')
       boundConditions.forEach(condition => lines.push(
         `        *_optional_filter(${JSON.stringify(condition.field)}, ${JSON.stringify(condition.operator)}, ${JSON.stringify(condition.parameterNames[0])}),`,
+      ))
+      boundRuntimeFilters.forEach(filter => lines.push(
+        `        *_optional_filter(${JSON.stringify(filter.field)}, "eq", ${JSON.stringify(filter.parameterName)}),`,
       ))
       scopedParameters.forEach(parameter => lines.push(`        ${readExpression(parameter)},`))
       filters.forEach(filter => lines.push(`        ${datasetFilterExpression(filter)},`))
