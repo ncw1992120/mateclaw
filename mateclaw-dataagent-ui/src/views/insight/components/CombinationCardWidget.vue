@@ -11,7 +11,7 @@
     @drop.stop.prevent="onBodyDrop"
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
-    <div v-if="!editable && cfg.showTitle" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
+    <div v-if="!editable && component.showTitle !== false && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
       <span class="cc-title">{{ cfg.title || component.title }}</span>
     </div>
 
@@ -31,17 +31,26 @@
       >
         <input
           v-if="editable && editingTab === tab.id"
+          ref="tabEditInput"
           class="tab-edit"
-          :value="tab.title"
+          v-model="editingTabTitle"
           @click.stop
-          @input="tab.title = ($event.target as HTMLInputElement).value"
-          @blur="editingTab = null"
-          @keyup.enter="editingTab = null"
+          @blur="commitTabRename(tab)"
+          @keydown.esc.prevent="cancelTabRename"
+          @keyup.enter="commitTabRename(tab)"
         />
         <template v-else>
-          <span @dblclick.stop="editable && (editingTab = tab.id)">{{ tab.title }}</span>
+          <span @dblclick.stop="editable && startTabRename(tab)">{{ tab.title }}</span>
           <!-- 重命名 affordance：hover 淡入铅笔图标，提示该页签可双击重命名 -->
-          <el-icon v-if="editable" class="tab-rename-hint" :size="11"><EditPen /></el-icon>
+          <button
+            v-if="editable"
+            type="button"
+            class="tab-rename-button"
+            :aria-label="`编辑页签 ${tab.title}`"
+            @click.stop="startTabRename(tab)"
+          >
+            <el-icon class="tab-rename-hint" :size="11"><EditPen /></el-icon>
+          </button>
         </template>
         <button v-if="editable" class="tab-x" @click.stop="deleteTab(tab.id)" :title="t('insight.combination.deleteTab')">
           <el-icon :size="10"><Close /></el-icon>
@@ -75,8 +84,29 @@
         @mousedown="onChildMouseDown($event, child)"
         @dragstart.stop.prevent
       >
-        <div class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
-          <span v-if="child.showTitle !== false" class="cc-child-title">{{ child.title }}</span>
+        <div v-if="isTitleVisible(child.showTitle, child.titleBarStyle)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
+          <input
+            v-if="editable && editingChildId === child.id"
+            ref="childTitleInput"
+            class="cc-child-title-input"
+            aria-label="子组件标题"
+            v-model="editingChildTitle"
+            @click.stop
+            @blur="commitChildTitle(child)"
+            @keydown.esc.prevent="cancelChildTitle"
+            @keyup.enter="commitChildTitle(child)"
+          />
+          <button
+            v-if="editable && editingChildId !== child.id"
+            type="button"
+            class="cc-child-title-trigger"
+            :aria-label="`编辑子组件标题 ${child.title}`"
+            @click.stop="startChildTitleEdit(child)"
+          >
+            <span class="cc-child-title">{{ child.title }}</span>
+            <el-icon class="cc-child-title-edit" :size="11"><EditPen /></el-icon>
+          </button>
+          <span v-else-if="editingChildId !== child.id" class="cc-child-title">{{ child.title }}</span>
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
           </button>
@@ -87,38 +117,38 @@
             v-if="child.type === 'kpi'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
             :dashboard-theme="dashboardTheme"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
             :dashboard-theme="dashboardTheme"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
             :show-header="child.showHeader !== false"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="toWidgetComponent(child)"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && child.showTitle !== false"
+            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
@@ -151,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
@@ -164,7 +194,6 @@ import type {
   InsightComponentData,
   ResolvedDashboardTheme,
 } from '@/types'
-import { resolveCombinationBackground } from '@/utils/combination-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
@@ -210,6 +239,59 @@ const hoverChildId = ref<string | null>(null)
 const movingId = ref<string | null>(null)
 const resizingId = ref<string | null>(null)
 const editingTab = ref<string | null>(null)
+const editingTabTitle = ref('')
+const tabEditInput = ref<HTMLInputElement | null>(null)
+const editingChildId = ref<string | null>(null)
+const editingChildTitle = ref('')
+const childTitleInput = ref<HTMLInputElement | null>(null)
+
+function startChildTitleEdit(child: { id: string; title: string }): void {
+  if (!props.editable) return
+  editingChildId.value = child.id
+  editingChildTitle.value = child.title
+  void nextTick(() => {
+    const input = childTitleInput.value as unknown as { focus?: () => void; select?: () => void } | null
+    input?.focus?.()
+    input?.select?.()
+  })
+}
+
+function commitChildTitle(child: { id: string; title: string }): void {
+  if (editingChildId.value !== child.id) return
+  const title = editingChildTitle.value.trim()
+  if (title) child.title = title
+  editingChildId.value = null
+  editingChildTitle.value = ''
+}
+
+function cancelChildTitle(): void {
+  editingChildId.value = null
+  editingChildTitle.value = ''
+}
+
+function startTabRename(tab: { id: string; title: string }): void {
+  if (!props.editable) return
+  editingTab.value = tab.id
+  editingTabTitle.value = tab.title
+  void nextTick(() => {
+    const input = tabEditInput.value as unknown as { focus?: () => void; select?: () => void } | null
+    input?.focus?.()
+    input?.select?.()
+  })
+}
+
+function commitTabRename(tab: { id: string; title: string }): void {
+  if (editingTab.value !== tab.id) return
+  const nextTitle = editingTabTitle.value.trim()
+  if (nextTitle) tab.title = nextTitle
+  editingTab.value = null
+  editingTabTitle.value = ''
+}
+
+function cancelTabRename(): void {
+  editingTab.value = null
+  editingTabTitle.value = ''
+}
 
 /** 兜底容器配置（防御性） */
 function defaultConfig(): InsightCombinationConfig {
@@ -229,21 +311,21 @@ function defaultConfig(): InsightCombinationConfig {
 }
 const cfg = computed<InsightCombinationConfig>(() => props.component.containerConfig ?? defaultConfig())
 
-const rootStyle = computed<Record<string, string>>(() => ({
-  background: resolveCombinationBackground(cfg.value.background, cfg.value.backgroundMode),
-  borderRadius: cfg.value.radius + 'px',
-  padding: cfg.value.padding + 'px',
-  border: cfg.value.style.border.mode === 'visible' || (!cfg.value.style.border.mode && cfg.value.style.border.enabled)
-    ? `${cfg.value.style.border.width ?? 1}px ${cfg.value.style.border.style ?? 'solid'} ${cfg.value.style.border.colorMode === 'theme' ? 'var(--db-border)' : cfg.value.style.border.color}`
-    : cfg.value.style.border.mode === 'theme'
-      ? `${cfg.value.style.border.width ?? 1}px ${cfg.value.style.border.style ?? 'solid'} var(--db-border)`
-      : '1px solid transparent',
-  boxShadow: cfg.value.shadow === 'medium'
-    ? 'var(--shadow-card-hover, 0 8px 24px rgba(15, 23, 42, 0.12))'
-    : cfg.value.shadow === 'subtle'
-      ? 'var(--shadow-card, 0 2px 10px rgba(15, 23, 42, 0.06))'
-      : 'none',
-}))
+function isTitleVisible(showTitle: boolean | undefined, titleBarStyle: InsightComponent['titleBarStyle']): boolean {
+  return showTitle !== false && titleBarStyle !== 'hidden'
+}
+
+const rootStyle = computed<Record<string, string>>(() => {
+  const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination', cfg.value)
+  return {
+    ...shared,
+    background: 'var(--component-surface)',
+    border: 'var(--component-border)',
+    borderRadius: 'var(--component-radius)',
+    padding: 'var(--component-padding)',
+    boxShadow: 'var(--component-shadow)',
+  }
+})
 
 /** 当前激活页签的子卡片数组（无页签则用 component.children） */
 function getActiveChildren(): InsightCombinationChild[] {
@@ -281,7 +363,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
-  const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
+  const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type, child.containerConfig)
   if (cfg.value.layoutMode === 'free') {
     return {
       ...visualStyle,
@@ -765,6 +847,8 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-tab.active { color: var(--db-accent); border-bottom-color: var(--db-accent); font-weight: 600; }
 .cc-tab:focus-visible { outline: 2px solid var(--db-accent-border); border-radius: 4px; }
 .tab-edit { width: 64px; border: 1px solid var(--db-accent); border-radius: 4px; padding: 2px 4px; font-size: 12px; }
+.tab-rename-button { border: none; background: transparent; color: inherit; display: inline-flex; align-items: center; padding: 2px; border-radius: 4px; cursor: pointer; }
+.tab-rename-button:hover { background: var(--db-hover); }
 .cc-tab-add { border: none; background: transparent; color: var(--db-text-muted); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .cc-tab-add:hover { background: var(--db-hover); color: var(--db-accent); }
 /* 重命名 affordance：hover 页签时淡入铅笔图标，提示可双击重命名 */
@@ -808,6 +892,10 @@ const { onTabKeydown } = useTabKeyboard(
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }
+.cc-child-title-trigger { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border: none; padding: 0; background: transparent; color: inherit; cursor: text; }
+.cc-child-title-edit { color: var(--db-text-muted); opacity: 0; transition: opacity var(--transition-fast); }
+.cc-child-title-trigger:hover .cc-child-title-edit { opacity: 0.8; }
+.cc-child-title-input { min-width: 100px; max-width: 220px; height: 22px; border: 1px solid var(--db-accent); border-radius: var(--radius-sm); padding: 2px 5px; background: var(--db-surface-control, var(--db-card)); color: var(--db-text); font-size: 12px; outline: none; }
 .cc-child-title { font-size: 12px; font-weight: 500; color: var(--db-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .cc-child-del:hover { background: var(--db-danger-bg); color: var(--db-danger); }

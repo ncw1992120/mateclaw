@@ -62,7 +62,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
-          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
+          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi', getComponent(item.i)?.containerConfig), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -80,7 +80,29 @@
             draggable="true"
             @dragstart.stop="handleComponentDragStart($event, item.i)"
           >
-            <span v-if="isToolbarTitleVisible(item.i)" class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+            <template v-if="isToolbarTitleVisible(item.i)">
+              <input
+                v-if="editingTitleId === item.i"
+                ref="titleInput"
+                class="grid-item-title-input"
+                aria-label="组件标题"
+                v-model="editingTitleValue"
+                @click.stop
+                @blur="commitTitleEdit(item.i)"
+                @keydown.esc.prevent="cancelTitleEdit"
+                @keyup.enter="commitTitleEdit(item.i)"
+              />
+              <button
+                v-else
+                type="button"
+                class="grid-item-title-trigger"
+                :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
+                @click.stop="startTitleEdit(item.i)"
+              >
+                <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+                <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
+              </button>
+            </template>
             <button
               class="grid-item-delete"
               :aria-label="`删除组件 ${getComponentTitle(item.i)}`"
@@ -96,7 +118,7 @@
                 v-if="getComponent(item.i)?.type === 'kpi'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
@@ -107,7 +129,7 @@
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :dashboard-theme="dashboardTheme"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
@@ -116,7 +138,7 @@
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :show-header="getComponent(item.i)?.showHeader !== false"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
@@ -124,14 +146,14 @@
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
@@ -139,7 +161,7 @@
                 v-else-if="getComponent(item.i)?.type === 'aiAnalysis'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && getComponent(item.i)?.showTitle !== false"
+                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
                 :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 @generate="(id) => emit('ai-analysis-generate', id)"
@@ -173,6 +195,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
+import { EditPen } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
@@ -211,6 +234,9 @@ const props = withDefaults(defineProps<{
 
 /** 画布根元素（drop 落点换算用） */
 const canvasRef = ref<HTMLElement | null>(null)
+const editingTitleId = ref<string | null>(null)
+const editingTitleValue = ref('')
+const titleInput = ref<HTMLInputElement | null>(null)
 
 const canvasWorkspaceStyle = computed(() => {
   if (!props.editable) return undefined
@@ -225,6 +251,7 @@ const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void
   (e: 'update-layout', payload: Array<{ id: string; x: number; y: number; w: number; h: number }>): void
   (e: 'select-component', id: string): void
+  (e: 'rename-component', payload: { componentId: string; title: string }): void
   (e: 'select-child', payload: { containerId: string; childId: string | null }): void
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
@@ -368,12 +395,39 @@ function getComponentTitle(id: string): string {
   return getComponent(id)?.title ?? ''
 }
 
+function startTitleEdit(id: string): void {
+  if (!props.editable) return
+  editingTitleId.value = id
+  editingTitleValue.value = getComponentTitle(id)
+  void nextTick(() => {
+    const input = titleInput.value as unknown as { focus?: () => void; select?: () => void } | null
+    input?.focus?.()
+    input?.select?.()
+  })
+}
+
+function commitTitleEdit(id: string): void {
+  if (editingTitleId.value !== id) return
+  const title = editingTitleValue.value.trim()
+  if (title) emit('rename-component', { componentId: id, title })
+  editingTitleId.value = null
+  editingTitleValue.value = ''
+}
+
+function cancelTitleEdit(): void {
+  editingTitleId.value = null
+  editingTitleValue.value = ''
+}
+
 /** 编辑态工具栏标题是否展示（组合卡片「显示标题」关闭时隐藏，让开关在编辑态可见生效） */
 function isToolbarTitleVisible(id: string): boolean {
   const comp = getComponent(id)
   if (!comp) return true
-  if (comp.type === 'combination') return comp.containerConfig?.showTitle !== false && comp.showTitle !== false
-  return comp.showTitle !== false
+  return isComponentTitleVisible(comp)
+}
+
+function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
+  return Boolean(comp) && comp?.showTitle !== false && comp?.titleBarStyle !== 'hidden'
 }
 
 /** 根据 ID 获取组件渲染数据 */
@@ -889,6 +943,41 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.grid-item-title-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: text;
+}
+
+.grid-item-title-edit {
+  color: var(--db-text-muted);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.grid-item-title-trigger:hover .grid-item-title-edit {
+  opacity: 0.8;
+}
+
+.grid-item-title-input {
+  min-width: 120px;
+  max-width: 280px;
+  height: 24px;
+  border: 1px solid var(--db-accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--db-surface-control, var(--db-card));
+  color: var(--db-text);
+  font-size: 13px;
+  outline: none;
 }
 
 .grid-item-delete {

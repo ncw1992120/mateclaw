@@ -49,6 +49,20 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
   })
 
+  it('renames a top-level component from the canvas title toolbar', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.get('[aria-label="编辑组件标题 订单数"]').trigger('click')
+    const input = wrapper.get('input[aria-label="组件标题"]')
+    await input.setValue('新标题')
+    await input.trigger('keyup', { key: 'Enter' })
+
+    expect(wrapper.emitted('rename-component')).toEqual([[{ componentId: 'kpi-1', title: '新标题' }]])
+  })
+
   it('uses the component title bar as a drag handle for moving into a combination', async () => {
     const setData = vi.fn()
     const wrapper = mount(DashboardCanvas, {

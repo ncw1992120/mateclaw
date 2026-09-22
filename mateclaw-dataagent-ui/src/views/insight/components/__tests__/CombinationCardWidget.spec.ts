@@ -47,6 +47,144 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('renames a child component from its canvas title pen', async () => {
+    const child = {
+      id: 'child-kpi',
+      type: 'kpi' as const,
+      title: '策略概括',
+      showTitle: true,
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combination-child-title',
+          type: 'combination',
+          title: '组合卡片',
+          children: [child],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    await wrapper.get('[aria-label="编辑子组件标题 策略概括"]').trigger('click')
+    const input = wrapper.get('input[aria-label="子组件标题"]')
+    await input.setValue('策略概括（新）')
+    await input.trigger('keyup', { key: 'Enter' })
+
+    expect(child.title).toBe('策略概括（新）')
+    expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
+  })
+
+  it('emits copy, paste and context-menu actions for a child component', async () => {
+    const child = {
+      id: 'child-copy',
+      type: 'kpi' as const,
+      title: '策略概括',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combination-copy',
+          type: 'combination',
+          title: '组合卡片',
+          children: [child],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const childEl = wrapper.get('[data-child="child-copy"]')
+    await childEl.trigger('keydown', { key: 'c', ctrlKey: true })
+    await childEl.trigger('keydown', { key: 'v', metaKey: true })
+    await childEl.trigger('contextmenu', { clientX: 80, clientY: 120 })
+
+    expect(wrapper.emitted('copy-child')).toEqual([[{ containerId: 'combination-copy', childId: 'child-copy' }]])
+    expect(wrapper.emitted('paste-child')).toEqual([[{ containerId: 'combination-copy', childId: 'child-copy' }]])
+    expect(wrapper.emitted('context-menu')).toEqual([[{ containerId: 'combination-copy', childId: 'child-copy', x: 80, y: 120 }]])
+  })
+
+  it('clicks the tab edit pen to rename a canvas tab and supports escape cancel', async () => {
+    const tabs = [
+      { id: 'tab-one', title: '页签一', children: [] },
+      { id: 'tab-two', title: '页签二', children: [] },
+    ]
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combination-tabs',
+          type: 'combination',
+          title: '组合卡片',
+          children: [],
+          containerConfig: { ...containerConfig, tabs, activeTab: 'tab-one' },
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const pen = wrapper.find('.cc-tab .tab-rename-hint')
+    await pen.trigger('click')
+    const input = wrapper.get('.cc-tab .tab-edit')
+    expect((input.element as HTMLInputElement).value).toBe('页签一')
+
+    await input.setValue('已保存页签')
+    await input.trigger('keyup', { key: 'Enter' })
+    expect(tabs[0].title).toBe('已保存页签')
+    expect(wrapper.find('.tab-edit').exists()).toBe(false)
+
+    await wrapper.find('.cc-tab .tab-rename-hint').trigger('click')
+    const cancelInput = wrapper.get('.cc-tab .tab-edit')
+    await cancelInput.setValue('不会保存')
+    await cancelInput.trigger('keydown', { key: 'Escape' })
+    expect(tabs[0].title).toBe('已保存页签')
+    expect(wrapper.find('.tab-edit').exists()).toBe(false)
+  })
+
   it('moves a selected child with keyboard arrows while staying inside the container', async () => {
     const child = {
       ...nestedCombination,

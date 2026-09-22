@@ -192,6 +192,7 @@
           @add-component="handleAddComponent"
           @update-layout="handleUpdateLayout"
           @select-component="handleSelectComponent"
+          @rename-component="handleCanvasComponentRename"
           @select-child="handleSelectChild"
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
@@ -903,6 +904,19 @@ function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w:
       comp.position = { x: item.x, y: item.y, w: item.w, h: item.h }
     }
   })
+}
+
+/** 画布内直接编辑顶层组件标题；组合卡片同步容器标题，保证预览态标题一致。 */
+function handleCanvasComponentRename(payload: { componentId: string; title: string }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  const component = page?.components.find((item) => item.id === payload.componentId)
+  if (!component) return
+  const title = payload.title.trim()
+  if (!title) return
+  component.title = title
+  if (component.type === 'combination' && component.containerConfig) {
+    component.containerConfig.title = title
+  }
 }
 
 /** 选中组件（顶层） */
