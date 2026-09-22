@@ -1238,14 +1238,10 @@ export interface InsightComponent {
   type: InsightComponentType
   /** 组件标题 */
   title: string
-  /** 是否显示组件标题（默认显示） */
-  showTitle?: boolean
   /** 标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
   /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
-  /** 数据表是否显示表头（默认显示） */
-  showHeader?: boolean
   /** 栅格位置 */
   position: ComponentPosition
   /** 数据绑定配置 */
@@ -1362,14 +1358,10 @@ export interface InsightCombinationChild {
   type: InsightComponentType
   /** 子卡片标题 */
   title: string
-  /** 是否显示子卡片标题（默认显示） */
-  showTitle?: boolean
   /** 子卡片标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
   /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
-  /** 数据表子卡片是否显示表头（默认显示） */
-  showHeader?: boolean
   /** 图表子类型（仅 chart） */
   chartType?: ChartType
   /** 组件扩展配置 */
@@ -1408,37 +1400,12 @@ export interface CombinationTab {
 
 /** 组合卡片容器配置 */
 export interface InsightCombinationConfig {
-  /** 容器标题 */
-  title: string
-  /** 是否显示标题 */
-  showTitle: boolean
-  /** 背景色（CSS color；backgroundMode=custom 时生效） */
-  background: string
-  /** 容器背景来源；旧配置缺省时由编辑器按历史背景值兼容推断 */
-  backgroundMode?: 'theme' | 'custom'
-  /** 圆角 px */
-  radius: number
-  /** 内边距 px */
-  padding: number
-  /** 容器阴影 */
-  shadow?: 'none' | 'subtle' | 'medium'
   /** 内部布局模式：自由布局 / 栅格 / 垂直流 */
   layoutMode: 'free' | 'grid' | 'vertical'
   /** 页签列表（非空时启用多页签） */
   tabs: CombinationTab[]
   /** 当前激活页签 ID（tabs 非空时生效） */
   activeTab?: string
-  /** 容器边框样式 */
-  style: {
-    border: {
-      enabled: boolean
-      color: string
-      mode?: 'theme' | 'visible' | 'hidden'
-      colorMode?: 'theme' | 'custom'
-      width?: 1 | 2
-      style?: 'solid' | 'dashed'
-    }
-  }
 }
 
 /**

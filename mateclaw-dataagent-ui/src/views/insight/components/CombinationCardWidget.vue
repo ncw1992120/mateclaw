@@ -11,8 +11,8 @@
     @drop.stop.prevent="onBodyDrop"
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
-    <div v-if="!editable && component.showTitle !== false && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title">{{ cfg.title || component.title }}</span>
+    <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
+      <span class="cc-title">{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -85,7 +85,7 @@
         @mousedown="onChildMouseDown($event, child)"
         @dragstart.stop.prevent
       >
-        <div v-if="isTitleVisible(child.showTitle, child.titleBarStyle)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
+        <div v-if="isTitleVisible(child.titleBarStyle)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
           <input
             v-if="editable && editingChildId === child.id"
             ref="childTitleInput"
@@ -118,38 +118,31 @@
             v-if="child.type === 'kpi'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
             :dashboard-theme="dashboardTheme"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
             :dashboard-theme="dashboardTheme"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
-            :show-header="child.showHeader !== false"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="toWidgetComponent(child)"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
-            :show-title="!editable && isTitleVisible(child.showTitle, child.titleBarStyle)"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
@@ -304,34 +297,21 @@ function cancelTabRename(): void {
 /** 兜底容器配置（防御性） */
 function defaultConfig(): InsightCombinationConfig {
   return {
-    title: '',
-    showTitle: true,
-    background: '#ffffff',
-    backgroundMode: 'theme',
-    radius: 12,
-    padding: 16,
-    shadow: 'none',
     layoutMode: 'free',
     tabs: [],
     activeTab: undefined,
-    style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
   }
 }
 const cfg = computed<InsightCombinationConfig>(() => props.component.containerConfig ?? defaultConfig())
 
-function isTitleVisible(showTitle: boolean | undefined, titleBarStyle: InsightComponent['titleBarStyle']): boolean {
-  return showTitle !== false && titleBarStyle !== 'hidden'
+function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boolean {
+  return titleBarStyle !== 'hidden'
 }
 
 const rootStyle = computed<Record<string, string>>(() => {
-  const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination', cfg.value)
+  const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
   return {
     ...shared,
-    background: 'var(--component-surface)',
-    border: 'var(--component-border)',
-    borderRadius: 'var(--component-radius)',
-    padding: 'var(--component-padding)',
-    boxShadow: 'var(--component-shadow)',
   }
 })
 
@@ -353,10 +333,8 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     id: child.id,
     type: child.type,
     title: child.title,
-    showTitle: child.showTitle,
     titleBarStyle: child.titleBarStyle,
     visualStyle: child.visualStyle,
-    showHeader: child.showHeader,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
     config: child.config,
@@ -371,7 +349,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
-  const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type, child.containerConfig)
+  const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
   if (cfg.value.layoutMode === 'free') {
     return {
       ...visualStyle,

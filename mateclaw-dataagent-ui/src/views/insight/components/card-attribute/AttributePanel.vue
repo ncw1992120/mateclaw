@@ -27,7 +27,7 @@
 
       <div class="field">
         <label class="field-label">标题栏样式</label>
-        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="activeCard.showTitle = activeCard.titleBarStyle !== 'hidden'">
+        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%">
           <el-option value="hidden" label="隐藏标题栏" />
           <el-option value="standard" label="标准卡片" />
           <el-option value="minimal" label="简洁文本" />
@@ -112,11 +112,6 @@
           </div>
         </div>
       </details>
-      <div v-if="activeCard.type === 'table'" class="field row">
-        <span class="field-label">显示表头</span>
-        <el-switch v-model="activeCard.showHeader" aria-label="显示表头" />
-      </div>
-
       <!-- 2/3. 多指标模式 / 多TAB模式（仅 KPI/指标卡显示，本轮只实现 KPI 卡） -->
       <template v-if="isKpiCard">
         <div class="field row">

@@ -66,7 +66,7 @@ const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 7)}`
 const container = reactive({
   id: 'cc-1',
   title: '策略执行情况',
-  showTitle: true,
+  titleBarStyle: 'standard' as 'hidden' | 'standard',
   size: { width: 760, height: 420 },
   style: {
     background: '#FFFFFF',
@@ -209,7 +209,7 @@ function togglePreview() {
 }
 function doSave() {
   const errs: string[] = []
-  if (container.showTitle && !container.title.trim()) errs.push('容器已开启显示标题，请补充标题')
+  if (container.titleBarStyle !== 'hidden' && !container.title.trim()) errs.push('容器已开启标题栏，请补充标题')
   const names = container.tabs.map((t) => t.title.trim())
   if (names.some((n) => !n)) errs.push('存在空页签名称')
   const dup = names.filter((n, i) => names.indexOf(n) !== i)
@@ -472,8 +472,8 @@ function chartSvg(d: any): string {
           >
             <!-- 头部（红框1：原工具栏按钮已删除，添加组件/页签/设置等入口保留在别处） -->
             <div class="cc-header">
-              <span class="cc-title" v-if="container.showTitle">{{ container.title }}</span>
-              <span class="cc-title muted" v-else>（标题已隐藏）</span>
+              <span class="cc-title" v-if="container.titleBarStyle !== 'hidden'">{{ container.title }}</span>
+              <span class="cc-title muted" v-else>（标题栏已隐藏）</span>
             </div>
 
             <!-- 页签 -->
@@ -652,7 +652,6 @@ function chartSvg(d: any): string {
             <div class="prop-body" v-show="!collapsed.basic">
               <div class="field"><label>容器标题</label><el-input v-model="container.title" size="small" /></div>
               <div class="field"><label>容器描述</label><el-input placeholder="展示策略执行相关指标" size="small" /></div>
-              <div class="field row"><label>显示标题</label><el-switch v-model="container.showTitle" /></div>
             </div>
           </section>
 

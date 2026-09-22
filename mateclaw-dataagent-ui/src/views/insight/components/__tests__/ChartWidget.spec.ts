@@ -30,9 +30,9 @@ const component = {
 } as any
 
 describe('ChartWidget', () => {
-  it('hides the component title when configured', () => {
+  it('hides the component title when the title bar is hidden', () => {
     const wrapper = mount(ChartWidget, {
-      props: { component, showTitle: false },
+      props: { component: { ...component, titleBarStyle: 'hidden' } },
       global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
     })
 
@@ -41,7 +41,7 @@ describe('ChartWidget', () => {
 
   it('removes the empty title bar when title and time filter are both hidden', () => {
     const wrapper = mount(ChartWidget, {
-      props: { component, showTitle: false },
+      props: { component: { ...component, titleBarStyle: 'hidden' } },
       global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
     })
 
@@ -50,7 +50,7 @@ describe('ChartWidget', () => {
 
   it('applies the configured title bar style', () => {
     const wrapper = mount(ChartWidget, {
-      props: { component: { ...component, titleBarStyle: 'accent' } as any, showTitle: true },
+      props: { component: { ...component, titleBarStyle: 'accent' } as any },
       global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
     })
 

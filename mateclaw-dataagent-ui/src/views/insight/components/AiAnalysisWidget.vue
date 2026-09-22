@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
-    <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? props.titleBarStyle ?? 'standard'}`">
-      <span v-if="showTitle !== false" class="analysis-title">{{ component.title }}</span>
+    <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+      <span v-if="component.titleBarStyle !== 'hidden'" class="analysis-title">{{ component.title }}</span>
       <el-button
         v-if="!generating"
         type="primary"
@@ -47,7 +47,7 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightComponent, InsightComponentData, ComponentTitleBarStyle } from '@/types'
+import type { InsightComponent, InsightComponentData } from '@/types'
 
 defineOptions({
   name: 'AiAnalysisWidget',
@@ -58,8 +58,6 @@ const { t } = useI18n()
 const props = defineProps<{
   component: InsightComponent
   componentData?: InsightComponentData
-  showTitle?: boolean
-  titleBarStyle?: ComponentTitleBarStyle
   generating?: boolean
 }>()
 

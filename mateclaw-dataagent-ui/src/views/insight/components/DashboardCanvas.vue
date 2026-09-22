@@ -19,14 +19,12 @@
             <span class="global-filter-label">{{ comp.title }}</span>
             <FilterSelectWidget
               v-if="comp.type === 'filter'"
-              :component="comp"
-              :show-title="false"
+              :component="{ ...comp, titleBarStyle: 'hidden' }"
               @change="(payload) => handleFilterChange(comp.id, payload)"
             />
             <TimeFilterWidget
               v-else-if="comp.type === 'timeFilter'"
-              :component="comp"
-              :show-title="false"
+              :component="{ ...comp, titleBarStyle: 'hidden' }"
               @change="(payload) => handleTimeFilterChange(comp.id, payload)"
             />
           </div>
@@ -62,7 +60,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
-          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi', getComponent(item.i)?.containerConfig), animationDelay: `${index * 40}ms` }"
+          :style="{ ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -118,8 +116,6 @@
                 v-if="getComponent(item.i)?.type === 'kpi'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
@@ -129,8 +125,6 @@
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :dashboard-theme="dashboardTheme"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
@@ -138,31 +132,22 @@
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
-                :show-header="getComponent(item.i)?.showHeader !== false"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
                 v-else-if="getComponent(item.i)?.type === 'aiAnalysis'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable && isComponentTitleVisible(getComponent(item.i))"
-                :title-bar-style="getComponent(item.i)?.titleBarStyle"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />
@@ -432,7 +417,7 @@ function isToolbarTitleVisible(id: string): boolean {
 }
 
 function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
-  return Boolean(comp) && comp?.showTitle !== false && comp?.titleBarStyle !== 'hidden'
+  return Boolean(comp) && comp?.titleBarStyle !== 'hidden'
 }
 
 /** 根据 ID 获取组件渲染数据 */

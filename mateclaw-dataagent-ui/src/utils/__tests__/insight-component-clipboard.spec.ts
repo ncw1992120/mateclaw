@@ -11,7 +11,6 @@ function createComponent(): InsightComponent {
     boundFilterIds: ['filter-source'],
     containerConfig: {
       title: '策略执行情况',
-      showTitle: true,
       background: '#fff',
       radius: 12,
       padding: 16,

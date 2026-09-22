@@ -28,7 +28,6 @@ const i18n = createI18n({
 
 const containerConfig = {
   title: '外层组合',
-  showTitle: true,
   background: '#fff',
   radius: 12,
   padding: 16,
@@ -42,7 +41,7 @@ const nestedCombination = {
   type: 'combination' as const,
   title: '内层组合',
   children: [],
-  containerConfig: { ...containerConfig, title: '内层组合' },
+  containerConfig: { ...containerConfig },
   layout: { x: 12, y: 12, col: 6, h: 180 },
 }
 
@@ -52,7 +51,6 @@ describe('CombinationCardWidget', () => {
       id: 'child-kpi',
       type: 'kpi' as const,
       title: '策略概括',
-      showTitle: true,
       layout: { x: 0, y: 0, col: 6, h: 120 },
     }
     const wrapper = mount(CombinationCardWidget, {

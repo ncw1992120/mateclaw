@@ -106,11 +106,6 @@
           </div>
         </div>
       </details>
-      <div v-if="component.type === 'table'" class="form-group form-group-row">
-        <label class="form-label">显示表头</label>
-        <el-switch v-model="localComponent.showHeader" aria-label="显示表头" @change="emitChange" />
-      </div>
-
       <!-- 组合卡片：容器配置 -->
       <template v-if="component.type === 'combination' && localComponent.containerConfig">
         <div class="form-group">
@@ -732,7 +727,6 @@ import * as datasourceApi from '@/api/datasource'
 import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
-import { normalizeCombinationBackgroundMode } from '@/utils/combination-theme'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 import InlineHelp from './property/InlineHelp.vue'
 
@@ -769,8 +763,6 @@ const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasou
 const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(group => group.category === 'aloudata'))
 
 function handleTitleBarStyleChange(style: InsightComponent['titleBarStyle']): void {
-  localComponent.showTitle = style !== 'hidden'
-  if (localComponent.containerConfig) localComponent.containerConfig.showTitle = localComponent.showTitle
   emitChange()
 }
 
@@ -915,47 +907,24 @@ function componentSignature(c: InsightComponent | null | undefined): string {
 function defaultCombinationConfig(): NonNullable<InsightComponent['containerConfig']> {
   return {
     title: '',
-    showTitle: true,
-    background: '#ffffff',
-    backgroundMode: 'theme',
-    radius: 12,
-    padding: 16,
-    shadow: 'none',
     layoutMode: 'free',
     tabs: [],
     activeTab: undefined,
-    style: { border: { enabled: false, color: 'transparent', mode: 'hidden', colorMode: 'theme', width: 1, style: 'solid' } },
   }
 }
 
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
   next.titleBarStyle ??= 'standard'
-  if (next.showTitle === false) next.titleBarStyle = 'hidden'
-  next.showTitle = next.titleBarStyle !== 'hidden'
   if (next.type === 'combination') {
     const defaults = defaultCombinationConfig()
     const config = next.containerConfig ?? {}
-    const background = typeof config.background === 'string' ? config.background : defaults.background
-    const backgroundMode = normalizeCombinationBackgroundMode(config.backgroundMode, background)
     next.containerConfig = {
-      ...defaults,
-      ...config,
-      background,
-      backgroundMode,
+      layoutMode: config.layoutMode ?? defaults.layoutMode,
       tabs: config.tabs ?? defaults.tabs,
-      style: {
-        ...defaults.style,
-        ...config.style,
-        border: {
-          ...defaults.style.border,
-          ...config.style?.border,
-          mode: config.style?.border?.mode ?? (config.style?.border?.enabled ? 'visible' : 'hidden'),
-          colorMode: config.style?.border?.colorMode ?? (config.style?.border?.color && config.style.border.color !== 'transparent' ? 'custom' : 'theme'),
-        },
-      },
+      activeTab: config.activeTab,
     }
-    next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type, next.containerConfig)
+    next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type)
   } else {
     next.visualStyle = normalizeComponentVisualStyle(next.visualStyle, next.type)
   }

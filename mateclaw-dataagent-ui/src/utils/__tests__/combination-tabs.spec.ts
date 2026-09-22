@@ -26,7 +26,6 @@ function makeContainer(children: InsightCombinationChild[] = [], tabs: Array<{ i
     children: [...children],
     containerConfig: {
       title: '',
-      showTitle: true,
       background: '#ffffff',
       radius: 12,
       padding: 16,
