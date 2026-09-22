@@ -47,7 +47,9 @@ class DataAgentInsightDashboardControllerQueryTest {
         resultSetQueryService = mock(ResultSetQueryService.class);
         DataAgentInsightDashboardController controller = new DataAgentInsightDashboardController(
                 dashboards, bind, reports, executionService, resultSetQueryService);
-        mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new vip.mate.dataagent.exception.DataAgentGlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -97,8 +99,8 @@ class DataAgentInsightDashboardControllerQueryTest {
         mvc.perform(post("/v1/insight/dashboards/executions/e2/result/preview")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isOk()) // R 信封 200 + code != 200
-                .andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.not(200)))
-                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("RESULT_NOT_READY")));
+                .andExpect(status().isBadRequest()) // 全局处理器：QueryPlanException → 400 稳定信封
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.msg").value(org.hamcrest.Matchers.containsString("RESULT_NOT_READY")));
     }
 }

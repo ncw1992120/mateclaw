@@ -1,6 +1,6 @@
 package vip.mate.dataagent.service;
 
-import vip.mate.dataagent.dto.QueryContextDTO;
+import vip.mate.dataagent.dto.ResultPreviewRequest;
 
 import java.util.Map;
 
@@ -11,7 +11,7 @@ import java.util.Map;
 public interface ResultSetQueryService {
 
     /**
-     * @param context 携带 sort/pagination 的查询上下文（requestId 用于链路追踪）
+     * @param request 结果级排序/分页请求（requestId 用于链路追踪）
      */
-    Map<String, Object> preview(String executionId, QueryContextDTO context);
+    Map<String, Object> preview(String executionId, ResultPreviewRequest request);
 }

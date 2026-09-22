@@ -186,8 +186,8 @@ public class DataAgentInsightDashboardController {
     @Operation(summary = "结果集分页预览", description = "对完整执行结果做服务端排序/分页，返回精确总数；不基于旧接口前 10 行截断")
     public R<Map<String, Object>> executionResultPreview(
             @PathVariable String executionId,
-            @RequestBody(required = false) vip.mate.dataagent.dto.QueryContextDTO context) {
-        return R.ok(resultSetQueryService.preview(executionId, context));
+            @RequestBody(required = false) vip.mate.dataagent.dto.ResultPreviewRequest request) {
+        return R.ok(resultSetQueryService.preview(executionId, request));
     }
 
     @PostMapping("/executions/{executionId}/cancel")

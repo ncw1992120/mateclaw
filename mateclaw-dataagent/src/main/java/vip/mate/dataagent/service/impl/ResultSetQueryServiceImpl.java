@@ -9,7 +9,7 @@ import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dataset.ObjectRef;
 import vip.mate.dataagent.dataset.ResidualRowOperations;
-import vip.mate.dataagent.dto.QueryContextDTO;
+import vip.mate.dataagent.dto.ResultPreviewRequest;
 import vip.mate.dataagent.model.DashboardExecutionEntity;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 import vip.mate.dataagent.objectref.ObjectRefService;
@@ -57,7 +57,7 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
     }
 
     @Override
-    public Map<String, Object> preview(String executionId, QueryContextDTO context) {
+    public Map<String, Object> preview(String executionId, ResultPreviewRequest request) {
         if (executionId == null || executionId.isBlank()) {
             throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID, "unknown dashboard execution");
         }
@@ -71,11 +71,11 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
 
         List<Map<String, Object>> rows = loadTableRows(execution);
         int totalCount = rows.size();
-        if (context != null && context.sort() != null) {
-            ResidualRowOperations.sort(rows, List.of(new DatasetSort(context.sort().field(), context.sort().direction())));
+        if (request != null && request.sort() != null) {
+            ResidualRowOperations.sort(rows, List.of(new DatasetSort(request.sort().field(), request.sort().direction())));
         }
-        int page = context != null && context.pagination() != null ? context.pagination().page() : 1;
-        int pageSize = context != null && context.pagination() != null ? context.pagination().pageSize() : Math.min(totalCount, 100);
+        int page = request != null && request.pagination() != null ? request.pagination().page() : 1;
+        int pageSize = request != null && request.pagination() != null ? request.pagination().pageSize() : Math.min(totalCount, 100);
         List<Map<String, Object>> pageRows = new ArrayList<>(ResidualRowOperations.paginate(rows, pageSize, (page - 1) * pageSize));
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -86,7 +86,7 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
         response.put("page", page);
         response.put("pageSize", pageSize);
         response.put("totalCount", totalCount);
-        if (context != null && context.requestId() != null) response.put("requestId", context.requestId());
+        if (request != null && request.requestId() != null) response.put("requestId", request.requestId());
         return response;
     }
 

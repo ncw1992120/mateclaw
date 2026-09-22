@@ -9,6 +9,7 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.ObjectRef;
 import vip.mate.dataagent.dto.QueryContextDTO;
+import vip.mate.dataagent.dto.ResultPreviewRequest;
 import vip.mate.dataagent.model.DashboardExecutionEntity;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 import vip.mate.dataagent.objectref.ObjectRefService;
@@ -74,7 +75,7 @@ class ResultSetQueryServiceTest {
     void realPaginationWithTotalCount() throws Exception {
         execution("SUCCEEDED", inlineTable(25), null);
         Map<String, Object> response = service.preview("exec-1",
-                new QueryContextDTO("d", "c", null, Map.of(), null, new QueryContextDTO.PaginationSpec(2, 10), "req-1"));
+                new ResultPreviewRequest(null, new QueryContextDTO.PaginationSpec(2, 10), Map.of(), "req-1"));
         assertEquals(25, ((Number) response.get("totalCount")).intValue());
         assertEquals(2, ((Number) response.get("page")).intValue());
         assertEquals(10, ((Number) response.get("pageSize")).intValue());
@@ -88,8 +89,7 @@ class ResultSetQueryServiceTest {
     void serverSideSortThenPage() throws Exception {
         execution("SUCCEEDED", inlineTable(5), null);
         Map<String, Object> response = service.preview("exec-1",
-                new QueryContextDTO("d", "c", null, Map.of(),
-                        new QueryContextDTO.SortSpec("v", "asc"), new QueryContextDTO.PaginationSpec(1, 2), null));
+                new ResultPreviewRequest(new QueryContextDTO.SortSpec("v", "asc"), new QueryContextDTO.PaginationSpec(1, 2), Map.of(), null));
         List<?> rows = (List<?>) response.get("rows");
         assertEquals(1, ((Number) ((Map<?, ?>) rows.get(0)).get("v")).intValue());
         assertEquals(5, ((Number) response.get("totalCount")).intValue());
@@ -134,14 +134,12 @@ class ResultSetQueryServiceTest {
                     om.writeValueAsString(Map.of("objectId", "obj-1", "workspaceId", 7L, "taskId", "task",
                             "format", "parquet", "digest", "digest", "expiresAt", System.currentTimeMillis() + 60_000L,
                             "schemaVersion", "1.0", "kind", "table", "rowCount", 12,
-                            "columns", List.of(Map.of("name", "v", "title", "v", "dataType", "number", "nullable", false))));
+                            "columns", List.of(Map.of("name", "v", "title", "v", "dataType", "number", "nullable", false)))));
             ObjectRef parsed = om.readValue(entity.getOutputRefJson(), ObjectRef.class);
             refs.when(() -> DatasetBatchCodec.readRows(any(), eq(parsed), eq(objectRefs), eq(0), eq(10_000)))
-                    .thenReturn(all.subList(0, 10));
-            refs.when(() -> DatasetBatchCodec.readRows(any(), eq(parsed), eq(objectRefs), eq(10_000), eq(10_000)))
-                    .thenReturn(all.subList(10, 12));
+                    .thenReturn(all);
             Map<String, Object> response = service.preview("exec-1",
-                    new QueryContextDTO("d", "c", null, Map.of(), null, new QueryContextDTO.PaginationSpec(2, 10), null));
+                    new ResultPreviewRequest(null, new QueryContextDTO.PaginationSpec(2, 10), Map.of(), null));
             assertEquals(12, ((Number) response.get("totalCount")).intValue());
             assertEquals(2, ((List<?>) response.get("rows")).size());
         } finally {
