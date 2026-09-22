@@ -195,6 +195,7 @@
           @select-child="handleSelectChild"
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
+          @move-component-into="handleMoveComponentInto"
           @delete-component="handleDeleteComponent"
           @copy-component="handleCopyComponent"
           @paste-component="handlePasteComponent"
@@ -340,6 +341,7 @@ import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { componentToCombinationChild, defaultCombinationChildLayout } from '@/utils/combination-tabs'
 import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
@@ -989,6 +991,28 @@ function handleCombinationAddTab(payload: { containerId: string }): void {
 function handleCombinationRemoveTab(payload: { containerId: string; tabId: string }): void {
   const container = findCombinationContainer(payload.containerId)
   if (container?.type === 'combination') void removeTabFromContainer(container as InsightComponent, payload.tabId)
+}
+
+/** 将画布已有的顶层组件拖入组合卡片当前页签，并从顶层栅格中移除。 */
+function handleMoveComponentInto(payload: { containerId: string; componentId: string; x: number; y: number }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  const container = page?.components.find((c) => c.id === payload.containerId)
+  if (!page || !container || container.type !== 'combination' || container.id === payload.componentId) return
+
+  const sourceIndex = page.components.findIndex((c) => c.id === payload.componentId)
+  if (sourceIndex < 0) return
+  const source = page.components[sourceIndex]
+  const layoutBase = defaultCombinationChildLayout(source.type, payload.x, payload.y)
+  const child = componentToCombinationChild(source, layoutBase)
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (container.containerConfig?.tabs.length && activeTab) {
+    activeTab.children.push(child)
+  } else {
+    ;(container.children ??= []).push(child)
+  }
+  page.components.splice(sourceIndex, 1)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: child.id }
 }
 
 /** 属性面板「添加页签」 */

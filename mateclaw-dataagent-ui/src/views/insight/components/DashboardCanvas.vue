@@ -54,7 +54,7 @@
         :w="item.w"
         :h="item.h"
         :static="!editable"
-        :drag-ignore-from="'a, button, .cc-child'"
+        :drag-ignore-from="'a, button, .cc-child, .grid-item-toolbar'"
         @click.stop="handleSelectComponent(item.i)"
       >
         <div
@@ -77,6 +77,8 @@
             v-if="editable"
             class="grid-item-toolbar"
             :class="`title-bar-${getComponent(item.i)?.titleBarStyle ?? 'standard'}`"
+            draggable="true"
+            @dragstart.stop="handleComponentDragStart($event, item.i)"
           >
             <span v-if="isToolbarTitleVisible(item.i)" class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
             <button
@@ -152,6 +154,7 @@
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
+                @move-component-into="(p) => emit('move-component-into', p)"
               />
             </template>
           </div>
@@ -225,6 +228,7 @@ const emit = defineEmits<{
   (e: 'select-child', payload: { containerId: string; childId: string | null }): void
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
   (e: 'delete-component', id: string): void
   (e: 'copy-component', id: string): void
   (e: 'paste-component'): void
@@ -384,6 +388,17 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
+/** 组件标题栏是进入组合容器的专用拖拽把手，避免和画布栅格移动冲突。 */
+function handleComponentDragStart(event: DragEvent, componentId: string): void {
+  if (!props.editable || !event.dataTransfer) return
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('application/json', JSON.stringify({
+    kind: 'canvas-component',
+    componentId,
+    componentType: getComponent(componentId)?.type,
+  }))
+}
+
 /** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
 const GRID_COLS = 24
 const GRID_ROW_HEIGHT = 30
@@ -422,6 +437,7 @@ function handleDrop(event: DragEvent): void {
   }
   try {
     const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
+    if ((payload as { kind?: string }).kind === 'canvas-component') return
     emit('add-component', { ...payload, position: dropToGrid(event) })
   } catch (e) {
     console.error('[DashboardCanvas] drop parse error:', e)
@@ -859,6 +875,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   background: var(--db-surface-nested, var(--db-hover));
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
+  cursor: grab;
+}
+
+.grid-item-toolbar:active {
+  cursor: grabbing;
 }
 
 .grid-item-title {

@@ -175,6 +175,7 @@ import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import EmptyState from './EmptyState.vue'
 import { useTabKeyboard } from '../composables/useTabKeyboard'
 import { calculateCombinationChildResize } from './combinationChildLayout'
+import { defaultCombinationChildLayout } from '@/utils/combination-tabs'
 
 defineOptions({ name: 'CombinationCardWidget' })
 
@@ -196,6 +197,8 @@ const emit = defineEmits<{
   (e: 'add-tab', payload: { containerId: string }): void
   /** 删除页签（编辑器负责二次确认与「最后一个页签组件平移回容器」） */
   (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
+  /** 将画布中的已有组件移入当前组合容器/页签 */
+  (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
 }>()
 
 const { t } = useI18n()
@@ -311,9 +314,15 @@ function onBodyDrop(e: DragEvent) {
   const raw = e.dataTransfer.getData('application/json')
   if (!raw) return
   try {
-    const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
-    const size = defaultSize(payload.type)
-    addChild(payload.type, payload.chartType, dropPosFromEvent(e, size.col, size.h))
+    const payload = JSON.parse(raw) as { kind?: string; componentId?: string; componentType?: InsightComponentType; type?: InsightComponentType; chartType?: ChartType }
+    if (payload.kind === 'canvas-component' && payload.componentId) {
+      const layout = defaultCombinationChildLayout(payload.componentType ?? 'kpi')
+      const pos = dropPosFromEvent(e, layout.col, layout.h ?? 180)
+      emit('move-component-into', { containerId: props.component.id, componentId: payload.componentId, ...pos })
+    } else if (payload.type) {
+      const size = defaultSize(payload.type)
+      addChild(payload.type, payload.chartType, dropPosFromEvent(e, size.col, size.h))
+    }
   } catch (err) {
     console.error('[CombinationCardWidget] drop parse error:', err)
   }
@@ -359,10 +368,8 @@ function genId(prefix: string): string {
 
 /** 子组件默认尺寸（col 为 12 栅格列数，h 为像素高）—— 落点换算与新增子组件共用同一来源 */
 function defaultSize(type: InsightComponentType): { col: number; h: number } {
-  return {
-    col: type === 'chart' || type === 'table' ? 7 : 6,
-    h: type === 'kpi' ? 96 : type === 'aiAnalysis' ? 160 : 180,
-  }
+  const layout = defaultCombinationChildLayout(type)
+  return { col: layout.col, h: layout.h ?? 180 }
 }
 
 function addChild(type: InsightComponentType, chartType: ChartType | undefined, pos: { x: number; y: number }): void {

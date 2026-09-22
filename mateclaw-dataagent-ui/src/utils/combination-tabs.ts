@@ -1,4 +1,4 @@
-import type { CombinationTab, InsightComponent } from '@/types'
+import type { CombinationChildLayout, CombinationTab, InsightCombinationChild, InsightComponent, InsightComponentType } from '@/types'
 
 /**
  * 组合卡片页签增删的纯逻辑（画布与属性面板共用，保证两个入口行为一致）。
@@ -20,6 +20,30 @@ export function createCombinationTabId(): string {
 export function combinationTabChildCount(component: InsightComponent, tabId: string): number {
   const tab = component.containerConfig?.tabs.find((x) => x.id === tabId)
   return tab?.children.length ?? 0
+}
+
+/** 组合子组件的默认布局，画布拖入和已有组件移入共用同一套尺寸规则。 */
+export function defaultCombinationChildLayout(
+  type: InsightComponentType,
+  x = 24,
+  y = 24,
+): CombinationChildLayout {
+  return {
+    x,
+    y,
+    col: type === 'chart' || type === 'table' ? 7 : 6,
+    h: type === 'kpi' ? 96 : type === 'aiAnalysis' ? 160 : 180,
+  }
+}
+
+/** 将画布顶层组件转换为组合卡片子组件，保留数据配置和组件视觉配置。 */
+export function componentToCombinationChild(
+  component: InsightComponent,
+  layout: CombinationChildLayout,
+): InsightCombinationChild {
+  const clone = JSON.parse(JSON.stringify(component)) as InsightComponent
+  const { position: _position, ...child } = clone
+  return { ...child, layout } as InsightCombinationChild
 }
 
 export interface AddCombinationTabResult {

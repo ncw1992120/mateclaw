@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dashboardCanvasConstants'
 
@@ -47,6 +47,18 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
 
     expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
+  })
+
+  it('uses the component title bar as a drag handle for moving into a combination', async () => {
+    const setData = vi.fn()
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.get('.grid-item-toolbar').trigger('dragstart', { dataTransfer: { setData, effectAllowed: '' } })
+
+    expect(setData).toHaveBeenCalledWith('application/json', JSON.stringify({ kind: 'canvas-component', componentId: 'kpi-1', componentType: 'kpi' }))
   })
 
   it('offers one add-component action in an empty canvas', () => {

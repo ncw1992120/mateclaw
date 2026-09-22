@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   addCombinationTab,
   combinationTabChildCount,
+  componentToCombinationChild,
+  defaultCombinationChildLayout,
   removeCombinationTab,
 } from '@/utils/combination-tabs'
 import type { InsightCombinationChild, InsightComponent } from '@/types'
@@ -122,5 +124,30 @@ describe('组合卡片页签 · 删除页签', () => {
 
     expect(combinationTabChildCount(c, 'tab_a')).toBe(1)
     expect(combinationTabChildCount(c, 'tab_missing')).toBe(0)
+  })
+})
+
+describe('组合卡片 · 顶层组件移入', () => {
+  it('转换时保留组件配置、数据绑定和视觉样式，仅替换为相对布局', () => {
+    const source: InsightComponent = {
+      id: 'canvas-kpi-1',
+      type: 'kpi',
+      title: '策略概括',
+      titleBarStyle: 'accent',
+      visualStyle: { border: { mode: 'theme' }, shadow: 'medium' },
+      dataSource: { datasourceId: 'ds-1', metrics: ['metric_a'], dimensions: ['channel'], filters: [], limit: 100 },
+      multiKpi: true,
+      position: { x: 3, y: 8, w: 6, h: 4 },
+    }
+    const child = componentToCombinationChild(source, defaultCombinationChildLayout('kpi', 40, 60))
+
+    expect(child.id).toBe('canvas-kpi-1')
+    expect(child.title).toBe('策略概括')
+    expect(child.titleBarStyle).toBe('accent')
+    expect(child.visualStyle?.shadow).toBe('medium')
+    expect(child.dataSource?.datasourceId).toBe('ds-1')
+    expect(child.multiKpi).toBe(true)
+    expect(child.layout).toEqual({ x: 40, y: 60, col: 6, h: 96 })
+    expect((child as unknown as { position?: unknown }).position).toBeUndefined()
   })
 })

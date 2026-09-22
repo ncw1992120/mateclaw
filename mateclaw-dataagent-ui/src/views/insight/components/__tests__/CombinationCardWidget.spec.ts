@@ -173,4 +173,42 @@ describe('CombinationCardWidget', () => {
     await secondTab.trigger('click')
     expect(innerConfig.activeTab).toBe('tab-two')
   })
+
+  it('accepts an existing canvas component drop and emits a move request', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'outer-combination',
+          type: 'combination',
+          title: '外层组合',
+          children: [],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const dataTransfer = {
+      getData: (type: string) => type === 'application/json'
+        ? JSON.stringify({ kind: 'canvas-component', componentId: 'canvas-kpi-1' })
+        : '',
+    }
+    await wrapper.get('.combination-card').trigger('drop', { clientX: 40, clientY: 50, dataTransfer })
+
+    expect(wrapper.emitted('move-component-into')).toEqual([[{ containerId: 'outer-combination', componentId: 'canvas-kpi-1', x: 0, y: 0 }]])
+  })
 })
