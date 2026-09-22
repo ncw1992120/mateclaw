@@ -91,6 +91,7 @@ describe('PropertyPanel', () => {
 
     expect((wrapper.vm as any).localFilterConfig.optionSource).toBe('dynamic')
     expect(wrapper.find('.static-options-list').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('insight.property.filterOptionDynamicHint')
     const labels = wrapper.findAll('.form-label').map(label => label.text())
     expect(labels.indexOf('insight.property.filterOptions')).toBeLessThan(labels.indexOf('insight.property.datasource'))
   })
@@ -115,6 +116,9 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('.static-options-list').exists()).toBe(true)
     expect(wrapper.findAll('.static-options-list input')).toHaveLength(2)
     expect(wrapper.text()).toContain('+ insight.property.addOption')
+    expect(wrapper.text()).not.toContain('insight.property.filterOptionStaticHint')
+    const labels = wrapper.findAll('.form-label').map(label => label.text())
+    expect(labels.indexOf('insight.property.filterStaticOptions')).toBeLessThan(labels.indexOf('insight.property.filterSelectionMode'))
   })
 
   it('shows datasource and dimension controls only for dynamic filter options', async () => {

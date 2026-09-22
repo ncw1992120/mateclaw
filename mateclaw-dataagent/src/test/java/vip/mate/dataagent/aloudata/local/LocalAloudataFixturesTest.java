@@ -116,6 +116,19 @@ class LocalAloudataFixturesTest {
     }
 
     @Test
+    void dimensionValuesReturnsConversionMetricNamesFromStrategyDimensionView() {
+        Map<String, Object> body = fixtures.payload("dimension_values", Map.of(
+                "dimName", "metric_name",
+                "dimValueKeyword", "加仓",
+                "pageNumber", 1,
+                "pageSize", 1), null);
+
+        assertEquals("200", body.get("code"));
+        assertEquals(Boolean.TRUE, body.get("success"));
+        assertEquals(List.of("经纪个人场内公募非货加仓交易量"), body.get("data"));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void viewResultIsColumnarAndSupportsPaging() {
         Map<String, Object> body = fixtures.payload("analysis_view_query_data",

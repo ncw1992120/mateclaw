@@ -72,6 +72,7 @@ public class LocalAloudataFixtures {
             case "analysis_view_query_by_name" -> viewByName(owner, safeParams);
             case "metric_batch_detail" -> metricBatchDetail(owner, safeParams);
             case "dimension_list" -> dimensionList(owner, safeParams);
+            case "dimension_values" -> dimensionValues(safeParams);
             case "analysis_view_query_data" -> queryData(owner, safeParams);
             case "metrics_query" -> metricsQuery(owner, safeParams);
             default -> unknownEndpoint(endpointName);
@@ -139,6 +140,38 @@ public class LocalAloudataFixtures {
         data.put("total", all.size());
         data.put("hasNext", to < all.size());
         return envelope;
+    }
+
+    /** 维度值预览：从策略解读-子策略-维度视图读取去重后的维值，支持关键词与分页。 */
+    private Map<String, Object> dimensionValues(Map<String, Object> params) {
+        Map<String, Object> container = copy(load("analysis_view_query_data.json"));
+        Map<String, Object> view = asMap(container.get("cljd_zcl_wd_view"));
+        Map<String, Object> data = asMap(view.get("data"));
+        Map<String, Object> table = asMap(data.get("table"));
+        Map<String, Object> columns = asMap(table.get("columns"));
+        String dimName = firstString(params.get("dimName"));
+
+        LinkedHashSet<String> uniqueValues = new LinkedHashSet<>();
+        Object rawCells = dimName == null ? null : columns.get(dimName);
+        if (rawCells instanceof List<?> cells) {
+            for (Object cell : cells) {
+                Object value = cell instanceof Map<?, ?> map ? map.get("value") : cell;
+                String text = firstString(value);
+                if (text != null) uniqueValues.add(text);
+            }
+        }
+
+        String keyword = firstString(params.get("dimValueKeyword"));
+        List<String> matched = uniqueValues.stream()
+                .filter(value -> keyword == null
+                        || value.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT)))
+                .toList();
+        int pageSize = Math.max(0, intValue(params.get("pageSize"), 200));
+        int pageNumber = Math.max(1, intValue(params.get("pageNumber"), 1));
+        int from = Math.min(matched.size(), (pageNumber - 1) * pageSize);
+        int to = Math.min(matched.size(), from + pageSize);
+        List<String> page = pageSize == 0 ? List.of() : new ArrayList<>(matched.subList(from, to));
+        return envelope(page, "mock-trace-dimension-values");
     }
 
     /** 视图详情：按 viewName 命中；未知视图返回 SM_02_0038，模拟「无该视图权限」。 */

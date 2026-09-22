@@ -395,12 +395,41 @@
               <el-radio-button value="static">{{ t('insight.property.filterOptionStatic') }}</el-radio-button>
               <el-radio-button value="dynamic">{{ t('insight.property.filterOptionDynamic') }}</el-radio-button>
             </el-radio-group>
-            <span class="form-hint">
-              {{ localFilterConfig.optionSource === 'dynamic'
-                ? t('insight.property.filterOptionDynamicHint')
-                : t('insight.property.filterOptionStaticHint') }}
-            </span>
           </div>
+        </div>
+
+        <!-- 静态选项编辑：紧跟在静态选项来源按钮下方。 -->
+        <div v-if="localFilterConfig.optionSource === 'static'" class="form-group form-group-column">
+          <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
+          <div class="static-options-list">
+            <div
+              v-for="(opt, idx) in localFilterConfig.staticOptions"
+              :key="idx"
+              class="static-option-row"
+            >
+              <el-input
+                v-model="opt.label"
+                :placeholder="t('insight.property.optionLabel')"
+                style="flex: 1"
+                @change="emitFilterConfigChange"
+              />
+              <el-input
+                v-model="opt.value"
+                :placeholder="t('insight.property.optionValue')"
+                style="flex: 1"
+                @change="emitFilterConfigChange"
+              />
+              <el-button
+                text
+                @click="removeStaticOption(idx)"
+              >
+                ✕
+              </el-button>
+            </div>
+          </div>
+          <el-button text @click="addStaticOption">
+            + {{ t('insight.property.addOption') }}
+          </el-button>
         </div>
 
         <template v-if="localFilterConfig.optionSource === 'dynamic'">
@@ -489,44 +518,6 @@
               :value="opt.value"
             />
           </el-select>
-        </div>
-
-        <!-- 静态选项编辑（仅静态来源；列表和添加入口位于“静态选项”标题下方）-->
-        <div v-if="localFilterConfig.optionSource === 'static'" class="form-group form-group-column">
-          <label class="form-label">{{ t('insight.property.filterStaticOptions') }}</label>
-          <div class="static-options-list">
-            <div
-              v-for="(opt, idx) in localFilterConfig.staticOptions"
-              :key="idx"
-              class="static-option-row"
-            >
-              <el-input
-                v-model="opt.label"
-                :placeholder="t('insight.property.optionLabel')"
-                style="flex: 1"
-                @change="emitFilterConfigChange"
-              />
-              <el-input
-                v-model="opt.value"
-                :placeholder="t('insight.property.optionValue')"
-                style="flex: 1"
-                @change="emitFilterConfigChange"
-              />
-              <el-button
-                text
-                @click="removeStaticOption(idx)"
-              >
-                ✕
-              </el-button>
-            </div>
-          </div>
-          <el-button
-            text
-            
-            @click="addStaticOption"
-          >
-            + {{ t('insight.property.addOption') }}
-          </el-button>
         </div>
 
         <!-- 筛选器作用范围 -->

@@ -356,6 +356,33 @@ def handle_dimension_list(query, body, headers):
     return payload
 
 
+def handle_dimension_values(query, body, headers):
+    """返回指定维度的去重值，数据来源于策略解读-子策略-维度视图夹具。"""
+    view = load_fixture("analysis_view_query_data.json").get("cljd_zcl_wd_view", {})
+    columns = ((view.get("data") or {}).get("table") or {}).get("columns") or {}
+    dim_name = str(body.get("dimName") or "")
+    cells = columns.get(dim_name) or []
+
+    values = []
+    seen = set()
+    for cell in cells:
+        value = cell.get("value") if isinstance(cell, dict) else cell
+        if value is None:
+            continue
+        text = str(value)
+        if text not in seen:
+            seen.add(text)
+            values.append(text)
+
+    keyword = str(body.get("dimValueKeyword") or "").strip().lower()
+    if keyword:
+        values = [value for value in values if keyword in value.lower()]
+
+    page_size = as_int(body.get("pageSize"), 200)
+    page_number = as_int(body.get("pageNumber"), 1)
+    return envelope(paginate(values, page_number, page_size), trace_id="mock-trace-dimension-values")
+
+
 def handle_metric_list(query, body, headers):
     payload = replace_owner(load_fixture("metric_batch_detail.json"), headers.get("auth-value") or DEFAULT_OWNER)
     data = payload.get("data", [])
@@ -410,6 +437,7 @@ ROUTES = {
     ("GET", f"{ANYMETRICS}/metrics/list"): handle_metric_list,
     ("GET", f"{ANYMETRICS}/metrics/dimensionAll"): handle_dimension_all,
     ("POST", f"{ANYMETRICS}/dimension/list"): handle_dimension_list,
+    ("POST", f"{ANYMETRICS}/dimension/values"): handle_dimension_values,
     ("GET", f"{ANYMETRICS}/dimension/detail"): handle_dimension_detail,
     ("GET", f"{ANYMETRICS}/category/list"): handle_category_list,
     ("GET", f"{SEMANTIC}/analysisView/query"): handle_analysis_view_query,
