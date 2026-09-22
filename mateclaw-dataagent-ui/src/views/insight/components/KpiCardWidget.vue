@@ -1,9 +1,9 @@
 <template>
   <div ref="rootRef" class="kpi-card-widget">
     <div class="kpi-card-inner">
-      <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+      <div v-if="(showTitle !== false && component.titleBarStyle !== 'hidden') || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
-          <span v-if="component.titleBarStyle !== 'hidden'" class="kpi-header-title">{{ component.title }}</span>
+          <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title">{{ component.title }}</span>
         </div>
         <div v-if="showTimeFilter" class="kpi-time-filter">
           <el-date-picker
@@ -142,6 +142,8 @@ const props = withDefaults(defineProps<{
   componentData?: InsightComponentData
   /** 是否编辑态（编辑态下指标可拖拽 / 缩放 / 打开样式弹窗） */
   editable?: boolean
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
   dashboardTheme?: ResolvedDashboardTheme
 }>(), {

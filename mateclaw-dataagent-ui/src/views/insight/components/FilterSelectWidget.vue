@@ -1,6 +1,6 @@
 <template>
   <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="component.titleBarStyle !== 'hidden'" class="filter-label">{{ component.title }}</div>
+    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label">{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
@@ -46,6 +46,8 @@ defineOptions({
 const props = defineProps<{
   /** 组件配置 */
   component: InsightComponent
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
   /** 可选项（外部注入，优先级低于 config.staticOptions） */
   options?: Array<{ label: string; value: string }>
 }>()

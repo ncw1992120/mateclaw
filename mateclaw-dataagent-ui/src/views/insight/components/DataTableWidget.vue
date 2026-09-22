@@ -2,7 +2,7 @@
   <div class="data-table-widget">
     <div class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
-        <div v-if="component.titleBarStyle !== 'hidden'" class="table-title">{{ component.title }}</div>
+        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title">{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">
@@ -96,6 +96,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
 }>()
 
 const emit = defineEmits<{

@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
     <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <span v-if="component.titleBarStyle !== 'hidden'" class="analysis-title">{{ component.title }}</span>
+      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title">{{ component.title }}</span>
       <el-button
         v-if="!generating"
         type="primary"
@@ -59,6 +59,8 @@ const props = defineProps<{
   component: InsightComponent
   componentData?: InsightComponentData
   generating?: boolean
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
 }>()
 
 const emit = defineEmits<{

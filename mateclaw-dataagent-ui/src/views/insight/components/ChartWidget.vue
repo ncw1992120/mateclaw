@@ -1,7 +1,7 @@
 <template>
   <div class="chart-widget">
     <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <div v-if="component.titleBarStyle !== 'hidden'" class="chart-title">{{ component.title }}</div>
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title">{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"
@@ -56,6 +56,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
   /** 仪表盘级主题；不传时保持旧图表视觉 */
   dashboardTheme?: ResolvedDashboardTheme
 }>()

@@ -118,31 +118,37 @@
             v-if="child.type === 'kpi'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
+            :show-title="false"
             :dashboard-theme="dashboardTheme"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
+            :show-title="false"
             :dashboard-theme="dashboardTheme"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
+            :show-title="false"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="toWidgetComponent(child)"
+            :show-title="false"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
+            :show-title="false"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
+            :show-title="false"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
