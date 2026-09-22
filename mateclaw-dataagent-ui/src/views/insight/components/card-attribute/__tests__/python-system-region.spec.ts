@@ -36,8 +36,12 @@ describe('buildPythonSystemRegion', () => {
       fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
     }])
 
-    expect(state.pythonSystem).toContain('_optional_filter("metric_time", "eq", "指标日期")')
-    expect(state.pythonSystemState?.generatedCode).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+    // 新契约：绑定变化刷新系统区，但系统区不再携带任何筛选拼接
+    expect(state.pythonSystem).toContain('table2 = datasets.input(')
+    expect(state.pythonSystem).toContain(').to_polars()')
+    expect(state.pythonSystem).not.toContain('_optional_filter')
+    expect(state.pythonSystem).not.toContain('filters=')
+    expect(state.pythonSystemState?.generatedCode).toContain('datasets.input(')
   })
 
   it('打开已绑定筛选器的组件时重算过期的系统生成区域', () => {
@@ -71,22 +75,24 @@ describe('buildPythonSystemRegion', () => {
 
     hydratePanel(component as never)
 
-    expect(state.pythonSystem).toContain('_optional_filter("metric_time", "eq", "指标日期")')
-    expect(state.pythonSystemState?.generatedCode).toContain('_optional_filter("metric_time", "eq", "指标日期")')
+    expect(state.pythonSystem).toContain('table2 = datasets.input(')
+    expect(state.pythonSystemState?.generatedCode).toContain('datasets.input(')
+    expect(state.pythonSystem).not.toContain('datasets.read(')
   })
 
-  it('无绑定筛选时生成 datasets.read 全量读取（可运行契约，不再生成 inputs[...]）', () => {
+  it('无绑定筛选时生成 datasets.input 标准读取（不生成 read/inputs[...]）', () => {
     state.datasets = [{ id: 'ds1', alias: 'table1' }] as never
     state.filterBindings = []
     const code = buildPythonSystemRegion()
-    expect(code).toContain('table1 = datasets.read(')
+    expect(code).toContain('table1 = datasets.input(')
     expect(code).toContain('input_name="table1"')
-    expect(code).toContain('filters=[]')
     expect(code).toContain('.to_polars()')
+    expect(code).not.toContain('datasets.read(')
+    expect(code).not.toContain('filters=')
     expect(code).not.toContain('inputs[')
   })
 
-  it('绑定筛选器时生成真实下推条件（不再是注释）', () => {
+  it('绑定筛选器不再向系统区注入下推条件（条件由 queryConfig/Planner 处理）', () => {
     state.datasets = [
       { id: 'ds1', alias: 'table2' },
       { id: 'ds2', alias: 'table3' },
@@ -102,18 +108,11 @@ describe('buildPythonSystemRegion', () => {
       },
     ] as never
     const code = buildPythonSystemRegion()
-    // 每个作用域数据集都有下推条件
-    expect(code.match(/_cond\("metric_time", "指标日期"\)/g)).toHaveLength(2)
-    expect(code).toContain('filters=_cond("metric_time", "指标日期")')
-    // 运行时辅助：值经 datasets.params 注入，形状自适应
-    expect(code).toContain('datasets.params.get(name)')
-    expect(code).toContain('"between" if isinstance(v, dict) else "eq"')
-    expect(code).toContain('"in" if isinstance(v, (list, tuple))')
-    // 模糊查询：通配符值按 contains 下推（* 归一为 %），支持显式 operator 覆盖
-    expect(code).toContain('"operator": "contains"')
-    expect(code).toContain('v.replace("*", "%")')
-    expect(code).toContain('operator="auto"')
-    expect(code).not.toContain('未映射字段')
+    // 新契约：系统区逐输入标准读取，无 params/条件拼接
+    expect(code.match(/datasets\.input\(/g)).toHaveLength(2)
+    expect(code).not.toContain('_cond(')
+    expect(code).not.toContain('datasets.params')
+    expect(code).not.toContain('filters=')
     expect(code).not.toContain('数据源查询阶段下推')
   })
 
@@ -127,10 +126,10 @@ describe('buildPythonSystemRegion', () => {
       },
     ] as never
     const code = buildPythonSystemRegion()
-    expect(code).toContain('filters=[]')
+    expect(code).toContain('table2 = datasets.input(')
     expect(code).not.toContain('_cond(')
-    // 未生成辅助函数定义（没有绑定条件时保持系统区域精简）
     expect(code).not.toContain('def _cond(')
+    expect(code).not.toContain('filters=')
   })
 
   it('有显式模板时按 operator 和 parameterNames 生成可选下推条件', () => {
@@ -145,9 +144,9 @@ describe('buildPythonSystemRegion', () => {
       ],
     }] as never
     const code = buildPythonSystemRegion()
-    expect(code).toContain('_cond("metric_time", "startDate", "gte")')
-    expect(code).toContain('_cond("metric_time", "endDate", "lt")')
-    expect(code).not.toContain('_cond("metric_time", "时间范围")')
+    expect(code).not.toContain('_cond(')
+    expect(code).toContain('table2 = datasets.input(')
+    expect(code).toContain(').to_polars()')
   })
 
   it('筛选器只作用于声明范围内数据集', () => {
@@ -163,11 +162,11 @@ describe('buildPythonSystemRegion', () => {
       },
     ] as never
     const code = buildPythonSystemRegion()
-    expect(code).toContain('filters=_cond("metric_time", "指标日期")')
+    expect(code).toContain('input_name="table2"')
     expect(code).toContain('input_name="table3"')
-    // table3 不在作用域内 → 全量读取
-    const table3Block = code.slice(code.indexOf('input_name="table3"'))
-    expect(table3Block).toContain('filters=[]')
+    // 作用域不再影响系统区：两个输入都是统一标准读取
+    expect(code).not.toContain('filters=')
+    expect(code).not.toContain('_cond(')
   })
 })
 

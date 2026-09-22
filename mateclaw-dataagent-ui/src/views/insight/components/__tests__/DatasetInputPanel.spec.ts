@@ -136,7 +136,11 @@ describe('DatasetInputPanel', () => {
     })
     await wrapper.find('button[aria-label="生成 Python Base Script"]').trigger('click')
     const emitted = wrapper.emitted('update:script')?.at(-1)?.[0] as string
-    expect(emitted).toContain('"operator": "eq"')
+    // 新契约：系统区只生成 datasets.input，用户代码保留
+    expect(emitted).toContain('orders = datasets.input(')
+    expect(emitted).toContain(').to_polars()')
+    expect(emitted).not.toContain('datasets.read(')
+    expect(emitted).not.toContain('"operator": "eq"')
     expect(emitted).toContain('result = orders.join(metrics)')
     expect(emitted).toContain('系统生成区域')
   })

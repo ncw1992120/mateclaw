@@ -236,81 +236,31 @@ function toIdentifier(alias: string): string {
 }
 
 /**
- * 绑定筛选器的运行时下推辅助代码（随系统区域生成，供 datasets.read 使用）。
- *
- * 契约：页面筛选值经执行参数注入 `datasets.params`（key = 筛选器标题）。
- * operator="auto"（默认）按值形状自适应：
- *   - 字符串含 % 或 * → contains（模糊查询；后端编译为 LIKE '%value%'，* 归一为 %）
- *   - 列表 → in；{start,end} 字典 → between；其余标量 → eq
- * 未选值（None/空串/空列表）时不下推该条件，读全量。
- * 绑定若需强制某种匹配方式，可在生成处传显式 operator（如 "contains"）覆盖自适应。
+ * Python 系统生成区域（实施计划任务 6 契约）：
+ * 唯一标准读取方式是 datasets.input(input_name="...").to_polars()；返回的 DatasetInput
+ * 已经是查询计划处理后的输入（页面筛选/排序/分页在读取前应用）。
+ * 系统区不生成 datasets.read、columns=[]、datasets.params 或任何筛选/排序/分页拼接；
+ * 也不向脚本注入运行时参数入口。
  */
-const PYTHON_FILTER_RUNTIME = `def _bind_param(name):
-    # 页面筛选值由执行参数注入（datasets.params）；本地无 Runner 时 datasets 为 None
-    return datasets.params.get(name) if datasets is not None else None
-
-def _cond(field, name, operator="auto"):
-    """绑定筛选器 → datasets.read 的 filters 条件（列表）；未选值时返回 []。"""
-    v = _bind_param(name)
-    if v is None or v == "" or (isinstance(v, (list, tuple)) and len(v) == 0):
-        return []
-    if operator == "auto":
-        # 模糊查询：值自带 % 或 * 通配符时按 contains 下推（LIKE '%value%'）
-        if isinstance(v, str) and ("%" in v or "*" in v):
-            return [{"field": field, "operator": "contains", "value": v.replace("*", "%")}]
-        operator = "in" if isinstance(v, (list, tuple)) else ("between" if isinstance(v, dict) else "eq")
-    return [{"field": field, "operator": operator, "value": v}]`
-
 export function buildPythonSystemRegion(): string {
-  const lines = ['# ===== 系统生成区域：输入数据集和筛选绑定', '']
-  const hasBoundFilters = state.filterBindings.some((b) =>
-    state.datasets.some((ds) => b.scope[ds.id] && b.fieldMap.some((m) => m.datasetId === ds.id && m.field)),
-  )
-  if (hasBoundFilters) {
-    lines.push(PYTHON_FILTER_RUNTIME, '')
-  }
+  const lines = [
+    '# ===== 系统生成区域：输入数据集和筛选绑定',
+    '',
+    '# 每个输入已是查询计划处理后的结果：页面筛选、排序和分页在读取前应用。',
+    '# 只读区域：请勿在此拼接 filters/orders/limit/offset 等页面查询参数。',
+    '',
+  ]
   state.datasets.forEach((ds) => {
-    // 绑定到该数据集的筛选器：fieldMap 命中真实字段名的才生成下推条件
-    const bound: { name: string; field: string; conditions: DashboardScriptFilterCondition[] }[] = []
-    state.filterBindings.forEach((b) => {
-      if (!b.scope[ds.id]) return
-      const hit = b.fieldMap.find((m) => m.datasetId === ds.id)
-      if (!hit?.field) return
-      const explicitConditions = (b.conditions ?? []).filter((condition) =>
-        (condition.inputName === ds.alias || b.inputNames?.includes(condition.inputName)) && condition.field,
-      )
-      bound.push({ name: b.filterName, field: hit.field, conditions: explicitConditions })
-    })
-    if (bound.length) {
-      bound.forEach((b) => {
-        lines.push(`# 筛选器「${b.name}」→ ${toIdentifier(ds.alias)}.${b.field}（经 datasets.params 注入，未选值时不下推）`)
-      })
-      const condArgs = bound.flatMap((b) => {
-        if (b.conditions.length) {
-          return b.conditions.map((condition) =>
-            `_cond(${JSON.stringify(condition.field)}, ${JSON.stringify(condition.parameterNames[0])}, ${JSON.stringify(condition.operator)})`,
-          )
-        }
-        return [`_cond(${JSON.stringify(b.field)}, ${JSON.stringify(b.name)})`]
-      }).join(' + ')
-      lines.push(
-        `${toIdentifier(ds.alias)} = datasets.read(`,
-        `    input_name=${JSON.stringify(ds.alias)},`,
-        '    columns=[],',
-        `    filters=${condArgs},`,
-        ').to_polars()',
-      )
-    } else {
-      lines.push(
-        `${toIdentifier(ds.alias)} = datasets.read(`,
-        `    input_name=${JSON.stringify(ds.alias)},`,
-        '    columns=[],',
-        '    filters=[],',
-        ').to_polars()',
-      )
-    }
-    lines.push('')
+    lines.push(
+      `${toIdentifier(ds.alias)} = datasets.input(`,
+      `    input_name=${JSON.stringify(ds.alias)},`,
+      ').to_polars()',
+      '',
+    )
   })
+  if (!state.datasets.length) {
+    lines.push('# 当前没有已绑定的数据集输入。', '')
+  }
   return lines.join('\n')
 }
 
