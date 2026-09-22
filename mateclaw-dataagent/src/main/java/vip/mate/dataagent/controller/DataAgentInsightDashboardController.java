@@ -35,6 +35,7 @@ public class DataAgentInsightDashboardController {
     private final InsightDataBindService dataBindService;
     private final InsightReportService reportService;
     private final DashboardExecutionService executionService;
+    private final vip.mate.dataagent.service.ResultSetQueryService resultSetQueryService;
 
     /**
      * 仪表盘列表
@@ -150,7 +151,8 @@ public class DataAgentInsightDashboardController {
             @RequestBody(required = false) DashboardExecutionRequest request) {
         DashboardExecutionRequest scoped = new DashboardExecutionRequest(
                 request == null ? Map.of() : request.parameters(), componentId,
-                request == null ? null : request.schemaJson());
+                request == null ? null : request.schemaJson(),
+                request == null ? null : request.queryContext());
         return R.ok(executionService.submit(id, scoped));
     }
 
@@ -173,6 +175,19 @@ public class DataAgentInsightDashboardController {
     @Operation(summary = "读取仪表盘执行结果", description = "受工作区权限和 ObjectRef 任务上下文保护；返回统一结构化结果 {executionId,status,envelope,inline,outputRef?}，envelope 为 table/scalar/message 标准信封（内联与引用结果同构），预览行数受控且 meta 保留真实 rowCount/truncated；输出契约错误返回结构化 stage/path/expected/actual/suggestion")
     public R<Map<String, Object>> executionResult(@PathVariable String executionId) {
         return R.ok(executionService.result(executionId));
+    }
+
+    /**
+     * 结果集筛选/排序/分页预览：针对完整 inline 或 ObjectRef 结果执行服务端有界处理，
+     * 返回 columns/rows/totalCount/page/pageSize；GET result 的旧版前 10 行预览语义保持不变。
+     */
+    @PostMapping("/executions/{executionId}/result/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "结果集分页预览", description = "对完整执行结果做服务端排序/分页，返回精确总数；不基于旧接口前 10 行截断")
+    public R<Map<String, Object>> executionResultPreview(
+            @PathVariable String executionId,
+            @RequestBody(required = false) vip.mate.dataagent.dto.QueryContextDTO context) {
+        return R.ok(resultSetQueryService.preview(executionId, context));
     }
 
     @PostMapping("/executions/{executionId}/cancel")

@@ -43,6 +43,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     private final ObjectRefService objectRefs;
     private final ScriptResultContractService resultContract;
     private final String datasetReadBaseUrl;
+    private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
 
     public DashboardExecutionServiceImpl(
             InsightDashboardService dashboards,
@@ -53,7 +54,8 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             DashboardExecutionMapper executionMapper,
             ObjectRefService objectRefs,
             ScriptResultContractService resultContract,
-            @Value("${mateclaw.runner.dataset-read-base-url:http://mateclaw-dataagent:18089/dataagent/api}") String datasetReadBaseUrl) {
+            @Value("${mateclaw.runner.dataset-read-base-url:http://mateclaw-dataagent:18089/dataagent/api}") String datasetReadBaseUrl,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) vip.mate.dataagent.service.QueryPlanner queryPlanner) {
         this.dashboards = dashboards;
         this.preparation = preparation;
         this.runner = runner;
@@ -63,6 +65,22 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         this.objectRefs = objectRefs;
         this.resultContract = resultContract;
         this.datasetReadBaseUrl = datasetReadBaseUrl.replaceAll("/$", "");
+        this.queryPlanner = queryPlanner;
+    }
+
+    /** 旧签名便利构造器：无 Planner（存量测试/调用方使用）。 */
+    public DashboardExecutionServiceImpl(
+            InsightDashboardService dashboards,
+            ScriptTaskPreparationService preparation,
+            PythonExecutionService runner,
+            WorkspaceGuard workspaceGuard,
+            ObjectMapper mapper,
+            DashboardExecutionMapper executionMapper,
+            ObjectRefService objectRefs,
+            ScriptResultContractService resultContract,
+            String datasetReadBaseUrl) {
+        this(dashboards, preparation, runner, workspaceGuard, mapper, executionMapper, objectRefs,
+                resultContract, datasetReadBaseUrl, null);
     }
 
     @Override
@@ -81,10 +99,17 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         validateFilterBindings(executionSchema.path("scriptFilterBindings"), inputs.keySet());
         Map<String, Object> parameters = resolveParameters(
                 executionSchema.path("parameters"), request == null ? Map.of() : request.parameters());
+        // 新链路：queryContext 只用于 Planner 生成查询计划，不进入 Runner 的 parameters/datasets.params
+        Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> plans =
+                buildPlans(request == null ? null : request.queryContext(), schema, pipeline, inputs,
+                        script != null && !script.isBlank());
         String taskId = "dashboard-" + dashboardId + "-" + UUID.randomUUID();
-        ScriptTaskPreparationService.PreparedTask prepared = preparation.prepare(
-                taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
-                inputs, script, parameters);
+        // 存量契约（无 queryContext）保持原 prepare 调用；新链路才物化 prepared inputs
+        ScriptTaskPreparationService.PreparedTask prepared = plans.isEmpty()
+                ? preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
+                        inputs, script, parameters)
+                : preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
+                        inputs, script, parameters, plans);
 
         // 新版组件编排把执行策略随 pipeline 持久化；旧版仪表盘仍放在根级。
         // 根级为空时回退到实际执行的 pipeline，避免编辑器保存后丢失超时/输出限制。
@@ -133,6 +158,13 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
 
     /** 组件级数据集编排优先，旧仪表盘继续从根级 Schema 执行。 */
     private JsonNode findComponentPipeline(JsonNode schema, String componentId) {
+        JsonNode component = findComponent(schema, componentId);
+        if (component == null) return null;
+        JsonNode pipeline = component.path("config").path("datasetPipeline");
+        return pipeline.isObject() ? pipeline : null;
+    }
+
+    private JsonNode findComponent(JsonNode schema, String componentId) {
         if (componentId == null || componentId.isBlank()) return null;
         JsonNode pages = schema.path("pages");
         if (!pages.isArray()) return null;
@@ -140,13 +172,44 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             JsonNode components = page.path("components");
             if (!components.isArray()) continue;
             for (JsonNode component : components) {
-                if (componentId.equals(text(component, "id"))) {
-                    JsonNode pipeline = component.path("config").path("datasetPipeline");
-                    return pipeline.isObject() ? pipeline : null;
-                }
+                if (componentId.equals(text(component, "id"))) return component;
             }
         }
         return null;
+    }
+
+    /**
+     * 执行顺序：权限校验（入口）→ Schema/组件/绑定校验（上方）→ Planner → Adapter（在
+     * preparation 物化中）→ prepared input → Runner。queryContext 缺省时 plans 为空（存量契约）。
+     */
+    private Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> buildPlans(
+            vip.mate.dataagent.dto.QueryContextDTO context, JsonNode schema, JsonNode pipeline,
+            Map<String, Long> inputs, boolean hasPython) {
+        Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> plans = new LinkedHashMap<>();
+        if (context == null || pipeline == null || queryPlanner == null) return plans;
+        JsonNode component = findComponent(schema, context.componentId());
+        if (component == null) {
+            // 找不到组件节点（预览 schema 变体）时以 pipeline 构造最小容器供 Planner 读取
+            com.fasterxml.jackson.databind.node.ObjectNode container = mapper.createObjectNode();
+            container.putObject("config").set("datasetPipeline", pipeline);
+            component = container;
+        }
+        JsonNode declaredInputs = pipeline.path("datasetInputs");
+        for (JsonNode input : declaredInputs) {
+            String alias = text(input, "inputName");
+            if (alias == null || !inputs.containsKey(alias)) continue;
+            plans.put(alias, queryPlanner.plan(component, input, context, hasPython));
+        }
+        if (!plans.isEmpty()) {
+            // 审计日志：只记录字段名与数量，不记录凭据或完整参数值
+            org.slf4j.LoggerFactory.getLogger(DashboardExecutionServiceImpl.class)
+                    .info("[query-plan] component={} requestId={} inputs={} firstFilters={} firstOrders={} "
+                            + "residual={}", context.componentId(), context.requestId(), plans.size(),
+                            plans.values().iterator().next().filters().size(),
+                            plans.values().iterator().next().orders().size(),
+                            plans.values().iterator().next().residualOperations());
+        }
+        return plans;
     }
 
     @Override
