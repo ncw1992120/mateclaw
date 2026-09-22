@@ -33,12 +33,13 @@ const props = withDefaults(defineProps<{
   title?: string
   dashboardTheme?: ResolvedDashboardTheme
   size?: number
+  variant?: number
 }>(), { size: 14 })
 
 const iconRegistry = { Aim, Calendar, Collection, DataAnalysis, Filter, Grid, Histogram, MagicStick, PieChart, TrendCharts }
 const visible = computed(() => props.dashboardTheme?.iconMode !== 'hide')
 const iconComponent = computed(() => iconRegistry[resolveDashboardIcon(props.type, props.chartType, props.title) as keyof typeof iconRegistry] ?? Collection)
-const iconStyle = computed(() => componentIconStyle(props.dashboardTheme, props.type, props.title))
+const iconStyle = computed(() => componentIconStyle(props.dashboardTheme, props.type, props.title, props.variant))
 const iconSize = computed(() => Number.parseInt(iconStyle.value['--dashboard-icon-size'] ?? `${props.size}`, 10))
 </script>
 
@@ -48,6 +49,7 @@ const iconSize = computed(() => Number.parseInt(iconStyle.value['--dashboard-ico
   vertical-align: -2px;
   color: var(--dashboard-icon-color, currentColor);
   font-weight: var(--dashboard-icon-weight, 800);
+  margin-right: 6px;
   transform: scale(1.08);
 }
 .dashboard-component-icon :deep(svg) { stroke-width: 2.35; }

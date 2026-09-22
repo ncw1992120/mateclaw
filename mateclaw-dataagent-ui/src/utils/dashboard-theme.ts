@@ -18,7 +18,6 @@ interface ThemePreset extends Omit<ThemeToken, 'iconPalette'> {
 }
 
 const palette = (values: string[]): string[] => values.slice(0, 5)
-const STANDARD_WARM_ICON_PALETTE = palette(['#B45309', '#C2410C', '#BE185D', '#A16207', '#D97706'])
 
 export const DASHBOARD_THEME_PRESETS: Record<string, ThemePreset> = {
   blue: {
@@ -77,13 +76,20 @@ function isColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())
 }
 
+function darkenHex(hex: string, amount: number): string {
+  if (!isColor(hex)) return hex
+  const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16))
+  return `#${channels.map((channel) => Math.round(channel * (1 - amount)).toString(16).padStart(2, '0')).join('').toUpperCase()}`
+}
+
 function mergePreset(preset: ThemePreset, overrides: DashboardThemeOverrides): ThemeToken {
   const merged = { ...preset, ...overrides }
   const chart = Array.isArray(overrides.chartPalette) ? overrides.chartPalette : preset.chartPalette
   const metric = Array.isArray(overrides.metricPalette)
     ? overrides.metricPalette
     : Array.isArray(overrides.chartPalette) ? chart : preset.metricPalette
-  return { ...merged, chartPalette: chart, metricPalette: metric, iconPalette: STANDARD_WARM_ICON_PALETTE } as ThemeToken
+  const iconPalette = palette([0.16, 0.26, 0.36, 0.46, 0.56].map((amount) => darkenHex(preset.primary, amount)))
+  return { ...merged, chartPalette: chart, metricPalette: metric, iconPalette } as ThemeToken
 }
 
 export function resolveDashboardTheme(config: DashboardThemeConfig | undefined, globalMode: ResolvedDashboardTheme['mode']): ResolvedDashboardTheme {
@@ -190,13 +196,13 @@ export function componentThemeStyle(theme: ResolvedDashboardTheme | undefined, t
 }
 
 /** 输出标准语义图标的字号、字重和暖色；图标不再直接继承标题文字色。 */
-export function componentIconStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType | 'tab', title?: string): Record<string, string> {
+export function componentIconStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType | 'tab', title?: string, variant = 0): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
   const groupIndex: Record<ReturnType<typeof componentThemeGroup>, number> = {
     metric: 0, chart: 1, filter: 2, data: 3, ai: 4, container: 0,
   }
   const tabIndex = title?.includes('指标') ? 0 : title?.includes('计划') ? 1 : title?.includes('策略') ? 2 : 4
-  const colorIndex = type === 'tab' ? tabIndex : groupIndex[componentThemeGroup(type)]
+  const colorIndex = type === 'tab' ? tabIndex : (groupIndex[componentThemeGroup(type)] + variant) % theme.iconPalette.length
   const color = theme.iconPalette[colorIndex] ?? theme.primary
   return {
     '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',

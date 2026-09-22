@@ -18,7 +18,7 @@
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
     <div v-if="cfg.tabs.length || editable" class="cc-tabs" role="tablist" :aria-label="t('insight.combination.tabs')">
       <div
-        v-for="tab in cfg.tabs"
+        v-for="(tab, tabIndex) in cfg.tabs"
         :key="tab.id"
         class="cc-tab"
         :class="{ active: tab.id === cfg.activeTab }"
@@ -40,7 +40,7 @@
           @keyup.enter="commitTabRename(tab)"
         />
         <template v-else>
-          <span class="cc-tab-label" @dblclick.stop="editable && startTabRename(tab)"><DashboardComponentIcon type="tab" :title="tab.title" :dashboard-theme="dashboardTheme" />{{ tab.title }}</span>
+          <span class="cc-tab-label" @dblclick.stop="editable && startTabRename(tab)"><DashboardComponentIcon type="tab" :title="tab.title" :dashboard-theme="dashboardTheme" :variant="tabIndex" />{{ tab.title }}</span>
           <!-- 重命名 affordance：hover 淡入铅笔图标，提示该页签可双击重命名 -->
           <button
             v-if="editable"
@@ -69,7 +69,7 @@
       </div>
 
       <div
-        v-for="child in activeChildren"
+        v-for="(child, childIndex) in activeChildren"
         :key="child.id"
         class="cc-child"
         :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id }]"
@@ -104,10 +104,10 @@
             :aria-label="`编辑子组件标题 ${child.title}`"
             @click.stop="startChildTitleEdit(child)"
           >
-            <span class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" />{{ child.title }}</span>
+            <span class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" :variant="childIndex" />{{ child.title }}</span>
             <el-icon class="cc-child-title-edit" :size="11"><EditPen /></el-icon>
           </button>
-          <span v-else-if="editingChildId !== child.id" class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" />{{ child.title }}</span>
+          <span v-else-if="editingChildId !== child.id" class="cc-child-title"><DashboardComponentIcon :type="child.type" :chart-type="child.chartType" :title="child.title" :dashboard-theme="dashboardTheme" :variant="childIndex" />{{ child.title }}</span>
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
           </button>

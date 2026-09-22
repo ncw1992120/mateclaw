@@ -97,7 +97,7 @@
                 :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
                 @click.stop="startTitleEdit(item.i)"
               >
-                <span class="grid-item-title"><DashboardComponentIcon :type="getComponent(item.i)?.type ?? 'kpi'" :chart-type="getComponent(item.i)?.chartType" :title="getComponentTitle(item.i)" :dashboard-theme="dashboardTheme" />{{ getComponentTitle(item.i) }}</span>
+                <span class="grid-item-title"><DashboardComponentIcon :type="getComponent(item.i)?.type ?? 'kpi'" :chart-type="getComponent(item.i)?.chartType" :title="getComponentTitle(item.i)" :dashboard-theme="dashboardTheme" :variant="sameRowIconVariant(item)" />{{ getComponentTitle(item.i) }}</span>
                 <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
               </button>
             </template>
@@ -388,6 +388,14 @@ function getComponent(id: string): InsightComponent | undefined {
 /** 根据 ID 获取组件标题 */
 function getComponentTitle(id: string): string {
   return getComponent(id)?.title ?? ''
+}
+
+/** 同一行组件按从左到右轮换同主题深色阶，避免并列组件视觉黏连。 */
+function sameRowIconVariant(item: GridLayoutItem): number {
+  return gridLayout.value
+    .filter(candidate => candidate.y === item.y)
+    .sort((left, right) => left.x - right.x)
+    .findIndex(candidate => candidate.i === item.i)
 }
 
 function startTitleEdit(id: string): void {

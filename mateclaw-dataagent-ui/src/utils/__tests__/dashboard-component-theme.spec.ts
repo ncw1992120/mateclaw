@@ -17,13 +17,16 @@ describe('dashboard component theme standards', () => {
 
   it('uses a larger, bold warm semantic icon style instead of inheriting one text color', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
-    const metric = componentIconStyle(theme, 'kpi')
+    const metric = componentIconStyle(theme, 'kpi', undefined, 0)
+    const metricNext = componentIconStyle(theme, 'kpi', undefined, 1)
     const ai = componentIconStyle(theme, 'aiAnalysis')
 
     expect(metric['--dashboard-icon-size']).toBe('18px')
     expect(metric['--dashboard-icon-weight']).toBe('800')
     expect(metric['--dashboard-icon-color']).not.toBe(ai['--dashboard-icon-color'])
-    expect(metric['--dashboard-icon-color']).toMatch(/^#[0-9A-F]{6}$/i)
+    expect(metric['--dashboard-icon-color']).toBe(theme.iconPalette[0])
+    expect(metricNext['--dashboard-icon-color']).toBe(theme.iconPalette[1])
+    expect(theme.iconPalette[0]).not.toBe(theme.primary)
     expect(componentIconStyle(theme, 'tab', '策略视角')['--dashboard-icon-color']).not.toBe(metric['--dashboard-icon-color'])
   })
 
