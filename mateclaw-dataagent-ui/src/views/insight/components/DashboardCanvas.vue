@@ -73,7 +73,11 @@
             <div class="resize-handle resize-handle-bottom" @pointerdown.stop.prevent="startResize($event, item.i, 'bottom')" />
             <div class="resize-handle resize-handle-left" @pointerdown.stop.prevent="startResize($event, item.i, 'left')" />
           </template>
-          <div v-if="editable" class="grid-item-toolbar">
+          <div
+            v-if="editable"
+            class="grid-item-toolbar"
+            :class="`title-bar-${getComponent(item.i)?.titleBarStyle ?? 'standard'}`"
+          >
             <span v-if="isToolbarTitleVisible(item.i)" class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
             <button
               class="grid-item-delete"

@@ -37,6 +37,18 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.emitted('update-layout')?.at(-1)?.[0]).toEqual([{ id: 'kpi-1', x: 1, y: 0, w: 4, h: 4 }])
   })
 
+  it('applies the selected title bar style to the edit toolbar', () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [{ ...component, titleBarStyle: 'accent' as const }],
+        editable: true,
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
+  })
+
   it('offers one add-component action in an empty canvas', () => {
     const wrapper = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
     expect(wrapper.get('[aria-label="从组件库添加组件"]').exists()).toBe(true)

@@ -1050,6 +1050,7 @@ function handleComponentChange(updated: InsightComponent): void {
     if (child) {
       child.title = updated.title
       child.showTitle = updated.showTitle
+      child.titleBarStyle = updated.titleBarStyle
       child.showHeader = updated.showHeader
       child.chartType = updated.chartType
       child.config = updated.config
