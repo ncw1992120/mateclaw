@@ -16,14 +16,16 @@
 #                                   always（默认）每次重启都停旧 mock 再起新的；
 #                                   keep 仅在未监听时拉起（保留手工起的 mock 进程）
 #   ALOUDATA_MOCK_SERVER=...        （embed / off 模式下忽略）
-#   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  后端数据库连接
+#   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
 #   SPRING_PROFILES_ACTIVE=...      显式覆盖整组 profile（优先级最高）
 
 set -Eeuo pipefail
 
-PROJECT_ROOT="/Users/srant/IdeaProjects/codex/mateclaw-1"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 JAR_PATH="$PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 BACKEND_PORT="18089"
+BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/dataagent/api/actuator/health"
 
 MOCK_SERVER_SCRIPT="$PROJECT_ROOT/dev-support/local-simulation/scripts/aloudata-mock-server.py"
 MOCK_PORT="${ALOUDATA_MOCK_PORT:-18081}"
@@ -49,7 +51,8 @@ usage() {
                                   always（默认）每次重启都停旧 mock 再起新的；
                                   keep 仅在未监听时拉起（保留手工起的 mock 进程）
   ALOUDATA_MOCK_FORCE_KILL=1      端口被非脚本进程（PID 文件丢失/手工起的 mock）占用时强制接管
-  DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  后端数据库连接
+  DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
+  DB_PRECHECK=on|skip             启动前数据库连通性预检（默认 on，连不上直接报错退出）
   SPRING_PROFILES_ACTIVE=...      显式覆盖整组 profile（优先级最高）
 TXT
 }
@@ -60,19 +63,13 @@ mock_listening() {
   lsof -tiTCP:"$MOCK_PORT" -sTCP:LISTEN >/dev/null 2>&1
 }
 
-# 只有确认监听进程就是我们这个 mock 脚本时才回显 PID，避免误杀占用同端口的其它服务。
-# 判据两条：① 与本脚本启动时写的 PID 文件一致；② 命令行含 aloudata-mock-server.py。
-# （受限环境里 ps 可能看不到其它进程，所以 PID 文件是主判据。）
+# 只有确认命令行确实是本项目 mock 脚本时才回显 PID，避免 PID 文件过期或复用导致误杀其它服务。
 mock_own_pids() {
-  local pid pid_file_pid=""
-  [[ -f "${MOCK_PID_FILE}" ]] && pid_file_pid="$(cat "${MOCK_PID_FILE}" 2>/dev/null || true)"
+  local pid command
   for pid in $(lsof -tiTCP:"${MOCK_PORT}" -sTCP:LISTEN 2>/dev/null || true); do
-    if [[ -n "${pid_file_pid}" && "${pid}" == "${pid_file_pid}" ]]; then
-      echo "${pid}"
-      continue
-    fi
     # -ww 必须带：macOS 下 ps 默认会截断 command 列，导致匹配不到完整脚本名
-    if ps -p "${pid}" -ww -o command= 2>/dev/null | grep -q "aloudata-mock-server.py"; then
+    command="$(ps -p "${pid}" -ww -o command= 2>/dev/null || true)"
+    if [[ "$command" == *"aloudata-mock-server.py"* ]]; then
       echo "${pid}"
     fi
   done
@@ -170,11 +167,15 @@ esac
 
 # ---------------------------------------------------------------- 后端
 
-export JAVA_HOME="${JAVA_HOME:-/Users/srant/.jdks/jdk-21.0.12+8/Contents/Home}"
+JAVA_HOME="${JAVA_HOME:-}"
+if [[ -z "$JAVA_HOME" && -x /usr/libexec/java_home ]]; then
+  JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
+fi
+export JAVA_HOME
 export PATH="$JAVA_HOME/bin:$PATH"
 
-if [[ ! -x "$JAVA_HOME/bin/java" ]]; then
-  echo "错误：找不到 JDK 21：$JAVA_HOME" >&2
+if [[ -z "$JAVA_HOME" || ! -x "$JAVA_HOME/bin/java" ]]; then
+  echo "错误：找不到 JDK 21，请设置 JAVA_HOME。当前值：${JAVA_HOME:-未设置}" >&2
   exit 1
 fi
 
@@ -248,6 +249,67 @@ export DB_NAME="${DB_NAME:-testdb}"
 export DB_USERNAME="${DB_USERNAME:-testdb}"
 export DB_PASSWORD="${DB_PASSWORD:-testdb}"
 
+# ---------------------------------------------------------------- DB 连通性预检
+# 后端启动后会立刻查库（Security 加载用户），网络不可用时不会马上失败，
+# 而是卡满 Hikari 的 30s connectionTimeout，再抛
+#   SQLTransientConnectionException: Connection is not available, request timed out after 30005ms
+#   Caused by: PSQLException: 尝试连线已失败。
+# 与其干等超时后看一堆堆栈猜原因，不如启动前先探一次数据库。
+# 逃生开关：DB_PRECHECK=skip ./restart-dataagent-backend.sh
+db_port_reachable() {
+  local host="$1" port="$2"
+  if command -v nc >/dev/null 2>&1; then
+    # macOS 的 nc 用 -G（超时），GNU netcat 用 -w
+    nc -z -G 5 "$host" "$port" >/dev/null 2>&1 && return 0
+    nc -z -w 5 "$host" "$port" >/dev/null 2>&1 && return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$host" "$port" <<'PY' >/dev/null 2>&1
+import socket, sys
+s = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5)
+s.close()
+PY
+    return $?
+  fi
+  # 没有任何探测工具，不拦启动
+  return 0
+}
+
+db_ready() {
+  db_port_reachable "$DB_HOST" "$DB_PORT" || return 1
+  if command -v psql >/dev/null 2>&1; then
+    PGPASSWORD="$DB_PASSWORD" psql -X -w \
+      -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" \
+      -c 'select 1' >/dev/null 2>&1
+  else
+    echo "提示：未找到 psql，仅完成数据库 TCP 端口检查。" >&2
+    return 0
+  fi
+}
+
+if [[ "${DB_PRECHECK:-on}" != "skip" ]]; then
+  printf '检查数据库连通性：%s:%s/%s ... ' "$DB_HOST" "$DB_PORT" "$DB_NAME"
+  if ! db_ready; then
+    echo "失败"
+    cat >&2 <<TXT
+
+错误：无法连接并验证数据库 ${DB_HOST}:${DB_PORT}/${DB_NAME}。
+      后端启动很可能失败（Hikari 等 30s 超时后抛「尝试连线已失败」）。
+
+排查顺序：
+  1) 网络：开发库 ${DB_HOST} 通常要求办公网或 VPN，先确认 VPN 已连接、没切 Wi-Fi/热点
+  2) 地址：当前使用 ${DB_HOST}/${DB_PORT}/${DB_NAME}（用户 ${DB_USERNAME}）
+     若你的 shell 里 export 过 DB_HOST/DB_PORT 同名变量，会覆盖脚本默认值
+  3) 手工验证：
+       nc -z -G 5 ${DB_HOST} ${DB_PORT} && echo OK
+       PGPASSWORD='你的密码' psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USERNAME} -d ${DB_NAME} -c 'select 1'
+  4) 走跳板/端口转发等特殊情况，确认可达后强启：DB_PRECHECK=skip $0
+TXT
+    exit 1
+  fi
+  echo "可达"
+fi
+
 # 洞察/仪表盘当前不依赖 Elasticsearch。
 export ES_URIS="${ES_URIS:-http://127.0.0.1:9200}"
 export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED="${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}"
@@ -277,10 +339,31 @@ unset MAVEN_OPTS
 unset JAVA_OPTS
 
 echo "停止旧的 DataAgent 后端进程..."
+backend_own_pids() {
+  local pid command
+  for pid in $(lsof -tiTCP:"${BACKEND_PORT}" -sTCP:LISTEN 2>/dev/null || true); do
+    command="$(ps -p "$pid" -ww -o command= 2>/dev/null || true)"
+    if [[ "$command" == *"$JAR_PATH"* ]]; then
+      echo "$pid"
+    fi
+  done
+}
+
+pid_count() {
+  printf '%s\n' "$1" | awk 'NF { count++ } END { print count + 0 }'
+}
+
 old_pids="$(lsof -tiTCP:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+own_old_pids="$(backend_own_pids || true)"
 if [[ -n "$old_pids" ]]; then
+  if [[ -z "$own_old_pids" || "$(pid_count "$old_pids")" != "$(pid_count "$own_old_pids")" ]]; then
+    echo "错误：端口 $BACKEND_PORT 被非本项目 DataAgent 进程占用，未执行 kill。" >&2
+    lsof -nP -iTCP:"$BACKEND_PORT" -sTCP:LISTEN >&2 || true
+    ps -p $old_pids -ww -o pid=,command= >&2 || true
+    exit 1
+  fi
   # shellcheck disable=SC2086
-  kill $old_pids
+  kill $own_old_pids
   for _ in {1..10}; do
     if ! lsof -tiTCP:"$BACKEND_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
       break
@@ -296,8 +379,34 @@ fi
 
 echo "使用 Java：$(java -version 2>&1 | head -1)"
 echo "启动 DataAgent 后端，数据库：$DB_HOST:$DB_PORT/$DB_NAME"
-echo "健康检查地址：http://127.0.0.1:$BACKEND_PORT/dataagent/api/actuator/health"
+echo "健康检查地址：$BACKEND_HEALTH_URL"
 
 cd "$PROJECT_ROOT"
 # 显式锁定 HTTP 端口（命令行参数优先级最高，覆盖任何把 server.port 设成 0/随机的来源）。
-exec java -jar "$JAR_PATH" --server.port="$BACKEND_PORT"
+if ! command -v curl >/dev/null 2>&1; then
+  echo "错误：未找到 curl，无法执行后端健康检查。" >&2
+  exit 1
+fi
+
+java -jar "$JAR_PATH" --server.port="$BACKEND_PORT" &
+backend_pid=$!
+trap 'kill "$backend_pid" 2>/dev/null || true; exit 143' INT TERM
+
+for _ in {1..60}; do
+  if curl --fail --silent --show-error --connect-timeout 1 --max-time 3 "$BACKEND_HEALTH_URL" >/dev/null 2>&1; then
+    echo "DataAgent 后端已就绪（PID ${backend_pid}）。"
+    wait "$backend_pid"
+    exit $?
+  fi
+  if ! kill -0 "$backend_pid" 2>/dev/null; then
+    echo "错误：DataAgent 后端进程已退出，未通过健康检查。" >&2
+    wait "$backend_pid" 2>/dev/null || true
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "错误：DataAgent 后端在 60 秒内未通过健康检查：$BACKEND_HEALTH_URL" >&2
+kill "$backend_pid" 2>/dev/null || true
+wait "$backend_pid" 2>/dev/null || true
+exit 1
