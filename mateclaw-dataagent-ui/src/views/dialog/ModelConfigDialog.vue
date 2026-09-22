@@ -130,9 +130,6 @@
                   <div v-for="model in (provider.models || [])" :key="'m-' + model.id" class="model-mini">
                     <span class="model-mini-name">{{ model.name }}</span>
                     <el-tag v-if="model.isDefault" type="warning" size="small">{{ t('modelConfig.default') }}</el-tag>
-                    <el-tag :type="model.probeOk === true ? 'success' : model.probeOk === false ? 'danger' : 'info'" size="small">
-                      {{ model.probeOk === true ? t('modelConfig.probeOk') : model.probeOk === false ? t('modelConfig.probeFail') : t('modelConfig.untested') }}
-                    </el-tag>
                   </div>
                   <div v-for="model in (provider.extraModels || [])" :key="'e-' + model.id" class="model-mini model-extra">
                     <span class="model-mini-name">{{ model.name }}</span>

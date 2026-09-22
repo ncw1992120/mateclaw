@@ -141,6 +141,7 @@
                   <el-input
                     :model-value="getEditingBaseUrl(provider)"
                     :disabled="provider.freezeUrl || editingProviderId !== provider.providerId"
+                    autocomplete="off"
                     @update:model-value="setEditingBaseUrl(provider.providerId, $event)"
                   />
                 </el-form-item>
@@ -149,6 +150,8 @@
                     :model-value="getEditingApiKey(provider)"
                     type="password"
                     show-password
+                    :placeholder="editingProviderId === provider.providerId ? t('modelConfig.apiKeyKeepPlaceholder') : ''"
+                    autocomplete="new-password"
                     :disabled="editingProviderId !== provider.providerId"
                     @update:model-value="setEditingApiKey(provider.providerId, $event)"
                   />
@@ -166,9 +169,6 @@
                 <div v-for="model in (provider.models || [])" :key="'m-' + model.id" class="model-mini">
                   <span class="model-mini-name">{{ model.name }}</span>
                   <el-tag v-if="model.isDefault" type="warning" size="small">{{ t('modelConfig.default') }}</el-tag>
-                  <el-tag :type="model.probeOk === true ? 'success' : model.probeOk === false ? 'danger' : 'info'" size="small">
-                    {{ model.probeOk === true ? t('modelConfig.probeOk') : model.probeOk === false ? t('modelConfig.probeFail') : t('modelConfig.untested') }}
-                  </el-tag>
                 </div>
                 <div v-for="model in (provider.extraModels || [])" :key="'e-' + model.id" class="model-mini model-extra">
                   <span class="model-mini-name">{{ model.name }}</span>
@@ -299,16 +299,16 @@
       >
         <el-form :model="newProvider" label-width="100px" size="small">
           <el-form-item :label="t('modelConfig.providerId')">
-            <el-input v-model="newProvider.providerId" />
+            <el-input v-model="newProvider.providerId" autocomplete="off" />
           </el-form-item>
           <el-form-item :label="t('modelConfig.providerName')">
-            <el-input v-model="newProvider.name" />
+            <el-input v-model="newProvider.name" autocomplete="off" />
           </el-form-item>
           <el-form-item :label="t('modelConfig.baseUrl')">
-            <el-input v-model="newProvider.baseUrl" />
+            <el-input v-model="newProvider.baseUrl" autocomplete="off" />
           </el-form-item>
           <el-form-item :label="t('modelConfig.apiKey')">
-            <el-input v-model="newProvider.apiKey" type="password" show-password />
+            <el-input v-model="newProvider.apiKey" type="password" show-password autocomplete="new-password" />
           </el-form-item>
           <el-form-item :label="t('modelConfig.chatModel')">
             <el-input v-model="newProvider.chatModel" />
@@ -426,7 +426,9 @@ function startEditProvider(provider: ModelProvider): void {
   if (!editingConfigs[provider.providerId]) {
     editingConfigs[provider.providerId] = {
       baseUrl: provider.baseUrl ?? '',
-      apiKey: provider.apiKey ?? '',
+      // 列表接口返回的是打码值（如 sk-1********abcd），不能回填进编辑框，
+      // 否则保存时会把打码串当真实 Key 写回数据库；留空表示"保持原值"
+      apiKey: '',
     }
   }
   editingProviderId.value = provider.providerId
@@ -714,9 +716,11 @@ async function handleSaveProviderConfig(providerId: string): Promise<void> {
   if (!config) return
   savingConfig.value = providerId
   try {
+    // apiKey 留空表示不修改：编辑框不预填打码值，仅在用户重新输入时才回传
+    const apiKey = config.apiKey.trim()
     await modelStore.updateProvider(providerId, {
       baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
+      ...(apiKey ? { apiKey } : {}),
     } as Partial<ModelProvider>)
     delete editingConfigs[providerId]
     editingProviderId.value = null
@@ -750,10 +754,11 @@ async function handleCreateProvider(): Promise<void> {
     id: newProvider.providerId,
     name: newProvider.name || newProvider.providerId,
     defaultBaseUrl: newProvider.baseUrl,
+    apiKey: newProvider.apiKey.trim(),
     apiKeyPrefix: '',
     protocol: '',
     chatModel: newProvider.chatModel,
-    requireApiKey: !!newProvider.apiKey,
+    requireApiKey: !!newProvider.apiKey.trim(),
     models: [],
   })
   Object.assign(newProvider, { providerId: '', name: '', baseUrl: '', apiKey: '', chatModel: '' })

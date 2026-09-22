@@ -752,6 +752,7 @@ export default {
     providerName: '供应商名称',
     baseUrl: 'Base URL',
     apiKey: 'API Key',
+    apiKeyKeepPlaceholder: '留空则保持原有 Key 不变',
     chatModel: '默认对话模型',
     modelName: '显示名称',
     realModelName: '模型标识',

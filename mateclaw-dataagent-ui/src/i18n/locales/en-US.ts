@@ -744,6 +744,7 @@ export default {
     providerName: 'Provider Name',
     baseUrl: 'Base URL',
     apiKey: 'API Key',
+    apiKeyKeepPlaceholder: 'Leave empty to keep the existing key',
     chatModel: 'Default Chat Model',
     modelName: 'Display Name',
     realModelName: 'Model Identifier',
