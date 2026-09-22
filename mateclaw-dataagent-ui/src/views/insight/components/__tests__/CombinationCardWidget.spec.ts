@@ -47,6 +47,51 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('moves a selected child with keyboard arrows while staying inside the container', async () => {
+    const child = {
+      ...nestedCombination,
+      id: 'keyboard-child',
+      type: 'kpi' as const,
+      title: '键盘子组件',
+      layout: { x: 12, y: 12, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'outer-combination',
+          type: 'combination',
+          title: '外层组合',
+          children: [child],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const childEl = wrapper.get('[data-child="keyboard-child"]')
+    expect(childEl.attributes('tabindex')).toBe('0')
+    await childEl.trigger('mousedown', { clientX: 10, clientY: 10 })
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await childEl.trigger('keydown', { key: 'ArrowRight' })
+    expect(child.layout.x).toBe(13)
+    await childEl.trigger('keydown', { key: 'ArrowDown', shiftKey: true })
+    expect(child.layout.y).toBe(22)
+  })
+
   it('renders a combination child as a nested combination card', () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {

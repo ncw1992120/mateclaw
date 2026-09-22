@@ -66,13 +66,16 @@
         :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id }]"
         :style="childStyle(child)"
         :data-child="child.id"
+        :tabindex="editable ? 0 : undefined"
+        :aria-label="editable ? `移动子组件 ${child.title}` : undefined"
         @click.stop="selectChild(child.id)"
+        @keydown="onChildKeydown($event, child)"
         @mouseenter="hoverChildId = child.id"
         @mouseleave="hoverChildId = null"
         @mousedown="onChildMouseDown($event, child)"
         @dragstart.stop.prevent
       >
-        <div class="cc-child-head">
+        <div class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
           <span v-if="child.showTitle !== false" class="cc-child-title">{{ child.title }}</span>
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
@@ -161,6 +164,7 @@ import type {
   InsightComponentData,
   ResolvedDashboardTheme,
 } from '@/types'
+import { resolveCombinationBackground } from '@/utils/combination-theme'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -209,6 +213,7 @@ function defaultConfig(): InsightCombinationConfig {
     title: '',
     showTitle: true,
     background: '#ffffff',
+    backgroundMode: 'theme',
     radius: 12,
     padding: 16,
     layoutMode: 'free',
@@ -220,7 +225,7 @@ function defaultConfig(): InsightCombinationConfig {
 const cfg = computed<InsightCombinationConfig>(() => props.component.containerConfig ?? defaultConfig())
 
 const rootStyle = computed<Record<string, string>>(() => ({
-  background: cfg.value.background,
+  background: resolveCombinationBackground(cfg.value.background, cfg.value.backgroundMode),
   borderRadius: cfg.value.radius + 'px',
   padding: cfg.value.padding + 'px',
   border: cfg.value.style.border.enabled ? `1px solid ${cfg.value.style.border.color}` : '1px solid transparent',
@@ -401,7 +406,9 @@ interface ChildBounds { width: number; height: number }
  */
 function readChildBounds(): ChildBounds | null {
   const r = ccBodyRef.value?.getBoundingClientRect()
-  return r ? { width: r.width, height: r.height } : null
+  // jsdom 以及尚未完成布局的隐藏容器会返回 0×0 的 DOMRect。此时不能把可移动范围
+  // 误判成只有原点，否则键盘微调会被 clampBox 永久钳在 (0, 0)。
+  return r && r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null
 }
 
 /** 位置钳制：保证子组件整体可见 —— 这也保证八向手柄永远落在容器里、永远抓得到 */
@@ -446,6 +453,8 @@ function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   e.stopPropagation()
   selectChild(child.id)
   const el = (ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null) ?? null
+  // preventDefault 会阻止浏览器默认的鼠标聚焦；主动聚焦后，用户松开鼠标即可直接用方向键微调。
+  el?.focus()
   mv = {
     id: child.id,
     sx: e.clientX,
@@ -596,6 +605,32 @@ function selectChild(id: string) {
   selectedChildId.value = id
   emit('select-child', { containerId: props.component.id, childId: id })
 }
+
+/** 编辑态下，获得焦点的子组件可用方向键微调位置；交互控件保留自身键盘行为。 */
+function onChildKeydown(event: KeyboardEvent, child: InsightCombinationChild): void {
+  if (!props.editable || cfg.value.layoutMode !== 'free') return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, textarea, select, button, [role="tab"]')) return
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  selectChild(child.id)
+
+  const bounds = readChildBounds()
+  const childEl = ccBodyRef.value?.querySelector(`[data-child="${child.id}"]`) as HTMLElement | null
+  const width = childEl?.offsetWidth ?? (bounds ? bounds.width * child.layout.col / 12 : 0)
+  const height = childEl?.offsetHeight ?? child.layout.h ?? 120
+  const step = event.shiftKey ? 10 : 1
+  const dx = event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0
+  const dy = event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0
+  const next = clampBox(bounds, child.layout.x + dx, child.layout.y + dy, width, height)
+  child.layout.x = next.x
+  child.layout.y = next.y
+  childEl?.style.setProperty('left', next.x + 'px')
+  childEl?.style.setProperty('top', next.y + 'px')
+}
+
 async function deleteChild(id: string) {
   const child = getActiveChildren().find((c) => c.id === id)
   try {
@@ -688,6 +723,7 @@ const { onTabKeydown } = useTabKeyboard(
   align-items: center;
   gap: 4px;
   border-bottom: 1px solid var(--db-border);
+  background: var(--db-surface-control, transparent);
   margin-bottom: 10px;
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -731,7 +767,7 @@ const { onTabKeydown } = useTabKeyboard(
   box-sizing: border-box;
   border: 1px solid var(--db-border);
   border-radius: 8px;
-  background: var(--db-card);
+  background: var(--db-surface-card, var(--db-card));
   display: flex;
   flex-direction: column;
   /* overflow 必须可见：八向缩放手柄有 7px 探出子卡片边界，hidden 会把可点击区域裁掉，
@@ -745,7 +781,7 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child.moving { opacity: 0.85; }
 .cc-child-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; background: var(--db-hover); border-bottom: 1px solid var(--db-border);
+  padding: 6px 10px; background: var(--db-surface-nested, var(--db-hover)); border-bottom: 1px solid var(--db-border);
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }

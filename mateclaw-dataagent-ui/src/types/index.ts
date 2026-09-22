@@ -1390,8 +1390,10 @@ export interface InsightCombinationConfig {
   title: string
   /** 是否显示标题 */
   showTitle: boolean
-  /** 背景色（CSS color） */
+  /** 背景色（CSS color；backgroundMode=custom 时生效） */
   background: string
+  /** 容器背景来源；旧配置缺省时由编辑器按历史背景值兼容推断 */
+  backgroundMode?: 'theme' | 'custom'
   /** 圆角 px */
   radius: number
   /** 内边距 px */

@@ -699,7 +699,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--db-card);
+  background: var(--db-surface-card, var(--db-card));
   border: 1px solid var(--db-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -854,7 +854,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-md);
-  background: var(--db-hover);
+  background: var(--db-surface-nested, var(--db-hover));
   border-bottom: 1px solid var(--db-border);
   flex-shrink: 0;
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="insight-editor-view" @click="closeComponentContextMenu">
+  <div class="insight-editor-view" :style="themeCssVariables(dashboardTheme)" @click="closeComponentContextMenu">
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
@@ -344,7 +344,7 @@ import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tab
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
-import { resolveDashboardTheme } from '@/utils/dashboard-theme'
+import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -868,6 +868,7 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
       title: '',
       showTitle: true,
       background: '#ffffff',
+      backgroundMode: 'theme',
       radius: 12,
       padding: 16,
       layoutMode: 'free',
