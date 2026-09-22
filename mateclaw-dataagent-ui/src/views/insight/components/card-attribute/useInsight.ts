@@ -1460,10 +1460,30 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
 
 /** 保存当前卡片配置到后端 Schema */
 async function ensurePersistedDatasetInputs(): Promise<void> {
+  const existingDatasets = await datasetApi.list()
   for (const ds of state.datasets) {
     if (isPersistedBackendDatasetId(ds.backendDatasetId)) continue
     const request = draftRequestForDataset(ds)
     if (!request) throw new Error(`数据集「${ds.alias}」尚未落库，当前类型不支持自动保存`)
+
+    // 复制仪表盘或重复点击“查看数据”时，数据集草稿可能已经在后端落库。
+    // 先按名称和来源配置复用，避免 confirmDraft 因同名数据集返回 400。
+    const existing = existingDatasets.find((candidate) => {
+      if (candidate.name !== ds.alias || String(candidate.sourceType ?? '').toUpperCase() !== String(request.sourceType).toUpperCase()) return false
+      if (String(candidate.datasourceId ?? '') !== String(request.datasourceId ?? '')) return false
+      if (!candidate.sourceConfig) return true
+      try {
+        const stored = typeof candidate.sourceConfig === 'string' ? JSON.parse(candidate.sourceConfig) : candidate.sourceConfig
+        return Object.entries(request.sourceConfig ?? {}).every(([key, value]) => String(stored?.[key] ?? '') === String(value ?? ''))
+      } catch {
+        return false
+      }
+    })
+    if (existing) {
+      ds.backendDatasetId = String(existing.id)
+      continue
+    }
+
     const result = await backend.confirmDatasetDraft({
       ...request,
       name: ds.alias,
@@ -1498,18 +1518,18 @@ async function saveDashboard(): Promise<boolean> {
 /** 使用当前未保存的组件 Schema 执行 Python 预览；预览本身不保存仪表盘。 */
 async function runComponentPreview(): Promise<{ ok: boolean; message: string }> {
   if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
-  if (state.datasets.some((ds) => !isPersistedBackendDatasetId(ds.backendDatasetId))) {
-    return { ok: false, message: '请先保存数据集配置，再执行 Python 筛选预览' }
-  }
-  const previewSchema = buildSchema()
   state.backend.running = true
   const startedAt = Date.now()
   try {
+    // “查看数据”是 Python 编辑器内的直接操作，不能要求用户先离开弹窗再点顶部保存。
+    // 对仍使用 ds-* 临时 ID 的草稿先落库，再用回填后的真实 datasetId 组装执行 Schema。
+    await ensurePersistedDatasetInputs()
+    const executableSchema = buildSchema()
     const { executionId } = await backend.submitComponentExecution(
       state.backend.dashboardId,
       state.backend.componentId,
       {},
-      JSON.stringify(previewSchema),
+      JSON.stringify(executableSchema),
     )
     state.backend.executionId = executionId
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
