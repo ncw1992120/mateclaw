@@ -1,0 +1,28 @@
+{
+  "name": "table-detail-prepared-input",
+  "description": "Runner 读取 prepared input 的成功响应（位于现有 R<T>.data 中）",
+  "contract": {
+    "inputName": "strategy_data",
+    "schema": [
+      { "name": "strategy_id", "dataType": "STRING" },
+      { "name": "in_account", "dataType": "DECIMAL" }
+    ],
+    "rowCount": 2,
+    "rows": [
+      { "strategy_id": "A", "in_account": 120.5 },
+      { "strategy_id": "B", "in_account": 80.0 }
+    ],
+    "objectRef": null
+  },
+  "largeResultShape": {
+    "rows": null,
+    "objectRef": "{...}",
+    "note": "大结果采用同一 schema 与 rowCount，rows=null、objectRef 非空；SDK 必须用受控批量读取取得完整行集后才可 to_polars()"
+  },
+  "rules": {
+    "endpoint": "POST /api/internal/v1/script-tasks/{taskId}/datasets/input，请求体只含 inputName，令牌在 Header",
+    "systemRegion": "Python 系统区唯一标准读取方式 datasets.input(input_name=\"...\").to_polars()，不读 params/runtime，不重拼 filters/orders/limit/offset",
+    "failure": "无法在安全限制内读取时显式资源超限错误，不允许以「前 10 行预览」冒充完整结果",
+    "errors": "PREPARED_INPUT_EXPIRED / 别名不存在 / 输入未准备 / 空结果 / 超内联大小，均为可识别错误且不输出认证值"
+  }
+}

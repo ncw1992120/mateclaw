@@ -1,0 +1,26 @@
+{
+  "name": "table-detail-query-plan",
+  "description": "数据集查询计划（服务端 Planner 产出，pushdown 为服务端计算结果）",
+  "contract": {
+    "datasetId": "42",
+    "inputName": "strategy_data",
+    "columns": ["metric_date", "strategy_id", "in_account"],
+    "filters": [
+      { "field": "strategy_id", "operator": "in", "value": ["A", "B"] },
+      { "field": "metric_date", "operator": "gte", "value": "2026-09-01" },
+      { "field": "metric_date", "operator": "lt", "value": "2026-10-01" }
+    ],
+    "orders": [{ "field": "in_account", "direction": "desc" }],
+    "pagination": { "page": 2, "pageSize": 100 },
+    "pushdown": { "filters": true, "sort": true, "pagination": true },
+    "residualOperations": []
+  },
+  "rules": {
+    "pushdown": "服务端计算，不允许前端伪造",
+    "sourceFields": "来自已保存 parameterBindings 与字段注册表，不来自临时 parameters 的任意键",
+    "multiDataset": "多数据集 Python 场景最终排序/分页不下推到任一输入；计算字段排序/筛选由结果集服务处理",
+    "residual": "数据源不支持的操作必须有有界残余处理，否则明确失败",
+    "singleDatasetPage2": "单数据集页面请求第 2 页转为数据源 limit=100, offset=100",
+    "pythonGranularityChange": "Python 脚本改变结果集粒度/行数/顺序时禁止做 limit/offset 转换"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "table-detail-query-config",
+  "description": "仪表盘静态查询配置（保存于 pages[].components[].config.datasetPipeline.datasetInputs[].queryConfig）",
+  "contract": {
+    "datasetId": "42",
+    "inputName": "strategy_data",
+    "queryConfig": {
+      "displayFields": [
+        { "field": "metric_date", "title": "指标日期", "role": "dimension", "dataType": "date" },
+        { "field": "strategy_id", "title": "策略编码", "role": "dimension", "dataType": "string" },
+        { "field": "in_account", "title": "入金客户数", "role": "measure", "dataType": "number" }
+      ],
+      "parameterBindings": [
+        { "filterComponentId": "strategy_type", "parameterName": "strategy_ids", "field": "strategy_id", "operator": "in" },
+        { "filterComponentId": "date_range", "parameterName": "start_date", "field": "metric_date", "operator": "gte" },
+        { "filterComponentId": "date_range", "parameterName": "end_date", "field": "metric_date", "operator": "lt" }
+      ],
+      "sortPolicy": { "enabled": true, "mode": "single", "allowedFields": ["in_account"], "defaultSort": null },
+      "paginationPolicy": { "enabled": true, "defaultPageSize": 100, "maxPageSize": 500, "returnTotalCount": true }
+    }
+  },
+  "rules": {
+    "datasetId": "前端 Schema 中必须是已存在的真实数据集 ID；不得将概念标识 ds_strategy 发往 long datasetId 接口",
+    "fieldMappings": "旧版 fieldMappings.source/target 仍为技术字段名/展示名；scriptFilterBindings 仅在编辑器归一化层转为 queryConfig.parameterBindings 展示草稿",
+    "authority": "保存新版后以 queryConfig 为权威配置，旧 scriptFilterBindings 仅供旧版读取兼容，禁止两份规则同时生效",
+    "fieldName": "字段映射、筛选、排序、分页一律使用数据源技术字段名，展示名仅保存在表现层"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "table-detail-query-context",
+  "description": "表格详情页运行时 QueryContext 契约样例（设计文档第七节同形 + requestId）",
+  "contract": {
+    "dashboardId": "dashboard-001",
+    "componentId": "component-001",
+    "datasetId": "42",
+    "parameters": {
+      "strategy_ids": ["A", "B"],
+      "start_date": "2026-09-01",
+      "end_date": "2026-10-01"
+    },
+    "sort": { "field": "in_account", "direction": "desc" },
+    "pagination": { "page": 2, "pageSize": 100 },
+    "requestId": "run-20260922-001"
+  },
+  "rules": {
+    "datasetId": "仅用于数据卡片「查看数据」；组件执行时可省略，由服务端按组件绑定数据集逐个生成计划",
+    "parameters": "键必须来自已绑定筛选器的参数定义；日期范围按绑定展开为 gte(start_date)/lt(end_date)，数值范围 gte/lte",
+    "emptySelection": "空选/全部 = 无过滤；显式空集合 = 短路空结果",
+    "pagination": "page 从 1 开始；pageSize <= min(500, maxPageSize)；服务端首轮上限 500",
+    "totalCount": "未开启分页/总数时不得返回虚假精确总数",
+    "requestId": "链路关联标识，不属于持久化配置"
+  }
+}
