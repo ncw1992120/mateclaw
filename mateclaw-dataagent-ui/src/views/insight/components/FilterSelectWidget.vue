@@ -168,5 +168,20 @@ function handleChange(value: string | string[]): void {
 
 .filter-select-widget :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
+  background: var(--db-hover);
+  box-shadow: 0 0 0 1px var(--db-border) inset;
+}
+
+.filter-select-widget :deep(.el-input__inner) {
+  color: var(--db-text);
+}
+
+.filter-select-widget :deep(.el-input__inner::placeholder) {
+  color: var(--db-text-muted);
+}
+
+.filter-select-widget :deep(.el-select__caret),
+.filter-select-widget :deep(.el-select__clear) {
+  color: var(--db-text-secondary);
 }
 </style>

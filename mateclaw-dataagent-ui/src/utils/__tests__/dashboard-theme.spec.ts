@@ -75,6 +75,20 @@ describe('dashboard theme · 变量和密度', () => {
     expect(vars['--db-accent']).toBe('var(--insight-primary)')
   })
 
+  it('深色预设完整覆盖交互背景、边框、状态背景和图表预览 Token', () => {
+    const vars = themeCssVariables(resolveDashboardTheme({ mode: 'preset', presetId: 'dark-data' }, 'light'))
+
+    expect(vars['--db-hover']).toContain('color-mix')
+    expect(vars['--db-muted']).toContain('color-mix')
+    expect(vars['--db-border-strong']).toContain('color-mix')
+    expect(vars['--db-accent-light']).toContain('color-mix')
+    expect(vars['--db-positive-bg']).toContain('color-mix')
+    expect(vars['--db-danger-bg']).toContain('color-mix')
+    expect(vars['--db-chart-preview-bg']).toContain('color-mix')
+    expect(vars['--db-text-primary']).toBe('var(--insight-text)')
+    expect(vars['--db-chart-1']).toBe('#60A5FA')
+  })
+
   it('字号密度按 compact、standard、large 递增，未知值回退 standard', () => {
     expect(densityScale('compact').metricValue).toBeLessThan(densityScale('standard').metricValue)
     expect(densityScale('large').metricValue).toBeGreaterThan(densityScale('standard').metricValue)

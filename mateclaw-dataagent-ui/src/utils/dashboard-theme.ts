@@ -84,16 +84,48 @@ export function resolveDashboardTheme(config: DashboardThemeConfig | undefined, 
 
 export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string, string> {
   if (theme.source === 'legacy') return {}
+  const mix = (foreground: string, background: string, foregroundAmount: number): string =>
+    `color-mix(in srgb, ${foreground} ${foregroundAmount}%, ${background})`
   const vars: Record<string, string> = {
     '--insight-page-bg': theme.pageBackground, '--insight-card-bg': theme.cardBackground, '--insight-border': theme.border,
     '--insight-text': theme.text, '--insight-text-secondary': theme.textSecondary, '--insight-text-muted': theme.textMuted,
     '--insight-primary': theme.primary, '--insight-positive': theme.positive, '--insight-negative': theme.negative,
     '--insight-warning': theme.warning, '--insight-info': theme.info,
     '--db-bg': 'var(--insight-page-bg)', '--db-card': 'var(--insight-card-bg)', '--db-border': 'var(--insight-border)',
-    '--db-text': 'var(--insight-text)', '--db-text-secondary': 'var(--insight-text-secondary)', '--db-text-muted': 'var(--insight-text-muted)', '--db-accent': 'var(--insight-primary)',
+    '--db-hover': mix('var(--insight-text)', 'var(--insight-card-bg)', 10),
+    '--db-muted': mix('var(--insight-text)', 'var(--insight-card-bg)', 16),
+    '--db-strong': 'var(--insight-text)',
+    '--db-text': 'var(--insight-text)', '--db-text-primary': 'var(--insight-text)',
+    '--db-text-secondary': 'var(--insight-text-secondary)', '--db-text-muted': 'var(--insight-text-muted)',
+    '--db-text-quaternary': 'var(--insight-text-muted)', '--db-accent': 'var(--insight-primary)',
+    '--db-border-strong': mix('var(--insight-text)', 'var(--insight-border)', 34),
+    '--db-accent-light': mix('var(--insight-primary)', 'transparent', 18),
+    '--db-accent-border': mix('var(--insight-primary)', 'transparent', 52),
+    '--db-positive': 'var(--insight-positive)', '--db-danger': 'var(--insight-negative)',
+    '--db-warning': 'var(--insight-warning)',
+    '--db-positive-bg': mix('var(--insight-positive)', 'transparent', 16),
+    '--db-danger-bg': mix('var(--insight-negative)', 'transparent', 16),
+    '--db-up': 'var(--insight-negative)', '--db-up-bg': mix('var(--insight-negative)', 'transparent', 16),
+    '--db-down': 'var(--insight-positive)', '--db-down-bg': mix('var(--insight-positive)', 'transparent', 16),
+    '--db-status-success-bg': mix('var(--insight-positive)', 'transparent', 20),
+    '--db-status-success-fg': 'var(--insight-positive)',
+    '--db-status-warning-bg': mix('var(--insight-warning)', 'transparent', 20),
+    '--db-status-warning-fg': 'var(--insight-warning)',
+    '--db-action-warning-fg': 'var(--insight-warning)',
+    '--db-action-danger-fg': 'var(--insight-negative)',
+    '--db-chart-preview-bg': mix('var(--insight-text)', 'var(--insight-card-bg)', 5),
+    '--db-chart-preview-track': mix('var(--insight-border)', 'var(--insight-card-bg)', 65),
+    '--db-mask': 'rgba(0, 0, 0, 0.58)',
   }
-  theme.chartPalette.forEach((color, index) => { vars[`--insight-chart-${index + 1}`] = color })
+  theme.chartPalette.forEach((color, index) => {
+    vars[`--insight-chart-${index + 1}`] = color
+    vars[`--db-chart-${index + 1}`] = color
+  })
   theme.metricPalette.forEach((color, index) => { vars[`--insight-metric-${index + 1}`] = color })
+  const cardColors = ['#4176E6', '#8B52D9', '#18A06E', '#DD8A1D', '#E05260', '#1D9EC4']
+  cardColors.forEach((color, index) => {
+    vars[`--db-card-${['blue', 'violet', 'green', 'orange', 'pink', 'cyan'][index]}-bg`] = mix(color, 'transparent', 18)
+  })
   return vars
 }
 

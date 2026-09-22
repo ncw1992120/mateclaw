@@ -29,4 +29,18 @@ describe('DashboardThemePanel', () => {
     expect(wrapper.emitted('confirm-theme-switch')).toBeTruthy()
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
+
+  it('主题面板的即时预览跟随所选深色预设，而不是沿用全站浅色 Token', () => {
+    const wrapper = mount(DashboardThemePanel, {
+      props: {
+        modelValue: { mode: 'preset', presetId: 'dark-data' },
+        visible: true,
+      },
+      global: { stubs: { 'el-drawer': { template: '<div><slot /></div>' } } },
+    })
+
+    const style = wrapper.find('.dashboard-theme-panel').attributes('style') ?? ''
+    expect(style).toContain('--theme-surface: #161B26')
+    expect(style).toContain('--theme-text: #EDF1F7')
+  })
 })

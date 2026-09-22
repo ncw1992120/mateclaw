@@ -390,9 +390,14 @@ function escapeCsvField(field: string): string {
 .table-wrapper :deep(.el-table) {
   min-height: 160px;
   font-size: 13px;
+  --el-table-bg-color: var(--db-card);
+  --el-table-tr-bg-color: var(--db-card);
   --el-table-border-color: var(--db-border);
   --el-table-header-bg-color: var(--db-card);
   --el-table-row-hover-bg-color: var(--db-hover);
+  --el-fill-color-lighter: var(--db-hover);
+  --el-text-color-regular: var(--db-text);
+  --el-text-color-secondary: var(--db-text-secondary);
 }
 
 .table-wrapper :deep(.el-table th.el-table__cell) {

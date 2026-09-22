@@ -135,5 +135,21 @@ function handleDateChange(dates: [string, string] | null): void {
 
 .time-filter-widget :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
+  background: var(--db-hover);
+  box-shadow: 0 0 0 1px var(--db-border) inset;
+}
+
+.time-filter-widget :deep(.el-input__inner) {
+  color: var(--db-text);
+}
+
+.time-filter-widget :deep(.el-input__inner::placeholder) {
+  color: var(--db-text-muted);
+}
+
+.time-filter-widget :deep(.el-range-separator),
+.time-filter-widget :deep(.el-range__icon),
+.time-filter-widget :deep(.el-range__close-icon) {
+  color: var(--db-text-secondary);
 }
 </style>

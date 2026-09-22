@@ -6,7 +6,7 @@
     append-to-body
     @update:model-value="emit('update:visible', $event)"
   >
-    <div class="dashboard-theme-panel">
+    <div class="dashboard-theme-panel" :style="themeTokenStyle">
       <section class="theme-section">
         <div class="theme-section-title">预设主题</div>
         <p class="theme-hint">主题作用于整个仪表盘，切换页面和预览会保持一致。</p>
@@ -83,6 +83,16 @@ const validationMessage = computed(() => {
   return error?.message ?? ''
 })
 const previewStyle = computed(() => ({ background: resolved.value.pageBackground, color: resolved.value.text, borderColor: resolved.value.border }))
+const themeTokenStyle = computed(() => ({
+  '--theme-bg': resolved.value.pageBackground,
+  '--theme-surface': resolved.value.cardBackground,
+  '--theme-surface-hover': resolved.value.border,
+  '--theme-border': resolved.value.border,
+  '--theme-text': resolved.value.text,
+  '--theme-text-secondary': resolved.value.textSecondary,
+  '--theme-text-muted': resolved.value.textMuted,
+  '--theme-primary': resolved.value.primary,
+}))
 const hasOverrides = computed(() => Object.keys(props.modelValue.overrides ?? {}).length > 0)
 
 function requestPreset(presetId: string): void {
