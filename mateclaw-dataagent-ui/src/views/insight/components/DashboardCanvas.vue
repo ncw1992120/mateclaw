@@ -2,6 +2,7 @@
   <div
     ref="canvasRef"
     class="dashboard-canvas"
+    :class="{ 'is-resizing': isCustomResizing }"
     data-canvas-workspace="expanded"
     :style="{ ...canvasWorkspaceStyle, ...dashboardThemeVariables }"
     tabindex="0"
@@ -67,10 +68,10 @@
         >
           <!-- 四边拖动热区（仅编辑态） -->
           <template v-if="editable">
-            <div class="resize-handle resize-handle-top" @mousedown.stop="startResize($event, item.i, 'top')" />
-            <div class="resize-handle resize-handle-right" @mousedown.stop="startResize($event, item.i, 'right')" />
-            <div class="resize-handle resize-handle-bottom" @mousedown.stop="startResize($event, item.i, 'bottom')" />
-            <div class="resize-handle resize-handle-left" @mousedown.stop="startResize($event, item.i, 'left')" />
+            <div class="resize-handle resize-handle-top" @pointerdown.stop.prevent="startResize($event, item.i, 'top')" />
+            <div class="resize-handle resize-handle-right" @pointerdown.stop.prevent="startResize($event, item.i, 'right')" />
+            <div class="resize-handle resize-handle-bottom" @pointerdown.stop.prevent="startResize($event, item.i, 'bottom')" />
+            <div class="resize-handle resize-handle-left" @pointerdown.stop.prevent="startResize($event, item.i, 'left')" />
           </template>
           <div v-if="editable" class="grid-item-toolbar">
             <span v-if="isToolbarTitleVisible(item.i)" class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
@@ -169,6 +170,7 @@ import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 import { themeCssVariables } from '@/utils/dashboard-theme'
+import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -318,7 +320,7 @@ function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
   gridLayout.value = newLayout
 
   // 仅在编辑态且非 props 同步时 emit 给 Editor（预览态为 static，不应回写 schema）
-  if (isSyncingFromProps || !props.editable) {
+  if (isSyncingFromProps || !props.editable || isCustomResizing.value) {
     return
   }
 
@@ -487,90 +489,92 @@ function handleDeleteComponent(id: string): void {
 }
 
 /** 自定义边缘拖动状态 */
-const resizingItem = ref<{ id: string; edge: string; startX: number; startY: number; startW: number; startH: number; startXPos: number; startYPos: number } | null>(null)
+const resizingItem = ref<{
+  id: string
+  edge: GridResizeEdge
+  startX: number
+  startY: number
+  startW: number
+  startH: number
+  startXPos: number
+  startYPos: number
+  pointerId: number
+  metrics: GridResizeMetrics
+} | null>(null)
 
 /** 是否正在自定义拉伸（期间禁用 grid-layout-plus 内置拖拽/缩放，避免碰撞检测推走位置） */
 const isCustomResizing = ref(false)
+let resizeRaf = 0
+let resizeLastPoint: { x: number; y: number } | null = null
+
+function readGridResizeMetrics(): GridResizeMetrics {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const gridWidth = grid?.getBoundingClientRect().width ?? canvasRef.value?.getBoundingClientRect().width ?? 0
+  return { gridWidth, columns: GRID_COLS, marginX: GRID_GAP, rowHeight: GRID_ROW_HEIGHT, marginY: GRID_GAP }
+}
 
 /** 开始自定义边缘拖动 */
-function startResize(event: MouseEvent, id: string, edge: string): void {
-  const comp = getComponent(id)
-  if (!comp) return
+function startResize(event: PointerEvent, id: string, edge: GridResizeEdge): void {
+  const item = gridLayout.value.find((entry) => entry.i === id)
+  if (!item) return
+  event.preventDefault()
+  event.stopPropagation()
   isCustomResizing.value = true
   resizingItem.value = {
     id,
     edge,
     startX: event.clientX,
     startY: event.clientY,
-    startW: comp.position.w,
-    startH: comp.position.h,
-    startXPos: comp.position.x,
-    startYPos: comp.position.y,
+    startW: item.w,
+    startH: item.h,
+    startXPos: item.x,
+    startYPos: item.y,
+    pointerId: event.pointerId,
+    metrics: readGridResizeMetrics(),
   }
-  document.addEventListener('mousemove', handleResizeMove)
-  document.addEventListener('mouseup', handleResizeEnd)
+  document.addEventListener('pointermove', handleResizeMove)
+  document.addEventListener('pointerup', handleResizeEnd)
 }
 
-/** 计算拉伸后的新尺寸 */
-function calcResizeResult(dx: number, dy: number): { newX: number; newY: number; newW: number; newH: number } | null {
-  if (!resizingItem.value) return null
-  const colWidth = 30
-  const rowHeight = 30
-
-  let newW = resizingItem.value.startW
-  let newH = resizingItem.value.startH
-  let newX = resizingItem.value.startXPos
-  let newY = resizingItem.value.startYPos
-
-  if (resizingItem.value.edge === 'left') {
-    const colDelta = Math.round(dx / colWidth)
-    newW = Math.max(1, resizingItem.value.startW - colDelta)
-  } else if (resizingItem.value.edge === 'right') {
-    const colDelta = Math.round(dx / colWidth)
-    newW = Math.max(1, resizingItem.value.startW + colDelta)
-  } else if (resizingItem.value.edge === 'top') {
-    const rowDelta = Math.round(dy / rowHeight)
-    newH = Math.max(1, resizingItem.value.startH - rowDelta)
-  } else if (resizingItem.value.edge === 'bottom') {
-    const rowDelta = Math.round(dy / rowHeight)
-    newH = Math.max(1, resizingItem.value.startH + rowDelta)
-  }
-
-  // 边界保护
-  if (newX < 0) {
-    newX = 0
-  }
-  if (newY < 0) {
-    newY = 0
-  }
-  if (newX + newW > 24) {
-    newW = 24 - newX
-  }
-
-  return { newX, newY, newW, newH }
+function applyResizePoint(point: { x: number; y: number }): void {
+  const start = resizingItem.value
+  if (!start) return
+  const result = calculateGridResize({
+    edge: start.edge,
+    startX: start.startX,
+    startY: start.startY,
+    startW: start.startW,
+    startH: start.startH,
+    startXPos: start.startXPos,
+    startYPos: start.startYPos,
+    dx: point.x - start.startX,
+    dy: point.y - start.startY,
+  }, start.metrics)
+  const item = gridLayout.value.find((g) => g.i === start.id)
+  if (item) Object.assign(item, { x: result.newX, y: result.newY, w: result.newW, h: result.newH })
 }
 
-/** 拖动中：直接更新 gridLayout 本地数据，避免 props 往返 */
-function handleResizeMove(event: MouseEvent): void {
-  if (!resizingItem.value) return
-
-  const dx = event.clientX - resizingItem.value.startX
-  const dy = event.clientY - resizingItem.value.startY
-  const result = calcResizeResult(dx, dy)
-  if (!result) return
-
-  // 直接修改本地 gridLayout，让 grid-layout-plus 即时响应
-  const item = gridLayout.value.find((g) => g.i === resizingItem.value!.id)
-  if (item) {
-    item.x = result.newX
-    item.y = result.newY
-    item.w = result.newW
-    item.h = result.newH
+/** 拖动中：合并到下一帧，避免每个 pointermove 都触发布局重算。 */
+function handleResizeMove(event: PointerEvent): void {
+  if (!resizingItem.value || event.pointerId !== resizingItem.value.pointerId) return
+  event.preventDefault()
+  resizeLastPoint = { x: event.clientX, y: event.clientY }
+  if (!resizeRaf) {
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0
+      if (resizeLastPoint) applyResizePoint(resizeLastPoint)
+    })
   }
 }
 
 /** 拖动结束：将最终结果 emit 给父组件持久化 */
-function handleResizeEnd(): void {
+function handleResizeEnd(event?: PointerEvent): void {
+  if (event && resizingItem.value && event.pointerId !== resizingItem.value.pointerId) return
+  if (resizeRaf) {
+    cancelAnimationFrame(resizeRaf)
+    resizeRaf = 0
+  }
+  if (resizeLastPoint) applyResizePoint(resizeLastPoint)
   if (resizingItem.value) {
     const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
     if (item) {
@@ -583,10 +587,11 @@ function handleResizeEnd(): void {
       }])
     }
   }
+  resizeLastPoint = null
   resizingItem.value = null
   isCustomResizing.value = false
-  document.removeEventListener('mousemove', handleResizeMove)
-  document.removeEventListener('mouseup', handleResizeEnd)
+  document.removeEventListener('pointermove', handleResizeMove)
+  document.removeEventListener('pointerup', handleResizeEnd)
 }
 
 /** 筛选组件值变化 */
@@ -677,6 +682,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-content {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -688,6 +694,15 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+
+.dashboard-canvas.is-resizing,
+.dashboard-canvas.is-resizing * {
+  user-select: none;
+}
+
+.dashboard-canvas.is-resizing .grid-item-content {
+  transition: none;
 }
 
 /* 扩大 resizer 热区 */
