@@ -16,7 +16,7 @@ MateClaw DataAgent Python Client SDK
     from mateclaw_dataagent import DataAgentClient
 
     client = DataAgentClient(
-        base_url="http://localhost:18089/dataagent/api",
+        base_url="http://localhost:18089",
         workspace_id=1
     )
     client.login(username="admin", password="admin123")

@@ -11,7 +11,7 @@ import type {
 } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/agents'
+const BASE_URL = '/v1/agents'
 
 /** 查询 Agent 列表 */
 export function list(workspaceId: number) {

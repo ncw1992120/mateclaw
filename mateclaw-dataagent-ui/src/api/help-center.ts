@@ -2,7 +2,7 @@ import api from './index'
 import type { HelpCategory, HelpCategoryRequest, HelpDocument, HelpDocumentRequest, HelpSearchResult, HelpFeedbackRequest, HelpFeedback, HelpFeedbackSummary } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/help-center'
+const BASE_URL = '/v1/help-center'
 
 /** 获取分类树 */
 export function listCategoryTree() {

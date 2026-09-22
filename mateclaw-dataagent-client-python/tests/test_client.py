@@ -20,7 +20,7 @@ class TestDataAgentClient(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.client = DataAgentClient(
-            base_url="http://localhost:18089/dataagent/api",
+            base_url="http://localhost:18089",
             workspace_id=1,
         )
 
@@ -30,7 +30,7 @@ class TestDataAgentClient(unittest.TestCase):
 
     def test_initialization(self):
         """测试初始化"""
-        self.assertEqual(self.client.base_url, "http://localhost:18089/dataagent/api")
+        self.assertEqual(self.client.base_url, "http://localhost:18089")
         self.assertEqual(self.client.workspace_id, 1)
         self.assertEqual(self.client.timeout, 60)
         self.assertIsNone(self.client.token)
@@ -39,7 +39,7 @@ class TestDataAgentClient(unittest.TestCase):
         """测试 URL 构建"""
         self.assertEqual(
             self.client._url("/v1/auth/login"),
-            "http://localhost:18089/dataagent/api/v1/auth/login",
+            "http://localhost:18089/v1/auth/login",
         )
 
     def test_parse_sse_buffer(self):

@@ -2,7 +2,7 @@ import api from './index'
 import type { Dataset, DatasetField, DatasetData, DatasetColumnDef } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/datasets'
+const BASE_URL = '/v1/datasets'
 
 /** 查询数据集列表 */
 export function list() {

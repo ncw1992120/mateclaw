@@ -222,7 +222,7 @@ def run_verification(
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="AI 测评验证脚本")
-    parser.add_argument("--base-url", default="http://localhost:18089/dataagent/api",
+    parser.add_argument("--base-url", default="http://localhost:18089",
                         help="DataAgent API 地址")
     parser.add_argument("--workspace-id", type=int, default=1,
                         help="工作区 ID")

@@ -66,7 +66,7 @@ from mateclaw_dataagent import DataAgentClient
 
 # Initialize the client
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1,
 )
 
@@ -95,7 +95,7 @@ client.close()
 from mateclaw_dataagent import DataAgentClient
 
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1,
 )
 client.login(username="admin", password="admin123")
@@ -126,7 +126,7 @@ client.close()
 from mateclaw_dataagent import DataAgentClient, EvaluationRunner
 
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1,
 )
 client.login(username="admin", password="admin123")
@@ -166,7 +166,7 @@ No agent, no conversation, no persistence — just like calling the LLM HTTP API
 from mateclaw_dataagent import DataAgentClient, LlmChatMessage
 
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1,
 )
 client.login(username="admin", password="admin123")
@@ -270,7 +270,7 @@ python examples/verify_evaluation.py --cases examples/test_cases.json
 
 ```python
 client = DataAgentClient(
-    base_url: str,        # Base path of the DataAgent API, e.g. "http://localhost:18089/dataagent/api"
+    base_url: str,        # Base path of the DataAgent API, e.g. "http://localhost:18089"
     workspace_id: int,    # Workspace ID
     timeout: int = 60,    # Request timeout in seconds
 )
@@ -465,7 +465,7 @@ Use `event.event` to branch on the type and `event.delta` / `event.data` to read
 ```python
 from mateclaw_dataagent import DataAgentClient, ApiError
 
-client = DataAgentClient("http://localhost:18089/dataagent/api", workspace_id=1)
+client = DataAgentClient("http://localhost:18089", workspace_id=1)
 
 try:
     client.login("admin", "wrong_password")

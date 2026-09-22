@@ -2,7 +2,7 @@ import api from './index'
 import type { BusinessTerm, BusinessTermCreateRequest, BusinessTermReferenceOptions, BusinessTermSearchResult, BusinessTermUpdateRequest } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/business-terms'
+const BASE_URL = '/v1/business-terms'
 
 /** 列出所有已存在术语数据的租户编码 */
 export function listTenantCodes() {

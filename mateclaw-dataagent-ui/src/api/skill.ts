@@ -9,7 +9,7 @@ import type {
 } from '@/types'
 
 /** 技能 CRUD 路径 */
-const BASE_URL = '/dataagent/api/v1/skills'
+const BASE_URL = '/v1/skills'
 
 /** 技能分页查询 */
 export function page(params: {

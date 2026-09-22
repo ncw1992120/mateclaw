@@ -3,7 +3,7 @@ import type { WorkspaceFile } from '@/types'
 
 /** API 路径前缀（按 agentId 拼接） */
 function baseUrl(agentId: number | string): string {
-  return `/dataagent/api/v1/agents/${agentId}/context`
+  return `/v1/agents/${agentId}/context`
 }
 
 /** 列出 Agent 的所有工作区文件（不含内容） */

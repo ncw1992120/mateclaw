@@ -3,7 +3,7 @@ import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 import type { CurrentUserInfo, LoginResponse } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/auth'
+const BASE_URL = '/v1/auth'
 
 /** 领航认证类型：UM=域账号口令 / AD=用户主机账号口令 */
 export type PilotAuthType = 'UM' | 'AD'

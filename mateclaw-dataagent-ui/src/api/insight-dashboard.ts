@@ -2,7 +2,7 @@ import api from './index'
 import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/insight/dashboards'
+const BASE_URL = '/v1/insight/dashboards'
 
 /** 查询仪表盘列表 */
 export function list() {

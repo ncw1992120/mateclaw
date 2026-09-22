@@ -10,7 +10,7 @@ import { classifySseError, type ChatErrorInfo } from '@/types/chatError'
 const RECONNECT_STORAGE_KEY = 'mateclaw.chat.reconnect'
 
 /** 聊天附件文件访问地址前缀（与后端 ChatUploadRuntime.FILE_URL_PREFIX 保持一致） */
-const CHAT_FILE_URL_PREFIX = '/dataagent/api/v1/chat/files/'
+const CHAT_FILE_URL_PREFIX = '/v1/chat/files/'
 
 interface PersistedReconnectState {
   conversationId: string

@@ -2,7 +2,7 @@ import api from './index'
 import type { Datasource, DatasourceTable, DatasourceColumn } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/datasources'
+const BASE_URL = '/v1/datasources'
 
 /** 查询数据源列表 */
 export function list() {
@@ -213,7 +213,7 @@ export function listSyncedCategories(datasourceId: string | number, categoryType
 
 // ==================== 数据源用户查询账号 ====================
 
-const ACCOUNT_BASE_URL = '/dataagent/api/v1/datasource-accounts'
+const ACCOUNT_BASE_URL = '/v1/datasource-accounts'
 
 /** 查询当前用户所有已绑定的查询账号 */
 export function listDatasourceAccounts() {
@@ -256,7 +256,7 @@ export interface DatasourceAccountVO {
 
 // ==================== 用户 Aloudata UID 自动映射 ====================
 
-const UID_MAPPING_BASE_URL = '/dataagent/api/v1/user-uid-mappings'
+const UID_MAPPING_BASE_URL = '/v1/user-uid-mappings'
 
 /** 查询当前用户全部启用的 UID 自动映射概要（租户 + 最近同步时间） */
 export function listMyUidMappings() {

@@ -660,7 +660,7 @@ Python 相关分析（统计检验、回归、聚类、预测）依赖本机的 
 
 ### 10.1 接口文档
 
-Swagger 地址：`http://<host>:18089/dataagent/api/v1/swagger-ui.html`
+Swagger 地址：`http://<host>:18089/v1/swagger-ui.html`
 
 ### 10.2 认证
 
@@ -682,7 +682,7 @@ pip install -e .
 ```python
 from mateclaw_dataagent import DataAgentClient
 
-client = DataAgentClient(base_url="http://localhost:18089/dataagent/api", workspace_id=1)
+client = DataAgentClient(base_url="http://localhost:18089", workspace_id=1)
 client.login(username="admin", password="admin123")
 
 resp = client.chat(agent_id=1, message="本月销售额是多少", conversation_id="demo-1")
@@ -717,8 +717,8 @@ for event in client.stream_chat(agent_id=1, message="上月销售额", conversat
 | 项目 | 地址 / 值 |
 |------|-----------|
 | 前端（开发模式） | `http://localhost:5173` |
-| 后端 API | `http://<host>:18089/dataagent/api` |
-| Swagger 文档 | `http://<host>:18089/dataagent/api/v1/swagger-ui.html` |
+| 后端 API | `http://<host>:18089` |
+| Swagger 文档 | `http://<host>:18089/v1/swagger-ui.html` |
 | 默认初始化账号 | `admin / admin123`（**仅默认部署值，务必尽快修改**） |
 | Python 示例 | `mateclaw-dataagent-client-python/examples/` |
 | Docker 部署 | 仓库根目录 `docker compose up -d` |
