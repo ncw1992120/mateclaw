@@ -117,7 +117,7 @@ describe('PropertyPanel', () => {
     expect(wrapper.text()).toContain('+ insight.property.addOption')
   })
 
-  it('only exposes Aloudata datasources for filter components', async () => {
+  it('shows datasource and dimension controls only for dynamic filter options', async () => {
     datasourceListMock.splice(0, datasourceListMock.length,
       { id: 'aloudata-1', name: '指标平台', sourceType: 'aloudata' } as any,
       { id: 'jdbc-1', name: '业务 MySQL', sourceType: 'mysql' } as any,
@@ -140,10 +140,24 @@ describe('PropertyPanel', () => {
 
     await nextTick()
 
-    expect(wrapper.findAll('optgroup').map(group => group.attributes('label'))).toEqual(['Aloudata'])
-    expect(wrapper.text()).toContain('指标平台')
-    expect(wrapper.text()).not.toContain('业务 MySQL')
-    expect(wrapper.text()).not.toContain('订单接口')
+    expect(wrapper.find('[aria-label="insight.property.datasource"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="insight.property.filterField"]').exists()).toBe(false)
+    expect(wrapper.find('.static-options-list').exists()).toBe(true)
+
+    await wrapper.setProps({
+      component: {
+        id: 'filter-1',
+        type: 'filter',
+        title: '区域',
+        position: { x: 0, y: 0, w: 4, h: 2 },
+        config: { optionSource: 'dynamic', datasourceId: 'aloudata-1', field: 'region' },
+      },
+    })
+    await nextTick()
+
+    expect(wrapper.find('[aria-label="insight.property.datasource"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="insight.property.filterField"]').exists()).toBe(true)
+    expect(wrapper.find('.static-options-list').exists()).toBe(false)
 
     datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
   })

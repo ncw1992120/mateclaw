@@ -403,47 +403,47 @@
           </div>
         </div>
 
-        <!-- 数据源（用于加载筛选字段维度列表）-->
-        <div class="form-group">
-          <label class="form-label">{{ t('insight.property.datasource') }}</label>
-          <el-select
-            v-model="localFilterDatasourceId"
-            :placeholder="t('insight.property.selectDatasource')"
-            :aria-label="t('insight.property.datasource')"
-            
-            filterable
-            style="width: 100%"
-            @change="handleFilterDatasourceChange"
-          >
-            <el-option-group v-for="group in filterDatasourceGroups" :key="`filter-${group.category}`" :label="group.label">
-              <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
-            </el-option-group>
-          </el-select>
-        </div>
+        <template v-if="localFilterConfig.optionSource === 'dynamic'">
+          <!-- 数据源（用于加载筛选字段维度列表）-->
+          <div class="form-group">
+            <label class="form-label">{{ t('insight.property.datasource') }}</label>
+            <el-select
+              v-model="localFilterDatasourceId"
+              :placeholder="t('insight.property.selectDatasource')"
+              :aria-label="t('insight.property.datasource')"
+              filterable
+              style="width: 100%"
+              @change="handleFilterDatasourceChange"
+            >
+              <el-option-group v-for="group in filterDatasourceGroups" :key="`filter-${group.category}`" :label="group.label">
+                <el-option v-for="ds in group.items" :key="ds.id" :label="ds.name" :value="ds.id" />
+              </el-option-group>
+            </el-select>
+          </div>
 
-        <!-- 筛选字段（从维度下拉选择）-->
-        <div v-if="localFilterDatasourceId" class="form-group">
-          <label class="form-label">{{ t('insight.property.filterField') }}</label>
-          <el-select
-            v-model="localFilterConfig.field"
-            :placeholder="t('insight.property.selectDimensions')"
-            :aria-label="t('insight.property.filterField')"
-            
-            filterable
-            remote
-            :remote-method="searchFilterDimensions"
-            :loading="filterDimensionsLoading"
-            style="width: 100%"
-            @change="handleFilterFieldChange"
-          >
-            <el-option
-              v-for="d in filterDimensionsOptions"
-              :key="d.dimName"
-              :label="d.dimDisplayName || d.dimName"
-              :value="d.dimName"
-            />
-          </el-select>
-        </div>
+          <!-- 筛选字段（从维度下拉选择）-->
+          <div v-if="localFilterDatasourceId" class="form-group">
+            <label class="form-label">{{ t('insight.property.filterField') }}</label>
+            <el-select
+              v-model="localFilterConfig.field"
+              :placeholder="t('insight.property.selectDimensions')"
+              :aria-label="t('insight.property.filterField')"
+              filterable
+              remote
+              :remote-method="searchFilterDimensions"
+              :loading="filterDimensionsLoading"
+              style="width: 100%"
+              @change="handleFilterFieldChange"
+            >
+              <el-option
+                v-for="d in filterDimensionsOptions"
+                :key="d.dimName"
+                :label="d.dimDisplayName || d.dimName"
+                :value="d.dimName"
+              />
+            </el-select>
+          </div>
+        </template>
 
         <!-- 选择行为：按业务字段决定是否允许多选、全部和不筛选 -->
         <div class="form-group form-group-column">
@@ -933,7 +933,7 @@ watch(
         : (Array.isArray(config.defaultValue) ? [...config.defaultValue] : config.defaultValue)
       // 同步筛选器数据源 ID（优先使用 config.datasourceId，兼容旧数据）
       localFilterDatasourceId.value = config?.datasourceId ?? ''
-      if (localFilterDatasourceId.value) {
+      if (localFilterConfig.optionSource === 'dynamic' && localFilterDatasourceId.value) {
         loadFilterDimensions(localFilterDatasourceId.value)
       } else {
         filterDimensionsOptions.value = []
@@ -1204,7 +1204,10 @@ function handleFilterOptionSourceChange(): void {
   localFilterDefaultValue.value = localFilterSelectionMode.value === 'multiple' ? [] : null
   filterDefaultValues.value = []
   if (localFilterConfig.optionSource === 'dynamic') {
+    if (localFilterDatasourceId.value) loadFilterDimensions(localFilterDatasourceId.value)
     loadFilterDefaultValues()
+  } else {
+    filterDimensionsOptions.value = []
   }
   emitFilterConfigChange()
 }
