@@ -30,7 +30,7 @@
                 <el-tag :type="row.role === 'measure' ? 'warning' : 'info'" size="small" class="qc-role-tag" title="点击切换维度 / 指标" @click.stop="toggleRole(row)">
                   {{ row.role === 'measure' ? '指标' : '维度' }}
                 </el-tag>
-                <span class="qc-tech-field" :title="row.field">{{ row.field }}</span>
+                <el-input v-model="row.field" class="qc-tech-input" size="small" placeholder="技术字段名" data-testid="python-qc-field-tech-input" />
               </div>
               <div class="qc-field-cell qc-field-title-cell">
                 <el-input v-model="row.title" class="qc-title-input" size="small" placeholder="展示名" data-testid="python-qc-title-input" />
@@ -38,11 +38,15 @@
               </div>
               <el-button class="qc-remove" size="small" text type="danger" data-testid="python-qc-field-remove" @click.stop="removeField(index)">×</el-button>
             </div>
-            <div v-if="!fieldRows.length" class="qc-empty" data-testid="python-qc-fields-empty">Python 生成结果字段后，可在此选择展示字段</div>
           </div>
-          <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="+ 添加字段" filterable @change="addField">
-            <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
-          </el-select>
+          <div class="qc-add-field-row">
+            <el-input v-model="newFieldName" class="qc-new-field-input" size="small" placeholder="技术字段名（英文/数字/下划线）" data-testid="python-qc-new-field-name" />
+            <el-input v-model="newFieldTitle" class="qc-new-field-input" size="small" placeholder="展示名" data-testid="python-qc-new-field-title" />
+            <el-button size="small" type="primary" plain data-testid="python-qc-add-new-field" @click="addNewField">添加字段</el-button>
+            <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="从结果字段选择" filterable @change="addField">
+              <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
+            </el-select>
+          </div>
         </div>
       </div>
 
@@ -114,7 +118,11 @@ const emit = defineEmits<{
   (e: 'save', config: FinalResultQueryConfig): void
 }>()
 
-const fieldRows = ref<QueryDisplayField[]>([])
+interface EditableField extends QueryDisplayField {
+  originalField: string
+}
+
+const fieldRows = ref<EditableField[]>([])
 const filterRows = ref<FinalResultFilterField[]>([])
 const sortEnabled = ref(false)
 const sortAllowed = ref<string[]>([])
@@ -124,6 +132,9 @@ const maxPageSize = ref(500)
 const returnTotalCount = ref(false)
 const dragIndex = ref<number | null>(null)
 const fieldsExpanded = ref(true)
+const newFieldName = ref('')
+const newFieldTitle = ref('')
+const FIELD_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 const duplicateTitles = computed(() => {
   const seen = new Set<string>()
@@ -138,13 +149,17 @@ const duplicateTitles = computed(() => {
 })
 
 const addableFields = computed(() => props.fieldCatalog.filter((field) => !fieldRows.value.some((row) => row.field === field.field)))
+const filterFieldCandidates = computed(() => {
+  const candidates = [...fieldRows.value, ...props.fieldCatalog]
+  return candidates.filter((field, index) => candidates.findIndex((item) => item.field === field.field) === index)
+})
 
 function fieldOptionLabel(field: QueryDisplayField): string {
   return field.title && field.title !== field.field ? `${field.field} · ${field.title}` : field.field
 }
 
 function cloneConfig(config: FinalResultQueryConfig): void {
-  fieldRows.value = config.displayFields.map((field) => ({ ...field }))
+  fieldRows.value = config.displayFields.map((field) => ({ ...field, originalField: field.field }))
   filterRows.value = config.filterFields.map((field) => ({ ...field }))
   sortEnabled.value = config.sortPolicy.enabled
   sortAllowed.value = [...config.sortPolicy.allowedFields]
@@ -152,6 +167,8 @@ function cloneConfig(config: FinalResultQueryConfig): void {
   defaultPageSize.value = config.paginationPolicy.defaultPageSize
   maxPageSize.value = config.paginationPolicy.maxPageSize
   returnTotalCount.value = config.paginationPolicy.returnTotalCount
+  newFieldName.value = ''
+  newFieldTitle.value = ''
 }
 
 watch(() => props.modelValue, (visible) => {
@@ -163,11 +180,27 @@ watch(() => props.modelValue, (visible) => {
 
 function addField(fieldName: string): void {
   const field = props.fieldCatalog.find((item) => item.field === fieldName)
-  if (field) fieldRows.value.push({ ...field })
+  if (field && !fieldRows.value.some((row) => row.field === field.field)) fieldRows.value.push({ ...field, originalField: field.field })
+}
+
+function addNewField(): void {
+  const fieldName = newFieldName.value.trim()
+  const title = newFieldTitle.value.trim() || fieldName
+  if (!FIELD_NAME_PATTERN.test(fieldName)) {
+    ElMessage.warning('技术字段名只能由英文、数字、下划线组成，且不能以数字开头')
+    return
+  }
+  if (fieldRows.value.some((row) => row.field === fieldName)) {
+    ElMessage.warning('技术字段名不能重复')
+    return
+  }
+  fieldRows.value.push({ field: fieldName, title, role: 'dimension', dataType: 'string', originalField: fieldName })
+  newFieldName.value = ''
+  newFieldTitle.value = ''
 }
 
 function addFilterField(): void {
-  const field = props.fieldCatalog.find((item) => !filterRows.value.some((row) => row.field === item.field))
+  const field = filterFieldCandidates.value.find((item) => !filterRows.value.some((row) => row.field === item.field))
   if (!field) return
   filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'] })
 }
@@ -179,6 +212,7 @@ function toggleRole(row: QueryDisplayField): void {
 function removeField(index: number): void {
   const field = fieldRows.value[index]?.field
   fieldRows.value.splice(index, 1)
+  filterRows.value = filterRows.value.filter((row) => row.field !== field)
   sortAllowed.value = sortAllowed.value.filter((item) => item !== field)
 }
 
@@ -192,6 +226,19 @@ function onDrop(index: number): void {
 }
 
 function save(): void {
+  const fieldNames = new Set<string>()
+  for (const field of fieldRows.value) {
+    const fieldName = field.field.trim()
+    if (!FIELD_NAME_PATTERN.test(fieldName)) {
+      ElMessage.warning('技术字段名只能由英文、数字、下划线组成，且不能以数字开头')
+      return
+    }
+    if (fieldNames.has(fieldName)) {
+      ElMessage.warning('技术字段名不能重复')
+      return
+    }
+    fieldNames.add(fieldName)
+  }
   if (duplicateTitles.value.size) {
     ElMessage.warning('展示名必须唯一')
     return
@@ -200,12 +247,20 @@ function save(): void {
     ElMessage.warning('开启排序后至少选择一个允许排序的字段')
     return
   }
+  const renamedFields = new Map(fieldRows.value.map((field) => [field.originalField, field.field.trim()]))
+  const titleByField = new Map(fieldRows.value.map((field) => [field.field.trim(), field.title.trim() || field.field.trim()]))
+  const displayFields = fieldRows.value.map((field) => ({ field: field.field.trim(), title: field.title.trim() || field.field.trim(), role: field.role, dataType: field.dataType }))
+  const filterFields = filterRows.value.map((field) => {
+    const nextField = renamedFields.get(field.field) ?? field.field
+    return { ...field, field: nextField, title: titleByField.get(nextField) ?? field.title, parameterName: field.parameterName === field.field ? nextField : field.parameterName }
+  })
+  const allowedFields = sortAllowed.value.map((field) => renamedFields.get(field) ?? field)
   emit('save', {
     schemaFingerprint: props.config.schemaFingerprint,
     confirmed: false,
-    displayFields: fieldRows.value.map((field) => ({ ...field })),
-    filterFields: filterRows.value.map((field) => ({ ...field })),
-    sortPolicy: { ...props.config.sortPolicy, enabled: sortEnabled.value, allowedFields: [...sortAllowed.value], defaultSort: sortAllowed.value[0] ? { field: sortAllowed.value[0], direction: 'asc' } : null },
+    displayFields,
+    filterFields,
+    sortPolicy: { ...props.config.sortPolicy, enabled: sortEnabled.value, allowedFields, defaultSort: allowedFields[0] ? { field: allowedFields[0], direction: 'asc' } : null },
     paginationPolicy: { ...props.config.paginationPolicy, enabled: paginationEnabled.value, defaultPageSize: defaultPageSize.value, maxPageSize: Math.min(maxPageSize.value, 500), returnTotalCount: returnTotalCount.value },
   })
   emit('update:modelValue', false)
@@ -235,10 +290,13 @@ function save(): void {
 .qc-field-title-cell { gap: 8px; }
 .qc-role-tag { flex-shrink: 0; cursor: pointer; user-select: none; }
 .qc-tech-field { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--db-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qc-tech-input { flex: 1; min-width: 0; }
 .qc-title-input { flex: 1; min-width: 0; }
 .qc-error { color: var(--el-color-danger); font-size: 12px; flex-shrink: 0; }
 .qc-remove { flex-shrink: 0; }
-.qc-add-field { width: 220px; margin-top: 4px; }
+.qc-add-field-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.qc-new-field-input { width: 220px; }
+.qc-add-field { width: 180px; }
 .qc-binding-table { display: flex; flex-direction: column; }
 .qc-binding-thead { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; padding: 0 2px 6px; }
 .qc-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: center; gap: 8px; margin-bottom: 8px; }

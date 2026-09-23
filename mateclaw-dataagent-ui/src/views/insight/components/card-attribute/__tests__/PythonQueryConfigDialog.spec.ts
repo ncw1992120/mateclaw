@@ -44,4 +44,36 @@ describe('PythonQueryConfigDialog', () => {
     expect(wrapper.emitted('save')).toHaveLength(1)
     expect((wrapper.emitted('save')![0][0] as FinalResultQueryConfig).displayFields.map((field) => field.field)).toEqual(['region', 'amount'])
   })
+
+  it('允许添加并编辑 Python 输出字段，同时将筛选字段保存为真实配置', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [] },
+      global: { stubs },
+    })
+
+    await wrapper.find('[data-testid="python-qc-new-field-name"]').setValue('customer_id')
+    await wrapper.find('[data-testid="python-qc-new-field-title"]').setValue('客户ID')
+    await wrapper.find('[data-testid="python-qc-add-new-field"]').trigger('click')
+
+    expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(1)
+    await wrapper.find('[data-testid="python-qc-field-tech-input"]').setValue('customer_code')
+    await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
+    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
+
+    const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
+    expect(saved.displayFields[0]).toMatchObject({ field: 'customer_code', title: '客户ID' })
+    expect(saved.filterFields[0]).toMatchObject({ field: 'customer_code', parameterName: 'customer_code' })
+  })
+
+  it('拒绝不符合英文数字下划线规则的技术字段名', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [] },
+      global: { stubs },
+    })
+
+    await wrapper.find('[data-testid="python-qc-new-field-name"]').setValue('客户名称')
+    await wrapper.find('[data-testid="python-qc-add-new-field"]').trigger('click')
+
+    expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(0)
+  })
 })
