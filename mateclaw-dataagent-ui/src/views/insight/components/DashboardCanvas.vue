@@ -138,22 +138,30 @@
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
               <ChartWidget
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
               <DataTableWidget
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
@@ -183,6 +191,7 @@
                 :selected="selectedId === item.i"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="childTitleIconStylePreview"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
@@ -191,6 +200,7 @@
                 @paste-child="(p) => emit('paste-child', p)"
                 @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
                 @edit-child-title-icon-style="openChildTitleIconStyle"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
             </template>
           </div>
@@ -266,18 +276,45 @@ const editingTitleId = ref<string | null>(null)
 const editingTitleValue = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
 const titleIconDialogVisible = ref(false)
-const editingTitleIconTarget = ref<{ componentId: string; containerId?: string; childId?: string } | null>(null)
+const editingTitleIconTarget = ref<{
+  componentId: string
+  containerId?: string
+  childId?: string
+  tabId?: string
+  tabKind?: 'component' | 'combination'
+} | null>(null)
 const titleIconDialogTop = ref('16px')
 const previewTitleIconStyleValue = ref<ComponentTitleIconStyle | null>(null)
+
+const tabTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target?.tabId && target.tabKind && previewTitleIconStyleValue.value
+    ? { componentId: target.componentId, tabId: target.tabId, titleIconStyle: previewTitleIconStyleValue.value }
+    : undefined
+})
 
 const editingTitleIconComponent = computed(() => {
   const target = editingTitleIconTarget.value
   if (!target) return undefined
-  if (!target.childId) return props.components.find((component) => component.id === target.componentId)
+  if (!target.childId) return findCanvasComponent(target.componentId)
   return findChildComponent(target.containerId ?? '', target.childId)
 })
-const editingTitleIconStyle = computed(() => editingTitleIconComponent.value?.titleIconStyle)
-const editingTitleIconTitle = computed(() => editingTitleIconComponent.value?.title ?? '')
+const editingTitleIconStyle = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  if (!target?.tabId || !owner) return owner?.titleIconStyle
+  if (target.tabKind === 'component') return owner.tabs?.find((tab) => tab.id === target.tabId)?.titleIconStyle
+  return owner.containerConfig?.tabs.find((tab) => tab.id === target.tabId)?.titleIconStyle
+})
+const editingTitleIconTitle = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  if (target?.tabId && owner) {
+    if (target.tabKind === 'component') return owner.tabs?.find((tab) => tab.id === target.tabId)?.title ?? ''
+    return owner.containerConfig?.tabs.find((tab) => tab.id === target.tabId)?.title ?? ''
+  }
+  return owner?.title ?? ''
+})
 const childTitleIconStylePreview = computed(() => {
   const target = editingTitleIconTarget.value
   return target?.childId && previewTitleIconStyleValue.value
@@ -316,6 +353,7 @@ const emit = defineEmits<{
   (e: 'open-metric-style', payload: { componentId: string; fieldKey: string }): void
   (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
   (e: 'update-child-title-icon-style', payload: { containerId: string; childId: string; titleIconStyle: ComponentTitleIconStyle }): void
+  (e: 'update-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; titleIconStyle: ComponentTitleIconStyle }): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */
@@ -485,6 +523,29 @@ function findChildComponent(containerId: string, childId: string): InsightCombin
   ])
 }
 
+function findCanvasComponent(componentId: string): InsightComponent | InsightCombinationChild | undefined {
+  for (const component of props.components) {
+    if (component.id === componentId) return component
+    const visit = (children: InsightCombinationChild[] | undefined): InsightCombinationChild | undefined => {
+      for (const child of children ?? []) {
+        if (child.id === componentId) return child
+        const nested = visit([
+          ...(child.children ?? []),
+          ...((child.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+        ])
+        if (nested) return nested
+      }
+      return undefined
+    }
+    const child = visit([
+      ...(component.children ?? []),
+      ...((component.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+    ])
+    if (child) return child
+  }
+  return undefined
+}
+
 function openTitleIconStyle(componentId: string, anchor?: HTMLElement | null): void {
   if (!props.editable) return
   previewTitleIconStyleValue.value = null
@@ -497,6 +558,19 @@ function openChildTitleIconStyle(payload: { containerId: string; childId: string
   if (!props.editable) return
   previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = { ...payload, componentId: payload.containerId }
+  titleIconDialogTop.value = dialogTopForAnchor(payload.anchor)
+  titleIconDialogVisible.value = true
+}
+
+function openTabTitleIconStyle(payload: {
+  componentId: string
+  tabId: string
+  tabKind: 'component' | 'combination'
+  anchor?: HTMLElement
+}): void {
+  if (!props.editable) return
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = payload
   titleIconDialogTop.value = dialogTopForAnchor(payload.anchor)
   titleIconDialogVisible.value = true
 }
@@ -540,7 +614,14 @@ function setTitleIconDialogVisible(visible: boolean): void {
 function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
   const target = editingTitleIconTarget.value
   if (!target) return
-  if (target.childId && target.containerId) {
+  if (target.tabId && target.tabKind) {
+    emit('update-tab-title-icon-style', {
+      componentId: target.componentId,
+      tabId: target.tabId,
+      tabKind: target.tabKind,
+      titleIconStyle: style,
+    })
+  } else if (target.childId && target.containerId) {
     emit('update-child-title-icon-style', {
       containerId: target.containerId,
       childId: target.childId,

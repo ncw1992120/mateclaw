@@ -23,7 +23,7 @@
       <!-- Tab 栏（多 Tab 模式） -->
       <div v-if="hasTabs" class="widget-tabs" role="tablist" :aria-label="t('insight.kpiTabsLabel')">
         <div
-          v-for="tab in tabList"
+          v-for="(tab, tabIndex) in tabList"
           :key="tab.id"
           class="widget-tab"
           :class="{ active: activeTabId === tab.id }"
@@ -34,7 +34,15 @@
           @click="selectTab(tab.id)"
           @keydown="onTabKeydown($event, tab.id)"
         >
-          {{ tab.title }}
+          <DashboardTabTitle
+            :title="tab.title"
+            :title-icon-style="tab.titleIconStyle"
+            :title-icon-style-preview="tabIconStylePreview(tab)"
+            :dashboard-theme="dashboardTheme"
+            :variant="tabIndex"
+            :editable="editable"
+            @edit="(anchor) => emit('edit-tab-title-icon-style', { componentId: component.id, tabId: tab.id, tabKind: 'component', anchor })"
+          />
         </div>
       </div>
 
@@ -122,8 +130,9 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import DashboardTabTitle from './DashboardTabTitle.vue'
 import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
 import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
@@ -147,6 +156,8 @@ const props = withDefaults(defineProps<{
   showTitle?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
   dashboardTheme?: ResolvedDashboardTheme
+  /** 正在编辑的页签图标样式即时预览 */
+  tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
 }>(), {
   editable: false,
 })
@@ -155,6 +166,7 @@ const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   /** 打开某指标的字段样式弹窗（默认定位到「指标值」字段） */
   (e: 'open-metric-style', payload: { componentId: string; fieldKey: string; field: KpiMetricField }): void
+  (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
 const kpiData = computed(() => props.componentData?.kpi)
@@ -169,6 +181,12 @@ const hasTabs = computed(() => {
   return !!(props.component.tabs && props.component.tabs.length > 0)
 })
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+function tabIconStylePreview(tab: ComponentTab) {
+  const preview = props.tabTitleIconStylePreview
+  return preview?.componentId === props.component.id && preview.tabId === tab.id
+    ? preview.titleIconStyle
+    : undefined
+}
 const activeTabId = ref('')
 const rootRef = ref<HTMLElement | null>(null)
 

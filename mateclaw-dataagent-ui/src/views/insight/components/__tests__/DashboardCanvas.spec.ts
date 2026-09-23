@@ -10,12 +10,22 @@ const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
   KpiCardWidget: { template: '<div />' },
-  ChartWidget: { template: '<div />' },
+  ChartWidget: {
+    name: 'ChartWidget',
+    props: ['component', 'componentData', 'editable', 'dashboardTheme', 'tabTitleIconStylePreview'],
+    emits: ['edit-tab-title-icon-style'],
+    template: '<div />',
+  },
   DataTableWidget: { template: '<div />' },
   FilterSelectWidget: { template: '<div />' },
   TimeFilterWidget: { template: '<div />' },
   AiAnalysisWidget: { template: '<div />' },
-  CombinationCardWidget: { template: '<div />' },
+  CombinationCardWidget: {
+    name: 'CombinationCardWidget',
+    props: ['component', 'componentDataMap', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'tabTitleIconStylePreview'],
+    emits: ['edit-tab-title-icon-style'],
+    template: '<div />',
+  },
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { canvasEmpty: '暂无组件' } } }, missingWarn: false, fallbackWarn: false })
 
@@ -116,6 +126,130 @@ describe('DashboardCanvas keyboard interaction', () => {
     const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
     expect(dialog.props('draggable')).toBe(true)
     expect(dialog.props('top')).toBe('88px')
+  })
+
+  it('opens the shared icon dialog for a tab and previews only that tab before applying', async () => {
+    const initialStyle = { iconKey: 'trend-charts', colorMode: 'theme' as const, strokeWidth: 2 as const }
+    const chart = {
+      ...component,
+      id: 'chart-tab-owner',
+      type: 'chart' as const,
+      tabs: [{ id: 'summary-tab', title: '汇总', titleIconStyle: initialStyle, dataSource: {} }],
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [chart], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    const chartWidget = wrapper.findComponent({ name: 'ChartWidget' })
+    const anchor = document.createElement('button')
+    chartWidget.vm.$emit('edit-tab-title-icon-style', {
+      componentId: chart.id,
+      tabId: 'summary-tab',
+      tabKind: 'component',
+      anchor,
+    })
+    await wrapper.vm.$nextTick()
+
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    expect(dialog.props('titleIconStyle')).toEqual(initialStyle)
+
+    const previewStyle = { iconKey: 'chart-bar', colorMode: 'custom' as const, color: '#aa5522', strokeWidth: 3 as const }
+    dialog.vm.$emit('preview', previewStyle)
+    await wrapper.vm.$nextTick()
+    expect(chartWidget.props('tabTitleIconStylePreview')).toEqual({
+      componentId: chart.id,
+      tabId: 'summary-tab',
+      titleIconStyle: previewStyle,
+    })
+
+    dialog.vm.$emit('save', previewStyle)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('update-tab-title-icon-style')?.[0]?.[0]).toEqual({
+      componentId: chart.id,
+      tabId: 'summary-tab',
+      tabKind: 'component',
+      titleIconStyle: previewStyle,
+    })
+  })
+
+  it('resolves nested card tabs by component identity and routes saved styles to the schema update event', async () => {
+    const initialStyle = { iconKey: 'calendar', colorMode: 'theme' as const, strokeWidth: 2.5 as const }
+    const nestedChart = {
+      id: 'nested-chart',
+      type: 'chart' as const,
+      title: '子趋势',
+      tabs: [{ id: 'nested-week', title: '本周', titleIconStyle: initialStyle, dataSource: {} }],
+      layout: { x: 0, y: 0, col: 6, h: 180 },
+    }
+    const combination = {
+      ...component,
+      id: 'combination-owner',
+      type: 'combination' as const,
+      title: '容器',
+      children: [nestedChart],
+      containerConfig: { layoutMode: 'free' as const, tabs: [], activeTab: undefined },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [combination], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    const combinationWidget = wrapper.findComponent({ name: 'CombinationCardWidget' })
+    combinationWidget.vm.$emit('edit-tab-title-icon-style', {
+      componentId: nestedChart.id,
+      tabId: 'nested-week',
+      tabKind: 'component',
+      anchor: document.createElement('button'),
+    })
+    await wrapper.vm.$nextTick()
+
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    expect(dialog.props('titleIconStyle')).toEqual(initialStyle)
+    const updatedStyle = { iconKey: 'chart-bar', colorMode: 'custom' as const, color: '#aa5522', strokeWidth: 3 as const }
+    dialog.vm.$emit('save', updatedStyle)
+    expect(wrapper.emitted('update-tab-title-icon-style')?.[0]?.[0]).toEqual({
+      componentId: nestedChart.id,
+      tabId: 'nested-week',
+      tabKind: 'component',
+      titleIconStyle: updatedStyle,
+    })
+  })
+
+  it('opens the same dialog for a combination container tab', async () => {
+    const style = { iconKey: 'pie-chart', colorMode: 'theme' as const, strokeWidth: 1.5 as const }
+    const combination = {
+      ...component,
+      id: 'combination-tab-owner',
+      type: 'combination' as const,
+      title: '组合卡片',
+      children: [],
+      containerConfig: {
+        layoutMode: 'free' as const,
+        tabs: [{ id: 'container-summary', title: '概览', titleIconStyle: style, children: [] }],
+        activeTab: 'container-summary',
+      },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [combination], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    wrapper.findComponent({ name: 'CombinationCardWidget' }).vm.$emit('edit-tab-title-icon-style', {
+      componentId: combination.id,
+      tabId: 'container-summary',
+      tabKind: 'combination',
+      anchor: document.createElement('button'),
+    })
+    await wrapper.vm.$nextTick()
+
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    expect(dialog.props('titleIconStyle')).toEqual(style)
+    const updatedStyle = { iconKey: 'trend-charts', colorMode: 'custom' as const, color: '#aa5522', strokeWidth: 2.5 as const }
+    dialog.vm.$emit('save', updatedStyle)
+    expect(wrapper.emitted('update-tab-title-icon-style')?.[0]?.[0]).toEqual({
+      componentId: combination.id,
+      tabId: 'container-summary',
+      tabKind: 'combination',
+      titleIconStyle: updatedStyle,
+    })
   })
 
   it('uses the component title bar as a drag handle for moving into a combination', async () => {

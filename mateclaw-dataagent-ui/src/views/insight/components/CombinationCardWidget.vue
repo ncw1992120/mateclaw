@@ -40,7 +40,17 @@
           @keyup.enter="commitTabRename(tab)"
         />
         <template v-else>
-          <span class="cc-tab-label" @dblclick.stop="editable && startTabRename(tab)"><DashboardComponentIcon type="tab" :title="tab.title" :dashboard-theme="dashboardTheme" :variant="tabIndex" />{{ tab.title }}</span>
+          <span class="cc-tab-label" @dblclick.stop="editable && startTabRename(tab)">
+            <DashboardTabTitle
+              :title="tab.title"
+              :title-icon-style="tab.titleIconStyle"
+              :title-icon-style-preview="tabIconStylePreview(tab)"
+              :dashboard-theme="dashboardTheme"
+              :variant="tabIndex"
+              :editable="editable"
+              @edit="(anchor) => emit('edit-tab-title-icon-style', { componentId: component.id, tabId: tab.id, tabKind: 'combination', anchor })"
+            />
+          </span>
           <!-- 重命名 affordance：hover 淡入铅笔图标，提示该页签可双击重命名 -->
           <button
             v-if="editable"
@@ -141,21 +151,30 @@
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
+            :editable="editable"
             :dashboard-theme="dashboardTheme"
+            :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <ChartWidget
             v-else-if="child.type === 'chart'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
+            :editable="editable"
             :dashboard-theme="dashboardTheme"
+            :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <DataTableWidget
             v-else-if="child.type === 'table'"
             :component="toWidgetComponent(child)"
             :component-data="componentDataMap?.[child.id]"
             :show-title="false"
+            :editable="editable"
             :dashboard-theme="dashboardTheme"
+            :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
@@ -184,6 +203,7 @@
             :selected="selectedChildId === child.id"
             :dashboard-theme="dashboardTheme"
             :title-icon-style-preview="titleIconStylePreview"
+            :tab-title-icon-style-preview="tabTitleIconStylePreview"
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
@@ -191,6 +211,7 @@
             @paste-child="(payload) => emit('paste-child', payload)"
             @context-menu="(payload) => emit('context-menu', payload)"
             @edit-child-title-icon-style="(payload) => emit('edit-child-title-icon-style', payload)"
+            @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
         </div>
 
@@ -217,6 +238,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import DashboardTabTitle from './DashboardTabTitle.vue'
 import type {
   InsightComponent,
   InsightComponentType,
@@ -225,6 +247,7 @@ import type {
   ChartType,
   InsightComponentData,
   ComponentTitleIconStyle,
+  DashboardTabTitleIconStylePreview,
   ResolvedDashboardTheme,
 } from '@/types'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
@@ -250,6 +273,7 @@ const props = withDefaults(
     selected?: boolean
     dashboardTheme?: ResolvedDashboardTheme
     titleIconStylePreview?: { childId: string; style: ComponentTitleIconStyle }
+    tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
   }>(),
   { editable: false, selected: false },
 )
@@ -268,6 +292,7 @@ const emit = defineEmits<{
   (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
   (e: 'context-menu', payload: { containerId: string; childId: string; x: number; y: number }): void
   (e: 'edit-child-title-icon-style', payload: { containerId: string; childId: string; anchor?: HTMLElement }): void
+  (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
 }>()
 
 const { t } = useI18n()
@@ -288,6 +313,13 @@ const childTitleInput = ref<HTMLInputElement | null>(null)
 function childIconTitleStyle(child: InsightCombinationChild): ComponentTitleIconStyle | undefined {
   const preview = props.titleIconStylePreview
   return preview?.childId === child.id ? preview.style : child.titleIconStyle
+}
+
+function tabIconStylePreview(tab: { id: string }): ComponentTitleIconStyle | undefined {
+  const preview = props.tabTitleIconStylePreview
+  return preview?.componentId === props.component.id && preview.tabId === tab.id
+    ? preview.titleIconStyle
+    : undefined
 }
 
 function startChildTitleEdit(child: { id: string; title: string }): void {
@@ -384,6 +416,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
     config: child.config,
+    tabs: child.tabs,
     dataSource: child.dataSource,
     children: child.children,
     containerConfig: child.containerConfig,

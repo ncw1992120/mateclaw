@@ -89,6 +89,91 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
   })
 
+  it('offers a per-tab icon style action and keeps its configured style visible', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combination-tab-style',
+          type: 'combination',
+          title: '组合卡片',
+          children: [],
+          containerConfig: {
+            ...containerConfig,
+            tabs: [{ id: 'tab-one', title: '策略概括', children: [], titleIconStyle: { iconKey: 'trend-charts', colorMode: 'custom', color: '#aa5522', strokeWidth: 3 } }],
+            activeTab: 'tab-one',
+          },
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { EmptyState: { template: '<div />' }, 'el-icon': true },
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'DashboardTabTitle' }).props('titleIconStyle')).toMatchObject({
+      iconKey: 'trend-charts',
+      color: '#aa5522',
+      strokeWidth: 3,
+    })
+    await wrapper.get('[aria-label="编辑页签图标 策略概括"]').trigger('click')
+    expect(wrapper.emitted('edit-tab-title-icon-style')?.[0]?.[0]).toMatchObject({
+      componentId: 'combination-tab-style',
+      tabId: 'tab-one',
+      tabKind: 'combination',
+    })
+  })
+
+  it('forwards nested card tab style requests with the nested component identity', () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combination-parent',
+          type: 'combination',
+          title: '组合卡片',
+          children: [{
+            id: 'nested-chart',
+            type: 'chart',
+            title: '趋势',
+            tabs: [{ id: 'nested-tab', title: '本周', dataSource: {} as any }],
+            layout: { x: 0, y: 0, col: 6, h: 180 },
+          }],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: {
+            name: 'ChartWidget',
+            props: ['component', 'tabTitleIconStylePreview'],
+            emits: ['edit-tab-title-icon-style'],
+            template: '<div />',
+          },
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+    const nestedChart = wrapper.findComponent({ name: 'ChartWidget' })
+    expect(nestedChart.props('component').tabs[0].title).toBe('本周')
+    nestedChart.vm.$emit('edit-tab-title-icon-style', {
+      componentId: 'nested-chart', tabId: 'nested-tab', tabKind: 'component', anchor: document.createElement('button'),
+    })
+
+    expect(wrapper.emitted('edit-tab-title-icon-style')?.[0]?.[0]).toMatchObject({
+      componentId: 'nested-chart', tabId: 'nested-tab', tabKind: 'component',
+    })
+  })
+
   it('emits copy, paste and context-menu actions for a child component', async () => {
     const child = {
       id: 'child-copy',

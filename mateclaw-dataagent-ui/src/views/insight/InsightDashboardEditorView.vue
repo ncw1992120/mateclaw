@@ -206,6 +206,7 @@
           @open-metric-style="handleOpenMetricStyle"
           @update-title-icon-style="handleCanvasTitleIconStyleUpdate"
           @update-child-title-icon-style="handleCanvasChildTitleIconStyleUpdate"
+          @update-tab-title-icon-style="handleCanvasTabTitleIconStyleUpdate"
         />
       </div>
 
@@ -1033,6 +1034,38 @@ function handleCanvasChildTitleIconStyleUpdate(payload: {
   if (child) child.titleIconStyle = payload.titleIconStyle
 }
 
+function handleCanvasTabTitleIconStyleUpdate(payload: {
+  componentId: string
+  tabId: string
+  tabKind: 'component' | 'combination'
+  titleIconStyle: InsightComponent['titleIconStyle']
+}): void {
+  const topComponent = currentPageComponents.value.find((component) => component.id === payload.componentId)
+  const owner = topComponent ?? currentPageComponents.value
+    .filter((component) => component.type === 'combination')
+    .map((container) => findCombinationChild(container, payload.componentId))
+    .find((child): child is InsightCombinationChild => child !== null)
+  if (!owner) return
+  const tabs = payload.tabKind === 'component'
+    ? owner.tabs
+    : owner.containerConfig?.tabs
+  const tab = tabs?.find((item) => item.id === payload.tabId)
+  if (tab) tab.titleIconStyle = payload.titleIconStyle
+}
+
+function mergeComponentTabIconStyles(
+  existing: InsightComponent['tabs'],
+  updated: InsightComponent['tabs'],
+): InsightComponent['tabs'] {
+  if (!updated) return undefined
+  return updated.map((tab) => {
+    const currentStyle = existing?.find((item) => item.id === tab.id)?.titleIconStyle
+    return tab.titleIconStyle || !currentStyle
+      ? tab
+      : { ...tab, titleIconStyle: currentStyle }
+  })
+}
+
 /** 选中组件（顶层） */
 function handleSelectComponent(id: string): void {
   selectedComponentId.value = id
@@ -1188,7 +1221,7 @@ function mergeCombinationConfig(
   if (!upCfg) return exCfg
   const tabs = upCfg.tabs.map((t) => {
     const ex = exCfg.tabs.find((x) => x.id === t.id)
-    return ex ? { ...t, children: ex.children } : t
+    return ex ? { ...t, titleIconStyle: t.titleIconStyle ?? ex.titleIconStyle, children: ex.children } : t
   })
   // 面板副本若没回显到画布侧新增的页签，这里补回，避免回写把新页签弄丢
   for (const ex of exCfg.tabs) {
@@ -1206,10 +1239,11 @@ function handleComponentChange(updated: InsightComponent): void {
     if (child) {
       child.title = updated.title
       child.titleBarStyle = updated.titleBarStyle
-      child.titleIconStyle = updated.titleIconStyle
+      child.titleIconStyle = updated.titleIconStyle ?? child.titleIconStyle
       child.visualStyle = updated.visualStyle
       child.chartType = updated.chartType
       child.config = updated.config
+      child.tabs = mergeComponentTabIconStyles(child.tabs, updated.tabs)
       child.dataSource = updated.dataSource
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
@@ -1230,6 +1264,8 @@ function handleComponentChange(updated: InsightComponent): void {
     const existing = page.components[idx]
     page.components[idx] = {
       ...updated,
+      titleIconStyle: updated.titleIconStyle ?? existing.titleIconStyle,
+      tabs: mergeComponentTabIconStyles(existing.tabs, updated.tabs),
       // 保留画布拖拽/缩放管理的 position，不被属性面板覆盖
       position: existing.position,
       // 组合卡片：children（子卡片）只在画布内维护，属性面板不参与编辑，
