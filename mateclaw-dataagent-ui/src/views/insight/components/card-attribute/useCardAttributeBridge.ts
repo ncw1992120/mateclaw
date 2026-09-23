@@ -118,6 +118,7 @@ export function hydratePanel(
   state.cards = [{
     id: component.id,
     type: toCardType(component.type),
+    chartType: component.chartType,
     title: component.title || '',
     titleBarStyle: component.titleBarStyle ?? 'standard',
     visualStyle: normalizeComponentVisualStyle(component.visualStyle, component.type),

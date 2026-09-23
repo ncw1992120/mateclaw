@@ -3,6 +3,7 @@ import {
   formatScriptResultError,
   parseScriptResultEnvelope,
   resultEnvelopeToComponentData,
+  tableEnvelopeFromRows,
   type ScriptResultColumn,
   type ScriptResultEnvelope,
 } from '../script-result'
@@ -49,6 +50,16 @@ describe('parseScriptResultEnvelope', () => {
     expect(() => parseScriptResultEnvelope({ schemaVersion: '2.0', kind: 'table', data: {}, meta: { rowCount: 0 } })).toThrow(/schemaVersion/)
     expect(() => parseScriptResultEnvelope({ schemaVersion: '1.0', kind: 'chart', data: {}, meta: { rowCount: 0 } })).toThrow(/result\.kind/)
     expect(() => parseScriptResultEnvelope(tableEnvelope([{ name: 'x', title: 'x', dataType: 'object' as never, nullable: false }], []))).toThrow(/dataType/)
+  })
+})
+
+describe('tableEnvelopeFromRows', () => {
+  it('infers a typed output envelope for direct dataset preview rows', () => {
+    const envelope = tableEnvelopeFromRows([{ region: '华东', amount: 12, active: true }])
+    expect(envelope.data.columns.map(({ name, dataType }) => [name, dataType])).toEqual([
+      ['region', 'string'], ['amount', 'number'], ['active', 'boolean'],
+    ])
+    expect(envelope.meta.rowCount).toBe(1)
   })
 })
 
@@ -106,6 +117,7 @@ describe('formatScriptResultError', () => {
     })
     expect(output).toContain('result.data.rows[2].amount')
     expect(output).toContain('统一 amount 列类型')
+    expect(output).toContain('数据格式不匹配')
   })
 
   it('资源类错误映射为可读文案', () => {

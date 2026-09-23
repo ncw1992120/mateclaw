@@ -31,9 +31,9 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
-import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
+import { formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
 import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
@@ -112,6 +112,7 @@ export interface DatasetConfig {
 export interface CardItem {
   id: string
   type: CardType
+  chartType?: ChartType
   title: string
   titleBarStyle: 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
   visualStyle: ComponentVisualStyle
@@ -1320,6 +1321,7 @@ function buildSchema(): InsightDashboardSchema {
     id: componentId,
     type: card.type === 'kpi' ? 'kpi' : card.type === 'table' ? 'table' : 'chart',
     title: card.title,
+    chartType: card.type === 'chart' ? card.chartType : undefined,
     position: { x: 0, y: 0, w: 12, h: 8 },
     multiKpi: card.multiMetric,
     renderType: card.type === 'kpi' ? 'kpi' : card.type === 'table' ? 'table' : 'echarts',
@@ -1520,12 +1522,14 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
         const envelope = parseScriptResultEnvelope(response.envelope)
         // 执行后按组件输出规范提前校验：形状不匹配直接给出精确报错，避免渲染错/静默空态
         const previewCard = state.cards.find((c) => c.id === state.activeCardId) ?? state.cards[0]
-        const previewSpec = previewCard ? resolveOutputSpec(previewCard.type) : null
+        const previewSpec = previewCard ? resolveOutputSpec(previewCard.type, previewCard.chartType) : null
         const previewViolation = previewSpec ? validateComponentOutput(previewSpec, envelope) : null
         if (previewViolation) {
-          commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
-          state.resultSet.error = formatScriptResultError(previewViolation)
-          return { ok: true, message: executionId }
+          const message = formatScriptResultError(previewViolation)
+          failResultSet('script', message)
+          state.resultSet.executionId = executionId
+          state.resultSet.elapsedMs = Date.now() - startedAt
+          return { ok: false, message }
         }
         if (envelope.kind === 'table') {
           commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
@@ -1863,6 +1867,16 @@ async function generateResultSetByDataset(): Promise<{ ok: boolean; message: str
     if (!req) throw new Error('该类型数据集暂不支持取数（需登记数据源 / 接口定义）')
     const batch = await backend.previewDatasetDraft(req)
     const rows = (batch.rows as Record<string, unknown>[] | null) ?? []
+    const card = state.cards.find((item) => item.id === state.activeCardId) ?? state.cards[0]
+    const spec = card ? resolveOutputSpec(card.type, card.chartType) : null
+    if (spec) {
+      const violation = validateComponentOutput(spec, tableEnvelopeFromRows(rows))
+      if (violation) {
+        const message = formatScriptResultError(violation)
+        failResultSet('dataset', message)
+        return { ok: false, message }
+      }
+    }
     commitResultSet({ source: 'dataset', rows, elapsedMs: Date.now() - started })
     return { ok: true, message: `${rows.length} 行` }
   } catch (e) {

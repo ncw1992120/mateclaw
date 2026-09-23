@@ -8,7 +8,7 @@ import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dash
 const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
-  KpiCardWidget: { template: '<div />' },
+  KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
   ChartWidget: { template: '<div />' },
   DataTableWidget: { template: '<div />' },
   FilterSelectWidget: { template: '<div />' },
@@ -48,6 +48,27 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
 
     expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
+  })
+
+  it('renders default component sample data with a visible watermark until a dataset is configured', () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    expect(wrapper.get('[data-testid="sample-data-watermark"]').text()).toBe('样例数据')
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
+      componentId: 'kpi-1', renderType: 'kpi', kpi: { value: '1,284' },
+    })
+
+    const configured = mount(DashboardCanvas, {
+      props: {
+        components: [{ ...component, config: { datasetPipeline: { datasetInputs: [{ alias: 'orders' }] } } }],
+        editable: true,
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+    expect(configured.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+    expect(configured.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {

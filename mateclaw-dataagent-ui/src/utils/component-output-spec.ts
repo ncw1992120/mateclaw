@@ -16,6 +16,7 @@ export type OutputShapeFamily = 'kpi' | 'table' | 'chartCategory' | 'chartNameVa
 
 export interface ComponentOutputSpec {
   componentType: InsightComponentType
+  chartType?: ChartType
   /** 该组件可接受的 envelope kind */
   accepts: ScriptResultEnvelope['kind'][]
   family: OutputShapeFamily
@@ -27,6 +28,31 @@ export interface ComponentOutputSpec {
 
 /** 名称+值 家族的图表：饼图/漏斗/仪表盘/旭日/矩形树。其余图表走 维度+指标 家族。 */
 const NAME_VALUE_CHARTS = new Set<ChartType>(['pie', 'funnel', 'gauge', 'sunburst', 'treemap'])
+const CHART_HINTS: Partial<Record<ChartType, string>> = {
+  pie: '饼图需要恰好 1 个分类维度和 1 个数值指标',
+  funnel: '漏斗图需要有序阶段字段和 1 个数值指标',
+  gauge: '仪表盘需要恰好 1 个数值指标',
+  radar: '雷达图需要至少 2 个数值指标轴；多系列需系列名称字段',
+  treemap: '矩形树图需要至少 2 个层级维度和 1 个数值指标',
+  sunburst: '旭日图需要至少 2 个层级维度和 1 个数值指标',
+  scatter: '散点图需要 X、Y 两个数值字段',
+  effectScatter: '涟漪特效散点图需要 X、Y 两个数值字段',
+  candlestick: 'K 线图需要 open、close、low、high 四个数值字段',
+  heatmap: '热力图需要 X 维度、Y 维度和 1 个数值指标',
+  boxplot: '箱线图需要分组和样本数值，或 min、q1、median、q3、max 五数概括',
+  map: '地图需要区域编码/名称或经纬度字段，以及数值指标',
+  lines: '流向图需要 source、target 起终点字段',
+  graph: '关系图需要唯一节点及 source、target 关系边字段',
+  tree: '树图需要 name 和 parentId 层级字段',
+  parallel: '平行坐标系至少需要 2 个数值轴字段',
+  sankey: '桑基图需要 source、target 和非负数值 value 字段',
+  themeRiver: '主题河流图需要时间、系列名称和数值指标',
+}
+
+const SPECIAL_CHARTS = new Set<ChartType>([
+  'scatter', 'effectScatter', 'candlestick', 'heatmap', 'boxplot', 'map', 'lines',
+  'graph', 'tree', 'parallel', 'sankey', 'themeRiver',
+])
 
 /** 图表子类型 → 输出家族；缺省（未知/非图表）按 维度+指标 处理。 */
 export function chartOutputFamily(chartType?: ChartType): OutputShapeFamily {
@@ -70,9 +96,20 @@ export function resolveOutputSpec(
         example: 'result = df_order        # 任意列结构的 DataFrame',
       }
     case 'chart':
+      if (chartType && SPECIAL_CHARTS.has(chartType)) {
+        return {
+          componentType,
+          chartType,
+          accepts: ['table'],
+          family: 'chartCategory',
+          description: CHART_HINTS[chartType] ?? '按图表子类型的字段角色返回数据表。',
+          example: `result = df  # ${CHART_HINTS[chartType] ?? '返回符合字段要求的数据表'}`,
+        }
+      }
       if (chartOutputFamily(chartType) === 'chartNameValue') {
         return {
           componentType,
+          chartType,
           accepts: ['table'],
           family: 'chartNameValue',
           description: '返回一张表：第一列作名称、第二列（数值型）作值；单列时该列直接作为值。',
@@ -81,6 +118,7 @@ export function resolveOutputSpec(
       }
       return {
         componentType,
+        chartType,
         accepts: ['table'],
         family: 'chartCategory',
         description: '返回一张表：含 1 个维度（类目）列 + 至少 1 个数值指标列。',
@@ -129,6 +167,77 @@ export function validateComponentOutput(
 
   const columns = envelope.data.columns as ScriptResultColumn[]
   const numericCols = columns.filter((column) => column.dataType === 'number')
+  const names = new Set(columns.map((column) => column.name.toLowerCase()))
+  const hasAny = (...fields: string[]) => fields.some((field) => names.has(field))
+  const failChart = (expected: string, actual: string) => ({
+    status: 'OUTPUT_CONTRACT_ERROR',
+    path: 'result.data.columns',
+    expected,
+    actual,
+    suggestion: CHART_HINTS[spec.chartType ?? 'line'] ?? '图表数据结构不匹配',
+  })
+
+  if (spec.componentType === 'chart' && spec.chartType) {
+    const stringCols = columns.filter((column) => column.dataType === 'string' || column.dataType === 'date' || column.dataType === 'datetime')
+    const chartType = spec.chartType
+    if (chartType === 'scatter' || chartType === 'effectScatter') {
+      if (numericCols.length < 2) return failChart('至少 2 个数值字段（X、Y）', `${numericCols.length} 个数值字段`)
+      return null
+    }
+    if (chartType === 'radar') {
+      if (numericCols.length < 2) return failChart('至少 2 个数值指标轴字段', `${numericCols.length} 个数值字段`)
+      return null
+    }
+    if (chartType === 'sankey' || chartType === 'graph' || chartType === 'lines') {
+      if (!hasAny('source') || !hasAny('target')) return failChart('source、target 字段', columns.map((column) => column.name).join(', ') || '无字段')
+      if (chartType === 'sankey' && (!hasAny('value') || numericCols.length === 0)) return failChart('source、target 及数值 value 字段', columns.map((column) => column.name).join(', '))
+      return null
+    }
+    if (chartType === 'candlestick') {
+      const ohlc = ['open', 'close', 'low', 'high']
+      if (!ohlc.every((field) => names.has(field)) || ohlc.some((field) => !columns.find((column) => column.name.toLowerCase() === field)?.dataType.match(/^number$/))) {
+        return failChart('open、close、low、high 四个数值字段', columns.map((column) => column.name).join(', ') || '无字段')
+      }
+      return null
+    }
+    if (chartType === 'heatmap') {
+      if (stringCols.length < 2 || numericCols.length < 1) return failChart('2 个维度字段 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
+      return null
+    }
+    if (chartType === 'parallel') {
+      if (numericCols.length < 2) return failChart('至少 2 个数值轴字段', `${numericCols.length} 个数值字段`)
+      return null
+    }
+    if (chartType === 'themeRiver') {
+      if (stringCols.length < 2 || numericCols.length < 1) return failChart('时间字段 + 系列字段 + 数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
+      return null
+    }
+    if (chartType === 'map') {
+      if (!(hasAny('regioncode', 'regionname', 'geoid', 'name') || (hasAny('longitude', 'lon', 'lng') && hasAny('latitude', 'lat'))) || numericCols.length < 1) {
+        return failChart('区域编码/名称或经纬度 + 数值指标', columns.map((column) => column.name).join(', ') || '无字段')
+      }
+      return null
+    }
+    if (chartType === 'tree') {
+      if (!hasAny('name', 'label') || !hasAny('parentid', 'parent_id', 'parent')) return failChart('name/label + parentId 层级字段', columns.map((column) => column.name).join(', ') || '无字段')
+      return null
+    }
+    if (chartType === 'boxplot') {
+      const fiveNumbers = ['min', 'q1', 'median', 'q3', 'max']
+      const hasFiveNumberSummary = fiveNumbers.every((field) => names.has(field) && columns.find((column) => column.name.toLowerCase() === field)?.dataType === 'number')
+      if (!(hasFiveNumberSummary || (stringCols.length >= 1 && numericCols.length >= 1))) return failChart('分组 + 样本数值，或 min/q1/median/q3/max 五个数值字段', columns.map((column) => column.name).join(', ') || '无字段')
+      return null
+    }
+    if ((chartType === 'treemap' || chartType === 'sunburst') && (stringCols.length < 2 || numericCols.length < 1)) {
+      return failChart('至少 2 个层级维度 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
+    }
+    if (chartType === 'pie' && (stringCols.length !== 1 || numericCols.length !== 1 || columns.length !== 2)) {
+      return failChart('恰好 1 个分类维度 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段，共 ${columns.length} 列`)
+    }
+    if (chartType === 'funnel' && (stringCols.length < 1 || numericCols.length !== 1)) {
+      return failChart('1 个阶段字段 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
+    }
+  }
 
   if (spec.family === 'kpi') {
     if (ctx.valueField) {
@@ -166,6 +275,11 @@ export function validateComponentOutput(
     }
   }
 
+  if (spec.componentType === 'chart' && spec.chartType && ['line', 'bar', 'area', 'pictorialBar'].includes(spec.chartType)) {
+    const dimensionCols = columns.filter((column) => column.dataType === 'string' || column.dataType === 'date' || column.dataType === 'datetime')
+    if (dimensionCols.length < 1) return failChart('至少 1 个类别/时间维度 + 1 个数值指标', columns.map((column) => column.name).join(', ') || '无字段')
+  }
+
   if (spec.family === 'chartNameValue') {
     if (columns.length < 1) {
       return {
@@ -175,6 +289,9 @@ export function validateComponentOutput(
         actual: `${columns.length} 列`,
         suggestion: '饼图/漏斗/仪表盘类需要 名称列 + 数值列（或单列数值）',
       }
+    }
+    if (spec.chartType === 'gauge' && numericCols.length !== 1) {
+      return failChart('恰好 1 个数值指标', `${numericCols.length} 个数值字段`)
     }
     return null
   }

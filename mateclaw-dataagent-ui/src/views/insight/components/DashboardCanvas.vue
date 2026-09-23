@@ -155,13 +155,13 @@
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
-                :component="getComponent(item.i)!"
+                :component="getWidgetComponent(item.i)!"
                 :dashboard-theme="dashboardTheme"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
-                :component="getComponent(item.i)!"
+                :component="getWidgetComponent(item.i)!"
                 :dashboard-theme="dashboardTheme"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
@@ -178,6 +178,7 @@
                 :component="getComponent(item.i)!"
                 :component-data-map="componentDataMap"
                 :editable="editable"
+                :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
                 :dashboard-theme="dashboardTheme"
                 @select-child="handleSelectChild"
@@ -190,6 +191,7 @@
                 @edit-child-title-icon-style="openChildTitleIconStyle"
               />
             </template>
+            <div v-if="isSampleData(item.i)" class="sample-data-watermark" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据">样例数据</div>
           </div>
         </div>
       </GridItem>
@@ -231,6 +233,7 @@ import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 import { themeCssVariables, componentThemeStyle } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
+import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
@@ -527,7 +530,26 @@ function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
 
 /** 根据 ID 获取组件渲染数据 */
 function getComponentData(id: string): InsightComponentData | undefined {
-  return props.componentDataMap?.[id]
+  const configured = props.componentDataMap?.[id]
+  if (configured) return configured
+  const component = getComponent(id)
+  if (!component || hasConfiguredDataset(component)) return undefined
+  return resolveComponentSample(component).renderData
+}
+
+function isSampleData(id: string): boolean {
+  const component = getComponent(id)
+  return Boolean(component && !props.componentDataMap?.[id] && !hasConfiguredDataset(component))
+}
+
+function getWidgetComponent(id: string): InsightComponent | undefined {
+  const component = getComponent(id)
+  if (!component || !isSampleData(id) || component.type !== 'filter') return component
+  const sample = JSON.parse(resolveComponentSample(component).json) as { data?: { options?: Array<{ label: string; value: string }> } }
+  return {
+    ...component,
+    config: { ...(component.config ?? {}), optionSource: 'static', staticOptions: sample.data?.options ?? [] },
+  }
 }
 
 /** 拖拽悬停（允许 drop） */
@@ -1118,6 +1140,24 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .grid-item-body {
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+.sample-data-watermark {
+  position: absolute;
+  z-index: 5;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  border: 1px solid rgba(210, 55, 55, 0.16);
+  border-radius: 4px;
+  color: rgba(190, 45, 45, 0.48);
+  background: rgba(255, 235, 235, 0.35);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
 }
 
 .grid-item-error {

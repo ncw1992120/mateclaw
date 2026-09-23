@@ -46,6 +46,30 @@ export interface ScriptMessageEnvelope {
 
 export type ScriptResultEnvelope = ScriptTableEnvelope | ScriptScalarEnvelope | ScriptMessageEnvelope
 
+/** 把数据集直出行归一成与 Python 结果相同的强类型 table envelope，供统一契约校验。 */
+export function tableEnvelopeFromRows(rows: Record<string, unknown>[]): ScriptTableEnvelope {
+  const sample = rows[0] ?? {}
+  const columns = Object.keys(sample).map((name): ScriptResultColumn => {
+    const value = sample[name]
+    const dataType: ScriptDataType = typeof value === 'number'
+      ? 'number'
+      : typeof value === 'boolean'
+        ? 'boolean'
+        : value instanceof Date
+          ? 'datetime'
+          : typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+            ? 'date'
+            : 'string'
+    return { name, title: name, dataType, nullable: rows.some((row) => row[name] == null) }
+  })
+  return {
+    schemaVersion: '1.0',
+    kind: 'table',
+    data: { columns, rows },
+    meta: { rowCount: rows.length, truncated: false },
+  }
+}
+
 /** DataAgent 执行结果 API 响应 */
 export interface ScriptExecutionResultResponse {
   executionId: string
@@ -138,12 +162,12 @@ export function formatScriptResultError(error: ScriptResultError | string | null
   if (typeof error === 'string') return error
   if (error.status === 'OUTPUT_CONTRACT_ERROR') {
     const parts = [
-      '输出契约错误',
+      '数据格式不匹配',
       error.path ? `路径 ${error.path}` : '',
       error.expected && error.actual ? `期望 ${error.expected}，实际 ${error.actual}` : '',
       error.suggestion ? `建议：${error.suggestion}` : '',
     ].filter(Boolean)
-    return `${parts.join('；')}`
+    return `${parts.join('；')}；请参考样例数据格式或使用 Python 脚本继续处理。`
   }
   if (error.message) return error.message
   const statusText: Record<string, string> = {

@@ -105,6 +105,32 @@ describe('validateComponentOutput', () => {
     assertOk(resolveOutputSpec('chart', 'pie')!, tableEnv([col('channel', 'string'), col('amount')]))
   })
 
+  it('散点图要求两个数值轴字段', () => {
+    const spec = resolveOutputSpec('chart', 'scatter')!
+    expect(assertError(spec, tableEnv([col('x', 'string'), col('y')])).suggestion).toContain('X、Y')
+    assertOk(spec, tableEnv([col('x'), col('y')]))
+  })
+
+  it('雷达图要求至少两个数值轴', () => {
+    const spec = resolveOutputSpec('chart', 'radar')!
+    expect(assertError(spec, tableEnv([col('response')])).suggestion).toContain('数值指标轴')
+    assertOk(spec, tableEnv([col('response'), col('quality')]))
+  })
+
+  it('折线/柱状/面积/象形柱图要求类别维度和数值指标', () => {
+    for (const chartType of ['line', 'bar', 'area', 'pictorialBar'] as const) {
+      const spec = resolveOutputSpec('chart', chartType)!
+      assertError(spec, tableEnv([col('amount')]))
+      assertOk(spec, tableEnv([col('category', 'string'), col('amount')]))
+    }
+  })
+
+  it('桑基图要求 source、target 和数值 value，不能把行顺序伪造成连线', () => {
+    const spec = resolveOutputSpec('chart', 'sankey')!
+    expect(assertError(spec, tableEnv([col('name', 'string'), col('amount')])).suggestion).toContain('source、target')
+    assertOk(spec, tableEnv([col('source', 'string'), col('target', 'string'), col('value')]))
+  })
+
   it('图表收到 scalar → kind 不匹配报错', () => {
     assertError(resolveOutputSpec('chart')!, scalarEnv(1))
   })

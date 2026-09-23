@@ -89,6 +89,46 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
   })
 
+  it('renders sample data for unconfigured children while the container is in sample mode', () => {
+    const child = {
+      id: 'sample-child-kpi',
+      type: 'kpi' as const,
+      title: '样例指标',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        sampleMode: true,
+        component: {
+          id: 'combination-sample-child',
+          type: 'combination',
+          title: '组合卡片',
+          children: [child],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
+      renderType: 'kpi',
+      kpi: { fieldKey: 'value' },
+    })
+  })
+
   it('emits copy, paste and context-menu actions for a child component', async () => {
     const child = {
       id: 'child-copy',

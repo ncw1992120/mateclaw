@@ -1305,6 +1305,11 @@ function handleComponentResultSet(payload: {
     return
   }
   if (payload.status === 'failed' && payload.error) {
+    componentDataMap.value[payload.componentId] = {
+      componentId: payload.componentId,
+      renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table',
+      error: payload.error,
+    }
     ElMessage.warning(payload.error)
   }
 }

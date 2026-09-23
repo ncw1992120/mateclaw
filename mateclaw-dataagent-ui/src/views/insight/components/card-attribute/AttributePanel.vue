@@ -128,6 +128,7 @@
       <div class="section">
         <div class="section-head">
           <span class="section-title">数据集配置</span>
+          <el-button size="small" text type="primary" data-testid="component-sample-data" @click="sampleDialogVisible = true">样例数据</el-button>
           <!-- 0 个数据集：添加入口在标题行右侧（文档 11.3） -->
           <el-button v-if="datasetCount === 0" size="small" type="primary" @click="openDataSourceTree">
             + 添加数据集
@@ -156,7 +157,14 @@
         <!-- 未配置：提供入口（1 个数据集时可选；2+ 时用户处理区必填） -->
         <div v-if="!state.hasPython" class="python-empty">
           <el-button size="small" @click="openPython">编辑 Python 脚本</el-button>
-          <span v-if="pythonRequired" class="req-tip">（多数据集时用户处理区域为必填）</span>
+          <el-alert
+            v-if="pythonRequired"
+            class="python-required-alert"
+            type="warning"
+            :closable="false"
+            title="已添加多个数据集，请使用 Python 脚本合并或处理"
+            description="单个数据集的预览仅用于检查输入；组件最终数据格式将在 Python 输出预览后校验。"
+          />
         </div>
 
         <!-- 已配置：系统生成区(只读) + 用户处理区(可编辑) -->
@@ -243,6 +251,7 @@
         </div>
       </div>
     </div>
+    <ComponentSampleDialog v-model="sampleDialogVisible" :title="activeCard.title" :sample="componentSample" />
   </div>
 </template>
 
@@ -251,11 +260,20 @@ import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
 import InlineHelp from '../property/InlineHelp.vue'
 import DatasetCard from './DatasetCard.vue'
+import ComponentSampleDialog from '../ComponentSampleDialog.vue'
+import { resolveComponentSample } from '@/utils/component-sample-data'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 
 const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
 
 const kpiMetricCount = computed(() => state.kpiMetrics.length)
+const sampleDialogVisible = ref(false)
+const componentSample = computed(() => resolveComponentSample({
+  id: activeCard.value.id,
+  type: activeCard.value.type,
+  chartType: activeCard.value.chartType,
+  title: activeCard.value.title,
+}))
 
 /* ── 结果集节点：管道唯一出口，也是卡片唯一的数据来源 ── */
 
@@ -503,9 +521,18 @@ function typeLabel(t: string) {
   line-height: 1.6;
 }
 .python-empty {
-  display: flex;
-  align-items: center;
+  display: grid;
   gap: 8px;
+  justify-items: start;
+}
+.python-required-alert {
+  width: 100%;
+}
+.python-required-alert :deep(.el-alert__description) {
+  line-height: 1.5;
+}
+.python-empty > .el-button {
+  justify-self: start;
 }
 .req-tip {
   font-size: 12px;
