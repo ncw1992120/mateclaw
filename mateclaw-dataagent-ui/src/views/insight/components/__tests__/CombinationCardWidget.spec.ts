@@ -89,7 +89,7 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
   })
 
-  it('renders sample data for unconfigured children while the container is in sample mode', () => {
+  it('does not render sample data for an unconfigured child inside a combination card', () => {
     const child = {
       id: 'sample-child-kpi',
       type: 'kpi' as const,
@@ -123,10 +123,8 @@ describe('CombinationCardWidget', () => {
       },
     })
 
-    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
-      renderType: 'kpi',
-      kpi: { fieldKey: 'value' },
-    })
+    expect(wrapper.find('.cc-sample-preview').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
   })
 
   it('emits copy, paste and context-menu actions for a child component', async () => {
