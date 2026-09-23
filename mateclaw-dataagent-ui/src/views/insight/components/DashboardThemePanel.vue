@@ -53,20 +53,15 @@
           </div>
         </div>
         <div class="theme-option-group">
-          <span class="theme-option-label">辅助色</span>
-          <div class="theme-option-swatches">
-            <button
-              v-for="color in accentAltChoices"
-              :key="color"
-              type="button"
-              class="theme-swatch-button"
-              :class="{ active: resolved.accentAlt.toUpperCase() === color.toUpperCase() }"
-              :style="{ background: color }"
-              :title="color"
-              :aria-label="`辅色 ${color}`"
-              @click="updateAccentAlt(color)"
-            />
-          </div>
+          <InsightColorField
+            :model-value="resolved.accentAlt"
+            label="辅助色"
+            :suggested-colors="accentAltChoices"
+            @change="updateAccentAlt"
+          />
+          <button data-testid="reset-accent-alt" type="button" class="theme-reset-button" @click="resetAccentAlt">
+            恢复预设默认色
+          </button>
         </div>
         <p v-if="validationMessage" class="theme-error" role="alert">{{ validationMessage }}</p>
       </section>
@@ -94,6 +89,7 @@ import type { DashboardThemeConfig, DashboardThemePresetId, ResolvedDashboardThe
 import type { DashboardThemeComponentColorMode, DashboardThemeHierarchy, DashboardThemeIconMode } from '@/types'
 import { componentAccentColor, DASHBOARD_THEME_PRESETS, resolveDashboardTheme, themeSource, validateDashboardTheme } from '@/utils/dashboard-theme'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import InsightColorField from './InsightColorField.vue'
 
 const props = defineProps<{
   modelValue: DashboardThemeConfig
@@ -152,11 +148,17 @@ function updateStandardOption(key: 'iconMode' | 'hierarchy' | 'componentColorMod
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
-/** 辅色只允许从候选里挑；再点一次当前色即回到预设值。 */
+/** 选择或输入均显式建立覆盖，包括与预设当前解析色相同的值。 */
 function updateAccentAlt(color: string): void {
   const overrides = { ...(props.modelValue.overrides ?? {}) }
-  if ((resolved.value.accentAlt || '').toUpperCase() === color.toUpperCase()) delete overrides.accentAlt
-  else overrides.accentAlt = color
+  overrides.accentAlt = color
+  emit('update:modelValue', { ...props.modelValue, overrides })
+}
+
+/** 删除覆盖后由当前预设重新提供默认辅助色。 */
+function resetAccentAlt(): void {
+  const overrides = { ...(props.modelValue.overrides ?? {}) }
+  delete overrides.accentAlt
   emit('update:modelValue', { ...props.modelValue, overrides })
 }
 
@@ -194,9 +196,7 @@ defineExpose({ applyPreset })
 .theme-option-buttons button { flex: 1; padding: 7px 8px; border: 1px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface); color: var(--theme-text-secondary); cursor: pointer; font-size: 12px; }
 .theme-option-buttons button.active, .theme-option-buttons button:hover, .theme-option-buttons button:focus-visible { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 10%, var(--theme-surface)); color: var(--theme-primary); outline: none; }
 .theme-error { color: var(--el-color-danger); font-size: 12px; margin: 10px 0 0; }
-.theme-option-swatches { display: flex; gap: 6px; }
-.theme-swatch-button { width: 26px; height: 26px; padding: 0; border: 1px solid var(--theme-border); border-radius: 6px; cursor: pointer; }
-.theme-swatch-button.active, .theme-swatch-button:hover, .theme-swatch-button:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 1px; }
+.theme-reset-button { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--theme-primary); cursor: pointer; font: inherit; font-size: 12px; }
 .theme-accent-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--theme-text-secondary); }
 .theme-accent-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .theme-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
