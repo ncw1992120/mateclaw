@@ -3,6 +3,7 @@ import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import PropertyPanel from '../PropertyPanel.vue'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
 
 const listSyncedMetricsMock = vi.hoisted(() => vi.fn())
 const listMetricsDimensionDetailsMock = vi.hoisted(() => vi.fn())
@@ -54,6 +55,11 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="color" v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
   },
+  InsightColorField: {
+    name: 'InsightColorField',
+    props: ['modelValue', 'label', 'suggestedColors'],
+    template: '<input data-testid="insight-color-field" :aria-label="label" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
+  },
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio': { template: '<label><slot /></label>' },
   'el-radio-button': { template: '<button><slot /></button>' },
@@ -85,6 +91,66 @@ const i18n = createI18n({
 })
 
 describe('PropertyPanel', () => {
+  it('uses the shared color field and keeps color edits on the component change path', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          ...component,
+          visualStyle: {
+            border: { mode: 'visible', colorMode: 'custom', color: '#112233', width: 1, style: 'solid' },
+            background: { mode: 'custom', color: '#445566' },
+            radius: 8, shadow: 'none', padding: 8,
+          },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const fields = wrapper.findAll('[data-testid="insight-color-field"]')
+    expect(fields).toHaveLength(2)
+    const borderField = fields.find(field => field.attributes('aria-label') === '自定义边框颜色')!
+    const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
+    expect(borderField.element.tagName).toBe('INPUT')
+    expect(borderField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
+    expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
+
+    await borderField.setValue('#A1B2C3')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      visualStyle: { border: { mode: 'visible', colorMode: 'custom', color: '#A1B2C3' } },
+    })
+
+    await backgroundField.setValue('#AABBCC')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      visualStyle: {
+        background: { mode: 'custom', color: '#AABBCC' },
+        border: { mode: 'visible', colorMode: 'custom', color: '#A1B2C3' },
+      },
+    })
+  })
+
+  it('keeps theme and transparent background choices in the active panel', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          ...component,
+          visualStyle: {
+            border: { mode: 'theme', colorMode: 'theme', width: 1, style: 'solid' },
+            background: { mode: 'theme' },
+            radius: 8, shadow: 'none', padding: 8,
+          },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.get('select[aria-label="组件背景"]').setValue('transparent')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { background: { mode: 'transparent' } } })
+    await wrapper.get('select[aria-label="组件边框"]').setValue('theme')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { border: { mode: 'theme' } } })
+  })
+
   it('提供组件边框三态和展示样式配置，并将修改写回组件', async () => {
     const wrapper = mount(PropertyPanel, {
       props: { component, allComponents: [] },

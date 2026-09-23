@@ -72,11 +72,11 @@
             @click="enableCustomColor"
           ><span class="color-mode-indicator" aria-hidden="true" />自定义</button>
         </div>
-        <el-color-picker
+        <InsightColorField
           v-if="draft.colorMode === 'custom'"
           v-model="draft.color"
-          aria-label="自定义图标颜色"
-          :show-alpha="false"
+          label="自定义图标颜色"
+          :suggested-colors="TEXT_COLOR_PRESETS"
         />
       </div>
     </div>
@@ -93,6 +93,8 @@
 import { reactive, watch } from 'vue'
 import type { ComponentTitleIconStyle } from '@/types'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
+import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
+import InsightColorField from './InsightColorField.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
