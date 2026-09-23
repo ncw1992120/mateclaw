@@ -12,6 +12,7 @@
  */
 import { reactive, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import InsightColorField from './components/InsightColorField.vue'
 
 /* ── 类型 ─────────────────────────────────────────────────────────────── */
 type ChildType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'ai' | 'button' | 'container'
@@ -697,7 +698,7 @@ function chartSvg(d: any): string {
                 </el-select>
               </div>
               <div class="field row"><label>显示边框</label><el-switch v-model="container.style.border.enabled" />
-                <el-input v-model="container.style.border.color" size="small" style="width:90px" /><el-input v-model.number="container.style.border.width" type="number" size="small" style="width:54px" />
+                <InsightColorField v-model="container.style.border.color" label="边框颜色" /><el-input v-model.number="container.style.border.width" type="number" size="small" style="width:54px" />
               </div>
               <div class="field row"><label>圆角(px)</label><el-input v-model.number="container.style.radius" type="number" size="small" style="width:80px" /></div>
               <div class="field row"><label>内边距(px)</label><el-input v-model.number="container.style.padding" type="number" size="small" style="width:80px" /></div>
