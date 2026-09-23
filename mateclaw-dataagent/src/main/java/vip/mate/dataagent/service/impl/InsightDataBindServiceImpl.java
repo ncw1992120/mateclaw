@@ -88,7 +88,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         // 校验 dataSource
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
-            return buildError(component.getId(), "组件未配置数据源");
+            // 组件布局由仪表盘 Schema 决定；没有直连数据源时仍应显示画布组件及其空态。
+            // 例如经数据集管道/脚本配置的组件，其结果由前端结果集链路恢复。
+            return null;
         }
         try {
             return doBind(component);
@@ -196,7 +198,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
-            return buildError(component.getId(), "组件未配置数据源");
+            return null;
         }
         try {
             return doBind(component, filterContext);
@@ -231,8 +233,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
             if (tab.getDataSource() == null || tab.getDataSource().getDatasourceId() == null
                     || tab.getDataSource().getDatasourceId().isBlank()) {
-                // 未配置数据源的 Tab，返回空数据
-                tabData.setError("未配置数据源");
+                // Tab 配置仍由 Schema 展示；没有数据源时让前端显示标准空态。
                 tabsMap.put(tab.getId(), tabData);
                 continue;
             }
@@ -356,7 +357,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         // 4. 调用 Aloudata 查询
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(datasourceId, request);
         if (response == null || response.getData() == null) {
-            return buildError(component.getId(), "查询无数据");
+            return buildEmptyData(component);
         }
 
         // 3. 转换响应格式：列式 columns → 行式 List<String> + List<List<String>>
@@ -373,7 +374,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             columns = extractColumnNames(metricData.getRows().get(0));
             rows = convertRows(metricData.getRows(), columns);
         } else {
-            return buildError(component.getId(), "查询无数据");
+            return buildEmptyData(component);
         }
 
         // 4. 按组件类型生成渲染数据
@@ -797,6 +798,20 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         dto.setComponentId(componentId);
         dto.setRenderType(DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
         dto.setError(errorMsg);
+        return dto;
+    }
+
+    /**
+     * 构建无数据但组件有效的预览结果。由前端按 Schema 渲染组件布局，并展示各自的空态。
+     */
+    private InsightComponentDataDTO buildEmptyData(Component component) {
+        InsightComponentDataDTO dto = new InsightComponentDataDTO();
+        dto.setComponentId(component.getId());
+        dto.setRenderType("kpi".equals(component.getType())
+                ? DataAgentConstants.INSIGHT_RENDER_TYPE_KPI
+                : "chart".equals(component.getType())
+                        ? DataAgentConstants.INSIGHT_RENDER_TYPE_ECHARTS
+                        : DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
         return dto;
     }
 
