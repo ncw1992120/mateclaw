@@ -8,26 +8,28 @@
     :close-on-click-modal="false"
   >
     <div class="dd-body">
-      <!-- ① 定义：这份数据是怎么来的 -->
+      <!-- ① 展示字段：直接取查询配置，只读 -->
       <section class="dd-block">
         <div class="dd-head">
-          <span class="dd-title">定义</span>
-          <span class="dd-hint">{{ definitionHint }}</span>
+          <span class="dd-title">展示字段</span>
+          <span class="dd-hint">来自查询配置 · 只读</span>
         </div>
-        <el-input
-          v-if="isSql"
-          v-model="sql"
-          type="textarea"
-          :rows="5"
-          class="dd-code"
-          placeholder="SELECT ... WHERE created_at >= :start_date"
-        />
-        <div v-else class="dd-kv">
-          <div v-for="row in definitionRows" :key="row.label" class="dd-kv-row">
-            <span class="dd-kv-label">{{ row.label }}</span>
-            <code class="dd-kv-value">{{ row.value }}</code>
+        <div v-if="displayFields.length" class="dd-display-fields">
+          <div v-for="field in displayFields" :key="field.field" class="dd-display-field" data-testid="display-field-row">
+            <span class="dd-field-role">{{ field.role === 'measure' ? '指标' : '维度' }}</span>
+            <code class="dd-field-name">{{ field.field }}</code>
+            <span class="dd-field-title">{{ field.title || field.field }}</span>
           </div>
         </div>
+        <div v-else class="dd-display-empty">尚未在查询配置中选择展示字段</div>
+      </section>
+
+      <section v-if="isSql" class="dd-block">
+        <div class="dd-head">
+          <span class="dd-title">SQL</span>
+          <span class="dd-hint">数据集定义 · 只读</span>
+        </div>
+        <pre class="dd-sql-readonly" data-testid="dataset-sql-readonly"><code>{{ sql }}</code></pre>
       </section>
 
       <!-- ② 参数：从定义里自动提取的占位符（SQL / 接口） -->
@@ -76,80 +78,37 @@
         </div>
       </section>
 
-      <!-- ③ 筛选条件：字段 + 操作符 + 取值，查询时下推到源查询 -->
+      <!-- ③ 筛选条件来自查询配置；当前预览只允许填写值和启停 -->
       <section v-if="filterSupported" class="dd-block">
         <div class="dd-head">
           <span class="dd-title">筛选条件</span>
         </div>
-
-        <div v-if="runtimeBoundRows.length" class="dd-bound-conditions">
-          <div class="dd-subtitle">绑定筛选条件（本次查询）</div>
+        <div v-if="queryFilterRows.length" class="dd-conditions">
           <div
-            v-for="(row, index) in runtimeBoundRows"
-            :key="`${row.field}-${row.parameterName}-${index}`"
-            class="dd-condition dd-bound-condition"
-            data-testid="bound-filter-row"
+            v-for="(row, index) in queryFilterRows"
+            :key="`${row.filterComponentId}-${row.field}-${row.parameterName}-${index}`"
+            class="dd-condition dd-query-condition"
+            data-testid="query-filter-row"
           >
-            <span class="dd-bound-field">{{ row.field }}</span>
-            <code class="dd-bound-op">{{ row.operator }}</code>
-            <span class="dd-bound-param">${{ row.parameterName }}</span>
-            <el-input v-model="row.value" class="dd-value" size="small" placeholder="可选，未填写不参与查询" />
-            <el-button size="small" text type="danger" :icon="Delete" @click="removeBoundCondition(index)" />
-          </div>
-        </div>
-
-        <el-alert
-          v-if="!optionsLoading && !fieldOptions.length"
-          class="dd-note"
-          type="info"
-          :closable="false"
-          title="未取到可筛选字段，可直接输入字段名；字段名需与数据源一致。"
-        />
-
-        <div v-if="conditions.length" class="dd-conditions">
-          <div v-for="(row, index) in conditions" :key="index" class="dd-condition">
-            <el-select
-              v-model="row.field"
-              class="dd-field"
-              placeholder="字段"
-              size="small"
-              filterable
-              allow-create
-              default-first-option
-              :loading="optionsLoading"
-            >
-              <el-option v-for="option in fieldOptions" :key="option.value" :label="option.label" :value="option.value" />
-            </el-select>
-            <el-select v-model="row.op" class="dd-op" size="small" @change="onOperatorChange(row)">
-              <el-option v-for="option in operatorOptions" :key="option.value" :label="option.label" :value="option.value" />
-            </el-select>
+            <span class="dd-bound-filter">{{ row.filterTitle }}</span>
+            <span class="dd-bound-field">{{ row.fieldTitle }} <code>{{ row.field }}</code></span>
+            <span class="dd-fixed-operator" data-testid="query-filter-operator">{{ operatorLabel(row.operator) }}</span>
             <el-input
               v-model="row.value"
               class="dd-value"
               size="small"
-              :disabled="!needsValue(row.op)"
-              :placeholder="needsValue(row.op) ? valueHintOf(row.op) : '无需取值'"
+              :disabled="!row.enabled || !operatorNeedsValue(row.operator)"
+              :placeholder="operatorNeedsValue(row.operator) ? '填写本次查询值' : '无需取值'"
             />
-            <el-button size="small" text type="danger" :icon="Delete" @click="removeCondition(index)" />
+            <el-switch
+              :model-value="row.enabled"
+              data-testid="query-filter-enabled"
+              :aria-label="`${row.filterTitle}筛选条件启用`"
+              @change="setQueryFilterEnabled(row, $event)"
+            />
           </div>
         </div>
-        <div v-else class="dd-empty">暂无筛选条件，点下方「添加筛选条件」新建一条；不加条件则取全量数据。</div>
-
-        <!-- 添加入口放在条件行下方、查询上方：先铺条件，再统一查询 -->
-        <div class="dd-add-row">
-          <el-button size="small" :icon="Plus" :loading="optionsLoading" @click="addCondition">添加筛选条件</el-button>
-        </div>
-
-        <!-- 遗留条件：字段已不在当前可筛选项内 —— 可见、可清理，不静默失效 -->
-        <div v-if="legacyConditions.length" class="dd-legacy">
-          <div class="dd-legacy-title">遗留条件（字段已不在当前可筛选项内，仍会参与下推）</div>
-          <div v-for="item in legacyConditions" :key="item.field" class="dd-legacy-item">
-            <code>{{ item.field }}</code>
-            <span class="dd-legacy-op">{{ item.op }}</span>
-            <span class="dd-legacy-value">{{ item.value || '—' }}</span>
-            <el-button size="small" text type="danger" @click="removeLegacy(item.field)">移除</el-button>
-          </div>
-        </div>
+        <div v-else class="dd-empty">查询配置中尚未绑定筛选器</div>
       </section>
 
       <!-- ④ 查询：紧跟在筛选条件下方 —— 改完条件顺手点，视线不用跳到弹窗底部 -->
@@ -187,36 +146,23 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Delete, Plus } from '@element-plus/icons-vue'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
 import { previewInput } from '@/api/dataset'
 import { draftRequestForDataset, isPersistedBackendDatasetId } from './card-attribute/useInsight'
 import type { DatasetConfig } from './card-attribute/useInsight'
-import { listAnalysisViewFields } from '@/api/datasource'
-import { resolveFieldLabel } from '@/utils/field-mapping'
 import { extractApiParameters, extractSqlParameters, type ExtractedParameter } from '@/utils/parameter-extract'
 import { getCachedQuery, setCachedQuery } from './dataset-data-cache'
-import type { QuerySortSpec } from '@/types'
+import type { QueryDisplayField, QueryParameterBinding, QuerySortSpec } from '@/types'
 import {
-  DIMENSION_OPERATORS,
   GENERIC_OPERATORS,
-  completeConditions,
-  emptyCondition,
-  needsValue,
-  partitionConditions,
-  valueHintOf,
-  withoutField,
-  type FilterCondition,
+  normalizeOperator,
 } from '@/utils/filter-conditions'
 import {
   buildExecutionParameters,
-  defaultRuntimeRows,
   toDatasetFilters,
   type RuntimeFilterRow,
 } from '@/utils/runtime-filter-bindings'
-import type { DashboardScriptFilterBinding } from '@/types'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
 const { state } = useInsight()
@@ -239,43 +185,10 @@ let requestSequence = 0
 
 const isSql = computed(() => props.dataset.sourceType === 'jdbc')
 const isApi = computed(() => props.dataset.sourceType === 'api')
-const isAloudata = computed(() => props.dataset.sourceType === 'aloudata')
 
-/* ── 定义区 ── */
-const sql = ref(props.dataset.jdbc?.sql ?? '')
-
-const definitionHint = computed(() => {
-  if (isSql.value) return 'SQL 语句 · 可编辑，改完点「查询」生效'
-  if (isApi.value) return '接口信息 · 只读'
-  if (isAloudata.value) return props.dataset.aloudata?.mode === 'metric-view' ? '指标视图 · 只读' : '指标 / 维度 · 只读'
-  return '文件信息 · 只读'
-})
-
-const definitionRows = computed<{ label: string; value: string }[]>(() => {
-  const ds = props.dataset
-  if (isApi.value) {
-    const endpoint = `${ds.api?.host ?? ''}${ds.api?.path ?? ''}`
-    return [
-      { label: '地址', value: endpoint || '—' },
-      { label: '方法', value: ds.api?.method || 'GET' },
-      { label: '请求参数', value: ds.api?.params || '—' },
-    ]
-  }
-  if (isAloudata.value) {
-    const aloudata = ds.aloudata
-    const list: { label: string; value: string }[] = [
-      { label: '指标', value: (aloudata?.metrics ?? []).join('、') || '—' },
-      { label: '维度', value: (aloudata?.dims ?? []).join('、') || '—' },
-    ]
-    if (aloudata?.metricView) list.unshift({ label: '指标视图', value: aloudata.metricView })
-    return list
-  }
-  return [
-    { label: '文件', value: ds.file?.fileName || '—' },
-    { label: '类型', value: ds.file?.fileType || '—' },
-    { label: '字段数', value: String(ds.file?.columns?.length ?? 0) },
-  ]
-})
+/* ── 查询配置只读展示 ── */
+const sql = computed(() => props.dataset.jdbc?.sql ?? '')
+const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
 
 /* ── 参数区：SQL / 接口的占位符（绑进查询内部，与筛选条件不是一回事） ── */
 const parameters = computed<ExtractedParameter[]>(() => {
@@ -311,90 +224,59 @@ function namedParameters(): Record<string, unknown> {
 /** 文件类型上游不做筛选下推（后端只把它们记进 residualFilters），因此不给编辑入口，避免「能配但不生效」 */
 const filterSupported = computed(() => props.dataset.sourceType !== 'file')
 
-const conditions = ref<FilterCondition[]>([])
-const legacyConditions = ref<FilterCondition[]>([])
-const boundRows = ref<RuntimeFilterRow[]>([])
-const runtimeBoundRows = computed(() => boundRows.value)
-const fieldOptions = ref<{ value: string; label: string }[]>([])
-const optionsLoading = ref(false)
+const queryFilterRows = ref<PreviewQueryFilterRow[]>([])
 
-/**
- * 可筛选字段：
- *  - Aloudata 指标视图：视图定义里的**维度**（指标是聚合结果，不作为筛选项）
- *  - Aloudata 指标&维度：已选维度
- *  - 其余类型：字段注册表（已配「字段名称」时），回退文件列
- */
-async function loadFieldOptions(): Promise<void> {
-  const ds = props.dataset
-  const aloudata = ds.aloudata
-  if (isAloudata.value && aloudata?.datasourceId && aloudata.mode === 'metric-view' && aloudata.metricView) {
-    optionsLoading.value = true
-    try {
-      const fields = await listAnalysisViewFields(aloudata.datasourceId, aloudata.metricView)
-      fieldOptions.value = fields
-        .filter((field) => (field.role ?? 'dimension').toLowerCase() === 'dimension')
-        .map((field) => ({ value: field.name, label: field.displayName || field.name }))
-    } catch {
-      fieldOptions.value = []
-      ElMessage.warning('指标视图维度加载失败，可手动输入字段名')
-    } finally {
-      optionsLoading.value = false
-    }
-    return
-  }
-  if (isAloudata.value) {
-    fieldOptions.value = (aloudata?.dims ?? []).filter(Boolean).map((name) => ({ value: name, label: name }))
-    return
-  }
-  const fields = ds.fields ?? []
-  fieldOptions.value = fields.length
-    ? fields.map((field) => ({ value: field.name, label: resolveFieldLabel(fields, field.name) }))
-    : (ds.file?.columns ?? []).map((column) => ({ value: column.name, label: column.name }))
+function fieldTitle(field: string): string {
+  return displayFields.value.find((row) => row.field === field)?.title || field
 }
 
-/** Aloudata 语义层只接受 = <> > >= < <= IN NotIn，因此维度筛选的运算符范围更窄 */
-const operatorOptions = computed(() => (isAloudata.value ? DIMENSION_OPERATORS : GENERIC_OPERATORS))
-
-function addCondition(): void {
-  conditions.value.push(emptyCondition())
+function operatorLabel(operator: QueryParameterBinding['operator']): string {
+  const normalized = normalizeOperator(operator)
+  return GENERIC_OPERATORS.find((option) => option.value === normalized)?.label ?? operator
 }
 
-function removeCondition(index: number): void {
-  conditions.value.splice(index, 1)
+function operatorNeedsValue(operator: QueryParameterBinding['operator']): boolean {
+  return operator !== 'is_null' && operator !== 'is_not_null'
 }
 
-function removeBoundCondition(index: number): void {
-  boundRows.value.splice(index, 1)
+function createQueryFilterRows(): PreviewQueryFilterRow[] {
+  return (props.dataset.queryConfig?.parameterBindings ?? []).map((binding) => ({
+    inputName: props.dataset.alias,
+    field: binding.field,
+    operator: binding.operator,
+    parameterNames: [binding.parameterName || binding.filterComponentId],
+    parameterName: binding.parameterName || binding.filterComponentId,
+    filterComponentId: binding.filterComponentId,
+    filterTitle: state.filterCatalog.find((filter) => filter.id === binding.filterComponentId)?.title ?? binding.filterComponentId,
+    fieldTitle: fieldTitle(binding.field),
+    value: '',
+    enabled: true,
+  }))
 }
 
-/** 从「为空」这类无需取值的运算符切回来时，把残留的禁用值清掉，避免下推一个看不见的值 */
-function onOperatorChange(row: FilterCondition): void {
-  if (!needsValue(row.op)) row.value = ''
-}
-
-function removeLegacy(field: string): void {
-  legacyConditions.value = withoutField(legacyConditions.value, field)
+function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): void {
+  row.enabled = enabled
+  if (!enabled) row.value = ''
 }
 
 /* ── 结果区 ── */
 const queryHint = computed(() =>
-  filterSupported.value ? '绑定条件和附加条件按 AND 组合；多个条件按 AND 组合；空的绑定值不参与查询' : '文件类型暂不支持筛选下推，直接查询即可',
+  filterSupported.value ? '筛选条件来自查询配置；关闭的条件不参与本次查询' : '文件类型暂不支持筛选下推，直接查询即可',
 )
 
 /** 最近一次执行的时间（展示用 HH:mm） */
 const queriedAt = ref(0)
 
 /**
- * 当前「定义 + 条件」的指纹：用来判断缓存的结果还是不是这份条件查出来的。
+ * 当前定义、SQL 参数和查询配置筛选条件的指纹：用于判断缓存结果是否过期。
  * 条件变了 → 结果照常展示但标注已过期，不静默丢弃，也不假装它还是最新的。
  */
 const currentSignature = computed(() =>
   JSON.stringify([
     sql.value,
+    displayFields.value.map(({ field, title, role }) => [field, title, role]),
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
-    boundRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value })),
-    completeConditions(conditions.value),
-    legacyConditions.value,
+    queryFilterRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value, enabled: row.enabled })),
   ]),
 )
 
@@ -417,11 +299,8 @@ async function fetchRows(reset: boolean): Promise<void> {
   error.value = ''
   const started = Date.now()
   try {
-    const filters = [
-      ...completeConditions(conditions.value),
-      ...legacyConditions.value,
-      ...toDatasetFilters(boundRows.value),
-    ]
+    const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
+    const filters = toDatasetFilters(enabledFilterRows)
     const request = draftRequestForDataset({
       ...props.dataset,
       filters: filters as DatasetConfig['filters'],
@@ -433,13 +312,11 @@ async function fetchRows(reset: boolean): Promise<void> {
       rows.value = []
       return
     }
-    const parameters = { ...namedParameters(), ...buildExecutionParameters(boundRows.value) }
+    const parameters = { ...namedParameters(), ...buildExecutionParameters(enabledFilterRows) }
     const offset = reset ? 0 : rows.value.length
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
-    // 不应要求前端重新携带 SQL 才能查看数据。用户在弹窗内修改 SQL 后，
-    // 才降级到草稿预览，以保留“改完点查询”的编辑能力。
+    // 数据定义在查看数据弹窗中只读；已落库数据集统一走输入读取接口。
     const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
-      && (!isSql.value || sql.value === (props.dataset.jdbc?.sql ?? ''))
     const currentRequest = ++requestSequence
     const batch = savedDefinitionUnchanged
       ? await previewInput({
@@ -511,40 +388,19 @@ function onScroll(event: Event): void {
   void fetchRows(false)
 }
 
-/* ── 打开时初始化：不取数，只把定义 / 参数 / 条件铺好，等用户点「查询」 ── */
+/* ── 打开时初始化：不取数，只把查询配置/参数铺好，等用户点「查询」 ── */
 async function open(): Promise<void> {
-  sql.value = props.dataset.jdbc?.sql ?? ''
   for (const key of Object.keys(paramValues)) delete paramValues[key]
   for (const param of parameters.value) {
     if (param.defaultValue !== undefined) paramValues[param.name] = param.defaultValue
   }
 
-  conditions.value = []
-  legacyConditions.value = []
-  boundRows.value = []
-  fieldOptions.value = []
+  queryFilterRows.value = createQueryFilterRows()
   columns.value = []
   rows.value = []
   hasMore.value = false
   elapsed.value = ''
   error.value = ''
-
-  await loadFieldOptions()
-  const runtimeBindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => ({
-    filterComponentId: binding.filterName,
-    inputNames: state.datasets
-      .filter((item) => binding.scope[item.id] || binding.scope[item.alias])
-      .map((item) => item.alias),
-    fieldMappings: Object.fromEntries(binding.fieldMap.map((item) => [item.datasetId, item.field])),
-    conditions: binding.conditions ?? [],
-  }))
-  boundRows.value = defaultRuntimeRows(props.dataset.alias, runtimeBindings)
-  // 可选项就绪后再分流：此时才判断得出哪些存量条件属于「遗留」
-  const saved = (props.dataset.filters ?? []) as unknown as Parameters<typeof partitionConditions>[0]
-  const known = new Set(fieldOptions.value.map((option) => option.value))
-  const { rows: editable, legacy } = partitionConditions(saved, known)
-  conditions.value = editable.length ? editable : [emptyCondition()]
-  legacyConditions.value = legacy
 
   // 恢复最近一次执行结果：条件与结果都还在，不必重新点「查询」。
   // 若条件已被改过，结果照常展示、结果区标注「条件已变更」，由用户决定是否重查。
@@ -598,15 +454,7 @@ watch(() => ui.dataDialog.visible, (visible) => {
   font-size: 12px;
   color: var(--db-text-muted);
 }
-.dd-note {
-  margin: 0;
-}
-.dd-code :deep(textarea) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.7;
-}
-.dd-kv {
+.dd-display-fields {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -614,20 +462,45 @@ watch(() => ui.dataDialog.visible, (visible) => {
   border-radius: var(--radius-md);
   padding: 10px 12px;
 }
-.dd-kv-row {
+.dd-display-field {
   display: flex;
+  align-items: center;
   gap: 10px;
   font-size: 12px;
 }
-.dd-kv-label {
+.dd-field-role {
   flex-shrink: 0;
   width: 68px;
   color: var(--db-text-muted);
 }
-.dd-kv-value {
+.dd-field-name,
+.dd-sql-readonly code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--db-text);
   word-break: break-all;
+}
+.dd-field-name {
+  min-width: 180px;
+}
+.dd-field-title {
+  color: var(--db-text-secondary);
+}
+.dd-display-empty {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--db-muted);
+  color: var(--db-text-muted);
+  font-size: 12px;
+}
+.dd-sql-readonly {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--db-muted);
+  color: var(--db-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .dd-param-grid {
   display: grid;
@@ -656,41 +529,31 @@ watch(() => ui.dataDialog.visible, (visible) => {
   flex-direction: column;
   gap: 8px;
 }
-.dd-bound-conditions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-md);
-  background: var(--db-muted);
-}
-.dd-subtitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--db-text-secondary);
-}
 .dd-bound-field {
-  min-width: 140px;
+  min-width: 0;
   color: var(--db-text);
 }
-.dd-bound-op,
-.dd-bound-param {
+.dd-bound-filter,
+.dd-fixed-operator {
   flex-shrink: 0;
   color: var(--db-text-secondary);
+}
+.dd-bound-field code {
+  margin-left: 4px;
+  color: var(--db-text-muted);
 }
 .dd-condition {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.dd-field {
-  flex: 1.2;
-  min-width: 0;
-}
-.dd-op {
-  width: 120px;
-  flex-shrink: 0;
+.dd-query-condition {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) minmax(170px, 1.3fr) 100px minmax(160px, 2fr) auto;
+  padding: 8px 10px;
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-md);
+  background: var(--db-muted);
 }
 .dd-value {
   flex: 1;
@@ -699,41 +562,6 @@ watch(() => ui.dataDialog.visible, (visible) => {
 .dd-empty {
   font-size: 12px;
   color: var(--db-text-muted);
-}
-.dd-legacy {
-  border: 1px dashed var(--db-border);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-}
-.dd-legacy-title {
-  font-size: 12px;
-  color: var(--db-text-muted);
-  margin-bottom: 6px;
-}
-.dd-legacy-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 0;
-  font-size: 12px;
-}
-.dd-legacy-item code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--db-text);
-}
-.dd-legacy-op {
-  color: var(--db-text-secondary);
-}
-.dd-legacy-value {
-  flex: 1;
-  min-width: 0;
-  color: var(--db-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dd-add-row {
-  display: flex;
 }
 .dd-query-row {
   display: flex;

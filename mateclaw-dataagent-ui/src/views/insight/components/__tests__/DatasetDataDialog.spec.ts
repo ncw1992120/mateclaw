@@ -20,36 +20,29 @@ vi.mock('@/api/dataset', async (importOriginal) => {
   return { ...actual, previewInput: (...args: unknown[]) => previewInput(...(args as [])) }
 })
 
-/** 指标视图字段清单：两个维度 + 一个指标（指标不该出现在筛选项里） */
-vi.mock('@/api/datasource', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api/datasource')>()
-  return {
-    ...actual,
-    listAnalysisViewFields: vi.fn(async () => [
-      { name: 'trade_date', displayName: '交易日期', role: 'dimension' },
-      { name: 'cust_type', displayName: '客户类型', role: 'dimension' },
-      { name: 'amount', displayName: '金额', role: 'measure' },
-    ]),
-  }
-})
-
 import DatasetDataDialog from '../DatasetDataDialog.vue'
 import { clearAllCachedQueries } from '../dataset-data-cache'
 import { useInsight } from '../card-attribute/useInsight'
 import type { DatasetConfig } from '../card-attribute/useInsight'
+import type { DatasetQueryConfig } from '@/types'
 
 const { state } = useInsight()
 
+function queryConfig(parameterBindings: DatasetQueryConfig['parameterBindings'] = []): DatasetQueryConfig {
+  return {
+    displayFields: [
+      { field: 'trade_date', title: '交易日期', role: 'dimension' },
+      { field: 'cust_type', title: '客户类型', role: 'dimension' },
+      { field: 'amount', title: '金额', role: 'measure' },
+    ],
+    parameterBindings,
+    sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+    paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+  }
+}
+
 const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
-  'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
-  'el-select': {
-    props: ['modelValue'],
-    emits: ['update:modelValue', 'change'],
-    template:
-      '<select :value="modelValue" v-bind="$attrs" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>',
-  },
-  'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
   'el-input': {
     props: ['modelValue'],
     template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -61,6 +54,12 @@ const stubs = {
   'el-date-picker': {
     props: ['modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
+  'el-switch': {
+    props: ['modelValue'],
+    emits: ['update:modelValue', 'change'],
+    template:
+      '<input type="checkbox" :checked="modelValue" v-bind="$attrs" @change="$emit(\'update:modelValue\', $event.target.checked); $emit(\'change\', $event.target.checked)" />',
   },
   'el-button': { template: '<button type="button"><slot /></button>' },
   'el-table': { props: ['data'], template: '<div class="stub-table"><slot /></div>' },
@@ -84,6 +83,9 @@ function metricViewDataset(partial: Partial<DatasetConfig> = {}): DatasetConfig 
       metrics: [],
       dims: [],
     },
+    queryConfig: queryConfig([
+      { filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' },
+    ]),
     ...partial,
   } as DatasetConfig
 }
@@ -99,6 +101,7 @@ async function openWith(dataset: DatasetConfig) {
 beforeEach(() => {
   state.ui.dataDialog = { visible: false, datasetId: '' }
   state.filterBindings = []
+  state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', selectionMode: 'single' }]
   clearAllCachedQueries()
   previewDatasetDraft.mockClear()
   previewInput.mockClear()
@@ -106,8 +109,7 @@ beforeEach(() => {
 
 describe('查看数据弹窗 · 保留最近一次执行结果', () => {
   async function runQuery(wrapper: ReturnType<typeof mount>) {
-    await wrapper.find('select.dd-field').setValue('trade_date')
-    await wrapper.find('.dd-condition').find('input.dd-value').setValue('2026-09-01')
+    await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
   }
@@ -125,9 +127,8 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     expect(previewDatasetDraft.mock.calls.length).toBe(callsAfterQuery)
     expect(again.find('.dd-result .dd-hint').text()).toContain('1 行')
     expect(again.find('.dd-result .dd-hint').text()).toContain('查询')
-    // 临时查询值不写回 Schema；重新打开只按持久化条件初始化
-    expect(again.find('select.dd-field').element.value).toBe('')
-    expect(again.find('.dd-condition').find('input.dd-value').element.value).toBe('')
+    // 本次值不写回 Schema；重新打开只按查询配置生成默认启用的空值行
+    expect(again.find('[data-testid="query-filter-row"] input.dd-value').element.value).toBe('')
     again.unmount()
   })
 
@@ -137,13 +138,13 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await runQuery(first)
     first.unmount()
 
-    // 用户在别处改了条件
-    dataset.filters = [{ field: 'cust_type', op: '=', value: 'A' }] as never
+    // 用户在查询配置中调整绑定字段
+    dataset.queryConfig!.parameterBindings[0].field = 'cust_type'
     const again = await openWith(dataset)
     expect(again.findAll('.dd-result-body .stub-table')).toHaveLength(1) // 结果仍展示，不清空
     expect(again.find('.dd-result .dd-hint').text()).toContain('条件已变更')
-    // 条件区展示的是新条件，不是产生缓存结果的那份
-    expect(again.find('select.dd-field').element.value).toBe('cust_type')
+    // 条件区展示的是新绑定，而不是产生缓存结果的那份
+    expect(again.find('[data-testid="query-filter-row"]').text()).toContain('cust_type')
     again.unmount()
   })
 
@@ -174,154 +175,125 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(wrapper.find('.dd-result-body').exists()).toBe(true)
   })
 
-  it('给出「添加筛选条件」入口与操作指引（此前缺失的地方）', async () => {
-    const wrapper = await openWith(metricViewDataset())
+  it('展示字段来自查询配置且只读，不再展示数据源定义字段', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: {
+        displayFields: [
+          { field: 'cust_type', title: '客户类型', role: 'dimension' },
+          { field: 'amount', title: '金额', role: 'measure' },
+        ],
+        parameterBindings: [],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      },
+    }))
 
-    expect(wrapper.text()).toContain('添加筛选条件')
-    expect(wrapper.text()).toContain('多个条件按 AND 组合')
+    expect(wrapper.find('.dd-display-fields').text()).toContain('cust_type')
+    expect(wrapper.find('.dd-display-fields').text()).toContain('客户类型')
+    expect(wrapper.find('.dd-display-fields').text()).toContain('金额')
+    expect(wrapper.find('.dd-kv').exists()).toBe(false)
   })
 
-  it('指标视图的筛选项只取维度，指标不进筛选项', async () => {
-    const wrapper = await openWith(metricViewDataset())
+  it('查询配置筛选器绑定是唯一条件来源，操作符只读且默认启用', async () => {
+    state.filterCatalog = [{ id: 'filter-strategy', title: '策略类型', type: 'filter', selectionMode: 'single' }]
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: {
+        displayFields: [{ field: 'strategy_id', title: '策略编号', role: 'dimension' }],
+        parameterBindings: [{ filterComponentId: 'filter-strategy', parameterName: 'strategy', field: 'strategy_id', operator: 'eq' }],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      },
+    }))
 
-    const options = wrapper.findAll('select.dd-field option').map((o) => o.element.value)
-    expect(options).toEqual(['trade_date', 'cust_type'])
+    expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="query-filter-row"]').text()).toContain('策略类型')
+    expect(wrapper.find('[data-testid="query-filter-operator"]').text()).toContain('等于')
+    expect(wrapper.find('[data-testid="query-filter-operator"] select').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="query-filter-enabled"]').element.checked).toBe(true)
+    expect(wrapper.findAll('[data-testid="query-filter-row"] button')).toHaveLength(0)
+    expect(wrapper.text()).not.toContain('添加筛选条件')
+    expect(wrapper.find('select.dd-field').exists()).toBe(false)
+    expect(wrapper.find('.dd-note').exists()).toBe(false)
   })
 
-  it('没有可筛字段时提示可手输字段名，而不是静默给空下拉', async () => {
-    const wrapper = await openWith(
-      metricViewDataset({ sourceType: 'jdbc', jdbc: { db: '1', sql: 'select 1' }, aloudata: undefined, fields: [] }),
-    )
+  it('禁用查询配置筛选器时清空并锁定值，查询请求不携带该条件', async () => {
+    state.filterCatalog = [{ id: 'filter-strategy', title: '策略类型', type: 'filter', selectionMode: 'single' }]
+    const dataset = metricViewDataset({
+      queryConfig: {
+        displayFields: [{ field: 'strategy_id', title: '策略编号', role: 'dimension' }],
+        parameterBindings: [{ filterComponentId: 'filter-strategy', parameterName: 'strategy', field: 'strategy_id', operator: 'eq' }],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      },
+    })
+    const wrapper = await openWith(dataset)
+    const row = wrapper.find('[data-testid="query-filter-row"]')
+    const value = row.find('input.dd-value')
+    await value.setValue('strategy-a')
+    await row.find('[data-testid="query-filter-enabled"]').setValue(false)
 
-    expect(wrapper.find('.stub-alert').text()).toContain('未取到可筛选字段')
-    // 仍然给一条可编辑行，用户能直接敲字段名（下拉支持 allow-create）
-    expect(wrapper.find('select.dd-field').attributes('allow-create')).toBeDefined()
+    expect(value.element.value).toBe('')
+    expect(value.attributes('disabled')).toBeDefined()
+    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
+    await flushPromises()
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[]; parameters?: unknown }).filters).toEqual([])
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { parameters?: unknown }).parameters).toEqual({})
+  })
+
+  it('JDBC SQL 在查看数据时只读，SQL 参数仍可编辑并进入 parameters', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      sourceType: 'jdbc',
+      aloudata: undefined,
+      jdbc: { db: '1', sql: 'select * from orders where region = :region' },
+      fields: [],
+    }))
+
+    expect(wrapper.find('[data-testid="dataset-sql-readonly"]').text()).toContain('select * from orders')
+    expect(wrapper.find('textarea.dd-code').exists()).toBe(false)
+    await wrapper.find('.dd-param input').setValue('华东')
+    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
+    await flushPromises()
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { parameters?: unknown }).parameters).toEqual({ region: '华东' })
   })
 })
 
-describe('查看数据弹窗 · 添加条件并查询', () => {
-  it('点「添加筛选条件」新增一行条件', async () => {
-    const wrapper = await openWith(metricViewDataset())
-
-    // 初次打开没有存量条件时给一条空行，便于直接填
-    expect(wrapper.findAll('.dd-condition')).toHaveLength(1)
-    await wrapper.findAll('button').find((b) => b.text().includes('添加筛选条件'))!.trigger('click')
-    expect(wrapper.findAll('.dd-condition')).toHaveLength(2)
-  })
-
-  it('查询时把条件下推到源查询（filters），但不写回数据集 Schema', async () => {
+describe('查看数据弹窗 · 查询配置筛选条件', () => {
+  it('启用的绑定值转换为数据集过滤条件和参数，不修改保存的查询配置', async () => {
     const dataset = metricViewDataset()
     const wrapper = await openWith(dataset)
-
-    await wrapper.find('select.dd-field').setValue('trade_date')
-    await wrapper.find('.dd-condition').findAll('input')[0].setValue('2026-09-01')
+    await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
 
-    expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
-    const request = previewDatasetDraft.mock.calls[0][0] as { filters?: unknown[]; offset?: number }
-    expect(request.filters).toEqual([{ field: 'trade_date', op: '=', value: '2026-09-01' }])
+    const request = previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[]; parameters?: unknown; offset?: number }
+    expect(request.filters).toEqual([{ field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' }])
+    expect(request.parameters).toEqual({ date: '2026-09-01' })
     expect(request.offset).toBe(0)
+    expect(dataset.queryConfig?.parameterBindings[0].field).toBe('trade_date')
     expect(dataset.filters).toEqual([])
   })
 
-  it('打开时默认带出绑定筛选模板，运行值只进入本次查询', async () => {
+  it('不再读取旧 dataset.filters 或全局 filterBindings，也不允许手工新增条件', async () => {
     state.filterBindings = [{
-      filterName: '时间范围',
-      scope: { 'ds-1': true },
-      fieldMap: [{ datasetId: 'ds-1', field: 'metric_time', matched: true }],
-      conditions: [
-        { inputName: 'cljd_zcl_zb_view', field: 'metric_time', operator: 'gte', parameterNames: ['startDate'], required: false },
-        { inputName: 'cljd_zcl_zb_view', field: 'metric_time', operator: 'lt', parameterNames: ['endDate'], required: false },
-      ],
-    }] as any
-    const dataset = metricViewDataset()
-    const wrapper = await openWith(dataset)
-
-    expect(wrapper.findAll('[data-testid="bound-filter-row"]')).toHaveLength(2)
-    expect(wrapper.findAll('[data-testid="bound-filter-row"] input')[0].attributes('placeholder'))
-      .toBe('可选，未填写不参与查询')
-    await wrapper.findAll('[data-testid="bound-filter-row"] input')[0].setValue('2026-09-01')
-    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
-    await flushPromises()
-
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
-      { field: 'metric_time', operator: 'gte', value: '2026-09-01', role: 'dimension' },
-    ])
-    expect(dataset.filters).toEqual([])
-  })
-
-  it('不完整的条件（缺字段或缺值）不参与下推', async () => {
-    const dataset = metricViewDataset()
-    const wrapper = await openWith(dataset)
-
-    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
-    await flushPromises()
-
-    const request = previewDatasetDraft.mock.calls[0][0] as { filters?: unknown[] }
-    expect(request.filters).toEqual([])
-    expect(dataset.filters).toEqual([])
-  })
-
-  it('切到「为空」这类免值操作符时清掉残留取值，避免下推一个看不见的值', async () => {
+      filterName: '旧绑定', scope: { 'ds-1': true }, fieldMap: [], conditions: [],
+    }] as never
     const dataset = metricViewDataset({
-      sourceType: 'jdbc',
-      aloudata: undefined,
-      jdbc: { db: '1', sql: 'select 1' },
-      fields: [{ name: 'region' }],
+      filters: [{ field: 'cust_type', op: '=', value: '旧值' }] as never,
+      queryConfig: queryConfig([]),
     })
     const wrapper = await openWith(dataset)
 
-    await wrapper.find('select.dd-field').setValue('region')
-    await wrapper.find('.dd-condition').find('input.dd-value').setValue('华东')
-    expect(wrapper.find('.dd-condition').find('input.dd-value').element.value).toBe('华东')
-
-    await wrapper.find('.dd-condition').findAll('select')[1].setValue('is null')
-
-    const input = wrapper.find('.dd-condition').find('.dd-value')
-    expect(input.element.value).toBe('')
-    expect(input.attributes('disabled')).toBeDefined()
-
-    // 空值操作符仍然可下推（不需要取值）
+    expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(0)
+    expect(wrapper.find('.dd-empty').text()).toContain('查询配置中尚未绑定筛选器')
+    expect(wrapper.text()).not.toContain('添加筛选条件')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect((previewDatasetDraft.mock.calls[0][0] as { filters?: unknown }).filters).toEqual([
-      { field: 'region', op: 'is null', value: '' },
-    ])
-  })
-})
-
-describe('查看数据弹窗 · 存量筛选不丢', () => {
-  it('打开时回填已配好的条件', async () => {
-    const wrapper = await openWith(
-      metricViewDataset({ filters: [{ field: 'cust_type', op: 'in', value: 'A,B' }] as never }),
-    )
-
-    const row = wrapper.find('.dd-condition')
-    expect(row.find('select').element.value).toBe('cust_type')
-    expect(row.findAll('input')[0].element.value).toBe('A,B')
-  })
-
-  it('字段已不在可筛选项内 → 单独列为遗留条件，可移除但不静默丢弃', async () => {
-    const dataset = metricViewDataset({ filters: [{ field: '已删除的维度', op: '=', value: 'x' }] as never })
-    const wrapper = await openWith(dataset)
-
-    expect(wrapper.text()).toContain('遗留条件')
-    expect(wrapper.find('.dd-legacy').text()).toContain('已删除的维度')
-    expect(wrapper.findAll('.dd-condition')).toHaveLength(1) // 遗留的不算可编辑行
-
-    await wrapper.find('.dd-legacy').findAll('button').find((b) => b.text().includes('移除'))!.trigger('click')
-    expect(wrapper.find('.dd-legacy').exists()).toBe(false)
-
-    // 移除后查询：遗留条件不再写回数据集
-    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
-    await flushPromises()
-    expect(dataset.filters).toEqual([{ field: '已删除的维度', op: '=', value: 'x' }])
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([])
   })
 })
 
 describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => {
-  it('文件类型不给筛选条件入口（上游不做下推，避免能配但不生效）', async () => {
+  it('文件类型不显示筛选条件（上游不做下推，避免能配但不生效）', async () => {
     const wrapper = await openWith(
       metricViewDataset({
         sourceType: 'file',
@@ -331,7 +303,7 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
     )
 
     expect(wrapper.text()).not.toContain('添加筛选条件')
-    expect(wrapper.text()).toContain('文件')
+    expect(wrapper.find('.dd-conditions').exists()).toBe(false)
   })
 
   it('SQL 的 :param 作为参数区自动提取，与筛选条件是两条通道', async () => {

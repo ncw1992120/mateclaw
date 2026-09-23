@@ -164,7 +164,7 @@ interface UiState {
   // KPI 指标分组弹窗
   metricConfig: { visible: boolean }
   metricStyle: { visible: boolean; fieldKey: string; field: string }
-  /** 「查看数据」弹窗：定义 / 筛选条件 / 参数 / 结果 —— 条件由用户显式「添加」后点查询下推 */
+  /** 「查看数据」弹窗：查询配置展示字段 / 只读 SQL / 筛选条件值 / 结果 */
   dataDialog: { visible: boolean; datasetId: string }
   /** 「查询配置」弹窗：展示字段 / 筛选器绑定 / 排序 / 分页 */
   queryConfigDialog: { visible: boolean; datasetId: string }
@@ -1010,7 +1010,7 @@ function closePreview() {
   state.ui.preview.visible = false
 }
 
-/** 打开「查看数据」弹窗（定义 / 筛选条件 / 结果；点查询才取数） */
+/** 打开「查看数据」弹窗（查询配置与运行值；点查询才取数） */
 function openDataDialog(datasetId: string): void {
   state.ui.dataDialog = { visible: true, datasetId }
 }
