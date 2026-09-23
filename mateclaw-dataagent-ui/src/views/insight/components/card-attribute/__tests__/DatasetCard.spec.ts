@@ -4,6 +4,7 @@ import DatasetCard from '../DatasetCard.vue'
 
 const actions = vi.hoisted(() => ({
   openFieldMapping: vi.fn(),
+  openQueryConfig: vi.fn(),
   openDataDialog: vi.fn(),
   removeDataset: vi.fn(),
   reconfigureDataset: vi.fn(),

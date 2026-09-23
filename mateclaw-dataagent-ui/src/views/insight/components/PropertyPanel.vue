@@ -13,6 +13,9 @@
     </div>
 
     <div v-else class="panel-body">
+      <div v-if="['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(component.type)" class="sample-data-action">
+        <el-button size="small" text type="primary" data-testid="component-sample-data" @click="sampleDialogVisible = true">样例数据</el-button>
+      </div>
       <!-- 标题 -->
       <div class="form-group">
         <label class="form-label">{{ t('insight.property.componentTitle') }}</label>
@@ -722,6 +725,12 @@
         </div>
       </template>
     </div>
+    <ComponentSampleDialog
+      v-if="component && ['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(component.type)"
+      v-model="sampleDialogVisible"
+      :title="localComponent.title"
+      :sample="componentSample"
+    />
   </div>
 </template>
 
@@ -737,6 +746,8 @@ import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 import InlineHelp from './property/InlineHelp.vue'
+import ComponentSampleDialog from './ComponentSampleDialog.vue'
+import { resolveComponentSample } from '@/utils/component-sample-data'
 
 defineOptions({
   name: 'PropertyPanel',
@@ -754,6 +765,13 @@ const props = defineProps<{
 }>()
 
 const useDatasetPipeline = computed(() => Boolean(props.useDatasetPipeline))
+const sampleDialogVisible = ref(false)
+const componentSample = computed(() => resolveComponentSample({
+  id: localComponent.id,
+  type: localComponent.type,
+  chartType: localComponent.chartType,
+  title: localComponent.title,
+}))
 
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void

@@ -49,6 +49,12 @@ export interface PanelFilterComponent {
   id: string
   type: InsightComponentType
   title: string
+  /**
+   * 选择方式（仅 `filter` 类型有意义）：单选 → eq，多选 → in。
+   * `timeFilter` 不携带此字段（时间范围由下游展开为 gte~lte）。
+   * 「筛选器绑定」弹窗据此把运算符固定为筛选器自身的语义，不允许在绑定处再编辑。
+   */
+  selectionMode?: 'single' | 'multiple'
 }
 
 /** 正式组件类型 → 原型卡片类型 */
@@ -147,8 +153,13 @@ export function hydratePanel(
     state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   }
-  // 保留筛选器 id/title 对照，旧绑定保存回写时需还原为真实组件 ID。
-  state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
+  // 仪表盘可用筛选器组件；透传类型和选择方式供查询配置确定筛选运算符。
+  state.filterCatalog = filterComponents.map((c) => ({
+    id: String(c.id),
+    title: c.title || String(c.id),
+    type: c.type,
+    selectionMode: c.selectionMode,
+  }))
 
   // 结果集：回填持久化元数据（行数据留空，由画布侧回读或重算补齐）。
   // 必须在 kpiMetrics 投影之前 —— 指标候选字段以结果集 schema 为准。

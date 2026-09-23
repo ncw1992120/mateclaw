@@ -38,8 +38,8 @@ const fields = [
 ]
 
 const filterOptions = [
-  { id: 'strategy_type', title: '策略类型' },
-  { id: 'date_range', title: '日期范围' },
+  { id: 'strategy_type', title: '策略类型', type: 'filter', selectionMode: 'multiple' },
+  { id: 'date_range', title: '日期范围', type: 'timeFilter' },
 ]
 
 function mountDialog(props: Record<string, unknown> = {}) {
@@ -146,5 +146,29 @@ describe('QueryConfigDialog', () => {
     await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
     await wrapper.find('[data-testid="qc-save"]').trigger('click')
     expect(wrapper.emitted('save')).toBeUndefined()
+  })
+
+  it('筛选器绑定只展示筛选器名称和绑定对象，运算符不在界面重复展示', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    await flushPromises()
+    const row = findTest(wrapper, 'qc-binding-row')[0]
+    const selects = row.findAll('[data-testid="select"]')
+    // 仅「筛选器名称」「绑定对象」两个下拉；操作符由筛选器自身语义决定
+    expect(selects.length).toBe(2)
+    expect(row.text()).not.toContain('运算符')
+
+    // 选多选筛选器后，保存时仍按筛选器类型写入兼容字段
+    await selects[0].setValue('strategy_type')
+    await flushPromises()
+    await selects[0].setValue('date_range')
+    await flushPromises()
+
+    // 保存后运算符按筛选器类型固定写入，界面不暴露该实现字段
+    await wrapper.find('[data-testid="qc-save"]').trigger('click')
+    await flushPromises()
+    const config = wrapper.emitted('save')![0][0] as DatasetQueryConfig
+    expect(config.parameterBindings[0].operator).toBe('gte')
   })
 })

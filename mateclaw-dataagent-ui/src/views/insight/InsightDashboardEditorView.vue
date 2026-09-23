@@ -400,7 +400,12 @@ const queryConfigDataset = computed(
   () => insightState.datasets.find((item) => item.id === insightState.ui.queryConfigDialog.datasetId) ?? null,
 )
 const filterOptions = computed(() =>
-  insightState.filterCatalog.map((filter) => ({ id: filter.id, title: filter.title })),
+  insightState.filterCatalog.map((filter) => ({
+    id: filter.id,
+    title: filter.title,
+    type: filter.type,
+    selectionMode: filter.selectionMode,
+  })),
 )
 /** 旧 scriptFilterBindings 的展示草稿：仅当该数据集尚无已保存查询配置时预填 */
 const queryConfigLegacyBindings = computed(() => {
@@ -672,13 +677,18 @@ const panelComponent = computed<InsightComponent | null>(() => selectedChildComp
 function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
   const out: PanelFilterComponent[] = []
   const seen = new Set<string>()
-  const push = (item: { id: string; type: InsightComponentType; title: string }) => {
-    if (!item.id || seen.has(item.id)) return
-    seen.add(item.id)
-    out.push({ id: String(item.id), type: item.type, title: item.title || String(item.id) })
+  // 筛选类组件的最小形态：id / type / title + 可选 config（取 selectionMode）
+  type FilterLike = { id: unknown; type: InsightComponentType; title?: string; config?: Record<string, unknown> }
+  const push = (item: FilterLike) => {
+    if (!item.id || seen.has(String(item.id))) return
+    const selectionMode = item.type === 'filter'
+      ? ((item.config?.selectionMode as 'single' | 'multiple' | undefined) ?? 'single')
+      : undefined
+    seen.add(String(item.id))
+    out.push({ id: String(item.id), type: item.type, title: item.title || String(item.id), selectionMode })
   }
   const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'
-  const walkChildren = (children?: Array<{ id: string; type: InsightComponentType; title: string }>) => {
+  const walkChildren = (children?: FilterLike[]) => {
     ;(children ?? []).forEach((child) => {
       if (isFilterLike(child.type)) push(child)
     })
@@ -686,8 +696,8 @@ function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
   list.forEach((c) => {
     if (isFilterLike(c.type)) push(c)
     // 组合卡片容器：默认 Tab 的子卡片 + 每个页签各自的子卡片
-    walkChildren(c.children)
-    c.containerConfig?.tabs?.forEach((tab) => walkChildren(tab.children))
+    walkChildren(c.children as FilterLike[] | undefined)
+    c.containerConfig?.tabs?.forEach((tab) => walkChildren((tab as { children?: FilterLike[] }).children))
   })
   return out
 }

@@ -312,8 +312,8 @@ const state = reactive({
   filterBindings: [] as FilterBinding[],
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
   kpiMetrics: [] as KpiMetricConfig[],
-  // 仪表盘筛选器的真实 id/title 对照（由 hydratePanel 注入，用于旧绑定回写时还原组件 ID）
-  filterCatalog: [] as { id: string; title: string }[],
+  // 仪表盘可用筛选器组件，由 hydratePanel 注入，供查询配置确定筛选运算符。
+  filterCatalog: [] as Array<{ id: string; title: string; type?: string; selectionMode?: 'single' | 'multiple' }>,
   // 结果集：卡片唯一数据来源（数据集 / 筛选 / 脚本都只是产出它的手段）
   resultSet: {
     status: 'empty',
@@ -632,12 +632,29 @@ function confirmFile() {
  * 契约见 docs/策略解读/原型设计.md §4.1。
  */
 
-/** 从草稿预览响应取字段名列表（优先 schema，回落首行 key） */
-function readSchemaNames(batch: { schema?: string[]; rows?: Record<string, unknown>[] } | null | undefined): string[] {
+type PreviewBatchShape = { schema?: string[]; rows?: Record<string, unknown>[] }
+
+/**
+ * 草稿预览当前只返回列名和样例行，没有独立的语义角色字段。
+ * 因此这里用样例值做保守推断：数字列是指标，文本/日期列是维度。
+ * 这比在查询配置弹窗里把所有 JDBC/文件字段默认成 dimension 更可靠；
+ * 样例为空时再用通用的数值字段命名后缀兜底，最终仍允许用户在弹窗中切换角色。
+ */
+function inferPreviewRole(name: string, rows: Record<string, unknown>[] | undefined): 'dimension' | 'measure' {
+  const sample = rows?.map((row) => row[name]).find((value) => value !== null && value !== undefined && value !== '')
+  if (typeof sample === 'number' || typeof sample === 'bigint') return 'measure'
+  if (typeof sample === 'string' && /^[-+]?\d+(?:\.\d+)?$/.test(sample.trim())) return 'measure'
+  if (/(?:^|_)(?:amt|amount|cnt|count|num|number|rate|ratio|total|value|score|qty|quantity)(?:$|_)/i.test(name)) return 'measure'
+  return 'dimension'
+}
+
+/** 从草稿预览响应取字段名和角色（优先 schema，回落首行 key） */
+function readSchemaFields(batch: PreviewBatchShape | null | undefined): DatasetSchemaField[] {
   if (!batch) return []
-  if (batch.schema?.length) return batch.schema.map((n) => String(n)).filter(Boolean)
-  const first = batch.rows?.[0]
-  return first ? Object.keys(first) : []
+  const names = batch.schema?.length
+    ? batch.schema.map((name) => String(name)).filter(Boolean)
+    : Object.keys(batch.rows?.[0] || {})
+  return names.map((name) => ({ name, role: inferPreviewRole(name, batch.rows) }))
 }
 
 /** 从候选键里取第一个非空值（Aloudata 视图定义为平台原始 Map，键名不稳定） */
@@ -755,7 +772,7 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
       sourceConfig: { sql: ds.jdbc.sql },
       filters: [],
     })
-    return readSchemaNames(batch).map((name) => ({ name }))
+    return readSchemaFields(batch)
   }
 
   if (ds.sourceType === 'aloudata') {
@@ -788,7 +805,7 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
       } catch {
         labels = {}
       }
-      return readSchemaNames(batch).map((name) => ({ name, displayName: labels[name] }))
+      return readSchemaFields(batch).map((field) => ({ ...field, displayName: labels[field.name] }))
     }
     const metrics = ds.aloudata?.metrics ?? []
     const dims = ds.aloudata?.dims ?? []
@@ -803,7 +820,7 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
   if (ds.sourceType === 'file') {
     if (!ds.file?.objectId) return []
     const batch = await backend.previewDatasetDraft({ sourceType: 'FILE', sourceConfig: fileSourceConfig(ds.file) })
-    return readSchemaNames(batch).map((name) => ({ name }))
+    return readSchemaFields(batch)
   }
 
   // 接口类型：需先登记受控接口定义（含数据源与地址白名单），原型阶段不做草稿预览
