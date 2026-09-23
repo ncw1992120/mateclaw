@@ -74,16 +74,24 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(configured.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
   })
 
-  it('shows canvas zoom controls and updates the displayed zoom level', async () => {
+  it('starts at 100 percent and applies manually entered zoom', async () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true },
       global: { stubs, plugins: [i18n] },
     })
 
     expect(wrapper.get('[role="toolbar"][aria-label="画布缩放"]').exists()).toBe(true)
-    await nextTick()
+    const zoomInput = wrapper.get('input[aria-label="画布缩放百分比"]')
+    expect((zoomInput.element as HTMLInputElement).value).toBe('100')
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom: 1')
+
     await wrapper.get('[aria-label="放大画布"]').trigger('click')
-    expect(wrapper.get('[role="toolbar"] span').text()).toBe('50%')
+    expect((zoomInput.element as HTMLInputElement).value).toBe('110')
+
+    await zoomInput.setValue('75')
+    await zoomInput.trigger('keydown.enter')
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom: 0.75')
+    expect((zoomInput.element as HTMLInputElement).value).toBe('75')
   })
 
   it('does not mark a combination card as sample data', () => {

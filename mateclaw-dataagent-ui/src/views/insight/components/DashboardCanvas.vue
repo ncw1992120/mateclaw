@@ -42,7 +42,23 @@
 
     <div v-if="editable && gridLayout.length > 0" class="canvas-zoom-toolbar" role="toolbar" aria-label="画布缩放">
       <button type="button" aria-label="缩小画布" title="缩小" :disabled="canvasZoom <= MIN_CANVAS_ZOOM" @click="zoomCanvas(-ZOOM_STEP)">−</button>
-      <span aria-live="polite">{{ Math.round(canvasZoom * 100) }}%</span>
+      <input
+        class="canvas-zoom-input"
+        type="number"
+        min="40"
+        max="120"
+        step="1"
+        inputmode="numeric"
+        aria-label="画布缩放百分比"
+        aria-description="输入40到120之间的百分比，按回车或离开输入框应用"
+        title="输入40到120之间的百分比，按回车或离开输入框应用"
+        :value="canvasZoomInput"
+        @input="updateCanvasZoomInput"
+        @keydown.enter.prevent="applyCanvasZoomInput"
+        @blur="applyCanvasZoomInput"
+      />
+      <span class="canvas-zoom-suffix" aria-hidden="true">%</span>
+      <span class="canvas-zoom-live" aria-live="polite">{{ Math.round(canvasZoom * 100) }}%</span>
       <button type="button" aria-label="放大画布" title="放大" :disabled="canvasZoom >= MAX_CANVAS_ZOOM" @click="zoomCanvas(ZOOM_STEP)">+</button>
       <button type="button" class="canvas-fit-button" @click="fitCanvas">适配</button>
       <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
@@ -259,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
@@ -308,6 +324,7 @@ const props = withDefaults(defineProps<{
 /** 画布根元素（drop 落点换算用） */
 const canvasRef = ref<HTMLElement | null>(null)
 const canvasZoom = ref(1)
+const canvasZoomInput = ref('100')
 const canvasZoomStyle = computed(() => props.editable ? {
   zoom: canvasZoom.value,
   width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
@@ -316,10 +333,24 @@ const canvasZoomStyle = computed(() => props.editable ? {
 
 function setCanvasZoom(value: number): void {
   canvasZoom.value = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(value * 100) / 100))
+  canvasZoomInput.value = String(Math.round(canvasZoom.value * 100))
 }
 
 function zoomCanvas(delta: number): void {
   setCanvasZoom(canvasZoom.value + delta)
+}
+
+function updateCanvasZoomInput(event: Event): void {
+  canvasZoomInput.value = (event.target as HTMLInputElement).value
+}
+
+function applyCanvasZoomInput(): void {
+  const percent = Number(canvasZoomInput.value)
+  if (!canvasZoomInput.value.trim() || !Number.isFinite(percent)) {
+    canvasZoomInput.value = String(Math.round(canvasZoom.value * 100))
+    return
+  }
+  setCanvasZoom(percent / 100)
 }
 
 function fitCanvas(): void {
@@ -331,9 +362,6 @@ function fitCanvas(): void {
   setCanvasZoom(Math.min(1, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
 }
 
-onMounted(() => {
-  if (props.editable) nextTick(fitCanvas)
-})
 const editingTitleId = ref<string | null>(null)
 const editingTitleValue = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
@@ -1083,12 +1111,40 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   cursor: not-allowed;
 }
 
-.canvas-zoom-toolbar span {
-  min-width: 42px;
+.canvas-zoom-toolbar .canvas-zoom-input {
+  width: 46px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  outline-offset: 1px;
+  background: transparent;
   color: var(--db-text-secondary);
+  font: inherit;
   font-size: 12px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom-toolbar .canvas-zoom-input:focus-visible {
+  outline: 2px solid var(--db-accent);
+}
+
+.canvas-zoom-toolbar .canvas-zoom-suffix {
+  margin-left: -4px;
+  color: var(--db-text-secondary);
+  font-size: 12px;
+}
+
+.canvas-zoom-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .canvas-zoom-toolbar .canvas-fit-button {
