@@ -660,7 +660,7 @@ function selectedCombinationContainer(): InsightComponent | null {
 const panelComponent = computed<InsightComponent | null>(() => selectedChildComponent.value ?? selectedComponent.value)
 
 /**
- * 递归收集页面内所有筛选类组件，供「筛选器绑定」弹窗做参数名候选。
+ * 递归收集页面内所有筛选类组件，供历史数据管道绑定按名称回查真实组件 ID。
  *
  * 覆盖三类此前收集不到的筛选器（2026-09-18 修）：
  *  1. **组合卡片容器内**的子筛选器 —— 旧实现只看 `currentPageComponents`（顶层），

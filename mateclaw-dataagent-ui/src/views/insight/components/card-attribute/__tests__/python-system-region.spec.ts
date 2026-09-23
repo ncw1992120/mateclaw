@@ -15,35 +15,6 @@ const { ElMessageBox } = await import('element-plus')
 const { state } = useInsight()
 
 describe('buildPythonSystemRegion', () => {
-  it('保存筛选器绑定后立即刷新系统生成区域的过滤条件', () => {
-    const { saveFilterBindings } = useInsight()
-    state.datasets = [{ id: 'ds1', alias: 'table2' }] as never
-    state.filterBindings = []
-    state.filterCatalog = [{ id: 'filter-metric-date', title: '指标日期' }]
-    state.hasPython = true
-    state.pythonUser = 'result = table2'
-    state.pythonSystem = 'table2 = datasets.read(input_name="table2", filters=[]).to_polars()'
-    state.pythonSystemState = {
-      mode: 'generated',
-      generatedCode: state.pythonSystem,
-      generatedFingerprint: 'before-binding',
-      userCode: state.pythonUser,
-    }
-
-    saveFilterBindings([{
-      filterName: '指标日期',
-      scope: { ds1: true },
-      fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
-    }])
-
-    // 新契约：绑定变化刷新系统区，但系统区不再携带任何筛选拼接
-    expect(state.pythonSystem).toContain('table2 = datasets.input(')
-    expect(state.pythonSystem).toContain(').to_polars()')
-    expect(state.pythonSystem).not.toContain('_optional_filter')
-    expect(state.pythonSystem).not.toContain('filters=')
-    expect(state.pythonSystemState?.generatedCode).toContain('datasets.input(')
-  })
-
   it('打开已绑定筛选器的组件时重算过期的系统生成区域', () => {
     const component = writeComponentDatasetPipeline(
       { id: 'nested-table', type: 'table', title: '子策略贡献表', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },
