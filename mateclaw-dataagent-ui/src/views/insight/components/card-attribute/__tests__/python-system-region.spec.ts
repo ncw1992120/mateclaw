@@ -198,10 +198,14 @@ const elDialogStub = {
   props: ['modelValue'],
   template: '<div v-bind="$attrs"><slot /><slot name="footer" /></div>',
 }
+const pythonQueryConfigDialogStub = {
+  props: ['modelValue'],
+  template: '<div v-if="modelValue" data-testid="query-config-editor" />',
+}
 
 async function mountDialog() {
   const wrapper = mount(PythonScriptDialog, {
-    global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub } },
+    global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
   })
   state.ui.python.visible = true
   await nextTick()
