@@ -110,6 +110,7 @@ describe('DashboardCanvas keyboard interaction', () => {
     const toolbar = wrapper.get('.canvas-zoom-toolbar').element as HTMLElement
     const overlay = document.createElement('div')
     overlay.className = 'el-overlay'
+    overlay.style.display = 'none'
     const source = readFileSync(resolve(process.cwd(), 'src/views/insight/components/DashboardCanvas.vue'), 'utf8')
     const { descriptor, errors } = parse(source, { filename: 'DashboardCanvas.vue' })
     expect(errors).toHaveLength(0)
@@ -130,6 +131,12 @@ describe('DashboardCanvas keyboard interaction', () => {
       expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
       document.body.append(overlay)
       await nextTick()
+      expect(window.getComputedStyle(document.body).visibility).toBe('visible')
+      expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
+
+      overlay.style.removeProperty('display')
+      await nextTick()
+      expect(window.getComputedStyle(document.body).visibility).toBe('visible')
       expect(window.getComputedStyle(toolbar).visibility).toBe('hidden')
 
       overlay.remove()

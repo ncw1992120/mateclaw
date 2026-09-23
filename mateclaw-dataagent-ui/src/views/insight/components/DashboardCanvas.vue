@@ -1137,8 +1137,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   box-shadow: var(--shadow-sm);
 }
 
-/* Element Plus 将弹窗遮罩挂在 body 下；弹窗打开时隐藏工具条但保留占位，关闭后自动恢复。 */
-:global(body:has(> .el-overlay)) .canvas-zoom-toolbar {
+/* Element Plus 会将抽屉遮罩常驻挂在 body 下；只在可见遮罩期间隐藏工具条，并保留占位。 */
+:global(body:has(> .el-overlay:not([style*="display: none"])) .canvas-zoom-toolbar) {
   visibility: hidden;
   pointer-events: none;
 }
