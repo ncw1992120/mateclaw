@@ -1541,6 +1541,8 @@ export interface FinalResultFilterField {
 /** 针对 Python 最终输出的静态查询配置，不影响输入数据源查询。 */
 export interface FinalResultQueryConfig {
   schemaFingerprint: string
+  /** 是否经过用户在 Python 编辑器中确认保存；系统自动生成的草稿为 false。 */
+  confirmed?: boolean
   displayFields: QueryDisplayField[]
   filterFields: FinalResultFilterField[]
   sortPolicy: QuerySortPolicy

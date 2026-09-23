@@ -78,6 +78,62 @@
       </div>
     </div>
 
+    <div class="py-block py-query-config" data-testid="python-query-config">
+      <div class="py-title">
+        <span class="py-title-left">
+          查询配置
+          <el-tag size="small" :type="queryConfigured ? 'success' : 'warning'" data-testid="query-config-status">
+            {{ queryConfigured ? '已配置' : '未配置' }}
+          </el-tag>
+        </span>
+        <el-button size="small" type="primary" plain data-testid="open-query-config" @click="openQueryConfig">
+          查询配置
+        </el-button>
+      </div>
+      <el-alert
+        v-if="!queryConfigured"
+        type="warning"
+        :closable="false"
+        show-icon
+        data-testid="query-config-required"
+        title="请先进行查询配置，再查看 Python 最终结果数据。"
+        description="查询配置作用于 Python 脚本处理后的最终结果集，不会修改输入数据集。"
+      />
+      <div v-if="showQueryConfig && finalQueryConfig" class="py-query-config-editor" data-testid="query-config-editor">
+        <div class="py-query-config-group">
+          <div class="py-config-label">展示字段</div>
+          <el-checkbox-group v-model="displayFieldNames">
+            <el-checkbox v-for="field in finalQueryConfig.displayFields" :key="field.field" :label="field.field">
+              {{ field.title }}（{{ field.field }}）
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
+        <div class="py-query-config-group">
+          <div class="py-config-label">可筛选字段</div>
+          <el-checkbox-group v-model="filterFieldNames">
+            <el-checkbox v-for="field in finalQueryConfig.filterFields" :key="field.field" :label="field.field">
+              {{ field.title }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
+        <div class="py-query-config-line">
+          <el-checkbox v-model="sortEnabled">启用排序</el-checkbox>
+          <el-select v-model="sortField" size="small" :disabled="!sortEnabled" placeholder="默认排序字段">
+            <el-option v-for="field in finalQueryConfig.displayFields" :key="field.field" :label="field.title" :value="field.field" />
+          </el-select>
+        </div>
+        <div class="py-query-config-line">
+          <el-checkbox v-model="paginationEnabled">启用分页</el-checkbox>
+          <el-input-number v-model="pageSize" size="small" :disabled="!paginationEnabled" :min="1" :max="500" />
+          <span class="py-spec-desc">默认每页条数</span>
+        </div>
+        <div class="py-query-config-actions">
+          <el-button size="small" @click="showQueryConfig = false">取消</el-button>
+          <el-button size="small" type="primary" data-testid="save-query-config" @click="saveQueryConfig">保存查询配置</el-button>
+        </div>
+      </div>
+    </div>
+
     <template #footer>
       <el-button @click="ui.python.visible = false">取消</el-button>
       <el-button data-testid="view-python-result" @click="onPreview">查看数据</el-button>
@@ -92,6 +148,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useInsight, currentPythonSource } from './useInsight'
 import { effectiveSystemCode, fingerprintSystemSource, generateSystemScript, restoreGenerated } from '@/utils/python-script-template'
+import type { FinalResultQueryConfig } from '@/types'
+import { isFinalResultQueryConfigured } from '@/utils/final-result-query'
 import { resolveOutputSpec, componentLabel } from '@/utils/component-output-spec'
 import { highlightPython } from '@/utils/python-syntax'
 
@@ -117,6 +175,50 @@ const outputSpec = computed(() => {
   return resolveOutputSpec(card.type)
 })
 const finalQueryConfig = computed(() => state.finalResultQueryConfig)
+const queryConfigured = computed(() => isFinalResultQueryConfigured(finalQueryConfig.value))
+const showQueryConfig = ref(false)
+const queryConfigDraft = ref<FinalResultQueryConfig | null>(null)
+
+const displayFieldNames = computed<string[]>({
+  get: () => queryConfigDraft.value?.displayFields.map((field) => field.field) ?? [],
+  set: (names) => {
+    if (!queryConfigDraft.value) return
+    const fields = new Map(queryConfigDraft.value.displayFields.map((field) => [field.field, field]))
+    queryConfigDraft.value.displayFields = names.map((name) => fields.get(name)).filter((field): field is NonNullable<typeof field> => Boolean(field))
+  },
+})
+const filterFieldNames = computed<string[]>({
+  get: () => queryConfigDraft.value?.filterFields.map((field) => field.field) ?? [],
+  set: (names) => {
+    if (!queryConfigDraft.value) return
+    const fields = new Map(queryConfigDraft.value.filterFields.map((field) => [field.field, field]))
+    queryConfigDraft.value.filterFields = names.map((name) => fields.get(name)).filter((field): field is NonNullable<typeof field> => Boolean(field))
+  },
+})
+const sortEnabled = computed({
+  get: () => queryConfigDraft.value?.sortPolicy.enabled ?? false,
+  set: (enabled: boolean) => {
+    if (queryConfigDraft.value) queryConfigDraft.value.sortPolicy = { ...queryConfigDraft.value.sortPolicy, enabled }
+  },
+})
+const sortField = computed({
+  get: () => queryConfigDraft.value?.sortPolicy.defaultSort?.field ?? '',
+  set: (field: string) => {
+    if (queryConfigDraft.value) queryConfigDraft.value.sortPolicy = { ...queryConfigDraft.value.sortPolicy, defaultSort: field ? { field, direction: 'asc' } : null, allowedFields: field ? [field] : [] }
+  },
+})
+const paginationEnabled = computed({
+  get: () => queryConfigDraft.value?.paginationPolicy.enabled ?? false,
+  set: (enabled: boolean) => {
+    if (queryConfigDraft.value) queryConfigDraft.value.paginationPolicy = { ...queryConfigDraft.value.paginationPolicy, enabled }
+  },
+})
+const pageSize = computed({
+  get: () => queryConfigDraft.value?.paginationPolicy.defaultPageSize ?? 100,
+  set: (value: number | undefined) => {
+    if (queryConfigDraft.value && value) queryConfigDraft.value.paginationPolicy = { ...queryConfigDraft.value.paginationPolicy, defaultPageSize: value }
+  },
+})
 
 /** managed 模式下系统代码可编辑，直接绑定到接管副本 */
 const managedCode = computed({
@@ -229,11 +331,36 @@ function save() {
   const system = state.pythonSystemState ? effectiveSystemCode(state.pythonSystemState) : state.pythonSystem
   savePython(system, userCode.value)
 }
+
+function openQueryConfig() {
+  if (!finalQueryConfig.value) {
+    ElMessage.warning('请先执行 Python 脚本生成最终结果字段，再进行查询配置')
+    return
+  }
+  queryConfigDraft.value = JSON.parse(JSON.stringify(finalQueryConfig.value)) as FinalResultQueryConfig
+  showQueryConfig.value = true
+}
+
+function saveQueryConfig() {
+  if (!queryConfigDraft.value) return
+  if (!queryConfigDraft.value.displayFields.length) {
+    ElMessage.warning('至少保留一个展示字段')
+    return
+  }
+  state.finalResultQueryConfig = { ...queryConfigDraft.value, confirmed: true }
+  showQueryConfig.value = false
+  ElMessage.success('查询配置已保存')
+}
 // 查看数据：先持久化 Python 脚本（关闭弹窗），再打开最终结果集预览。
 // 脚本是**管道级**的（作用于多个数据集求最终输出），所以这里看的是结果集、不是某个输入数据集，
 // 与数据集卡片上的「查看数据」（打开单个输入数据集）层级不同。
 function onPreview() {
   save()
+  if (!queryConfigured.value) {
+    ElMessage.warning('请先进行查询配置，再查看 Python 最终结果数据')
+    showQueryConfig.value = Boolean(finalQueryConfig.value)
+    return
+  }
   openPreview('result')
 }
 async function onExec() {
@@ -257,6 +384,52 @@ async function onExec() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.py-query-config {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-blank);
+}
+.py-query-config-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.py-query-config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.py-query-config-group :deep(.el-checkbox-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.py-query-config-group :deep(.el-checkbox) {
+  margin-right: 0;
+}
+.py-config-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+.py-query-config-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.py-query-config-line :deep(.el-checkbox) {
+  margin-right: 4px;
+}
+.py-query-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 :global(.python-script-dialog.el-dialog) {

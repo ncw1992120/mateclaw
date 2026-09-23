@@ -13,6 +13,10 @@ import type { ResultSchema, ScriptDataType } from './script-result'
 
 export type FinalResultQueryConfigStatus = 'missing' | 'ready' | 'stale' | 'conflict'
 
+export function isFinalResultQueryConfigured(config: FinalResultQueryConfig | undefined): boolean {
+  return config?.confirmed === true
+}
+
 const STRING_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq', 'in', 'not_in', 'contains']
 const NUMBER_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between']
 const BOOLEAN_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq']
@@ -56,6 +60,7 @@ export function buildFinalResultQueryConfig(spec: ComponentOutputSpec, schema: R
   if (!acceptedKind) {
     return {
       schemaFingerprint: schema.fingerprint,
+      confirmed: false,
       displayFields: [],
       filterFields: [],
       sortPolicy: defaultSortPolicy(),
@@ -64,6 +69,7 @@ export function buildFinalResultQueryConfig(spec: ComponentOutputSpec, schema: R
   }
   return {
     schemaFingerprint: schema.fingerprint,
+    confirmed: false,
     displayFields,
     filterFields,
     sortPolicy: defaultSortPolicy(),

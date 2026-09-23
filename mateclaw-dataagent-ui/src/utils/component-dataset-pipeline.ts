@@ -168,6 +168,7 @@ function readFinalResultQueryConfig(value: unknown): FinalResultQueryConfig | un
   const pagination = asRecord(raw.paginationPolicy)
   return {
     schemaFingerprint: raw.schemaFingerprint,
+    confirmed: raw.confirmed === true,
     displayFields: raw.displayFields as FinalResultQueryConfig['displayFields'],
     filterFields: raw.filterFields as FinalResultQueryConfig['filterFields'],
     sortPolicy: {

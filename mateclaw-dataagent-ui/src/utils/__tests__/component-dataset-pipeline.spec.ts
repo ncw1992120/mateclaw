@@ -130,6 +130,7 @@ describe('component dataset pipeline', () => {
 
   it('reads and writes component-level final result query config separately from input queryConfig', () => {
     const finalResultQueryConfig = {
+      confirmed: false,
       schemaFingerprint: 'result-schema-1',
       displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
       filterFields: [{ field: 'region', title: '区域', dataType: 'string', parameterName: 'region', operators: ['eq'] }],
