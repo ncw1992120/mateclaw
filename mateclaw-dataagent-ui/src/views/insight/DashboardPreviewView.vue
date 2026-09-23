@@ -115,6 +115,7 @@
         v-else
         :components="currentPageComponents"
         :component-data-map="componentDataMap"
+        :dataset-inputs="schema.datasetInputs"
         :editable="false"
         :dashboard-theme="dashboardTheme"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"

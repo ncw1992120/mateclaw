@@ -287,7 +287,7 @@ import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
-import type { ComponentTitleIconStyle, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { ComponentTitleIconStyle, DashboardDatasetInput, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -301,7 +301,6 @@ import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/ut
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
-import { fieldLabelsFromMappings } from '@/utils/field-mapping'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
@@ -318,6 +317,8 @@ const props = withDefaults(defineProps<{
   components: InsightComponent[]
   /** 组件渲染数据映射（componentId -> data） */
   componentDataMap?: Record<string, InsightComponentData>
+  /** 仪表盘级数据集输入；旧版组件管道可能只保存在此处 */
+  datasetInputs?: DashboardDatasetInput[]
   /** 是否可编辑 */
   editable?: boolean
   /** 当前选中的组件 ID */
@@ -787,15 +788,46 @@ function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
 function getComponentData(id: string): InsightComponentData | undefined {
   const configured = props.componentDataMap?.[id]
   const component = getComponent(id)
+  const pipeline = component ? readComponentDatasetPipeline(component) : undefined
+  const componentLabels = fieldLabelsFromInputs(pipeline?.datasetInputs ?? [])
+  const dashboardLabels = fieldLabelsFromInputs(props.datasetInputs ?? [])
+  const fieldLabels = { ...dashboardLabels, ...componentLabels }
   if (configured) {
-    if (!component) return configured
-    const pipeline = readComponentDatasetPipeline(component)
-    const mappings = pipeline?.datasetInputs.flatMap((input) => input.fieldMappings ?? []) ?? []
-    const fieldLabels = fieldLabelsFromMappings(mappings)
-    return { ...configured, fieldLabels: { ...configured.fieldLabels, ...fieldLabels } }
+    return { ...configured, fieldLabels: { ...fieldLabels, ...configured.fieldLabels } }
   }
   if (!component || hasConfiguredDataset(component)) return undefined
-  return resolveComponentSample(component).renderData
+  const sample = resolveComponentSample(component).renderData
+  return sample ? { ...sample, fieldLabels: { ...fieldLabels, ...sample.fieldLabels } } : sample
+}
+
+/** 优先使用字段注册表；兼容较旧配置中仅保存在 queryConfig.displayFields 的展示名。 */
+function fieldLabelsFromInputs(inputs: DashboardDatasetInput[]): Record<string, string> {
+  const labels: Record<string, string> = {}
+  const ambiguous = new Set<string>()
+  for (const input of inputs) {
+    const inputLabels = new Map<string, string>()
+    for (const mapping of input.fieldMappings ?? []) {
+      const source = mapping.source?.trim()
+      const target = mapping.target?.trim()
+      if (source) inputLabels.set(source, target && target !== source ? target : source)
+    }
+    for (const field of input.queryConfig?.displayFields ?? []) {
+      const source = field.field?.trim()
+      const title = field.title?.trim()
+      if (source && title && (!inputLabels.has(source) || inputLabels.get(source) === source)) inputLabels.set(source, title)
+    }
+    for (const [source, label] of inputLabels) {
+      if (ambiguous.has(source)) continue
+      const existing = labels[source]
+      if (existing !== undefined && existing !== label) {
+        delete labels[source]
+        ambiguous.add(source)
+      } else {
+        labels[source] = label
+      }
+    }
+  }
+  return labels
 }
 
 function isSampleData(id: string): boolean {

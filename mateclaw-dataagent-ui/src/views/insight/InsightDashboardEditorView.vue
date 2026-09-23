@@ -186,6 +186,7 @@
         <DashboardCanvas
           :components="currentPageComponents"
           :component-data-map="componentDataMap"
+          :dataset-inputs="schema.datasetInputs"
           :editable="true"
           :dashboard-theme="dashboardTheme"
           :selected-id="selectedComponentId"
