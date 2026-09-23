@@ -51,7 +51,7 @@ public class FinalResultQueryServiceImpl implements FinalResultQueryService {
             }
         }
 
-        var rows = new ArrayList<>(table.rows());
+        List<Map<String, Object>> rows = new ArrayList<>(table.rows());
         rows.removeIf(row -> !matches(row, context.parameters(), filterByParameter, columnByName));
         int totalRows = rows.size();
 
@@ -85,9 +85,24 @@ public class FinalResultQueryServiceImpl implements FinalResultQueryService {
             rows = new ArrayList<>(rows.subList(from, to));
         }
 
+        List<ScriptResultContractService.ValidatedEnvelope.Column> resultColumns = columns;
+        if (!config.displayFields().isEmpty()) {
+            resultColumns = config.displayFields().stream().map(field -> {
+                var column = columnByName.get(field.field());
+                if (column == null) throw new IllegalArgumentException("display field is not in result schema: " + field.field());
+                return column;
+            }).toList();
+            var selectedColumns = resultColumns;
+            rows = rows.stream().map(row -> {
+                var projected = new LinkedHashMap<String, Object>();
+                selectedColumns.forEach(column -> projected.put(column.name(), row.get(column.name())));
+                return (Map<String, Object>) projected;
+            }).toList();
+        }
+
         var result = new ScriptResultContractService.ValidatedEnvelope(
                 envelope.schemaVersion(), envelope.kind(),
-                new ScriptResultContractService.ValidatedEnvelope.TableData(columns, rows),
+                new ScriptResultContractService.ValidatedEnvelope.TableData(resultColumns, rows),
                 new ScriptResultContractService.ValidatedEnvelope.Meta(totalRows, rows.size() < totalRows,
                         envelope.meta().sourceInputs()));
         return new FinalResultPage(result, totalRows, page, pageSize);

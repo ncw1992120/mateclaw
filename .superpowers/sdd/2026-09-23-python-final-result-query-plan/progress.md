@@ -32,3 +32,9 @@ Task 5 note: generated Python system code now includes the component output kind
 Task 6: complete (commit pending, tests: `component-dataset-pipeline.spec.ts` + `python-script-template.spec.ts` → 15 tests passed; `vue-tsc --noEmit` → passed)
 
 Task 6 note: after a successful Python envelope, the UI derives and persists component-level final-result field candidates from the real result Schema; the Python editor exposes those candidates as post-Python query configuration, while the result preview continues to operate on the final result rows.
+
+Task 7: complete (commit pending; frontend full suite → 85 files / 493 tests passed; `vue-tsc --noEmit` → passed; Java focused suite → 10 tests passed; Java full suite → 288 tests, 285 passed, 3 blocked by missing Docker socket in Testcontainers)
+
+Task 7 note: blocked full-suite tests are `ObjectRefServiceTest`, `ScriptDatasetReadObjectRefIntegrationTest`, and `S3DatasetFileStorageServiceTest`; no failures were reported. The feature path has compile and focused behavioral evidence, but Docker-dependent integration validation remains NOT_RUN in this environment.
+
+Final review: self-review (no subagent tool available); `git diff --check` passed before the final display-field correction, and the correction is covered by the 10-test focused Java run.

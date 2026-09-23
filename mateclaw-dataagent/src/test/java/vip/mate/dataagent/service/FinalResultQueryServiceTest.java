@@ -67,6 +67,22 @@ class FinalResultQueryServiceTest {
         assertThat(page.totalRows()).isZero();
     }
 
+    @Test
+    void projectsConfiguredDisplayFieldsAfterQuerying() {
+        var config = new FinalResultQueryConfigDTO("schema-1",
+                List.of(new FinalResultQueryConfigDTO.DisplayField("amount", "金额", "measure", "number")),
+                List.of(), List.of(),
+                new FinalResultQueryConfigDTO.SortPolicy(false, List.of()),
+                new FinalResultQueryConfigDTO.PaginationPolicy(false, 100, 100, false));
+
+        var page = new FinalResultQueryServiceImpl().query(table(row("region", "华东", "amount", 10)), config,
+                new FinalResultQueryContextDTO(Map.of(), null, null));
+
+        assertThat(page.envelope().data().columns()).extracting(ScriptResultContractService.ValidatedEnvelope.Column::name)
+                .containsExactly("amount");
+        assertThat(page.envelope().data().rows()).containsExactly(Map.of("amount", 10));
+    }
+
     private static ScriptResultContractService.ValidatedEnvelope table(Map<String, Object>... rows) {
         return new ScriptResultContractService.ValidatedEnvelope("1.0", "table",
                 new ScriptResultContractService.ValidatedEnvelope.TableData(
