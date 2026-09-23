@@ -68,8 +68,10 @@
           show-overflow-tooltip
         />
       </el-table>
-      <div v-else class="table-placeholder">
-        {{ activeTabError || t('insight.tableNoData') }}
+      <div v-else class="table-placeholder" role="status">
+        <template v-if="activeTabError">{{ activeTabError }}</template>
+        <template v-else-if="!hasConfiguredDataset(props.component)">尚未绑定数据源，请在属性配置中添加数据。</template>
+        <template v-else>暂无数据，请检查查询配置或筛选条件。</template>
       </div>
     </div>
     <!-- 分页 -->
@@ -94,6 +96,7 @@ import { Download } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
+import { hasConfiguredDataset } from '@/utils/component-sample-data'
 
 defineOptions({
   name: 'DataTableWidget',
