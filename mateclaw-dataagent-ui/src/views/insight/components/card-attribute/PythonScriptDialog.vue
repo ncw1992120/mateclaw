@@ -86,19 +86,7 @@
             {{ queryConfigured ? '已配置' : '未配置' }}
           </el-tag>
         </span>
-        <el-button size="small" type="primary" plain data-testid="open-query-config" @click="openQueryConfig">
-          查询配置
-        </el-button>
       </div>
-      <el-alert
-        v-if="!queryConfigured"
-        type="warning"
-        :closable="false"
-        show-icon
-        data-testid="query-config-required"
-        title="请先进行查询配置，再查看 Python 最终结果数据。"
-        description="查询配置作用于 Python 脚本处理后的最终结果集，不会修改输入数据集。"
-      />
       <div v-if="showQueryConfig && finalQueryConfig" class="py-query-config-editor" data-testid="query-config-editor">
         <div class="py-query-config-group">
           <div class="py-config-label">展示字段</div>
@@ -135,7 +123,7 @@
     </div>
 
     <template #footer>
-      <el-button @click="ui.python.visible = false">取消</el-button>
+      <el-button type="primary" plain data-testid="footer-query-config" @click="openQueryConfig">查询配置</el-button>
       <el-button data-testid="view-python-result" @click="onPreview">查看数据</el-button>
       <el-button @click="onExec" :loading="executing">执行记录</el-button>
       <el-button type="primary" @click="save">确定</el-button>
@@ -328,6 +316,11 @@ function restore() {
 }
 
 function save() {
+  if (!queryConfigured.value) {
+    ElMessage.warning('请先编辑并确认查询配置，再保存 Python 脚本')
+    showQueryConfig.value = Boolean(finalQueryConfig.value)
+    return
+  }
   const system = state.pythonSystemState ? effectiveSystemCode(state.pythonSystemState) : state.pythonSystem
   savePython(system, userCode.value)
 }
@@ -355,12 +348,12 @@ function saveQueryConfig() {
 // 脚本是**管道级**的（作用于多个数据集求最终输出），所以这里看的是结果集、不是某个输入数据集，
 // 与数据集卡片上的「查看数据」（打开单个输入数据集）层级不同。
 function onPreview() {
-  save()
   if (!queryConfigured.value) {
-    ElMessage.warning('请先进行查询配置，再查看 Python 最终结果数据')
+    ElMessage.warning('请先编辑并确认查询配置，再查看 Python 最终结果数据')
     showQueryConfig.value = Boolean(finalQueryConfig.value)
     return
   }
+  save()
   openPreview('result')
 }
 async function onExec() {

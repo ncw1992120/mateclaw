@@ -10,7 +10,7 @@ vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal<typeof import('element-plus')>()
   return { ...actual, ElMessageBox: { ...actual.ElMessageBox, confirm: vi.fn().mockResolvedValue(true) } }
 })
-const { ElMessageBox } = await import('element-plus')
+const { ElMessage, ElMessageBox } = await import('element-plus')
 
 const { state } = useInsight()
 
@@ -196,7 +196,7 @@ const elTagStub = { name: 'el-tag', template: '<span v-bind="$attrs"><slot /></s
 const elDialogStub = {
   name: 'el-dialog',
   props: ['modelValue'],
-  template: '<div><slot /><slot name="footer" /></div>',
+  template: '<div v-bind="$attrs"><slot /><slot name="footer" /></div>',
 }
 
 async function mountDialog() {
@@ -209,12 +209,76 @@ async function mountDialog() {
 }
 
 describe('PythonScriptDialog 系统区接管交互', () => {
+  let warningSpy: ReturnType<typeof vi.spyOn>
+
   beforeEach(() => {
     vi.mocked(ElMessageBox.confirm).mockClear()
+    warningSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
     state.ui.python.visible = false
+    state.ui.preview.visible = false
+    state.finalResultQueryConfig = undefined
     state.datasets = [{ id: 'ds1', alias: 'dataset_a' }] as never
     state.filterBindings = []
     state.pythonUser = 'result = 1'
+  })
+
+  it('未确认查询配置时保存脚本会弹出提示且不关闭编辑弹窗', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: false,
+      schemaFingerprint: 'schema-1',
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
+    state.pythonSystem = 'GEN_CODE'
+    const wrapper = await mountDialog()
+
+    await wrapper.findAll('button').find((button) => button.text() === '确定')!.trigger('click')
+
+    expect(warningSpy).toHaveBeenCalledWith('请先编辑并确认查询配置，再保存 Python 脚本')
+    expect(state.ui.python.visible).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('未确认查询配置时查看数据会弹出提示且不打开结果预览', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: false,
+      schemaFingerprint: 'schema-1',
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
+    state.pythonSystem = 'GEN_CODE'
+    const wrapper = await mountDialog()
+
+    await wrapper.find('[data-testid="view-python-result"]').trigger('click')
+
+    expect(warningSpy).toHaveBeenCalledWith('请先编辑并确认查询配置，再查看 Python 最终结果数据')
+    expect(state.ui.preview.visible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('底部操作顺序为查询配置、查看数据、执行记录、确定且不显示取消', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: true,
+      schemaFingerprint: 'schema-1',
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
+    state.pythonSystem = 'GEN_CODE'
+    const wrapper = await mountDialog()
+
+    const buttons = wrapper.findAll('button').map((button) => button.text()).slice(-4)
+    expect(buttons).toEqual(['查询配置', '查看数据', '执行记录', '确定'])
+    expect(buttons).not.toContain('取消')
+    wrapper.unmount()
   })
 
   it('generated 模式：只读展示 + 解锁进入用户接管（用户区不受影响）', async () => {
