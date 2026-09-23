@@ -10,9 +10,10 @@
  * 注意：本文件为独立 prototype 视图，不改动线上编辑器，便于先验证交互、再决定如何并入 DashboardCanvas。
  * ============================================================================
  */
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import InsightColorField from './components/InsightColorField.vue'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
 
 /* ── 类型 ─────────────────────────────────────────────────────────────── */
 type ChildType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'ai' | 'button' | 'container'
@@ -114,6 +115,22 @@ const fitContent = ref(false)
 const lockRatio = ref(false)
 const ccBodyRef = ref<HTMLElement | null>(null) // 内容区 DOM，用于自由布局落点/拖动 clamp
 const cardContainerRef = ref<HTMLElement | null>(null) // 卡片容器 DOM，用于判定拖拽是否仍在卡内
+const backgroundPresets = ['#FFFFFF', 'var(--db-card)', 'var(--db-card-orange-bg)']
+const isCustomBackground = ref(!backgroundPresets.includes(container.style.background))
+
+watch(() => container.style.background, (background) => {
+  isCustomBackground.value = !backgroundPresets.includes(background)
+})
+
+function changeBackground(value: string) {
+  if (value === 'custom') {
+    isCustomBackground.value = true
+    if (container.style.background.startsWith('var(')) container.style.background = '#FFFFFF'
+    return
+  }
+  container.style.background = value
+  isCustomBackground.value = false
+}
 
 /* ── 计算 ───────────────────────────────────────────────────────────── */
 const activeTabObj = computed<ContainerTab>(() => container.tabs.find((t) => t.id === container.activeTab) ?? container.tabs[0])
@@ -693,9 +710,13 @@ function chartSvg(d: any): string {
             <button class="sh" @click="collapsed.appear = !collapsed.appear">外观样式 <span class="ar">▾</span></button>
             <div class="prop-body" v-show="!collapsed.appear">
               <div class="field"><label>背景</label>
-                <el-select v-model="container.style.background" size="small">
+                <el-select :model-value="isCustomBackground ? 'custom' : container.style.background" size="small" @change="changeBackground">
                   <el-option label="白色" value="#FFFFFF" /><el-option label="跟随主题" value="var(--db-card)" /><el-option label="浅橙" value="var(--db-card-orange-bg)" />
+                  <el-option label="自定义" value="custom" />
                 </el-select>
+              </div>
+              <div v-if="isCustomBackground" class="field">
+                <InsightColorField v-model="container.style.background" label="自定义背景色" :suggested-colors="CARD_BG_PRESETS" />
               </div>
               <div class="field row"><label>显示边框</label><el-switch v-model="container.style.border.enabled" />
                 <InsightColorField v-model="container.style.border.color" label="边框颜色" /><el-input v-model.number="container.style.border.width" type="number" size="small" style="width:54px" />

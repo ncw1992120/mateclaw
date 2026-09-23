@@ -8,6 +8,8 @@ vi.mock('@/stores/useInsightColorHistoryStore', () => ({
 }))
 
 import router from '@/router'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import InsightColorField from '../components/InsightColorField.vue'
 import CardContainerPrototype from '../CardContainerPrototype.vue'
 
 const ColorPickerStub = {
@@ -37,7 +39,11 @@ function mountPrototype() {
         'el-color-picker': ColorPickerStub,
         'el-input': InputStub,
         'el-switch': SwitchStub,
-        'el-select': { props: ['modelValue'], template: '<select><slot /></select>' },
+        'el-select': {
+          props: ['modelValue'],
+          emits: ['update:modelValue', 'change'],
+          template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>',
+        },
         'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
         'el-button': { template: '<button><slot /></button>' },
       },
@@ -70,6 +76,45 @@ describe('CardContainerPrototype border color field', () => {
     expect((container.element as HTMLElement).style.borderColor).toBe('rgb(18, 58, 188)')
     expect((enabledInput.element as HTMLInputElement).checked).toBe(true)
     expect((widthInput.element as HTMLInputElement).value).toBe('1')
+  })
+
+  it('preserves the three background presets and opens a shared HEX field for custom colors', async () => {
+    const wrapper = mountPrototype()
+    const container = wrapper.get('.card-container')
+    const backgroundSelect = wrapper.findAll('select').find((select) =>
+      select.element.innerHTML.includes('浅橙'),
+    )!
+
+    expect(Array.from(backgroundSelect.findAll('option')).map((option) => (option.element as HTMLOptionElement).value))
+      .toEqual(['#FFFFFF', 'var(--db-card)', 'var(--db-card-orange-bg)', 'custom'])
+    expect(wrapper.find('input[aria-label="自定义背景色"]').exists()).toBe(false)
+
+    await backgroundSelect.setValue('custom')
+
+    const backgroundField = wrapper.get('input[aria-label="自定义背景色"]')
+    const picker = wrapper.getComponent(InsightColorField)
+    expect((backgroundField.element as HTMLInputElement).value).toBe('#FFFFFF')
+    expect(picker.props('suggestedColors')).toEqual(CARD_BG_PRESETS)
+
+    await backgroundField.setValue('#abc123')
+    expect((container.element as HTMLElement).style.background).toBe('rgb(171, 193, 35)')
+
+    await backgroundSelect.setValue('#FFFFFF')
+    expect((container.element as HTMLElement).style.background).toBe('rgb(255, 255, 255)')
+    expect(wrapper.find('input[aria-label="自定义背景色"]').exists()).toBe(false)
+  })
+
+  it('treats a pre-existing non-preset background string as custom', async () => {
+    const wrapper = mountPrototype()
+    wrapper.vm.$.setupState.container.style.background = '#123abc'
+    await wrapper.vm.$nextTick()
+    const backgroundSelect = wrapper.findAll('select').find((select) =>
+      select.element.innerHTML.includes('浅橙'),
+    )!
+
+    expect((backgroundSelect.element as HTMLSelectElement).value).toBe('custom')
+    expect((wrapper.get('input[aria-label="自定义背景色"]').element as HTMLInputElement).value).toBe('#123ABC')
+    expect((wrapper.get('.card-container').element as HTMLElement).style.background).toBe('rgb(18, 58, 188)')
   })
 
   it('keeps the existing development route pointed at this prototype', () => {
