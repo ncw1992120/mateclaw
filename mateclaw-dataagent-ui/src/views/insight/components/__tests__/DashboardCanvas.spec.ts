@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
+import { nextTick } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
 import DashboardComponentIcon from '../DashboardComponentIcon.vue'
@@ -57,7 +58,7 @@ describe('DashboardCanvas keyboard interaction', () => {
       props: { components: [component], editable: true },
       global: { stubs, plugins: [i18n] },
     })
-    expect(wrapper.get('[data-testid="sample-data-watermark"]').text()).toBe('样例数据')
+    expect(wrapper.get('[data-testid="sample-data-watermark"]').text()).toBe('示例数据')
     expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
       componentId: 'kpi-1', renderType: 'kpi', kpi: { value: '1,284' },
     })
@@ -71,6 +72,18 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
     expect(configured.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(configured.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
+  })
+
+  it('shows canvas zoom controls and updates the displayed zoom level', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('[role="toolbar"][aria-label="画布缩放"]').exists()).toBe(true)
+    await nextTick()
+    await wrapper.get('[aria-label="放大画布"]').trigger('click')
+    expect(wrapper.get('[role="toolbar"] span').text()).toBe('50%')
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {
@@ -145,8 +158,10 @@ describe('DashboardCanvas keyboard interaction', () => {
     const wrapper = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
     const canvas = wrapper.get('.dashboard-canvas')
     expect(canvas.attributes('data-canvas-workspace')).toBe('expanded')
-    expect(canvas.attributes('style')).toContain(`min-width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
-    expect(canvas.attributes('style')).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
+    expect(canvas.attributes('style') ?? '').not.toContain('min-width:')
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom:')
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain(`width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
   })
 
   it('emits copy and paste commands from canvas keyboard shortcuts', async () => {

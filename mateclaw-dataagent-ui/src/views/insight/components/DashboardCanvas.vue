@@ -4,7 +4,7 @@
     class="dashboard-canvas"
     :class="{ 'is-resizing': isCustomResizing }"
     data-canvas-workspace="expanded"
-    :style="{ ...canvasWorkspaceStyle, ...dashboardThemeVariables }"
+    :style="dashboardThemeVariables"
     tabindex="0"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
@@ -40,31 +40,41 @@
       </div>
     </div>
 
-    <GridLayout
-      v-if="gridLayout.length > 0"
-      :layout="gridLayout"
-      :col-num="24"
-      :row-height="30"
-      :is-draggable="editable && !isCustomResizing"
-      :is-resizable="editable && !isCustomResizing"
-      :vertical-compact="false"
-      :margin="[12, 12]"
-      @layout-updated="handleLayoutUpdated"
-    >
-      <GridItem
-        v-for="(item, index) in gridLayout"
-        :key="item.i"
-        :i="item.i"
-        :x="item.x"
-        :y="item.y"
-        :w="item.w"
-        :h="item.h"
-        :static="!editable"
-        :drag-ignore-from="'a, button, .cc-child, .grid-item-toolbar'"
-        @click.stop="handleSelectComponent(item.i)"
+    <div v-if="editable && gridLayout.length > 0" class="canvas-zoom-toolbar" role="toolbar" aria-label="画布缩放">
+      <button type="button" aria-label="缩小画布" title="缩小" :disabled="canvasZoom <= MIN_CANVAS_ZOOM" @click="zoomCanvas(-ZOOM_STEP)">−</button>
+      <span aria-live="polite">{{ Math.round(canvasZoom * 100) }}%</span>
+      <button type="button" aria-label="放大画布" title="放大" :disabled="canvasZoom >= MAX_CANVAS_ZOOM" @click="zoomCanvas(ZOOM_STEP)">+</button>
+      <button type="button" class="canvas-fit-button" @click="fitCanvas">适配</button>
+      <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
+    </div>
+
+    <div class="canvas-grid-stage" :style="canvasZoomStyle">
+      <GridLayout
+        v-if="gridLayout.length > 0"
+        :layout="gridLayout"
+        :col-num="24"
+        :row-height="30"
+        :transform-scale="canvasZoom"
+        :is-draggable="editable && !isCustomResizing"
+        :is-resizable="editable && !isCustomResizing"
+        :vertical-compact="false"
+        :margin="[12, 12]"
+        @layout-updated="handleLayoutUpdated"
       >
-        <div
-          class="grid-item-content mc-card grid-item-animated"
+        <GridItem
+          v-for="(item, index) in gridLayout"
+          :key="item.i"
+          :i="item.i"
+          :x="item.x"
+          :y="item.y"
+          :w="item.w"
+          :h="item.h"
+          :static="!editable"
+          :drag-ignore-from="'a, button, .cc-child, .grid-item-toolbar'"
+          @click.stop="handleSelectComponent(item.i)"
+        >
+          <div
+            class="grid-item-content mc-card grid-item-animated"
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)) }"
@@ -220,35 +230,36 @@
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
             </template>
-            <div v-if="isSampleData(item.i)" class="sample-data-watermark" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据">样例数据</div>
+            <div v-if="isSampleData(item.i)" class="sample-data-watermark" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据" title="未绑定数据源，当前为示例内容">示例数据</div>
           </div>
-        </div>
-      </GridItem>
-    </GridLayout>
-    <DashboardTitleIconStyleDialog
-      v-if="editingTitleIconTarget"
-      :model-value="titleIconDialogVisible"
-      :title="editingTitleIconTitle"
-      :title-icon-style="editingTitleIconStyle"
-      :default-color="editingTitleIconDefaultColor"
-      :top="titleIconDialogTop"
-      :left="titleIconDialogLeft"
-      :draggable="true"
-      @save="saveTitleIconStyle"
-      @preview="previewTitleIconStyle"
-      @update:model-value="setTitleIconDialogVisible"
-    />
+          </div>
+        </GridItem>
+      </GridLayout>
+      <DashboardTitleIconStyleDialog
+        v-if="editingTitleIconTarget"
+        :model-value="titleIconDialogVisible"
+        :title="editingTitleIconTitle"
+        :title-icon-style="editingTitleIconStyle"
+        :default-color="editingTitleIconDefaultColor"
+        :top="titleIconDialogTop"
+        :left="titleIconDialogLeft"
+        :draggable="true"
+        @save="saveTitleIconStyle"
+        @preview="previewTitleIconStyle"
+        @update:model-value="setTitleIconDialogVisible"
+      />
 
-    <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
+      <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
       <div class="empty-icon" aria-hidden="true">—</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
       <button v-if="editable" type="button" class="canvas-empty-action" aria-label="从组件库添加组件" @click="emit('add-component', { type: 'kpi' })">从组件库添加组件</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
@@ -273,6 +284,9 @@ defineOptions({
 })
 
 const { t } = useI18n()
+const MIN_CANVAS_ZOOM = 0.4
+const MAX_CANVAS_ZOOM = 1.2
+const ZOOM_STEP = 0.1
 
 const props = withDefaults(defineProps<{
   /** 仪表盘组件列表 */
@@ -293,6 +307,33 @@ const props = withDefaults(defineProps<{
 
 /** 画布根元素（drop 落点换算用） */
 const canvasRef = ref<HTMLElement | null>(null)
+const canvasZoom = ref(1)
+const canvasZoomStyle = computed(() => props.editable ? {
+  zoom: canvasZoom.value,
+  width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+  minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+} : undefined)
+
+function setCanvasZoom(value: number): void {
+  canvasZoom.value = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(value * 100) / 100))
+}
+
+function zoomCanvas(delta: number): void {
+  setCanvasZoom(canvasZoom.value + delta)
+}
+
+function fitCanvas(): void {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  const styles = getComputedStyle(canvas)
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  const availableWidth = canvas.clientWidth - horizontalPadding
+  setCanvasZoom(Math.min(1, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
+}
+
+onMounted(() => {
+  if (props.editable) nextTick(fitCanvas)
+})
 const editingTitleId = ref<string | null>(null)
 const editingTitleValue = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
@@ -364,13 +405,6 @@ const childTitleIconStylePreview = computed(() => {
     : undefined
 })
 
-const canvasWorkspaceStyle = computed(() => {
-  if (!props.editable) return undefined
-  return {
-    minWidth: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
-    minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
-  }
-})
 const dashboardThemeVariables = computed(() => props.dashboardTheme ? themeCssVariables(props.dashboardTheme) : {})
 
 const emit = defineEmits<{
@@ -768,12 +802,17 @@ const GRID_GAP = 12
  */
 function dropToGrid(event: DragEvent): { x: number; y: number } {
   const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
-  const rect = (grid ?? canvasRef.value)?.getBoundingClientRect()
+  const stage = canvasRef.value?.querySelector<HTMLElement>('.canvas-grid-stage')
+  const rect = (grid ?? stage ?? canvasRef.value)?.getBoundingClientRect()
   if (!rect) return { x: 0, y: 0 }
-  const colWidth = (rect.width - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
+  const scale = props.editable ? canvasZoom.value : 1
+  const logicalWidth = rect.width / scale
+  const offsetX = (event.clientX - rect.left) / scale
+  const offsetY = (event.clientY - rect.top) / scale
+  const colWidth = (logicalWidth - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
   if (colWidth <= 0) return { x: 0, y: 0 }
-  const col = Math.floor(((event.clientX - rect.left) - GRID_GAP) / (colWidth + GRID_GAP))
-  const row = Math.floor(((event.clientY - rect.top) - GRID_GAP) / (GRID_ROW_HEIGHT + GRID_GAP))
+  const col = Math.floor((offsetX - GRID_GAP) / (colWidth + GRID_GAP))
+  const row = Math.floor((offsetY - GRID_GAP) / (GRID_ROW_HEIGHT + GRID_GAP))
   return {
     x: Math.max(0, Math.min(col, GRID_COLS - 1)),
     y: Math.max(0, row),
@@ -890,7 +929,7 @@ let resizeLastPoint: { x: number; y: number } | null = null
 
 function readGridResizeMetrics(): GridResizeMetrics {
   const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
-  const gridWidth = grid?.getBoundingClientRect().width ?? canvasRef.value?.getBoundingClientRect().width ?? 0
+  const gridWidth = (grid?.getBoundingClientRect().width ?? canvasRef.value?.getBoundingClientRect().width ?? 0) / canvasZoom.value
   return { gridWidth, columns: GRID_COLS, marginX: GRID_GAP, rowHeight: GRID_ROW_HEIGHT, marginY: GRID_GAP }
 }
 
@@ -928,8 +967,8 @@ function applyResizePoint(point: { x: number; y: number }): void {
     startH: start.startH,
     startXPos: start.startXPos,
     startYPos: start.startYPos,
-    dx: point.x - start.startX,
-    dy: point.y - start.startY,
+    dx: (point.x - start.startX) / canvasZoom.value,
+    dy: (point.y - start.startY) / canvasZoom.value,
   }, start.metrics)
   const item = gridLayout.value.find((g) => g.i === start.id)
   if (item) Object.assign(item, { x: result.newX, y: result.newY, w: result.newW, h: result.newH })
@@ -1004,6 +1043,61 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   background: var(--db-bg);
   display: flex;
   flex-direction: column;
+}
+
+.canvas-zoom-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 4px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  background: var(--db-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.canvas-zoom-toolbar button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--db-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-zoom-toolbar button:hover:not(:disabled) {
+  background: var(--db-bg);
+  color: var(--db-accent);
+}
+
+.canvas-zoom-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.canvas-zoom-toolbar span {
+  min-width: 42px;
+  color: var(--db-text-secondary);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom-toolbar .canvas-fit-button {
+  border-left: 1px solid var(--db-border);
+  border-radius: 0 5px 5px 0;
+}
+
+.canvas-grid-stage {
+  width: 100%;
 }
 
 .global-filter-bar {
@@ -1350,14 +1444,16 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .sample-data-watermark {
   position: absolute;
   z-index: 5;
-  top: 8px;
-  right: 8px;
-  padding: 3px 8px;
-  border: 1px solid rgba(210, 55, 55, 0.16);
-  border-radius: 4px;
-  color: rgba(190, 45, 45, 0.48);
-  background: rgba(255, 235, 235, 0.35);
+  top: 10px;
+  right: 10px;
+  padding: 4px 9px;
+  border: 1px solid rgba(190, 45, 45, 0.24);
+  border-radius: 999px;
+  color: #9f2525;
+  background: rgba(255, 239, 239, 0.96);
+  box-shadow: 0 1px 3px rgba(80, 20, 20, 0.08);
   font-size: 11px;
+  font-weight: 600;
   line-height: 1.4;
   letter-spacing: 0.04em;
   pointer-events: none;

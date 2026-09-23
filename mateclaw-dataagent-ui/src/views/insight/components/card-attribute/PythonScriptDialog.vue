@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.python.visible" class="insight-dialog--preview" title="编辑 Python 脚本" width="860px" destroy-on-close :close-on-click-modal="false" aria-label="编辑 Python 脚本">
+  <el-dialog v-model="ui.python.visible" class="insight-dialog--preview python-script-dialog" title="编辑 Python 脚本" width="min(860px, calc(100vw - 32px))" destroy-on-close :close-on-click-modal="false" aria-label="编辑 Python 脚本">
     <!-- 系统生成区域：generated 只读 / managed 用户接管可编辑 -->
     <div class="py-block">
       <div class="py-title">
@@ -241,6 +241,39 @@ async function onExec() {
 <style scoped>
 .py-block {
   margin-bottom: 14px;
+}
+
+:global(.python-script-dialog.el-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
+}
+
+:global(.python-script-dialog .el-dialog__header),
+:global(.python-script-dialog .el-dialog__footer) {
+  flex: 0 0 auto;
+}
+
+:global(.python-script-dialog .el-dialog__body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+:global(.python-script-dialog .el-dialog__footer) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color);
+}
+
+:global(.python-script-dialog .el-dialog__footer .el-button) {
+  margin: 0;
 }
 .py-title {
   font-size: 13px;
