@@ -42,6 +42,7 @@
               :model-value="activeCard.componentColor ?? DEFAULT_COMPONENT_COLOR"
               label="组件配色"
               :suggested-colors="COMPONENT_COLOR_PRESETS"
+              :show-picker="false"
               @update:model-value="activeCard.componentColor = $event"
             />
           </div>
