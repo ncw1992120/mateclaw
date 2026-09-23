@@ -6,7 +6,7 @@
     :show-label="showLabel"
   >
     <template #icon>
-      <DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />
+      <DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />
     </template>
     <el-date-picker
       v-model="customDateRange"
@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import FilterControlShell from './FilterControlShell.vue'
 
@@ -40,6 +40,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   dashboardTheme?: ResolvedDashboardTheme
 }>()
 

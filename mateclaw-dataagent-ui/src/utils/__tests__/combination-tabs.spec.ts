@@ -136,6 +136,12 @@ describe('组合卡片 · 顶层组件移入', () => {
       visualStyle: { border: { mode: 'theme' }, shadow: 'medium' },
       dataSource: { datasourceId: 'ds-1', metrics: ['metric_a'], dimensions: ['channel'], filters: [], limit: 100 },
       multiKpi: true,
+      tabs: [{
+        id: 'tab-summary',
+        title: '概览',
+        dataSource: { datasourceId: '', metrics: [], dimensions: [], filters: [], limit: 100 },
+        titleIconStyle: { iconKey: 'trend-charts', colorMode: 'custom', color: '#aa5522', strokeWidth: 3 },
+      }],
       position: { x: 3, y: 8, w: 6, h: 4 },
     }
     const child = componentToCombinationChild(source, defaultCombinationChildLayout('kpi', 40, 60))
@@ -146,6 +152,9 @@ describe('组合卡片 · 顶层组件移入', () => {
     expect(child.visualStyle?.shadow).toBe('medium')
     expect(child.dataSource?.datasourceId).toBe('ds-1')
     expect(child.multiKpi).toBe(true)
+    expect(child.tabs?.[0]?.titleIconStyle).toEqual({
+      iconKey: 'trend-charts', colorMode: 'custom', color: '#aa5522', strokeWidth: 3,
+    })
     expect(child.layout).toEqual({ x: 40, y: 60, col: 6, h: 96 })
     expect((child as unknown as { position?: unknown }).position).toBeUndefined()
   })

@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
     <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
+      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
       <el-button
         v-if="!generating"
         type="primary"
@@ -47,7 +47,7 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightComponent, InsightComponentData, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 defineOptions({
@@ -62,6 +62,8 @@ const props = defineProps<{
   generating?: boolean
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   dashboardTheme?: ResolvedDashboardTheme
 }>()
 

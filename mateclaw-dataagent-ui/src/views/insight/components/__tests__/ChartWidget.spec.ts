@@ -79,6 +79,27 @@ describe('ChartWidget', () => {
     expect(tabs[1].attributes('tabindex')).toBe('0')
   })
 
+  it('offers a per-tab icon style action only in edit mode and emits the selected tab target', async () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component, editable: true },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    const trigger = wrapper.get('[aria-label="编辑页签图标 概览"]')
+    await trigger.trigger('click')
+    expect(wrapper.emitted('edit-tab-title-icon-style')?.[0]?.[0]).toMatchObject({
+      componentId: 'chart-1',
+      tabId: 'overview',
+      tabKind: 'component',
+    })
+
+    const viewWrapper = mount(ChartWidget, {
+      props: { component, editable: false },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+    expect(viewWrapper.find('[aria-label="编辑页签图标 概览"]').exists()).toBe(false)
+  })
+
   it('resets the active tab when tab definitions are replaced', async () => {
     const wrapper = mount(ChartWidget, {
       props: { component },

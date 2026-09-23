@@ -2,7 +2,7 @@
   <div class="data-table-widget">
     <div class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
-        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</div>
+        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">
@@ -27,7 +27,7 @@
     <!-- Tab 栏（多 Tab 模式） -->
     <div v-if="hasTabs" class="widget-tabs" role="tablist" aria-label="数据表分页">
       <div
-        v-for="tab in tabList"
+        v-for="(tab, tabIndex) in tabList"
         :key="tab.id"
         class="widget-tab"
         :class="{ active: activeTabId === tab.id }"
@@ -38,7 +38,15 @@
         @click="selectTab(tab.id)"
         @keydown="handleTabKeydown($event, tab.id)"
       >
-        {{ tab.title }}
+        <DashboardTabTitle
+          :title="tab.title"
+          :title-icon-style="tab.titleIconStyle"
+          :title-icon-style-preview="tabIconStylePreview(tab)"
+          :dashboard-theme="dashboardTheme"
+          :variant="tabIndex"
+          :editable="editable"
+          @edit="(anchor) => emit('edit-tab-title-icon-style', { componentId: component.id, tabId: tab.id, tabKind: 'component', anchor })"
+        />
       </div>
     </div>
     <div class="table-wrapper">
@@ -83,8 +91,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import DashboardTabTitle from './DashboardTabTitle.vue'
 
 defineOptions({
   name: 'DataTableWidget',
@@ -100,10 +109,17 @@ const props = withDefaults(defineProps<{
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
   dashboardTheme?: ResolvedDashboardTheme
-}>(), { showTitle: true })
+  /** 编辑态显示页签图标设置操作 */
+  editable?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
+  /** 正在编辑的页签图标样式即时预览 */
+  tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
+}>(), { showTitle: true, editable: false })
 
 const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
 /** 分页相关常量 */
@@ -120,6 +136,12 @@ const hasTabs = computed(() => {
 
 /** Tab 列表（从组件配置构建） */
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+function tabIconStylePreview(tab: ComponentTab) {
+  const preview = props.tabTitleIconStylePreview
+  return preview?.componentId === props.component.id && preview.tabId === tab.id
+    ? preview.titleIconStyle
+    : undefined
+}
 
 /** 当前激活的 Tab ID */
 const activeTabId = ref('')

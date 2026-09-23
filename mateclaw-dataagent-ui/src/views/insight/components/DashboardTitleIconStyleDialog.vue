@@ -2,23 +2,13 @@
   <el-dialog
     :model-value="modelValue"
     title="标题图标样式"
-    width="520px"
+    :width="width"
+    :top="top"
+    :style="{ marginLeft: left }"
+    :draggable="draggable"
     :close-on-click-modal="false"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="handleVisibilityChange"
   >
-    <div class="title-icon-preview">
-      <DashboardComponentIcon
-        :type="previewType"
-        :chart-type="chartType"
-        :title="title"
-        :dashboard-theme="dashboardTheme"
-        :title-icon-style="draft"
-        :size="20"
-      />
-      <span>{{ title || '组件标题' }}</span>
-      <span class="preview-caption">预览</span>
-    </div>
-
     <section class="icon-style-section" aria-labelledby="title-icon-choice-label">
       <div id="title-icon-choice-label" class="section-label">图标</div>
       <div class="icon-options" role="radiogroup" aria-label="选择标题图标">
@@ -50,22 +40,38 @@
       </div>
     </section>
 
-    <div class="style-controls">
-      <div class="control-field">
-        <label for="title-icon-stroke-width">图标粗细</label>
-        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="图标粗细" style="width: 100%">
+    <div class="style-controls style-controls-inline">
+      <div class="control-row">
+        <label class="control-label" for="title-icon-stroke-width">粗细</label>
+        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="粗细" style="width: 88px">
           <el-option :value="1.5" label="纤细" />
           <el-option :value="2" label="标准" />
           <el-option :value="2.5" label="加粗" />
           <el-option :value="3" label="粗体" />
         </el-select>
       </div>
-      <div class="control-field">
-        <span class="control-label">图标颜色</span>
-        <el-radio-group v-model="draft.colorMode" aria-label="图标颜色模式">
-          <el-radio value="theme">跟随主题</el-radio>
-          <el-radio value="custom">自定义</el-radio>
-        </el-radio-group>
+      <div class="control-row color-control-row">
+        <span class="control-label">颜色</span>
+        <div class="color-mode-options" role="radiogroup" aria-label="图标颜色模式">
+          <button
+            type="button"
+            class="color-mode-option"
+            :class="{ selected: draft.colorMode === 'theme' }"
+            role="radio"
+            :aria-checked="draft.colorMode === 'theme'"
+            aria-label="跟随主题颜色模式"
+            @click="draft.colorMode = 'theme'"
+          ><span class="color-mode-indicator" aria-hidden="true" />跟随主题</button>
+          <button
+            type="button"
+            class="color-mode-option"
+            :class="{ selected: draft.colorMode === 'custom' }"
+            role="radio"
+            :aria-checked="draft.colorMode === 'custom'"
+            aria-label="自定义颜色模式"
+            @click="draft.colorMode = 'custom'"
+          ><span class="color-mode-indicator" aria-hidden="true" />自定义</button>
+        </div>
         <el-color-picker
           v-if="draft.colorMode === 'custom'"
           v-model="draft.color"
@@ -77,7 +83,7 @@
 
     <template #footer>
       <el-button @click="reset">恢复默认</el-button>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
+      <el-button @click="cancel">取消</el-button>
       <el-button type="primary" @click="save">应用</el-button>
     </template>
   </el-dialog>
@@ -85,26 +91,28 @@
 
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
-import type { ChartType, ComponentTitleIconStyle, InsightComponentType, ResolvedDashboardTheme } from '@/types'
+import type { ComponentTitleIconStyle } from '@/types'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
-import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
   titleIconStyle?: ComponentTitleIconStyle
-  title?: string
-  previewType?: InsightComponentType
-  chartType?: ChartType
-  dashboardTheme?: ResolvedDashboardTheme
-}>(), { title: '', previewType: 'kpi' })
+  width?: string
+  top?: string
+  left?: string
+  draggable?: boolean
+}>(), { width: 'min(520px, calc(100vw - 32px))', top: '16px', left: '16px', draggable: true })
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void
   (event: 'save', style: ComponentTitleIconStyle): void
+  (event: 'preview', style: ComponentTitleIconStyle): void
 }>()
 
 const defaults = (): ComponentTitleIconStyle => ({ colorMode: 'theme', strokeWidth: 2 })
 const draft = reactive<ComponentTitleIconStyle>(defaults())
+
+watch(draft, (style) => emit('preview', { ...style }), { deep: true })
 
 watch(() => props.modelValue, (visible) => {
   if (visible) Object.assign(draft, defaults(), props.titleIconStyle ?? {})
@@ -118,26 +126,18 @@ function save(): void {
   emit('save', { ...draft })
   emit('update:modelValue', false)
 }
+
+function cancel(): void {
+  emit('update:modelValue', false)
+}
+
+function handleVisibilityChange(visible: boolean): void {
+  emit('update:modelValue', visible)
+}
 </script>
 
 <style scoped>
-.title-icon-preview {
-  display: flex;
-  align-items: center;
-  min-height: 52px;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  background: var(--el-fill-color-lighter);
-  color: var(--el-text-color-primary);
-}
-.preview-caption {
-  margin-left: auto;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-.icon-style-section { margin-top: 20px; }
+.icon-style-section { margin-top: 0; }
 .section-label, .control-label {
   display: block;
   margin-bottom: 8px;
@@ -174,22 +174,53 @@ function save(): void {
   color: var(--el-color-primary);
 }
 .icon-option:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
-.style-controls {
-  display: grid;
-  grid-template-columns: 1fr 1.3fr;
-  gap: 20px;
-  margin-top: 20px;
+.style-controls-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px 28px;
+  margin-top: 18px;
 }
-.control-field { min-width: 0; }
-.control-field > label {
-  display: block;
-  margin-bottom: 8px;
+.control-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+.control-label {
+  flex: 0 0 auto;
+  margin: 0;
   color: var(--el-text-color-regular);
   font-size: 13px;
+  font-weight: 600;
 }
-.control-field :deep(.el-radio-group) { display: flex; gap: 12px; margin-bottom: 10px; }
+.color-mode-options { display: inline-flex; align-items: center; gap: 12px; }
+.color-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--el-text-color-regular);
+  font: inherit;
+  cursor: pointer;
+}
+.color-mode-indicator {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 50%;
+  background: var(--el-bg-color);
+}
+.color-mode-option.selected { color: var(--el-color-primary); }
+.color-mode-option.selected .color-mode-indicator {
+  border: 4px solid var(--el-color-primary);
+}
+.color-mode-option:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 3px; border-radius: 4px; }
 @media (max-width: 560px) {
-  .style-controls { grid-template-columns: 1fr; gap: 14px; }
+  .style-controls-inline { align-items: flex-start; flex-direction: column; gap: 12px; }
   .icon-options { grid-template-columns: repeat(6, minmax(44px, 1fr)); }
 }
 </style>

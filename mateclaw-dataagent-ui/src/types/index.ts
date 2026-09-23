@@ -1374,6 +1374,8 @@ export interface InsightCombinationChild {
   chartType?: ChartType
   /** 组件扩展配置 */
   config?: Record<string, unknown>
+  /** 多 Tab 配置（子组件与顶层组件保持同一能力） */
+  tabs?: ComponentTab[]
   /** 数据绑定配置（v1 暂未接入取数，结构预留） */
   dataSource?: ComponentDataSource
   /** 嵌套组合卡片的子卡片 */
@@ -1414,6 +1416,8 @@ export interface CombinationTab {
   id: string
   /** 页签标题 */
   title: string
+  /** 页签标题图标样式；未配置时沿用主题自动图标 */
+  titleIconStyle?: ComponentTitleIconStyle
   /** 该页签下的子卡片 */
   children: InsightCombinationChild[]
 }
@@ -1563,8 +1567,17 @@ export interface ComponentTab {
   id: string
   /** Tab 标题 */
   title: string
+  /** 页签标题图标样式；未配置时沿用主题自动图标 */
+  titleIconStyle?: ComponentTitleIconStyle
   /** Tab 数据源配置 */
   dataSource: ComponentDataSource
+}
+
+/** 画布中正在编辑的单个页签图标样式预览。 */
+export interface DashboardTabTitleIconStylePreview {
+  componentId: string
+  tabId: string
+  titleIconStyle: ComponentTitleIconStyle
 }
 
 /** 仪表盘视角（顶层 Tab） */
