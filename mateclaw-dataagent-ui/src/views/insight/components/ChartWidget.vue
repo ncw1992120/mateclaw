@@ -160,8 +160,31 @@ const activeTabError = computed(() => {
 
 /** 当前生效的 option（Tab 模式取 activeTabOption，否则取主 option） */
 const effectiveOption = computed(() => {
-  if (hasTabs.value) return activeTabOption.value
-  return props.componentData?.option
+  const option = hasTabs.value ? activeTabOption.value : props.componentData?.option
+  const labels = props.componentData?.fieldLabels
+  if (!option || !labels || !Object.keys(labels).length) return option
+  const mapped = { ...option } as Record<string, unknown>
+  const label = (value: unknown) => typeof value === 'string' ? (labels[value] ?? value) : value
+  const mapAxis = (axis: unknown): unknown => Array.isArray(axis)
+    ? axis.map((item) => mapAxis(item))
+    : axis && typeof axis === 'object'
+      ? { ...(axis as Record<string, unknown>), ...(typeof (axis as Record<string, unknown>).name === 'string' ? { name: label((axis as Record<string, unknown>).name) } : {}) }
+      : axis
+  const series = mapped.series
+  if (Array.isArray(series)) {
+    mapped.series = series.map((item) => {
+      if (!item || typeof item !== 'object') return item
+      const entry = item as Record<string, unknown>
+      return typeof entry.name === 'string' ? { ...entry, name: label(entry.name) } : entry
+    })
+  }
+  if (mapped.legend && typeof mapped.legend === 'object') {
+    const legend = mapped.legend as Record<string, unknown>
+    mapped.legend = { ...legend, ...(Array.isArray(legend.data) ? { data: legend.data.map((item) => typeof item === 'string' ? label(item) : item && typeof item === 'object' && typeof (item as Record<string, unknown>).name === 'string' ? { ...(item as Record<string, unknown>), name: label((item as Record<string, unknown>).name) } : item) } : {}) }
+  }
+  if ('xAxis' in mapped) mapped.xAxis = mapAxis(mapped.xAxis)
+  if ('yAxis' in mapped) mapped.yAxis = mapAxis(mapped.yAxis)
+  return mapped
 })
 
 const hasOption = computed(() => !!effectiveOption.value)

@@ -43,8 +43,9 @@ export function kpiFieldsOf(component: InsightComponent): KpiProjectionField[] {
 export function toComponentData(
   component: InsightComponent,
   rows: Record<string, unknown>[],
+  fieldLabels?: Record<string, string>,
 ): InsightComponentData {
-  return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component))
+  return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component), fieldLabels)
 }
 
 /** 结果集行数据回读：脚本走执行结果，无脚本走数据集查询 */
@@ -88,10 +89,11 @@ function executionEnvelopeToComponentData(
     return {
       componentId: component.id,
       renderType,
+      fieldLabels: result.fieldLabels,
       ...(renderType === 'table' ? { table: { columns: result.columns.map((column) => column.name), rows: [] } } : {}),
     }
   }
-  if (renderType === 'echarts') return { componentId: component.id, renderType, option: result.option }
+  if (renderType === 'echarts') return { componentId: component.id, renderType, option: result.option, fieldLabels: result.fieldLabels }
   if (renderType === 'kpi') {
     const value = result.value
     const fieldKey = component.config?.valueField as string | undefined
@@ -100,9 +102,9 @@ function executionEnvelopeToComponentData(
       name: item.name,
       value: String(item.value),
     }))
-    return { componentId: component.id, renderType, kpi: kpiList[0], kpiList }
+    return { componentId: component.id, renderType, kpi: kpiList[0], kpiList, fieldLabels: result.fieldLabels }
   }
-  return { componentId: component.id, renderType, table: result.table }
+  return { componentId: component.id, renderType, table: result.table, fieldLabels: result.fieldLabels }
 }
 
 /**

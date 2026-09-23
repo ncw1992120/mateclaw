@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
 import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
@@ -192,6 +192,8 @@ export interface ResultSetState {
   source: 'dataset' | 'script'
   /** 结果集字段结构：指标配置的候选字段唯一来源 */
   columns: { name: string; type: string }[]
+  /** 脚本 envelope 提供的派生字段标题，仅作当前会话渲染元数据。 */
+  fieldLabels?: Record<string, string>
   /** 行数据（运行期内存态，不写入 Schema） */
   rows: Record<string, unknown>[]
   rowCount: number
@@ -320,6 +322,7 @@ const state = reactive({
     status: 'empty',
     source: 'dataset',
     columns: [],
+    fieldLabels: undefined,
     rows: [],
     rowCount: 0,
     generatedAt: '',
@@ -1032,14 +1035,25 @@ function closeQueryConfig(): void {
   state.ui.queryConfigDialog.visible = false
 }
 /** 保存查询配置到本地数据集状态（buildPipeline 时写入 datasetInputs[].queryConfig） */
-function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): void {
+function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string | null {
   const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
-  if (dataset) dataset.queryConfig = config
+  if (dataset) {
+    const titles = new Map(config.displayFields.map((field) => [field.field, field.title.trim()]))
+    const fields = dataset.fields.map((field) => titles.has(field.name)
+      ? { ...field, displayName: titles.get(field.name) || undefined }
+      : field)
+    const error = validateFieldMetas(fields)
+    if (error) return error
+    dataset.fields = fields
+    dataset.queryConfig = config
+    syncKpiMetricsFromFields()
+  }
   // 配置变化后系统区生成代码需要刷新（输入 schema 说明变化）
   if (state.pythonSystemState) {
     state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   }
+  return null
 }
 /** 当前绑定的筛选器组件 ID（Planner 据此校验绑定归属） */
 function boundFilterComponentIds(): string[] {
@@ -1551,7 +1565,13 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
           return { ok: false, message }
         }
         if (envelope.kind === 'table') {
-          commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
+          commitResultSet({
+            source: 'script',
+            rows: envelope.data.rows,
+            fieldLabels: Object.fromEntries(envelope.data.columns.filter((column) => column.title?.trim()).map((column) => [column.name, column.title.trim()])),
+            executionId,
+            elapsedMs: Date.now() - startedAt,
+          })
         } else if (envelope.kind === 'message') {
           commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
           state.resultSet.error = envelope.data.message
@@ -1782,6 +1802,7 @@ let autoResultSetTimer: ReturnType<typeof setTimeout> | null = null
 function resetResultSet(status: ResultSetStatus = 'empty'): void {
   state.resultSet.status = status
   state.resultSet.columns = []
+  state.resultSet.fieldLabels = undefined
   state.resultSet.rows = []
   state.resultSet.rowCount = 0
   state.resultSet.generatedAt = ''
@@ -1827,11 +1848,13 @@ export function scheduleResultSet(): void {
 function commitResultSet(payload: {
   source: 'dataset' | 'script'
   rows: Record<string, unknown>[]
+  fieldLabels?: Record<string, string>
   executionId?: string
   elapsedMs: number
 }): void {
   state.resultSet.source = payload.source
   state.resultSet.columns = rowsToColumns(payload.rows)
+  state.resultSet.fieldLabels = payload.fieldLabels
   state.resultSet.rows = payload.rows
   state.resultSet.rowCount = payload.rows.length
   state.resultSet.generatedAt = new Date().toISOString()
@@ -1846,6 +1869,7 @@ function failResultSet(source: 'dataset' | 'script', message: string): void {
   state.resultSet.source = source
   state.resultSet.error = message
   state.resultSet.columns = []
+  state.resultSet.fieldLabels = undefined
   state.resultSet.rows = []
   state.resultSet.rowCount = 0
   state.resultSet.status = 'failed'
@@ -1948,6 +1972,7 @@ export function hydrateResultSet(meta?: ComponentResultSet): void {
   state.resultSet.status = meta.status === 'failed' ? 'failed' : 'ready'
   state.resultSet.source = meta.source
   state.resultSet.columns = meta.columns ?? []
+  state.resultSet.fieldLabels = undefined
   state.resultSet.rows = []
   state.resultSet.rowCount = meta.rowCount ?? 0
   state.resultSet.generatedAt = meta.generatedAt ?? ''

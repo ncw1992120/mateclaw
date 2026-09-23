@@ -186,6 +186,8 @@ export interface EnvelopeComponentResult {
   message?: string
   rows: Record<string, unknown>[]
   columns: ScriptResultColumn[]
+  /** 脚本字段显式标题；应用展示时由字段注册表标签覆盖。 */
+  fieldLabels?: Record<string, string>
   /** table 组件数据 */
   table?: { columns: string[]; rows: string[][] }
   /** 图表 option（按组件配置的维度/指标映射生成） */
@@ -264,9 +266,12 @@ export function resultEnvelopeToComponentData(
   }
 
   const columns = envelope.data.columns as ScriptResultColumn[]
+  const fieldLabels = Object.fromEntries(
+    columns.filter((column) => column.title?.trim()).map((column) => [column.name, column.title.trim()]),
+  )
   const rows = envelope.data.rows
   if (rows.length === 0) {
-    return { state: 'empty', rows: [], columns }
+    return { state: 'empty', rows: [], columns, fieldLabels }
   }
 
   if (component.type === 'chart') {
@@ -287,7 +292,7 @@ export function resultEnvelopeToComponentData(
         series.min = 0
         series.max = Math.ceil(max * 1.2)
       }
-      return { state: 'data', rows, columns, option: { tooltip: { trigger: 'item' }, series: [series] } }
+      return { state: 'data', rows, columns, fieldLabels, option: { tooltip: { trigger: 'item' }, series: [series] } }
     }
 
     const config = component.config ?? {}
@@ -300,6 +305,7 @@ export function resultEnvelopeToComponentData(
       state: 'data',
       rows,
       columns,
+      fieldLabels,
       option: {
         tooltip: { trigger: 'axis' },
         xAxis: { type: 'category', data: rows.map((row) => String(row[dimensionField] ?? '')) },
@@ -323,7 +329,7 @@ export function resultEnvelopeToComponentData(
     } else {
       value = (last[columns[0]?.name] ?? '') as string | number | boolean
     }
-    return { state: 'data', rows, columns, value, kpiList: [{ name: String(config.valueField || columns[0]?.name || '值'), value }] }
+    return { state: 'data', rows, columns, fieldLabels, value, kpiList: [{ name: String(config.valueField || columns[0]?.name || '值'), value }] }
   }
 
   // table：按列顺序输出字符串化表格（与既有 DataTableWidget 渲染契约一致）
@@ -332,6 +338,7 @@ export function resultEnvelopeToComponentData(
     state: 'data',
     rows,
     columns,
+    fieldLabels,
     table: { columns: names, rows: rows.map((row) => names.map((name) => formatCell(row[name]))) },
   }
 }

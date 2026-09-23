@@ -1924,6 +1924,8 @@ export interface InsightComponentData {
   componentId: string
   /** 渲染类型：echarts / kpi / table / aiAnalysis */
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
+  /** 字段技术名到展示名的渲染元数据；不参与查询、排序或数据映射。 */
+  fieldLabels?: Record<string, string>
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
@@ -1952,6 +1954,8 @@ export interface InsightComponentData {
 export interface ComponentTabData {
   /** Tab 标题 */
   title: string
+  /** 字段技术名到展示名的渲染元数据。 */
+  fieldLabels?: Record<string, string>
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
