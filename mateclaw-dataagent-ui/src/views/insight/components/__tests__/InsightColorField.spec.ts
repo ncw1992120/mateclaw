@@ -60,10 +60,36 @@ describe('InsightColorField', () => {
     expect(store.recordColor).not.toHaveBeenCalled()
     await input.trigger('keydown', { key: 'Enter' })
     expect(store.recordColor).toHaveBeenLastCalledWith('#AABBCC')
+    expect(store.recordColor).toHaveBeenCalledTimes(1)
+    await input.trigger('blur')
+    expect(store.recordColor).toHaveBeenCalledTimes(1)
 
     await input.setValue('#123abc')
     await input.trigger('blur')
     expect(store.recordColor).toHaveBeenLastCalledWith('#123ABC')
+    expect(store.recordColor).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not record the initial color when Enter or blur occurs without an edit', async () => {
+    const wrapper = mountField('#123456')
+    const input = wrapper.get('input')
+
+    await input.trigger('keydown', { key: 'Enter' })
+    await input.trigger('blur')
+
+    expect(store.recordColor).not.toHaveBeenCalled()
+  })
+
+  it('keeps a valid edit pending when the parent reflects its normalized model value', async () => {
+    const wrapper = mountField()
+    const input = wrapper.get('input')
+
+    await input.setValue('#abc')
+    await wrapper.setProps({ modelValue: '#AABBCC' })
+    await input.trigger('blur')
+
+    expect(store.recordColor).toHaveBeenCalledTimes(1)
+    expect(store.recordColor).toHaveBeenLastCalledWith('#AABBCC')
   })
 
   it('commits and records a color picker selection immediately', async () => {

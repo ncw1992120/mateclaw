@@ -55,6 +55,7 @@ const emit = defineEmits<{
 
 const history = useInsightColorHistoryStore()
 const draft = ref(normalizeColor(props.modelValue) ?? props.modelValue)
+const hasUncommittedEdit = ref(false)
 const inputId = useId()
 const errorId = `${inputId}-error`
 
@@ -78,10 +79,13 @@ const predefinedColors = computed(() => {
 })
 
 watch(() => props.modelValue, (value) => {
+  const isLocalEditEcho = hasUncommittedEdit.value && normalizeColor(value) === normalizedDraft.value
   draft.value = normalizeColor(value) ?? value
+  if (!isLocalEditEcho) hasUncommittedEdit.value = false
 })
 
 function onInput(): void {
+  hasUncommittedEdit.value = true
   const color = normalizedDraft.value
   if (!color) return
   emit('update:modelValue', color)
@@ -89,14 +93,18 @@ function onInput(): void {
 }
 
 function commitDraft(): void {
+  if (!hasUncommittedEdit.value) return
   const color = normalizedDraft.value
-  if (color) history.recordColor(color)
+  if (!color) return
+  history.recordColor(color)
+  hasUncommittedEdit.value = false
 }
 
 function onPickerChange(value: string | null): void {
   const color = normalizeColor(value)
   if (!color) return
   draft.value = color
+  hasUncommittedEdit.value = false
   emit('update:modelValue', color)
   emit('change', color)
   history.recordColor(color)
