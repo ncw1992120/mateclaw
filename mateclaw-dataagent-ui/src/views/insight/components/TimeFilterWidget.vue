@@ -1,18 +1,19 @@
 <template>
     <div class="time-filter-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
-    <el-date-picker
-      v-model="customDateRange"
-      type="daterange"
-      size="small"
-      style="width: 100%"
-      value-format="YYYY-MM-DD"
-      unlink-panels
-      :shortcuts="dateShortcuts"
-      :start-placeholder="t('insight.timeRange.startPlaceholder')"
-      :end-placeholder="t('insight.timeRange.endPlaceholder')"
-      @change="handleDateChange"
-    />
+    <div class="time-filter-body">
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+      <el-date-picker
+        v-model="customDateRange"
+        type="daterange"
+        size="small"
+        value-format="YYYY-MM-DD"
+        unlink-panels
+        :shortcuts="dateShortcuts"
+        :start-placeholder="t('insight.timeRange.startPlaceholder')"
+        :end-placeholder="t('insight.timeRange.endPlaceholder')"
+        @change="handleDateChange"
+      />
+    </div>
   </div>
 </template>
 
@@ -116,42 +117,70 @@ function handleDateChange(dates: [string, string] | null): void {
 .time-filter-widget {
   width: 100%;
   height: 100%;
+  container-type: inline-size;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  align-items: center;
   padding: var(--space-md);
   box-sizing: border-box;
   background: var(--component-surface, var(--db-card));
   border-radius: var(--component-radius, var(--radius-lg));
 }
 
+/* 同筛选器：标题语义是表单标签，故左右排列。
+   日期范围控件本身天然更宽（两个日期 + 分隔 + 图标），
+   因此回退阈值比普通筛选器更高（380px）。 */
+.time-filter-body {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+}
+
 .time-filter-label {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--db-text-secondary);
+  white-space: nowrap;
 }
 
-.time-filter-widget :deep(.el-date-editor) {
-  width: 100%;
+.time-filter-body :deep(.el-date-editor) {
+  flex: 1 1 0%;
+  min-width: 0;
 }
 
-.time-filter-widget :deep(.el-input__wrapper) {
+@container (max-width: 380px) {
+  .time-filter-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-xs);
+  }
+
+  .time-filter-body :deep(.el-date-editor) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+.time-filter-body :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
   background: var(--db-hover);
   box-shadow: 0 0 0 1px var(--db-border) inset;
 }
 
-.time-filter-widget :deep(.el-input__inner) {
+.time-filter-body :deep(.el-input__inner) {
   color: var(--db-text);
 }
 
-.time-filter-widget :deep(.el-input__inner::placeholder) {
+.time-filter-body :deep(.el-input__inner::placeholder) {
   color: var(--db-text-muted);
 }
 
-.time-filter-widget :deep(.el-range-separator),
-.time-filter-widget :deep(.el-range__icon),
-.time-filter-widget :deep(.el-range__close-icon) {
+.time-filter-body :deep(.el-range-separator),
+.time-filter-body :deep(.el-range__icon),
+.time-filter-body :deep(.el-range__close-icon) {
   color: var(--db-text-secondary);
 }
 </style>

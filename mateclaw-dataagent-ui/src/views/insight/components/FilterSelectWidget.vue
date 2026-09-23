@@ -1,34 +1,35 @@
 <template>
   <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
-    <el-select
-      v-model="selectedValue"
-      :placeholder="t('insight.filterPlaceholder')"
-      :aria-label="component.title || t('insight.filterPlaceholder')"
-      :clearable="selectionBehavior.allowNoFilter"
-      filterable
-      :multiple="selectionBehavior.selectionMode === 'multiple'"
-      :collapse-tags="selectionBehavior.selectionMode === 'multiple'"
-      :remote="isDynamic"
-      :remote-method="handleRemoteSearch"
-      :loading="dynamicLoading"
-      size="small"
-      style="width: 100%"
-      @change="handleChange"
-      @visible-change="handleVisibleChange"
-    >
-      <el-option
-        v-if="selectionBehavior.allowSelectAll"
-        :label="t('insight.filterAllOption')"
-        :value="FILTER_ALL_VALUE"
-      />
-      <el-option
-        v-for="opt in resolvedOptions"
-        :key="opt.value"
-        :label="opt.label"
-        :value="opt.value"
-      />
-    </el-select>
+    <div class="filter-body">
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+      <el-select
+        v-model="selectedValue"
+        :placeholder="t('insight.filterPlaceholder')"
+        :aria-label="component.title || t('insight.filterPlaceholder')"
+        :clearable="selectionBehavior.allowNoFilter"
+        filterable
+        :multiple="selectionBehavior.selectionMode === 'multiple'"
+        :collapse-tags="selectionBehavior.selectionMode === 'multiple'"
+        :remote="isDynamic"
+        :remote-method="handleRemoteSearch"
+        :loading="dynamicLoading"
+        size="small"
+        @change="handleChange"
+        @visible-change="handleVisibleChange"
+      >
+        <el-option
+          v-if="selectionBehavior.allowSelectAll"
+          :label="t('insight.filterAllOption')"
+          :value="FILTER_ALL_VALUE"
+        />
+        <el-option
+          v-for="opt in resolvedOptions"
+          :key="opt.value"
+          :label="opt.label"
+          :value="opt.value"
+        />
+      </el-select>
+    </div>
   </div>
 </template>
 
@@ -148,42 +149,70 @@ function handleChange(value: string | string[]): void {
 .filter-select-widget {
   width: 100%;
   height: 100%;
+  /* 容器查询锚点：让下面的 @container 按组件自身宽度决策，而不依赖视口 */
+  container-type: inline-size;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-xs);
+  align-items: center;
   padding: var(--space-md);
   box-sizing: border-box;
   background: var(--component-surface, var(--db-card));
   border-radius: var(--component-radius, var(--radius-lg));
 }
 
+/* 筛选器的「标题」语义是表单标签而非卡片标题，故标签与控件左右排列；
+   宽度不足时（可由用户拖拽缩放产生）回退为上下，避免控件被压成一条缝。 */
+.filter-body {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-width: 0;
+}
+
 .filter-label {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--db-text-secondary);
+  white-space: nowrap;
 }
 
-.filter-select-widget :deep(.el-select) {
-  width: 100%;
+/* min-width:0 必写：否则 el-select 作为 flex item 不会收缩，会把容器撑破 */
+.filter-body :deep(.el-select) {
+  flex: 1 1 0%;
+  min-width: 0;
 }
 
-.filter-select-widget :deep(.el-input__wrapper) {
+@container (max-width: 240px) {
+  .filter-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-xs);
+  }
+
+  .filter-body :deep(.el-select) {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+.filter-body :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
   background: var(--db-hover);
   box-shadow: 0 0 0 1px var(--db-border) inset;
 }
 
-.filter-select-widget :deep(.el-input__inner) {
+.filter-body :deep(.el-input__inner) {
   color: var(--db-text);
 }
 
-.filter-select-widget :deep(.el-input__inner::placeholder) {
+.filter-body :deep(.el-input__inner::placeholder) {
   color: var(--db-text-muted);
 }
 
-.filter-select-widget :deep(.el-select__caret),
-.filter-select-widget :deep(.el-select__clear) {
+.filter-body :deep(.el-select__caret),
+.filter-body :deep(.el-select__clear) {
   color: var(--db-text-secondary);
 }
 </style>
