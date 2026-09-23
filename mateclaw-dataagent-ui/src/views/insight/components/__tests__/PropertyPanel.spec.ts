@@ -58,7 +58,7 @@ const stubs = {
   InsightColorField: {
     name: 'InsightColorField',
     props: ['modelValue', 'label', 'suggestedColors'],
-    template: '<input data-testid="insight-color-field" :aria-label="label" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
+    template: '<input data-testid="insight-color-field" :aria-label="label" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" @change="$emit(\'change\', $event.target.value)" />',
   },
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio': { template: '<label><slot /></label>' },
@@ -108,7 +108,7 @@ describe('PropertyPanel', () => {
     })
 
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
-    expect(fields).toHaveLength(2)
+    expect(fields).toHaveLength(3)
     const borderField = fields.find(field => field.attributes('aria-label') === '自定义边框颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
     expect(borderField.element.tagName).toBe('INPUT')
@@ -167,7 +167,7 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('select[aria-label="组件背景"]').exists()).toBe(true)
   })
 
-  it('exposes the title bar style presets and persists the selection', async () => {
+  it('将标题栏样式和组件配色统一放入样式设置，并移除标题栏强调色选项', async () => {
     const wrapper = mount(PropertyPanel, {
       props: { component, allComponents: [] },
       global: { stubs, plugins: [i18n] },
@@ -180,28 +180,17 @@ describe('PropertyPanel', () => {
       '隐藏标题栏',
       '标准卡片',
       '简洁文本',
-      '强调色',
       '分组标题',
     ])
 
-    await styleSelect.setValue('accent')
-    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ titleBarStyle: 'accent' })
-  })
+    const styleSettings = wrapper.get('.style-settings')
+    expect(styleSettings.find('select[aria-label="标题栏样式"]').exists()).toBe(true)
+    expect(styleSettings.find('[aria-label="组件配色"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="组件强调色"]').exists()).toBe(false)
 
-  it('allows data components to select one of the three restrained accent colors', async () => {
-    const wrapper = mount(PropertyPanel, {
-      props: { component, allComponents: [] },
-      global: { stubs, plugins: [i18n] },
-    })
-
-    const accentSelect = wrapper.get('select[aria-label="组件强调色"]')
-    expect(accentSelect.findAll('option').map(option => option.text())).toEqual([
-      '主色',
-      '辅助色',
-      '强调色',
-    ])
-    await accentSelect.setValue('highlight')
-    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ themeAccentGroup: 'highlight' })
+    const colorField = styleSettings.get('[aria-label="组件配色"]')
+    await colorField.setValue('#A1B2C3')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ componentColor: '#A1B2C3' })
   })
 
   it('所有组件共用样式设置，且不再暴露重复的标题开关', async () => {

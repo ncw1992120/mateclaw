@@ -189,6 +189,7 @@ export function componentThemeStyle(
   type: InsightComponentType,
   _depth = 0,
   accentGroup?: ComponentThemeAccentGroup,
+  componentColor?: string,
 ): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
   // 筛选控件始终中性，不随「统一主色」策略着色。
@@ -196,7 +197,7 @@ export function componentThemeStyle(
   const defaultGroup: ComponentThemeAccentGroup = theme.componentColorMode === 'uniform'
     ? 'primary'
     : componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'
-  const accent = componentAccentColor(theme, accentGroup ?? defaultGroup)
+  const accent = isHexColor(componentColor) ? componentColor : componentAccentColor(theme, accentGroup ?? defaultGroup)
   const hierarchyAmount = theme.hierarchy === 'soft' ? 4 : theme.hierarchy === 'strong' ? 12 : 7
   const mix = (foreground: string, background: string, amount: number): string => `color-mix(in srgb, ${foreground} ${amount}%, ${background})`
   return {
@@ -214,18 +215,25 @@ export function componentIconStyle(
   title?: string,
   _variant = 0,
   accentGroup?: ComponentThemeAccentGroup,
+  componentColor?: string,
 ): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
   const color = type === 'tab'
     ? theme.primary
     : componentThemeZone(type) === 'control'
       ? theme.textSecondary
-      : componentAccentColor(theme, accentGroup ?? (componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'))
+      : isHexColor(componentColor)
+        ? componentColor
+        : componentAccentColor(theme, accentGroup ?? (componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'))
   return {
     '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
     '--dashboard-icon-weight': '800',
     '--dashboard-icon-color': color,
   }
+}
+
+function isHexColor(value: string | undefined): value is string {
+  return typeof value === 'string' && /^#[\da-f]{6}$/i.test(value)
 }
 
 /** 标准语义图标注册表。返回 Element Plus 图标组件名，业务不配置图标名称。 */

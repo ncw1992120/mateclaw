@@ -95,11 +95,13 @@ describe('AttributePanel shared color field', () => {
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
     const card = insightFixture.value.activeCard.value
 
-    expect(fields).toHaveLength(2)
+    expect(fields).toHaveLength(3)
     const borderField = fields.find(field => field.attributes('aria-label') === '自定义边框颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
+    const componentColorField = fields.find(field => field.attributes('aria-label') === '组件配色')!
     expect(borderField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
+    expect(componentColorField.attributes('data-suggested-colors')).toBeTruthy()
 
     await backgroundField.setValue('#AABBCC')
     expect(card.visualStyle.background).toEqual({ mode: 'custom', color: '#AABBCC' })
@@ -114,6 +116,6 @@ describe('AttributePanel shared color field', () => {
     expect(card.visualStyle.background.mode).toBe('transparent')
     await wrapper.get('select[aria-label="组件边框"]').setValue('theme')
     expect(card.visualStyle.border.mode).toBe('theme')
-    expect(wrapper.find('[data-testid="insight-color-field"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="insight-color-field"]').exists()).toBe(true)
   })
 })

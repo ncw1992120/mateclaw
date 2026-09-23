@@ -1248,6 +1248,8 @@ export interface InsightComponent {
   titleIconStyle?: ComponentTitleIconStyle
   /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
   themeAccentGroup?: ComponentThemeAccentGroup
+  /** 组件自定义配色；未配置时沿用仪表盘主题颜色。 */
+  componentColor?: string
   /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 栅格位置 */
@@ -1372,6 +1374,8 @@ export interface InsightCombinationChild {
   titleIconStyle?: ComponentTitleIconStyle
   /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
   themeAccentGroup?: ComponentThemeAccentGroup
+  /** 子卡片自定义配色；未配置时沿用仪表盘主题颜色。 */
+  componentColor?: string
   /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 图表子类型（仅 chart） */
