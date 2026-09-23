@@ -1,4 +1,7 @@
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { compileStyle, parse } from '@vue/compiler-sfc'
 import { createI18n } from 'vue-i18n'
 import { nextTick } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
@@ -96,6 +99,47 @@ describe('DashboardCanvas keyboard interaction', () => {
     await zoomInput.trigger('keydown.enter')
     expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom: 0.75')
     expect((zoomInput.element as HTMLInputElement).value).toBe('75')
+  })
+
+  it('hides the canvas zoom toolbar while a modal overlay is open, then restores it', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+      attachTo: document.body,
+    })
+    const toolbar = wrapper.get('.canvas-zoom-toolbar').element as HTMLElement
+    const overlay = document.createElement('div')
+    overlay.className = 'el-overlay'
+    const source = readFileSync(resolve(process.cwd(), 'src/views/insight/components/DashboardCanvas.vue'), 'utf8')
+    const { descriptor, errors } = parse(source, { filename: 'DashboardCanvas.vue' })
+    expect(errors).toHaveLength(0)
+    const scopeId = [...toolbar.attributes].find((attribute) => attribute.name.startsWith('data-v-'))?.name
+    expect(scopeId).toBeTruthy()
+    const compiledStyle = compileStyle({
+      source: descriptor.styles[0].content,
+      filename: 'DashboardCanvas.vue',
+      id: scopeId!,
+      scoped: descriptor.styles[0].scoped,
+    })
+    expect(compiledStyle.errors).toHaveLength(0)
+    const style = document.createElement('style')
+    style.textContent = compiledStyle.code
+    document.head.append(style)
+
+    try {
+      expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
+      document.body.append(overlay)
+      await nextTick()
+      expect(window.getComputedStyle(toolbar).visibility).toBe('hidden')
+
+      overlay.remove()
+      await nextTick()
+      expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
+    } finally {
+      overlay.remove()
+      style.remove()
+      wrapper.unmount()
+    }
   })
 
   it('hides the duplicate table title in the editable canvas', () => {
