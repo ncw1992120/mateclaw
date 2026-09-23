@@ -11,7 +11,8 @@
     <FileConfigDialog />
     <FieldMappingDialog />
     <PythonScriptDialog />
-    <PreviewDialog />
+    <PreviewDialog v-if="state.ui.preview.kind !== 'result'" />
+    <PythonResultDataDialog v-else />
     <MetricConfigDialog />
     <MetricStyleDialog />
   </div>
@@ -34,6 +35,7 @@ import FileConfigDialog from './dataset/FileConfigDialog.vue'
 import FieldMappingDialog from './FieldMappingDialog.vue'
 import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
+import PythonResultDataDialog from './PythonResultDataDialog.vue'
 import MetricConfigDialog from './MetricConfigDialog.vue'
 import MetricStyleDialog from './MetricStyleDialog.vue'
 import { useComponentPropertyDraft } from '../property/useComponentPropertyDraft'

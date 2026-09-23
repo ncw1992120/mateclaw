@@ -1,0 +1,248 @@
+<template>
+  <el-dialog
+    :model-value="modelValue"
+    class="insight-dialog--lg"
+    title="查询配置"
+    width="860px"
+    destroy-on-close
+    :close-on-click-modal="false"
+    aria-label="Python 最终结果查询配置"
+    @update:model-value="emit('update:modelValue', $event)"
+  >
+    <div class="qc-body">
+      <div class="qc-section">
+        <div class="qc-section-head">
+          <button type="button" class="qc-collapsible qc-expand-toggle" :aria-expanded="fieldsExpanded" aria-controls="python-qc-field-table" @click.stop="fieldsExpanded = !fieldsExpanded">
+            <span class="qc-chevron" :class="{ 'is-collapsed': !fieldsExpanded }">›</span>
+          </button>
+          <span class="qc-section-title qc-section-title-grow">展示字段</span>
+          <span class="qc-hint">角色可点击切换；拖动行调整列顺序；删除字段不会修改 Python 输出</span>
+        </div>
+        <div v-show="fieldsExpanded" id="python-qc-field-table" class="qc-field-wrap">
+          <div class="qc-field-table" data-testid="python-qc-field-rows" role="table" aria-label="展示字段">
+            <div class="qc-thead">
+              <span class="qc-th qc-th-field">字段名</span>
+              <span class="qc-th qc-th-title">展示名</span>
+              <span class="qc-th qc-th-op" />
+            </div>
+            <div v-for="(row, index) in fieldRows" :key="row.field" class="qc-field-row" data-testid="python-qc-field-row" draggable="true" @dragstart="onDragStart(index)" @dragover.prevent @drop="onDrop(index)">
+              <div class="qc-field-cell qc-field-name-cell">
+                <el-tag :type="row.role === 'measure' ? 'warning' : 'info'" size="small" class="qc-role-tag" title="点击切换维度 / 指标" @click.stop="toggleRole(row)">
+                  {{ row.role === 'measure' ? '指标' : '维度' }}
+                </el-tag>
+                <span class="qc-tech-field" :title="row.field">{{ row.field }}</span>
+              </div>
+              <div class="qc-field-cell qc-field-title-cell">
+                <el-input v-model="row.title" class="qc-title-input" size="small" placeholder="展示名" data-testid="python-qc-title-input" />
+                <span v-if="duplicateTitles.has(row.title.trim())" class="qc-error">展示名重复</span>
+              </div>
+              <el-button class="qc-remove" size="small" text type="danger" data-testid="python-qc-field-remove" @click.stop="removeField(index)">×</el-button>
+            </div>
+            <div v-if="!fieldRows.length" class="qc-empty" data-testid="python-qc-fields-empty">Python 生成结果字段后，可在此选择展示字段</div>
+          </div>
+          <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="+ 添加字段" filterable @change="addField">
+            <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
+          </el-select>
+        </div>
+      </div>
+
+      <div class="qc-section">
+        <div class="qc-section-head">
+          <span class="qc-section-title">筛选字段</span>
+          <el-button size="small" type="primary" plain data-testid="python-qc-add-filter" @click="addFilterField">+ 添加筛选字段</el-button>
+        </div>
+        <div v-if="filterRows.length" class="qc-binding-table">
+          <div class="qc-thead qc-binding-thead">
+            <span class="qc-th qc-th-filter">字段名</span>
+            <span class="qc-th qc-th-target">参数名</span>
+            <span class="qc-th qc-th-op" />
+          </div>
+          <div v-for="(row, index) in filterRows" :key="row.field" class="qc-binding-row" data-testid="python-qc-filter-row">
+            <span class="qc-tech-field">{{ row.title }}（{{ row.field }}）</span>
+            <el-input v-model="row.parameterName" size="small" placeholder="参数名" />
+            <el-button size="small" text type="danger" data-testid="python-qc-filter-remove" @click="filterRows.splice(index, 1)">删除</el-button>
+          </div>
+        </div>
+        <div v-else class="qc-empty">暂无筛选字段；查看数据时不会产生筛选条件</div>
+      </div>
+
+      <div class="qc-section">
+        <div class="qc-section-head">
+          <span class="qc-section-title">允许排序</span>
+          <el-switch v-model="sortEnabled" data-testid="python-qc-sort-enabled" />
+        </div>
+        <el-select v-if="sortEnabled" v-model="sortAllowed" multiple class="qc-sort-select" placeholder="选择允许排序的字段" data-testid="python-qc-sort-fields">
+          <el-option v-for="row in fieldRows" :key="row.field" :label="`${row.field} · ${row.title}`" :value="row.field" />
+        </el-select>
+      </div>
+
+      <div class="qc-section">
+        <div class="qc-section-head">
+          <span class="qc-section-title">分页</span>
+          <el-switch v-model="paginationEnabled" data-testid="python-qc-pagination-enabled" />
+        </div>
+        <div v-if="paginationEnabled" class="qc-pagination-row">
+          <span class="qc-hint">默认每页</span>
+          <el-input-number v-model="defaultPageSize" :min="1" :max="maxPageSize" size="small" controls-position="right" data-testid="python-qc-default-page-size" />
+          <span class="qc-hint">最大每页</span>
+          <el-input-number v-model="maxPageSize" :min="1" :max="500" size="small" controls-position="right" data-testid="python-qc-max-page-size" />
+          <el-checkbox v-model="returnTotalCount" data-testid="python-qc-return-total">返回总数</el-checkbox>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <el-button @click="emit('update:modelValue', false)">取消</el-button>
+      <el-button type="primary" data-testid="python-qc-save" @click="save">确认</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { FinalResultFilterField, FinalResultQueryConfig, QueryDisplayField } from '@/types'
+
+const props = defineProps<{
+  modelValue: boolean
+  config: FinalResultQueryConfig
+  fieldCatalog: QueryDisplayField[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: boolean): void
+  (e: 'save', config: FinalResultQueryConfig): void
+}>()
+
+const fieldRows = ref<QueryDisplayField[]>([])
+const filterRows = ref<FinalResultFilterField[]>([])
+const sortEnabled = ref(false)
+const sortAllowed = ref<string[]>([])
+const paginationEnabled = ref(false)
+const defaultPageSize = ref(100)
+const maxPageSize = ref(500)
+const returnTotalCount = ref(false)
+const dragIndex = ref<number | null>(null)
+const fieldsExpanded = ref(true)
+
+const duplicateTitles = computed(() => {
+  const seen = new Set<string>()
+  const duplicates = new Set<string>()
+  fieldRows.value.forEach((row) => {
+    const title = row.title.trim()
+    if (!title) return
+    if (seen.has(title)) duplicates.add(title)
+    seen.add(title)
+  })
+  return duplicates
+})
+
+const addableFields = computed(() => props.fieldCatalog.filter((field) => !fieldRows.value.some((row) => row.field === field.field)))
+
+function fieldOptionLabel(field: QueryDisplayField): string {
+  return field.title && field.title !== field.field ? `${field.field} · ${field.title}` : field.field
+}
+
+function cloneConfig(config: FinalResultQueryConfig): void {
+  fieldRows.value = config.displayFields.map((field) => ({ ...field }))
+  filterRows.value = config.filterFields.map((field) => ({ ...field }))
+  sortEnabled.value = config.sortPolicy.enabled
+  sortAllowed.value = [...config.sortPolicy.allowedFields]
+  paginationEnabled.value = config.paginationPolicy.enabled
+  defaultPageSize.value = config.paginationPolicy.defaultPageSize
+  maxPageSize.value = config.paginationPolicy.maxPageSize
+  returnTotalCount.value = config.paginationPolicy.returnTotalCount
+}
+
+watch(() => props.modelValue, (visible) => {
+  if (visible) {
+    fieldsExpanded.value = true
+    cloneConfig(props.config)
+  }
+}, { immediate: true })
+
+function addField(fieldName: string): void {
+  const field = props.fieldCatalog.find((item) => item.field === fieldName)
+  if (field) fieldRows.value.push({ ...field })
+}
+
+function addFilterField(): void {
+  const field = props.fieldCatalog.find((item) => !filterRows.value.some((row) => row.field === item.field))
+  if (!field) return
+  filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'] })
+}
+
+function toggleRole(row: QueryDisplayField): void {
+  row.role = row.role === 'measure' ? 'dimension' : 'measure'
+}
+
+function removeField(index: number): void {
+  const field = fieldRows.value[index]?.field
+  fieldRows.value.splice(index, 1)
+  sortAllowed.value = sortAllowed.value.filter((item) => item !== field)
+}
+
+function onDragStart(index: number): void { dragIndex.value = index }
+function onDrop(index: number): void {
+  const from = dragIndex.value
+  dragIndex.value = null
+  if (from === null || from === index) return
+  const [moved] = fieldRows.value.splice(from, 1)
+  fieldRows.value.splice(index, 0, moved)
+}
+
+function save(): void {
+  if (duplicateTitles.value.size) {
+    ElMessage.warning('展示名必须唯一')
+    return
+  }
+  if (sortEnabled.value && !sortAllowed.value.length) {
+    ElMessage.warning('开启排序后至少选择一个允许排序的字段')
+    return
+  }
+  emit('save', {
+    schemaFingerprint: props.config.schemaFingerprint,
+    confirmed: false,
+    displayFields: fieldRows.value.map((field) => ({ ...field })),
+    filterFields: filterRows.value.map((field) => ({ ...field })),
+    sortPolicy: { ...props.config.sortPolicy, enabled: sortEnabled.value, allowedFields: [...sortAllowed.value], defaultSort: sortAllowed.value[0] ? { field: sortAllowed.value[0], direction: 'asc' } : null },
+    paginationPolicy: { ...props.config.paginationPolicy, enabled: paginationEnabled.value, defaultPageSize: defaultPageSize.value, maxPageSize: Math.min(maxPageSize.value, 500), returnTotalCount: returnTotalCount.value },
+  })
+  emit('update:modelValue', false)
+}
+</script>
+
+<style scoped>
+.qc-body { display: flex; flex-direction: column; gap: 18px; max-height: 62vh; overflow: auto; padding-right: 4px; }
+.qc-section { border: 1px solid var(--db-border); border-radius: var(--radius-md); padding: 12px; background: #fff; }
+.qc-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.qc-section-title { font-weight: 600; font-size: 13px; color: var(--db-text); }
+.qc-hint { font-size: 12px; color: var(--db-text-muted); }
+.qc-expand-toggle { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--db-text-muted); cursor: pointer; }
+.qc-expand-toggle:hover { background: var(--db-muted); color: var(--db-text); }
+.qc-chevron { display: inline-block; transition: transform 0.15s ease; font-size: 20px; line-height: 1; }
+.qc-chevron.is-collapsed { transform: rotate(-90deg); }
+.qc-section-title-grow { margin-right: auto; margin-left: 4px; }
+.qc-field-wrap { margin-top: 2px; background: #fff; }
+.qc-field-table { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--db-border); border-radius: var(--radius-sm); background: #fff; }
+.qc-thead, .qc-field-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 28px; align-items: center; column-gap: 12px; }
+.qc-thead { min-height: 34px; padding: 0 10px; border-bottom: 1px solid var(--db-border); font-size: 12px; color: var(--db-text-muted); font-weight: 600; background: #fff; }
+.qc-th-op { width: 28px; }
+.qc-field-row { min-height: 46px; padding: 6px 10px; border-bottom: 1px solid var(--db-border); background: #fff; cursor: grab; }
+.qc-field-row:last-of-type { border-bottom: 0; }
+.qc-field-cell { display: flex; align-items: center; min-width: 0; }
+.qc-field-name-cell { gap: 8px; }
+.qc-field-title-cell { gap: 8px; }
+.qc-role-tag { flex-shrink: 0; cursor: pointer; user-select: none; }
+.qc-tech-field { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--db-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qc-title-input { flex: 1; min-width: 0; }
+.qc-error { color: var(--el-color-danger); font-size: 12px; flex-shrink: 0; }
+.qc-remove { flex-shrink: 0; }
+.qc-add-field { width: 220px; margin-top: 4px; }
+.qc-binding-table { display: flex; flex-direction: column; }
+.qc-binding-thead { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; padding: 0 2px 6px; }
+.qc-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: center; gap: 8px; margin-bottom: 8px; }
+.qc-sort-select { width: 100%; }
+.qc-pagination-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.qc-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
+</style>
