@@ -9,101 +9,155 @@
         style="margin-bottom: 12px"
       />
       <template v-else>
-        <div class="directory-toolbar">
-          <el-radio-group v-model="directoryMode" size="small" @change="onDirectoryModeChange">
-            <el-radio-button label="metrics">指标</el-radio-button>
-            <el-radio-button label="dimensions">维度</el-radio-button>
-          </el-radio-group>
-          <el-input
-            v-model="directoryKeyword"
-            class="directory-search"
-            :placeholder="directoryMode === 'metrics' ? '搜索指标展示名或指标字段名称' : '搜索维度展示名或维度字段名称'"
-            clearable
-            @input="onDirectoryKeywordInput"
-          />
-          <span class="count">已选 指标 {{ ui.aloudata.metrics.length }} · 维度 {{ ui.aloudata.dims.length }}</span>
-        </div>
-
-        <div class="directory-layout">
-          <aside class="directory-categories" aria-label="Aloudata 指标目录">
-            <el-tree
-              v-if="directoryMode === 'metrics'"
-              :data="filteredMetricTree"
-              :props="metricTreeProps"
-              node-key="categoryId"
-              highlight-current
-              :default-expanded-keys="expandedMetricCategoryKeys"
-              :expand-on-click-node="false"
-              @node-click="onMetricCategorySelect"
+        <div class="selection-fields">
+          <div class="selection-row">
+            <span class="selection-label">指标</span>
+            <el-popover
+              v-model:visible="metricPickerVisible"
+              trigger="click"
+              placement="bottom-start"
+              :width="760"
+              popper-class="aloudata-picker-popper"
+              @show="onMetricPickerShow"
             >
-              <template #default="{ data }">
-                <span class="category-node"><span>{{ data.categoryName }}</span><span class="category-count">{{ data.metricList?.length || '' }}</span></span>
+              <template #reference>
+                <div class="selection-box metric-selection-box" role="button" tabindex="0" aria-haspopup="dialog">
+                  <el-tag
+                    v-for="name in ui.aloudata.metrics"
+                    :key="name"
+                    closable
+                    size="small"
+                    @close.stop="removeSelection('metrics', name)"
+                  >{{ metricLabel(name) }}</el-tag>
+                  <span v-if="!ui.aloudata.metrics.length" class="selection-placeholder">点击选择指标</span>
+                </div>
               </template>
-            </el-tree>
-            <el-tree
-              v-else
-              :data="dimensionCategoryTree"
-              :props="dimensionTreeProps"
-              node-key="categoryId"
-              highlight-current
-              :default-expanded-keys="['__all_dimensions__']"
-              :expand-on-click-node="false"
-              @node-click="onDimensionCategorySelect"
+              <div class="picker-panel metric-picker-popup" @click.stop>
+                <div class="picker-toolbar">
+                  <el-input
+                    v-model="metricKeyword"
+                    placeholder="搜索指标展示名或字段名称"
+                    clearable
+                    @input="onMetricKeywordInput"
+                  />
+                  <span>{{ metricPage.total }} 个指标</span>
+                </div>
+                <div class="directory-layout">
+                  <aside class="directory-categories" aria-label="指标目录">
+                    <el-tree
+                      :data="filteredMetricCategories"
+                      :props="categoryTreeProps"
+                      node-key="categoryId"
+                      highlight-current
+                      :default-expanded-keys="expandedMetricCategoryKeys"
+                      :expand-on-click-node="false"
+                      @node-click="onMetricCategorySelect"
+                    />
+                    <div v-if="!metricCategories.length" class="directory-empty">暂无指标目录</div>
+                  </aside>
+                  <section class="directory-results" v-loading="metricsLoading">
+                    <label v-for="item in metricPage.records" :key="item.metricName" class="directory-item">
+                      <el-checkbox
+                        :model-value="ui.aloudata.metrics.includes(item.metricName)"
+                        :label="item.metricName"
+                        @change="(checked: boolean) => toggleSelection('metrics', item.metricName, checked)"
+                      />
+                      <span class="directory-item-info">
+                        <span class="directory-item-title">{{ item.metricDisplayName || item.metricName }}</span>
+                        <span class="directory-item-code">{{ item.metricName }}</span>
+                      </span>
+                    </label>
+                    <div v-if="!metricsLoading && !metricPage.records.length" class="directory-empty">没有匹配的指标</div>
+                    <el-pagination
+                      v-if="metricPage.total > pageSize"
+                      class="pager"
+                      layout="prev, pager, next, total"
+                      :total="metricPage.total"
+                      :page-size="pageSize"
+                      :current-page="metricPage.current"
+                      @current-change="onMetricPageChange"
+                      small
+                    />
+                  </section>
+                </div>
+              </div>
+            </el-popover>
+          </div>
+
+          <div class="selection-row">
+            <span class="selection-label">维度</span>
+            <el-popover
+              v-model:visible="dimensionPickerVisible"
+              trigger="click"
+              placement="bottom-start"
+              :width="760"
+              popper-class="aloudata-picker-popper"
+              @show="onDimensionPickerShow"
             >
-              <template #default="{ data }">
-                <span class="category-node"><span>{{ data.categoryName }}</span></span>
+              <template #reference>
+                <div class="selection-box dimension-selection-box" role="button" tabindex="0" aria-haspopup="dialog">
+                  <el-tag
+                    v-for="name in ui.aloudata.dims"
+                    :key="name"
+                    closable
+                    size="small"
+                    type="info"
+                    @close.stop="removeSelection('dimensions', name)"
+                  >{{ dimLabel(name) }}</el-tag>
+                  <span v-if="!ui.aloudata.dims.length" class="selection-placeholder">点击选择维度</span>
+                </div>
               </template>
-            </el-tree>
-            <div v-if="directoryMode === 'metrics' && !metricTreeLoading && !filteredMetricTree.length" class="directory-empty">没有匹配的指标目录</div>
-          </aside>
-
-          <section class="directory-results" v-loading="directoryMode === 'metrics' ? metricTreeLoading : dimsLoading">
-            <template v-if="directoryMode === 'metrics'">
-              <div v-if="visibleMetrics.length" class="directory-item-list">
-                <label v-for="item in visibleMetrics" :key="item.metricName" class="directory-item">
-                  <el-checkbox v-model="ui.aloudata.metrics" :label="item.metricName" />
-                  <span class="directory-item-info">
-                    <span class="directory-item-title">{{ item.metricDisplayName || item.metricName }}</span>
-                    <span class="directory-item-code">{{ item.metricName }}<template v-if="item.categoryPath"> · {{ item.categoryPath }}</template></span>
-                  </span>
-                </label>
+              <div class="picker-panel dimension-picker-popup" @click.stop>
+                <div class="picker-toolbar">
+                  <el-input
+                    v-model="dimensionKeyword"
+                    placeholder="搜索维度展示名或字段名称"
+                    clearable
+                    @input="onDimensionKeywordInput"
+                  />
+                  <span>{{ dimensionPage.total }} 个维度</span>
+                </div>
+                <div class="directory-layout">
+                  <aside class="directory-categories" aria-label="维度目录">
+                    <el-tree
+                      :data="filteredDimensionCategories"
+                      :props="categoryTreeProps"
+                      node-key="categoryId"
+                      highlight-current
+                      :default-expanded-keys="['__all_dimensions__']"
+                      :expand-on-click-node="false"
+                      @node-click="onDimensionCategorySelect"
+                    />
+                    <div v-if="!dimensionCategories.length" class="directory-empty">暂无维度目录</div>
+                  </aside>
+                  <section class="directory-results" v-loading="dimensionsLoading">
+                    <label v-for="item in dimensionPage.records" :key="item.dimName" class="directory-item">
+                      <el-checkbox
+                        :model-value="ui.aloudata.dims.includes(item.dimName)"
+                        :label="item.dimName"
+                        @change="(checked: boolean) => toggleSelection('dimensions', item.dimName, checked)"
+                      />
+                      <span class="directory-item-info">
+                        <span class="directory-item-title">{{ item.dimDisplayName || item.dimName }}</span>
+                        <span class="directory-item-code">{{ item.dimName }}</span>
+                      </span>
+                    </label>
+                    <div v-if="!dimensionsLoading && !dimensionPage.records.length" class="directory-empty">没有匹配的维度</div>
+                    <el-pagination
+                      v-if="dimensionPage.total > pageSize"
+                      class="pager"
+                      layout="prev, pager, next, total"
+                      :total="dimensionPage.total"
+                      :page-size="pageSize"
+                      :current-page="dimensionPage.current"
+                      @current-change="onDimensionPageChange"
+                      small
+                    />
+                  </section>
+                </div>
               </div>
-              <div v-else-if="!metricTreeLoading" class="directory-empty">该目录下暂无指标</div>
-            </template>
-            <template v-else>
-              <div v-if="dimPage.records.length" class="directory-item-list">
-                <label v-for="item in dimPage.records" :key="item.dimName" class="directory-item">
-                  <el-checkbox v-model="ui.aloudata.dims" :label="item.dimName" />
-                  <span class="directory-item-info">
-                    <span class="directory-item-title">{{ item.dimDisplayName || item.dimName }}</span>
-                    <span class="directory-item-code">{{ item.dimName }}</span>
-                  </span>
-                </label>
-              </div>
-              <div v-else-if="!dimsLoading" class="directory-empty">该目录下没有匹配的维度</div>
-              <el-pagination
-                v-if="dimPage.total > pageSize"
-                class="pager"
-                layout="prev, pager, next, total"
-                :total="dimPage.total"
-                :page-size="pageSize"
-                :current-page="dimPage.current"
-                @current-change="onDimPageChange"
-                small
-              />
-            </template>
-          </section>
-        </div>
-
-        <div class="selected-summary">
-          <span class="selected-summary-label">已选</span>
-          <el-tag v-for="name in ui.aloudata.metrics" :key="`m-${name}`" closable size="small" @close="removeSelection('metrics', name)">
-            {{ metricLabel(name) }}
-          </el-tag>
-          <el-tag v-for="name in ui.aloudata.dims" :key="`d-${name}`" closable size="small" type="info" @close="removeSelection('dimensions', name)">
-            {{ dimLabel(name) }}
-          </el-tag>
-          <span v-if="!ui.aloudata.metrics.length && !ui.aloudata.dims.length" class="selected-placeholder">尚未选择</span>
+            </el-popover>
+          </div>
         </div>
       </template>
     </template>
@@ -146,22 +200,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as datasourceApi from '@/api/datasource'
 import {
-  getAloudataMetricDirectory,
+  pageAloudataMetrics,
   pageAloudataDimensions,
   listAloudataCategoryCounts,
 } from '@/api/semantic-model'
-import type { AloudataMetricDirectoryNode } from '@/api/semantic-model'
 import type {
+  AloudataMetricPage,
   AloudataDimensionPage,
   AloudataCategoryCount,
 } from '@/types'
-import { buildCategoryTree, filterMetricCategoryTree } from './aloudata-metric-directory'
-import type { AloudataCategoryTreeNode, AloudataMetricDirectoryItem } from './aloudata-metric-directory'
+import { buildCategoryTree, filterCategoryTree } from './aloudata-metric-directory'
+import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
 
 const { state, confirmAloudata } = useInsight()
 const ui = state.ui
@@ -172,18 +226,19 @@ const aloudataTitle = computed(() =>
 const pageSize = 20
 const ALL_DIMENSIONS_ID = '__all_dimensions__'
 const datasourceId = ref('')
-const directoryMode = ref<'metrics' | 'dimensions'>('metrics')
-const directoryKeyword = ref('')
-const metricTreeLoading = ref(false)
-const metricDirectory = ref<AloudataMetricDirectoryNode[]>([])
-const selectedMetricCategoryId = ref('')
+const metricPickerVisible = ref(false)
+const dimensionPickerVisible = ref(false)
+const metricKeyword = ref('')
+const dimensionKeyword = ref('')
+const metricsLoading = ref(false)
+const dimensionsLoading = ref(false)
+const metricCategories = ref<AloudataCategoryTreeNode[]>([])
 const dimensionCategories = ref<AloudataCategoryTreeNode[]>([])
+const selectedMetricCategoryId = ref('')
 const selectedDimensionCategoryId = ref(ALL_DIMENSIONS_ID)
 const metricLabelMap = reactive<Record<string, string>>({})
 const dimLabelMap = reactive<Record<string, string>>({})
-const dimsLoading = ref(false)
-const metricTreeProps = { label: 'categoryName', children: 'subCategory' }
-const dimensionTreeProps = { label: 'categoryName', children: 'children' }
+const categoryTreeProps = { label: 'categoryName', children: 'children' }
 
 /** 指标视图列表（来自后端 analysis-views/list，非假数据；带 owner/mine 归属） */
 const analysisViews = ref<datasourceApi.AloudataAnalysisViewItem[]>([])
@@ -193,7 +248,14 @@ const viewKeyword = ref('')
 const onlyMine = ref(true)
 const viewsLoading = ref(false)
 
-const dimPage = reactive<AloudataDimensionPage>({
+const metricPage = reactive<AloudataMetricPage>({
+  records: [],
+  total: 0,
+  size: pageSize,
+  current: 1,
+  pages: 0,
+})
+const dimensionPage = reactive<AloudataDimensionPage>({
   records: [],
   total: 0,
   size: pageSize,
@@ -201,37 +263,21 @@ const dimPage = reactive<AloudataDimensionPage>({
   pages: 0,
 })
 
-const dimensionCategoryTree = computed(() => [
-  { categoryId: ALL_DIMENSIONS_ID, categoryName: '全部维度', children: dimensionCategories.value },
-])
-const filteredMetricTree = computed(() => filterMetricCategoryTree(metricDirectory.value, directoryKeyword.value))
+const dimensionCategoryTree = computed(() => [{
+  categoryId: ALL_DIMENSIONS_ID,
+  categoryName: '全部维度',
+  children: dimensionCategories.value,
+}])
+const filteredMetricCategories = computed(() => filterCategoryTree(metricCategories.value, metricKeyword.value))
+const filteredDimensionCategories = computed(() => filterCategoryTree(dimensionCategoryTree.value, dimensionKeyword.value))
 const expandedMetricCategoryKeys = computed(() => {
   const keys: string[] = []
-  const visit = (nodes: AloudataMetricDirectoryNode[]) => nodes.forEach((node) => {
+  const visit = (nodes: AloudataCategoryTreeNode[]) => nodes.forEach((node) => {
     keys.push(node.categoryId)
-    visit(node.subCategory || [])
+    visit(node.children)
   })
-  if (directoryKeyword.value.trim()) visit(filteredMetricTree.value)
+  if (metricKeyword.value.trim()) visit(filteredMetricCategories.value)
   return keys
-})
-const visibleMetrics = computed(() => {
-  const result: Array<AloudataMetricDirectoryItem & { categoryPath: string }> = []
-  const search = directoryKeyword.value.trim()
-  const visit = (nodes: AloudataMetricDirectoryNode[], path: string[]) => {
-    for (const node of nodes) {
-      const nextPath = [...path, node.categoryName]
-      const matches = search ? filterMetricCategoryTree([node], search)[0] : node
-      if (!matches) continue
-      const items = matches.metricList || []
-      if (search || node.categoryId === selectedMetricCategoryId.value) {
-        result.push(...items.map((item) => ({ ...item, categoryPath: nextPath.join(' / ') })))
-      }
-      if (search) visit(matches.subCategory || [], nextPath)
-      else if (node.categoryId !== selectedMetricCategoryId.value) visit(node.subCategory || [], nextPath)
-    }
-  }
-  visit(metricDirectory.value, [])
-  return result
 })
 
 watch(
@@ -243,12 +289,18 @@ watch(
 
 function open() {
   datasourceId.value = ui.aloudata.datasourceId
-  directoryMode.value = 'metrics'
-  directoryKeyword.value = ''
-  metricDirectory.value = []
+  metricPickerVisible.value = false
+  dimensionPickerVisible.value = false
+  metricKeyword.value = ''
+  dimensionKeyword.value = ''
+  metricPage.records = []
+  metricPage.total = 0
+  dimensionPage.records = []
+  dimensionPage.total = 0
   selectedMetricCategoryId.value = ''
-  dimensionCategories.value = []
   selectedDimensionCategoryId.value = ALL_DIMENSIONS_ID
+  metricCategories.value = []
+  dimensionCategories.value = []
   viewKeyword.value = ''
   onlyMine.value = true
   Object.keys(metricLabelMap).forEach((k) => delete metricLabelMap[k])
@@ -261,7 +313,7 @@ function open() {
     loadAnalysisViews()
     return
   }
-  loadMetricDirectory()
+  loadMetricCategories()
   loadDimensionCategories()
 }
 
@@ -284,31 +336,23 @@ async function loadAnalysisViews() {
   }
 }
 
-let viewKwTimer: any
+let viewKwTimer: ReturnType<typeof setTimeout> | undefined
 function onViewKeywordInput() {
-  clearTimeout(viewKwTimer)
+  if (viewKwTimer) clearTimeout(viewKwTimer)
   viewKwTimer = setTimeout(() => loadAnalysisViews(), 300)
 }
 
-// ---- 实时目录接口与按字段标识搜索 ----
-async function loadMetricDirectory() {
-  if (!datasourceId.value) return
-  metricTreeLoading.value = true
+async function loadMetricCategories() {
   try {
-    metricDirectory.value = await getAloudataMetricDirectory(datasourceId.value)
-    selectedMetricCategoryId.value = metricDirectory.value[0]?.categoryId || ''
-    const collectLabels = (nodes: AloudataMetricDirectoryNode[]) => nodes.forEach((node) => {
-      for (const metric of node.metricList || []) {
-        metricLabelMap[metric.metricName] = metric.metricDisplayName || metric.metricName
-      }
-      collectLabels(node.subCategory || [])
-    })
-    collectLabels(metricDirectory.value)
+    const categories = await listAloudataCategoryCounts(datasourceId.value, 'CATEGORY_METRIC')
+    metricCategories.value = buildCategoryTree((categories as AloudataCategoryCount[]).map((item) => ({
+      categoryId: item.categoryId,
+      categoryName: item.categoryName,
+      parentId: item.parentId,
+    })))
   } catch {
-    metricDirectory.value = []
-    ElMessage.error('加载 Aloudata 指标目录失败，请检查数据源连接及认证配置')
-  } finally {
-    metricTreeLoading.value = false
+    metricCategories.value = []
+    ElMessage.error('加载 Aloudata 指标目录失败')
   }
 }
 
@@ -336,66 +380,155 @@ function removeSelection(type: 'metrics' | 'dimensions', name: string) {
   if (type === 'metrics') ui.aloudata.metrics = ui.aloudata.metrics.filter((item) => item !== name)
   else ui.aloudata.dims = ui.aloudata.dims.filter((item) => item !== name)
 }
-function onMetricCategorySelect(data: AloudataMetricDirectoryNode) {
+function onMetricCategorySelect(data: AloudataCategoryTreeNode) {
   selectedMetricCategoryId.value = data.categoryId
+  loadMetrics(1)
 }
 function onDimensionCategorySelect(data: { categoryId: string }) {
   selectedDimensionCategoryId.value = data.categoryId
   loadDimensions(1)
 }
-function onDirectoryModeChange(mode: 'metrics' | 'dimensions') {
-  if (mode === 'dimensions') loadDimensions(1)
+function onMetricPickerShow() {
+  dimensionPickerVisible.value = false
+  if (!metricPage.records.length) loadMetrics(1)
+}
+function onDimensionPickerShow() {
+  metricPickerVisible.value = false
+  if (!dimensionPage.records.length) loadDimensions(1)
+}
+
+async function loadMetrics(page: number) {
+  if (!datasourceId.value) return
+  metricsLoading.value = true
+  try {
+    const data = await pageAloudataMetrics(datasourceId.value, {
+      pageNumber: page,
+      pageSize,
+      keyword: metricKeyword.value.trim() || undefined,
+      categoryId: selectedMetricCategoryId.value || undefined,
+    })
+    Object.assign(metricPage, data)
+    data.records.forEach((item) => { metricLabelMap[item.metricName] = item.metricDisplayName || item.metricName })
+  } catch {
+    metricPage.records = []
+    metricPage.total = 0
+    ElMessage.error('加载 Aloudata 指标失败')
+  } finally {
+    metricsLoading.value = false
+  }
 }
 
 async function loadDimensions(page: number) {
   if (!datasourceId.value) return
-  dimsLoading.value = true
+  dimensionsLoading.value = true
   try {
     const data = await pageAloudataDimensions(datasourceId.value, {
       pageNumber: page,
       pageSize,
-      keyword: directoryKeyword.value.trim() || undefined,
-      categoryId: selectedDimensionCategoryId.value === ALL_DIMENSIONS_ID
-        ? undefined
-        : selectedDimensionCategoryId.value,
+      keyword: dimensionKeyword.value.trim() || undefined,
+      categoryId: selectedDimensionCategoryId.value === ALL_DIMENSIONS_ID ? undefined : selectedDimensionCategoryId.value,
     })
-    dimPage.records = data.records
-    dimPage.total = data.total
-    dimPage.current = data.current
-    dimPage.size = data.size
-    dimPage.pages = data.pages
-    data.records.forEach((item) => {
-      dimLabelMap[item.dimName] = item.dimDisplayName || item.dimName
-    })
+    Object.assign(dimensionPage, data)
+    data.records.forEach((item) => { dimLabelMap[item.dimName] = item.dimDisplayName || item.dimName })
   } catch {
-    dimPage.records = []
-    dimPage.total = 0
+    dimensionPage.records = []
+    dimensionPage.total = 0
     ElMessage.error('加载 Aloudata 维度失败')
   } finally {
-    dimsLoading.value = false
+    dimensionsLoading.value = false
   }
 }
 
-let directoryKeywordTimer: ReturnType<typeof setTimeout> | undefined
-function onDirectoryKeywordInput() {
-  if (directoryMode.value !== 'dimensions') return
-  if (directoryKeywordTimer) clearTimeout(directoryKeywordTimer)
-  directoryKeywordTimer = setTimeout(() => loadDimensions(1), 300)
+function toggleSelection(type: 'metrics' | 'dimensions', name: string, checked: boolean) {
+  const selected = type === 'metrics' ? ui.aloudata.metrics : ui.aloudata.dims
+  if (checked && !selected.includes(name)) selected.push(name)
+  if (!checked) {
+    const next = selected.filter((item) => item !== name)
+    if (type === 'metrics') ui.aloudata.metrics = next
+    else ui.aloudata.dims = next
+  }
 }
-function onDimPageChange(page: number) {
-  loadDimensions(page)
+
+let metricKeywordTimer: ReturnType<typeof setTimeout> | undefined
+let dimensionKeywordTimer: ReturnType<typeof setTimeout> | undefined
+function onMetricKeywordInput() {
+  if (metricKeywordTimer) clearTimeout(metricKeywordTimer)
+  metricKeywordTimer = setTimeout(() => {
+    selectedMetricCategoryId.value = ''
+    loadMetrics(1)
+  }, 300)
 }
+function onDimensionKeywordInput() {
+  if (dimensionKeywordTimer) clearTimeout(dimensionKeywordTimer)
+  dimensionKeywordTimer = setTimeout(() => {
+    selectedDimensionCategoryId.value = ALL_DIMENSIONS_ID
+    loadDimensions(1)
+  }, 300)
+}
+function onMetricPageChange(page: number) { loadMetrics(page) }
+function onDimensionPageChange(page: number) { loadDimensions(page) }
+
+onBeforeUnmount(() => {
+  if (viewKwTimer) clearTimeout(viewKwTimer)
+  if (metricKeywordTimer) clearTimeout(metricKeywordTimer)
+  if (dimensionKeywordTimer) clearTimeout(dimensionKeywordTimer)
+})
 </script>
 
 <style scoped>
-.directory-toolbar {
+.selection-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.selection-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+.selection-label {
+  padding-top: 9px;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.selection-box {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.selection-box:hover,
+.selection-box:focus-visible {
+  border-color: var(--el-color-primary);
+  outline: none;
+}
+.selection-placeholder {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
+}
+.picker-panel {
+  min-width: 0;
+}
+.picker-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
-.directory-search {
-  width: min(390px, 44%);
+.picker-toolbar :deep(.el-input) {
+  flex: 1;
+}
+.picker-toolbar > span {
+  flex: none;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .toolbar {
   display: flex;
@@ -443,10 +576,6 @@ function onDimPageChange(page: number) {
   overflow: auto;
   padding: 8px 14px;
 }
-.directory-item-list {
-  display: flex;
-  flex-direction: column;
-}
 .directory-item {
   display: flex;
   align-items: center;
@@ -483,39 +612,21 @@ function onDimPageChange(page: number) {
   color: var(--el-text-color-placeholder);
   font-size: 13px;
 }
-.selected-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 88px;
-  overflow: auto;
-  margin-top: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-}
-.selected-summary-label {
-  flex: none;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-.selected-placeholder {
-  color: var(--el-text-color-placeholder);
-  font-size: 12px;
-}
 @media (max-width: 700px) {
-  .directory-toolbar {
-    align-items: stretch;
-    flex-wrap: wrap;
+  .selection-row {
+    grid-template-columns: 42px minmax(0, 1fr);
   }
-  .directory-search {
-    width: 100%;
+  .picker-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
   .directory-layout {
     grid-template-columns: 38% minmax(0, 1fr);
     height: 55vh;
   }
+}
+:global(.aloudata-picker-popper) {
+  max-width: calc(100vw - 32px) !important;
 }
 .pager {
   margin-top: 8px;

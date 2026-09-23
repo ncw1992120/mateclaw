@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCategoryTree, filterMetricCategoryTree } from '../aloudata-metric-directory'
+import { buildCategoryTree, filterCategoryTree, filterMetricCategoryTree } from '../aloudata-metric-directory'
 
 const tree = [
   {
@@ -50,6 +50,20 @@ describe('Aloudata metric directory filtering', () => {
     ])
 
     expect(result).toHaveLength(1)
+    expect(result[0].children[0].categoryId).toBe('child')
+  })
+
+  it('filters category trees by name while preserving matching ancestor paths', () => {
+    const categories = buildCategoryTree([
+      { categoryId: 'root', categoryName: '策略解读', parentId: null },
+      { categoryId: 'child', categoryName: '子策略', parentId: 'root' },
+      { categoryId: 'other', categoryName: '渠道', parentId: null },
+    ])
+
+    const result = filterCategoryTree(categories, '子策略')
+
+    expect(result).toHaveLength(1)
+    expect(result[0].categoryId).toBe('root')
     expect(result[0].children[0].categoryId).toBe('child')
   })
 })
