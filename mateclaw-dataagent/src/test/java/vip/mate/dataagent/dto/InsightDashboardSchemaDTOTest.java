@@ -189,7 +189,10 @@ class InsightDashboardSchemaDTOTest {
                 {"version":"1.1","pages":[{"id":"page-1","components":[{
                   "id":"kpi-1","type":"kpi","title":"订单数",
                   "position":{"x":0,"y":0,"w":4,"h":3},
-                  "titleIconStyle":{"iconKey":"trend-charts","strokeWidth":2.5,"colorMode":"custom","color":"#8C4A2F"}
+                  "titleIconStyle":{"iconKey":"trend-charts","strokeWidth":2.5,"colorMode":"custom","color":"#8C4A2F"},
+                  "themeAccentGroup":"highlight",
+                  "children":[{"id":"child-1","type":"chart","title":"子图","themeAccentGroup":"secondary"}],
+                  "containerConfig":{"layoutMode":"grid","tabs":[{"id":"tab-1","title":"页签","children":[{"id":"child-2","type":"table","themeAccentGroup":"highlight"}]}]}
                 }]}]}
                 """;
 
@@ -202,5 +205,8 @@ class InsightDashboardSchemaDTOTest {
         assertEquals(2.5, style.get("strokeWidth").asDouble());
         assertEquals("custom", style.get("colorMode").asText());
         assertEquals("#8C4A2F", style.get("color").asText());
+        assertEquals("highlight", roundTrip.at("/pages/0/components/0/themeAccentGroup").asText());
+        assertEquals("secondary", roundTrip.at("/pages/0/components/0/children/0/themeAccentGroup").asText());
+        assertEquals("highlight", roundTrip.at("/pages/0/components/0/containerConfig/tabs/0/children/0/themeAccentGroup").asText());
     }
 }

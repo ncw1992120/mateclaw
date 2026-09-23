@@ -82,6 +82,18 @@ public class InsightDashboardPatchOp implements Serializable {
     @Schema(description = "组件标题图标样式")
     private java.util.Map<String, Object> titleIconStyle;
 
+    /** 仪表盘主题强调色分组（add/update 可选） */
+    @Schema(description = "仪表盘主题强调色分组", allowableValues = {"primary", "secondary", "highlight"})
+    private String themeAccentGroup;
+
+    /** 组合卡片默认子组件配置 */
+    @Schema(description = "组合卡片默认子组件配置")
+    private java.util.List<java.util.Map<String, Object>> children;
+
+    /** 组合卡片布局及页签配置 */
+    @Schema(description = "组合卡片布局及页签配置")
+    private java.util.Map<String, Object> containerConfig;
+
     /** 图表子类型（add 且 type=chart 时必填）：line / bar / pie / area / scatter / radar */
     @Schema(description = "图表子类型（type=chart时）", example = "bar",
             allowableValues = {"line", "bar", "pie", "area", "scatter", "radar"})

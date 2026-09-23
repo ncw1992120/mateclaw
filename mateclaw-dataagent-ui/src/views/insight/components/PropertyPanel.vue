@@ -29,6 +29,14 @@
           <el-option value="section" label="分组标题" />
         </el-select>
       </div>
+      <div v-if="!['filter', 'timeFilter', 'aiAnalysis'].includes(component.type)" class="form-group">
+        <label class="form-label">组件强调色</label>
+        <el-select v-model="localComponent.themeAccentGroup" aria-label="组件强调色" style="width: 100%" @change="emitChange">
+          <el-option value="primary" label="主色" />
+          <el-option value="secondary" label="辅助色" />
+          <el-option value="highlight" label="强调色" />
+        </el-select>
+      </div>
       <details class="style-settings">
         <summary class="style-section-title">样式设置</summary>
         <div class="style-field-grid">

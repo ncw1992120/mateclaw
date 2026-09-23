@@ -24,7 +24,7 @@ import {
   PieChart,
   TrendCharts,
 } from '@element-plus/icons-vue'
-import type { ChartType, ComponentTitleIconStyle, InsightComponentType, ResolvedDashboardTheme } from '@/types'
+import type { ChartType, ComponentThemeAccentGroup, ComponentTitleIconStyle, InsightComponentType, ResolvedDashboardTheme } from '@/types'
 import { componentIconStyle, resolveDashboardIcon } from '@/utils/dashboard-theme'
 import { resolveDashboardIcon as resolveRegisteredIcon } from '@/utils/dashboard-icon-registry'
 
@@ -34,6 +34,7 @@ const props = withDefaults(defineProps<{
   title?: string
   dashboardTheme?: ResolvedDashboardTheme
   titleIconStyle?: ComponentTitleIconStyle
+  themeAccentGroup?: ComponentThemeAccentGroup
   size?: number
   variant?: number
 }>(), { size: 14 })
@@ -46,7 +47,7 @@ const iconComponent = computed(() => {
   return iconRegistry[resolveDashboardIcon(props.type, props.chartType, props.title) as keyof typeof iconRegistry] ?? Collection
 })
 const iconStyle = computed(() => {
-  const style = componentIconStyle(props.dashboardTheme, props.type, props.title, props.variant)
+  const style = componentIconStyle(props.dashboardTheme, props.type, props.title, props.variant, props.themeAccentGroup)
   const customColor = props.titleIconStyle?.colorMode === 'custom' && /^#[0-9a-f]{6}$/i.test(props.titleIconStyle.color ?? '')
     ? props.titleIconStyle.color
     : undefined

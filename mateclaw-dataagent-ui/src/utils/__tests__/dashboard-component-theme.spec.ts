@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDashboardTheme, componentThemeStyle, componentIconStyle, resolveDashboardIcon } from '@/utils/dashboard-theme'
+import { resolveDashboardTheme, componentThemeStyle, componentIconStyle, resolveDashboardIcon, themeCssVariables } from '@/utils/dashboard-theme'
 
 describe('dashboard component theme standards', () => {
   it('uses standard icon, hierarchy and automatic group color defaults', () => {
@@ -25,14 +25,33 @@ describe('dashboard component theme standards', () => {
     // 控制区不吃色相：不下发 accent，下游回落中性 --db-*
     expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBeUndefined()
     expect(componentThemeStyle(theme, 'timeFilter')['--component-group-accent']).toBeUndefined()
-    expect(new Set([theme.primary, theme.accentAlt]).size).toBe(2)
+    expect(new Set([theme.primary, theme.accentAlt, theme.metricPalette[3]]).size).toBe(3)
+  })
+
+  it('supports an explicit semantic accent group without tinting card surfaces', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+
+    expect(componentThemeStyle(theme, 'kpi', 0, 'secondary')['--component-group-accent']).toBe(theme.accentAlt)
+    expect(componentThemeStyle(theme, 'chart', 0, 'highlight')['--component-group-accent']).toBe(theme.metricPalette[3])
+    expect(componentThemeStyle(theme, 'kpi', 0, 'highlight')['--component-group-surface']).toBe('var(--insight-card-bg)')
+    expect(componentThemeStyle(theme, 'kpi', 0, 'highlight')['--component-group-border']).not.toContain(theme.metricPalette[3])
+    expect(componentIconStyle(theme, 'kpi', undefined, 0, 'highlight')['--dashboard-icon-color']).toBe(theme.metricPalette[3])
+  })
+
+  it('uses neutral canvas and nested surfaces instead of washing large areas with the primary color', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+    const variables = themeCssVariables(theme)
+    const style = componentThemeStyle(theme, 'kpi')
+
+    expect(variables['--db-surface-container']).toBe('color-mix(in srgb, var(--insight-border) 35%, var(--insight-page-bg))')
+    expect(style['--component-group-header-surface']).toBe('var(--insight-card-bg)')
   })
 
   it('collapses every zone to the primary color in uniform mode', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue', componentColorMode: 'uniform' }, 'light')
 
     expect(componentThemeStyle(theme, 'aiAnalysis')['--component-group-accent']).toBe(theme.primary)
-    expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBeUndefined()
   })
 
   it('uses a larger, bold warm semantic icon style instead of inheriting one text color', () => {
@@ -44,10 +63,9 @@ describe('dashboard component theme standards', () => {
     expect(metric['--dashboard-icon-size']).toBe('18px')
     expect(metric['--dashboard-icon-weight']).toBe('800')
     expect(metric['--dashboard-icon-color']).not.toBe(ai['--dashboard-icon-color'])
-    expect(metric['--dashboard-icon-color']).toBe(theme.iconPalette[0])
-    expect(metricNext['--dashboard-icon-color']).toBe(theme.iconPalette[1])
-    expect(theme.iconPalette[0]).not.toBe(theme.primary)
-    expect(componentIconStyle(theme, 'tab', '策略视角')['--dashboard-icon-color']).not.toBe(metric['--dashboard-icon-color'])
+    expect(metric['--dashboard-icon-color']).toBe(theme.primary)
+    expect(metricNext['--dashboard-icon-color']).toBe(theme.primary)
+    expect(componentIconStyle(theme, 'tab', '策略视角')['--dashboard-icon-color']).toBe(theme.primary)
   })
 
   it('allows only standard choices to change the rendering policy', () => {

@@ -1242,6 +1242,8 @@ export interface InsightComponent {
   titleBarStyle?: ComponentTitleBarStyle
   /** 标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
   titleIconStyle?: ComponentTitleIconStyle
+  /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
+  themeAccentGroup?: ComponentThemeAccentGroup
   /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 栅格位置 */
@@ -1364,6 +1366,8 @@ export interface InsightCombinationChild {
   titleBarStyle?: ComponentTitleBarStyle
   /** 子卡片标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
   titleIconStyle?: ComponentTitleIconStyle
+  /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
+  themeAccentGroup?: ComponentThemeAccentGroup
   /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 图表子类型（仅 chart） */
@@ -1629,6 +1633,8 @@ export interface DashboardThemeConfig {
   componentColorMode?: DashboardThemeComponentColorMode
 }
 
+export type ComponentThemeAccentGroup = 'primary' | 'secondary' | 'highlight'
+
 export type DashboardThemeIconMode = 'show' | 'hide'
 export type DashboardThemeHierarchy = 'soft' | 'standard' | 'strong'
 export type DashboardThemeComponentColorMode = 'auto' | 'uniform'
@@ -1644,7 +1650,7 @@ export interface ResolvedDashboardTheme {
   textSecondary: string
   textMuted: string
   primary: string
-  /** 辅色：全页唯一的第二个色相，只用于「洞察区」组件。第三个色号留给用户在指标样式里显式指定的例外。 */
+  /** 辅色：蓝/绿/琥珀三类强调色之一；默认用于 AI 洞察或显式分组组件。 */
   accentAlt: string
   positive: string
   negative: string
