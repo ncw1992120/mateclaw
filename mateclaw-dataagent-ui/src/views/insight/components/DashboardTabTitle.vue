@@ -46,7 +46,7 @@ const emit = defineEmits<{
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
 .dashboard-tab-title :deep(.dashboard-component-icon) {
@@ -64,11 +64,12 @@ const emit = defineEmits<{
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+  margin-right: -4px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 3px;
   color: var(--el-text-color-secondary);
   background: transparent;
   cursor: pointer;

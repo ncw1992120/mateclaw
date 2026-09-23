@@ -4,8 +4,8 @@ import DashboardTitleIconStyleDialog from '../DashboardTitleIconStyleDialog.vue'
 
 const stubs = {
   'el-dialog': {
-    props: ['modelValue', 'title', 'draggable', 'top'],
-    template: '<div v-if="modelValue" role="dialog" :data-draggable="draggable" :data-top="top"><h2>{{ title }}</h2><slot /><slot name="footer" /></div>',
+    props: ['modelValue', 'title', 'draggable', 'top', 'left'],
+    template: '<div v-if="modelValue" role="dialog" :data-draggable="draggable" :data-top="top" :style="$attrs.style"><h2>{{ title }}</h2><slot /><slot name="footer" /></div>',
   },
   'el-icon': { template: '<span><slot /></span>' },
   'el-select': {
@@ -33,9 +33,11 @@ describe('DashboardTitleIconStyleDialog', () => {
     expect(wrapper.find('.title-icon-preview').exists()).toBe(false)
     expect(wrapper.get('[role="dialog"]').attributes('data-draggable')).toBe('true')
     expect(wrapper.get('[role="dialog"]').attributes('data-top')).toBeTruthy()
+    expect(wrapper.get('[role="dialog"]').attributes('style')).toContain('margin-left')
     expect(wrapper.find('label[for="title-icon-stroke-width"]').text()).toBe('粗细')
     expect(wrapper.get('.color-control-row .control-label').text()).toBe('颜色')
     expect(wrapper.find('.style-controls').classes()).toContain('style-controls-inline')
+    expect(wrapper.get('select[aria-label="粗细"]').attributes('style')).toContain('width: 88px')
 
     await wrapper.get('[aria-label="图表"]').trigger('click')
     expect(wrapper.emitted('preview')?.at(-1)?.[0]).toMatchObject({ iconKey: 'chart-bar' })

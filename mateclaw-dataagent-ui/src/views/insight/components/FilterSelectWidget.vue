@@ -1,6 +1,6 @@
 <template>
   <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
+    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, FilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, FilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import * as datasourceApi from '@/api/datasource'
 import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
@@ -49,6 +49,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   /** 可选项（外部注入，优先级低于 config.staticOptions） */
   options?: Array<{ label: string; value: string }>
   dashboardTheme?: ResolvedDashboardTheme

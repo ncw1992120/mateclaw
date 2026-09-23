@@ -1,7 +1,7 @@
 <template>
   <div class="chart-widget">
     <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"
@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
@@ -70,6 +70,8 @@ const props = defineProps<{
   showTitle?: boolean
   /** 仪表盘级主题；不传时保持旧图表视觉 */
   dashboardTheme?: ResolvedDashboardTheme
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   /** 正在编辑的页签图标样式即时预览 */
   tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
   /** 是否显示页签图标编辑操作 */

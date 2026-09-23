@@ -12,7 +12,7 @@
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</span>
+      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="componentTitleIconStylePreview ?? component.titleIconStyle" />{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -273,6 +273,7 @@ const props = withDefaults(
     selected?: boolean
     dashboardTheme?: ResolvedDashboardTheme
     titleIconStylePreview?: { childId: string; style: ComponentTitleIconStyle }
+    componentTitleIconStylePreview?: ComponentTitleIconStyle
     tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
   }>(),
   { editable: false, selected: false },
@@ -986,9 +987,9 @@ const { onTabKeydown } = useTabKeyboard(
   flex-shrink: 0;
 }
 .cc-child-title-trigger { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border: none; padding: 0; background: transparent; color: inherit; cursor: text; }
-.cc-child-title-group { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.cc-child-title-group { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 .cc-child-title-group :deep(.dashboard-component-icon) { margin-right: 0; }
-.cc-child-icon-style-trigger { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 20px; height: 20px; margin: 0; border: 0; border-radius: 4px; background: transparent; color: var(--db-text-muted); cursor: pointer; }
+.cc-child-icon-style-trigger { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 20px; height: 20px; margin: 0 -4px 0 0; border: 0; border-radius: 3px; background: transparent; color: var(--db-text-muted); cursor: pointer; }
 .cc-child-icon-style-trigger:hover { background: var(--db-hover); color: var(--db-accent); }
 .cc-child-icon-style-trigger:focus-visible { outline: 2px solid var(--db-accent); outline-offset: 1px; }
 .cc-child-title-edit { color: var(--db-text-muted); opacity: 0; transition: opacity var(--transition-fast); }

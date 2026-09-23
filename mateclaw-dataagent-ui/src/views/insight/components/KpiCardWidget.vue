@@ -3,7 +3,7 @@
     <div class="kpi-card-inner">
       <div v-if="(showTitle !== false && component.titleBarStyle !== 'hidden') || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
-          <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title"><DashboardComponentIcon type="kpi" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</span>
+          <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title"><DashboardComponentIcon type="kpi" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />{{ component.title }}</span>
         </div>
         <div v-if="showTimeFilter" class="kpi-time-filter">
           <el-date-picker
@@ -130,7 +130,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
@@ -156,6 +156,8 @@ const props = withDefaults(defineProps<{
   showTitle?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
   dashboardTheme?: ResolvedDashboardTheme
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   /** 正在编辑的页签图标样式即时预览 */
   tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
 }>(), {

@@ -14,9 +14,17 @@
     <!-- 全局联动栏（仅预览态且有全局筛选器时显示） -->
     <div v-if="!editable && globalFilterComponents.length > 0" class="global-filter-bar">
       <div class="global-filter-items">
-        <template v-for="comp in globalFilterComponents" :key="comp.id">
+        <template v-for="(comp, index) in globalFilterComponents" :key="comp.id">
           <div class="global-filter-item">
-            <span class="global-filter-label">{{ comp.title }}</span>
+            <span class="global-filter-label">
+              <DashboardComponentIcon
+                :type="comp.type"
+                :title="comp.title"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style="comp.titleIconStyle"
+                :variant="index"
+              />{{ comp.title }}
+            </span>
             <FilterSelectWidget
               v-if="comp.type === 'filter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
@@ -138,6 +146,7 @@
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
@@ -149,6 +158,7 @@
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
@@ -159,6 +169,7 @@
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
@@ -167,12 +178,14 @@
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getComponent(item.i)!"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getComponent(item.i)!"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
@@ -181,6 +194,7 @@
                 :component-data="getComponentData(item.i)"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @generate="(id) => emit('ai-analysis-generate', id)"
               />
               <CombinationCardWidget
@@ -190,6 +204,7 @@
                 :editable="editable"
                 :selected="selectedId === item.i"
                 :dashboard-theme="dashboardTheme"
+                :component-title-icon-style-preview="componentTitleIconStylePreview"
                 :title-icon-style-preview="childTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @select-child="handleSelectChild"
@@ -213,6 +228,7 @@
       :title="editingTitleIconTitle"
       :title-icon-style="editingTitleIconStyle"
       :top="titleIconDialogTop"
+      :left="titleIconDialogLeft"
       :draggable="true"
       @save="saveTitleIconStyle"
       @preview="previewTitleIconStyle"
@@ -284,7 +300,15 @@ const editingTitleIconTarget = ref<{
   tabKind?: 'component' | 'combination'
 } | null>(null)
 const titleIconDialogTop = ref('16px')
+const titleIconDialogLeft = ref('16px')
 const previewTitleIconStyleValue = ref<ComponentTitleIconStyle | null>(null)
+
+const componentTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target && !target.tabId && !target.childId && previewTitleIconStyleValue.value
+    ? previewTitleIconStyleValue.value
+    : undefined
+})
 
 const tabTitleIconStylePreview = computed(() => {
   const target = editingTitleIconTarget.value
@@ -550,7 +574,7 @@ function openTitleIconStyle(componentId: string, anchor?: HTMLElement | null): v
   if (!props.editable) return
   previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = { componentId }
-  titleIconDialogTop.value = dialogTopForAnchor(anchor)
+  setTitleIconDialogPosition(anchor)
   titleIconDialogVisible.value = true
 }
 
@@ -558,7 +582,7 @@ function openChildTitleIconStyle(payload: { containerId: string; childId: string
   if (!props.editable) return
   previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = { ...payload, componentId: payload.containerId }
-  titleIconDialogTop.value = dialogTopForAnchor(payload.anchor)
+  setTitleIconDialogPosition(payload.anchor)
   titleIconDialogVisible.value = true
 }
 
@@ -571,18 +595,26 @@ function openTabTitleIconStyle(payload: {
   if (!props.editable) return
   previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = payload
-  titleIconDialogTop.value = dialogTopForAnchor(payload.anchor)
+  setTitleIconDialogPosition(payload.anchor)
   titleIconDialogVisible.value = true
 }
 
-function dialogTopForAnchor(anchor?: HTMLElement | null): string {
-  if (!anchor) return '16px'
+function setTitleIconDialogPosition(anchor?: HTMLElement | null): void {
+  if (!anchor) {
+    titleIconDialogTop.value = '16px'
+    titleIconDialogLeft.value = '16px'
+    return
+  }
   const rect = anchor.getBoundingClientRect()
   const viewportHeight = window.innerHeight || 768
+  const viewportWidth = window.innerWidth || 1024
+  const dialogWidth = Math.min(520, viewportWidth - 32)
   const maxTop = Math.max(16, viewportHeight - 520)
   let top = rect.bottom + 12
   if (top > maxTop) top = Math.max(16, rect.top - 520 - 12)
-  return `${Math.round(top)}px`
+  const left = Math.min(Math.max(16, rect.left), Math.max(16, viewportWidth - dialogWidth - 16))
+  titleIconDialogTop.value = `${Math.round(top)}px`
+  titleIconDialogLeft.value = `${Math.round(left)}px`
 }
 
 function toolbarTitleIconStyle(componentId: string): ComponentTitleIconStyle | undefined {
@@ -1189,7 +1221,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 .grid-item-title-group :deep(.dashboard-component-icon) {
@@ -1201,9 +1233,9 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  margin: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0 -4px 0 0;
   border: 0;
   border-radius: 5px;
   background: transparent;

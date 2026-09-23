@@ -2,7 +2,7 @@
   <div class="data-table-widget">
     <div class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
-        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
+        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">
@@ -91,7 +91,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 
@@ -111,6 +111,8 @@ const props = withDefaults(defineProps<{
   dashboardTheme?: ResolvedDashboardTheme
   /** 编辑态显示页签图标设置操作 */
   editable?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   /** 正在编辑的页签图标样式即时预览 */
   tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
 }>(), { showTitle: true, editable: false })

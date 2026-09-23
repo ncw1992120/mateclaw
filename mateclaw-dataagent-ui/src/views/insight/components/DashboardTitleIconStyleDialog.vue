@@ -2,8 +2,9 @@
   <el-dialog
     :model-value="modelValue"
     title="标题图标样式"
-    width="520px"
+    :width="width"
     :top="top"
+    :style="{ marginLeft: left }"
     :draggable="draggable"
     :close-on-click-modal="false"
     @update:model-value="handleVisibilityChange"
@@ -42,7 +43,7 @@
     <div class="style-controls style-controls-inline">
       <div class="control-row">
         <label class="control-label" for="title-icon-stroke-width">粗细</label>
-        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="粗细" style="width: 112px">
+        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="粗细" style="width: 88px">
           <el-option :value="1.5" label="纤细" />
           <el-option :value="2" label="标准" />
           <el-option :value="2.5" label="加粗" />
@@ -96,9 +97,11 @@ import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
 const props = withDefaults(defineProps<{
   modelValue: boolean
   titleIconStyle?: ComponentTitleIconStyle
+  width?: string
   top?: string
+  left?: string
   draggable?: boolean
-}>(), { top: '16px', draggable: true })
+}>(), { width: 'min(520px, calc(100vw - 32px))', top: '16px', left: '16px', draggable: true })
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void

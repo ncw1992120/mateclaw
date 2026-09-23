@@ -9,20 +9,20 @@ import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dash
 const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
-  KpiCardWidget: { template: '<div />' },
+  KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'tabTitleIconStylePreview'], template: '<div />' },
   ChartWidget: {
     name: 'ChartWidget',
-    props: ['component', 'componentData', 'editable', 'dashboardTheme', 'tabTitleIconStylePreview'],
+    props: ['component', 'componentData', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'tabTitleIconStylePreview'],
     emits: ['edit-tab-title-icon-style'],
     template: '<div />',
   },
-  DataTableWidget: { template: '<div />' },
-  FilterSelectWidget: { template: '<div />' },
-  TimeFilterWidget: { template: '<div />' },
-  AiAnalysisWidget: { template: '<div />' },
+  DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'tabTitleIconStylePreview'], template: '<div />' },
+  FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'editable', 'dashboardTheme', 'titleIconStylePreview'], template: '<div />' },
+  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'editable', 'dashboardTheme', 'titleIconStylePreview'], template: '<div />' },
+  AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['component', 'componentData', 'editable', 'dashboardTheme', 'titleIconStylePreview'], template: '<div />' },
   CombinationCardWidget: {
     name: 'CombinationCardWidget',
-    props: ['component', 'componentDataMap', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'tabTitleIconStylePreview'],
+    props: ['component', 'componentDataMap', 'editable', 'dashboardTheme', 'titleIconStylePreview', 'componentTitleIconStylePreview', 'tabTitleIconStylePreview'],
     emits: ['edit-tab-title-icon-style'],
     template: '<div />',
   },
@@ -59,6 +59,25 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
 
     expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
+  })
+
+  it('shows a configured title icon for filters moved into the preview global toolbar', () => {
+    const style = { iconKey: 'calendar', colorMode: 'custom' as const, color: '#8c4a2f', strokeWidth: 3 as const }
+    const filter = {
+      ...component,
+      id: 'global-filter',
+      type: 'filter' as const,
+      title: '渠道',
+      titleIconStyle: style,
+      config: { scope: 'global', field: 'channel' },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [filter], editable: false },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('.global-filter-label').text()).toContain('渠道')
+    expect(wrapper.findComponent(DashboardComponentIcon).props('titleIconStyle')).toEqual(style)
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {
@@ -111,6 +130,30 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(titleGroup.findComponent(DashboardComponentIcon).props('titleIconStyle')).toEqual(initialStyle)
   })
 
+  it.each([
+    ['kpi', 'KpiCardWidget'],
+    ['chart', 'ChartWidget'],
+    ['table', 'DataTableWidget'],
+    ['filter', 'FilterSelectWidget'],
+    ['timeFilter', 'TimeFilterWidget'],
+    ['aiAnalysis', 'AiAnalysisWidget'],
+    ['combination', 'CombinationCardWidget'],
+  ] as const)('实时预览应传递到 %s 组件本身，而不只更新画布工具栏', async (type, widgetName) => {
+    const owner = { ...component, id: `owner-${type}`, type } as any
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [owner], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    await wrapper.get(`[aria-label="编辑标题图标 ${owner.title}"]`).trigger('click')
+    const previewStyle = { iconKey: 'chart-bar', colorMode: 'custom' as const, color: '#8c4a2f', strokeWidth: 3 as const }
+    wrapper.findComponent(DashboardTitleIconStyleDialog).vm.$emit('preview', previewStyle)
+    await wrapper.vm.$nextTick()
+
+    const widget = wrapper.findComponent({ name: widgetName })
+    const previewProp = widgetName === 'CombinationCardWidget' ? 'componentTitleIconStylePreview' : 'titleIconStylePreview'
+    expect(widget.props(previewProp)).toEqual(previewStyle)
+  })
+
   it('positions the icon dialog below its trigger and enables dragging', async () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true },
@@ -126,6 +169,7 @@ describe('DashboardCanvas keyboard interaction', () => {
     const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
     expect(dialog.props('draggable')).toBe(true)
     expect(dialog.props('top')).toBe('88px')
+    expect(dialog.props('left')).toBe('60px')
   })
 
   it('opens the shared icon dialog for a tab and previews only that tab before applying', async () => {
