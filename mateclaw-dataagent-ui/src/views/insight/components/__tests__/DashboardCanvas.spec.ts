@@ -2,8 +2,10 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
+import DashboardComponentIcon from '../DashboardComponentIcon.vue'
 import DashboardTitleIconStyleDialog from '../DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dashboardCanvasConstants'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 
 const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
@@ -95,6 +97,28 @@ describe('DashboardCanvas keyboard interaction', () => {
 
     expect(wrapper.find('input[aria-label="组件标题"]').exists()).toBe(false)
     expect(wrapper.findComponent(DashboardTitleIconStyleDialog).props('modelValue')).toBe(true)
+  })
+
+  it('previews a custom title icon color on the matching canvas component', async () => {
+    const dashboardTheme = resolveDashboardTheme({
+      presetId: 'blue',
+      componentColorMode: 'uniform',
+      overrides: { primary: '#123456' },
+    }, 'light')
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true, dashboardTheme },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.get('[aria-label="编辑标题图标 订单数"]').trigger('click')
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    expect(dialog.props('defaultColor')).toBe('#123456')
+
+    const customStyle = { colorMode: 'custom' as const, color: '#e87431' }
+    dialog.vm.$emit('preview', customStyle)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent(DashboardComponentIcon).props('titleIconStyle')).toEqual(customStyle)
   })
 
   it('uses the component title bar as a drag handle for moving into a combination', async () => {

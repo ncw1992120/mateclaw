@@ -230,6 +230,7 @@
       :model-value="titleIconDialogVisible"
       :title="editingTitleIconTitle"
       :title-icon-style="editingTitleIconStyle"
+      :default-color="editingTitleIconDefaultColor"
       :top="titleIconDialogTop"
       :left="titleIconDialogLeft"
       :draggable="true"
@@ -262,7 +263,7 @@ import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
 import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
-import { themeCssVariables, componentThemeStyle } from '@/utils/dashboard-theme'
+import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
@@ -342,6 +343,19 @@ const editingTitleIconTitle = computed(() => {
     return owner.containerConfig?.tabs.find((tab) => tab.id === target.tabId)?.title ?? ''
   }
   return owner?.title ?? ''
+})
+const editingTitleIconDefaultColor = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  const type = target?.tabId ? 'tab' : owner?.type ?? 'kpi'
+  const iconStyle = componentIconStyle(
+    props.dashboardTheme,
+    type,
+    editingTitleIconTitle.value,
+    0,
+    owner?.themeAccentGroup,
+  )
+  return iconStyle['--dashboard-icon-color'] ?? props.dashboardTheme?.textSecondary ?? '#8c4a2f'
 })
 const childTitleIconStylePreview = computed(() => {
   const target = editingTitleIconTarget.value

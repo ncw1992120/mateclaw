@@ -53,6 +53,18 @@ describe('DashboardTitleIconStyleDialog', () => {
     expect(wrapper.emitted('preview')?.at(-1)?.[0]).toMatchObject({ colorMode: 'theme' })
   })
 
+  it('seeds custom color from the current theme color and previews it immediately', async () => {
+    const wrapper = mount(DashboardTitleIconStyleDialog, {
+      props: { modelValue: true, title: '订单数', defaultColor: '#b45309' },
+      global: { stubs },
+    })
+
+    await wrapper.get('[aria-label="自定义颜色模式"]').trigger('click')
+
+    expect(wrapper.get('input[aria-label="自定义图标颜色"]').attributes('value')).toBe('#b45309')
+    expect(wrapper.emitted('preview')?.at(-1)?.[0]).toMatchObject({ colorMode: 'custom', color: '#b45309' })
+  })
+
   it('lets the user choose an icon, thickness, and custom color, then saves the complete style', async () => {
     const wrapper = mount(DashboardTitleIconStyleDialog, {
       props: { modelValue: true, title: '订单数' },

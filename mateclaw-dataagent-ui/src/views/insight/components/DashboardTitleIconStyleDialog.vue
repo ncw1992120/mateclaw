@@ -69,7 +69,7 @@
             role="radio"
             :aria-checked="draft.colorMode === 'custom'"
             aria-label="自定义颜色模式"
-            @click="draft.colorMode = 'custom'"
+            @click="enableCustomColor"
           ><span class="color-mode-indicator" aria-hidden="true" />自定义</button>
         </div>
         <el-color-picker
@@ -97,6 +97,8 @@ import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
 const props = withDefaults(defineProps<{
   modelValue: boolean
   titleIconStyle?: ComponentTitleIconStyle
+  /** 自定义颜色首次启用时用于预览的当前主题颜色 */
+  defaultColor?: string
   width?: string
   top?: string
   left?: string
@@ -111,6 +113,11 @@ const emit = defineEmits<{
 
 const defaults = (): ComponentTitleIconStyle => ({ colorMode: 'theme', strokeWidth: 2 })
 const draft = reactive<ComponentTitleIconStyle>(defaults())
+
+function enableCustomColor(): void {
+  draft.colorMode = 'custom'
+  if (!draft.color) draft.color = props.defaultColor ?? '#8c4a2f'
+}
 
 watch(draft, (style) => emit('preview', { ...style }), { deep: true })
 
