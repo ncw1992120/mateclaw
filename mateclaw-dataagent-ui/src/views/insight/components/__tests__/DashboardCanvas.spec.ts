@@ -58,7 +58,11 @@ describe('DashboardCanvas keyboard interaction', () => {
       props: { components: [component], editable: true },
       global: { stubs, plugins: [i18n] },
     })
-    expect(wrapper.get('[data-testid="sample-data-watermark"]').text()).toBe('示例数据')
+    const watermark = wrapper.get('[data-testid="sample-data-watermark"]')
+    expect(watermark.text()).toBe('示例数据')
+    expect(watermark.classes()).toContain('sample-data-watermark--titlebar')
+    expect(watermark.element.parentElement?.classList.contains('grid-item-toolbar')).toBe(true)
+    expect(wrapper.find('.grid-item-body [data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
       componentId: 'kpi-1', renderType: 'kpi', kpi: { value: '1,284' },
     })

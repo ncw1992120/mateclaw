@@ -164,6 +164,7 @@
               :aria-label="`删除组件 ${getComponentTitle(item.i)}`"
               @click.stop="handleDeleteComponent(item.i)"
             >✕</button>
+            <div v-if="isSampleData(item.i)" class="sample-data-watermark sample-data-watermark--titlebar" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据" title="未绑定数据源，当前为示例内容">示例数据</div>
           </div>
           <div class="grid-item-body">
             <div v-if="getComponentData(item.i)?.error" class="grid-item-error">
@@ -253,7 +254,6 @@
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
             </template>
-            <div v-if="isSampleData(item.i)" class="sample-data-watermark" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据" title="未绑定数据源，当前为示例内容">示例数据</div>
           </div>
           </div>
         </GridItem>
@@ -1389,6 +1389,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1506,22 +1507,30 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .sample-data-watermark {
-  position: absolute;
-  z-index: 5;
-  top: 10px;
-  right: 10px;
+  display: inline-flex;
+  align-items: center;
   padding: 4px 9px;
-  border: 1px solid rgba(190, 45, 45, 0.24);
+  border: 1px solid rgba(190, 45, 45, 0.18);
   border-radius: 999px;
-  color: #9f2525;
-  background: rgba(255, 239, 239, 0.96);
-  box-shadow: 0 1px 3px rgba(80, 20, 20, 0.08);
+  color: rgba(159, 37, 37, 0.68);
+  background: rgba(255, 239, 239, 0.58);
+  box-shadow: 0 1px 3px rgba(80, 20, 20, 0.04);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: 0.04em;
   pointer-events: none;
   user-select: none;
+}
+
+.sample-data-watermark--titlebar {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.72;
+  filter: blur(0.15px);
 }
 
 /* 筛选器自身提供横向标题与控件布局，编辑态工具栏只保留删除入口。 */
