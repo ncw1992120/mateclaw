@@ -32,7 +32,6 @@ function legacyInput(): DashboardDatasetInput {
 beforeEach(() => {
   state.datasets.splice(0, state.datasets.length)
   state.kpiMetrics = []
-  state.filterBindings = []
 })
 
 describe('存量归一（决策 4）· 读入老配置', () => {

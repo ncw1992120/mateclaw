@@ -98,7 +98,6 @@ async function openWith(dataset: DatasetConfig) {
 
 beforeEach(() => {
   state.ui.dataDialog = { visible: false, datasetId: '' }
-  state.filterBindings = []
   clearAllCachedQueries()
   previewDatasetDraft.mockClear()
   previewInput.mockClear()
@@ -222,32 +221,6 @@ describe('查看数据弹窗 · 添加条件并查询', () => {
     const request = previewDatasetDraft.mock.calls[0][0] as { filters?: unknown[]; offset?: number }
     expect(request.filters).toEqual([{ field: 'trade_date', op: '=', value: '2026-09-01' }])
     expect(request.offset).toBe(0)
-    expect(dataset.filters).toEqual([])
-  })
-
-  it('打开时默认带出绑定筛选模板，运行值只进入本次查询', async () => {
-    state.filterBindings = [{
-      filterName: '时间范围',
-      scope: { 'ds-1': true },
-      fieldMap: [{ datasetId: 'ds-1', field: 'metric_time', matched: true }],
-      conditions: [
-        { inputName: 'cljd_zcl_zb_view', field: 'metric_time', operator: 'gte', parameterNames: ['startDate'], required: false },
-        { inputName: 'cljd_zcl_zb_view', field: 'metric_time', operator: 'lt', parameterNames: ['endDate'], required: false },
-      ],
-    }] as any
-    const dataset = metricViewDataset()
-    const wrapper = await openWith(dataset)
-
-    expect(wrapper.findAll('[data-testid="bound-filter-row"]')).toHaveLength(2)
-    expect(wrapper.findAll('[data-testid="bound-filter-row"] input')[0].attributes('placeholder'))
-      .toBe('可选，未填写不参与查询')
-    await wrapper.findAll('[data-testid="bound-filter-row"] input')[0].setValue('2026-09-01')
-    await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
-    await flushPromises()
-
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
-      { field: 'metric_time', operator: 'gte', value: '2026-09-01', role: 'dimension' },
-    ])
     expect(dataset.filters).toEqual([])
   })
 

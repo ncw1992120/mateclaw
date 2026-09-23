@@ -10,7 +10,6 @@
     <ApiConfigDialog />
     <FileConfigDialog />
     <FieldMappingDialog />
-    <FilterBindingDialog />
     <PythonScriptDialog />
     <PreviewDialog />
     <MetricConfigDialog />
@@ -33,7 +32,6 @@ import AloudataDialog from './dataset/AloudataDialog.vue'
 import ApiConfigDialog from './dataset/ApiConfigDialog.vue'
 import FileConfigDialog from './dataset/FileConfigDialog.vue'
 import FieldMappingDialog from './FieldMappingDialog.vue'
-import FilterBindingDialog from './FilterBindingDialog.vue'
 import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
 import MetricConfigDialog from './MetricConfigDialog.vue'
@@ -123,19 +121,19 @@ function scheduleEmit(): void {
   }, 300)
 }
 
-// 仅监听数据字段（datasets / 筛选器绑定 / Python / 卡片元信息 / KPI 指标分组），避开 state.ui 弹窗开关引发的噪声
+// 仅监听数据字段（datasets / Python / 卡片元信息 / KPI 指标分组），避开 state.ui 弹窗开关引发的噪声
 watch(
-  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards, state.kpiMetrics],
+  () => [state.datasets, state.pythonUser, state.cards, state.kpiMetrics],
   () => scheduleEmit(),
   { deep: true },
 )
 
 /**
  * 输入配置变更 → 结果集标记过期；无脚本时防抖自动重算，有脚本时等用户点「生成结果集」。
- * 只监听「产出结果集的输入」（数据集 / 筛选器绑定 / 脚本），卡片标题等元信息不影响数据。
+ * 只监听「产出结果集的输入」（数据集 / 脚本），卡片标题等元信息不影响数据。
  */
 watch(
-  () => [state.datasets, state.filterBindings, state.pythonUser, state.hasPython],
+  () => [state.datasets, state.pythonUser, state.hasPython],
   () => {
     if (hydrating.value) return
     scheduleResultSet()

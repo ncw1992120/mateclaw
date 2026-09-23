@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
@@ -56,6 +56,25 @@ export type CardType = 'kpi' | 'table' | 'chart'
 let loadedExecutionPolicy: DashboardExecutionPolicy = {}
 let loadedDashboardSchema: InsightDashboardSchema | null = null
 let loadedDashboardUpdateTime: string | undefined
+
+/**
+ * 旧「筛选器绑定」的载入快照。
+ *
+ * Schema 字段 `scriptFilterBindings` / `boundFilterComponentIds` **仍然保留**：老看板的读取兼容
+ * （见 utils/component-dataset-pipeline.ts）与运行期参数注入（DashboardPreviewView）都依赖它。
+ * 本版本已删除该功能的编辑入口，保存时按载入快照原样回写，避免开关一次卡片就把老数据抹掉。
+ */
+let loadedScriptFilterBindings: DashboardScriptFilterBinding[] = []
+let loadedBoundFilterComponentIds: string[] = []
+
+/** 载入时记录旧绑定快照（hydratePanel / applyPipeline 调用），供保存回写 */
+export function setLoadedLegacyBindings(
+  bindings: DashboardScriptFilterBinding[] = [],
+  boundFilterComponentIds: string[] = [],
+): void {
+  loadedScriptFilterBindings = Array.isArray(bindings) ? bindings : []
+  loadedBoundFilterComponentIds = Array.isArray(boundFilterComponentIds) ? boundFilterComponentIds : []
+}
 
 export function setLoadedExecutionPolicy(policy: DashboardExecutionPolicy | undefined): void {
   loadedExecutionPolicy = { ...(policy ?? {}) }
@@ -119,20 +138,6 @@ export interface CardItem {
   multiTab: boolean // 多 TAB 模式（仅 KPI/指标卡）
 }
 
-/** 筛选器绑定 */
-export interface FilterBindingFieldMap {
-  datasetId: string
-  field: string // 该数据集上匹配到的字段
-  matched: boolean // 是否自动匹配（false 表示需手动映射）
-}
-export interface FilterBinding {
-  filterName: string // 仪表盘参数名，例：策略类型
-  scope: Record<string, boolean> // 数据集 id -> 是否作用到该数据集
-  fieldMap: FilterBindingFieldMap[]
-  /** 筛选器绑定到数据集后的运行时条件模板，值在查看数据时临时注入。 */
-  conditions?: DashboardScriptFilterCondition[]
-}
-
 interface UiState {
   treeVisible: boolean // 数据源选择树弹窗
   editingDatasetId: string | null // 正在编辑（重新配置）的数据集 id；null=新增
@@ -150,7 +155,6 @@ interface UiState {
     rows: Record<string, string>[]
   }
   fieldMapping: { visible: boolean; datasetId: string }
-  filterBinding: { visible: boolean }
   python: { visible: boolean }
   preview: {
     visible: boolean
@@ -217,9 +221,7 @@ export interface ResultSetState {
 
 // 输入筛选默认空；由用户按原型 §4.2 运算符枚举添加（运算符为固定枚举，非假数据）。
 
-// 筛选器绑定默认空；由用户添加，作用范围默认全选当前数据集，字段映射按真实字段名推断（见 FilterBindingDialog）。
-
-// Python 系统生成区域由 buildPythonSystemRegion() 根据「真实」数据集与筛选器绑定确定性生成
+// Python 系统生成区域由 buildPythonSystemRegion() 根据「真实」数据集确定性生成
 // （见下方函数定义，位于 Python 预处理一节）；用户处理区域由用户在编辑器中自行编写，
 // 不再预置任何假样例代码。
 
@@ -273,21 +275,9 @@ export function currentPythonSource(): PythonSystemSource {
     sourceType: mapSourceTypeOut(ds),
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
   }))
-  const bindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => {
-    const scoped = state.datasets.filter((ds) => binding.scope[ds.id] ?? binding.scope[ds.alias])
-    const fieldMappings: Record<string, string> = {}
-    scoped.forEach((ds) => {
-      const hit = binding.fieldMap.find((field) => field.datasetId === ds.id || field.datasetId === ds.alias)
-      if (hit?.field) fieldMappings[ds.alias] = hit.field
-    })
-    return {
-      filterComponentId: binding.filterName,
-      inputNames: scoped.map((ds) => ds.alias),
-      fieldMappings,
-      conditions: binding.conditions ?? [],
-    }
-  })
-  return { inputs, bindings }
+  // 系统区不再由筛选器绑定生成（bindings 仅供指纹稳定，脚本模板已忽略该参数），
+  // 沿用载入快照，避免开关卡片后老看板的系统区指纹无谓抖动。
+  return { inputs, bindings: loadedScriptFilterBindings }
 }
 
 /* ============================ 状态单例 ============================ */
@@ -307,8 +297,6 @@ const state = reactive({
   pythonSystem: '' as string,
   pythonUser: '' as string,
   pythonSystemState: null as import('@/utils/python-script-template').ReconciledSystemScript | null,
-  // 筛选器绑定（支持同时绑定多个筛选器）
-  filterBindings: [] as FilterBinding[],
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
   kpiMetrics: [] as KpiMetricConfig[],
   // 仪表盘可用筛选器组件（来自筛选器绑定弹窗的真实参数名来源；由 hydratePanel 注入）
@@ -392,7 +380,6 @@ function selectCard(id: string) {
   state.hasPython = false
   state.pythonSystem = ''
   state.pythonUser = ''
-  state.filterBindings = []
   resetResultSet('empty')
 }
 
@@ -550,19 +537,6 @@ function renameDataset(id: string, newAlias: string) {
     const re = new RegExp(`inputs\\[["']${escapeRegExp(oldAlias)}["']\\]`, 'g')
     state.pythonSystem = state.pythonSystem.replace(re, `inputs["${clean}"]`)
     state.pythonUser = state.pythonUser.replace(re, `inputs["${clean}"]`)
-  }
-
-  // 同步筛选器绑定（仅当绑定以别名为 key 时），遍历所有已绑定筛选器
-  if (state.filterBindings && state.filterBindings.length) {
-    state.filterBindings.forEach((b) => {
-      if (b.scope[oldAlias] !== undefined) {
-        b.scope[clean] = b.scope[oldAlias]
-        delete b.scope[oldAlias]
-      }
-      b.fieldMap.forEach((m) => {
-        if (m.datasetId === oldAlias) m.datasetId = clean
-      })
-    })
   }
 
   ds.alias = clean
@@ -946,30 +920,6 @@ function saveFieldMetas(list: DatasetFieldMeta[]): string | null {
   return null
 }
 
-/* ---- 筛选器绑定（支持多个） ---- */
-function openFilterBinding() {
-  // 首开不预置假数据；筛选器绑定弹窗按需创建空草稿（作用范围默认全选当前数据集）
-  state.ui.filterBinding.visible = true
-}
-function saveFilterBindings(arr: FilterBinding[]) {
-  state.filterBindings = arr
-  if (state.pythonSystemState) {
-    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
-    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
-  } else if (state.hasPython) {
-    const source = currentPythonSource()
-    const generatedCode = generateSystemScript(source)
-    state.pythonSystemState = {
-      mode: 'generated',
-      generatedCode,
-      generatedFingerprint: fingerprintSystemSource(source),
-      userCode: state.pythonUser,
-    }
-    state.pythonSystem = generatedCode
-  }
-  state.ui.filterBinding.visible = false
-}
-
 /* ---- Python 预处理 ---- */
 function openPython() {
   // generated 模式可自动刷新；managed 模式只更新候选版本，不覆盖用户接管代码。
@@ -1047,13 +997,6 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): void {
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   }
 }
-/** 当前绑定的筛选器组件 ID（Planner 据此校验绑定归属） */
-function boundFilterComponentIds(): string[] {
-  return state.filterBindings
-    .map((binding) => state.filterCatalog.find((f) => f.title === binding.filterName)?.id ?? binding.filterName)
-    .filter(Boolean)
-}
-
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
 
 /**
@@ -1305,39 +1248,23 @@ export function buildPipeline(): ComponentDatasetPipeline {
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
   }))
 
-  const scriptFilterBindings: DashboardScriptFilterBinding[] = state.filterBindings.map((b) => {
-    const inScope = state.datasets.filter((ds) => b.scope[ds.id] ?? b.scope[ds.alias])
-    const fieldMappings: Record<string, string> = {}
-    inScope.forEach((ds) => {
-      const hit = b.fieldMap.find((m) => m.datasetId === ds.id || m.datasetId === ds.alias)
-      if (hit?.field) fieldMappings[ds.alias] = hit.field
-    })
-    // filterComponentId 必须存画布真实筛选器组件 id（此前合成 filter-N，回显时按 id 找
-    // 不到组件 → 绑定名丢失成 "filter-0"，连带 params 取值 key 失效）。
-    // 找不到对应组件时回退存绑定名本身：回显侧按 title 兜底命中。
-    const catalogHit = state.filterCatalog.find((f) => f.title === b.filterName)
-    return {
-      filterComponentId: catalogHit?.id ?? b.filterName,
-      inputNames: inScope.map((ds) => ds.alias),
-      fieldMappings,
-      conditions: b.conditions ?? [],
-    }
-  })
-
+  // 旧「筛选器绑定」已无编辑入口：scriptFilterBindings / boundFilterComponentIds 按载入快照原样回写，
+  // 保证老看板（运行期参数注入仍读 schema.scriptFilterBindings）在编辑保存后不丢数据。
   return {
     datasetInputs,
-    scriptFilterBindings,
+    scriptFilterBindings: loadedScriptFilterBindings,
     script: buildPipelineScript(),
     systemScript: state.pythonSystemState ?? undefined,
     parameters: [],
     executionPolicy: loadedExecutionPolicy,
-    boundFilterComponentIds: boundFilterComponentIds(),
+    boundFilterComponentIds: loadedBoundFilterComponentIds,
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
     resultSet: resultSetMeta(),
   }
 }
 
-/** 本地状态 → 后端仪表盘 Schema（卡片组件 + 筛选器组件） */
+/** 本地状态 → 后端仪表盘 Schema（卡片组件）。
+ *  筛选器是画布上的真实组件，不再由旧「筛选器绑定」派生，故这里不再合成 filter-N 组件。 */
 function buildSchema(): InsightDashboardSchema {
   const pipeline = buildPipeline()
   const card = state.cards.find((c) => c.id === state.activeCardId) ?? state.cards[0]
@@ -1350,16 +1277,9 @@ function buildSchema(): InsightDashboardSchema {
     multiKpi: card.multiMetric,
     renderType: card.type === 'kpi' ? 'kpi' : card.type === 'table' ? 'table' : 'echarts',
   }
-  const filterComponents: InsightComponent[] = state.filterBindings.map((b, i) => ({
-    id: `filter-${i}`,
-    type: 'filter',
-    title: b.filterName,
-    position: { x: 0, y: 0, w: 6, h: 2 },
-    config: { field: b.filterName, optionSource: 'static', scope: 'scoped' },
-  }))
   const patch = {
     version: '1.1',
-    pages: [{ id: 'page_0', name: '卡片配置', order: 0, components: [backend.withPipeline(cardComponent, pipeline), ...filterComponents] }],
+    pages: [{ id: 'page_0', name: '卡片配置', order: 0, components: [backend.withPipeline(cardComponent, pipeline)] }],
     datasetInputs: pipeline.datasetInputs,
     script: pipeline.script,
     scriptFilterBindings: pipeline.scriptFilterBindings,
@@ -1369,12 +1289,6 @@ function buildSchema(): InsightDashboardSchema {
   const target = backend.withPipeline(cardComponent, pipeline)
   const base = loadedDashboardSchema ?? patch
   const merged = patchDashboardSchema(base, target) as InsightDashboardSchema
-  // 过滤器是当前卡片管道的可视化绑定；只新增缺失的过滤器，不删除其他页面/组件。
-  const firstPage = merged.pages?.[0]
-  if (firstPage && filterComponents.length) {
-    const existingIds = new Set((firstPage.components ?? []).map((item) => String(item.id)))
-    firstPage.components = [...(firstPage.components ?? []), ...filterComponents.filter((item) => !existingIds.has(item.id))]
-  }
   merged.datasetInputs = pipeline.datasetInputs
   merged.script = pipeline.script
   merged.scriptFilterBindings = pipeline.scriptFilterBindings
@@ -1411,19 +1325,11 @@ function applyPipeline(resp: InsightDashboardSchema): void {
     state.hasPython = false
   }
 
-  const filterComps = components.filter((c) => c.type === 'filter')
-  const bindings = pipeline?.scriptFilterBindings ?? resp.scriptFilterBindings ?? []
-  state.filterBindings = bindings.map((b, i) => {
-    const scope: Record<string, boolean> = {}
-    state.datasets.forEach((ds) => (scope[ds.id] = (b.inputNames ?? []).includes(ds.alias)))
-    const fieldMap: FilterBindingFieldMap[] = state.datasets.map((ds) => {
-      // 老绑定里存的是展示名 → 归一为字段名（决策 4），保证改名后绑定关系仍有效
-      const raw = b.fieldMappings?.[ds.alias] ?? ''
-      const field = raw ? normalizeFieldRef(raw) : ''
-      return { datasetId: ds.id, field, matched: !!field }
-    })
-    return { filterName: filterComps[i]?.title || `筛选器${i + 1}`, scope, fieldMap }
-  })
+  // 旧绑定已无编辑入口，只记录载入快照供保存回写（保留老看板数据）。
+  setLoadedLegacyBindings(
+    pipeline?.scriptFilterBindings ?? resp.scriptFilterBindings ?? [],
+    pipeline?.boundFilterComponentIds ?? [],
+  )
 }
 
 /**
@@ -1993,9 +1899,6 @@ export function useInsight() {
     // dataset schema（「字段名称」自动填充 + diff）
     canFetchDatasetSchema,
     refreshDatasetSchema,
-    // filter binding
-    openFilterBinding,
-    saveFilterBindings,
     // python
     openPython,
     savePython,

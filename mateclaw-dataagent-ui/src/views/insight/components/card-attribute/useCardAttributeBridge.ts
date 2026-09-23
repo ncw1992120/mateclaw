@@ -15,7 +15,6 @@ import type {
   ComponentDatasetPipeline,
   ComponentTab,
   DashboardDatasetInput,
-  DashboardScriptFilterBinding,
   InsightComponent,
   InsightComponentType,
   InsightDashboardSchema,
@@ -29,11 +28,11 @@ import {
   mapSourceTypeIn,
   materializedKpiMetrics,
   migrateKpiMetrics,
-  normalizeFieldRef,
   setLoadedExecutionPolicy,
+  setLoadedLegacyBindings,
   useInsight,
 } from './useInsight'
-import type { CardType, DatasetConfig, FilterBinding, InputFilter } from './useInsight'
+import type { CardType, DatasetConfig, InputFilter } from './useInsight'
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 
@@ -65,38 +64,6 @@ export function inputToDatasetConfig(input: DashboardDatasetInput, index: number
   const ds = datasetFromInput(input, index)
   const datasetId = input.datasetId ? String(input.datasetId) : ''
   return { ...ds, id: `${datasetId || 'ds'}-${index}` }
-}
-
-/** pipeline.scriptFilterBindings → 面板筛选器绑定（作用范围按数据集逐项展开） */
-function filterBindingsFromPipeline(
-  bindings: DashboardScriptFilterBinding[],
-  datasets: DatasetConfig[],
-  filterComponents: PanelFilterComponent[],
-): FilterBinding[] {
-  return bindings.map((binding, index) => {
-    const scope: Record<string, boolean> = {}
-    datasets.forEach((ds) => {
-      scope[ds.id] = (binding.inputNames ?? []).includes(ds.alias)
-    })
-    const fieldMap = datasets.map((ds) => {
-      // 老绑定里存的是展示名 → 归一为字段名（决策 4），改名后绑定关系依然有效
-      const raw = binding.fieldMappings?.[ds.alias] ?? ''
-      const field = raw ? normalizeFieldRef(raw) : ''
-      return { datasetId: ds.id, field, matched: Boolean(field) }
-    })
-    // 绑定名回显：优先按组件 id 精确匹配；历史数据可能存的是筛选器名本身
-    // （保存侧找不到组件 id 时回退存名），再按 title 兜底命中。
-    // 旧版合成的 filter-N id 名字已丢失：画布仅一个筛选器候选时唯一可对，自动恢复。
-    const matchedComponent = filterComponents.find((c) => c.id === binding.filterComponentId)
-      ?? filterComponents.find((c) => c.title === binding.filterComponentId)
-      ?? (filterComponents.length === 1 && /^filter-\d+$/.test(binding.filterComponentId) ? filterComponents[0] : undefined)
-    return {
-      filterName: matchedComponent?.title || binding.filterComponentId || `筛选器${index + 1}`,
-      scope,
-      fieldMap,
-      conditions: binding.conditions ?? [],
-    }
-  })
 }
 
 /**
@@ -140,7 +107,8 @@ export function hydratePanel(
     state.pythonUser = script
     state.hasPython = Boolean(script.trim())
   }
-  state.filterBindings = filterBindingsFromPipeline(pipeline?.scriptFilterBindings ?? [], state.datasets, filterComponents)
+  // 旧「筛选器绑定」已无编辑入口：记录载入快照供保存回写（保留老看板数据），不再灌入面板 state。
+  setLoadedLegacyBindings(pipeline?.scriptFilterBindings ?? [], pipeline?.boundFilterComponentIds ?? [])
   if (state.pythonSystemState && (pipeline?.scriptFilterBindings?.length ?? 0) > 0) {
     state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
@@ -175,7 +143,6 @@ export function hydratePanel(
   state.ui.api.visible = false
   state.ui.file.visible = false
   state.ui.fieldMapping.visible = false
-  state.ui.filterBinding.visible = false
   state.ui.python.visible = false
   state.ui.preview.visible = false
   state.ui.metricConfig.visible = false

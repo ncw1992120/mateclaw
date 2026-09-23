@@ -82,22 +82,6 @@
           <span class="dd-title">筛选条件</span>
         </div>
 
-        <div v-if="runtimeBoundRows.length" class="dd-bound-conditions">
-          <div class="dd-subtitle">绑定筛选条件（本次查询）</div>
-          <div
-            v-for="(row, index) in runtimeBoundRows"
-            :key="`${row.field}-${row.parameterName}-${index}`"
-            class="dd-condition dd-bound-condition"
-            data-testid="bound-filter-row"
-          >
-            <span class="dd-bound-field">{{ row.field }}</span>
-            <code class="dd-bound-op">{{ row.operator }}</code>
-            <span class="dd-bound-param">${{ row.parameterName }}</span>
-            <el-input v-model="row.value" class="dd-value" size="small" placeholder="可选，未填写不参与查询" />
-            <el-button size="small" text type="danger" :icon="Delete" @click="removeBoundCondition(index)" />
-          </div>
-        </div>
-
         <el-alert
           v-if="!optionsLoading && !fieldOptions.length"
           class="dd-note"
@@ -210,13 +194,6 @@ import {
   withoutField,
   type FilterCondition,
 } from '@/utils/filter-conditions'
-import {
-  buildExecutionParameters,
-  defaultRuntimeRows,
-  toDatasetFilters,
-  type RuntimeFilterRow,
-} from '@/utils/runtime-filter-bindings'
-import type { DashboardScriptFilterBinding } from '@/types'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
 const { state } = useInsight()
@@ -313,8 +290,6 @@ const filterSupported = computed(() => props.dataset.sourceType !== 'file')
 
 const conditions = ref<FilterCondition[]>([])
 const legacyConditions = ref<FilterCondition[]>([])
-const boundRows = ref<RuntimeFilterRow[]>([])
-const runtimeBoundRows = computed(() => boundRows.value)
 const fieldOptions = ref<{ value: string; label: string }[]>([])
 const optionsLoading = ref(false)
 
@@ -363,10 +338,6 @@ function removeCondition(index: number): void {
   conditions.value.splice(index, 1)
 }
 
-function removeBoundCondition(index: number): void {
-  boundRows.value.splice(index, 1)
-}
-
 /** 从「为空」这类无需取值的运算符切回来时，把残留的禁用值清掉，避免下推一个看不见的值 */
 function onOperatorChange(row: FilterCondition): void {
   if (!needsValue(row.op)) row.value = ''
@@ -378,7 +349,7 @@ function removeLegacy(field: string): void {
 
 /* ── 结果区 ── */
 const queryHint = computed(() =>
-  filterSupported.value ? '绑定条件和附加条件按 AND 组合；多个条件按 AND 组合；空的绑定值不参与查询' : '文件类型暂不支持筛选下推，直接查询即可',
+  filterSupported.value ? '多个条件按 AND 组合；未填写的条件不参与查询' : '文件类型暂不支持筛选下推，直接查询即可',
 )
 
 /** 最近一次执行的时间（展示用 HH:mm） */
@@ -392,7 +363,6 @@ const currentSignature = computed(() =>
   JSON.stringify([
     sql.value,
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
-    boundRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value })),
     completeConditions(conditions.value),
     legacyConditions.value,
   ]),
@@ -420,7 +390,6 @@ async function fetchRows(reset: boolean): Promise<void> {
     const filters = [
       ...completeConditions(conditions.value),
       ...legacyConditions.value,
-      ...toDatasetFilters(boundRows.value),
     ]
     const request = draftRequestForDataset({
       ...props.dataset,
@@ -433,7 +402,7 @@ async function fetchRows(reset: boolean): Promise<void> {
       rows.value = []
       return
     }
-    const parameters = { ...namedParameters(), ...buildExecutionParameters(boundRows.value) }
+    const parameters = namedParameters()
     const offset = reset ? 0 : rows.value.length
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 不应要求前端重新携带 SQL 才能查看数据。用户在弹窗内修改 SQL 后，
@@ -521,7 +490,6 @@ async function open(): Promise<void> {
 
   conditions.value = []
   legacyConditions.value = []
-  boundRows.value = []
   fieldOptions.value = []
   columns.value = []
   rows.value = []
@@ -530,15 +498,6 @@ async function open(): Promise<void> {
   error.value = ''
 
   await loadFieldOptions()
-  const runtimeBindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => ({
-    filterComponentId: binding.filterName,
-    inputNames: state.datasets
-      .filter((item) => binding.scope[item.id] || binding.scope[item.alias])
-      .map((item) => item.alias),
-    fieldMappings: Object.fromEntries(binding.fieldMap.map((item) => [item.datasetId, item.field])),
-    conditions: binding.conditions ?? [],
-  }))
-  boundRows.value = defaultRuntimeRows(props.dataset.alias, runtimeBindings)
   // 可选项就绪后再分流：此时才判断得出哪些存量条件属于「遗留」
   const saved = (props.dataset.filters ?? []) as unknown as Parameters<typeof partitionConditions>[0]
   const known = new Set(fieldOptions.value.map((option) => option.value))
@@ -655,29 +614,6 @@ watch(() => ui.dataDialog.visible, (visible) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.dd-bound-conditions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-md);
-  background: var(--db-muted);
-}
-.dd-subtitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--db-text-secondary);
-}
-.dd-bound-field {
-  min-width: 140px;
-  color: var(--db-text);
-}
-.dd-bound-op,
-.dd-bound-param {
-  flex-shrink: 0;
-  color: var(--db-text-secondary);
 }
 .dd-condition {
   display: flex;

@@ -15,35 +15,6 @@ const { ElMessageBox } = await import('element-plus')
 const { state } = useInsight()
 
 describe('buildPythonSystemRegion', () => {
-  it('保存筛选器绑定后立即刷新系统生成区域的过滤条件', () => {
-    const { saveFilterBindings } = useInsight()
-    state.datasets = [{ id: 'ds1', alias: 'table2' }] as never
-    state.filterBindings = []
-    state.filterCatalog = [{ id: 'filter-metric-date', title: '指标日期' }]
-    state.hasPython = true
-    state.pythonUser = 'result = table2'
-    state.pythonSystem = 'table2 = datasets.read(input_name="table2", filters=[]).to_polars()'
-    state.pythonSystemState = {
-      mode: 'generated',
-      generatedCode: state.pythonSystem,
-      generatedFingerprint: 'before-binding',
-      userCode: state.pythonUser,
-    }
-
-    saveFilterBindings([{
-      filterName: '指标日期',
-      scope: { ds1: true },
-      fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
-    }])
-
-    // 新契约：绑定变化刷新系统区，但系统区不再携带任何筛选拼接
-    expect(state.pythonSystem).toContain('table2 = datasets.input(')
-    expect(state.pythonSystem).toContain(').to_polars()')
-    expect(state.pythonSystem).not.toContain('_optional_filter')
-    expect(state.pythonSystem).not.toContain('filters=')
-    expect(state.pythonSystemState?.generatedCode).toContain('datasets.input(')
-  })
-
   it('打开已绑定筛选器的组件时重算过期的系统生成区域', () => {
     const component = writeComponentDatasetPipeline(
       { id: 'nested-table', type: 'table', title: '子策略贡献表', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },
@@ -80,9 +51,8 @@ describe('buildPythonSystemRegion', () => {
     expect(state.pythonSystem).not.toContain('datasets.read(')
   })
 
-  it('无绑定筛选时生成 datasets.input 标准读取（不生成 read/inputs[...]）', () => {
+  it('生成 datasets.input 标准读取（不生成 read/inputs[...]）', () => {
     state.datasets = [{ id: 'ds1', alias: 'table1' }] as never
-    state.filterBindings = []
     const code = buildPythonSystemRegion()
     expect(code).toContain('table1 = datasets.input(')
     expect(code).toContain('input_name="table1"')
@@ -92,20 +62,10 @@ describe('buildPythonSystemRegion', () => {
     expect(code).not.toContain('inputs[')
   })
 
-  it('绑定筛选器不再向系统区注入下推条件（条件由 queryConfig/Planner 处理）', () => {
+  it('系统区逐输入标准读取，不下推条件（条件由 queryConfig/Planner 处理）', () => {
     state.datasets = [
       { id: 'ds1', alias: 'table2' },
       { id: 'ds2', alias: 'table3' },
-    ] as never
-    state.filterBindings = [
-      {
-        filterName: '指标日期',
-        scope: { ds1: true, ds2: true },
-        fieldMap: [
-          { datasetId: 'ds1', field: 'metric_time', matched: true },
-          { datasetId: 'ds2', field: 'metric_time', matched: true },
-        ],
-      },
     ] as never
     const code = buildPythonSystemRegion()
     // 新契约：系统区逐输入标准读取，无 params/条件拼接
@@ -116,15 +76,8 @@ describe('buildPythonSystemRegion', () => {
     expect(code).not.toContain('数据源查询阶段下推')
   })
 
-  it('字段映射未命中时不生成下推条件（回落全量读取）', () => {
+  it('系统区不生成下推条件函数（_cond 已下线）', () => {
     state.datasets = [{ id: 'ds1', alias: 'table2' }] as never
-    state.filterBindings = [
-      {
-        filterName: '指标日期',
-        scope: { ds1: true },
-        fieldMap: [{ datasetId: 'ds1', field: '', matched: false }],
-      },
-    ] as never
     const code = buildPythonSystemRegion()
     expect(code).toContain('table2 = datasets.input(')
     expect(code).not.toContain('_cond(')
@@ -132,34 +85,18 @@ describe('buildPythonSystemRegion', () => {
     expect(code).not.toContain('filters=')
   })
 
-  it('有显式模板时按 operator 和 parameterNames 生成可选下推条件', () => {
+  it('系统区不按 operator/parameterNames 生成可选下推条件', () => {
     state.datasets = [{ id: 'ds1', alias: 'table2' }] as never
-    state.filterBindings = [{
-      filterName: '时间范围',
-      scope: { ds1: true },
-      fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
-      conditions: [
-        { inputName: 'table2', field: 'metric_time', operator: 'gte', parameterNames: ['startDate'], required: false },
-        { inputName: 'table2', field: 'metric_time', operator: 'lt', parameterNames: ['endDate'], required: false },
-      ],
-    }] as never
     const code = buildPythonSystemRegion()
     expect(code).not.toContain('_cond(')
     expect(code).toContain('table2 = datasets.input(')
     expect(code).toContain(').to_polars()')
   })
 
-  it('筛选器只作用于声明范围内数据集', () => {
+  it('多输入各自标准读取，作用域不再影响系统区', () => {
     state.datasets = [
       { id: 'ds1', alias: 'table2' },
       { id: 'ds2', alias: 'table3' },
-    ] as never
-    state.filterBindings = [
-      {
-        filterName: '指标日期',
-        scope: { ds1: true, ds2: false },
-        fieldMap: [{ datasetId: 'ds1', field: 'metric_time', matched: true }],
-      },
     ] as never
     const code = buildPythonSystemRegion()
     expect(code).toContain('input_name="table2"')
@@ -207,7 +144,6 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     vi.mocked(ElMessageBox.confirm).mockClear()
     state.ui.python.visible = false
     state.datasets = [{ id: 'ds1', alias: 'dataset_a' }] as never
-    state.filterBindings = []
     state.pythonUser = 'result = 1'
   })
 
