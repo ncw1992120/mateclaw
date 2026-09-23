@@ -1411,6 +1411,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         c.setType(op.getType());
         c.setTitle(op.getTitle() != null && !op.getTitle().isBlank() ? op.getTitle() : resolveDefaultTitle(op.getType()));
         c.setTitleIconStyle(op.getTitleIconStyle());
+        c.setThemeAccentGroup(op.getThemeAccentGroup());
+        c.setChildren(op.getChildren());
+        c.setContainerConfig(op.getContainerConfig());
         c.setChartType(op.getChartType());
         c.setRenderType(op.getRenderType() != null && !op.getRenderType().isBlank()
                 ? op.getRenderType() : resolveRenderType(op.getType()));
@@ -1442,6 +1445,15 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         if (op.getTitleIconStyle() != null) {
             c.setTitleIconStyle(op.getTitleIconStyle());
+        }
+        if (op.getThemeAccentGroup() != null) {
+            c.setThemeAccentGroup(op.getThemeAccentGroup());
+        }
+        if (op.getChildren() != null) {
+            c.setChildren(op.getChildren());
+        }
+        if (op.getContainerConfig() != null) {
+            c.setContainerConfig(op.getContainerConfig());
         }
         if (op.getChartType() != null) {
             c.setChartType(op.getChartType());

@@ -1207,6 +1207,7 @@ function handleComponentChange(updated: InsightComponent): void {
       child.title = updated.title
       child.titleBarStyle = updated.titleBarStyle
       child.titleIconStyle = updated.titleIconStyle
+      child.themeAccentGroup = updated.themeAccentGroup
       child.visualStyle = updated.visualStyle
       child.chartType = updated.chartType
       child.config = updated.config

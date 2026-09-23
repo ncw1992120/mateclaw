@@ -12,7 +12,7 @@
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</span>
+      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -108,6 +108,7 @@
               :title="child.title"
               :dashboard-theme="dashboardTheme"
               :title-icon-style="child.titleIconStyle"
+              :theme-accent-group="child.themeAccentGroup"
               :variant="childIndex"
             />
             <button
@@ -351,7 +352,7 @@ function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boole
 const rootStyle = computed<Record<string, string>>(() => {
   const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
   return {
-    ...componentThemeStyle(props.dashboardTheme, 'combination'),
+    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup),
     ...shared,
   }
 })
@@ -376,6 +377,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     title: child.title,
     titleBarStyle: child.titleBarStyle,
     titleIconStyle: child.titleIconStyle,
+    themeAccentGroup: child.themeAccentGroup,
     visualStyle: child.visualStyle,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
@@ -414,7 +416,7 @@ function childComponentData(child: InsightCombinationChild): InsightComponentDat
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
-  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1)
+  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup)
   if (cfg.value.layoutMode === 'free') {
     return {
       ...themeStyle,
@@ -958,6 +960,7 @@ const { onTabKeydown } = useTabKeyboard(
 /* 空态内容（图标 + 文案）由共享 EmptyState 组件渲染 */
 
 .cc-child {
+  position: relative;
   box-sizing: border-box;
   border: var(--component-border, 1px solid var(--component-group-border, var(--db-border)));
   border-radius: var(--component-radius, 8px);
@@ -972,6 +975,7 @@ const { onTabKeydown } = useTabKeyboard(
   cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.15s;
 }
+.cc-child::before { content: ''; position: absolute; inset: 0 0 auto; z-index: 2; height: 2px; border-radius: inherit; background: var(--component-group-accent, transparent); pointer-events: none; }
 .cc-body.mode-vertical .cc-child { position: relative; }
 .cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }

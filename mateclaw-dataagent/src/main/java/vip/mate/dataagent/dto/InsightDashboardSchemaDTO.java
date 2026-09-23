@@ -109,6 +109,15 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 标题图标样式；使用 Map 兼容前端可演进的显示属性。 */
         private Map<String, Object> titleIconStyle;
 
+        /** 仪表盘主题强调色分组；缺省时前端按主色渲染以兼容历史 Schema。 */
+        private String themeAccentGroup;
+
+        /** 组合卡片默认子组件；Map 结构用于原样保留前端逐步演进的子组件配置。 */
+        private List<Map<String, Object>> children;
+
+        /** 组合卡片布局及页签配置；Map 结构需保留 tabs[].children 等嵌套数据。 */
+        private Map<String, Object> containerConfig;
+
         /** 栅格位置 */
         private Position position;
 
