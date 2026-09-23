@@ -53,6 +53,7 @@
       <el-table
         v-if="activeTableData && activeTableData.rows.length > 0"
         :data="pagedTableRows"
+        @sort-change="handleSortChange"
         border
         size="small"
         height="100%"
@@ -65,6 +66,8 @@
           :prop="`col_${idx}`"
           :label="col"
           min-width="120"
+          :sortable="isSampleSortableColumn(idx) ? 'custom' : false"
+          :sort-orders="['ascending', 'descending', null]"
           show-overflow-tooltip
         />
       </el-table>
@@ -111,6 +114,8 @@ const props = withDefaults(defineProps<{
   componentData?: InsightComponentData
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 当前内容是否为未绑定数据源时的默认样例数据 */
+  sampleMode?: boolean
   dashboardTheme?: ResolvedDashboardTheme
   /** 编辑态显示页签图标设置操作 */
   editable?: boolean
@@ -118,7 +123,7 @@ const props = withDefaults(defineProps<{
   titleIconStylePreview?: ComponentTitleIconStyle
   /** 正在编辑的页签图标样式即时预览 */
   tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
-}>(), { showTitle: true, editable: false })
+}>(), { showTitle: true, sampleMode: false, editable: false })
 
 const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
@@ -241,10 +246,49 @@ const activeTableRows = computed(() => {
 const currentPage = ref(1)
 const pageSize = ref(PAGE_SIZE_DEFAULT)
 const pageSizes = PAGE_SIZE_OPTIONS
+const sortState = ref<{ prop: string; order: 'ascending' | 'descending' } | null>(null)
 
 /** 数据变化时重置页码 */
 watch(activeTableRows, () => {
   currentPage.value = 1
+  sortState.value = null
+})
+
+watch(() => props.sampleMode, () => {
+  currentPage.value = 1
+  sortState.value = null
+})
+
+function isSampleSortableColumn(index: number): boolean {
+  return props.sampleMode && index === 1
+}
+
+function handleSortChange(sort: { prop: string; order: 'ascending' | 'descending' | null }): void {
+  if (!props.sampleMode || sort.prop !== 'col_1' || !sort.order) {
+    sortState.value = null
+    currentPage.value = 1
+    return
+  }
+  sortState.value = { prop: sort.prop, order: sort.order }
+  currentPage.value = 1
+}
+
+/** 样例表格在前端对全部行排序，再切分页数据；真实数据仍沿用原顺序。 */
+const sortedTableRows = computed(() => {
+  const sort = sortState.value
+  if (!props.sampleMode || !sort) return activeTableRows.value
+  const direction = sort.order === 'ascending' ? 1 : -1
+  return [...activeTableRows.value].sort((left, right) => {
+    const leftValue = left[sort.prop] ?? ''
+    const rightValue = right[sort.prop] ?? ''
+    const leftNumber = Number(leftValue)
+    const rightNumber = Number(rightValue)
+    const bothNumeric = leftValue !== '' && rightValue !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+    const comparison = bothNumeric
+      ? leftNumber - rightNumber
+      : leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: 'base' })
+    return comparison * direction
+  })
 })
 
 /** 是否显示分页（数据量超过一页时显示） */
@@ -256,7 +300,7 @@ const showPagination = computed(() => {
 const pagedTableRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
-  return activeTableRows.value.slice(start, end)
+  return sortedTableRows.value.slice(start, end)
 })
 
 /** 导出 CSV */

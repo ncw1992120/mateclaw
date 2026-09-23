@@ -139,10 +139,13 @@ export function resolveComponentSample(component: SampleComponent): ComponentSam
     renderData = { componentId: component.id, renderType: 'kpi', kpi: { name: '总量', value: '1,284', fieldKey: 'value' }, kpiList: [{ name: '总量', value: '1,284', fieldKey: 'value' }] }
   } else if (component.type === 'table') {
     const columns = [{ name: 'name', dataType: 'string', role: 'dimension' }, { name: 'count', dataType: 'number', role: 'metric' }]
-    const rows = [{ name: '策略A', count: 42 }, { name: '策略B', count: 35 }]
-    data = { kind: 'table', schema: columns, rows, pagination: { page: 1, pageSize: 20, total: 2, hasNext: false } }
+    const rows = Array.from({ length: 45 }, (_, index) => ({
+      name: `策略${String.fromCharCode(65 + index % 26)}${Math.floor(index / 26) + 1}`,
+      count: index + 1,
+    }))
+    data = { kind: 'table', schema: columns, rows, pagination: { page: 1, pageSize: 20, total: rows.length, hasNext: true } }
     contract = '表格：列定义 + 明细行；分页结果需包含 page、pageSize、total 或 hasNext。'
-    renderData = { componentId: component.id, renderType: 'table', table: { columns: ['name', 'count'], rows: [['策略A', '42'], ['策略B', '35']] } }
+    renderData = { componentId: component.id, renderType: 'table', table: { columns: ['name', 'count'], rows: rows.map((row) => [row.name, String(row.count)]) } }
   } else if (component.type === 'filter') {
     const options = [{ label: '策略A', value: 'strategy-a' }, { label: '策略B', value: 'strategy-b' }]
     data = { kind: 'options', schema: [{ name: 'label', dataType: 'string', role: 'label' }, { name: 'value', dataType: 'string', role: 'value' }], options }
