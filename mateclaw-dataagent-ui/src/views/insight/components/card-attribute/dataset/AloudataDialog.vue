@@ -10,6 +10,20 @@
       />
       <template v-else>
         <div class="selection-fields">
+          <el-alert
+            v-if="selectionConflict"
+            class="selection-conflict"
+            type="error"
+            :closable="false"
+            title="已选指标与维度存在不兼容项，请调整选择后再确定"
+          />
+          <el-alert
+            v-else-if="selectedMetricRelationsUnverified"
+            class="selection-validation-state"
+            type="warning"
+            :closable="false"
+            :title="selectedMetricRelationsLoading ? '正在校验已选指标的可用维度…' : '无法校验已选指标的可用维度，请重试或移除该指标'"
+          />
           <div class="selection-row">
             <span class="selection-label">指标</span>
             <el-popover
@@ -56,8 +70,28 @@
                     <div v-if="!metricCategories.length" class="directory-empty">暂无指标目录</div>
                   </aside>
                   <section class="directory-results" v-loading="metricsLoading">
-                    <label v-for="item in metricPage.records" :key="item.metricName" class="directory-item">
+                    <label
+                      v-for="item in metricPage.records"
+                      :key="item.metricName"
+                      class="directory-item"
+                      :class="{ 'is-unavailable': isMetricUnavailable(item) && !ui.aloudata.metrics.includes(item.metricName) }"
+                    >
+                      <el-tooltip
+                        v-if="isMetricUnavailable(item) && !ui.aloudata.metrics.includes(item.metricName)"
+                        :content="metricUnavailableReason(item)"
+                        placement="top"
+                      >
+                        <span class="disabled-checkbox-target">
+                          <el-checkbox
+                            :model-value="ui.aloudata.metrics.includes(item.metricName)"
+                            :label="item.metricName"
+                            disabled
+                            @change="(checked: boolean) => toggleSelection('metrics', item.metricName, checked)"
+                          />
+                        </span>
+                      </el-tooltip>
                       <el-checkbox
+                        v-else
                         :model-value="ui.aloudata.metrics.includes(item.metricName)"
                         :label="item.metricName"
                         @change="(checked: boolean) => toggleSelection('metrics', item.metricName, checked)"
@@ -131,8 +165,28 @@
                     <div v-if="!dimensionCategories.length" class="directory-empty">暂无维度目录</div>
                   </aside>
                   <section class="directory-results" v-loading="dimensionsLoading">
-                    <label v-for="item in dimensionPage.records" :key="item.dimName" class="directory-item">
+                    <label
+                      v-for="item in dimensionPage.records"
+                      :key="item.dimName"
+                      class="directory-item"
+                      :class="{ 'is-unavailable': dimensionUnavailableReason(item.dimName) && !ui.aloudata.dims.includes(item.dimName) }"
+                    >
+                      <el-tooltip
+                        v-if="dimensionUnavailableReason(item.dimName) && !ui.aloudata.dims.includes(item.dimName)"
+                        :content="dimensionUnavailableReason(item.dimName)"
+                        placement="top"
+                      >
+                        <span class="disabled-checkbox-target">
+                          <el-checkbox
+                            :model-value="ui.aloudata.dims.includes(item.dimName)"
+                            :label="item.dimName"
+                            disabled
+                            @change="(checked: boolean) => toggleSelection('dimensions', item.dimName, checked)"
+                          />
+                        </span>
+                      </el-tooltip>
                       <el-checkbox
+                        v-else
                         :model-value="ui.aloudata.dims.includes(item.dimName)"
                         :label="item.dimName"
                         @change="(checked: boolean) => toggleSelection('dimensions', item.dimName, checked)"
@@ -194,7 +248,7 @@
 
     <template #footer>
       <el-button @click="ui.aloudata.visible = false">取消</el-button>
-      <el-button type="primary" :disabled="!datasourceId" @click="confirmAloudata">确定</el-button>
+      <el-button type="primary" :disabled="!datasourceId || selectionConflict || selectedMetricRelationsUnverified" @click="confirmAloudata">确定</el-button>
     </template>
   </el-dialog>
 </template>
@@ -205,6 +259,7 @@ import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as datasourceApi from '@/api/datasource'
 import {
+  getAloudataMetricDetail,
   pageAloudataMetrics,
   pageAloudataDimensions,
   listAloudataCategoryCounts,
@@ -238,6 +293,8 @@ const selectedMetricCategoryId = ref('')
 const selectedDimensionCategoryId = ref(ALL_DIMENSIONS_ID)
 const metricLabelMap = reactive<Record<string, string>>({})
 const dimLabelMap = reactive<Record<string, string>>({})
+const metricDimensions = reactive<Record<string, string[]>>({})
+const selectedMetricRelationsLoading = ref(false)
 const categoryTreeProps = { label: 'categoryName', children: 'children' }
 
 /** 指标视图列表（来自后端 analysis-views/list，非假数据；带 owner/mine 归属） */
@@ -261,6 +318,15 @@ const dimensionPage = reactive<AloudataDimensionPage>({
   size: pageSize,
   current: 1,
   pages: 0,
+})
+
+const selectedMetricRelationsReady = computed(() => ui.aloudata.metrics.every((name) => Array.isArray(metricDimensions[name])))
+const selectedMetricRelationsUnverified = computed(() => ui.aloudata.metrics.length > 0 && !selectedMetricRelationsReady.value)
+const selectionConflict = computed(() => {
+  if (!ui.aloudata.metrics.length || !ui.aloudata.dims.length || !selectedMetricRelationsReady.value) return false
+  return ui.aloudata.metrics.some((metricName) =>
+    ui.aloudata.dims.some((dimName) => !metricDimensions[metricName].includes(dimName)),
+  )
 })
 
 const dimensionCategoryTree = computed(() => [{
@@ -305,6 +371,7 @@ function open() {
   onlyMine.value = true
   Object.keys(metricLabelMap).forEach((k) => delete metricLabelMap[k])
   Object.keys(dimLabelMap).forEach((k) => delete dimLabelMap[k])
+  Object.keys(metricDimensions).forEach((k) => delete metricDimensions[k])
   if (!datasourceId.value) {
     ElMessage.warning('未关联到数据源，无法加载指标/维度')
     return
@@ -313,6 +380,7 @@ function open() {
     loadAnalysisViews()
     return
   }
+  void loadSelectedMetricRelations(ui.aloudata.metrics)
   loadMetricCategories()
   loadDimensionCategories()
 }
@@ -379,6 +447,53 @@ function dimLabel(name: string) {
 function removeSelection(type: 'metrics' | 'dimensions', name: string) {
   if (type === 'metrics') ui.aloudata.metrics = ui.aloudata.metrics.filter((item) => item !== name)
   else ui.aloudata.dims = ui.aloudata.dims.filter((item) => item !== name)
+}
+
+async function loadSelectedMetricRelations(metricNames: string[]) {
+  const missing = [...new Set(metricNames)].filter((name) => !Array.isArray(metricDimensions[name]))
+  if (!missing.length) return
+  selectedMetricRelationsLoading.value = true
+  try {
+    const relations = await Promise.all(missing.map((name) => getAloudataMetricDetail(datasourceId.value, name)))
+    relations.forEach((relation, index) => {
+      if (Array.isArray(relation.availableDimensions)) {
+        metricDimensions[missing[index]] = relation.availableDimensions
+      }
+    })
+  } catch {
+    ElMessage.error('加载已选指标的可用维度失败，请重试')
+  } finally {
+    selectedMetricRelationsLoading.value = false
+  }
+}
+
+watch(
+  () => [...ui.aloudata.metrics],
+  (metricNames) => { void loadSelectedMetricRelations(metricNames) },
+)
+
+function dimensionUnavailableReason(dimName: string) {
+  if (!ui.aloudata.metrics.length) return ''
+  if (!selectedMetricRelationsReady.value) {
+    return selectedMetricRelationsLoading.value
+      ? '正在校验已选指标的可用维度'
+      : '无法校验已选指标的可用维度'
+  }
+  return ui.aloudata.metrics.some((metricName) => !metricDimensions[metricName].includes(dimName))
+    ? '该维度不是已选指标的可用维度'
+    : ''
+}
+
+function isMetricUnavailable(item: { availableDimensions?: string[] | null }) {
+  return ui.aloudata.dims.length > 0
+    && (!Array.isArray(item.availableDimensions)
+      || ui.aloudata.dims.some((dimName) => !item.availableDimensions!.includes(dimName)))
+}
+
+function metricUnavailableReason(item: { availableDimensions?: string[] | null }) {
+  return Array.isArray(item.availableDimensions)
+    ? '该指标不支持已选维度'
+    : '无法校验该指标对已选维度的支持情况'
 }
 function onMetricCategorySelect(data: AloudataCategoryTreeNode) {
   selectedMetricCategoryId.value = data.categoryId
@@ -590,6 +705,16 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-width: 0;
   gap: 2px;
+}
+.disabled-checkbox-target {
+  display: inline-flex;
+  flex: none;
+}
+.directory-item.is-unavailable .directory-item-info {
+  color: var(--el-text-color-placeholder);
+}
+.directory-item.is-unavailable {
+  cursor: not-allowed;
 }
 .directory-item-title,
 .directory-item-code {

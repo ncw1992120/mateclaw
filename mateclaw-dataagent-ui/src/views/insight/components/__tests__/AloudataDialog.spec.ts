@@ -2,17 +2,21 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getAloudataMetricDirectory, pageAloudataMetrics, pageAloudataDimensions, listAloudataCategoryCounts } = vi.hoisted(() => ({
+const { getAloudataMetricDirectory, getAloudataMetricDetail, pageAloudataMetrics, pageAloudataDimensions, listAloudataCategoryCounts } = vi.hoisted(() => ({
   getAloudataMetricDirectory: vi.fn(async () => [{
     categoryId: 'metric-root',
     categoryName: '业务指标',
     metricList: [{ metricName: 'metric_a', metricDisplayName: '指标 A' }],
     subCategory: [],
   }]),
+  getAloudataMetricDetail: vi.fn(async (_datasourceId: string, metricName: string) => ({
+    metricName,
+    availableDimensions: metricName === 'metric_a' ? ['dim_a'] : ['dim_a', 'region'],
+  })),
   pageAloudataMetrics: vi.fn(async () => ({
     records: [
-      { metricName: 'metric_a', metricDisplayName: '指标 A' },
-      { metricName: 'technical_rate', metricDisplayName: '转化率' },
+      { metricName: 'metric_a', metricDisplayName: '指标 A', availableDimensions: ['dim_a'] },
+      { metricName: 'technical_rate', metricDisplayName: '转化率', availableDimensions: ['dim_a', 'region'] },
     ],
     total: 2,
     current: 1,
@@ -20,7 +24,10 @@ const { getAloudataMetricDirectory, pageAloudataMetrics, pageAloudataDimensions,
     pages: 1,
   })),
   pageAloudataDimensions: vi.fn(async () => ({
-    records: [{ dimName: 'dim_a', dimDisplayName: '维度 A' }],
+    records: [
+      { dimName: 'dim_a', dimDisplayName: '维度 A' },
+      { dimName: 'region', dimDisplayName: '所属大区' },
+    ],
     total: 1,
     current: 1,
     size: 20,
@@ -39,6 +46,7 @@ const { getAloudataMetricDirectory, pageAloudataMetrics, pageAloudataDimensions,
 
 vi.mock('@/api/semantic-model', () => ({
   getAloudataMetricDirectory,
+  getAloudataMetricDetail,
   pageAloudataMetrics,
   pageAloudataDimensions,
   listAloudataCategoryCounts,
@@ -121,7 +129,10 @@ const TreeStub = defineComponent({
 
 const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
-  'el-alert': { template: '<div />' },
+  'el-alert': {
+    props: { title: { type: String, default: '' } },
+    template: '<div>{{ title }}<slot /></div>',
+  },
   'el-popover': PopoverStub,
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio-button': { template: '<button type="button"><slot /></button>' },
@@ -138,7 +149,10 @@ const stubs = {
   'el-table-column': { template: '<div />' },
   'el-pagination': { template: '<div />' },
   'el-tree': TreeStub,
-  'el-tooltip': { template: '<span><slot /><slot name="content" /></span>' },
+  'el-tooltip': {
+    props: { content: { type: String, default: '' } },
+    template: '<span :data-tooltip="content"><slot /><slot name="content" /></span>',
+  },
 }
 
 beforeEach(() => {
@@ -151,6 +165,7 @@ beforeEach(() => {
     dims: ['dim_a'],
   }
   getAloudataMetricDirectory.mockClear()
+  getAloudataMetricDetail.mockClear()
   pageAloudataMetrics.mockClear()
   pageAloudataDimensions.mockClear()
   listAloudataCategoryCounts.mockClear()
@@ -227,5 +242,49 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
 
     expect(pageAloudataMetrics).toHaveBeenLastCalledWith('aloudata-1', expect.objectContaining({ keyword: 'technical_rate' }))
+  })
+
+  it('disables dimensions that are not supported by every selected metric and explains why', async () => {
+    state.ui.aloudata.metrics = ['metric_a', 'technical_rate']
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await flushPromises()
+
+    const region = wrapper.find('.dimension-picker-popup').findAll('.directory-item')
+      .find((item) => item.text().includes('region'))
+    expect(region?.find('input').element.disabled).toBe(true)
+    expect(region?.find('[data-tooltip]').attributes('data-tooltip')).toBe('该维度不是已选指标的可用维度')
+    expect(getAloudataMetricDetail).toHaveBeenCalledWith('aloudata-1', 'technical_rate')
+  })
+
+  it('disables metrics that do not support every selected dimension', async () => {
+    state.ui.aloudata.metrics = []
+    state.ui.aloudata.dims = ['region']
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+
+    const metricA = wrapper.find('.metric-picker-popup').findAll('.directory-item')
+      .find((item) => item.text().includes('metric_a'))
+    expect(metricA?.find('input').element.disabled).toBe(true)
+  })
+
+  it('keeps incompatible existing selections, reports the conflict, and blocks confirmation', async () => {
+    state.ui.aloudata.dims = ['region']
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+
+    expect(wrapper.find('.selection-conflict').text()).toContain('已选指标与维度存在不兼容项')
+    expect(wrapper.find('.dimension-selection-box').text()).toContain('region')
+    expect(wrapper.find('.stub-dialog').findAll('button').at(-1)?.element.disabled).toBe(true)
+
+    await wrapper.find('.dimension-selection-box .selected-tag-remove').trigger('click')
+    expect(wrapper.find('.selection-conflict').exists()).toBe(false)
+    expect(wrapper.find('.stub-dialog').findAll('button').at(-1)?.element.disabled).toBe(false)
   })
 })

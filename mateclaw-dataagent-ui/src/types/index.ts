@@ -244,7 +244,7 @@ export interface AloudataSyncedMetric {
   unit: string
   owner?: string
   status?: string
-  availableDimensions: string[]
+  availableDimensions: string[] | null
 }
 
 /** Aloudata 已同步维度 */

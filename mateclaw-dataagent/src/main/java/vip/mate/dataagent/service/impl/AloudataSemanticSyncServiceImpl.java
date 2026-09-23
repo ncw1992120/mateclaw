@@ -337,6 +337,13 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             List<Map<String, Object>> rows = data != null ? (List<Map<String, Object>>) data.get("data") : null;
             List<AloudataMetricSemanticDTO> records = (rows == null) ? Collections.emptyList()
                     : rows.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList());
+            if (!records.isEmpty()) {
+                List<String> metricNames = records.stream().map(AloudataMetricSemanticDTO::getMetricName)
+                        .filter(Objects::nonNull).collect(Collectors.toList());
+                Map<String, List<String>> dimensionMap = fetchMetricDimensionNames(config, metricNames);
+                records.forEach(metric -> metric.setAvailableDimensions(
+                        dimensionMap != null ? dimensionMap.get(metric.getMetricName()) : null));
+            }
             Page<AloudataMetricSemanticDTO> result = new Page<>(query.getPageNumber(), query.getPageSize(), total);
             result.setRecords(records);
             return result;
@@ -405,7 +412,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         AloudataMetricSemanticDTO dto = new AloudataMetricSemanticDTO();
         dto.setMetricName(metricName);
         dto.setSynonyms(Collections.emptyList());
-        dto.setAvailableDimensions(Collections.emptyList());
+        dto.setAvailableDimensions(null);
         if (metricName == null || metricName.isBlank()) {
             return dto;
         }
@@ -468,8 +475,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                             if (dn == null) {
                                 continue;
                             }
-                            String ddn = asStr(dm.get("dimDisplayName"));
-                            dims.add(ddn != null && !ddn.equals(dn) ? dn + "（" + ddn + "）" : dn);
+                            // 可用维度用于字段关系匹配，必须只返回稳定的维度编码。
+                            dims.add(dn);
                         } else if (o != null) {
                             dims.add(String.valueOf(o));
                         }
@@ -482,6 +489,51 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         }
 
         return dto;
+    }
+
+    /**
+     * 批量查询指标可用维度编码。dimensionAll 响应按指标名分组，避免分页列表逐指标请求。
+     * 返回 null 表示关系接口调用失败；空列表表示成功但该指标没有可用维度。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, List<String>> fetchMetricDimensionNames(AloudataConfigDTO config, List<String> metricNames) {
+        if (metricNames == null || metricNames.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metricNames", metricNames);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ENDPOINT_METRIC_ALL_DIMENSIONS, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_ALL_DIMENSIONS, config, params);
+            Map<String, Object> body = response.getBody();
+            if (!response.getStatusCode().is2xxSuccessful() || body == null
+                    || !Boolean.TRUE.equals(body.get("success")) || !(body.get("data") instanceof Map)) {
+                return null;
+            }
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            Map<String, List<String>> result = new HashMap<>();
+            for (String metricName : metricNames) {
+                Object rawDimensions = data.get(metricName);
+                if (!(rawDimensions instanceof List<?> dimensions)) {
+                    continue;
+                }
+                List<String> names = new ArrayList<>();
+                for (Object rawDimension : dimensions) {
+                    if (rawDimension instanceof Map<?, ?> dimension) {
+                        String dimName = asStr(dimension.get("dimName"));
+                        if (dimName != null && !dimName.isBlank()) names.add(dimName);
+                    } else if (rawDimension != null && !String.valueOf(rawDimension).isBlank()) {
+                        names.add(String.valueOf(rawDimension));
+                    }
+                }
+                result.put(metricName, names);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标分页] 批量获取可用维度失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     @Override
