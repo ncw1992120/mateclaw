@@ -13,7 +13,7 @@ const stubs = {
   GridItem: { template: '<div><slot /></div>' },
   KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
   ChartWidget: { template: '<div />' },
-  DataTableWidget: { template: '<div />' },
+  DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component'], template: '<div />' },
   TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component'], template: '<div />' },
   AiAnalysisWidget: { template: '<div />' },
@@ -92,6 +92,18 @@ describe('DashboardCanvas keyboard interaction', () => {
     await zoomInput.trigger('keydown.enter')
     expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom: 0.75')
     expect((zoomInput.element as HTMLInputElement).value).toBe('75')
+  })
+
+  it('hides the duplicate table title in the editable canvas', () => {
+    const table = { ...component, id: 'table-1', type: 'table' as const }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [table], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const tableWidget = wrapper.findComponent({ name: 'DataTableWidget' })
+    expect(tableWidget.props('showTitle')).toBe(false)
+    expect(tableWidget.props('sampleMode')).toBe(true)
   })
 
   it('does not mark a combination card as sample data', () => {

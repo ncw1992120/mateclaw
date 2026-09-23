@@ -196,6 +196,8 @@
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
+                :show-title="!editable"
+                :sample-mode="isSampleData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
