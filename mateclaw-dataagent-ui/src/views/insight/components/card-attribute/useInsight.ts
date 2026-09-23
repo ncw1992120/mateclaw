@@ -116,6 +116,7 @@ export interface CardItem {
   title: string
   titleBarStyle: 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
   themeAccentGroup?: 'primary' | 'secondary' | 'highlight'
+  componentColor?: string
   visualStyle: ComponentVisualStyle
   multiMetric: boolean // 多指标模式（仅 KPI/指标卡）
   multiTab: boolean // 多 TAB 模式（仅 KPI/指标卡）

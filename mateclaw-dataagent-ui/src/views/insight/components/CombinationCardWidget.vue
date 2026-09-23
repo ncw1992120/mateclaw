@@ -12,7 +12,7 @@
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="componentTitleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
+      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="componentTitleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -116,6 +116,7 @@
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style="childIconTitleStyle(child)"
                 :theme-accent-group="child.themeAccentGroup"
+                :component-color="child.componentColor"
                 :variant="childIndex"
               />
               <button
@@ -391,7 +392,7 @@ function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boole
 const rootStyle = computed<Record<string, string>>(() => {
   const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
   return {
-    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup),
+    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup, props.component.componentColor),
     ...shared,
   }
 })
@@ -417,6 +418,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     titleBarStyle: child.titleBarStyle,
     titleIconStyle: child.titleIconStyle,
     themeAccentGroup: child.themeAccentGroup,
+    componentColor: child.componentColor,
     visualStyle: child.visualStyle,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
@@ -442,7 +444,7 @@ function childComponentData(child: InsightCombinationChild): InsightComponentDat
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
-  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup)
+  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup, child.componentColor)
   if (cfg.value.layoutMode === 'free') {
     return {
       ...themeStyle,

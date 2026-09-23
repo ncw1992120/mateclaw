@@ -25,27 +25,26 @@
         <el-input v-model="activeCard.title" placeholder="请输入组件标题" aria-label="组件标题" />
       </div>
 
-      <div class="field">
-        <label class="field-label">标题栏样式</label>
-        <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%">
-          <el-option value="hidden" label="隐藏标题栏" />
-          <el-option value="standard" label="标准卡片" />
-          <el-option value="minimal" label="简洁文本" />
-          <el-option value="accent" label="强调色" />
-          <el-option value="section" label="分组标题" />
-        </el-select>
-      </div>
-      <div v-if="!['filter', 'timeFilter', 'aiAnalysis'].includes(activeCard.type)" class="field">
-        <label class="field-label">组件强调色</label>
-        <el-select v-model="activeCard.themeAccentGroup" aria-label="组件强调色" style="width: 100%">
-          <el-option value="primary" label="主色" />
-          <el-option value="secondary" label="辅助色" />
-          <el-option value="highlight" label="强调色" />
-        </el-select>
-      </div>
       <details class="style-settings">
         <summary class="section-title visual-style-title">样式设置</summary>
         <div class="style-field-grid">
+          <div class="field">
+            <label class="field-label">标题栏样式</label>
+            <el-select v-model="activeCard.titleBarStyle" aria-label="标题栏样式" style="width: 100%">
+              <el-option value="hidden" label="隐藏标题栏" />
+              <el-option value="standard" label="标准卡片" />
+              <el-option value="minimal" label="简洁文本" />
+              <el-option value="section" label="分组标题" />
+            </el-select>
+          </div>
+          <div v-if="!['filter', 'timeFilter'].includes(activeCard.type)" class="field">
+            <InsightColorField
+              :model-value="activeCard.componentColor ?? DEFAULT_COMPONENT_COLOR"
+              label="组件配色"
+              :suggested-colors="COMPONENT_COLOR_PRESETS"
+              @update:model-value="activeCard.componentColor = $event"
+            />
+          </div>
           <div class="field">
             <label class="field-label">边框</label>
             <el-select v-model="activeCard.visualStyle.border!.mode" aria-label="组件边框" style="width: 100%">
@@ -271,10 +270,13 @@ import DatasetCard from './DatasetCard.vue'
 import ComponentSampleDialog from '../ComponentSampleDialog.vue'
 import { resolveComponentSample } from '@/utils/component-sample-data'
 import { resolveFieldLabel } from '@/utils/field-mapping'
-import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
 
 const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
+
+const DEFAULT_COMPONENT_COLOR = '#1E40AF'
+const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
 
 const kpiMetricCount = computed(() => state.kpiMetrics.length)
 const sampleDialogVisible = ref(false)

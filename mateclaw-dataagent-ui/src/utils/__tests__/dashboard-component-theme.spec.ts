@@ -38,6 +38,13 @@ describe('dashboard component theme standards', () => {
     expect(componentIconStyle(theme, 'kpi', undefined, 0, 'highlight')['--dashboard-icon-color']).toBe(theme.metricPalette[3])
   })
 
+  it('allows an explicit component color to override the theme accent', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+
+    expect(componentThemeStyle(theme, 'chart', 0, undefined, '#A1B2C3')['--component-group-accent']).toBe('#A1B2C3')
+    expect(componentIconStyle(theme, 'chart', '销售趋势', 0, undefined, '#A1B2C3')['--dashboard-icon-color']).toBe('#A1B2C3')
+  })
+
   it('uses neutral canvas and nested surfaces instead of washing large areas with the primary color', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
     const variables = themeCssVariables(theme)

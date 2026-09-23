@@ -96,7 +96,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)) }"
-          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
+          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup, getComponent(item.i)?.componentColor), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -135,6 +135,7 @@
                     :dashboard-theme="dashboardTheme"
                     :title-icon-style="toolbarTitleIconStyle(item.i)"
                     :theme-accent-group="getComponent(item.i)?.themeAccentGroup"
+                    :component-color="getComponent(item.i)?.componentColor"
                     :variant="sameRowIconVariant(item)"
                   />
                   <button
@@ -429,6 +430,7 @@ const editingTitleIconDefaultColor = computed(() => {
     editingTitleIconTitle.value,
     0,
     owner?.themeAccentGroup,
+    owner?.componentColor,
   )
   return iconStyle['--dashboard-icon-color'] ?? props.dashboardTheme?.textSecondary ?? '#8c4a2f'
 })

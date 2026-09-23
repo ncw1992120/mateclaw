@@ -22,27 +22,26 @@
         <el-input v-model="localComponent.title" :aria-label="t('insight.property.componentTitle')" @change="emitChange" />
       </div>
 
-      <div class="form-group">
-        <label class="form-label">标题栏样式</label>
-        <el-select v-model="localComponent.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="handleTitleBarStyleChange">
-          <el-option value="hidden" label="隐藏标题栏" />
-          <el-option value="standard" label="标准卡片" />
-          <el-option value="minimal" label="简洁文本" />
-          <el-option value="accent" label="强调色" />
-          <el-option value="section" label="分组标题" />
-        </el-select>
-      </div>
-      <div v-if="!['filter', 'timeFilter', 'aiAnalysis'].includes(component.type)" class="form-group">
-        <label class="form-label">组件强调色</label>
-        <el-select v-model="localComponent.themeAccentGroup" aria-label="组件强调色" style="width: 100%" @change="emitChange">
-          <el-option value="primary" label="主色" />
-          <el-option value="secondary" label="辅助色" />
-          <el-option value="highlight" label="强调色" />
-        </el-select>
-      </div>
       <details class="style-settings">
         <summary class="style-section-title">样式设置</summary>
         <div class="style-field-grid">
+          <div class="form-group">
+            <label class="form-label">标题栏样式</label>
+            <el-select v-model="localComponent.titleBarStyle" aria-label="标题栏样式" style="width: 100%" @change="handleTitleBarStyleChange">
+              <el-option value="hidden" label="隐藏标题栏" />
+              <el-option value="standard" label="标准卡片" />
+              <el-option value="minimal" label="简洁文本" />
+              <el-option value="section" label="分组标题" />
+            </el-select>
+          </div>
+          <div v-if="!['filter', 'timeFilter'].includes(component.type)" class="form-group component-color-field">
+            <InsightColorField
+              :model-value="localComponent.componentColor ?? DEFAULT_COMPONENT_COLOR"
+              label="组件配色"
+              :suggested-colors="COMPONENT_COLOR_PRESETS"
+              @update:model-value="handleComponentColorChange"
+            />
+          </div>
           <div class="form-group">
             <label class="form-label">边框</label>
             <el-select v-model="localComponent.visualStyle!.border!.mode" aria-label="组件边框" style="width: 100%" @change="emitChange">
@@ -745,7 +744,7 @@ import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
-import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from './InsightColorField.vue'
 import InlineHelp from './property/InlineHelp.vue'
 import ComponentSampleDialog from './ComponentSampleDialog.vue'
@@ -756,6 +755,9 @@ defineOptions({
 })
 
 const { t } = useI18n()
+
+const DEFAULT_COMPONENT_COLOR = '#1E40AF'
+const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
 
 const props = defineProps<{
   /** 当前选中的组件 */
@@ -791,6 +793,11 @@ const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasou
 const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(group => group.category === 'aloudata'))
 
 function handleTitleBarStyleChange(style: InsightComponent['titleBarStyle']): void {
+  emitChange()
+}
+
+function handleComponentColorChange(color: string): void {
+  localComponent.componentColor = color
   emitChange()
 }
 
@@ -944,6 +951,7 @@ function defaultCombinationConfig(): NonNullable<InsightComponent['containerConf
 function replaceLocalComponent(component: InsightComponent): void {
   const next = JSON.parse(JSON.stringify(component)) as InsightComponent
   next.titleBarStyle ??= 'standard'
+  if (next.titleBarStyle === 'accent') next.titleBarStyle = 'standard'
   if (next.type === 'combination') {
     const defaults = defaultCombinationConfig()
     const config = next.containerConfig ?? {}
