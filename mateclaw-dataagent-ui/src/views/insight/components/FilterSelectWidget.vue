@@ -1,6 +1,13 @@
 <template>
-  <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+  <FilterControlShell
+    class="filter-select-widget"
+    :title="component.title"
+    :title-bar-style="component.titleBarStyle"
+    :show-label="showLabel"
+  >
+    <template #icon>
+      <DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" />
+    </template>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
@@ -29,7 +36,7 @@
         :value="opt.value"
       />
     </el-select>
-  </div>
+  </FilterControlShell>
 </template>
 
 <script setup lang="ts">
@@ -37,6 +44,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, FilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import FilterControlShell from './FilterControlShell.vue'
 import * as datasourceApi from '@/api/datasource'
 import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
 
@@ -53,6 +61,8 @@ const props = defineProps<{
   options?: Array<{ label: string; value: string }>
   dashboardTheme?: ResolvedDashboardTheme
 }>()
+
+const showLabel = computed(() => props.showTitle !== false && props.component.titleBarStyle !== 'hidden')
 
 const emit = defineEmits<{
   (e: 'change', payload: { field: string; value: string | string[] | undefined }): void
@@ -145,25 +155,6 @@ function handleChange(value: string | string[]): void {
 </script>
 
 <style scoped>
-.filter-select-widget {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-xs);
-  padding: var(--space-md);
-  box-sizing: border-box;
-  background: var(--component-surface, var(--db-card));
-  border-radius: var(--component-radius, var(--radius-lg));
-}
-
-.filter-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--db-text-secondary);
-}
-
 .filter-select-widget :deep(.el-select) {
   width: 100%;
 }

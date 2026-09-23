@@ -1,6 +1,13 @@
 <template>
-    <div class="time-filter-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+  <FilterControlShell
+    class="time-filter-widget"
+    :title="component.title"
+    :title-bar-style="component.titleBarStyle"
+    :show-label="showLabel"
+  >
+    <template #icon>
+      <DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />
+    </template>
     <el-date-picker
       v-model="customDateRange"
       type="daterange"
@@ -11,9 +18,10 @@
       :shortcuts="dateShortcuts"
       :start-placeholder="t('insight.timeRange.startPlaceholder')"
       :end-placeholder="t('insight.timeRange.endPlaceholder')"
+      :aria-label="component.title || t('insight.timeRange.startPlaceholder')"
       @change="handleDateChange"
     />
-  </div>
+  </FilterControlShell>
 </template>
 
 <script setup lang="ts">
@@ -21,6 +29,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import FilterControlShell from './FilterControlShell.vue'
 
 defineOptions({
   name: 'TimeFilterWidget',
@@ -33,6 +42,8 @@ const props = defineProps<{
   showTitle?: boolean
   dashboardTheme?: ResolvedDashboardTheme
 }>()
+
+const showLabel = computed(() => props.showTitle !== false && props.component.titleBarStyle !== 'hidden')
 
 const emit = defineEmits<{
   (e: 'change', payload: { field: string; timeRange: TimeRangeValue }): void
@@ -113,24 +124,6 @@ function handleDateChange(dates: [string, string] | null): void {
 </script>
 
 <style scoped>
-.time-filter-widget {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-md);
-  box-sizing: border-box;
-  background: var(--component-surface, var(--db-card));
-  border-radius: var(--component-radius, var(--radius-lg));
-}
-
-.time-filter-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--db-text-secondary);
-}
-
 .time-filter-widget :deep(.el-date-editor) {
   width: 100%;
 }
