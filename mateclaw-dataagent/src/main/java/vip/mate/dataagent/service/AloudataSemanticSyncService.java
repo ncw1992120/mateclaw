@@ -176,6 +176,9 @@ public interface AloudataSemanticSyncService {
      */
     AloudataMetricSemanticDTO getMetricDetail(Long datasourceId, String metricName);
 
+    /** 实时获取单个维度详情（直接调用 Aloudata dimension_detail）。 */
+    AloudataDimensionSemanticDTO getDimensionDetail(Long datasourceId, String dimName);
+
     /**
      * 按指标类目分组查询指标列表
      *

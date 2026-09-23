@@ -4,6 +4,7 @@ import type {
   AloudataDimensionPage,
   AloudataMetricPage,
   AloudataSyncedMetric,
+  AloudataSyncedDimension,
   SemanticModel,
   SemanticModelCreateRequest,
   SemanticModelUpdateRequest,
@@ -146,6 +147,13 @@ export function pageAloudataDimensions(
 export function getAloudataMetricDetail(datasourceId: string, metricName: string) {
   return api.get<AloudataSyncedMetric>(
     `/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/detail`,
+  )
+}
+
+/** 实时获取单个维度详情（懒加载悬浮详情用） */
+export function getAloudataDimensionDetail(datasourceId: string, dimName: string) {
+  return api.get<AloudataSyncedDimension>(
+    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/detail`,
   )
 }
 
