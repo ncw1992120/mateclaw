@@ -60,6 +60,15 @@
       <pre class="py-readonly py-spec-example" data-testid="output-spec-example"><code>{{ outputSpec.example }}</code></pre>
     </div>
 
+    <div v-if="finalQueryConfig" class="py-block py-output-spec" data-testid="final-result-query-config">
+      <div class="py-title">最终结果查询配置</div>
+      <p class="py-spec-desc">作用于 Python 输出之后；字段候选来自最近一次通过组件契约校验的结果 Schema。</p>
+      <div class="py-query-fields">
+        <el-tag v-for="field in finalQueryConfig.displayFields" :key="field.field" size="small">{{ field.title }}（{{ field.field }}）</el-tag>
+      </div>
+      <p v-if="!finalQueryConfig.displayFields.length" class="py-spec-desc">尚未生成最终结果，执行一次脚本后系统会生成字段候选。</p>
+    </div>
+
     <!-- 用户处理区域（可编辑；系统操作不影响此处） -->
     <div class="py-block">
       <div class="py-title">用户处理区域（可编辑）</div>
@@ -107,6 +116,7 @@ const outputSpec = computed(() => {
   if (!card) return null
   return resolveOutputSpec(card.type)
 })
+const finalQueryConfig = computed(() => state.finalResultQueryConfig)
 
 /** managed 模式下系统代码可编辑，直接绑定到接管副本 */
 const managedCode = computed({
@@ -241,6 +251,12 @@ async function onExec() {
 <style scoped>
 .py-block {
   margin-bottom: 14px;
+}
+
+.py-query-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 :global(.python-script-dialog.el-dialog) {

@@ -31,9 +31,10 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
-import { formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
+import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
+import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
 import { outputContractTemplate, resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
@@ -329,6 +330,7 @@ const state = reactive({
     executionId: '',
     error: '',
   } as ResultSetState,
+  finalResultQueryConfig: undefined as FinalResultQueryConfig | undefined,
   // [后端联调] 与 mateclaw-dataagent 的联动状态
   backend: {
     dashboardId: '', // 后端仪表盘 ID
@@ -1330,6 +1332,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     boundFilterComponentIds: boundFilterComponentIds(),
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
     resultSet: resultSetMeta(),
+    finalResultQueryConfig: state.finalResultQueryConfig,
   }
 }
 
@@ -1553,6 +1556,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
           return { ok: false, message }
         }
         if (envelope.kind === 'table') {
+          if (previewSpec) state.finalResultQueryConfig = buildFinalResultQueryConfig(previewSpec, extractResultSchema(envelope))
           commitResultSet({ source: 'script', rows: envelope.data.rows, executionId, elapsedMs: Date.now() - startedAt })
         } else if (envelope.kind === 'message') {
           commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })

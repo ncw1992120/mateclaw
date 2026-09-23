@@ -135,6 +135,7 @@ export function hydratePanel(
   }]
   state.activeCardId = component.id
   state.datasets = inputs.map(inputToDatasetConfig)
+  state.finalResultQueryConfig = pipeline?.finalResultQueryConfig
   // 系统脚本状态：新 Schema 带systemScript（generated/managed + 候选指纹），原样恢复，
   // 展示区显示实际生效代码；旧 Schema 只有 script 时整体按历史用户代码读取，不猜测拆分。
   const systemState = pipeline?.systemScript

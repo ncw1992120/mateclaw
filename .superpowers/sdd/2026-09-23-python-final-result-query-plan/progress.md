@@ -28,3 +28,7 @@ Task 4 note: result preview accepts optional `finalResultQueryConfig`; when pres
 Task 5: complete (commit pending, tests: `python-script-template.spec.ts` + `component-output-spec.spec.ts` → 24 tests passed; `vue-tsc --noEmit` → passed)
 
 Task 5 note: generated Python system code now includes the component output kind, minimum field rules, and the Runner JSON-envelope example. User processing code remains a separate editable region.
+
+Task 6: complete (commit pending, tests: `component-dataset-pipeline.spec.ts` + `python-script-template.spec.ts` → 15 tests passed; `vue-tsc --noEmit` → passed)
+
+Task 6 note: after a successful Python envelope, the UI derives and persists component-level final-result field candidates from the real result Schema; the Python editor exposes those candidates as post-Python query configuration, while the result preview continues to operate on the final result rows.
