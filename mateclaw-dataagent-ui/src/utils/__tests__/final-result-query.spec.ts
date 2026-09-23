@@ -4,6 +4,7 @@ import type { ResultSchema } from '../script-result'
 import {
   buildFinalResultQueryConfig,
   finalResultQueryConfigStatus,
+  isFinalResultQueryConfigured,
   normalizeFinalResultQueryContext,
 } from '../final-result-query'
 
@@ -46,6 +47,14 @@ describe('finalResultQueryConfigStatus', () => {
     const config = buildFinalResultQueryConfig(resolveOutputSpec('table')!, current)
     expect(finalResultQueryConfigStatus(config, schema([], 'schema-3'))).toBe('conflict')
     expect(finalResultQueryConfigStatus(config, schema([{ name: 'region', title: '区域', dataType: 'number', nullable: false }], 'schema-4'))).toBe('conflict')
+  })
+})
+
+describe('isFinalResultQueryConfigured', () => {
+  it('系统生成草稿不算用户已配置，保存确认后才算已配置', () => {
+    const config = buildFinalResultQueryConfig(resolveOutputSpec('table')!, schema([{ name: 'region', title: '区域', dataType: 'string', nullable: false }]))
+    expect(isFinalResultQueryConfigured(config)).toBe(false)
+    expect(isFinalResultQueryConfigured({ ...config, confirmed: true })).toBe(true)
   })
 })
 
