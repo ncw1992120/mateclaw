@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { ElMessage } from 'element-plus'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DatasetCard from '../DatasetCard.vue'
 
 const actions = vi.hoisted(() => ({
@@ -9,6 +10,7 @@ const actions = vi.hoisted(() => ({
   removeDataset: vi.fn(),
   reconfigureDataset: vi.fn(),
   renameDataset: vi.fn(),
+  state: { filterCatalog: [] as Array<{ id: string; title: string }> },
 }))
 
 vi.mock('../useInsight', () => ({
@@ -34,6 +36,16 @@ const stubs = {
   },
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
 }
+
+beforeEach(() => {
+  actions.openFieldMapping.mockClear()
+  actions.openQueryConfig.mockClear()
+  actions.openDataDialog.mockClear()
+  actions.removeDataset.mockClear()
+  actions.reconfigureDataset.mockClear()
+  actions.renameDataset.mockClear()
+  actions.state.filterCatalog = []
+})
 
 describe('DatasetCard', () => {
   it('labels the shared dataset query entry as 查看数据', () => {
@@ -67,5 +79,27 @@ describe('DatasetCard', () => {
 
     await wrapper.get('button').trigger('click')
     expect(actions.reconfigureDataset).not.toHaveBeenCalled()
+  })
+
+  it('没有页面筛选器时点击查询配置给出提示，但不打开弹窗', async () => {
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
+    const wrapper = mount(DatasetCard, { props: { dataset }, global: { stubs } })
+
+    await wrapper.findAll('button').find((button) => button.text().includes('查询配置'))!.trigger('click')
+
+    expect(warning).toHaveBeenCalledWith('请先添加筛选器或时间筛选组件，再配置数据集查询条件')
+    expect(actions.openQueryConfig).not.toHaveBeenCalled()
+    warning.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('页面已存在筛选器时正常打开查询配置', async () => {
+    actions.state.filterCatalog = [{ id: 'filter-1', title: '策略类型', type: 'filter' }]
+    const wrapper = mount(DatasetCard, { props: { dataset }, global: { stubs } })
+
+    await wrapper.findAll('button').find((button) => button.text().includes('查询配置'))!.trigger('click')
+
+    expect(actions.openQueryConfig).toHaveBeenCalledWith('dataset-1')
+    wrapper.unmount()
   })
 })

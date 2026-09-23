@@ -26,7 +26,7 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="dd-display-empty">尚未在查询配置中选择展示字段</div>
+        <div v-else class="dd-display-empty" data-testid="display-fields-empty">尚未配置展示字段，请先在查询配置中选择字段。</div>
       </section>
 
       <section v-if="isSql" class="dd-block">
@@ -136,13 +136,15 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="dd-empty">查询配置中尚未绑定筛选器</div>
+        <div v-else class="dd-empty" data-testid="query-filter-empty" role="status">
+          尚未绑定筛选器，请先在查询配置中添加筛选器绑定，再填写条件值。
+        </div>
       </section>
 
       <!-- ④ 查询：紧跟在筛选条件下方 —— 改完条件顺手点，视线不用跳到弹窗底部 -->
       <div class="dd-query-row">
         <span class="dd-hint">{{ queryHint }}</span>
-        <el-button type="primary" :loading="loading" @click="query()">查询</el-button>
+        <el-button data-testid="run-query" type="primary" :loading="loading" :disabled="queryDisabled" @click="query()">查询</el-button>
       </div>
 
       <!-- ⑤ 结果 -->
@@ -313,6 +315,22 @@ function operatorNeedsValue(operator: QueryParameterBinding['operator']): boolea
   return operator !== 'is_null' && operator !== 'is_not_null'
 }
 
+function hasFilterValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some((item) => item !== null && String(item).trim() !== '')
+  if (value === null || value === undefined) return false
+  return typeof value === 'string' ? value.trim() !== '' : true
+}
+
+const hasExecutableFilter = computed(() => queryFilterRows.value.some((row) =>
+  row.enabled && (!operatorNeedsValue(row.operator) || hasFilterValue(row.value)),
+))
+/** JDBC / API 预定义的命名参数也是本次查询条件；空参数不能作为无条件查询放行。 */
+const hasNamedQueryParameters = computed(() => Object.keys(namedParameters()).length > 0)
+/** 文件数据集没有可下推筛选器，保留其直接预览路径；其他类型至少需要一个有效条件。 */
+const queryDisabled = computed(() => loading.value ||
+  (filterSupported.value && !hasExecutableFilter.value && !hasNamedQueryParameters.value),
+)
+
 function createQueryFilterRows(): PreviewQueryFilterRow[] {
   return (props.dataset.queryConfig?.parameterBindings ?? []).flatMap((binding) => {
     const parameterName = binding.parameterName || binding.filterComponentId
@@ -346,9 +364,16 @@ function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): vo
 }
 
 /* ── 结果区 ── */
-const queryHint = computed(() =>
-  filterSupported.value ? '筛选条件来自查询配置；关闭的条件不参与本次查询' : '文件类型暂不支持筛选下推，直接查询即可',
-)
+const queryHint = computed(() => {
+  if (!filterSupported.value) return '文件类型暂不支持筛选下推，可直接预览文件数据'
+  if (!queryFilterRows.value.length) {
+    return hasNamedQueryParameters.value
+      ? '尚未绑定页面筛选器；本次将使用已填写的数据源参数查询'
+      : '请先在查询配置中绑定筛选器，再执行查询'
+  }
+  if (!hasExecutableFilter.value && !hasNamedQueryParameters.value) return '至少启用一个筛选条件并填写本次查询值后，才能查询'
+  return '筛选条件来自查询配置；关闭的条件不参与本次查询'
+})
 
 /** 最近一次执行的时间（展示用 HH:mm） */
 const queriedAt = ref(0)
@@ -523,6 +548,7 @@ function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): Qu
 
 /** 显式查询：改条件后必须点一下才取数（不再自动跑，避免「一打开数据就出来了」） */
 async function query(): Promise<void> {
+  if (queryDisabled.value) return
   currentPage.value = 1
   await fetchRows(true)
 }
@@ -650,7 +676,7 @@ watch(() => ui.dataDialog.visible, (visible) => {
 .dd-table-wrap {
   overflow-x: auto;
   overflow-y: hidden;
-  background: var(--db-muted);
+  background: #fff;
   border-radius: var(--radius-md);
 }
 .dd-table {
@@ -694,7 +720,7 @@ watch(() => ui.dataDialog.visible, (visible) => {
 .dd-display-empty {
   padding: 10px 12px;
   border-radius: var(--radius-md);
-  background: var(--db-muted);
+  background: #fff;
   color: var(--db-text-muted);
   font-size: 12px;
 }
@@ -749,6 +775,10 @@ watch(() => ui.dataDialog.visible, (visible) => {
   min-width: 0;
 }
 .dd-empty {
+  padding: 10px 12px;
+  border: 1px dashed var(--db-border);
+  border-radius: var(--radius-md);
+  background: #fff;
   font-size: 12px;
   color: var(--db-text-muted);
 }

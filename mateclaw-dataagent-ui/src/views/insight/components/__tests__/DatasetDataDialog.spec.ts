@@ -67,7 +67,7 @@ const stubs = {
     template:
       '<input type="checkbox" :checked="modelValue" v-bind="$attrs" @change="$emit(\'update:modelValue\', $event.target.checked); $emit(\'change\', $event.target.checked)" />',
   },
-  'el-button': { template: '<button type="button"><slot /></button>' },
+  'el-button': { template: '<button type="button" :disabled="$attrs.disabled" v-bind="$attrs"><slot /></button>' },
   'el-table': {
     props: ['data'],
     emits: ['sort-change'],
@@ -223,10 +223,11 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     })
     const wrapper = await openWith(metricViewDataset({
       queryConfig: {
-        ...queryConfig([]),
+        ...queryConfig([{ filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' }]),
         sortPolicy: { enabled: true, mode: 'single', allowedFields: ['amount'], defaultSort: null },
       },
     }))
+    await wrapper.find('input.dd-value').setValue('2026-09-01')
     await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
     await flushPromises()
 
@@ -238,14 +239,55 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     wrapper.unmount()
   })
 
+  it('首次打开时直接展示已保存查询配置字段；未配置时显示前往配置的明确提示', async () => {
+    const configured = await openWith(metricViewDataset())
+    expect(configured.findAll('[data-testid="display-field-row"]')).toHaveLength(3)
+    configured.unmount()
+
+    const unconfigured = await openWith(metricViewDataset({
+      id: 'ds-no-display-fields',
+      queryConfig: { ...queryConfig([]), displayFields: [] },
+    }))
+    expect(unconfigured.find('.dd-display-empty').text()).toContain('请先在查询配置中选择字段')
+    unconfigured.unmount()
+  })
+
+  it('没有筛选器绑定时显示提示并禁用查询', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: queryConfig([]),
+    }))
+
+    expect(wrapper.find('.dd-empty').text()).toContain('请先在查询配置中添加筛选器绑定')
+    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeDefined()
+    await wrapper.find('.dd-query-row button').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('只有至少一个已启用且有有效值的筛选条件时才允许查询', async () => {
+    const wrapper = await openWith(metricViewDataset())
+    const queryButton = wrapper.find('.dd-query-row button')
+    expect(queryButton.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
+    expect(queryButton.attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="query-filter-enabled"]').setValue(false)
+    expect(queryButton.attributes('disabled')).toBeDefined()
+    expect((wrapper.find('[data-testid="query-filter-row"] input.dd-value').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+
   it('查询配置开启分页后按当前页码、每页条数和允许排序字段发起服务端查询', async () => {
     const dataset = metricViewDataset({ backendDatasetId: '123' })
     dataset.queryConfig = {
-      ...queryConfig([]),
+      ...queryConfig([{ filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' }]),
       sortPolicy: { enabled: true, mode: 'single', allowedFields: ['amount'], defaultSort: null },
       paginationPolicy: { enabled: true, defaultPageSize: 2, maxPageSize: 5, returnTotalCount: true },
     }
     const wrapper = await openWith(dataset)
+    await wrapper.find('input.dd-value').setValue('2026-09-01')
     await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
     await flushPromises()
     expect((previewInput.mock.calls.at(-1)?.[0] as { limit?: number; offset?: number; requestTotalCount?: boolean }).limit).toBe(2)
@@ -298,7 +340,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(wrapper.find('.dd-note').exists()).toBe(false)
   })
 
-  it('禁用查询配置筛选器时清空并锁定值，查询请求不携带该条件', async () => {
+  it('禁用唯一绑定筛选器时清空并锁定值，且不能发起无条件查询', async () => {
     state.filterCatalog = [{ id: 'filter-strategy', title: '策略类型', type: 'filter', selectionMode: 'single' }]
     const dataset = metricViewDataset({
       queryConfig: {
@@ -316,10 +358,10 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
     expect(value.element.value).toBe('')
     expect(value.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeDefined()
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[]; parameters?: unknown }).filters).toEqual([])
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { parameters?: unknown }).parameters).toEqual({})
+    expect(previewDatasetDraft).not.toHaveBeenCalled()
   })
 
   it('JDBC SQL 在查看数据时只读，SQL 参数仍可编辑并进入 parameters', async () => {
@@ -415,11 +457,11 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     const wrapper = await openWith(dataset)
 
     expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(0)
-    expect(wrapper.find('.dd-empty').text()).toContain('查询配置中尚未绑定筛选器')
+    expect(wrapper.find('.dd-empty').text()).toContain('请先在查询配置中添加筛选器绑定')
     expect(wrapper.text()).not.toContain('添加筛选条件')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([])
+    expect(previewDatasetDraft).not.toHaveBeenCalled()
   })
 })
 
@@ -428,13 +470,18 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
     const wrapper = await openWith(
       metricViewDataset({
         sourceType: 'file',
-        file: { fileName: 'a.csv', fileType: 'csv', columns: [{ name: 'c1', type: 'string' }], rows: [] },
+        file: { objectId: 'object-1', fileName: 'a.csv', fileType: 'csv', columns: [{ name: 'c1', type: 'string' }], rows: [] },
         aloudata: undefined,
       }),
     )
 
     expect(wrapper.text()).not.toContain('添加筛选条件')
     expect(wrapper.find('.dd-conditions').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="run-query"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
   })
 
   it('SQL 的 :param 作为参数区自动提取，与筛选条件是两条通道', async () => {
@@ -450,15 +497,16 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
     expect(wrapper.text()).toContain(':region')
     expect(wrapper.text()).toContain('从定义自动提取')
 
-    // 占位符未填 → 不下发；填了 → 走 parameters（不是 filters）
+    // 占位符未填时没有有效查询条件；填写后走 parameters（不是 filters）
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect((previewDatasetDraft.mock.calls[0][0] as { parameters?: unknown }).parameters).toEqual({})
+    expect(previewDatasetDraft).not.toHaveBeenCalled()
 
     await wrapper.find('.dd-param input').setValue('华东')
+    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeUndefined()
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    const request = previewDatasetDraft.mock.calls[1][0] as { parameters?: unknown; filters?: unknown }
+    const request = previewDatasetDraft.mock.calls[0][0] as { parameters?: unknown; filters?: unknown }
     expect(request.parameters).toEqual({ region: '华东' })
     expect(request.filters).toEqual([])
   })
