@@ -278,6 +278,7 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('[aria-label="组合容器阴影"]').exists()).toBe(false)
     expect(wrapper.find('[aria-label="组件圆角"]').exists()).toBe(true)
     expect(wrapper.find('[aria-label="组合容器圆角"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="component-sample-data"]').exists()).toBe(false)
   })
 
   it('defaults new filter configuration to dynamic options before datasource setup', async () => {
@@ -298,9 +299,29 @@ describe('PropertyPanel', () => {
 
     expect((wrapper.vm as any).localFilterConfig.optionSource).toBe('dynamic')
     expect(wrapper.find('.static-options-list').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="component-sample-data"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('insight.property.filterOptionDynamicHint')
     const labels = wrapper.findAll('.form-label').map(label => label.text())
     expect(labels.indexOf('insight.property.filterOptions')).toBeLessThan(labels.indexOf('insight.property.datasource'))
+  })
+
+  it('不为时间筛选显示样例数据入口', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'time-filter-1',
+          type: 'timeFilter',
+          title: '时间范围',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="component-sample-data"]').exists()).toBe(false)
   })
 
   it('shows static options only after switching to static source', async () => {

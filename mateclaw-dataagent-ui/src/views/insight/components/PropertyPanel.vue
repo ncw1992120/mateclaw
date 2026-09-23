@@ -13,7 +13,7 @@
     </div>
 
     <div v-else class="panel-body">
-      <div v-if="['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(component.type)" class="sample-data-action">
+      <div v-if="component.type === 'aiAnalysis'" class="sample-data-action">
         <el-button size="small" text type="primary" data-testid="component-sample-data" @click="sampleDialogVisible = true">样例数据</el-button>
       </div>
       <!-- 标题 -->
@@ -726,7 +726,7 @@
       </template>
     </div>
     <ComponentSampleDialog
-      v-if="component && ['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(component.type)"
+      v-if="component?.type === 'aiAnalysis'"
       v-model="sampleDialogVisible"
       :title="localComponent.title"
       :sample="componentSample"
