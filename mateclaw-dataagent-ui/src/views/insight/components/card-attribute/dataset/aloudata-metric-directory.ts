@@ -39,6 +39,23 @@ export function buildCategoryTree(categories: AloudataCategoryItem[]): AloudataC
   return roots
 }
 
+/** Filter categories by name while preserving matching ancestor paths. */
+export function filterCategoryTree(
+  roots: AloudataCategoryTreeNode[],
+  keyword: string,
+): AloudataCategoryTreeNode[] {
+  const normalized = keyword.trim().toLocaleLowerCase()
+  if (!normalized) return roots
+
+  const filterNode = (node: AloudataCategoryTreeNode): AloudataCategoryTreeNode | undefined => {
+    const children = node.children.map(filterNode).filter((child): child is AloudataCategoryTreeNode => Boolean(child))
+    if (!node.categoryName.toLocaleLowerCase().includes(normalized) && !children.length) return undefined
+    return { ...node, children }
+  }
+
+  return roots.map(filterNode).filter((node): node is AloudataCategoryTreeNode => Boolean(node))
+}
+
 /** Filter by the display name and technical field name while preserving matching category paths. */
 export function filterMetricCategoryTree(
   roots: AloudataMetricDirectoryNode[],
