@@ -49,6 +49,8 @@ export interface PanelFilterComponent {
   id: string
   type: InsightComponentType
   title: string
+  /** 筛选组件已配置的技术字段名；动态 Aloudata 维度筛选器用于匹配数据集字段。 */
+  field?: string
   /**
    * 选择方式（仅 `filter` 类型有意义）：单选 → eq，多选 → in。
    * `timeFilter` 不携带此字段（时间范围由下游展开为 gte~lte）。
@@ -154,11 +156,12 @@ export function hydratePanel(
     state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   }
-  // 仪表盘可用筛选器组件；透传类型和选择方式供查询配置确定筛选运算符。
+  // 仪表盘可用筛选器组件；透传字段名、类型和选择方式供查询配置自动匹配与确定运算符。
   state.filterCatalog = filterComponents.map((c) => ({
     id: String(c.id),
     title: c.title || String(c.id),
     type: c.type,
+    field: c.field,
     selectionMode: c.selectionMode,
   }))
 

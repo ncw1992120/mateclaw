@@ -313,8 +313,8 @@ const state = reactive({
   filterBindings: [] as FilterBinding[],
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
   kpiMetrics: [] as KpiMetricConfig[],
-  // 仪表盘可用筛选器组件，由 hydratePanel 注入，供查询配置确定筛选运算符。
-  filterCatalog: [] as Array<{ id: string; title: string; type?: string; selectionMode?: 'single' | 'multiple' }>,
+  // 仪表盘可用筛选器组件，由 hydratePanel 注入，供查询配置按字段名自动匹配并确定运算符。
+  filterCatalog: [] as Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>,
   // 结果集：卡片唯一数据来源（数据集 / 筛选 / 脚本都只是产出它的手段）
   resultSet: {
     status: 'empty',

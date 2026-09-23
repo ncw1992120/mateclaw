@@ -405,6 +405,7 @@ const filterOptions = computed(() =>
     id: filter.id,
     title: filter.title,
     type: filter.type,
+    field: filter.field,
     selectionMode: filter.selectionMode,
   })),
 )
@@ -686,7 +687,13 @@ function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
       ? ((item.config?.selectionMode as 'single' | 'multiple' | undefined) ?? 'single')
       : undefined
     seen.add(String(item.id))
-    out.push({ id: String(item.id), type: item.type, title: item.title || String(item.id), selectionMode })
+    out.push({
+      id: String(item.id),
+      type: item.type,
+      title: item.title || String(item.id),
+      field: typeof item.config?.field === 'string' ? item.config.field : undefined,
+      selectionMode,
+    })
   }
   const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'
   const walkChildren = (children?: FilterLike[]) => {

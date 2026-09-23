@@ -15,6 +15,25 @@ const { ElMessageBox } = await import('element-plus')
 const { state } = useInsight()
 
 describe('buildPythonSystemRegion', () => {
+  it('保留 Aloudata 维度筛选器配置的技术字段名，供查询配置自动匹配', () => {
+    const component = {
+      id: 'field-filter-card',
+      type: 'kpi',
+      title: '指标卡',
+      position: { x: 0, y: 0, w: 6, h: 4 },
+    }
+
+    hydratePanel(component as never, '', [{
+      id: 'strategy-filter',
+      type: 'filter',
+      title: '策略类型',
+      field: 'strategy_id',
+      selectionMode: 'single',
+    } as never])
+
+    expect(state.filterCatalog[0]).toMatchObject({ id: 'strategy-filter', field: 'strategy_id' })
+  })
+
   it('round-trips a component accent group through card attribute-panel state', () => {
     const component = {
       id: 'accent-card',
