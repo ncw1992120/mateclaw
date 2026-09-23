@@ -39,7 +39,7 @@ const fields = [
 
 const filterOptions = [
   { id: 'strategy_type', title: '策略类型', type: 'filter', selectionMode: 'multiple' },
-  { id: 'date_range', title: '日期范围', type: 'timeFilter' },
+  { id: 'date_range', title: '日期范围', type: 'timeFilter', field: 'metric_date' },
 ]
 
 function mountDialog(props: Record<string, unknown> = {}) {
@@ -146,6 +146,68 @@ describe('QueryConfigDialog', () => {
     await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
     await wrapper.find('[data-testid="qc-save"]').trigger('click')
     expect(wrapper.emitted('save')).toBeUndefined()
+  })
+
+  it('优先用筛选器字段名匹配展示字段，并在绑定对象选项中显示展示名', async () => {
+    const wrapper = mountDialog({
+      filterOptions: [{ id: 'strategy_filter', title: '策略筛选', type: 'filter', field: 'strategy_id' }],
+    })
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    const row = findTest(wrapper, 'qc-binding-row')[0]
+    const selects = row.findAll('[data-testid="select"]')
+    await selects[0].setValue('strategy_filter')
+
+    expect((selects[1].element as HTMLSelectElement).value).toBe('strategy_id')
+    expect(selects[1].find('option[value="strategy_id"]').text()).toBe('策略编码')
+    await wrapper.find('[data-testid="qc-save"]').trigger('click')
+    const config = wrapper.emitted('save')![0][0] as DatasetQueryConfig
+    expect(config.parameterBindings[0].field).toBe('strategy_id')
+  })
+
+  it('筛选器没有字段名时按筛选器名称匹配展示名', async () => {
+    const wrapper = mountDialog({
+      filterOptions: [{ id: 'strategy_filter', title: '策略编码', type: 'filter' }],
+    })
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    const selects = findTest(wrapper, 'qc-binding-row')[0].findAll('[data-testid="select"]')
+    await selects[0].setValue('strategy_filter')
+
+    expect((selects[1].element as HTMLSelectElement).value).toBe('strategy_id')
+  })
+
+  it('筛选器名称匹配技术字段名时回填对应展示字段', async () => {
+    const wrapper = mountDialog({
+      filterOptions: [{ id: 'metric-date-filter', title: 'metric_date', type: 'filter' }],
+    })
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    const selects = findTest(wrapper, 'qc-binding-row')[0].findAll('[data-testid="select"]')
+    await selects[0].setValue('metric-date-filter')
+    expect((selects[1].element as HTMLSelectElement).value).toBe('metric_date')
+  })
+
+  it('筛选器名称无法匹配展示字段时保持未选择', async () => {
+    const wrapper = mountDialog({
+      filterOptions: [{ id: 'unknown-filter', title: '未匹配筛选器', type: 'filter' }],
+    })
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    const selects = findTest(wrapper, 'qc-binding-row')[0].findAll('[data-testid="select"]')
+    await selects[0].setValue('unknown-filter')
+    expect((selects[1].element as HTMLSelectElement).value).toBe('')
+  })
+
+  it('无法唯一匹配筛选器与展示字段时不猜测默认字段', async () => {
+    const wrapper = mountDialog({
+      fields: [
+        ...fields,
+        { name: 'strategy_name', displayName: 'strategy_id', role: 'dimension' },
+      ],
+      filterOptions: [{ id: 'strategy_filter', title: 'strategy_id', type: 'filter' }],
+    })
+    await findTest(wrapper, 'qc-add-binding')[0].trigger('click')
+    const selects = findTest(wrapper, 'qc-binding-row')[0].findAll('[data-testid="select"]')
+    await selects[0].setValue('strategy_filter')
+
+    expect((selects[1].element as HTMLSelectElement).value).toBe('')
   })
 
   it('筛选器绑定只展示筛选器名称和绑定对象，运算符不在界面重复展示', async () => {

@@ -157,8 +157,8 @@ const props = defineProps<{
   modelValue: boolean
   /** 后端 descriptor 字段（技术字段名 + 角色），来源必须是真实 descriptor，不允许前端假数据 */
   fields: DatasetFieldMeta[]
-  /** 页面筛选器组件（id + title + type + selectionMode）：运算符由筛选器类型固定 */
-  filterOptions: Array<{ id: string; title: string; type?: string; selectionMode?: 'single' | 'multiple' }>
+  /** 页面筛选器组件（含技术字段名）：用于字段匹配；运算符仍由筛选器类型固定 */
+  filterOptions: Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>
   initialConfig: DatasetQueryConfig | null
   /** 旧 scriptFilterBindings 归一化的展示草稿：仅在无已保存配置时预填 */
   legacyBindings?: QueryParameterBinding[]
@@ -276,12 +276,28 @@ function addBinding(): void {
 function onFilterChange(binding: BindingRow): void {
   // 参数名缺省 = 筛选器组件 id（与后端 Planner 的声明式参数契约一致）
   if (!binding.parameterName) binding.parameterName = binding.filterComponentId
-  if (!binding.field) {
-    const firstDimension = fieldRows.value.find((row) => row.role === 'dimension')
-    if (firstDimension) binding.field = firstDimension.field
-  }
+  binding.field = matchedFieldForFilter(binding.filterComponentId)
   // 运算符由筛选器类型固定，切换筛选器时同步刷新（绑定处不再可编辑）
   binding.operator = fixedOperatorFor(binding.filterComponentId)
+}
+
+/** 筛选器字段名优先，其次用筛选器名称与展示名/技术字段名精确匹配；歧义时不猜测。 */
+function matchedFieldForFilter(filterComponentId: string): string {
+  const filter = props.filterOptions.find((option) => option.id === filterComponentId)
+  if (!filter) return ''
+
+  const configuredField = (filter.field ?? '').trim()
+  if (configuredField) {
+    const fieldMatches = fieldRows.value.filter((row) => row.field === configuredField)
+    if (fieldMatches.length === 1) return fieldMatches[0].field
+    if (fieldMatches.length > 1) return ''
+  }
+
+  const filterNames = new Set([filter.title.trim(), configuredField].filter(Boolean))
+  const matches = fieldRows.value.filter((row) =>
+    filterNames.has(row.field.trim()) || filterNames.has(row.title.trim()),
+  )
+  return matches.length === 1 ? matches[0].field : ''
 }
 
 /** 维度字段默认置顶（指标跟随其后）；用户仍可用拖动自由调整顺序 */
