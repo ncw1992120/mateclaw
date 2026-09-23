@@ -15,6 +15,7 @@ export function buildSystemScript(
   inputs: DashboardDatasetInput[],
   _parameters: DashboardScriptParameter[] = [],
   _bindings: DashboardScriptFilterBinding[] = [],
+  outputContract?: { kind: string; example: string; fieldRules: { minColumns: number; minDimensionColumns: number; minNumericColumns: number } },
 ): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const lines = [
@@ -22,6 +23,15 @@ export function buildSystemScript(
     '# 每个输入已是查询计划处理后的结果：页面筛选、排序和分页在读取前应用。',
     '# 只读区域：请勿在此拼接 filters/orders/limit/offset 等页面查询参数。',
   ]
+  if (outputContract) {
+    lines.push(
+      '',
+      `# 最终输出契约：kind=${outputContract.kind}；最少列=${outputContract.fieldRules.minColumns}；`
+        + `维度列=${outputContract.fieldRules.minDimensionColumns}；数值列=${outputContract.fieldRules.minNumericColumns}`,
+      '# Python 代码最后的 result 必须能被 Runner 包装为以下 JSON 信封：',
+      ...outputContract.example.split('\n').map(line => `# ${line}`),
+    )
+  }
   validInputs.forEach((input) => {
     lines.push('', `${input.inputName} = datasets.input(`, `    input_name=${JSON.stringify(input.inputName)},`, ').to_polars()')
   })

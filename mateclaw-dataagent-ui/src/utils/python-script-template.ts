@@ -4,6 +4,11 @@ import { buildSystemScript } from './script-template'
 export interface PythonSystemSource {
   inputs: DashboardDatasetInput[]
   bindings: DashboardScriptFilterBinding[]
+  outputContract?: {
+    kind: string
+    example: string
+    fieldRules: { minColumns: number; minDimensionColumns: number; minNumericColumns: number }
+  }
 }
 
 export interface ReconciledSystemScript extends DashboardSystemScriptState {
@@ -34,7 +39,7 @@ export function fingerprintSystemSource(source: PythonSystemSource): string {
 }
 
 export function generateSystemScript(source: PythonSystemSource): string {
-  return buildSystemScript(source.inputs, [], source.bindings)
+  return buildSystemScript(source.inputs, [], source.bindings, source.outputContract)
 }
 
 export function effectiveSystemCode(state: DashboardSystemScriptState): string {

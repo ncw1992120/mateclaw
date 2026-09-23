@@ -46,6 +46,46 @@ export interface ScriptMessageEnvelope {
 
 export type ScriptResultEnvelope = ScriptTableEnvelope | ScriptScalarEnvelope | ScriptMessageEnvelope
 
+export interface ResultSchema {
+  fingerprint: string
+  kind: ScriptResultEnvelope['kind']
+  columns: ScriptResultColumn[]
+  rowCount: number
+}
+
+function fnv1a(value: string): string {
+  let hash = 2166136261
+  for (const char of value) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/** 只根据结果类型和字段契约计算指纹，不让行数变化导致配置失效。 */
+export function fingerprintResultSchema(schema: Omit<ResultSchema, 'fingerprint'> | ResultSchema): string {
+  return fnv1a(JSON.stringify({
+    kind: schema.kind,
+    columns: schema.columns.map(({ name, title, dataType, nullable }) => ({ name, title, dataType, nullable })),
+  }))
+}
+
+/** 从已解析且已通过基础 envelope 校验的结果中提取可持久化 Schema。 */
+export function extractResultSchema(envelope: ScriptResultEnvelope): ResultSchema {
+  const columns = envelope.kind === 'table'
+    ? envelope.data.columns.map((column) => ({
+      ...column,
+      nullable: column.nullable || envelope.data.rows.length === 0 || envelope.data.rows.some((row) => row[column.name] == null),
+    }))
+    : []
+  const schema = {
+    kind: envelope.kind,
+    columns,
+    rowCount: envelope.meta.rowCount,
+  } satisfies Omit<ResultSchema, 'fingerprint'>
+  return { ...schema, fingerprint: fingerprintResultSchema(schema) }
+}
+
 /** 把数据集直出行归一成与 Python 结果相同的强类型 table envelope，供统一契约校验。 */
 export function tableEnvelopeFromRows(rows: Record<string, unknown>[]): ScriptTableEnvelope {
   const sample = rows[0] ?? {}

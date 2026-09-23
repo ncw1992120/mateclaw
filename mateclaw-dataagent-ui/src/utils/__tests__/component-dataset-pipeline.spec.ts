@@ -128,6 +128,23 @@ describe('component dataset pipeline', () => {
     expect((updated.config as any).datasetPipeline.datasetInputs[0].queryConfig).toEqual(queryConfig)
   })
 
+  it('reads and writes component-level final result query config separately from input queryConfig', () => {
+    const finalResultQueryConfig = {
+      schemaFingerprint: 'result-schema-1',
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [{ field: 'region', title: '区域', dataType: 'string', parameterName: 'region', operators: ['eq'] }],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: true, defaultPageSize: 20, maxPageSize: 100, returnTotalCount: false },
+    }
+    const component = { id: 'c1', config: {} } as any
+    const updated = writeComponentDatasetPipeline(component, {
+      datasetInputs: [],
+      finalResultQueryConfig,
+    })
+    expect(readComponentDatasetPipeline(updated)?.finalResultQueryConfig).toEqual(finalResultQueryConfig)
+    expect((updated.config as any).datasetPipeline.datasetInputs).toEqual([])
+  })
+
   it('writes boundFilterComponentIds when present', () => {
     const component = { id: 'c1', config: {} } as any
     const updated = writeComponentDatasetPipeline(component, {

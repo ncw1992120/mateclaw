@@ -1,6 +1,7 @@
 import type {
   ComponentDatasetPipeline,
   ComponentResultSet,
+  FinalResultQueryConfig,
   DashboardScriptFilterBinding,
   DashboardSystemScriptState,
   DatasetQueryConfig,
@@ -156,6 +157,31 @@ export function readComponentDatasetPipeline(component: InsightComponent | null 
       ? value.boundFilterComponentIds.filter((item): item is string => typeof item === 'string')
       : undefined,
     resultSet: readResultSet(value.resultSet),
+    finalResultQueryConfig: readFinalResultQueryConfig(value.finalResultQueryConfig),
+  }
+}
+
+function readFinalResultQueryConfig(value: unknown): FinalResultQueryConfig | undefined {
+  const raw = asRecord(value)
+  if (typeof raw.schemaFingerprint !== 'string' || !Array.isArray(raw.displayFields) || !Array.isArray(raw.filterFields)) return undefined
+  const sort = asRecord(raw.sortPolicy)
+  const pagination = asRecord(raw.paginationPolicy)
+  return {
+    schemaFingerprint: raw.schemaFingerprint,
+    displayFields: raw.displayFields as FinalResultQueryConfig['displayFields'],
+    filterFields: raw.filterFields as FinalResultQueryConfig['filterFields'],
+    sortPolicy: {
+      enabled: sort.enabled === true,
+      mode: sort.mode === 'multi' ? 'multi' : 'single',
+      allowedFields: Array.isArray(sort.allowedFields) ? sort.allowedFields.filter((field): field is string => typeof field === 'string') : [],
+      defaultSort: sort.defaultSort && typeof sort.defaultSort === 'object' ? sort.defaultSort as FinalResultQueryConfig['sortPolicy']['defaultSort'] : null,
+    },
+    paginationPolicy: {
+      enabled: pagination.enabled === true,
+      defaultPageSize: typeof pagination.defaultPageSize === 'number' ? pagination.defaultPageSize : 100,
+      maxPageSize: typeof pagination.maxPageSize === 'number' ? pagination.maxPageSize : 500,
+      returnTotalCount: pagination.returnTotalCount === true,
+    },
   }
 }
 
@@ -202,6 +228,7 @@ export function writeComponentDatasetPipeline(component: InsightComponent, pipel
           : {}),
         // 结果集元数据持久化：重开仪表盘时据此回显或刷新（决策 B）
         ...(pipeline.resultSet ? { resultSet: pipeline.resultSet } : {}),
+        ...(pipeline.finalResultQueryConfig ? { finalResultQueryConfig: pipeline.finalResultQueryConfig } : {}),
       },
     },
   }

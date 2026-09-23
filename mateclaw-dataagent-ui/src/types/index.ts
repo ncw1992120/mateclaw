@@ -1481,6 +1481,8 @@ export interface ComponentDatasetPipeline {
   boundFilterComponentIds?: string[]
   /** 最近一次产出的结果集（元数据持久化，行数据由后端 executionId 或前端重算获得） */
   resultSet?: ComponentResultSet
+  /** Python 输出通过组件契约校验后的、组件级最终结果集查询配置。 */
+  finalResultQueryConfig?: FinalResultQueryConfig
 }
 
 /** ===== 表格详情页查询链路（契约见 docs/策略解读/plans/2026-09-22-表格详情页查询链路实施计划.md）===== */
@@ -1527,6 +1529,24 @@ export interface DatasetQueryConfig {
   paginationPolicy: QueryPaginationPolicy
 }
 
+/** Python 输出字段可参与的最终结果集筛选规则。 */
+export interface FinalResultFilterField {
+  field: string
+  title: string
+  dataType: string
+  parameterName: string
+  operators: QueryParameterBinding['operator'][]
+}
+
+/** 针对 Python 最终输出的静态查询配置，不影响输入数据源查询。 */
+export interface FinalResultQueryConfig {
+  schemaFingerprint: string
+  displayFields: QueryDisplayField[]
+  filterFields: FinalResultFilterField[]
+  sortPolicy: QuerySortPolicy
+  paginationPolicy: QueryPaginationPolicy
+}
+
 /** 运行时排序；direction 仅 asc/desc。 */
 export interface QuerySortSpec {
   field: string
@@ -1553,6 +1573,13 @@ export interface QueryContext {
   pagination?: QueryPaginationSpec | null
   /** 链路关联标识，用于丢弃旧请求晚返回的响应。 */
   requestId?: string
+}
+
+/** Python 输出阶段的运行时查询值；不向输入 Query Planner 反向下推。 */
+export interface FinalResultQueryContext {
+  parameters: Record<string, unknown>
+  sort?: QuerySortSpec | null
+  pagination?: QueryPaginationSpec | null
 }
 
 /** 服务端查询计划摘要（pushdown 是服务端计算结果，前端不可伪造）。 */

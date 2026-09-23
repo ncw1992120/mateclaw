@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  extractResultSchema,
   formatScriptResultError,
+  fingerprintResultSchema,
   parseScriptResultEnvelope,
   resultEnvelopeToComponentData,
   tableEnvelopeFromRows,
@@ -60,6 +62,34 @@ describe('tableEnvelopeFromRows', () => {
       ['region', 'string'], ['amount', 'number'], ['active', 'boolean'],
     ])
     expect(envelope.meta.rowCount).toBe(1)
+  })
+})
+
+describe('result schema', () => {
+  it('从 table 结果提取字段、类型、可空性和行数', () => {
+    const envelope = tableEnvelope(
+      [
+        { name: 'region', title: 'region', dataType: 'string', nullable: false },
+        { name: 'amount', title: 'amount', dataType: 'number', nullable: false },
+      ],
+      [{ region: '华东', amount: 10 }, { region: null, amount: 20 }],
+    )
+    const schema = extractResultSchema(envelope)
+    expect(schema.kind).toBe('table')
+    expect(schema.rowCount).toBe(2)
+    expect(schema.columns).toEqual([
+      { name: 'region', title: 'region', dataType: 'string', nullable: true },
+      { name: 'amount', title: 'amount', dataType: 'number', nullable: false },
+    ])
+    expect(schema.fingerprint).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  it('空 table 仍保留声明的列并生成稳定指纹', () => {
+    const a = extractResultSchema(tableEnvelope([{ name: 'amount', title: 'amount', dataType: 'number', nullable: false }], []))
+    const b = extractResultSchema(tableEnvelope([{ name: 'amount', title: 'amount', dataType: 'number', nullable: false }], []))
+    expect(a.rowCount).toBe(0)
+    expect(a.columns).toEqual([{ name: 'amount', title: 'amount', dataType: 'number', nullable: true }])
+    expect(fingerprintResultSchema(a)).toBe(fingerprintResultSchema(b))
   })
 })
 

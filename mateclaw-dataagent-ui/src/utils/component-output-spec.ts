@@ -26,6 +26,16 @@ export interface ComponentOutputSpec {
   example: string
 }
 
+export interface OutputContractTemplate {
+  kind: ScriptResultEnvelope['kind']
+  example: string
+  fieldRules: {
+    minColumns: number
+    minDimensionColumns: number
+    minNumericColumns: number
+  }
+}
+
 /** 名称+值 家族的图表：饼图/漏斗/仪表盘/旭日/矩形树。其余图表走 维度+指标 家族。 */
 const NAME_VALUE_CHARTS = new Set<ChartType>(['pie', 'funnel', 'gauge', 'sunburst', 'treemap'])
 const CHART_HINTS: Partial<Record<ChartType, string>> = {
@@ -127,6 +137,26 @@ export function resolveOutputSpec(
     default:
       // filter / timeFilter / aiAnalysis / combination：不消费脚本结果
       return null
+  }
+}
+
+/** 将组件输出规范转换为编辑器可展示的固定返回模板和字段下限。 */
+export function outputContractTemplate(spec: ComponentOutputSpec): OutputContractTemplate {
+  const table = spec.accepts.includes('table')
+  const minDimensionColumns = spec.family === 'chartCategory' || spec.family === 'chartNameValue' ? 1 : 0
+  const minNumericColumns = spec.family === 'chartCategory' || spec.family === 'chartNameValue' ? 1 : 0
+  return {
+    kind: table ? 'table' : spec.accepts[0],
+    example: table
+      ? '{"schemaVersion":"1.0","kind":"table","data":{"columns":[],"rows":[]},"meta":{"rowCount":0,"truncated":false}}'
+      : spec.accepts[0] === 'scalar'
+        ? '{"schemaVersion":"1.0","kind":"scalar","data":{"value":0,"dataType":"number"},"meta":{"rowCount":1,"truncated":false}}'
+        : '{"schemaVersion":"1.0","kind":"message","data":{"level":"info","message":"暂无数据"},"meta":{"rowCount":0,"truncated":false}}',
+    fieldRules: {
+      minColumns: table ? (spec.family === 'table' ? 0 : minDimensionColumns + minNumericColumns) : 0,
+      minDimensionColumns,
+      minNumericColumns,
+    },
   }
 }
 

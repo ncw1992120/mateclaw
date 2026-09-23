@@ -31,10 +31,11 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
-import { formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
-import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
+import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
+import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
+import { outputContractTemplate, resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
 import {
@@ -291,7 +292,9 @@ export function currentPythonSource(): PythonSystemSource {
       conditions: binding.conditions ?? [],
     }
   })
-  return { inputs, bindings }
+  const activeCard = state.cards.find((card) => card.id === state.activeCardId)
+  const outputSpec = activeCard ? resolveOutputSpec(activeCard.type) : null
+  return { inputs, bindings, outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined }
 }
 
 /* ============================ 状态单例 ============================ */
@@ -330,6 +333,7 @@ const state = reactive({
     executionId: '',
     error: '',
   } as ResultSetState,
+  finalResultQueryConfig: undefined as FinalResultQueryConfig | undefined,
   // [后端联调] 与 mateclaw-dataagent 的联动状态
   backend: {
     dashboardId: '', // 后端仪表盘 ID
@@ -1342,6 +1346,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     boundFilterComponentIds: boundFilterComponentIds(),
     // 结果集元数据随 pipeline 持久化：重开仪表盘时据此回读（有脚本）或重算（无脚本）
     resultSet: resultSetMeta(),
+    finalResultQueryConfig: state.finalResultQueryConfig,
   }
 }
 
@@ -1572,6 +1577,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
             executionId,
             elapsedMs: Date.now() - startedAt,
           })
+          if (previewSpec) state.finalResultQueryConfig = buildFinalResultQueryConfig(previewSpec, extractResultSchema(envelope))
         } else if (envelope.kind === 'message') {
           commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
           state.resultSet.error = envelope.data.message
