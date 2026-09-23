@@ -75,11 +75,7 @@
     <div ref="ccBodyRef" class="cc-body" :class="{ 'mode-free': cfg.layoutMode === 'free', 'mode-grid': cfg.layoutMode === 'grid', 'mode-vertical': cfg.layoutMode === 'vertical' }">
       <!-- 空状态（共享 EmptyState 组件，线性图标替代 emoji） -->
       <div v-if="activeChildren.length === 0" class="cc-empty">
-        <div v-if="sampleMode" class="cc-sample-preview" aria-label="组合卡片样例内容">
-          <div class="cc-sample-kpi"><span>总量</span><strong>1,284</strong><small>样例指标</small></div>
-          <div class="cc-sample-chart" aria-hidden="true"><i style="height: 38%" /><i style="height: 68%" /><i style="height: 52%" /><i style="height: 86%" /></div>
-        </div>
-        <EmptyState v-else :text="editable ? t('insight.combination.emptyEditable') : t('insight.combination.empty')" />
+        <EmptyState :text="editable ? t('insight.combination.emptyEditable') : t('insight.combination.empty')" />
       </div>
 
       <div
@@ -267,7 +263,6 @@ import EmptyState from './EmptyState.vue'
 import { useTabKeyboard } from '../composables/useTabKeyboard'
 import { calculateCombinationChildResize } from './combinationChildLayout'
 import { defaultCombinationChildLayout } from '@/utils/combination-tabs'
-import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 
 defineOptions({ name: 'CombinationCardWidget' })
 
@@ -275,6 +270,7 @@ const props = withDefaults(
   defineProps<{
     component: InsightComponent
     componentDataMap?: Record<string, InsightComponentData>
+    /** 组合卡片不使用样例数据；保留字段兼容旧调用方。 */
     sampleMode?: boolean
     editable?: boolean
     selected?: boolean
@@ -436,25 +432,11 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 }
 
 function childWidgetComponent(child: InsightCombinationChild): InsightComponent {
-  const component = toWidgetComponent(child)
-  if (!props.sampleMode || hasConfiguredDataset(component) || child.type !== 'filter') return component
-  const sample = JSON.parse(resolveComponentSample(component).json) as { data?: { options?: Array<{ label: string; value: string }> } }
-  return {
-    ...component,
-    config: {
-      ...(component.config ?? {}),
-      optionSource: 'static',
-      staticOptions: sample.data?.options ?? [],
-    },
-  }
+  return toWidgetComponent(child)
 }
 
 function childComponentData(child: InsightCombinationChild): InsightComponentData | undefined {
-  const configured = props.componentDataMap?.[child.id]
-  if (configured) return configured
-  const component = toWidgetComponent(child)
-  if (!props.sampleMode || hasConfiguredDataset(component)) return undefined
-  return resolveComponentSample(component).renderData
+  return props.componentDataMap?.[child.id]
 }
 
 /** 子卡片定位样式 */
@@ -995,12 +977,6 @@ const { onTabKeydown } = useTabKeyboard(
   position: absolute; inset: 0;
   border: 1px dashed var(--db-border); border-radius: 8px;
 }
-.cc-sample-preview { display: grid; grid-template-columns: 1fr 1.2fr; align-items: center; gap: 12px; width: min(420px, 90%); text-align: left; }
-.cc-sample-kpi { display: flex; flex-direction: column; gap: 4px; color: var(--db-text-muted); font-size: 12px; }
-.cc-sample-kpi strong { color: var(--db-text); font-size: 24px; font-variant-numeric: tabular-nums; }
-.cc-sample-kpi small { font-size: 11px; }
-.cc-sample-chart { display: flex; height: 72px; align-items: end; justify-content: space-around; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--db-border); }
-.cc-sample-chart i { display: block; width: 18%; border-radius: 3px 3px 0 0; background: var(--db-accent); opacity: 0.55; }
 /* 空态内容（图标 + 文案）由共享 EmptyState 组件渲染 */
 
 .cc-child {

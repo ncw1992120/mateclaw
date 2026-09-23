@@ -14,7 +14,7 @@ const stubs = {
   FilterSelectWidget: { template: '<div />' },
   TimeFilterWidget: { template: '<div />' },
   AiAnalysisWidget: { template: '<div />' },
-  CombinationCardWidget: { template: '<div />' },
+  CombinationCardWidget: { name: 'CombinationCardWidget', props: ['sampleMode'], template: '<div />' },
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { canvasEmpty: '暂无组件' } } }, missingWarn: false, fallbackWarn: false })
 
@@ -69,6 +69,26 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
     expect(configured.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(configured.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
+  })
+
+  it('does not mark a combination card as sample data', () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [{
+          id: 'combination-1',
+          type: 'combination',
+          title: '组合卡片',
+          position: { x: 0, y: 0, w: 6, h: 4 },
+          children: [],
+          containerConfig: { layoutMode: 'free', tabs: [] },
+        }],
+        editable: true,
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'CombinationCardWidget' }).props('sampleMode')).toBe(false)
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {

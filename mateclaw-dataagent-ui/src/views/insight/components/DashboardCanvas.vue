@@ -708,7 +708,7 @@ function getComponentData(id: string): InsightComponentData | undefined {
 
 function isSampleData(id: string): boolean {
   const component = getComponent(id)
-  return Boolean(component && !props.componentDataMap?.[id] && !hasConfiguredDataset(component))
+  return Boolean(component && component.type !== 'combination' && !props.componentDataMap?.[id] && !hasConfiguredDataset(component))
 }
 
 function getWidgetComponent(id: string): InsightComponent | undefined {
