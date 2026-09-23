@@ -145,26 +145,7 @@
         </div>
       </div>
 
-      <!-- 5. 筛选器绑定（绑定到当前选中的 KPI/指标卡，无独立组件级时间筛选） -->
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">筛选器绑定</span>
-          <InlineHelp label="筛选器绑定" content="将仪表盘筛选条件绑定到当前卡片的数据集，查询时按字段下推。" />
-        </div>
-        <div class="fb-box">
-          <template v-if="state.filterBindings && state.filterBindings.length">
-            <div class="fb-tags">
-              <el-tag v-for="(b, i) in state.filterBindings" :key="i" size="small" type="info" class="fb-tag">
-                {{ b.filterName }}
-              </el-tag>
-            </div>
-            <el-button size="small" text type="primary" @click="openFilterBinding">查看 / 修改</el-button>
-          </template>
-          <el-button v-else size="small" @click="openFilterBinding">绑定筛选器</el-button>
-        </div>
-      </div>
-
-      <!-- 6. Python 预处理（位于数据集、筛选器绑定之后、结果集之前：
+      <!-- 5. Python 预处理（位于数据集之后、结果集之前：
            有脚本时结果集由用户处理区产出，面板顺序与数据流保持一致） -->
       <div class="section">
         <div class="section-head">
@@ -197,7 +178,7 @@
         </div>
       </div>
 
-      <!-- 7. 结果集：管道唯一出口，也是卡片唯一的数据来源 —— 就绪后卡片才会显示数据 -->
+      <!-- 6. 结果集：管道唯一出口，也是卡片唯一的数据来源 —— 就绪后卡片才会显示数据 -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">结果集</span>
@@ -246,7 +227,7 @@
         </template>
       </div>
 
-      <!-- 8. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
+      <!-- 7. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
            排在 Python 预处理之后：指标由「最终结果集」字段投影而来，而结果集可能由
            Python 用户处理区产生，放最后才符合「先出结果集、再配置指标」的使用顺序。 -->
       <div v-if="isKpiCard" class="section">
@@ -272,7 +253,7 @@ import InlineHelp from '../property/InlineHelp.vue'
 import DatasetCard from './DatasetCard.vue'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openFilterBinding, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
 
 const kpiMetricCount = computed(() => state.kpiMetrics.length)
 
@@ -520,31 +501,6 @@ function typeLabel(t: string) {
   font-size: 12px;
   color: var(--db-warning);
   line-height: 1.6;
-}
-.fb-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 32px;
-}
-.fb-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--db-text-muted);
-  line-height: 1.6;
-}
-.fb-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  flex: 1;
-}
-.fb-tag {
-  margin: 0;
-}
-.fb-name {
-  font-size: 13px;
-  color: var(--db-text);
 }
 .python-empty {
   display: flex;

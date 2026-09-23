@@ -40,7 +40,7 @@ import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
 export type { ComponentDatasetPipeline }
 
 /**
- * 「筛选器绑定」所需的筛选器最小信息。
+ * 旧 pipeline 绑定回显所需的筛选器最小信息。
  * 顶层筛选器与**组合卡片容器内的子筛选器**统一成这个形状：容器内子卡片是
  * `InsightCombinationChild`，没有 `position` 等 `InsightComponent` 的必填字段，
  * 而本场景只消费 `id` / `title` / `type`。
@@ -67,7 +67,7 @@ export function inputToDatasetConfig(input: DashboardDatasetInput, index: number
   return { ...ds, id: `${datasetId || 'ds'}-${index}` }
 }
 
-/** pipeline.scriptFilterBindings → 面板筛选器绑定（作用范围按数据集逐项展开） */
+/** pipeline.scriptFilterBindings → 本地旧配置映射（作用范围按数据集逐项展开） */
 function filterBindingsFromPipeline(
   bindings: DashboardScriptFilterBinding[],
   datasets: DatasetConfig[],
@@ -101,7 +101,7 @@ function filterBindingsFromPipeline(
 
 /**
  * 选中组件 → 面板状态。切换卡片 / 首次打开属性配置时调用。
- * 回显内容：组件标题、多指标模式、多Tab模式、数据集卡片、筛选器绑定、Python 脚本。
+ * 回显内容：组件标题、多指标模式、多Tab模式、数据集卡片、旧筛选绑定、Python 脚本。
  */
 export function hydratePanel(
   component: InsightComponent,
@@ -145,7 +145,7 @@ export function hydratePanel(
     state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
     state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
   }
-  // 仪表盘可用筛选器组件：作为「筛选器绑定」弹窗的真实参数名来源（替代此前的固定词表）
+  // 保留筛选器 id/title 对照，旧绑定保存回写时需还原为真实组件 ID。
   state.filterCatalog = filterComponents.map((c) => ({ id: String(c.id), title: c.title || String(c.id) }))
 
   // 结果集：回填持久化元数据（行数据留空，由画布侧回读或重算补齐）。
@@ -175,7 +175,6 @@ export function hydratePanel(
   state.ui.api.visible = false
   state.ui.file.visible = false
   state.ui.fieldMapping.visible = false
-  state.ui.filterBinding.visible = false
   state.ui.python.visible = false
   state.ui.preview.visible = false
   state.ui.metricConfig.visible = false

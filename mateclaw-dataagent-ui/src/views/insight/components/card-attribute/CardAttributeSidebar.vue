@@ -10,7 +10,6 @@
     <ApiConfigDialog />
     <FileConfigDialog />
     <FieldMappingDialog />
-    <FilterBindingDialog />
     <PythonScriptDialog />
     <PreviewDialog />
     <MetricConfigDialog />
@@ -33,7 +32,6 @@ import AloudataDialog from './dataset/AloudataDialog.vue'
 import ApiConfigDialog from './dataset/ApiConfigDialog.vue'
 import FileConfigDialog from './dataset/FileConfigDialog.vue'
 import FieldMappingDialog from './FieldMappingDialog.vue'
-import FilterBindingDialog from './FilterBindingDialog.vue'
 import PythonScriptDialog from './PythonScriptDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
 import MetricConfigDialog from './MetricConfigDialog.vue'
@@ -46,7 +44,7 @@ const props = defineProps<{
   /** 仪表盘 ID（用于后端联调态与回显） */
   dashboardId: string
   executionPolicy?: InsightDashboardSchema['executionPolicy']
-  /** 当前页面内的筛选类组件（filter / timeFilter，含组合卡片容器内的子筛选器），用于筛选器绑定命名与候选 */
+  /** 当前页面筛选组件索引，用于历史 pipeline 绑定回显与保存兼容 */
   filterComponents?: PanelFilterComponent[]
 }>()
 

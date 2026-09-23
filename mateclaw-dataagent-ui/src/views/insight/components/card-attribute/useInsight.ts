@@ -150,7 +150,6 @@ interface UiState {
     rows: Record<string, string>[]
   }
   fieldMapping: { visible: boolean; datasetId: string }
-  filterBinding: { visible: boolean }
   python: { visible: boolean }
   preview: {
     visible: boolean
@@ -217,7 +216,7 @@ export interface ResultSetState {
 
 // 输入筛选默认空；由用户按原型 §4.2 运算符枚举添加（运算符为固定枚举，非假数据）。
 
-// 筛选器绑定默认空；由用户添加，作用范围默认全选当前数据集，字段映射按真实字段名推断（见 FilterBindingDialog）。
+// 历史 scriptFilterBindings 从仪表盘 pipeline 回填到这里，保存时继续原样兼容旧配置。
 
 // Python 系统生成区域由 buildPythonSystemRegion() 根据「真实」数据集与筛选器绑定确定性生成
 // （见下方函数定义，位于 Python 预处理一节）；用户处理区域由用户在编辑器中自行编写，
@@ -311,7 +310,7 @@ const state = reactive({
   filterBindings: [] as FilterBinding[],
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
   kpiMetrics: [] as KpiMetricConfig[],
-  // 仪表盘可用筛选器组件（来自筛选器绑定弹窗的真实参数名来源；由 hydratePanel 注入）
+  // 仪表盘筛选器的真实 id/title 对照（由 hydratePanel 注入，用于旧绑定回写时还原组件 ID）
   filterCatalog: [] as { id: string; title: string }[],
   // 结果集：卡片唯一数据来源（数据集 / 筛选 / 脚本都只是产出它的手段）
   resultSet: {
@@ -343,7 +342,6 @@ const state = reactive({
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
     file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', fileRef: undefined, columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
-    filterBinding: { visible: false },
     python: { visible: false },
     preview: {
       visible: false,
@@ -944,30 +942,6 @@ function saveFieldMetas(list: DatasetFieldMeta[]): string | null {
   }
   state.ui.fieldMapping.visible = false
   return null
-}
-
-/* ---- 筛选器绑定（支持多个） ---- */
-function openFilterBinding() {
-  // 首开不预置假数据；筛选器绑定弹窗按需创建空草稿（作用范围默认全选当前数据集）
-  state.ui.filterBinding.visible = true
-}
-function saveFilterBindings(arr: FilterBinding[]) {
-  state.filterBindings = arr
-  if (state.pythonSystemState) {
-    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
-    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
-  } else if (state.hasPython) {
-    const source = currentPythonSource()
-    const generatedCode = generateSystemScript(source)
-    state.pythonSystemState = {
-      mode: 'generated',
-      generatedCode,
-      generatedFingerprint: fingerprintSystemSource(source),
-      userCode: state.pythonUser,
-    }
-    state.pythonSystem = generatedCode
-  }
-  state.ui.filterBinding.visible = false
 }
 
 /* ---- Python 预处理 ---- */
@@ -1993,9 +1967,6 @@ export function useInsight() {
     // dataset schema（「字段名称」自动填充 + diff）
     canFetchDatasetSchema,
     refreshDatasetSchema,
-    // filter binding
-    openFilterBinding,
-    saveFilterBindings,
     // python
     openPython,
     savePython,
