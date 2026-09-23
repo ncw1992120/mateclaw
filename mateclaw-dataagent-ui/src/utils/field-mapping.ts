@@ -65,6 +65,20 @@ export function resolveFieldLabel(fields: DatasetFieldMeta[] | undefined, name: 
   return display || key
 }
 
+/** 从已持久化映射构建渲染标签；空标签及未映射字段均回退技术字段名。 */
+export function fieldLabelsFromMappings(
+  mappings: Array<{ source: string; target?: string }> | undefined,
+): Record<string, string> {
+  const labels: Record<string, string> = {}
+  for (const mapping of mappings ?? []) {
+    const source = (mapping.source ?? '').trim()
+    if (!source) continue
+    const target = (mapping.target ?? '').trim()
+    labels[source] = target && target !== source ? target : source
+  }
+  return labels
+}
+
 /**
  * 反解：展示名 → 字段名（决策 1 的展示名唯一性保证一一映射，无歧义）。
  * 命中顺序：① 本身就是字段名 → 原样；② 命中某条目的展示名 → 其字段名；③ 未命中 → 原样返回。

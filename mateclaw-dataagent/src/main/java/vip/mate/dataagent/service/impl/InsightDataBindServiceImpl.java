@@ -14,6 +14,7 @@ import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.util.InsightChartOptionHelper;
+import vip.mate.dataagent.support.InsightFieldLabels;
 import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.repository.DatasourceMapper;
@@ -732,12 +733,15 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
         if (schema != null && !schema.getAllComponents().isEmpty()) {
             for (Component comp : schema.getAllComponents()) {
+                Map<String, String> fieldLabels = InsightFieldLabels.fromComponent(schema, comp.getId());
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {
-                        metrics.addAll(comp.getDataSource().getMetrics());
+                        metrics.addAll(comp.getDataSource().getMetrics().stream()
+                                .map(name -> fieldLabels.getOrDefault(name, name)).toList());
                     }
                     if (comp.getDataSource().getDimensions() != null) {
-                        dimensions.addAll(comp.getDataSource().getDimensions());
+                        dimensions.addAll(comp.getDataSource().getDimensions().stream()
+                                .map(name -> fieldLabels.getOrDefault(name, name)).toList());
                     }
                     if (comp.getDataSource().getFilters() != null) {
                         filters.addAll(comp.getDataSource().getFilters());

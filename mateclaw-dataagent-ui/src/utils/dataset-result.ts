@@ -13,16 +13,18 @@ export function rowsToComponentData(
   rows: unknown[],
   renderType: 'table' | 'echarts' | 'kpi' = 'table',
   kpiFields: KpiProjectionField[] = [],
+  fieldLabels?: Record<string, string>,
 ): InsightComponentData {
   const records = rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
   const columns = [...new Set(records.flatMap((row) => Object.keys(row)))]
   if (renderType === 'kpi') {
-    return { componentId, renderType: 'kpi', ...buildKpiPayload(records, columns, kpiFields) }
+    return { componentId, renderType: 'kpi', fieldLabels, ...buildKpiPayload(records, columns, kpiFields) }
   }
   if (renderType === 'table') {
     return {
       componentId,
       renderType: 'table',
+      fieldLabels,
       table: { columns, rows: records.map((row) => columns.map((column) => formatCell(row[column]))) },
     }
   }
@@ -32,6 +34,7 @@ export function rowsToComponentData(
   return {
     componentId,
     renderType: 'echarts',
+    fieldLabels,
     option: {
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: records.map((row) => formatCell(row[category])) },
