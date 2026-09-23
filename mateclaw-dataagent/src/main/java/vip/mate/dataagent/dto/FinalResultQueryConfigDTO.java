@@ -22,7 +22,12 @@ public record FinalResultQueryConfigDTO(
     public record DisplayField(String field, String title, String role, String dataType) {}
 
     public record FilterField(String field, String title, String dataType,
-                              String parameterName, List<String> operators) {
+                              String parameterName, List<String> operators, String filterComponentId) {
+        public FilterField(String field, String title, String dataType,
+                           String parameterName, List<String> operators) {
+            this(field, title, dataType, parameterName, operators, null);
+        }
+
         public FilterField {
             operators = operators == null ? List.of() : List.copyOf(operators);
         }

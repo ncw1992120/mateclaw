@@ -27,7 +27,7 @@
             </div>
             <div v-for="(row, index) in fieldRows" :key="row.field" class="qc-field-row" data-testid="python-qc-field-row" draggable="true" @dragstart="onDragStart(index)" @dragover.prevent @drop="onDrop(index)">
               <div class="qc-field-cell qc-field-name-cell">
-                <el-tag :type="row.role === 'measure' ? 'warning' : 'info'" size="small" class="qc-role-tag" title="点击切换维度 / 指标" @click.stop="toggleRole(row)">
+                <el-tag :type="row.role === 'measure' ? 'warning' : 'info'" size="small" class="qc-role-tag" data-testid="python-qc-role-toggle" title="点击切换维度 / 指标" @click.stop="toggleRole(row)">
                   {{ row.role === 'measure' ? '指标' : '维度' }}
                 </el-tag>
                 <el-input v-model="row.field" class="qc-tech-input" size="small" placeholder="技术字段名" data-testid="python-qc-field-tech-input" />
@@ -40,9 +40,9 @@
             </div>
           </div>
           <div class="qc-add-field-row">
+            <el-button size="small" type="primary" plain data-testid="python-qc-add-new-field" @click="addNewField">添加字段</el-button>
             <el-input v-model="newFieldName" class="qc-new-field-input" size="small" placeholder="技术字段名（英文/数字/下划线）" data-testid="python-qc-new-field-name" />
             <el-input v-model="newFieldTitle" class="qc-new-field-input" size="small" placeholder="展示名" data-testid="python-qc-new-field-title" />
-            <el-button size="small" type="primary" plain data-testid="python-qc-add-new-field" @click="addNewField">添加字段</el-button>
             <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="从结果字段选择" filterable @change="addField">
               <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
             </el-select>
@@ -57,13 +57,17 @@
         </div>
         <div v-if="filterRows.length" class="qc-binding-table">
           <div class="qc-thead qc-binding-thead">
-            <span class="qc-th qc-th-filter">字段名</span>
-            <span class="qc-th qc-th-target">参数名</span>
+            <span class="qc-th qc-th-filter">筛选器名称</span>
+            <span class="qc-th qc-th-target">绑定对象</span>
             <span class="qc-th qc-th-op" />
           </div>
-          <div v-for="(row, index) in filterRows" :key="row.field" class="qc-binding-row" data-testid="python-qc-filter-row">
-            <span class="qc-tech-field">{{ row.title }}（{{ row.field }}）</span>
-            <el-input v-model="row.parameterName" size="small" placeholder="参数名" />
+          <div v-for="(row, index) in filterRows" :key="`${row.filterComponentId || 'filter'}-${row.field}-${index}`" class="qc-binding-row" data-testid="python-qc-filter-row">
+            <el-select v-model="row.filterComponentId" size="small" placeholder="筛选器名称" filterable data-testid="python-qc-filter-component">
+              <el-option v-for="filter in filterOptions" :key="filter.id" :label="filter.title" :value="filter.id" />
+            </el-select>
+            <el-select v-model="row.field" size="small" placeholder="绑定字段" filterable data-testid="python-qc-filter-field" @change="updateFilterField(row, $event)">
+              <el-option v-for="field in filterFieldCandidates" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
+            </el-select>
             <el-button size="small" text type="danger" data-testid="python-qc-filter-remove" @click="filterRows.splice(index, 1)">删除</el-button>
           </div>
         </div>
@@ -111,6 +115,7 @@ const props = defineProps<{
   modelValue: boolean
   config: FinalResultQueryConfig
   fieldCatalog: QueryDisplayField[]
+  filterOptions?: Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>
 }>()
 
 const emit = defineEmits<{
@@ -122,8 +127,12 @@ interface EditableField extends QueryDisplayField {
   originalField: string
 }
 
+interface EditableFilterField extends FinalResultFilterField {
+  filterComponentId?: string
+}
+
 const fieldRows = ref<EditableField[]>([])
-const filterRows = ref<FinalResultFilterField[]>([])
+const filterRows = ref<EditableFilterField[]>([])
 const sortEnabled = ref(false)
 const sortAllowed = ref<string[]>([])
 const paginationEnabled = ref(false)
@@ -153,6 +162,7 @@ const filterFieldCandidates = computed(() => {
   const candidates = [...fieldRows.value, ...props.fieldCatalog]
   return candidates.filter((field, index) => candidates.findIndex((item) => item.field === field.field) === index)
 })
+const filterOptions = computed(() => props.filterOptions ?? [])
 
 function fieldOptionLabel(field: QueryDisplayField): string {
   return field.title && field.title !== field.field ? `${field.field} · ${field.title}` : field.field
@@ -160,7 +170,7 @@ function fieldOptionLabel(field: QueryDisplayField): string {
 
 function cloneConfig(config: FinalResultQueryConfig): void {
   fieldRows.value = config.displayFields.map((field) => ({ ...field, originalField: field.field }))
-  filterRows.value = config.filterFields.map((field) => ({ ...field }))
+  filterRows.value = config.filterFields.map((field) => ({ ...field, filterComponentId: field.filterComponentId ?? '' }))
   sortEnabled.value = config.sortPolicy.enabled
   sortAllowed.value = [...config.sortPolicy.allowedFields]
   paginationEnabled.value = config.paginationPolicy.enabled
@@ -202,7 +212,17 @@ function addNewField(): void {
 function addFilterField(): void {
   const field = filterFieldCandidates.value.find((item) => !filterRows.value.some((row) => row.field === item.field))
   if (!field) return
-  filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'] })
+  filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'], filterComponentId: filterOptions.value[0]?.id ?? '' })
+}
+
+function updateFilterField(row: EditableFilterField, fieldName: string): void {
+  const field = filterFieldCandidates.value.find((item) => item.field === fieldName)
+  if (!field) return
+  row.field = field.field
+  row.title = field.title
+  row.dataType = field.dataType ?? 'string'
+  row.parameterName = field.field
+  row.operators = field.dataType === 'number' ? ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'] : ['eq', 'neq', 'in', 'not_in', 'contains']
 }
 
 function toggleRole(row: QueryDisplayField): void {
@@ -252,7 +272,7 @@ function save(): void {
   const displayFields = fieldRows.value.map((field) => ({ field: field.field.trim(), title: field.title.trim() || field.field.trim(), role: field.role, dataType: field.dataType }))
   const filterFields = filterRows.value.map((field) => {
     const nextField = renamedFields.get(field.field) ?? field.field
-    return { ...field, field: nextField, title: titleByField.get(nextField) ?? field.title, parameterName: field.parameterName === field.field ? nextField : field.parameterName }
+    return { ...field, field: nextField, title: titleByField.get(nextField) ?? field.title, parameterName: field.parameterName === field.field ? nextField : field.parameterName, ...(field.filterComponentId ? { filterComponentId: field.filterComponentId } : {}) }
   })
   const allowedFields = sortAllowed.value.map((field) => renamedFields.get(field) ?? field)
   emit('save', {

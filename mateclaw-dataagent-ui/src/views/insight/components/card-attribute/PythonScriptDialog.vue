@@ -100,6 +100,7 @@
     v-model="showQueryConfig"
     :config="queryConfigDraft ?? createEmptyFinalResultQueryConfig()"
     :field-catalog="queryConfigFieldCatalog"
+    :filter-options="state.filterCatalog"
     @save="saveQueryConfig"
   />
 </template>
