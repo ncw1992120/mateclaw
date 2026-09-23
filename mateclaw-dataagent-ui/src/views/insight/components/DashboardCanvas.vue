@@ -28,11 +28,13 @@
             <FilterSelectWidget
               v-if="comp.type === 'filter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :show-title="false"
               @change="(payload) => handleFilterChange(comp.id, payload)"
             />
             <TimeFilterWidget
               v-else-if="comp.type === 'timeFilter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :show-title="false"
               @change="(payload) => handleTimeFilterChange(comp.id, payload)"
             />
           </div>
@@ -204,6 +206,7 @@
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getWidgetComponent(item.i)!"
+                :show-title="true"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleFilterChange(item.i, payload)"
@@ -211,6 +214,7 @@
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getWidgetComponent(item.i)!"
+                :show-title="true"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"

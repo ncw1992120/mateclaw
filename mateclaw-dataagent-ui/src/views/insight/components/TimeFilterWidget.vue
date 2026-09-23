@@ -45,7 +45,7 @@ const props = defineProps<{
   dashboardTheme?: ResolvedDashboardTheme
 }>()
 
-const showLabel = computed(() => props.showTitle !== false && props.component.titleBarStyle !== 'hidden')
+const showLabel = computed(() => props.showTitle === true || (props.showTitle !== false && props.component.titleBarStyle !== 'hidden'))
 
 const emit = defineEmits<{
   (e: 'change', payload: { field: string; timeRange: TimeRangeValue }): void
