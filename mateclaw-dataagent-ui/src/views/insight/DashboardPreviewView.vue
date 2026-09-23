@@ -441,9 +441,9 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
       if (adapted.state === 'message') {
         componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, error: adapted.message }
       } else if (adapted.state === 'empty') {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, fieldLabels: adapted.fieldLabels, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
       } else if (binding.renderType === 'echarts') {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', option: adapted.option }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', option: adapted.option, fieldLabels: adapted.fieldLabels }
       } else if (binding.renderType === 'kpi') {
         const value = adapted.value
         componentDataMap.value[binding.componentId] = {
@@ -451,9 +451,10 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
           renderType: 'kpi',
           kpi: value === undefined ? undefined : { fieldKey: 'value', name: '值', value: String(value) },
           kpiList: value === undefined ? [] : [{ fieldKey: 'value', name: '值', value: String(value) }],
+          fieldLabels: adapted.fieldLabels,
         }
       } else {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', table: adapted.table }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', table: adapted.table, fieldLabels: adapted.fieldLabels }
       }
     }
   } catch (error: any) {

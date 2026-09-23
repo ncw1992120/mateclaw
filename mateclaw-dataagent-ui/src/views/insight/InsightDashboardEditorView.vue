@@ -339,7 +339,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage, DatasetQueryConfig } from '@/types'
 import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { useUserStore } from '@/stores/useUserStore'
@@ -422,7 +422,11 @@ const queryConfigLegacyBindings = computed(() => {
   return draftQueryConfigFromLegacyBindings([binding]).parameterBindings
 })
 function onSaveQueryConfig(config: DatasetQueryConfig): void {
-  saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config)
+  const error = saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config)
+  if (error) {
+    ElMessage.warning(error)
+    return
+  }
 }
 
 const dashboard = computed(() => store.currentDashboard)
@@ -1309,7 +1313,7 @@ function handleScriptResult(rows: Record<string, unknown>[]): void {
     return
   }
   const renderType = component.type === 'chart' ? 'echarts' : 'table'
-  componentDataMap.value[component.id] = rowsToComponentData(component.id, rows, renderType)
+  componentDataMap.value[component.id] = rowsToComponentData(component.id, rows, renderType, [], insightState.resultSet.fieldLabels)
   schema.scriptBindings = [
     ...(schema.scriptBindings ?? []).filter((binding) => binding.componentId !== component.id),
     { componentId: component.id, renderType },
@@ -1344,7 +1348,7 @@ function handleComponentResultSet(payload: {
   const component = currentPageComponents.value.find((item) => item.id === payload.componentId)
   if (!component) return
   if (payload.status === 'ready') {
-    componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows)
+    componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)
     return
   }
   if (payload.status === 'stale' || payload.status === 'running') {

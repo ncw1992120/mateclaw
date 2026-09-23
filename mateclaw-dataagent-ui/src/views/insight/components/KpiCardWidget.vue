@@ -61,7 +61,7 @@
         >
           <div class="kpi-metric-name" :style="css(metric.styles.name, metricVisual(metric).textColors.name)">
             <el-icon v-if="metricIcon(metric)" class="kpi-metric-icon" :style="{ color: metricVisual(metric).accentColor }" aria-hidden="true"><component :is="metricIcon(metric)" /></el-icon>
-            <span>{{ metric.displayName }}</span>
+            <span>{{ metricLabel(metric) }}</span>
           </div>
           <div class="kpi-metric-valuerow">
             <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value)">{{ metricValue(metric) }}</span>
@@ -103,7 +103,7 @@
           class="kpi-multi-item"
         >
           <div class="kpi-value">{{ item?.value ?? '--' }}</div>
-          <div v-if="item?.name" class="kpi-name">{{ item.name }}</div>
+          <div v-if="item?.name" class="kpi-name">{{ kpiItemLabel(item) }}</div>
           <div v-if="item?.chg" class="kpi-chg" :class="item.up ? 'up' : 'down'">
             <el-icon class="kpi-trend-icon"><component :is="item.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
             <span>{{ item.chg }}</span>
@@ -115,7 +115,7 @@
       <!-- 单指标模式 -->
       <div v-else class="kpi-body">
         <div class="kpi-value">{{ activeKpiData?.value ?? '--' }}</div>
-        <div v-if="component.titleBarStyle !== 'hidden' && activeKpiData?.name" class="kpi-name">{{ activeKpiData.name }}</div>
+        <div v-if="component.titleBarStyle !== 'hidden' && activeKpiData?.name" class="kpi-name">{{ kpiItemLabel(activeKpiData) }}</div>
         <div v-if="activeKpiData?.chg" class="kpi-chg" :class="activeKpiData.up ? 'up' : 'down'">
           <el-icon class="kpi-trend-icon"><component :is="activeKpiData.up ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
           <span>{{ activeKpiData.chg }}</span>
@@ -265,6 +265,14 @@ const kpiListOrdered = computed<KpiItemData[]>(() => (props.component.kpiMetrics
   if (byField) return byField
   return effectiveKpiList.value[index] ?? null
 }).filter((x): x is KpiItemData => !!x))
+
+function metricLabel(metric: KpiMetricConfig): string {
+  return props.componentData?.fieldLabels?.[metric.fieldKey] ?? metric.displayName ?? metric.fieldKey
+}
+
+function kpiItemLabel(item: KpiItemData): string {
+  return (item.fieldKey && props.componentData?.fieldLabels?.[item.fieldKey]) || item.name
+}
 
 /** 取某指标的渲染值：优先按 fieldKey 命中，缺失时按下标对齐，最后回落 kpi */
 function metricValue(metric: KpiMetricConfig): string {

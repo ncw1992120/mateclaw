@@ -64,7 +64,7 @@
           v-for="(col, idx) in activeTableData.columns"
           :key="idx"
           :prop="`col_${idx}`"
-          :label="col"
+          :label="componentData?.fieldLabels?.[col] ?? col"
           min-width="120"
           :sortable="isSampleSortableColumn(idx) ? 'custom' : false"
           :sort-orders="['ascending', 'descending', null]"

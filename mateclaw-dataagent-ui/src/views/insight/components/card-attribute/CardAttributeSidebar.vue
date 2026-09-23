@@ -54,6 +54,7 @@ export interface ResultSetEmitPayload {
   status: ResultSetStatus
   source: 'dataset' | 'script'
   rows: Record<string, unknown>[]
+  fieldLabels?: Record<string, string>
   error: string
 }
 
@@ -151,6 +152,7 @@ watch(
       status,
       source: state.resultSet.source,
       rows: state.resultSet.rows,
+      fieldLabels: state.resultSet.fieldLabels,
       error: state.resultSet.error,
     })
   },

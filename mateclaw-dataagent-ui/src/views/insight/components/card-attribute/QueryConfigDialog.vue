@@ -146,7 +146,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { DatasetFieldMeta } from '@/utils/field-mapping'
+import { validateFieldMetas, type DatasetFieldMeta } from '@/utils/field-mapping'
 import type {
   DatasetQueryConfig,
   QueryDisplayField,
@@ -329,6 +329,15 @@ function save(): void {
   }
   if (duplicateTitles.value.size) {
     ElMessage.warning('展示名必须唯一')
+    return
+  }
+  const titles = new Map(fieldRows.value.map((row) => [row.field, row.title.trim()]))
+  const registryError = validateFieldMetas(props.fields.map((field) => ({
+    ...field,
+    displayName: titles.has(field.name) ? titles.get(field.name) || undefined : field.displayName,
+  })))
+  if (registryError) {
+    ElMessage.warning(registryError)
     return
   }
   // 参数名在 UI 中隐藏，提交前用筛选器组件 id 兜底（与后端 Planner 声明式参数契约一致）

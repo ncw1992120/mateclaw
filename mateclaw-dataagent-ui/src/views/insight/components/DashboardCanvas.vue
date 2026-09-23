@@ -300,6 +300,8 @@ import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashb
 import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { fieldLabelsFromMappings } from '@/utils/field-mapping'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
@@ -784,8 +786,14 @@ function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
 /** 根据 ID 获取组件渲染数据 */
 function getComponentData(id: string): InsightComponentData | undefined {
   const configured = props.componentDataMap?.[id]
-  if (configured) return configured
   const component = getComponent(id)
+  if (configured) {
+    if (!component) return configured
+    const pipeline = readComponentDatasetPipeline(component)
+    const mappings = pipeline?.datasetInputs.flatMap((input) => input.fieldMappings ?? []) ?? []
+    const fieldLabels = fieldLabelsFromMappings(mappings)
+    return { ...configured, fieldLabels: { ...configured.fieldLabels, ...fieldLabels } }
+  }
   if (!component || hasConfiguredDataset(component)) return undefined
   return resolveComponentSample(component).renderData
 }
