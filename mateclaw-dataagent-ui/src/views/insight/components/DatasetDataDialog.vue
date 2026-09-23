@@ -14,12 +14,17 @@
           <span class="dd-title">展示字段</span>
           <span class="dd-hint">来自查询配置 · 只读</span>
         </div>
-        <div v-if="displayFields.length" class="dd-display-fields">
-          <div v-for="field in displayFields" :key="field.field" class="dd-display-field" data-testid="display-field-row">
-            <span class="dd-field-role">{{ field.role === 'measure' ? '指标' : '维度' }}</span>
-            <code class="dd-field-name">{{ field.field }}</code>
-            <span class="dd-field-title">{{ field.title || field.field }}</span>
-          </div>
+        <div v-if="displayFields.length" class="dd-table-wrap">
+          <table class="dd-table dd-display-table" data-testid="display-fields-table">
+            <thead><tr><th scope="col">字段类型</th><th scope="col">字段名</th><th scope="col">展示名</th></tr></thead>
+            <tbody>
+              <tr v-for="field in displayFields" :key="field.field" data-testid="display-field-row">
+                <td>{{ field.role === 'measure' ? '指标' : '维度' }}</td>
+                <td><code class="dd-field-name">{{ field.field }}</code></td>
+                <td>{{ field.title || field.field }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <div v-else class="dd-display-empty">尚未在查询配置中选择展示字段</div>
       </section>
@@ -82,31 +87,54 @@
       <section v-if="filterSupported" class="dd-block">
         <div class="dd-head">
           <span class="dd-title">筛选条件</span>
+          <span v-if="hasTimeFilterRows" class="dd-hint">时间范围左闭右开：包含开始时间，不包含结束时间</span>
         </div>
-        <div v-if="queryFilterRows.length" class="dd-conditions">
-          <div
-            v-for="(row, index) in queryFilterRows"
-            :key="`${row.filterComponentId}-${row.field}-${row.parameterName}-${index}`"
-            class="dd-condition dd-query-condition"
-            data-testid="query-filter-row"
-          >
-            <span class="dd-bound-filter">{{ row.filterTitle }}</span>
-            <span class="dd-bound-field">{{ row.fieldTitle }} <code>{{ row.field }}</code></span>
-            <span class="dd-fixed-operator" data-testid="query-filter-operator">{{ operatorLabel(row.operator) }}</span>
-            <el-input
-              v-model="row.value"
-              class="dd-value"
-              size="small"
-              :disabled="!row.enabled || !operatorNeedsValue(row.operator)"
-              :placeholder="operatorNeedsValue(row.operator) ? '填写本次查询值' : '无需取值'"
-            />
-            <el-switch
-              :model-value="row.enabled"
-              data-testid="query-filter-enabled"
-              :aria-label="`${row.filterTitle}筛选条件启用`"
-              @change="setQueryFilterEnabled(row, $event)"
-            />
-          </div>
+        <div v-if="queryFilterRows.length" class="dd-table-wrap dd-conditions">
+          <table class="dd-table dd-filter-table" data-testid="query-filter-table">
+            <thead><tr><th scope="col">筛选器</th><th scope="col">映射字段</th><th scope="col">操作符</th><th scope="col">本次查询值</th><th scope="col">启用</th></tr></thead>
+            <tbody>
+              <tr
+                v-for="(row, index) in queryFilterRows"
+                :key="`${row.filterComponentId}-${row.field}-${row.parameterName}-${index}`"
+                data-testid="query-filter-row"
+                :data-time-boundary="row.timeBoundary"
+              >
+                <td class="dd-bound-filter">{{ row.timeBoundary ? `${row.filterTitle} · ${row.timeBoundary === 'start' ? '开始时间' : '结束时间'}` : row.filterTitle }}</td>
+                <td class="dd-bound-field">{{ row.fieldTitle }} <code>{{ row.field }}</code></td>
+                <td class="dd-fixed-operator" data-testid="query-filter-operator">{{ operatorLabel(row.operator) }}</td>
+                <td>
+                  <el-date-picker
+                    v-if="row.timeBoundary"
+                    v-model="row.value"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    class="dd-value"
+                    size="small"
+                    :disabled="!row.enabled"
+                    :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
+                    :aria-label="`${row.filterTitle}${row.timeBoundary === 'start' ? '开始时间' : '结束时间'}本次查询值`"
+                  />
+                  <el-input
+                    v-else
+                    v-model="row.value"
+                    class="dd-value"
+                    size="small"
+                    :disabled="!row.enabled || !operatorNeedsValue(row.operator)"
+                    :placeholder="operatorNeedsValue(row.operator) ? '填写本次查询值' : '无需取值'"
+                    :aria-label="`${row.filterTitle}本次查询值`"
+                  />
+                </td>
+                <td>
+                  <el-switch
+                    :model-value="row.enabled"
+                    data-testid="query-filter-enabled"
+                    :aria-label="`${row.filterTitle}${row.timeBoundary ? (row.timeBoundary === 'start' ? '开始时间' : '结束时间') : ''}筛选条件启用`"
+                    @change="setQueryFilterEnabled(row, $event)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <div v-else class="dd-empty">查询配置中尚未绑定筛选器</div>
       </section>
@@ -225,6 +253,14 @@ function namedParameters(): Record<string, unknown> {
 const filterSupported = computed(() => props.dataset.sourceType !== 'file')
 
 const queryFilterRows = ref<PreviewQueryFilterRow[]>([])
+const hasTimeFilterRows = computed(() => queryFilterRows.value.some((row) => row.timeBoundary !== undefined))
+
+interface PreviewQueryFilterRow extends RuntimeFilterRow {
+  filterTitle: string
+  fieldTitle: string
+  enabled: boolean
+  timeBoundary?: 'start' | 'end'
+}
 
 function fieldTitle(field: string): string {
   return displayFields.value.find((row) => row.field === field)?.title || field
@@ -240,18 +276,30 @@ function operatorNeedsValue(operator: QueryParameterBinding['operator']): boolea
 }
 
 function createQueryFilterRows(): PreviewQueryFilterRow[] {
-  return (props.dataset.queryConfig?.parameterBindings ?? []).map((binding) => ({
-    inputName: props.dataset.alias,
-    field: binding.field,
-    operator: binding.operator,
-    parameterNames: [binding.parameterName || binding.filterComponentId],
-    parameterName: binding.parameterName || binding.filterComponentId,
-    filterComponentId: binding.filterComponentId,
-    filterTitle: state.filterCatalog.find((filter) => filter.id === binding.filterComponentId)?.title ?? binding.filterComponentId,
-    fieldTitle: fieldTitle(binding.field),
-    value: '',
-    enabled: true,
-  }))
+  return (props.dataset.queryConfig?.parameterBindings ?? []).flatMap((binding) => {
+    const parameterName = binding.parameterName || binding.filterComponentId
+    const filter = state.filterCatalog.find((item) => item.id === binding.filterComponentId)
+    const base: PreviewQueryFilterRow = {
+      inputName: props.dataset.alias,
+      field: binding.field,
+      operator: binding.operator,
+      parameterNames: [parameterName],
+      parameterName,
+      filterComponentId: binding.filterComponentId,
+      filterTitle: filter?.title ?? binding.filterComponentId,
+      fieldTitle: fieldTitle(binding.field),
+      value: '',
+      enabled: true,
+    }
+    if (filter?.type !== 'timeFilter') return [base]
+
+    return [
+      { ...base, operator: 'gte', timeBoundary: 'start' },
+      // The persisted binding has one parameter name; the exclusive upper bound is
+      // transmitted as a field filter only, without inventing a new schema parameter.
+      { ...base, operator: 'lt', parameterName: '', parameterNames: [], timeBoundary: 'end' },
+    ]
+  })
 }
 
 function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): void {
@@ -454,24 +502,40 @@ watch(() => ui.dataDialog.visible, (visible) => {
   font-size: 12px;
   color: var(--db-text-muted);
 }
-.dd-display-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.dd-table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--db-muted);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
 }
-.dd-display-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.dd-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
 }
-.dd-field-role {
-  flex-shrink: 0;
-  width: 68px;
+.dd-table th,
+.dd-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--db-border);
+  text-align: left;
+  vertical-align: middle;
+}
+.dd-filter-table {
+  min-width: 760px;
+}
+.dd-display-table {
+  min-width: 560px;
+}
+.dd-table th {
   color: var(--db-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.dd-table td {
+  color: var(--db-text-secondary);
+}
+.dd-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 .dd-field-name,
 .dd-sql-readonly code {
@@ -480,10 +544,7 @@ watch(() => ui.dataDialog.visible, (visible) => {
   word-break: break-all;
 }
 .dd-field-name {
-  min-width: 180px;
-}
-.dd-field-title {
-  color: var(--db-text-secondary);
+  color: var(--db-text);
 }
 .dd-display-empty {
   padding: 10px 12px;
@@ -524,39 +585,22 @@ watch(() => ui.dataDialog.visible, (visible) => {
 .dd-param-control {
   width: 100%;
 }
-.dd-conditions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .dd-bound-field {
   min-width: 0;
-  color: var(--db-text);
+  white-space: nowrap;
 }
 .dd-bound-filter,
 .dd-fixed-operator {
-  flex-shrink: 0;
   color: var(--db-text-secondary);
+  white-space: nowrap;
 }
 .dd-bound-field code {
   margin-left: 4px;
   color: var(--db-text-muted);
 }
-.dd-condition {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.dd-query-condition {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.9fr) minmax(170px, 1.3fr) 100px minmax(160px, 2fr) auto;
-  padding: 8px 10px;
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-md);
-  background: var(--db-muted);
-}
 .dd-value {
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
 }
 .dd-empty {

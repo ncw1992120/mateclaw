@@ -53,7 +53,7 @@ const stubs = {
   },
   'el-date-picker': {
     props: ['modelValue'],
-    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+    template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   'el-switch': {
     props: ['modelValue'],
@@ -188,9 +188,15 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       },
     }))
 
-    expect(wrapper.find('.dd-display-fields').text()).toContain('cust_type')
-    expect(wrapper.find('.dd-display-fields').text()).toContain('客户类型')
-    expect(wrapper.find('.dd-display-fields').text()).toContain('金额')
+    const table = wrapper.find('[data-testid="display-fields-table"]')
+    expect(table.exists()).toBe(true)
+    expect(table.find('thead').text()).toContain('字段类型')
+    expect(table.find('thead').text()).toContain('字段名')
+    expect(table.find('thead').text()).toContain('展示名')
+    expect(table.findAll('tbody tr')).toHaveLength(2)
+    expect(table.text()).toContain('cust_type')
+    expect(table.text()).toContain('客户类型')
+    expect(table.text()).toContain('金额')
     expect(wrapper.find('.dd-kv').exists()).toBe(false)
   })
 
@@ -207,6 +213,10 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
     expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(1)
     expect(wrapper.find('[data-testid="query-filter-row"]').text()).toContain('策略类型')
+    expect(wrapper.find('[data-testid="query-filter-table"] thead').text()).toContain('筛选器')
+    expect(wrapper.find('[data-testid="query-filter-table"] thead').text()).toContain('映射字段')
+    expect(wrapper.find('[data-testid="query-filter-table"] thead').text()).toContain('操作符')
+    expect(wrapper.find('[data-testid="query-filter-table"] thead').text()).toContain('本次查询值')
     expect(wrapper.find('[data-testid="query-filter-operator"]').text()).toContain('等于')
     expect(wrapper.find('[data-testid="query-filter-operator"] select').exists()).toBe(false)
     expect(wrapper.find('[data-testid="query-filter-enabled"]').element.checked).toBe(true)
@@ -259,6 +269,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
 describe('查看数据弹窗 · 查询配置筛选条件', () => {
   it('启用的绑定值转换为数据集过滤条件和参数，不修改保存的查询配置', async () => {
+    state.filterCatalog = [{ id: 'filter-date', title: '交易日', type: 'filter', selectionMode: 'single' }]
     const dataset = metricViewDataset()
     const wrapper = await openWith(dataset)
     await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
@@ -271,6 +282,54 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     expect(request.offset).toBe(0)
     expect(dataset.queryConfig?.parameterBindings[0].field).toBe('trade_date')
     expect(dataset.filters).toEqual([])
+  })
+
+  it('时间筛选器以开始和结束两行展示，并提交包前不包后的过滤条件', async () => {
+    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', selectionMode: 'single' }]
+    const wrapper = await openWith(metricViewDataset())
+
+    const startRow = wrapper.find('[data-time-boundary="start"]')
+    const endRow = wrapper.find('[data-time-boundary="end"]')
+    expect(startRow.exists()).toBe(true)
+    expect(endRow.exists()).toBe(true)
+    expect(startRow.text()).toContain('开始时间')
+    expect(startRow.find('[data-testid="query-filter-operator"]').text()).toContain('大于等于')
+    expect(startRow.find('input.dd-value').attributes('aria-label')).toContain('开始时间')
+    expect(endRow.text()).toContain('结束时间')
+    expect(endRow.find('[data-testid="query-filter-operator"]').text()).toContain('小于')
+    expect(endRow.find('input.dd-value').attributes('placeholder')).toContain('不包含')
+    expect(wrapper.text()).toContain('包含开始时间，不包含结束时间')
+
+    await startRow.find('input.dd-value').setValue('2026-09-01')
+    await endRow.find('input.dd-value').setValue('2026-10-01')
+    await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
+    await flushPromises()
+
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
+      { field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' },
+      { field: 'trade_date', operator: 'lt', value: '2026-10-01', role: 'dimension' },
+    ])
+  })
+
+  it('开始和结束条件独立启停；禁用结束时间只提交开始边界', async () => {
+    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', selectionMode: 'single' }]
+    const wrapper = await openWith(metricViewDataset())
+    const startRow = wrapper.find('[data-time-boundary="start"]')
+    const endRow = wrapper.find('[data-time-boundary="end"]')
+    await startRow.find('input.dd-value').setValue('2026-09-01')
+    await endRow.find('input.dd-value').setValue('2026-10-01')
+    await endRow.find('[data-testid="query-filter-enabled"]').setValue(false)
+
+    expect(startRow.find('[data-testid="query-filter-enabled"]').element.checked).toBe(true)
+    expect(endRow.find('[data-testid="query-filter-enabled"]').element.checked).toBe(false)
+    expect(endRow.find('input.dd-value').element.value).toBe('')
+    expect(endRow.find('input.dd-value').attributes('disabled')).toBeDefined()
+
+    await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
+    await flushPromises()
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
+      { field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' },
+    ])
   })
 
   it('不再读取旧 dataset.filters 或全局 filterBindings，也不允许手工新增条件', async () => {
