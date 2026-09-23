@@ -33,7 +33,7 @@ public final class DashboardThemeValidator {
 
     private static void validateOverrides(InsightDashboardSchemaDTO.ThemeOverrides overrides) {
         if (overrides == null) return;
-        List<String> colors = java.util.stream.Stream.of(overrides.getPageBackground(), overrides.getCardBackground(), overrides.getBorder(), overrides.getText(), overrides.getTextSecondary(), overrides.getTextMuted(), overrides.getPrimary(), overrides.getPositive(), overrides.getNegative(), overrides.getWarning(), overrides.getInfo()).toList();
+        List<String> colors = java.util.stream.Stream.of(overrides.getPageBackground(), overrides.getCardBackground(), overrides.getBorder(), overrides.getText(), overrides.getTextSecondary(), overrides.getTextMuted(), overrides.getPrimary(), overrides.getAccentAlt(), overrides.getPositive(), overrides.getNegative(), overrides.getWarning(), overrides.getInfo()).toList();
         colors.stream().filter(value -> value != null && !COLOR.matcher(value).matches()).findFirst().ifPresent(value -> fail("主题颜色必须是 6 位 HEX"));
         validatePalette(overrides.getMetricPalette(), "metricPalette");
         validatePalette(overrides.getChartPalette(), "chartPalette");

@@ -265,6 +265,8 @@ public class InsightDashboardSchemaDTO implements Serializable {
         private String textSecondary;
         private String textMuted;
         private String primary;
+        /** 辅色：全页唯一的第二个色相，只用于「洞察区」组件。 */
+        private String accentAlt;
         private String positive;
         private String negative;
         private String warning;
