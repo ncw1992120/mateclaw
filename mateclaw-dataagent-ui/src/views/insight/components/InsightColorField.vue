@@ -3,12 +3,14 @@
     <label class="insight-color-field__label" :for="inputId">{{ label }}</label>
     <div class="insight-color-field__controls">
       <span
+        v-if="showPicker"
         data-testid="color-preview"
         class="insight-color-field__preview"
         :style="{ backgroundColor: previewColor }"
         aria-hidden="true"
       />
       <el-color-picker
+        v-if="showPicker"
         :model-value="previewColor"
         :predefine="predefinedColors"
         :aria-label="`${label}取色器`"
@@ -44,8 +46,10 @@ const props = withDefaults(defineProps<{
   modelValue: string
   label: string
   suggestedColors?: string[]
+  showPicker?: boolean
 }>(), {
   suggestedColors: () => TEXT_COLOR_PRESETS,
+  showPicker: true,
 })
 
 const emit = defineEmits<{

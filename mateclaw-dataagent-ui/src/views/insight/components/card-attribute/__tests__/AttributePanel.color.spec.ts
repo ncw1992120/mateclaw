@@ -12,9 +12,9 @@ vi.mock('../useInsight', () => ({
 
 const colorFieldStub = {
   name: 'InsightColorField',
-  props: ['modelValue', 'label', 'suggestedColors'],
+  props: ['modelValue', 'label', 'suggestedColors', 'showPicker'],
   emits: ['update:modelValue', 'change'],
-  template: '<input data-testid="insight-color-field" :aria-label="label" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
+    template: '<input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
 }
 
 function createCard() {
@@ -102,6 +102,7 @@ describe('AttributePanel shared color field', () => {
     expect(borderField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(componentColorField.attributes('data-suggested-colors')).toBeTruthy()
+    expect(componentColorField.attributes('data-show-picker')).toBe('false')
 
     await backgroundField.setValue('#AABBCC')
     expect(card.visualStyle.background).toEqual({ mode: 'custom', color: '#AABBCC' })

@@ -45,6 +45,13 @@ describe('dashboard component theme standards', () => {
     expect(componentIconStyle(theme, 'chart', '销售趋势', 0, undefined, '#A1B2C3')['--dashboard-icon-color']).toBe('#A1B2C3')
   })
 
+  it('keeps explicit component colors effective for legacy dashboards', () => {
+    const legacyTheme = resolveDashboardTheme(undefined, 'light')
+
+    expect(componentThemeStyle(legacyTheme, 'chart', 0, undefined, '#F43F5E')['--component-group-accent']).toBe('#F43F5E')
+    expect(componentIconStyle(legacyTheme, 'chart', '销售趋势', 0, undefined, '#F43F5E')['--dashboard-icon-color']).toBe('#F43F5E')
+  })
+
   it('uses neutral canvas and nested surfaces instead of washing large areas with the primary color', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
     const variables = themeCssVariables(theme)

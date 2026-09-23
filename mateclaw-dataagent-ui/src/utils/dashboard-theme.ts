@@ -191,9 +191,10 @@ export function componentThemeStyle(
   accentGroup?: ComponentThemeAccentGroup,
   componentColor?: string,
 ): Record<string, string> {
-  if (!theme || theme.source === 'legacy') return {}
-  // 筛选控件始终中性，不随「统一主色」策略着色。
-  if (componentThemeZone(type) === 'control') return {}
+  if (!theme || componentThemeZone(type) === 'control') return {}
+  if (theme.source === 'legacy') {
+    return isHexColor(componentColor) ? { '--component-group-accent': componentColor } : {}
+  }
   const defaultGroup: ComponentThemeAccentGroup = theme.componentColorMode === 'uniform'
     ? 'primary'
     : componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'
@@ -217,7 +218,15 @@ export function componentIconStyle(
   accentGroup?: ComponentThemeAccentGroup,
   componentColor?: string,
 ): Record<string, string> {
-  if (!theme || theme.source === 'legacy') return {}
+  if (!theme) return {}
+  if (theme.source === 'legacy') {
+    if (componentThemeZone(type) === 'control' || !isHexColor(componentColor)) return {}
+    return {
+      '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
+      '--dashboard-icon-weight': '800',
+      '--dashboard-icon-color': componentColor,
+    }
+  }
   const color = type === 'tab'
     ? theme.primary
     : componentThemeZone(type) === 'control'
