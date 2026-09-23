@@ -106,6 +106,26 @@ class FileDatasetAdapterTest {
     }
 
     @Test
+    void previewsDraftWithSortingProjectionAndPageMetadata() {
+        DatasetMapper datasets = mock(DatasetMapper.class); DatasetFieldMapper fields = mock(DatasetFieldMapper.class); ObjectRefService refs = mock(ObjectRefService.class);
+        StoredFileRef stored = new StoredFileRef("datasets/1/file-1", 1L, 2L, "orders.csv", "csv", 32, "sha256:x");
+        when(refs.open(any(), any())).thenReturn(new ByteArrayInputStream(
+                "id,amount\n1,10\n2,30\n3,20\n4,40\n".getBytes(StandardCharsets.UTF_8)));
+        DatasetReadRequest request = new DatasetReadRequest(99L, "orders", List.of("id"), List.of(),
+                List.of(new DatasetSort("amount", "desc")), 2, 1, Map.of(), true);
+
+        DatasetBatch batch = new FileDatasetAdapter(datasets, fields, refs, new ObjectMapper())
+                .previewDraft(context(99L), stored, "csv", request);
+
+        assertEquals(List.of(Map.of("id", "2"), Map.of("id", "3")), batch.rows());
+        assertEquals(2, batch.rowCount());
+        assertFalse(batch.last());
+        assertEquals(4L, batch.totalCount());
+        assertTrue(batch.pushdownReport().ordersPushed().isEmpty());
+        verifyNoInteractions(datasets, fields);
+    }
+
+    @Test
     void rejectsSchemaVersionMismatchBeforeOpeningObject() throws Exception {
         DatasetMapper datasets = mock(DatasetMapper.class); DatasetFieldMapper fields = mock(DatasetFieldMapper.class); ObjectRefService refs = mock(ObjectRefService.class);
         DatasetEntity d = dataset(12L, "orders.csv", "csv", 1);

@@ -78,10 +78,11 @@ public class HttpApiDatasetAdapter implements DatasetSourceAdapter {
         }
         // HTTP 源端不支持排序下推：orders 非空时改取有界全量，本地排序后切片（禁止丢语义）
         boolean residualSort = request.orders() != null && !request.orders().isEmpty();
-        DatasetReadRequest effectiveRequest = residualSort
+        // 未声明上游分页协议时，limit/offset 也只能在受限响应集上执行，不能透传成自定义参数。
+        boolean localPaging = residualSort || "none".equalsIgnoreCase(definition.paginationMode());
+        DatasetReadRequest effectiveRequest = localPaging
                 ? new DatasetReadRequest(request.datasetId(), request.inputName(), request.columns(),
-                        request.filters(), List.of(), MAX_RESULT_ROWS, 0, request.parameters(),
-                        request.requestTotalCount())
+                        request.filters(), List.of(), MAX_RESULT_ROWS, 0, request.parameters(), false)
                 : request;
         Map<String, Object> mapped;
         try {
@@ -104,14 +105,24 @@ public class HttpApiDatasetAdapter implements DatasetSourceAdapter {
             Map<String, Object> json = objectMapper.readValue(raw.isBlank() ? "{}" : raw, new TypeReference<>() {});
             List<Map<String, Object>> rows = extractRows(json, definition.resultPath());
             PushdownReport report;
-            if (residualSort) {
-                ResidualRowOperations.sort(rows, request.orders());
-                rows = new ArrayList<>(ResidualRowOperations.paginate(rows, request.limit(), request.offset()));
-                report = new PushdownReport(request.filters(), List.of(), List.of(), true, false, false, null);
+            Long totalCount = null;
+            boolean hasNext;
+            if (localPaging) {
+                if (residualSort) ResidualRowOperations.sort(rows, request.orders());
+                int sourceRowCount = rows.size();
+                int offset = request.offset() == null ? 0 : request.offset();
+                int limit = request.limit() == null ? 100 : request.limit();
+                if (request.requestTotalCount() && sourceRowCount < MAX_RESULT_ROWS) totalCount = (long) sourceRowCount;
+                rows = new ArrayList<>(ResidualRowOperations.paginate(rows, limit, offset));
+                hasNext = offset + rows.size() < sourceRowCount;
+                if (sourceRowCount >= MAX_RESULT_ROWS && rows.size() == limit) hasNext = true;
+                report = new PushdownReport(request.filters(), List.of(), List.of(),
+                        true, false, request.requestTotalCount(), null);
             } else {
                 report = new PushdownReport(request.filters(), List.of(), List.of(), true, true, false, null);
+                hasNext = rows.size() >= (request.limit() == null ? 100 : request.limit());
             }
-            return new DatasetBatch(rows, null, rows.size(), true, report);
+            return new DatasetBatch(rows, null, rows.size(), !hasNext, report, totalCount);
         } catch (DatasetReadException e) {
             throw e;
         } catch (HttpClientErrorException.TooManyRequests e) {

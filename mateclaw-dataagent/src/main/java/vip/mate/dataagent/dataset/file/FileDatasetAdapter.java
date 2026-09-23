@@ -101,27 +101,58 @@ public class FileDatasetAdapter implements DatasetSourceAdapter {
 
     /** 上传后的文件草稿样本读取；只接受受控 StoredFileRef，不创建 DatasetEntity。 */
     public DatasetBatch previewDraft(DatasetAccessContext context, StoredFileRef stored, String format, int limit) {
+        return previewDraft(context, stored, format, new DatasetReadRequest(1L, "draft", List.of(), List.of(),
+                Math.min(Math.max(limit, 1), 100), 0, Map.of()));
+    }
+
+    /** 文件草稿查询在受控扫描内执行过滤、排序和 offset/limit；不会把运行时参数写入 Dataset。 */
+    public DatasetBatch previewDraft(DatasetAccessContext context, StoredFileRef stored, String format,
+                                     DatasetReadRequest request) {
         if (stored == null || context == null || !Objects.equals(context.workspaceId(), stored.workspaceId()))
             throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "文件引用上下文不匹配");
         String resolved = format == null || format.isBlank() ? stored.format() : format;
         if (!stored.format().equalsIgnoreCase(resolved))
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "文件格式与上传对象不一致");
+        int offset = request.offset() == null ? 0 : request.offset();
+        int limit = Math.min(request.limit() == null ? 100 : request.limit(), MAX_PAGE_SIZE);
+        boolean residualSort = !request.orders().isEmpty();
         List<Map<String,Object>> rows = new ArrayList<>();
-        int max = Math.min(Math.max(limit, 1), 100);
+        int[] matched = {0};
+        RowConsumer consumer = row -> {
+            if (!matches(row, request.filters())) return;
+            matched[0]++;
+            if (residualSort) {
+                if (rows.size() >= MAX_SCAN_ROWS) throw new DatasetReadException(DatasetReadErrorCode.RESULT_LIMIT_EXCEEDED,
+                        "文件草稿排序超过有界处理上限: " + MAX_SCAN_ROWS);
+                rows.add(row);
+            } else if (matched[0] > offset && rows.size() <= limit) {
+                rows.add(row);
+            }
+        };
         try (InputStream in = openStored(context, stored)) {
-            RowConsumer consumer = row -> { if (rows.size() < max) rows.add(row); };
             switch (resolved.toLowerCase(Locale.ROOT)) {
                 case "json" -> scanJson(in, consumer);
                 case "csv" -> scanCsv(in, consumer);
                 case "txt" -> scanTxt(in, consumer);
                 case "xls", "excel", "xlsx" -> scanXlsx(in, consumer);
-                case "parquet" -> scanParquet(in, consumer, new DatasetReadRequest(0L, "draft", List.of(), List.of(), max, 0, Map.of()));
+                case "parquet" -> scanParquet(in, consumer, request);
                 default -> throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "不支持的文件格式: " + resolved);
             }
         } catch (DatasetReadException e) { throw e; }
         catch (IOException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "文件草稿预览失败", e); }
-        return new DatasetBatch(rows, null, rows.size(), true,
-                new PushdownReport(List.of(), List.of(), false, false, "file-draft-preview"));
+        List<Map<String,Object>> resultRows = rows;
+        if (residualSort) {
+            ResidualRowOperations.sort(rows, request.orders());
+            resultRows = new ArrayList<>(ResidualRowOperations.paginate(rows, limit, offset));
+        } else if (rows.size() > limit) {
+            rows.removeLast();
+        }
+        boolean hasNext = offset + resultRows.size() < matched[0];
+        List<Map<String,Object>> projected = resultRows.stream().map(row -> project(row, request.columns())).toList();
+        Long totalCount = request.requestTotalCount() ? (long) matched[0] : null;
+        PushdownReport report = new PushdownReport(List.of(), request.filters(), List.of(),
+                !request.columns().isEmpty(), false, request.requestTotalCount(), "file-draft-preview");
+        return new DatasetBatch(projected, null, projected.size(), !hasNext, report, totalCount);
     }
 
     private InputStream openStored(DatasetAccessContext context, StoredFileRef stored) {

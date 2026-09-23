@@ -14,6 +14,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dataset.DatasetFilter;
 import vip.mate.dataagent.dataset.DatasetBatch;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dataset.jdbc.SqlValidationService;
 import vip.mate.dataagent.dto.DatasetCreateRequest;
 import vip.mate.dataagent.dto.DatasetSourceDefinition;
@@ -51,6 +52,7 @@ import java.net.URI;
 @RequiredArgsConstructor
 @Tag(name = "数据集编排")
 public class DatasetComposerController {
+    private static final int MAX_DRAFT_PAGE_SIZE = 500;
     private final DatasetManageService datasets;
     private final SqlValidationService sqlValidation;
     private final ObjectMapper mapper;
@@ -91,10 +93,22 @@ public class DatasetComposerController {
                 .map(AloudataFilterExpressions::of)
                 .filter(Objects::nonNull)
                 .toList());
-        query.setLimit(Math.min(request.limit == null ? 20 : request.limit, 100)); query.setOffset(0);
+        query.setOrders(toOrders(request.orders).stream().map(order -> Map.of(order.field(), order.direction())).toList());
+        int limit = Math.min(Math.max(request.limit == null ? 20 : request.limit, 1), MAX_DRAFT_PAGE_SIZE);
+        int offset = Math.max(request.offset == null ? 0 : request.offset, 0);
+        query.setLimit(limit); query.setOffset(offset);
+        query.setIsQueryTotalCount(request.requestTotalCount);
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(longId(request.datasourceId), query);
         List<Map<String, Object>> rows = response == null || response.getData() == null || response.getData().getRows() == null ? List.of() : response.getData().getRows();
-        return Map.of("rows", rows, "schema", rows.isEmpty() ? List.of() : new ArrayList<>(rows.getFirst().keySet()), "rowCount", rows.size(), "pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters, "residualFilters", List.of()), "executionId", "draft-" + UUID.randomUUID());
+        Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
+        boolean hasNext = total != null ? offset + rows.size() < total : rows.size() >= limit;
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));
+        result.put("rowCount", rows.size()); result.put("hasNext", hasNext); result.put("last", !hasNext);
+        if (total != null) result.put("totalCount", total);
+        result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
+                "residualFilters", List.of())); result.put("executionId", "draft-" + UUID.randomUUID());
+        return result;
     }
 
     private Map<String, Object> previewHttpApi(DraftRequest request) {
@@ -121,11 +135,17 @@ public class DatasetComposerController {
                 String.valueOf(config.getOrDefault("resultPath", "$.data")), "none", null, null,
                 "GET".equalsIgnoreCase(String.valueOf(config.getOrDefault("method", "GET"))), Map.of());
         DatasetBatch batch = httpApiAdapter.readDraft(new vip.mate.dataagent.dataset.DatasetReadRequest(
-                0L, "draft", List.of(), toFilters(request.filters), Math.min(request.limit == null ? 20 : request.limit, 100), 0, Map.of()), definition, hosts);
+                1L, "draft", request.columns, toFilters(request.filters), toOrders(request.orders),
+                Math.min(request.limit == null ? 20 : request.limit, MAX_DRAFT_PAGE_SIZE), request.offset == null ? 0 : request.offset,
+                request.parameters, request.requestTotalCount), definition, hosts);
         List<Map<String, Object>> rows = batch.rows() == null ? List.of() : batch.rows();
-        return Map.of("rows", rows, "schema", rows.isEmpty() ? List.of() : new ArrayList<>(rows.getFirst().keySet()),
-                "rowCount", rows.size(), "pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
-                        "residualFilters", List.of()), "executionId", "draft-" + UUID.randomUUID());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));
+        result.put("rowCount", rows.size()); result.put("hasNext", !batch.last()); result.put("last", batch.last());
+        if (batch.totalCount() != null) result.put("totalCount", batch.totalCount());
+        result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
+                "residualFilters", List.of())); result.put("executionId", "draft-" + UUID.randomUUID());
+        return result;
     }
 
     private Map<String, Object> previewFile(DraftRequest request) {
@@ -138,11 +158,17 @@ public class DatasetComposerController {
         DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                 "draft-file-" + UUID.randomUUID(), Set.of());
         DatasetBatch batch = fileDatasetAdapter.previewDraft(context, stored, String.valueOf(config.getOrDefault("format", stored.format())),
-                Math.min(request.limit == null ? 20 : request.limit, 100));
+                new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", request.columns,
+                        toFilters(request.filters), toOrders(request.orders), Math.min(request.limit == null ? 20 : request.limit, MAX_DRAFT_PAGE_SIZE),
+                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount));
         List<Map<String, Object>> rows = batch.rows() == null ? List.of() : batch.rows();
-        return Map.of("rows", rows, "schema", rows.isEmpty() ? List.of() : new ArrayList<>(rows.getFirst().keySet()),
-                "rowCount", rows.size(), "pushdownReport", Map.of("pushedFilters", List.of(), "residualFilters", request.filters == null ? List.of() : request.filters),
-                "executionId", "draft-" + UUID.randomUUID());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));
+        result.put("rowCount", rows.size()); result.put("hasNext", !batch.last()); result.put("last", batch.last());
+        if (batch.totalCount() != null) result.put("totalCount", batch.totalCount());
+        result.put("pushdownReport", Map.of("pushedFilters", List.of(), "residualFilters", request.filters == null ? List.of() : request.filters));
+        result.put("executionId", "draft-" + UUID.randomUUID());
+        return result;
     }
 
     private Map<String, Object> previewAloudataView(DraftRequest request) {
@@ -159,12 +185,17 @@ public class DatasetComposerController {
         DatasetBatch batch = aloudataViewAdapter.previewDraft(context, longId(request.datasourceId), view,
                 // 草稿预览不依赖已落库数据集；datasetId 传占位值 1L 以通过 record 参数校验，
                 // adapter.previewDraft 只消费 filters/limit，不读取 datasetId。
-                new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", List.of(), toFilters(request.filters),
-                        Math.min(request.limit == null ? 20 : request.limit, 100), 0, Map.of()));
+                new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", request.columns, toFilters(request.filters),
+                        toOrders(request.orders), Math.min(request.limit == null ? 20 : request.limit, MAX_DRAFT_PAGE_SIZE),
+                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount));
         List<Map<String,Object>> rows = batch.rows() == null ? List.of() : batch.rows();
-        return Map.of("rows", rows, "schema", rows.isEmpty() ? List.of() : new ArrayList<>(rows.getFirst().keySet()),
-                "rowCount", rows.size(), "pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
-                        "residualFilters", List.of()), "executionId", "draft-" + UUID.randomUUID());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));
+        result.put("rowCount", rows.size()); result.put("hasNext", !batch.last()); result.put("last", batch.last());
+        if (batch.totalCount() != null) result.put("totalCount", batch.totalCount());
+        result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
+                "residualFilters", List.of())); result.put("executionId", "draft-" + UUID.randomUUID());
+        return result;
     }
 
     @PostMapping("/api-definitions")
@@ -208,8 +239,9 @@ public class DatasetComposerController {
                 && !Objects.equals(datasource.getOwnerId(), workspaceGuard.currentUserId()))) {
             throw new IllegalArgumentException("无权访问该 JDBC 数据源");
         }
-        var compiled = sqlValidation.compile(String.valueOf(config.getOrDefault("sql", "")), List.of(),
-                toFilters(request.filters), Math.min(request.limit == null ? 20 : request.limit, 100),
+        int pageSize = Math.min(Math.max(request.limit == null ? 20 : request.limit, 1), MAX_DRAFT_PAGE_SIZE);
+        var compiled = sqlValidation.compile(String.valueOf(config.getOrDefault("sql", "")), request.columns,
+                toFilters(request.filters), toOrders(request.orders), pageSize + 1,
                 Math.max(request.offset == null ? 0 : request.offset, 0),
                 request.parameters);
         try (Connection connection = DriverManager.getConnection(JdbcUtils.buildJdbcUrl(datasource), datasource.getUsername(), AesPasswordCryptor.decrypt(datasource.getPassword()));
@@ -221,14 +253,20 @@ public class DatasetComposerController {
                 List<String> schema = new ArrayList<>();
                 for (int i = 1; i <= md.getColumnCount(); i++) schema.add(md.getColumnLabel(i));
                 List<Map<String, Object>> rows = new ArrayList<>();
-                while (rs.next() && rows.size() < 100) {
+                while (rows.size() <= pageSize && rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     for (int i = 1; i <= md.getColumnCount(); i++) row.put(schema.get(i - 1), rs.getObject(i));
                     rows.add(row);
                 }
-                return Map.of("rows", rows, "schema", schema, "rowCount", rows.size(), "pushdownReport",
-                        Map.of("pushedFilters", request.filters == null ? List.of() : request.filters, "residualFilters", List.of(), "safe", true),
-                        "executionId", "draft-" + UUID.randomUUID());
+                boolean hasNext = rows.size() > pageSize;
+                if (hasNext) rows.removeLast();
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("rows", rows); result.put("schema", schema); result.put("rowCount", rows.size());
+                result.put("hasNext", hasNext); result.put("last", !hasNext);
+                result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
+                        "residualFilters", List.of(), "safe", true));
+                result.put("executionId", "draft-" + UUID.randomUUID());
+                return result;
             }
         } catch (SQLException e) {
             throw new IllegalArgumentException("JDBC 草稿预览失败", e);
@@ -281,6 +319,11 @@ public class DatasetComposerController {
         return mapper.convertValue(filters, new TypeReference<>() {});
     }
 
+    private List<DatasetSort> toOrders(List<Map<String, Object>> orders) {
+        if (orders == null) return List.of();
+        return mapper.convertValue(orders, new TypeReference<>() {});
+    }
+
     private long longId(String value) { try { return Long.parseLong(value); } catch (Exception e) { throw new IllegalArgumentException("datasourceId is required"); } }
     private List<String> strings(Object value) { return value == null ? List.of() : mapper.convertValue(value, new TypeReference<>() {}); }
     private Map<String, Object> parseObject(Object value) { if (value == null) return new LinkedHashMap<>(); if (value instanceof Map<?, ?> map) return mapper.convertValue(map, new TypeReference<>() {}); try { return mapper.readValue(String.valueOf(value), new TypeReference<>() {}); } catch (Exception e) { return new LinkedHashMap<>(); } }
@@ -291,10 +334,13 @@ public class DatasetComposerController {
         private String sourceType;
         private String datasourceId;
         private Map<String, Object> sourceConfig;
+        private List<String> columns;
         private List<Map<String, Object>> filters;
+        private List<Map<String, Object>> orders;
         private Integer limit;
         /** 分页偏移（配合 limit 做服务端滚动加载；单次上限仍受编译器的 MAX_LIMIT 约束） */
         private Integer offset;
+        private boolean requestTotalCount;
         /**
          * SQL 命名参数值（对应 baseSql 里的 {@code :name} 占位符）。
          * <p>

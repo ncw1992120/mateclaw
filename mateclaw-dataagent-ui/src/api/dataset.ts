@@ -1,6 +1,6 @@
 import api from './index'
 import type { Dataset, DatasetField, DatasetData, DatasetColumnDef, DatasetInputDescriptor, DatasetReadRequest, DatasetBatch, QueryContext, DatasetQueryConfig, DatasetQueryPlanSummary } from '@/types'
-import type { DatasetSourceType, DatasetFilter } from '@/types'
+import type { DatasetSourceType, DatasetFilter, QuerySortSpec } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/datasets'
@@ -90,10 +90,13 @@ export interface DatasetComposerDraftRequest {
   sourceType: DatasetSourceType | string
   datasourceId?: string
   sourceConfig?: Record<string, unknown>
+  columns?: string[]
   filters?: DatasetFilter[]
+  orders?: QuerySortSpec[]
   limit?: number
   /** 分页偏移（配合 limit 做服务端滚动加载） */
   offset?: number
+  requestTotalCount?: boolean
   /**
    * SQL 命名参数值（对应 baseSql 里的 `:name` 占位符）。
    * 与 filters 是两回事：filters 按列名追加外层谓词，parameters 绑进 SQL 内部的占位符，互不替代。

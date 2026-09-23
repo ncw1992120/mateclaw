@@ -152,20 +152,42 @@
           <span class="dd-hint">{{ resultHint }}</span>
         </div>
         <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
-          <el-table v-if="columns.length" :data="rows" border size="small" height="100%" @sort-change="onSortChange">
+          <el-table
+            v-if="columns.length"
+            :data="rows"
+            :default-sort="sortState ? { prop: sortState.field, order: sortState.direction === 'asc' ? 'ascending' : 'descending' } : undefined"
+            border
+            size="small"
+            height="100%"
+            @sort-change="onSortChange"
+          >
             <el-table-column
               v-for="column in columns"
               :key="column"
               :prop="column"
-              :label="column"
+              :label="fieldTitle(column)"
               min-width="120"
               show-overflow-tooltip
-              sortable="custom"
+              :sortable="isFieldSortable(column) ? 'custom' : false"
               :sort-orders="['ascending', 'descending', null]"
             />
           </el-table>
           <el-empty v-else-if="loading" description="查询中…" />
           <el-empty v-else :description="error || '点「查询」获取数据'" />
+        </div>
+        <div v-if="paginationEnabled && columns.length" class="dd-pagination" data-testid="query-pagination">
+          <span data-testid="pagination-status">
+            {{ totalCount === null ? `第 ${currentPage} 页` : `第 ${currentPage} 页 · 共 ${totalCount} 条` }}
+          </span>
+          <label class="dd-page-size">
+            <span>每页</span>
+            <select :value="currentPageSize" aria-label="每页条数" data-testid="page-size" @change="onPageSizeChange">
+              <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+            </select>
+            <span>条</span>
+          </label>
+          <el-button size="small" :disabled="currentPage <= 1 || loading" data-testid="page-previous" @click="changePage(currentPage - 1)">上一页</el-button>
+          <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
         </div>
       </section>
     </div>
@@ -180,7 +202,7 @@ import { previewInput } from '@/api/dataset'
 import { draftRequestForDataset, isPersistedBackendDatasetId } from './card-attribute/useInsight'
 import type { DatasetConfig } from './card-attribute/useInsight'
 import { extractApiParameters, extractSqlParameters, type ExtractedParameter } from '@/utils/parameter-extract'
-import { getCachedQuery, setCachedQuery } from './dataset-data-cache'
+import { getCachedQuery, getCachedQueryState, setCachedQuery, setCachedQueryState } from './dataset-data-cache'
 import type { QueryDisplayField, QueryParameterBinding, QuerySortSpec } from '@/types'
 import {
   GENERIC_OPERATORS,
@@ -196,8 +218,8 @@ const props = defineProps<{ dataset: DatasetConfig }>()
 const { state } = useInsight()
 const ui = state.ui
 
-/** 每页条数（滚动到底按 offset 追加一页，分页交给服务端） */
-const PAGE_SIZE = 50
+/** 未配置分页时沿用预览安全批次，滚动到底继续追加。 */
+const DEFAULT_BATCH_SIZE = 50
 
 const loading = ref(false)
 const error = ref('')
@@ -205,9 +227,13 @@ const elapsed = ref('')
 const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
 const hasMore = ref(false)
+const totalCount = ref<number | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
 /** 表头三态排序（升序 → 降序 → 取消）；变化时页码回 1 */
 const sortState = ref<QuerySortSpec | null>(null)
+const currentPage = ref(1)
+const currentPageSize = ref(DEFAULT_BATCH_SIZE)
+const stateReady = ref(false)
 /** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
 let requestSequence = 0
 
@@ -217,6 +243,18 @@ const isApi = computed(() => props.dataset.sourceType === 'api')
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
 const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
+const paginationPolicy = computed(() => props.dataset.queryConfig?.paginationPolicy)
+const paginationEnabled = computed(() => paginationPolicy.value?.enabled === true)
+const sortPolicy = computed(() => props.dataset.queryConfig?.sortPolicy)
+const pageSizeOptions = computed(() => {
+  const max = Math.max(1, paginationPolicy.value?.maxPageSize || 500)
+  const initial = Math.min(max, Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE))
+  return [...new Set([initial, 10, 20, 50, 100, 200, 500].filter((size) => size <= max))].sort((a, b) => a - b)
+})
+
+function isFieldSortable(field: string): boolean {
+  return sortPolicy.value?.enabled === true && sortPolicy.value.allowedFields.includes(field)
+}
 
 /* ── 参数区：SQL / 接口的占位符（绑进查询内部，与筛选条件不是一回事） ── */
 const parameters = computed<ExtractedParameter[]>(() => {
@@ -325,7 +363,38 @@ const currentSignature = computed(() =>
     displayFields.value.map(({ field, title, role }) => [field, title, role]),
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
     queryFilterRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value, enabled: row.enabled })),
+    sortState.value,
+    paginationEnabled.value ? [currentPage.value, currentPageSize.value] : null,
   ]),
+)
+
+function persistQueryState(): void {
+  if (!stateReady.value) return
+  setCachedQueryState(props.dataset.id, {
+    filters: queryFilterRows.value.map((row) => ({
+      filterComponentId: row.filterComponentId,
+      field: row.field,
+      parameterName: row.parameterName,
+      timeBoundary: row.timeBoundary,
+      value: Array.isArray(row.value) ? [...row.value] : row.value,
+      enabled: row.enabled,
+    })),
+    parameters: { ...paramValues },
+    sort: sortState.value ? { ...sortState.value } : null,
+    page: currentPage.value,
+    pageSize: currentPageSize.value,
+  })
+}
+
+watch(
+  () => JSON.stringify([
+    queryFilterRows.value.map((row) => [row.filterComponentId, row.field, row.parameterName, row.timeBoundary, row.value, row.enabled]),
+    paramValues,
+    sortState.value,
+    currentPage.value,
+    currentPageSize.value,
+  ]),
+  persistQueryState,
 )
 
 /** 缓存的结果是否还对应当前条件 */
@@ -339,7 +408,9 @@ const resultHint = computed(() => {
   if (!columns.value.length) return error.value || '尚未查询'
   const time = queriedAt.value ? ` · ${new Date(queriedAt.value).toTimeString().slice(0, 5)} 查询` : ''
   const stale = cacheStale.value ? ' · 条件已变更，点「查询」刷新' : ''
-  return `${rows.value.length} 行${elapsed.value ? ` · ${elapsed.value}` : ''}${time}${stale}${hasMore.value ? ' · 可滚动加载更多' : ''}`
+  const count = totalCount.value === null ? `${rows.value.length} 行` : `${rows.value.length} 行 · 共 ${totalCount.value} 行`
+  const paging = paginationEnabled.value ? ` · 第 ${currentPage.value} 页` : hasMore.value ? ' · 可滚动加载更多' : ''
+  return `${count}${elapsed.value ? ` · ${elapsed.value}` : ''}${time}${stale}${paging}`
 })
 
 async function fetchRows(reset: boolean): Promise<void> {
@@ -361,7 +432,12 @@ async function fetchRows(reset: boolean): Promise<void> {
       return
     }
     const parameters = { ...namedParameters(), ...buildExecutionParameters(enabledFilterRows) }
-    const offset = reset ? 0 : rows.value.length
+    const limit = paginationEnabled.value ? currentPageSize.value : DEFAULT_BATCH_SIZE
+    const offset = paginationEnabled.value
+      ? (currentPage.value - 1) * currentPageSize.value
+      : reset ? 0 : rows.value.length
+    const orders = sortState.value && isFieldSortable(sortState.value.field) ? [sortState.value] : []
+    const requestTotalCount = paginationEnabled.value && paginationPolicy.value?.returnTotalCount === true
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 数据定义在查看数据弹窗中只读；已落库数据集统一走输入读取接口。
     const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
@@ -371,20 +447,36 @@ async function fetchRows(reset: boolean): Promise<void> {
           datasetId: props.dataset.backendDatasetId as string,
           inputName: props.dataset.alias,
           filters: filters as DatasetConfig['filters'],
-          limit: PAGE_SIZE,
+          columns: displayFields.value.map(({ field }) => field),
+          orders,
+          requestTotalCount,
+          limit,
           offset,
           parameters,
         })
-      : await previewDatasetDraft({ ...request, parameters, limit: PAGE_SIZE, offset })
+      : await previewDatasetDraft({
+          ...request,
+          columns: displayFields.value.map(({ field }) => field),
+          parameters,
+          orders,
+          requestTotalCount,
+          limit,
+          offset,
+        })
     // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
     if (currentRequest !== requestSequence) return
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
-    rows.value = reset ? nextRows : [...rows.value, ...nextRows]
+    rows.value = paginationEnabled.value || reset ? nextRows : [...rows.value, ...nextRows]
     if (reset) {
-      columns.value = nextRows.length ? Object.keys(nextRows[0]) : []
+      columns.value = batch.schema?.length ? batch.schema : nextRows.length ? Object.keys(nextRows[0]) : displayFields.value.map(({ field }) => field)
       queriedAt.value = Date.now()
     }
-    hasMore.value = nextRows.length >= PAGE_SIZE
+    hasMore.value = typeof batch.hasNext === 'boolean'
+      ? batch.hasNext
+      : typeof batch.last === 'boolean'
+        ? !batch.last
+        : nextRows.length >= limit
+    totalCount.value = typeof batch.totalCount === 'number' ? batch.totalCount : null
     elapsed.value = `${((Date.now() - started) / 1000).toFixed(1)}s`
     // 记住这次执行（追加页也一并缓存）：关掉再打开，条件和结果都还在
     // —— 运行时条件只进入本次查询和会话缓存，不写回 Dashboard Schema
@@ -395,7 +487,9 @@ async function fetchRows(reset: boolean): Promise<void> {
       elapsed: elapsed.value,
       queriedAt: queriedAt.value,
       signature: currentSignature.value,
+      totalCount: totalCount.value,
     })
+    persistQueryState()
     if (reset) {
       await nextTick()
       if (scrollRef.value) scrollRef.value.scrollTop = 0
@@ -413,10 +507,14 @@ async function fetchRows(reset: boolean): Promise<void> {
 
 /** 表头三态：新字段从升序开始；同字段 asc → desc → 取消；变化后页码回 1 并立即重新查询 */
 function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }): void {
+  if (!isFieldSortable(prop)) return
   const next = order ? elOrderToSortState(prop, order) : null
   const changed = JSON.stringify(next) !== JSON.stringify(sortState.value)
   sortState.value = next
-  if (changed) void fetchRows(true)
+  if (changed) {
+    currentPage.value = 1
+    void fetchRows(true)
+  }
 }
 
 function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): QuerySortSpec {
@@ -425,28 +523,72 @@ function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): Qu
 
 /** 显式查询：改条件后必须点一下才取数（不再自动跑，避免「一打开数据就出来了」） */
 async function query(): Promise<void> {
+  currentPage.value = 1
   await fetchRows(true)
+}
+
+function changePage(page: number): void {
+  if (page < 1 || page === currentPage.value) return
+  currentPage.value = page
+  void fetchRows(true)
+}
+
+function onPageSizeChange(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement).value)
+  const max = Math.max(1, paginationPolicy.value?.maxPageSize || 500)
+  currentPageSize.value = Math.min(max, Math.max(1, value))
+  currentPage.value = 1
+  void fetchRows(true)
 }
 
 /** 滚动到底部按 offset 拉下一页 */
 function onScroll(event: Event): void {
   const el = event.target as HTMLElement
   if (el.scrollHeight - el.scrollTop - el.clientHeight > 24) return
-  if (!hasMore.value || loading.value) return
+  if (paginationEnabled.value || !hasMore.value || loading.value) return
   void fetchRows(false)
 }
 
 /* ── 打开时初始化：不取数，只把查询配置/参数铺好，等用户点「查询」 ── */
 async function open(): Promise<void> {
+  stateReady.value = false
   for (const key of Object.keys(paramValues)) delete paramValues[key]
   for (const param of parameters.value) {
     if (param.defaultValue !== undefined) paramValues[param.name] = param.defaultValue
   }
 
   queryFilterRows.value = createQueryFilterRows()
+  sortState.value = sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
+  currentPage.value = 1
+  currentPageSize.value = Math.min(
+    Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE),
+    Math.max(1, paginationPolicy.value?.maxPageSize || 500),
+  )
+
+  const cachedState = getCachedQueryState(props.dataset.id)
+  if (cachedState) {
+    cachedState.filters.forEach((saved, index) => {
+      const row = queryFilterRows.value[index]
+      if (!row || row.filterComponentId !== saved.filterComponentId || row.field !== saved.field || row.parameterName !== saved.parameterName || row.timeBoundary !== saved.timeBoundary) return
+      row.value = Array.isArray(saved.value) ? [...saved.value] : saved.value
+      row.enabled = saved.enabled
+    })
+    for (const param of parameters.value) {
+      if (Object.hasOwn(cachedState.parameters, param.name)) paramValues[param.name] = cachedState.parameters[param.name]
+    }
+    sortState.value = cachedState.sort && isFieldSortable(cachedState.sort.field)
+      ? cachedState.sort
+      : sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
+    currentPageSize.value = Math.min(
+      Math.max(1, cachedState.pageSize || currentPageSize.value),
+      Math.max(1, paginationPolicy.value?.maxPageSize || 500),
+    )
+    currentPage.value = paginationEnabled.value ? Math.max(1, cachedState.page || 1) : 1
+  }
   columns.value = []
   rows.value = []
   hasMore.value = false
+  totalCount.value = null
   elapsed.value = ''
   error.value = ''
 
@@ -457,10 +599,13 @@ async function open(): Promise<void> {
     rows.value = cached.rows
     columns.value = cached.columns
     hasMore.value = cached.hasMore
+    totalCount.value = cached.totalCount ?? null
     elapsed.value = cached.elapsed
     queriedAt.value = cached.queriedAt
     error.value = ''
   }
+  stateReady.value = true
+  persistQueryState()
 }
 
 watch(() => ui.dataDialog.visible, (visible) => {
@@ -618,6 +763,28 @@ watch(() => ui.dataDialog.visible, (visible) => {
   overflow: auto;
   border: 1px solid var(--db-border);
   border-radius: var(--radius-md);
+}
+.dd-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  color: var(--db-text-muted);
+  font-size: 12px;
+}
+.dd-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dd-page-size select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-sm);
+  color: var(--db-text-secondary);
+  background: var(--db-surface);
 }
 </style>
 

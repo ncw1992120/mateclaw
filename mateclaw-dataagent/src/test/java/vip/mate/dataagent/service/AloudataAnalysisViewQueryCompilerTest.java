@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import vip.mate.dataagent.dataset.DatasetFilter;
 import vip.mate.dataagent.dataset.DatasetReadException;
 import vip.mate.dataagent.dataset.DatasetReadRequest;
+import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dto.AloudataAnalysisViewDetail;
 
 import java.util.List;
@@ -48,6 +49,19 @@ class AloudataAnalysisViewQueryCompilerTest {
 
         assertEquals(List.of("[region] IN (\"华东\",\"华南\")", "([revenue] >= 10 AND [revenue] <= 40)"),
                 body.get("filters"));
+    }
+
+    @Test
+    void compilesAllowedSortAndRuntimePageIntoAloudataQuery() {
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of(), List.of(),
+                List.of(new DatasetSort("revenue", "desc")), 25, 50, Map.of(), true);
+
+        Map<String, Object> body = compiler.compile(view(), request);
+
+        assertEquals(List.of(Map.of("revenue", "desc")), body.get("orders"));
+        assertEquals(25, body.get("limit"));
+        assertEquals(50, body.get("offset"));
+        assertEquals(true, body.get("isQueryTotalCount"));
     }
 
     @Test

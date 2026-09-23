@@ -104,6 +104,10 @@ export async function previewDatasetDraft(req: datasetApi.DatasetComposerDraftRe
     columns?: string[]
     schema?: string[]
     rows?: Record<string, unknown>[]
+    rowCount?: number
+    last?: boolean
+    hasNext?: boolean
+    totalCount?: number
   }
 }
 

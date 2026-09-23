@@ -64,7 +64,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         Map<String, Object> params;
         PushdownReport report;
         String endpoint;
-        if (request.filters().isEmpty()) {
+        if (request.filters().isEmpty() && request.orders().isEmpty()) {
             endpoint = "analysis_view_query_data";
             params = new LinkedHashMap<>();
             params.put("viewName", viewName);
@@ -78,12 +78,14 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             }
             params.put("pageIndex", offset / limit);
             params.put("queryResultType", "DATA");
-            report = new PushdownReport(List.of(), List.of(), true, true, null);
+            report = new PushdownReport(List.of(), List.of(), List.of(), true, true,
+                    request.requestTotalCount(), null);
         } else {
             endpoint = "metrics_query";
             AloudataAnalysisViewDetail view = viewDetail(dataset.getDatasourceId(), viewName);
             params = new LinkedHashMap<>(queryCompiler.compile(view, request));
-            report = new PushdownReport(request.filters(), List.of(), true, true, null);
+            report = new PushdownReport(request.filters(), List.of(), request.orders(), true, true,
+                    request.requestTotalCount(), null);
         }
         try {
             ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
@@ -98,7 +100,10 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                         Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
             }
             List<Map<String, Object>> rows = rows(body);
-            return new DatasetBatch(rows, null, rows.size(), true, report);
+            Long total = totalCount(body);
+            int offset = request.offset() == null ? 0 : request.offset();
+            boolean hasNext = total == null ? rows.size() >= limit : offset + rows.size() < total;
+            return new DatasetBatch(rows, null, rows.size(), !hasNext, report, total);
         } catch (DatasetReadException e) {
             throw e;
         } catch (ResourceAccessException e) {
@@ -118,7 +123,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         Map<String, Object> params = new LinkedHashMap<>();
         String endpoint;
         PushdownReport report;
-        if (request.filters().isEmpty()) {
+        if (request.filters().isEmpty() && request.orders().isEmpty()) {
             endpoint = "analysis_view_query_data";
             params.put("viewName", viewName); params.put("pageSize", limit);
             // DatasetReadRequest.offset 是行偏移，而结果查询端点要的是零基页号 ——
@@ -134,7 +139,8 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             endpoint = "metrics_query";
             AloudataAnalysisViewDetail view = viewDetail(datasourceId, viewName);
             params.putAll(queryCompiler.compile(view, request));
-            report = new PushdownReport(request.filters(), List.of(), true, true, null);
+            report = new PushdownReport(request.filters(), List.of(), request.orders(), true, true,
+                    request.requestTotalCount(), null);
         }
         try {
             ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
@@ -144,7 +150,10 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             if (Boolean.FALSE.equals(body.get("success"))) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
                     Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
             List<Map<String,Object>> rows = rows(body);
-            return new DatasetBatch(rows, null, rows.size(), true, report);
+            Long total = totalCount(body);
+            int offset = request.offset() == null ? 0 : request.offset();
+            boolean hasNext = total == null ? rows.size() >= limit : offset + rows.size() < total;
+            return new DatasetBatch(rows, null, rows.size(), !hasNext, report, total);
         } catch (DatasetReadException e) { throw e; }
         catch (ResourceAccessException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_TIMEOUT, "Aloudata 请求超时", e); }
         catch (RestClientException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "Aloudata 服务不可用", e); }
@@ -210,6 +219,19 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
     private String text(Map<String, Object> data, String... keys) {
         for (String key : keys) if (data.get(key) != null && !String.valueOf(data.get(key)).isBlank()) return String.valueOf(data.get(key));
         return null;
+    }
+
+    private Long totalCount(Map<String, Object> body) {
+        Object dataValue = body == null ? null : body.get("data");
+        if (!(dataValue instanceof Map<?, ?>)) return null;
+        Map<String, Object> data = objectMapper.convertValue(dataValue, new TypeReference<>() {});
+        Object total = data.get("total");
+        if (total == null && data.get("table") instanceof Map<?, ?> table) {
+            total = objectMapper.convertValue(table, new TypeReference<Map<String, Object>>() {}).get("total");
+        }
+        if (total instanceof Number number) return number.longValue();
+        try { return total == null ? null : Long.parseLong(String.valueOf(total)); }
+        catch (NumberFormatException ignored) { return null; }
     }
 
     private List<Map<String, Object>> list(Object value) {

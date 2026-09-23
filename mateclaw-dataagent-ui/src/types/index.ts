@@ -769,9 +769,11 @@ export interface DatasetReadRequest {
   inputName: string
   columns?: string[]
   filters?: DatasetFilter[]
+  orders?: QuerySortSpec[]
   limit?: number
   offset?: number
   parameters?: Record<string, unknown>
+  requestTotalCount?: boolean
 }
 
 /** 统一数据集读取结果 */
@@ -782,6 +784,8 @@ export interface DatasetBatch {
   objectRef?: DatasetObjectRef | null
   rowCount: number
   last: boolean
+  hasNext?: boolean
+  totalCount?: number
   pushdownReport?: {
     pushedFilters: DatasetFilter[]
     residualFilters: DatasetFilter[]

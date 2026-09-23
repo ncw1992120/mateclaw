@@ -15,12 +15,29 @@ export interface CachedQueryResult {
   columns: string[]
   /** 上一页取满时才认为可能还有下一页（恢复后滚动加载可继续） */
   hasMore: boolean
+  totalCount?: number | null
   elapsed: string
   queriedAt: number
   signature: string
 }
 
+export interface CachedQueryState {
+  filters: Array<{
+    filterComponentId: string
+    field: string
+    parameterName: string
+    timeBoundary?: 'start' | 'end'
+    value: unknown
+    enabled: boolean
+  }>
+  parameters: Record<string, unknown>
+  sort: { field: string; direction: 'asc' | 'desc' } | null
+  page: number
+  pageSize: number
+}
+
 const cache = new Map<string, CachedQueryResult>()
+const stateCache = new Map<string, CachedQueryState>()
 
 export function getCachedQuery(datasetId: string): CachedQueryResult | undefined {
   return cache.get(datasetId)
@@ -31,11 +48,22 @@ export function setCachedQuery(datasetId: string, result: CachedQueryResult): vo
   cache.set(datasetId, result)
 }
 
+export function getCachedQueryState(datasetId: string): CachedQueryState | undefined {
+  return stateCache.get(datasetId)
+}
+
+export function setCachedQueryState(datasetId: string, state: CachedQueryState): void {
+  if (!datasetId) return
+  stateCache.set(datasetId, state)
+}
+
 export function clearCachedQuery(datasetId: string): void {
   cache.delete(datasetId)
+  stateCache.delete(datasetId)
 }
 
 /** 测试用：清空全部缓存 */
 export function clearAllCachedQueries(): void {
   cache.clear()
+  stateCache.clear()
 }

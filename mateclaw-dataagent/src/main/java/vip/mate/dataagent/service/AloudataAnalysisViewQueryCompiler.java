@@ -37,6 +37,15 @@ public class AloudataAnalysisViewQueryCompiler {
             filters.add(toExpression(filter));
         }
 
+        List<Map<String, String>> orders = new ArrayList<>();
+        for (var order : request.orders()) {
+            if (!allowedFields.contains(order.field())) {
+                throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,
+                        "指标视图不支持排序字段: " + order.field());
+            }
+            orders.add(Map.of(order.field(), order.direction()));
+        }
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("metrics", names(view.metrics()));
         body.put("dimensions", names(view.dimensions()));
@@ -46,6 +55,8 @@ public class AloudataAnalysisViewQueryCompiler {
         }
         if (request.limit() != null) body.put("limit", request.limit());
         if (request.offset() != null) body.put("offset", request.offset());
+        if (!orders.isEmpty()) body.put("orders", orders);
+        if (request.requestTotalCount()) body.put("isQueryTotalCount", true);
         body.put("queryResultType", "DATA");
         return Map.copyOf(body);
     }

@@ -59,9 +59,11 @@ public class JdbcDatasetAdapter implements DatasetSourceAdapter {
             throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "JDBC 数据源不存在");
         }
         List<String> columns = request.columns().isEmpty() ? fieldNames(request.datasetId()) : request.columns();
+        int pageSize = Math.min(request.limit() == null ? 100 : request.limit(), MAX_PAGE_SIZE);
+        int fetchLimit = pageSize == MAX_PAGE_SIZE ? pageSize : pageSize + 1;
         CompiledJdbcQuery compiled = sqlValidationService.compile(baseSql(dataset, datasource), columns,
                 request.filters(), request.orders(),
-                Math.min(request.limit() == null ? 100 : request.limit(), MAX_PAGE_SIZE),
+                fetchLimit,
                 request.offset() == null ? 0 : request.offset());
         try (Connection connection = DriverManager.getConnection(JdbcUtils.buildJdbcUrl(datasource),
                 datasource.getUsername(), AesPasswordCryptor.decrypt(datasource.getPassword()));
@@ -72,14 +74,16 @@ public class JdbcDatasetAdapter implements DatasetSourceAdapter {
                 ResultSetMetaData metadata = resultSet.getMetaData();
                 int count = metadata.getColumnCount();
                 List<Map<String, Object>> rows = new ArrayList<>();
-                while (resultSet.next() && rows.size() < MAX_PAGE_SIZE) {
+                while (rows.size() <= pageSize && resultSet.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     for (int i = 1; i <= count; i++) row.put(metadata.getColumnLabel(i), resultSet.getObject(i));
                     rows.add(row);
                 }
+                boolean hasNext = rows.size() > pageSize;
+                if (hasNext) rows.removeLast();
                 PushdownReport report = new PushdownReport(request.filters(), List.of(), request.orders(),
-                        !columns.isEmpty(), true, false, compiled.digest());
-                return new DatasetBatch(rows, null, rows.size(), true, report);
+                        !columns.isEmpty(), true, request.requestTotalCount(), compiled.digest());
+                return new DatasetBatch(rows, null, rows.size(), !hasNext, report);
             }
         } catch (SQLTimeoutException e) {
             throw new DatasetReadException(DatasetReadErrorCode.SOURCE_TIMEOUT, "JDBC 查询超时", e);
