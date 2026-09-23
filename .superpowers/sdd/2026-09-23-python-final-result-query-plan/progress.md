@@ -24,3 +24,7 @@ Task 3 note: `FinalResultQueryServiceImpl` only consumes `ValidatedEnvelope`; it
 Task 4: complete (commit pending, tests: Docker Java 21 `mvn -o -f mateclaw-dataagent/pom.xml -Dtest=FinalResultQueryServiceTest,ResultSetQueryServiceTest test` → 9 tests passed)
 
 Task 4 note: result preview accepts optional `finalResultQueryConfig`; when present, the service loads and validates the complete Python envelope first, then applies final-result filters/sort/page. The old preview constructor/request behavior remains compatible when the field is absent.
+
+Task 5: complete (commit pending, tests: `python-script-template.spec.ts` + `component-output-spec.spec.ts` → 24 tests passed; `vue-tsc --noEmit` → passed)
+
+Task 5 note: generated Python system code now includes the component output kind, minimum field rules, and the Runner JSON-envelope example. User processing code remains a separate editable region.

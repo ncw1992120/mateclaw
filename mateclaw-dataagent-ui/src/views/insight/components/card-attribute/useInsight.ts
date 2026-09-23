@@ -34,7 +34,7 @@ import {
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
-import { resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
+import { outputContractTemplate, resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
 import {
@@ -289,7 +289,9 @@ export function currentPythonSource(): PythonSystemSource {
       conditions: binding.conditions ?? [],
     }
   })
-  return { inputs, bindings }
+  const activeCard = state.cards.find((card) => card.id === state.activeCardId)
+  const outputSpec = activeCard ? resolveOutputSpec(activeCard.type) : null
+  return { inputs, bindings, outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined }
 }
 
 /* ============================ 状态单例 ============================ */

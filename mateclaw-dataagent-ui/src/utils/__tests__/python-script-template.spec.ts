@@ -11,6 +11,7 @@ import {
 const source = {
   inputs: [{ datasetId: 'a', inputName: 'dataset_a' }],
   bindings: [],
+  outputContract: { kind: 'table', example: '{"kind":"table"}', fieldRules: { minColumns: 2, minDimensionColumns: 1, minNumericColumns: 1 } },
 }
 
 describe('python script system state', () => {
@@ -18,6 +19,8 @@ describe('python script system state', () => {
     const first = generateSystemScript(source)
     const second = generateSystemScript({ ...source, bindings: [] })
     expect(first).toContain('input_name="dataset_a"')
+    expect(first).toContain('最终输出契约：kind=table')
+    expect(first).toContain('# {"kind":"table"}')
     expect(fingerprintSystemSource(source)).toBe(fingerprintSystemSource({ ...source, bindings: [] }))
     expect(second).toBe(first)
   })
