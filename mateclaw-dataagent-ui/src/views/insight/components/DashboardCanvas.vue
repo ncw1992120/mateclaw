@@ -91,32 +91,34 @@
                 @keyup.enter="commitTitleEdit(item.i)"
               />
               <template v-else>
-                <DashboardComponentIcon
-                  :type="getComponent(item.i)?.type ?? 'kpi'"
-                  :chart-type="getComponent(item.i)?.chartType"
-                  :title="getComponentTitle(item.i)"
-                  :dashboard-theme="dashboardTheme"
-                  :title-icon-style="getComponent(item.i)?.titleIconStyle"
-                  :variant="sameRowIconVariant(item)"
-                />
-                <button
-                  type="button"
-                  class="grid-item-icon-style-trigger"
-                  :aria-label="`编辑标题图标 ${getComponentTitle(item.i)}`"
-                  title="修改标题图标样式"
-                  @click.stop="openTitleIconStyle(item.i)"
-                >
-                  <el-icon :size="12"><EditPen /></el-icon>
-                </button>
-                <button
-                  type="button"
-                  class="grid-item-title-trigger"
-                  :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
-                  @click.stop="startTitleEdit(item.i)"
-                >
-                  <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
-                  <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
-                </button>
+                <span class="grid-item-title-group">
+                  <DashboardComponentIcon
+                    :type="getComponent(item.i)?.type ?? 'kpi'"
+                    :chart-type="getComponent(item.i)?.chartType"
+                    :title="getComponentTitle(item.i)"
+                    :dashboard-theme="dashboardTheme"
+                    :title-icon-style="toolbarTitleIconStyle(item.i)"
+                    :variant="sameRowIconVariant(item)"
+                  />
+                  <button
+                    type="button"
+                    class="grid-item-icon-style-trigger"
+                    :aria-label="`编辑标题图标 ${getComponentTitle(item.i)}`"
+                    title="修改标题图标样式"
+                    @click.stop="openTitleIconStyle(item.i, $event.currentTarget as HTMLElement)"
+                  >
+                    <el-icon :size="12"><EditPen /></el-icon>
+                  </button>
+                  <button
+                    type="button"
+                    class="grid-item-title-trigger"
+                    :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
+                    @click.stop="startTitleEdit(item.i)"
+                  >
+                    <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+                    <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
+                  </button>
+                </span>
               </template>
             </template>
             <button
@@ -180,6 +182,7 @@
                 :editable="editable"
                 :selected="selectedId === item.i"
                 :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="childTitleIconStylePreview"
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
@@ -196,13 +199,14 @@
     </GridLayout>
     <DashboardTitleIconStyleDialog
       v-if="editingTitleIconTarget"
-      v-model="titleIconDialogVisible"
+      :model-value="titleIconDialogVisible"
       :title="editingTitleIconTitle"
-      :preview-type="editingTitleIconType"
-      :chart-type="editingTitleIconChartType"
       :title-icon-style="editingTitleIconStyle"
-      :dashboard-theme="dashboardTheme"
+      :top="titleIconDialogTop"
+      :draggable="true"
       @save="saveTitleIconStyle"
+      @preview="previewTitleIconStyle"
+      @update:model-value="setTitleIconDialogVisible"
     />
 
     <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
@@ -263,6 +267,8 @@ const editingTitleValue = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
 const titleIconDialogVisible = ref(false)
 const editingTitleIconTarget = ref<{ componentId: string; containerId?: string; childId?: string } | null>(null)
+const titleIconDialogTop = ref('16px')
+const previewTitleIconStyleValue = ref<ComponentTitleIconStyle | null>(null)
 
 const editingTitleIconComponent = computed(() => {
   const target = editingTitleIconTarget.value
@@ -272,8 +278,12 @@ const editingTitleIconComponent = computed(() => {
 })
 const editingTitleIconStyle = computed(() => editingTitleIconComponent.value?.titleIconStyle)
 const editingTitleIconTitle = computed(() => editingTitleIconComponent.value?.title ?? '')
-const editingTitleIconType = computed(() => editingTitleIconComponent.value?.type ?? 'kpi')
-const editingTitleIconChartType = computed(() => editingTitleIconComponent.value?.chartType)
+const childTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target?.childId && previewTitleIconStyleValue.value
+    ? { childId: target.childId, style: previewTitleIconStyleValue.value }
+    : undefined
+})
 
 const canvasWorkspaceStyle = computed(() => {
   if (!props.editable) return undefined
@@ -475,16 +485,56 @@ function findChildComponent(containerId: string, childId: string): InsightCombin
   ])
 }
 
-function openTitleIconStyle(componentId: string): void {
+function openTitleIconStyle(componentId: string, anchor?: HTMLElement | null): void {
   if (!props.editable) return
+  previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = { componentId }
+  titleIconDialogTop.value = dialogTopForAnchor(anchor)
   titleIconDialogVisible.value = true
 }
 
-function openChildTitleIconStyle(payload: { containerId: string; childId: string }): void {
+function openChildTitleIconStyle(payload: { containerId: string; childId: string; anchor?: HTMLElement }): void {
   if (!props.editable) return
+  previewTitleIconStyleValue.value = null
   editingTitleIconTarget.value = { ...payload, componentId: payload.containerId }
+  titleIconDialogTop.value = dialogTopForAnchor(payload.anchor)
   titleIconDialogVisible.value = true
+}
+
+function dialogTopForAnchor(anchor?: HTMLElement | null): string {
+  if (!anchor) return '16px'
+  const rect = anchor.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || 768
+  const maxTop = Math.max(16, viewportHeight - 520)
+  let top = rect.bottom + 12
+  if (top > maxTop) top = Math.max(16, rect.top - 520 - 12)
+  return `${Math.round(top)}px`
+}
+
+function toolbarTitleIconStyle(componentId: string): ComponentTitleIconStyle | undefined {
+  const target = editingTitleIconTarget.value
+  if (!target?.childId && target?.componentId === componentId && previewTitleIconStyleValue.value) {
+    return previewTitleIconStyleValue.value
+  }
+  return getComponent(componentId)?.titleIconStyle
+}
+
+function previewTitleIconStyle(style: ComponentTitleIconStyle): void {
+  previewTitleIconStyleValue.value = style
+}
+
+function clearTitleIconDialog(): void {
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = null
+  titleIconDialogVisible.value = false
+}
+
+function setTitleIconDialogVisible(visible: boolean): void {
+  if (visible) {
+    titleIconDialogVisible.value = true
+    return
+  }
+  clearTitleIconDialog()
 }
 
 function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
@@ -499,6 +549,7 @@ function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
   } else {
     emit('update-title-icon-style', { componentId: target.componentId, titleIconStyle: style })
   }
+  clearTitleIconDialog()
 }
 
 function commitTitleEdit(id: string): void {
@@ -1052,6 +1103,18 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   cursor: text;
 }
 
+.grid-item-title-group {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 4px;
+}
+
+.grid-item-title-group :deep(.dashboard-component-icon) {
+  margin-right: 0;
+}
+
 .grid-item-icon-style-trigger {
   display: inline-flex;
   align-items: center;
@@ -1059,7 +1122,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  margin: 0 6px 0 -4px;
+  margin: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;

@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
+import DashboardComponentIcon from '../DashboardComponentIcon.vue'
 import DashboardTitleIconStyleDialog from '../DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dashboardCanvasConstants'
 
@@ -74,6 +75,47 @@ describe('DashboardCanvas keyboard interaction', () => {
 
     expect(wrapper.find('input[aria-label="组件标题"]').exists()).toBe(false)
     expect(wrapper.findComponent(DashboardTitleIconStyleDialog).props('modelValue')).toBe(true)
+  })
+
+  it('keeps icon tools grouped with the title and previews edits on the canvas until canceled', async () => {
+    const initialStyle = { iconKey: 'trend-charts', colorMode: 'theme' as const, strokeWidth: 2 as const }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [{ ...component, titleIconStyle: initialStyle }], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const titleGroup = wrapper.get('.grid-item-title-group')
+    expect(titleGroup.findComponent(DashboardComponentIcon).exists()).toBe(true)
+    expect(titleGroup.get('[aria-label="编辑标题图标 订单数"]').exists()).toBe(true)
+    expect(titleGroup.get('[aria-label="编辑组件标题 订单数"]').text()).toContain('订单数')
+
+    await titleGroup.get('[aria-label="编辑标题图标 订单数"]').trigger('click')
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    const previewStyle = { iconKey: 'chart-bar', colorMode: 'custom' as const, color: '#8c4a2f', strokeWidth: 3 as const }
+    dialog.vm.$emit('preview', previewStyle)
+    await wrapper.vm.$nextTick()
+
+    expect(titleGroup.findComponent(DashboardComponentIcon).props('titleIconStyle')).toEqual(previewStyle)
+    dialog.vm.$emit('update:modelValue', false)
+    await wrapper.vm.$nextTick()
+    expect(titleGroup.findComponent(DashboardComponentIcon).props('titleIconStyle')).toEqual(initialStyle)
+  })
+
+  it('positions the icon dialog below its trigger and enables dragging', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    const trigger = wrapper.get('[aria-label="编辑标题图标 订单数"]')
+    Object.defineProperty(trigger.element, 'getBoundingClientRect', {
+      value: () => ({ top: 50, right: 80, bottom: 76, left: 60, width: 20, height: 26, x: 60, y: 50, toJSON: () => ({}) }),
+    })
+
+    await trigger.trigger('click')
+
+    const dialog = wrapper.findComponent(DashboardTitleIconStyleDialog)
+    expect(dialog.props('draggable')).toBe(true)
+    expect(dialog.props('top')).toBe('88px')
   })
 
   it('uses the component title bar as a drag handle for moving into a combination', async () => {
