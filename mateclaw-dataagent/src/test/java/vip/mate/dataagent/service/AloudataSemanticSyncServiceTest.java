@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.dto.AloudataDimensionPageQuery;
+import vip.mate.dataagent.dto.AloudataMetricPageQuery;
 import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.repository.AloudataCategoryMapper;
@@ -30,6 +31,48 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyMap;
 
 class AloudataSemanticSyncServiceTest {
+
+    @Test
+    void enrichesLiveMetricPageWithDimensionCodesFromDimensionAll() {
+        DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
+        AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);
+        AloudataApiClient apiClient = mock(AloudataApiClient.class);
+        AloudataEndpointService endpointService = mock(AloudataEndpointService.class);
+        AloudataSemanticSyncServiceImpl service = new AloudataSemanticSyncServiceImpl(
+                mock(AloudataMetricMapper.class),
+                mock(AloudataDimensionMapper.class),
+                mock(AloudataMetricDimensionMapper.class),
+                mock(AloudataCategoryMapper.class),
+                datasourceMapper,
+                apiClient,
+                configHelper,
+                endpointService,
+                mock(AloudataSemanticEsService.class),
+                mock(ModelConfigService.class),
+                mock(AloudataService.class));
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setSourceType("aloudata");
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        when(datasourceMapper.selectById(9L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(config);
+        when(endpointService.buildParamsFromConfigAndInput(eq("metric_list"), eq(config), anyMap()))
+                .thenReturn(new java.util.HashMap<>());
+        when(endpointService.buildParamsFromConfigAndInput(eq("metric_all_dimensions"), eq(config), anyMap()))
+                .thenReturn(new java.util.HashMap<>());
+        when(apiClient.callWithParams(eq("metric_list"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", Map.of("total", 1,
+                        "data", List.of(Map.of("metricName", "metric_a", "metricDisplayName", "指标 A"))))));
+        when(apiClient.callWithParams(eq("metric_all_dimensions"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", Map.of("metric_a",
+                        List.of(Map.of("dimName", "region", "dimDisplayName", "所属大区"))))));
+        AloudataMetricPageQuery query = new AloudataMetricPageQuery();
+        query.setPageNumber(1);
+        query.setPageSize(20);
+
+        var result = service.pageMetrics(9L, query);
+
+        assertEquals(List.of("region"), result.getRecords().get(0).getAvailableDimensions());
+    }
 
     @Test
     void loadsMetricDirectoryFromConfiguredAloudataDatasource() {
