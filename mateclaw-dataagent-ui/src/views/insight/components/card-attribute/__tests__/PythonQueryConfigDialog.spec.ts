@@ -27,10 +27,15 @@ const stubs = {
   'el-checkbox': { props: ['modelValue'], emits: ['update:modelValue'], template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />' },
 }
 
+const filterOptions = [
+  { id: 'strategy-filter', title: '策略类型', type: 'filter', selectionMode: 'single' as const },
+  { id: 'date-filter', title: '交易日期', type: 'timeFilter', selectionMode: 'single' as const },
+]
+
 describe('PythonQueryConfigDialog', () => {
   it('使用查询配置弹窗结构展示字段、筛选字段、排序和分页并保存', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config, fieldCatalog: config.displayFields },
+      props: { modelValue: true, config, fieldCatalog: config.displayFields, filterOptions },
       global: { stubs },
     })
 
@@ -39,15 +44,18 @@ describe('PythonQueryConfigDialog', () => {
     expect(wrapper.text()).toContain('允许排序')
     expect(wrapper.text()).toContain('分页')
 
+    await wrapper.find('[data-testid="python-qc-role-toggle"]').trigger('click')
     await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
 
     expect(wrapper.emitted('save')).toHaveLength(1)
-    expect((wrapper.emitted('save')![0][0] as FinalResultQueryConfig).displayFields.map((field) => field.field)).toEqual(['region', 'amount'])
+    const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
+    expect(saved.displayFields.map((field) => field.field)).toEqual(['region', 'amount'])
+    expect(saved.displayFields[0].role).toBe('measure')
   })
 
   it('允许添加并编辑 Python 输出字段，同时将筛选字段保存为真实配置', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [] },
+      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [], filterOptions },
       global: { stubs },
     })
 
@@ -67,7 +75,7 @@ describe('PythonQueryConfigDialog', () => {
 
   it('拒绝不符合英文数字下划线规则的技术字段名', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [] },
+      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [], filterOptions },
       global: { stubs },
     })
 
@@ -75,5 +83,20 @@ describe('PythonQueryConfigDialog', () => {
     await wrapper.find('[data-testid="python-qc-add-new-field"]').trigger('click')
 
     expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(0)
+  })
+
+  it('筛选字段使用筛选器名称绑定结果字段', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions },
+      global: { stubs },
+    })
+
+    await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
+    expect(wrapper.find('[data-testid="python-qc-filter-component"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="python-qc-filter-field"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
+
+    const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
+    expect(saved.filterFields[0]).toMatchObject({ field: 'region', filterComponentId: 'strategy-filter' })
   })
 })

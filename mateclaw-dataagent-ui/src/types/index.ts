@@ -1536,6 +1536,8 @@ export interface FinalResultFilterField {
   dataType: string
   parameterName: string
   operators: QueryParameterBinding['operator'][]
+  /** 可选的页面筛选器组件 ID；用于与数据集查询配置保持一致的筛选器绑定展示。 */
+  filterComponentId?: string
 }
 
 /** 针对 Python 最终输出的静态查询配置，不影响输入数据源查询。 */
