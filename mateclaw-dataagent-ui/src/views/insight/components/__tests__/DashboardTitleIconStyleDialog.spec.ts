@@ -20,13 +20,14 @@ const stubs = {
     template: '<div class="color-modes"><button type="button" @click="$emit(\'update:modelValue\', \'theme\')">跟随主题</button><button type="button" @click="$emit(\'update:modelValue\', \'custom\')">自定义</button></div>',
   },
   'el-radio': { template: '<span><slot /></span>' },
-  'el-color-picker': {
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    template: '<input aria-label="自定义图标颜色" type="color" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  InsightColorField: {
+    name: 'InsightColorField',
+    props: ['modelValue', 'label', 'suggestedColors'],
+    emits: ['update:modelValue', 'change'],
+    template: '<input data-testid="insight-color-field" :aria-label="label" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
   },
   'el-button': { template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
-  DashboardComponentIcon: { props: ['titleIconStyle'], template: '<span class="preview-icon">{{ titleIconStyle?.iconKey || "automatic" }}</span>' },
+  DashboardComponentIcon: { name: 'DashboardComponentIcon', props: ['titleIconStyle'], template: '<span class="preview-icon">{{ titleIconStyle?.iconKey || "automatic" }}</span>' },
 }
 
 describe('DashboardTitleIconStyleDialog', () => {
@@ -39,7 +40,10 @@ describe('DashboardTitleIconStyleDialog', () => {
     await wrapper.get('[aria-label="图表"]').trigger('click')
     await wrapper.get('select[aria-label="图标粗细"]').setValue('2.5')
     await wrapper.get('.color-modes button:nth-child(2)').trigger('click')
-    await wrapper.get('input[aria-label="自定义图标颜色"]').setValue('#8c4a2f')
+    const colorField = wrapper.get('[data-testid="insight-color-field"]')
+    expect(colorField.attributes('aria-label')).toBe('自定义图标颜色')
+    await colorField.setValue('#8c4a2f')
+    expect(wrapper.emitted('save')).toBeUndefined()
     await wrapper.findAll('button').find((button) => button.text() === '应用')!.trigger('click')
 
     expect(wrapper.emitted('save')?.[0]?.[0]).toMatchObject({
@@ -49,6 +53,22 @@ describe('DashboardTitleIconStyleDialog', () => {
       color: '#8c4a2f',
     })
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe(false)
+  })
+
+  it('keeps title icon color edits in the preview draft until applied', async () => {
+    const wrapper = mount(DashboardTitleIconStyleDialog, {
+      props: { modelValue: true, titleIconStyle: { colorMode: 'custom', color: '#123456', strokeWidth: 2 } },
+      global: { stubs },
+    })
+
+    await wrapper.get('.color-modes button:nth-child(2)').trigger('click')
+    await wrapper.get('[data-testid="insight-color-field"]').setValue('#AABBCC')
+
+    expect(wrapper.findComponent({ name: 'DashboardComponentIcon' }).props('titleIconStyle')).toMatchObject({
+      colorMode: 'custom',
+      color: '#AABBCC',
+    })
+    expect(wrapper.emitted('save')).toBeUndefined()
   })
 
   it('resets to automatic theme icon styling', async () => {

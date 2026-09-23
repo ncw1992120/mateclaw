@@ -66,11 +66,11 @@
           <el-radio value="theme">跟随主题</el-radio>
           <el-radio value="custom">自定义</el-radio>
         </el-radio-group>
-        <el-color-picker
+        <InsightColorField
           v-if="draft.colorMode === 'custom'"
           v-model="draft.color"
-          aria-label="自定义图标颜色"
-          :show-alpha="false"
+          label="自定义图标颜色"
+          :suggested-colors="TEXT_COLOR_PRESETS"
         />
       </div>
     </div>
@@ -87,7 +87,9 @@
 import { reactive, watch } from 'vue'
 import type { ChartType, ComponentTitleIconStyle, InsightComponentType, ResolvedDashboardTheme } from '@/types'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
+import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import InsightColorField from './InsightColorField.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean

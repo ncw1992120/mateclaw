@@ -15,7 +15,12 @@
           <p class="ms-hint">图标和强调色默认跟随仪表盘主题，可单独关闭或覆盖。</p>
           <div class="ms-icon-row">
             <el-switch v-model="iconEnabled" active-text="显示图标" />
-            <el-color-picker v-model="metric.visual!.accentColor" size="small" :predefine="PRESET_COLORS" @change="setCustomAccent" />
+            <InsightColorField
+              v-model="metric.visual!.accentColor"
+              label="强调色"
+              :suggested-colors="PRESET_COLORS"
+              @change="setCustomAccent"
+            />
           </div>
           <div class="ms-icon-grid" role="grid" aria-label="选择指标图标" @keydown.esc="ui.metricStyle.visible = false">
             <button
@@ -44,7 +49,12 @@
             :aria-label="`${KPI_FIELD_LABELS[field]}加粗`"
             @update:model-value="(v: boolean) => (metric!.styles[field].bold = v ? 'bold' : 'normal')"
           />
-          <el-color-picker v-model="metric.styles[field].color" size="small" :predefine="PRESET_COLORS" @change="() => (metric!.styles[field].colorMode = 'custom')" />
+          <InsightColorField
+            v-model="metric.styles[field].color"
+            :label="`${KPI_FIELD_LABELS[field]}颜色`"
+            :suggested-colors="PRESET_COLORS"
+            @change="() => (metric!.styles[field].colorMode = 'custom')"
+          />
         </div>
         <p class="ms-hint">颜色与字号修改会立即同步画布；双击颜色块或点击重置可恢复跟随主题。</p>
         <el-button text type="primary" @click="resetMetric">重置该指标</el-button>
@@ -67,6 +77,7 @@ import { KPI_FIELD_LABELS, KPI_METRIC_FIELDS, defaultMetricStyles, styleToCss } 
 import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import type { KpiMetricField } from '@/utils/kpi-metrics'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
+import InsightColorField from '../InsightColorField.vue'
 
 const { state } = useInsight()
 const ui = state.ui
