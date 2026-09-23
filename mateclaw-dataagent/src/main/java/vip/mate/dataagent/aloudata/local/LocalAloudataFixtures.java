@@ -68,6 +68,8 @@ public class LocalAloudataFixtures {
         Map<String, Object> safeParams = params == null ? Map.of() : params;
         return switch (endpointName == null ? "" : endpointName) {
             case "analysis_view_tree" -> treeList(owner);
+            case "metric_tree" -> copy(load("metric_tree.json"));
+            case "category_list" -> categoryList(safeParams);
             case "analysis_view_list" -> listViews(owner, safeParams);
             case "analysis_view_query_by_name" -> viewByName(owner, safeParams);
             case "metric_batch_detail" -> metricBatchDetail(owner, safeParams);
@@ -85,6 +87,18 @@ public class LocalAloudataFixtures {
     private Map<String, Object> treeList(String owner) {
         Map<String, Object> envelope = copy(load("analysis_view_tree.json"));
         replacePlaceholder(envelope, OWNER_PLACEHOLDER, owner);
+        return envelope;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> categoryList(Map<String, Object> params) {
+        Map<String, Object> envelope = copy(load("category_list.json"));
+        String categoryType = firstString(params.get("categoryType"));
+        List<Map<String, Object>> categories = asMapList(envelope.get("data"));
+        if (categoryType != null) {
+            categories.removeIf(category -> !categoryType.equals(firstString(category.get("categoryType"))));
+        }
+        envelope.put("data", categories);
         return envelope;
     }
 

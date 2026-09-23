@@ -67,6 +67,9 @@ public interface AloudataSemanticSyncService {
      */
     List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword);
 
+    /** Load the live Aloudata metric directory tree for dataset configuration. */
+    List<java.util.Map<String, Object>> listMetricDirectory(Long datasourceId);
+
     /**
      * 按关键词分页查询指标实体
      * <p>

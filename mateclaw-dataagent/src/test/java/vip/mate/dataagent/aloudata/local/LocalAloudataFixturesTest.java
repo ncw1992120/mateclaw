@@ -20,6 +20,32 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void metricTreeReturnsNestedMetricDirectoryForLocalDashboardEditing() {
+        Map<String, Object> body = fixtures.payload("metric_tree", Map.of(), null);
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        List<Map<String, Object>> roots = (List<Map<String, Object>>) data.get("rootList");
+
+        assertEquals(Boolean.TRUE, body.get("success"));
+        assertEquals("策略解读", roots.getFirst().get("categoryName"));
+        List<Map<String, Object>> metrics = (List<Map<String, Object>>) roots.getFirst().get("metricList");
+        assertTrue(metrics.stream().anyMatch(metric -> "digo_cust_asset_in".equals(metric.get("metricName"))));
+        List<Map<String, Object>> children = (List<Map<String, Object>>) roots.getFirst().get("subCategory");
+        assertEquals("子策略", children.getFirst().get("categoryName"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void categoryListFiltersMetricAndDimensionDirectories() {
+        Map<String, Object> body = fixtures.payload("category_list", Map.of("categoryType", "CATEGORY_DIMENSION"), null);
+        List<Map<String, Object>> categories = (List<Map<String, Object>>) body.get("data");
+
+        assertEquals(Boolean.TRUE, body.get("success"));
+        assertTrue(categories.stream().allMatch(category -> "CATEGORY_DIMENSION".equals(category.get("categoryType"))));
+        assertTrue(categories.stream().anyMatch(category -> "dim-sub-strategy".equals(category.get("id"))));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void treeReturnsTwoStrategyViewsUnderOneCategory() {
         Map<String, Object> body = fixtures.payload("analysis_view_tree", Map.of(), null);
 

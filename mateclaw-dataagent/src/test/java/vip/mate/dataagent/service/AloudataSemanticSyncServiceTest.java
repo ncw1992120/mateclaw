@@ -1,7 +1,11 @@
 package vip.mate.dataagent.service;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
+import vip.mate.dataagent.dto.AloudataConfigDTO;
+import vip.mate.dataagent.dto.AloudataDimensionPageQuery;
+import vip.mate.dataagent.model.DatasourceEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.repository.AloudataCategoryMapper;
 import vip.mate.dataagent.repository.AloudataDimensionMapper;
@@ -19,8 +23,83 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyMap;
 
 class AloudataSemanticSyncServiceTest {
+
+    @Test
+    void loadsMetricDirectoryFromConfiguredAloudataDatasource() {
+        DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
+        AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);
+        AloudataApiClient apiClient = mock(AloudataApiClient.class);
+        AloudataSemanticSyncServiceImpl service = new AloudataSemanticSyncServiceImpl(
+                mock(AloudataMetricMapper.class),
+                mock(AloudataDimensionMapper.class),
+                mock(AloudataMetricDimensionMapper.class),
+                mock(AloudataCategoryMapper.class),
+                datasourceMapper,
+                apiClient,
+                configHelper,
+                mock(AloudataEndpointService.class),
+                mock(AloudataSemanticEsService.class),
+                mock(ModelConfigService.class),
+                mock(AloudataService.class));
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setSourceType("aloudata");
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        Map<String, Object> root = Map.of("categoryId", "cat-1", "categoryName", "策略解读",
+                "metricList", List.of(Map.of("metricName", "conversion_count")), "subCategory", List.of());
+        when(datasourceMapper.selectById(9L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(config);
+        when(apiClient.callWithParams(eq("metric_tree"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", Map.of("rootList", List.of(root)))));
+
+        assertEquals(List.of(root), service.listMetricDirectory(9L));
+        verify(apiClient).callWithParams(eq("metric_tree"), eq(config), anyMap());
+    }
+
+    @Test
+    void forwardsDimensionKeywordToDirectAloudataListApi() {
+        DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
+        AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);
+        AloudataApiClient apiClient = mock(AloudataApiClient.class);
+        AloudataEndpointService endpointService = mock(AloudataEndpointService.class);
+        AloudataSemanticSyncServiceImpl service = new AloudataSemanticSyncServiceImpl(
+                mock(AloudataMetricMapper.class),
+                mock(AloudataDimensionMapper.class),
+                mock(AloudataMetricDimensionMapper.class),
+                mock(AloudataCategoryMapper.class),
+                datasourceMapper,
+                apiClient,
+                configHelper,
+                endpointService,
+                mock(AloudataSemanticEsService.class),
+                mock(ModelConfigService.class),
+                mock(AloudataService.class));
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setSourceType("aloudata");
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        when(datasourceMapper.selectById(9L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(config);
+        when(endpointService.buildParamsFromConfigAndInput(eq("dimension_list"), eq(config), anyMap()))
+                .thenReturn(new java.util.HashMap<>());
+        when(apiClient.callWithParams(eq("dimension_list"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", Map.of("total", 0, "data", List.of()))));
+        AloudataDimensionPageQuery query = new AloudataDimensionPageQuery();
+        query.setPageNumber(1);
+        query.setPageSize(20);
+        query.setKeyword("metric_name");
+
+        service.pageDimensions(9L, query);
+
+        org.mockito.ArgumentCaptor<Map<String, Object>> params = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(apiClient).callWithParams(eq("dimension_list"), eq(config), params.capture());
+        assertEquals("metric_name", params.getValue().get("keyword"));
+    }
 
     @Test
     void acceptsNumericAloudataTimestampsWhenBuildingMetricEntities() {

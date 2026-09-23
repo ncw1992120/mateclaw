@@ -42,5 +42,6 @@ class AloudataEndpointServiceTest {
         assertEquals("/custom/metrics", service.getEndpoint("metrics_query").getPath());
         assertEquals("/anymetrics/api/v1/metrics/list", service.getEndpoint("metric_list").getPath());
         assertEquals("/anymetrics/api/v1/category/list", service.getEndpoint("category_list").getPath());
+        assertEquals("/anymetrics/api/v1/metrics/treeList", service.getEndpoint("metric_tree").getPath());
     }
 }

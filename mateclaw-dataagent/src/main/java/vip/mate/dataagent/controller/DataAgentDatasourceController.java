@@ -386,6 +386,15 @@ public class DataAgentDatasourceController {
         return R.ok(aloudataSyncService.pageMetrics(datasourceId, query));
     }
 
+    /** 查询实时 Aloudata 指标目录树 */
+    @GetMapping("/{datasourceId}/aloudata/metrics/directory")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "Aloudata 指标目录树", description = "直接从 Aloudata 获取指标类目树和类目下指标")
+    public R<List<Map<String, Object>>> listMetricDirectory(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.listMetricDirectory(datasourceId));
+    }
+
     /**
      * 分页查询已同步的维度列表
      */

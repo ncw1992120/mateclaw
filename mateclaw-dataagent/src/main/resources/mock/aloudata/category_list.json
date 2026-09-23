@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "id": "metric-strategy",
+      "name": "策略解读指标",
+      "parentId": null,
+      "categoryType": "CATEGORY_METRIC"
+    },
+    {
+      "id": "dim-strategy",
+      "name": "策略解读维度",
+      "parentId": null,
+      "categoryType": "CATEGORY_DIMENSION"
+    },
+    {
+      "id": "dim-sub-strategy",
+      "name": "子策略维度",
+      "parentId": "dim-strategy",
+      "categoryType": "CATEGORY_DIMENSION"
+    }
+  ],
+  "success": true,
+  "code": "200",
+  "errorMsg": null,
+  "traceId": "local-category-list"
+}

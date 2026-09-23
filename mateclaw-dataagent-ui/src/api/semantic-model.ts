@@ -12,6 +12,19 @@ import type {
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/semantic-models'
 
+export interface AloudataMetricDirectoryNode {
+  categoryId: string
+  categoryName: string
+  metricList?: Array<{
+    metricName: string
+    metricDisplayName?: string
+    type?: string
+    unit?: string
+    [key: string]: unknown
+  }>
+  subCategory?: AloudataMetricDirectoryNode[]
+}
+
 /** 查询语义模型列表 */
 export function list(datasourceId: string, tableNames?: string) {
   return api.get<SemanticModel[]>(BASE_URL, {
@@ -112,6 +125,11 @@ export function pageAloudataMetrics(
   return api.get<AloudataMetricPage>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/page`, {
     params,
   })
+}
+
+/** Query the live Aloudata category tree with metrics nested under each category. */
+export function getAloudataMetricDirectory(datasourceId: string) {
+  return api.get<AloudataMetricDirectoryNode[]>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/directory`)
 }
 
 /** 分页查询 Aloudata 维度列表 */
