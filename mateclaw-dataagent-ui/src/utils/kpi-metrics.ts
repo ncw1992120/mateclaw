@@ -100,7 +100,9 @@ export function styleToCss(style: KpiMetricFieldStyle, themeColor?: string): str
   return `font-size:${style.size}px;color:${color};font-family:${family};font-weight:${style.bold || 'normal'};`
 }
 
-/** 解析指标的图标、强调色和四个文字字段颜色；不访问数据源。 */
+/** 解析指标的图标、强调色和四个文字字段颜色；不访问数据源。
+ * 强调色默认取区域主色（同一张卡内所有指标同色）：一卡跑五个色系是纯噪声，
+ * 第三个色号只由用户在指标样式弹窗里显式 custom 产生。图标仍按序号轮转做形状区分。 */
 export function resolveMetricVisual(
   metric: KpiMetricConfig,
   componentVisual: KpiMetricVisualConfig | undefined,
@@ -108,7 +110,7 @@ export function resolveMetricVisual(
   index: number,
 ): { iconKey: string | null; accentColor: string; textColors: Record<KpiMetricField, string> } {
   const visual = componentVisual ?? metric.visual
-  const accentColor = visual?.colorMode === 'custom' && visual.accentColor ? visual.accentColor : theme.metricPalette[index % Math.max(theme.metricPalette.length, 1)] ?? theme.primary
+  const accentColor = visual?.colorMode === 'custom' && visual.accentColor ? visual.accentColor : theme.primary
   const fieldColor = (field: KpiMetricField): string => {
     const style = metric.styles[field]
     return style.colorMode === 'theme' || !style.colorMode && !style.color ? accentColor : style.color

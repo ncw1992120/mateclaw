@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策略解读看板：色彩方案对比</title>
+<style>
+  :root{
+    --ink:#1f2329; --muted:#6b7280; --faint:#9aa3b2;
+    --line:#e4e7ed; --page:#f4f5fa; --card:#ffffff;
+    --blue:#2b4acb; --blue-band:#e9edfb; --blue-deep:#1e3a9f;
+    --purple:#8b47c9; --purple-band:#f5ecfa;
+    --green-band:#ddf2ea;
+    --amber:#b45309;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:#eceef4;color:var(--ink);padding:28px 32px 40px}
+  h1{font-size:19px;font-weight:600;margin-bottom:4px}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.7}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:22px;max-width:1560px}
+  .variant{background:#fff;border-radius:12px;padding:16px 16px 14px;border:1px solid var(--line)}
+  .v-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .v-name{font-size:14px;font-weight:600}
+  .v-name small{font-weight:400;color:var(--faint);font-size:11px;margin-left:6px}
+  .budget{display:flex;gap:5px;flex-shrink:0}
+  .budget i{width:14px;height:14px;border-radius:4px;border:1px solid rgba(0,0,0,.10)}
+  /* 迷你看板画布 */
+  .frame{background:var(--page);border-radius:9px;padding:14px;min-height:560px}
+  .fake-tabs{display:flex;gap:16px;font-size:11px;color:var(--faint);margin-bottom:12px}
+  .fake-tabs .on{color:var(--blue);font-weight:600;border-bottom:2px solid var(--blue);padding-bottom:3px}
+  .filters{display:flex;gap:8px;margin-bottom:12px}
+  .fpill{flex:1;height:30px;border-radius:6px;font-size:11px;display:flex;align-items:center;padding:0 10px;gap:6px}
+  .sect{font-size:11px;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:6px}
+  .sect::before{content:"";width:3px;height:11px;border-radius:2px;display:inline-block}
+  .krow{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+  .kpi{border-radius:8px;overflow:hidden;background:var(--card)}
+  .k-band{height:26px;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:10.5px;font-weight:600}
+  .kpi svg{width:11px;height:11px;flex-shrink:0}
+  .k-body{padding:9px 10px 10px}
+  .k-val{font-size:19px;font-weight:700;letter-spacing:.2px}
+  .k-val small{font-size:10px;font-weight:500;color:var(--faint);margin-left:3px}
+  .k-cap{font-size:9.5px;color:var(--faint);margin-top:3px}
+  /* AI 卡 */
+  .ai{border-radius:8px;overflow:hidden;background:var(--card)}
+  .a-band{height:26px;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:10.5px;font-weight:600}
+  .a-body{padding:11px;text-align:center}
+  .a-btn{display:inline-block;font-size:10px;padding:5px 13px;border-radius:12px;color:#fff;font-weight:500}
+  .a-cap{font-size:9.5px;color:var(--faint);margin-top:7px}
+  .a-foot{margin-top:9px;text-align:center;font-size:9px}
+  /* 结论注 */
+  .v-note{margin-top:12px;font-size:11.5px;color:var(--muted);line-height:1.75}
+  .v-note b{color:var(--ink);font-weight:600}
+  .up{color:#ef4444} .down{color:#22c55e}
+  .chip{display:inline-block;font-size:9px;padding:1px 7px;border-radius:8px;font-weight:500}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#f1f2f7;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>策略解读看板 · 色彩方案对比</h1>
+<p class="sub">同一份内容（筛选 + 三张 KPI + AI 分析），四种色彩策略。<b>方案 C 已写入代码</b>，其余为设计推演。涨跌红绿为语义色，不计入色彩预算。</p>
+
+<div class="grid">
+
+  <!-- ============ 现状 ============ -->
+  <div class="variant">
+    <div class="v-head"><span class="v-name">现状还原<small>截图</small></span>
+      <span class="budget"><i style="background:#2b4acb"></i><i style="background:#4db892"></i><i style="background:#b06fd4"></i><i style="background:#9aa3b2"></i></span></div>
+    <div class="frame">
+      <div class="fake-tabs"><span class="on">策略视角</span><span>计划视角</span><span>指标视角</span></div>
+      <div class="filters">
+        <div class="fpill" style="background:var(--green-band);color:#3d6b5c">▽ 转化指标名称</div>
+        <div class="fpill" style="background:var(--green-band);color:#3d6b5c">▦ 指标日期</div>
+      </div>
+      <p class="sect" style="--c:var(--blue)">策略执行概况</p>
+      <div class="krow">
+        <div class="kpi" style="border:1px solid #dfe4f6">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略概括</div>
+          <div class="k-body"><div class="k-val" style="color:#3a3f4b">——</div><div class="k-cap">暂无数据</div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #dfe4f6">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略执行</div>
+          <div class="k-body"><div class="k-val" style="color:#3a3f4b">——</div><div class="k-cap">暂无数据</div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #dfe4f6">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略贡献</div>
+          <div class="k-body"><div class="k-val" style="color:#3a3f4b">——</div><div class="k-cap">暂无数据</div></div>
+        </div>
+      </div>
+      <p class="sect">AI 分析</p>
+      <div class="ai">
+        <div class="a-band" style="background:var(--purple-band);color:var(--purple)">✦ 策略解读</div>
+        <div class="a-body"><span class="a-btn" style="background:#232a5c">✦ AI 分析</span><div class="a-cap">点击"生成分析"开始 AI 解读</div></div>
+        <div class="a-foot" style="background:#e7e9ef;color:var(--muted);padding:5px 0">AI 分析仅供参考</div>
+      </div>
+    </div>
+    <p class="v-note"><b>问题：</b>绿、紫各只出现一次，像点缀不成体系（实际 4+ 色系）；三卡同带同权，页面无视觉入口；「——」占位像渲染错误；AI 卡底部灰条重得像表头。</p>
+  </div>
+
+  <!-- ============ 方案 A ============ -->
+  <div class="variant">
+    <div class="v-head"><span class="v-name">方案 A · 分区色收敛<small>按功能区块上色</small></span>
+      <span class="budget"><i style="background:#2b4acb"></i><i style="background:#8b47c9"></i><i style="background:#f1f2f7"></i></span></div>
+    <div class="frame">
+      <div class="fake-tabs"><span class="on">策略视角</span><span>计划视角</span><span>指标视角</span></div>
+      <div class="filters">
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▽ 转化指标名称</div>
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▦ 指标日期</div>
+      </div>
+      <p class="sect" style="--c:var(--blue)">策略执行概况</p>
+      <div class="krow">
+        <div class="kpi" style="border:1px solid #e3e8f7">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略概括</div>
+          <div class="k-body"><div class="k-val">32<small>项</small></div><div class="k-cap">在管策略 · 上期 28</div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #e3e8f7">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略执行</div>
+          <div class="k-body"><div class="k-val">87.5%</div><div class="k-cap">执行率 · <span class="up">▲ 12.4%</span></div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #e3e8f7">
+          <div class="k-band" style="background:var(--blue-band);color:var(--blue)">▦ 策略贡献</div>
+          <div class="k-body"><div class="k-val">+2.1<span class="up" style="font-size:12px">%</span></div><div class="k-cap">收益贡献 · 较基准</div></div>
+        </div>
+      </div>
+      <p class="sect">AI 分析</p>
+      <div class="ai">
+        <div class="a-band" style="background:var(--purple-band);color:var(--purple)">✦ 策略解读</div>
+        <div class="a-body"><span class="a-btn" style="background:var(--purple)">✦ AI 分析</span><div class="a-cap">点击"生成分析"开始 AI 解读</div></div>
+        <div class="a-foot"><span class="chip" style="background:var(--purple-band);color:var(--purple)">AI 分析仅供参考</span></div>
+      </div>
+    </div>
+    <p class="v-note"><b>思路：</b>筛选器退回中性白底描边；三张 KPI 保持同组同色（同组一致、组间区分）；AI 紫升格为唯一辅助色并贯穿「带 + 按钮 + 脚注」。色彩预算 = <b>蓝 + 紫 + 中性</b>，体系感强，但对「三卡同权」没有改善——页面依然没有焦点。</p>
+  </div>
+
+  <!-- ============ 方案 B ============ -->
+  <div class="variant">
+    <div class="v-head"><span class="v-name">方案 B · 1 主 2 辅<small>推荐：hero 制造入口</small></span>
+      <span class="budget"><i style="background:#1e3a9f"></i><i style="background:#b45309"></i><i style="background:#f1f2f7"></i></span></div>
+    <div class="frame">
+      <div class="fake-tabs"><span class="on">策略视角</span><span>计划视角</span><span>指标视角</span></div>
+      <div class="filters">
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▽ 转化指标名称</div>
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▦ 指标日期</div>
+      </div>
+      <p class="sect" style="--c:var(--blue)">策略执行概况</p>
+      <div class="krow">
+        <div class="kpi" style="background:var(--blue-deep);grid-column:span 1">
+          <div class="k-body" style="padding:13px 12px 12px">
+            <div style="font-size:10.5px;color:#b9c6f5;display:flex;align-items:center;gap:5px;font-weight:600">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#b9c6f5" stroke-width="2" style="width:11px;height:11px"><path d="M4 4h16v5H4zM6 9v11h12V9"/></svg>策略执行</div>
+            <div class="k-val" style="color:#fff;font-size:27px;margin-top:5px">87.5%</div>
+            <div class="k-cap" style="color:#8fa3e8">执行率 · <span class="up" style="color:#ffb4a8">▲ 12.4%</span></div>
+          </div>
+        </div>
+        <div class="kpi" style="border:1px solid var(--line)">
+          <div class="k-body" style="padding:11px 12px">
+            <div style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" style="width:11px;height:11px"><path d="M12 2v20M17 6.5C17 4.6 14.8 3.5 12 3.5S7 4.6 7 6.5s2 3 5 3.5 5 1.6 5 3.5-2.2 3-5 3-5-1.1-5-3"/></svg>策略概括</div>
+            <div class="k-val" style="font-size:17px;margin-top:4px">32<small>项</small></div>
+            <div class="k-cap">在管策略 · 上期 28</div>
+          </div>
+        </div>
+        <div class="kpi" style="border:1px solid var(--line)">
+          <div class="k-body" style="padding:11px 12px">
+            <div style="font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" style="width:11px;height:11px"><path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0z"/></svg>策略贡献</div>
+            <div class="k-val" style="font-size:17px;margin-top:4px">+2.1<span class="up" style="font-size:11px">%</span></div>
+            <div class="k-cap">收益贡献 · 较基准</div>
+          </div>
+        </div>
+      </div>
+      <p class="sect">AI 分析</p>
+      <div class="ai" style="border:1px solid var(--line)">
+        <div class="a-body" style="padding:13px">
+          <span class="a-btn" style="background:var(--blue)">✦ AI 分析</span>
+          <div class="a-cap">点击"生成分析"开始 AI 解读</div>
+          <div class="a-foot"><span class="chip" style="background:var(--page);color:var(--faint)">AI 分析仅供参考</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="v-note"><b>思路：</b>去掉标题色带（图标 + 文字承担识别），把色彩预算集中到一张 hero 卡——主色深底反白 + 大数字，一眼锁定重点指标；其余两卡白底细边。AI 回归主蓝。色彩预算 = <b>蓝 + 中性（琥珀涨跌点缀可选）</b>，色最省、冲击力最强，且不与「指标强调色循环色板」的规则抢色。</p>
+  </div>
+
+  <!-- ============ 方案 C ============ -->
+  <div class="variant">
+    <div class="v-head"><span class="v-name">方案 C · 改后实现<small>已写入代码</small></span>
+      <span class="budget"><i style="background:#1E40AF"></i><i style="background:#0F766E"></i><i style="background:#f1f2f7"></i></span></div>
+    <div class="frame">
+      <div class="fake-tabs"><span class="on">策略视角</span><span>计划视角</span><span>指标视角</span></div>
+      <div class="filters">
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▽ 转化指标名称</div>
+        <div class="fpill" style="background:var(--card);border:1px solid var(--line);color:var(--muted)">▦ 指标日期</div>
+      </div>
+      <p class="sect" style="--c:#1E40AF">策略执行概况</p>
+      <div class="krow">
+        <div class="kpi" style="border:1px solid #CCD7ED">
+          <div class="k-band" style="background:#EFF2F9;color:#1E40AF;border-left:3px solid #1E40AF">▦ 策略概括</div>
+          <div class="k-body"><div class="k-val" style="color:#1E40AF">32<small>项</small></div><div class="k-cap">在管策略 · 上期 28</div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #CCD7ED">
+          <div class="k-band" style="background:#EFF2F9;color:#1E40AF;border-left:3px solid #1E40AF">▦ 策略执行</div>
+          <div class="k-body"><div class="k-val" style="color:#1E40AF">87.5%</div><div class="k-cap">执行率 · <span class="up">▲ 12.4%</span></div></div>
+        </div>
+        <div class="kpi" style="border:1px solid #CCD7ED">
+          <div class="k-band" style="background:#EFF2F9;color:#1E40AF;border-left:3px solid #1E40AF">▦ 策略贡献</div>
+          <div class="k-body"><div class="k-val" style="color:#1E40AF">+2.1<span class="up" style="font-size:12px">%</span></div><div class="k-cap">收益贡献 · 较基准</div></div>
+        </div>
+      </div>
+      <p class="sect">AI 分析</p>
+      <div class="ai" style="border:1px solid #CFE0DE">
+        <div class="a-band" style="background:#EEF5F5;color:#0F766E;border-left:3px solid #0F766E">✦ 策略解读</div>
+        <div class="a-body"><span class="a-btn" style="background:#0F766E">✦ AI 分析</span><div class="a-cap">点击"生成分析"开始 AI 解读</div></div>
+        <div class="a-foot"><span class="chip" style="background:#EEF5F5;color:#0F766E">AI 分析仅供参考</span></div>
+      </div>
+    </div>
+    <p class="v-note"><b>已落地：</b>分区键从「组件类型 5 组」收敛为「3 个语义区」——数据区（KPI/图表/表格）用主色 <b>#1E40AF</b>，洞察区（AI）用辅色 <b>#0F766E</b>，控制区（筛选器/时间筛选）<b>不下发 accent</b> 走中性。卡内多指标不再色相轮转，一律同色，只靠图标轮转区分。整页强调色 = <b>2 个</b>，第 3 个留给用户在指标样式里显式指定。</p>
+  </div>
+
+</div>
+
+<p class="sub" style="margin-top:20px;max-width:1560px">
+<b>已按方案落地：</b><code>src/utils/dashboard-theme.ts</code> 新增 <code>componentThemeZone()</code>（data / insight / control 三区）与预设字段 <code>accentAlt</code>；
+<code>componentThemeStyle()</code> 不再按组件类型取 <code>metricPalette[0..4]</code>，控制区直接返回空（走中性 <code>--db-*</code>）；
+<code>resolveMetricVisual()</code> 卡内多指标默认同色；同时补上未定义的 <code>--db-accent-strong</code>（原回退硬编码 <code>#4f46e5</code>，不吃主题）并删除零消费的 <code>--db-card-group-N-bg</code>。
+<br><br>
+<b>仍未采纳「同列相同组件用不同色系」：</b>画布是 GridLayout（<code>x/y/w/h</code>），「列」由 <code>x</code> 推导而非数据字段，拖拽换列就会换色，颜色与内容身份脱钩；且同列若放 KPI+图表+表格+筛选，按列分色立刻破 3 色预算。
+<br><br>
+<b>下一步可选：</b>若还要更强的视觉入口，可在数据区内部再加一层<b>层级</b>（主指标用 <code>hierarchy=strong</code> 或用户 custom 的第 3 色），而不是再加一个色相。
+</p>
+</body>
+</html>

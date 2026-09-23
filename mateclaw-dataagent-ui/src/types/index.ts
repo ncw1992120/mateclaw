@@ -1588,6 +1588,8 @@ export interface DashboardThemeOverrides {
   textSecondary?: string
   textMuted?: string
   primary?: string
+  /** 辅色：全页唯一的第二个色相，只用于「洞察区」组件。 */
+  accentAlt?: string
   positive?: string
   negative?: string
   warning?: string
@@ -1626,6 +1628,8 @@ export interface ResolvedDashboardTheme {
   textSecondary: string
   textMuted: string
   primary: string
+  /** 辅色：全页唯一的第二个色相，只用于「洞察区」组件。第三个色号留给用户在指标样式里显式指定的例外。 */
+  accentAlt: string
   positive: string
   negative: string
   warning: string

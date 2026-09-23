@@ -22,7 +22,7 @@
 - 卡片级密度档（Q12）是组件级配置：`config.density ∈ {compact, standard, large}`，默认 `standard`，随组件 config 持久化与复制/AI 修改 round-trip；“恢复预设”只清仪表盘 `theme.overrides`，不清除密度档。
 - 主题是仪表盘级配置，不按页面 Tab 分开保存；页面切换、组件选择和组合卡片内部切换均继承同一个主题。
 - 预设切换存在未保存的主题级覆盖时必须二次确认；确认后只清理主题级覆盖，不清理指标级视觉例外、组件密度档或数据配置。
-- `metricPalette` 只负责 KPI/指标强调色，`chartPalette` 只负责 ECharts 系列；未配置 `metricPalette` 时允许解析器回退到 `chartPalette`，但 UI 必须显示当前生效来源。
+- **分区配色（2026-09-23 定稿）**：组件区域色只按 `componentThemeZone()` 的 3 个语义区取值——数据区（kpi/chart/table/组合容器）= `primary`，洞察区（aiAnalysis）= `accentAlt`，控制区（filter/timeFilter）**不下发 `--component-group-accent`** 走中性 `--db-*`。`metricPalette` 不再驱动组件分区色，只作为 `accentAlt` 缺失时的兜底；`chartPalette` 只负责 ECharts 系列，不外溢到卡片边框/标题栏。整页强调色预算 = 2 个，第 3 个只由指标级 `custom` 产生。
 - 主题切换、指标样式编辑必须进入现有编辑器撤销/重做历史；不新增主题专属历史栈。
 - 使用项目现有 Element Plus、ECharts、Vue 组件；不引入第二套 UI 框架、图表框架或完整 BI 产品。Iconify 只作为图标数量确实不足后的独立评估项，本轮不引入运行时远程 Iconify API。
 - 编辑/预览/保存/刷新/仪表盘复制/AI 修改均要保留主题配置；数据查询与筛选请求不得因为纯视觉变更发生变化。
@@ -76,6 +76,7 @@ interface DashboardThemeConfig {
   presetId: DashboardThemePreset
   overrides?: Partial<{
     primary: string
+    accentAlt: string    // 辅色：全页唯一的第二个色相，只用于「洞察区」组件（2026-09-23 新增）
     secondary: string
     background: string
     cardBackground: string
@@ -115,6 +116,7 @@ interface KpiMetricFieldStyle {
 interface ResolvedDashboardTheme {
   source: 'legacy' | 'configured'
   primary: string
+  accentAlt: string       // 辅色；缺失时回落 metricPalette[1] 再回落 primary
   secondary: string
   background: string
   cardBackground: string
@@ -147,7 +149,7 @@ interface ThemeValidationError {
 ```text
 页面背景、卡片背景：全站主题 Token（旧 Schema）/ 仪表盘预设 + 用户覆盖（新 Schema）
 图表颜色：图表显式 option.color > 仪表盘 chartPalette > 既有 ECharts 默认
-指标强调色：指标 custom > 组件 custom > metricPalette[稳定序号] > --db-accent
+指标强调色：指标 custom > 区域主色 --db-accent（同一张卡内所有指标同色，不按序号轮转 metricPalette）
 指标文字色：styles.*.colorMode=custom 的 HEX/旧 styles.*.color 显式 HEX > theme 模式对应语义 Token
 指标字号：styles.*.size 显式值（例外，仅用户改动后存在）> 卡片密度档 config.density > 主题基准（Task 1 densityScale）
 状态/涨跌色：--db-positive/--db-danger 和 --db-up/--db-down 分别计算，绝不混用
@@ -175,7 +177,7 @@ interface ThemeValidationError {
 
 | 组件 | 主题消费方式 |
 | --- | --- |
-| 卡片（KPI 分组卡） | 背景/边框/文字随主题；指标强调色 = 色板[稳定序号]、图标 = 按序循环，仅例外单独配 |
+| 卡片（KPI 分组卡） | 背景/边框/文字随主题；**指标强调色 = 数据区主色（同卡同色）**、图标 = 按序循环，仅例外单独配 |
 | 组合卡片 | 子组件继承父画布主题；容器显式背景仍按现有优先级覆盖；密度档随卡片 config |
 | 全部 ECharts 图表 | `withDashboardChartTheme` 注入色板与轴/图例色；显式 `option.color` 优先 |
 | `DataTableWidget.vue` | 表头底色 = 卡片底混入 primary 6%、正文 `text`、表头文字 `textMuted`、边框 `border`、斑马纹混入 `background`、hover 混入 primary 8% |
@@ -288,7 +290,7 @@ interface ThemeValidationError {
 
 **Interfaces:** Jackson 中 `theme` 和 `kpiMetrics[].visual` 字段名与 §1 一致；复制仍由 `copyDashboard(id)` 完成，更新仍由 `updateDashboard(id, request)` 完成；不新增主题 API。
 
-- [x] 写失败测试：完整主题配置及 KPI 图标/颜色经 DTO read→write 字段和值无损；10 个预设 ID 均可通过白名单校验；`metricPalette`、`chartPalette`、`overrides.radius`、`overrides.shadow` round-trip 无损；组件级 `config.density` round-trip 无损；旧 Schema 不带主题仍可 read→write；无效配置不能保存非法 CSS。先以缺少 DTO 字段/校验器确认失败。
+- [x] 写失败测试：完整主题配置及 KPI 图标/颜色经 DTO read→write 字段和值无损；10 个预设 ID 均可通过白名单校验；`metricPalette`、`chartPalette`、`overrides.radius`、`overrides.shadow`、`overrides.accentAlt` round-trip 无损；组件级 `config.density` round-trip 无损；旧 Schema 不带主题仍可 read→write；无效配置不能保存非法 CSS。先以缺少 DTO 字段/校验器确认失败。
 
   ```java
   String themeFixtureJson = Files.readString(Path.of("../docs/plans/fixtures/insight-dashboard-theme-schema.json"));
@@ -406,7 +408,7 @@ interface ThemeValidationError {
 5. **图表重绘：** 构造 option 新对象并沿用 ECharts 实例管理/ResizeObserver；主题变化只更新视觉 option，不触发执行 API。保留原 option 的 100KB 检查、白名单和 XSS 函数剥离。
 6. **验收数据安全：** 真实“策略解读”已由用户配置；E2E 优先在复制仪表盘上测试，删除测试副本只在明确是本次创建且已核对 ID 后执行。不得改写生产样本，也不得把凭据写入测试证据。
 7. **预设切换丢失覆盖：** 预设切换前计算 `theme.overrides` 是否为空；非空时必须走确认弹窗，取消保持草稿引用和值不变，确认只清主题覆盖，不清指标视觉和组件密度。
-8. **指标/图表色板混用：** 解析器、组件和面板统一使用 `metricPalette`/`chartPalette` 的职责定义；测试同时覆盖两套色板、指标色板缺失回退和来源提示，禁止组件各自解释。
+8. **指标/图表色板混用：** 解析器、组件和面板统一使用 `metricPalette`/`chartPalette` 的职责定义；测试同时覆盖两套色板、指标色板缺失回退和来源提示，禁止组件各自解释。**2026-09-23 补充**：组件区域色改由 `componentThemeZone()` 三区 + `accentAlt` 决定，`metricPalette` 退为兜底；回归必须覆盖「控制区不下发 accent」「洞察区取 accentAlt」「卡内多指标同色」三条，避免改动把色相数又放回去。
 9. **原型宣称实时但组件未消费样式：** KPI 渲染必须使用四字段 size/bold/color/unit/helper；样式变更测试监听网络请求计数，保证视觉更新不触发数据查询。
 
 ## 7. 执行交接

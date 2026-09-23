@@ -28,10 +28,12 @@ describe('kpi-metrics · 默认样式', () => {
     expect(styles.value.color).toBe('')
   })
 
-  it('主题模式使用解析后的指标色，旧固定 HEX 仍保持自定义色', () => {
+  it('主题模式使用区域主色且同一张卡内所有指标同色，旧固定 HEX 仍保持自定义色', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
     const metric = buildKpiMetrics(schema)[0]
-    expect(resolveMetricVisual(metric, undefined, theme, 0).textColors.value).toBe(theme.metricPalette[0])
+    expect(resolveMetricVisual(metric, undefined, theme, 0).textColors.value).toBe(theme.primary)
+    // 卡内轮转只换图标，不换色相
+    expect(resolveMetricVisual(metric, undefined, theme, 3).textColors.value).toBe(theme.primary)
     metric.styles.value.color = '#1f2329'
     delete metric.styles.value.colorMode
     expect(resolveMetricVisual(metric, undefined, theme, 0).textColors.value).toBe('#1f2329')

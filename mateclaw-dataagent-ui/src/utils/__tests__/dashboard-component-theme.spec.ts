@@ -10,9 +10,29 @@ describe('dashboard component theme standards', () => {
     expect(theme.componentColorMode).toBe('auto')
     expect(theme.iconPalette).toHaveLength(5)
     expect(componentThemeStyle(theme, 'kpi')).toEqual(expect.objectContaining({
-      '--component-group-accent': theme.metricPalette[0],
+      '--component-group-accent': theme.primary,
       '--component-group-border': expect.stringContaining('color-mix'),
     }))
+  })
+
+  it('limits accent hues to primary plus one alternative across three semantic zones', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+
+    expect(componentThemeStyle(theme, 'kpi')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'chart')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'table')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'aiAnalysis')['--component-group-accent']).toBe(theme.accentAlt)
+    // 控制区不吃色相：不下发 accent，下游回落中性 --db-*
+    expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBeUndefined()
+    expect(componentThemeStyle(theme, 'timeFilter')['--component-group-accent']).toBeUndefined()
+    expect(new Set([theme.primary, theme.accentAlt]).size).toBe(2)
+  })
+
+  it('collapses every zone to the primary color in uniform mode', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue', componentColorMode: 'uniform' }, 'light')
+
+    expect(componentThemeStyle(theme, 'aiAnalysis')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBe(theme.primary)
   })
 
   it('uses a larger, bold warm semantic icon style instead of inheriting one text color', () => {

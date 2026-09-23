@@ -21,49 +21,49 @@ const palette = (values: string[]): string[] => values.slice(0, 5)
 
 export const DASHBOARD_THEME_PRESETS: Record<string, ThemePreset> = {
   blue: {
-    label: '经典蓝', pageBackground: '#F4F7FC', cardBackground: '#FFFFFF', border: '#D9E2F2', text: '#172B4D', textSecondary: '#52627A', textMuted: '#7A889D', primary: '#1E40AF', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
+    label: '经典蓝', pageBackground: '#F4F7FC', cardBackground: '#FFFFFF', border: '#D9E2F2', text: '#172B4D', textSecondary: '#52627A', textMuted: '#7A889D', primary: '#1E40AF', accentAlt: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
     metricPalette: palette(['#1E40AF', '#2563EB', '#0F766E', '#B45309', '#7C3AED']), chartPalette: palette(['#2563EB', '#14B8A6', '#F59E0B', '#8B5CF6', '#EC4899']), radius: 'medium', shadow: 'subtle',
   },
   indigo: {
-    label: '靛青', pageBackground: '#F5F5FF', cardBackground: '#FFFFFF', border: '#DFDFF5', text: '#1E1B4B', textSecondary: '#57547A', textMuted: '#7B7895', primary: '#4F46E5', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#6366F1',
+    label: '靛青', pageBackground: '#F5F5FF', cardBackground: '#FFFFFF', border: '#DFDFF5', text: '#1E1B4B', textSecondary: '#57547A', textMuted: '#7B7895', primary: '#4F46E5', accentAlt: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#6366F1',
     metricPalette: palette(['#4F46E5', '#6366F1', '#0F766E', '#C2410C', '#7C3AED']), chartPalette: palette(['#4F46E5', '#06B6D4', '#F97316', '#A855F7', '#10B981']), radius: 'medium', shadow: 'subtle',
   },
   teal: {
-    label: '青碧', pageBackground: '#F2F9F8', cardBackground: '#FFFFFF', border: '#D3E9E5', text: '#123B3A', textSecondary: '#4B6865', textMuted: '#728B87', primary: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#0E7490',
+    label: '青碧', pageBackground: '#F2F9F8', cardBackground: '#FFFFFF', border: '#D3E9E5', text: '#123B3A', textSecondary: '#4B6865', textMuted: '#728B87', primary: '#0F766E', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#0E7490',
     metricPalette: palette(['#0F766E', '#0D9488', '#1D4ED8', '#B45309', '#7C3AED']), chartPalette: palette(['#0F766E', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899']), radius: 'medium', shadow: 'subtle',
   },
   amber: {
-    label: '琥珀', pageBackground: '#FFFBF2', cardBackground: '#FFFFFF', border: '#F0E1C0', text: '#422006', textSecondary: '#6B4F2A', textMuted: '#8A7353', primary: '#B45309', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
+    label: '琥珀', pageBackground: '#FFFBF2', cardBackground: '#FFFFFF', border: '#F0E1C0', text: '#422006', textSecondary: '#6B4F2A', textMuted: '#8A7353', primary: '#B45309', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
     metricPalette: palette(['#B45309', '#D97706', '#1D4ED8', '#0F766E', '#9F1239']), chartPalette: palette(['#D97706', '#2563EB', '#0F766E', '#BE185D', '#7C3AED']), radius: 'medium', shadow: 'subtle',
   },
   'dark-data': {
-    label: '深色数据', pageBackground: '#0D1117', cardBackground: '#161B26', border: '#303A4A', text: '#EDF1F7', textSecondary: '#C3CCD9', textMuted: '#9AA6B6', primary: '#60A5FA', positive: '#57D38C', negative: '#FF8A80', warning: '#FBBF24', info: '#93C5FD',
+    label: '深色数据', pageBackground: '#0D1117', cardBackground: '#161B26', border: '#303A4A', text: '#EDF1F7', textSecondary: '#C3CCD9', textMuted: '#9AA6B6', primary: '#60A5FA', accentAlt: '#34D399', positive: '#57D38C', negative: '#FF8A80', warning: '#FBBF24', info: '#93C5FD',
     metricPalette: palette(['#60A5FA', '#38BDF8', '#34D399', '#FBBF24', '#C084FC']), chartPalette: palette(['#60A5FA', '#2DD4BF', '#FBBF24', '#C084FC', '#FB7185']), radius: 'medium', shadow: 'elevated',
   },
   rose: {
-    label: '玫瑰红', pageBackground: '#FFF7FA', cardBackground: '#FFFFFF', border: '#F3D8E3', text: '#4A1728', textSecondary: '#704356', textMuted: '#927184', primary: '#BE185D', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
+    label: '玫瑰红', pageBackground: '#FFF7FA', cardBackground: '#FFFFFF', border: '#F3D8E3', text: '#4A1728', textSecondary: '#704356', textMuted: '#927184', primary: '#BE185D', accentAlt: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
     metricPalette: palette(['#BE185D', '#DB2777', '#C2410C', '#0F766E', '#7C3AED']), chartPalette: palette(['#BE185D', '#F43F5E', '#F97316', '#14B8A6', '#8B5CF6']), radius: 'large', shadow: 'subtle',
   },
   coral: {
-    label: '珊瑚橙', pageBackground: '#FFF8F5', cardBackground: '#FFFFFF', border: '#F4DDD5', text: '#431C12', textSecondary: '#704A3E', textMuted: '#94766A', primary: '#C2410C', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
+    label: '珊瑚橙', pageBackground: '#FFF8F5', cardBackground: '#FFFFFF', border: '#F4DDD5', text: '#431C12', textSecondary: '#704A3E', textMuted: '#94766A', primary: '#C2410C', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
     metricPalette: palette(['#C2410C', '#EA580C', '#BE185D', '#0F766E', '#7C3AED']), chartPalette: palette(['#F97316', '#FB7185', '#14B8A6', '#6366F1', '#EAB308']), radius: 'large', shadow: 'subtle',
   },
   orange: {
-    label: '暖橙', pageBackground: '#FFF9F2', cardBackground: '#FFFFFF', border: '#F1DFC7', text: '#431F08', textSecondary: '#704D2F', textMuted: '#95785A', primary: '#EA580C', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
+    label: '暖橙', pageBackground: '#FFF9F2', cardBackground: '#FFFFFF', border: '#F1DFC7', text: '#431F08', textSecondary: '#704D2F', textMuted: '#95785A', primary: '#EA580C', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
     metricPalette: palette(['#EA580C', '#F97316', '#BE185D', '#0F766E', '#7C3AED']), chartPalette: palette(['#EA580C', '#F59E0B', '#14B8A6', '#8B5CF6', '#F43F5E']), radius: 'medium', shadow: 'subtle',
   },
   gold: {
-    label: '金黄', pageBackground: '#FFFCF2', cardBackground: '#FFFFFF', border: '#EFE2BA', text: '#3B2A05', textSecondary: '#67552A', textMuted: '#89774B', primary: '#A16207', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
+    label: '金黄', pageBackground: '#FFFCF2', cardBackground: '#FFFFFF', border: '#EFE2BA', text: '#3B2A05', textSecondary: '#67552A', textMuted: '#89774B', primary: '#A16207', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#A16207', info: '#2563EB',
     metricPalette: palette(['#A16207', '#CA8A04', '#C2410C', '#0F766E', '#BE185D']), chartPalette: palette(['#EAB308', '#F97316', '#14B8A6', '#6366F1', '#F43F5E']), radius: 'medium', shadow: 'subtle',
   },
   burgundy: {
-    label: '酒红', pageBackground: '#FFF7F7', cardBackground: '#FFFFFF', border: '#EFD9DC', text: '#45151B', textSecondary: '#6F444A', textMuted: '#927277', primary: '#9F1239', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
+    label: '酒红', pageBackground: '#FFF7F7', cardBackground: '#FFFFFF', border: '#EFD9DC', text: '#45151B', textSecondary: '#6F444A', textMuted: '#927277', primary: '#9F1239', accentAlt: '#1D4ED8', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
     metricPalette: palette(['#9F1239', '#BE123C', '#C2410C', '#0F766E', '#7C3AED']), chartPalette: palette(['#9F1239', '#F43F5E', '#F97316', '#14B8A6', '#8B5CF6']), radius: 'large', shadow: 'subtle',
   },
 }
 
 const LEGACY_THEME: ResolvedDashboardTheme = {
-  source: 'legacy', mode: 'light', pageBackground: '', cardBackground: '', border: '', text: '', textSecondary: '', textMuted: '', primary: '', positive: '', negative: '', warning: '', info: '', metricPalette: [], chartPalette: [], iconPalette: [], radius: 'medium', shadow: 'subtle', iconMode: 'show', hierarchy: 'standard', componentColorMode: 'auto', overrides: {},
+  source: 'legacy', mode: 'light', pageBackground: '', cardBackground: '', border: '', text: '', textSecondary: '', textMuted: '', primary: '', accentAlt: '', positive: '', negative: '', warning: '', info: '', metricPalette: [], chartPalette: [], iconPalette: [], radius: 'medium', shadow: 'subtle', iconMode: 'show', hierarchy: 'standard', componentColorMode: 'auto', overrides: {},
 }
 
 const STANDARD_THEME_OPTIONS: {
@@ -116,7 +116,7 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
   const vars: Record<string, string> = {
     '--insight-page-bg': theme.pageBackground, '--insight-card-bg': theme.cardBackground, '--insight-border': theme.border,
     '--insight-text': theme.text, '--insight-text-secondary': theme.textSecondary, '--insight-text-muted': theme.textMuted,
-    '--insight-primary': theme.primary, '--insight-positive': theme.positive, '--insight-negative': theme.negative,
+    '--insight-primary': theme.primary, '--insight-accent-alt': theme.accentAlt || theme.metricPalette[1] || theme.primary, '--insight-positive': theme.positive, '--insight-negative': theme.negative,
     '--insight-warning': theme.warning, '--insight-info': theme.info,
     '--db-bg': 'var(--insight-page-bg)', '--db-card': 'var(--insight-card-bg)', '--db-border': 'var(--insight-border)',
     '--db-hover': mix('var(--insight-text)', 'var(--insight-card-bg)', 10),
@@ -134,6 +134,9 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
     '--db-surface-control': mix('var(--insight-text)', 'var(--insight-card-bg)', 4),
     '--db-surface-control-hover': 'var(--db-hover)',
     '--db-focus': 'var(--db-accent)',
+    // 向正文色混合：浅色主题下变深、深色主题下变亮，避免像 #4f46e5 那样硬编码死色。
+    '--db-accent-strong': mix('var(--insight-primary)', 'var(--insight-text)', 18),
+    '--db-accent-alt': 'var(--insight-accent-alt)',
     '--db-accent-light': mix('var(--insight-primary)', 'transparent', 18),
     '--db-accent-border': mix('var(--insight-primary)', 'transparent', 52),
     '--db-positive': 'var(--insight-positive)', '--db-danger': 'var(--insight-negative)',
@@ -155,35 +158,40 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
     '--db-theme-hierarchy': theme.hierarchy,
     '--db-theme-component-colors': theme.componentColorMode,
   }
+  // 分区色由 componentThemeStyle 单独下发，chartPalette 只在图表内部消费，不外溢到卡片。
   theme.chartPalette.forEach((color, index) => {
     vars[`--insight-chart-${index + 1}`] = color
     vars[`--db-chart-${index + 1}`] = color
   })
   theme.metricPalette.forEach((color, index) => { vars[`--insight-metric-${index + 1}`] = color })
   theme.iconPalette.forEach((color, index) => { vars[`--insight-icon-${index + 1}`] = color })
-  theme.metricPalette.forEach((color, index) => {
-    vars[`--db-card-group-${index + 1}-bg`] = mix(color, 'transparent', 18)
-  })
   return vars
 }
 
-/** 将组件类型归入稳定的系统语义组，避免每个业务页面单独定颜色。 */
-export function componentThemeGroup(type: InsightComponentType): 'metric' | 'chart' | 'filter' | 'data' | 'ai' | 'container' {
-  if (type === 'kpi') return 'metric'
-  if (type === 'chart') return 'chart'
-  if (type === 'filter' || type === 'timeFilter') return 'filter'
-  if (type === 'table') return 'data'
-  if (type === 'aiAnalysis') return 'ai'
-  return 'container'
+/** 语义分区：颜色编码「区域」而不是「第几个组件」，全页只允许主色 + 辅色两个色相。
+ *  - data    ：KPI / 图表 / 表格 —— 占绝大部分面积，用主色
+ *  - insight ：AI 洞察 —— 全页唯一的第二个色相（辅色）
+ *  - control ：筛选器 / 时间筛选 —— 控件，不吃色相，走中性阶
+ * 第三个色号不在这里分配，留给用户在指标样式弹窗里显式指定的例外。 */
+export function componentThemeZone(type: InsightComponentType): 'data' | 'insight' | 'control' {
+  if (type === 'filter' || type === 'timeFilter') return 'control'
+  if (type === 'aiAnalysis') return 'insight'
+  return 'data'
 }
 
-/** 输出给画布/组合卡片的同类组件层次 Token；显式组件样式可在调用方覆盖。 */
+/** 分区在图标明度梯度上的序号；只影响明度，不引入新色相。 */
+const ZONE_ICON_INDEX: Record<ReturnType<typeof componentThemeZone>, number> = { data: 0, insight: 1, control: 2 }
+
+/** 输出给画布/组合卡片的分区层次 Token；显式组件样式可在调用方覆盖。 */
 export function componentThemeStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType, depth = 0): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
-  const groupIndex: Record<ReturnType<typeof componentThemeGroup>, number> = {
-    metric: 0, chart: 1, filter: 2, data: 3, ai: 4, container: 0,
-  }
-  const accent = theme.componentColorMode === 'uniform' ? theme.primary : (theme.metricPalette[groupIndex[componentThemeGroup(type)]] ?? theme.primary)
+  // 控制区不参与强调色竞争：不下发 --component-group-accent，下游全部回落到中性 --db-*。
+  if (theme.componentColorMode !== 'uniform' && componentThemeZone(type) === 'control') return {}
+  const accent = theme.componentColorMode === 'uniform'
+    ? theme.primary
+    : componentThemeZone(type) === 'insight'
+      ? (theme.accentAlt || theme.metricPalette[1] || theme.primary)
+      : theme.primary
   const hierarchyAmount = theme.hierarchy === 'soft' ? 4 : theme.hierarchy === 'strong' ? 12 : 7
   const nestedAmount = Math.max(2, hierarchyAmount - Math.min(depth, 2) * 2)
   const mix = (foreground: string, background: string, amount: number): string => `color-mix(in srgb, ${foreground} ${amount}%, ${background})`
@@ -198,11 +206,8 @@ export function componentThemeStyle(theme: ResolvedDashboardTheme | undefined, t
 /** 输出标准语义图标的字号、字重和暖色；图标不再直接继承标题文字色。 */
 export function componentIconStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType | 'tab', title?: string, variant = 0): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
-  const groupIndex: Record<ReturnType<typeof componentThemeGroup>, number> = {
-    metric: 0, chart: 1, filter: 2, data: 3, ai: 4, container: 0,
-  }
   const tabIndex = title?.includes('指标') ? 0 : title?.includes('计划') ? 1 : title?.includes('策略') ? 2 : 4
-  const colorIndex = type === 'tab' ? tabIndex : (groupIndex[componentThemeGroup(type)] + variant) % theme.iconPalette.length
+  const colorIndex = type === 'tab' ? tabIndex : (ZONE_ICON_INDEX[componentThemeZone(type)] + variant) % theme.iconPalette.length
   const color = theme.iconPalette[colorIndex] ?? theme.primary
   return {
     '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
@@ -267,7 +272,7 @@ export function validateDashboardTheme(config: DashboardThemeConfig): ThemeValid
   for (const [field, value] of Object.entries(overrides)) {
     if (field.endsWith('Palette')) {
       if (!Array.isArray(value) || value.length < 5 || value.some((color) => !isColor(color))) errors.push({ code: Array.isArray(value) && value.some((color) => !isColor(color)) ? 'invalid_color' : 'invalid_palette', field, message: '色板需要至少 5 个合法十六进制颜色' })
-    } else if (['pageBackground', 'cardBackground', 'border', 'text', 'textSecondary', 'textMuted', 'primary', 'positive', 'negative', 'warning', 'info'].includes(field) && !isColor(value)) {
+    } else if (['pageBackground', 'cardBackground', 'border', 'text', 'textSecondary', 'textMuted', 'primary', 'accentAlt', 'positive', 'negative', 'warning', 'info'].includes(field) && !isColor(value)) {
       errors.push({ code: 'invalid_color', field, message: '颜色必须是 6 位十六进制值' })
     }
   }

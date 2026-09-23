@@ -33,7 +33,7 @@
 
       <section class="theme-section">
         <div class="theme-section-title">标准组件样式</div>
-        <p class="theme-hint">系统会为页签、标题和组件分配语义图标，并按组件层级自动生成相近色阶。</p>
+        <p class="theme-hint">数据区（指标/图表/表格）用主色，AI 洞察区用辅色，筛选器保持中性。整页只出现两个强调色，第三个留给你在指标样式里单独指定。</p>
         <div class="theme-option-group">
           <span class="theme-option-label">语义图标</span>
           <div class="theme-option-buttons" role="radiogroup" aria-label="语义图标">
@@ -47,9 +47,25 @@
           </div>
         </div>
         <div class="theme-option-group">
-          <span class="theme-option-label">同类组件配色</span>
+          <span class="theme-option-label">分区配色</span>
           <div class="theme-option-buttons" role="radiogroup" aria-label="同类组件配色">
             <button v-for="item in colorModeOptions" :key="item.value" type="button" role="radio" :aria-checked="resolved.componentColorMode === item.value" :class="{ active: resolved.componentColorMode === item.value }" @click="updateStandardOption('componentColorMode', item.value)">{{ item.label }}</button>
+          </div>
+        </div>
+        <div class="theme-option-group">
+          <span class="theme-option-label">辅色（AI 洞察区）</span>
+          <div class="theme-option-swatches">
+            <button
+              v-for="color in accentAltChoices"
+              :key="color"
+              type="button"
+              class="theme-swatch-button"
+              :class="{ active: resolved.accentAlt.toUpperCase() === color.toUpperCase() }"
+              :style="{ background: color }"
+              :title="color"
+              :aria-label="`辅色 ${color}`"
+              @click="updateAccentAlt(color)"
+            />
           </div>
         </div>
         <p v-if="validationMessage" class="theme-error" role="alert">{{ validationMessage }}</p>
@@ -62,6 +78,10 @@
           <div><strong>指标概览</strong><div class="theme-preview-value">12,345</div></div>
         </div>
         <div class="theme-source">当前主色：{{ themeSource(resolved, 'primary') }}</div>
+        <div class="theme-dual-colors">
+          <span class="theme-dot" :style="{ background: resolved.primary }" />{{ resolved.primary }}
+          <span class="theme-dot" :style="{ background: resolved.accentAlt }" />{{ resolved.accentAlt }}
+        </div>
       </section>
     </div>
   </el-drawer>
@@ -87,7 +107,8 @@ const emit = defineEmits<{
 
 const iconOptions = [{ value: 'show' as const, label: '显示' }, { value: 'hide' as const, label: '隐藏' }]
 const hierarchyOptions = [{ value: 'soft' as const, label: '柔和' }, { value: 'standard' as const, label: '标准' }, { value: 'strong' as const, label: '增强' }]
-const colorModeOptions = [{ value: 'auto' as const, label: '自动分组' }, { value: 'uniform' as const, label: '统一主色' }]
+const colorModeOptions = [{ value: 'auto' as const, label: '按分区' }, { value: 'uniform' as const, label: '统一主色' }]
+const accentAltChoices = ['#0F766E', '#1D4ED8', '#7C3AED', '#B45309', '#BE185D', '#047857']
 
 const resolved = computed<ResolvedDashboardTheme>(() => resolveDashboardTheme(props.modelValue, 'light'))
 const validationMessage = computed(() => {
@@ -130,6 +151,14 @@ function updateStandardOption(key: 'iconMode' | 'hierarchy' | 'componentColorMod
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
+/** 辅色只允许从候选里挑；再点一次当前色即回到预设值。 */
+function updateAccentAlt(color: string): void {
+  const overrides = { ...(props.modelValue.overrides ?? {}) }
+  if ((resolved.value.accentAlt || '').toUpperCase() === color.toUpperCase()) delete overrides.accentAlt
+  else overrides.accentAlt = color
+  emit('update:modelValue', { ...props.modelValue, overrides })
+}
+
 function onPresetKeydown(event: KeyboardEvent): void {
   if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) return
   const buttons = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[data-preset-id]'))
@@ -164,6 +193,11 @@ defineExpose({ applyPreset })
 .theme-option-buttons button { flex: 1; padding: 7px 8px; border: 1px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface); color: var(--theme-text-secondary); cursor: pointer; font-size: 12px; }
 .theme-option-buttons button.active, .theme-option-buttons button:hover, .theme-option-buttons button:focus-visible { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 10%, var(--theme-surface)); color: var(--theme-primary); outline: none; }
 .theme-error { color: var(--el-color-danger); font-size: 12px; margin: 10px 0 0; }
+.theme-option-swatches { display: flex; gap: 6px; }
+.theme-swatch-button { width: 26px; height: 26px; padding: 0; border: 1px solid var(--theme-border); border-radius: 6px; cursor: pointer; }
+.theme-swatch-button.active, .theme-swatch-button:hover, .theme-swatch-button:focus-visible { outline: 2px solid var(--theme-primary); outline-offset: 1px; }
+.theme-dual-colors { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--theme-text-secondary); }
+.theme-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .theme-preview-section { padding: 12px; border: 1px solid; border-radius: 10px; }
 .theme-preview-card { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 8px; background: var(--theme-surface); }
 .theme-preview-icon { display: grid; width: 30px; height: 30px; border-radius: 8px; place-items: center; }
