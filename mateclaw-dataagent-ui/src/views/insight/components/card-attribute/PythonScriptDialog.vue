@@ -87,11 +87,11 @@
           </el-tag>
         </span>
       </div>
-      <div v-if="showQueryConfig && finalQueryConfig" class="py-query-config-editor" data-testid="query-config-editor">
+      <div v-if="showQueryConfig" class="py-query-config-editor" data-testid="query-config-editor">
         <div class="py-query-config-group">
           <div class="py-config-label">展示字段</div>
           <el-checkbox-group v-model="displayFieldNames">
-            <el-checkbox v-for="field in finalQueryConfig.displayFields" :key="field.field" :label="field.field">
+            <el-checkbox v-for="field in queryConfigFields.displayFields" :key="field.field" :label="field.field">
               {{ field.title }}（{{ field.field }}）
             </el-checkbox>
           </el-checkbox-group>
@@ -99,7 +99,7 @@
         <div class="py-query-config-group">
           <div class="py-config-label">可筛选字段</div>
           <el-checkbox-group v-model="filterFieldNames">
-            <el-checkbox v-for="field in finalQueryConfig.filterFields" :key="field.field" :label="field.field">
+            <el-checkbox v-for="field in queryConfigFields.filterFields" :key="field.field" :label="field.field">
               {{ field.title }}
             </el-checkbox>
           </el-checkbox-group>
@@ -107,7 +107,7 @@
         <div class="py-query-config-line">
           <el-checkbox v-model="sortEnabled">启用排序</el-checkbox>
           <el-select v-model="sortField" size="small" :disabled="!sortEnabled" placeholder="默认排序字段">
-            <el-option v-for="field in finalQueryConfig.displayFields" :key="field.field" :label="field.title" :value="field.field" />
+            <el-option v-for="field in queryConfigFields.displayFields" :key="field.field" :label="field.title" :value="field.field" />
           </el-select>
         </div>
         <div class="py-query-config-line">
@@ -163,9 +163,21 @@ const outputSpec = computed(() => {
   return resolveOutputSpec(card.type)
 })
 const finalQueryConfig = computed(() => state.finalResultQueryConfig)
+const queryConfigFields = computed(() => finalQueryConfig.value ?? queryConfigDraft.value ?? createEmptyFinalResultQueryConfig())
 const queryConfigured = computed(() => isFinalResultQueryConfigured(finalQueryConfig.value))
 const showQueryConfig = ref(false)
 const queryConfigDraft = ref<FinalResultQueryConfig | null>(null)
+
+function createEmptyFinalResultQueryConfig(): FinalResultQueryConfig {
+  return {
+    schemaFingerprint: '',
+    confirmed: false,
+    displayFields: [],
+    filterFields: [],
+    sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+    paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+  }
+}
 
 const displayFieldNames = computed<string[]>({
   get: () => queryConfigDraft.value?.displayFields.map((field) => field.field) ?? [],
@@ -326,17 +338,13 @@ function save() {
 }
 
 function openQueryConfig() {
-  if (!finalQueryConfig.value) {
-    ElMessage.warning('请先执行 Python 脚本生成最终结果字段，再进行查询配置')
-    return
-  }
-  queryConfigDraft.value = JSON.parse(JSON.stringify(finalQueryConfig.value)) as FinalResultQueryConfig
+  queryConfigDraft.value = JSON.parse(JSON.stringify(finalQueryConfig.value ?? createEmptyFinalResultQueryConfig())) as FinalResultQueryConfig
   showQueryConfig.value = true
 }
 
 function saveQueryConfig() {
   if (!queryConfigDraft.value) return
-  if (!queryConfigDraft.value.displayFields.length) {
+  if (finalQueryConfig.value && !queryConfigDraft.value.displayFields.length) {
     ElMessage.warning('至少保留一个展示字段')
     return
   }
