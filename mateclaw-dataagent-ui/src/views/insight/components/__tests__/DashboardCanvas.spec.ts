@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import DashboardCanvas from '../DashboardCanvas.vue'
+import DashboardTitleIconStyleDialog from '../DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dashboardCanvasConstants'
 
 const stubs = {
@@ -61,6 +62,18 @@ describe('DashboardCanvas keyboard interaction', () => {
     await input.trigger('keyup', { key: 'Enter' })
 
     expect(wrapper.emitted('rename-component')).toEqual([[{ componentId: 'kpi-1', title: '新标题' }]])
+  })
+
+  it('opens title icon styling separately from renaming the component', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    await wrapper.get('[aria-label="编辑标题图标 订单数"]').trigger('click')
+
+    expect(wrapper.find('input[aria-label="组件标题"]').exists()).toBe(false)
+    expect(wrapper.findComponent(DashboardTitleIconStyleDialog).props('modelValue')).toBe(true)
   })
 
   it('uses the component title bar as a drag handle for moving into a combination', async () => {

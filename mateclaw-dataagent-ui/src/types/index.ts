@@ -1240,6 +1240,8 @@ export interface InsightComponent {
   title: string
   /** 标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
+  /** 标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
+  titleIconStyle?: ComponentTitleIconStyle
   /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 栅格位置 */
@@ -1360,6 +1362,8 @@ export interface InsightCombinationChild {
   title: string
   /** 子卡片标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
+  /** 子卡片标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
+  titleIconStyle?: ComponentTitleIconStyle
   /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 图表子类型（仅 chart） */
@@ -1386,6 +1390,18 @@ export interface InsightCombinationChild {
   enableTimeFilter?: boolean
   /** 是否启用多指标模式（仅 kpi 子卡片） */
   multiKpi?: boolean
+}
+
+/** 组件标题前置图标的显示配置。 */
+export interface ComponentTitleIconStyle {
+  /** 本地图标注册表 key；未设置时使用组件类型/标题的自动图标 */
+  iconKey?: string
+  /** SVG 线条粗细 */
+  strokeWidth?: 1.5 | 2 | 2.5 | 3
+  /** 图标颜色模式 */
+  colorMode?: 'theme' | 'custom'
+  /** 自定义 HEX 颜色，仅 colorMode=custom 时使用 */
+  color?: string
 }
 
 /** 组合卡片页签（每个页签拥有独立的子卡片集合） */

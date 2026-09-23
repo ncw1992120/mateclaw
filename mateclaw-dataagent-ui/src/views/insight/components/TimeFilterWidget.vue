@@ -1,6 +1,6 @@
 <template>
     <div class="time-filter-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="time-filter-label"><DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
     <el-date-picker
       v-model="customDateRange"
       type="daterange"

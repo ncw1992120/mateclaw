@@ -2,7 +2,7 @@
   <div class="data-table-widget">
     <div class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
-        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">

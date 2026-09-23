@@ -1,7 +1,7 @@
 <template>
   <div class="chart-widget">
     <div v-if="component.titleBarStyle !== 'hidden' || showTimeFilter" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"
