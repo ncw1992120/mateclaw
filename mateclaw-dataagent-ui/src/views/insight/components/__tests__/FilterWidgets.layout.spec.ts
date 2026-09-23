@@ -62,6 +62,7 @@ describe('筛选类组件的横向工具栏布局', () => {
     expect(wrapper.text()).toContain('转化指标名称')
     expect(wrapper.find('.filter-control-content').exists()).toBe(true)
     expect(wrapper.find('.filter-control-widget').classes()).toContain('filter-control-inline')
+    expect(wrapper.find('.filter-control-widget').classes()).toContain('filter-control-compact')
   })
 
   it('时间筛选器复用同一套横向控制栏结构，并保留可访问标签', () => {
@@ -71,6 +72,7 @@ describe('筛选类组件的横向工具栏布局', () => {
     expect(wrapper.text()).toContain('指标日期')
     expect(wrapper.find('.filter-control-content').exists()).toBe(true)
     expect(wrapper.find('.filter-control-widget').classes()).toContain('filter-control-inline')
+    expect(wrapper.find('.filter-control-widget').classes()).toContain('filter-control-compact')
     expect(wrapper.find('.stub-date-picker').exists()).toBe(true)
   })
 })
