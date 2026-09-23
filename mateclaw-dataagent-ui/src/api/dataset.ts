@@ -64,12 +64,16 @@ export interface QueryPlanPreviewRequest {
   queryConfig?: DatasetQueryConfig
 }
 
-/** 查询计划预览响应：plan / descriptor / rows / pushdownReport / totalCount?（预览不落库） */
+/**
+ * 查询计划预览响应。
+ * totalCount 在旧版 Aloudata 未返回总数时缺失，此时分页控件应以 hasNext 判断是否可继续翻页。
+ */
 export interface QueryPlanPreviewResponse {
   plan: DatasetQueryPlanSummary
   descriptor: DatasetInputDescriptor
   rows: Record<string, unknown>[]
   rowCount: number
+  hasNext: boolean
   pushdownReport?: Record<string, unknown> | null
   totalCount?: number
 }

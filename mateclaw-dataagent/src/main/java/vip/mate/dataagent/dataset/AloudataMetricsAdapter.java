@@ -40,17 +40,22 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         // orders 仅当字段属于已选指标/维度时下发；Aloudata 要求排序字段包含在 metrics/dimensions 中
         List<Map<String, String>> orders = ordersExpression(config, request.orders());
         query.setOrders(orders.isEmpty() ? null : orders);
-        query.setLimit(request.limit() == null ? 100 : request.limit()); query.setOffset(request.offset() == null ? 0 : request.offset());
-        query.setIsQueryTotalCount(request.requestTotalCount());
+        int limit = request.limit() == null ? 100 : request.limit();
+        int offset = request.offset() == null ? 0 : request.offset();
+        query.setLimit(limit); query.setOffset(offset);
+        boolean countRequested = request.requestTotalCount();
+        query.setIsQueryTotalCount(countRequested);
         query.setQueryResultType("DATA");
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(dataset.getDatasourceId(), query);
         requireSuccess(response);
         List<Map<String, Object>> rows = response == null || response.getData() == null || response.getData().getRows() == null ? List.of() : response.getData().getRows();
         Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
-        boolean totalRequested = Boolean.TRUE.equals(request.requestTotalCount()) && total != null;
-        return new DatasetBatch(rows, null, rows.size(), true,
+        boolean totalKnown = total != null;
+        // 新版接口返回 total 时按精确总数判断；旧版没有 total 时只能用“是否满页”判断。
+        boolean hasNext = totalKnown ? offset + rows.size() < total : rows.size() >= limit;
+        return new DatasetBatch(rows, null, rows.size(), !hasNext,
                 new PushdownReport(request.filters(), List.of(), orders.isEmpty() ? List.of() : request.orders(),
-                        true, true, totalRequested, null), totalRequested ? total : null);
+                        true, true, countRequested, null), totalKnown ? total : null);
     }
 
     private void requireSuccess(AloudataMetricQueryResponse response) {

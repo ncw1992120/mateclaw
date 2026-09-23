@@ -83,6 +83,7 @@ public class DataAgentDatasetController {
             // 显式空集合：短路空结果，不访问数据源
             response.put("rows", List.of());
             response.put("rowCount", 0);
+            response.put("hasNext", false);
             return R.ok(response);
         }
 
@@ -102,8 +103,10 @@ public class DataAgentDatasetController {
         DatasetBatch batch = executionService.preview(context, readRequest);
         response.put("rows", batch.rows());
         response.put("rowCount", batch.rowCount());
+        // totalCount 对旧版 Aloudata 接口可能缺失；hasNext 始终返回，供前端无总数分页使用。
+        response.put("hasNext", !batch.last());
         response.put("pushdownReport", batch.pushdownReport());
-        if (requestTotal && batch.totalCount() != null) response.put("totalCount", batch.totalCount());
+        if (batch.totalCount() != null) response.put("totalCount", batch.totalCount());
         return R.ok(response);
     }
 

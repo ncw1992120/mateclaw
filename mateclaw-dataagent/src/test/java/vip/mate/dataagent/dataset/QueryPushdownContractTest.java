@@ -146,6 +146,64 @@ class QueryPushdownContractTest {
         assertTrue(batch.pushdownReport().ordersPushed().isEmpty());
     }
 
+    @Test
+    @DisplayName("Aloudata 未返回总数时按页大小推断是否还有下一页")
+    void aloudataUnknownTotalUsesPageSizeToInferLastPage() {
+        DatasetMapper mapper = mock(DatasetMapper.class);
+        AloudataService service = mock(AloudataService.class);
+        DatasetEntity dataset = aloudataDataset();
+        when(mapper.selectById(7L)).thenReturn(dataset);
+
+        AloudataMetricQueryResponse response = new AloudataMetricQueryResponse();
+        AloudataMetricQueryResponse.MetricData data = new AloudataMetricQueryResponse.MetricData();
+        data.setRows(new ArrayList<>(Collections.nCopies(100, Map.of("in_account", 1))));
+        data.setTotal(null);
+        response.setData(data);
+        when(service.queryMetrics(eq(3L), any())).thenReturn(response);
+
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
+                new DatasetReadRequest(7L, "m", List.of(), List.of(), List.of(), 100, 0, Map.of(), true));
+
+        assertFalse(batch.last(), "返回满页且总数未知时必须允许继续请求下一页");
+        assertNull(batch.totalCount(), "旧接口未返回总数时不能伪造 totalCount");
+        assertTrue(batch.pushdownReport().totalCountRequested(), "报告应记录本次确实请求了总数");
+    }
+
+    @Test
+    @DisplayName("Aloudata 返回总数时按 offset + 当前行数判断是否到末页")
+    void aloudataKnownTotalUsesTotalCountToInferLastPage() {
+        DatasetMapper mapper = mock(DatasetMapper.class);
+        AloudataService service = mock(AloudataService.class);
+        DatasetEntity dataset = aloudataDataset();
+        when(mapper.selectById(7L)).thenReturn(dataset);
+
+        AloudataMetricQueryResponse response = new AloudataMetricQueryResponse();
+        AloudataMetricQueryResponse.MetricData data = new AloudataMetricQueryResponse.MetricData();
+        data.setRows(new ArrayList<>(Collections.nCopies(50, Map.of("in_account", 1))));
+        data.setTotal(250L);
+        response.setData(data);
+        when(service.queryMetrics(eq(3L), any())).thenReturn(response);
+
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
+                new DatasetReadRequest(7L, "m", List.of(), List.of(), List.of(), 100, 200, Map.of(), true));
+
+        assertTrue(batch.last(), "offset 200 加当前 50 行已覆盖 total 250，应为末页");
+        assertEquals(250L, batch.totalCount());
+        assertTrue(batch.pushdownReport().totalCountRequested());
+    }
+
+    private DatasetEntity aloudataDataset() {
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L);
+        dataset.setName("m");
+        dataset.setSourceType("ALOUDATA_METRICS");
+        dataset.setDatasourceId(3L);
+        dataset.setSourceConfig("{\"dimensions\":[\"strategy_id\"],\"metrics\":[\"in_account\"]}");
+        return dataset;
+    }
+
     // ==================== HTTP / File：有界残余排序不丢语义 ====================
 
     @Test

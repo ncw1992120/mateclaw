@@ -6,8 +6,8 @@ import java.util.List;
  * Adapter 对过滤、投影、排序和分页实际下推情况的审计结果。
  * <p>
  * {@code ordersPushed} 列出实际下推到源端的排序（不支持时为空且必须由 DataAgent 有界残余执行）；
- * {@code totalCountRequested} 表示是否真正向源端请求了精确总数——不支持总数的源端必须为 false，
- * 不允许返回虚假总数。
+ * {@code totalCountRequested} 表示本次是否向源端请求了精确总数；它不代表源端一定返回了总数。
+ * 源端未返回时，{@code DatasetBatch.totalCount} 必须保持为 null，不允许伪造总数。
  */
 public record PushdownReport(
         List<DatasetFilter> pushedFilters,
