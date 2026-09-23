@@ -182,4 +182,25 @@ class InsightDashboardSchemaDTOTest {
         assertEquals("#102030", written.at("/theme/overrides/metricPalette/0").asText());
         assertEquals("large", written.at("/pages/0/components/0/config/density").asText());
     }
+
+    @Test
+    void titleIconStyleSurvivesSchemaJsonRoundTrip() throws Exception {
+        String json = """
+                {"version":"1.1","pages":[{"id":"page-1","components":[{
+                  "id":"kpi-1","type":"kpi","title":"订单数",
+                  "position":{"x":0,"y":0,"w":4,"h":3},
+                  "titleIconStyle":{"iconKey":"trend-charts","strokeWidth":2.5,"colorMode":"custom","color":"#8C4A2F"}
+                }]}]}
+                """;
+
+        ObjectMapper mapper = new ObjectMapper();
+        InsightDashboardSchemaDTO schema = mapper.readValue(json, InsightDashboardSchemaDTO.class);
+        JsonNode roundTrip = mapper.readTree(mapper.writeValueAsString(schema));
+        JsonNode style = roundTrip.at("/pages/0/components/0/titleIconStyle");
+
+        assertEquals("trend-charts", style.get("iconKey").asText());
+        assertEquals(2.5, style.get("strokeWidth").asDouble());
+        assertEquals("custom", style.get("colorMode").asText());
+        assertEquals("#8C4A2F", style.get("color").asText());
+    }
 }

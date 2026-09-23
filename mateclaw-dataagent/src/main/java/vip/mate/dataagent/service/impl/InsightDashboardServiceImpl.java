@@ -1410,6 +1410,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         c.setId(op.getId() != null && !op.getId().isBlank() ? op.getId() : generateSchemaId("comp"));
         c.setType(op.getType());
         c.setTitle(op.getTitle() != null && !op.getTitle().isBlank() ? op.getTitle() : resolveDefaultTitle(op.getType()));
+        c.setTitleIconStyle(op.getTitleIconStyle());
         c.setChartType(op.getChartType());
         c.setRenderType(op.getRenderType() != null && !op.getRenderType().isBlank()
                 ? op.getRenderType() : resolveRenderType(op.getType()));
@@ -1438,6 +1439,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         if (op.getTitle() != null) {
             c.setTitle(op.getTitle());
+        }
+        if (op.getTitleIconStyle() != null) {
+            c.setTitleIconStyle(op.getTitleIconStyle());
         }
         if (op.getChartType() != null) {
             c.setChartType(op.getChartType());

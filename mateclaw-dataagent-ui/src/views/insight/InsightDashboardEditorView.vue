@@ -204,6 +204,8 @@
           @paste-component="handlePasteComponent"
           @context-menu="handleComponentContextMenu"
           @open-metric-style="handleOpenMetricStyle"
+          @update-title-icon-style="handleCanvasTitleIconStyleUpdate"
+          @update-child-title-icon-style="handleCanvasChildTitleIconStyleUpdate"
         />
       </div>
 
@@ -1015,6 +1017,22 @@ function handleCanvasComponentRename(payload: { componentId: string; title: stri
   component.title = title
 }
 
+function handleCanvasTitleIconStyleUpdate(payload: { componentId: string; titleIconStyle: InsightComponent['titleIconStyle'] }): void {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  const component = page?.components.find((item) => item.id === payload.componentId)
+  if (component) component.titleIconStyle = payload.titleIconStyle
+}
+
+function handleCanvasChildTitleIconStyleUpdate(payload: {
+  containerId: string
+  childId: string
+  titleIconStyle: InsightComponent['titleIconStyle']
+}): void {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (child) child.titleIconStyle = payload.titleIconStyle
+}
+
 /** 选中组件（顶层） */
 function handleSelectComponent(id: string): void {
   selectedComponentId.value = id
@@ -1188,6 +1206,7 @@ function handleComponentChange(updated: InsightComponent): void {
     if (child) {
       child.title = updated.title
       child.titleBarStyle = updated.titleBarStyle
+      child.titleIconStyle = updated.titleIconStyle
       child.visualStyle = updated.visualStyle
       child.chartType = updated.chartType
       child.config = updated.config

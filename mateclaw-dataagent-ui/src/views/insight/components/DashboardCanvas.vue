@@ -90,16 +90,34 @@
                 @keydown.esc.prevent="cancelTitleEdit"
                 @keyup.enter="commitTitleEdit(item.i)"
               />
-              <button
-                v-else
-                type="button"
-                class="grid-item-title-trigger"
-                :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
-                @click.stop="startTitleEdit(item.i)"
-              >
-                <span class="grid-item-title"><DashboardComponentIcon :type="getComponent(item.i)?.type ?? 'kpi'" :chart-type="getComponent(item.i)?.chartType" :title="getComponentTitle(item.i)" :dashboard-theme="dashboardTheme" :variant="sameRowIconVariant(item)" />{{ getComponentTitle(item.i) }}</span>
-                <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
-              </button>
+              <template v-else>
+                <DashboardComponentIcon
+                  :type="getComponent(item.i)?.type ?? 'kpi'"
+                  :chart-type="getComponent(item.i)?.chartType"
+                  :title="getComponentTitle(item.i)"
+                  :dashboard-theme="dashboardTheme"
+                  :title-icon-style="getComponent(item.i)?.titleIconStyle"
+                  :variant="sameRowIconVariant(item)"
+                />
+                <button
+                  type="button"
+                  class="grid-item-icon-style-trigger"
+                  :aria-label="`编辑标题图标 ${getComponentTitle(item.i)}`"
+                  title="修改标题图标样式"
+                  @click.stop="openTitleIconStyle(item.i)"
+                >
+                  <el-icon :size="12"><EditPen /></el-icon>
+                </button>
+                <button
+                  type="button"
+                  class="grid-item-title-trigger"
+                  :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
+                  @click.stop="startTitleEdit(item.i)"
+                >
+                  <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+                  <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
+                </button>
+              </template>
             </template>
             <button
               class="grid-item-delete"
@@ -169,12 +187,24 @@
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
                 @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
+                @edit-child-title-icon-style="openChildTitleIconStyle"
               />
             </template>
           </div>
         </div>
       </GridItem>
     </GridLayout>
+    <DashboardTitleIconStyleDialog
+      v-if="editingTitleIconTarget"
+      v-model="titleIconDialogVisible"
+      :title="editingTitleIconTitle"
+      :preview-type="editingTitleIconType"
+      :chart-type="editingTitleIconChartType"
+      :title-icon-style="editingTitleIconStyle"
+      :dashboard-theme="dashboardTheme"
+      @save="saveTitleIconStyle"
+    />
+
     <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
       <div class="empty-icon" aria-hidden="true">—</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
@@ -189,7 +219,7 @@ import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
-import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { ComponentTitleIconStyle, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -197,6 +227,7 @@ import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
+import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 import { themeCssVariables, componentThemeStyle } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
@@ -230,6 +261,19 @@ const canvasRef = ref<HTMLElement | null>(null)
 const editingTitleId = ref<string | null>(null)
 const editingTitleValue = ref('')
 const titleInput = ref<HTMLInputElement | null>(null)
+const titleIconDialogVisible = ref(false)
+const editingTitleIconTarget = ref<{ componentId: string; containerId?: string; childId?: string } | null>(null)
+
+const editingTitleIconComponent = computed(() => {
+  const target = editingTitleIconTarget.value
+  if (!target) return undefined
+  if (!target.childId) return props.components.find((component) => component.id === target.componentId)
+  return findChildComponent(target.containerId ?? '', target.childId)
+})
+const editingTitleIconStyle = computed(() => editingTitleIconComponent.value?.titleIconStyle)
+const editingTitleIconTitle = computed(() => editingTitleIconComponent.value?.title ?? '')
+const editingTitleIconType = computed(() => editingTitleIconComponent.value?.type ?? 'kpi')
+const editingTitleIconChartType = computed(() => editingTitleIconComponent.value?.chartType)
 
 const canvasWorkspaceStyle = computed(() => {
   if (!props.editable) return undefined
@@ -260,6 +304,8 @@ const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'ai-analysis-generate', componentId: string): void
   (e: 'open-metric-style', payload: { componentId: string; fieldKey: string }): void
+  (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
+  (e: 'update-child-title-icon-style', payload: { containerId: string; childId: string; titleIconStyle: ComponentTitleIconStyle }): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */
@@ -407,6 +453,52 @@ function startTitleEdit(id: string): void {
     input?.focus?.()
     input?.select?.()
   })
+}
+
+function findChildComponent(containerId: string, childId: string): InsightCombinationChild | undefined {
+  const visit = (children: InsightCombinationChild[] | undefined): InsightCombinationChild | undefined => {
+    for (const child of children ?? []) {
+      if (child.id === childId) return child
+      const nested = visit([
+        ...(child.children ?? []),
+        ...((child.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+      ])
+      if (nested) return nested
+    }
+    return undefined
+  }
+  const container = props.components.find((component) => component.id === containerId)
+  if (!container) return undefined
+  return visit([
+    ...(container.children ?? []),
+    ...((container.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+  ])
+}
+
+function openTitleIconStyle(componentId: string): void {
+  if (!props.editable) return
+  editingTitleIconTarget.value = { componentId }
+  titleIconDialogVisible.value = true
+}
+
+function openChildTitleIconStyle(payload: { containerId: string; childId: string }): void {
+  if (!props.editable) return
+  editingTitleIconTarget.value = { ...payload, componentId: payload.containerId }
+  titleIconDialogVisible.value = true
+}
+
+function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
+  const target = editingTitleIconTarget.value
+  if (!target) return
+  if (target.childId && target.containerId) {
+    emit('update-child-title-icon-style', {
+      containerId: target.containerId,
+      childId: target.childId,
+      titleIconStyle: style,
+    })
+  } else {
+    emit('update-title-icon-style', { componentId: target.componentId, titleIconStyle: style })
+  }
 }
 
 function commitTitleEdit(id: string): void {
@@ -958,6 +1050,29 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   background: transparent;
   color: inherit;
   cursor: text;
+}
+
+.grid-item-icon-style-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0 6px 0 -4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+}
+.grid-item-icon-style-trigger:hover {
+  background: var(--db-hover);
+  color: var(--db-accent);
+}
+.grid-item-icon-style-trigger:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: 1px;
 }
 
 .grid-item-title-edit {

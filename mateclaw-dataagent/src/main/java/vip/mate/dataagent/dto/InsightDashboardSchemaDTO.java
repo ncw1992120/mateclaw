@@ -106,6 +106,9 @@ public class InsightDashboardSchemaDTO implements Serializable {
         /** 组件标题 */
         private String title;
 
+        /** 标题图标样式；使用 Map 兼容前端可演进的显示属性。 */
+        private Map<String, Object> titleIconStyle;
+
         /** 栅格位置 */
         private Position position;
 

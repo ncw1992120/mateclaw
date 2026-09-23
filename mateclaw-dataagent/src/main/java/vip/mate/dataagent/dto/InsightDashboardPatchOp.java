@@ -78,6 +78,10 @@ public class InsightDashboardPatchOp implements Serializable {
     @Schema(description = "组件标题", example = "销售额")
     private String title;
 
+    /** 组件标题图标样式（add/update 可选） */
+    @Schema(description = "组件标题图标样式")
+    private java.util.Map<String, Object> titleIconStyle;
+
     /** 图表子类型（add 且 type=chart 时必填）：line / bar / pie / area / scatter / radar */
     @Schema(description = "图表子类型（type=chart时）", example = "bar",
             allowableValues = {"line", "bar", "pie", "area", "scatter", "radar"})

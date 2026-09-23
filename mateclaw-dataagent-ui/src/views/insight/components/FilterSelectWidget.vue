@@ -1,6 +1,6 @@
 <template>
   <div class="filter-select-widget" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" />{{ component.title }}</div>
+    <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="filter-label"><DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" :title-icon-style="component.titleIconStyle" />{{ component.title }}</div>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"

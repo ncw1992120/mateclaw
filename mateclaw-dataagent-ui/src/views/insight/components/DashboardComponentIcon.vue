@@ -24,22 +24,41 @@ import {
   PieChart,
   TrendCharts,
 } from '@element-plus/icons-vue'
-import type { ChartType, InsightComponentType, ResolvedDashboardTheme } from '@/types'
+import type { ChartType, ComponentTitleIconStyle, InsightComponentType, ResolvedDashboardTheme } from '@/types'
 import { componentIconStyle, resolveDashboardIcon } from '@/utils/dashboard-theme'
+import { resolveDashboardIcon as resolveRegisteredIcon } from '@/utils/dashboard-icon-registry'
 
 const props = withDefaults(defineProps<{
   type: InsightComponentType | 'tab'
   chartType?: ChartType
   title?: string
   dashboardTheme?: ResolvedDashboardTheme
+  titleIconStyle?: ComponentTitleIconStyle
   size?: number
   variant?: number
 }>(), { size: 14 })
 
 const iconRegistry = { Aim, Calendar, Collection, DataAnalysis, Filter, Grid, Histogram, MagicStick, PieChart, TrendCharts }
-const visible = computed(() => props.dashboardTheme?.iconMode !== 'hide')
-const iconComponent = computed(() => iconRegistry[resolveDashboardIcon(props.type, props.chartType, props.title) as keyof typeof iconRegistry] ?? Collection)
-const iconStyle = computed(() => componentIconStyle(props.dashboardTheme, props.type, props.title, props.variant))
+const visible = computed(() => Boolean(props.titleIconStyle?.iconKey) || props.dashboardTheme?.iconMode !== 'hide')
+const iconComponent = computed(() => {
+  const selected = resolveRegisteredIcon(props.titleIconStyle?.iconKey)
+  if (selected) return selected
+  return iconRegistry[resolveDashboardIcon(props.type, props.chartType, props.title) as keyof typeof iconRegistry] ?? Collection
+})
+const iconStyle = computed(() => {
+  const style = componentIconStyle(props.dashboardTheme, props.type, props.title, props.variant)
+  const customColor = props.titleIconStyle?.colorMode === 'custom' && /^#[0-9a-f]{6}$/i.test(props.titleIconStyle.color ?? '')
+    ? props.titleIconStyle.color
+    : undefined
+  const strokeWidth = [1.5, 2, 2.5, 3].includes(Number(props.titleIconStyle?.strokeWidth))
+    ? Number(props.titleIconStyle?.strokeWidth)
+    : 2.35
+  return {
+    ...style,
+    ...(customColor ? { '--dashboard-icon-color': customColor } : {}),
+    '--dashboard-icon-stroke-width': `${strokeWidth}px`,
+  }
+})
 const iconSize = computed(() => Number.parseInt(iconStyle.value['--dashboard-icon-size'] ?? `${props.size}`, 10))
 </script>
 
@@ -52,5 +71,9 @@ const iconSize = computed(() => Number.parseInt(iconStyle.value['--dashboard-ico
   margin-right: 6px;
   transform: scale(1.08);
 }
-.dashboard-component-icon :deep(svg) { stroke-width: 2.35; }
+.dashboard-component-icon :deep(svg) {
+  stroke: currentColor;
+  stroke-width: var(--dashboard-icon-stroke-width, 2.35px);
+  vector-effect: non-scaling-stroke;
+}
 </style>
