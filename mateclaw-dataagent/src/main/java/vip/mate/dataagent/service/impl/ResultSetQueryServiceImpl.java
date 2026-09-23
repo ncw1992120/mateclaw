@@ -10,6 +10,7 @@ import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dataset.ObjectRef;
 import vip.mate.dataagent.dataset.ResidualRowOperations;
 import vip.mate.dataagent.dto.ResultPreviewRequest;
+import vip.mate.dataagent.dto.FinalResultQueryContextDTO;
 import vip.mate.dataagent.model.DashboardExecutionEntity;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 import vip.mate.dataagent.objectref.ObjectRefService;
@@ -42,18 +43,29 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
     private final ObjectMapper mapper;
     private final ScriptResultContractService resultContract;
     private final ObjectRefService objectRefs;
+    private final vip.mate.dataagent.service.FinalResultQueryService finalResultQuery;
     private final String resultTtlMillis;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ResultSetQueryServiceImpl(DashboardExecutionMapper executionMapper, WorkspaceGuard workspaceGuard,
                                      ObjectMapper mapper, ScriptResultContractService resultContract,
                                      ObjectRefService objectRefs,
-                                     @Value("${mateclaw.runner.result-ttl-millis:0}") String resultTtlMillis) {
+                                     @Value("${mateclaw.runner.result-ttl-millis:0}") String resultTtlMillis,
+                                     vip.mate.dataagent.service.FinalResultQueryService finalResultQuery) {
         this.executionMapper = executionMapper;
         this.workspaceGuard = workspaceGuard;
         this.mapper = mapper;
         this.resultContract = resultContract;
         this.objectRefs = objectRefs;
         this.resultTtlMillis = resultTtlMillis;
+        this.finalResultQuery = finalResultQuery;
+    }
+
+    public ResultSetQueryServiceImpl(DashboardExecutionMapper executionMapper, WorkspaceGuard workspaceGuard,
+                                     ObjectMapper mapper, ScriptResultContractService resultContract,
+                                     ObjectRefService objectRefs, String resultTtlMillis) {
+        this(executionMapper, workspaceGuard, mapper, resultContract, objectRefs, resultTtlMillis,
+                new vip.mate.dataagent.service.FinalResultQueryServiceImpl());
     }
 
     @Override
@@ -68,6 +80,25 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
             throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID, "unknown dashboard execution");
         }
         requireTerminal(execution);
+
+        if (request != null && request.finalResultQueryConfig() != null) {
+            var queried = finalResultQuery.query(loadTableEnvelope(execution), request.finalResultQueryConfig(),
+                    new FinalResultQueryContextDTO(request.parameters(), request.sort(), request.pagination()));
+            if (!"table".equals(queried.envelope().kind())) {
+                throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
+                        "execution result is not a table: " + queried.envelope().kind());
+            }
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("executionId", execution.getExecutionId());
+            response.put("status", execution.getStatus());
+            response.put("columns", queried.envelope().data().columns().stream().map(ScriptResultContractService.ValidatedEnvelope.Column::name).toList());
+            response.put("rows", queried.envelope().data().rows());
+            response.put("page", queried.page());
+            response.put("pageSize", queried.pageSize());
+            response.put("totalCount", queried.totalRows());
+            if (request.requestId() != null) response.put("requestId", request.requestId());
+            return response;
+        }
 
         List<Map<String, Object>> rows = loadTableRows(execution);
         int totalCount = rows.size();
@@ -106,6 +137,10 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
     }
 
     private List<Map<String, Object>> loadTableRows(DashboardExecutionEntity execution) {
+        return new ArrayList<>(loadTableEnvelope(execution).data().rows());
+    }
+
+    private ScriptResultContractService.ValidatedEnvelope loadTableEnvelope(DashboardExecutionEntity execution) {
         try {
             if (execution.getOutputJson() != null && !execution.getOutputJson().isBlank()) {
                 Object envelope = mapper.readValue(execution.getOutputJson(), Object.class);
@@ -114,7 +149,7 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
                     throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
                             "execution result is not a table: " + validated.kind());
                 }
-                return new ArrayList<>(validated.data().rows());
+                return validated;
             }
             if (execution.getOutputRefJson() != null && !"null".equals(execution.getOutputRefJson())) {
                 ObjectRef reference = mapper.readValue(execution.getOutputRefJson(), ObjectRef.class);
@@ -135,7 +170,7 @@ public class ResultSetQueryServiceImpl implements ResultSetQueryService {
                 ScriptResultContractService.ValidatedEnvelope rebuilt = resultContract.rebuildTable(
                         mapper.readValue(execution.getOutputRefJson(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}),
                         rows);
-                return new ArrayList<>(rebuilt.data().rows());
+                return rebuilt;
             }
             throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID, "execution has no result");
         } catch (QueryPlanException e) {

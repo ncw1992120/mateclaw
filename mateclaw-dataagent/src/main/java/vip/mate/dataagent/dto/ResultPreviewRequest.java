@@ -11,7 +11,13 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ResultPreviewRequest(QueryContextDTO.SortSpec sort, QueryContextDTO.PaginationSpec pagination,
-                                   Map<String, Object> parameters, String requestId) {
+                                   Map<String, Object> parameters, String requestId,
+                                   FinalResultQueryConfigDTO finalResultQueryConfig) {
+    public ResultPreviewRequest(QueryContextDTO.SortSpec sort, QueryContextDTO.PaginationSpec pagination,
+                                Map<String, Object> parameters, String requestId) {
+        this(sort, pagination, parameters, requestId, null);
+    }
+
     public ResultPreviewRequest {
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);
     }

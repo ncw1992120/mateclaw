@@ -20,3 +20,7 @@ Task 2 note: component-level `finalResultQueryConfig` is persisted separately fr
 Task 3: complete (commit pending, tests: Docker Java 21 `mvn -o -f mateclaw-dataagent/pom.xml -Dtest=FinalResultQueryServiceTest test` → 3 tests passed)
 
 Task 3 note: `FinalResultQueryServiceImpl` only consumes `ValidatedEnvelope`; it applies parameter-bound filters, whitelist-checked sort, and bounded pagination in memory. Scalar/message outputs remain unchanged when no result query is requested and reject table-only operations.
+
+Task 4: complete (commit pending, tests: Docker Java 21 `mvn -o -f mateclaw-dataagent/pom.xml -Dtest=FinalResultQueryServiceTest,ResultSetQueryServiceTest test` → 9 tests passed)
+
+Task 4 note: result preview accepts optional `finalResultQueryConfig`; when present, the service loads and validates the complete Python envelope first, then applies final-result filters/sort/page. The old preview constructor/request behavior remains compatible when the field is absent.

@@ -10,6 +10,7 @@ import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.ObjectRef;
 import vip.mate.dataagent.dto.QueryContextDTO;
 import vip.mate.dataagent.dto.ResultPreviewRequest;
+import vip.mate.dataagent.dto.FinalResultQueryConfigDTO;
 import vip.mate.dataagent.model.DashboardExecutionEntity;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 import vip.mate.dataagent.objectref.ObjectRefService;
@@ -93,6 +94,27 @@ class ResultSetQueryServiceTest {
         List<?> rows = (List<?>) response.get("rows");
         assertEquals(1, ((Number) ((Map<?, ?>) rows.get(0)).get("v")).intValue());
         assertEquals(5, ((Number) response.get("totalCount")).intValue());
+    }
+
+    @Test
+    @DisplayName("配置最终结果查询时：筛选发生在 Python 输出之后")
+    void finalResultQueryRunsOnValidatedPythonEnvelope() throws Exception {
+        execution("SUCCEEDED", inlineTable(5), null);
+        var config = new FinalResultQueryConfigDTO("schema-1", List.of(),
+                List.of(new FinalResultQueryConfigDTO.FilterField("v", "值", "number", "min", List.of("gte"))),
+                List.of(new FinalResultQueryConfigDTO.ParameterBinding("min", "v", "gte")),
+                new FinalResultQueryConfigDTO.SortPolicy(true, List.of("v")),
+                new FinalResultQueryConfigDTO.PaginationPolicy(true, 10, 100, true));
+
+        Map<String, Object> response = service.preview("exec-1", new ResultPreviewRequest(
+                new QueryContextDTO.SortSpec("v", "desc"),
+                new QueryContextDTO.PaginationSpec(1, 2),
+                Map.of("min", 3), "req-final", config));
+
+        assertEquals(3, ((Number) response.get("totalCount")).intValue());
+        List<?> rows = (List<?>) response.get("rows");
+        assertEquals(5, ((Number) ((Map<?, ?>) rows.get(0)).get("v")).intValue());
+        assertEquals(4, ((Number) ((Map<?, ?>) rows.get(1)).get("v")).intValue());
     }
 
     @Test
