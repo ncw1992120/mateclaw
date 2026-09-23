@@ -92,6 +92,21 @@ describe('InsightColorField', () => {
     expect(store.recordColor).toHaveBeenLastCalledWith('#AABBCC')
   })
 
+  it('preserves a short HEX prefix while the parent reflects its normalized color', async () => {
+    const wrapper = mountField()
+    const input = wrapper.get('input')
+
+    await input.setValue('#a')
+    await input.setValue('#ab')
+    await input.setValue('#abc')
+    await wrapper.setProps({ modelValue: '#AABBCC' })
+
+    expect((input.element as HTMLInputElement).value).toBe('#abc')
+    await input.setValue('#abcd')
+    expect((input.element as HTMLInputElement).value).toBe('#abcd')
+    expect(wrapper.get('[role="alert"]').text()).toBeTruthy()
+  })
+
   it('commits and records a color picker selection immediately', async () => {
     const wrapper = mountField()
 

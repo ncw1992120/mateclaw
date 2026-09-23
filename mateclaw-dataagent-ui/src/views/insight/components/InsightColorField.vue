@@ -80,8 +80,9 @@ const predefinedColors = computed(() => {
 
 watch(() => props.modelValue, (value) => {
   const isLocalEditEcho = hasUncommittedEdit.value && normalizeColor(value) === normalizedDraft.value
+  if (isLocalEditEcho) return
   draft.value = normalizeColor(value) ?? value
-  if (!isLocalEditEcho) hasUncommittedEdit.value = false
+  hasUncommittedEdit.value = false
 })
 
 function onInput(): void {
