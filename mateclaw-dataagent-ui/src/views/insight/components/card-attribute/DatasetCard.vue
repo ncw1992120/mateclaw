@@ -28,13 +28,13 @@
 
     <!-- 操作行：查询配置 / 查看数据 / 移除。
          「查询配置」打开查询配置弹窗：展示字段、筛选器绑定、允许排序、分页。
-         「查看数据」打开统一数据查看弹窗：添加本次条件后查询，并将条件下推到源查询。 -->
+         「查看数据」打开统一数据查看弹窗：按查询配置展示字段与筛选绑定，填写本次值后查询。 -->
     <div class="ds-actions" @click.stop>
       <el-button size="small" text bg @click="openQueryConfig(dataset.id)">查询配置</el-button>
       <el-button
         size="small"
         text bg
-        title="查看该输入数据集：可添加筛选条件后查询"
+        title="查看该输入数据集：按查询配置启停筛选条件并查询"
         @click="openDataDialog(dataset.id)"
       >
         查看数据
