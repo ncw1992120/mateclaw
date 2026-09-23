@@ -1,6 +1,6 @@
 <template>
   <div
-    class="filter-control-widget filter-control-inline"
+    class="filter-control-widget filter-control-inline filter-control-compact"
     :class="[`title-bar-${titleBarStyle ?? 'standard'}`, { 'filter-control-label-hidden': !showLabel }]"
   >
     <div v-if="showLabel" class="filter-control-label">
@@ -27,20 +27,20 @@ withDefaults(defineProps<{
 
 <style scoped>
 .filter-control-widget {
-  --filter-control-gap: 12px;
+  --filter-control-gap: 8px;
   container-type: inline-size;
   width: 100%;
   min-width: 0;
-  min-height: 64px;
+  min-height: 48px;
   display: grid;
-  grid-template-columns: minmax(104px, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
   align-items: center;
   gap: var(--filter-control-gap);
-  padding: 10px 12px;
+  padding: 6px 8px;
   box-sizing: border-box;
   background: var(--component-surface, var(--db-card));
   border: 1px solid var(--db-border);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-sm, 6px);
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
