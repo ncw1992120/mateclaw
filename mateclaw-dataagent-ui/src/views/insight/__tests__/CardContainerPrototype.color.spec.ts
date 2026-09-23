@@ -117,6 +117,21 @@ describe('CardContainerPrototype border color field', () => {
     expect((wrapper.get('.card-container').element as HTMLElement).style.background).toBe('rgb(18, 58, 188)')
   })
 
+  it('keeps custom editing open when switching from a theme background', async () => {
+    const wrapper = mountPrototype()
+    wrapper.vm.$.setupState.container.style.background = 'var(--db-card)'
+    await wrapper.vm.$nextTick()
+    const backgroundSelect = wrapper.findAll('select').find((select) =>
+      select.element.innerHTML.includes('浅橙'),
+    )!
+
+    await backgroundSelect.setValue('custom')
+    await wrapper.vm.$nextTick()
+
+    expect((backgroundSelect.element as HTMLSelectElement).value).toBe('custom')
+    expect((wrapper.get('input[aria-label="自定义背景色"]').element as HTMLInputElement).value).toBe('#FFFFFF')
+  })
+
   it('keeps the existing development route pointed at this prototype', () => {
     expect(router.resolve('/insight/card-container-prototype').name).toBe('insight-card-container-prototype')
     expect(router.hasRoute('insight-card-container-prototype')).toBe(import.meta.env.DEV)

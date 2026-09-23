@@ -117,15 +117,23 @@ const ccBodyRef = ref<HTMLElement | null>(null) // 内容区 DOM，用于自由�
 const cardContainerRef = ref<HTMLElement | null>(null) // 卡片容器 DOM，用于判定拖拽是否仍在卡内
 const backgroundPresets = ['#FFFFFF', 'var(--db-card)', 'var(--db-card-orange-bg)']
 const isCustomBackground = ref(!backgroundPresets.includes(container.style.background))
+let keepCustomBackgroundOnNextWatch = false
 
 watch(() => container.style.background, (background) => {
+  if (keepCustomBackgroundOnNextWatch) {
+    keepCustomBackgroundOnNextWatch = false
+    return
+  }
   isCustomBackground.value = !backgroundPresets.includes(background)
 })
 
 function changeBackground(value: string) {
   if (value === 'custom') {
     isCustomBackground.value = true
-    if (container.style.background.startsWith('var(')) container.style.background = '#FFFFFF'
+    if (container.style.background.startsWith('var(')) {
+      keepCustomBackgroundOnNextWatch = true
+      container.style.background = '#FFFFFF'
+    }
     return
   }
   container.style.background = value
