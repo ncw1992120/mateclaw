@@ -80,12 +80,12 @@
             </div>
             <div v-if="localComponent.visualStyle.border.colorMode === 'custom'" class="form-group">
               <label class="form-label">自定义边框颜色</label>
-              <el-color-picker v-model="localComponent.visualStyle.border.color" aria-label="自定义边框颜色" @change="emitChange" />
+              <InsightColorField v-model="localComponent.visualStyle.border.color" label="自定义边框颜色" @change="emitChange" />
             </div>
           </template>
           <div v-if="localComponent.visualStyle?.background?.mode === 'custom'" class="form-group">
             <label class="form-label">自定义背景色</label>
-            <el-color-picker v-model="localComponent.visualStyle.background.color" aria-label="自定义背景色" @change="emitChange" />
+            <InsightColorField v-model="localComponent.visualStyle.background.color" label="自定义背景色" :suggested-colors="CARD_BG_PRESETS" @change="emitChange" />
           </div>
           <div class="form-group">
             <label class="form-label">圆角</label>
@@ -736,6 +736,8 @@ import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import InsightColorField from './InsightColorField.vue'
 import InlineHelp from './property/InlineHelp.vue'
 
 defineOptions({

@@ -86,12 +86,12 @@
             </div>
             <div v-if="activeCard.visualStyle.border.colorMode === 'custom'" class="field">
               <label class="field-label">自定义边框颜色</label>
-              <el-color-picker v-model="activeCard.visualStyle.border.color" aria-label="自定义边框颜色" />
+              <InsightColorField v-model="activeCard.visualStyle.border.color" label="自定义边框颜色" />
             </div>
           </template>
           <div v-if="activeCard.visualStyle.background?.mode === 'custom'" class="field">
             <label class="field-label">自定义背景色</label>
-            <el-color-picker v-model="activeCard.visualStyle.background.color" aria-label="自定义背景色" />
+            <InsightColorField v-model="activeCard.visualStyle.background.color" label="自定义背景色" :suggested-colors="CARD_BG_PRESETS" />
           </div>
           <div class="field">
             <label class="field-label">圆角</label>
@@ -271,6 +271,8 @@ import DatasetCard from './DatasetCard.vue'
 import ComponentSampleDialog from '../ComponentSampleDialog.vue'
 import { resolveComponentSample } from '@/utils/component-sample-data'
 import { resolveFieldLabel } from '@/utils/field-mapping'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
+import InsightColorField from '../InsightColorField.vue'
 
 const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
 
