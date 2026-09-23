@@ -262,6 +262,18 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     wrapper.unmount()
   })
 
+  it('没有最终结果 Schema 时点击查询配置不再弹锁定提示，并打开空配置编辑器', async () => {
+    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
+    state.pythonSystem = 'GEN_CODE'
+    const wrapper = await mountDialog()
+
+    await wrapper.find('[data-testid="footer-query-config"]').trigger('click')
+
+    expect(warningSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="query-config-editor"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('底部操作顺序为查询配置、查看数据、执行记录、确定且不显示取消', async () => {
     state.finalResultQueryConfig = {
       confirmed: true,
