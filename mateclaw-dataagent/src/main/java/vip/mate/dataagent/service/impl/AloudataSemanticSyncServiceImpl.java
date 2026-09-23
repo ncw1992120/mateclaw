@@ -57,6 +57,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private EmbeddingModelFactory embeddingModelFactory;
 
     private static final String ENDPOINT_CATEGORY_LIST = "category_list";
+    private static final String ENDPOINT_METRIC_TREE = "metric_tree";
     private static final String ENDPOINT_METRIC_LIST = "metric_list";
     private static final String ENDPOINT_METRIC_BATCH_DETAIL = "metric_batch_detail";
     private static final String ENDPOINT_METRIC_ALL_DIMENSIONS = "metric_all_dimensions";
@@ -263,6 +264,36 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    public List<Map<String, Object>> listMetricDirectory(Long datasourceId) {
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            return Collections.emptyList();
+        }
+        try {
+            Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(ENDPOINT_METRIC_TREE, config);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_TREE, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
+                String message = body == null ? "Aloudata 返回空响应" : asStr(body.get("errorMsg"));
+                throw new IllegalStateException("加载 Aloudata 指标目录失败：" + (message == null ? "接口请求失败" : message));
+            }
+            Object data = body.get("data");
+            if (data instanceof Map<?, ?> dataMap && dataMap.get("rootList") instanceof List<?> roots) {
+                return (List<Map<String, Object>>) roots;
+            }
+            if (data instanceof List<?> roots) {
+                return (List<Map<String, Object>>) roots;
+            }
+            return Collections.emptyList();
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标目录] 加载失败 datasourceId={}: {}", datasourceId, e.getMessage());
+            throw new IllegalStateException("加载 Aloudata 指标目录失败", e);
+        }
+    }
+
+    @Override
     public List<AloudataCategoryEntity> listSyncedCategories(Long datasourceId, String categoryType) {
         LambdaQueryWrapper<AloudataCategoryEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataCategoryEntity::getDatasourceId, datasourceId);
@@ -339,6 +370,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
 
         try {
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_DIMENSION_LIST, config, input);
+            // Older database endpoint definitions may not declare keyword although Aloudata's
+            // dimension/list contract accepts it; keep live directory search functional.
+            if (StringUtils.hasText(query.getKeyword())) {
+                params.put("keyword", query.getKeyword());
+            }
             ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_DIMENSION_LIST, config, params);
             Map<String, Object> body = response.getBody();
             if (body == null || !Boolean.TRUE.equals(body.get("success"))) {

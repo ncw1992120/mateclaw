@@ -2,14 +2,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { pageAloudataMetrics, pageAloudataDimensions } = vi.hoisted(() => ({
-  pageAloudataMetrics: vi.fn(async () => ({
-    records: [{ metricName: 'metric_a', metricDisplayName: '指标 A' }],
-    total: 1,
-    current: 1,
-    size: 50,
-    pages: 1,
-  })),
+const { getAloudataMetricDirectory, pageAloudataDimensions } = vi.hoisted(() => ({
+  getAloudataMetricDirectory: vi.fn(async () => [{
+    categoryId: 'metric-root',
+    categoryName: '业务指标',
+    metricList: [{ metricName: 'metric_a', metricDisplayName: '指标 A' }],
+    subCategory: [],
+  }]),
   pageAloudataDimensions: vi.fn(async () => ({
     records: [{ dimName: 'dim_a', dimDisplayName: '维度 A' }],
     total: 1,
@@ -20,10 +19,9 @@ const { pageAloudataMetrics, pageAloudataDimensions } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/semantic-model', () => ({
-  pageAloudataMetrics,
+  getAloudataMetricDirectory,
   pageAloudataDimensions,
-  listAloudataCategoryCounts: vi.fn(async () => []),
-  getAloudataMetricDetail: vi.fn(),
+  listAloudataCategoryCounts: vi.fn(async () => [{ categoryId: 'dim-root', categoryName: '业务维度', parentId: null }]),
 }))
 
 vi.mock('@/api/datasource', () => ({
@@ -61,6 +59,8 @@ const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
   'el-alert': { template: '<div />' },
   'el-select': SelectStub,
+  'el-radio-group': { template: '<div><slot /></div>' },
+  'el-radio-button': { template: '<button type="button"><slot /></button>' },
   'el-option': { template: '<div />' },
   'el-tag': {
     props: { closable: Boolean },
@@ -73,6 +73,7 @@ const stubs = {
   'el-table': { template: '<div />' },
   'el-table-column': { template: '<div />' },
   'el-pagination': { template: '<div />' },
+  'el-tree': { template: '<div class="stub-tree" />' },
   'el-tooltip': { template: '<span><slot /><slot name="content" /></span>' },
 }
 
@@ -85,7 +86,7 @@ beforeEach(() => {
     metrics: ['metric_a'],
     dims: ['dim_a'],
   }
-  pageAloudataMetrics.mockClear()
+  getAloudataMetricDirectory.mockClear()
   pageAloudataDimensions.mockClear()
 })
 
@@ -95,10 +96,22 @@ describe('Aloudata 指标&维度选择', () => {
     state.ui.aloudata.visible = true
     await flushPromises()
 
-    expect(wrapper.findAll('.selected-tag').map((tag) => tag.text())).toEqual(['指标 A×', '维度 A×'])
+    expect(wrapper.findAll('.selected-tag').map((tag) => tag.text())).toEqual(['指标 A×', 'dim_a×'])
+    expect(wrapper.text()).toContain('metric_a')
+    expect(getAloudataMetricDirectory).toHaveBeenCalledWith('aloudata-1')
 
     await wrapper.find('.selected-tag-remove').trigger('click')
     expect(state.ui.aloudata.metrics).toEqual([])
     expect(state.ui.aloudata.dims).toEqual(['dim_a'])
+  })
+
+  it('provides the metric tree and searchable technical metric identifier', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('业务指标')
+    expect(wrapper.text()).toContain('指标 A')
+    expect(wrapper.text()).toContain('metric_a')
   })
 })

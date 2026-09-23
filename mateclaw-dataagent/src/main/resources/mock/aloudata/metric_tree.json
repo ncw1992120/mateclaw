@@ -1,0 +1,41 @@
+{
+  "data": {
+    "rootList": [
+      {
+        "categoryId": "fixture-strategy",
+        "categoryName": "策略解读",
+        "metricList": [
+          {
+            "metricName": "digo_cust_asset_in",
+            "metricDisplayName": "入金客户数",
+            "metricCategoryId": "fixture-strategy",
+            "type": "ATOMIC",
+            "status": "ONLINE",
+            "publishStatus": "PUBLISHED"
+          }
+        ],
+        "subCategory": [
+          {
+            "categoryId": "fixture-sub-strategy",
+            "categoryName": "子策略",
+            "metricList": [
+              {
+                "metricName": "digo_touch_cnt_1",
+                "metricDisplayName": "触达次数",
+                "metricCategoryId": "fixture-sub-strategy",
+                "type": "ATOMIC",
+                "status": "ONLINE",
+                "publishStatus": "PUBLISHED"
+              }
+            ],
+            "subCategory": []
+          }
+        ]
+      }
+    ]
+  },
+  "success": true,
+  "code": "200",
+  "errorMsg": null,
+  "traceId": "local-metric-tree"
+}

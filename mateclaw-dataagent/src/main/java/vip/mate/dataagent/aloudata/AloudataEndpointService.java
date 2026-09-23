@@ -115,6 +115,7 @@ public class AloudataEndpointService {
         Map<String, ApiEndpoint> endpoints = new LinkedHashMap<>();
         List<ApiParam> headers = commonHeaderParams();
         endpoints.put("analysis_view_tree", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/treeList", "GET", headers));
+        endpoints.put("metric_tree", endpoint("anymetrics", "/anymetrics/api/v1/metrics/treeList", "GET", headers));
         endpoints.put("analysis_view_query_by_name", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/queryByName", "GET",
                 mergeParams(headers, List.of(new ApiParam("viewName", "String", true, null, "指标视图名称", "QUERY")))));
         endpoints.put("analysis_view_query_data", endpoint("semantic", "/semantic/api/v1.1/analysisView/query", "GET",
