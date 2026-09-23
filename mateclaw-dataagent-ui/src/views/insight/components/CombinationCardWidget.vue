@@ -76,7 +76,7 @@
         v-for="(child, childIndex) in activeChildren"
         :key="child.id"
         class="cc-child"
-        :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id }]"
+        :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id, 'inline-filter-child': isInlineFilterChild(child) }]"
         :style="childStyle(child)"
         :data-child="child.id"
         :tabindex="editable ? 0 : undefined"
@@ -89,7 +89,7 @@
         @mousedown="onChildMouseDown($event, child)"
         @dragstart.stop.prevent
       >
-        <div v-if="isTitleVisible(child.titleBarStyle)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
+        <div v-if="isTitleVisible(child.titleBarStyle) && !isInlineFilterChild(child)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
           <input
             v-if="editable && editingChildId === child.id"
             ref="childTitleInput"
@@ -162,13 +162,13 @@
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="childWidgetComponent(child)"
-            :show-title="false"
+            :show-title="true"
             :dashboard-theme="dashboardTheme"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
-            :show-title="false"
+            :show-title="true"
             :dashboard-theme="dashboardTheme"
           />
           <AiAnalysisWidget
@@ -628,6 +628,11 @@ function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
   window.addEventListener('mousemove', onChildMouseMove)
   window.addEventListener('mouseup', onChildMouseUp)
 }
+
+function isInlineFilterChild(child: InsightCombinationChild): boolean {
+  return child.type === 'filter' || child.type === 'timeFilter'
+}
+
 function onChildMouseMove(e: MouseEvent) {
   if (!mv) return
   mvLast = { x: e.clientX, y: e.clientY }
@@ -987,6 +992,8 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .cc-child-del:hover { background: var(--db-danger-bg); color: var(--db-danger); }
 .cc-child-body { flex: 1; overflow: hidden; min-height: 0; border-radius: 0 0 7px 7px; }
+.cc-child.inline-filter-child { border: 0; background: transparent; box-shadow: none; }
+.cc-child.inline-filter-child .cc-child-body { overflow: visible; border-radius: 0; }
 
 /* 拖动/缩放期间：屏蔽子卡片内部（图表/表格等）的鼠标事件，并关掉子卡片的过渡动画
    —— 指针移动会让 :hover 在子卡片之间反复进出，每次都会重启 box-shadow 过渡，指标/子组件

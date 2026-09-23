@@ -59,7 +59,7 @@
           class="grid-item-content mc-card grid-item-animated"
           :data-component-id="item.i"
           tabindex="0"
-          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
+          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)) }"
           :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi'), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
@@ -521,7 +521,11 @@ function cancelTitleEdit(): void {
 function isToolbarTitleVisible(id: string): boolean {
   const comp = getComponent(id)
   if (!comp) return true
-  return isComponentTitleVisible(comp)
+  return isComponentTitleVisible(comp) && !isInlineFilterComponent(comp)
+}
+
+function isInlineFilterComponent(comp: InsightComponent | undefined): boolean {
+  return comp?.type === 'filter' || comp?.type === 'timeFilter'
 }
 
 function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
@@ -1158,6 +1162,30 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   letter-spacing: 0.04em;
   pointer-events: none;
   user-select: none;
+}
+
+/* 筛选器自身提供横向标题与控件布局，编辑态工具栏只保留删除入口。 */
+.grid-item-content.inline-filter-component .grid-item-toolbar {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.grid-item-content.inline-filter-component .grid-item-delete {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  pointer-events: auto;
+}
+
+.grid-item-content.inline-filter-component .grid-item-body {
+  height: 100%;
 }
 
 .grid-item-error {
