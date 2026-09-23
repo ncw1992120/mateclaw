@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   chartOutputFamily,
+  outputContractTemplate,
   resolveOutputSpec,
   validateComponentOutput,
   type ComponentOutputSpec,
@@ -60,6 +61,23 @@ describe('resolveOutputSpec', () => {
     expect(resolveOutputSpec('filter')).toBeNull()
     expect(resolveOutputSpec('aiAnalysis')).toBeNull()
     expect(resolveOutputSpec('combination')).toBeNull()
+  })
+})
+
+describe('outputContractTemplate', () => {
+  it('按组件契约生成 Python 返回模板，而不是任意 JSON', () => {
+    const template = outputContractTemplate(resolveOutputSpec('table')!)
+    expect(template.kind).toBe('table')
+    expect(template.example).toContain('columns')
+    expect(template.example).toContain('rows')
+    expect(template.fieldRules.minColumns).toBe(0)
+  })
+
+  it('图表模板携带组件字段约束', () => {
+    const template = outputContractTemplate(resolveOutputSpec('chart', 'pie')!)
+    expect(template.kind).toBe('table')
+    expect(template.fieldRules.minNumericColumns).toBe(1)
+    expect(template.fieldRules.minDimensionColumns).toBe(1)
   })
 })
 
