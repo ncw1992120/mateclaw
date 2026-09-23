@@ -1,8 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref, watch } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getAloudataMetricDirectory, getAloudataMetricDetail, pageAloudataMetrics, pageAloudataDimensions, listAloudataCategoryCounts } = vi.hoisted(() => ({
+const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensionDetail, pageAloudataMetrics, pageAloudataDimensions, listAloudataCategoryCounts } = vi.hoisted(() => ({
   getAloudataMetricDirectory: vi.fn(async () => [{
     categoryId: 'metric-root',
     categoryName: '业务指标',
@@ -11,7 +11,18 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, pageAloudataMetrics
   }]),
   getAloudataMetricDetail: vi.fn(async (_datasourceId: string, metricName: string) => ({
     metricName,
+    metricDisplayName: metricName === 'metric_a' ? '指标 A' : '转化率',
+    type: 'DERIVED',
+    businessCaliber: '按用户统计转化率',
+    unit: '%',
+    owner: '数据团队',
     availableDimensions: metricName === 'metric_a' ? ['dim_a'] : ['dim_a', 'region'],
+  })),
+  getAloudataDimensionDetail: vi.fn(async (_datasourceId: string, dimName: string) => ({
+    dimName,
+    dimDisplayName: dimName === 'region' ? '所属大区' : '维度 A',
+    originDataType: 'VARCHAR',
+    dimDescription: '维度描述',
   })),
   pageAloudataMetrics: vi.fn(async () => ({
     records: [
@@ -47,6 +58,7 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, pageAloudataMetrics
 vi.mock('@/api/semantic-model', () => ({
   getAloudataMetricDirectory,
   getAloudataMetricDetail,
+  getAloudataDimensionDetail,
   pageAloudataMetrics,
   pageAloudataDimensions,
   listAloudataCategoryCounts,
@@ -66,12 +78,23 @@ const PopoverStub = defineComponent({
   props: { visible: Boolean },
   emits: ['update:visible', 'show'],
   setup(props, { slots, emit }) {
+    const visible = ref(props.visible)
+    watch(() => props.visible, (value) => { visible.value = value })
+    const show = () => {
+      visible.value = true
+      emit('update:visible', true)
+      emit('show')
+    }
     return () => h('div', { class: 'picker-popover' }, [
-      h('div', { class: 'picker-reference', onClick: () => {
-        emit('update:visible', !props.visible)
-        if (!props.visible) emit('show')
+      h('div', { class: 'picker-reference', onMouseover: () => {
+        show()
+      }, onClick: () => {
+        if (visible.value) {
+          visible.value = false
+          emit('update:visible', false)
+        } else show()
       } }, slots.reference?.()),
-      props.visible ? h('div', { class: 'picker-popup' }, slots.default?.()) : null,
+      visible.value ? h('div', { class: 'picker-popup' }, slots.default?.()) : null,
     ])
   },
 })
@@ -166,6 +189,7 @@ beforeEach(() => {
   }
   getAloudataMetricDirectory.mockClear()
   getAloudataMetricDetail.mockClear()
+  getAloudataDimensionDetail.mockClear()
   pageAloudataMetrics.mockClear()
   pageAloudataDimensions.mockClear()
   listAloudataCategoryCounts.mockClear()
@@ -271,6 +295,38 @@ describe('Aloudata 指标&维度选择', () => {
     const metricA = wrapper.find('.metric-picker-popup').findAll('.directory-item')
       .find((item) => item.text().includes('metric_a'))
     expect(metricA?.find('input').element.disabled).toBe(true)
+  })
+
+  it('loads and displays live metric details when hovering a metric', async () => {
+    state.ui.aloudata.metrics = []
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+    await wrapper.find('.metric-detail-trigger[data-metric-name="metric_a"]').trigger('mouseover')
+    await flushPromises()
+    expect(getAloudataMetricDetail).toHaveBeenCalledWith('aloudata-1', 'metric_a')
+    const detail = wrapper.find('.metric-detail-card')
+    expect(detail.text()).toContain('按用户统计转化率')
+    expect(detail.text()).toContain('DERIVED')
+    expect(detail.text()).toContain('%')
+  })
+
+  it('loads and displays live dimension details when hovering a dimension', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await flushPromises()
+    await wrapper.find('.dimension-detail-trigger[data-dimension-name="region"]').trigger('mouseover')
+    await flushPromises()
+    expect(getAloudataDimensionDetail).toHaveBeenCalledWith('aloudata-1', 'region')
+    const detail = wrapper.find('.dimension-detail-card')
+    expect(detail.text()).toContain('region')
+    expect(detail.text()).toContain('所属大区')
+    expect(detail.text()).toContain('VARCHAR')
+    expect(detail.text()).toContain('维度描述')
   })
 
   it('keeps incompatible existing selections, reports the conflict, and blocks confirmation', async () => {

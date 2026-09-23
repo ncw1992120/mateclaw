@@ -96,10 +96,33 @@
                         :label="item.metricName"
                         @change="(checked: boolean) => toggleSelection('metrics', item.metricName, checked)"
                       />
-                      <span class="directory-item-info">
-                        <span class="directory-item-title">{{ item.metricDisplayName || item.metricName }}</span>
-                        <span class="directory-item-code">{{ item.metricName }}</span>
-                      </span>
+                      <el-popover
+                        trigger="hover"
+                        placement="right"
+                        :width="290"
+                        :show-after="250"
+                        popper-class="aloudata-detail-popper"
+                        @show="loadMetricDetail(item.metricName)"
+                      >
+                        <template #reference>
+                          <span class="directory-item-info metric-detail-trigger" :data-metric-name="item.metricName">
+                            <span class="directory-item-title">{{ item.metricDisplayName || item.metricName }}</span>
+                            <span class="directory-item-code">{{ item.metricName }}</span>
+                          </span>
+                        </template>
+                        <div class="aloudata-detail-card metric-detail-card">
+                          <div class="detail-card-title"><span class="detail-kind">123</span>{{ metricDetails[item.metricName]?.metricDisplayName || item.metricDisplayName || item.metricName }}</div>
+                          <div v-if="metricDetailLoading[item.metricName]" class="detail-loading">加载详情中…</div>
+                          <template v-else>
+                            <div class="detail-row"><span>指标编码：</span>{{ item.metricName }}</div>
+                            <div class="detail-row"><span>指标名称：</span>{{ metricDetails[item.metricName]?.metricDisplayName || item.metricDisplayName || '—' }}</div>
+                            <div class="detail-row"><span>指标类型：</span>{{ metricDetails[item.metricName]?.type || item.type || '—' }}</div>
+                            <div class="detail-row"><span>业务口径：</span>{{ metricDetails[item.metricName]?.businessCaliber || item.businessCaliber || '—' }}</div>
+                            <div class="detail-row"><span>单位：</span>{{ metricDetails[item.metricName]?.unit || item.unit || '—' }}</div>
+                            <div class="detail-row"><span>负责人：</span>{{ metricDetails[item.metricName]?.owner || item.owner || '—' }}</div>
+                          </template>
+                        </div>
+                      </el-popover>
                     </label>
                     <div v-if="!metricsLoading && !metricPage.records.length" class="directory-empty">没有匹配的指标</div>
                     <el-pagination
@@ -191,10 +214,31 @@
                         :label="item.dimName"
                         @change="(checked: boolean) => toggleSelection('dimensions', item.dimName, checked)"
                       />
-                      <span class="directory-item-info">
-                        <span class="directory-item-title">{{ item.dimDisplayName || item.dimName }}</span>
-                        <span class="directory-item-code">{{ item.dimName }}</span>
-                      </span>
+                      <el-popover
+                        trigger="hover"
+                        placement="right"
+                        :width="290"
+                        :show-after="250"
+                        popper-class="aloudata-detail-popper"
+                        @show="loadDimensionDetail(item.dimName)"
+                      >
+                        <template #reference>
+                          <span class="directory-item-info dimension-detail-trigger" :data-dimension-name="item.dimName">
+                            <span class="directory-item-title">{{ item.dimDisplayName || item.dimName }}</span>
+                            <span class="directory-item-code">{{ item.dimName }}</span>
+                          </span>
+                        </template>
+                        <div class="aloudata-detail-card dimension-detail-card">
+                          <div class="detail-card-title"><span class="detail-kind">abc</span>{{ dimensionDetails[item.dimName]?.dimDisplayName || item.dimDisplayName || item.dimName }}</div>
+                          <div v-if="dimensionDetailLoading[item.dimName]" class="detail-loading">加载详情中…</div>
+                          <template v-else>
+                            <div class="detail-row"><span>维度编码：</span>{{ item.dimName }}</div>
+                            <div class="detail-row"><span>维度名称：</span>{{ dimensionDetails[item.dimName]?.dimDisplayName || item.dimDisplayName || '—' }}</div>
+                            <div class="detail-row"><span>数据类型：</span>{{ dimensionDetails[item.dimName]?.originDataType || item.originDataType || '—' }}</div>
+                            <div class="detail-row"><span>维度描述：</span>{{ dimensionDetails[item.dimName]?.dimDescription || item.dimDescription || '—' }}</div>
+                          </template>
+                        </div>
+                      </el-popover>
                     </label>
                     <div v-if="!dimensionsLoading && !dimensionPage.records.length" class="directory-empty">没有匹配的维度</div>
                     <el-pagination
@@ -260,6 +304,7 @@ import { useInsight } from '../useInsight'
 import * as datasourceApi from '@/api/datasource'
 import {
   getAloudataMetricDetail,
+  getAloudataDimensionDetail,
   pageAloudataMetrics,
   pageAloudataDimensions,
   listAloudataCategoryCounts,
@@ -268,6 +313,8 @@ import type {
   AloudataMetricPage,
   AloudataDimensionPage,
   AloudataCategoryCount,
+  AloudataSyncedMetric,
+  AloudataSyncedDimension,
 } from '@/types'
 import { buildCategoryTree, filterCategoryTree } from './aloudata-metric-directory'
 import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
@@ -294,6 +341,10 @@ const selectedDimensionCategoryId = ref(ALL_DIMENSIONS_ID)
 const metricLabelMap = reactive<Record<string, string>>({})
 const dimLabelMap = reactive<Record<string, string>>({})
 const metricDimensions = reactive<Record<string, string[]>>({})
+const metricDetails = reactive<Record<string, AloudataSyncedMetric>>({})
+const dimensionDetails = reactive<Record<string, AloudataSyncedDimension>>({})
+const metricDetailLoading = reactive<Record<string, boolean>>({})
+const dimensionDetailLoading = reactive<Record<string, boolean>>({})
 const selectedMetricRelationsLoading = ref(false)
 const categoryTreeProps = { label: 'categoryName', children: 'children' }
 
@@ -372,6 +423,10 @@ function open() {
   Object.keys(metricLabelMap).forEach((k) => delete metricLabelMap[k])
   Object.keys(dimLabelMap).forEach((k) => delete dimLabelMap[k])
   Object.keys(metricDimensions).forEach((k) => delete metricDimensions[k])
+  Object.keys(metricDetails).forEach((k) => delete metricDetails[k])
+  Object.keys(dimensionDetails).forEach((k) => delete dimensionDetails[k])
+  Object.keys(metricDetailLoading).forEach((k) => delete metricDetailLoading[k])
+  Object.keys(dimensionDetailLoading).forEach((k) => delete dimensionDetailLoading[k])
   if (!datasourceId.value) {
     ElMessage.warning('未关联到数据源，无法加载指标/维度')
     return
@@ -456,6 +511,7 @@ async function loadSelectedMetricRelations(metricNames: string[]) {
   try {
     const relations = await Promise.all(missing.map((name) => getAloudataMetricDetail(datasourceId.value, name)))
     relations.forEach((relation, index) => {
+      metricDetails[missing[index]] = relation
       if (Array.isArray(relation.availableDimensions)) {
         metricDimensions[missing[index]] = relation.availableDimensions
       }
@@ -464,6 +520,30 @@ async function loadSelectedMetricRelations(metricNames: string[]) {
     ElMessage.error('加载已选指标的可用维度失败，请重试')
   } finally {
     selectedMetricRelationsLoading.value = false
+  }
+}
+
+async function loadMetricDetail(metricName: string) {
+  if (metricDetails[metricName] || metricDetailLoading[metricName]) return
+  metricDetailLoading[metricName] = true
+  try {
+    metricDetails[metricName] = await getAloudataMetricDetail(datasourceId.value, metricName)
+  } catch {
+    // Keep the live list fields visible if the optional hover-detail request fails.
+  } finally {
+    metricDetailLoading[metricName] = false
+  }
+}
+
+async function loadDimensionDetail(dimName: string) {
+  if (dimensionDetails[dimName] || dimensionDetailLoading[dimName]) return
+  dimensionDetailLoading[dimName] = true
+  try {
+    dimensionDetails[dimName] = await getAloudataDimensionDetail(datasourceId.value, dimName)
+  } catch {
+    // Keep the live list fields visible if the optional hover-detail request fails.
+  } finally {
+    dimensionDetailLoading[dimName] = false
   }
 }
 
@@ -730,6 +810,44 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
   font-size: 11px;
 }
+.metric-detail-trigger,
+.dimension-detail-trigger {
+  flex: 1;
+  cursor: help;
+}
+.aloudata-detail-card {
+  color: var(--el-text-color-primary);
+  font-size: 12px;
+}
+.detail-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 14px;
+  font-weight: 600;
+}
+.detail-kind {
+  color: var(--el-color-primary);
+  font-size: 11px;
+  font-weight: 500;
+}
+.detail-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.detail-row > span {
+  flex: none;
+  color: var(--el-text-color-placeholder);
+}
+.detail-loading {
+  padding-top: 12px;
+  color: var(--el-text-color-secondary);
+}
 .directory-empty {
   display: grid;
   min-height: 180px;
@@ -752,6 +870,9 @@ onBeforeUnmount(() => {
 }
 :global(.aloudata-picker-popper) {
   max-width: calc(100vw - 32px) !important;
+}
+:global(.aloudata-detail-popper) {
+  padding: 14px !important;
 }
 .pager {
   margin-top: 8px;

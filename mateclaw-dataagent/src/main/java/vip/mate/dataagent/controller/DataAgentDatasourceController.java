@@ -311,6 +311,16 @@ public class DataAgentDatasourceController {
         return R.ok(aloudataSyncService.getMetricDetail(datasourceId, metricName));
     }
 
+    /** 实时获取单个维度详情，用于选择弹窗悬浮展示。 */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/detail")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "维度详情", description = "实时获取指定维度的类型、描述等详情（懒加载）")
+    public R<AloudataDimensionSemanticDTO> getDimensionDetail(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "维度英文名") @PathVariable String dimName) {
+        return R.ok(aloudataSyncService.getDimensionDetail(datasourceId, dimName));
+    }
+
     /**
      * 查询指标关联的维度详情列表
      */

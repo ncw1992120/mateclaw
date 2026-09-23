@@ -75,6 +75,47 @@ class AloudataSemanticSyncServiceTest {
     }
 
     @Test
+    void loadsLiveDimensionDetailFromConfiguredAloudataDatasource() {
+        DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
+        AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);
+        AloudataApiClient apiClient = mock(AloudataApiClient.class);
+        AloudataEndpointService endpointService = mock(AloudataEndpointService.class);
+        AloudataSemanticSyncServiceImpl service = new AloudataSemanticSyncServiceImpl(
+                mock(AloudataMetricMapper.class),
+                mock(AloudataDimensionMapper.class),
+                mock(AloudataMetricDimensionMapper.class),
+                mock(AloudataCategoryMapper.class),
+                datasourceMapper,
+                apiClient,
+                configHelper,
+                endpointService,
+                mock(AloudataSemanticEsService.class),
+                mock(ModelConfigService.class),
+                mock(AloudataService.class));
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setSourceType("aloudata");
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        when(datasourceMapper.selectById(9L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(config);
+        when(endpointService.buildParamsFromConfigAndInput(eq("dimension_detail"), eq(config), anyMap()))
+                .thenReturn(new java.util.HashMap<>());
+        when(apiClient.callWithParams(eq("dimension_detail"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", Map.of(
+                        "dimensionId", "dim-id", "dimName", "region", "dimDisplayName", "所属大区",
+                        "originDataType", "VARCHAR", "dimDescription", "区域维度",
+                        "datasetName", "demo_inventory_detail"))));
+
+        var result = service.getDimensionDetail(9L, "region");
+
+        assertEquals("region", result.getDimName());
+        assertEquals("所属大区", result.getDimDisplayName());
+        assertEquals("VARCHAR", result.getOriginDataType());
+        assertEquals("区域维度", result.getDimDescription());
+        assertEquals("demo_inventory_detail", result.getDatasetName());
+        verify(apiClient).callWithParams(eq("dimension_detail"), eq(config), anyMap());
+    }
+
+    @Test
     void loadsMetricDirectoryFromConfiguredAloudataDatasource() {
         DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
         AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);

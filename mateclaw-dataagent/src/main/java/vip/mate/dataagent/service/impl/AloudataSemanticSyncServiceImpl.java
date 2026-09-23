@@ -491,6 +491,53 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         return dto;
     }
 
+    /** 按需直连 Aloudata dimension_detail，供指标/维度选择器悬浮详情使用。 */
+    @Override
+    @SuppressWarnings("unchecked")
+    public AloudataDimensionSemanticDTO getDimensionDetail(Long datasourceId, String dimName) {
+        AloudataDimensionSemanticDTO dto = new AloudataDimensionSemanticDTO();
+        dto.setDimName(dimName);
+        if (dimName == null || dimName.isBlank()) {
+            return dto;
+        }
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            return dto;
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("dimName", dimName);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ENDPOINT_DIMENSION_DETAIL, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_DIMENSION_DETAIL, config, params);
+            Map<String, Object> body = response.getBody();
+            if (response.getStatusCode().is2xxSuccessful() && body != null
+                    && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof Map) {
+                Map<String, Object> detail = (Map<String, Object>) body.get("data");
+                dto.setDimensionId(asStr(detail.get("dimensionId")));
+                dto.setDimName(asStr(detail.get("dimName")) != null ? asStr(detail.get("dimName")) : dimName);
+                dto.setDimDisplayName(asStr(detail.get("dimDisplayName")));
+                dto.setOriginDataType(asStr(detail.get("originDataType")));
+                dto.setDimDescription(asStr(detail.get("dimDescription")));
+                dto.setConfigType(asStr(detail.get("configType")));
+                dto.setConfigValue(asStr(detail.get("configValue")));
+                dto.setDatasetName(asStr(detail.get("datasetName")));
+                dto.setStatus(asStr(detail.get("displayStatus")));
+                dto.setCategoryId(detail.get("dimCategoryId") == null ? null : detail.get("dimCategoryId").toString());
+                dto.setCategoryName(asStr(detail.get("dimCategoryName")));
+                Object synonyms = detail.get("synonyms");
+                if (synonyms instanceof List<?> values) {
+                    dto.setSynonyms(values.stream().filter(Objects::nonNull).map(String::valueOf).toList());
+                } else if (synonyms instanceof String value && !value.isBlank()) {
+                    dto.setSynonyms(Arrays.asList(value.split(",")));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Aloudata维度详情] 获取详情失败 dimName={}: {}", dimName, e.getMessage());
+        }
+        return dto;
+    }
+
     /**
      * 批量查询指标可用维度编码。dimensionAll 响应按指标名分组，避免分页列表逐指标请求。
      * 返回 null 表示关系接口调用失败；空列表表示成功但该指标没有可用维度。
