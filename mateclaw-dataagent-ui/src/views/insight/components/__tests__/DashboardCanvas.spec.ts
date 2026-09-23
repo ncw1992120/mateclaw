@@ -14,8 +14,8 @@ const stubs = {
   KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
   ChartWidget: { template: '<div />' },
   DataTableWidget: { template: '<div />' },
-  FilterSelectWidget: { template: '<div />' },
-  TimeFilterWidget: { template: '<div />' },
+  FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component'], template: '<div />' },
+  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component'], template: '<div />' },
   AiAnalysisWidget: { template: '<div />' },
   CombinationCardWidget: { name: 'CombinationCardWidget', props: ['sampleMode'], template: '<div />' },
 }
@@ -112,6 +112,29 @@ describe('DashboardCanvas keyboard interaction', () => {
 
     expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'CombinationCardWidget' }).props('sampleMode')).toBe(false)
+  })
+
+  it('does not mark filter and time filter as sample data', () => {
+    const filter = {
+      id: 'filter-1',
+      type: 'filter' as const,
+      title: '区域',
+      position: { x: 0, y: 0, w: 4, h: 2 },
+    }
+    const timeFilter = {
+      id: 'time-filter-1',
+      type: 'timeFilter' as const,
+      title: '时间范围',
+      position: { x: 4, y: 0, w: 4, h: 2 },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [filter, timeFilter], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('component')).toEqual(filter)
+    expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('component')).toEqual(timeFilter)
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {
