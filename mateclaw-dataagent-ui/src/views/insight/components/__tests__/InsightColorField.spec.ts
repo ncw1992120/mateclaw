@@ -18,9 +18,9 @@ const ColorPickerStub = {
   template: '<button class="picker" type="button" aria-label="取色器" @click="$emit(\'change\', \'#abcdef\')">{{ modelValue }}</button>',
 }
 
-function mountField(modelValue = '#123456', suggestedColors: string[] = ['#ABCDEF', '#112233'], showPicker = true) {
+function mountField(modelValue = '#123456', suggestedColors: string[] = ['#ABCDEF', '#112233']) {
   return mount(InsightColorField, {
-    props: { modelValue, label: '主色', suggestedColors, showPicker },
+    props: { modelValue, label: '主色', suggestedColors },
     global: { stubs: { ElColorPicker: ColorPickerStub, 'el-color-picker': ColorPickerStub } },
   })
 }
@@ -39,7 +39,8 @@ describe('InsightColorField', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe('#AABBCC')
     await input.setValue('#a1b2c3')
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe('#A1B2C3')
-    expect((wrapper.get('[data-testid="color-preview"]').element as HTMLElement).style.backgroundColor).toBe('rgb(161, 178, 195)')
+    expect(wrapper.find('[data-testid="color-preview"]').exists()).toBe(false)
+    expect(wrapper.find('.picker').exists()).toBe(true)
   })
 
   it('keeps invalid intermediate text as a draft without updating the model', async () => {
@@ -120,14 +121,6 @@ describe('InsightColorField', () => {
     const wrapper = mountField('#123456', ['#ABCDEF', '#654321'])
 
     expect(wrapper.getComponent(ColorPickerStub).props('predefine')).toEqual(['#ABCDEF', '#123456', '#654321'])
-  })
-
-  it('can render only the HEX input for inline component color editing', () => {
-    const wrapper = mountField('#123456', [], false)
-
-    expect(wrapper.find('[data-testid="color-preview"]').exists()).toBe(false)
-    expect(wrapper.find('.picker').exists()).toBe(false)
-    expect(wrapper.get('input').attributes('aria-label')).toBe('主色')
   })
 
   it('exposes the field label as the accessible name of the HEX input', () => {
