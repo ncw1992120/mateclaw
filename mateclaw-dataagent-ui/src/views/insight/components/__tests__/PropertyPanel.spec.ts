@@ -58,7 +58,7 @@ const stubs = {
   InsightColorField: {
     name: 'InsightColorField',
     props: ['modelValue', 'label', 'suggestedColors', 'showPicker'],
-    template: '<input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" @change="$emit(\'change\', $event.target.value)" />',
+    template: '<input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker ?? true)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" @change="$emit(\'change\', $event.target.value)" />',
   },
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio': { template: '<label><slot /></label>' },
@@ -189,7 +189,7 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('[aria-label="组件强调色"]').exists()).toBe(false)
 
     const colorField = styleSettings.get('[aria-label="组件配色"]')
-    expect(colorField.attributes('data-show-picker')).toBe('false')
+    expect(colorField.attributes('data-show-picker')).toBe('true')
     await colorField.setValue('#A1B2C3')
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ componentColor: '#A1B2C3' })
   })

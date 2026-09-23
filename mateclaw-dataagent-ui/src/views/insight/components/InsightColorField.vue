@@ -2,15 +2,7 @@
   <div class="insight-color-field">
     <label class="insight-color-field__label" :for="inputId">{{ label }}</label>
     <div class="insight-color-field__controls">
-      <span
-        v-if="showPicker"
-        data-testid="color-preview"
-        class="insight-color-field__preview"
-        :style="{ backgroundColor: previewColor }"
-        aria-hidden="true"
-      />
       <el-color-picker
-        v-if="showPicker"
         :model-value="previewColor"
         :predefine="predefinedColors"
         :aria-label="`${label}取色器`"
@@ -46,10 +38,8 @@ const props = withDefaults(defineProps<{
   modelValue: string
   label: string
   suggestedColors?: string[]
-  showPicker?: boolean
 }>(), {
   suggestedColors: () => TEXT_COLOR_PRESETS,
-  showPicker: true,
 })
 
 const emit = defineEmits<{
@@ -120,7 +110,6 @@ function onPickerChange(value: string | null): void {
 .insight-color-field { display: grid; gap: 6px; }
 .insight-color-field__label { color: var(--el-text-color-regular); font-size: 13px; }
 .insight-color-field__controls { display: flex; align-items: center; gap: 8px; }
-.insight-color-field__preview { width: 24px; height: 24px; flex: 0 0 24px; border: 1px solid var(--el-border-color); border-radius: 4px; }
 .insight-color-field__controls input { min-width: 0; width: 112px; padding: 6px 8px; border: 1px solid var(--el-border-color); border-radius: 4px; color: var(--el-text-color-primary); font: inherit; font-family: monospace; }
 .insight-color-field__controls input[aria-invalid="true"] { border-color: var(--el-color-danger); }
 .insight-color-field__error { margin: 0; color: var(--el-color-danger); font-size: 12px; }
