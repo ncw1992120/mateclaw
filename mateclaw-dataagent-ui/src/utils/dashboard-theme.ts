@@ -7,6 +7,7 @@ import type {
   DashboardThemeIconMode,
   ChartType,
   InsightComponentType,
+  ComponentThemeAccentGroup,
   ResolvedDashboardTheme,
   ThemeValidationError,
 } from '@/types'
@@ -21,7 +22,7 @@ const palette = (values: string[]): string[] => values.slice(0, 5)
 
 export const DASHBOARD_THEME_PRESETS: Record<string, ThemePreset> = {
   blue: {
-    label: '经典蓝', pageBackground: '#F4F7FC', cardBackground: '#FFFFFF', border: '#D9E2F2', text: '#172B4D', textSecondary: '#52627A', textMuted: '#7A889D', primary: '#1E40AF', accentAlt: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
+    label: '经典蓝', pageBackground: '#F7F8FA', cardBackground: '#FFFFFF', border: '#E1E5EB', text: '#172B4D', textSecondary: '#52627A', textMuted: '#7A889D', primary: '#1E40AF', accentAlt: '#0F766E', positive: '#047857', negative: '#B42318', warning: '#B45309', info: '#2563EB',
     metricPalette: palette(['#1E40AF', '#2563EB', '#0F766E', '#B45309', '#7C3AED']), chartPalette: palette(['#2563EB', '#14B8A6', '#F59E0B', '#8B5CF6', '#EC4899']), radius: 'medium', shadow: 'subtle',
   },
   indigo: {
@@ -128,9 +129,9 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
     '--db-border-strong': mix('var(--insight-text)', 'var(--insight-border)', 34),
     // 页面级层次：外层画布 → 组合容器 → 子卡片/控件。组件只消费这些 Token，
     // 不再各自猜测主题背景，保证编辑器和正式预览使用同一层级。
-    '--db-surface-container': mix('var(--insight-primary)', 'var(--insight-page-bg)', 4),
+    '--db-surface-container': mix('var(--insight-border)', 'var(--insight-page-bg)', 35),
     '--db-surface-card': 'var(--db-card)',
-    '--db-surface-nested': mix('var(--insight-primary)', 'var(--insight-card-bg)', 6),
+    '--db-surface-nested': mix('var(--insight-border)', 'var(--insight-card-bg)', 55),
     '--db-surface-control': mix('var(--insight-text)', 'var(--insight-card-bg)', 4),
     '--db-surface-control-hover': 'var(--db-hover)',
     '--db-focus': 'var(--db-accent)',
@@ -168,47 +169,58 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
   return vars
 }
 
-/** 语义分区：颜色编码「区域」而不是「第几个组件」，全页只允许主色 + 辅色两个色相。
- *  - data    ：KPI / 图表 / 表格 —— 占绝大部分面积，用主色
- *  - insight ：AI 洞察 —— 全页唯一的第二个色相（辅色）
- *  - control ：筛选器 / 时间筛选 —— 控件，不吃色相，走中性阶
- * 第三个色号不在这里分配，留给用户在指标样式弹窗里显式指定的例外。 */
+/** 语义分区：数据组件缺省主色，AI 洞察缺省辅色，筛选控件保持中性。 */
 export function componentThemeZone(type: InsightComponentType): 'data' | 'insight' | 'control' {
   if (type === 'filter' || type === 'timeFilter') return 'control'
   if (type === 'aiAnalysis') return 'insight'
   return 'data'
 }
 
-/** 分区在图标明度梯度上的序号；只影响明度，不引入新色相。 */
-const ZONE_ICON_INDEX: Record<ReturnType<typeof componentThemeZone>, number> = { data: 0, insight: 1, control: 2 }
+/** 将组件强调色分组映射到有限的三色主题；琥珀使用当前主题的第四个指标色。 */
+export function componentAccentColor(theme: ResolvedDashboardTheme, group: ComponentThemeAccentGroup): string {
+  if (group === 'secondary') return theme.accentAlt || theme.metricPalette[2] || theme.primary
+  if (group === 'highlight') return theme.metricPalette[3] || '#B45309'
+  return theme.primary
+}
 
 /** 输出给画布/组合卡片的分区层次 Token；显式组件样式可在调用方覆盖。 */
-export function componentThemeStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType, depth = 0): Record<string, string> {
+export function componentThemeStyle(
+  theme: ResolvedDashboardTheme | undefined,
+  type: InsightComponentType,
+  _depth = 0,
+  accentGroup?: ComponentThemeAccentGroup,
+): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
-  // 控制区不参与强调色竞争：不下发 --component-group-accent，下游全部回落到中性 --db-*。
-  if (theme.componentColorMode !== 'uniform' && componentThemeZone(type) === 'control') return {}
-  const accent = theme.componentColorMode === 'uniform'
-    ? theme.primary
-    : componentThemeZone(type) === 'insight'
-      ? (theme.accentAlt || theme.metricPalette[1] || theme.primary)
-      : theme.primary
+  // 筛选控件始终中性，不随「统一主色」策略着色。
+  if (componentThemeZone(type) === 'control') return {}
+  const defaultGroup: ComponentThemeAccentGroup = theme.componentColorMode === 'uniform'
+    ? 'primary'
+    : componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'
+  const accent = componentAccentColor(theme, accentGroup ?? defaultGroup)
   const hierarchyAmount = theme.hierarchy === 'soft' ? 4 : theme.hierarchy === 'strong' ? 12 : 7
-  const nestedAmount = Math.max(2, hierarchyAmount - Math.min(depth, 2) * 2)
   const mix = (foreground: string, background: string, amount: number): string => `color-mix(in srgb, ${foreground} ${amount}%, ${background})`
   return {
     '--component-group-accent': accent,
-    '--component-group-border': mix(accent, 'var(--insight-border)', hierarchyAmount),
-    '--component-group-surface': mix(accent, 'var(--insight-card-bg)', nestedAmount),
-    '--component-group-header-surface': mix(accent, 'var(--insight-card-bg)', hierarchyAmount + 3),
+    '--component-group-border': mix('var(--insight-text)', 'var(--insight-border)', hierarchyAmount),
+    '--component-group-surface': 'var(--insight-card-bg)',
+    '--component-group-header-surface': 'var(--insight-card-bg)',
   }
 }
 
-/** 输出标准语义图标的字号、字重和暖色；图标不再直接继承标题文字色。 */
-export function componentIconStyle(theme: ResolvedDashboardTheme | undefined, type: InsightComponentType | 'tab', title?: string, variant = 0): Record<string, string> {
+/** 图标只使用主题三色；筛选器与页签图标走中性色/主色，不再按序号生成额外色相。 */
+export function componentIconStyle(
+  theme: ResolvedDashboardTheme | undefined,
+  type: InsightComponentType | 'tab',
+  title?: string,
+  _variant = 0,
+  accentGroup?: ComponentThemeAccentGroup,
+): Record<string, string> {
   if (!theme || theme.source === 'legacy') return {}
-  const tabIndex = title?.includes('指标') ? 0 : title?.includes('计划') ? 1 : title?.includes('策略') ? 2 : 4
-  const colorIndex = type === 'tab' ? tabIndex : (ZONE_ICON_INDEX[componentThemeZone(type)] + variant) % theme.iconPalette.length
-  const color = theme.iconPalette[colorIndex] ?? theme.primary
+  const color = type === 'tab'
+    ? theme.primary
+    : componentThemeZone(type) === 'control'
+      ? theme.textSecondary
+      : componentAccentColor(theme, accentGroup ?? (componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'))
   return {
     '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
     '--dashboard-icon-weight': '800',

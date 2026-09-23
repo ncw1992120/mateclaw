@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { buildPythonSystemRegion, useInsight } from '../useInsight'
-import { hydratePanel } from '../useCardAttributeBridge'
+import { buildComponentPatch, hydratePanel } from '../useCardAttributeBridge'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
 // 弹窗内的确认框在测试中直接通过
@@ -15,6 +15,22 @@ const { ElMessageBox } = await import('element-plus')
 const { state } = useInsight()
 
 describe('buildPythonSystemRegion', () => {
+  it('round-trips a component accent group through card attribute-panel state', () => {
+    const component = {
+      id: 'accent-card',
+      type: 'kpi',
+      title: '指标卡',
+      position: { x: 0, y: 0, w: 6, h: 4 },
+      themeAccentGroup: 'highlight',
+    }
+
+    hydratePanel(component as never)
+    const updated = buildComponentPatch(component as never)
+
+    expect(state.cards[0]?.themeAccentGroup).toBe('highlight')
+    expect(updated.themeAccentGroup).toBe('highlight')
+  })
+
   it('打开已绑定筛选器的组件时重算过期的系统生成区域', () => {
     const component = writeComponentDatasetPipeline(
       { id: 'nested-table', type: 'table', title: '子策略贡献表', position: { x: 0, y: 0, w: 6, h: 4 }, config: {} },

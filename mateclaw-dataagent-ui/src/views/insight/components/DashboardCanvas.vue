@@ -60,7 +60,7 @@
           :data-component-id="item.i"
           tabindex="0"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)) }"
-          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi'), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
+          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -97,6 +97,7 @@
                   :title="getComponentTitle(item.i)"
                   :dashboard-theme="dashboardTheme"
                   :title-icon-style="getComponent(item.i)?.titleIconStyle"
+                  :theme-accent-group="getComponent(item.i)?.themeAccentGroup"
                   :variant="sameRowIconVariant(item)"
                 />
                 <button
@@ -897,6 +898,15 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   box-shadow: var(--component-shadow, var(--shadow-card));
   padding: var(--component-padding, 0px);
   transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+.grid-item-content::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  height: 2px;
+  background: var(--component-group-accent, transparent);
+  pointer-events: none;
 }
 
 .dashboard-canvas.is-resizing,

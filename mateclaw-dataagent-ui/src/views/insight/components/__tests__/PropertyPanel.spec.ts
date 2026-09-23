@@ -122,6 +122,22 @@ describe('PropertyPanel', () => {
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ titleBarStyle: 'accent' })
   })
 
+  it('allows data components to select one of the three restrained accent colors', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: { component, allComponents: [] },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const accentSelect = wrapper.get('select[aria-label="组件强调色"]')
+    expect(accentSelect.findAll('option').map(option => option.text())).toEqual([
+      '主色',
+      '辅助色',
+      '强调色',
+    ])
+    await accentSelect.setValue('highlight')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ themeAccentGroup: 'highlight' })
+  })
+
   it('所有组件共用样式设置，且不再暴露重复的标题开关', async () => {
     const wrapper = mount(PropertyPanel, {
       props: { component, allComponents: [] },
