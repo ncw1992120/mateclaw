@@ -99,4 +99,19 @@ describe('PythonQueryConfigDialog', () => {
     const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
     expect(saved.filterFields[0]).toMatchObject({ field: 'region', filterComponentId: 'strategy-filter' })
   })
+
+  it('筛选绑定对象是可编辑输入框并拒绝非法字段名', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions },
+      global: { stubs },
+    })
+
+    await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
+    const target = wrapper.find('[data-testid="python-qc-filter-field"]')
+    expect(target.element.tagName).toBe('INPUT')
+    await target.setValue('字段-名称')
+    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
+
+    expect(wrapper.emitted('save')).toBeUndefined()
+  })
 })
