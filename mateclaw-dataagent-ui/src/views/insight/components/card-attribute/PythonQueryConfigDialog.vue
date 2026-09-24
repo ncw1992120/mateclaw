@@ -65,9 +65,7 @@
             <el-select v-model="row.filterComponentId" size="small" placeholder="筛选器名称" filterable data-testid="python-qc-filter-component">
               <el-option v-for="filter in filterOptions" :key="filter.id" :label="filter.title" :value="filter.id" />
             </el-select>
-            <el-select v-model="row.field" size="small" placeholder="绑定字段" filterable data-testid="python-qc-filter-field" @change="updateFilterField(row, $event)">
-              <el-option v-for="field in filterFieldCandidates" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
-            </el-select>
+            <el-input v-model="row.field" size="small" placeholder="字段名（英文/数字/下划线）" data-testid="python-qc-filter-field" />
             <el-button size="small" text type="danger" data-testid="python-qc-filter-remove" @click="filterRows.splice(index, 1)">删除</el-button>
           </div>
         </div>
@@ -215,16 +213,6 @@ function addFilterField(): void {
   filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'], filterComponentId: filterOptions.value[0]?.id ?? '' })
 }
 
-function updateFilterField(row: EditableFilterField, fieldName: string): void {
-  const field = filterFieldCandidates.value.find((item) => item.field === fieldName)
-  if (!field) return
-  row.field = field.field
-  row.title = field.title
-  row.dataType = field.dataType ?? 'string'
-  row.parameterName = field.field
-  row.operators = field.dataType === 'number' ? ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'] : ['eq', 'neq', 'in', 'not_in', 'contains']
-}
-
 function toggleRole(row: QueryDisplayField): void {
   row.role = row.role === 'measure' ? 'dimension' : 'measure'
 }
@@ -259,6 +247,19 @@ function save(): void {
     }
     fieldNames.add(fieldName)
   }
+  const filterNames = new Set<string>()
+  for (const field of filterRows.value) {
+    const fieldName = field.field.trim()
+    if (!FIELD_NAME_PATTERN.test(fieldName)) {
+      ElMessage.warning('绑定字段名只能由英文、数字、下划线组成，且不能以数字开头')
+      return
+    }
+    if (filterNames.has(fieldName)) {
+      ElMessage.warning('绑定字段名不能重复')
+      return
+    }
+    filterNames.add(fieldName)
+  }
   if (duplicateTitles.value.size) {
     ElMessage.warning('展示名必须唯一')
     return
@@ -272,7 +273,7 @@ function save(): void {
   const displayFields = fieldRows.value.map((field) => ({ field: field.field.trim(), title: field.title.trim() || field.field.trim(), role: field.role, dataType: field.dataType }))
   const filterFields = filterRows.value.map((field) => {
     const nextField = renamedFields.get(field.field) ?? field.field
-    return { ...field, field: nextField, title: titleByField.get(nextField) ?? field.title, parameterName: field.parameterName === field.field ? nextField : field.parameterName, ...(field.filterComponentId ? { filterComponentId: field.filterComponentId } : {}) }
+    return { ...field, field: nextField, title: titleByField.get(nextField) ?? field.title, parameterName: nextField, ...(field.filterComponentId ? { filterComponentId: field.filterComponentId } : {}) }
   })
   const allowedFields = sortAllowed.value.map((field) => renamedFields.get(field) ?? field)
   emit('save', {
