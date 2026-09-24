@@ -113,7 +113,6 @@ import type { FinalResultFilterField, FinalResultQueryConfig, QueryDisplayField 
 const props = defineProps<{
   modelValue: boolean
   config: FinalResultQueryConfig
-  fieldCatalog: QueryDisplayField[]
   filterOptions?: Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>
 }>()
 
