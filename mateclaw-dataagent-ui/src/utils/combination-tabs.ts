@@ -22,6 +22,25 @@ export function combinationTabChildCount(component: InsightComponent, tabId: str
   return tab?.children.length ?? 0
 }
 
+/** 在组合卡片及其所有页签、嵌套组合卡片中查找指定子组件。 */
+export function findCombinationChild(
+  container: Pick<InsightComponent, 'children' | 'containerConfig'>,
+  childId: string,
+): InsightCombinationChild | null {
+  const children = [
+    ...(container.children ?? []),
+    ...(container.containerConfig?.tabs.flatMap((tab) => tab.children) ?? []),
+  ]
+  for (const child of children) {
+    if (child.id === childId) return child
+    if (child.type === 'combination') {
+      const nested = findCombinationChild(child, childId)
+      if (nested) return nested
+    }
+  }
+  return null
+}
+
 /** 组合子组件的默认布局，画布拖入和已有组件移入共用同一套尺寸规则。 */
 export function defaultCombinationChildLayout(
   type: InsightComponentType,
