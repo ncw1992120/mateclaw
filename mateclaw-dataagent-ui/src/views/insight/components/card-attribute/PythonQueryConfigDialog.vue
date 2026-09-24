@@ -159,19 +159,18 @@ const duplicateTitles = computed(() => {
 
 const filterOptions = computed(() => props.filterOptions ?? [])
 
-function getFieldNameError(value: string, duplicated: boolean, label: string): string {
+function getFieldNameError(value: string, label: string): string {
   const fieldName = value.trim()
-  if (!fieldName || !FIELD_NAME_PATTERN.test(fieldName)) return `${label}只能由英文、数字、下划线组成，且不能以数字开头`
-  if (duplicated) return `${label}不能重复`
-  return ''
+  if (!fieldName || FIELD_NAME_PATTERN.test(fieldName)) return ''
+  return `${label}只能由英文、数字、下划线组成，且不能以数字开头`
 }
 
 function displayFieldNameError(row: EditableField): string {
-  return getFieldNameError(row.field, fieldRows.value.filter((item) => item.field.trim() === row.field.trim()).length > 1, '技术字段名')
+  return getFieldNameError(row.field, '技术字段名')
 }
 
 function filterFieldNameError(row: EditableFilterField): string {
-  return getFieldNameError(row.field, filterRows.value.filter((item) => item.field.trim() === row.field.trim()).length > 1, '绑定字段名')
+  return getFieldNameError(row.field, '绑定字段名')
 }
 
 function displayFieldRowKey(row: EditableField): number {
