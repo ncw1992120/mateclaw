@@ -99,7 +99,6 @@
   <PythonQueryConfigDialog
     v-model="showQueryConfig"
     :config="queryConfigDraft ?? createEmptyFinalResultQueryConfig()"
-    :field-catalog="queryConfigFieldCatalog"
     :filter-options="state.filterCatalog"
     @save="saveQueryConfig"
   />
@@ -139,6 +138,16 @@ const outputSpec = computed(() => {
 })
 const finalQueryConfig = computed(() => state.finalResultQueryConfig)
 const queryConfigured = computed(() => isFinalResultQueryConfigured(finalQueryConfig.value))
+const datasetQueryDisplayFields = computed<QueryDisplayField[]>(() => {
+  const fields = new Map<string, QueryDisplayField>()
+  state.datasets.forEach((dataset) => {
+    dataset.queryConfig?.displayFields.forEach((field) => {
+      const fieldName = field.field.trim()
+      if (fieldName && !fields.has(fieldName)) fields.set(fieldName, { ...field, field: fieldName })
+    })
+  })
+  return [...fields.values()]
+})
 const showQueryConfig = ref(false)
 const queryConfigDraft = ref<FinalResultQueryConfig | null>(null)
 
@@ -152,16 +161,6 @@ function createEmptyFinalResultQueryConfig(): FinalResultQueryConfig {
     paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
   }
 }
-
-const queryConfigFieldCatalog = computed<QueryDisplayField[]>(() => {
-  const fields = new Map<string, QueryDisplayField>()
-  finalQueryConfig.value?.displayFields.forEach((field) => fields.set(field.field, { ...field }))
-  finalQueryConfig.value?.filterFields.forEach((field) => {
-    if (!fields.has(field.field)) fields.set(field.field, { field: field.field, title: field.title, role: field.dataType === 'number' ? 'measure' : 'dimension', dataType: field.dataType })
-  })
-  return [...fields.values()]
-})
-
 
 /** managed 模式下系统代码可编辑，直接绑定到接管副本 */
 const managedCode = computed({
@@ -281,7 +280,11 @@ function save() {
 }
 
 function openQueryConfig() {
-  queryConfigDraft.value = JSON.parse(JSON.stringify(finalQueryConfig.value ?? createEmptyFinalResultQueryConfig())) as FinalResultQueryConfig
+  const config = JSON.parse(JSON.stringify(finalQueryConfig.value ?? createEmptyFinalResultQueryConfig())) as FinalResultQueryConfig
+  if (!finalQueryConfig.value?.confirmed && datasetQueryDisplayFields.value.length) {
+    config.displayFields = datasetQueryDisplayFields.value.map((field) => ({ ...field }))
+  }
+  queryConfigDraft.value = config
   showQueryConfig.value = true
 }
 
