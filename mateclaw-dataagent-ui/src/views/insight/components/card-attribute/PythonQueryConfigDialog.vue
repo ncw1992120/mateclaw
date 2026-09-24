@@ -25,12 +25,15 @@
               <span class="qc-th qc-th-title">展示名</span>
               <span class="qc-th qc-th-op" />
             </div>
-            <div v-for="(row, index) in fieldRows" :key="row.field" class="qc-field-row" data-testid="python-qc-field-row" draggable="true" @dragstart="onDragStart(index)" @dragover.prevent @drop="onDrop(index)">
+            <div v-for="(row, index) in fieldRows" :key="displayFieldRowKey(row)" class="qc-field-row" data-testid="python-qc-field-row" draggable="true" @dragstart="onDragStart(index)" @dragover.prevent @drop="onDrop(index)">
               <div class="qc-field-cell qc-field-name-cell">
                 <el-tag :type="row.role === 'measure' ? 'warning' : 'info'" size="small" class="qc-role-tag" data-testid="python-qc-role-toggle" title="点击切换维度 / 指标" @click.stop="toggleRole(row)">
                   {{ row.role === 'measure' ? '指标' : '维度' }}
                 </el-tag>
-                <el-input v-model="row.field" class="qc-tech-input" size="small" placeholder="技术字段名" data-testid="python-qc-field-tech-input" />
+                <div class="qc-input-field">
+                  <el-input v-model="row.field" class="qc-tech-input" :class="{ 'qc-input-invalid': displayFieldNameError(row) }" :aria-invalid="Boolean(displayFieldNameError(row))" size="small" placeholder="技术字段名" data-testid="python-qc-field-tech-input" />
+                  <span v-if="displayFieldNameError(row)" class="qc-error" data-testid="python-qc-field-tech-error">{{ displayFieldNameError(row) }}</span>
+                </div>
               </div>
               <div class="qc-field-cell qc-field-title-cell">
                 <el-input v-model="row.title" class="qc-title-input" size="small" placeholder="展示名" data-testid="python-qc-title-input" />
@@ -41,7 +44,10 @@
           </div>
           <div class="qc-add-field-row">
             <el-button size="small" type="primary" plain data-testid="python-qc-add-new-field" @click="addNewField">添加字段</el-button>
-            <el-input v-model="newFieldName" class="qc-new-field-input" size="small" placeholder="技术字段名（英文/数字/下划线）" data-testid="python-qc-new-field-name" />
+            <div class="qc-input-field qc-new-field-input">
+              <el-input v-model="newFieldName" :class="{ 'qc-input-invalid': newFieldNameError }" :aria-invalid="Boolean(newFieldNameError)" size="small" placeholder="技术字段名（英文/数字/下划线）" data-testid="python-qc-new-field-name" @input="newFieldNameAttempted = true" />
+              <span v-if="newFieldNameError" class="qc-error" data-testid="python-qc-new-field-error">{{ newFieldNameError }}</span>
+            </div>
             <el-input v-model="newFieldTitle" class="qc-new-field-input" size="small" placeholder="展示名" data-testid="python-qc-new-field-title" />
             <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="从结果字段选择" filterable @change="addField">
               <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
@@ -65,7 +71,10 @@
             <el-select v-model="row.filterComponentId" size="small" placeholder="筛选器名称" filterable data-testid="python-qc-filter-component">
               <el-option v-for="filter in filterOptions" :key="filter.id" :label="filter.title" :value="filter.id" />
             </el-select>
-            <el-input v-model="row.field" size="small" placeholder="字段名（英文/数字/下划线）" data-testid="python-qc-filter-field" />
+            <div class="qc-input-field">
+              <el-input v-model="row.field" :class="{ 'qc-input-invalid': filterFieldNameError(row) }" :aria-invalid="Boolean(filterFieldNameError(row))" size="small" placeholder="字段名（英文/数字/下划线）" data-testid="python-qc-filter-field" />
+              <span v-if="filterFieldNameError(row)" class="qc-error" data-testid="python-qc-filter-field-error">{{ filterFieldNameError(row) }}</span>
+            </div>
             <el-button size="small" text type="danger" data-testid="python-qc-filter-remove" @click="filterRows.splice(index, 1)">删除</el-button>
           </div>
         </div>
@@ -131,8 +140,9 @@ interface EditableFilterField extends FinalResultFilterField {
 
 const fieldRows = ref<EditableField[]>([])
 const filterRows = ref<EditableFilterField[]>([])
+const displayFieldRowKeys = new WeakMap<object, number>()
 const filterRowKeys = new WeakMap<object, number>()
-let nextFilterRowKey = 0
+let nextRowKey = 0
 const sortEnabled = ref(false)
 const sortAllowed = ref<string[]>([])
 const paginationEnabled = ref(false)
@@ -143,6 +153,7 @@ const dragIndex = ref<number | null>(null)
 const fieldsExpanded = ref(true)
 const newFieldName = ref('')
 const newFieldTitle = ref('')
+const newFieldNameAttempted = ref(false)
 const FIELD_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 const duplicateTitles = computed(() => {
@@ -163,11 +174,39 @@ const filterFieldCandidates = computed(() => {
   return candidates.filter((field, index) => candidates.findIndex((item) => item.field === field.field) === index)
 })
 const filterOptions = computed(() => props.filterOptions ?? [])
+const newFieldNameError = computed(() => {
+  if (!newFieldName.value.trim() && !newFieldNameAttempted.value) return ''
+  return getFieldNameError(newFieldName.value, fieldRows.value.some((row) => row.field.trim() === newFieldName.value.trim()), '技术字段名')
+})
+
+function getFieldNameError(value: string, duplicated: boolean, label: string): string {
+  const fieldName = value.trim()
+  if (!fieldName || !FIELD_NAME_PATTERN.test(fieldName)) return `${label}只能由英文、数字、下划线组成，且不能以数字开头`
+  if (duplicated) return `${label}不能重复`
+  return ''
+}
+
+function displayFieldNameError(row: EditableField): string {
+  return getFieldNameError(row.field, fieldRows.value.filter((item) => item.field.trim() === row.field.trim()).length > 1, '技术字段名')
+}
+
+function filterFieldNameError(row: EditableFilterField): string {
+  return getFieldNameError(row.field, filterRows.value.filter((item) => item.field.trim() === row.field.trim()).length > 1, '绑定字段名')
+}
+
+function displayFieldRowKey(row: EditableField): number {
+  let key = displayFieldRowKeys.get(row)
+  if (key === undefined) {
+    key = nextRowKey++
+    displayFieldRowKeys.set(row, key)
+  }
+  return key
+}
 
 function filterRowKey(row: EditableFilterField): number {
   let key = filterRowKeys.get(row)
   if (key === undefined) {
-    key = nextFilterRowKey++
+    key = nextRowKey++
     filterRowKeys.set(row, key)
   }
   return key
@@ -188,6 +227,7 @@ function cloneConfig(config: FinalResultQueryConfig): void {
   returnTotalCount.value = config.paginationPolicy.returnTotalCount
   newFieldName.value = ''
   newFieldTitle.value = ''
+  newFieldNameAttempted.value = false
 }
 
 watch(() => props.modelValue, (visible) => {
@@ -205,17 +245,15 @@ function addField(fieldName: string): void {
 function addNewField(): void {
   const fieldName = newFieldName.value.trim()
   const title = newFieldTitle.value.trim() || fieldName
-  if (!FIELD_NAME_PATTERN.test(fieldName)) {
-    ElMessage.warning('技术字段名只能由英文、数字、下划线组成，且不能以数字开头')
-    return
-  }
-  if (fieldRows.value.some((row) => row.field === fieldName)) {
-    ElMessage.warning('技术字段名不能重复')
+  newFieldNameAttempted.value = true
+  if (newFieldNameError.value) {
+    ElMessage.warning(newFieldNameError.value)
     return
   }
   fieldRows.value.push({ field: fieldName, title, role: 'dimension', dataType: 'string', originalField: fieldName })
   newFieldName.value = ''
   newFieldTitle.value = ''
+  newFieldNameAttempted.value = false
 }
 
 function addFilterField(): void {
@@ -320,6 +358,8 @@ function save(): void {
 .qc-field-cell { display: flex; align-items: center; min-width: 0; }
 .qc-field-name-cell { gap: 8px; }
 .qc-field-title-cell { gap: 8px; }
+.qc-input-field { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.qc-input-invalid :deep(.el-input__wrapper) { box-shadow: 0 0 0 1px var(--el-color-danger) inset; }
 .qc-role-tag { flex-shrink: 0; cursor: pointer; user-select: none; }
 .qc-tech-field { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--db-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qc-tech-input { flex: 1; min-width: 0; }
