@@ -139,7 +139,7 @@ function initialize(): void {
 
 watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
   if (visible && kind === 'result') initialize()
-})
+}, { immediate: true })
 </script>
 
 <style scoped>
