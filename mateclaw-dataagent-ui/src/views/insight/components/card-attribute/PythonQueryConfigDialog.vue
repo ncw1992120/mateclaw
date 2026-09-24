@@ -44,14 +44,6 @@
           </div>
           <div class="qc-add-field-row">
             <el-button size="small" type="primary" plain data-testid="python-qc-add-new-field" @click="addNewField">添加字段</el-button>
-            <div class="qc-input-field qc-new-field-input">
-              <el-input v-model="newFieldName" :class="{ 'qc-input-invalid': newFieldNameError }" :aria-invalid="Boolean(newFieldNameError)" size="small" placeholder="技术字段名（英文/数字/下划线）" data-testid="python-qc-new-field-name" @input="newFieldNameAttempted = true" />
-              <span v-if="newFieldNameError" class="qc-error" data-testid="python-qc-new-field-error">{{ newFieldNameError }}</span>
-            </div>
-            <el-input v-model="newFieldTitle" class="qc-new-field-input" size="small" placeholder="展示名" data-testid="python-qc-new-field-title" />
-            <el-select :model-value="undefined" class="qc-add-field" size="small" placeholder="从结果字段选择" filterable @change="addField">
-              <el-option v-for="field in addableFields" :key="field.field" :label="fieldOptionLabel(field)" :value="field.field" />
-            </el-select>
           </div>
         </div>
       </div>
@@ -87,7 +79,7 @@
           <el-switch v-model="sortEnabled" data-testid="python-qc-sort-enabled" />
         </div>
         <el-select v-if="sortEnabled" v-model="sortAllowed" multiple class="qc-sort-select" placeholder="选择允许排序的字段" data-testid="python-qc-sort-fields">
-          <el-option v-for="row in fieldRows" :key="row.field" :label="`${row.field} · ${row.title}`" :value="row.field" />
+          <el-option v-for="row in fieldRows" :key="displayFieldRowKey(row)" :label="`${row.field} · ${row.title}`" :value="row.field" />
         </el-select>
       </div>
 
@@ -151,9 +143,6 @@ const maxPageSize = ref(500)
 const returnTotalCount = ref(false)
 const dragIndex = ref<number | null>(null)
 const fieldsExpanded = ref(true)
-const newFieldName = ref('')
-const newFieldTitle = ref('')
-const newFieldNameAttempted = ref(false)
 const FIELD_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 const duplicateTitles = computed(() => {
@@ -168,16 +157,7 @@ const duplicateTitles = computed(() => {
   return duplicates
 })
 
-const addableFields = computed(() => props.fieldCatalog.filter((field) => !fieldRows.value.some((row) => row.field === field.field)))
-const filterFieldCandidates = computed(() => {
-  const candidates = [...fieldRows.value, ...props.fieldCatalog]
-  return candidates.filter((field, index) => candidates.findIndex((item) => item.field === field.field) === index)
-})
 const filterOptions = computed(() => props.filterOptions ?? [])
-const newFieldNameError = computed(() => {
-  if (!newFieldName.value.trim() && !newFieldNameAttempted.value) return ''
-  return getFieldNameError(newFieldName.value, fieldRows.value.some((row) => row.field.trim() === newFieldName.value.trim()), '技术字段名')
-})
 
 function getFieldNameError(value: string, duplicated: boolean, label: string): string {
   const fieldName = value.trim()
@@ -212,10 +192,6 @@ function filterRowKey(row: EditableFilterField): number {
   return key
 }
 
-function fieldOptionLabel(field: QueryDisplayField): string {
-  return field.title && field.title !== field.field ? `${field.field} · ${field.title}` : field.field
-}
-
 function cloneConfig(config: FinalResultQueryConfig): void {
   fieldRows.value = config.displayFields.map((field) => ({ ...field, originalField: field.field }))
   filterRows.value = config.filterFields.map((field) => ({ ...field, filterComponentId: field.filterComponentId ?? '' }))
@@ -225,9 +201,6 @@ function cloneConfig(config: FinalResultQueryConfig): void {
   defaultPageSize.value = config.paginationPolicy.defaultPageSize
   maxPageSize.value = config.paginationPolicy.maxPageSize
   returnTotalCount.value = config.paginationPolicy.returnTotalCount
-  newFieldName.value = ''
-  newFieldTitle.value = ''
-  newFieldNameAttempted.value = false
 }
 
 watch(() => props.modelValue, (visible) => {
@@ -237,29 +210,12 @@ watch(() => props.modelValue, (visible) => {
   }
 }, { immediate: true })
 
-function addField(fieldName: string): void {
-  const field = props.fieldCatalog.find((item) => item.field === fieldName)
-  if (field && !fieldRows.value.some((row) => row.field === field.field)) fieldRows.value.push({ ...field, originalField: field.field })
-}
-
 function addNewField(): void {
-  const fieldName = newFieldName.value.trim()
-  const title = newFieldTitle.value.trim() || fieldName
-  newFieldNameAttempted.value = true
-  if (newFieldNameError.value) {
-    ElMessage.warning(newFieldNameError.value)
-    return
-  }
-  fieldRows.value.push({ field: fieldName, title, role: 'dimension', dataType: 'string', originalField: fieldName })
-  newFieldName.value = ''
-  newFieldTitle.value = ''
-  newFieldNameAttempted.value = false
+  fieldRows.value.push({ field: '', title: '', role: 'dimension', dataType: 'string', originalField: '' })
 }
 
 function addFilterField(): void {
-  const field = filterFieldCandidates.value.find((item) => !filterRows.value.some((row) => row.field === item.field))
-  if (!field) return
-  filterRows.value.push({ field: field.field, title: field.title, dataType: field.dataType ?? 'string', parameterName: field.field, operators: ['eq', 'neq', 'in', 'not_in', 'contains'], filterComponentId: filterOptions.value[0]?.id ?? '' })
+  filterRows.value.push({ field: '', title: '', dataType: 'string', parameterName: '', operators: ['eq', 'neq', 'in', 'not_in', 'contains'], filterComponentId: filterOptions.value[0]?.id ?? '' })
 }
 
 function toggleRole(row: QueryDisplayField): void {
@@ -269,7 +225,7 @@ function toggleRole(row: QueryDisplayField): void {
 function removeField(index: number): void {
   const field = fieldRows.value[index]?.field
   fieldRows.value.splice(index, 1)
-  filterRows.value = filterRows.value.filter((row) => row.field !== field)
+  if (field) filterRows.value = filterRows.value.filter((row) => row.field !== field)
   sortAllowed.value = sortAllowed.value.filter((item) => item !== field)
 }
 
@@ -367,8 +323,6 @@ function save(): void {
 .qc-error { color: var(--el-color-danger); font-size: 12px; flex-shrink: 0; }
 .qc-remove { flex-shrink: 0; }
 .qc-add-field-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.qc-new-field-input { width: 220px; }
-.qc-add-field { width: 180px; }
 .qc-binding-table { display: flex; flex-direction: column; }
 .qc-binding-thead { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; padding: 0 2px 6px; }
 .qc-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: center; gap: 8px; margin-bottom: 8px; }
