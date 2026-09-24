@@ -377,6 +377,15 @@ def handle_dimension_list(query, body, headers):
     payload = replace_owner(load_fixture("dimension_list.json"), headers.get("auth-value") or DEFAULT_OWNER)
     data = payload["data"]
     items = data.get("data", [])
+    keyword = str(body.get("keyword") or "").strip().lower()
+    category_id = str(body.get("categoryId") or "").strip()
+    if keyword:
+        items = [item for item in items if keyword in str(item.get("dimName") or "").lower()
+                 or keyword in str(item.get("dimDisplayName") or "").lower()]
+    if category_id:
+        allowed = category_descendants(load_fixture("category_list.json").get("data", []),
+                                       category_id, "CATEGORY_DIMENSION")
+        items = [item for item in items if item.get("dimCategoryId") in allowed]
     pager = body.get("pager") or {}
     page_size = as_int(pager.get("pageSize"), len(items))
     page_number = as_int(pager.get("pageNumber"), 1)
@@ -387,6 +396,24 @@ def handle_dimension_list(query, body, headers):
     data["total"] = len(items)
     data["hasNext"] = (page_number * page_size) < len(items)
     return payload
+
+
+def query_value(query, key):
+    value = query.get(key)
+    return value[0] if isinstance(value, list) and value else value
+
+
+def category_descendants(categories, category_id, category_type):
+    ids = {category_id}
+    changed = True
+    while changed:
+        changed = False
+        for item in categories:
+            if item.get("categoryType") == category_type and item.get("parentId") in ids:
+                if item.get("id") not in ids:
+                    ids.add(item.get("id"))
+                    changed = True
+    return ids
 
 
 def handle_dimension_values(query, body, headers):
@@ -419,24 +446,51 @@ def handle_dimension_values(query, body, headers):
 def handle_metric_list(query, body, headers):
     payload = replace_owner(load_fixture("metric_batch_detail.json"), headers.get("auth-value") or DEFAULT_OWNER)
     data = payload.get("data", [])
-    page_size = as_int((query.get("pageSize") or [None])[0], len(data))
-    page_number = as_int((query.get("pageNumber") or [None])[0], 1)
+    keyword = str(query_value(query, "keyword") or "").strip().lower()
+    category_id = str(query_value(query, "metricCategoryId") or query_value(query, "categoryId") or "").strip()
+    if keyword:
+        data = [item for item in data if keyword in str(item.get("metricName") or "").lower()
+                or keyword in str(item.get("metricDisplayName") or "").lower()]
+    if category_id:
+        allowed = category_descendants(load_fixture("category_list.json").get("data", []),
+                                       category_id, "CATEGORY_METRIC")
+        data = [item for item in data if item.get("metricCategoryId") in allowed]
+    page_size = as_int(query_value(query, "pageSize"), len(data))
+    page_number = as_int(query_value(query, "pageNumber"), 1)
     return envelope({"total": len(data), "pageNumber": page_number, "pageSize": page_size,
                      "hasNext": page_number * page_size < len(data),
                      "data": paginate(data, page_number, page_size)})
 
 
 def handle_dimension_all(query, body, headers):
-    payload = replace_owner(load_fixture("dimension_list.json"), headers.get("auth-value") or DEFAULT_OWNER)
-    return envelope(payload.get("data", {}).get("data", []))
+    requested = query.get("metricNames") or []
+    if not isinstance(requested, list):
+        requested = [requested]
+    definitions = load_fixture("analysis_view_query_by_name.json")
+    relations = {}
+    for definition_envelope in definitions.values():
+        definition = definition_envelope.get("data") or {}
+        dimensions = definition.get("dimensions") or []
+        for metric_name in definition.get("metrics") or []:
+            if not requested or metric_name in requested:
+                relations[metric_name] = list(dimensions)
+    return envelope(relations)
 
 
 def handle_category_list(query, body, headers):
-    return envelope([])
+    category_type = query_value(query, "categoryType")
+    categories = load_fixture("category_list.json").get("data", [])
+    if category_type:
+        categories = [item for item in categories if item.get("categoryType") == category_type]
+    return envelope(categories)
 
 
 def handle_dimension_detail(query, body, headers):
-    return envelope(None)
+    dim_name = query_value(query, "dimName")
+    payload = load_fixture("dimension_list.json")
+    dimensions = (payload.get("data") or {}).get("data") or []
+    detail = next((item for item in dimensions if item.get("dimName") == dim_name), None)
+    return envelope(detail)
 
 
 def handle_orders(query, body, headers):

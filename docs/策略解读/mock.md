@@ -1,6 +1,6 @@
 # 洞察-仪表盘-组件-卡片-添加数据集：Aloudata 指标视图本地 Mock 设计
 
-> 版本：v1.1（2026-09-18）—— v1.1 依据**真实环境实测**修正了字段形状与报文样例，并记录落地实现
+> 版本：v1.2（2026-09-24）—— v1.2 补齐指标&维度选择弹窗的本地类目、搜索、关联校验与悬浮详情 mock
 > 范围：`洞察 → 仪表盘 → 组件库 → 卡片 → 添加数据集 → Aloudata.指标视图` 及其「字段名称默认值」链路
 > 数据来源：`generated_cljd_zcl.sql`（原 PostgreSQL 造数脚本，已转为**代码内 mock 数据**）
 > 交付形态：本文档 + `mock/aloudata/*.json` 夹具 + `LocalAloudataApiClient` 切面
@@ -15,7 +15,7 @@
 | 「字段名称默认值」是不是一个独立接口？ | **不是**。它就是 `GET /v1/datasources/{id}/analysis-views/{viewName}/fields`，前端按 `displayName` 生成默认值 |
 | Mock 应该切在哪一层？ | **`AloudataApiClient#send`**（`@Profile("local-mock")` + `@Primary`），**请求构建仍走真实 `prepare()`**，一处收口覆盖全部上游端点 |
 | 本地与正式的差异是什么？ | 默认不启用 mock，后端直接调用真实 Aloudata。显式设置 `ALOUDATA_MOCK=on` 时，用真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务；显式设置 `ALOUDATA_MOCK=embed` 时使用内置夹具 |
-| 需要 mock 几个上游端点？ | **7 个业务端点**由夹具覆盖（`analysis_view_tree` / `analysis_view_list` / `analysis_view_query_by_name` / `metric_batch_detail` / `dimension_list` / `analysis_view_query_data` / `metrics_query`）；本地 HTTP 服务另注册 11 条 anymetrics + semantic 路由（含 `metrics/list` / `dimensionAlld` / `category/list` / `dimension/detail`） |
+| 需要 mock 几个上游端点？ | 视图取数与选择器依赖的 Aloudata 端点由 Java 内置夹具和 Python HTTP mock 共用 fixtures 覆盖，包括 `category/list`、`metrics/list`、`metrics/batchDetail`、`metrics/dimensionAll`、`dimension/list`、`dimension/detail` 及指标视图查询端点 |
 | 本地会不会掩盖真机问题？ | **不会**（这是本轮重点）：请求方式配错 → 405、端点未注册 → `SM_04_0004`、视图无权限 → `SM_02_0038`、`filters` 用了结构化对象 → `SM99002`，本地一律复现真实失败形状 |
 | mock 报文格式依据 | **真实 Aloudata 实测响应**（§6 附实测样本；夹具由脚本按同一结构生成，Java 与 Python 两侧共用同一批夹具） |
 | `queryByName` 的 `metrics`/`dimensions` 形状 | **已实测定论：字符串数组**（`["AUM", ...]`），展示名单独在 `data.displayNameMap`。本仓 `listFields` 的读法正确，`getByName` 的 `mapList` 是 bug（详情接口会 500），已修，见 §8-P0-1 |
@@ -642,6 +642,25 @@ python3 dev-support/local-simulation/scripts/generate-aloudata-fixtures.py
 展示名 `dimDisplayName`、描述 `dimDescription`（**实测可能为 null**）、类型 `originDataType`。
 注意条目里还有一个 `name`（形如 `dm7de2b44d79e7161ea948a209cd4a2c` 的内部标识），**不要**当成字段名。
 
+### 6.6 指标&维度选择器 mock
+
+选择器两种本地模式（`local-mock` 内置夹具、`aloudata-mock-server.py` HTTP mock）共用
+`mock/aloudata/*.json`，生成源为 `generate-aloudata-fixtures.py`。字段目录对齐两张视图：
+`策略解读-子策略-指标` 提供 13 个指标和 5 个维度；`策略解读-子策略-维度` 提供 6 个指标和
+13 个维度。选择器可见 19 个指标、13 个维度，类别均为“策略解读 → 子策略”。
+
+| 上游接口 | 本地 mock 行为 |
+|---|---|
+| `GET /anymetrics/api/v1/category/list` | 按 `categoryType` 返回指标或维度的“策略解读 → 子策略”类目树 |
+| `GET /anymetrics/api/v1/metrics/list` | 按展示名/字段名关键字、类目及页码筛选 19 个视图指标 |
+| `GET /anymetrics/api/v1/metrics/batchDetail` | 按 `metricNames` 返回已有指标口径、展示名、单位等详情 |
+| `GET /anymetrics/api/v1/metrics/dimensionAll` | 返回 `metricName → [dimName]` 关系；直接由两个视图各自的 `metrics` / `dimensions` 字段推导 |
+| `POST /anymetrics/api/v1/dimension/list` | 按展示名/字段名关键字、类目及 `pager` 分页筛选 13 个视图维度 |
+| `GET /anymetrics/api/v1/dimension/detail?dimName=...` | 返回对应维度的字段名、展示名、类型和描述，供悬浮详情显示 |
+
+选择“策略解读”父类目时会包含其“子策略”子类目；每个指标支持的维度严格按其所属视图字段定义返回，
+因此用指标/维度弹窗可以验证不兼容字段的禁用态，而不是将所有指标与维度错误地互相视为兼容。
+
 **`analysisView/query`**：列式 `data.table.columns = {列名: [{value, flag, count}]}`，并带 `data.metas[]`、`data.queryId`、`data.warning`。
 （本仓早期一版夹具曾误写成 `data.analysisView.columns`，已于本轮修正为与官方文档一致的 `data.table.columns`。）
 
@@ -906,7 +925,7 @@ Body：`{"pager":{"pageNumber":1,"pageSize":1000}}`
 
 > `dimDescription` 是「维度描述」列的数据源；缺失时会回退成 `dimDisplayName`。
 
-### 6.6 `analysis_view_query_data`
+### 6.7 `analysis_view_query_data`
 
 `GET /semantic/api/v1.1/analysisView/query?viewName=cljd_zcl_zb_view&pageSize=20&pageIndex=0&queryResultType=DATA`
 

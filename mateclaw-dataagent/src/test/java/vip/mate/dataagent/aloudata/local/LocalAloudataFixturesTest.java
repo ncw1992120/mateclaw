@@ -46,6 +46,56 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void selectorMetricListSearchesFieldsAndPaginatesWithinCategory() {
+        Map<String, Object> body = fixtures.payload("metric_list", Map.of(
+                "keyword", "入金", "metricCategoryId", "metric-sub-strategy",
+                "pageNumber", 1, "pageSize", 1), null);
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        List<Map<String, Object>> records = (List<Map<String, Object>>) data.get("data");
+
+        assertEquals(3, data.get("total"));
+        assertEquals(1, records.size());
+        assertEquals("digo_cust_asset_in", records.getFirst().get("metricName"));
+
+        Map<String, Object> byField = fixtures.payload("metric_list", Map.of("keyword", "digo_strategy_cnt_distr_1"), null);
+        List<Map<String, Object>> fieldResults = (List<Map<String, Object>>)
+                ((Map<String, Object>) byField.get("data")).get("data");
+        assertEquals(List.of("digo_strategy_cnt_distr_1"),
+                fieldResults.stream().map(item -> item.get("metricName")).toList());
+
+        Map<String, Object> allMetrics = fixtures.payload("metric_list", Map.of("pageNumber", 1, "pageSize", 100), null);
+        assertEquals(19, ((Map<String, Object>) allMetrics.get("data")).get("total"));
+        Map<String, Object> allDimensions = fixtures.payload("dimension_list", Map.of(
+                "pager", Map.of("pageNumber", 1, "pageSize", 100)), null);
+        assertEquals(13, ((Map<String, Object>) allDimensions.get("data")).get("total"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricAllDimensionsAreDerivedFromTheTwoStrategyViewSchemas() {
+        Map<String, Object> body = fixtures.payload("metric_all_dimensions", Map.of(
+                "metricNames", List.of("digo_cust_asset_in", "digo_strategy_cnt")), null);
+        Map<String, Object> relations = (Map<String, Object>) body.get("data");
+
+        assertEquals(List.of("metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel"),
+                relations.get("digo_cust_asset_in"));
+        assertTrue(((List<String>) relations.get("digo_strategy_cnt")).contains("metric_name"));
+        assertTrue(((List<String>) relations.get("digo_strategy_cnt")).contains("channel"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void dimensionDetailExposesFieldNameDisplayNameAndDescription() {
+        Map<String, Object> body = fixtures.payload("dimension_detail", Map.of("dimName", "metric_name"), null);
+        Map<String, Object> detail = (Map<String, Object>) body.get("data");
+
+        assertEquals("metric_name", detail.get("dimName"));
+        assertEquals("转化指标名称", detail.get("dimDisplayName"));
+        assertEquals("转化指标名称", detail.get("dimDescription"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void treeReturnsTwoStrategyViewsUnderOneCategory() {
         Map<String, Object> body = fixtures.payload("analysis_view_tree", Map.of(), null);
 
