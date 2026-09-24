@@ -64,6 +64,19 @@ function readQueryConfig(value: unknown): DatasetQueryConfig | undefined {
   if (!Array.isArray(raw.displayFields) || !Array.isArray(raw.parameterBindings)) return undefined
   const displayFields = raw.displayFields.map(readDisplayField).filter((f): f is QueryDisplayField => Boolean(f))
   if (!displayFields.length) return undefined
+  const queryableFields = Array.isArray(raw.queryableFields)
+    ? raw.queryableFields.flatMap((value) => {
+        const field = asRecord(value)
+        if (typeof field.name !== 'string' || !field.name.trim()) return []
+        const role = field.role === 'measure' ? 'measure' : 'dimension'
+        return [{
+          name: field.name,
+          displayName: typeof field.displayName === 'string' ? field.displayName : undefined,
+          role,
+          dataType: typeof field.dataType === 'string' ? field.dataType : undefined,
+        }]
+      })
+    : undefined
   const parameterBindings = raw.parameterBindings
     .map(readParameterBinding)
     .filter((b): b is QueryParameterBinding => Boolean(b))
@@ -83,7 +96,7 @@ function readQueryConfig(value: unknown): DatasetQueryConfig | undefined {
     maxPageSize: typeof paginationRaw.maxPageSize === 'number' ? paginationRaw.maxPageSize : 500,
     returnTotalCount: paginationRaw.returnTotalCount === true,
   }
-  return { displayFields, parameterBindings, sortPolicy, paginationPolicy }
+  return { displayFields, queryableFields, parameterBindings, sortPolicy, paginationPolicy }
 }
 
 /**

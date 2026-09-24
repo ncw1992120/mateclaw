@@ -1495,6 +1495,14 @@ export interface QueryDisplayField {
   dataType?: string
 }
 
+/** 数据集完整可查询字段注册表；包含未投影到展示结果的筛选字段。 */
+export interface QueryableDatasetField {
+  name: string
+  displayName?: string
+  role: 'dimension' | 'measure'
+  dataType?: string
+}
+
 /** 查询配置筛选器绑定：页面筛选器参数 → 本输入字段的下推规则。 */
 export interface QueryParameterBinding {
   filterComponentId: string
@@ -1524,6 +1532,8 @@ export interface QueryPaginationPolicy {
 /** 单个数据集输入的静态查询配置（保存于 datasetInputs[].queryConfig）。 */
 export interface DatasetQueryConfig {
   displayFields: QueryDisplayField[]
+  /** 完整字段注册表，筛选字段不要求同时出现在 displayFields。旧配置缺省时兼容展示字段集。 */
+  queryableFields?: QueryableDatasetField[]
   parameterBindings: QueryParameterBinding[]
   sortPolicy: QuerySortPolicy
   paginationPolicy: QueryPaginationPolicy
