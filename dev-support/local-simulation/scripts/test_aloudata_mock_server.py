@@ -74,17 +74,22 @@ def test_metric_list_searches_display_and_field_names_and_filters_category():
     assert [item["metricName"] for item in by_field["data"]["data"]] == ["digo_cust_asset_in10000"]
 
 
-def test_metric_dimension_all_reflects_each_metric_view_schema():
+def test_metric_dimension_all_makes_all_strategy_metrics_support_all_strategy_dimensions():
+    definitions = aloudata_mock_server.load_fixture("analysis_view_query_by_name.json")
+    requested_metrics = [
+        metric_name
+        for definition in definitions.values()
+        for metric_name in definition["data"]["metrics"]
+    ]
+    dimension_directory = aloudata_mock_server.load_fixture("dimension_list.json")["data"]["data"]
+    expected_dimensions = {dimension["dimName"] for dimension in dimension_directory}
     response = aloudata_mock_server.handle_dimension_all(
-        {"metricNames": ["digo_cust_asset_in", "digo_strategy_cnt"]}, {}, {}
+        {"metricNames": requested_metrics}, {}, {}
     )
 
     relations = response["data"]
-    assert relations["digo_cust_asset_in"] == [
-        "metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel"
-    ]
-    assert "metric_name" in relations["digo_strategy_cnt"]
-    assert "metric_id" in relations["digo_strategy_cnt"]
+    assert set(relations) == set(requested_metrics)
+    assert all(set(dimensions) == expected_dimensions for dimensions in relations.values())
 
 
 def test_dimension_list_supports_keyword_and_category_filtering():

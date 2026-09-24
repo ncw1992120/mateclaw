@@ -2,8 +2,10 @@ package vip.mate.dataagent.aloudata.local;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -72,15 +74,25 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void metricAllDimensionsAreDerivedFromTheTwoStrategyViewSchemas() {
+    void everyStrategyMetricSupportsEveryStrategyDimension() {
+        Map<String, Object> metricList = (Map<String, Object>) fixtures.payload("metric_list", Map.of(
+                "pageNumber", 1, "pageSize", 100), null).get("data");
+        List<Map<String, Object>> metrics = (List<Map<String, Object>>) metricList.get("data");
+        Set<String> metricNames = new HashSet<>();
+        metrics.forEach(metric -> metricNames.add((String) metric.get("metricName")));
+
+        Map<String, Object> dimensionList = (Map<String, Object>) fixtures.payload("dimension_list", Map.of(
+                "pager", Map.of("pageNumber", 1, "pageSize", 100)), null).get("data");
+        List<Map<String, Object>> dimensions = (List<Map<String, Object>>) dimensionList.get("data");
+        Set<String> dimensionNames = new HashSet<>();
+        dimensions.forEach(dimension -> dimensionNames.add((String) dimension.get("dimName")));
+
         Map<String, Object> body = fixtures.payload("metric_all_dimensions", Map.of(
-                "metricNames", List.of("digo_cust_asset_in", "digo_strategy_cnt")), null);
+                "metricNames", List.copyOf(metricNames)), null);
         Map<String, Object> relations = (Map<String, Object>) body.get("data");
 
-        assertEquals(List.of("metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel"),
-                relations.get("digo_cust_asset_in"));
-        assertTrue(((List<String>) relations.get("digo_strategy_cnt")).contains("metric_name"));
-        assertTrue(((List<String>) relations.get("digo_strategy_cnt")).contains("channel"));
+        assertEquals(metricNames, relations.keySet());
+        relations.values().forEach(available -> assertEquals(dimensionNames, new HashSet<>((List<String>) available)));
     }
 
     @Test

@@ -467,13 +467,21 @@ def handle_dimension_all(query, body, headers):
     if not isinstance(requested, list):
         requested = [requested]
     definitions = load_fixture("analysis_view_query_by_name.json")
-    relations = {}
+    strategy_metrics = []
+    strategy_dimensions = []
     for definition_envelope in definitions.values():
         definition = definition_envelope.get("data") or {}
-        dimensions = definition.get("dimensions") or []
         for metric_name in definition.get("metrics") or []:
-            if not requested or metric_name in requested:
-                relations[metric_name] = list(dimensions)
+            if metric_name not in strategy_metrics:
+                strategy_metrics.append(metric_name)
+        for dimension_name in definition.get("dimensions") or []:
+            if dimension_name not in strategy_dimensions:
+                strategy_dimensions.append(dimension_name)
+    relations = {
+        metric_name: list(strategy_dimensions)
+        for metric_name in strategy_metrics
+        if not requested or metric_name in requested
+    }
     return envelope(relations)
 
 

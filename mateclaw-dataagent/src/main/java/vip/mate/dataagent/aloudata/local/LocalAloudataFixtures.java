@@ -214,19 +214,22 @@ public class LocalAloudataFixtures {
         return envelope;
     }
 
-    /** 指标可用维度关系直接由两个策略视图的 metrics/dimensions 字段成员关系派生。 */
+    /** 策略 mock 中两个视图共享同一维度目录，所有策略指标均可按全部维度分析。 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> metricAllDimensions(Map<String, Object> params) {
         Set<String> requested = nameSet(params.get("metricNames"));
         Map<String, Object> views = copy(load("analysis_view_query_by_name.json"));
-        Map<String, Object> relations = new LinkedHashMap<>();
+        Set<String> metricNames = new LinkedHashSet<>();
+        Set<String> dimensionNames = new LinkedHashSet<>();
         for (Object rawEnvelope : views.values()) {
             Map<String, Object> view = asMap(asMap(rawEnvelope).get("data"));
-            List<String> dimensions = stringList(view.get("dimensions"));
-            for (String metricName : stringList(view.get("metrics"))) {
-                if (requested.isEmpty() || requested.contains(metricName)) {
-                    relations.put(metricName, dimensions);
-                }
+            metricNames.addAll(stringList(view.get("metrics")));
+            dimensionNames.addAll(stringList(view.get("dimensions")));
+        }
+        Map<String, Object> relations = new LinkedHashMap<>();
+        for (String metricName : metricNames) {
+            if (requested.isEmpty() || requested.contains(metricName)) {
+                relations.put(metricName, new ArrayList<>(dimensionNames));
             }
         }
         return envelope(relations, "mock-trace-metric-dimensions");
