@@ -30,7 +30,7 @@
               v-model:visible="metricPickerVisible"
               trigger="click"
               placement="bottom-start"
-              :width="760"
+              :width="430"
               popper-class="aloudata-picker-popper"
               @show="onMetricPickerShow"
             >
@@ -47,6 +47,12 @@
                 </div>
               </template>
               <div class="picker-panel metric-picker-popup" @click.stop>
+                <div class="picker-heading">
+                  <strong>选择指标</strong>
+                  <button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" @click="hideUnavailable = !hideUnavailable">
+                    <span>自动隐藏不可分析内容</span><i :class="{ 'is-on': hideUnavailable }" />
+                  </button>
+                </div>
                 <div class="picker-toolbar">
                   <el-input
                     v-model="metricKeyword"
@@ -71,7 +77,7 @@
                   </aside>
                   <section class="directory-results" v-loading="metricsLoading">
                     <label
-                      v-for="item in metricPage.records"
+                      v-for="item in visibleMetrics"
                       :key="item.metricName"
                       class="directory-item"
                       :class="{ 'is-unavailable': isMetricUnavailable(item) && !ui.aloudata.metrics.includes(item.metricName) }"
@@ -124,7 +130,9 @@
                         </div>
                       </el-popover>
                     </label>
-                    <div v-if="!metricsLoading && !metricPage.records.length" class="directory-empty">没有匹配的指标</div>
+                    <div v-if="!metricsLoading && !visibleMetrics.length" class="directory-empty">
+                      {{ hideUnavailable && metricPage.records.length ? '已隐藏不可分析的指标' : '没有匹配的指标' }}
+                    </div>
                     <el-pagination
                       v-if="metricPage.total > pageSize"
                       class="pager"
@@ -147,7 +155,7 @@
               v-model:visible="dimensionPickerVisible"
               trigger="click"
               placement="bottom-start"
-              :width="760"
+              :width="430"
               popper-class="aloudata-picker-popper"
               @show="onDimensionPickerShow"
             >
@@ -165,6 +173,12 @@
                 </div>
               </template>
               <div class="picker-panel dimension-picker-popup" @click.stop>
+                <div class="picker-heading">
+                  <strong>选择维度</strong>
+                  <button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" @click="hideUnavailable = !hideUnavailable">
+                    <span>自动隐藏不可分析内容</span><i :class="{ 'is-on': hideUnavailable }" />
+                  </button>
+                </div>
                 <div class="picker-toolbar">
                   <el-input
                     v-model="dimensionKeyword"
@@ -189,7 +203,7 @@
                   </aside>
                   <section class="directory-results" v-loading="dimensionsLoading">
                     <label
-                      v-for="item in dimensionPage.records"
+                      v-for="item in visibleDimensions"
                       :key="item.dimName"
                       class="directory-item"
                       :class="{ 'is-unavailable': dimensionUnavailableReason(item.dimName) && !ui.aloudata.dims.includes(item.dimName) }"
@@ -240,7 +254,9 @@
                         </div>
                       </el-popover>
                     </label>
-                    <div v-if="!dimensionsLoading && !dimensionPage.records.length" class="directory-empty">没有匹配的维度</div>
+                    <div v-if="!dimensionsLoading && !visibleDimensions.length" class="directory-empty">
+                      {{ hideUnavailable && dimensionPage.records.length ? '已隐藏不可分析的维度' : '没有匹配的维度' }}
+                    </div>
                     <el-pagination
                       v-if="dimensionPage.total > pageSize"
                       class="pager"
@@ -334,6 +350,7 @@ const metricKeyword = ref('')
 const dimensionKeyword = ref('')
 const metricsLoading = ref(false)
 const dimensionsLoading = ref(false)
+const hideUnavailable = ref(false)
 const metricCategories = ref<AloudataCategoryTreeNode[]>([])
 const dimensionCategories = ref<AloudataCategoryTreeNode[]>([])
 const selectedMetricCategoryId = ref('')
@@ -372,6 +389,12 @@ const dimensionPage = reactive<AloudataDimensionPage>({
 })
 
 const selectedMetricRelationsReady = computed(() => ui.aloudata.metrics.every((name) => Array.isArray(metricDimensions[name])))
+const visibleMetrics = computed(() => hideUnavailable.value
+  ? metricPage.records.filter((item) => !isMetricUnavailable(item))
+  : metricPage.records)
+const visibleDimensions = computed(() => hideUnavailable.value
+  ? dimensionPage.records.filter((item) => !dimensionUnavailableReason(item.dimName))
+  : dimensionPage.records)
 const selectedMetricRelationsUnverified = computed(() => ui.aloudata.metrics.length > 0 && !selectedMetricRelationsReady.value)
 const selectionConflict = computed(() => {
   if (!ui.aloudata.metrics.length || !ui.aloudata.dims.length || !selectedMetricRelationsReady.value) return false
@@ -408,6 +431,7 @@ function open() {
   datasourceId.value = ui.aloudata.datasourceId
   metricPickerVisible.value = false
   dimensionPickerVisible.value = false
+  hideUnavailable.value = false
   metricKeyword.value = ''
   dimensionKeyword.value = ''
   metricPage.records = []
@@ -711,6 +735,47 @@ onBeforeUnmount(() => {
 .picker-panel {
   min-width: 0;
 }
+.picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  margin-bottom: 8px;
+  color: var(--el-text-color-primary);
+  font-size: 14px;
+}
+.hide-unavailable-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.hide-unavailable-toggle i {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  border-radius: 10px;
+  background: var(--el-border-color);
+  transition: background .15s;
+}
+.hide-unavailable-toggle i::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  content: '';
+  transition: transform .15s;
+}
+.hide-unavailable-toggle i.is-on { background: var(--el-color-primary); }
+.hide-unavailable-toggle i.is-on::after { transform: translateX(14px); }
 .picker-toolbar {
   display: flex;
   align-items: center;
@@ -737,17 +802,18 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
 }
 .directory-layout {
-  display: grid;
-  grid-template-columns: minmax(190px, 28%) minmax(0, 1fr);
-  height: 390px;
+  display: flex;
+  flex-direction: column;
+  height: 430px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
   overflow: hidden;
 }
 .directory-categories {
   overflow: auto;
-  padding: 8px 4px;
-  border-right: 1px solid var(--el-border-color-lighter);
+  flex: 0 0 142px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
   background: var(--el-fill-color-lighter);
 }
 .directory-categories :deep(.el-tree) {
@@ -767,6 +833,7 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .directory-results {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: auto;
   padding: 8px 14px;

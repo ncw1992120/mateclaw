@@ -68,10 +68,16 @@ class AloudataSemanticSyncServiceTest {
         AloudataMetricPageQuery query = new AloudataMetricPageQuery();
         query.setPageNumber(1);
         query.setPageSize(20);
+        query.setKeyword("客户数");
+        query.setCategoryId("category-17");
 
         var result = service.pageMetrics(9L, query);
 
         assertEquals(List.of("region"), result.getRecords().get(0).getAvailableDimensions());
+        org.mockito.ArgumentCaptor<Map<String, Object>> params = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(apiClient).callWithParams(eq("metric_list"), eq(config), params.capture());
+        assertEquals("客户数", params.getValue().get("keyword"));
+        assertEquals("category-17", params.getValue().get("metricCategoryId"));
     }
 
     @Test
@@ -177,12 +183,14 @@ class AloudataSemanticSyncServiceTest {
         query.setPageNumber(1);
         query.setPageSize(20);
         query.setKeyword("metric_name");
+        query.setCategoryId("dimension-category-2");
 
         service.pageDimensions(9L, query);
 
         org.mockito.ArgumentCaptor<Map<String, Object>> params = org.mockito.ArgumentCaptor.forClass(Map.class);
         verify(apiClient).callWithParams(eq("dimension_list"), eq(config), params.capture());
         assertEquals("metric_name", params.getValue().get("keyword"));
+        assertEquals("dimension-category-2", params.getValue().get("categoryId"));
     }
 
     @Test
