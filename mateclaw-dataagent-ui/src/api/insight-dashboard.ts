@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/dataagent/api/v1/insight/dashboards'
@@ -50,8 +50,8 @@ export function execute(id: string, parameters: Record<string, unknown> = {}) {
 }
 
 /** 按组件级 datasetPipeline 创建执行任务。 */
-export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string) {
-  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson })
+export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string, queryContext?: QueryContext) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext })
 }
 
 /** 查询脚本执行状态 */

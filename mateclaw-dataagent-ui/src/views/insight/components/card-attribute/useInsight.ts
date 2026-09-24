@@ -35,6 +35,7 @@ import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, Component
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
 import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
+import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec, validateComponentOutput } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
@@ -1545,6 +1546,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
       state.backend.componentId,
       {},
       JSON.stringify(executableSchema),
+      createComponentPreviewQueryContext(state.backend.dashboardId, state.backend.componentId),
     )
     state.backend.executionId = executionId
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
