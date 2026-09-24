@@ -51,6 +51,7 @@ usage() {
                                   always（默认）每次重启都停旧 mock 再起新的；
                                   keep 仅在未监听时拉起（保留手工起的 mock 进程）
   ALOUDATA_MOCK_FORCE_KILL=1      端口被非脚本进程（PID 文件丢失/手工起的 mock）占用时强制接管
+  MAVEN_CMD=...                   Maven 可执行文件路径（默认依次查 PATH 和 ~/.maven/apache-maven-*）
   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
   DB_PRECHECK=on|skip             启动前数据库连通性预检（默认 on，连不上直接报错退出）
   SPRING_PROFILES_ACTIVE=...      显式覆盖整组 profile（优先级最高）
@@ -216,12 +217,6 @@ if ! java_home_is_17_or_newer "$JAVA_HOME"; then
   exit 1
 fi
 
-if [[ ! -f "$JAR_PATH" ]]; then
-  echo "错误：找不到后端 JAR：$JAR_PATH" >&2
-  echo "请先执行后端构建命令。" >&2
-  exit 1
-fi
-
 # 重启脚本默认使用本地 HTTP mock（应用未启用 local-mock 时仍直连真实 Aloudata）：
 #   ALOUDATA_MOCK=on（默认）：启动本地 HTTP mock，并将 local-mock 请求转发至该服务。
 #   重启 mock 时默认先停旧服务再起新的（ALOUDATA_MOCK_RESTART=keep 可保留现有服务）。
@@ -379,6 +374,31 @@ export JDK_JAVA_OPTIONS="$(strip_proxy_opts "${JDK_JAVA_OPTIONS:-}")"
 export _JAVA_OPTIONS="$(strip_proxy_opts "${_JAVA_OPTIONS:-}")"
 unset MAVEN_OPTS
 unset JAVA_OPTS
+
+MAVEN_BIN="${MAVEN_CMD:-}"
+if [[ -z "$MAVEN_BIN" ]]; then
+  MAVEN_BIN="$(command -v mvn || true)"
+fi
+if [[ -z "$MAVEN_BIN" ]]; then
+  for candidate_maven in "$HOME"/.maven/apache-maven-*/bin/mvn; do
+    if [[ -x "$candidate_maven" ]]; then
+      MAVEN_BIN="$candidate_maven"
+    fi
+  done
+fi
+if [[ -z "$MAVEN_BIN" || ! -x "$MAVEN_BIN" ]]; then
+  echo "错误：找不到 Maven，请安装 Maven 或设置 MAVEN_CMD。" >&2
+  exit 1
+fi
+
+echo "使用 Maven：$MAVEN_BIN"
+echo "清理并重新构建 DataAgent（跳过完整测试套件，避免每次本地重启重复执行耗时测试）..."
+"$MAVEN_BIN" -f "$PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests
+
+if [[ ! -f "$JAR_PATH" ]]; then
+  echo "错误：DataAgent 构建完成后仍找不到 JAR：$JAR_PATH" >&2
+  exit 1
+fi
 
 echo "停止旧的 DataAgent 后端进程..."
 backend_own_pids() {

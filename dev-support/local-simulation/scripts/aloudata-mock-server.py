@@ -196,6 +196,58 @@ def sort_rows(rows: list, orders) -> list:
     return result
 
 
+def metric_aggregation(metric_name: str, body: dict) -> str:
+    """从查询临时定义或指标元数据中读取聚合函数，夹具指标默认使用 SUM。"""
+    expression = None
+    definitions = body.get("metricDefinitions") or {}
+    if isinstance(definitions, dict):
+        definition = definitions.get(metric_name)
+        if isinstance(definition, dict):
+            expression = definition.get("expr") or definition.get("expression") or definition.get("formula")
+        elif isinstance(definition, str):
+            expression = definition
+
+    if not expression:
+        for definition in load_fixture("metric_batch_detail.json").get("data", []):
+            if definition.get("metricName") == metric_name:
+                caliber = definition.get("caliber") or {}
+                expression = caliber.get("expr") or caliber.get("formula")
+                break
+
+    matched = re.match(r"\s*(sum|avg|average|min|max|count)\s*\(", str(expression or ""), re.IGNORECASE)
+    return matched.group(1).lower() if matched else "sum"
+
+
+def aggregate_rows(rows: list, dimensions: list, metrics: list, body: dict) -> list:
+    """GROUP BY 请求维度并按指标定义聚合明细行。"""
+    groups = {}
+    for row in rows:
+        key = tuple(row.get(dimension) for dimension in dimensions)
+        groups.setdefault(key, []).append(row)
+
+    result = []
+    aggregations = {metric: metric_aggregation(metric, body) for metric in metrics}
+    for key, group_rows in groups.items():
+        grouped = {dimension: value for dimension, value in zip(dimensions, key)}
+        for metric, aggregation in aggregations.items():
+            values = [row.get(metric) for row in group_rows if row.get(metric) is not None]
+            if aggregation == "count":
+                value = len(values)
+            elif not values:
+                value = None
+            elif aggregation in {"avg", "average"}:
+                value = sum(values) / len(values)
+            elif aggregation == "min":
+                value = min(values)
+            elif aggregation == "max":
+                value = max(values)
+            else:
+                value = sum(values)
+            grouped[metric] = value
+        result.append(grouped)
+    return result
+
+
 def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
     if (set(requested_metrics) | set(requested_dimensions)).issubset({"region", "order_date", "revenue"}):
         # seed 的双源门禁通过 metrics/query 下推 region=east；该路径与
@@ -327,9 +379,8 @@ def handle_metrics_query(query, body, headers):
     source_data = source.get("data") or {}
     source_columns = ((source_data.get("table") or {}).get("columns")) or {}
     requested = [name for name in list(dimensions) + list(metrics)]
-
-    projected = {name: cells for name, cells in source_columns.items() if not requested or name in requested}
-    rows = apply_filters(columns_to_rows(projected), filters)
+    rows = columns_to_rows(source_columns)
+    rows = apply_filters(rows, filters)
     if body.get("timeConstraint"):
         rows = apply_filters(rows, [body["timeConstraint"]])
     result_filters = body.get("resultFilters") or []
@@ -337,6 +388,7 @@ def handle_metrics_query(query, body, headers):
         return envelope(None, code="SM99002", success=False,
                         error="系统异常: resultFilters 仅支持表达式字符串数组",
                         trace_id="mock-trace-SM99002")
+    rows = aggregate_rows(rows, dimensions, metrics, body) if requested else rows
     rows = apply_filters(rows, result_filters)
     rows = sort_rows(rows, body.get("orders"))
     total_before_paging = len(rows)
@@ -352,7 +404,8 @@ def handle_metrics_query(query, body, headers):
     metas = source_data.get("metas") or []
     kept_metas = [meta for meta in metas if not requested or meta.get("name") in requested]
     query_result_type = body.get("queryResultType") or "DATA"
-    data = {"table": {"columns": rows_to_columns(rows, projected.keys()), "total": len(rows)},
+    output_names = requested or list(source_columns.keys())
+    data = {"table": {"columns": rows_to_columns(rows, output_names), "total": len(rows)},
             "metas": kept_metas,
             "total": total_before_paging if body.get("isQueryTotalCount") is True else len(rows),
             "queryResultType": query_result_type}

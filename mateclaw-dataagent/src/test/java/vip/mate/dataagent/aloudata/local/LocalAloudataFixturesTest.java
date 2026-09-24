@@ -256,7 +256,7 @@ class LocalAloudataFixturesTest {
         assertEquals("trd_fund_amt_inout_cy_jjgr", metricId.get(3).get("value"));
     }
 
-    /** metrics_query 无 viewName，应按请求字段反查视图、投影列、并按表达式筛选。 */
+    /** metrics_query 无 viewName，应按请求字段反查视图，先筛选明细再按维度分组聚合。 */
     @Test
     @SuppressWarnings("unchecked")
     void metricsQueryProjectsColumnsAndAppliesEqFilter() {
@@ -269,8 +269,53 @@ class LocalAloudataFixturesTest {
 
         assertEquals(List.of("channel", "digo_cust_asset_in"), List.copyOf(columns.keySet()));
         List<Map<String, Object>> channel = (List<Map<String, Object>>) columns.get("channel");
-        assertEquals(4, channel.size(), "zb 视图中 channel=APP 的行为 4 行");
+        assertEquals(1, channel.size(), "channel=APP 的明细应合并为一个分组");
         assertTrue(channel.stream().allMatch(cell -> "APP".equals(cell.get("value"))));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryFiltersGroupsAndSumsLikeTheDashboardQuery() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of(
+                        "digo_distr_count_1",
+                        "digo_distr_user_cnt_a",
+                        "digo_strategy_cnt_distr_1",
+                        "digo_strategy_cnt"),
+                "dimensions", List.of("metric_time"),
+                "filters", List.of("([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-02\")"),
+                "limit", 100,
+                "offset", 0,
+                "isQueryTotalCount", true), null);
+
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, Object> table = (Map<String, Object>) data.get("table");
+        Map<String, List<Map<String, Object>>> columns = (Map<String, List<Map<String, Object>>>) table.get("columns");
+
+        assertEquals(1, data.get("total"));
+        assertEquals("2026-09-01", columns.get("metric_time").getFirst().get("value"));
+        assertEquals(1470, ((Number) columns.get("digo_distr_count_1").getFirst().get("value")).intValue());
+        assertEquals(1215, ((Number) columns.get("digo_distr_user_cnt_a").getFirst().get("value")).intValue());
+        assertEquals(21, ((Number) columns.get("digo_strategy_cnt_distr_1").getFirst().get("value")).intValue());
+        assertEquals(21, ((Number) columns.get("digo_strategy_cnt").getFirst().get("value")).intValue());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryCanFilterByADimensionOutsideTheReturnedProjection() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_strategy_cnt"),
+                "dimensions", List.of("metric_time"),
+                "filters", List.of(
+                        "[metric_time] = \"2026-09-01\"",
+                        "[attribution_strategy_id] = \"STR-002\"")), null);
+
+        Map<String, Object> table = (Map<String, Object>)
+                ((Map<String, Object>) body.get("data")).get("table");
+        Map<String, List<Map<String, Object>>> columns =
+                (Map<String, List<Map<String, Object>>>) table.get("columns");
+        assertEquals("2026-09-01", columns.get("metric_time").getFirst().get("value"));
+        assertEquals(9, ((Number) columns.get("digo_strategy_cnt").getFirst().get("value")).intValue());
     }
 
     /** 结构化 filters 是真实服务的非法形态（SM99002），本地必须同样失败，杜绝「本地假绿」。 */
@@ -341,7 +386,7 @@ class LocalAloudataFixturesTest {
         Map<String, Object> columns = (Map<String, Object>) table.get("columns");
         assertEquals(1, ((List<?>) columns.get("metric_time")).size());
         assertEquals("2026-09-02", ((Map<?, ?>) ((List<?>) columns.get("metric_time")).getFirst()).get("value"));
-        assertEquals(2, data.get("total"), "total 应为结果筛选后的分页前条数");
+        assertEquals(1, data.get("total"), "total 应为聚合、结果筛选后的分页前分组数");
         assertEquals("dashboard-card-001", data.get("source"));
         assertEquals("SQL_AND_DATA", data.get("queryResultType"));
         assertNotNull(data.get("sql"));

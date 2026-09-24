@@ -115,3 +115,55 @@ def test_hover_details_return_source_view_metadata():
     assert metric["data"][0]["metricDisplayName"] == "入金客户数"
     assert dimension["data"]["dimDisplayName"] == "转化指标名称"
     assert dimension["data"]["dimDescription"] == "转化指标名称"
+
+
+def test_metrics_query_filters_groups_by_dimensions_and_sums_selected_metrics():
+    response = aloudata_mock_server.handle_metrics_query(
+        {},
+        {
+            "metrics": [
+                "digo_distr_count_1",
+                "digo_distr_user_cnt_a",
+                "digo_strategy_cnt_distr_1",
+                "digo_strategy_cnt",
+            ],
+            "dimensions": ["metric_time"],
+            "filters": [
+                '([metric_time] >= "2026-09-01" AND [metric_time] < "2026-09-02")'
+            ],
+            "limit": 100,
+            "offset": 0,
+            "isQueryTotalCount": True,
+        },
+        {},
+    )
+
+    data = response["data"]
+    columns = data["table"]["columns"]
+    assert data["total"] == 1
+    assert {name: cells[0]["value"] for name, cells in columns.items()} == {
+        "metric_time": "2026-09-01",
+        "digo_distr_count_1": 1470,
+        "digo_distr_user_cnt_a": 1215,
+        "digo_strategy_cnt_distr_1": 21,
+        "digo_strategy_cnt": 21,
+    }
+
+
+def test_metrics_query_can_filter_by_a_dimension_not_returned_in_the_projection():
+    response = aloudata_mock_server.handle_metrics_query(
+        {},
+        {
+            "metrics": ["digo_strategy_cnt"],
+            "dimensions": ["metric_time"],
+            "filters": [
+                '([metric_time] = "2026-09-01")',
+                '[attribution_strategy_id] = "STR-002"',
+            ],
+        },
+        {},
+    )
+
+    columns = response["data"]["table"]["columns"]
+    assert columns["metric_time"] == [{"value": "2026-09-01", "flag": 0, "count": 1}]
+    assert columns["digo_strategy_cnt"] == [{"value": 9, "flag": 0, "count": 1}]

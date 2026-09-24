@@ -8,6 +8,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,6 +56,8 @@ public class LocalAloudataFixtures {
     /** 筛选表达式：{@code [字段] 运算符 值}，字段可用 {@code ['字段']} 形式。 */
     private static final Pattern CONDITION = Pattern.compile(
             "\\['?([^'\\]]+)'?\\]\\s*(<>|>=|<=|=|>|<|IN|NotIn)\\s*(.+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern AGGREGATION = Pattern.compile(
+            "\\s*(sum|avg|average|min|max|count)\\s*\\(", Pattern.CASE_INSENSITIVE);
 
     /** 视图名 → 结果集夹具文件内的键；顺序即 metrics_query 反查的优先级。 */
     private static final List<String> VIEW_ORDER = List.of("cljd_zcl_zb_view", "cljd_zcl_wd_view");
@@ -376,7 +380,8 @@ public class LocalAloudataFixtures {
 
     /**
      * 指标数据查询：入参没有 viewName，按「请求的指标 + 维度」落在哪个视图上反查，
-     * 再做列投影、筛选、limit/offset。与真实响应一致使用 {@code data.table.columns}。
+     * 再对完整明细应用筛选，按请求维度分组、按指标定义聚合，最后排序分页。
+     * 与真实响应一致使用 {@code data.table.columns}。
      * <p>
      * 与正式契约一致：{@code filters} 必须是**表达式字符串数组**（如 {@code [region] = "华东"}）；
      * 传结构化 {@code {field,operator,value}} 时真实服务返回 {@code SM99002}，这里同样返回该
@@ -397,9 +402,10 @@ public class LocalAloudataFixtures {
         Map<String, Object> sourceTable = asMap(sourceData.get("table"));
         Map<String, Object> sourceColumns = asMap(sourceTable.get("columns"));
 
-        Set<String> requested = new LinkedHashSet<>();
-        requested.addAll(nameSet(params.get("dimensions")));
-        requested.addAll(nameSet(params.get("metrics")));
+        List<String> dimensions = new ArrayList<>(nameSet(params.get("dimensions")));
+        List<String> metrics = new ArrayList<>(nameSet(params.get("metrics")));
+        Set<String> requested = new LinkedHashSet<>(dimensions);
+        requested.addAll(metrics);
         Map<String, Object> projected = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : sourceColumns.entrySet()) {
             if (requested.isEmpty() || requested.contains(entry.getKey())) {
@@ -407,21 +413,29 @@ public class LocalAloudataFixtures {
             }
         }
 
-        List<Map<String, Object>> rows = toRows(projected);
+        List<Map<String, Object>> rows = toRows(sourceColumns);
         try {
             rows = filterRows(rows, expressions);
             String timeConstraint = firstString(params.get("timeConstraint"));
             if (timeConstraint != null) {
                 rows = filterRows(rows, List.of(timeConstraint));
             }
-            List<String> resultExpressions = filterExpressions(params.get("resultFilters"));
-            if (resultExpressions == null) {
-                return systemError(CODE_SYSTEM_ERROR, "系统异常: resultFilters 仅支持表达式字符串数组");
-            }
-            rows = filterRows(rows, resultExpressions);
         } catch (InvalidFilterExpressionException e) {
             log.warn("[local-mock] metrics_query 收到无法解析的筛选条件，按真实服务行为返回 SM99002");
             return systemError("SM99002", "系统异常: filters 表达式无法解析");
+        }
+        if (!requested.isEmpty()) {
+            rows = aggregateRows(rows, dimensions, metrics, params);
+        }
+        List<String> resultExpressions = filterExpressions(params.get("resultFilters"));
+        if (resultExpressions == null) {
+            return systemError(CODE_SYSTEM_ERROR, "系统异常: resultFilters 仅支持表达式字符串数组");
+        }
+        try {
+            rows = filterRows(rows, resultExpressions);
+        } catch (InvalidFilterExpressionException e) {
+            log.warn("[local-mock] metrics_query 收到无法解析的结果筛选条件，按真实服务行为返回 SM99002");
+            return systemError("SM99002", "系统异常: resultFilters 表达式无法解析");
         }
         sortRows(rows, params.get("orders"));
         int totalBeforePaging = rows.size();
@@ -452,6 +466,83 @@ public class LocalAloudataFixtures {
             data.put("sql", buildMockSql(requested, expressions, params));
         }
         return envelope(data, source.get("traceId"));
+    }
+
+    private List<Map<String, Object>> aggregateRows(List<Map<String, Object>> rows, List<String> dimensions,
+                                                     List<String> metrics, Map<String, Object> params) {
+        Map<List<Object>, List<Map<String, Object>>> groups = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            List<Object> key = dimensions.stream().map(row::get).toList();
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(row);
+        }
+
+        List<Map<String, Object>> aggregated = new ArrayList<>();
+        for (Map.Entry<List<Object>, List<Map<String, Object>>> entry : groups.entrySet()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            for (int i = 0; i < dimensions.size(); i++) {
+                result.put(dimensions.get(i), entry.getKey().get(i));
+            }
+            for (String metric : metrics) {
+                result.put(metric, aggregateMetric(metric, entry.getValue(), params));
+            }
+            aggregated.add(result);
+        }
+        return aggregated;
+    }
+
+    private Object aggregateMetric(String metric, List<Map<String, Object>> rows, Map<String, Object> params) {
+        String function = aggregationFunction(metric, params);
+        List<Number> values = rows.stream().map(row -> row.get(metric))
+                .filter(Number.class::isInstance).map(Number.class::cast).toList();
+        if ("count".equals(function)) {
+            return values.size();
+        }
+        if (values.isEmpty()) {
+            return null;
+        }
+        List<BigDecimal> decimals = values.stream().map(value -> new BigDecimal(value.toString())).toList();
+        if ("min".equals(function)) {
+            return jsonNumber(decimals.stream().min(BigDecimal::compareTo).orElseThrow());
+        }
+        if ("max".equals(function)) {
+            return jsonNumber(decimals.stream().max(BigDecimal::compareTo).orElseThrow());
+        }
+        BigDecimal sum = decimals.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        if ("avg".equals(function) || "average".equals(function)) {
+            return jsonNumber(sum.divide(BigDecimal.valueOf(decimals.size()), MathContext.DECIMAL64));
+        }
+        return jsonNumber(sum);
+    }
+
+    private Object jsonNumber(BigDecimal value) {
+        BigDecimal normalized = value.stripTrailingZeros();
+        if (normalized.scale() <= 0) {
+            try {
+                return normalized.longValueExact();
+            } catch (ArithmeticException ignored) {
+                return normalized;
+            }
+        }
+        return normalized;
+    }
+
+    private String aggregationFunction(String metric, Map<String, Object> params) {
+        Map<String, Object> definition = asMap(asMap(params.get("metricDefinitions")).get(metric));
+        String expression = firstString(definition.get("expr"));
+        if (expression == null) expression = firstString(definition.get("expression"));
+        if (expression == null) expression = firstString(definition.get("formula"));
+        if (expression == null) {
+            Map<String, Object> envelope = load("metric_batch_detail.json");
+            for (Map<String, Object> item : asMapList(envelope.get("data"))) {
+                if (!metric.equals(firstString(item.get("metricName")))) continue;
+                Map<String, Object> caliber = asMap(item.get("caliber"));
+                expression = firstString(caliber.get("expr"));
+                if (expression == null) expression = firstString(caliber.get("formula"));
+                break;
+            }
+        }
+        Matcher matcher = AGGREGATION.matcher(expression == null ? "" : expression);
+        return matcher.find() ? matcher.group(1).toLowerCase(Locale.ROOT) : "sum";
     }
 
     private void sortRows(List<Map<String, Object>> rows, Object rawOrders) {
