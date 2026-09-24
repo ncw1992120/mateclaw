@@ -25,7 +25,7 @@
             <span class="qc-chevron" :class="{ 'is-collapsed': !fieldsExpanded }">›</span>
           </button>
           <span class="qc-section-title qc-section-title-grow">展示字段</span>
-          <span class="qc-hint">角色可点击徽标切换（维度/指标）；拖动行调整列顺序；删除同步解除筛选绑定与排序白名单</span>
+          <span class="qc-hint">角色可点击徽标切换（维度/指标）；拖动行调整列顺序；删除仅影响展示与排序字段，不影响筛选绑定</span>
         </div>
         <div v-show="fieldsExpanded" id="qc-field-table" class="qc-field-wrap">
           <div class="qc-field-table" data-testid="qc-field-rows" role="table" aria-label="展示字段">
@@ -101,7 +101,7 @@
               <el-option v-for="filter in filterOptions" :key="filter.id" :label="filter.title" :value="filter.id" />
             </el-select>
             <el-select v-model="binding.field" size="small" placeholder="绑定字段" filterable>
-              <el-option v-for="row in fieldRows" :key="row.field" :label="fieldTitle(row.field)" :value="row.field" />
+              <el-option v-for="field in queryableFields" :key="field.name" :label="fieldTitle(field.name)" :value="field.name" />
             </el-select>
             <el-button size="small" text type="danger" data-testid="qc-binding-remove" @click="bindingRows.splice(index, 1)">删除</el-button>
           </div>
@@ -149,6 +149,7 @@ import { ElMessage } from 'element-plus'
 import { validateFieldMetas, type DatasetFieldMeta } from '@/utils/field-mapping'
 import type {
   DatasetQueryConfig,
+  QueryableDatasetField,
   QueryDisplayField,
   QueryParameterBinding,
 } from '@/types'
@@ -233,8 +234,17 @@ function roleForInitialRow(row: FieldRow): 'dimension' | 'measure' {
 
 function fieldTitle(fieldName: string): string {
   const row = fieldRows.value.find((item) => item.field === fieldName)
-  return row?.title?.trim() || fieldName
+  if (row?.title?.trim()) return row.title.trim()
+  const field = queryableFields.value.find((item) => item.name === fieldName)
+  return field?.displayName?.trim() || fieldName
 }
+
+/** 筛选可用字段取完整数据集 descriptor，与当前输出投影 fieldRows 解耦。 */
+const queryableFields = computed<QueryableDatasetField[]>(() => props.fields.map((field) => ({
+  name: field.name,
+  displayName: field.displayName,
+  role: fieldRows.value.find((row) => row.field === field.name)?.role ?? roleOf(field),
+})))
 
 function addField(fieldName: string): void {
   const field = props.fields.find((item) => item.name === fieldName)
@@ -253,8 +263,8 @@ function toggleRole(row: FieldRow): void {
 function removeField(index: number): void {
   const removed = fieldRows.value[index]
   fieldRows.value.splice(index, 1)
-  // 删除字段联动：解除筛选绑定引用，并移出排序白名单（白名单为空时关闭排序）
-  bindingRows.value = bindingRows.value.filter((binding) => binding.field !== removed.field)
+  // 输出投影与筛选条件独立；移除展示列不应影响仍可查询的字段绑定。
+  // 排序白名单保持为展示层交互能力，删除对应展示列时仍同步移除。
   sortAllowed.value = sortAllowed.value.filter((field) => field !== removed.field)
   if (!sortAllowed.value.length) sortEnabled.value = false
 }
@@ -281,23 +291,25 @@ function onFilterChange(binding: BindingRow): void {
   binding.operator = fixedOperatorFor(binding.filterComponentId)
 }
 
-/** 筛选器字段名优先，其次用筛选器名称与展示名/技术字段名精确匹配；歧义时不猜测。 */
+/** 筛选器字段名优先，其次用筛选器名称与完整字段目录中的展示名/技术名匹配；歧义时不猜测。 */
 function matchedFieldForFilter(filterComponentId: string): string {
   const filter = props.filterOptions.find((option) => option.id === filterComponentId)
   if (!filter) return ''
 
   const configuredField = (filter.field ?? '').trim()
   if (configuredField) {
-    const fieldMatches = fieldRows.value.filter((row) => row.field === configuredField)
-    if (fieldMatches.length === 1) return fieldMatches[0].field
+    const fieldMatches = queryableFields.value.filter((candidate) => candidate.name === configuredField)
+    if (fieldMatches.length === 1) return fieldMatches[0].name
     if (fieldMatches.length > 1) return ''
   }
 
   const filterNames = new Set([filter.title.trim(), configuredField].filter(Boolean))
-  const matches = fieldRows.value.filter((row) =>
-    filterNames.has(row.field.trim()) || filterNames.has(row.title.trim()),
+  const matches = queryableFields.value.filter((field) =>
+    filterNames.has(field.name.trim())
+      || filterNames.has((field.displayName ?? '').trim())
+      || filterNames.has(fieldRows.value.find((row) => row.field === field.name)?.title.trim() ?? ''),
   )
-  return matches.length === 1 ? matches[0].field : ''
+  return matches.length === 1 ? matches[0].name : ''
 }
 
 /** 维度字段默认置顶（指标跟随其后）；用户仍可用拖动自由调整顺序 */
@@ -373,6 +385,7 @@ function save(): void {
   }
   emit('save', {
     displayFields: fieldRows.value.map((row) => ({ ...row })),
+    queryableFields: queryableFields.value,
     parameterBindings: bindingRows.value.map((binding) => ({ ...binding })),
     sortPolicy: {
       enabled: sortEnabled.value,

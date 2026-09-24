@@ -22,7 +22,7 @@ import java.util.Set;
  * <p>
  * 权威配置来源：{@code input.queryConfig.parameterBindings}；旧 Schema 无 queryConfig 时才归一化
  * {@code component.config.datasetPipeline.scriptFilterBindings}，两份规则绝不同时生效。
- * 字段名一律是数据源技术字段名（displayFields[].field），展示名不进下推链路。
+ * 字段名一律是数据源技术字段名（queryableFields[].name / displayFields[].field），展示名不进下推链路。
  */
 @Service
 public class QueryPlannerImpl implements QueryPlanner {
@@ -46,16 +46,31 @@ public class QueryPlannerImpl implements QueryPlanner {
         JsonNode queryConfig = input.path("queryConfig");
         boolean authoritative = queryConfig.isObject() && queryConfig.size() > 0;
 
-        // ---- 字段注册表（技术字段名） ----
+        // ---- 完整可查询字段注册表（用于筛选校验）；展示字段仅定义输出投影 ----
         Map<String, String> fieldRoles = new LinkedHashMap<>(); // field -> role
         List<String> columns = new ArrayList<>();
         if (authoritative) {
+            JsonNode queryableFields = queryConfig.path("queryableFields");
+            // 兼容没有完整目录的旧配置：旧版只能对展示字段筛选。
+            JsonNode registry = queryableFields.isArray() ? queryableFields : queryConfig.path("displayFields");
+            String fieldProperty = queryableFields.isArray() ? "name" : "field";
+            for (JsonNode registeredField : registry) {
+                String field = requiredText(registeredField, fieldProperty, "queryable field");
+                String role = registeredField.path("role").asText("dimension");
+                if (fieldRoles.putIfAbsent(field, role) != null) {
+                    throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED, "duplicate queryable field: " + field);
+                }
+            }
             for (JsonNode displayField : queryConfig.path("displayFields")) {
                 String field = requiredText(displayField, "field", "display field");
-                if (fieldRoles.containsKey(field)) {
+                if (!fieldRoles.containsKey(field)) {
+                    // 旧配置若存在 queryableFields，应保证展示列也在真实字段目录中。
+                    throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED,
+                            "display field is not registered as queryable: " + field);
+                }
+                if (columns.contains(field)) {
                     throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED, "duplicate display field: " + field);
                 }
-                fieldRoles.put(field, displayField.path("role").asText("dimension"));
                 columns.add(field);
             }
         }

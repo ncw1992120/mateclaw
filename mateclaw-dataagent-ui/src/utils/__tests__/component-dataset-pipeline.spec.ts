@@ -113,6 +113,10 @@ describe('component dataset pipeline', () => {
   it('reads and writes queryConfig on dataset inputs (任务 5 契约)', () => {
     const queryConfig = {
       displayFields: [{ field: 'metric_date', title: '指标日期', role: 'dimension' }],
+      queryableFields: [
+        { name: 'metric_date', displayName: '指标日期', role: 'dimension' },
+        { name: 'created_by', displayName: '创建人', role: 'dimension' },
+      ],
       parameterBindings: [{ filterComponentId: 'date_range', parameterName: 'start_date', field: 'metric_date', operator: 'gte' }],
       sortPolicy: { enabled: true, mode: 'single', allowedFields: ['in_account'], defaultSort: null },
       paginationPolicy: { enabled: true, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: true },

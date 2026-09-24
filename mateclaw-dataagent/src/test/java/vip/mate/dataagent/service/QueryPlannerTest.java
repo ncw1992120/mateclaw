@@ -167,6 +167,37 @@ class QueryPlannerTest {
     }
 
     @Test
+    @DisplayName("筛选字段可独立于展示字段：隐藏字段参与过滤但不进入输出列")
+    void hiddenQueryableFieldCanFilterWithoutBeingProjected() throws Exception {
+        String inputJson = """
+                {
+                  "datasetId": "42",
+                  "inputName": "strategy_data",
+                  "queryConfig": {
+                    "displayFields": [
+                      {"field": "strategy_id", "title": "策略编码", "role": "dimension"}
+                    ],
+                    "queryableFields": [
+                      {"name": "strategy_id", "role": "dimension"},
+                      {"name": "created_by", "displayName": "创建人", "role": "dimension"}
+                    ],
+                    "parameterBindings": [
+                      {"filterComponentId": "strategy_type", "parameterName": "creator", "field": "created_by", "operator": "eq"}
+                    ],
+                    "sortPolicy": {"enabled": false, "allowedFields": []},
+                    "paginationPolicy": {"enabled": false}
+                  }
+                }
+                """;
+        JsonNode component = component(inputJson);
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component), context(Map.of("creator", "Alice")), false);
+
+        assertThat(plan.columns()).containsExactly("strategy_id");
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("created_by", "eq", "Alice"));
+    }
+
+    @Test
     @DisplayName("被删除的筛选器映射在 Planner 阶段失败")
     void deletedFilterMappingFails() throws Exception {
         // boundFilterComponentIds 移除 amount_range（模拟筛选器被删）
