@@ -14,7 +14,7 @@
 | 前端是否直连 Aloudata？ | **否**。全部经 `mateclaw-dataagent` 后端中转，前端只感知 dataagent 的 `/dataagent/api/v1/**` 接口 |
 | 「字段名称默认值」是不是一个独立接口？ | **不是**。它就是 `GET /v1/datasources/{id}/analysis-views/{viewName}/fields`，前端按 `displayName` 生成默认值 |
 | Mock 应该切在哪一层？ | **`AloudataApiClient#send`**（`@Profile("local-mock")` + `@Primary`），**请求构建仍走真实 `prepare()`**，一处收口覆盖全部上游端点 |
-| 本地与正式的差异是什么？ | 默认不启用 mock，后端直接调用真实 Aloudata。显式设置 `ALOUDATA_MOCK=on` 时，用真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务；显式设置 `ALOUDATA_MOCK=embed` 时使用内置夹具 |
+| 本地与正式的差异是什么？ | 应用未启用 `local-mock` 时仍直接调用真实 Aloudata；`restart-dataagent-backend.sh` 开发重启脚本默认使用 `ALOUDATA_MOCK=on`，通过真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务；可显式设为 `embed` 使用内置夹具，或 `off` 调用真实 Aloudata |
 | 需要 mock 几个上游端点？ | 视图取数与选择器依赖的 Aloudata 端点由 Java 内置夹具和 Python HTTP mock 共用 fixtures 覆盖，包括 `category/list`、`metrics/list`、`metrics/batchDetail`、`metrics/dimensionAll`、`dimension/list`、`dimension/detail` 及指标视图查询端点 |
 | 本地会不会掩盖真机问题？ | **不会**（这是本轮重点）：请求方式配错 → 405、端点未注册 → `SM_04_0004`、视图无权限 → `SM_02_0038`、`filters` 用了结构化对象 → `SM99002`，本地一律复现真实失败形状 |
 | mock 报文格式依据 | **真实 Aloudata 实测响应**（§6 附实测样本；夹具由脚本按同一结构生成，Java 与 Python 两侧共用同一批夹具） |
@@ -477,15 +477,15 @@ public class LocalAloudataApiClient extends AloudataApiClient {
 **方式一（推荐）：一个脚本同时管后端与本地 mock 服务** —— `docs/策略解读/restart-dataagent-backend.sh`：
 
 ```bash
-./docs/策略解读/restart-dataagent-backend.sh               # 重启后端，默认直连真实 Aloudata
+./docs/策略解读/restart-dataagent-backend.sh               # 重启后端，默认启动本地 mock 并使用 mock 数据
 ./docs/策略解读/restart-dataagent-backend.sh mock          # ★ 只重启 mock 服务（不动后端，改完 mock 脚本/夹具后用它）
 ./docs/策略解读/restart-dataagent-backend.sh stop-mock     # 只停止 mock 服务
 ./docs/策略解读/restart-dataagent-backend.sh help          # 用法
 
 # 上游模式（ALOUDATA_MOCK）
-ALOUDATA_MOCK=on ./docs/策略解读/restart-dataagent-backend.sh     # 显式启用：本地 mock 服务，只换 ip:port
+ALOUDATA_MOCK=on ./docs/策略解读/restart-dataagent-backend.sh     # 本地 HTTP mock（默认）
 ALOUDATA_MOCK=embed ./docs/策略解读/restart-dataagent-backend.sh   # 内置夹具，不起 HTTP 服务（零依赖）
-ALOUDATA_MOCK=off   ./docs/策略解读/restart-dataagent-backend.sh   # 显式指定真实 Aloudata（等同默认）
+ALOUDATA_MOCK=off   ./docs/策略解读/restart-dataagent-backend.sh   # 显式指定真实 Aloudata
 
 # 其它开关
 ALOUDATA_MOCK_PORT=18082 ./docs/策略解读/restart-dataagent-backend.sh          # 换 mock 服务端口
