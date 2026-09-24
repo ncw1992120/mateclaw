@@ -14,7 +14,7 @@
 | 前端是否直连 Aloudata？ | **否**。全部经 `mateclaw-dataagent` 后端中转，前端只感知 dataagent 的 `/dataagent/api/v1/**` 接口 |
 | 「字段名称默认值」是不是一个独立接口？ | **不是**。它就是 `GET /v1/datasources/{id}/analysis-views/{viewName}/fields`，前端按 `displayName` 生成默认值 |
 | Mock 应该切在哪一层？ | **`AloudataApiClient#send`**（`@Profile("local-mock")` + `@Primary`），**请求构建仍走真实 `prepare()`**，一处收口覆盖全部上游端点 |
-| 本地与正式的差异是什么？ | **只有 ip:port**。默认（`ALOUDATA_MOCK=on`）后端用真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务：路径、query/body、请求方式、状态码、业务码全部一致；不起服务则用 `ALOUDATA_MOCK=embed` 走内置夹具 |
+| 本地与正式的差异是什么？ | 默认不启用 mock，后端直接调用真实 Aloudata。显式设置 `ALOUDATA_MOCK=on` 时，用真实 `RestTemplate` 把请求发到 `127.0.0.1:18081` 的本地 mock 服务；显式设置 `ALOUDATA_MOCK=embed` 时使用内置夹具 |
 | 需要 mock 几个上游端点？ | **7 个业务端点**由夹具覆盖（`analysis_view_tree` / `analysis_view_list` / `analysis_view_query_by_name` / `metric_batch_detail` / `dimension_list` / `analysis_view_query_data` / `metrics_query`）；本地 HTTP 服务另注册 11 条 anymetrics + semantic 路由（含 `metrics/list` / `dimensionAlld` / `category/list` / `dimension/detail`） |
 | 本地会不会掩盖真机问题？ | **不会**（这是本轮重点）：请求方式配错 → 405、端点未注册 → `SM_04_0004`、视图无权限 → `SM_02_0038`、`filters` 用了结构化对象 → `SM99002`，本地一律复现真实失败形状 |
 | mock 报文格式依据 | **真实 Aloudata 实测响应**（§6 附实测样本；夹具由脚本按同一结构生成，Java 与 Python 两侧共用同一批夹具） |
@@ -45,7 +45,7 @@
        ├─ prepare(endpointName, config, params)   ← ★ 唯一的请求构建逻辑（默认值/校验/QUERY|BODY 分发/拼 URL+方法）
        └─ send(prepared)
             ▼  ← ★ Mock 切点：只接管「发送」这一步
-           ├─ 方案 A（默认）：真实 RestTemplate 发 HTTP → http://127.0.0.1:18081（仅 ip:port 不同）
+           ├─ 方案 A（ALOUDATA_MOCK=on）：真实 RestTemplate 发 HTTP → http://127.0.0.1:18081（仅 ip:port 不同）
            ├─ 方案 B（embed）：LocalAloudataFixtures 直接返回内置夹具
            └─ 生产：真实 Aloudata（anymetrics :8083 / semantic :8085）
 ```
@@ -67,7 +67,7 @@
 |---|---|
 | context-path | `/dataagent/api`（`application.yml:4`） |
 | 默认端口 | 18089（本地可能被占用而落到其他端口，以启动日志为准） |
-| 激活 profile | `pgsql`（默认）+ `local-mock`（新增） |
+| 激活 profile | 默认 `pgsql`；只有显式启用 `ALOUDATA_MOCK=on` 或 `embed` 才追加 `local-mock` |
 | 数据源类型判定 | `source_type` 小写后需包含 `aloudata` 或 `anymetrics`（`AloudataAnalysisViewServiceImpl#requireAloudataDatasource`） |
 | 工作区/归属校验 | 数据源需 `workspace_id` 匹配当前 `X-Workspace-Id`，且 `meta_shared=true` 或 `owner_id` 匹配当前用户 |
 
@@ -389,12 +389,12 @@ target      = userEdited ? prevTarget : defaultTargetOf(field)
 
 | 方案 | 做法 | 覆盖度 | 请求保真度 | 是否锻炼真实逻辑 | 结论 |
 |---|---|---|---|---|---|
-| A. 本地 HTTP mock 服务（`aloudata-mock-server.py`） | 后端**不启用** mock 类，数据源 host 指向 `127.0.0.1:18081`，真实 `RestTemplate` 发 HTTP | 11 个端点（含 anymetrics + semantic） | ★★★ 路径/方法/query/body/状态码全真，**只有 ip:port 不同** | ✅ 全链路真跑 | ★ **推荐（默认 `ALOUDATA_MOCK=on`）** |
+| A. 本地 HTTP mock 服务（`aloudata-mock-server.py`） | 后端**不启用** mock 类，数据源 host 指向 `127.0.0.1:18081`，真实 `RestTemplate` 发 HTTP | 11 个端点（含 anymetrics + semantic） | ★★★ 路径/方法/query/body/状态码全真，**只有 ip:port 不同** | ✅ 全链路真跑 | 本地联调可显式设置 `ALOUDATA_MOCK=on` |
 | B. 覆写 `send(PreparedRequest)` 返回内置夹具 | `@Profile("local-mock") @Primary` 子类，**复用真实 `prepare()`** 构建请求后只把"发送"换成夹具 | 全端点一处收口 | ★★ 参数/校验/URL 全真，但不发 HTTP | ✅ `flattenTree`/`listFields` 聚合/`rows` 容错全跑 | ★ **零依赖兜底（`ALOUDATA_MOCK=embed`）** |
 | C. 替换 `AloudataAnalysisViewService` 实现 | mock 直接返回 DTO | 需同时替换 Adapter + `AloudataService`，3 个类 | ✗ 绕过参数构建与校验 | ❌ 绕过聚合逻辑 | 不采用 |
 | D. WireMock 静态 mapping | 数据源 host 指向 18081 | 缺 `analysisview/list` 等 mapping，静态响应无分页/筛选 | ★★★ | ✅ | 不采用（无法做参数感知，已由方案 A 的脚本替代） |
 
-采用 **A（默认）+ B（兜底）**。两者的共同点（也是本方案的核心约定）：
+采用 **A（显式开启 `ALOUDATA_MOCK=on`）+ B（显式开启 `ALOUDATA_MOCK=embed`）**。常规启动默认调用真实 Aloudata。两种 mock 方式的共同点（也是本方案的核心约定）：
 
 1. **请求构建只有一份代码**：`AloudataApiClient#prepare()`（端点声明 → 默认值 → 必填/枚举校验 → HEADER/QUERY/BODY 分发 → 拼 URL + HTTP 方法）。A、B 与真实调用都走它，因此本地不会掩盖「参数名写错 / 请求方式配错 / 必填缺失 / 请求体形状错误」。
 2. **服务端只替换"数据来源"**：A 由 Python 脚本按真实契约应答，B 由 `LocalAloudataFixtures` 直接吐夹具。
@@ -477,15 +477,15 @@ public class LocalAloudataApiClient extends AloudataApiClient {
 **方式一（推荐）：一个脚本同时管后端与本地 mock 服务** —— `docs/策略解读/restart-dataagent-backend.sh`：
 
 ```bash
-./docs/策略解读/restart-dataagent-backend.sh               # 重启 mock 服务（默认）+ 后端
+./docs/策略解读/restart-dataagent-backend.sh               # 重启后端，默认直连真实 Aloudata
 ./docs/策略解读/restart-dataagent-backend.sh mock          # ★ 只重启 mock 服务（不动后端，改完 mock 脚本/夹具后用它）
 ./docs/策略解读/restart-dataagent-backend.sh stop-mock     # 只停止 mock 服务
 ./docs/策略解读/restart-dataagent-backend.sh help          # 用法
 
 # 上游模式（ALOUDATA_MOCK）
-./docs/策略解读/restart-dataagent-backend.sh               # on（默认）：本地 mock 服务，只换 ip:port
+ALOUDATA_MOCK=on ./docs/策略解读/restart-dataagent-backend.sh     # 显式启用：本地 mock 服务，只换 ip:port
 ALOUDATA_MOCK=embed ./docs/策略解读/restart-dataagent-backend.sh   # 内置夹具，不起 HTTP 服务（零依赖）
-ALOUDATA_MOCK=off   ./docs/策略解读/restart-dataagent-backend.sh   # 切回真实 Aloudata 上游
+ALOUDATA_MOCK=off   ./docs/策略解读/restart-dataagent-backend.sh   # 显式指定真实 Aloudata（等同默认）
 
 # 其它开关
 ALOUDATA_MOCK_PORT=18082 ./docs/策略解读/restart-dataagent-backend.sh          # 换 mock 服务端口
@@ -497,7 +497,7 @@ ALOUDATA_MOCK_FORCE_KILL=1 ./docs/策略解读/restart-dataagent-backend.sh mock
 
 | 行为 | 说明 |
 |---|---|
-| 重启范围 | 默认每次运行都**先停旧 mock 服务再起新的**（`always`），确保运行的始终是当前版本的脚本与夹具 |
+| 重启范围 | 仅在 `ALOUDATA_MOCK=on` 时管理 mock 服务；该模式下默认每次运行都**先停旧 mock 服务再起新的**（`always`），确保运行的始终是当前版本的脚本与夹具 |
 | 进程识别 | 先比对 `/tmp/aloudata-mock-server-<port>.pid`，再比对命令行含 `aloudata-mock-server.py`；两者都不匹配（端口被别的服务占）→ **拒绝 kill** 并打印占用者，避免误杀 |
 | 启动校验 | 启动后轮询端口最多 10s；仍未监听则打印日志路径，并**降级为内置夹具**同时在横幅标注（不静默） |
 | 故障提示 | mock 服务中途退出时，接口返回 **503「上游服务不可达」**（含 URL 与恢复命令），不是 500 |
@@ -572,7 +572,7 @@ python3 dev-support/local-simulation/scripts/generate-aloudata-fixtures.py
 
 > 若确实想造一条专用 mock 数据源，注意两种模式下 host/port 都不必指向本地：
 > 方案 A 会把已构建 URL 的 `scheme://host:port` 改写成 `ALOUDATA_MOCK_SERVER`，方案 B 直接短路不发请求。
-> 因此**现有指向真实域名的数据源可原样使用**，切回 `ALOUDATA_MOCK=off` 即打真实域名。
+> 因此**现有指向真实域名的数据源默认直接使用真实域名**；显式设置 `ALOUDATA_MOCK=off` 也会直接调用真实上游。
 > 真正有语义的字段是 `source_type`、`username`（tenantId）、`password`（auth-value）。
 
 真实环境对照（仅本地探测用，mock 下不生效）：
