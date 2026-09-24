@@ -28,6 +28,7 @@ import type {
   InsightComponent,
   InsightDashboardSchema,
   InsightComponentData,
+  QueryContext,
 } from '@/types'
 
 /** 原型联调使用的仪表盘名称（首次进入自动创建） */
@@ -117,8 +118,9 @@ export async function submitComponentExecution(
   componentId: string,
   parameters: Record<string, unknown> = {},
   schemaJson?: string,
+  queryContext?: QueryContext,
 ): Promise<{ executionId: string; status?: string }> {
-  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters, schemaJson)) as unknown as {
+  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters, schemaJson, queryContext)) as unknown as {
     executionId: string
     status?: string
   }
