@@ -361,7 +361,7 @@ import { rowsToComponentData } from '@/utils/dataset-result'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { componentToCombinationChild, defaultCombinationChildLayout } from '@/utils/combination-tabs'
-import { addCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
+import { addCombinationTab, findCombinationChild, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
@@ -607,28 +607,6 @@ type CombinationContainer = {
   type: InsightComponentType
   children?: InsightCombinationChild[]
   containerConfig?: InsightComponent['containerConfig']
-}
-
-function findCombinationChild(container: CombinationContainer, childId: string): InsightCombinationChild | null {
-  const direct = container.children?.find((c) => c.id === childId)
-  if (direct) return direct
-  for (const child of container.children ?? []) {
-    if (child.type === 'combination') {
-      const nested = findCombinationChild(child, childId)
-      if (nested) return nested
-    }
-  }
-  for (const tab of container.containerConfig?.tabs ?? []) {
-    const hit = tab.children.find((c) => c.id === childId)
-    if (hit) return hit
-    for (const child of tab.children) {
-      if (child.type === 'combination') {
-        const nested = findCombinationChild(child, childId)
-        if (nested) return nested
-      }
-    }
-  }
-  return null
 }
 
 function findCombinationContainer(containerId: string): CombinationContainer | null {
@@ -1353,7 +1331,14 @@ function handleComponentResultSet(payload: {
   rows: Record<string, unknown>[]
   error: string
 }): void {
-  const component = currentPageComponents.value.find((item) => item.id === payload.componentId)
+  const topLevel = currentPageComponents.value.find((item) => item.id === payload.componentId)
+  const nestedChild = topLevel ? null : currentPageComponents.value
+    .filter((item) => item.type === 'combination')
+    .map((item) => findCombinationChild(item, payload.componentId))
+    .find((item) => item !== null)
+  const component = topLevel ?? (nestedChild
+    ? { ...nestedChild, position: { x: 0, y: 0, w: 6, h: 4 } } as InsightComponent
+    : null)
   if (!component) return
   if (payload.status === 'ready') {
     componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)

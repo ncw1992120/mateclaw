@@ -4,6 +4,7 @@ import {
   combinationTabChildCount,
   componentToCombinationChild,
   defaultCombinationChildLayout,
+  findCombinationChild,
   removeCombinationTab,
 } from '@/utils/combination-tabs'
 import type { InsightCombinationChild, InsightComponent } from '@/types'
@@ -38,6 +39,19 @@ function makeContainer(children: InsightCombinationChild[] = [], tabs: Array<{ i
 }
 
 describe('组合卡片页签 · 首次添加页签', () => {
+  it('可以从多层组合卡片和页签中找到嵌套组件', () => {
+    const nested = makeContainer([], [{
+      id: 'nested-tab', title: '子策略贡献表', children: [makeChild('table-target')],
+    }])
+    const parent = makeContainer([], [{
+      id: 'parent-tab', title: '策略视角', children: [{
+        ...componentToCombinationChild(nested, { x: 0, y: 0, col: 12 }),
+      }],
+    }])
+
+    expect(findCombinationChild(parent, 'table-target')?.id).toBe('table-target')
+  })
+
   it('无页签态已有子卡片时，全部平移进第一个页签并激活该页签', () => {
     const c = makeContainer([makeChild('c1'), makeChild('c2')])
     const res = addCombinationTab(c)
