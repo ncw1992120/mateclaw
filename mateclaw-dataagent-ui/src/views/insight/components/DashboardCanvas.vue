@@ -1137,8 +1137,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   box-shadow: var(--shadow-sm);
 }
 
-/* Element Plus 会将抽屉遮罩常驻挂在 body 下；只在可见遮罩期间隐藏工具条，并保留占位。 */
-:global(body:has(> .el-overlay:not([style*="display: none"])) .canvas-zoom-toolbar) {
+/* Element Plus 对话框可能挂在属性面板内，抽屉则可能挂在 body 下；任意可见遮罩期间隐藏工具条并保留占位。 */
+:global(body:has(.el-overlay:not([style*="display: none"])) .canvas-zoom-toolbar) {
   visibility: hidden;
   pointer-events: none;
 }
