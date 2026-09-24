@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 本地 mock 的 Aloudata 报文仓库。
@@ -70,10 +71,13 @@ public class LocalAloudataFixtures {
             case "analysis_view_tree" -> treeList(owner);
             case "metric_tree" -> copy(load("metric_tree.json"));
             case "category_list" -> categoryList(safeParams);
+            case "metric_list" -> metricList(safeParams);
             case "analysis_view_list" -> listViews(owner, safeParams);
             case "analysis_view_query_by_name" -> viewByName(owner, safeParams);
             case "metric_batch_detail" -> metricBatchDetail(owner, safeParams);
+            case "metric_all_dimensions" -> metricAllDimensions(safeParams);
             case "dimension_list" -> dimensionList(owner, safeParams);
+            case "dimension_detail" -> dimensionDetail(safeParams);
             case "dimension_values" -> dimensionValues(safeParams);
             case "analysis_view_query_data" -> queryData(owner, safeParams);
             case "metrics_query" -> metricsQuery(owner, safeParams);
@@ -99,6 +103,43 @@ public class LocalAloudataFixtures {
             categories.removeIf(category -> !categoryType.equals(firstString(category.get("categoryType"))));
         }
         envelope.put("data", categories);
+        return envelope;
+    }
+
+    /** 指标选择器列表：按展示名/字段名、类目和页码筛选现有视图指标。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> metricList(Map<String, Object> params) {
+        Map<String, Object> envelope = copy(load("metric_batch_detail.json"));
+        List<Map<String, Object>> items = asMapList(envelope.get("data"));
+        String keyword = firstString(params.get("keyword"));
+        String categoryId = firstString(params.get("metricCategoryId"));
+        Set<String> categoryIds = categoryId == null ? Set.of()
+                : categoryIdsFor(categoryId, "CATEGORY_METRIC");
+        String needle = keyword == null ? null : keyword.toLowerCase(Locale.ROOT);
+        List<Map<String, Object>> matched = new ArrayList<>();
+        for (Map<String, Object> item : items) {
+            String name = firstString(item.get("metricName"));
+            String displayName = firstString(item.get("metricDisplayName"));
+            String itemCategory = firstString(item.get("metricCategoryId"));
+            if (needle != null && !containsIgnoreCase(name, needle) && !containsIgnoreCase(displayName, needle)) {
+                continue;
+            }
+            if (categoryId != null && !categoryIds.contains(itemCategory)) {
+                continue;
+            }
+            matched.add(item);
+        }
+        int pageSize = Math.max(0, intValue(params.get("pageSize"), matched.size()));
+        int pageNumber = Math.max(1, intValue(params.get("pageNumber"), 1));
+        int from = Math.min(matched.size(), (pageNumber - 1) * pageSize);
+        int to = Math.min(matched.size(), from + pageSize);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("total", matched.size());
+        data.put("pageNumber", pageNumber);
+        data.put("pageSize", pageSize);
+        data.put("hasNext", to < matched.size());
+        data.put("data", pageSize == 0 ? List.of() : new ArrayList<>(matched.subList(from, to)));
+        envelope.put("data", data);
         return envelope;
     }
 
@@ -143,17 +184,99 @@ public class LocalAloudataFixtures {
         replacePlaceholder(envelope, OWNER_PLACEHOLDER, owner);
         Map<String, Object> data = asMap(envelope.get("data"));
         List<Map<String, Object>> all = asMapList(data.get("data"));
+        String keyword = firstString(params.get("keyword"));
+        String categoryId = firstString(params.get("categoryId"));
+        Set<String> categoryIds = categoryId == null ? Set.of()
+                : categoryIdsFor(categoryId, "CATEGORY_DIMENSION");
+        String needle = keyword == null ? null : keyword.toLowerCase(Locale.ROOT);
+        List<Map<String, Object>> matched = new ArrayList<>();
+        for (Map<String, Object> item : all) {
+            String name = firstString(item.get("dimName"));
+            String displayName = firstString(item.get("dimDisplayName"));
+            if (needle != null && !containsIgnoreCase(name, needle) && !containsIgnoreCase(displayName, needle)) {
+                continue;
+            }
+            if (categoryId != null && !categoryIds.contains(firstString(item.get("dimCategoryId")))) {
+                continue;
+            }
+            matched.add(item);
+        }
         Map<String, Object> pager = asMap(params.get("pager"));
-        int pageSize = intValue(pager.get("pageSize"), all.size());
+        int pageSize = intValue(pager.get("pageSize"), matched.size());
         int pageNumber = Math.max(1, intValue(pager.get("pageNumber"), 1));
-        int from = Math.min(all.size(), (pageNumber - 1) * Math.max(pageSize, 0));
-        int to = Math.min(all.size(), from + Math.max(pageSize, 0));
-        data.put("data", pageSize <= 0 ? List.of() : new ArrayList<>(all.subList(from, to)));
+        int from = Math.min(matched.size(), (pageNumber - 1) * Math.max(pageSize, 0));
+        int to = Math.min(matched.size(), from + Math.max(pageSize, 0));
+        data.put("data", pageSize <= 0 ? List.of() : new ArrayList<>(matched.subList(from, to)));
         data.put("pageNumber", pageNumber);
         data.put("pageSize", pageSize);
-        data.put("total", all.size());
-        data.put("hasNext", to < all.size());
+        data.put("total", matched.size());
+        data.put("hasNext", to < matched.size());
         return envelope;
+    }
+
+    /** 策略 mock 中两个视图共享同一维度目录，所有策略指标均可按全部维度分析。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> metricAllDimensions(Map<String, Object> params) {
+        Set<String> requested = nameSet(params.get("metricNames"));
+        Map<String, Object> views = copy(load("analysis_view_query_by_name.json"));
+        Set<String> metricNames = new LinkedHashSet<>();
+        Set<String> dimensionNames = new LinkedHashSet<>();
+        for (Object rawEnvelope : views.values()) {
+            Map<String, Object> view = asMap(asMap(rawEnvelope).get("data"));
+            metricNames.addAll(stringList(view.get("metrics")));
+            dimensionNames.addAll(stringList(view.get("dimensions")));
+        }
+        Map<String, Object> relations = new LinkedHashMap<>();
+        for (String metricName : metricNames) {
+            if (requested.isEmpty() || requested.contains(metricName)) {
+                relations.put(metricName, new ArrayList<>(dimensionNames));
+            }
+        }
+        return envelope(relations, "mock-trace-metric-dimensions");
+    }
+
+    /** 维度悬浮详情复用维度视图同一条目录记录。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> dimensionDetail(Map<String, Object> params) {
+        String dimName = firstString(params.get("dimName"));
+        Map<String, Object> container = copy(load("dimension_list.json"));
+        Map<String, Object> data = asMap(container.get("data"));
+        for (Map<String, Object> item : asMapList(data.get("data"))) {
+            if (Objects.equals(dimName, firstString(item.get("dimName")))) {
+                return envelope(item, "mock-trace-dimension-detail");
+            }
+        }
+        return envelope(null, "mock-trace-dimension-detail");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Set<String> categoryIdsFor(String requestedId, String categoryType) {
+        Map<String, Object> categoriesEnvelope = copy(load("category_list.json"));
+        List<Map<String, Object>> categories = asMapList(categoriesEnvelope.get("data"));
+        Set<String> ids = new LinkedHashSet<>();
+        ids.add(requestedId);
+        boolean changed;
+        do {
+            changed = false;
+            for (Map<String, Object> category : categories) {
+                String id = firstString(category.get("id"));
+                String parentId = firstString(category.get("parentId"));
+                if (categoryType.equals(firstString(category.get("categoryType")))
+                        && parentId != null && ids.contains(parentId) && ids.add(id)) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+        return ids;
+    }
+
+    private boolean containsIgnoreCase(String value, String needle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) return List.of();
+        return values.stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.toList());
     }
 
     /** 维度值预览：从策略解读-子策略-维度视图读取去重后的维值，支持关键词与分页。 */

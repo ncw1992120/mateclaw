@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# DataAgent 后端（默认直连真实 Aloudata）一键重启
+# DataAgent 后端（默认使用本地 Aloudata HTTP mock）一键重启
 #
 # 用法：
-#   ./restart-dataagent-backend.sh                 # 重启后端（默认直连真实 Aloudata）
+#   ./restart-dataagent-backend.sh                 # 重启后端（默认使用本地 HTTP mock）
 #   bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
 #   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
 # 环境变量：
-#   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock / 内置夹具 / 真实 Aloudata（默认）
+#   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
 #   ALOUDATA_MOCK_PORT=18081        mock 服务端口
 #   ALOUDATA_MOCK_SERVER=...        mock 服务基地址（默认 http://127.0.0.1:<port>）
 #   ALOUDATA_MOCK_RESTART=always|keep
@@ -38,13 +38,13 @@ ACTION="${1:-all}"
 usage() {
   cat <<'TXT'
 用法：
-  ./restart-dataagent-backend.sh                 # 重启后端（默认直连真实 Aloudata）
+  ./restart-dataagent-backend.sh                 # 重启后端（默认使用本地 HTTP mock）
   bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
 
 环境变量：
-  ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock / 内置夹具 / 真实 Aloudata（默认）
+  ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
   ALOUDATA_MOCK_PORT=18081        mock 服务端口
   ALOUDATA_MOCK_SERVER=...        mock 服务基地址（默认 http://127.0.0.1:<port>）
   ALOUDATA_MOCK_RESTART=always|keep
@@ -222,13 +222,13 @@ if [[ ! -f "$JAR_PATH" ]]; then
   exit 1
 fi
 
-# Aloudata 上游默认真实调用；本地开发可显式启用 mock（docs/策略解读/mock.md）：
-#   ALOUDATA_MOCK=on：启动本地 HTTP mock，并将 local-mock 请求转发至该服务。
+# 重启脚本默认使用本地 HTTP mock（应用未启用 local-mock 时仍直连真实 Aloudata）：
+#   ALOUDATA_MOCK=on（默认）：启动本地 HTTP mock，并将 local-mock 请求转发至该服务。
 #   重启 mock 时默认先停旧服务再起新的（ALOUDATA_MOCK_RESTART=keep 可保留现有服务）。
 #   ALOUDATA_MOCK=embed：使用内置夹具，不发起 HTTP 请求。
-#   不设置 ALOUDATA_MOCK 或设置为 off：不启用 local-mock，直接调用真实 Aloudata。
+#   ALOUDATA_MOCK=off：不启用 local-mock，直接调用真实 Aloudata。
 #   （也可用 SPRING_PROFILES_ACTIVE=pgsql 显式覆盖整组 profile）
-MOCK_SWITCH="${ALOUDATA_MOCK:-off}"
+MOCK_SWITCH="${ALOUDATA_MOCK:-on}"
 case "$MOCK_SWITCH" in
   on|ON|true|TRUE|1)
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"

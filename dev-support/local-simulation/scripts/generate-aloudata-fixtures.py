@@ -32,6 +32,10 @@ from pathlib import Path
 
 CATEGORY_ID = "CAT_CLJD"
 CATEGORY_NAME = "策略解读"
+METRIC_CATEGORY_ROOT_ID = "metric-strategy"
+METRIC_CATEGORY_ID = "metric-sub-strategy"
+DIMENSION_CATEGORY_ROOT_ID = "dim-strategy"
+DIMENSION_CATEGORY_ID = "dim-sub-strategy"
 
 ZB_VIEW = "cljd_zcl_zb_view"
 WD_VIEW = "cljd_zcl_wd_view"
@@ -327,7 +331,8 @@ def metric_batch_detail_payload() -> dict:
             "unit": unit,
             "formatConfig": None,
             "cnUnit": unit,
-            "metricCategoryId": CATEGORY_ID,
+            "metricCategoryId": METRIC_CATEGORY_ID,
+            "metricCategoryName": "子策略",
             "metricViewCount": 1,
             "viewDetailCount": 0,
             "publishStatus": "PUBLISHED",
@@ -367,7 +372,7 @@ def dimension_list_payload() -> dict:
             "dimName": name,
             "dimCode": name,
             "dimDisplayName": display,
-            "dimCategoryId": CATEGORY_ID,
+            "dimCategoryId": DIMENSION_CATEGORY_ID,
             "dimDescription": description,
             "datasetName": "cljd_zcl",
             "originDataType": origin_type,
@@ -384,6 +389,27 @@ def dimension_list_payload() -> dict:
         "pageSize": 1000,
         "hasNext": False,
         "data": items,
+    }
+
+
+def category_list_payload() -> dict:
+    """指标/维度选择弹窗类目：同为「策略解读 → 子策略」，ID 与字段目录一致。"""
+    return {
+        "data": [
+            {"id": METRIC_CATEGORY_ROOT_ID, "name": CATEGORY_NAME, "parentId": None,
+             "categoryType": "CATEGORY_METRIC"},
+            {"id": METRIC_CATEGORY_ID, "name": "子策略", "parentId": METRIC_CATEGORY_ROOT_ID,
+             "categoryType": "CATEGORY_METRIC"},
+            {"id": DIMENSION_CATEGORY_ROOT_ID, "name": CATEGORY_NAME, "parentId": None,
+             "categoryType": "CATEGORY_DIMENSION"},
+            {"id": DIMENSION_CATEGORY_ID, "name": "子策略", "parentId": DIMENSION_CATEGORY_ROOT_ID,
+             "categoryType": "CATEGORY_DIMENSION"},
+        ],
+        "success": True,
+        "code": "200",
+        "errorMsg": None,
+        "detailErrorMsg": None,
+        "traceId": "mock-trace-category-list",
     }
 
 
@@ -480,6 +506,7 @@ def main() -> None:
         for view in (ZB_VIEW, WD_VIEW)
     })
     write(out / "metric_batch_detail.json", envelope(metric_batch_detail_payload(), "mock-trace-batch-detail"))
+    write(out / "category_list.json", category_list_payload())
     write(out / "dimension_list.json", envelope(dimension_list_payload(), "mock-trace-dimension-list"))
     write(out / "analysis_view_query_data.json", {
         view: envelope(query_data_payload(view), f"mock-trace-data-{view}")
