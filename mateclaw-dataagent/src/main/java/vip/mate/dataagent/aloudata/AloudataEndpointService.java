@@ -136,6 +136,8 @@ public class AloudataEndpointService {
                 mergeParams(headers, List.of(new ApiParam("categoryType", "String", true, null, "类目类型", "QUERY")))));
         endpoints.put("metric_list", endpoint("anymetrics", "/anymetrics/api/v1/metrics/list", "GET",
                 mergeParams(headers, List.of(
+                        new ApiParam("keyword", "String", false, null, "指标展示名或字段名关键字", "QUERY"),
+                        new ApiParam("metricCategoryId", "String", false, null, "指标类目 ID", "QUERY"),
                         new ApiParam("statusFilters", "Array", false, null, "状态筛选", "QUERY"),
                         new ApiParam("pageNumber", "Integer", false, "1", "页码", "QUERY"),
                         new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY")))));
@@ -144,7 +146,8 @@ public class AloudataEndpointService {
         endpoints.put("metric_all_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimensionAll", "GET",
                 mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
         endpoints.put("dimension_list", endpoint("anymetrics", "/anymetrics/api/v1/dimension/list", "POST",
-                mergeParams(headers, List.of(new ApiParam("categoryId", "String", false, null, "维度类目", "BODY"),
+                mergeParams(headers, List.of(new ApiParam("keyword", "String", false, null, "维度展示名或字段名关键字", "BODY"),
+                        new ApiParam("categoryId", "String", false, null, "维度类目", "BODY"),
                         new ApiParam("statusFilters", "Array", false, null, "状态筛选", "BODY"),
                         new ApiParam("pager", "Object", false, null, "分页器", "BODY")))));
         endpoints.put("dimension_detail", endpoint("anymetrics", "/anymetrics/api/v1/dimension/detail", "GET",

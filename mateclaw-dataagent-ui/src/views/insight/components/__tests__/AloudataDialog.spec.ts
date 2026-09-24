@@ -297,6 +297,21 @@ describe('Aloudata 指标&维度选择', () => {
     expect(metricA?.find('input').element.disabled).toBe(true)
   })
 
+  it('can hide metrics that are incompatible with the selected dimensions', async () => {
+    state.ui.aloudata.metrics = []
+    state.ui.aloudata.dims = ['region']
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(2)
+    await wrapper.find('.metric-picker-popup [role="switch"]').trigger('click')
+    expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(1)
+    expect(wrapper.find('.metric-picker-popup').text()).not.toContain('指标 A')
+  })
+
   it('loads and displays live metric details when hovering a metric', async () => {
     state.ui.aloudata.metrics = []
     const wrapper = mount(AloudataDialog, { global: { stubs } })

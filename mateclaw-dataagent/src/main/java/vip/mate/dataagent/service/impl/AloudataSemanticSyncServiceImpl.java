@@ -311,7 +311,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     public IPage<AloudataMetricSemanticDTO> pageMetrics(Long datasourceId, AloudataMetricPageQuery query) {
         AloudataConfigDTO config = resolveConfigSafely(datasourceId);
         if (config == null) {
-            return emptyMetricPage(query);
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
         }
         Map<String, Object> input = new HashMap<>();
         input.put("statusFilters", List.of("PUBLISHED"));
@@ -326,11 +326,16 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
 
         try {
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_LIST, config, input);
+            // Existing persisted endpoint definitions may predate these live-picker filters.
+            // Forward the documented query fields explicitly so an old parameter whitelist
+            // cannot silently turn category/search requests into an unfiltered request.
+            if (StringUtils.hasText(query.getKeyword())) params.put("keyword", query.getKeyword());
+            if (StringUtils.hasText(query.getCategoryId())) params.put("metricCategoryId", query.getCategoryId());
             ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_LIST, config, params);
             Map<String, Object> body = response.getBody();
             if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
-                log.warn("[Aloudata指标分页] 接口返回异常: {}", body != null ? body.get("errorMsg") : "空响应");
-                return emptyMetricPage(query);
+                String message = body != null ? Objects.toString(body.get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 指标接口返回失败: " + message);
             }
             Map<String, Object> data = (Map<String, Object>) body.get("data");
             long total = (data != null && data.get("total") != null) ? ((Number) data.get("total")).longValue() : 0;
@@ -349,7 +354,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             return result;
         } catch (Exception e) {
             log.warn("[Aloudata指标分页] 调用失败: {}", e.getMessage());
-            return emptyMetricPage(query);
+            throw new IllegalStateException("调用 Aloudata 指标接口失败: " + e.getMessage(), e);
         }
     }
 
@@ -360,7 +365,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     public IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query) {
         AloudataConfigDTO config = resolveConfigSafely(datasourceId);
         if (config == null) {
-            return emptyDimensionPage(query);
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
         }
         Map<String, Object> pager = new HashMap<>();
         pager.put("pageNumber", query.getPageNumber());
@@ -382,11 +387,14 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             if (StringUtils.hasText(query.getKeyword())) {
                 params.put("keyword", query.getKeyword());
             }
+            if (StringUtils.hasText(query.getCategoryId())) {
+                params.put("categoryId", query.getCategoryId());
+            }
             ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_DIMENSION_LIST, config, params);
             Map<String, Object> body = response.getBody();
             if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
-                log.warn("[Aloudata维度分页] 接口返回异常: {}", body != null ? body.get("errorMsg") : "空响应");
-                return emptyDimensionPage(query);
+                String message = body != null ? Objects.toString(body.get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 维度接口返回失败: " + message);
             }
             Map<String, Object> data = (Map<String, Object>) body.get("data");
             long total = (data != null && data.get("total") != null) ? ((Number) data.get("total")).longValue() : 0;
@@ -398,7 +406,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             return result;
         } catch (Exception e) {
             log.warn("[Aloudata维度分页] 调用失败: {}", e.getMessage());
-            return emptyDimensionPage(query);
+            throw new IllegalStateException("调用 Aloudata 维度接口失败: " + e.getMessage(), e);
         }
     }
 
@@ -669,7 +677,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         }
         AloudataConfigDTO config = resolveConfigSafely(datasourceId);
         if (config == null) {
-            return Collections.emptyList();
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
         }
         Map<String, Object> input = new HashMap<>();
         input.put("categoryType", categoryType);
@@ -677,7 +685,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_CATEGORY_LIST, config, input);
             ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_CATEGORY_LIST, config, params);
             if (response.getBody() == null || !Boolean.TRUE.equals(response.getBody().get("success"))) {
-                return Collections.emptyList();
+                String message = response.getBody() != null
+                        ? Objects.toString(response.getBody().get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 类目接口返回失败: " + message);
             }
             List<Map<String, Object>> categories = (List<Map<String, Object>>) response.getBody().get("data");
             if (categories == null) {
@@ -699,7 +709,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             return result;
         } catch (Exception e) {
             log.warn("[Aloudata类目] 实时获取类目失败: {}", e.getMessage());
-            return Collections.emptyList();
+            throw new IllegalStateException("调用 Aloudata 类目接口失败: " + e.getMessage(), e);
         }
     }
 
