@@ -61,7 +61,7 @@
             <span class="qc-th qc-th-target">绑定对象</span>
             <span class="qc-th qc-th-op" />
           </div>
-          <div v-for="(row, index) in filterRows" :key="`${row.filterComponentId || 'filter'}-${row.field}-${index}`" class="qc-binding-row" data-testid="python-qc-filter-row">
+          <div v-for="(row, index) in filterRows" :key="filterRowKey(row)" class="qc-binding-row" data-testid="python-qc-filter-row">
             <el-select v-model="row.filterComponentId" size="small" placeholder="筛选器名称" filterable data-testid="python-qc-filter-component">
               <el-option v-for="filter in filterOptions" :key="filter.id" :label="filter.title" :value="filter.id" />
             </el-select>
@@ -131,6 +131,8 @@ interface EditableFilterField extends FinalResultFilterField {
 
 const fieldRows = ref<EditableField[]>([])
 const filterRows = ref<EditableFilterField[]>([])
+const filterRowKeys = new WeakMap<object, number>()
+let nextFilterRowKey = 0
 const sortEnabled = ref(false)
 const sortAllowed = ref<string[]>([])
 const paginationEnabled = ref(false)
@@ -161,6 +163,15 @@ const filterFieldCandidates = computed(() => {
   return candidates.filter((field, index) => candidates.findIndex((item) => item.field === field.field) === index)
 })
 const filterOptions = computed(() => props.filterOptions ?? [])
+
+function filterRowKey(row: EditableFilterField): number {
+  let key = filterRowKeys.get(row)
+  if (key === undefined) {
+    key = nextFilterRowKey++
+    filterRowKeys.set(row, key)
+  }
+  return key
+}
 
 function fieldOptionLabel(field: QueryDisplayField): string {
   return field.title && field.title !== field.field ? `${field.field} · ${field.title}` : field.field
