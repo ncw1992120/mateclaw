@@ -108,9 +108,6 @@ describe('DashboardCanvas keyboard interaction', () => {
       attachTo: document.body,
     })
     const toolbar = wrapper.get('.canvas-zoom-toolbar').element as HTMLElement
-    const overlay = document.createElement('div')
-    overlay.className = 'el-overlay'
-    overlay.style.display = 'none'
     const source = readFileSync(resolve(process.cwd(), 'src/views/insight/components/DashboardCanvas.vue'), 'utf8')
     const { descriptor, errors } = parse(source, { filename: 'DashboardCanvas.vue' })
     expect(errors).toHaveLength(0)
@@ -127,23 +124,42 @@ describe('DashboardCanvas keyboard interaction', () => {
     style.textContent = compiledStyle.code
     document.head.append(style)
 
+    const directOverlay = document.createElement('div')
+    directOverlay.className = 'el-overlay'
+    directOverlay.style.display = 'none'
+    const sidebar = document.createElement('div')
+    sidebar.className = 'card-attr-sidebar'
+    const nestedOverlay = document.createElement('div')
+    nestedOverlay.className = 'el-overlay'
+    nestedOverlay.style.display = 'none'
+    sidebar.append(nestedOverlay)
+
     try {
       expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
-      document.body.append(overlay)
+      document.body.append(directOverlay, sidebar)
       await nextTick()
       expect(window.getComputedStyle(document.body).visibility).toBe('visible')
       expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
 
-      overlay.style.removeProperty('display')
+      directOverlay.style.removeProperty('display')
       await nextTick()
       expect(window.getComputedStyle(document.body).visibility).toBe('visible')
       expect(window.getComputedStyle(toolbar).visibility).toBe('hidden')
 
-      overlay.remove()
+      directOverlay.remove()
+      await nextTick()
+      expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
+
+      nestedOverlay.style.removeProperty('display')
+      await nextTick()
+      expect(window.getComputedStyle(toolbar).visibility).toBe('hidden')
+
+      nestedOverlay.style.display = 'none'
       await nextTick()
       expect(window.getComputedStyle(toolbar).visibility).toBe('visible')
     } finally {
-      overlay.remove()
+      directOverlay.remove()
+      sidebar.remove()
       style.remove()
       wrapper.unmount()
     }
