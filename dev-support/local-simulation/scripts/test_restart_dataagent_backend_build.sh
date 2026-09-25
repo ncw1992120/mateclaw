@@ -17,4 +17,26 @@ if (( build_line >= jar_check_line || build_line >= launch_line )); then
   exit 1
 fi
 
+runner_restart_line="$(grep -nFx 'restart_python_runner || exit 1' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+runner_url_line="$(grep -nF 'MATECLAW_RUNNER_URL' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+if [[ -z "$runner_restart_line" || -z "$runner_url_line" ]]; then
+  echo "启动脚本必须配置并重启本地 Python Runner。" >&2
+  exit 1
+fi
+
+if (( runner_restart_line <= jar_check_line || runner_restart_line >= launch_line )); then
+  echo "Python Runner 必须在 DataAgent 构建成功后、启动前重启。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'uvicorn' "$SCRIPT" || ! grep -Fq '18090' "$SCRIPT"; then
+  echo "Python Runner 应复用本地环境并监听配置的端口。" >&2
+  exit 1
+fi
+
+if grep -Eq 'docker compose.*(build|up --build)' "$SCRIPT"; then
+  echo "本地 Python Runner 重启不得触发 Docker rebuild。" >&2
+  exit 1
+fi
+
 echo "DataAgent 重启脚本 clean + package 顺序检查通过。"
