@@ -91,7 +91,7 @@ const PopoverStub = defineComponent({
       emit('show')
     }
     return () => h('div', {
-      class: ['picker-popover', props.popperClass],
+      class: ['el-popper', 'picker-popover', props.popperClass],
       placement: props.placement,
       style: props.popperStyle,
     }, [
@@ -216,7 +216,7 @@ beforeEach(() => {
 
 describe('Aloudata 指标&维度选择', () => {
   it('keeps a bottom-triggered picker within the viewport and lets the user drag it', async () => {
-    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    const wrapper = mount(AloudataDialog, { attachTo: document.body, global: { stubs } })
     state.ui.aloudata.visible = true
     await flushPromises()
 
@@ -240,7 +240,10 @@ describe('Aloudata 指标&维度选择', () => {
     expect(wrapper.find('.picker-popover').attributes('placement')).toBe('top-start')
 
     const panel = wrapper.find('.metric-picker-popup')
-    vi.spyOn(panel.element, 'getBoundingClientRect').mockReturnValue({
+    const popper = panel.element.closest<HTMLElement>('.el-popper')!
+    expect(popper.style.maxHeight).toBe('668px')
+    expect((panel.element as HTMLElement).style.maxHeight).toBe('644px')
+    vi.spyOn(popper, 'getBoundingClientRect').mockReturnValue({
       top: 300,
       bottom: 700,
       left: 600,
@@ -260,7 +263,8 @@ describe('Aloudata 指标&维度选择', () => {
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 130, clientY: 120 }))
     await nextTick()
 
-    expect(panel.attributes('style')).toContain('translate3d(30px, 20px, 0)')
+    expect(popper.getAttribute('style')).toContain('--picker-drag-offset: 30px 20px')
+    expect((panel.element as HTMLElement).style.transform).toBe('')
     panel.find('.picker-heading').element.dispatchEvent(new MouseEvent('pointerdown', {
       bubbles: true,
       button: 0,
@@ -269,7 +273,7 @@ describe('Aloudata 指标&维度选择', () => {
     }))
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 140, clientY: 125 }))
     await nextTick()
-    expect(panel.attributes('style')).toContain('translate3d(40px, 25px, 0)')
+    expect(popper.getAttribute('style')).toContain('--picker-drag-offset: 40px 25px')
     window.dispatchEvent(new MouseEvent('pointerup'))
     vi.unstubAllGlobals()
     wrapper.unmount()
