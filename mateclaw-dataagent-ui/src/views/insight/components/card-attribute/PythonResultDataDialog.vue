@@ -23,13 +23,30 @@
         <div class="dd-head"><span class="dd-title">筛选条件</span><span class="dd-hint">填写本次查看的实际参数</span></div>
         <div v-if="conditionRows.length" class="dd-table-wrap dd-conditions">
           <table class="dd-table dd-filter-table" data-testid="python-query-filter-table">
-            <thead><tr><th>字段</th><th>操作符</th><th>本次查询值</th><th>启用</th></tr></thead>
+            <thead><tr><th>筛选器</th><th>字段</th><th>操作符</th><th>本次查询值</th><th>启用</th></tr></thead>
             <tbody>
-              <tr v-for="row in conditionRows" :key="row.field" data-testid="python-query-filter-row">
+              <tr v-for="(row, index) in conditionRows" :key="`${row.filterComponentId ?? row.field}-${row.field}-${row.timeBoundary ?? 'value'}-${index}`" data-testid="python-query-filter-row" :data-time-boundary="row.timeBoundary">
+                <td>
+                  {{ row.filterTitle }}
+                  <span v-if="row.bindingError" class="dd-binding-error" role="alert">绑定的页面筛选器已失效，请先重新绑定</span>
+                  <span v-else-if="row.timeBoundary" class="dd-hint">{{ row.timeBoundary === 'start' ? '包含开始时间' : '不包含结束时间' }}</span>
+                </td>
                 <td>{{ row.title }} <code>{{ row.field }}</code></td>
-                <td><el-select v-model="row.op" size="small"><el-option v-for="op in operatorOptions(row.operators)" :key="op.value" :label="op.label" :value="op.value" /></el-select></td>
-                <td><el-input v-model="row.value" size="small" :disabled="!row.enabled || !needsValue(row.op)" placeholder="填写本次查询值" /></td>
-                <td><el-switch v-model="row.enabled" /></td>
+                <td data-testid="python-query-filter-operator">{{ row.op }}</td>
+                <td>
+                  <el-date-picker
+                    v-if="row.timeBoundary"
+                    v-model="row.value"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    size="small"
+                    data-testid="python-query-date-input"
+                    :disabled="row.bindingError || !row.enabled"
+                    :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
+                  />
+                  <el-input v-else v-model="row.value" size="small" :disabled="row.bindingError || !row.enabled || !needsValue(row.op)" placeholder="填写本次查询值" />
+                </td>
+                <td><el-switch v-model="row.enabled" :disabled="row.bindingError" /></td>
               </tr>
             </tbody>
           </table>
@@ -64,9 +81,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useInsight } from './useInsight'
-import type { FinalResultFilterField, QuerySortSpec } from '@/types'
-import { GENERIC_OPERATORS, completeConditions, needsValue, type FilterCondition, type OperatorOption } from '@/utils/filter-conditions'
+import type { QuerySortSpec } from '@/types'
+import { needsValue, type FilterCondition } from '@/utils/filter-conditions'
 import { applyResultFilters } from '@/utils/result-preview-filter'
+import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/utils/python-result-filter-conditions'
 
 const { state, previewState, loadResultPreview } = useInsight()
 const ui = state.ui
@@ -78,7 +96,7 @@ const filterFields = computed(() => config.value?.filterFields ?? [])
 const paginationEnabled = computed(() => config.value?.paginationPolicy.enabled === true)
 const pageSize = computed(() => config.value?.paginationPolicy.defaultPageSize || 100)
 const page = ref(1)
-const conditionRows = ref<Array<FilterCondition & Pick<FinalResultFilterField, 'title' | 'field' | 'operators'>>>([])
+const conditionRows = ref<ReturnType<typeof createPythonResultFilterRows>>([])
 const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
 
@@ -111,10 +129,6 @@ function fieldTitle(field: string): string {
   return displayFields.value.find((item) => item.field === field)?.title || field
 }
 
-function operatorOptions(operators: FinalResultFilterField['operators']): OperatorOption[] {
-  return GENERIC_OPERATORS.filter((option) => operators.includes(option.value as FinalResultFilterField['operators'][number]))
-}
-
 function isSortable(field: string): boolean {
   return config.value?.sortPolicy.enabled === true && config.value.sortPolicy.allowedFields.includes(field)
 }
@@ -125,7 +139,7 @@ function onSortChange(detail: { prop?: string; order?: 'ascending' | 'descending
 }
 
 function query(): void {
-  appliedConditions.value = completeConditions(conditionRows.value.map(({ field, op, value }) => ({ field, op, value })))
+  appliedConditions.value = enabledPythonResultConditions(conditionRows.value)
   page.value = 1
 }
 
@@ -133,7 +147,7 @@ function initialize(): void {
   page.value = 1
   sortState.value = null
   appliedConditions.value = []
-  conditionRows.value = filterFields.value.map((field) => ({ field: field.field, title: field.title, operators: field.operators, op: field.operators[0] ?? 'eq', value: '', enabled: false }))
+  conditionRows.value = createPythonResultFilterRows(filterFields.value, state.filterCatalog)
   void loadResultPreview()
 }
 
@@ -154,6 +168,7 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-table th { color: var(--db-text-muted); font-weight: 600; background: var(--db-muted); }
 .dd-field-name, .dd-bound-field code { font-family: var(--font-mono, monospace); }
 .dd-display-empty, .dd-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
+.dd-binding-error { display: block; color: var(--el-color-danger); font-size: 12px; margin-top: 4px; }
 .dd-query-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dd-result-body { min-height: 160px; }
 .dd-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--db-text-muted); }

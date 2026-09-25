@@ -24,4 +24,16 @@ describe('applyResultFilters', () => {
   it('空条件不改变 Python 最终结果', () => {
     expect(applyResultFilters(rows, [])).toEqual(rows)
   })
+
+  it('时间范围包含开始边界但排除结束边界', () => {
+    const datedRows = [
+      { event_date: '2026-09-01' },
+      { event_date: '2026-09-15' },
+      { event_date: '2026-10-01' },
+    ]
+    expect(applyResultFilters(datedRows, [
+      { field: 'event_date', op: '>=', value: '2026-09-01' },
+      { field: 'event_date', op: '<', value: '2026-10-01' },
+    ])).toEqual(datedRows.slice(0, 2))
+  })
 })

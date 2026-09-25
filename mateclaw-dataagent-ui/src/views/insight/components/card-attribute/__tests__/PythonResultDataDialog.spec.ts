@@ -11,10 +11,15 @@ const stubs = {
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   'el-table': { template: '<div class="result-table" />' },
   'el-table-column': { template: '<div />' },
+  'el-input': { inheritAttrs: false, template: '<input />' },
+  'el-date-picker': { inheritAttrs: false, template: '<input data-testid="python-query-date-input" />' },
+  'el-switch': { inheritAttrs: false, props: ['disabled'], template: '<input type="checkbox" :disabled="disabled" />' },
 }
 
 beforeEach(() => {
   state.ui.preview = { visible: true, kind: 'result', datasetId: null, tab: 'data' }
+  state.finalResultQueryConfig = undefined
+  state.filterCatalog = []
   Object.assign(state.resultSet, {
     status: 'ready', source: 'script', columns: [{ name: 'result', type: 'string' }],
     rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: 'execution-1', error: '',
@@ -42,6 +47,50 @@ describe('PythonResultDataDialog', () => {
 
     expect(wrapper.find('.result-table').exists()).toBe(true)
     expect(previewState.payload?.dataRows).toEqual([{ result: 'rendered' }])
+    wrapper.unmount()
+  })
+
+  it('按绑定筛选器固定操作符，并将时间范围呈现为开始和结束两个日期条件', async () => {
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'test',
+      confirmed: true,
+      displayFields: [],
+      filterFields: [
+        { field: 'event_date', title: '发生日期', dataType: 'date', parameterName: 'event_date', operators: ['between'], filterComponentId: 'date-filter' },
+      ],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+    state.filterCatalog = [{ id: 'date-filter', title: '日期范围', type: 'timeFilter' }]
+
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="python-query-filter-operator"]').map((cell) => cell.text())).toEqual(['>=', '<'])
+    expect(wrapper.findAll('[data-time-boundary="start"], [data-time-boundary="end"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="python-query-date-input"]')).toHaveLength(2)
+    expect(wrapper.find('el-select').exists()).toBe(false)
+    expect(wrapper.text()).toContain('不包含结束时间')
+    wrapper.unmount()
+  })
+
+  it('页面筛选器绑定失效时明确提示且不允许启用条件', async () => {
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'test',
+      confirmed: true,
+      displayFields: [],
+      filterFields: [
+        { field: 'status', title: '状态', dataType: 'string', parameterName: 'status', operators: ['eq'], filterComponentId: 'deleted-filter' },
+      ],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('绑定的页面筛选器已失效，请先重新绑定')
+    expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
 })

@@ -178,7 +178,7 @@ interface BindingRow extends QueryParameterBinding {}
 /**
  * 运算符由筛选器自身固定，绑定处不可编辑：
  * - `filter` 单选 → eq；多选 → in
- * - `timeFilter`（时间范围）→ gte（范围起点；下游展开为 gte~lte）
+ * - `timeFilter`（时间范围）→ gte（范围起点；下游展开为 gte~lt，左闭右开）
  * - 未知筛选器 → 默认 eq
  */
 function fixedOperatorFor(filterComponentId: string): QueryParameterBinding['operator'] {
