@@ -16,6 +16,7 @@ export interface AloudataCategoryItem {
   categoryId: string
   categoryName: string
   parentId?: string | null
+  count?: number | null
 }
 
 export interface AloudataCategoryTreeNode extends AloudataCategoryItem {

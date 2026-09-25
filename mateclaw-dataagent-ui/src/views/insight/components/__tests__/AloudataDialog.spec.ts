@@ -16,7 +16,7 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensio
     businessCaliber: '按用户统计转化率',
     unit: '%',
     owner: '数据团队',
-    availableDimensions: metricName === 'metric_a' ? ['dim_a'] : ['dim_a', 'region'],
+    availableDimensions: ['dim_a'],
   })),
   getAloudataDimensionDetail: vi.fn(async (_datasourceId: string, dimName: string) => ({
     dimName,
@@ -26,8 +26,8 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensio
   })),
   pageAloudataMetrics: vi.fn(async () => ({
     records: [
-      { metricName: 'metric_a', metricDisplayName: '指标 A', availableDimensions: ['dim_a'] },
-      { metricName: 'technical_rate', metricDisplayName: '转化率', availableDimensions: ['dim_a', 'region'] },
+      { metricName: 'metric_a', metricDisplayName: '指标 A', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
+      { metricName: 'technical_rate', metricDisplayName: '转化率', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
     ],
     total: 2,
     current: 1,
@@ -36,8 +36,8 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensio
   })),
   pageAloudataDimensions: vi.fn(async () => ({
     records: [
-      { dimName: 'dim_a', dimDisplayName: '维度 A' },
-      { dimName: 'region', dimDisplayName: '所属大区' },
+      { dimName: 'dim_a', dimDisplayName: '维度 A', categoryId: 'dim-child', categoryName: '客户维度' },
+      { dimName: 'region', dimDisplayName: '所属大区', categoryId: 'dim-child', categoryName: '客户维度' },
     ],
     total: 1,
     current: 1,
@@ -178,6 +178,16 @@ const stubs = {
   },
 }
 
+async function expandFieldCategory(wrapper: ReturnType<typeof mount>, kind: 'metric' | 'dimension') {
+  const rootId = kind === 'metric' ? 'metric-root' : 'dim-root'
+  const childId = kind === 'metric' ? 'metric-child' : 'dim-child'
+  const popupClass = kind === 'metric' ? '.metric-picker-popup' : '.dimension-picker-popup'
+  await wrapper.find(`${popupClass} [data-category-id="${rootId}"]`).trigger('click')
+  await flushPromises()
+  await wrapper.find(`${popupClass} [data-category-id="${childId}"]`).trigger('click')
+  await flushPromises()
+}
+
 beforeEach(() => {
   state.ui.aloudata = {
     visible: false,
@@ -206,6 +216,26 @@ describe('Aloudata 指标&维度选择', () => {
     expect(getAloudataMetricDirectory).not.toHaveBeenCalled()
   })
 
+  it('renders live fields inline beneath expandable categories instead of a separate results pane', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.metric-picker-popup .directory-results').exists()).toBe(false)
+    await expandFieldCategory(wrapper, 'metric')
+    expect(pageAloudataMetrics).toHaveBeenCalledWith('aloudata-1', expect.objectContaining({ categoryId: 'metric-child' }))
+    expect(wrapper.find('.metric-picker-popup').text()).toContain('technical_rate')
+
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.dimension-picker-popup .directory-results').exists()).toBe(false)
+    await expandFieldCategory(wrapper, 'dimension')
+    expect(pageAloudataDimensions).toHaveBeenCalledWith('aloudata-1', expect.objectContaining({ categoryId: 'dim-child' }))
+    expect(wrapper.find('.dimension-picker-popup').text()).toContain('所属大区')
+  })
+
   it('shows separate expanding metric and dimension boxes with removable selected chips', async () => {
     const wrapper = mount(AloudataDialog, { global: { stubs } })
     state.ui.aloudata.visible = true
@@ -224,18 +254,22 @@ describe('Aloudata 指标&维度选择', () => {
   })
 
   it('opens a floating tree picker and allows multiple metric selections without closing it', async () => {
+    state.ui.aloudata.metrics = []
+    state.ui.aloudata.dims = []
     const wrapper = mount(AloudataDialog, { global: { stubs } })
     state.ui.aloudata.visible = true
     await flushPromises()
 
     await wrapper.find('.metric-selection-box').trigger('click')
     await flushPromises()
+    await expandFieldCategory(wrapper, 'metric')
     expect(wrapper.find('.metric-picker-popup').exists()).toBe(true)
     expect(wrapper.find('.metric-picker-popup').text()).toContain('业务指标')
     expect(wrapper.find('.metric-picker-popup').text()).toContain('technical_rate')
 
-    const checkbox = wrapper.findAll('.metric-picker-popup .picker-checkbox')[1]
-    await checkbox.setValue(true)
+    const fieldRow = wrapper.find('.metric-picker-popup [data-field-code="technical_rate"]')
+    expect(fieldRow.find('input').element.disabled).toBe(false)
+    await fieldRow.trigger('click')
     expect(state.ui.aloudata.metrics).toContain('technical_rate')
     expect(wrapper.find('.metric-picker-popup').exists()).toBe(true)
   })
@@ -247,8 +281,7 @@ describe('Aloudata 指标&维度选择', () => {
 
     await wrapper.find('.metric-selection-box').trigger('click')
     await flushPromises()
-    await wrapper.find('.metric-picker-popup [data-category-id="metric-child"]').trigger('click')
-    await flushPromises()
+    await expandFieldCategory(wrapper, 'metric')
 
     expect(pageAloudataMetrics).toHaveBeenLastCalledWith('aloudata-1', expect.objectContaining({ categoryId: 'metric-child' }))
   })
@@ -275,6 +308,7 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
     await wrapper.find('.dimension-selection-box').trigger('click')
     await flushPromises()
+    await expandFieldCategory(wrapper, 'dimension')
 
     const region = wrapper.find('.dimension-picker-popup').findAll('.directory-item')
       .find((item) => item.text().includes('region'))
@@ -291,6 +325,7 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
     await wrapper.find('.metric-selection-box').trigger('click')
     await flushPromises()
+    await expandFieldCategory(wrapper, 'metric')
 
     const metricA = wrapper.find('.metric-picker-popup').findAll('.directory-item')
       .find((item) => item.text().includes('metric_a'))
@@ -305,6 +340,15 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
     await wrapper.find('.metric-selection-box').trigger('click')
     await flushPromises()
+    const incompatibleMetricPage = {
+      records: [
+        { metricName: 'metric_a', metricDisplayName: '指标 A', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
+        { metricName: 'technical_rate', metricDisplayName: '转化率', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a', 'region'] },
+      ], total: 2, current: 1, size: 20, pages: 1,
+    }
+    pageAloudataMetrics.mockImplementationOnce(async () => incompatibleMetricPage)
+    pageAloudataMetrics.mockImplementationOnce(async () => incompatibleMetricPage)
+    await expandFieldCategory(wrapper, 'metric')
 
     expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(2)
     await wrapper.find('.metric-picker-popup [role="switch"]').trigger('click')
@@ -319,6 +363,7 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
     await wrapper.find('.metric-selection-box').trigger('click')
     await flushPromises()
+    await expandFieldCategory(wrapper, 'metric')
     await wrapper.find('.metric-detail-trigger[data-metric-name="metric_a"]').trigger('mouseover')
     await flushPromises()
     expect(getAloudataMetricDetail).toHaveBeenCalledWith('aloudata-1', 'metric_a')
@@ -334,6 +379,7 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
     await wrapper.find('.dimension-selection-box').trigger('click')
     await flushPromises()
+    await expandFieldCategory(wrapper, 'dimension')
     await wrapper.find('.dimension-detail-trigger[data-dimension-name="region"]').trigger('mouseover')
     await flushPromises()
     expect(getAloudataDimensionDetail).toHaveBeenCalledWith('aloudata-1', 'region')
@@ -350,7 +396,7 @@ describe('Aloudata 指标&维度选择', () => {
     state.ui.aloudata.visible = true
     await flushPromises()
 
-    expect(wrapper.find('.selection-conflict').text()).toContain('已选指标与维度存在不兼容项')
+    expect(wrapper.find('.selection-conflict').text()).toContain('不兼容')
     expect(wrapper.find('.dimension-selection-box').text()).toContain('region')
     expect(wrapper.find('.stub-dialog').findAll('button').at(-1)?.element.disabled).toBe(true)
 
