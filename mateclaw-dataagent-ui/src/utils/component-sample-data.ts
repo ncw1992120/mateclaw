@@ -1,4 +1,6 @@
 import type { ChartType, InsightComponent, InsightComponentData } from '@/types'
+import { resolveOutputSpec, validateComponentOutput, type OutputValidationError } from './component-output-spec'
+import type { ScriptResultEnvelope, ScriptResultColumn } from './script-result'
 
 export interface ComponentSample {
   isSample: true
@@ -9,6 +11,114 @@ export interface ComponentSample {
 
 type SampleComponent = Pick<InsightComponent, 'id' | 'type'> & Partial<Pick<InsightComponent, 'chartType' | 'title'>>
 type SampleColumn = { name: string; dataType: 'string' | 'number' | 'date'; role: string }
+type SampleEnvelope = {
+  schemaVersion?: unknown
+  component?: { type?: unknown; subtype?: unknown }
+  data?: { kind?: unknown; schema?: SampleColumn[]; rows?: Record<string, unknown>[]; value?: unknown; pagination?: Record<string, unknown> }
+  meta?: { isSample?: unknown; rowCount?: unknown }
+}
+
+function sampleError(path: string, expected: string, actual: string): OutputValidationError {
+  return { status: 'OUTPUT_CONTRACT_ERROR', path, expected, actual, suggestion: '请修正组件样例数据定义' }
+}
+
+/** 校验默认样例信封的字段、行数和分页元数据，避免样例定义与组件契约脱节。 */
+export function validateComponentSample(component: SampleComponent, value: unknown): OutputValidationError | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return sampleError('result', '对象', Array.isArray(value) ? '数组' : typeof value)
+  const envelope = value as SampleEnvelope
+  if (envelope.schemaVersion !== '1.0') return sampleError('schemaVersion', '1.0', String(envelope.schemaVersion ?? '缺失'))
+  if (envelope.component?.type !== component.type) return sampleError('component.type', component.type, String(envelope.component?.type ?? '缺失'))
+  if (component.type === 'chart' && envelope.component?.subtype !== (component.chartType ?? 'line')) {
+    return sampleError('component.subtype', component.chartType ?? 'line', String(envelope.component?.subtype ?? '缺失'))
+  }
+  if (envelope.meta?.isSample !== true) return sampleError('meta.isSample', 'true', String(envelope.meta?.isSample))
+  const rowCount = envelope.meta.rowCount
+  if (!Number.isInteger(rowCount) || Number(rowCount) < 0) return sampleError('meta.rowCount', '非负整数', String(rowCount))
+
+  const data = envelope.data
+  if (!data || typeof data !== 'object') return sampleError('data', '对象', typeof data)
+  const isTabular = component.type === 'chart' || component.type === 'table'
+    || (component.type === 'kpi' && data.kind === 'table')
+  if (isTabular) {
+    if (data.kind !== 'table') return sampleError('data.kind', 'table', String(data.kind))
+    if (!Array.isArray(data.schema)) return sampleError('data.schema', '数组', typeof data.schema)
+    if (!Array.isArray(data.rows)) return sampleError('data.rows', '数组', typeof data.rows)
+    if (data.rows.length !== rowCount) return sampleError('meta.rowCount', `${data.rows.length}`, String(rowCount))
+    const schemaNames = new Set<string>()
+    for (const column of data.schema) {
+      if (!column || typeof column.name !== 'string' || !column.name || schemaNames.has(column.name)) {
+        return sampleError('data.schema.name', '非空且唯一的字段名', String(column?.name ?? '缺失'))
+      }
+      schemaNames.add(column.name)
+    }
+    for (const [rowIndex, row] of data.rows.entries()) {
+      for (const column of data.schema) {
+        if (!Object.prototype.hasOwnProperty.call(row, column.name)) {
+          return sampleError(`data.rows[${rowIndex}].${column.name}`, '字段存在', '缺失')
+        }
+        const value = row[column.name]
+        if (value == null) continue
+        const validType = column.dataType === 'number'
+          ? typeof value === 'number' && Number.isFinite(value)
+          : typeof value === 'string'
+        if (!validType) return sampleError(`data.rows[${rowIndex}].${column.name}`, column.dataType, typeof value)
+      }
+    }
+
+    if (component.type === 'table') {
+      const pagination = data.pagination
+      if (!pagination || pagination.enabled !== true) return sampleError('data.pagination.enabled', 'true', String(pagination?.enabled))
+      if (pagination.mode !== 'client' && pagination.mode !== 'server') return sampleError('data.pagination.mode', 'client | server', String(pagination.mode))
+      if (!Number.isInteger(pagination.pageSize) || Number(pagination.pageSize) < 1) return sampleError('data.pagination.pageSize', '正整数', String(pagination.pageSize))
+      if (!Number.isInteger(pagination.page) || Number(pagination.page) < 1) return sampleError('data.pagination.page', '正整数', String(pagination.page))
+      if (pagination.mode === 'client') {
+        if (pagination.total !== rowCount) return sampleError('data.pagination.total', String(rowCount), String(pagination.total))
+        const pageCount = Math.max(1, Math.ceil(Number(rowCount) / Number(pagination.pageSize)))
+        if (Number(pagination.page) > pageCount) return sampleError('data.pagination.page', `不大于 ${pageCount}`, String(pagination.page))
+      } else {
+        if (data.rows.length > Number(pagination.pageSize)) return sampleError('data.rows', `最多 ${pagination.pageSize} 行`, `${data.rows.length} 行`)
+        if (!Number.isInteger(pagination.total) || Number(pagination.total) < rowCount) return sampleError('data.pagination.total', `不小于 ${rowCount}`, String(pagination.total))
+        const expectedHasNext = Number(pagination.page) * Number(pagination.pageSize) < Number(pagination.total)
+        if (pagination.hasNext !== expectedHasNext) return sampleError('data.pagination.hasNext', String(expectedHasNext), String(pagination.hasNext))
+      }
+    }
+
+    if (component.type === 'kpi' && data.rows.length > 1) return sampleError('data.rows', '0..1 行', `${data.rows.length} 行`)
+    if (component.type === 'chart') {
+      if (component.chartType === 'pie') {
+        const dimensions = data.schema.filter((column) => column.role === 'dimension').length
+        const metrics = data.schema.filter((column) => column.role === 'metric').length
+        if (dimensions !== 1 || metrics !== 1 || data.schema.length !== 2) {
+          return sampleError('data.schema', '1 个维度 + 1 个指标', `${dimensions} 个维度 + ${metrics} 个指标`)
+        }
+      }
+      const spec = resolveOutputSpec('chart', component.chartType ?? 'line')
+      if (spec) {
+        const columns = data.schema.map((column): ScriptResultColumn => ({
+          name: column.name,
+          title: column.name,
+          dataType: column.dataType === 'date' ? 'date' : column.dataType,
+          nullable: true,
+        }))
+        const output = validateComponentOutput(spec, {
+          schemaVersion: '1.0',
+          kind: 'table',
+          data: { columns, rows: data.rows },
+          meta: { rowCount: data.rows.length, truncated: false },
+        } as ScriptResultEnvelope)
+        if (output) return output
+      }
+    }
+  } else if (component.type === 'kpi') {
+    if (data.kind !== 'scalar') return sampleError('data.kind', 'scalar | table', String(data.kind))
+    if (rowCount > 1) return sampleError('meta.rowCount', '0..1 行', `${rowCount} 行`)
+    if (!Array.isArray(data.schema) || data.schema.length !== 1 || data.schema[0]?.dataType !== 'number' || data.schema[0]?.role !== 'metric') {
+      return sampleError('data.schema', '1 个数值指标字段', `${Array.isArray(data.schema) ? data.schema.length : 0} 个符合字段`)
+    }
+    if (typeof data.value !== 'number' || !Number.isFinite(data.value)) return sampleError('data.value', '有限数值', typeof data.value)
+  }
+  return null
+}
 
 const CHART_CONTRACTS: Record<ChartType, string> = {
   line: '折线图：至少 1 个类别/时间维度和 1 个数值指标；可配置多个指标系列。',
@@ -144,7 +254,7 @@ export function resolveComponentSample(component: SampleComponent): ComponentSam
       count: index + 1,
     }))
     data = { kind: 'table', schema: columns, rows, pagination: { page: 1, pageSize: 20, total: rows.length, hasNext: true } }
-    contract = '表格：列定义 + 明细行；分页结果需包含 page、pageSize、total 或 hasNext。'
+    contract = '表格：列定义 + 0..N 条明细行；样例需声明行数与分页模式、当前页、每页行数和总行数。'
     renderData = { componentId: component.id, renderType: 'table', table: { columns: ['name', 'count'], rows: rows.map((row) => [row.name, String(row.count)]) } }
   } else if (component.type === 'filter') {
     const options = [{ label: '策略A', value: 'strategy-a' }, { label: '策略B', value: 'strategy-b' }]
@@ -169,8 +279,19 @@ export function resolveComponentSample(component: SampleComponent): ComponentSam
     schemaVersion: '1.0',
     component: { type: component.type, ...(chartType ? { subtype: chartType } : {}) },
     data,
-    meta: { isSample: true },
+    meta: {
+      isSample: true,
+      rowCount: 'rows' in data ? (data.rows as unknown[]).length
+        : 'options' in data ? (data.options as unknown[]).length
+          : 'value' in data ? 1 : 1,
+    },
   }
+  if (component.type === 'table') {
+    const tableData = data as { rows: unknown[]; pagination: { pageSize: number; total: number } }
+    tableData.pagination = { mode: 'client', enabled: true, page: 1, pageSize: 20, total: tableData.rows.length }
+  }
+  const validationError = validateComponentSample(component, envelope)
+  if (validationError) throw new Error(`组件样例数据不符合格式：${validationError.path} 期望 ${validationError.expected}，实际 ${validationError.actual}`)
   return { isSample: true, contract, json: JSON.stringify(envelope, null, 2), renderData }
 }
 

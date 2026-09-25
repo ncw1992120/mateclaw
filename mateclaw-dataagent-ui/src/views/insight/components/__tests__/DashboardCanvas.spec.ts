@@ -15,11 +15,11 @@ const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
   KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
-  ChartWidget: { template: '<div />' },
+  ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
   DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component'], template: '<div />' },
   TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component'], template: '<div />' },
-  AiAnalysisWidget: { template: '<div />' },
+  AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['componentData'], template: '<div />' },
   CombinationCardWidget: { name: 'CombinationCardWidget', props: ['sampleMode'], template: '<div />' },
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { canvasEmpty: '暂无组件' } } }, missingWarn: false, fallbackWarn: false })
@@ -79,6 +79,24 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
     expect(configured.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(configured.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
+  })
+
+  it('renders validated sample fixtures directly in KPI, chart, and table components', () => {
+    const components = [
+      component,
+      { ...component, id: 'chart-sample', type: 'chart' as const, chartType: 'pie' as const },
+      { ...component, id: 'table-sample', type: 'table' as const },
+      { ...component, id: 'ai-sample', type: 'aiAnalysis' as const },
+    ]
+    const wrapper = mount(DashboardCanvas, {
+      props: { components, editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({ renderType: 'kpi', kpi: { value: '1,284' } })
+    expect(wrapper.findComponent({ name: 'ChartWidget' }).props('componentData')).toMatchObject({ renderType: 'echarts', option: { series: [{ type: 'pie' }] } })
+    expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('componentData').table.rows).toHaveLength(45)
+    expect(wrapper.findComponent({ name: 'AiAnalysisWidget' }).props('componentData')).toMatchObject({ renderType: 'aiAnalysis' })
   })
 
   it('starts at 100 percent and applies manually entered zoom', async () => {

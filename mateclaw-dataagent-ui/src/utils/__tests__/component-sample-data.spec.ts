@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CHART_TYPES_ALL } from '@/constants/chartTypes'
-import { resolveComponentSample } from '../component-sample-data'
+import { resolveComponentSample, validateComponentSample } from '../component-sample-data'
 import { resolveOutputSpec, validateComponentOutput } from '../component-output-spec'
 
 describe('component sample data', () => {
@@ -50,5 +50,45 @@ describe('component sample data', () => {
       }
       expect(validateComponentOutput(resolveOutputSpec('chart', key)!, envelope), key).toBeNull()
     }
+  })
+
+  it('validates KPI sample cardinality as zero or one row', () => {
+    const component = { id: 'kpi-sample', type: 'kpi' as const }
+    const envelope = JSON.parse(resolveComponentSample(component).json) as Record<string, any>
+
+    expect(validateComponentSample(component, envelope)).toBeNull()
+    expect(validateComponentSample(component, {
+      ...envelope,
+      data: { kind: 'table', schema: [{ name: 'value', dataType: 'number', role: 'metric' }], rows: [{ value: 1 }, { value: 2 }] },
+      meta: { ...envelope.meta, rowCount: 2 },
+    })).toMatchObject({ path: 'data.rows', expected: '0..1 行', actual: '2 行' })
+  })
+
+  it('validates table sample row counts and client pagination metadata', () => {
+    const component = { id: 'table-sample', type: 'table' as const }
+    const envelope = JSON.parse(resolveComponentSample(component).json) as Record<string, any>
+
+    expect(validateComponentSample(component, envelope)).toBeNull()
+    expect(envelope.meta.rowCount).toBe(envelope.data.rows.length)
+    expect(envelope.data.pagination).toMatchObject({ mode: 'client', enabled: true, pageSize: 20 })
+    expect(validateComponentSample(component, {
+      ...envelope,
+      data: { ...envelope.data, pagination: { mode: 'client', enabled: true, pageSize: 0 } },
+    })).toMatchObject({ path: 'data.pagination.pageSize' })
+  })
+
+  it('validates pie sample with exactly one dimension and one metric role', () => {
+    const component = { id: 'pie-sample', type: 'chart' as const, chartType: 'pie' as const }
+    const envelope = JSON.parse(resolveComponentSample(component).json) as Record<string, any>
+
+    expect(validateComponentSample(component, envelope)).toBeNull()
+    expect(validateComponentSample(component, {
+      ...envelope,
+      data: {
+        ...envelope.data,
+        schema: [...envelope.data.schema, { name: 'region2', dataType: 'string', role: 'dimension' }],
+        rows: envelope.data.rows.map((row: Record<string, unknown>) => ({ ...row, region2: '样例' })),
+      },
+    })).toMatchObject({ path: 'data.schema', expected: '1 个维度 + 1 个指标', actual: '2 个维度 + 1 个指标' })
   })
 })
