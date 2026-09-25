@@ -89,18 +89,65 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
   })
 
-  it('does not render sample data for an unconfigured child inside a combination card', () => {
-    const child = {
-      id: 'sample-child-kpi',
-      type: 'kpi' as const,
-      title: '样例指标',
-      layout: { x: 0, y: 0, col: 6, h: 120 },
+  it('renders default sample data and a title watermark for a newly dropped child', async () => {
+    const component = {
+      id: 'combination-sample-child',
+      type: 'combination' as const,
+      title: '组合卡片',
+      children: [] as Array<{ id: string; type: 'kpi'; title: string; layout: { x: number; y: number; col: number; h: number } }>,
+      containerConfig,
+      position: { x: 0, y: 0, w: 12, h: 8 },
     }
     const wrapper = mount(CombinationCardWidget, {
       props: {
-        sampleMode: true,
+        editable: true,
+        component,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const dataTransfer = {
+      getData: (type: string) => type === 'application/json'
+        ? JSON.stringify({ type: 'kpi' })
+        : '',
+    }
+    await wrapper.get('.combination-card').trigger('drop', { clientX: 40, clientY: 50, dataTransfer })
+
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
+      renderType: 'kpi',
+      kpi: { value: '1,284' },
+    })
+    const watermark = wrapper.get('[data-testid="cc-sample-data-watermark"]')
+    expect(watermark.text()).toBe('示例数据')
+    expect(watermark.element.parentElement?.classList.contains('cc-child-head')).toBe(true)
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+  })
+
+  it('prefers actual result data and hides the child sample watermark', () => {
+    const child = {
+      id: 'actual-child-kpi',
+      type: 'kpi' as const,
+      title: '实际指标',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const actualData = { componentId: child.id, renderType: 'kpi' as const, kpi: { name: '实际', value: '42' } }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        componentDataMap: { [child.id]: actualData },
         component: {
-          id: 'combination-sample-child',
+          id: 'combination-actual-child',
           type: 'combination',
           title: '组合卡片',
           children: [child],
@@ -123,8 +170,105 @@ describe('CombinationCardWidget', () => {
       },
     })
 
-    expect(wrapper.find('.cc-sample-preview').exists()).toBe(false)
-    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toBeUndefined()
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject(actualData)
+    expect(wrapper.find('[data-testid="cc-sample-data-watermark"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+  })
+
+  it('renders default chart and table samples inside a combination card', () => {
+    const chart = {
+      id: 'sample-child-chart',
+      type: 'chart' as const,
+      chartType: 'pie' as const,
+      title: '样例饼图',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const table = {
+      id: 'sample-child-table',
+      type: 'table' as const,
+      title: '样例表格',
+      layout: { x: 0, y: 120, col: 6, h: 180 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'combination-chart-table-samples',
+          type: 'combination',
+          title: '组合卡片',
+          children: [chart, table],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'ChartWidget' }).props('componentData')).toMatchObject({
+      componentId: chart.id,
+      renderType: 'echarts',
+      option: { series: [{ type: 'pie' }] },
+    })
+    expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('componentData').table.rows).toHaveLength(45)
+    expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('sampleMode')).toBe(true)
+    expect(wrapper.findAll('[data-testid="cc-sample-data-watermark"]')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+  })
+
+  it('does not show child sample data or watermarks for filter and time controls', () => {
+    const filter = {
+      id: 'sample-child-filter',
+      type: 'filter' as const,
+      title: '样例筛选器',
+      layout: { x: 0, y: 0, col: 6, h: 60 },
+    }
+    const timeFilter = {
+      id: 'sample-child-time-filter',
+      type: 'timeFilter' as const,
+      title: '样例时间筛选',
+      layout: { x: 0, y: 60, col: 6, h: 60 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'combination-filter-sample',
+          type: 'combination',
+          title: '组合卡片',
+          children: [filter, timeFilter],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('componentData')).toBeUndefined()
+    expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="cc-sample-data-watermark"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
   })
 
   it('emits copy, paste and context-menu actions for a child component', async () => {
@@ -296,6 +440,7 @@ describe('CombinationCardWidget', () => {
 
     expect(wrapper.findAll('.combination-card')).toHaveLength(2)
     expect(wrapper.findAll('.cc-child-title').map((item) => item.text())).toContain('内层组合')
+    expect(wrapper.findAll('[data-testid="cc-sample-data-watermark"]')).toHaveLength(0)
   })
 
   it('switches an inner combination tab without starting the parent child drag', async () => {

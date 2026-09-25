@@ -145,6 +145,13 @@
           <button v-if="editable" class="cc-child-del" @click.stop="deleteChild(child.id)" :title="t('insight.combination.deleteChild')">
             <el-icon :size="10"><Close /></el-icon>
           </button>
+          <div
+            v-if="isSampleData(child)"
+            class="cc-sample-data-watermark"
+            data-testid="cc-sample-data-watermark"
+            aria-label="当前展示的是样例数据"
+            title="未绑定数据源，当前为示例内容"
+          >示例数据</div>
         </div>
         <!-- 子组件真实渲染（复用顶层 widget 组件；v1 子卡片数据接入下轮） -->
         <div class="cc-child-body">
@@ -173,6 +180,7 @@
             :component="toWidgetComponent(child)"
             :component-data="childComponentData(child)"
             :show-title="false"
+            :sample-mode="isSampleData(child)"
             :editable="editable"
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
@@ -264,6 +272,7 @@ import EmptyState from './EmptyState.vue'
 import { useTabKeyboard } from '../composables/useTabKeyboard'
 import { calculateCombinationChildResize } from './combinationChildLayout'
 import { defaultCombinationChildLayout } from '@/utils/combination-tabs'
+import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 
 defineOptions({ name: 'CombinationCardWidget' })
 
@@ -271,7 +280,7 @@ const props = withDefaults(
   defineProps<{
     component: InsightComponent
     componentDataMap?: Record<string, InsightComponentData>
-    /** 组合卡片不使用样例数据；保留字段兼容旧调用方。 */
+    /** 容器本身不展示样例数据；内部子组件按自身类型决定，保留字段兼容旧调用方。 */
     sampleMode?: boolean
     editable?: boolean
     selected?: boolean
@@ -438,7 +447,16 @@ function childWidgetComponent(child: InsightCombinationChild): InsightComponent 
 }
 
 function childComponentData(child: InsightCombinationChild): InsightComponentData | undefined {
-  return props.componentDataMap?.[child.id]
+  const actualData = props.componentDataMap?.[child.id]
+  if (actualData) return actualData
+  if (!isSampleData(child)) return undefined
+  return resolveComponentSample(toWidgetComponent(child)).renderData
+}
+
+function isSampleData(child: InsightCombinationChild): boolean {
+  if (['filter', 'timeFilter', 'combination'].includes(child.type)) return false
+  if (props.componentDataMap?.[child.id]) return false
+  return !hasConfiguredDataset(toWidgetComponent(child))
 }
 
 /** 子卡片定位样式 */
@@ -1002,10 +1020,34 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }
 .cc-child-head {
+  position: relative;
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 10px; background: var(--component-group-header-surface, var(--db-surface-nested, var(--db-hover))); border-bottom: 1px solid var(--component-group-border, var(--db-border));
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
+}
+.cc-sample-data-watermark {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid rgba(190, 45, 45, 0.18);
+  border-radius: 999px;
+  color: rgba(159, 37, 37, 0.68);
+  background: rgba(255, 239, 239, 0.58);
+  box-shadow: 0 1px 3px rgba(80, 20, 20, 0.04);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0.72;
+  filter: blur(0.15px);
+  pointer-events: none;
+  user-select: none;
 }
 .cc-child-title-trigger { display: inline-flex; align-items: center; gap: 4px; min-width: 0; border: none; padding: 0; background: transparent; color: inherit; cursor: text; }
 .cc-child-title-group { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
