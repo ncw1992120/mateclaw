@@ -56,6 +56,7 @@ public class LocalAloudataFixtures {
     /** 筛选表达式：{@code [字段] 运算符 值}，字段可用 {@code ['字段']} 形式。 */
     private static final Pattern CONDITION = Pattern.compile(
             "\\['?([^'\\]]+)'?\\]\\s*(<>|>=|<=|=|>|<|IN|NotIn)\\s*(.+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern FIELD_REFERENCE = Pattern.compile("\\['?([^'\\]]+)'?\\]");
     private static final Pattern AGGREGATION = Pattern.compile(
             "\\s*(sum|avg|average|min|max|count)\\s*\\(", Pattern.CASE_INSENSITIVE);
 
@@ -218,22 +219,19 @@ public class LocalAloudataFixtures {
         return envelope;
     }
 
-    /** 策略 mock 中两个视图共享同一维度目录，所有策略指标均可按全部维度分析。 */
+    /** 指标仅关联所属视图的维度；不同视图之间不能混合分析。 */
     @SuppressWarnings("unchecked")
     private Map<String, Object> metricAllDimensions(Map<String, Object> params) {
         Set<String> requested = nameSet(params.get("metricNames"));
         Map<String, Object> views = copy(load("analysis_view_query_by_name.json"));
-        Set<String> metricNames = new LinkedHashSet<>();
-        Set<String> dimensionNames = new LinkedHashSet<>();
+        Map<String, Object> relations = new LinkedHashMap<>();
         for (Object rawEnvelope : views.values()) {
             Map<String, Object> view = asMap(asMap(rawEnvelope).get("data"));
-            metricNames.addAll(stringList(view.get("metrics")));
-            dimensionNames.addAll(stringList(view.get("dimensions")));
-        }
-        Map<String, Object> relations = new LinkedHashMap<>();
-        for (String metricName : metricNames) {
-            if (requested.isEmpty() || requested.contains(metricName)) {
-                relations.put(metricName, new ArrayList<>(dimensionNames));
+            List<String> dimensions = stringList(view.get("dimensions"));
+            for (String metricName : stringList(view.get("metrics"))) {
+                if (requested.isEmpty() || requested.contains(metricName)) {
+                    relations.put(metricName, new ArrayList<>(dimensions));
+                }
             }
         }
         return envelope(relations, "mock-trace-metric-dimensions");
@@ -395,7 +393,10 @@ public class LocalAloudataFixtures {
             return systemError("SM99002", "系统异常: filters 仅支持表达式字符串数组");
         }
         Map<String, Object> container = copy(load("analysis_view_query_data.json"));
-        Map<String, Object> source = resolveViewForMetrics(container, params);
+        Map<String, Object> source = resolveViewForMetrics(container, params, expressions);
+        if (source == null) {
+            return systemError(CODE_SYSTEM_ERROR, "系统异常: 所选指标与维度不属于同一指标视图");
+        }
         replacePlaceholder(source, OWNER_PLACEHOLDER, owner);
 
         Map<String, Object> sourceData = asMap(source.get("data"));
@@ -588,14 +589,23 @@ public class LocalAloudataFixtures {
 
     // ------------------------------------------------------------------ 内部工具
 
-    /** 反查：首个「列集合覆盖请求的指标 + 维度」的视图；都不覆盖时退回第一个视图。 */
-    private Map<String, Object> resolveViewForMetrics(Map<String, Object> container, Map<String, Object> params) {
+    /** 反查覆盖全部请求指标与维度的单一视图；跨视图组合或未知字段返回不支持。 */
+    private Map<String, Object> resolveViewForMetrics(Map<String, Object> container, Map<String, Object> params,
+                                                       List<String> filters) {
         Set<String> requested = new LinkedHashSet<>();
         requested.addAll(nameSet(params.get("dimensions")));
         requested.addAll(nameSet(params.get("metrics")));
-        Map<String, Object> fallback = asMap(container.get(VIEW_ORDER.get(0)));
+        for (String expression : filters) {
+            Matcher matcher = FIELD_REFERENCE.matcher(expression);
+            while (matcher.find()) requested.add(matcher.group(1).trim());
+        }
+        String timeConstraint = firstString(params.get("timeConstraint"));
+        if (timeConstraint != null) {
+            Matcher matcher = FIELD_REFERENCE.matcher(timeConstraint);
+            while (matcher.find()) requested.add(matcher.group(1).trim());
+        }
         if (requested.isEmpty()) {
-            return fallback;
+            return asMap(container.get(VIEW_ORDER.get(0)));
         }
         for (String view : VIEW_ORDER) {
             Map<String, Object> candidate = asMap(container.get(view));
@@ -605,8 +615,8 @@ public class LocalAloudataFixtures {
                 return candidate;
             }
         }
-        log.warn("[local-mock] metrics_query 请求字段 {} 未落在任一 mock 视图上，退回 {}", requested, VIEW_ORDER.get(0));
-        return fallback;
+        log.warn("[local-mock] metrics_query 请求字段 {} 不属于同一 mock 视图", requested);
+        return null;
     }
 
     /**

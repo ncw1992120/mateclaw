@@ -15,7 +15,7 @@
             class="selection-conflict"
             type="error"
             :closable="false"
-            title="已选指标与维度存在不兼容项，请调整选择后再确定"
+            title="已选指标或维度存在不兼容组合，请调整选择后再确定"
           />
           <el-alert
             v-else-if="selectedMetricRelationsUnverified"
@@ -389,6 +389,10 @@ const dimensionPage = reactive<AloudataDimensionPage>({
 })
 
 const selectedMetricRelationsReady = computed(() => ui.aloudata.metrics.every((name) => Array.isArray(metricDimensions[name])))
+const selectedMetricViewsConflict = computed(() => {
+  if (ui.aloudata.metrics.length < 2 || !selectedMetricRelationsReady.value) return false
+  return new Set(ui.aloudata.metrics.map((name) => dimensionRelationKey(metricDimensions[name]))).size > 1
+})
 const visibleMetrics = computed(() => hideUnavailable.value
   ? metricPage.records.filter((item) => !isMetricUnavailable(item))
   : metricPage.records)
@@ -397,7 +401,9 @@ const visibleDimensions = computed(() => hideUnavailable.value
   : dimensionPage.records)
 const selectedMetricRelationsUnverified = computed(() => ui.aloudata.metrics.length > 0 && !selectedMetricRelationsReady.value)
 const selectionConflict = computed(() => {
-  if (!ui.aloudata.metrics.length || !ui.aloudata.dims.length || !selectedMetricRelationsReady.value) return false
+  if (!ui.aloudata.metrics.length || !selectedMetricRelationsReady.value) return false
+  if (selectedMetricViewsConflict.value) return true
+  if (!ui.aloudata.dims.length) return false
   return ui.aloudata.metrics.some((metricName) =>
     ui.aloudata.dims.some((dimName) => !metricDimensions[metricName].includes(dimName)),
   )
@@ -583,18 +589,30 @@ function dimensionUnavailableReason(dimName: string) {
       ? '正在校验已选指标的可用维度'
       : '无法校验已选指标的可用维度'
   }
+  if (selectedMetricViewsConflict.value) return '已选指标来自不同视图，不能组合分析'
   return ui.aloudata.metrics.some((metricName) => !metricDimensions[metricName].includes(dimName))
     ? '该维度不是已选指标的可用维度'
     : ''
 }
 
+function dimensionRelationKey(dimensions: string[] | null | undefined) {
+  return Array.isArray(dimensions) ? [...new Set(dimensions)].sort().join('\u0000') : null
+}
+
 function isMetricUnavailable(item: { availableDimensions?: string[] | null }) {
-  return ui.aloudata.dims.length > 0
-    && (!Array.isArray(item.availableDimensions)
-      || ui.aloudata.dims.some((dimName) => !item.availableDimensions!.includes(dimName)))
+  if (ui.aloudata.metrics.length > 0 && selectedMetricRelationsReady.value) {
+    const selectedRelation = metricDimensions[ui.aloudata.metrics[0] ?? '']
+    if (dimensionRelationKey(selectedRelation) !== dimensionRelationKey(item.availableDimensions)) return true
+  }
+  return ui.aloudata.dims.length > 0 && (!Array.isArray(item.availableDimensions)
+    || ui.aloudata.dims.some((dimName) => !item.availableDimensions!.includes(dimName)))
 }
 
 function metricUnavailableReason(item: { availableDimensions?: string[] | null }) {
+  if (ui.aloudata.metrics.length > 0 && selectedMetricRelationsReady.value && Array.isArray(item.availableDimensions)
+    && dimensionRelationKey(metricDimensions[ui.aloudata.metrics[0] ?? '']) !== dimensionRelationKey(item.availableDimensions)) {
+    return '该指标来自其他视图，不能与已选指标组合分析'
+  }
   return Array.isArray(item.availableDimensions)
     ? '该指标不支持已选维度'
     : '无法校验该指标对已选维度的支持情况'

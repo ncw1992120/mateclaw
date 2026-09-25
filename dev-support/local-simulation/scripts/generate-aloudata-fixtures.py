@@ -339,7 +339,7 @@ def metric_batch_detail_payload() -> dict:
             "status": "ONLINE",
             "displayStatus": "PUBLISHED",
             "isNewDimensionDefaultEnable": False,
-            "availableDimensions": [],
+            "availableDimensions": list(ZB_DIMS if name in ZB_METRICS else WD_DIMS),
             "disableDimensions": [],
             "factorDimensions": [],
             "restrictedDimensions": [],
