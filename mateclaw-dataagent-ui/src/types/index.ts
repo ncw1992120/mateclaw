@@ -237,6 +237,7 @@ export interface AloudataSyncStatus {
 export interface AloudataSyncedMetric {
   metricName: string
   metricDisplayName: string
+  metricCategoryId?: string
   type: string
   businessCaliber: string
   synonyms: string[]
@@ -251,6 +252,8 @@ export interface AloudataSyncedMetric {
 export interface AloudataSyncedDimension {
   dimName: string
   dimDisplayName: string
+  categoryId?: string
+  categoryName?: string
   originDataType: string
   dimDescription: string
   synonyms: string[]
