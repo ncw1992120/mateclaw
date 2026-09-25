@@ -39,8 +39,7 @@
                 trigger="click"
                 :placement="pickerLayout.placement"
                 :width="350"
-                :popper-class="pickerPopperClass('dimension')"
-                :popper-style="pickerPopperStyle"
+                popper-class="aloudata-picker-popper"
                 @show="onDimensionPickerShow"
               >
                 <template #reference>
@@ -48,7 +47,7 @@
                     <Plus aria-hidden="true" />添加维度
                   </button>
                 </template>
-                <div class="picker-panel dimension-picker-popup" :style="pickerPanelStyle('dimension')" @click.stop>
+                <div class="picker-panel dimension-picker-popup" :style="pickerPanelStyle" @click.stop>
                   <div class="picker-heading picker-heading-draggable" title="按住拖动弹窗" @pointerdown="startPickerDrag('dimension', $event)">
                     <strong>选择维度</strong>
                     <button class="picker-close" type="button" aria-label="关闭选择维度" @click="dimensionPickerVisible = false"><Close aria-hidden="true" /></button>
@@ -114,8 +113,7 @@
               trigger="click"
               :placement="pickerLayout.placement"
               :width="350"
-              :popper-class="pickerPopperClass('metric')"
-              :popper-style="pickerPopperStyle"
+              popper-class="aloudata-picker-popper"
               @show="onMetricPickerShow"
             >
               <template #reference>
@@ -123,7 +121,7 @@
                   <Plus aria-hidden="true" />添加指标
                 </button>
               </template>
-              <div class="picker-panel metric-picker-popup" :style="pickerPanelStyle('metric')" @click.stop>
+              <div class="picker-panel metric-picker-popup" :style="pickerPanelStyle" @click.stop>
                 <div class="picker-heading picker-heading-draggable" title="按住拖动弹窗" @pointerdown="startPickerDrag('metric', $event)">
                   <strong>选择指标</strong>
                   <button class="picker-close" type="button" aria-label="关闭选择指标" @click="metricPickerVisible = false"><Close aria-hidden="true" /></button>
@@ -544,25 +542,18 @@ function updatePickerViewportLayout(kind: 'metric' | 'dimension') {
   const bounds = trigger.getBoundingClientRect()
   Object.assign(pickerLayout, getPickerViewportLayout(bounds, window.innerHeight, 520))
   pickerOffsets[kind] = { x: 0, y: 0 }
+  const popupSelector = kind === 'metric' ? '.metric-picker-popup' : '.dimension-picker-popup'
+  document.querySelectorAll<HTMLElement>('.aloudata-picker-popper').forEach((popper) => {
+    if (!popper.querySelector(popupSelector)) return
+    popper.style.maxHeight = `${pickerLayout.maxHeight}px`
+    popper.style.overflow = 'visible'
+    popper.style.setProperty('--picker-drag-offset', '0px 0px')
+  })
 }
 
-const pickerPopperStyle = computed(() => ({
-  maxHeight: `${pickerLayout.maxHeight}px`,
-  overflow: 'visible',
+const pickerPanelStyle = computed(() => ({
+  maxHeight: `${Math.max(0, pickerLayout.maxHeight - 24)}px`,
 }))
-
-function pickerPopperClass(kind: 'metric' | 'dimension') {
-  const offset = pickerOffsets[kind]
-  return `aloudata-picker-popper${offset.x || offset.y ? ' is-dragged' : ''}`
-}
-
-function pickerPanelStyle(kind: 'metric' | 'dimension') {
-  const offset = pickerOffsets[kind]
-  return {
-    maxHeight: `${Math.max(0, pickerLayout.maxHeight - 24)}px`,
-    transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
-  }
-}
 
 let pickerDrag: {
   kind: 'metric' | 'dimension'
@@ -570,16 +561,19 @@ let pickerDrag: {
   startY: number
   bounds: PickerPanelBounds
   origin: PickerOffset
+  popper: HTMLElement
 } | undefined
 
 function movePickerDrag(event: PointerEvent) {
   if (!pickerDrag) return
-  pickerOffsets[pickerDrag.kind] = clampPickerDragOffset(
+  const nextOffset = clampPickerDragOffset(
     pickerDrag.bounds,
     pickerDrag.origin,
     { x: event.clientX - pickerDrag.startX, y: event.clientY - pickerDrag.startY },
     { width: window.innerWidth, height: window.innerHeight },
   )
+  pickerOffsets[pickerDrag.kind] = nextOffset
+  pickerDrag.popper.style.setProperty('--picker-drag-offset', `${nextOffset.x}px ${nextOffset.y}px`)
 }
 
 function stopPickerDrag() {
@@ -592,9 +586,10 @@ function stopPickerDrag() {
 function startPickerDrag(kind: 'metric' | 'dimension', event: PointerEvent) {
   if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
   const panel = (event.currentTarget as HTMLElement).parentElement
-  if (!panel) return
+  const popper = panel?.closest<HTMLElement>('.el-popper')
+  if (!popper) return
   event.preventDefault()
-  const bounds = panel.getBoundingClientRect()
+  const bounds = popper.getBoundingClientRect()
   const origin = { ...pickerOffsets[kind] }
   const baseBounds = {
     left: bounds.left - origin.x,
@@ -602,7 +597,7 @@ function startPickerDrag(kind: 'metric' | 'dimension', event: PointerEvent) {
     top: bounds.top - origin.y,
     bottom: bounds.bottom - origin.y,
   }
-  pickerDrag = { kind, startX: event.clientX, startY: event.clientY, bounds: baseBounds, origin }
+  pickerDrag = { kind, startX: event.clientX, startY: event.clientY, bounds: baseBounds, origin, popper }
   window.addEventListener('pointermove', movePickerDrag)
   window.addEventListener('pointerup', stopPickerDrag)
   window.addEventListener('pointercancel', stopPickerDrag)
@@ -1062,8 +1057,8 @@ onBeforeUnmount(() => {
 }
 :global(.aloudata-picker-popper) {
   max-width: calc(100vw - 32px) !important;
+  translate: var(--picker-drag-offset, 0px 0px);
 }
-:global(.aloudata-picker-popper.is-dragged .el-popper__arrow) { display: none; }
 :global(.aloudata-detail-popper) {
   padding: 14px !important;
 }
