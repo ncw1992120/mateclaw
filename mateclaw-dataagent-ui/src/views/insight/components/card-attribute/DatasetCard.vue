@@ -30,7 +30,7 @@
          「查询配置」打开查询配置弹窗：展示字段、筛选器绑定、允许排序、分页。
          「查看数据」打开统一数据查看弹窗：按查询配置展示字段与筛选绑定，填写本次值后查询。 -->
     <div class="ds-actions" @click.stop>
-      <el-button size="small" text bg @click="onOpenQueryConfig">查询配置</el-button>
+      <el-button size="small" text bg @click="openQueryConfig(dataset.id)">查询配置</el-button>
       <el-button
         size="small"
         text bg
@@ -47,21 +47,11 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import { Edit } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
 import type { DatasetConfig } from './useInsight'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
-const { state, openQueryConfig, openDataDialog, removeDataset, reconfigureDataset, renameDataset } = useInsight()
-
-function onOpenQueryConfig(): void {
-  const hasPageFilter = state.filterCatalog.some((filter) => filter.type === 'filter' || filter.type === 'timeFilter')
-  if (!hasPageFilter) {
-    ElMessage.warning('请先添加筛选器或时间筛选组件，再配置数据集查询条件')
-    return
-  }
-  openQueryConfig(props.dataset.id)
-}
+const { openQueryConfig, openDataDialog, removeDataset, reconfigureDataset, renameDataset } = useInsight()
 
 /* ---- 别名内联编辑 ---- */
 const editingAlias = ref(false)

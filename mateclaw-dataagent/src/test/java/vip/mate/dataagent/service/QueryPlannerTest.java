@@ -198,6 +198,31 @@ class QueryPlannerTest {
     }
 
     @Test
+    @DisplayName("无筛选器绑定时仍生成无过滤查询计划")
+    void noFilterBindingsProducesUnfilteredPlan() throws Exception {
+        String inputJson = """
+                {
+                  "datasetId": "42",
+                  "inputName": "strategy_data",
+                  "queryConfig": {
+                    "displayFields": [{"field": "strategy_id", "title": "策略编码", "role": "dimension"}],
+                    "queryableFields": [{"name": "strategy_id", "role": "dimension"}],
+                    "parameterBindings": [],
+                    "sortPolicy": {"enabled": false, "allowedFields": []},
+                    "paginationPolicy": {"enabled": false}
+                  }
+                }
+                """;
+        JsonNode component = component(inputJson);
+
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component), context(Map.of()), false);
+
+        assertThat(plan.columns()).containsExactly("strategy_id");
+        assertThat(plan.filters()).isEmpty();
+        assertThat(plan.shortCircuitEmpty()).isFalse();
+    }
+
+    @Test
     @DisplayName("被删除的筛选器映射在 Planner 阶段失败")
     void deletedFilterMappingFails() throws Exception {
         // boundFilterComponentIds 移除 amount_range（模拟筛选器被删）

@@ -33,6 +33,18 @@ const filterOptions = [
 ]
 
 describe('PythonQueryConfigDialog', () => {
+  it('允许保存没有筛选字段绑定的查询配置', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions: [] },
+      global: { stubs },
+    })
+
+    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
+
+    expect(wrapper.emitted('save')).toHaveLength(1)
+    expect((wrapper.emitted('save')![0][0] as FinalResultQueryConfig).filterFields).toEqual([])
+  })
+
   it('使用查询配置弹窗结构展示字段、筛选字段、排序和分页并保存', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
       props: { modelValue: true, config, fieldCatalog: config.displayFields, filterOptions },

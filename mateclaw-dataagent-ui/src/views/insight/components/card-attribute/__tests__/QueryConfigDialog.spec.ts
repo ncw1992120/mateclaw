@@ -62,6 +62,15 @@ function findTest(wrapper: ReturnType<typeof mount>, id: string) {
 beforeEach(() => {})
 
 describe('QueryConfigDialog', () => {
+  it('允许在没有筛选器绑定时保存数据集查询配置', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    await wrapper.find('[data-testid="qc-save"]').trigger('click')
+
+    const config = wrapper.emitted('save')![0][0] as DatasetQueryConfig
+    expect(config.parameterBindings).toEqual([])
+  })
+
   it('打开时按 descriptor 全量字段初始化展示字段（技术字段只读展示）', async () => {
     const wrapper = mountDialog()
     await flushPromises()

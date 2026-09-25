@@ -252,29 +252,31 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     unconfigured.unmount()
   })
 
-  it('没有筛选器绑定时显示提示并禁用查询', async () => {
+  it('没有筛选器绑定时仍可无条件查询', async () => {
     const wrapper = await openWith(metricViewDataset({
       queryConfig: queryConfig([]),
     }))
 
-    expect(wrapper.find('.dd-empty').text()).toContain('请先在查询配置中添加筛选器绑定')
-    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.dd-empty').text()).toContain('未绑定筛选器，本次查询将不附加筛选条件')
+    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeUndefined()
     await wrapper.find('.dd-query-row button').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [], parameters: {} })
     wrapper.unmount()
   })
 
-  it('只有至少一个已启用且有有效值的筛选条件时才允许查询', async () => {
+  it('已绑定筛选条件但值为空或全部禁用时仍可无条件查询', async () => {
     const wrapper = await openWith(metricViewDataset())
     const queryButton = wrapper.find('.dd-query-row button')
-    expect(queryButton.attributes('disabled')).toBeDefined()
-
-    await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
     expect(queryButton.attributes('disabled')).toBeUndefined()
 
+    await queryButton.trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [], parameters: {} })
+
     await wrapper.find('[data-testid="query-filter-enabled"]').setValue(false)
-    expect(queryButton.attributes('disabled')).toBeDefined()
+    expect(queryButton.attributes('disabled')).toBeUndefined()
     expect((wrapper.find('[data-testid="query-filter-row"] input.dd-value').element as HTMLInputElement).value).toBe('')
     wrapper.unmount()
   })
@@ -340,7 +342,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(wrapper.find('.dd-note').exists()).toBe(false)
   })
 
-  it('禁用唯一绑定筛选器时清空并锁定值，且不能发起无条件查询', async () => {
+  it('禁用唯一绑定筛选器时清空并锁定值，且可以无条件查询', async () => {
     state.filterCatalog = [{ id: 'filter-strategy', title: '策略类型', type: 'filter', selectionMode: 'single' }]
     const dataset = metricViewDataset({
       queryConfig: {
@@ -358,10 +360,11 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
     expect(value.element.value).toBe('')
     expect(value.attributes('disabled')).toBeDefined()
-    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeUndefined()
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [] })
   })
 
   it('JDBC SQL 在查看数据时只读，SQL 参数仍可编辑并进入 parameters', async () => {
@@ -457,11 +460,12 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     const wrapper = await openWith(dataset)
 
     expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(0)
-    expect(wrapper.find('.dd-empty').text()).toContain('请先在查询配置中添加筛选器绑定')
+    expect(wrapper.find('.dd-empty').text()).toContain('未绑定筛选器，本次查询将不附加筛选条件')
     expect(wrapper.text()).not.toContain('添加筛选条件')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [] })
   })
 })
 

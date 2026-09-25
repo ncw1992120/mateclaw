@@ -1,5 +1,4 @@
 import { mount } from '@vue/test-utils'
-import { ElMessage } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DatasetCard from '../DatasetCard.vue'
 
@@ -81,15 +80,12 @@ describe('DatasetCard', () => {
     expect(actions.reconfigureDataset).not.toHaveBeenCalled()
   })
 
-  it('没有页面筛选器时点击查询配置给出提示，但不打开弹窗', async () => {
-    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
+  it('没有页面筛选器时也允许打开查询配置', async () => {
     const wrapper = mount(DatasetCard, { props: { dataset }, global: { stubs } })
 
     await wrapper.findAll('button').find((button) => button.text().includes('查询配置'))!.trigger('click')
 
-    expect(warning).toHaveBeenCalledWith('请先添加筛选器或时间筛选组件，再配置数据集查询条件')
-    expect(actions.openQueryConfig).not.toHaveBeenCalled()
-    warning.mockRestore()
+    expect(actions.openQueryConfig).toHaveBeenCalledWith('dataset-1')
     wrapper.unmount()
   })
 

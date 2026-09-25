@@ -137,7 +137,7 @@
           </table>
         </div>
         <div v-else class="dd-empty" data-testid="query-filter-empty" role="status">
-          尚未绑定筛选器，请先在查询配置中添加筛选器绑定，再填写条件值。
+          未绑定筛选器，本次查询将不附加筛选条件。
         </div>
       </section>
 
@@ -324,11 +324,11 @@ function hasFilterValue(value: unknown): boolean {
 const hasExecutableFilter = computed(() => queryFilterRows.value.some((row) =>
   row.enabled && (!operatorNeedsValue(row.operator) || hasFilterValue(row.value)),
 ))
-/** JDBC / API 预定义的命名参数也是本次查询条件；空参数不能作为无条件查询放行。 */
+/** JDBC / API 定义中的占位符与页面筛选条件分开处理。 */
 const hasNamedQueryParameters = computed(() => Object.keys(namedParameters()).length > 0)
-/** 文件数据集没有可下推筛选器，保留其直接预览路径；其他类型至少需要一个有效条件。 */
+/** 筛选绑定和值均可省略；若 SQL / API 定义了占位符，仍需要输入参数值。 */
 const queryDisabled = computed(() => loading.value ||
-  (filterSupported.value && !hasExecutableFilter.value && !hasNamedQueryParameters.value),
+  (parameters.value.length > 0 && !hasNamedQueryParameters.value),
 )
 
 function createQueryFilterRows(): PreviewQueryFilterRow[] {
@@ -368,10 +368,10 @@ const queryHint = computed(() => {
   if (!filterSupported.value) return '文件类型暂不支持筛选下推，可直接预览文件数据'
   if (!queryFilterRows.value.length) {
     return hasNamedQueryParameters.value
-      ? '尚未绑定页面筛选器；本次将使用已填写的数据源参数查询'
-      : '请先在查询配置中绑定筛选器，再执行查询'
+      ? '未绑定页面筛选器；本次不附加筛选条件，按已填写的数据源参数查询'
+      : '未绑定筛选器，本次查询将不附加筛选条件'
   }
-  if (!hasExecutableFilter.value && !hasNamedQueryParameters.value) return '至少启用一个筛选条件并填写本次查询值后，才能查询'
+  if (!hasExecutableFilter.value) return '筛选条件均为空或已关闭，本次查询将不附加筛选条件'
   return '筛选条件来自查询配置；关闭的条件不参与本次查询'
 })
 
