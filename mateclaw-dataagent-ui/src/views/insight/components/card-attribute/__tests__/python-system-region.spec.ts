@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { buildPythonSystemRegion, useInsight } from '../useInsight'
+import { buildPipeline, buildPythonSystemRegion, useInsight } from '../useInsight'
 import { buildComponentPatch, hydratePanel } from '../useCardAttributeBridge'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
@@ -13,6 +13,15 @@ vi.mock('element-plus', async (importOriginal) => {
 const { ElMessage, ElMessageBox } = await import('element-plus')
 
 const { state } = useInsight()
+
+describe('Python 查询 Pipeline 筛选组件声明', () => {
+  it('声明当前页面可用的筛选组件，不把已删除的旧绑定 ID 作为有效 ID', () => {
+    state.filterCatalog = [{ id: 'live-filter', title: '指标日期', type: 'filter' }]
+    state.filterBindings = [{ filterName: 'deleted-filter', scope: {}, fieldMap: [] }] as never
+
+    expect(buildPipeline().boundFilterComponentIds).toEqual(['live-filter'])
+  })
+})
 
 describe('buildPythonSystemRegion', () => {
   it('保留 Aloudata 维度筛选器配置的技术字段名，供查询配置自动匹配', () => {
