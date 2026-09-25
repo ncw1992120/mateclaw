@@ -136,7 +136,27 @@ watch(
  * 只监听「产出结果集的输入」（数据集 / 筛选器绑定 / 脚本），卡片标题等元信息不影响数据。
  */
 watch(
-  () => [state.datasets, state.filterBindings, state.pythonUser, state.hasPython],
+  () => [
+    // lastQueryState 是「查看数据」的运行时输入，仅需随 Schema 保存；它不改变
+    // 组件结果集的静态查询定义，不能因此自动重跑 KPI / 图表结果校验。
+    state.datasets.map((dataset) => ({
+      id: dataset.id,
+      sourceType: dataset.sourceType,
+      backendDatasetId: dataset.backendDatasetId,
+      alias: dataset.alias,
+      fields: dataset.fields,
+      schema: dataset.schema,
+      filters: dataset.filters,
+      jdbc: dataset.jdbc,
+      aloudata: dataset.aloudata,
+      api: dataset.api,
+      file: dataset.file,
+      queryConfig: dataset.queryConfig,
+    })),
+    state.filterBindings,
+    state.pythonUser,
+    state.hasPython,
+  ],
   () => {
     if (hydrating.value) return
     scheduleResultSet()
