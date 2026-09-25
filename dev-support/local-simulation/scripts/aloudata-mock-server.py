@@ -41,6 +41,7 @@ DEFAULT_OWNER = "mock-uid-001"
 VIEW_ORDER = ["cljd_zcl_zb_view", "cljd_zcl_wd_view"]
 
 CONDITION = re.compile(r"\['?([^'\]]+)'?\]\s*(<>|>=|<=|=|>|<|IN|NotIn)\s*(.+)", re.IGNORECASE)
+FIELD_REFERENCE = re.compile(r"\['?([^'\]]+)'?\]")
 
 
 def load_fixture(name: str) -> dict:
@@ -248,13 +249,16 @@ def aggregate_rows(rows: list, dimensions: list, metrics: list, body: dict) -> l
     return result
 
 
-def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
-    if (set(requested_metrics) | set(requested_dimensions)).issubset({"region", "order_date", "revenue"}):
+def resolve_view_for_metrics(requested_metrics, requested_dimensions, filters=(), time_constraint=None) -> dict | None:
+    wanted = set(requested_metrics) | set(requested_dimensions)
+    for expression in [*filters, time_constraint]:
+        if isinstance(expression, str):
+            wanted.update(FIELD_REFERENCE.findall(expression))
+    if wanted.issubset({"region", "order_date", "revenue"}):
         # seed 的双源门禁通过 metrics/query 下推 region=east；该路径与
         # 无筛选时的 analysisView/query 使用同一份确定性结果。
         return local_sales_view_result({})
     container = load_fixture("analysis_view_query_data.json")
-    wanted = set(requested_metrics) | set(requested_dimensions)
     if not wanted:
         return container[VIEW_ORDER[0]]
     for view in VIEW_ORDER:
@@ -262,7 +266,7 @@ def resolve_view_for_metrics(requested_metrics, requested_dimensions) -> dict:
         available = set(((candidate.get("data") or {}).get("table") or {}).get("columns", {}).keys())
         if available and wanted.issubset(available):
             return candidate
-    return container[VIEW_ORDER[0]]
+    return None
 
 
 # --------------------------------------------------------------------- 端点实现
@@ -374,7 +378,11 @@ def handle_metrics_query(query, body, headers):
         return envelope(None, code="SM99002", success=False, error="系统异常: filters 仅支持表达式字符串数组",
                         trace_id="mock-trace-SM99002")
 
-    source = resolve_view_for_metrics(metrics, dimensions)
+    source = resolve_view_for_metrics(metrics, dimensions, filters, body.get("timeConstraint"))
+    if source is None:
+        return envelope(None, code="SM99002", success=False,
+                        error="系统异常: 所选指标与维度不属于同一指标视图",
+                        trace_id="mock-trace-SM99002")
     source = replace_owner(source, headers.get("auth-value") or DEFAULT_OWNER)
     source_data = source.get("data") or {}
     source_columns = ((source_data.get("table") or {}).get("columns")) or {}
@@ -520,21 +528,12 @@ def handle_dimension_all(query, body, headers):
     if not isinstance(requested, list):
         requested = [requested]
     definitions = load_fixture("analysis_view_query_by_name.json")
-    strategy_metrics = []
-    strategy_dimensions = []
+    relations = {}
     for definition_envelope in definitions.values():
         definition = definition_envelope.get("data") or {}
         for metric_name in definition.get("metrics") or []:
-            if metric_name not in strategy_metrics:
-                strategy_metrics.append(metric_name)
-        for dimension_name in definition.get("dimensions") or []:
-            if dimension_name not in strategy_dimensions:
-                strategy_dimensions.append(dimension_name)
-    relations = {
-        metric_name: list(strategy_dimensions)
-        for metric_name in strategy_metrics
-        if not requested or metric_name in requested
-    }
+            if not requested or metric_name in requested:
+                relations[metric_name] = list(definition.get("dimensions") or [])
     return envelope(relations)
 
 
