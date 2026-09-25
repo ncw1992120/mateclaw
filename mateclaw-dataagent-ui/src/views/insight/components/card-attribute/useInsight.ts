@@ -1135,9 +1135,9 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string 
 }
 /** 当前绑定的筛选器组件 ID（Planner 据此校验绑定归属） */
 function boundFilterComponentIds(): string[] {
-  return state.filterBindings
-    .map((binding) => state.filterCatalog.find((f) => f.title === binding.filterName)?.id ?? binding.filterName)
-    .filter(Boolean)
+  // 查询配置绑定的是当前仪表盘页的筛选器组件；声明当前目录即可让 Planner
+  // 接受有效绑定，同时继续拒绝不在目录中的已删除组件 ID。
+  return [...new Set(state.filterCatalog.map((filter) => filter.id).filter(Boolean))]
 }
 
 /* ---- KPI 指标分组（结果集优先：指标由最终结果集字段逐列投影） ---- */
