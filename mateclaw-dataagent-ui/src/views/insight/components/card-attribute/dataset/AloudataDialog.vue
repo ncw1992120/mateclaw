@@ -37,18 +37,19 @@
               <el-popover
                 v-model:visible="dimensionPickerVisible"
                 trigger="click"
-                placement="bottom-start"
+                :placement="pickerLayout.placement"
                 :width="350"
-                popper-class="aloudata-picker-popper"
+                :popper-class="pickerPopperClass('dimension')"
+                :popper-style="pickerPopperStyle"
                 @show="onDimensionPickerShow"
               >
                 <template #reference>
-                  <button class="config-add-button dimension-selection-box" data-testid="open-dimension-picker" type="button" aria-haspopup="dialog">
+                  <button ref="dimensionPickerTriggerEl" class="config-add-button dimension-selection-box" data-testid="open-dimension-picker" type="button" aria-haspopup="dialog">
                     <Plus aria-hidden="true" />添加维度
                   </button>
                 </template>
-                <div class="picker-panel dimension-picker-popup" @click.stop>
-                  <div class="picker-heading">
+                <div class="picker-panel dimension-picker-popup" :style="pickerPanelStyle('dimension')" @click.stop>
+                  <div class="picker-heading picker-heading-draggable" title="按住拖动弹窗" @pointerdown="startPickerDrag('dimension', $event)">
                     <strong>选择维度</strong>
                     <button class="picker-close" type="button" aria-label="关闭选择维度" @click="dimensionPickerVisible = false"><Close aria-hidden="true" /></button>
                   </div>
@@ -111,18 +112,19 @@
             <el-popover
               v-model:visible="metricPickerVisible"
               trigger="click"
-              placement="bottom-start"
+              :placement="pickerLayout.placement"
               :width="350"
-              popper-class="aloudata-picker-popper"
+              :popper-class="pickerPopperClass('metric')"
+              :popper-style="pickerPopperStyle"
               @show="onMetricPickerShow"
             >
               <template #reference>
-                <button class="config-add-button metric-selection-box" data-testid="open-metric-picker" type="button" aria-haspopup="dialog">
+                <button ref="metricPickerTriggerEl" class="config-add-button metric-selection-box" data-testid="open-metric-picker" type="button" aria-haspopup="dialog">
                   <Plus aria-hidden="true" />添加指标
                 </button>
               </template>
-              <div class="picker-panel metric-picker-popup" @click.stop>
-                <div class="picker-heading">
+              <div class="picker-panel metric-picker-popup" :style="pickerPanelStyle('metric')" @click.stop>
+                <div class="picker-heading picker-heading-draggable" title="按住拖动弹窗" @pointerdown="startPickerDrag('metric', $event)">
                   <strong>选择指标</strong>
                   <button class="picker-close" type="button" aria-label="关闭选择指标" @click="metricPickerVisible = false"><Close aria-hidden="true" /></button>
                 </div>
@@ -222,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { Close, InfoFilled, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
@@ -246,6 +248,8 @@ import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
 import AloudataFieldDirectory from './AloudataFieldDirectory.vue'
 import AloudataPickerField from './AloudataPickerField.vue'
 import type { DirectoryCategory, DirectoryField } from './AloudataFieldDirectory.vue'
+import { clampPickerDragOffset, getPickerViewportLayout } from './aloudata-picker-layout'
+import type { PickerOffset, PickerPanelBounds, PickerPlacement } from './aloudata-picker-layout'
 
 const { state, confirmAloudata } = useInsight()
 const ui = state.ui
@@ -257,8 +261,15 @@ const pageSize = 20
 const datasourceId = ref('')
 const metricPickerVisible = ref(false)
 const dimensionPickerVisible = ref(false)
+const metricPickerTriggerEl = ref<HTMLButtonElement>()
+const dimensionPickerTriggerEl = ref<HTMLButtonElement>()
 const metricPickerRevision = ref(0)
 const dimensionPickerRevision = ref(0)
+const pickerLayout = reactive<{ placement: PickerPlacement; maxHeight: number }>({ placement: 'bottom-start', maxHeight: 520 })
+const pickerOffsets = reactive<Record<'metric' | 'dimension', PickerOffset>>({
+  metric: { x: 0, y: 0 },
+  dimension: { x: 0, y: 0 },
+})
 const metricKeyword = ref('')
 const dimensionKeyword = ref('')
 const metricsLoading = ref(false)
@@ -527,14 +538,86 @@ function metricUnavailableReason(item: { availableDimensions?: string[] | null }
     ? '该指标不支持已选维度'
     : '无法校验该指标对已选维度的支持情况'
 }
+function updatePickerViewportLayout(kind: 'metric' | 'dimension') {
+  const trigger = kind === 'metric' ? metricPickerTriggerEl.value : dimensionPickerTriggerEl.value
+  if (!trigger) return
+  const bounds = trigger.getBoundingClientRect()
+  Object.assign(pickerLayout, getPickerViewportLayout(bounds, window.innerHeight, 520))
+  pickerOffsets[kind] = { x: 0, y: 0 }
+}
+
+const pickerPopperStyle = computed(() => ({
+  maxHeight: `${pickerLayout.maxHeight}px`,
+  overflow: 'visible',
+}))
+
+function pickerPopperClass(kind: 'metric' | 'dimension') {
+  const offset = pickerOffsets[kind]
+  return `aloudata-picker-popper${offset.x || offset.y ? ' is-dragged' : ''}`
+}
+
+function pickerPanelStyle(kind: 'metric' | 'dimension') {
+  const offset = pickerOffsets[kind]
+  return {
+    maxHeight: `${Math.max(0, pickerLayout.maxHeight - 24)}px`,
+    transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
+  }
+}
+
+let pickerDrag: {
+  kind: 'metric' | 'dimension'
+  startX: number
+  startY: number
+  bounds: PickerPanelBounds
+  origin: PickerOffset
+} | undefined
+
+function movePickerDrag(event: PointerEvent) {
+  if (!pickerDrag) return
+  pickerOffsets[pickerDrag.kind] = clampPickerDragOffset(
+    pickerDrag.bounds,
+    pickerDrag.origin,
+    { x: event.clientX - pickerDrag.startX, y: event.clientY - pickerDrag.startY },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
+}
+
+function stopPickerDrag() {
+  pickerDrag = undefined
+  window.removeEventListener('pointermove', movePickerDrag)
+  window.removeEventListener('pointerup', stopPickerDrag)
+  window.removeEventListener('pointercancel', stopPickerDrag)
+}
+
+function startPickerDrag(kind: 'metric' | 'dimension', event: PointerEvent) {
+  if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+  const panel = (event.currentTarget as HTMLElement).parentElement
+  if (!panel) return
+  event.preventDefault()
+  const bounds = panel.getBoundingClientRect()
+  const origin = { ...pickerOffsets[kind] }
+  const baseBounds = {
+    left: bounds.left - origin.x,
+    right: bounds.right - origin.x,
+    top: bounds.top - origin.y,
+    bottom: bounds.bottom - origin.y,
+  }
+  pickerDrag = { kind, startX: event.clientX, startY: event.clientY, bounds: baseBounds, origin }
+  window.addEventListener('pointermove', movePickerDrag)
+  window.addEventListener('pointerup', stopPickerDrag)
+  window.addEventListener('pointercancel', stopPickerDrag)
+}
+
 function onMetricPickerShow() {
   dimensionPickerVisible.value = false
   metricPickerRevision.value += 1
+  void nextTick(() => updatePickerViewportLayout('metric'))
   if (!metricPage.records.length) loadMetrics(1)
 }
 function onDimensionPickerShow() {
   metricPickerVisible.value = false
   dimensionPickerRevision.value += 1
+  void nextTick(() => updatePickerViewportLayout('dimension'))
   if (!dimensionPage.records.length) loadDimensions(1)
 }
 
@@ -722,6 +805,7 @@ function onMetricPageChange(page: number) { loadMetrics(page) }
 function onDimensionPageChange(page: number) { loadDimensions(page) }
 
 onBeforeUnmount(() => {
+  stopPickerDrag()
   if (viewKwTimer) clearTimeout(viewKwTimer)
   if (metricKeywordTimer) clearTimeout(metricKeywordTimer)
   if (dimensionKeywordTimer) clearTimeout(dimensionKeywordTimer)
@@ -847,7 +931,10 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .picker-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 .picker-heading {
   display: flex;
@@ -858,6 +945,8 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-primary);
   font-size: 14px;
 }
+.picker-heading-draggable { cursor: grab; user-select: none; }
+.picker-heading-draggable:active { cursor: grabbing; }
 .picker-close {
   width: 26px;
   height: 26px;
@@ -942,7 +1031,10 @@ onBeforeUnmount(() => {
 }
 .directory-layout {
   display: block;
+  flex: 1 1 auto;
   height: 390px;
+  min-height: 0;
+  max-height: 390px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 6px;
   overflow: auto;
@@ -966,11 +1058,12 @@ onBeforeUnmount(() => {
     align-items: stretch;
     flex-direction: column;
   }
-  .directory-layout { height: 55vh; }
+  .directory-layout { height: 55vh; max-height: 55vh; }
 }
 :global(.aloudata-picker-popper) {
   max-width: calc(100vw - 32px) !important;
 }
+:global(.aloudata-picker-popper.is-dragged .el-popper__arrow) { display: none; }
 :global(.aloudata-detail-popper) {
   padding: 14px !important;
 }

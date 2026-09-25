@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, ref, watch } from 'vue'
+import { defineComponent, h, nextTick, ref, watch } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensionDetail, pageAloudataMetrics, pageAloudataDimensions, listAloudataCategoryCounts } = vi.hoisted(() => ({
@@ -75,7 +75,12 @@ const { state } = useInsight()
 
 const PopoverStub = defineComponent({
   name: 'ElPopover',
-  props: { visible: Boolean },
+  props: {
+    visible: Boolean,
+    placement: { type: String, default: '' },
+    popperClass: { type: String, default: '' },
+    popperStyle: { type: Object, default: () => ({}) },
+  },
   emits: ['update:visible', 'show'],
   setup(props, { slots, emit }) {
     const visible = ref(props.visible)
@@ -85,7 +90,11 @@ const PopoverStub = defineComponent({
       emit('update:visible', true)
       emit('show')
     }
-    return () => h('div', { class: 'picker-popover' }, [
+    return () => h('div', {
+      class: ['picker-popover', props.popperClass],
+      placement: props.placement,
+      style: props.popperStyle,
+    }, [
       h('div', { class: 'picker-reference', onMouseover: () => {
         show()
       }, onClick: () => {
@@ -206,6 +215,66 @@ beforeEach(() => {
 })
 
 describe('Aloudata 指标&维度选择', () => {
+  it('keeps a bottom-triggered picker within the viewport and lets the user drag it', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+
+    const trigger = wrapper.find('[data-testid="open-metric-picker"]')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      top: 680,
+      bottom: 720,
+      left: 900,
+      right: 980,
+      width: 80,
+      height: 40,
+      x: 900,
+      y: 680,
+      toJSON: () => ({}),
+    } as DOMRect)
+    vi.stubGlobal('innerHeight', 800)
+
+    await trigger.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.picker-popover').attributes('placement')).toBe('top-start')
+
+    const panel = wrapper.find('.metric-picker-popup')
+    vi.spyOn(panel.element, 'getBoundingClientRect').mockReturnValue({
+      top: 300,
+      bottom: 700,
+      left: 600,
+      right: 950,
+      width: 350,
+      height: 400,
+      x: 600,
+      y: 300,
+      toJSON: () => ({}),
+    } as DOMRect)
+    panel.find('.picker-heading').element.dispatchEvent(new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+    }))
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 130, clientY: 120 }))
+    await nextTick()
+
+    expect(panel.attributes('style')).toContain('translate3d(30px, 20px, 0)')
+    panel.find('.picker-heading').element.dispatchEvent(new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: 130,
+      clientY: 120,
+    }))
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 140, clientY: 125 }))
+    await nextTick()
+    expect(panel.attributes('style')).toContain('translate3d(40px, 25px, 0)')
+    window.dispatchEvent(new MouseEvent('pointerup'))
+    vi.unstubAllGlobals()
+    wrapper.unmount()
+  })
+
   it('renders the analysis builder and opens the matching live picker from each add button', async () => {
     state.ui.aloudata.metrics = []
     state.ui.aloudata.dims = []
