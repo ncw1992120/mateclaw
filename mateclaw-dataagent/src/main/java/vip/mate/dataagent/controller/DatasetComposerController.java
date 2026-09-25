@@ -14,6 +14,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dataset.DatasetFilter;
 import vip.mate.dataagent.dataset.DatasetBatch;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.AloudataMetricRows;
 import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dataset.jdbc.SqlValidationService;
 import vip.mate.dataagent.dto.DatasetCreateRequest;
@@ -99,7 +100,7 @@ public class DatasetComposerController {
         query.setLimit(limit); query.setOffset(offset);
         query.setIsQueryTotalCount(request.requestTotalCount);
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(longId(request.datasourceId), query);
-        List<Map<String, Object>> rows = response == null || response.getData() == null || response.getData().getRows() == null ? List.of() : response.getData().getRows();
+        List<Map<String, Object>> rows = AloudataMetricRows.from(response);
         Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
         boolean hasNext = total != null ? offset + rows.size() < total : rows.size() >= limit;
         Map<String, Object> result = new LinkedHashMap<>();

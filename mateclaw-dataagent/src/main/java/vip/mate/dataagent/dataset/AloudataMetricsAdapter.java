@@ -48,11 +48,7 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         query.setQueryResultType("DATA");
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(dataset.getDatasourceId(), query);
         requireSuccess(response);
-        List<Map<String, Object>> rows = response == null || response.getData() == null || response.getData().getRows() == null ? List.of() : response.getData().getRows();
-        if (rows.isEmpty() && response != null && response.getData() != null
-                && response.getData().getColumns() != null && !response.getData().getColumns().isEmpty()) {
-            rows = columnsToRows(response.getData().getColumns());
-        }
+        List<Map<String, Object>> rows = AloudataMetricRows.from(response);
         Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
         boolean totalKnown = total != null;
         // 新版接口返回 total 时按精确总数判断；旧版没有 total 时只能用“是否满页”判断。
@@ -94,28 +90,6 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     }
     private Map<String, Object> config(DatasetEntity dataset) { try { return mapper.readValue(dataset.getSourceConfig(), new TypeReference<>() {}); } catch (Exception e) { return Map.of(); } }
     private List<String> strings(Object value) { return value == null ? List.of() : mapper.convertValue(value, new TypeReference<>() {}); }
-
-    /** Aloudata metrics/query 正式响应以 data.table.columns 列式返回，服务层映射到 DTO.columns。 */
-    private List<Map<String, Object>> columnsToRows(
-            Map<String, List<AloudataMetricQueryResponse.ColumnValue>> columns) {
-        int rowCount = columns.values().stream()
-                .filter(Objects::nonNull)
-                .mapToInt(List::size)
-                .max()
-                .orElse(0);
-        List<Map<String, Object>> rows = new ArrayList<>(rowCount);
-        for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            for (Map.Entry<String, List<AloudataMetricQueryResponse.ColumnValue>> column : columns.entrySet()) {
-                List<AloudataMetricQueryResponse.ColumnValue> values = column.getValue();
-                AloudataMetricQueryResponse.ColumnValue value = values != null && rowIndex < values.size()
-                        ? values.get(rowIndex) : null;
-                row.put(column.getKey(), value == null ? null : value.getValue());
-            }
-            rows.add(row);
-        }
-        return rows;
-    }
 
     /** 条件转 Aloudata 表达式：集合值逐项展开（[field] IN ("A","B")），标量值单值括号。 */
     String expression(DatasetFilter filter) {
