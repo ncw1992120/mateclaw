@@ -31,7 +31,7 @@ import {
   type DatasetFieldMeta,
   type DatasetSchemaField,
 } from '@/utils/field-mapping'
-import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
+import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope, tableEnvelopeFromRows } from '@/utils/script-result'
 import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
@@ -108,6 +108,8 @@ export interface DatasetConfig {
   backendDatasetId?: string
   /** 新版静态查询配置（查询配置弹窗保存；datasetInputs[].queryConfig 的本地来源） */
   queryConfig?: DatasetQueryConfig
+  /** 最近一次查看数据时填写的运行条件，随仪表盘 Schema 持久化。 */
+  lastQueryState?: DatasetLastQueryState
 }
 
 /** 卡片（仪表盘画布上的组件） */
@@ -1210,6 +1212,8 @@ export function datasetFromInput(input: DashboardDatasetInput, index = 0): Datas
     alias: input.inputName || `table${index + 1}`,
     fields: fieldMetasFromMappings(input.fieldMappings),
     filters: (input.filters ?? []) as unknown as InputFilter[],
+    queryConfig: input.queryConfig,
+    lastQueryState: input.lastQueryState,
     jdbc: cfg.sql
       ? { db: String(cfg.datasourceId ?? ''), sql: cfg.sql }
       : undefined,
@@ -1312,6 +1316,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     },
     // 新版静态查询配置：保存后以 queryConfig 为本输入的权威配置（旧 scriptFilterBindings 仅读取兼容）
     ...(ds.queryConfig ? { queryConfig: ds.queryConfig } : {}),
+    ...(ds.lastQueryState ? { lastQueryState: ds.lastQueryState } : {}),
     // 契约定版（§4.3）：source=字段名（后端下推唯一依据），target=展示名（仅导出表头等展示场景）
     fieldMappings: toFieldMappings(ds.fields ?? []),
     // filters[].field 自本版本起恒为字段名（存展示名的老配置在读入时已惰性归一，见 normalizeDatasetFields）

@@ -395,7 +395,7 @@ const currentSignature = computed(() =>
 
 function persistQueryState(): void {
   if (!stateReady.value) return
-  setCachedQueryState(props.dataset.id, {
+  const queryState = {
     filters: queryFilterRows.value.map((row) => ({
       filterComponentId: row.filterComponentId,
       field: row.field,
@@ -408,7 +408,10 @@ function persistQueryState(): void {
     sort: sortState.value ? { ...sortState.value } : null,
     page: currentPage.value,
     pageSize: currentPageSize.value,
-  })
+  }
+  // 查询条件和值是轻量的用户配置：随数据集输入写入仪表盘 Schema，跨刷新/登录恢复。
+  props.dataset.lastQueryState = queryState
+  setCachedQueryState(props.dataset.id, queryState)
 }
 
 watch(
@@ -591,7 +594,7 @@ async function open(): Promise<void> {
     Math.max(1, paginationPolicy.value?.maxPageSize || 500),
   )
 
-  const cachedState = getCachedQueryState(props.dataset.id)
+  const cachedState = props.dataset.lastQueryState ?? getCachedQueryState(props.dataset.id)
   if (cachedState) {
     cachedState.filters.forEach((saved, index) => {
       const row = queryFilterRows.value[index]

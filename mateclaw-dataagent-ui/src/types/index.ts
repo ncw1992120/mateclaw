@@ -1738,6 +1738,22 @@ export interface ThemeValidationError {
   message: string
 }
 
+/** 查看数据弹窗最近一次使用的条件；结果行不随仪表盘持久化。 */
+export interface DatasetLastQueryState {
+  filters: Array<{
+    filterComponentId: string
+    field: string
+    parameterName: string
+    timeBoundary?: 'start' | 'end'
+    value: unknown
+    enabled: boolean
+  }>
+  parameters: Record<string, unknown>
+  sort: { field: string; direction: 'asc' | 'desc' } | null
+  page: number
+  pageSize: number
+}
+
 /** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */
 export interface DashboardDatasetInput {
   datasetId: string
@@ -1771,6 +1787,8 @@ export interface DashboardDatasetInput {
    * 禁止两份规则同时生效。
    */
   queryConfig?: DatasetQueryConfig
+  /** 最近一次「查看数据」的运行条件值；刷新或重新登录后回显。 */
+  lastQueryState?: DatasetLastQueryState
 }
 
 /** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */

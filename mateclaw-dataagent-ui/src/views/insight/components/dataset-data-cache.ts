@@ -1,10 +1,13 @@
+import type { DatasetLastQueryState } from '@/types'
+
 /**
- * 「查看数据」弹窗的**会话级**查询缓存：按数据集记住最近一次执行结果（含产生它的条件）。
+ * 「查看数据」弹窗的会话级结果缓存：按数据集记住最近一次执行结果。
  *
- * 目的：关掉弹窗再打开，结果还在 —— 不必重新点「查询」，也不必重新跑一遍后端。
+ * 结果行只留在内存，避免大结果随仪表盘持久化；最近一次筛选值则另存到数据集输入的
+ * `lastQueryState`，随仪表盘 Schema 保存并在重新打开时恢复。
  *
- * 只放内存、不进 schema：行数据可能很大，落进 `DatasetConfig` 会跟着仪表盘一起持久化，
- * 体积和语义都不对。刷新页面后缓存消失，回到「点「查询」获取数据」的空态，这是有意的。
+ * 关掉弹窗再打开时，结果仍在；页面刷新后结果回到「点「查询」获取数据」空态，
+ * 但查询条件和值保留，用户无需重新填写。
  *
  * `signature` 记录产生这份结果的条件（SQL + 条件行 + 遗留条件）：重新打开时若当前条件已变，
  * 结果照常展示但标注「条件已变更」，让用户自己决定要不要重查 —— 不静默丢弃，也不假装它还是最新的。
@@ -21,20 +24,7 @@ export interface CachedQueryResult {
   signature: string
 }
 
-export interface CachedQueryState {
-  filters: Array<{
-    filterComponentId: string
-    field: string
-    parameterName: string
-    timeBoundary?: 'start' | 'end'
-    value: unknown
-    enabled: boolean
-  }>
-  parameters: Record<string, unknown>
-  sort: { field: string; direction: 'asc' | 'desc' } | null
-  page: number
-  pageSize: number
-}
+export type CachedQueryState = DatasetLastQueryState
 
 const cache = new Map<string, CachedQueryResult>()
 const stateCache = new Map<string, CachedQueryState>()
