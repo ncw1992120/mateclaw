@@ -206,6 +206,34 @@ beforeEach(() => {
 })
 
 describe('Aloudata 指标&维度选择', () => {
+  it('renders the analysis builder and opens the matching live picker from each add button', async () => {
+    state.ui.aloudata.metrics = []
+    state.ui.aloudata.dims = []
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+
+    expect(wrapper.find('.analysis-builder').exists()).toBe(true)
+    expect(wrapper.find('.analysis-builder').text()).toContain('ANALYSIS BUILDER')
+    expect(wrapper.find('.config-empty').text()).toContain('尚未添加维度')
+    expect(wrapper.findAll('.config-empty')[1]?.text()).toContain('尚未添加指标')
+
+    await wrapper.find('[data-testid="open-dimension-picker"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.dimension-picker-popup').exists()).toBe(true)
+    expect(wrapper.find('.metric-picker-popup').exists()).toBe(false)
+
+    await wrapper.find('.dimension-picker-popup [data-category-id="dim-root"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('.dimension-picker-popup [data-category-id="dim-child"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('.dimension-picker-popup [data-field-code="dim_a"]').trigger('click')
+    expect(wrapper.find('.configured-fields[data-testid="configured-dimensions"]').text()).toContain('维度 A')
+
+    await wrapper.find('.configured-fields[data-testid="configured-dimensions"] button[aria-label*="移除维度"]').trigger('click')
+    expect(state.ui.aloudata.dims).toEqual([])
+  })
+
   it('uses existing live category and paginated list APIs instead of the unavailable directory route', async () => {
     const wrapper = mount(AloudataDialog, { global: { stubs } })
     state.ui.aloudata.visible = true
@@ -236,19 +264,19 @@ describe('Aloudata 指标&维度选择', () => {
     expect(wrapper.find('.dimension-picker-popup').text()).toContain('所属大区')
   })
 
-  it('shows separate expanding metric and dimension boxes with removable selected chips', async () => {
+  it('shows separate configured-field areas with removable selected chips', async () => {
     const wrapper = mount(AloudataDialog, { global: { stubs } })
     state.ui.aloudata.visible = true
     await flushPromises()
 
-    const metricBox = wrapper.find('.metric-selection-box')
-    const dimensionBox = wrapper.find('.dimension-selection-box')
-    expect(metricBox.exists()).toBe(true)
-    expect(dimensionBox.exists()).toBe(true)
-    expect(metricBox.text()).toContain('metric_a')
-    expect(dimensionBox.text()).toContain('dim_a')
+    const metricFields = wrapper.find('[data-testid="configured-metrics"]')
+    const dimensionFields = wrapper.find('[data-testid="configured-dimensions"]')
+    expect(metricFields.exists()).toBe(true)
+    expect(dimensionFields.exists()).toBe(true)
+    expect(metricFields.text()).toContain('metric_a')
+    expect(dimensionFields.text()).toContain('dim_a')
 
-    await metricBox.find('.selected-tag-remove').trigger('click')
+    await metricFields.find('button[aria-label*="移除指标"]').trigger('click')
     expect(state.ui.aloudata.metrics).toEqual([])
     expect(state.ui.aloudata.dims).toEqual(['dim_a'])
   })
@@ -397,10 +425,10 @@ describe('Aloudata 指标&维度选择', () => {
     await flushPromises()
 
     expect(wrapper.find('.selection-conflict').text()).toContain('不兼容')
-    expect(wrapper.find('.dimension-selection-box').text()).toContain('region')
+    expect(wrapper.find('[data-testid="configured-dimensions"]').text()).toContain('region')
     expect(wrapper.find('.stub-dialog').findAll('button').at(-1)?.element.disabled).toBe(true)
 
-    await wrapper.find('.dimension-selection-box .selected-tag-remove').trigger('click')
+    await wrapper.find('[data-testid="configured-dimensions"] button[aria-label*="移除维度"]').trigger('click')
     expect(wrapper.find('.selection-conflict').exists()).toBe(false)
     expect(wrapper.find('.stub-dialog').findAll('button').at(-1)?.element.disabled).toBe(false)
   })
