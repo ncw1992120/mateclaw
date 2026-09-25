@@ -19,6 +19,7 @@ export interface AloudataCategoryItem {
 }
 
 export interface AloudataCategoryTreeNode extends AloudataCategoryItem {
+  count?: number
   children: AloudataCategoryTreeNode[]
 }
 
