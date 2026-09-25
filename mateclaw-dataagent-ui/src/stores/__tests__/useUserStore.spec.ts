@@ -33,4 +33,14 @@ describe('useUserStore', () => {
     expect(store.userId).toBe('1')
     expect(store.isAdmin).toBe(true)
   })
+
+  it('starts with no workspace when the saved workspace id is malformed', async () => {
+    localStorage.setItem('workspaceId', '{invalid-json')
+    const { useUserStore } = await import('@/stores/useUserStore')
+
+    const store = useUserStore()
+
+    expect(store.currentWorkspaceId).toBeNull()
+    expect(localStorage.getItem('workspaceId')).toBeNull()
+  })
 })

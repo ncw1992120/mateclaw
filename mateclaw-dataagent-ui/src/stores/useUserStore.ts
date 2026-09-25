@@ -19,11 +19,7 @@ export const useUserStore = defineStore('user', () => {
   /** 可见工作区列表 */
   const workspaces = ref<Workspace[]>([])
   /** 当前工作区 ID */
-  const currentWorkspaceId = ref<number | string | null>(
-    localStorage.getItem('workspaceId')
-      ? JSON.parse(localStorage.getItem('workspaceId')!)
-      : null
-  )
+  const currentWorkspaceId = ref<number | string | null>(readWorkspaceId())
 
   /** 是否已登录 */
   const isLoggedIn = computed(() => !!token.value)
@@ -173,3 +169,22 @@ export const useUserStore = defineStore('user', () => {
     logout,
   }
 })
+
+function readWorkspaceId(): number | string | null {
+  const savedWorkspaceId = localStorage.getItem('workspaceId')
+  if (!savedWorkspaceId) {
+    return null
+  }
+
+  try {
+    const workspaceId: unknown = JSON.parse(savedWorkspaceId)
+    if (typeof workspaceId === 'string' || typeof workspaceId === 'number') {
+      return workspaceId
+    }
+  } catch {
+    // A malformed persisted workspace must not prevent the app from mounting.
+  }
+
+  localStorage.removeItem('workspaceId')
+  return null
+}
