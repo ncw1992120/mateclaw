@@ -469,7 +469,18 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
   let id: string
   if (editingId) {
     const ds = getDataset(editingId)
-    if (ds) Object.assign(ds, payload)
+    if (ds) {
+      Object.assign(ds, payload)
+      // 指标&维度可在不请求后端的情况下确定字段集合。先同步查询配置，避免用户
+      // 在 schema 异步刷新前打开配置弹窗时仍看到旧字段。
+      if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
+        const selectedSchema = buildAloudataMetricDimSchema(ds.aloudata.metrics ?? [], ds.aloudata.dims ?? [])
+        if (selectedSchema.length) {
+          ds.fields = reconcileFieldMetas(selectedSchema, ds.fields, ds.schema)
+          reconcileDatasetQueryConfig(ds, selectedSchema)
+        }
+      }
+    }
     id = editingId
   } else {
     id = `ds-${Date.now()}`
@@ -749,6 +760,65 @@ export function buildAloudataMetricDimSchema(
   return fields
 }
 
+/** 数据源字段变化后，让静态查询配置只引用当前字段，同时保留未变化字段的用户设置。 */
+function reconcileDatasetQueryConfig(ds: DatasetConfig, schema: DatasetSchemaField[]): void {
+  const config = ds.queryConfig
+  if (!config) return
+
+  const fieldNames = new Set(schema.map((field) => field.name))
+  const metadata = new Map((ds.fields ?? []).filter((field) => !field.stale).map((field) => [field.name, field]))
+  const previousDisplay = new Map(config.displayFields.map((field) => [field.field, field]))
+  const previousQueryable = new Map((config.queryableFields ?? []).map((field) => [field.name, field]))
+  const roleOf = (field: DatasetSchemaField, fallback: 'dimension' | 'measure' = 'dimension') => {
+    const role = String(field.role ?? '').trim().toLowerCase()
+    if (role === 'measure' || role === 'metric') return 'measure' as const
+    if (role === 'dimension') return 'dimension' as const
+    return fallback
+  }
+  const displayFieldFor = (field: DatasetSchemaField) => {
+    const previous = previousDisplay.get(field.name)
+    const fieldMeta = metadata.get(field.name)
+    const role = roleOf(field, previous?.role)
+    const title = previous?.title.trim()
+    return {
+      field: field.name,
+      title: title && title !== field.name ? title : fieldMeta?.displayName?.trim() || field.displayName?.trim() || field.name,
+      role,
+      ...(previous?.dataType ? { dataType: previous.dataType } : {}),
+    }
+  }
+  // Keep the user's order for fields that remain, remove obsolete entries, then
+  // append newly selected fields in the source's dimension/metric order.
+  const displayFields = [
+    ...config.displayFields.filter((field) => fieldNames.has(field.field)).map((field) =>
+      displayFieldFor(schema.find((item) => item.name === field.field)!)),
+    ...schema.filter((field) => !previousDisplay.has(field.name)).map(displayFieldFor),
+  ]
+  const queryableFields = schema.map((field) => {
+    const previous = previousQueryable.get(field.name)
+    return {
+      name: field.name,
+      displayName: metadata.get(field.name)?.displayName ?? field.displayName ?? previous?.displayName,
+      role: roleOf(field, previous?.role),
+      ...(previous?.dataType ? { dataType: previous.dataType } : {}),
+    }
+  })
+  const allowedFields = config.sortPolicy.allowedFields.filter((field) => fieldNames.has(field))
+  const defaultSort = config.sortPolicy.defaultSort
+  ds.queryConfig = {
+    ...config,
+    displayFields,
+    queryableFields,
+    parameterBindings: config.parameterBindings.filter((binding) => fieldNames.has(binding.field)),
+    sortPolicy: {
+      ...config.sortPolicy,
+      enabled: config.sortPolicy.enabled && allowedFields.length > 0,
+      allowedFields,
+      defaultSort: defaultSort && allowedFields.includes(defaultSort.field) ? defaultSort : null,
+    },
+  }
+}
+
 /** 文件草稿来源配置：objectId（后端校验用）+ fileRef（真实读取用的受控引用） */
 function fileSourceConfig(file: NonNullable<DatasetConfig['file']>): Record<string, unknown> {
   return {
@@ -858,6 +928,7 @@ async function refreshDatasetSchema(
     // ds.schema 作为「上一版后端清单」参与 diff，用于判断用户是否手工改过展示名
     ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
     ds.schema = schema
+    reconcileDatasetQueryConfig(ds, schema)
     return { ok: true, message: `已获取 ${schema.length} 个字段` }
   } catch (e) {
     return { ok: false, message: (e as Error)?.message || '获取字段结构失败' }
