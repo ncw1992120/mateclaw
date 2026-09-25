@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="title" width="560px" aria-label="配置数据集来源" @close="cancel">
+  <el-dialog v-model="visible" :title="title" :width="draft.sourceType === 'ALOUDATA_METRICS' ? 'min(920px, calc(100vw - 32px))' : '560px'" aria-label="配置数据集来源" @close="cancel">
     <div v-if="activeView === 'config'" class="source-dialog-body">
       <template v-if="draft.sourceType === 'JDBC_SQL'">
         <div class="source-caption">JDBC · {{ draft.datasourceName || draft.datasourceId }}</div>
@@ -15,8 +15,12 @@
         <el-input v-model="draft.dimensionsText" aria-label="输出维度" placeholder="输出维度，多个用逗号分隔" />
       </template>
       <template v-else-if="draft.sourceType === 'ALOUDATA_METRICS'">
-        <el-input v-model="draft.metricsText" aria-label="配置指标" placeholder="指标，多个用逗号分隔" />
-        <el-input v-model="draft.dimensionsText" aria-label="配置维度" placeholder="维度，多个用逗号分隔" />
+        <AloudataFieldSelector
+          v-model:metrics="draft.metrics"
+          v-model:dimensions="draft.dimensions"
+          v-model:valid="draft.aloudataSelectionValid"
+          :datasource-id="String(draft.datasourceId || '')"
+        />
         <el-input v-model="draft.filtersText" aria-label="指标筛选条件" placeholder="筛选条件（可选）" />
       </template>
       <template v-else-if="draft.sourceType === 'HTTP_API'">
@@ -54,6 +58,7 @@ import type { DatasetSourceType } from '@/types'
 import * as datasetApi from '@/api/dataset'
 import * as datasourceApi from '@/api/datasource'
 import type { DatasetSourceSelection } from './DatasetSourcePicker.vue'
+import AloudataFieldSelector from './AloudataFieldSelector.vue'
 
 const props = defineProps<{ modelValue: boolean; selection: DatasetSourceSelection }>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: boolean): void; (event: 'confirm', value: DatasetSourceSelection & { sourceConfig?: Record<string, unknown>; displayName?: string }): void }>()
@@ -69,7 +74,7 @@ const fileFormats = ['Excel', 'CSV', 'TXT', 'JSON', 'Parquet']
 const title = computed(() => ({ JDBC_SQL: '输入 SQL', ALOUDATA_ANALYSIS_VIEW: '配置指标视图', ALOUDATA_METRICS: '配置指标&维度', HTTP_API: '配置接口', FILE: '配置文件' } as Record<string, string>)[draft.value.sourceType] || '配置数据集')
 
 watch(() => props.selection, async selection => {
-  draft.value = { sourceType: selection.sourceType, datasourceId: selection.datasourceId, datasetId: selection.datasetId, method: 'GET', timeoutMs: 30000, fileFormat: 'CSV' }
+  draft.value = { sourceType: selection.sourceType, datasourceId: selection.datasourceId, datasetId: selection.datasetId, method: 'GET', timeoutMs: 30000, fileFormat: 'CSV', metrics: [], dimensions: [], filtersText: '', aloudataSelectionValid: false }
   activeView.value = 'config'
   sqlEditing.value = false
   if (selection.sourceType === 'ALOUDATA_ANALYSIS_VIEW' && selection.datasourceId) {
@@ -119,7 +124,9 @@ async function confirm(): Promise<void> {
     } catch (error: any) { previewError.value = error?.message || '接口定义登记失败'; return }
   }
   if (draft.value.sourceType === 'ALOUDATA_ANALYSIS_VIEW' && !draft.value.analysisViewId) { previewError.value = '请选择指标视图'; return }
-  if (draft.value.sourceType === 'ALOUDATA_METRICS' && !split(draft.value.metricsText).length) { previewError.value = '至少配置一个指标'; return }
+  if (draft.value.sourceType === 'ALOUDATA_METRICS' && !draft.value.datasourceId) { previewError.value = '请先选择 Aloudata 数据源'; return }
+  if (draft.value.sourceType === 'ALOUDATA_METRICS' && !draft.value.metrics.length) { previewError.value = '至少配置一个指标'; return }
+  if (draft.value.sourceType === 'ALOUDATA_METRICS' && !draft.value.aloudataSelectionValid) { previewError.value = '指标与维度存在不兼容项，或可用性尚未校验完成'; return }
   if (draft.value.sourceType === 'FILE' && draft.value.file && typeof datasetApi.uploadFile === 'function') {
     try {
       const uploaded = await datasetApi.uploadFile(draft.value.file) as any
@@ -149,13 +156,12 @@ function buildSourceConfig(): Record<string, unknown> {
   const sourceConfig: Record<string, unknown> = { datasourceId: draft.value.datasourceId }
   if (draft.value.sourceType === 'JDBC_SQL') sourceConfig.sql = draft.value.sql
   if (draft.value.sourceType === 'ALOUDATA_ANALYSIS_VIEW') sourceConfig.analysisViewId = draft.value.analysisViewId
-  if (draft.value.sourceType === 'ALOUDATA_METRICS') { sourceConfig.metrics = split(draft.value.metricsText); sourceConfig.dimensions = split(draft.value.dimensionsText); sourceConfig.filters = draft.value.filtersText }
+  if (draft.value.sourceType === 'ALOUDATA_METRICS') { sourceConfig.metrics = [...draft.value.metrics]; sourceConfig.dimensions = [...draft.value.dimensions]; sourceConfig.filters = draft.value.filtersText }
   if (draft.value.sourceType === 'HTTP_API') Object.assign(sourceConfig, { apiDefinitionId: draft.value.apiDefinitionId, host: draft.value.host, path: draft.value.path, method: draft.value.method, timeoutMs: draft.value.timeoutMs, headers: draft.value.headersText, parameters: draft.value.parametersText })
   if (draft.value.sourceType === 'FILE') Object.assign(sourceConfig, { format: draft.value.fileFormat, fileName: draft.value.fileName, objectId: draft.value.objectId, fileRef: draft.value.fileRef })
   return sourceConfig
 }
 function cancel(): void { visible.value = false }
-function split(value?: string): string[] { return String(value || '').split(',').map(item => item.trim()).filter(Boolean) }
 function parseJsonObject(value?: string): Record<string, unknown> { if (!value?.trim()) return {}; try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {} } catch { return {} } }
 </script>
 
