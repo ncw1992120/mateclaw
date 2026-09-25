@@ -596,9 +596,20 @@ async function open(): Promise<void> {
 
   const cachedState = props.dataset.lastQueryState ?? getCachedQueryState(props.dataset.id)
   if (cachedState) {
-    cachedState.filters.forEach((saved, index) => {
-      const row = queryFilterRows.value[index]
-      if (!row || row.filterComponentId !== saved.filterComponentId || row.field !== saved.field || row.parameterName !== saved.parameterName || row.timeBoundary !== saved.timeBoundary) return
+    const restoredRows = new Set<number>()
+    cachedState.filters.forEach((saved) => {
+      // Bindings can be reordered or have their parameter name regenerated when the
+      // dashboard is reopened. Match by the stable filter + field + time-boundary
+      // identity instead of relying on array position or the editable parameter name.
+      const rowIndex = queryFilterRows.value.findIndex((candidate, index) =>
+        !restoredRows.has(index) &&
+        candidate.filterComponentId === saved.filterComponentId &&
+        candidate.field === saved.field &&
+        candidate.timeBoundary === saved.timeBoundary,
+      )
+      if (rowIndex < 0) return
+      restoredRows.add(rowIndex)
+      const row = queryFilterRows.value[rowIndex]
       row.value = Array.isArray(saved.value) ? [...saved.value] : saved.value
       row.enabled = saved.enabled
     })
