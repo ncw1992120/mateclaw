@@ -126,7 +126,7 @@ function scheduleEmit(): void {
 
 // 仅监听数据字段（datasets / 筛选器绑定 / Python / 卡片元信息 / KPI 指标分组），避开 state.ui 弹窗开关引发的噪声
 watch(
-  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards, state.kpiMetrics],
+  () => [state.datasets, state.filterBindings, state.pythonUser, state.cards, state.kpiMetrics, state.finalResultQueryConfig],
   () => scheduleEmit(),
   { deep: true },
 )

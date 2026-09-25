@@ -71,6 +71,7 @@
           {{ t('insight.aiAssistant') }}
         </el-button>
         <el-button class="toolbar-btn" aria-label="主题外观" @click="showThemePanel = true">主题外观</el-button>
+        <span v-if="dashboard" :class="['editor-save-status', `is-${schemaSaveState}`]" role="status" aria-live="polite">{{ schemaSaveStatusText }}</span>
         <el-button class="toolbar-btn" @click="handleSave" :loading="saving">
           <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
           {{ t('insight.save') }}
@@ -433,10 +434,54 @@ function onSaveQueryConfig(config: DatasetQueryConfig): void {
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
+const schemaSaveState = ref<'saved' | 'pending' | 'saving' | 'error'>('saved')
 const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
+
+const schemaSaveStatusText = computed(() => ({
+  saved: '已保存',
+  pending: '等待保存…',
+  saving: '正在保存…',
+  error: '自动保存失败，请点击保存重试',
+})[schemaSaveState.value])
+
+let schemaAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
+let schemaSaveQueue: Promise<void> = Promise.resolve()
+let schemaChangeVersion = 0
+
+/** 顺序写入仪表盘，避免自动保存与手动保存并发覆盖。 */
+function enqueueDashboardUpdate(data: Parameters<typeof store.updateDashboard>[1]): Promise<void> {
+  const dashboardId = dashboard.value?.id
+  if (!dashboardId) return Promise.resolve()
+  const pending = schemaSaveQueue.catch(() => undefined).then(() => store.updateDashboard(dashboardId, data))
+  schemaSaveQueue = pending
+  return pending
+}
+
+/** 属性面板确认的配置自动写入现有仪表盘 Schema；短暂防抖合并连续编辑。 */
+function scheduleSchemaAutoSave(): void {
+  if (!dashboard.value) return
+  schemaChangeVersion += 1
+  schemaSaveState.value = 'pending'
+  if (schemaAutoSaveTimer) clearTimeout(schemaAutoSaveTimer)
+  schemaAutoSaveTimer = setTimeout(() => {
+    schemaAutoSaveTimer = null
+    void persistSchemaChanges(schemaChangeVersion)
+  }, 600)
+}
+
+async function persistSchemaChanges(version: number): Promise<void> {
+  if (!dashboard.value) return
+  schemaSaveState.value = 'saving'
+  try {
+    await enqueueDashboardUpdate({ schemaJson: JSON.stringify(schema) })
+    if (version === schemaChangeVersion) schemaSaveState.value = 'saved'
+  } catch {
+    if (version === schemaChangeVersion) schemaSaveState.value = 'error'
+  }
+}
 
 type ComponentContextMenu = { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }
 const componentContextMenu = ref<ComponentContextMenu | null>(null)
@@ -705,6 +750,11 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleEditorClipboardKeydown)
+  if (schemaAutoSaveTimer) {
+    clearTimeout(schemaAutoSaveTimer)
+    schemaAutoSaveTimer = null
+    void persistSchemaChanges(schemaChangeVersion)
+  }
 })
 
 /** 监听 dashboardId 变化时重新加载 */
@@ -1254,6 +1304,7 @@ function handleComponentChange(updated: InsightComponent): void {
         child.children = child.children ?? updated.children ?? []
         child.containerConfig = mergeCombinationConfig(child, updated)
       }
+      scheduleSchemaAutoSave()
     }
     return
   }
@@ -1279,6 +1330,7 @@ function handleComponentChange(updated: InsightComponent): void {
           }
         : {}),
     }
+    scheduleSchemaAutoSave()
   }
   // 数据源变更时触发自动预览
   schedulePreview()
@@ -1403,16 +1455,24 @@ async function handleSave(): Promise<void> {
   if (!dashboard.value) {
     return
   }
+  if (schemaAutoSaveTimer) {
+    clearTimeout(schemaAutoSaveTimer)
+    schemaAutoSaveTimer = null
+  }
+  const version = ++schemaChangeVersion
   saving.value = true
+  schemaSaveState.value = 'saving'
   try {
-    await store.updateDashboard(dashboard.value.id, {
+    await enqueueDashboardUpdate({
       name: dashboardName.value,
       description: dashboardDescription.value,
       ownerName: dashboardOwnerName.value,
       schemaJson: JSON.stringify(schema),
     })
+    if (version === schemaChangeVersion) schemaSaveState.value = 'saved'
     ElMessage.success(t('insight.saveSuccess'))
   } catch {
+    if (version === schemaChangeVersion) schemaSaveState.value = 'error'
     ElMessage.error(t('insight.saveFailed'))
   } finally {
     saving.value = false
@@ -1422,7 +1482,7 @@ async function handleSave(): Promise<void> {
 /** 名称变更时自动保存 */
 function handleNameChange(): void {
   if (dashboard.value && dashboardName.value.trim()) {
-    store.updateDashboard(dashboard.value.id, { name: dashboardName.value.trim() }).catch(() => {
+    enqueueDashboardUpdate({ name: dashboardName.value.trim() }).catch(() => {
       // 静默失败
     })
   }
@@ -1431,7 +1491,7 @@ function handleNameChange(): void {
 /** 描述变更时自动保存 */
 function handleDescriptionChange(): void {
   if (dashboard.value) {
-    store.updateDashboard(dashboard.value.id, { description: dashboardDescription.value }).catch(() => {
+    enqueueDashboardUpdate({ description: dashboardDescription.value }).catch(() => {
       // 静默失败
     })
   }
@@ -1440,7 +1500,7 @@ function handleDescriptionChange(): void {
 /** 负责人变更时自动保存 */
 function handleOwnerNameChange(): void {
   if (dashboard.value) {
-    store.updateDashboard(dashboard.value.id, { ownerName: dashboardOwnerName.value }).catch(() => {
+    enqueueDashboardUpdate({ ownerName: dashboardOwnerName.value }).catch(() => {
       // 静默失败
     })
   }
@@ -1931,6 +1991,20 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
 .toolbar-right {
   gap: 8px;
+}
+
+.editor-save-status {
+  color: var(--db-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.editor-save-status.is-saved {
+  color: var(--el-color-success);
+}
+
+.editor-save-status.is-error {
+  color: var(--el-color-danger);
 }
 
 .toolbar-right :deep(.el-button.toolbar-btn) {
