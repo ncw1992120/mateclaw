@@ -6,7 +6,7 @@
  */
 
 import type { ChartType, InsightComponentType } from '@/types'
-import { resolveOutputSpec, validateComponentOutput, type OutputValidationContext } from './component-output-spec'
+import { resolveOutputSpec } from './component-output-spec'
 
 export type ScriptDataType = 'string' | 'number' | 'boolean' | 'date' | 'datetime'
 
@@ -283,22 +283,6 @@ export function resultEnvelopeToComponentData(
   if (!spec) {
     // 非脚本渲染组件（filter / aiAnalysis / combination 等）：无规范可套，原样空态
     return { state: 'empty', rows: [], columns: [] }
-  }
-
-  // 执行后按组件规范 fail-fast：形状不匹配直接给精确报错，避免渲染错 / 静默空态
-  const ctx: OutputValidationContext = {
-    valueField: component.config?.valueField,
-    metricFields: component.config?.metricFields,
-    dimensionField: component.config?.dimensionField,
-  }
-  const violation = validateComponentOutput(spec, envelope, ctx)
-  if (violation) {
-    return {
-      state: 'error',
-      message: formatScriptResultError(violation),
-      rows: [],
-      columns: envelope.kind === 'table' ? (envelope.data.columns as ScriptResultColumn[]) : [],
-    }
   }
 
   if (envelope.kind === 'scalar') {
