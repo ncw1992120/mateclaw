@@ -161,6 +161,8 @@ const props = defineProps<{
   /** 页面筛选器组件（含技术字段名）：用于字段匹配；运算符仍由筛选器类型固定 */
   filterOptions: Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>
   initialConfig: DatasetQueryConfig | null
+  /** 当前组件类型；仅 KPI 指标卡限制展示字段角色。 */
+  componentType?: 'kpi' | 'chart' | 'table'
   /** 旧 scriptFilterBindings 归一化的展示草稿：仅在无已保存配置时预填 */
   legacyBindings?: QueryParameterBinding[]
 }>()
@@ -354,6 +356,20 @@ function save(): void {
   if (!fieldRows.value.length) {
     ElMessage.warning('至少保留一个维度或指标字段')
     return
+  }
+  if (props.componentType === 'kpi') {
+    const dimensions = fieldRows.value.filter((row) => {
+      const metadata = props.fields.find((field) => field.name === row.field)
+      // Aloudata 等 descriptor 明确声明的维度以服务端角色为准；未提供角色的数据源
+      // 保留用户在配置弹窗中手动标记的分类。
+      const sourceRole = (metadata?.role ?? '').trim().toLowerCase()
+      return sourceRole === 'dimension' || (!sourceRole && row.role === 'dimension')
+    })
+    if (dimensions.length) {
+      const labels = dimensions.map((row) => row.title.trim() || row.field).join('、')
+      ElMessage.warning(`KPI 指标卡的展示字段不能包含维度：${labels}。请移除维度，仅保留一个或多个指标后再保存。`)
+      return
+    }
   }
   if (duplicateTitles.value.size) {
     ElMessage.warning('展示名必须唯一')

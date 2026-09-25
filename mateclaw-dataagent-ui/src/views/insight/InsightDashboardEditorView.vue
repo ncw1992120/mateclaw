@@ -282,6 +282,7 @@
       <QueryConfigDialog
         v-model="insightState.ui.queryConfigDialog.visible"
         :fields="queryConfigDataset?.fields ?? []"
+        :component-type="queryConfigComponentType"
         :filter-options="filterOptions"
         :initial-config="queryConfigDataset?.queryConfig ?? null"
         :legacy-bindings="queryConfigLegacyBindings"
@@ -402,6 +403,10 @@ const { saveQueryConfig, getLoadedDashboardSchema } = useInsight()
 const queryConfigDataset = computed(
   () => insightState.datasets.find((item) => item.id === insightState.ui.queryConfigDialog.datasetId) ?? null,
 )
+const queryConfigComponentType = computed(() => {
+  const active = insightState.cards.find((card) => card.id === insightState.activeCardId)
+  return active?.type === 'kpi' ? 'kpi' : active?.type === 'table' ? 'table' : 'chart'
+})
 const filterOptions = computed(() =>
   insightState.filterCatalog.map((filter) => ({
     id: filter.id,
