@@ -281,14 +281,6 @@ export function validateComponentOutput(
           suggestion: `KPI 的 valueField=${ctx.valueField} 在结果中不存在`,
         }
       }
-    } else if (columns.length === 0) {
-      return {
-        status: 'OUTPUT_CONTRACT_ERROR',
-        path: 'result.data.columns',
-        expected: '至少 1 列',
-        actual: '0 列',
-        suggestion: 'KPI 组件需要至少 1 列作为指标值',
-      }
     }
     return null
   }
