@@ -9,7 +9,14 @@
         style="margin-bottom: 12px"
       />
       <template v-else>
-        <div class="selection-fields">
+        <section class="analysis-builder" aria-label="分析配置">
+          <header class="config-title">
+            <div>
+              <span class="config-eyebrow">ANALYSIS BUILDER</span>
+              <h2>分析配置</h2>
+            </div>
+            <span class="config-step">字段配置 <b>01</b></span>
+          </header>
           <el-alert
             v-if="selectionConflict"
             class="selection-conflict"
@@ -24,8 +31,83 @@
             :closable="false"
             :title="selectedMetricRelationsLoading ? '正在校验已选指标的可用维度…' : '无法校验已选指标的可用维度，请重试或移除该指标'"
           />
-          <div class="selection-row">
-            <span class="selection-label">指标</span>
+          <section class="field-config-block" data-testid="config-dimension">
+            <div class="field-config-heading">
+              <div><strong>维度</strong><span>用于拆解和分组查看指标</span></div>
+              <el-popover
+                v-model:visible="dimensionPickerVisible"
+                trigger="click"
+                placement="bottom-start"
+                :width="350"
+                popper-class="aloudata-picker-popper"
+                @show="onDimensionPickerShow"
+              >
+                <template #reference>
+                  <button class="config-add-button dimension-selection-box" data-testid="open-dimension-picker" type="button" aria-haspopup="dialog">
+                    <Plus aria-hidden="true" />添加维度
+                  </button>
+                </template>
+                <div class="picker-panel dimension-picker-popup" @click.stop>
+                  <div class="picker-heading">
+                    <strong>选择维度</strong>
+                    <button class="picker-close" type="button" aria-label="关闭选择维度" @click="dimensionPickerVisible = false"><Close aria-hidden="true" /></button>
+                  </div>
+                  <div class="picker-toolbar">
+                    <el-input
+                      v-model="dimensionKeyword"
+                      placeholder="搜索"
+                      clearable
+                      @input="onDimensionKeywordInput"
+                    ><template #prefix><svg class="picker-search-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></el-input>
+                    <span>{{ dimensionPage.total }} 个维度</span>
+                  </div>
+                  <div class="picker-visibility"><span class="visibility-info">ⓘ</span><span>自动隐藏不可分析内容</span><button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" aria-label="自动隐藏不可分析内容" @click="hideUnavailable = !hideUnavailable"><i :class="{ 'is-on': hideUnavailable }" /></button></div>
+                  <div class="directory-layout" v-loading="dimensionsLoading">
+                    <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :auto-expand="Boolean(dimensionKeyword.trim())" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
+                      <template #field="{ field }">
+                        <AloudataPickerField
+                          :kind="'dimension'"
+                          :field="field.source as AloudataSyncedDimension"
+                          :selected="ui.aloudata.dims.includes(field.code)"
+                          :unavailable-reason="dimensionUnavailableReason(field.code)"
+                          :details="dimensionDetails[field.code]"
+                          :loading="dimensionDetailLoading[field.code]"
+                          @toggle="(checked) => toggleSelection('dimensions', field.code, checked)"
+                          @hover="loadDimensionDetail(field.code)"
+                        />
+                      </template>
+                    </AloudataFieldDirectory>
+                    <div v-if="!dimensionsLoading && !dimensionPickerTree.length" class="directory-empty">
+                      {{ hideUnavailable && dimensionPage.records.length ? '已隐藏不可分析的维度' : '没有匹配的维度' }}
+                    </div>
+                    <el-pagination
+                      v-if="dimensionKeyword && dimensionPage.total > pageSize"
+                      class="pager"
+                      layout="prev, pager, next, total"
+                      :total="dimensionPage.total"
+                      :page-size="pageSize"
+                      :current-page="dimensionPage.current"
+                      @current-change="onDimensionPageChange"
+                      small
+                    />
+                  </div>
+                </div>
+              </el-popover>
+            </div>
+            <div class="configured-fields" :class="{ 'has-fields': ui.aloudata.dims.length }" data-testid="configured-dimensions">
+              <template v-if="ui.aloudata.dims.length">
+                <span v-for="name in ui.aloudata.dims" :key="name" class="selected-chip" :data-selected-code="name">
+                  <span class="chip-type">abc</span><span class="chip-label">{{ dimLabel(name) }}</span><code>{{ name }}</code>
+                  <button type="button" :aria-label="`移除维度 ${dimLabel(name)}`" :title="`移除维度 ${dimLabel(name)}`" @click="removeSelection('dimensions', name)"><Close aria-hidden="true" /></button>
+                </span>
+              </template>
+              <span v-else class="config-empty">尚未添加维度，从目录中选择后会显示在这里</span>
+            </div>
+          </section>
+
+          <section class="field-config-block" data-testid="config-metric">
+            <div class="field-config-heading">
+              <div><strong>指标</strong><span>选择需要分析的业务指标</span></div>
             <el-popover
               v-model:visible="metricPickerVisible"
               trigger="click"
@@ -35,21 +117,14 @@
               @show="onMetricPickerShow"
             >
               <template #reference>
-                <div class="selection-box metric-selection-box" role="button" tabindex="0" aria-haspopup="dialog">
-                  <el-tag
-                    v-for="name in ui.aloudata.metrics"
-                    :key="name"
-                    closable
-                    size="small"
-                    @close.stop="removeSelection('metrics', name)"
-                  >{{ metricLabel(name) }}</el-tag>
-                  <span v-if="!ui.aloudata.metrics.length" class="selection-placeholder">点击选择指标</span>
-                </div>
+                <button class="config-add-button metric-selection-box" data-testid="open-metric-picker" type="button" aria-haspopup="dialog">
+                  <Plus aria-hidden="true" />添加指标
+                </button>
               </template>
               <div class="picker-panel metric-picker-popup" @click.stop>
                 <div class="picker-heading">
                   <strong>选择指标</strong>
-                  <button class="picker-close" type="button" aria-label="关闭选择指标" @click="metricPickerVisible = false">×</button>
+                  <button class="picker-close" type="button" aria-label="关闭选择指标" @click="metricPickerVisible = false"><Close aria-hidden="true" /></button>
                 </div>
                 <div class="picker-toolbar">
                   <el-input
@@ -92,79 +167,20 @@
                 </div>
               </div>
             </el-popover>
-          </div>
-
-          <div class="selection-row">
-            <span class="selection-label">维度</span>
-            <el-popover
-              v-model:visible="dimensionPickerVisible"
-              trigger="click"
-              placement="bottom-start"
-              :width="350"
-              popper-class="aloudata-picker-popper"
-              @show="onDimensionPickerShow"
-            >
-              <template #reference>
-                <div class="selection-box dimension-selection-box" role="button" tabindex="0" aria-haspopup="dialog">
-                  <el-tag
-                    v-for="name in ui.aloudata.dims"
-                    :key="name"
-                    closable
-                    size="small"
-                    type="info"
-                    @close.stop="removeSelection('dimensions', name)"
-                  >{{ dimLabel(name) }}</el-tag>
-                  <span v-if="!ui.aloudata.dims.length" class="selection-placeholder">点击选择维度</span>
-                </div>
+            </div>
+            <div class="configured-fields" :class="{ 'has-fields': ui.aloudata.metrics.length }" data-testid="configured-metrics">
+              <template v-if="ui.aloudata.metrics.length">
+                <span v-for="name in ui.aloudata.metrics" :key="name" class="selected-chip" :data-selected-code="name">
+                  <span class="chip-type">123</span><span class="chip-label">{{ metricLabel(name) }}</span><code>{{ name }}</code>
+                  <button type="button" :aria-label="`移除指标 ${metricLabel(name)}`" :title="`移除指标 ${metricLabel(name)}`" @click="removeSelection('metrics', name)"><Close aria-hidden="true" /></button>
+                </span>
               </template>
-              <div class="picker-panel dimension-picker-popup" @click.stop>
-                <div class="picker-heading">
-                  <strong>选择维度</strong>
-                  <button class="picker-close" type="button" aria-label="关闭选择维度" @click="dimensionPickerVisible = false">×</button>
-                </div>
-                <div class="picker-toolbar">
-                  <el-input
-                    v-model="dimensionKeyword"
-                    placeholder="搜索"
-                    clearable
-                    @input="onDimensionKeywordInput"
-                  ><template #prefix><svg class="picker-search-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></el-input>
-                  <span>{{ dimensionPage.total }} 个维度</span>
-                </div>
-                <div class="picker-visibility"><span class="visibility-info">ⓘ</span><span>自动隐藏不可分析内容</span><button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" aria-label="自动隐藏不可分析内容" @click="hideUnavailable = !hideUnavailable"><i :class="{ 'is-on': hideUnavailable }" /></button></div>
-                <div class="directory-layout" v-loading="dimensionsLoading">
-                  <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :auto-expand="Boolean(dimensionKeyword.trim())" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
-                    <template #field="{ field }">
-                      <AloudataPickerField
-                        :kind="'dimension'"
-                        :field="field.source as AloudataSyncedDimension"
-                        :selected="ui.aloudata.dims.includes(field.code)"
-                        :unavailable-reason="dimensionUnavailableReason(field.code)"
-                        :details="dimensionDetails[field.code]"
-                        :loading="dimensionDetailLoading[field.code]"
-                        @toggle="(checked) => toggleSelection('dimensions', field.code, checked)"
-                        @hover="loadDimensionDetail(field.code)"
-                      />
-                    </template>
-                  </AloudataFieldDirectory>
-                  <div v-if="!dimensionsLoading && !dimensionPickerTree.length" class="directory-empty">
-                    {{ hideUnavailable && dimensionPage.records.length ? '已隐藏不可分析的维度' : '没有匹配的维度' }}
-                  </div>
-                  <el-pagination
-                    v-if="dimensionKeyword && dimensionPage.total > pageSize"
-                    class="pager"
-                    layout="prev, pager, next, total"
-                    :total="dimensionPage.total"
-                    :page-size="pageSize"
-                    :current-page="dimensionPage.current"
-                    @current-change="onDimensionPageChange"
-                    small
-                  />
-                </div>
-              </div>
-            </el-popover>
-          </div>
-        </div>
+              <span v-else class="config-empty">尚未添加指标，从目录中选择后会显示在这里</span>
+            </div>
+          </section>
+
+          <div class="config-footnote"><InfoFilled aria-hidden="true" />指标与维度可以分别添加；移除字段后，目录选择状态会同步更新</div>
+        </section>
       </template>
     </template>
 
@@ -207,6 +223,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
+import { Close, InfoFilled, Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useInsight } from '../useInsight'
 import * as datasourceApi from '@/api/datasource'
@@ -417,10 +434,10 @@ async function loadDimensionCategories() {
 }
 
 function metricLabel(name: string) {
-  return metricLabelMap[name] || name
+  return metricLabelMap[name] || metricDetails[name]?.metricDisplayName || name
 }
 function dimLabel(name: string) {
-  return dimLabelMap[name] || name
+  return dimLabelMap[name] || dimensionDetails[name]?.dimDisplayName || name
 }
 function removeSelection(type: 'metrics' | 'dimensions', name: string) {
   if (type === 'metrics') ui.aloudata.metrics = ui.aloudata.metrics.filter((item) => item !== name)
@@ -712,42 +729,122 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.selection-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.analysis-builder {
+  min-height: 390px;
+  padding: 22px 24px 18px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
 }
-.selection-row {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-}
-.selection-label {
-  padding-top: 9px;
-  color: var(--el-text-color-regular);
-  font-size: 13px;
-}
-.selection-box {
+.config-title {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  min-height: 40px;
-  padding: 5px 8px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: border-color 0.15s;
+  justify-content: space-between;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
-.selection-box:hover,
-.selection-box:focus-visible {
-  border-color: var(--el-color-primary);
-  outline: none;
-}
-.selection-placeholder {
+.config-eyebrow {
   color: var(--el-text-color-placeholder);
-  font-size: 13px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .13em;
+}
+.config-title h2 {
+  margin: 5px 0 0;
+  color: var(--el-text-color-primary);
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: -.02em;
+}
+.config-step {
+  padding: 6px 9px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 5px;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
+}
+.config-step b { margin-left: 7px; color: var(--el-color-primary); font-weight: 600; }
+.field-config-block { margin-top: 20px; }
+.field-config-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.field-config-heading > div { display: flex; align-items: baseline; gap: 10px; }
+.field-config-heading strong { color: var(--el-text-color-primary); font-size: 14px; font-weight: 600; }
+.field-config-heading > div span { color: var(--el-text-color-placeholder); font-size: 11px; }
+.config-add-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--el-color-primary-light-7);
+  border-radius: 5px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.config-add-button:hover { border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-8); }
+.config-add-button > svg { width: 14px; height: 14px; }
+.config-footnote > svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.configured-fields {
+  min-height: 72px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 7px;
+  background: var(--el-fill-color-lighter);
+}
+.configured-fields.has-fields { border-style: solid; border-color: var(--el-border-color-lighter); background: var(--el-bg-color); }
+.config-empty { align-self: center; padding: 14px 2px; color: var(--el-text-color-placeholder); font-size: 12px; }
+.selected-chip {
+  max-width: 100%;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 9px;
+  border: 1px solid var(--el-color-primary-light-7);
+  border-radius: 5px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-text-color-regular);
+}
+.selected-chip .chip-type { color: var(--el-color-primary); font-size: 10px; font-weight: 600; }
+.selected-chip .chip-label { max-width: 150px; overflow: hidden; color: var(--el-text-color-regular); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.selected-chip code { max-width: 128px; overflow: hidden; color: var(--el-text-color-placeholder); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.selected-chip button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--el-text-color-placeholder);
+  font-size: 16px;
+  cursor: pointer;
+}
+.selected-chip button:hover { background: var(--el-color-primary-light-8); color: var(--el-color-primary); }
+.selected-chip button svg { width: 12px; height: 12px; }
+.config-footnote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
 }
 .picker-panel {
   min-width: 0;
@@ -772,6 +869,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .picker-close:hover { color: var(--el-text-color-primary); }
+.picker-close svg { width: 15px; height: 15px; }
 .picker-visibility {
   display: flex;
   align-items: center;
@@ -859,9 +957,11 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 @media (max-width: 700px) {
-  .selection-row {
-    grid-template-columns: 42px minmax(0, 1fr);
-  }
+  .analysis-builder { min-height: 0; padding: 18px 16px; }
+  .field-config-heading > div { display: block; }
+  .field-config-heading > div span { display: block; margin-top: 3px; }
+  .selected-chip code { display: none; }
+  .config-footnote { align-items: flex-start; }
   .picker-toolbar {
     align-items: stretch;
     flex-direction: column;
