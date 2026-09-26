@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  collectSparseRowColumns,
   extractResultSchema,
   formatScriptResultError,
   fingerprintResultSchema,
@@ -62,6 +63,32 @@ describe('tableEnvelopeFromRows', () => {
       ['region', 'string'], ['amount', 'number'], ['active', 'boolean'],
     ])
     expect(envelope.meta.rowCount).toBe(1)
+  })
+
+  it('合并稀疏行的 key，不因首行缺列截断列（KPI 指标丢列回归）', () => {
+    const envelope = tableEnvelopeFromRows([
+      { name: '华东' },
+      { name: '华北', amount: 3 },
+      { name: '华南', amount: 5 },
+    ])
+    expect(envelope.data.columns.map(({ name }) => name)).toEqual(['name', 'amount'])
+    // amount 的类型样本取该列首个非空值，而不是首行的 null
+    expect(envelope.data.columns[1].dataType).toBe('number')
+  })
+})
+
+describe('collectSparseRowColumns', () => {
+  it('按首次出现顺序合并全部行的 key，样本取首个非空值', () => {
+    const collected = collectSparseRowColumns([
+      { a: null, b: 'x' },
+      { a: 1, b: 'y', c: true },
+    ])
+    expect(collected.map(({ name }) => name)).toEqual(['a', 'b', 'c'])
+    expect(collected.map(({ sample }) => sample)).toEqual([1, 'x', true])
+  })
+
+  it('空行集返回空列', () => {
+    expect(collectSparseRowColumns([])).toEqual([])
   })
 })
 
