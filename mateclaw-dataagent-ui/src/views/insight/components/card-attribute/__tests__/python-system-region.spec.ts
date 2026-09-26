@@ -209,7 +209,8 @@ const elDialogStub = {
 }
 const pythonQueryConfigDialogStub = {
   props: ['modelValue'],
-  template: '<div v-if="modelValue" data-testid="query-config-editor" />',
+  emits: ['update:modelValue'],
+  template: '<div v-if="modelValue" data-testid="query-config-editor"><button data-testid="query-config-close" @click="$emit(\'update:modelValue\', false)">关闭</button></div>',
 }
 
 async function mountDialog() {
@@ -228,6 +229,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     vi.mocked(ElMessageBox.confirm).mockClear()
     warningSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
     state.ui.python.visible = false
+    state.ui.python.queryConfigOnly = false
     state.ui.preview.visible = false
     state.finalResultQueryConfig = undefined
     state.datasets = [{ id: 'ds1', alias: 'dataset_a' }] as never
@@ -284,6 +286,24 @@ describe('PythonScriptDialog 系统区接管交互', () => {
 
     expect(warningSpy).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="query-config-editor"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('从属性配置直接打开查询配置时不显示脚本编辑弹窗，关闭配置后结束流程', async () => {
+    const wrapper = mount(PythonScriptDialog, {
+      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
+    })
+
+    useInsight().openPythonQueryConfig()
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('.python-script-dialog').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="query-config-editor"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="query-config-close"]').trigger('click')
+    await nextTick()
+    expect(state.ui.python.visible).toBe(false)
+    expect(state.ui.python.queryConfigOnly).toBe(false)
     wrapper.unmount()
   })
 
@@ -419,5 +439,20 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     hydratePanel(compA as never)
     expect(state.pythonSystemState?.mode).toBe('managed')
     expect(state.pythonSystem).toBe('managed-a')
+  })
+})
+
+describe('属性配置中的 Python 查看数据入口', () => {
+  it('保存共享 Python 草稿并直接打开最终结果预览', () => {
+    state.ui.python.visible = true
+    state.pythonSystem = 'generated code'
+    state.pythonUser = 'result = 42'
+    state.hasPython = true
+
+    useInsight().openPythonResultPreview()
+
+    expect(state.ui.python.visible).toBe(false)
+    expect(state.ui.preview).toMatchObject({ visible: true, kind: 'result' })
+    expect(state.pythonSystemState?.userCode).toBe('result = 42')
   })
 })

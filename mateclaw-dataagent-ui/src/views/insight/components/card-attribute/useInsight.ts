@@ -157,7 +157,7 @@ interface UiState {
     rows: Record<string, string>[]
   }
   fieldMapping: { visible: boolean; datasetId: string }
-  python: { visible: boolean }
+  python: { visible: boolean; queryConfigOnly: boolean }
   preview: {
     visible: boolean
     kind: 'dataset' | 'result' | 'component'
@@ -355,7 +355,7 @@ const state = reactive({
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
     file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', fileRef: undefined, columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
-    python: { visible: false },
+    python: { visible: false, queryConfigOnly: false },
     preview: {
       visible: false,
       kind: 'dataset' as 'dataset' | 'result' | 'component',
@@ -1046,7 +1046,7 @@ function saveFieldMetas(list: DatasetFieldMeta[]): string | null {
 }
 
 /* ---- Python 预处理 ---- */
-function openPython() {
+function preparePython() {
   // generated 模式可自动刷新；managed 模式只更新候选版本，不覆盖用户接管代码。
   const source = currentPythonSource()
   if (!state.pythonSystemState) {
@@ -1060,6 +1060,15 @@ function openPython() {
     state.pythonUser = ''
     state.hasPython = true
   }
+}
+function openPython() {
+  preparePython()
+  state.ui.python.queryConfigOnly = false
+  state.ui.python.visible = true
+}
+function openPythonQueryConfig() {
+  preparePython()
+  state.ui.python.queryConfigOnly = true
   state.ui.python.visible = true
 }
 function savePython(system: string, user: string) {
@@ -1074,6 +1083,7 @@ function savePython(system: string, user: string) {
   }
   state.pythonSystemState = { ...current, userCode: user }
   state.hasPython = true
+  state.ui.python.queryConfigOnly = false
   state.ui.python.visible = false
 }
 function removePython() {
@@ -1082,11 +1092,17 @@ function removePython() {
   state.pythonSystem = ''
   state.hasPython = false
   state.pythonSystemState = null
+  state.ui.python.queryConfigOnly = false
 }
 
 /* ---- 预览 ---- */
 function openPreview(kind: 'dataset' | 'result' | 'component', datasetId: string | null = null, tab = 'data') {
   state.ui.preview = { visible: true, kind, datasetId, tab }
+}
+function openPythonResultPreview(): void {
+  const system = state.pythonSystemState ? effectiveSystemCode(state.pythonSystemState) : state.pythonSystem
+  savePython(system, state.pythonUser)
+  openPreview('result')
 }
 function closePreview() {
   state.ui.preview.visible = false
@@ -2110,6 +2126,8 @@ export function useInsight() {
     refreshDatasetSchema,
     // python
     openPython,
+    openPythonQueryConfig,
+    openPythonResultPreview,
     savePython,
     removePython,
     buildPythonSystemRegion,
