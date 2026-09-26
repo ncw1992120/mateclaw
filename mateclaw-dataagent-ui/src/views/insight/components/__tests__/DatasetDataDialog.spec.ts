@@ -232,10 +232,39 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     await flushPromises()
 
     const columns = wrapper.findAll('.stub-table-column')
-    expect(columns.find((column) => column.attributes('data-prop') === 'trade_date')?.attributes('data-label')).toBe('交易日期')
-    expect(columns.find((column) => column.attributes('data-prop') === 'amount')?.attributes('data-label')).toBe('金额')
-    expect(columns.find((column) => column.attributes('data-prop') === 'amount')?.attributes('data-sortable')).toBe('custom')
-    expect(columns.find((column) => column.attributes('data-prop') === 'trade_date')?.attributes('data-sortable')).not.toBe('true')
+    expect(columns.map((column) => column.attributes('data-prop'))).toEqual(['cust_type', 'amount'])
+    expect(columns[0].attributes('data-label')).toBe('客户类型')
+    expect(columns[1].attributes('data-label')).toBe('金额')
+    expect(columns[1].attributes('data-sortable')).toBe('custom')
+    wrapper.unmount()
+  })
+
+  it('时间维度只参与筛选，不参与展示分组；结果仅保留配置字段并映射中文名', async () => {
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [{ trade_date: '2026-09-01', cust_type: '个人', amount: 18, extra: '不要展示' }],
+      schema: ['trade_date', 'cust_type', 'amount', 'extra'],
+      rowCount: 1,
+      last: true,
+    })
+    const wrapper = await openWith(metricViewDataset())
+    const filterRows = wrapper.findAll('[data-testid="query-filter-row"]')
+    await filterRows[0].find('input.dd-value').setValue('2026-09-01')
+    await filterRows[1].find('input.dd-value').setValue('2026-09-02')
+    await wrapper.find('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    const request = previewDatasetDraft.mock.calls.at(-1)?.[0] as {
+      columns?: string[]
+      filters?: Array<{ field: string; operator: string; value: unknown }>
+    }
+    expect(request.columns).toEqual(['cust_type', 'amount'])
+    expect(request.filters).toEqual([
+      { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
+      { field: 'trade_date', role: 'dimension', operator: 'lt', value: '2026-09-02' },
+    ])
+    const columns = wrapper.findAll('.stub-table-column')
+    expect(columns.map((column) => column.attributes('data-prop'))).toEqual(['cust_type', 'amount'])
+    expect(columns.map((column) => column.attributes('data-label'))).toEqual(['客户类型', '金额'])
     wrapper.unmount()
   })
 

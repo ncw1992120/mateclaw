@@ -64,7 +64,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         Map<String, Object> params;
         PushdownReport report;
         String endpoint;
-        if (request.filters().isEmpty() && request.orders().isEmpty()) {
+        AloudataAnalysisViewDetail view = null;
+        boolean queryHasProjection = !request.columns().isEmpty();
+        if (request.filters().isEmpty() && request.orders().isEmpty() && !queryHasProjection) {
             endpoint = "analysis_view_query_data";
             params = new LinkedHashMap<>();
             params.put("viewName", viewName);
@@ -82,7 +84,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                     request.requestTotalCount(), null);
         } else {
             endpoint = "metrics_query";
-            AloudataAnalysisViewDetail view = viewDetail(dataset.getDatasourceId(), viewName);
+            view = viewDetail(dataset.getDatasourceId(), viewName);
             params = new LinkedHashMap<>(queryCompiler.compile(view, request));
             report = new PushdownReport(request.filters(), List.of(), request.orders(), true, true,
                     request.requestTotalCount(), null);
@@ -100,6 +102,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                         Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
             }
             List<Map<String, Object>> rows = rows(body);
+            if (queryHasProjection) {
+                rows = projectRows(rows, queryCompiler.resolveColumns(view, request.columns()));
+            }
             Long total = totalCount(body);
             int offset = request.offset() == null ? 0 : request.offset();
             boolean hasNext = total == null ? rows.size() >= limit : offset + rows.size() < total;
@@ -113,6 +118,14 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         }
     }
 
+    private List<Map<String, Object>> projectRows(List<Map<String, Object>> rows, List<String> columns) {
+        return rows.stream().map(row -> {
+            Map<String, Object> projected = new LinkedHashMap<>();
+            columns.forEach(column -> projected.put(column, row.get(column)));
+            return projected;
+        }).toList();
+    }
+
     /** 草稿视图预览：沿用正式读取的 Aloudata 查询端点，但不依赖已落库 DatasetEntity。 */
     public DatasetBatch previewDraft(DatasetAccessContext context, Long datasourceId, String viewName, DatasetReadRequest request) {
         if (context == null || datasourceId == null || viewName == null || viewName.isBlank())
@@ -123,7 +136,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         Map<String, Object> params = new LinkedHashMap<>();
         String endpoint;
         PushdownReport report;
-        if (request.filters().isEmpty() && request.orders().isEmpty()) {
+        AloudataAnalysisViewDetail view = null;
+        boolean queryHasProjection = !request.columns().isEmpty();
+        if (request.filters().isEmpty() && request.orders().isEmpty() && !queryHasProjection) {
             endpoint = "analysis_view_query_data";
             params.put("viewName", viewName); params.put("pageSize", limit);
             // DatasetReadRequest.offset 是行偏移，而结果查询端点要的是零基页号 ——
@@ -137,7 +152,7 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             report = new PushdownReport(List.of(), List.of(), true, true, null);
         } else {
             endpoint = "metrics_query";
-            AloudataAnalysisViewDetail view = viewDetail(datasourceId, viewName);
+            view = viewDetail(datasourceId, viewName);
             params.putAll(queryCompiler.compile(view, request));
             report = new PushdownReport(request.filters(), List.of(), request.orders(), true, true,
                     request.requestTotalCount(), null);
@@ -150,6 +165,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             if (Boolean.FALSE.equals(body.get("success"))) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
                     Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
             List<Map<String,Object>> rows = rows(body);
+            if (queryHasProjection) {
+                rows = projectRows(rows, queryCompiler.resolveColumns(view, request.columns()));
+            }
             Long total = totalCount(body);
             int offset = request.offset() == null ? 0 : request.offset();
             boolean hasNext = total == null ? rows.size() >= limit : offset + rows.size() < total;

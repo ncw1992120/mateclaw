@@ -65,6 +65,36 @@ class AloudataAnalysisViewQueryCompilerTest {
     }
 
     @Test
+    void projectsDisplayedFieldsAndKeepsFilteredTimeOutOfGrouping() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue"), Map.of("name", "cost")),
+                List.of(Map.of("name", "metric_time"), Map.of("name", "region")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales",
+                List.of("region", "revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-02")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("revenue"), body.get("metrics"));
+        assertEquals(List.of("region"), body.get("dimensions"));
+        assertEquals(List.of("[metric_time] >= \"2026-09-01\"", "[metric_time] < \"2026-09-02\""), body.get("filters"));
+    }
+
+    @Test
+    void rejectsDisplayedFieldsOutsideTheAnalysisView() {
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("missing_field"),
+                List.of(), 50, 0, Map.of());
+
+        DatasetReadException error = assertThrows(DatasetReadException.class,
+                () -> compiler.compile(view(), request));
+
+        assertEquals(vip.mate.dataagent.dataset.DatasetReadErrorCode.INVALID_REQUEST, error.code());
+    }
+
+    @Test
     void unsupportedFieldAndOperatorAreRejected() {
         DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of(),
                 List.of(new DatasetFilter("secret", "dimension", "eq", "x")), 10, 0, Map.of());

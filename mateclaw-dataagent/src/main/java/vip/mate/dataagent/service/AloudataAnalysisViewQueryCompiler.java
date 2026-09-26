@@ -37,18 +37,21 @@ public class AloudataAnalysisViewQueryCompiler {
             filters.add(toExpression(filter));
         }
 
+        List<String> projectedColumns = resolveColumns(view, request.columns());
+        Set<String> projectedSet = new LinkedHashSet<>(projectedColumns);
+
         List<Map<String, String>> orders = new ArrayList<>();
         for (var order : request.orders()) {
-            if (!allowedFields.contains(order.field())) {
+            if (!allowedFields.contains(order.field()) || !projectedSet.contains(order.field())) {
                 throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,
-                        "指标视图不支持排序字段: " + order.field());
+                        "排序字段未包含在展示字段中: " + order.field());
             }
             orders.add(Map.of(order.field(), order.direction()));
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("metrics", names(view.metrics()));
-        body.put("dimensions", names(view.dimensions()));
+        body.put("metrics", selectedNames(view.metrics(), projectedSet));
+        body.put("dimensions", selectedNames(view.dimensions(), projectedSet));
         if (!filters.isEmpty()) body.put("filters", filters);
         if (view.timeConstraint() != null && !view.timeConstraint().isBlank()) {
             body.put("timeConstraint", view.timeConstraint());
@@ -59,6 +62,51 @@ public class AloudataAnalysisViewQueryCompiler {
         if (request.requestTotalCount()) body.put("isQueryTotalCount", true);
         body.put("queryResultType", "DATA");
         return Map.copyOf(body);
+    }
+
+    /** 展示列是输出契约；其余指标/维度不进入查询，时间筛选字段可只过滤而不参与分组。 */
+    public List<String> resolveColumns(AloudataAnalysisViewDetail view, List<String> columns) {
+        if (columns == null || columns.isEmpty()) {
+            return java.util.stream.Stream.concat(names(view.dimensions()).stream(), names(view.metrics()).stream()).toList();
+        }
+        List<Map<String, Object>> definitions = new ArrayList<>();
+        definitions.addAll(view.dimensions());
+        definitions.addAll(view.metrics());
+        List<String> resolved = new ArrayList<>();
+        for (String requested : columns) {
+            Map<String, Object> definition = definitions.stream()
+                    .filter(item -> aliases(item).contains(requested))
+                    .findFirst()
+                    .orElseThrow(() -> new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,
+                            "展示字段不属于当前指标视图: " + requested));
+            String canonical = canonicalName(definition);
+            if (!resolved.contains(canonical)) resolved.add(canonical);
+        }
+        return List.copyOf(resolved);
+    }
+
+    private List<String> selectedNames(List<Map<String, Object>> definitions, Set<String> selected) {
+        return definitions.stream()
+                .map(this::canonicalName)
+                .filter(selected::contains)
+                .toList();
+    }
+
+    private Set<String> aliases(Map<String, Object> definition) {
+        Set<String> result = new LinkedHashSet<>();
+        addNames(result, definition);
+        return result;
+    }
+
+    private String canonicalName(Map<String, Object> definition) {
+        return List.of("name", "metricName", "dimName", "code").stream()
+                .map(definition::get)
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .filter(value -> !value.isBlank())
+                .findFirst()
+                .orElseThrow(() -> new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,
+                        "指标视图包含无字段名的定义"));
     }
 
     /** 单个下推条件 → Aloudata 筛选表达式；无法等价表达的运算符直接拒绝，不静默丢弃。 */

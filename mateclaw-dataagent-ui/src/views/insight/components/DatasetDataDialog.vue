@@ -268,9 +268,9 @@ const isApi = computed(() => props.dataset.sourceType === 'api')
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
 const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
-const componentPreviewFieldRoles = computed(() => Object.fromEntries(displayFields.value.map((field) => [field.field, field.role])))
+const componentPreviewFieldRoles = computed(() => Object.fromEntries(resultDisplayFieldList().map((field) => [field.field, field.role])))
 const componentPreviewColumns = computed(() => {
-  const names = columns.value.length ? columns.value : displayFields.value.map((field) => field.field)
+  const names = columns.value.length ? columns.value : resultDisplayFieldList().map((field) => field.field)
   return names.map((name) => {
     const field = displayFields.value.find((item) => item.field === name)
       ?? props.dataset.queryConfig?.queryableFields?.find((item) => item.name === name)
@@ -293,7 +293,9 @@ const pageSizeOptions = computed(() => {
 })
 
 function isFieldSortable(field: string): boolean {
-  return sortPolicy.value?.enabled === true && sortPolicy.value.allowedFields.includes(field)
+  return resultDisplayFieldList().some((item) => item.field === field)
+    && sortPolicy.value?.enabled === true
+    && sortPolicy.value.allowedFields.includes(field)
 }
 
 /* ── 参数区：SQL / 接口的占位符（绑进查询内部，与筛选条件不是一回事） ── */
@@ -332,6 +334,15 @@ const filterSupported = computed(() => props.dataset.sourceType !== 'file')
 
 const queryFilterRows = ref<PreviewQueryFilterRow[]>([])
 const hasTimeFilterRows = computed(() => queryFilterRows.value.some((row) => row.timeBoundary !== undefined))
+
+function resultDisplayFieldList(): QueryDisplayField[] {
+  const timeFilterFields = new Set(queryFilterRows.value
+    .filter((row) => row.timeBoundary !== undefined)
+    .map((row) => row.field))
+  return displayFields.value.filter((field) =>
+    field.role !== 'dimension' || !timeFilterFields.has(field.field),
+  )
+}
 
 interface PreviewQueryFilterRow extends RuntimeFilterRow {
   filterTitle: string
@@ -504,6 +515,10 @@ async function fetchRows(reset: boolean): Promise<void> {
       : reset ? 0 : rows.value.length
     const orders = sortState.value && isFieldSortable(sortState.value.field) ? [sortState.value] : []
     const requestTotalCount = paginationEnabled.value && paginationPolicy.value?.returnTotalCount === true
+    const hasConfiguredDisplayFields = displayFields.value.length > 0
+    const requestedColumns = hasConfiguredDisplayFields
+      ? resultDisplayFieldList().map(({ field }) => field)
+      : []
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 数据定义在查看数据弹窗中只读；已落库数据集统一走输入读取接口。
     const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
@@ -513,7 +528,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           datasetId: props.dataset.backendDatasetId as string,
           inputName: props.dataset.alias,
           filters: filters as DatasetConfig['filters'],
-          columns: displayFields.value.map(({ field }) => field),
+          columns: requestedColumns,
           orders,
           requestTotalCount,
           limit,
@@ -522,7 +537,7 @@ async function fetchRows(reset: boolean): Promise<void> {
         })
       : await previewDatasetDraft({
           ...request,
-          columns: displayFields.value.map(({ field }) => field),
+          columns: requestedColumns,
           parameters,
           orders,
           requestTotalCount,
@@ -534,7 +549,9 @@ async function fetchRows(reset: boolean): Promise<void> {
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
     rows.value = paginationEnabled.value || reset ? nextRows : [...rows.value, ...nextRows]
     if (reset) {
-      columns.value = batch.schema?.length ? batch.schema : nextRows.length ? Object.keys(nextRows[0]) : displayFields.value.map(({ field }) => field)
+      columns.value = hasConfiguredDisplayFields
+        ? requestedColumns
+        : batch.schema?.length ? batch.schema : nextRows.length ? Object.keys(nextRows[0]) : []
       queriedAt.value = Date.now()
     }
     hasMore.value = typeof batch.hasNext === 'boolean'

@@ -82,6 +82,61 @@ class AloudataAnalysisViewAdapterTest {
     }
 
     @Test
+    void aggregatesOnlyDisplayedMetricsAndProjectsOutFilteredTimeDimension() {
+        AloudataAnalysisViewAdapter adapter = adapter();
+        when(datasetMapper.selectById(7L)).thenReturn(dataset());
+        DatasourceEntity datasource = new DatasourceEntity();
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(new AloudataConfigDTO());
+        when(viewService.getByName(3L, "sales")).thenReturn(new AloudataAnalysisViewDetail(
+                "v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue"), Map.of("name", "cost")),
+                List.of(Map.of("name", "metric_time"), Map.of("name", "region")),
+                null, List.of(), List.of(), List.of()));
+        when(apiClient.callWithParams(eq("metrics_query"), any(), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("data", List.of(Map.of(
+                        "metric_time", "2026-09-01", "region", "华东", "revenue", 18, "cost", 7)))));
+
+        DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task-1", Set.of(7L)),
+                new DatasetReadRequest(7L, "sales", List.of("region", "revenue"),
+                        List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                                new DatasetFilter("metric_time", "dimension", "lt", "2026-09-02")),
+                        50, 0, Map.of()));
+
+        assertEquals(List.of(Map.of("region", "华东", "revenue", 18)), batch.rows());
+        verify(apiClient).callWithParams(eq("metrics_query"), any(), argThat(p ->
+                p.get("metrics").equals(List.of("revenue"))
+                        && p.get("dimensions").equals(List.of("region"))
+                        && p.get("filters").equals(List.of(
+                                "[metric_time] >= \"2026-09-01\"",
+                                "[metric_time] < \"2026-09-02\""))));
+    }
+
+    @Test
+    void draftPreviewUsesProjectionQueryEvenWithoutFilters() {
+        AloudataAnalysisViewAdapter adapter = adapter();
+        DatasourceEntity datasource = new DatasourceEntity();
+        when(datasourceMapper.selectById(3L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(new AloudataConfigDTO());
+        when(viewService.getByName(3L, "sales")).thenReturn(new AloudataAnalysisViewDetail(
+                "v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue"), Map.of("name", "cost")),
+                List.of(Map.of("name", "metric_time")), null, List.of(), List.of(), List.of()));
+        when(apiClient.callWithParams(eq("metrics_query"), any(), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("data", List.of(Map.of(
+                        "metric_time", "2026-09-01", "revenue", 18, "cost", 7)))));
+
+        DatasetBatch batch = adapter.previewDraft(new DatasetAccessContext(1L, 2L, "draft-1", Set.of()),
+                3L, "sales", new DatasetReadRequest(1L, "draft", List.of("revenue"),
+                        List.of(), 50, 0, Map.of()));
+
+        assertEquals(List.of(Map.of("revenue", 18)), batch.rows());
+        verify(apiClient).callWithParams(eq("metrics_query"), any(), argThat(p ->
+                p.get("metrics").equals(List.of("revenue"))
+                        && p.get("dimensions").equals(List.of())));
+    }
+
+    @Test
     void usesAnalysisViewIdFromSourceConfigForRuntimeFilterCompilation() {
         AloudataAnalysisViewAdapter adapter = adapter();
         DatasetEntity dataset = dataset();
