@@ -49,12 +49,6 @@ function queryConfig(parameterBindings: DatasetQueryConfig['parameterBindings'] 
 
 const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
-  'el-tabs': {
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    template: '<div><button data-testid="show-component-result" @click="$emit(\'update:modelValue\', \'component\')">组件预览</button><slot /></div>',
-  },
-  'el-tab-pane': { template: '<div><slot /></div>' },
   'el-input': {
     props: ['modelValue'],
     template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -134,13 +128,10 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await flushPromises()
   }
 
-  it('组件预览把当前查询结果交给画布中的组件，而不在弹窗内创建独立组件', async () => {
+  it('点击查询后立即把当前结果渲染到画布中的组件', async () => {
     const component = { id: 'table-1', type: 'table', title: '订单明细' }
     const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }), component)
     await wrapper.get('[data-testid="run-query"]').trigger('click')
-    await flushPromises()
-
-    await wrapper.get('[data-testid="show-component-result"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.emitted('render')).toHaveLength(1)
@@ -150,6 +141,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
       table: { columns: ['trade_date'], rows: [['2026-09-01']] },
     })
     expect((wrapper.emitted('render')?.[0]?.[0] as { fieldLabels?: Record<string, string> }).fieldLabels?.trade_date).toBe('交易日期')
+    expect(wrapper.text()).not.toContain('组件预览')
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
     wrapper.unmount()
   })
