@@ -163,6 +163,7 @@
             :editable="editable"
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @open-metric-style="(payload) => emit('open-metric-style', { ...payload, containerId: component.id, childId: child.id })"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <ChartWidget
@@ -306,6 +307,7 @@ const emit = defineEmits<{
   (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
   (e: 'context-menu', payload: { containerId: string; childId: string; x: number; y: number }): void
   (e: 'edit-child-title-icon-style', payload: { containerId: string; childId: string; anchor?: HTMLElement }): void
+  (e: 'open-metric-style', payload: { containerId: string; childId: string; fieldKey: string; field: string }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
 }>()
 
@@ -439,6 +441,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     boundFilterIds: child.boundFilterIds,
     enableTimeFilter: child.enableTimeFilter,
     multiKpi: child.multiKpi,
+    kpiMetrics: child.kpiMetrics,
   }
 }
 

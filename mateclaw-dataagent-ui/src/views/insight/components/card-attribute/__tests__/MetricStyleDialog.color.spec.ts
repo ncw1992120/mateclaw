@@ -55,6 +55,10 @@ beforeEach(() => {
   const targetMetric = reactive({
     fieldKey: 'orders',
     displayName: '订单数',
+    x: 180,
+    y: 42,
+    w: 120,
+    h: 72,
     visual: { colorMode: 'theme' as const },
     styles: defaultMetricStyles(),
   })
@@ -120,5 +124,6 @@ describe('MetricStyleDialog shared color fields', () => {
     const target = insightFixture.value.state.kpiMetrics.find((item: any) => item.fieldKey === 'orders')
     expect(target.styles.value).toMatchObject({ size: 36, color: '#123456' })
     expect(target.visual).toEqual({ iconKey: 'trend-up', colorMode: 'custom', accentColor: '#654321' })
+    expect(target).toMatchObject({ x: 180, y: 42, w: 120, h: 72, displayName: '订单数' })
   })
 })
