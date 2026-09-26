@@ -12,7 +12,12 @@
     <FieldMappingDialog />
     <PythonScriptDialog />
     <PreviewDialog v-if="state.ui.preview.kind !== 'result'" />
-    <PythonResultDataDialog v-else :component="component" @render="emit('render', $event)" />
+    <PythonResultDataDialog
+      v-else
+      :component="component"
+      @render="emit('render', $event)"
+      @resultset="emit('resultset', $event)"
+    />
     <MetricConfigDialog />
     <MetricStyleDialog />
   </div>
