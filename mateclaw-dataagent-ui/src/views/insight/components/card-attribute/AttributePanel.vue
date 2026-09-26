@@ -193,56 +193,7 @@
         </div>
       </div>
 
-      <!-- 6. 结果集：管道唯一出口，也是卡片唯一的数据来源 —— 就绪后卡片才会显示数据 -->
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">结果集</span>
-          <InlineHelp label="结果集" content="结果集是卡片展示的唯一数据出口；配置变化后会标记为过期。" />
-          <span class="rs-status" :class="resultSetStatusClass">
-            <span class="rs-dot"></span>{{ resultSetStatusText }}
-          </span>
-        </div>
-
-        <!-- 未配置数据集：结果集没有输入 -->
-        <div v-if="state.resultSet.status === 'empty'" class="empty">添加数据集后自动生成</div>
-
-        <template v-else>
-          <div class="rs-box" :class="resultSetStatusClass">
-            <div class="rs-line">
-              <span class="rs-source">{{ resultSetSourceLabel }}</span>
-              <span class="rs-meta">{{ state.resultSet.columns.length }} 字段 · {{ resultSetRowText }}</span>
-            </div>
-            <div v-if="resultSetTimeText" class="rs-time">{{ resultSetTimeText }}</div>
-          </div>
-
-          <el-alert
-            v-if="state.resultSet.status === 'failed' && state.resultSet.error"
-            class="rs-error"
-            type="error"
-            :closable="false"
-            :title="state.resultSet.error"
-          />
-
-          <div class="rs-actions">
-            <el-button size="small" :disabled="state.resultSet.status === 'running'" @click="openPreview('result')">
-              预览结果集
-            </el-button>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="state.resultSet.status === 'running'"
-              @click="generateResultSet()"
-            >
-              {{ resultSetActionText }}
-            </el-button>
-          </div>
-
-          <div v-if="resultSetStale" class="rs-hint">输入已变更，卡片仍在用上一次的数据</div>
-          <div v-else-if="!resultSetAuto" class="rs-hint">有 Python 脚本时需手动生成（执行有成本）</div>
-        </template>
-      </div>
-
-      <!-- 7. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
+      <!-- 6. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
            排在 Python 预处理之后：指标由「最终结果集」字段投影而来，而结果集可能由
            Python 用户处理区产生，放最后才符合「先出结果集、再配置指标」的使用顺序。 -->
       <div v-if="isKpiCard" class="section">
@@ -273,7 +224,7 @@ import { resolveFieldLabel } from '@/utils/field-mapping'
 import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPreview, removePython, openMetricConfig, resultSetStale, resultSetAuto, resultSetSourceLabel, resultSetHasOutput, generateResultSet } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
 
 const DEFAULT_COMPONENT_COLOR = '#1E40AF'
 const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
@@ -286,33 +237,6 @@ const componentSample = computed(() => resolveComponentSample({
   chartType: activeCard.value.chartType,
   title: activeCard.value.title,
 }))
-
-/* ── 结果集节点：管道唯一出口，也是卡片唯一的数据来源 ── */
-
-const RESULT_SET_STATUS_LABEL: Record<string, string> = {
-  empty: '未配置',
-  stale: '已过期',
-  running: '生成中',
-  ready: '就绪',
-  failed: '失败',
-}
-
-const resultSetStatusText = computed(() => RESULT_SET_STATUS_LABEL[state.resultSet.status] ?? state.resultSet.status)
-const resultSetStatusClass = computed(() => `rs-${state.resultSet.status}`)
-const resultSetRowText = computed(() =>
-  state.resultSet.status === 'running' ? '生成中…' : `${state.resultSet.rowCount} 行`,
-)
-/** 生成时间 + 耗时；过期态额外标注输入已变更，避免被误认为当前配置的结果 */
-const resultSetTimeText = computed(() => {
-  const rs = state.resultSet
-  if (rs.status === 'running') return '正在执行…'
-  if (!rs.generatedAt) return ''
-  const time = new Date(rs.generatedAt).toLocaleTimeString('zh-CN', { hour12: false })
-  const cost = rs.elapsedMs ? ` · 耗时 ${(rs.elapsedMs / 1000).toFixed(1)}s` : ''
-  const stale = rs.status === 'stale' ? '（输入已变更）' : ''
-  return `${time} 生成${cost}${stale}`
-})
-const resultSetActionText = computed(() => (state.resultSet.status === 'ready' ? '重新生成' : '生成结果集'))
 
 /** 告警被用户关闭后不再重复打扰（切换卡片时应重新提示） */
 const warningsDismissed = ref(false)
@@ -465,73 +389,6 @@ function typeLabel(t: string) {
   margin-top: 8px;
 }
 
-/* ── 结果集节点（管道唯一出口，卡片唯一数据来源） ── */
-.rs-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--db-text-muted);
-}
-.rs-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-}
-.rs-status.rs-ready { color: var(--db-positive); }
-.rs-status.rs-stale { color: var(--db-warning); }
-.rs-status.rs-running { color: var(--db-accent); }
-.rs-status.rs-failed { color: var(--db-danger); }
-.rs-box {
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  background: var(--db-muted);
-}
-.rs-box.rs-failed {
-  border-color: var(--db-danger);
-}
-.rs-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--db-text);
-}
-.rs-source {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rs-meta {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--db-text-muted);
-}
-.rs-time {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--db-text-muted);
-}
-.rs-error {
-  margin-top: 8px;
-}
-.rs-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-.rs-hint {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--db-warning);
-  line-height: 1.6;
-}
 .python-empty {
   display: grid;
   gap: 8px;

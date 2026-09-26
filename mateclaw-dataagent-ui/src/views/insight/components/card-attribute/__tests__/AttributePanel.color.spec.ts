@@ -89,7 +89,16 @@ beforeEach(() => {
   }
 })
 
-describe('AttributePanel shared color field', () => {
+describe('AttributePanel', () => {
+  it('does not render the result-set section or its preview and generation actions', () => {
+    const wrapper = mountPanel()
+
+    expect(wrapper.text()).not.toContain('结果集')
+    expect(wrapper.text()).not.toContain('预览结果集')
+    expect(wrapper.text()).not.toContain('生成结果集')
+    expect(wrapper.text()).not.toContain('重新生成')
+  })
+
   it('writes selected colors directly to the active card without changing mode or save flow', async () => {
     const wrapper = mountPanel()
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
