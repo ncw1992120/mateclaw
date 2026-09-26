@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
+import { defaultMetricStyles } from '@/utils/kpi-metrics'
 import CombinationCardWidget from '../CombinationCardWidget.vue'
 
 const i18n = createI18n({
@@ -46,6 +47,79 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('passes nested KPI metrics to the canvas widget and bubbles metric style edits with child context', async () => {
+    const metrics = [{
+      fieldKey: 'revenue', displayName: '收入', unit: '', helperText: '', visible: true,
+      x: 12, y: 18, w: 160, h: 80,
+      styles: { name: {}, value: {}, unit: {}, helper: {} },
+    }]
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combo', type: 'combination', title: '组合卡片',
+          children: [{ id: 'nested-kpi', type: 'kpi', title: '指标', kpiMetrics: metrics, layout: { x: 0, y: 0, col: 6, h: 120 } }],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: { name: 'KpiCardWidget', props: ['component'], emits: ['open-metric-style'], template: '<button data-testid="nested-kpi-edit" @click="$emit(\'open-metric-style\', { componentId: component.id, fieldKey: \'revenue\', field: \'value\' })">edit</button>' },
+          ChartWidget: true, DataTableWidget: true, FilterSelectWidget: true, TimeFilterWidget: true,
+          AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    const kpi = wrapper.findComponent({ name: 'KpiCardWidget' })
+    expect(kpi.props('component').kpiMetrics).toEqual(metrics)
+    await wrapper.get('[data-testid="nested-kpi-edit"]').trigger('click')
+    expect(wrapper.emitted('open-metric-style')?.[0]?.[0]).toMatchObject({
+      componentId: 'nested-kpi', containerId: 'combo', childId: 'nested-kpi', fieldKey: 'revenue', field: 'value',
+    })
+  })
+
+  it('drags a nested KPI metric without moving its combination child card', () => {
+    const metric = {
+      fieldKey: 'revenue', displayName: '收入', unit: '', helperText: '', visible: true,
+      x: 12, y: 18, w: 160, h: 80, styles: defaultMetricStyles(),
+    }
+    const child = {
+      id: 'nested-kpi', type: 'kpi' as const, title: '指标', kpiMetrics: [metric],
+      layout: { x: 36, y: 48, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combo', type: 'combination', title: '组合卡片',
+          children: [child], containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          ChartWidget: true, DataTableWidget: true, FilterSelectWidget: true, TimeFilterWidget: true,
+          AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+    const group = wrapper.get('.kpi-metric-group').element as HTMLElement
+    Object.defineProperty(group, 'getBoundingClientRect', { value: () => ({ width: 500, height: 300 }) })
+    const item = wrapper.get('[data-metric="revenue"]').element as HTMLElement
+    Object.defineProperty(item, 'offsetWidth', { value: 160 })
+    Object.defineProperty(item, 'offsetHeight', { value: 80 })
+
+    item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 12, clientY: 18 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42, clientY: 58 }))
+    window.dispatchEvent(new MouseEvent('mouseup'))
+
+    expect(metric).toMatchObject({ x: 42, y: 58 })
+    expect(child.layout).toEqual({ x: 36, y: 48, col: 6, h: 120 })
+    wrapper.unmount()
+  })
+
   it('renames a child component from its canvas title pen', async () => {
     const child = {
       id: 'child-kpi',

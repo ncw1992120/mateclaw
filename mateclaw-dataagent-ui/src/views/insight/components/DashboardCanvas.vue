@@ -250,6 +250,7 @@
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
                 @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
+                @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @edit-child-title-icon-style="openChildTitleIconStyle"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
@@ -465,7 +466,7 @@ const emit = defineEmits<{
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'ai-analysis-generate', componentId: string): void
-  (e: 'open-metric-style', payload: { componentId: string; fieldKey: string }): void
+  (e: 'open-metric-style', payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void
   (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
   (e: 'update-child-title-icon-style', payload: { containerId: string; childId: string; titleIconStyle: ComponentTitleIconStyle }): void
   (e: 'update-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; titleIconStyle: ComponentTitleIconStyle }): void

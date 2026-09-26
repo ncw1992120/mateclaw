@@ -1132,7 +1132,18 @@ function handleSelectComponent(id: string): void {
 }
 
 /** 画布 KPI 指标「:」直入口：先选中该组件（触发属性面板 hydrate），再打开字段样式弹窗 */
-function handleOpenMetricStyle(payload: { componentId: string; fieldKey: string; field: string }): void {
+function handleOpenMetricStyle(payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void {
+  if (payload.containerId && payload.childId) {
+    handleSelectChild({ containerId: payload.containerId, childId: payload.childId })
+    const { containerId, childId } = payload
+    nextTick(() => {
+      if (selectedChildInfo.value?.containerId === containerId && selectedChildInfo.value.childId === childId) {
+        openMetricStyle(payload.fieldKey, payload.field)
+      }
+    })
+    return
+  }
+  if (!payload.componentId) return
   handleSelectComponent(payload.componentId)
   const targetId = payload.componentId
   nextTick(() => {
@@ -1306,6 +1317,7 @@ function handleComponentChange(updated: InsightComponent): void {
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
       child.multiKpi = updated.multiKpi
+      child.kpiMetrics = updated.kpiMetrics
       if (child.type === 'combination') {
         child.children = child.children ?? updated.children ?? []
         child.containerConfig = mergeCombinationConfig(child, updated)
