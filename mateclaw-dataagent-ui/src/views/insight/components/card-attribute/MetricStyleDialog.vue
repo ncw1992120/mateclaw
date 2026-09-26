@@ -57,6 +57,9 @@
           />
         </div>
         <p class="ms-hint">颜色与字号修改会立即同步画布；双击颜色块或点击重置可恢复跟随主题。</p>
+        <el-button v-if="state.kpiMetrics.length > 1" text type="primary" @click="syncMetricStyles">
+          {{ t('insight.kpiMetricSync') }}
+        </el-button>
         <el-button text type="primary" @click="resetMetric">重置该指标</el-button>
       </div>
     </div>
@@ -71,6 +74,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
 import { KPI_FIELD_LABELS, KPI_METRIC_FIELDS, defaultMetricStyles, styleToCss } from '@/utils/kpi-metrics'
@@ -79,8 +83,9 @@ import type { KpiMetricField } from '@/utils/kpi-metrics'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
 import InsightColorField from '../InsightColorField.vue'
 
-const { state } = useInsight()
+const { state, syncKpiMetricStyles } = useInsight()
 const ui = state.ui
+const { t } = useI18n()
 
 const metric = computed(() => state.kpiMetrics.find((m) => m.fieldKey === ui.metricStyle.fieldKey))
 const currentField = computed(() => (ui.metricStyle.field as KpiMetricField) || 'value')
@@ -155,6 +160,12 @@ function resetMetric() {
   metric.value.visual = { iconKey: undefined, colorMode: 'theme' }
   iconEnabled.value = true
   ElMessage.success('已恢复跟随主题')
+}
+
+function syncMetricStyles() {
+  if (!metric.value || state.kpiMetrics.length < 2) return
+  syncKpiMetricStyles(metric.value.fieldKey)
+  ElMessage.success(t('insight.kpiMetricSyncSuccess'))
 }
 </script>
 
