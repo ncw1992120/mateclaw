@@ -41,6 +41,10 @@ PYTHON_RUNNER_HEALTH_URL="${PYTHON_RUNNER_URL%/}/health"
 PYTHON_RUNNER_LOG="/tmp/mateclaw-python-runner-${PYTHON_RUNNER_PORT}.log"
 
 ACTION="${1:-all}"
+LAUNCH_AGENT_LABEL="com.srant.mateclaw-dataagent-backend"
+LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist"
+LAUNCHD_DOMAIN="gui/$(id -u)"
+LAUNCH_AGENT_SUSPENDED=0
 
 usage() {
   cat <<'TXT'
@@ -282,6 +286,56 @@ esac
 
 # ---------------------------------------------------------------- 后端
 
+# 完整重启由当前脚本接管 DataAgent 生命周期。否则 launchd 的 KeepAlive
+# 会用 LaunchAgent 中固定的 profile 立即拉起旧配置（通常是 pgsql）。
+suspend_dataagent_launch_agent() {
+  if [[ "$(uname -s)" != "Darwin" || ! -f "$LAUNCH_AGENT_PLIST" ]] \
+    || ! command -v launchctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if launchctl print "$LAUNCHD_DOMAIN/$LAUNCH_AGENT_LABEL" >/dev/null 2>&1; then
+    echo "暂时停止 LaunchAgent $LAUNCH_AGENT_LABEL，由本脚本接管 DataAgent。"
+    if ! launchctl bootout "$LAUNCHD_DOMAIN/$LAUNCH_AGENT_LABEL"; then
+      echo "错误：无法暂停 LaunchAgent $LAUNCH_AGENT_LABEL，未继续重启 DataAgent。" >&2
+      return 1
+    fi
+    LAUNCH_AGENT_SUSPENDED=1
+  fi
+}
+
+restore_dataagent_launch_agent() {
+  local exit_status=$?
+  trap - EXIT
+
+  if [[ "$LAUNCH_AGENT_SUSPENDED" == "1" ]]; then
+    if launchctl bootstrap "$LAUNCHD_DOMAIN" "$LAUNCH_AGENT_PLIST"; then
+      echo "已恢复 LaunchAgent $LAUNCH_AGENT_LABEL（恢复其原有启动配置）。"
+    else
+      echo "错误：DataAgent LaunchAgent 恢复失败，请检查：$LAUNCH_AGENT_PLIST" >&2
+      if [[ "$exit_status" == "0" ]]; then
+        exit_status=1
+      fi
+    fi
+  fi
+
+  exit "$exit_status"
+}
+
+terminate_dataagent_restart() {
+  local exit_status="$1"
+  trap - INT TERM
+  if [[ -n "${backend_pid:-}" ]] && kill -0 "$backend_pid" 2>/dev/null; then
+    kill "$backend_pid" 2>/dev/null || true
+    wait "$backend_pid" 2>/dev/null || true
+  fi
+  exit "$exit_status"
+}
+
+trap restore_dataagent_launch_agent EXIT
+trap 'terminate_dataagent_restart 130' INT
+trap 'terminate_dataagent_restart 143' TERM
+
 java_major_version() {
   local java_home="$1" version major
   version="$("$java_home/bin/java" -version 2>&1 | awk -F '"' '/version/ { print $2; exit }')"
@@ -517,6 +571,10 @@ fi
 echo "重启本地 Python Runner（复用现有虚拟环境，不执行 rebuild）..."
 restart_python_runner || exit 1
 
+if ! suspend_dataagent_launch_agent; then
+  exit 1
+fi
+
 echo "停止旧的 DataAgent 后端进程..."
 backend_own_pids() {
   local pid command
@@ -569,7 +627,6 @@ fi
 
 java -jar "$JAR_PATH" --server.port="$BACKEND_PORT" &
 backend_pid=$!
-trap 'kill "$backend_pid" 2>/dev/null || true; exit 143' INT TERM
 
 for _ in {1..60}; do
   if curl --fail --silent --show-error --connect-timeout 1 --max-time 3 "$BACKEND_HEALTH_URL" >/dev/null 2>&1; then
