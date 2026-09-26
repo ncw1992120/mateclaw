@@ -1,11 +1,22 @@
 import { reactive } from 'vue'
 import { mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MetricStyleDialog from '../MetricStyleDialog.vue'
-import { defaultMetricStyles, KPI_FIELD_LABELS, KPI_METRIC_FIELDS } from '@/utils/kpi-metrics'
+import { defaultMetricStyles, KPI_FIELD_LABELS, KPI_METRIC_FIELDS, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 
 const insightFixture = vi.hoisted(() => ({ value: null as any }))
+const i18n = createI18n({
+  legacy: false,
+  locale: 'zh-CN',
+  messages: { 'zh-CN': { insight: {
+    kpiMetricSync: '同步到其他指标',
+    kpiMetricSyncSuccess: '已同步到其他指标',
+  } } },
+  missingWarn: false,
+  fallbackWarn: false,
+})
 
 vi.mock('../useInsight', () => ({
   useInsight: () => insightFixture.value,
@@ -21,6 +32,7 @@ const colorFieldStub = {
 function mountDialog() {
   return mount(MetricStyleDialog, {
     global: {
+      plugins: [i18n],
       stubs: {
         InsightColorField: colorFieldStub,
         'el-dialog': { template: '<div><slot /><slot name="footer" /></div>' },
@@ -40,10 +52,20 @@ beforeEach(() => {
     visual: { colorMode: 'theme' as const },
     styles: defaultMetricStyles(),
   })
+  const targetMetric = reactive({
+    fieldKey: 'orders',
+    displayName: '订单数',
+    visual: { colorMode: 'theme' as const },
+    styles: defaultMetricStyles(),
+  })
+  const state = reactive({
+    ui: { metricStyle: { visible: true, fieldKey: 'revenue', field: 'value' } },
+    kpiMetrics: [metric, targetMetric],
+  })
   insightFixture.value = {
-    state: {
-      ui: { metricStyle: { visible: true, fieldKey: 'revenue', field: 'value' } },
-      kpiMetrics: [metric],
+    state,
+    syncKpiMetricStyles: (fieldKey: string) => {
+      state.kpiMetrics = syncMetricStylesToAll(state.kpiMetrics, fieldKey)
     },
   }
 })
@@ -84,5 +106,19 @@ describe('MetricStyleDialog shared color fields', () => {
 
     expect(metric.visual).toEqual({ iconKey: undefined, colorMode: 'theme' })
     expect(metric.styles).toEqual(defaultMetricStyles())
+  })
+
+  it('syncs the current metric text styles and icon accent to other metrics from this dialog', async () => {
+    const wrapper = mountDialog()
+    const [source] = insightFixture.value.state.kpiMetrics
+    source.styles.value.size = 36
+    source.styles.value.color = '#123456'
+    source.visual = { iconKey: 'trend-up', colorMode: 'custom', accentColor: '#654321' }
+
+    await wrapper.findAll('button').find((button) => button.text() === '同步到其他指标')!.trigger('click')
+
+    const target = insightFixture.value.state.kpiMetrics.find((item: any) => item.fieldKey === 'orders')
+    expect(target.styles.value).toMatchObject({ size: 36, color: '#123456' })
+    expect(target.visual).toEqual({ iconKey: 'trend-up', colorMode: 'custom', accentColor: '#654321' })
   })
 })

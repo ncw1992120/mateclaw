@@ -72,11 +72,13 @@
           <button
             v-if="editable"
             class="kpi-metric-style-btn"
-            :title="t('insight.kpiMetricStyle')"
+            data-testid="kpi-metric-style"
+            :aria-label="t('insight.kpiMetricStyleFor', { name: metricLabel(metric) })"
+            :title="t('insight.kpiMetricStyleFor', { name: metricLabel(metric) })"
             @mousedown.stop.prevent
             @click.stop="openMetricStyle(metric)"
           >
-            <el-icon :size="12"><MoreFilled /></el-icon>
+            <el-icon :size="12"><EditPen /></el-icon>
           </button>
 
           <!-- 八向缩放手柄（编辑态 + 选中/悬停/拖动时显示） -->
@@ -129,7 +131,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowUp, ArrowDown, MoreFilled } from '@element-plus/icons-vue'
+import { ArrowUp, ArrowDown, EditPen } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'

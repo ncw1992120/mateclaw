@@ -173,9 +173,18 @@ export function buildKpiMetrics(
 /** 把某个指标的整套样式同步到全部指标（返回新数组，不改动入参） */
 export function syncMetricStylesToAll(metrics: KpiMetricConfig[], sourceFieldKey: string): KpiMetricConfig[] {
   const source = metrics.find((m) => m.fieldKey === sourceFieldKey)
-  if (!source) return metrics.map((m) => ({ ...m, styles: cloneStyles(m.styles) }))
+  if (!source) return metrics.map((m) => ({
+    ...m,
+    styles: cloneStyles(m.styles),
+    visual: m.visual ? { ...m.visual } : undefined,
+  }))
   const styles = cloneStyles(source.styles)
-  return metrics.map((m) => ({ ...m, styles: cloneStyles(styles) }))
+  const visual = source.visual ? { ...source.visual } : undefined
+  return metrics.map((m) => ({
+    ...m,
+    styles: cloneStyles(styles),
+    visual: visual ? { ...visual } : undefined,
+  }))
 }
 
 /** 后续渲染用：按结果集字段名索引指标 */

@@ -123,16 +123,29 @@ describe('kpi-metrics · 样式一键同步', () => {
     metrics[0].styles.value.size = 40
     metrics[0].styles.value.color = '#ff0000'
     metrics[0].styles.name.color = '#00ff00'
+    metrics[0].visual = { iconKey: 'trend-up', colorMode: 'custom', accentColor: '#123456' }
+    metrics[1].x = 66
+    metrics[1].displayName = '独立展示名'
+    metrics[1].helperText = '仅此指标的说明'
 
     const synced = syncMetricStylesToAll(metrics, 'plan_count')
     synced.forEach((m) => {
       expect(m.styles.value.size).toBe(40)
       expect(m.styles.value.color).toBe('#ff0000')
       expect(m.styles.name.color).toBe('#00ff00')
+      expect(m.visual).toEqual({ iconKey: 'trend-up', colorMode: 'custom', accentColor: '#123456' })
     })
     // 独立副本
     synced[1].styles.value.color = '#000000'
     expect(synced[2].styles.value.color).toBe('#ff0000')
+    synced[1].visual!.accentColor = '#000000'
+    expect(synced[2].visual!.accentColor).toBe('#123456')
+    expect(synced[1]).toMatchObject({
+      fieldKey: 'sent_count',
+      displayName: '独立展示名',
+      helperText: '仅此指标的说明',
+      x: 66,
+    })
   })
 
   it('源指标不存在时原样返回（仅深拷贝样式）', () => {
