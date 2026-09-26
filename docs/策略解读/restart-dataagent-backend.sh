@@ -18,7 +18,7 @@
 #                                   keep 仅在未监听时拉起（保留手工起的 mock 进程）
 #   ALOUDATA_MOCK_SERVER=...        （embed / off 模式下忽略）
 #   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
-#   SPRING_PROFILES_ACTIVE=...      显式覆盖整组 profile（优先级最高）
+#   SPRING_PROFILES_ACTIVE=...      数据库/运行 profile；on/embed 模式仍会强制追加 local-mock
 
 set -Eeuo pipefail
 
@@ -45,6 +45,7 @@ LAUNCH_AGENT_LABEL="com.srant.mateclaw-dataagent-backend"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist"
 LAUNCHD_DOMAIN="gui/$(id -u)"
 LAUNCH_AGENT_SUSPENDED=0
+MOCK_MODE=0
 
 usage() {
   cat <<'TXT'
@@ -66,7 +67,7 @@ usage() {
   MAVEN_CMD=...                   Maven 可执行文件路径（默认依次查 PATH 和 ~/.maven/apache-maven-*）
   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
   DB_PRECHECK=on|skip             启动前数据库连通性预检（默认 on，连不上直接报错退出）
-  SPRING_PROFILES_ACTIVE=...      显式覆盖整组 profile（优先级最高）
+  SPRING_PROFILES_ACTIVE=...      数据库/运行 profile；on/embed 模式仍会强制追加 local-mock
 TXT
 }
 
@@ -309,7 +310,10 @@ restore_dataagent_launch_agent() {
   trap - EXIT
 
   if [[ "$LAUNCH_AGENT_SUSPENDED" == "1" ]]; then
-    if launchctl bootstrap "$LAUNCHD_DOMAIN" "$LAUNCH_AGENT_PLIST"; then
+    if [[ "$MOCK_MODE" == "1" ]]; then
+      echo "mock 模式已结束；保持 LaunchAgent 停止，避免回退到真实 Aloudata。"
+      echo "如需恢复 LaunchAgent，请执行：launchctl bootstrap $LAUNCHD_DOMAIN $LAUNCH_AGENT_PLIST"
+    elif launchctl bootstrap "$LAUNCHD_DOMAIN" "$LAUNCH_AGENT_PLIST"; then
       echo "已恢复 LaunchAgent $LAUNCH_AGENT_LABEL（恢复其原有启动配置）。"
     else
       echo "错误：DataAgent LaunchAgent 恢复失败，请检查：$LAUNCH_AGENT_PLIST" >&2
@@ -390,11 +394,34 @@ fi
 #   重启 mock 时默认先停旧服务再起新的（ALOUDATA_MOCK_RESTART=keep 可保留现有服务）。
 #   ALOUDATA_MOCK=embed：使用内置夹具，不发起 HTTP 请求。
 #   ALOUDATA_MOCK=off：不启用 local-mock，直接调用真实 Aloudata。
-#   （也可用 SPRING_PROFILES_ACTIVE=pgsql 显式覆盖整组 profile）
+#   on/embed 会强制追加 local-mock；SPRING_PROFILES_ACTIVE 可指定数据库等其他 profile。
+ensure_profile_active() {
+  local required="$1"
+  local profiles="${SPRING_PROFILES_ACTIVE//[[:space:]]/}"
+  case ",${profiles}," in
+    *",${required},"*) ;;
+    *) export SPRING_PROFILES_ACTIVE="${profiles:+${profiles},}${required}" ;;
+  esac
+}
+
+ensure_profile_inactive() {
+  local excluded="$1" current profile result=""
+  local -a profiles
+  current="${SPRING_PROFILES_ACTIVE:-pgsql}"
+  IFS=',' read -r -a profiles <<< "$current"
+  for profile in "${profiles[@]}"; do
+    [[ -z "$profile" || "$profile" == "$excluded" ]] && continue
+    result="${result:+${result},}${profile}"
+  done
+  export SPRING_PROFILES_ACTIVE="${result:-pgsql}"
+}
+
 MOCK_SWITCH="${ALOUDATA_MOCK:-on}"
 case "$MOCK_SWITCH" in
   on|ON|true|TRUE|1)
+    MOCK_MODE=1
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"
+    ensure_profile_active local-mock
     export ALOUDATA_MOCK_PORT="$MOCK_PORT"
     export ALOUDATA_MOCK_SERVER="$MOCK_URL"
     MOCK_RESTART_MODE="${ALOUDATA_MOCK_RESTART:-always}"
@@ -431,16 +458,27 @@ case "$MOCK_SWITCH" in
     echo "  真实上游：ALOUDATA_MOCK=off 重启；切内置夹具：ALOUDATA_MOCK=embed 重启。"
     ;;
   embed|EMBED|embed-on|2)
+    MOCK_MODE=1
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql,local-mock}"
+    ensure_profile_active local-mock
     unset ALOUDATA_MOCK_SERVER
     echo "★ Aloudata 上游 = 内置夹具（不发起 HTTP，参数/请求方式仍走真实构建逻辑）。切回真实上游：ALOUDATA_MOCK=off 重启。"
     ;;
   *)
     export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-pgsql}"
+    ensure_profile_inactive local-mock
     unset ALOUDATA_MOCK_SERVER
     echo "Aloudata 上游 = 真实环境（未启用 local-mock）。"
     ;;
 esac
+
+# mock 模式必须先停掉使用旧 profile 的 LaunchAgent，再做任何预检；否则
+# 数据库预检失败时，原 pgsql 进程仍可能继续访问真实 Aloudata。
+if [[ "$MOCK_MODE" == "1" ]]; then
+  if ! suspend_dataagent_launch_agent; then
+    exit 1
+  fi
+fi
 
 export DB_HOST="${DB_HOST:-14.22.85.76}"
 export DB_PORT="${DB_PORT:-5432}"
@@ -568,11 +606,24 @@ if [[ ! -f "$JAR_PATH" ]]; then
   exit 1
 fi
 
-echo "重启本地 Python Runner（复用现有虚拟环境，不执行 rebuild）..."
-restart_python_runner || exit 1
+python_runner_enabled() {
+  case "${PYTHON_EXECUTOR_ENABLED:-false}" in
+    true|TRUE|1|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
-if ! suspend_dataagent_launch_agent; then
-  exit 1
+if python_runner_enabled; then
+  echo "重启本地 Python Runner（复用现有虚拟环境，不执行 rebuild）..."
+  restart_python_runner || exit 1
+else
+  echo "Python Executor 未启用，跳过本地 Python Runner 重启。"
+fi
+
+if [[ "$MOCK_MODE" != "1" ]]; then
+  if ! suspend_dataagent_launch_agent; then
+    exit 1
+  fi
 fi
 
 echo "停止旧的 DataAgent 后端进程..."
@@ -625,7 +676,7 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-java -jar "$JAR_PATH" --server.port="$BACKEND_PORT" &
+java -jar "$JAR_PATH" --spring.profiles.active="$SPRING_PROFILES_ACTIVE" --server.port="$BACKEND_PORT" &
 backend_pid=$!
 
 for _ in {1..60}; do
