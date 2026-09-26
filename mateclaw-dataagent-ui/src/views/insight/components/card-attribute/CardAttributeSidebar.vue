@@ -83,6 +83,12 @@ function hydrate(): void {
   // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
   nextTick(() => {
     hydrating.value = false
+    // 旧版多指标 KPI 只保存 multiKpi，画布仍渲染 legacy kpiList，
+    // 而属性面板已经按结果集投影出 kpiMetrics。首次选中时把投影回写组件，
+    // 使画布切换到支持单项拖动和样式编辑的新渲染分支。
+    if (component.type === 'kpi' && !component.kpiMetrics?.length && state.kpiMetrics.length > 0) {
+      scheduleEmit()
+    }
   })
 }
 
