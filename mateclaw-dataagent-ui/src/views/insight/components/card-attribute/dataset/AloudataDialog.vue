@@ -63,7 +63,7 @@
                   </div>
                   <div class="picker-visibility"><span class="visibility-info">ⓘ</span><span>自动隐藏不可分析内容</span><button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" aria-label="自动隐藏不可分析内容" @click="hideUnavailable = !hideUnavailable"><i :class="{ 'is-on': hideUnavailable }" /></button></div>
                   <div class="directory-layout" v-loading="dimensionsLoading">
-                    <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :auto-expand="Boolean(dimensionKeyword.trim())" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
+                    <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :auto-expand="Boolean(dimensionKeyword.trim())" :default-expanded-category-ids="dimensionDefaultExpandedCategoryIds" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
                       <template #field="{ field }">
                         <AloudataPickerField
                           :kind="'dimension'"
@@ -338,6 +338,14 @@ const dimensionPickerTree = computed(() => toDirectoryTree(
   dimensionKeyword.value ? dimensionPage.records : dimensionCategoryFields,
   'dimension',
 ))
+const dimensionDefaultExpandedCategoryIds = computed(() => findCategoryIdsByName(dimensionCategories.value, '未分类'))
+
+function findCategoryIdsByName(categories: AloudataCategoryTreeNode[], name: string): string[] {
+  return categories.flatMap((category) => [
+    ...(category.categoryName.trim() === name ? [category.categoryId] : []),
+    ...findCategoryIdsByName(category.children, name),
+  ])
+}
 
 watch(
   () => ui.aloudata.visible,

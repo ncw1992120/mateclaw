@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
 
 export interface DirectoryField {
@@ -23,13 +23,32 @@ defineOptions({ name: 'AloudataFieldDirectory' })
 const props = defineProps<{
   nodes: DirectoryCategory[]
   autoExpand?: boolean
+  defaultExpandedCategoryIds?: string[]
 }>()
 const emit = defineEmits<{
   toggle: [category: DirectoryCategory, expanded: boolean]
   more: [category: DirectoryCategory]
 }>()
-const expanded = ref(new Set<string>())
+const expanded = ref(new Set(props.defaultExpandedCategoryIds ?? []))
+const requestedDefaultCategories = new Set<string>()
 const isExpanded = (node: DirectoryCategory) => props.autoExpand || expanded.value.has(node.categoryId)
+
+function expandDefaultCategories() {
+  for (const node of props.nodes) {
+    if (!props.defaultExpandedCategoryIds?.includes(node.categoryId) || requestedDefaultCategories.has(node.categoryId)) continue
+    requestedDefaultCategories.add(node.categoryId)
+    emit('toggle', node, true)
+  }
+}
+
+watch(() => props.defaultExpandedCategoryIds, (ids) => {
+  const next = new Set(expanded.value)
+  ids?.forEach((id) => next.add(id))
+  expanded.value = next
+  expandDefaultCategories()
+}, { deep: true, flush: 'post' })
+watch(() => props.nodes, expandDefaultCategories, { deep: true, flush: 'post' })
+onMounted(expandDefaultCategories)
 
 function toggle(node: DirectoryCategory) {
   const next = new Set(expanded.value)
@@ -66,6 +85,7 @@ const hasNodes = computed(() => props.nodes.length > 0)
           v-if="category.children.length"
           :nodes="category.children"
           :auto-expand="autoExpand"
+          :default-expanded-category-ids="defaultExpandedCategoryIds"
           @toggle="(child, expanded) => emit('toggle', child, expanded)"
           @more="(child) => emit('more', child)"
         >

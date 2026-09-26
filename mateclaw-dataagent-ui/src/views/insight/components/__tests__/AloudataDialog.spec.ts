@@ -34,12 +34,14 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensio
     size: 20,
     pages: 1,
   })),
-  pageAloudataDimensions: vi.fn(async () => ({
-    records: [
-      { dimName: 'dim_a', dimDisplayName: '维度 A', categoryId: 'dim-child', categoryName: '客户维度' },
-      { dimName: 'region', dimDisplayName: '所属大区', categoryId: 'dim-child', categoryName: '客户维度' },
-    ],
-    total: 1,
+  pageAloudataDimensions: vi.fn(async (_datasourceId: string, params?: { categoryId?: string }) => ({
+    records: params?.categoryId === 'dim-uncategorized'
+      ? [{ dimName: 'dim_level_type', dimDisplayName: '会员等级', categoryId: 'dim-uncategorized', categoryName: '未分类' }]
+      : [
+        { dimName: 'dim_a', dimDisplayName: '维度 A', categoryId: 'dim-child', categoryName: '客户维度' },
+        { dimName: 'region', dimDisplayName: '所属大区', categoryId: 'dim-child', categoryName: '客户维度' },
+      ],
+    total: params?.categoryId === 'dim-uncategorized' ? 1262 : 1,
     current: 1,
     size: 20,
     pages: 1,
@@ -52,6 +54,7 @@ const { getAloudataMetricDirectory, getAloudataMetricDetail, getAloudataDimensio
     : [
       { categoryId: 'dim-root', categoryName: '业务维度', parentId: null },
       { categoryId: 'dim-child', categoryName: '客户维度', parentId: 'dim-root' },
+      { categoryId: 'dim-uncategorized', categoryName: '未分类', parentId: null, count: 1262 },
     ]),
 }))
 
@@ -335,6 +338,22 @@ describe('Aloudata 指标&维度选择', () => {
     await expandFieldCategory(wrapper, 'dimension')
     expect(pageAloudataDimensions).toHaveBeenCalledWith('aloudata-1', expect.objectContaining({ categoryId: 'dim-child' }))
     expect(wrapper.find('.dimension-picker-popup').text()).toContain('所属大区')
+  })
+
+  it('automatically expands 未分类 dimensions and shows Chinese names before field codes', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await flushPromises()
+
+    expect(pageAloudataDimensions).toHaveBeenCalledWith('aloudata-1', expect.objectContaining({ categoryId: 'dim-uncategorized' }))
+    const field = wrapper.find('.dimension-picker-popup [data-field-code="dim_level_type"]')
+    expect(field.exists()).toBe(true)
+    expect(field.find('.directory-item-title').text()).toBe('会员等级')
+    expect(field.find('.directory-item-code').text()).toBe('dim_level_type')
+    expect(field.element.compareDocumentPosition(field.find('.directory-item-code').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(getComputedStyle(field.find('.directory-item-code').element).display).not.toBe('none')
   })
 
   it('shows separate configured-field areas with removable selected chips', async () => {

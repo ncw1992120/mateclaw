@@ -86,11 +86,11 @@ function toggleFromRow() {
 .directory-item.is-selected { background: var(--el-color-primary-light-9); }
 .directory-item :deep(.el-checkbox) { flex: none; margin-right: 0; }
 .field-type-icon { flex: none; margin-right: 2px; color: var(--el-color-primary); font-size: 11px; }
-.directory-item-info { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 2px; cursor: help; }
-.directory-item-title, .directory-item-code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.directory-item-info { display: flex; flex: 1; align-items: baseline; min-width: 0; gap: 8px; cursor: help; }
+.directory-item-title, .directory-item-code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.directory-item-title { flex: 0 1 auto; }
 .directory-item-title { color: var(--el-text-color-primary); font-size: 15px; }
-.directory-item-code { color: var(--el-text-color-secondary); font-size: 12px; }
-.directory-item-code { display: none; }
+.directory-item-code { flex: 1; color: var(--el-text-color-secondary); font-size: 12px; }
 .disabled-checkbox-target { display: inline-flex; flex: none; }
 .directory-item.is-unavailable { opacity: .55; }
 .aloudata-detail-card { color: var(--el-text-color-primary); font-size: 12px; }
