@@ -17,6 +17,19 @@ if (( build_line >= jar_check_line || build_line >= launch_line )); then
   exit 1
 fi
 
+if ! grep -Fq 'mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH"' "$SCRIPT"; then
+  echo "后端启动前必须准备 origin/feature/dev_fu 的独立最新代码工作树。" >&2
+  exit 1
+fi
+if ! grep -Fq 'BUILD_PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests' "$SCRIPT"; then
+  echo "Maven clean package 必须针对最新部署工作树执行。" >&2
+  exit 1
+fi
+if ! grep -Fq 'mateclaw_same_git_repository "$PROJECT_ROOT" "$cwd"' "$SCRIPT"; then
+  echo "只能重启来自同一 Git 仓库其他工作树的 DataAgent 进程。" >&2
+  exit 1
+fi
+
 runner_restart_line="$(grep -nFx '  restart_python_runner || exit 1' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
 runner_url_line="$(grep -nF 'MATECLAW_RUNNER_URL' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
 if [[ -z "$runner_restart_line" || -z "$runner_url_line" ]]; then

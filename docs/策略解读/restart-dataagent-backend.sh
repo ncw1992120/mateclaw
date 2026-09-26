@@ -10,6 +10,7 @@
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
 # 环境变量：
+#   后端每次启动均从 origin/feature/dev_fu 获取最新提交并执行 clean package（需要 Git 网络访问）
 #   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
 #   ALOUDATA_MOCK_PORT=18081        mock 服务端口
 #   ALOUDATA_MOCK_SERVER=...        mock 服务基地址（默认 http://127.0.0.1:<port>）
@@ -24,7 +25,12 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-JAR_PATH="$PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
+BUILD_PROJECT_ROOT="$PROJECT_ROOT"
+DEPLOY_BRANCH="feature/dev_fu"
+DEPLOY_WORKTREE=""
+DEPLOY_WORKTREE_PARENT="${TMPDIR:-/tmp}/mateclaw-dataagent-deploy"
+source "$PROJECT_ROOT/dev-support/local-simulation/scripts/lib/latest-deploy-worktree.sh"
+JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 BACKEND_PORT="18089"
 BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/dataagent/api/actuator/health"
 
@@ -55,6 +61,9 @@ usage() {
   bash restart-dataagent-backend.sh runner       # 只重启本地 Python Runner（不构建）
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
+
+后端启动时会从 origin/feature/dev_fu 获取最新提交，在临时隔离工作树中 clean package，
+构建成功后再启动；Git 获取失败时会停止，不会回退到旧代码。
 
 环境变量：
   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
@@ -285,6 +294,30 @@ case "$ACTION" in
     ;;
 esac
 
+cleanup_deploy_worktree() {
+  [[ -n "$DEPLOY_WORKTREE" ]] || return 0
+  if [[ "$PWD" == "$DEPLOY_WORKTREE" || "$PWD" == "$DEPLOY_WORKTREE/"* ]]; then
+    cd "$PROJECT_ROOT"
+  fi
+  if git -C "$PROJECT_ROOT" worktree remove "$DEPLOY_WORKTREE"; then
+    DEPLOY_WORKTREE=""
+  else
+    echo "警告：部署工作树未能自动清理：$DEPLOY_WORKTREE" >&2
+  fi
+}
+
+# 每次启动后端都从远端指定分支创建独立临时工作树；不切换或覆盖用户工作树。
+# 工作树会在后端停止/启动失败后清理，避免 Maven 构建旧 checkout 的代码。
+mkdir -p "$DEPLOY_WORKTREE_PARENT"
+if ! DEPLOY_WORKTREE="$(mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH" "$DEPLOY_WORKTREE_PARENT")"; then
+  exit 1
+fi
+trap cleanup_deploy_worktree EXIT
+BUILD_PROJECT_ROOT="$DEPLOY_WORKTREE"
+JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
+DEPLOY_COMMIT="$(git -C "$BUILD_PROJECT_ROOT" rev-parse --short HEAD)"
+echo "本次部署源码：origin/$DEPLOY_BRANCH（$DEPLOY_COMMIT），工作树 $BUILD_PROJECT_ROOT"
+
 # ---------------------------------------------------------------- 后端
 
 # 完整重启由当前脚本接管 DataAgent 生命周期。否则 launchd 的 KeepAlive
@@ -323,6 +356,7 @@ restore_dataagent_launch_agent() {
     fi
   fi
 
+  cleanup_deploy_worktree
   exit "$exit_status"
 }
 
@@ -598,8 +632,8 @@ if [[ -z "$MAVEN_BIN" || ! -x "$MAVEN_BIN" ]]; then
 fi
 
 echo "使用 Maven：$MAVEN_BIN"
-echo "清理并重新构建 DataAgent（跳过完整测试套件，避免每次本地重启重复执行耗时测试）..."
-"$MAVEN_BIN" -f "$PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests
+echo "清理并重新构建最新 DataAgent（跳过完整测试套件，避免每次本地重启重复执行耗时测试）..."
+"$MAVEN_BIN" -f "$BUILD_PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests
 
 if [[ ! -f "$JAR_PATH" ]]; then
   echo "错误：DataAgent 构建完成后仍找不到 JAR：$JAR_PATH" >&2
@@ -628,11 +662,14 @@ fi
 
 echo "停止旧的 DataAgent 后端进程..."
 backend_own_pids() {
-  local pid command
+  local pid command cwd
   for pid in $(lsof -tiTCP:"${BACKEND_PORT}" -sTCP:LISTEN 2>/dev/null || true); do
     command="$(ps -p "$pid" -ww -o command= 2>/dev/null || true)"
-    if [[ "$command" == *"$JAR_PATH"* ]]; then
-      echo "$pid"
+    if [[ "$command" == *"/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"* ]]; then
+      cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+      if [[ -n "$cwd" ]] && mateclaw_same_git_repository "$PROJECT_ROOT" "$cwd"; then
+        echo "$pid"
+      fi
     fi
   done
 }
@@ -669,7 +706,7 @@ echo "使用 Java：$(java -version 2>&1 | head -1)"
 echo "启动 DataAgent 后端，数据库：$DB_HOST:$DB_PORT/$DB_NAME"
 echo "健康检查地址：$BACKEND_HEALTH_URL"
 
-cd "$PROJECT_ROOT"
+cd "$BUILD_PROJECT_ROOT"
 # 显式锁定 HTTP 端口（命令行参数优先级最高，覆盖任何把 server.port 设成 0/随机的来源）。
 if ! command -v curl >/dev/null 2>&1; then
   echo "错误：未找到 curl，无法执行后端健康检查。" >&2
