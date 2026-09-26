@@ -11,9 +11,19 @@ const stubs = {
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   'el-table': { template: '<div class="result-table" />' },
   'el-table-column': { template: '<div />' },
-  'el-input': { inheritAttrs: false, template: '<input />' },
+  'el-input': {
+    inheritAttrs: false,
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   'el-date-picker': { inheritAttrs: false, template: '<input data-testid="python-query-date-input" />' },
-  'el-switch': { inheritAttrs: false, props: ['disabled'], template: '<input type="checkbox" :disabled="disabled" />' },
+  'el-switch': {
+    inheritAttrs: false,
+    props: ['modelValue', 'disabled'],
+    emits: ['update:modelValue'],
+    template: '<input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 beforeEach(() => {
@@ -22,7 +32,7 @@ beforeEach(() => {
   state.filterCatalog = []
   Object.assign(state.resultSet, {
     status: 'ready', source: 'script', columns: [{ name: 'result', type: 'string' }],
-    rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: 'execution-1', error: '',
+    rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: '', error: '',
   })
   previewState.loading = false
   previewState.error = ''
@@ -47,6 +57,44 @@ describe('PythonResultDataDialog', () => {
 
     expect(wrapper.find('.result-table').exists()).toBe(true)
     expect(previewState.payload?.dataRows).toEqual([{ result: 'rendered' }])
+    wrapper.unmount()
+  })
+
+  it('点击查询后将 Python 查询结果推送到当前组件', async () => {
+    const component = { id: 'table-1', type: 'table', title: '结果表' } as any
+    Object.assign(state.resultSet, {
+      columns: [{ name: 'result', type: 'string' }, { name: 'internal_note', type: 'string' }],
+      rows: [
+        { result: '保留行', internal_note: '不展示' },
+        { result: '过滤行', internal_note: '不展示' },
+      ],
+      rowCount: 2,
+    })
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'test',
+      confirmed: true,
+      displayFields: [{ field: 'result', title: '结果', role: 'dimension' }],
+      filterFields: [
+        { field: 'result', title: '结果', dataType: 'string', parameterName: 'result', operators: ['eq'], filterComponentId: 'result-filter' },
+      ],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+    state.filterCatalog = [{ id: 'result-filter', title: '结果筛选器', type: 'filter', selectionMode: 'single' }]
+    const wrapper = mount(PythonResultDataDialog, { props: { component }, global: { stubs } })
+    await flushPromises()
+    await wrapper.find('input:not([type="checkbox"])').setValue('保留行')
+    await wrapper.find('input[type="checkbox"]').setValue(true)
+
+    await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+
+    expect(wrapper.emitted('resultset')?.[0]?.[0]).toMatchObject({
+      componentId: 'table-1',
+      status: 'ready',
+      source: 'script',
+      rows: [{ result: '保留行' }],
+      fieldLabels: { result: '结果' },
+    })
     wrapper.unmount()
   })
 

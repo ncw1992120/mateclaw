@@ -106,6 +106,16 @@ import type { InsightComponent } from '@/types'
 import ComponentRenderPreview from '../ComponentRenderPreview.vue'
 
 const props = defineProps<{ component?: InsightComponent | null }>()
+const emit = defineEmits<{
+  (event: 'resultset', payload: {
+    componentId: string
+    status: 'ready'
+    source: 'script'
+    rows: Record<string, unknown>[]
+    fieldLabels?: Record<string, string>
+    error: ''
+  }): void
+}>()
 const { state, previewState, loadResultPreview } = useInsight()
 const ui = state.ui
 const loading = computed(() => previewState.loading)
@@ -142,6 +152,10 @@ const sortedRows = computed(() => {
     return direction === 'asc' ? result : -result
   })
 })
+const componentRows = computed(() => {
+  const fields = visibleColumns.value.map((column) => column.name)
+  return sortedRows.value.map((row) => Object.fromEntries(fields.map((field) => [field, row[field]])))
+})
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)
 const componentPreviewColumns = computed(() => visibleColumns.value.map((column) => ({
   ...column,
@@ -170,6 +184,19 @@ function onSortChange(detail: { prop?: string; order?: 'ascending' | 'descending
 function query(): void {
   appliedConditions.value = enabledPythonResultConditions(conditionRows.value)
   page.value = 1
+  if (!props.component || !previewState.payload) return
+  const fieldLabels = {
+    ...(state.resultSet.fieldLabels ?? {}),
+    ...Object.fromEntries(displayFields.value.map((field) => [field.field, field.title || field.field])),
+  }
+  emit('resultset', {
+    componentId: props.component.id,
+    status: 'ready',
+    source: 'script',
+    rows: componentRows.value,
+    fieldLabels,
+    error: '',
+  })
 }
 
 function initialize(): void {
