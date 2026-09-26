@@ -147,10 +147,61 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-1',
       renderType: 'table',
-      table: { columns: ['trade_date'], rows: [['2026-09-01']] },
+      table: { columns: ['trade_date', 'cust_type', 'amount'], rows: [['2026-09-01', '', '']] },
     })
     expect((wrapper.emitted('render')?.[0]?.[0] as { fieldLabels?: Record<string, string> }).fieldLabels?.trade_date).toBe('交易日期')
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('组件预览不会把响应中未配置展示的日期维度带到画布', async () => {
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [{ trade_date: '2026-09-01', amount: 18, hidden_metric: 999 }],
+      schema: ['trade_date', 'amount', 'hidden_metric'],
+      rowCount: 1,
+      last: true,
+    })
+    const dataset = metricViewDataset({
+      queryConfig: { ...queryConfig(), displayFields: [{ field: 'amount', title: '金额', role: 'measure' }] },
+    })
+    const wrapper = await openWith(dataset, { id: 'table-1', type: 'table', title: '指标表' })
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="show-component-result"]').trigger('click')
+    await flushPromises()
+
+    const rendered = wrapper.emitted('render')?.[0]?.[0] as { table?: { columns: string[]; rows: unknown[][] } }
+    expect(rendered.table).toEqual({ columns: ['amount'], rows: [['18']] })
+    wrapper.unmount()
+  })
+
+  it('KPI 组件预览忽略组件历史配置中未选择展示的日期指标', async () => {
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [{ trade_date: '2026-09-01', amount: 18 }],
+      schema: ['trade_date', 'amount'],
+      rowCount: 1,
+      last: true,
+    })
+    const dataset = metricViewDataset({
+      queryConfig: { ...queryConfig(), displayFields: [{ field: 'amount', title: '金额', role: 'measure' }] },
+    })
+    const component = {
+      id: 'kpi-1',
+      type: 'kpi',
+      title: '指标卡',
+      kpiMetrics: [
+        { fieldKey: 'trade_date', displayName: '指标日期' },
+        { fieldKey: 'amount', displayName: '金额' },
+      ],
+    }
+    const wrapper = await openWith(dataset, component)
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="show-component-result"]').trigger('click')
+    await flushPromises()
+
+    const rendered = wrapper.emitted('render')?.[0]?.[0] as { kpiList?: Array<{ fieldKey: string }> }
+    expect(rendered.kpiList?.map(({ fieldKey }) => fieldKey)).toEqual(['amount'])
     wrapper.unmount()
   })
 
