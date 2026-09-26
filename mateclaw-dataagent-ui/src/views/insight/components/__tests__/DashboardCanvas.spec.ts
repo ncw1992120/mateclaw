@@ -20,7 +20,7 @@ const stubs = {
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component'], template: '<div />' },
   TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component'], template: '<div />' },
   AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['componentData'], template: '<div />' },
-  CombinationCardWidget: { name: 'CombinationCardWidget', props: ['sampleMode'], template: '<div />' },
+  CombinationCardWidget: { name: 'CombinationCardWidget', props: ['componentDataMap', 'sampleMode'], template: '<div />' },
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { canvasEmpty: '暂无组件' } } }, missingWarn: false, fallbackWarn: false })
 
@@ -97,6 +97,70 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.findComponent({ name: 'ChartWidget' }).props('componentData')).toMatchObject({ renderType: 'echarts', option: { series: [{ type: 'pie' }] } })
     expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('componentData').table.rows).toHaveLength(45)
     expect(wrapper.findComponent({ name: 'AiAnalysisWidget' }).props('componentData')).toMatchObject({ renderType: 'aiAnalysis' })
+  })
+
+  it('prefers dataset display names over stale runtime labels for every data component', () => {
+    const components = [
+      { ...component, config: { datasetPipeline: { datasetInputs: [{ datasetId: 'orders', alias: 'orders', fieldMappings: [{ source: 'raw_amount', target: '销售额' }] }] } } },
+      { ...component, id: 'chart-1', type: 'chart' as const, config: { datasetPipeline: { datasetInputs: [{ datasetId: 'orders', alias: 'orders', fieldMappings: [{ source: 'raw_amount', target: '销售额' }] }] } } },
+      { ...component, id: 'table-1', type: 'table' as const, config: { datasetPipeline: { datasetInputs: [{ datasetId: 'orders', alias: 'orders', fieldMappings: [{ source: 'raw_amount', target: '销售额' }] }] } } },
+    ]
+    const staleData = {
+      componentId: 'kpi-1', renderType: 'kpi' as const,
+      fieldLabels: { raw_amount: 'raw_amount', derived_amount: '派生指标标题' },
+      kpiList: [{ fieldKey: 'raw_amount', name: 'raw_amount', value: '120' }],
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components,
+        editable: true,
+        componentDataMap: {
+          'kpi-1': staleData,
+          'chart-1': { ...staleData, componentId: 'chart-1', renderType: 'echarts', option: { series: [{ name: 'raw_amount', data: [120] }] } },
+          'table-1': { ...staleData, componentId: 'table-1', renderType: 'table', table: { columns: ['raw_amount'], rows: [['120']] } },
+        },
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const expectedLabels = { raw_amount: '销售额', derived_amount: '派生指标标题' }
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
+    expect(wrapper.findComponent({ name: 'ChartWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
+    expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
+  })
+
+  it('passes resolved display names to components nested inside a combination card', () => {
+    const child = {
+      id: 'nested-kpi',
+      type: 'kpi' as const,
+      title: '销售额',
+      layout: { x: 0, y: 0, col: 12, h: 120 },
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: 'orders', alias: 'orders', fieldMappings: [{ source: 'raw_amount', target: '销售额' }] }] } },
+    }
+    const combination = {
+      ...component,
+      id: 'combination-1',
+      type: 'combination' as const,
+      children: [child],
+      containerConfig: { layoutMode: 'free' as const, tabs: [] },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [combination],
+        editable: true,
+        componentDataMap: {
+          'nested-kpi': {
+            componentId: 'nested-kpi',
+            renderType: 'kpi',
+            fieldLabels: { raw_amount: 'raw_amount' },
+            kpiList: [{ fieldKey: 'raw_amount', name: 'raw_amount', value: '120' }],
+          },
+        },
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.findComponent({ name: 'CombinationCardWidget' }).props('componentDataMap')['nested-kpi'].fieldLabels).toEqual({ raw_amount: '销售额' })
   })
 
   it('starts at 100 percent and applies manually entered zoom', async () => {

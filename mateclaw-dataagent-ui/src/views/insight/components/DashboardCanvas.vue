@@ -235,7 +235,7 @@
               <CombinationCardWidget
                 v-else-if="getComponent(item.i)?.type === 'combination'"
                 :component="getComponent(item.i)!"
-                :component-data-map="componentDataMap"
+                :component-data-map="componentDataMapWithFieldLabels"
                 :editable="editable"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
@@ -788,16 +788,25 @@ function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
 function getComponentData(id: string): InsightComponentData | undefined {
   const configured = props.componentDataMap?.[id]
   const component = getComponent(id)
-  const pipeline = component ? readComponentDatasetPipeline(component) : undefined
-  const componentLabels = fieldLabelsFromInputs(pipeline?.datasetInputs ?? [])
-  const dashboardLabels = fieldLabelsFromInputs(props.datasetInputs ?? [])
-  const fieldLabels = { ...dashboardLabels, ...componentLabels }
+  const fieldLabels = component ? fieldLabelsForComponent(component) : fieldLabelsFromInputs(props.datasetInputs ?? [])
   if (configured) {
-    return { ...configured, fieldLabels: { ...fieldLabels, ...configured.fieldLabels } }
+    return withFieldLabels(configured, fieldLabels)
   }
   if (!component || hasConfiguredDataset(component)) return undefined
   const sample = resolveComponentSample(component).renderData
-  return sample ? { ...sample, fieldLabels: { ...fieldLabels, ...sample.fieldLabels } } : sample
+  return sample ? withFieldLabels(sample, fieldLabels) : sample
+}
+
+function fieldLabelsForComponent(component: InsightComponent | InsightCombinationChild): Record<string, string> {
+  const pipeline = readComponentDatasetPipeline(component as unknown as InsightComponent)
+  const componentLabels = fieldLabelsFromInputs(pipeline?.datasetInputs ?? [])
+  const dashboardLabels = fieldLabelsFromInputs(props.datasetInputs ?? [])
+  return { ...dashboardLabels, ...componentLabels }
+}
+
+function withFieldLabels(data: InsightComponentData, labels: Record<string, string>): InsightComponentData {
+  // 数据集注册表标签优先；运行时标签仍可补充未登记的脚本派生字段。
+  return { ...data, fieldLabels: { ...data.fieldLabels, ...labels } }
 }
 
 /** 优先使用字段注册表；兼容较旧配置中仅保存在 queryConfig.displayFields 的展示名。 */
@@ -829,6 +838,22 @@ function fieldLabelsFromInputs(inputs: DashboardDatasetInput[]): Record<string, 
   }
   return labels
 }
+
+const componentDataMapWithFieldLabels = computed(() => {
+  const dataMap = { ...(props.componentDataMap ?? {}) }
+  const visit = (component: InsightComponent | InsightCombinationChild): void => {
+    const data = props.componentDataMap?.[component.id]
+    if (data) dataMap[component.id] = withFieldLabels(data, fieldLabelsForComponent(component))
+
+    const children = [
+      ...(component.children ?? []),
+      ...((component.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+    ]
+    children.forEach(visit)
+  }
+  props.components.forEach(visit)
+  return dataMap
+})
 
 function isSampleData(id: string): boolean {
   const component = getComponent(id)
