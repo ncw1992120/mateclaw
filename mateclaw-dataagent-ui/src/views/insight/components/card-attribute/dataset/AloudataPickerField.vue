@@ -35,10 +35,10 @@ function toggleFromRow() {
   >
     <el-tooltip v-if="unavailableReason && !selected" :content="unavailableReason" placement="top">
       <span class="disabled-checkbox-target">
-        <el-checkbox :model-value="selected" :label="code()" disabled @click.stop @change="(checked: boolean) => emit('toggle', checked)" />
+        <el-checkbox :model-value="selected" disabled @click.stop @change="(checked: boolean) => emit('toggle', checked)"><span class="visually-hidden">{{ label() }} {{ code() }}</span></el-checkbox>
       </span>
     </el-tooltip>
-    <el-checkbox v-else :model-value="selected" :label="code()" @click.stop @change="(checked: boolean) => emit('toggle', checked)" />
+    <el-checkbox v-else :model-value="selected" @click.stop @change="(checked: boolean) => emit('toggle', checked)"><span class="visually-hidden">{{ label() }} {{ code() }}</span></el-checkbox>
     <span class="field-type-icon">{{ kind === 'metric' ? '123' : 'abc' }}</span>
     <el-popover
       trigger="hover"
@@ -91,6 +91,7 @@ function toggleFromRow() {
 .directory-item-title { flex: 0 1 auto; }
 .directory-item-title { color: var(--el-text-color-primary); font-size: 15px; }
 .directory-item-code { flex: 1; color: var(--el-text-color-secondary); font-size: 12px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .disabled-checkbox-target { display: inline-flex; flex: none; }
 .directory-item.is-unavailable { opacity: .55; }
 .aloudata-detail-card { color: var(--el-text-color-primary); font-size: 12px; }

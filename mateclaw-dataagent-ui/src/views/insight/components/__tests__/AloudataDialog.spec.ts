@@ -129,18 +129,22 @@ const InputStub = defineComponent({
 
 const CheckboxStub = defineComponent({
   name: 'ElCheckbox',
-  props: { modelValue: Boolean, label: { type: String, required: true } },
+  props: { modelValue: Boolean, label: { type: String, default: '' }, disabled: Boolean },
   emits: ['change'],
-  setup(props, { emit }) {
-    return () => h('input', {
-      class: 'picker-checkbox',
-      type: 'checkbox',
-      checked: props.modelValue,
-      onChange: (event: Event) => {
-        const checked = (event.target as HTMLInputElement).checked
-        emit('change', checked)
-      },
-    })
+  setup(props, { emit, slots }) {
+    return () => h('label', { class: 'el-checkbox' }, [
+      h('input', {
+        class: 'picker-checkbox',
+        type: 'checkbox',
+        checked: props.modelValue,
+        disabled: props.disabled,
+        onChange: (event: Event) => {
+          const checked = (event.target as HTMLInputElement).checked
+          emit('change', checked)
+        },
+      }),
+      h('span', { class: 'el-checkbox__label' }, slots.default?.() ?? props.label),
+    ])
   },
 })
 
@@ -354,6 +358,9 @@ describe('Aloudata 指标&维度选择', () => {
     expect(field.find('.directory-item-code').text()).toBe('dim_level_type')
     expect(field.element.compareDocumentPosition(field.find('.directory-item-code').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(getComputedStyle(field.find('.directory-item-code').element).display).not.toBe('none')
+    const checkboxLabel = field.find('.el-checkbox__label .visually-hidden')
+    expect(checkboxLabel.text()).toBe('会员等级 dim_level_type')
+    expect(field.find('.el-checkbox').attributes('label')).toBeUndefined()
   })
 
   it('shows separate configured-field areas with removable selected chips', async () => {
