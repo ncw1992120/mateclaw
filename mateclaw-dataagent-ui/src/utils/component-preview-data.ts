@@ -14,12 +14,16 @@ export function componentPreviewData(
 ): InsightComponentData {
   const renderType = component.type === 'kpi' ? 'kpi' : component.type === 'chart' ? 'echarts' : 'table'
   const fieldLabels = Object.fromEntries(columns.map(({ name, title }) => [name, title?.trim() || name]))
+  const visibleFields = new Set(columns.map(({ name }) => name))
+  const projectedRows = rows
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
+    .map((row) => Object.fromEntries(columns.map(({ name }) => [name, row[name]])))
   const kpiFields = component.type === 'kpi'
     ? (component.kpiMetrics ?? []).map((metric) => ({
       fieldKey: metric.fieldKey,
       displayName: metric.displayName,
       unit: metric.unit,
-    }))
+    })).filter((metric) => visibleFields.has(metric.fieldKey))
     : []
-  return rowsToComponentData(component.id, rows, renderType, kpiFields, fieldLabels)
+  return rowsToComponentData(component.id, projectedRows, renderType, kpiFields, fieldLabels)
 }

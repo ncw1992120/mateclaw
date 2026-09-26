@@ -17,10 +17,25 @@ if (( build_line >= jar_check_line || build_line >= launch_line )); then
   exit 1
 fi
 
-runner_restart_line="$(grep -nFx 'restart_python_runner || exit 1' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
+runner_restart_line="$(grep -nFx '  restart_python_runner || exit 1' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
 runner_url_line="$(grep -nF 'MATECLAW_RUNNER_URL' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
 if [[ -z "$runner_restart_line" || -z "$runner_url_line" ]]; then
   echo "启动脚本必须配置并重启本地 Python Runner。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'if python_runner_enabled; then' "$SCRIPT"; then
+  echo "Python Runner 未启用时，启动脚本不得无条件重启 Runner。" >&2
+  exit 1
+fi
+
+runner_enabled_helper="$(sed -n '/^python_runner_enabled()/,/^}/p' "$SCRIPT")"
+disabled_result="$(PYTHON_EXECUTOR_ENABLED=false bash -c "$runner_enabled_helper
+if python_runner_enabled; then echo enabled; else echo disabled; fi")"
+enabled_result="$(PYTHON_EXECUTOR_ENABLED=true bash -c "$runner_enabled_helper
+if python_runner_enabled; then echo enabled; else echo disabled; fi")"
+if [[ "$disabled_result" != "disabled" || "$enabled_result" != "enabled" ]]; then
+  echo "Python Runner 启动条件没有正确遵循 PYTHON_EXECUTOR_ENABLED。" >&2
   exit 1
 fi
 
