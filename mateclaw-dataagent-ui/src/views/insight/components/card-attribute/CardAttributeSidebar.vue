@@ -12,7 +12,7 @@
     <FieldMappingDialog />
     <PythonScriptDialog />
     <PreviewDialog v-if="state.ui.preview.kind !== 'result'" />
-    <PythonResultDataDialog v-else :component="component" />
+    <PythonResultDataDialog v-else :component="component" @render="emit('render', $event)" />
     <MetricConfigDialog />
     <MetricStyleDialog />
   </div>
@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import type { InsightComponent, InsightDashboardSchema } from '@/types'
+import type { InsightComponent, InsightComponentData, InsightDashboardSchema } from '@/types'
 import { useInsight } from './useInsight'
 import type { ResultSetStatus } from './useInsight'
 import { hydratePanel, panelToPipeline, buildComponentPatch } from './useCardAttributeBridge'
@@ -63,6 +63,7 @@ export interface ResultSetEmitPayload {
 const emit = defineEmits<{
   (e: 'change', component: InsightComponent): void
   (e: 'resultset', payload: ResultSetEmitPayload): void
+  (e: 'render', data: InsightComponentData): void
 }>()
 
 const { state, scheduleResultSet } = useInsight()
