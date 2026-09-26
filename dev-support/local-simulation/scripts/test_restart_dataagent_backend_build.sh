@@ -39,4 +39,9 @@ if grep -Eq 'docker compose.*(build|up --build)' "$SCRIPT"; then
   exit 1
 fi
 
+if ! grep -Fq 'export MATECLAW_DATASET_READ_BASE_URL=' "$SCRIPT"; then
+  echo "DataAgent 必须通过 application.yml 使用的变量配置 Runner 数据回读地址。" >&2
+  exit 1
+fi
+
 echo "DataAgent 重启脚本 clean + package 顺序检查通过。"
