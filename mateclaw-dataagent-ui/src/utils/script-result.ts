@@ -234,7 +234,7 @@ export interface EnvelopeComponentResult {
   option?: Record<string, unknown>
   /** KPI 取值 */
   value?: string | number | boolean
-  kpiList?: { name: string; value: string | number | boolean }[]
+  kpiList?: { fieldKey?: string; name: string; value: string | number | boolean }[]
 }
 
 export interface EnvelopeComponentSpec {
@@ -247,6 +247,7 @@ export interface EnvelopeComponentSpec {
     valueField?: string
     aggregation?: 'sum' | 'avg' | 'max' | 'min' | 'count'
   } & Record<string, unknown>
+  kpiMetrics?: Array<{ fieldKey: string; displayName?: string; unit?: string }>
 }
 
 function isNumericColumn(column: ScriptResultColumn): boolean {
@@ -352,6 +353,14 @@ export function resultEnvelopeToComponentData(
       value = (last[config.valueField as string] ?? '') as string | number | boolean
     } else {
       value = (last[columns[0]?.name] ?? '') as string | number | boolean
+    }
+    if ((component.kpiMetrics?.length ?? 0) > 1) {
+      const kpiList = component.kpiMetrics!.map((metric) => ({
+        fieldKey: metric.fieldKey,
+        name: metric.displayName || fieldLabels[metric.fieldKey] || metric.fieldKey,
+        value: last[metric.fieldKey] as string | number | boolean ?? '',
+      }))
+      return { state: 'data', rows, columns, fieldLabels, value, kpiList }
     }
     return { state: 'data', rows, columns, fieldLabels, value, kpiList: [{ name: String(config.valueField || columns[0]?.name || '值'), value }] }
   }

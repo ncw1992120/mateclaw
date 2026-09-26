@@ -15,6 +15,7 @@ import type {
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { rowsToComponentData, type KpiProjectionField } from '@/utils/dataset-result'
+import { buildKpiMetrics } from '@/utils/kpi-metrics'
 import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { draftRequestForDataset } from '../components/card-attribute/useInsight'
 import { inputToDatasetConfig } from '../components/card-attribute/useCardAttributeBridge'
@@ -45,7 +46,26 @@ export function toComponentData(
   rows: Record<string, unknown>[],
   fieldLabels?: Record<string, string>,
 ): InsightComponentData {
-  return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component), fieldLabels)
+  return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component), fieldLabels, {
+    chartType: component.chartType,
+    config: component.config,
+  })
+}
+
+/** 用持久化结果集字段修复旧 KPI 投影，保留已有指标的布局和样式。 */
+export function reconcileKpiProjection(
+  component: InsightComponent,
+  columns: Array<{ name: string }>,
+): void {
+  if (component.type !== 'kpi' || !columns.length) return
+  const existing = component.kpiMetrics ?? []
+  component.kpiMetrics = buildKpiMetrics(
+    columns.map(({ name }) => ({
+      name,
+      displayName: existing.find((metric) => metric.fieldKey === name)?.displayName,
+    })),
+    existing,
+  )
 }
 
 /** 结果集行数据回读：脚本走执行结果，无脚本走数据集查询 */
@@ -77,6 +97,7 @@ function executionEnvelopeToComponentData(
     type: component.type,
     chartType: component.chartType,
     config: component.config,
+    kpiMetrics: component.kpiMetrics,
   }, envelope)
   const renderType = renderTypeOf(component)
   if (result.state === 'message') {
@@ -98,9 +119,10 @@ function executionEnvelopeToComponentData(
     const value = result.value
     const fieldKey = component.config?.valueField as string | undefined
     const kpiList = (result.kpiList ?? (value === undefined ? [] : [{ name: '值', value }])).map((item, index) => ({
-      fieldKey: fieldKey ?? `value_${index}`,
+      fieldKey: item.fieldKey ?? fieldKey ?? `value_${index}`,
       name: item.name,
       value: String(item.value),
+      unit: component.kpiMetrics?.find((metric) => metric.fieldKey === (item.fieldKey ?? fieldKey))?.unit,
     }))
     return { componentId: component.id, renderType, kpi: kpiList[0], kpiList, fieldLabels: result.fieldLabels }
   }
@@ -122,6 +144,7 @@ export async function restoreResultSetData(
       const pipeline = readComponentDatasetPipeline(component)
       const meta = pipeline?.resultSet
       if (!pipeline || !meta || meta.status !== 'ready') return
+      reconcileKpiProjection(component, meta.columns)
       if (meta.source === 'script' && meta.executionId) {
         const result = await insightDashboardApi.getExecutionResult(meta.executionId) as { envelope?: unknown }
         out[component.id] = executionEnvelopeToComponentData(component, result.envelope)

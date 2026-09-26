@@ -1,10 +1,16 @@
-import type { InsightComponentData, KpiItemData } from '@/types'
+import type { ChartType, InsightComponentData, KpiItemData } from '@/types'
+import { resultEnvelopeToComponentData, tableEnvelopeFromRows } from './script-result'
 
 /** KPI 投影配置：结果集列 → 卡片指标的映射，与组件 kpiMetrics 的 fieldKey 对齐 */
 export interface KpiProjectionField {
   fieldKey: string
   displayName?: string
   unit?: string
+}
+
+export interface ChartProjection {
+  chartType?: ChartType
+  config?: { dimensionField?: string; metricFields?: string[] }
 }
 
 /** 将脚本返回的行集映射为现有仪表盘组件数据，不改变数据源 Schema。 */
@@ -14,6 +20,7 @@ export function rowsToComponentData(
   renderType: 'table' | 'echarts' | 'kpi' = 'table',
   kpiFields: KpiProjectionField[] = [],
   fieldLabels?: Record<string, string>,
+  chartProjection?: ChartProjection,
 ): InsightComponentData {
   const records = rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
   const columns = [...new Set(records.flatMap((row) => Object.keys(row)))]
@@ -29,18 +36,17 @@ export function rowsToComponentData(
     }
   }
 
-  const category = columns[0]
-  const valueColumns = columns.slice(1).filter((column) => records.some((row) => typeof row[column] === 'number'))
+  const adapted = resultEnvelopeToComponentData({
+    id: componentId,
+    type: 'chart',
+    chartType: chartProjection?.chartType,
+    config: chartProjection?.config,
+  }, tableEnvelopeFromRows(records))
   return {
     componentId,
     renderType: 'echarts',
     fieldLabels,
-    option: {
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: records.map((row) => formatCell(row[category])) },
-      yAxis: { type: 'value' },
-      series: valueColumns.map((column) => ({ name: column, type: 'line', data: records.map((row) => row[column]) })),
-    },
+    option: adapted.option,
   }
 }
 

@@ -1368,8 +1368,15 @@ function handleScriptResult(rows: Record<string, unknown>[]): void {
     ElMessage.warning('请先选择要应用结果的组件')
     return
   }
-  const renderType = component.type === 'chart' ? 'echarts' : 'table'
-  componentDataMap.value[component.id] = rowsToComponentData(component.id, rows, renderType, [], insightState.resultSet.fieldLabels)
+  const renderType = component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table'
+  componentDataMap.value[component.id] = rowsToComponentData(
+    component.id,
+    rows,
+    renderType,
+    component.type === 'kpi' ? (component.kpiMetrics ?? []).map(({ fieldKey, displayName, unit }) => ({ fieldKey, displayName, unit })) : [],
+    insightState.resultSet.fieldLabels,
+    { chartType: component.chartType, config: component.config },
+  )
   schema.scriptBindings = [
     ...(schema.scriptBindings ?? []).filter((binding) => binding.componentId !== component.id),
     { componentId: component.id, renderType },

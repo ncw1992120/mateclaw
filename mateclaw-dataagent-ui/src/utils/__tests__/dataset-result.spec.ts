@@ -13,6 +13,21 @@ describe('dataset result mapping', () => {
     expect(result.option?.series).toEqual([{ name: 'amount', type: 'line', data: [2, 4] }])
   })
 
+  it('preserves the configured pie type instead of rendering it as a line chart', () => {
+    const result = rowsToComponentData(
+      'chart-pie',
+      [{ channel: '自然流量', users: 8 }, { channel: '广告', users: 3 }],
+      'echarts',
+      [],
+      undefined,
+      { chartType: 'pie', config: { dimensionField: 'channel', metricFields: ['users'] } },
+    )
+    expect(result.option?.series).toEqual([{
+      type: 'pie',
+      data: [{ name: '自然流量', value: 8 }, { name: '广告', value: 3 }],
+    }])
+  })
+
   it('maps the last row to KPI metrics and computes change from the previous row', () => {
     const result = rowsToComponentData(
       'kpi-1',

@@ -438,6 +438,7 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
         type: component.type,
         chartType: component.chartType,
         config: component.config,
+        kpiMetrics: component.kpiMetrics,
       }, envelope)
       if (adapted.state === 'message') {
         componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, error: adapted.message }
@@ -446,12 +447,18 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
       } else if (binding.renderType === 'echarts') {
         componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', option: adapted.option, fieldLabels: adapted.fieldLabels }
       } else if (binding.renderType === 'kpi') {
-        const value = adapted.value
+        const kpiList = (adapted.kpiList ?? (adapted.value === undefined ? [] : [{ name: '值', value: adapted.value }]))
+          .map((item, index) => ({
+            fieldKey: item.fieldKey ?? component.kpiMetrics?.[index]?.fieldKey ?? `value_${index}`,
+            name: item.name,
+            value: String(item.value),
+            unit: component.kpiMetrics?.[index]?.unit,
+          }))
         componentDataMap.value[binding.componentId] = {
           componentId: binding.componentId,
           renderType: 'kpi',
-          kpi: value === undefined ? undefined : { fieldKey: 'value', name: '值', value: String(value) },
-          kpiList: value === undefined ? [] : [{ fieldKey: 'value', name: '值', value: String(value) }],
+          kpi: kpiList[0],
+          kpiList,
           fieldLabels: adapted.fieldLabels,
         }
       } else {

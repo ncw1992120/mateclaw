@@ -25,5 +25,8 @@ export function componentPreviewData(
       unit: metric.unit,
     })).filter((metric) => visibleFields.has(metric.fieldKey))
     : []
-  return rowsToComponentData(component.id, projectedRows, renderType, kpiFields, fieldLabels)
+  return rowsToComponentData(component.id, projectedRows, renderType, kpiFields, fieldLabels, {
+    chartType: component.chartType,
+    config: component.config,
+  })
 }

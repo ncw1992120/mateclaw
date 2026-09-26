@@ -116,6 +116,23 @@ describe('resultEnvelopeToComponentData', () => {
     ).value).toBe(30)
   })
 
+  it('kpi 脚本表格结果按组件配置渲染全部指标', () => {
+    const result = resultEnvelopeToComponentData({
+      ...kpiComponent(),
+      kpiMetrics: [
+        { fieldKey: 'orders', displayName: '订单数' },
+        { fieldKey: 'revenue', displayName: '销售额' },
+      ],
+    }, tableEnvelope(
+      [column('orders', 'number'), column('revenue', 'number')],
+      [{ orders: 12, revenue: 360 }],
+    ))
+    expect(result.kpiList).toEqual([
+      { fieldKey: 'orders', name: '订单数', value: 12 },
+      { fieldKey: 'revenue', name: '销售额', value: 360 },
+    ])
+  })
+
   it('message 显示说明，不伪造成表格行', () => {
     const result = resultEnvelopeToComponentData(kpiComponent(), messageEnvelope('没有满足条件的数据'))
     expect(result.state).toBe('message')
