@@ -49,6 +49,12 @@ function queryConfig(parameterBindings: DatasetQueryConfig['parameterBindings'] 
 
 const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
+  'el-tabs': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<div><button data-testid="show-component-result" @click="$emit(\'update:modelValue\', \'component\')">组件预览</button><slot /></div>',
+  },
+  'el-tab-pane': { template: '<div><slot /></div>' },
   'el-input': {
     props: ['modelValue'],
     template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -78,6 +84,7 @@ const stubs = {
     template: '<div class="stub-table-column" :data-prop="prop" :data-label="label" :data-sortable="String(sortable)" />',
   },
   'el-empty': { props: ['description'], template: '<div class="stub-empty">{{ description }}</div>' },
+  'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
 }
 
 /** Aloudata 指标视图数据集：筛选字段来自视图维度 */
@@ -104,9 +111,9 @@ function metricViewDataset(partial: Partial<DatasetConfig> = {}): DatasetConfig 
 }
 
 /** 打开弹窗：visible 初值即 true，组件 mount 时就会走初始化 */
-async function openWith(dataset: DatasetConfig) {
+async function openWith(dataset: DatasetConfig, component?: Record<string, unknown>) {
   state.ui.dataDialog = { visible: true, datasetId: dataset.id }
-  const wrapper = mount(DatasetDataDialog, { props: { dataset }, global: { stubs }, attachTo: document.body })
+  const wrapper = mount(DatasetDataDialog, { props: { dataset, component }, global: { stubs }, attachTo: document.body })
   await flushPromises()
   return wrapper
 }
@@ -126,6 +133,26 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
   }
+
+  it('组件预览把当前查询结果交给画布中的组件，而不在弹窗内创建独立组件', async () => {
+    const component = { id: 'table-1', type: 'table', title: '订单明细' }
+    const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }), component)
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="show-component-result"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('render')).toHaveLength(1)
+    expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
+      componentId: 'table-1',
+      renderType: 'table',
+      table: { columns: ['trade_date'], rows: [['2026-09-01']] },
+    })
+    expect((wrapper.emitted('render')?.[0]?.[0] as { fieldLabels?: Record<string, string> }).fieldLabels?.trade_date).toBe('交易日期')
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 
   it('关掉再打开：条件和结果都还在，且不重新发请求', async () => {
     const dataset = metricViewDataset()

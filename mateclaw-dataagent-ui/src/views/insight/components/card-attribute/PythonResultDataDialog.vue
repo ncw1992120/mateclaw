@@ -77,17 +77,12 @@
             </div>
           </el-tab-pane>
           <el-tab-pane label="组件预览" name="component">
-            <div class="dd-head"><span class="dd-title">{{ component?.title || '组件' }}预览</span><span class="dd-hint">仅预览 Python 当前输出，不影响脚本与配置</span></div>
-            <ComponentRenderPreview
-              v-if="resultView === 'component'"
-              :component="component ?? null"
-              :rows="sortedRows"
-              :columns="componentPreviewColumns"
-              :field-roles="componentPreviewFieldRoles"
-              :loading="loading"
-              :error="error"
-              :has-queried="Boolean(previewState.payload)"
-            />
+            <div class="dd-head"><span class="dd-title">{{ component?.title || '组件' }}预览</span><span class="dd-hint">Python 当前输出已渲染到画布中的组件</span></div>
+            <el-alert v-if="!component" type="info" :closable="false" title="请先选择画布组件，再查看组件预览。" />
+            <el-alert v-else-if="loading" type="info" :closable="false" title="正在查询 Python 输出…" />
+            <el-alert v-else-if="error" type="error" :closable="false" :title="error" />
+            <el-alert v-else-if="previewState.payload" type="success" :closable="false" :title="`${component.title || '组件'}已使用当前 Python 输出渲染，请在画布查看。`" />
+            <el-alert v-else type="info" :closable="false" title="请先查询数据；查询结果会直接显示在画布中的组件上。" />
           </el-tab-pane>
         </el-tabs>
       </section>
@@ -102,10 +97,11 @@ import type { QuerySortSpec } from '@/types'
 import { needsValue, type FilterCondition } from '@/utils/filter-conditions'
 import { applyResultFilters } from '@/utils/result-preview-filter'
 import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/utils/python-result-filter-conditions'
-import type { InsightComponent } from '@/types'
-import ComponentRenderPreview from '../ComponentRenderPreview.vue'
+import type { InsightComponent, InsightComponentData } from '@/types'
+import { componentPreviewData } from '@/utils/component-preview-data'
 
 const props = defineProps<{ component?: InsightComponent | null }>()
+const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
 const { state, previewState, loadResultPreview } = useInsight()
 const ui = state.ui
 const loading = computed(() => previewState.loading)
@@ -144,11 +140,15 @@ const sortedRows = computed(() => {
 })
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)
 const componentPreviewColumns = computed(() => visibleColumns.value.map((column) => ({
-  ...column,
+  name: column.name,
   title: fieldTitle(column.name),
-  role: displayFields.value.find((field) => field.field === column.name)?.role,
 })))
-const componentPreviewFieldRoles = computed(() => Object.fromEntries(displayFields.value.map((field) => [field.field, field.role])))
+
+watch([resultView, sortedRows, () => props.component, loading, () => previewState.payload], () => {
+  const component = props.component
+  if (resultView.value !== 'component' || loading.value || !component || !previewState.payload) return
+  emit('render', componentPreviewData(component, sortedRows.value, componentPreviewColumns.value))
+}, { deep: true, flush: 'post' })
 const queryHint = computed(() => conditionRows.value.length ? '筛选条件来自查询配置；关闭条件后点击查询可查看全部结果' : '未配置筛选字段，本次将展示全部 Python 输出')
 const resultHint = computed(() => previewState.payload ? `${filteredRows.value.length} / ${(previewState.payload.dataRows ?? []).length} 行` : '请点击查询')
 

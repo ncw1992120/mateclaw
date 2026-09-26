@@ -7,8 +7,15 @@ const { state, previewState } = useInsight()
 
 const stubs = {
   'el-dialog': { template: '<div><slot /></div>' },
+  'el-tabs': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<div><button data-testid="show-component-result" @click="$emit(\'update:modelValue\', \'component\')">组件预览</button><slot /></div>',
+  },
+  'el-tab-pane': { template: '<div><slot /></div>' },
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
+  'el-alert': { props: ['title'], template: '<div class="alert">{{ title }}</div>' },
   'el-table': { template: '<div class="result-table" />' },
   'el-table-column': { template: '<div />' },
   'el-input': { inheritAttrs: false, template: '<input />' },
@@ -22,7 +29,7 @@ beforeEach(() => {
   state.filterCatalog = []
   Object.assign(state.resultSet, {
     status: 'ready', source: 'script', columns: [{ name: 'result', type: 'string' }],
-    rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: 'execution-1', error: '',
+    rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: '', error: '',
   })
   previewState.loading = false
   previewState.error = ''
@@ -30,6 +37,26 @@ beforeEach(() => {
 })
 
 describe('PythonResultDataDialog', () => {
+  it('组件预览把当前 Python 输出交给画布中的组件，而不在弹窗内创建独立组件', async () => {
+    const wrapper = mount(PythonResultDataDialog, {
+      props: { component: { id: 'table-python', type: 'table', title: 'Python 结果' } as never },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="show-component-result"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('render')).toHaveLength(1)
+    expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
+      componentId: 'table-python',
+      renderType: 'table',
+      table: { columns: ['result'], rows: [['rendered']] },
+    })
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('没有筛选字段时允许直接查看全部 Python 输出', async () => {
     const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()

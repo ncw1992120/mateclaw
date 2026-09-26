@@ -197,18 +197,12 @@
           <el-tab-pane label="组件预览" name="component">
             <div class="dd-head">
               <span class="dd-title">{{ component?.title || '组件' }}预览</span>
-              <span class="dd-hint">仅预览当前查询结果，不影响配置和后续操作</span>
+              <span class="dd-hint">当前查询结果已渲染到画布中的组件</span>
             </div>
-            <ComponentRenderPreview
-              v-if="resultView === 'component'"
-              :component="component"
-              :rows="rows"
-              :columns="componentPreviewColumns"
-              :field-roles="componentPreviewFieldRoles"
-              :loading="loading"
-              :error="error"
-              :has-queried="queriedAt > 0"
-            />
+            <el-alert v-if="!component" type="info" :closable="false" title="请先选择画布组件，再查看组件预览。" />
+            <el-alert v-else-if="!queriedAt" type="info" :closable="false" title="请先查询数据；查询结果会直接显示在画布中的组件上。" />
+            <el-alert v-else-if="error" type="error" :closable="false" :title="error" />
+            <el-alert v-else type="success" :closable="false" :title="`${component.title || '组件'}已使用当前查询结果渲染，请在画布查看。`" />
           </el-tab-pane>
         </el-tabs>
       </section>
@@ -218,7 +212,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import type { InsightComponent } from '@/types'
+import type { InsightComponent, InsightComponentData } from '@/types'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
 import { previewInput } from '@/api/dataset'
@@ -236,9 +230,10 @@ import {
   toDatasetFilters,
   type RuntimeFilterRow,
 } from '@/utils/runtime-filter-bindings'
-import ComponentRenderPreview from './ComponentRenderPreview.vue'
+import { componentPreviewData } from '@/utils/component-preview-data'
 
 const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
+const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
 const { state } = useInsight()
 const ui = state.ui
 
@@ -268,7 +263,6 @@ const isApi = computed(() => props.dataset.sourceType === 'api')
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
 const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
-const componentPreviewFieldRoles = computed(() => Object.fromEntries(resultDisplayFieldList().map((field) => [field.field, field.role])))
 const componentPreviewColumns = computed(() => {
   const names = columns.value.length ? columns.value : resultDisplayFieldList().map((field) => field.field)
   return names.map((name) => {
@@ -426,6 +420,12 @@ const queryHint = computed(() => {
 
 /** 最近一次执行的时间（展示用 HH:mm） */
 const queriedAt = ref(0)
+
+watch([resultView, rows, columns, () => props.component, loading, queriedAt], () => {
+  const component = props.component
+  if (resultView.value !== 'component' || loading.value || !queriedAt.value || !component) return
+  emit('render', componentPreviewData(component, rows.value, componentPreviewColumns.value))
+}, { deep: true, flush: 'post' })
 
 /**
  * 当前定义、SQL 参数和查询配置筛选条件的指纹：用于判断缓存结果是否过期。
