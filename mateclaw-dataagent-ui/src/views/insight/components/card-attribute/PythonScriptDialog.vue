@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.python.visible" class="insight-dialog--preview python-script-dialog" title="编辑 Python 脚本" width="min(860px, calc(100vw - 32px))" destroy-on-close :close-on-click-modal="false" aria-label="编辑 Python 脚本">
+  <el-dialog v-if="!ui.python.queryConfigOnly" v-model="ui.python.visible" class="insight-dialog--preview python-script-dialog" title="编辑 Python 脚本" width="min(860px, calc(100vw - 32px))" destroy-on-close :close-on-click-modal="false" aria-label="编辑 Python 脚本">
     <!-- 系统生成区域：generated 只读 / managed 用户接管可编辑 -->
     <div class="py-block">
       <div class="py-title">
@@ -180,6 +180,20 @@ watch(
     }
   },
 )
+
+watch(
+  () => ui.python.queryConfigOnly,
+  (queryConfigOnly) => {
+    if (queryConfigOnly && ui.python.visible) openQueryConfig()
+  },
+  { flush: 'post' },
+)
+watch(showQueryConfig, (visible) => {
+  if (!visible && ui.python.queryConfigOnly) {
+    ui.python.queryConfigOnly = false
+    ui.python.visible = false
+  }
+})
 
 function findUserEditor(): HTMLTextAreaElement | null {
   const root = userEditorRef.value as { $el?: HTMLElement } | HTMLElement | null

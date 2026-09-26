@@ -187,6 +187,8 @@
             placeholder="编写 Join、合并、计算和业务规则"
           />
           <div class="py-actions">
+            <el-button size="small" text bg @click="openPythonQueryConfig">查询配置</el-button>
+            <el-button size="small" text bg @click="viewPythonResult">查看数据</el-button>
             <el-button size="small" @click="openPython">展开编辑</el-button>
             <el-button size="small" type="danger" text @click="removePython">移除 Python 脚本</el-button>
           </div>
@@ -215,6 +217,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useInsight } from './useInsight'
 import InlineHelp from '../property/InlineHelp.vue'
 import DatasetCard from './DatasetCard.vue'
@@ -223,8 +226,9 @@ import { resolveComponentSample } from '@/utils/component-sample-data'
 import { resolveFieldLabel } from '@/utils/field-mapping'
 import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
+import { isFinalResultQueryConfigured } from '@/utils/final-result-query'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
 
 const DEFAULT_COMPONENT_COLOR = '#1E40AF'
 const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
@@ -237,6 +241,15 @@ const componentSample = computed(() => resolveComponentSample({
   chartType: activeCard.value.chartType,
   title: activeCard.value.title,
 }))
+
+function viewPythonResult(): void {
+  if (!isFinalResultQueryConfigured(state.finalResultQueryConfig)) {
+    ElMessage.warning('请先完成 Python 查询配置，再查看最终结果数据')
+    openPythonQueryConfig()
+    return
+  }
+  openPythonResultPreview()
+}
 
 /** 告警被用户关闭后不再重复打扰（切换卡片时应重新提示） */
 const warningsDismissed = ref(false)
@@ -435,6 +448,7 @@ function typeLabel(t: string) {
 }
 .py-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }

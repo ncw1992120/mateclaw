@@ -1,6 +1,7 @@
 import { computed, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ElMessage } from 'element-plus'
 import AttributePanel from '../AttributePanel.vue'
 import { CARD_BG_PRESETS } from '@/utils/color-presets'
 
@@ -67,6 +68,7 @@ beforeEach(() => {
       hasPython: false,
       pythonSystem: '',
       pythonUser: '',
+      finalResultQueryConfig: { confirmed: true },
       resultSet: {
         status: 'empty', rowCount: 0, columns: [], rows: [], error: '',
         source: 'dataset', generatedAt: '', elapsedMs: 0,
@@ -78,6 +80,8 @@ beforeEach(() => {
     pythonRequired: false,
     openDataSourceTree: vi.fn(),
     openPython: vi.fn(),
+    openPythonQueryConfig: vi.fn(),
+    openPythonResultPreview: vi.fn(),
     openPreview: vi.fn(),
     removePython: vi.fn(),
     openMetricConfig: vi.fn(),
@@ -90,6 +94,43 @@ beforeEach(() => {
 })
 
 describe('AttributePanel', () => {
+  it('在 Python 区域直接提供查询配置和查看数据入口', async () => {
+    insightFixture.value.state.hasPython = true
+    const wrapper = mountPanel()
+
+    const buttons = wrapper.findAll('button')
+    const queryButton = buttons.find((button) => button.text() === '查询配置')
+    const dataButton = buttons.find((button) => button.text() === '查看数据')
+
+    expect(queryButton).toBeTruthy()
+    expect(dataButton).toBeTruthy()
+    await queryButton!.trigger('click')
+    await dataButton!.trigger('click')
+    expect(insightFixture.value.openPythonQueryConfig).toHaveBeenCalledOnce()
+    expect(insightFixture.value.openPythonResultPreview).toHaveBeenCalledOnce()
+  })
+
+  it('尚未添加 Python 脚本时不显示 Python 查询配置和查看数据入口', () => {
+    const wrapper = mountPanel()
+
+    expect(wrapper.text()).not.toContain('查询配置')
+    expect(wrapper.text()).not.toContain('查看数据')
+  })
+
+  it('查询配置未确认时点击查看数据会提示并直接打开查询配置', async () => {
+    insightFixture.value.state.hasPython = true
+    insightFixture.value.state.finalResultQueryConfig = { confirmed: false }
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
+    const wrapper = mountPanel()
+
+    await wrapper.findAll('button').find((button) => button.text() === '查看数据')!.trigger('click')
+
+    expect(warning).toHaveBeenCalledWith('请先完成 Python 查询配置，再查看最终结果数据')
+    expect(insightFixture.value.openPythonQueryConfig).toHaveBeenCalledOnce()
+    expect(insightFixture.value.openPythonResultPreview).not.toHaveBeenCalled()
+    warning.mockRestore()
+  })
+
   it('does not render the result-set section or its preview and generation actions', () => {
     const wrapper = mountPanel()
 
