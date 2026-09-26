@@ -276,7 +276,7 @@
       </div>
 
       <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
-      <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" />
+      <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" :component="panelComponent" />
 
       <!-- 「查询配置」弹窗：展示字段 / 筛选器绑定 / 允许排序 / 分页 -->
       <QueryConfigDialog

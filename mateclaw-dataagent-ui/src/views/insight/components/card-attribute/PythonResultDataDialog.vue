@@ -60,19 +60,36 @@
       </div>
 
       <section class="dd-block dd-result">
-        <div class="dd-head"><span class="dd-title">结果</span><span class="dd-hint">{{ resultHint }}</span></div>
-        <div class="dd-result-body">
-          <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
-            <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
-          </el-table>
-          <el-empty v-else-if="loading" description="查询中…" />
-          <el-empty v-else :description="error || '点击「查询」获取数据'" />
-        </div>
-        <div v-if="paginationEnabled && visibleColumns.length" class="dd-pagination">
-          <span>第 {{ page }} 页 · 共 {{ filteredRows.length }} 条</span>
-          <el-button size="small" :disabled="page <= 1" @click="page -= 1">上一页</el-button>
-          <el-button size="small" :disabled="page * pageSize >= filteredRows.length" @click="page += 1">下一页</el-button>
-        </div>
+        <el-tabs v-model="resultView" data-testid="python-result-tabs">
+          <el-tab-pane label="查询结果" name="data">
+            <div class="dd-head"><span class="dd-title">Python 原始结果</span><span class="dd-hint">{{ resultHint }}</span></div>
+            <div class="dd-result-body">
+              <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
+                <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
+              </el-table>
+              <el-empty v-else-if="loading" description="查询中…" />
+              <el-empty v-else :description="error || '点击「查询」获取数据'" />
+            </div>
+            <div v-if="paginationEnabled && visibleColumns.length" class="dd-pagination">
+              <span>第 {{ page }} 页 · 共 {{ filteredRows.length }} 条</span>
+              <el-button size="small" :disabled="page <= 1" @click="page -= 1">上一页</el-button>
+              <el-button size="small" :disabled="page * pageSize >= filteredRows.length" @click="page += 1">下一页</el-button>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="组件预览" name="component">
+            <div class="dd-head"><span class="dd-title">{{ component?.title || '组件' }}预览</span><span class="dd-hint">仅预览 Python 当前输出，不影响脚本与配置</span></div>
+            <ComponentRenderPreview
+              v-if="resultView === 'component'"
+              :component="component ?? null"
+              :rows="sortedRows"
+              :columns="componentPreviewColumns"
+              :field-roles="componentPreviewFieldRoles"
+              :loading="loading"
+              :error="error"
+              :has-queried="Boolean(previewState.payload)"
+            />
+          </el-tab-pane>
+        </el-tabs>
       </section>
     </div>
   </el-dialog>
@@ -85,7 +102,10 @@ import type { QuerySortSpec } from '@/types'
 import { needsValue, type FilterCondition } from '@/utils/filter-conditions'
 import { applyResultFilters } from '@/utils/result-preview-filter'
 import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/utils/python-result-filter-conditions'
+import type { InsightComponent } from '@/types'
+import ComponentRenderPreview from '../ComponentRenderPreview.vue'
 
+const props = defineProps<{ component?: InsightComponent | null }>()
 const { state, previewState, loadResultPreview } = useInsight()
 const ui = state.ui
 const loading = computed(() => previewState.loading)
@@ -99,6 +119,7 @@ const page = ref(1)
 const conditionRows = ref<ReturnType<typeof createPythonResultFilterRows>>([])
 const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
+const resultView = ref<'data' | 'component'>('data')
 
 const visibleColumns = computed(() => {
   const columns = previewState.payload?.dataColumns ?? []
@@ -122,11 +143,19 @@ const sortedRows = computed(() => {
   })
 })
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)
+const componentPreviewColumns = computed(() => visibleColumns.value.map((column) => ({
+  ...column,
+  title: fieldTitle(column.name),
+  role: displayFields.value.find((field) => field.field === column.name)?.role,
+})))
+const componentPreviewFieldRoles = computed(() => Object.fromEntries(displayFields.value.map((field) => [field.field, field.role])))
 const queryHint = computed(() => conditionRows.value.length ? '筛选条件来自查询配置；关闭条件后点击查询可查看全部结果' : '未配置筛选字段，本次将展示全部 Python 输出')
 const resultHint = computed(() => previewState.payload ? `${filteredRows.value.length} / ${(previewState.payload.dataRows ?? []).length} 行` : '请点击查询')
 
 function fieldTitle(field: string): string {
-  return displayFields.value.find((item) => item.field === field)?.title || field
+  return displayFields.value.find((item) => item.field === field)?.title
+    || previewState.payload?.dataColumns.find((column) => column.name === field)?.title
+    || field
 }
 
 function isSortable(field: string): boolean {
@@ -144,6 +173,7 @@ function query(): void {
 }
 
 function initialize(): void {
+  resultView.value = 'data'
   page.value = 1
   sortState.value = null
   appliedConditions.value = []

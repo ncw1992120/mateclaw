@@ -43,8 +43,8 @@ const CHART_HINTS: Partial<Record<ChartType, string>> = {
   funnel: '漏斗图需要有序阶段字段和 1 个数值指标',
   gauge: '仪表盘需要恰好 1 个数值指标',
   radar: '雷达图需要至少 2 个数值指标轴；多系列需系列名称字段',
-  treemap: '矩形树图需要至少 2 个层级维度和 1 个数值指标',
-  sunburst: '旭日图需要至少 2 个层级维度和 1 个数值指标',
+  treemap: '矩形树图需要至少 1 个层级维度和 1 个数值指标',
+  sunburst: '旭日图需要至少 1 个层级维度和 1 个数值指标',
   scatter: '散点图需要 X、Y 两个数值字段',
   effectScatter: '涟漪特效散点图需要 X、Y 两个数值字段',
   candlestick: 'K 线图需要 open、close、low、high 四个数值字段',
@@ -53,7 +53,7 @@ const CHART_HINTS: Partial<Record<ChartType, string>> = {
   map: '地图需要区域编码/名称或经纬度字段，以及数值指标',
   lines: '流向图需要 source、target 起终点字段',
   graph: '关系图需要唯一节点及 source、target 关系边字段',
-  tree: '树图需要 name 和 parentId 层级字段',
+  tree: '树图至少需要一个层级字段；数值指标可用于节点大小',
   parallel: '平行坐标系至少需要 2 个数值轴字段',
   sankey: '桑基图需要 source、target 和非负数值 value 字段',
   themeRiver: '主题河流图需要时间、系列名称和数值指标',
@@ -249,7 +249,8 @@ export function validateComponentOutput(
       return null
     }
     if (chartType === 'tree') {
-      if (!hasAny('name', 'label') || !hasAny('parentid', 'parent_id', 'parent')) return failChart('name/label + parentId 层级字段', columns.map((column) => column.name).join(', ') || '无字段')
+      const hasParentLinks = hasAny('parentid', 'parent_id', 'parent') && hasAny('name', 'label')
+      if (!hasParentLinks && stringCols.length < 1) return failChart('至少 1 个层级字段，或 name + parentId 字段', columns.map((column) => column.name).join(', ') || '无字段')
       return null
     }
     if (chartType === 'boxplot') {
@@ -258,8 +259,8 @@ export function validateComponentOutput(
       if (!(hasFiveNumberSummary || (stringCols.length >= 1 && numericCols.length >= 1))) return failChart('分组 + 样本数值，或 min/q1/median/q3/max 五个数值字段', columns.map((column) => column.name).join(', ') || '无字段')
       return null
     }
-    if ((chartType === 'treemap' || chartType === 'sunburst') && (stringCols.length < 2 || numericCols.length < 1)) {
-      return failChart('至少 2 个层级维度 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
+    if ((chartType === 'treemap' || chartType === 'sunburst') && (stringCols.length < 1 || numericCols.length < 1)) {
+      return failChart('至少 1 个层级维度 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段`)
     }
     if (chartType === 'pie' && (stringCols.length !== 1 || numericCols.length !== 1 || columns.length !== 2)) {
       return failChart('恰好 1 个分类维度 + 1 个数值指标', `${stringCols.length} 个维度，${numericCols.length} 个数值字段，共 ${columns.length} 列`)

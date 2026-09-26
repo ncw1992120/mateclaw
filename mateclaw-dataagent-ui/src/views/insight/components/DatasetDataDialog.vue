@@ -149,48 +149,68 @@
 
       <!-- ⑤ 结果 -->
       <section class="dd-block dd-result">
-        <div class="dd-head">
-          <span class="dd-title">结果</span>
-          <span class="dd-hint">{{ resultHint }}</span>
-        </div>
-        <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
-          <el-table
-            v-if="columns.length"
-            :data="rows"
-            :default-sort="sortState ? { prop: sortState.field, order: sortState.direction === 'asc' ? 'ascending' : 'descending' } : undefined"
-            border
-            size="small"
-            height="100%"
-            @sort-change="onSortChange"
-          >
-            <el-table-column
-              v-for="column in columns"
-              :key="column"
-              :prop="column"
-              :label="fieldTitle(column)"
-              min-width="120"
-              show-overflow-tooltip
-              :sortable="isFieldSortable(column) ? 'custom' : false"
-              :sort-orders="['ascending', 'descending', null]"
+        <el-tabs v-model="resultView" data-testid="query-result-tabs">
+          <el-tab-pane label="查询结果" name="data">
+            <div class="dd-head">
+              <span class="dd-title">原始数据</span>
+              <span class="dd-hint">{{ resultHint }}</span>
+            </div>
+            <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
+              <el-table
+                v-if="columns.length"
+                :data="rows"
+                :default-sort="sortState ? { prop: sortState.field, order: sortState.direction === 'asc' ? 'ascending' : 'descending' } : undefined"
+                border
+                size="small"
+                height="100%"
+                @sort-change="onSortChange"
+              >
+                <el-table-column
+                  v-for="column in columns"
+                  :key="column"
+                  :prop="column"
+                  :label="fieldTitle(column)"
+                  min-width="120"
+                  show-overflow-tooltip
+                  :sortable="isFieldSortable(column) ? 'custom' : false"
+                  :sort-orders="['ascending', 'descending', null]"
+                />
+              </el-table>
+              <el-empty v-else-if="loading" description="查询中…" />
+              <el-empty v-else :description="error || '点「查询」获取数据'" />
+            </div>
+            <div v-if="paginationEnabled && columns.length" class="dd-pagination" data-testid="query-pagination">
+              <span data-testid="pagination-status">
+                {{ totalCount === null ? `第 ${currentPage} 页` : `第 ${currentPage} 页 · 共 ${totalCount} 条` }}
+              </span>
+              <label class="dd-page-size">
+                <span>每页</span>
+                <select :value="currentPageSize" aria-label="每页条数" data-testid="page-size" @change="onPageSizeChange">
+                  <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
+                </select>
+                <span>条</span>
+              </label>
+              <el-button size="small" :disabled="currentPage <= 1 || loading" data-testid="page-previous" @click="changePage(currentPage - 1)">上一页</el-button>
+              <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="组件预览" name="component">
+            <div class="dd-head">
+              <span class="dd-title">{{ component?.title || '组件' }}预览</span>
+              <span class="dd-hint">仅预览当前查询结果，不影响配置和后续操作</span>
+            </div>
+            <ComponentRenderPreview
+              v-if="resultView === 'component'"
+              :component="component"
+              :rows="rows"
+              :columns="componentPreviewColumns"
+              :field-roles="componentPreviewFieldRoles"
+              :loading="loading"
+              :error="error"
+              :has-queried="queriedAt > 0"
             />
-          </el-table>
-          <el-empty v-else-if="loading" description="查询中…" />
-          <el-empty v-else :description="error || '点「查询」获取数据'" />
-        </div>
-        <div v-if="paginationEnabled && columns.length" class="dd-pagination" data-testid="query-pagination">
-          <span data-testid="pagination-status">
-            {{ totalCount === null ? `第 ${currentPage} 页` : `第 ${currentPage} 页 · 共 ${totalCount} 条` }}
-          </span>
-          <label class="dd-page-size">
-            <span>每页</span>
-            <select :value="currentPageSize" aria-label="每页条数" data-testid="page-size" @change="onPageSizeChange">
-              <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
-            </select>
-            <span>条</span>
-          </label>
-          <el-button size="small" :disabled="currentPage <= 1 || loading" data-testid="page-previous" @click="changePage(currentPage - 1)">上一页</el-button>
-          <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
-        </div>
+          </el-tab-pane>
+        </el-tabs>
       </section>
     </div>
   </el-dialog>
@@ -198,6 +218,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import type { InsightComponent } from '@/types'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
 import { previewInput } from '@/api/dataset'
@@ -215,8 +236,9 @@ import {
   toDatasetFilters,
   type RuntimeFilterRow,
 } from '@/utils/runtime-filter-bindings'
+import ComponentRenderPreview from './ComponentRenderPreview.vue'
 
-const props = defineProps<{ dataset: DatasetConfig }>()
+const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
 const { state } = useInsight()
 const ui = state.ui
 
@@ -236,6 +258,7 @@ const sortState = ref<QuerySortSpec | null>(null)
 const currentPage = ref(1)
 const currentPageSize = ref(DEFAULT_BATCH_SIZE)
 const stateReady = ref(false)
+const resultView = ref<'data' | 'component'>('data')
 /** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
 let requestSequence = 0
 
@@ -245,6 +268,21 @@ const isApi = computed(() => props.dataset.sourceType === 'api')
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
 const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
+const componentPreviewFieldRoles = computed(() => Object.fromEntries(displayFields.value.map((field) => [field.field, field.role])))
+const componentPreviewColumns = computed(() => {
+  const names = columns.value.length ? columns.value : displayFields.value.map((field) => field.field)
+  return names.map((name) => {
+    const field = displayFields.value.find((item) => item.field === name)
+      ?? props.dataset.queryConfig?.queryableFields?.find((item) => item.name === name)
+      ?? props.dataset.fields.find((item) => item.name === name)
+    return {
+      name,
+      title: displayFields.value.find((item) => item.field === name)?.title || field?.displayName || name,
+      dataType: field && 'dataType' in field ? String(field.dataType ?? '') : undefined,
+      role: field && 'role' in field ? String(field.role ?? '') : undefined,
+    }
+  })
+})
 const paginationPolicy = computed(() => props.dataset.queryConfig?.paginationPolicy)
 const paginationEnabled = computed(() => paginationPolicy.value?.enabled === true)
 const sortPolicy = computed(() => props.dataset.queryConfig?.sortPolicy)
@@ -580,6 +618,7 @@ function onScroll(event: Event): void {
 
 /* ── 打开时初始化：不取数，只把查询配置/参数铺好，等用户点「查询」 ── */
 async function open(): Promise<void> {
+  resultView.value = 'data'
   stateReady.value = false
   for (const key of Object.keys(paramValues)) delete paramValues[key]
   for (const param of parameters.value) {

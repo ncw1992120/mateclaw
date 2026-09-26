@@ -1677,7 +1677,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
  * 全部由后端返回，本文件不再构造任何假数据。
  */
 export interface PreviewPayload {
-  dataColumns: { name: string; type: string }[]
+  dataColumns: { name: string; type: string; title?: string }[]
   dataRows: Record<string, unknown>[]
   fieldStruct: { name: string; type: string; displayName: string; desc: string; nullable: boolean }[]
   execInfo: {
@@ -1830,8 +1830,26 @@ async function loadResultPreview(): Promise<void> {
       const { ok, message } = await generateResultSet()
       if (!ok) throw new Error(message)
     }
-    const rows = state.resultSet.rows
-    const columns = state.resultSet.columns
+    let rows = state.resultSet.rows
+    let columns: PreviewPayload['dataColumns'] = state.resultSet.columns
+    if (state.resultSet.source === 'script' && state.resultSet.executionId) {
+      try {
+        const response = await getExecutionResult(state.resultSet.executionId)
+        const envelope = parseScriptResultEnvelope(response.envelope)
+        if (envelope.kind === 'table') {
+          rows = envelope.data.rows
+          columns = envelope.data.columns.map((column) => ({ name: column.name, type: column.dataType, title: column.title }))
+        } else if (envelope.kind === 'scalar') {
+          rows = [{ value: envelope.data.value }]
+          columns = [{ name: 'value', type: envelope.data.dataType, title: envelope.data.label || '值' }]
+        } else {
+          rows = []
+          columns = []
+        }
+      } catch {
+        // 结果引用读取失败时仍展示本地已缓存行，不让组件预览影响原始数据查看。
+      }
+    }
     previewState.payload = {
       dataColumns: columns,
       dataRows: rows,
