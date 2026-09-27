@@ -1419,6 +1419,10 @@ function handleComponentResultSet(payload: {
     ? { ...nestedChild, position: { x: 0, y: 0, w: 6, h: 4 } } as InsightComponent
     : null)
   if (!component) return
+  if (payload.status === 'empty') {
+    delete componentDataMap.value[payload.componentId]
+    return
+  }
   if (payload.status === 'ready') {
     componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)
     return

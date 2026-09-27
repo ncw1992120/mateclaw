@@ -10,6 +10,7 @@ const {
   kpiResultFields,
   resetResultSet,
   generateResultSet,
+  removeDataset,
 } = useInsight()
 
 /** 基线：一个数据集 + 已就绪的结果集（模拟「刚生成完」） */
@@ -112,6 +113,18 @@ describe('result set state machine', () => {
     expect(ok).toBe(false)
     expect(message).toBe('尚未配置数据集')
     expect(state.resultSet.status).toBe('empty')
+  })
+
+  it('clears the rendered result set when its dataset is removed', () => {
+    seedReadyResultSet()
+
+    removeDataset('ds-1')
+
+    expect(state.datasets).toHaveLength(0)
+    expect(state.resultSet.status).toBe('empty')
+    expect(state.resultSet.columns).toEqual([])
+    expect(state.resultSet.rows).toEqual([])
+    expect(state.resultSet.rowCount).toBe(0)
   })
 
   it('rejects multi-dataset pipelines that have no Python script', async () => {

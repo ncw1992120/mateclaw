@@ -504,7 +504,12 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
 
 function removeDataset(id: string) {
   const idx = state.datasets.findIndex((d) => d.id === id)
-  if (idx >= 0) state.datasets.splice(idx, 1)
+  if (idx >= 0) {
+    state.datasets.splice(idx, 1)
+    // 移除输入后，画布不能继续展示由旧数据集生成的结果；有剩余输入时
+    // Sidebar 会按现有策略自动刷新（无脚本）或等待用户重新生成（有脚本）。
+    resetResultSet('empty')
+  }
 }
 
 /**
