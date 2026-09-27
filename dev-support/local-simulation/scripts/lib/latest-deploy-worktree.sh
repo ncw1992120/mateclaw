@@ -2,7 +2,7 @@
 
 mateclaw_create_latest_worktree() {
   local repo_root="$1" branch="$2" worktree_parent="$3"
-  local deploy_ref commit worktree
+  local branch_ref commit worktree
 
   if ! git check-ref-format "refs/heads/$branch"; then
     echo "错误：无效的部署分支名：$branch" >&2
@@ -13,12 +13,12 @@ mateclaw_create_latest_worktree() {
     return 1
   fi
 
-  deploy_ref="refs/codex-deploy/$branch"
-  if ! git -C "$repo_root" fetch --quiet --no-tags origin "+refs/heads/$branch:$deploy_ref"; then
-    echo "错误：无法获取 origin/$branch；为避免使用旧代码，已取消构建。" >&2
+  branch_ref="refs/heads/$branch"
+  if ! git -C "$repo_root" show-ref --verify --quiet "$branch_ref"; then
+    echo "错误：本地分支 $branch 不存在；已取消构建。" >&2
     return 1
   fi
-  commit="$(git -C "$repo_root" rev-parse --verify "$deploy_ref^{commit}")"
+  commit="$(git -C "$repo_root" rev-parse --verify "$branch_ref^{commit}")"
   worktree="$(mktemp -d "${worktree_parent%/}/mateclaw-dataagent.XXXXXX")"
   if ! git -C "$repo_root" worktree add --quiet --detach "$worktree" "$commit"; then
     rmdir "$worktree" 2>/dev/null || true

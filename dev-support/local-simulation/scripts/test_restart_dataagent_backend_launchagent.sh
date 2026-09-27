@@ -43,7 +43,7 @@ restore_function="$(sed -n '/^restore_dataagent_launch_agent()/,/^}/p' "$SCRIPT"
 mock_restore_output="$(
   RESTORE_FUNCTION="$restore_function" LAUNCH_AGENT_SUSPENDED=1 MOCK_MODE=1 LAUNCHD_DOMAIN=gui/test \
     LAUNCH_AGENT_PLIST=/tmp/test.plist LAUNCH_AGENT_LABEL=test-agent \
-    bash -c 'launchctl() { printf "CALL:%s\\n" "$*"; }; trap() { :; }; eval "$RESTORE_FUNCTION"; restore_dataagent_launch_agent'
+    bash -c 'launchctl() { printf "CALL:%s\\n" "$*"; }; cleanup_deploy_worktree() { :; }; trap() { :; }; eval "$RESTORE_FUNCTION"; restore_dataagent_launch_agent'
 )"
 if grep -Fq 'CALL:bootstrap' <<< "$mock_restore_output"; then
   echo "mock 模式退出后不得重新加载真实 profile 的 LaunchAgent。" >&2
@@ -53,7 +53,7 @@ fi
 real_restore_output="$(
   RESTORE_FUNCTION="$restore_function" LAUNCH_AGENT_SUSPENDED=1 MOCK_MODE=0 LAUNCHD_DOMAIN=gui/test \
     LAUNCH_AGENT_PLIST=/tmp/test.plist LAUNCH_AGENT_LABEL=test-agent \
-    bash -c 'launchctl() { printf "CALL:%s\\n" "$*"; }; trap() { :; }; eval "$RESTORE_FUNCTION"; restore_dataagent_launch_agent'
+    bash -c 'launchctl() { printf "CALL:%s\\n" "$*"; }; cleanup_deploy_worktree() { :; }; trap() { :; }; eval "$RESTORE_FUNCTION"; restore_dataagent_launch_agent'
 )"
 if ! grep -Fq 'CALL:bootstrap gui/test /tmp/test.plist' <<< "$real_restore_output"; then
   echo "非 mock 模式退出后应保留 LaunchAgent 恢复行为。" >&2
