@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const previewDatasetDraft = vi.fn(async () => ({
@@ -282,7 +283,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
   it('无筛选器绑定时，保存查询配置会同步展示字段，并可查询渲染到画布', async () => {
     const originalDatasets = state.datasets
-    const dataset = metricViewDataset({ queryConfig: undefined })
+    const dataset = reactive(metricViewDataset({ queryConfig: undefined }))
     state.datasets = [dataset]
     const wrapper = await openWith(state.datasets[0], { id: 'table-no-bindings', type: 'table', title: '策略表' })
 
@@ -311,6 +312,39 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       wrapper.unmount()
       state.datasets = originalDatasets
     }
+  })
+
+  it('首次未保存查询配置时跟随数据集字段目录，并按默认展示字段查询和渲染', async () => {
+    const dataset = reactive(metricViewDataset({ queryConfig: undefined }))
+    const wrapper = await openWith(dataset, { id: 'table-first-open', type: 'table', title: '策略表' })
+
+    expect(wrapper.find('[data-testid="display-fields-empty"]').exists()).toBe(true)
+
+    // 模拟首次添加数据集后，异步 schema 预取完成；没有打开过「查询配置」。
+    dataset.fields = [
+      { name: 'amount', displayName: '下发人数', role: 'measure' },
+      { name: 'trade_date', displayName: '指标日期', role: 'dimension' },
+      { name: 'cust_type', displayName: '客户类型', role: 'dimension' },
+    ]
+    await flushPromises()
+
+    const displayRows = wrapper.findAll('[data-testid="display-field-row"]')
+    expect(displayRows).toHaveLength(3)
+    expect(displayRows.map((row) => row.text())).toEqual([
+      expect.stringContaining('指标日期'),
+      expect.stringContaining('客户类型'),
+      expect.stringContaining('下发人数'),
+    ])
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }))
+    expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
+      componentId: 'table-first-open',
+      table: { columns: ['trade_date', 'cust_type', 'amount'] },
+    })
+    wrapper.unmount()
   })
 
   it('结果表头使用查询配置中的展示名，排序只开放已配置字段', async () => {

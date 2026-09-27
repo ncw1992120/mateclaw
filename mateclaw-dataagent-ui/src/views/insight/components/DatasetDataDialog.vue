@@ -247,7 +247,21 @@ const isApi = computed(() => props.dataset.sourceType === 'api')
 
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
-const displayFields = computed<QueryDisplayField[]>(() => props.dataset.queryConfig?.displayFields ?? [])
+const displayFields = computed<QueryDisplayField[]>(() => {
+  const configured = props.dataset.queryConfig?.displayFields
+  if (configured) return configured
+
+  // 首次查看数据时可能还没有保存过查询配置。与 QueryConfigDialog 的默认行为一致，
+  // 将当前字段目录视为默认展示字段（维度在前、指标在后）；schema 异步刷新后也会响应更新。
+  return [...(props.dataset.fields ?? [])]
+    .map((field) => ({
+      field: field.name,
+      title: field.displayName?.trim() || field.name,
+      role: ['measure', 'metric'].includes((field.role ?? '').trim().toLowerCase()) ? 'measure' : 'dimension',
+      ...(field.dataType ? { dataType: field.dataType } : {}),
+    }))
+    .sort((left, right) => Number(left.role === 'measure') - Number(right.role === 'measure'))
+})
 const componentPreviewColumns = computed(() => {
   const names = columns.value.length ? columns.value : resultDisplayFieldList().map((field) => field.field)
   return names.map((name) => {
