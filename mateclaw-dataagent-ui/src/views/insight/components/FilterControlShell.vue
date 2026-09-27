@@ -48,6 +48,12 @@ withDefaults(defineProps<{
   border-color: color-mix(in srgb, var(--db-accent) 35%, var(--db-border));
 }
 
+/* 键盘焦点：与 hover 同族但更清晰（VIS-06），非仅靠颜色区分（附阴影环） */
+.filter-control-widget:focus-within {
+  border-color: color-mix(in srgb, var(--db-accent) 45%, var(--db-border));
+  box-shadow: 0 0 0 2px var(--db-accent-light);
+}
+
 .filter-control-label {
   min-width: 0;
   display: inline-flex;

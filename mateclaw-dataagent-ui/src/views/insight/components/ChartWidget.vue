@@ -271,7 +271,7 @@ watch(chartContainerRef, (el) => {
   min-height: 48px;
   flex-shrink: 0;
   gap: var(--space-sm);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .chart-title {
@@ -302,7 +302,7 @@ watch(chartContainerRef, (el) => {
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-lg);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   overflow-x: auto;
 }

@@ -959,8 +959,8 @@ const { onTabKeydown } = useTabKeyboard(
   display: flex;
   align-items: center;
   gap: 4px;
-  border-bottom: 1px solid var(--db-border);
-  background: var(--db-surface-control, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
+  background: transparent;
   margin-bottom: 10px;
   flex-wrap: wrap;
   flex-shrink: 0;
@@ -1005,7 +1005,7 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child {
   position: relative;
   box-sizing: border-box;
-  border: var(--component-border, 1px solid var(--component-group-border, var(--db-border)));
+  border: var(--component-border, 1px solid color-mix(in srgb, var(--component-group-border, var(--db-border)) 55%, transparent));
   border-radius: var(--component-radius, 8px);
   background: var(--component-surface, var(--component-group-surface, var(--db-surface-card, var(--db-card))));
   box-shadow: var(--component-shadow, none);
@@ -1018,14 +1018,14 @@ const { onTabKeydown } = useTabKeyboard(
   cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.15s;
 }
-.cc-child::before { content: ''; position: absolute; inset: 0 0 auto; z-index: 2; height: 2px; border-radius: inherit; background: var(--component-group-accent, transparent); pointer-events: none; }
+.cc-child::before { content: ''; position: absolute; inset: 0 0 auto; z-index: 2; height: 1px; border-radius: inherit; background: color-mix(in srgb, var(--component-group-accent, transparent) 30%, transparent); pointer-events: none; }
 .cc-body.mode-vertical .cc-child { position: relative; }
 .cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }
 .cc-child-head {
   position: relative;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; background: var(--component-group-header-surface, var(--db-surface-nested, var(--db-hover))); border-bottom: 1px solid var(--component-group-border, var(--db-border));
+  padding: 6px 10px; background: var(--component-group-header-surface, transparent); border-bottom: 1px solid color-mix(in srgb, var(--component-group-border, var(--db-border)) 55%, transparent);
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }

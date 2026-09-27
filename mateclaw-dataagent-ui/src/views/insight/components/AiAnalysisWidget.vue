@@ -109,7 +109,7 @@ function handleGenerate(): void {
   justify-content: space-between;
   padding: var(--space-md) var(--space-lg);
   min-height: 48px;
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   gap: var(--space-sm);
 }
@@ -165,7 +165,7 @@ function handleGenerate(): void {
   gap: var(--space-sm);
   padding: var(--space-md);
   background: var(--db-hover);
-  border: 1px solid var(--db-border);
+  border: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   border-radius: var(--radius-lg);
   animation: fadeIn var(--transition-base) both;
 }

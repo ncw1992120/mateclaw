@@ -543,7 +543,7 @@ function handleDateChange(val: [string, string] | null): void {
   align-items: center;
   gap: var(--space-xs);
   width: 100%;
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   overflow-x: auto;
   margin-bottom: var(--space-md);
@@ -589,7 +589,7 @@ function handleDateChange(val: [string, string] | null): void {
 
 .kpi-value {
   font-size: 36px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--db-text);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
@@ -669,7 +669,7 @@ function handleDateChange(val: [string, string] | null): void {
 }
 
 .kpi-multi-item + .kpi-multi-item {
-  border-left: 1px solid var(--db-border);
+  border-left: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .kpi-multi-item .kpi-value {

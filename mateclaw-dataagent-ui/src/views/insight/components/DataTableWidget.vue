@@ -398,7 +398,7 @@ function escapeCsvField(field: string): string {
   padding: var(--space-md) var(--space-lg);
   min-height: 48px;
   gap: var(--space-sm);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .table-header-left {
@@ -442,7 +442,7 @@ function escapeCsvField(field: string): string {
   justify-content: flex-end;
   padding: var(--space-xs) var(--space-lg) var(--space-sm);
   flex-shrink: 0;
-  border-top: 1px solid var(--db-border);
+  border-top: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .widget-tabs {
@@ -450,7 +450,7 @@ function escapeCsvField(field: string): string {
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-lg);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   overflow-x: auto;
 }
@@ -488,7 +488,7 @@ function escapeCsvField(field: string): string {
 }
 
 .table-placeholder::before {
-  content: '📋';
+  content: '—';
   font-size: 32px;
   opacity: 0.6;
 }
@@ -522,7 +522,7 @@ function escapeCsvField(field: string): string {
   padding: 10px 16px;
   color: var(--db-text);
   font-variant-numeric: tabular-nums;
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 60%, transparent);
 }
 
 .table-wrapper :deep(.el-table--small .el-table__cell) {

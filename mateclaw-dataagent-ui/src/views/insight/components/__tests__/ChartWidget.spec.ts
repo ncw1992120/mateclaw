@@ -3,9 +3,11 @@ import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 import ChartWidget from '../ChartWidget.vue'
 
+const renderEChartsMock = vi.hoisted(() => vi.fn())
+
 vi.mock('@/composables/useEChartsRenderer', () => ({
   useEChartsRenderer: () => ({
-    renderECharts: vi.fn(),
+    renderECharts: renderEChartsMock,
     disposeChart: vi.fn(),
   }),
 }))
@@ -55,6 +57,40 @@ describe('ChartWidget', () => {
     })
 
     expect(wrapper.find('.chart-header').classes()).toContain('title-bar-accent')
+  })
+
+  it('passes the chart option through to the renderer unchanged (series data, encode and explicit colors intact)', async () => {
+    const option = {
+      color: ['#5470c6', '#91cc75'],
+      xAxis: { type: 'category', data: ['一月', '二月'] },
+      yAxis: { type: 'value' },
+      dataset: { source: [['month', 'sales'], ['一月', 12], ['二月', 20]] },
+      series: [
+        {
+          type: 'line',
+          encode: { x: 0, y: 1 },
+          data: [12, 20],
+          itemStyle: { color: '#ff0000' },
+          lineStyle: { width: 2 },
+        },
+      ],
+      tooltip: { trigger: 'axis', formatter: '{b}: {c}' },
+    }
+    const wrapper = mount(ChartWidget, {
+      props: {
+        component: { ...component, titleBarStyle: 'hidden', tabs: [] } as any,
+        componentData: { option, fieldLabels: {} } as any,
+      },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+    await wrapper.vm.$nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(renderEChartsMock).toHaveBeenCalled()
+    const passedOption = renderEChartsMock.mock.calls.at(-1)![1]
+    // 视觉改造不得改变数据：透传的 option 与输入深度一致（含 series.data、encode、显式色）。
+    // 注：props 经 Vue 响应式代理，引用不相同但内容必须逐字段一致。
+    expect(passedOption).toStrictEqual(option)
   })
 
   it('exposes widget tabs as keyboard-operable tabs', async () => {

@@ -1316,8 +1316,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   position: absolute;
   inset: 0 0 auto;
   z-index: 2;
-  height: 2px;
-  background: var(--component-group-accent, transparent);
+  height: 1px;
+  background: color-mix(in srgb, var(--component-group-accent, transparent) 30%, transparent);
   pointer-events: none;
 }
 
@@ -1443,7 +1443,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 
 .grid-item-content:hover {
   border-color: var(--db-border-strong);
-  box-shadow: var(--shadow-card-hover);
+  box-shadow: var(--shadow-card);
 }
 
 .grid-item-content.selected {
@@ -1452,12 +1452,12 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .editable .grid-item-content {
-  border-style: dashed;
+  border-style: solid;
 }
 
 .editable .grid-item-content:hover {
   border-style: solid;
-  border-color: var(--db-accent);
+  border-color: var(--db-border-strong);
 }
 
 .editable .grid-item-content.selected {
@@ -1470,8 +1470,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-md);
-  background: var(--db-surface-nested, var(--db-hover));
-  border-bottom: 1px solid var(--db-border);
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 60%, transparent);
   flex-shrink: 0;
   cursor: grab;
 }
