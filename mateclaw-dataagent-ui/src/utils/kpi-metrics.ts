@@ -122,11 +122,11 @@ export function resolveMetricVisual(
   }
 }
 
-/** 单个指标的默认自由布局（两列错落，紧凑间距：横向留 12px、纵向留 8px） */
+/** 单个指标的默认自由布局（两列错落，紧凑卡片：横向留 12px、纵向留 8px） */
 export function defaultMetricLayout(index: number): Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'> {
   const col = index % 2
   const row = Math.floor(index / 2)
-  return { x: col * 204, y: row * 80, w: 192, h: 72 }
+  return { x: col * 172, y: row * 80, w: 160, h: 72 }
 }
 
 /** 旧版默认布局尺寸（284×88、步距 296×96）。

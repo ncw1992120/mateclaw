@@ -62,8 +62,28 @@ describe('kpi-metrics · 结果集投影（增量合并）', () => {
     expect(metrics[0].displayName).toBe('关联计划数')
     expect(metrics[0].visible).toBe(true)
     expect(metrics[0].x).toBe(0)
-    expect(metrics[1].x).toBeGreaterThan(0)
+    expect(metrics[0]).toMatchObject({ w: 160, h: 72 })
+    expect(metrics[1]).toMatchObject({ x: 172, w: 160, h: 72 })
     expect(metrics[0].styles.value.bold).toBe('bold')
+  })
+
+  it('重新投影时将旧版自动默认尺寸收窄，但保留用户调整过的尺寸', () => {
+    const existing = buildKpiMetrics(schema).map((metric, index) => ({
+      ...metric,
+      x: index * 296,
+      y: 0,
+      w: 284,
+      h: 88,
+    }))
+
+    const projected = buildKpiMetrics(schema, existing)
+
+    expect(projected[0]).toMatchObject({ x: 0, y: 0, w: 160, h: 72 })
+    expect(projected[1]).toMatchObject({ x: 172, y: 0, w: 160, h: 72 })
+
+    existing[2].w = 246
+    const withManualSize = buildKpiMetrics(schema, existing)
+    expect(withManualSize[2]).toMatchObject({ w: 246, h: 88 })
   })
 
   it('再次投影保留用户配置（辅助说明/显示/布局/样式）', () => {
