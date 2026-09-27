@@ -42,23 +42,23 @@ if git -C "$first_worktree" symbolic-ref -q HEAD >/dev/null; then
   exit 1
 fi
 
-printf 'second\n' > "$REPO/source.txt"
+# A local-only commit must be used even when origin/feature/dev_fu has not moved.
+printf 'local-only\n' > "$REPO/source.txt"
 git -C "$REPO" add source.txt
-git -C "$REPO" commit -q -m second
-git -C "$REPO" push -q origin feature/dev_fu
+git -C "$REPO" commit -q -m local-only
+local_commit="$(git -C "$REPO" rev-parse refs/heads/feature/dev_fu)"
 
 second_worktree="$(mateclaw_create_latest_worktree "$REPO" feature/dev_fu "$DEPLOY_PARENT")"
-second_commit="$(git -C "$REPO" rev-parse refs/heads/feature/dev_fu)"
-if [[ "$(git -C "$second_worktree" rev-parse HEAD)" != "$second_commit" ]]; then
-  echo "再次运行部署工作树未获取新提交。" >&2
+if [[ "$(git -C "$second_worktree" rev-parse HEAD)" != "$local_commit" ]]; then
+  echo "部署工作树必须使用本地 feature/dev_fu 分支 HEAD，而不是远端提交。" >&2
   exit 1
 fi
-if [[ "$(<"$second_worktree/source.txt")" != "second" ]]; then
-  echo "部署工作树源文件不是最新内容。" >&2
+if [[ "$(<"$second_worktree/source.txt")" != "local-only" ]]; then
+  echo "部署工作树没有包含本地 feature/dev_fu 分支的未推送提交。" >&2
   exit 1
 fi
-if [[ "$(git -C "$REPO" symbolic-ref --short HEAD)" != "feature/dev_fu" ]]; then
-  echo "获取部署代码不应切换调用方的当前分支。" >&2
+if git -C "$second_worktree" symbolic-ref -q HEAD >/dev/null; then
+  echo "部署工作树应为 detached HEAD，不应占用本地 feature/dev_fu 分支。" >&2
   exit 1
 fi
 if ! mateclaw_same_git_repository "$REPO" "$second_worktree"; then
@@ -66,16 +66,9 @@ if ! mateclaw_same_git_repository "$REPO" "$second_worktree"; then
   exit 1
 fi
 
-OTHER_CLONE="$TEMP_ROOT/other-clone"
-git clone -q "$REMOTE" "$OTHER_CLONE"
-if mateclaw_same_git_repository "$REPO" "$OTHER_CLONE"; then
-  echo "独立 clone 不得被识别为同一 Git 仓库进程。" >&2
-  exit 1
-fi
-
-git --git-dir="$REMOTE" update-ref -d refs/heads/feature/dev_fu
-if mateclaw_create_latest_worktree "$REPO" feature/dev_fu "$DEPLOY_PARENT" >/dev/null 2>&1; then
-  echo "远端分支不可用时不得回退使用旧提交。" >&2
+# The caller's current branch remains unchanged and the source branch is not checked out twice.
+if [[ "$(git -C "$REPO" symbolic-ref --short HEAD)" != "feature/dev_fu" ]]; then
+  echo "创建部署工作树不应切换调用方的当前分支。" >&2
   exit 1
 fi
 
@@ -83,4 +76,16 @@ git -C "$REPO" worktree remove "$first_worktree"
 first_worktree=""
 git -C "$REPO" worktree remove "$second_worktree"
 second_worktree=""
-echo "部署工作树会在每次运行时获取 feature/dev_fu 最新提交，且不切换调用方分支。"
+OTHER_CLONE="$TEMP_ROOT/other-clone"
+git clone -q "$REMOTE" "$OTHER_CLONE"
+if mateclaw_same_git_repository "$REPO" "$OTHER_CLONE"; then
+  echo "独立 clone 不得被识别为同一 Git 仓库进程。" >&2
+  exit 1
+fi
+
+if mateclaw_create_latest_worktree "$REPO" missing-branch "$DEPLOY_PARENT" >/dev/null 2>&1; then
+  echo "本地部署分支不存在时必须明确失败，不能回退到远端分支。" >&2
+  exit 1
+fi
+
+echo "部署工作树使用本地 feature/dev_fu 分支 HEAD（含未推送提交），且不切换调用方分支。"

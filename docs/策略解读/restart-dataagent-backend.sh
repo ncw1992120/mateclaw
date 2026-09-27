@@ -10,7 +10,7 @@
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
 # 环境变量：
-#   后端每次启动均从 origin/feature/dev_fu 获取最新提交并执行 clean package（需要 Git 网络访问）
+#   后端每次启动均从本地 feature/dev_fu 分支 HEAD 创建临时工作树并执行 clean package
 #   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
 #   ALOUDATA_MOCK_PORT=18081        mock 服务端口
 #   ALOUDATA_MOCK_SERVER=...        mock 服务基地址（默认 http://127.0.0.1:<port>）
@@ -62,8 +62,8 @@ usage() {
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
 
-后端启动时会从 origin/feature/dev_fu 获取最新提交，在临时隔离工作树中 clean package，
-构建成功后再启动；Git 获取失败时会停止，不会回退到旧代码。
+后端启动时会从本地 feature/dev_fu 分支 HEAD 创建临时隔离工作树并 clean package，
+构建成功后再启动；本地分支不存在时会停止，不会回退到远端或其他分支。
 
 环境变量：
   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
@@ -316,7 +316,7 @@ trap cleanup_deploy_worktree EXIT
 BUILD_PROJECT_ROOT="$DEPLOY_WORKTREE"
 JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 DEPLOY_COMMIT="$(git -C "$BUILD_PROJECT_ROOT" rev-parse --short HEAD)"
-echo "本次部署源码：origin/$DEPLOY_BRANCH（$DEPLOY_COMMIT），工作树 $BUILD_PROJECT_ROOT"
+echo "本次部署源码：本地分支提交 $DEPLOY_COMMIT，工作树 $BUILD_PROJECT_ROOT"
 
 # ---------------------------------------------------------------- 后端
 

@@ -18,7 +18,7 @@ if (( build_line >= jar_check_line || build_line >= launch_line )); then
 fi
 
 if ! grep -Fq 'mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH"' "$SCRIPT"; then
-  echo "后端启动前必须准备 origin/feature/dev_fu 的独立最新代码工作树。" >&2
+  echo "后端启动前必须准备本地 feature/dev_fu 的独立部署工作树。" >&2
   exit 1
 fi
 if ! grep -Fq 'BUILD_PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests' "$SCRIPT"; then
