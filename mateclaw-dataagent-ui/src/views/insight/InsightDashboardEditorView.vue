@@ -279,13 +279,15 @@
       <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
       <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" :component="panelComponent" @render="handlePreviewResult" />
 
-      <!-- 「查询配置」弹窗：展示字段 / 筛选器绑定 / 允许排序 / 分页 -->
+      <!-- 「查询配置」弹窗：展示字段 / 固定筛选 / 筛选器绑定 / 允许排序 / 分页 -->
       <QueryConfigDialog
         v-model="insightState.ui.queryConfigDialog.visible"
         :fields="queryConfigDataset?.fields ?? []"
         :component-type="queryConfigComponentType"
         :filter-options="filterOptions"
         :initial-config="queryConfigDataset?.queryConfig ?? null"
+        :initial-fixed-filters="queryConfigDataset?.filters ?? []"
+        :source-type="queryConfigDataset?.sourceType"
         :legacy-bindings="queryConfigLegacyBindings"
         @save="onSaveQueryConfig"
       />
@@ -430,8 +432,8 @@ const queryConfigLegacyBindings = computed(() => {
   if (!binding) return []
   return draftQueryConfigFromLegacyBindings([binding]).parameterBindings
 })
-function onSaveQueryConfig(config: DatasetQueryConfig): void {
-  const error = saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config)
+function onSaveQueryConfig(config: DatasetQueryConfig, fixedFilters: Array<{ field: string; op: string; value: string }>): void {
+  const error = saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config, fixedFilters)
   if (error) {
     ElMessage.warning(error)
     return

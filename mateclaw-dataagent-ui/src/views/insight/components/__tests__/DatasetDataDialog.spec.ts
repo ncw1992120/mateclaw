@@ -129,6 +129,27 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await flushPromises()
   }
 
+  it('固定筛选只读展示且始终与本次筛选器绑定条件一起下推', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      filters: [{ field: 'status', op: '=', value: 'ACTIVE' }],
+      queryConfig: queryConfig([
+        { filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' },
+      ]),
+      fields: [{ name: 'status', displayName: '状态', role: 'dimension' }],
+    }))
+    await runQuery(wrapper)
+
+    expect(wrapper.get('[data-testid="fixed-filter-section"]').text()).toContain('始终生效 · 只读')
+    expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('ACTIVE')
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
+      filters: [
+        { field: 'status', role: 'dimension', operator: 'eq', value: 'ACTIVE' },
+        { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
+      ],
+    }))
+    wrapper.unmount()
+  })
+
   it('点击查询后立即把当前结果渲染到画布中的组件', async () => {
     const component = { id: 'table-1', type: 'table', title: '订单明细' }
     const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }), component)
@@ -291,19 +312,25 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       expect(wrapper.find('[data-testid="display-fields-empty"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="query-filter-row"]').exists()).toBe(false)
 
-      const saveError = useInsight().saveQueryConfig(dataset.id, queryConfig([]))
+      const fixedFilters = [{ field: 'cust_type', op: '=', value: '机构' }]
+      const saveError = useInsight().saveQueryConfig(dataset.id, queryConfig([]), fixedFilters)
       await flushPromises()
 
       expect(saveError).toBeNull()
+      expect(dataset.filters).toEqual(fixedFilters)
       expect(wrapper.findAll('[data-testid="display-field-row"]')).toHaveLength(3)
       expect(wrapper.text()).toContain('交易日期')
       expect(wrapper.text()).toContain('客户类型')
       expect(wrapper.text()).toContain('金额')
+      expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('机构')
 
       await wrapper.get('[data-testid="run-query"]').trigger('click')
       await flushPromises()
 
-      expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }))
+      expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
+        columns: ['trade_date', 'cust_type', 'amount'],
+        filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '机构' }],
+      }))
       expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
         componentId: 'table-no-bindings',
         table: { columns: ['trade_date', 'cust_type', 'amount'] },
@@ -611,7 +638,7 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     ])
   })
 
-  it('不再读取旧 dataset.filters 或全局 filterBindings，也不允许手工新增条件', async () => {
+  it('固定筛选不受旧全局 filterBindings 影响，并始终下推', async () => {
     state.filterBindings = [{
       filterName: '旧绑定', scope: { 'ds-1': true }, fieldMap: [], conditions: [],
     }] as never
@@ -622,12 +649,15 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     const wrapper = await openWith(dataset)
 
     expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(0)
-    expect(wrapper.find('.dd-empty').text()).toContain('未绑定筛选器，本次查询将不附加筛选条件')
+    expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('旧值')
+    expect(wrapper.find('.dd-empty').text()).toContain('固定筛选条件仍会生效')
     expect(wrapper.text()).not.toContain('添加筛选条件')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
-    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [] })
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
+      filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '旧值' }],
+    })
   })
 })
 

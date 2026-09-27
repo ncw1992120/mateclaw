@@ -37,6 +37,25 @@
         <pre class="dd-sql-readonly" data-testid="dataset-sql-readonly"><code>{{ sql }}</code></pre>
       </section>
 
+      <section v-if="fixedFilters.length" class="dd-block" data-testid="fixed-filter-section">
+        <div class="dd-head">
+          <span class="dd-title">固定筛选条件</span>
+          <span class="dd-hint">来自查询配置 · 始终生效 · 只读</span>
+        </div>
+        <div class="dd-table-wrap">
+          <table class="dd-table dd-filter-table" data-testid="fixed-filter-table">
+            <thead><tr><th scope="col">字段</th><th scope="col">操作符</th><th scope="col">固定值</th></tr></thead>
+            <tbody>
+              <tr v-for="(filter, index) in fixedFilters" :key="`${filter.field}-${index}`" data-testid="fixed-filter-row">
+                <td>{{ fieldTitle(filter.field) }} <code>{{ filter.field }}</code></td>
+                <td>{{ operatorLabel(filter.operator) }}</td>
+                <td>{{ filter.value === undefined ? '—' : Array.isArray(filter.value) ? filter.value.join('，') : filter.value }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- ② 参数：从定义里自动提取的占位符（SQL / 接口） -->
       <section v-if="parameters.length" class="dd-block">
         <div class="dd-head">
@@ -83,10 +102,10 @@
         </div>
       </section>
 
-      <!-- ③ 筛选条件来自查询配置；当前预览只允许填写值和启停 -->
+      <!-- ④ 页面筛选器绑定：仅填写本次查询值；固定筛选条件独立、始终生效 -->
       <section v-if="filterSupported" class="dd-block">
         <div class="dd-head">
-          <span class="dd-title">筛选条件</span>
+          <span class="dd-title">筛选器绑定</span>
           <span v-if="hasTimeFilterRows" class="dd-hint">时间范围左闭右开：包含开始时间，不包含结束时间</span>
         </div>
         <div v-if="queryFilterRows.length" class="dd-table-wrap dd-conditions">
@@ -137,7 +156,7 @@
           </table>
         </div>
         <div v-else class="dd-empty" data-testid="query-filter-empty" role="status">
-          未绑定筛选器，本次查询将不附加筛选条件。
+          {{ fixedFilters.length ? '未绑定页面筛选器；固定筛选条件仍会生效。' : '未绑定筛选器，本次查询将不附加筛选条件。' }}
         </div>
       </section>
 
@@ -216,6 +235,7 @@ import {
   toDatasetFilters,
   type RuntimeFilterRow,
 } from '@/utils/runtime-filter-bindings'
+import { toFixedDatasetFilters } from '@/utils/fixed-dataset-filters'
 import { componentPreviewData } from '@/utils/component-preview-data'
 
 const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
@@ -244,6 +264,7 @@ let requestSequence = 0
 
 const isSql = computed(() => props.dataset.sourceType === 'jdbc')
 const isApi = computed(() => props.dataset.sourceType === 'api')
+const fixedFilters = computed(() => toFixedDatasetFilters(props.dataset.filters, props.dataset.fields))
 
 /* ── 查询配置只读展示 ── */
 const sql = computed(() => props.dataset.jdbc?.sql ?? '')
@@ -409,12 +430,17 @@ function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): vo
 const queryHint = computed(() => {
   if (!filterSupported.value) return '文件类型暂不支持筛选下推，可直接预览文件数据'
   if (!queryFilterRows.value.length) {
+    if (fixedFilters.value.length) return '固定筛选条件始终生效；当前没有页面筛选器参数'
     return hasNamedQueryParameters.value
       ? '未绑定页面筛选器；本次不附加筛选条件，按已填写的数据源参数查询'
       : '未绑定筛选器，本次查询将不附加筛选条件'
   }
-  if (!hasExecutableFilter.value) return '筛选条件均为空或已关闭，本次查询将不附加筛选条件'
-  return '筛选条件来自查询配置；关闭的条件不参与本次查询'
+  if (!hasExecutableFilter.value) return fixedFilters.value.length
+    ? '页面筛选条件为空或已关闭；固定筛选条件仍会生效'
+    : '筛选条件均为空或已关闭，本次查询将不附加筛选条件'
+  return fixedFilters.value.length
+    ? '固定筛选条件始终生效；关闭的页面筛选条件不参与本次查询'
+    : '筛选条件来自查询配置；关闭的条件不参与本次查询'
 })
 
 /** 最近一次执行的时间（展示用 HH:mm） */
@@ -427,6 +453,7 @@ const queriedAt = ref(0)
 const currentSignature = computed(() =>
   JSON.stringify([
     sql.value,
+    fixedFilters.value,
     displayFields.value.map(({ field, title, role }) => [field, title, role]),
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
     queryFilterRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value, enabled: row.enabled })),
@@ -489,10 +516,10 @@ async function fetchRows(reset: boolean): Promise<void> {
   const started = Date.now()
   try {
     const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
-    const filters = toDatasetFilters(enabledFilterRows)
+    const filters = [...fixedFilters.value, ...toDatasetFilters(enabledFilterRows)]
     const request = draftRequestForDataset({
       ...props.dataset,
-      filters: filters as DatasetConfig['filters'],
+      filters: filters as unknown as DatasetConfig['filters'],
       jdbc: { ...props.dataset.jdbc, sql: sql.value },
     })
     if (!request) {
@@ -520,7 +547,7 @@ async function fetchRows(reset: boolean): Promise<void> {
       ? await previewInput({
           datasetId: props.dataset.backendDatasetId as string,
           inputName: props.dataset.alias,
-          filters: filters as DatasetConfig['filters'],
+          filters: filters as unknown as DatasetConfig['filters'],
           columns: requestedColumns,
           orders,
           requestTotalCount,

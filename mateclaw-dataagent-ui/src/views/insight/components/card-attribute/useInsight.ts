@@ -1150,8 +1150,12 @@ function openQueryConfig(datasetId: string): void {
 function closeQueryConfig(): void {
   state.ui.queryConfigDialog.visible = false
 }
-/** 保存查询配置到本地数据集状态（buildPipeline 时写入 datasetInputs[].queryConfig） */
-function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string | null {
+/** 保存查询配置与每次查询都生效的固定筛选（分别写入 queryConfig 与 datasetInputs[].filters）。 */
+function saveQueryConfig(
+  datasetId: string,
+  config: DatasetQueryConfig,
+  fixedFilters?: InputFilter[],
+): string | null {
   const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
   if (dataset) {
     const titles = new Map(config.displayFields.map((field) => [field.field, field.title.trim()]))
@@ -1162,6 +1166,7 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string 
     if (error) return error
     dataset.fields = fields
     dataset.queryConfig = config
+    if (fixedFilters) dataset.filters = fixedFilters.map((filter) => ({ ...filter }))
     syncKpiMetricsFromFields()
   }
   // 配置变化后系统区生成代码需要刷新（输入 schema 说明变化）

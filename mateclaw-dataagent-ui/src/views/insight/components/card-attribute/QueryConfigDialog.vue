@@ -84,7 +84,36 @@
         </div>
       </div>
 
-      <!-- ② 筛选器绑定：只展示筛选器名称和展示名；参数名/操作符由后端兼容字段及筛选器类型自动确定 -->
+      <!-- ② 固定筛选：存于 datasetInputs[].filters，每次查询都生效，不接受页面参数 -->
+      <div class="qc-section">
+        <div class="qc-section-head">
+          <span class="qc-section-title">固定筛选条件</span>
+          <el-button size="small" type="primary" plain data-testid="qc-add-fixed-filter" @click="addFixedFilter">+ 添加条件</el-button>
+        </div>
+        <p class="qc-hint qc-fixed-filter-hint">每次查询都会应用；如需由页面控件动态传值，请使用下方「筛选器绑定」。</p>
+        <div v-if="fixedFilterRows.length" class="qc-fixed-filter-list">
+          <div v-for="(filter, index) in fixedFilterRows" :key="index" class="qc-fixed-filter-row" data-testid="qc-fixed-filter-row">
+            <el-select v-model="filter.field" size="small" placeholder="选择字段" :aria-label="`固定筛选字段 ${index + 1}`" data-testid="qc-fixed-field">
+              <el-option v-for="field in queryableFields" :key="field.name" :label="fieldOptionLabel({ ...field, dataType: undefined })" :value="field.name" />
+            </el-select>
+            <el-select v-model="filter.op" size="small" :aria-label="`固定筛选操作符 ${index + 1}`" data-testid="qc-fixed-operator">
+              <el-option v-for="option in fixedOperators(filter.field)" :key="option.value" :label="option.label" :value="option.value" />
+            </el-select>
+            <el-input
+              v-model="filter.value"
+              size="small"
+              :disabled="!needsValue(filter.op)"
+              :placeholder="valueHintOf(filter.op) || '无需填写'"
+              :aria-label="`固定筛选值 ${index + 1}`"
+              data-testid="qc-fixed-value"
+            />
+            <el-button size="small" text type="danger" :aria-label="`删除固定筛选条件 ${index + 1}`" data-testid="qc-remove-fixed-filter" @click="fixedFilterRows.splice(index, 1)">删除</el-button>
+          </div>
+        </div>
+        <div v-else class="qc-empty" data-testid="qc-fixed-filter-empty">暂无固定筛选条件；不需要固定限制时可留空。</div>
+      </div>
+
+      <!-- ③ 筛选器绑定：只展示筛选器名称和展示名；参数名/操作符由后端兼容字段及筛选器类型自动确定 -->
       <div class="qc-section">
         <div class="qc-section-head">
           <span class="qc-section-title">筛选器绑定</span>
@@ -153,6 +182,7 @@ import type {
   QueryDisplayField,
   QueryParameterBinding,
 } from '@/types'
+import { isComplete, needsValue, operatorsFor, toCondition, valueHintOf } from '@/utils/filter-conditions'
 
 const props = defineProps<{
   modelValue: boolean
@@ -161,6 +191,8 @@ const props = defineProps<{
   /** 页面筛选器组件（含技术字段名）：用于字段匹配；运算符仍由筛选器类型固定 */
   filterOptions: Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>
   initialConfig: DatasetQueryConfig | null
+  initialFixedFilters?: Array<{ field: string; op?: string; operator?: string; value?: unknown }>
+  sourceType?: string
   /** 当前组件类型；仅 KPI 指标卡限制展示字段角色。 */
   componentType?: 'kpi' | 'chart' | 'table'
   /** 旧 scriptFilterBindings 归一化的展示草稿：仅在无已保存配置时预填 */
@@ -169,7 +201,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
-  (e: 'save', config: DatasetQueryConfig): void
+  (e: 'save', config: DatasetQueryConfig, fixedFilters: Array<{ field: string; op: string; value: string }>): void
 }>()
 
 interface FieldRow extends QueryDisplayField {}
@@ -190,6 +222,7 @@ function fixedOperatorFor(filterComponentId: string): QueryParameterBinding['ope
 
 const fieldRows = ref<FieldRow[]>([])
 const bindingRows = ref<BindingRow[]>([])
+const fixedFilterRows = ref<Array<{ field: string; op: string; value: string }>>([])
 const sortEnabled = ref(false)
 const sortAllowed = ref<string[]>([])
 const paginationEnabled = ref(false)
@@ -247,6 +280,20 @@ const queryableFields = computed<QueryableDatasetField[]>(() => props.fields.map
   displayName: field.displayName,
   role: fieldRows.value.find((row) => row.field === field.name)?.role ?? roleOf(field),
 })))
+
+function fixedOperators(fieldName: string) {
+  const field = props.fields.find((item) => item.name === fieldName)
+  const sourceType = props.sourceType === 'api' ? 'HTTP_API'
+    : props.sourceType === 'aloudata' ? 'ALOUDATA_ANALYSIS_VIEW'
+      : props.sourceType === 'file' ? 'FILE' : 'JDBC_SQL'
+  if (sourceType === 'HTTP_API') return [{ value: '=', label: '等于', valueHint: '值' }]
+  return operatorsFor(field?.dataType ?? 'string', sourceType)
+    .filter((option) => !['starts_with', 'ends_with'].includes(option.value))
+}
+
+function addFixedFilter(): void {
+  fixedFilterRows.value.push({ field: '', op: '=', value: '' })
+}
 
 function addField(fieldName: string): void {
   const field = props.fields.find((item) => item.name === fieldName)
@@ -326,6 +373,7 @@ function sortDimensionsFirst(rows: FieldRow[]): FieldRow[] {
 watch(() => props.modelValue, (visible) => {
   if (!visible) return
   fieldsExpanded.value = true
+  fixedFilterRows.value = (props.initialFixedFilters ?? []).map((filter) => toCondition(filter))
   const initial = props.initialConfig
   if (initial && initial.displayFields.length) {
     fieldRows.value = sortDimensionsFirst(initial.displayFields.map((row) => ({ ...row, role: roleForInitialRow(row) })))
@@ -375,6 +423,13 @@ function save(): void {
     ElMessage.warning('展示名必须唯一')
     return
   }
+  const invalidFixedFilter = fixedFilterRows.value.find((filter) =>
+    !filter.field || !fixedOperators(filter.field).some((option) => option.value === filter.op) || !isComplete(filter),
+  )
+  if (invalidFixedFilter) {
+    ElMessage.warning('固定筛选条件未填写完整，或操作符不适用于所选字段')
+    return
+  }
   const titles = new Map(fieldRows.value.map((row) => [row.field, row.title.trim()]))
   const registryError = validateFieldMetas(props.fields.map((field) => ({
     ...field,
@@ -415,7 +470,7 @@ function save(): void {
       maxPageSize: Math.min(maxPageSize.value, 500),
       returnTotalCount: returnTotalCount.value,
     },
-  })
+  }, fixedFilterRows.value.map((filter) => ({ ...filter, field: filter.field.trim(), value: filter.value.trim() })))
   emit('update:modelValue', false)
 }
 </script>
@@ -459,7 +514,15 @@ function save(): void {
 .qc-binding-thead { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; padding: 0 2px 6px; }
 .qc-binding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: center; gap: 8px; margin-bottom: 8px; }
 .qc-binding-row .el-select { flex: 1 1 0; min-width: 0; }
+.qc-fixed-filter-hint { margin: -2px 0 10px; line-height: 1.5; }
+.qc-fixed-filter-list { display: flex; flex-direction: column; gap: 8px; }
+.qc-fixed-filter-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(100px, 0.8fr) minmax(100px, 1.2fr) 52px; align-items: center; gap: 8px; }
+.qc-fixed-filter-row > * { min-width: 0; }
 .qc-sort-select { width: 100%; }
 .qc-pagination-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .qc-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
+@media (max-width: 680px) {
+  .qc-fixed-filter-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px; }
+  .qc-fixed-filter-row [data-testid="qc-fixed-value"] { grid-column: 1 / 3; }
+}
 </style>

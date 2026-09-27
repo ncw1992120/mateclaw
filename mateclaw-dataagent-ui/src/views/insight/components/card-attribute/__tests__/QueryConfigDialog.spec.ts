@@ -71,6 +71,29 @@ describe('QueryConfigDialog', () => {
     expect(config.parameterBindings).toEqual([])
   })
 
+  it('固定筛选条件独立于筛选器绑定保存，并在重开时回显', async () => {
+    const fixedFilters = [{ field: 'strategy_id', op: '=', value: 'S1' }]
+    const wrapper = mountDialog({ initialFixedFilters: fixedFilters })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="qc-fixed-filter-row"]').text()).toContain('策略编码')
+    await wrapper.find('[data-testid="qc-save"]').trigger('click')
+
+    const saved = wrapper.emitted('save')![0]
+    const config = saved[0] as DatasetQueryConfig
+    expect(config.parameterBindings).toEqual([])
+    expect(saved[1]).toEqual(fixedFilters)
+  })
+
+  it('未填完整的固定筛选条件不能保存', async () => {
+    const wrapper = mountDialog()
+    await flushPromises()
+    await wrapper.get('[data-testid="qc-add-fixed-filter"]').trigger('click')
+    await wrapper.find('[data-testid="qc-save"]').trigger('click')
+
+    expect(wrapper.emitted('save')).toBeUndefined()
+  })
+
   it('打开时按 descriptor 全量字段初始化展示字段（技术字段只读展示）', async () => {
     const wrapper = mountDialog()
     await flushPromises()
