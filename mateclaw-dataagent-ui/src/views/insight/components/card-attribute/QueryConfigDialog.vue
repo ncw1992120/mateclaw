@@ -415,8 +415,7 @@ function save(): void {
     })
     if (dimensions.length) {
       const labels = dimensions.map((row) => row.title.trim() || row.field).join('、')
-      ElMessage.warning(`KPI 指标卡的展示字段不能包含维度：${labels}。请移除维度，仅保留一个或多个指标后再保存。`)
-      return
+      ElMessage.warning(`当前 KPI 展示字段包含维度：${labels}，可能无法按指标卡样式展示；配置仍会保存，可稍后调整字段或使用 Python 脚本处理。`)
     }
   }
   if (duplicateTitles.value.size) {
