@@ -202,6 +202,9 @@ describe('buildPythonSystemRegion', () => {
 
 import PythonScriptDialog from '../PythonScriptDialog.vue'
 
+const { fetchDatasetSampleRows } = vi.hoisted(() => ({ fetchDatasetSampleRows: vi.fn() }))
+vi.mock('../../dataset-sample-query', () => ({ fetchDatasetSampleRows }))
+
 const elInputStub = {
   name: 'el-input',
   props: ['modelValue', 'type', 'rows'],
@@ -232,6 +235,7 @@ async function mountDialog() {
   })
   state.ui.python.visible = true
   await nextTick()
+  await flushPromises()
   return wrapper
 }
 
@@ -239,6 +243,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
   let warningSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    fetchDatasetSampleRows.mockReset().mockResolvedValue({ rows: [{ region: '华东', amount: 12 }], columns: ['region', 'amount'] })
     vi.mocked(ElMessageBox.confirm).mockClear()
     warningSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
     state.ui.python.visible = false
@@ -306,6 +311,9 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     expect((editor.element as HTMLTextAreaElement).value).toContain('造数示例与上游数据读取')
     expect((editor.element as HTMLTextAreaElement).value).toContain('自定义处理代码（可编辑）')
     expect((editor.element as HTMLTextAreaElement).value).toContain('输出结果示例（参考）')
+    expect((editor.element as HTMLTextAreaElement).value).toContain('华东')
+    expect((editor.element as HTMLTextAreaElement).value).toContain('12')
+    expect(fetchDatasetSampleRows).toHaveBeenCalledWith(state.datasets[0], state.filterCatalog)
     expect(wrapper.find('[data-testid="system-code-readonly"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="user-code"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="footer-query-config"]').exists()).toBe(false)

@@ -31,14 +31,19 @@
         data-testid="python-editor-code"
         aria-label="Python 脚本"
         spellcheck="false"
+        :disabled="editorLoading"
       />
     </div>
 
+    <p v-if="editorLoading" class="editor-hint" data-testid="python-sample-loading">正在获取上游数据集的查询结果，用于生成 JSON 造数样例…</p>
+    <ul v-else-if="editorSampleWarnings.length" class="editor-warnings" data-testid="python-sample-warnings">
+      <li v-for="warning in editorSampleWarnings" :key="warning">{{ warning }}</li>
+    </ul>
     <p class="editor-hint">取消注释造数示例后，对应输入会跳过真实数据读取；查询参数说明仅供参考，查看数据时由查询配置应用。</p>
 
     <template #footer>
       <el-button data-testid="python-editor-cancel" @click="ui.python.visible = false">取消</el-button>
-      <el-button type="primary" data-testid="python-editor-save" @click="save">保存</el-button>
+      <el-button type="primary" data-testid="python-editor-save" :disabled="editorLoading" @click="save">保存</el-button>
     </template>
   </el-dialog>
 
@@ -58,12 +63,14 @@ import { buildPythonEditorDocument, parsePythonEditorDocument } from '@/utils/py
 import type { FinalResultQueryConfig, QueryDisplayField } from '@/types'
 import { isFinalResultQueryConfigured, sortDisplayFieldsDimensionsFirst } from '@/utils/final-result-query'
 import { highlightPython } from '@/utils/python-syntax'
-import { getCachedQuery } from '../dataset-data-cache'
+import { fetchDatasetSampleRows } from '../dataset-sample-query'
 import PythonQueryConfigDialog from './PythonQueryConfigDialog.vue'
 
 const { state, savePython } = useInsight()
 const ui = state.ui
 const editorCode = ref('')
+const editorLoading = ref(false)
+const editorSampleWarnings = ref<string[]>([])
 const editorRef = ref<unknown>(null)
 const highlightRef = ref<HTMLElement | null>(null)
 const showQueryConfig = ref(false)
@@ -94,15 +101,40 @@ function createEmptyFinalResultQueryConfig(): FinalResultQueryConfig {
   }
 }
 
-function editorDocument(): string {
-  const samples = Object.fromEntries(state.datasets.map((dataset) => [dataset.alias, getCachedQuery(dataset.id)?.rows ?? []]))
-  return buildPythonEditorDocument(currentPythonSource(), state.pythonUser, samples)
+let editorLoadId = 0
+
+async function loadEditorDocument(): Promise<void> {
+  const loadId = ++editorLoadId
+  editorLoading.value = true
+  editorSampleWarnings.value = []
+  editorCode.value = '# 正在获取上游数据集的查询结果…'
+
+  const samples: Record<string, Record<string, unknown>[]> = {}
+  const warnings: string[] = []
+  await Promise.all(state.datasets.map(async (dataset) => {
+    try {
+      const result = await fetchDatasetSampleRows(dataset, state.filterCatalog)
+      samples[dataset.alias] = result.rows
+      if (!result.rows.length) warnings.push(`上游数据集「${dataset.alias}」查询成功，但结果为 0 行；未生成 JSON 造数。`)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      warnings.push(`上游数据集「${dataset.alias}」查询失败：${reason}。真实数据读取代码仍保留。`)
+    }
+  }))
+
+  if (loadId !== editorLoadId || !ui.python.visible) return
+  editorSampleWarnings.value = warnings
+  editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, samples)
+  editorLoading.value = false
+  void nextTick(bindEditorScroll)
 }
 
 watch(() => ui.python.visible, (visible) => {
   if (visible && !ui.python.queryConfigOnly) {
-    editorCode.value = editorDocument()
-    void nextTick(bindEditorScroll)
+    void loadEditorDocument()
+  } else {
+    editorLoadId += 1
+    editorLoading.value = false
   }
 })
 
@@ -233,6 +265,13 @@ function saveQueryConfig(config: FinalResultQueryConfig): void {
 .editor-hint {
   margin: 10px 2px 0;
   color: var(--db-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.editor-warnings {
+  margin: 10px 2px 0;
+  padding-left: 20px;
+  color: var(--el-color-warning-dark-2);
   font-size: 12px;
   line-height: 1.6;
 }

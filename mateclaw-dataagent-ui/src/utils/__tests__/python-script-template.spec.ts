@@ -94,4 +94,17 @@ describe('python script system state', () => {
     expect(document).toContain('# {"kind":"table","data":[]}')
     expect(parsePythonEditorDocument(document)).toMatchObject({ userCode: 'result = table_zb' })
   })
+
+  it('没有真实查询行时不再用字段映射伪造 schema 造数', () => {
+    const document = buildPythonEditorDocument({
+      inputs: [{
+        datasetId: 'a', inputName: 'table_ab',
+        fieldMappings: [{ source: 'region', target: '区域' }, { source: 'amount', target: '金额' }],
+      }],
+      bindings: [],
+    })
+
+    expect(document).not.toContain('pl.DataFrame({')
+    expect(document).toContain('尚未获取真实查询结果行')
+  })
 })

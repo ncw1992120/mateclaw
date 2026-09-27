@@ -51,20 +51,11 @@ export function buildSystemScript(
   }
   validInputs.forEach((input) => {
     const rows = samplesByInputName[input.inputName] ?? []
-    const sampleData = rows.length
-      ? rows
-      : (input.fieldMappings ?? []).map((field) => ({ [field.source]: null }))
+    const sampleData = rows
     if (rows.length) {
       lines.push(`# ${input.inputName} = pl.DataFrame(json.loads(${JSON.stringify(JSON.stringify(sampleData))}))`)
-    } else if (sampleData.length) {
-      lines.push(`# ${input.inputName} = pl.DataFrame({`)
-      sampleData.forEach((row) => {
-        const [field, value] = Object.entries(row)[0] ?? []
-        lines.push(`#     ${JSON.stringify(field)}: [${value === null ? 'None' : JSON.stringify(value)}],`)
-      })
-      lines.push('# })')
     } else {
-      lines.push(`# ${input.inputName} = pl.DataFrame()  # 先在上游数据集「查看数据-查询」以获取字段和样例行`)
+      lines.push(`# ${input.inputName}：尚未获取真实查询结果行，不生成 schema 造数；请检查上游数据集查询。`)
     }
   })
 
