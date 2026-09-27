@@ -283,6 +283,15 @@ export function validateComponentOutput(
         }
       }
     }
+    if (columns.length === 0) {
+      return {
+        status: 'OUTPUT_CONTRACT_ERROR',
+        path: 'result.data.columns',
+        expected: '至少 1 列',
+        actual: '0 列',
+        suggestion: 'KPI 组件需要至少 1 个数值指标列，或配置有效的 valueField',
+      }
+    }
     return null
   }
 

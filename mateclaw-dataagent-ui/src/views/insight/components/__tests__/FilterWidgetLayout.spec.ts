@@ -43,57 +43,65 @@ const timeComponent = {
 // 组件内部标签不渲染（画布/全局筛选栏目前都靠外层渲染标题）。
 // 所以要验证「标签 + 控件」的同容器结构，必须显式传 showTitle: true。
 describe('筛选器组件的左右内联布局契约', () => {
-  it('标签与下拉框同为 .filter-body 的直接子项，且标签在前', () => {
+  it('标签与下拉框通过共享壳组件内联展示，且标签在前', () => {
     const wrapper = mount(FilterSelectWidget, {
       props: { component: filterComponent, showTitle: true },
       global: { plugins: [i18n], stubs },
     })
 
-    const body = wrapper.find('.filter-body')
+    const body = wrapper.find('.filter-control-widget')
     expect(body.exists()).toBe(true)
 
     const children = Array.from(body.element.children)
     expect(children.length).toBe(2)
-    expect(children[0].classList.contains('filter-label')).toBe(true)
-    expect(children[1].tagName.toLowerCase()).toBe('el-select-stub')
+    expect(children[0].classList.contains('filter-control-label')).toBe(true)
+    expect(children[1].classList.contains('filter-control-content')).toBe(true)
+    expect(children[1].querySelector('el-select-stub')).not.toBeNull()
   })
 
-  it('标题栏隐藏时只摘标签，容器与下拉框保留', () => {
+  it('标题栏隐藏时只摘标签，共享壳容器与下拉框保留', () => {
     const wrapper = mount(FilterSelectWidget, {
       props: { component: { ...filterComponent, titleBarStyle: 'hidden' } },
       global: { plugins: [i18n], stubs },
     })
 
     expect(wrapper.find('.filter-label').exists()).toBe(false)
-    const children = Array.from(wrapper.find('.filter-body').element.children)
+    const body = wrapper.find('.filter-control-widget')
+    expect(body.exists()).toBe(true)
+    const children = Array.from(body.element.children)
     expect(children.length).toBe(1)
-    expect(children[0].tagName.toLowerCase()).toBe('el-select-stub')
+    expect(children[0].classList.contains('filter-control-content')).toBe(true)
+    expect(children[0].querySelector('el-select-stub')).not.toBeNull()
   })
 
-  it('标签与日期范围控件同为 .time-filter-body 的直接子项，且标签在前', () => {
+  it('标签与日期范围控件通过共享壳组件内联展示，且标签在前', () => {
     const wrapper = mount(TimeFilterWidget, {
       props: { component: timeComponent, showTitle: true },
       global: { plugins: [i18n], stubs },
     })
 
-    const body = wrapper.find('.time-filter-body')
+    const body = wrapper.find('.filter-control-widget')
     expect(body.exists()).toBe(true)
 
     const children = Array.from(body.element.children)
     expect(children.length).toBe(2)
-    expect(children[0].classList.contains('time-filter-label')).toBe(true)
-    expect(children[1].tagName.toLowerCase()).toBe('el-date-picker-stub')
+    expect(children[0].classList.contains('filter-control-label')).toBe(true)
+    expect(children[1].classList.contains('filter-control-content')).toBe(true)
+    expect(children[1].querySelector('el-date-picker-stub')).not.toBeNull()
   })
 
-  it('标题栏隐藏时只摘标签，容器与日期控件保留', () => {
+  it('标题栏隐藏时只摘标签，共享壳容器与日期控件保留', () => {
     const wrapper = mount(TimeFilterWidget, {
       props: { component: { ...timeComponent, titleBarStyle: 'hidden' } },
       global: { plugins: [i18n], stubs },
     })
 
     expect(wrapper.find('.time-filter-label').exists()).toBe(false)
-    const children = Array.from(wrapper.find('.time-filter-body').element.children)
+    const body = wrapper.find('.filter-control-widget')
+    expect(body.exists()).toBe(true)
+    const children = Array.from(body.element.children)
     expect(children.length).toBe(1)
-    expect(children[0].tagName.toLowerCase()).toBe('el-date-picker-stub')
+    expect(children[0].classList.contains('filter-control-content')).toBe(true)
+    expect(children[0].querySelector('el-date-picker-stub')).not.toBeNull()
   })
 })

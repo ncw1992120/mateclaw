@@ -329,9 +329,9 @@ const sortedTableRows = computed(() => {
   })
 })
 
-/** 是否显示分页由静态查询配置决定；即使当前结果不足一页，也允许切换每页条数。 */
+/** 正式数据分页由查询配置决定；样例预览在行数较多时展示分页，便于体验表格交互。 */
 const showPagination = computed(() => {
-  return paginationEnabled.value
+  return paginationEnabled.value || (props.sampleMode && activeTableRows.value.length > pageSize.value)
 })
 
 /** 当前页数据 */

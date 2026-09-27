@@ -279,7 +279,10 @@ const queryableFields = computed<QueryableDatasetField[]>(() => props.fields.map
   name: field.name,
   displayName: field.displayName,
   role: fieldRows.value.find((row) => row.field === field.name)?.role ?? roleOf(field),
-})))
+})).sort((left, right) => {
+  // 筛选绑定字段沿用展示字段的维度优先顺序，且保留同类字段的 descriptor 顺序。
+  return (left.role === 'measure' ? 1 : 0) - (right.role === 'measure' ? 1 : 0)
+}))
 
 function fixedOperators(fieldName: string) {
   const field = props.fields.find((item) => item.name === fieldName)

@@ -306,20 +306,20 @@ function handleKeydown(event: KeyboardEvent, item: PaletteItem): void {
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 12px;
   margin: 0 4px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: grab;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
   user-select: none;
 }
 
 .palette-item:hover {
   background: var(--db-hover);
-  border-color: var(--db-border);
 }
 
 .palette-item:active {
@@ -327,23 +327,42 @@ function handleKeydown(event: KeyboardEvent, item: PaletteItem): void {
   background: var(--db-accent-light, var(--db-hover));
 }
 
+.palette-item:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: -2px;
+}
+
 .palette-icon {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--db-text-secondary);
+  color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+  border-radius: 6px;
   flex-shrink: 0;
 }
 
 .palette-icon svg {
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
 }
 
 .palette-label {
   font-size: 13px;
   color: var(--db-text);
+}
+
+@media (pointer: coarse) {
+  .palette-item {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-item {
+    transition: none;
+  }
 }
 </style>

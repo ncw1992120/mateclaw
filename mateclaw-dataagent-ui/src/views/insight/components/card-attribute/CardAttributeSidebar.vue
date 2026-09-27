@@ -83,6 +83,8 @@ const hydrating = ref(false)
 function hydrate(): void {
   const component = props.component
   if (!component) return
+  const layoutSignatureBefore = JSON.stringify((component.kpiMetrics ?? [])
+    .map((metric) => [metric.fieldKey, metric.x, metric.y, metric.w, metric.h]))
   hydrating.value = true
   hydratePanel(component, props.dashboardId, props.filterComponents ?? [], props.executionPolicy)
   propertyDraft.load(component)
