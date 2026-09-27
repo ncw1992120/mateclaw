@@ -35,6 +35,10 @@ function mountDialog() {
       plugins: [i18n],
       stubs: {
         InsightColorField: colorFieldStub,
+        'el-input': {
+          props: ['modelValue', 'size', 'clearable'],
+          template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+        },
         'el-dialog': { template: '<div><slot /><slot name="footer" /></div>' },
         'el-switch': { template: '<button type="button"><slot /></button>' },
         'el-icon': { template: '<span><slot /></span>' },
@@ -49,6 +53,8 @@ beforeEach(() => {
   const metric = reactive({
     fieldKey: 'revenue',
     displayName: '收入',
+    unit: '元',
+    helperText: '同期对比',
     visual: { colorMode: 'theme' as const },
     styles: defaultMetricStyles(),
   })
@@ -68,6 +74,15 @@ beforeEach(() => {
   })
   insightFixture.value = {
     state,
+    setFieldDisplayName: (fieldKey: string, value: string) => {
+      const current = state.kpiMetrics.find((item: any) => item.fieldKey === fieldKey)
+      if (current) current.displayName = value
+      return null
+    },
+    setFieldUnit: (fieldKey: string, value: string) => {
+      const current = state.kpiMetrics.find((item: any) => item.fieldKey === fieldKey)
+      if (current) current.unit = value
+    },
     syncKpiMetricStyles: (fieldKey: string) => {
       state.kpiMetrics = syncMetricStylesToAll(state.kpiMetrics, fieldKey)
     },
@@ -75,6 +90,19 @@ beforeEach(() => {
 })
 
 describe('MetricStyleDialog shared color fields', () => {
+  it('edits display name, unit and helper text from the style dialog', async () => {
+    const wrapper = mountDialog()
+    const metric = insightFixture.value.state.kpiMetrics[0]
+
+    await wrapper.get('[data-testid="metric-display-name"]').setValue('营收')
+    await wrapper.get('[data-testid="metric-unit"]').setValue('万元')
+    await wrapper.get('[data-testid="metric-helper-text"]').setValue('较上期增长')
+
+    expect(metric.displayName).toBe('营收')
+    expect(metric.unit).toBe('万元')
+    expect(metric.helperText).toBe('较上期增长')
+  })
+
   it('maps accent and each metric text color to their existing style fields', async () => {
     const wrapper = mountDialog()
     const metric = insightFixture.value.state.kpiMetrics[0]

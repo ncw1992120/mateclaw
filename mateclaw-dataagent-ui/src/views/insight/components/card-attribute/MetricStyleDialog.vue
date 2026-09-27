@@ -39,6 +39,40 @@
             </button>
           </div>
         </div>
+        <div class="ms-section-title">指标信息</div>
+        <div class="ms-meta-grid">
+          <label class="ms-meta-label" for="metric-style-display-name">展示名</label>
+          <el-input
+            id="metric-style-display-name"
+            :model-value="metric.displayName"
+            size="small"
+            clearable
+            placeholder="留空时使用字段名"
+            aria-label="展示名"
+            data-testid="metric-display-name"
+            @update:model-value="updateDisplayName"
+          />
+          <label class="ms-meta-label" for="metric-style-unit">单位</label>
+          <el-input
+            id="metric-style-unit"
+            :model-value="metric.unit"
+            size="small"
+            clearable
+            placeholder="例如：人、元"
+            aria-label="单位"
+            data-testid="metric-unit"
+            @update:model-value="updateUnit"
+          />
+          <label class="ms-meta-label" for="metric-style-helper">辅助说明</label>
+          <el-input
+            id="metric-style-helper"
+            v-model="metric.helperText"
+            size="small"
+            placeholder="补充说明"
+            aria-label="辅助说明"
+            data-testid="metric-helper-text"
+          />
+        </div>
         <div class="ms-section-title">字段样式</div>
         <div v-for="field in KPI_METRIC_FIELDS" :key="field" class="ms-style-row">
           <span class="ms-field-name">{{ KPI_FIELD_LABELS[field] }}</span>
@@ -84,7 +118,7 @@ import type { KpiMetricField } from '@/utils/kpi-metrics'
 import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
 import InsightColorField from '../InsightColorField.vue'
 
-const { state, syncKpiMetricStyles } = useInsight()
+const { state, syncKpiMetricStyles, setFieldDisplayName, setFieldUnit } = useInsight()
 const ui = state.ui
 const { t } = useI18n()
 
@@ -116,6 +150,16 @@ watch(iconEnabled, (enabled) => {
 
 function setCustomAccent() {
   if (metric.value?.visual) metric.value.visual.colorMode = 'custom'
+}
+
+function updateDisplayName(value: string) {
+  if (!metric.value) return
+  const error = setFieldDisplayName(metric.value.fieldKey, value)
+  if (error) ElMessage.error(error)
+}
+
+function updateUnit(value: string) {
+  if (metric.value) setFieldUnit(metric.value.fieldKey, value)
 }
 
 function selectIcon(iconKey: string) {
@@ -174,6 +218,9 @@ function syncMetricStyles() {
 .ms-body {
   display: flex;
   min-height: 220px;
+  /* 为弹窗标题和底部关闭按钮留出空间，窄视口时仅滚动内容区。 */
+  max-height: min(65vh, calc(100vh - 280px), 620px);
+  overflow-y: auto;
 }
 .ms-config {
   width: 100%;
@@ -193,6 +240,17 @@ function syncMetricStyles() {
 }
 .ms-icon-section {
   margin-bottom: 18px;
+}
+.ms-meta-grid {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 18px;
+}
+.ms-meta-label {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
 }
 .ms-icon-row {
   display: flex;
@@ -229,8 +287,7 @@ function syncMetricStyles() {
 }
 .ms-style-row {
   display: grid;
-  /* 弹窗内容区 340px：48 + 80 + 40 + 140 + 间隙 24 = 332，留 8px 余量 */
-  grid-template-columns: minmax(48px, 1fr) 80px 40px 140px;
+  grid-template-columns: minmax(64px, 1fr) 76px 36px minmax(88px, 1fr);
   gap: 8px;
   align-items: center;
   padding: 9px 0;
@@ -248,6 +305,7 @@ function syncMetricStyles() {
 }
 .ms-size {
   width: 100%;
+  min-width: 0;
 }
 /* 行内取色字段：隐藏独立标签/校验提示，HEX 输入占满剩余列宽，且不做红色失效描边。
    min-width:0 必须加在栅格项上，否则 input 固有宽度会把定宽列撑出弹窗；
@@ -282,9 +340,6 @@ function syncMetricStyles() {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   margin-bottom: 6px;
-}
-.ms-size {
-  width: 140px;
 }
 .ms-inline {
   display: flex;
