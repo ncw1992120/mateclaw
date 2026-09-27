@@ -163,6 +163,7 @@
             :editable="editable"
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @open-metric-style="(payload) => openChildMetricStyle(child.id, payload)"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <ChartWidget
@@ -222,6 +223,7 @@
             @context-menu="(payload) => emit('context-menu', payload)"
             @edit-child-title-icon-style="(payload) => emit('edit-child-title-icon-style', payload)"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
+            @open-metric-style="(payload) => emit('open-metric-style', payload)"
           />
         </div>
 
@@ -273,6 +275,7 @@ import { useTabKeyboard } from '../composables/useTabKeyboard'
 import { calculateCombinationChildResize } from './combinationChildLayout'
 import { defaultCombinationChildLayout } from '@/utils/combination-tabs'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
+import type { KpiMetricField } from '@/utils/kpi-metrics'
 
 defineOptions({ name: 'CombinationCardWidget' })
 
@@ -307,6 +310,8 @@ const emit = defineEmits<{
   (e: 'context-menu', payload: { containerId: string; childId: string; x: number; y: number }): void
   (e: 'edit-child-title-icon-style', payload: { containerId: string; childId: string; anchor?: HTMLElement }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
+  /** 子 KPI 卡片指标「✏️」直入口：透传给编辑器打开字段样式弹窗 */
+  (e: 'open-metric-style', payload: { componentId: string; fieldKey: string; field: KpiMetricField }): void
 }>()
 
 const { t } = useI18n()
@@ -439,6 +444,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     boundFilterIds: child.boundFilterIds,
     enableTimeFilter: child.enableTimeFilter,
     multiKpi: child.multiKpi,
+    kpiMetrics: child.kpiMetrics,
   }
 }
 
@@ -812,6 +818,12 @@ function onChildResizeUp() {
 function selectChild(id: string) {
   selectedChildId.value = id
   emit('select-child', { containerId: props.component.id, childId: id })
+}
+
+/** 子 KPI 卡片「✏️」直入口：先选中该子组件（触发属性面板 hydrate 指标），再透传给编辑器打开样式弹窗 */
+function openChildMetricStyle(childId: string, payload: { componentId: string; fieldKey: string; field: KpiMetricField }): void {
+  selectChild(childId)
+  emit('open-metric-style', payload)
 }
 
 /** 编辑态下，获得焦点的子组件可用方向键微调位置；交互控件保留自身键盘行为。 */

@@ -84,6 +84,10 @@ function hydrate(): void {
   const component = props.component
   if (!component) return
   hydrating.value = true
+  // 记录组件侧布局签名：用于识别 buildKpiMetrics 投影时把「旧版机器默认布局」吸附迁移的情况
+  const layoutSignatureBefore = JSON.stringify(
+    (component.type === 'kpi' ? component.kpiMetrics ?? [] : []).map((m) => [m.fieldKey, m.x, m.y, m.w, m.h]),
+  )
   hydratePanel(component, props.dashboardId, props.filterComponents ?? [], props.executionPolicy)
   propertyDraft.load(component)
   // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
@@ -92,8 +96,12 @@ function hydrate(): void {
     // 旧版多指标 KPI 只保存 multiKpi，画布仍渲染 legacy kpiList，
     // 而属性面板已经按结果集投影出 kpiMetrics。首次选中时把投影回写组件，
     // 使画布切换到支持单项拖动和样式编辑的新渲染分支。
-    if (component.type === 'kpi' && !component.kpiMetrics?.length && state.kpiMetrics.length > 0) {
-      scheduleEmit()
+    // 另外若投影触发了旧默认布局吸附迁移（布局签名变化），同样回写一次。
+    if (component.type === 'kpi' && state.kpiMetrics.length > 0) {
+      const layoutSignatureAfter = JSON.stringify(state.kpiMetrics.map((m) => [m.fieldKey, m.x, m.y, m.w, m.h]))
+      if (!component.kpiMetrics?.length || layoutSignatureAfter !== layoutSignatureBefore) {
+        scheduleEmit()
+      }
     }
   })
 }

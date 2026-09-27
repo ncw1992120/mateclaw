@@ -1407,6 +1407,8 @@ export interface InsightCombinationChild {
   enableTimeFilter?: boolean
   /** 是否启用多指标模式（仅 kpi 子卡片） */
   multiKpi?: boolean
+  /** KPI 指标分组：指标列表（仅 kpi 子卡片；与 `InsightComponent.kpiMetrics` 同名语义一致） */
+  kpiMetrics?: KpiMetricConfig[]
 }
 
 /** 组件标题前置图标的显示配置。 */

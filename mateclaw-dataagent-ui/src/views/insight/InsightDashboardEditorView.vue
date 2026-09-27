@@ -1131,10 +1131,19 @@ function handleSelectComponent(id: string): void {
   }
 }
 
-/** 画布 KPI 指标「:」直入口：先选中该组件（触发属性面板 hydrate），再打开字段样式弹窗 */
+/** 画布 KPI 指标「✏️」直入口：先选中该组件（触发属性面板 hydrate），再打开字段样式弹窗 */
 function handleOpenMetricStyle(payload: { componentId: string; fieldKey: string; field: string }): void {
-  handleSelectComponent(payload.componentId)
   const targetId = payload.componentId
+  // 组合卡片子组件：画布侧 openChildMetricStyle 已先 selectChild（selectedChildInfo 就位）。
+  // 不能走 handleSelectComponent —— 那会清掉子组件选中，并把顶层选中错设为 child.id，
+  // 导致属性面板拿不到该子组件、样式弹窗读到别的卡片的指标。
+  if (selectedChildInfo.value?.childId === targetId) {
+    nextTick(() => {
+      openMetricStyle(payload.fieldKey, payload.field)
+    })
+    return
+  }
+  handleSelectComponent(targetId)
   nextTick(() => {
     if (selectedComponentId.value === targetId) {
       openMetricStyle(payload.fieldKey, payload.field)
@@ -1306,6 +1315,11 @@ function handleComponentChange(updated: InsightComponent): void {
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
       child.multiKpi = updated.multiKpi
+      // KPI 指标分组：面板投影/拖拽布局/样式编辑的结果要持久化到子卡片，
+      // 否则画布内子 KPI 卡永远拿不到 kpiMetrics，回退旧版多指标布局（无拖拽与 ✏️）。
+      if (child.type === 'kpi') {
+        child.kpiMetrics = updated.kpiMetrics
+      }
       if (child.type === 'combination') {
         child.children = child.children ?? updated.children ?? []
         child.containerConfig = mergeCombinationConfig(child, updated)

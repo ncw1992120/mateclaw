@@ -56,11 +56,12 @@
             @change="() => (metric!.styles[field].colorMode = 'custom')"
           />
         </div>
-        <p class="ms-hint">颜色与字号修改会立即同步画布；双击颜色块或点击重置可恢复跟随主题。</p>
-        <el-button v-if="state.kpiMetrics.length > 1" text type="primary" @click="syncMetricStyles">
-          {{ t('insight.kpiMetricSync') }}
-        </el-button>
-        <el-button text type="primary" @click="resetMetric">重置该指标</el-button>
+        <div class="ms-actions">
+          <el-button v-if="state.kpiMetrics.length > 1" text type="primary" @click="syncMetricStyles">
+            {{ t('insight.kpiMetricSync') }}
+          </el-button>
+          <el-button text type="primary" @click="resetMetric">重置该指标</el-button>
+        </div>
       </div>
     </div>
 
@@ -228,15 +229,50 @@ function syncMetricStyles() {
 }
 .ms-style-row {
   display: grid;
-  grid-template-columns: 1fr 92px 42px 32px;
+  /* 弹窗内容区 340px：48 + 80 + 40 + 140 + 间隙 24 = 332，留 8px 余量 */
+  grid-template-columns: minmax(48px, 1fr) 80px 40px 140px;
   gap: 8px;
   align-items: center;
   padding: 9px 0;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
+.ms-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
 .ms-field-name {
   color: var(--el-text-color-regular);
   font-size: 13px;
+}
+.ms-size {
+  width: 100%;
+}
+/* 行内取色字段：隐藏独立标签/校验提示，HEX 输入占满剩余列宽，且不做红色失效描边。
+   min-width:0 必须加在栅格项上，否则 input 固有宽度会把定宽列撑出弹窗；
+   组件根节点是 auto 列 grid，同样要用 minmax(0,1fr) 钉死轨道宽度。 */
+.ms-config :deep(.insight-color-field) {
+  gap: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.ms-config :deep(.insight-color-field__label) {
+  display: none;
+}
+.ms-config :deep(.insight-color-field__error) {
+  display: none;
+}
+.ms-config :deep(.insight-color-field__controls) {
+  width: 100%;
+}
+.ms-config :deep(.insight-color-field__controls input) {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.ms-config :deep(.insight-color-field__controls input[aria-invalid="true"]) {
+  border-color: var(--el-border-color);
 }
 .ms-field {
   margin-bottom: 14px;
