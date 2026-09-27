@@ -22,7 +22,8 @@ export function createPythonResultFilterRows(
   fields: readonly FinalResultFilterField[],
   filterOptions: readonly PythonResultFilterOption[],
 ): PythonResultFilterRow[] {
-  return fields.flatMap((field) => {
+  // 历史版本会自动为所有输出列生成未绑定项；它们不是用户配置的筛选条件。
+  return fields.filter((field) => Boolean(field.filterComponentId)).flatMap((field) => {
     const filter = filterOptions.find((item) => item.id === field.filterComponentId)
     const base: PythonResultFilterRow = {
       field: field.field,
@@ -32,7 +33,7 @@ export function createPythonResultFilterRows(
       op: filter?.selectionMode === 'multiple' ? 'in' : '=',
       value: '',
       enabled: false,
-      bindingError: !field.filterComponentId || !filter,
+      bindingError: !filter,
     }
 
     if (base.bindingError) return [base]

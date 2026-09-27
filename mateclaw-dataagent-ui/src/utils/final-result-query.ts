@@ -1,9 +1,7 @@
 import type {
-  FinalResultFilterField,
   FinalResultQueryConfig,
   FinalResultQueryContext,
   QueryDisplayField,
-  QueryParameterBinding,
   QueryPaginationPolicy,
   QuerySortPolicy,
   QuerySortSpec,
@@ -17,15 +15,6 @@ export function isFinalResultQueryConfigured(config: FinalResultQueryConfig | un
   return config?.confirmed === true
 }
 
-const STRING_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq', 'in', 'not_in', 'contains']
-const NUMBER_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between']
-const BOOLEAN_OPERATORS: QueryParameterBinding['operator'][] = ['eq', 'neq']
-
-function operatorsFor(dataType: ScriptDataType): QueryParameterBinding['operator'][] {
-  if (dataType === 'number') return NUMBER_OPERATORS
-  if (dataType === 'boolean') return BOOLEAN_OPERATORS
-  return STRING_OPERATORS
-}
 
 function roleFor(dataType: ScriptDataType): QueryDisplayField['role'] {
   return dataType === 'number' ? 'measure' : 'dimension'
@@ -47,13 +36,6 @@ export function buildFinalResultQueryConfig(spec: ComponentOutputSpec, schema: R
     role: roleFor(column.dataType),
     dataType: column.dataType,
   }))
-  const filterFields = schema.columns.map((column): FinalResultFilterField => ({
-    field: column.name,
-    title: column.title || column.name,
-    dataType: column.dataType,
-    parameterName: column.name,
-    operators: operatorsFor(column.dataType),
-  }))
   // 组件契约已经在执行阶段校验；这里保留 spec 参数作为显式边界，避免未来调用方
   // 在没有可消费结果类型时误生成配置。
   const acceptedKind = spec.accepts.includes(schema.kind)
@@ -71,7 +53,8 @@ export function buildFinalResultQueryConfig(spec: ComponentOutputSpec, schema: R
     schemaFingerprint: schema.fingerprint,
     confirmed: false,
     displayFields,
-    filterFields,
+    // 结果字段不应自动成为筛选条件；只有用户绑定页面筛选器后才生成 filterFields。
+    filterFields: [],
     sortPolicy: defaultSortPolicy(),
     paginationPolicy: defaultPaginationPolicy(),
   }
@@ -92,6 +75,10 @@ export function finalResultQueryConfigStatus(
 ): FinalResultQueryConfigStatus {
   if (!config || !schema) return 'missing'
   const schemaByName = new Map(schema.columns.map((column) => [column.name, column]))
+  for (const field of config.displayFields) {
+    const current = schemaByName.get(field.field)
+    if (!current || (field.dataType && current.dataType !== field.dataType)) return 'conflict'
+  }
   for (const field of config.filterFields) {
     const current = schemaByName.get(field.field)
     if (!current || current.dataType !== field.dataType) return 'conflict'

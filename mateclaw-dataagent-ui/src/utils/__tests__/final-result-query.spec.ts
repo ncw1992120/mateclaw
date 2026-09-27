@@ -20,8 +20,7 @@ describe('buildFinalResultQueryConfig', () => {
     ]))
     expect(config.schemaFingerprint).toBe('schema-1')
     expect(config.displayFields.map((field) => field.field)).toEqual(['region', 'amount'])
-    expect(config.filterFields.map((field) => field.field)).toEqual(['region', 'amount'])
-    expect(config.filterFields.find((field) => field.field === 'amount')?.operators).toContain('gte')
+    expect(config.filterFields).toEqual([])
   })
 
   it('没有最终查询配置时生成默认草稿，不改变输入查询语义', () => {
@@ -64,6 +63,9 @@ describe('normalizeFinalResultQueryContext', () => {
       { name: 'region', title: '区域', dataType: 'string', nullable: false },
       { name: 'amount', title: '金额', dataType: 'number', nullable: false },
     ]))
+    config.filterFields = [{
+      field: 'region', title: '区域', dataType: 'string', parameterName: 'region', operators: ['eq'], filterComponentId: 'region-filter',
+    }]
     const normalized = normalizeFinalResultQueryContext(config, {
       parameters: { region: '华东', unknown: 'drop' },
       sort: { field: 'amount', direction: 'desc' },

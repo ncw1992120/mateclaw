@@ -30,15 +30,14 @@ describe('Python 结果筛选条件', () => {
     expect(rows[1].filterTitle).toBe('时间范围 · 结束时间')
   })
 
-  it('筛选器绑定缺失或失效时标记错误，避免猜测操作符并误过滤', () => {
+  it('忽略未绑定的历史自动生成字段，筛选器绑定失效时仍明确标记错误', () => {
     const rows = createPythonResultFilterRows([
       { field: 'status', title: '状态', dataType: 'string', parameterName: 'status', operators: ['eq'], filterComponentId: 'deleted-filter' },
       { field: 'owner', title: '负责人', dataType: 'string', parameterName: 'owner', operators: ['eq'] },
     ], [])
 
-    expect(rows).toHaveLength(2)
-    expect(rows.every((row) => row.bindingError)).toBe(true)
-    expect(rows.every((row) => row.enabled === false)).toBe(true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ field: 'status', bindingError: true, enabled: false })
     expect(enabledPythonResultConditions(rows)).toEqual([])
   })
 

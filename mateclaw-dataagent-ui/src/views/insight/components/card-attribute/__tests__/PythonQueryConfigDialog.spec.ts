@@ -10,7 +10,7 @@ const config: FinalResultQueryConfig = {
     { field: 'region', title: '区域', role: 'dimension', dataType: 'string' },
     { field: 'amount', title: '金额', role: 'measure', dataType: 'number' },
   ],
-  filterFields: [{ field: 'region', title: '区域', dataType: 'string', parameterName: 'region', operators: ['eq', 'in'] }],
+  filterFields: [{ field: 'region', title: '区域', dataType: 'string', parameterName: 'region', operators: ['eq', 'in'], filterComponentId: 'strategy-filter' }],
   sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
   paginationPolicy: { enabled: true, defaultPageSize: 20, maxPageSize: 100, returnTotalCount: false },
 }
@@ -33,7 +33,7 @@ const filterOptions = [
 ]
 
 describe('PythonQueryConfigDialog', () => {
-  it('查询配置不再编辑展示字段，只配置结果筛选、排序和分页', async () => {
+  it('查询配置仅配置筛选器绑定、排序和分页，不编辑展示字段', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
       props: { modelValue: true, config, fieldCatalog: config.displayFields, filterOptions },
       global: { stubs },
@@ -80,7 +80,7 @@ describe('PythonQueryConfigDialog', () => {
     expect(saved.displayFields).toEqual(config.displayFields)
   })
 
-  it('筛选字段使用筛选器名称绑定结果字段', async () => {
+  it('筛选绑定使用页面筛选器并将其映射到 Python 输出字段', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
       props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions },
       global: { stubs },
@@ -96,18 +96,26 @@ describe('PythonQueryConfigDialog', () => {
     expect(saved.filterFields[0]).toMatchObject({ field: 'region', filterComponentId: 'strategy-filter' })
   })
 
-  it('筛选绑定对象是可编辑输入框并拒绝非法字段名', async () => {
+  it('没有页面筛选器时不能创建空绑定', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions },
+      props: { modelValue: true, config: { ...config, filterFields: [] }, filterOptions: [] },
       global: { stubs },
     })
 
-    await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
-    const target = wrapper.find('[data-testid="python-qc-filter-field"]')
-    expect(target.element.tagName).toBe('INPUT')
-    await target.setValue('字段-名称')
+    expect(wrapper.get('[data-testid="python-qc-add-filter"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('[data-testid="python-qc-filter-row"]')).toHaveLength(0)
+  })
+
+  it('历史自动生成但未绑定筛选器的字段不再显示或保存', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config: { ...config, filterFields: [{ ...config.filterFields[0], filterComponentId: undefined }] }, fieldCatalog: config.displayFields, filterOptions },
+      global: { stubs },
+    })
+
+    expect(wrapper.findAll('[data-testid="python-qc-filter-row"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('暂无筛选器绑定')
     await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
 
-    expect(wrapper.emitted('save')).toBeUndefined()
+    expect((wrapper.emitted('save')![0][0] as FinalResultQueryConfig).filterFields).toEqual([])
   })
 })
