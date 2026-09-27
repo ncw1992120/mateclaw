@@ -1,6 +1,18 @@
-import type { InsightCombinationChild, InsightComponent } from '@/types'
+import type { CombinationChildLayout, InsightCombinationChild, InsightComponent } from '@/types'
 
 export type ClipboardIdFactory = (prefix: 'comp' | 'tab') => string
+
+/** 粘贴到组合卡片时沿用复制目标的位置，仅向右下轻微错开。 */
+export function getCombinationChildPasteLayout(
+  source: CombinationChildLayout,
+  offset = { x: 12, y: 12 },
+): CombinationChildLayout {
+  return {
+    ...source,
+    x: Math.max(0, source.x + offset.x),
+    y: Math.max(0, source.y + offset.y),
+  }
+}
 
 /**
  * 为画布粘贴创建组件深拷贝。
@@ -73,10 +85,6 @@ export function cloneCombinationChildForPaste(
     }
   }
   cloneNode(clone as unknown as Record<string, any>)
-  clone.layout = {
-    ...clone.layout,
-    x: Math.max(0, clone.layout.x + offset.x),
-    y: Math.max(0, clone.layout.y + offset.y),
-  }
+  clone.layout = getCombinationChildPasteLayout(clone.layout, offset)
   return clone
 }

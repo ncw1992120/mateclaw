@@ -828,22 +828,6 @@ function handlePasteChild(payload: { containerId: string; childId: string | null
   if (!container || !source) return
   const children = getActiveCombinationChildren(container)
   const pasted = cloneCombinationChildForPaste(source, generateId)
-  const overlaps = (left: number, top: number): boolean => children.some((child) => (
-    left < child.layout.x + child.layout.col * 80
-      && left + pasted.layout.col * 80 > child.layout.x
-      && top < child.layout.y + (child.layout.h ?? 180)
-      && top + (pasted.layout.h ?? 180) > child.layout.y
-  ))
-  let x = pasted.layout.x
-  let y = pasted.layout.y
-  while (overlaps(x, y)) {
-    x += 12
-    if (x + pasted.layout.col * 80 > 960) {
-      x = 0
-      y += 12
-    }
-  }
-  pasted.layout = { ...pasted.layout, x, y }
   children.push(pasted)
   selectedComponentId.value = container.id
   selectedChildInfo.value = { containerId: container.id, childId: pasted.id }

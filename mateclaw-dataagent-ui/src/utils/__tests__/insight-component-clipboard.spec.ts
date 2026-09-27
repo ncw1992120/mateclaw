@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent } from '@/types'
-import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '../insight-component-clipboard'
+import { cloneCombinationChildForPaste, cloneInsightComponentForPaste, getCombinationChildPasteLayout } from '../insight-component-clipboard'
 
 function createComponent(): InsightComponent {
   return {
@@ -70,5 +70,16 @@ describe('Insight component clipboard', () => {
     expect(clone.children?.[0].id).toBe('comp-new-2')
     expect(clone.containerConfig?.tabs[0].id).toBe('tab-new-3')
     expect(clone.containerConfig?.activeTab).toBe('tab-source')
+  })
+
+  it('keeps a pasted child just below and to the right of its copied position', () => {
+    const source = {
+      id: 'child-source',
+      type: 'kpi' as const,
+      title: '指标卡片',
+      layout: { x: 120, y: 80, col: 6, h: 96 },
+    }
+
+    expect(getCombinationChildPasteLayout(source.layout)).toEqual({ x: 132, y: 92, col: 6, h: 96 })
   })
 })
