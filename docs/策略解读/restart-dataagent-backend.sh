@@ -306,7 +306,7 @@ cleanup_deploy_worktree() {
   fi
 }
 
-# 每次启动后端都从远端指定分支创建独立临时工作树；不切换或覆盖用户工作树。
+# 每次启动后端都从本地指定分支创建独立临时工作树；不切换或覆盖用户工作树。
 # 工作树会在后端停止/启动失败后清理，避免 Maven 构建旧 checkout 的代码。
 mkdir -p "$DEPLOY_WORKTREE_PARENT"
 if ! DEPLOY_WORKTREE="$(mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH" "$DEPLOY_WORKTREE_PARENT")"; then
