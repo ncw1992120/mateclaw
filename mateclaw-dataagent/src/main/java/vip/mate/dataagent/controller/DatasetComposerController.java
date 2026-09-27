@@ -87,14 +87,19 @@ public class DatasetComposerController {
     private Map<String, Object> previewAloudataMetrics(DraftRequest request) {
         Map<String, Object> config = request.sourceConfig == null ? Map.of() : request.sourceConfig;
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
-        query.setMetrics(strings(config.get("metrics"))); query.setDimensions(strings(config.get("dimensions")));
+        List<String> metrics = strings(config.get("metrics"));
+        List<String> dimensions = requestedFields(strings(config.get("dimensions")), request.columns);
+        query.setMetrics(metrics); query.setDimensions(dimensions);
         // filters 必须是 Aloudata 表达式字符串（如 ["[region] = \"华东\""]）；统一由
         // AloudataFilterExpressions 生成 —— 历史的 `[f] EQ ("v")` 与结构化对象在真实服务都会失败。
         query.setFilters((request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream()
                 .map(AloudataFilterExpressions::of)
                 .filter(Objects::nonNull)
                 .toList());
-        query.setOrders(toOrders(request.orders).stream().map(order -> Map.of(order.field(), order.direction())).toList());
+        Set<String> sortable = new HashSet<>(metrics);
+        sortable.addAll(dimensions);
+        query.setOrders(toOrders(request.orders).stream().filter(order -> sortable.contains(order.field()))
+                .map(order -> Map.of(order.field(), order.direction())).toList());
         int limit = Math.min(Math.max(request.limit == null ? 20 : request.limit, 1), MAX_DRAFT_PAGE_SIZE);
         int offset = Math.max(request.offset == null ? 0 : request.offset, 0);
         query.setLimit(limit); query.setOffset(offset);
@@ -197,6 +202,12 @@ public class DatasetComposerController {
         result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
                 "residualFilters", List.of())); result.put("executionId", "draft-" + UUID.randomUUID());
         return result;
+    }
+
+    private List<String> requestedFields(List<String> configuredFields, List<String> requestedColumns) {
+        if (requestedColumns == null || requestedColumns.isEmpty()) return configuredFields;
+        Set<String> requested = new HashSet<>(requestedColumns);
+        return configuredFields.stream().filter(requested::contains).toList();
     }
 
     @PostMapping("/api-definitions")

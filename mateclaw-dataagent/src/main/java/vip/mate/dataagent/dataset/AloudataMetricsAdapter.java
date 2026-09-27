@@ -35,10 +35,16 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         DatasetEntity dataset = require(context, request.datasetId());
         Map<String, Object> config = config(dataset);
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
-        query.setMetrics(strings(config.get("metrics"))); query.setDimensions(strings(config.get("dimensions")));
+        List<String> configuredMetrics = strings(config.get("metrics"));
+        List<String> configuredDimensions = strings(config.get("dimensions"));
+        // 指标仍使用数据集配置；分组维度只使用本次展示字段中的维度。
+        // 隐藏维度可用于筛选，但不能继续参与 GROUP BY，否则 KPI 会被拆成多行。
+        List<String> metrics = configuredMetrics;
+        List<String> dimensions = requestedFields(configuredDimensions, request.columns());
+        query.setMetrics(metrics); query.setDimensions(dimensions);
         query.setFilters(request.filters().stream().map(this::expression).toList());
         // orders 仅当字段属于已选指标/维度时下发；Aloudata 要求排序字段包含在 metrics/dimensions 中
-        List<Map<String, String>> orders = ordersExpression(config, request.orders());
+        List<Map<String, String>> orders = ordersExpression(metrics, dimensions, request.orders());
         query.setOrders(orders.isEmpty() ? null : orders);
         int limit = request.limit() == null ? 100 : request.limit();
         int offset = request.offset() == null ? 0 : request.offset();
@@ -67,11 +73,12 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         }
     }
 
-    private List<Map<String, String>> ordersExpression(Map<String, Object> config, List<DatasetSort> orders) {
+    private List<Map<String, String>> ordersExpression(List<String> metrics, List<String> dimensions,
+                                                       List<DatasetSort> orders) {
         if (orders == null || orders.isEmpty()) return List.of();
         Set<String> selectable = new LinkedHashSet<>();
-        selectable.addAll(strings(config.get("metrics")));
-        selectable.addAll(strings(config.get("dimensions")));
+        selectable.addAll(metrics);
+        selectable.addAll(dimensions);
         List<Map<String, String>> result = new ArrayList<>();
         for (DatasetSort sort : orders) {
             // 不在已选指标/维度中的排序字段不下发（残余由上层结果处理），避免 Aloudata 直接报错
@@ -80,6 +87,12 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
             }
         }
         return result;
+    }
+
+    private List<String> requestedFields(List<String> configuredFields, List<String> requestedColumns) {
+        if (requestedColumns == null || requestedColumns.isEmpty()) return configuredFields;
+        Set<String> requested = new HashSet<>(requestedColumns);
+        return configuredFields.stream().filter(requested::contains).toList();
     }
 
     private DatasetEntity require(DatasetAccessContext context, long id) {
