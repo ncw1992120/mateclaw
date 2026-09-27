@@ -16,6 +16,7 @@ import * as insightDashboardApi from '@/api/insight-dashboard'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { rowsToComponentData, type KpiProjectionField } from '@/utils/dataset-result'
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
+import { selectKpiProjectionFields } from '@/utils/dataset-result'
 import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { draftRequestForDataset } from '../components/card-attribute/useInsight'
 import { inputToDatasetConfig } from '../components/card-attribute/useCardAttributeBridge'
@@ -56,16 +57,48 @@ export function toComponentData(
 export function reconcileKpiProjection(
   component: InsightComponent,
   columns: Array<{ name: string }>,
+  pipeline?: ComponentDatasetPipeline,
 ): void {
-  if (component.type !== 'kpi' || !columns.length) return
+  if (component.type !== 'kpi') return
   const existing = component.kpiMetrics ?? []
+  const roles = new Map<string, string>()
+  pipeline?.datasetInputs.forEach((input) => {
+    input.queryConfig?.queryableFields?.forEach((field) => roles.set(field.name, field.role))
+    input.queryConfig?.displayFields.forEach((field) => roles.set(field.field, field.role))
+    input.sourceConfig?.dimensions?.forEach((name) => roles.set(name, 'dimension'))
+    input.sourceConfig?.metrics?.forEach((name) => { if (!roles.has(name)) roles.set(name, 'measure') })
+  })
+  const configuredFields = pipeline?.script?.trim()
+    ? pipeline.finalResultQueryConfig?.displayFields ?? []
+    : pipeline?.datasetInputs.flatMap((input) => input.queryConfig?.displayFields ?? []) ?? []
+  const projection = selectKpiProjectionFields(
+    columns.map(({ name }) => ({ name, role: roles.get(name) })),
+    configuredFields.length ? configuredFields : undefined,
+  )
+  if (!projection.length && !columns.length) return
   component.kpiMetrics = buildKpiMetrics(
-    columns.map(({ name }) => ({
-      name,
-      displayName: existing.find((metric) => metric.fieldKey === name)?.displayName,
+    projection.map((field) => ({
+      ...field,
+      displayName: field.displayName ?? existing.find((metric) => metric.fieldKey === field.name)?.displayName,
     })),
     existing,
   )
+}
+
+/** Collect result-set components recursively, including combination tabs/children. */
+export function collectResultSetComponents(components: InsightComponent[]): InsightComponent[] {
+  const collected = new Map<string, InsightComponent>()
+  const visit = (component: InsightComponent): void => {
+    collected.set(component.id, component)
+    const nested = [
+      ...(component.children ?? []),
+      ...(component.tabs ?? []).flatMap((tab) => tab.children ?? []),
+      ...(component.containerConfig?.tabs ?? []).flatMap((tab) => tab.children ?? []),
+    ]
+    nested.forEach((child) => visit(child as unknown as InsightComponent))
+  }
+  components.forEach(visit)
+  return [...collected.values()]
 }
 
 /** 结果集行数据回读：脚本走执行结果，无脚本走数据集查询 */
@@ -139,12 +172,12 @@ export async function restoreResultSetData(
 ): Promise<Record<string, InsightComponentData>> {
   const out: Record<string, InsightComponentData> = {}
   await Promise.allSettled(
-    components.map(async (component) => {
+    collectResultSetComponents(components).map(async (component) => {
       if (!RESULT_SET_COMPONENT_TYPES.has(component.type)) return
       const pipeline = readComponentDatasetPipeline(component)
       const meta = pipeline?.resultSet
       if (!pipeline || !meta || meta.status !== 'ready') return
-      reconcileKpiProjection(component, meta.columns)
+      reconcileKpiProjection(component, meta.columns, pipeline)
       if (meta.source === 'script' && meta.executionId) {
         const result = await insightDashboardApi.getExecutionResult(meta.executionId) as { envelope?: unknown }
         out[component.id] = executionEnvelopeToComponentData(component, result.envelope)

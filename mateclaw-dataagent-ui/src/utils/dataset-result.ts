@@ -1,4 +1,5 @@
 import type { ChartType, InsightComponentData, KpiItemData } from '@/types'
+import type { DatasetFieldMeta } from './field-mapping'
 import { resultEnvelopeToComponentData, tableEnvelopeFromRows } from './script-result'
 
 /** KPI 投影配置：结果集列 → 卡片指标的映射，与组件 kpiMetrics 的 fieldKey 对齐 */
@@ -6,6 +7,35 @@ export interface KpiProjectionField {
   fieldKey: string
   displayName?: string
   unit?: string
+}
+
+export interface ConfiguredKpiDisplayField {
+  field: string
+  title: string
+  role: 'dimension' | 'measure'
+}
+
+/**
+ * Resolve the KPI field projection from the authoritative query display config.
+ * The result-set schema can be incomplete during restore, and may contain
+ * dimensions such as metric_time that must never become KPI cards.
+ */
+export function selectKpiProjectionFields(
+  resultFields: DatasetFieldMeta[],
+  configuredFields?: ConfiguredKpiDisplayField[],
+): DatasetFieldMeta[] {
+  if (configuredFields?.length) {
+    const resultByName = new Map(resultFields.map((field) => [field.name, field]))
+    return configuredFields
+      .filter((field) => field.role === 'measure')
+      .map((field) => ({
+        ...resultByName.get(field.field),
+        name: field.field,
+        displayName: field.title || resultByName.get(field.field)?.displayName,
+        role: 'measure',
+      }))
+  }
+  return resultFields.filter((field) => field.role !== 'dimension')
 }
 
 export interface ChartProjection {

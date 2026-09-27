@@ -33,6 +33,7 @@ import {
 } from '@/utils/field-mapping'
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
+import { selectKpiProjectionFields } from '@/utils/dataset-result'
 import { collectSparseRowColumns, extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
@@ -1168,16 +1169,15 @@ function boundFilterComponentIds(): string[] {
  */
 export function kpiResultFields(): DatasetFieldMeta[] {
   const rs = state.resultSet
-  if ((rs.status === 'ready' || rs.status === 'stale') && rs.columns.length) {
-    const registry = datasetRegistryFields()
-    const byName = new Map(registry.map((f) => [f.name, f]))
-    return rs.columns.map((c) => {
-      const hit = byName.get(c.name)
-      // 命中注册表 → 保留展示名 / 单位；脚本新产出的列尚未登记 → 用字段名兜底
-      return hit ? { ...hit } : ({ name: c.name } as DatasetFieldMeta)
-    })
-  }
-  return datasetRegistryFields()
+  const registry = datasetRegistryFields()
+  const byName = new Map(registry.map((field) => [field.name, field]))
+  const fields = (rs.status === 'ready' || rs.status === 'stale') && rs.columns.length
+    ? rs.columns.map((column) => ({ ...byName.get(column.name), name: column.name }))
+    : registry
+  const configuredFields = state.hasPython
+    ? state.finalResultQueryConfig?.displayFields ?? []
+    : state.datasets.flatMap((dataset) => dataset.queryConfig?.displayFields ?? [])
+  return selectKpiProjectionFields(fields, configuredFields.length ? configuredFields : undefined)
 }
 
 /** 数据集字段注册表并集（结果集尚未产出时的回退候选来源） */
@@ -1191,7 +1191,15 @@ function datasetRegistryFields(): DatasetFieldMeta[] {
     // 注册表尚未建立（schema 未拉取）时回落后端最近一次原始清单
     ;(ds.schema ?? []).forEach((f) => fields.push({ ...f }))
   })
-  return fields
+  const roles = new Map<string, string>()
+  state.datasets.forEach((dataset) => {
+    dataset.fields.forEach((field) => { if (field.role) roles.set(field.name, field.role) })
+    dataset.queryConfig?.queryableFields?.forEach((field) => roles.set(field.name, field.role))
+    dataset.queryConfig?.displayFields.forEach((field) => roles.set(field.field, field.role))
+    dataset.aloudata?.dims?.forEach((name) => roles.set(name, 'dimension'))
+    dataset.aloudata?.metrics?.forEach((name) => { if (!roles.has(name)) roles.set(name, 'measure') })
+  })
+  return fields.map((field) => ({ ...field, role: roles.get(field.name) ?? field.role }))
 }
 
 /** 按最新结果集字段增量重建指标（命中保留用户配置、新增追加、消失移除；结果集为空不清空） */

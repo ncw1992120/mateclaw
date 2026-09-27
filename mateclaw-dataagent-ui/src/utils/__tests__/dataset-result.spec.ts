@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { rowsToComponentData } from '@/utils/dataset-result'
+import { rowsToComponentData, selectKpiProjectionFields } from '@/utils/dataset-result'
 
 describe('dataset result mapping', () => {
+  it('uses configured measure fields as KPI projection and excludes dimension fields even when result columns are incomplete', () => {
+    const fields = selectKpiProjectionFields(
+      [{ name: 'metric_time', role: 'dimension' }, { name: 'touch_count', role: 'measure' }],
+      [
+        { field: 'touch_count', title: '触达次数', role: 'measure' },
+        { field: 'touch_users', title: '触达人数', role: 'measure' },
+        { field: 'send_count', title: '下发次数', role: 'measure' },
+        { field: 'send_users', title: '下发人数', role: 'measure' },
+        { field: 'metric_time', title: '指标日期', role: 'dimension' },
+      ],
+    )
+
+    expect(fields.map(({ name }) => name)).toEqual(['touch_count', 'touch_users', 'send_count', 'send_users'])
+    expect(fields.map(({ displayName }) => displayName)).toEqual(['触达次数', '触达人数', '下发次数', '下发人数'])
+  })
+
+  it('excludes known dimensions when no explicit KPI display projection is available', () => {
+    const fields = selectKpiProjectionFields([
+      { name: 'metric_time', role: 'dimension' },
+      { name: 'touch_count', role: 'measure' },
+    ])
+
+    expect(fields.map(({ name }) => name)).toEqual(['touch_count'])
+  })
+
   it('maps rows to table component data', () => {
     const result = rowsToComponentData('table-1', [{ name: 'east', count: 2 }, { name: 'west', count: 3 }])
     expect(result.table).toEqual({ columns: ['name', 'count'], rows: [['east', '2'], ['west', '3']] })

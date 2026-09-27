@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent } from '@/types'
+import type { ComponentDatasetPipeline } from '@/types'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
-import { reconcileKpiProjection } from '../useResultSetRestore'
+import { collectResultSetComponents, reconcileKpiProjection } from '../useResultSetRestore'
 
 describe('reconcileKpiProjection', () => {
   it('adds result-set KPI fields missing from an older persisted projection', () => {
@@ -18,5 +19,81 @@ describe('reconcileKpiProjection', () => {
 
     expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual(['orders', 'revenue'])
     expect(component.kpiMetrics?.[0].displayName).toBe('订单数')
+  })
+
+  it('restores all configured measure KPIs and excludes the date dimension when result metadata is incomplete', () => {
+    const component = {
+      id: 'kpi-2',
+      type: 'kpi',
+      kpiMetrics: [],
+    } as unknown as InsightComponent
+    const pipeline: ComponentDatasetPipeline = {
+      datasetInputs: [{
+        datasetId: 'dataset-1',
+        inputName: 'table1',
+        queryConfig: {
+          displayFields: [
+            { field: 'touch_count', title: '触达次数', role: 'measure' },
+            { field: 'touch_users', title: '触达人数', role: 'measure' },
+            { field: 'send_count', title: '下发次数', role: 'measure' },
+            { field: 'send_users', title: '下发人数', role: 'measure' },
+            { field: 'metric_time', title: '指标日期', role: 'dimension' },
+          ],
+          parameterBindings: [],
+          sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+          paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 100, returnTotalCount: false },
+        },
+      }],
+    }
+
+    reconcileKpiProjection(component, [{ name: 'touch_count' }, { name: 'metric_time' }], pipeline)
+
+    expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual([
+      'touch_count', 'touch_users', 'send_count', 'send_users',
+    ])
+    expect(component.kpiMetrics?.map(({ displayName }) => displayName)).toEqual([
+      '触达次数', '触达人数', '下发次数', '下发人数',
+    ])
+  })
+
+  it('includes KPI children inside combination tabs in the same result-set restoration pass', () => {
+    const child = {
+      id: 'nested-kpi',
+      type: 'kpi',
+      title: '子指标卡',
+      config: {},
+      kpiMetrics: [],
+      layout: { x: 0, y: 0, col: 6 },
+    }
+    const combination = {
+      id: 'combination-1',
+      type: 'combination',
+      title: '组合卡片',
+      position: { x: 0, y: 0, w: 6, h: 4 },
+      containerConfig: {
+        layoutMode: 'grid',
+        tabs: [{ id: 'tab-1', title: '指标', children: [child] }],
+      },
+    } as unknown as InsightComponent
+
+    const nested = collectResultSetComponents([combination]).find(({ id }) => id === 'nested-kpi')
+    expect(nested).toBeDefined()
+    reconcileKpiProjection(nested!, [{ name: 'metric_time' }, { name: 'orders' }], {
+      datasetInputs: [{
+        datasetId: 'dataset-1',
+        inputName: 'table1',
+        queryConfig: {
+          displayFields: [
+            { field: 'metric_time', title: '指标日期', role: 'dimension' },
+            { field: 'orders', title: '订单数', role: 'measure' },
+          ],
+          parameterBindings: [],
+          sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+          paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 100, returnTotalCount: false },
+        },
+      }],
+    })
+
+    expect(child.kpiMetrics.map(({ fieldKey }) => fieldKey)).toEqual(['orders'])
   })
 })
