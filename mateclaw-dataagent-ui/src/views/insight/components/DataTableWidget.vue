@@ -66,7 +66,7 @@
           :prop="`col_${idx}`"
           :label="componentData?.fieldLabels?.[col] ?? col"
           min-width="120"
-          :sortable="isSampleSortableColumn(idx) ? 'custom' : false"
+          :sortable="isFieldSortable(col, idx) ? 'custom' : false"
           :sort-orders="['ascending', 'descending', null]"
           show-overflow-tooltip
         />
@@ -100,6 +100,7 @@ import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentT
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 import { hasConfiguredDataset } from '@/utils/component-sample-data'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
 defineOptions({
   name: 'DataTableWidget',
@@ -130,12 +131,38 @@ const emit = defineEmits<{
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
-/** 分页相关常量 */
-const PAGE_SIZE_DEFAULT = 20
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200]
+/** 分页选项；最终仍受查询配置的 maxPageSize 限制。 */
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
 
 const tableData = computed(() => props.componentData?.table)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
+
+/** 表格消费的是组件最终结果：直连数据集读唯一输入配置，Python 读最终结果配置。 */
+const queryPolicy = computed(() => {
+  const pipeline = readComponentDatasetPipeline(props.component)
+  if (pipeline?.script?.trim()) {
+    const config = pipeline.finalResultQueryConfig
+    return config?.confirmed === true ? config : undefined
+  }
+  return pipeline?.datasetInputs.length === 1 ? pipeline.datasetInputs[0]?.queryConfig : undefined
+})
+const sortPolicy = computed(() => queryPolicy.value?.sortPolicy)
+const paginationPolicy = computed(() => queryPolicy.value?.paginationPolicy)
+const paginationEnabled = computed(() => paginationPolicy.value?.enabled === true)
+
+function clampPageSize(size: number | undefined): number {
+  const max = Math.min(500, Math.max(1, paginationPolicy.value?.maxPageSize || 500))
+  const configured = size && size > 0 ? size : 20
+  return Math.min(configured, max)
+}
+
+const configuredDefaultPageSize = computed(() => clampPageSize(paginationPolicy.value?.defaultPageSize))
+const pageSizes = computed(() => {
+  const max = Math.min(500, Math.max(1, paginationPolicy.value?.maxPageSize || 500))
+  const options = PAGE_SIZE_OPTIONS.filter((size) => size <= max)
+  if (!options.includes(configuredDefaultPageSize.value)) options.push(configuredDefaultPageSize.value)
+  return options.sort((a, b) => a - b)
+})
 
 /** 是否有多 Tab 模式（基于组件配置判断，而非后端返回数据） */
 const hasTabs = computed(() => {
@@ -244,9 +271,13 @@ const activeTableRows = computed(() => {
 
 /** 分页状态 */
 const currentPage = ref(1)
-const pageSize = ref(PAGE_SIZE_DEFAULT)
-const pageSizes = PAGE_SIZE_OPTIONS
-const sortState = ref<{ prop: string; order: 'ascending' | 'descending' } | null>(null)
+const pageSize = ref(20)
+const sortState = ref<{ field: string; order: 'ascending' | 'descending' } | null>(null)
+
+watch(configuredDefaultPageSize, (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+}, { immediate: true })
 
 /** 数据变化时重置页码 */
 watch(activeTableRows, () => {
@@ -259,28 +290,35 @@ watch(() => props.sampleMode, () => {
   sortState.value = null
 })
 
-function isSampleSortableColumn(index: number): boolean {
+function isFieldSortable(field: string, index: number): boolean {
+  if (sortPolicy.value?.enabled) return sortPolicy.value.allowedFields.includes(field)
+  // 未配置数据源的样例仍保留原本的演示排序行为。
   return props.sampleMode && index === 1
 }
 
 function handleSortChange(sort: { prop: string; order: 'ascending' | 'descending' | null }): void {
-  if (!props.sampleMode || sort.prop !== 'col_1' || !sort.order) {
+  const columnIndex = Number(sort.prop.replace(/^col_/, ''))
+  const field = Number.isInteger(columnIndex) ? activeTableData.value?.columns[columnIndex] : undefined
+  if (!field || !isFieldSortable(field, columnIndex) || !sort.order) {
     sortState.value = null
     currentPage.value = 1
     return
   }
-  sortState.value = { prop: sort.prop, order: sort.order }
+  sortState.value = { field, order: sort.order }
   currentPage.value = 1
 }
 
-/** 样例表格在前端对全部行排序，再切分页数据；真实数据仍沿用原顺序。 */
+/** 画布结果集已完整物化；按查询配置排序后再分页展示。 */
 const sortedTableRows = computed(() => {
   const sort = sortState.value
-  if (!props.sampleMode || !sort) return activeTableRows.value
+  if (!sort) return activeTableRows.value
+  const columnIndex = activeTableData.value?.columns.indexOf(sort.field) ?? -1
+  if (columnIndex < 0) return activeTableRows.value
+  const prop = `col_${columnIndex}`
   const direction = sort.order === 'ascending' ? 1 : -1
   return [...activeTableRows.value].sort((left, right) => {
-    const leftValue = left[sort.prop] ?? ''
-    const rightValue = right[sort.prop] ?? ''
+    const leftValue = left[prop] ?? ''
+    const rightValue = right[prop] ?? ''
     const leftNumber = Number(leftValue)
     const rightNumber = Number(rightValue)
     const bothNumeric = leftValue !== '' && rightValue !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
@@ -291,9 +329,9 @@ const sortedTableRows = computed(() => {
   })
 })
 
-/** 是否显示分页（数据量超过一页时显示） */
+/** 是否显示分页由静态查询配置决定；即使当前结果不足一页，也允许切换每页条数。 */
 const showPagination = computed(() => {
-  return activeTableRows.value.length > PAGE_SIZE_DEFAULT
+  return paginationEnabled.value
 })
 
 /** 当前页数据 */
