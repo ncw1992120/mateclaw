@@ -24,6 +24,19 @@ describe('Python 查询 Pipeline 筛选组件声明', () => {
 })
 
 describe('buildPythonSystemRegion', () => {
+  it('保存统一编辑器中的数据接入代码时将其作为当前执行脚本持久化', () => {
+    state.pythonSystemState = {
+      mode: 'generated', generatedCode: 'old generated input', generatedFingerprint: 'old', userCode: '', hasGeneratedUpdate: false,
+    }
+
+    useInsight().savePython('new editor input', 'result = table_zb')
+
+    expect(state.pythonSystemState?.mode).toBe('managed')
+    expect(state.pythonSystemState?.managedCode).toBe('new editor input')
+    expect(buildPipeline().script).toContain('new editor input')
+    expect(buildPipeline().script).toContain('result = table_zb')
+  })
+
   it('保留 Aloudata 维度筛选器配置的技术字段名，供查询配置自动匹配', () => {
     const component = {
       id: 'field-filter-card',
@@ -250,41 +263,10 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     state.pythonSystem = 'GEN_CODE'
     const wrapper = await mountDialog()
 
-    await wrapper.findAll('button').find((button) => button.text() === '确定')!.trigger('click')
+    await wrapper.find('[data-testid="python-editor-save"]').trigger('click')
 
-    expect(warningSpy).toHaveBeenCalledWith('请先编辑并确认查询配置，再保存 Python 脚本')
+    expect(warningSpy).toHaveBeenCalledWith('请先完成查询配置，再展开编辑 Python 脚本')
     expect(state.ui.python.visible).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('未确认查询配置时查看数据会弹出提示且不打开结果预览', async () => {
-    state.finalResultQueryConfig = {
-      confirmed: false,
-      schemaFingerprint: 'schema-1',
-      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
-      filterFields: [],
-      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
-      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
-    } as never
-    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
-    state.pythonSystem = 'GEN_CODE'
-    const wrapper = await mountDialog()
-
-    await wrapper.find('[data-testid="view-python-result"]').trigger('click')
-
-    expect(warningSpy).toHaveBeenCalledWith('请先编辑并确认查询配置，再查看 Python 最终结果数据')
-    expect(state.ui.preview.visible).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('没有最终结果 Schema 时点击查询配置不再弹锁定提示，并打开空配置编辑器', async () => {
-    state.pythonSystemState = { mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1', userCode: 'result = 1', hasGeneratedUpdate: false }
-    state.pythonSystem = 'GEN_CODE'
-    const wrapper = await mountDialog()
-
-    await wrapper.find('[data-testid="footer-query-config"]').trigger('click')
-
-    expect(warningSpy).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="query-config-editor"]').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -307,7 +289,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     wrapper.unmount()
   })
 
-  it('底部操作顺序为查询配置、查看数据、执行记录、确定且不显示取消', async () => {
+  it('单一编辑区包含造数、数据接入、自定义代码和输出样例，不再呈现分区编辑器', async () => {
     state.finalResultQueryConfig = {
       confirmed: true,
       schemaFingerprint: 'schema-1',
@@ -320,13 +302,22 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     state.pythonSystem = 'GEN_CODE'
     const wrapper = await mountDialog()
 
-    const buttons = wrapper.findAll('button').map((button) => button.text()).slice(-4)
-    expect(buttons).toEqual(['查询配置', '查看数据', '执行记录', '确定'])
-    expect(buttons).not.toContain('取消')
+    const editor = wrapper.get('[data-testid="python-editor-code"]')
+    expect((editor.element as HTMLTextAreaElement).value).toContain('造数示例与上游数据读取')
+    expect((editor.element as HTMLTextAreaElement).value).toContain('自定义处理代码（可编辑）')
+    expect((editor.element as HTMLTextAreaElement).value).toContain('输出结果示例（参考）')
+    expect(wrapper.find('[data-testid="system-code-readonly"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="user-code"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="footer-query-config"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('generated 模式：只读展示 + 解锁进入用户接管（用户区不受影响）', async () => {
+  it('编辑统一脚本后保存时拆分接入脚本和用户处理代码', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: true, schemaFingerprint: 'schema-1', displayFields: [], filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
     state.pythonSystemState = {
       mode: 'generated', generatedCode: 'GEN_CODE', generatedFingerprint: 'fp1',
       userCode: 'result = 1', hasGeneratedUpdate: false,
@@ -334,80 +325,17 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     state.pythonSystem = 'GEN_CODE'
     const wrapper = await mountDialog()
 
-    expect(wrapper.find('[data-testid="system-code-readonly"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('系统生成')
-
-    await wrapper.find('[data-testid="unlock-btn"]').trigger('click')
-    await flushPromises()
-
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('用户接管')
-    const managed = wrapper.find('[data-testid="system-code-managed"]')
-    expect(managed.exists()).toBe(true)
-    expect((managed.element as HTMLTextAreaElement).value).toBe('GEN_CODE')
-    // 用户处理区域保持独立
-    expect((wrapper.find('[data-testid="user-code"]').element as HTMLTextAreaElement).value).toBe('result = 1')
-    wrapper.unmount()
-  })
-
-  it('用户处理区域显示 Python 关键字高亮，同时保留可编辑文本框', async () => {
-    state.pythonSystemState = {
-      mode: 'generated', generatedCode: 'table1 = datasets.read()', generatedFingerprint: 'fp1',
-      userCode: 'def normalize(value):\n    return len(value)', hasGeneratedUpdate: false,
-    }
-    state.pythonSystem = 'table1 = datasets.read()'
-    state.pythonUser = state.pythonSystemState.userCode
-    const wrapper = await mountDialog()
-
-    expect(wrapper.find('[data-testid="python-editor"] .hljs-keyword').text()).toBe('def')
-    expect(wrapper.find('[data-testid="user-code"]').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('managed 模式：配置变化产生候选提示，保留当前版本不覆盖用户代码', async () => {
-    state.pythonSystemState = {
-      mode: 'managed', generatedCode: 'OLD', managedCode: 'dataset_a = custom_read()',
-      generatedFingerprint: 'old-fp', userCode: 'result = 1', hasGeneratedUpdate: false,
-    }
-    state.pythonSystem = 'dataset_a = custom_read()'
-    const wrapper = await mountDialog()
-
-    // 数据集变化后 reconcile 产生候选版本（openPython 内部走 reconcileSystemScript）
-    state.datasets = [{ id: 'ds1', alias: 'dataset_a' }, { id: 'ds2', alias: 'dataset_b' }] as never
-    useInsight().openPython()
+    const editor = wrapper.get('[data-testid="python-editor-code"]')
+    await editor.setValue((editor.element as HTMLTextAreaElement).value.replace(
+      '# ===== 输出结果示例（参考） =====',
+      'value = 1\n\n# ===== 输出结果示例（参考） =====',
+    ))
     await nextTick()
+    await wrapper.find('[data-testid="python-editor-save"]').trigger('click')
 
-    expect(wrapper.find('[data-testid="diff-toggle"]').exists()).toBe(true)
-    await wrapper.find('[data-testid="diff-toggle"]').trigger('click')
-    const diff = wrapper.find('[data-testid="system-diff"]')
-    expect(diff.exists()).toBe(true)
-    expect(diff.text()).toContain('dataset_a = custom_read()')
-    expect(diff.text()).toContain('dataset_b')
-
-    await wrapper.find('[data-testid="keep-current"]').trigger('click')
-    await nextTick()
-    expect(wrapper.find('[data-testid="diff-toggle"]').exists()).toBe(false)
-    // 用户接管代码未被覆盖
-    expect(state.pythonSystemState?.managedCode).toBe('dataset_a = custom_read()')
-    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('用户接管')
-    wrapper.unmount()
-  })
-
-  it('恢复系统生成：mode 回到 generated，用户处理区域保留', async () => {
-    state.pythonSystemState = {
-      mode: 'managed', generatedCode: 'GEN_NEW', managedCode: 'custom()',
-      generatedFingerprint: 'fp', userCode: 'result = 2', hasGeneratedUpdate: true,
-    }
-    state.pythonSystem = 'custom()'
-    state.pythonUser = 'result = 2'
-    const wrapper = await mountDialog()
-
-    await wrapper.find('[data-testid="restore-generated"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="system-mode-tag"]').text()).toContain('系统生成')
-    expect(wrapper.find('[data-testid="system-code-readonly"]').text()).toContain('GEN_NEW')
-    expect((wrapper.find('[data-testid="user-code"]').element as HTMLTextAreaElement).value).toBe('result = 2')
+    expect(state.pythonSystemState?.mode).toBe('managed')
+    expect(state.pythonSystem).toContain('datasets.input(')
+    expect(state.pythonUser).toContain('value = 1')
     wrapper.unmount()
   })
 

@@ -281,6 +281,7 @@ export function currentPythonSource(): PythonSystemSource {
     displayName: ds.alias,
     sourceType: mapSourceTypeOut(ds),
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
+    fieldMappings: toFieldMappings(ds.fields ?? []),
   }))
   const bindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => {
     const scoped = state.datasets.filter((ds) => binding.scope[ds.id] ?? binding.scope[ds.alias])
@@ -298,7 +299,17 @@ export function currentPythonSource(): PythonSystemSource {
   })
   const activeCard = state.cards.find((card) => card.id === state.activeCardId)
   const outputSpec = activeCard ? resolveOutputSpec(activeCard.type) : null
-  return { inputs, bindings, outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined }
+  return {
+    inputs,
+    bindings,
+    queryParameters: (state.finalResultQueryConfig?.filterFields ?? []).map((field) => ({
+      field: field.field,
+      title: field.title,
+      parameterName: field.parameterName,
+      operators: field.operators,
+    })),
+    outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined,
+  }
 }
 
 /* ============================ 状态单例 ============================ */
@@ -1087,7 +1098,12 @@ function savePython(system: string, user: string) {
     generatedFingerprint: fingerprintSystemSource(source),
     userCode: user,
   }
-  state.pythonSystemState = { ...current, userCode: user }
+  const systemWasEdited = system.trim() !== current.generatedCode.trim()
+  state.pythonSystemState = {
+    ...current,
+    ...(current.mode === 'managed' || systemWasEdited ? { mode: 'managed' as const, managedCode: system } : {}),
+    userCode: user,
+  }
   state.hasPython = true
   state.ui.python.queryConfigOnly = false
   state.ui.python.visible = false
@@ -1641,10 +1657,12 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
   if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
   state.backend.running = true
   const startedAt = Date.now()
+  let stage = '准备输入数据集'
   try {
     // “查看数据”是 Python 编辑器内的直接操作，不能要求用户先离开弹窗再点顶部保存。
     // 对仍使用 ds-* 临时 ID 的草稿先落库，再用回填后的真实 datasetId 组装执行 Schema。
     await ensurePersistedDatasetInputs()
+    stage = '提交 Python 执行'
     const executableSchema = buildSchema()
     const { executionId } = await backend.submitComponentExecution(
       state.backend.dashboardId,
@@ -1654,6 +1672,7 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
       createComponentPreviewQueryContext(state.backend.dashboardId, state.backend.componentId),
     )
     state.backend.executionId = executionId
+    stage = '等待 Python 执行结果'
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
     for (let attempt = 0; attempt < 120; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -1696,8 +1715,12 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
     return { ok: false, message: '执行超时' }
   } catch (e) {
     const msg = (e as Error)?.message || '执行提交失败'
-    state.backend.lastError = msg
-    return { ok: false, message: msg }
+    const detail = msg.includes('同一工作区内数据集名称已存在')
+      ? `${msg}。请修改该输入别名，或在数据集配置中复用同名且来源配置完全一致的数据集。`
+      : msg
+    const actionableMessage = `${stage}失败（Python 尚未执行或未完成）：${detail}`
+    state.backend.lastError = actionableMessage
+    return { ok: false, message: actionableMessage }
   } finally {
     state.backend.running = false
   }

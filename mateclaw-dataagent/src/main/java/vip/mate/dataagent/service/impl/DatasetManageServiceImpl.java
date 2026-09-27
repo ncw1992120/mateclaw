@@ -298,7 +298,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private void ensureUniqueDatasetName(String name, Long workspaceId, Long excludeId) {
         LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<DatasetEntity>()
                 .eq(DatasetEntity::getWorkspaceId, workspaceId)
-                .eq(DatasetEntity::getName, name);
+                .eq(DatasetEntity::getName, name)
+                .eq(DatasetEntity::getDeleted, 0);
         if (excludeId != null) wrapper.ne(DatasetEntity::getId, excludeId);
         if (datasetMapper.selectCount(wrapper) > 0) {
             throw new IllegalArgumentException("同一工作区内数据集名称已存在: " + name);

@@ -9,14 +9,14 @@
   >
     <div class="dd-body">
       <section class="dd-block">
-        <div class="dd-head"><span class="dd-title">展示字段</span><span class="dd-hint">来自查询配置 · 只读</span></div>
-        <div v-if="displayFields.length" class="dd-table-wrap">
+        <div class="dd-head"><span class="dd-title">结果字段</span><span class="dd-hint">全部 Python 输出 · 可编辑展示名</span></div>
+        <div v-if="displayRows.length" class="dd-table-wrap">
           <table class="dd-table dd-display-table" data-testid="python-display-fields-table">
             <thead><tr><th>字段类型</th><th>字段名</th><th>展示名</th></tr></thead>
-            <tbody><tr v-for="field in displayFields" :key="field.field"><td>{{ field.role === 'measure' ? '指标' : '维度' }}</td><td><code class="dd-field-name">{{ field.field }}</code></td><td>{{ field.title || field.field }}</td></tr></tbody>
+            <tbody><tr v-for="field in displayRows" :key="field.name" class="result-column"><td>{{ field.role === 'measure' ? '指标' : '维度' }}</td><td><code class="dd-field-name">{{ field.name }}</code></td><td><el-input :model-value="field.title" size="small" :data-testid="`python-display-name-${field.name}`" @update:model-value="(value: string) => updateDisplayName(field.name, value)" /></td></tr></tbody>
           </table>
         </div>
-        <div v-else class="dd-display-empty">尚未配置展示字段，请先在查询配置中选择字段。</div>
+        <div v-else class="dd-display-empty">查询后显示 Python 输出字段。</div>
       </section>
 
       <section class="dd-block">
@@ -104,6 +104,10 @@ const loading = computed(() => previewState.loading)
 const error = computed(() => previewState.error)
 const config = computed(() => state.finalResultQueryConfig)
 const displayFields = computed(() => config.value?.displayFields ?? [])
+const displayRows = computed(() => (previewState.payload?.dataColumns ?? []).map((column) => {
+  const configured = displayFields.value.find((field) => field.field === column.name)
+  return { name: column.name, title: configured?.title || column.title || column.name, role: configured?.role ?? (typeof column.sampleValue === 'number' ? 'measure' : 'dimension') }
+}))
 const filterFields = computed(() => config.value?.filterFields ?? [])
 const paginationEnabled = computed(() => config.value?.paginationPolicy.enabled === true)
 const pageSize = computed(() => config.value?.paginationPolicy.defaultPageSize || 100)
@@ -113,10 +117,7 @@ const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
 
 const visibleColumns = computed(() => {
-  const columns = previewState.payload?.dataColumns ?? []
-  if (!displayFields.value.length) return columns
-  const allowed = new Set(displayFields.value.map((field) => field.field))
-  return columns.filter((column) => allowed.has(column.name))
+  return previewState.payload?.dataColumns ?? []
 })
 const filteredRows = computed(() => applyResultFilters(previewState.payload?.dataRows ?? [], appliedConditions.value))
 const sortedRows = computed(() => {
@@ -145,6 +146,17 @@ function fieldTitle(field: string): string {
   return displayFields.value.find((item) => item.field === field)?.title
     || previewState.payload?.dataColumns.find((column) => column.name === field)?.title
     || field
+}
+
+function updateDisplayName(field: string, title: string): void {
+  const fields = [...displayFields.value]
+  const index = fields.findIndex((item) => item.field === field)
+  const column = previewState.payload?.dataColumns.find((item) => item.name === field)
+  const role = fields[index]?.role ?? (typeof column?.sampleValue === 'number' ? 'measure' : 'dimension')
+  const next = { field, title, role }
+  if (index >= 0) fields[index] = { ...fields[index], title }
+  else fields.push(next)
+  state.finalResultQueryConfig = { ...config.value!, displayFields: fields }
 }
 
 function isSortable(field: string): boolean {

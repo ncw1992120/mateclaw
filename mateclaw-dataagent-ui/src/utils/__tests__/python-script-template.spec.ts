@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   composeExecutionScript,
+  buildPythonEditorDocument,
   effectiveSystemCode,
   fingerprintSystemSource,
   generateSystemScript,
+  parsePythonEditorDocument,
   reconcileSystemScript,
   restoreGenerated,
 } from '../python-script-template'
@@ -62,5 +64,34 @@ describe('python script system state', () => {
     expect(composeExecutionScript({
       mode: 'generated', generatedCode: 'dataset_a = 1', generatedFingerprint: 'x', userCode: 'result = dataset_a',
     })).toContain('# ===== 用户处理区域 =====\nresult = dataset_a')
+  })
+
+  it('builds the four editor sections in order and lets uncommented samples bypass live reads', () => {
+    const document = buildPythonEditorDocument({
+      inputs: [{
+        datasetId: 'a',
+        inputName: 'table_zb',
+        fieldMappings: [{ source: 'region', target: '区域' }, { source: 'amount', target: '金额' }],
+      }],
+      bindings: [],
+      queryParameters: [{ field: 'region', title: '区域', parameterName: 'region_param', operators: ['eq'] }],
+      outputContract: { kind: 'table', example: '{"kind":"table","data":[]}', fieldRules: { minColumns: 2, minDimensionColumns: 1, minNumericColumns: 1 } },
+    }, 'result = table_zb', { table_zb: [{ region: '华东', amount: 12 }] })
+
+    const sampleStart = document.indexOf('造数示例')
+    const sourceStart = document.indexOf('datasets.input(')
+    const userStart = document.indexOf('# ===== 自定义处理代码（可编辑） =====')
+    const outputStart = document.indexOf('# ===== 输出结果示例（参考） =====')
+    expect(sampleStart).toBeGreaterThanOrEqual(0)
+    expect(sampleStart).toBeLessThan(sourceStart)
+    expect(sourceStart).toBeLessThan(userStart)
+    expect(userStart).toBeLessThan(outputStart)
+    expect(document).toContain('# table_zb = pl.DataFrame(json.loads(')
+    expect(document).toContain('华东')
+    expect(document).toContain('if "table_zb" not in locals():')
+    expect(document).toContain('# 参数 region_param：筛选字段「区域」(region)，可用操作符 eq')
+    expect(document).toContain('不会作为 Python 变量注入')
+    expect(document).toContain('# {"kind":"table","data":[]}')
+    expect(parsePythonEditorDocument(document)).toMatchObject({ userCode: 'result = table_zb' })
   })
 })

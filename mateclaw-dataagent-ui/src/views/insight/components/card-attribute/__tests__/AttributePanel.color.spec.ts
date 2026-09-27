@@ -94,6 +94,22 @@ beforeEach(() => {
 })
 
 describe('AttributePanel', () => {
+  it('Python 属性区统一显示操作入口，并在未完成查询配置时阻止展开编辑', async () => {
+    insightFixture.value.state.hasPython = true
+    insightFixture.value.state.finalResultQueryConfig = { confirmed: false }
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
+    const wrapper = mountPanel()
+
+    const pythonBox = wrapper.find('.python-box')
+    expect(pythonBox.findAll('button').map((button) => button.text())).toEqual(['查询配置', '展开编辑', '查看数据', '移除'])
+    await wrapper.find('[data-testid="python-script-preview"]').trigger('click')
+
+    expect(warning).toHaveBeenCalledWith('请先完成 Python 查询配置，再展开编辑')
+    expect(insightFixture.value.openPythonQueryConfig).toHaveBeenCalledOnce()
+    expect(insightFixture.value.openPython).not.toHaveBeenCalled()
+    warning.mockRestore()
+  })
+
   it('在 Python 区域直接提供查询配置和查看数据入口', async () => {
     insightFixture.value.state.hasPython = true
     const wrapper = mountPanel()
@@ -110,11 +126,16 @@ describe('AttributePanel', () => {
     expect(insightFixture.value.openPythonResultPreview).toHaveBeenCalledOnce()
   })
 
-  it('尚未添加 Python 脚本时不显示 Python 查询配置和查看数据入口', () => {
+  it('尚未添加 Python 脚本时仍展示四个入口，并通过查询配置门禁阻止直接展开', async () => {
+    insightFixture.value.state.finalResultQueryConfig = { confirmed: false }
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
     const wrapper = mountPanel()
 
-    expect(wrapper.text()).not.toContain('查询配置')
-    expect(wrapper.text()).not.toContain('查看数据')
+    expect(wrapper.findAll('.python-box button').map((button) => button.text())).toEqual(['查询配置', '展开编辑', '查看数据', '移除'])
+    await wrapper.findAll('.python-box button').at(1)!.trigger('click')
+    expect(warning).toHaveBeenCalledWith('请先完成 Python 查询配置，再展开编辑')
+    expect(insightFixture.value.openPythonQueryConfig).toHaveBeenCalledOnce()
+    warning.mockRestore()
   })
 
   it('查询配置未确认时点击查看数据会提示并直接打开查询配置', async () => {
@@ -125,7 +146,7 @@ describe('AttributePanel', () => {
 
     await wrapper.findAll('button').find((button) => button.text() === '查看数据')!.trigger('click')
 
-    expect(warning).toHaveBeenCalledWith('请先完成 Python 查询配置，再查看最终结果数据')
+    expect(warning).toHaveBeenCalledWith('请先完成 Python 查询配置，再查看数据')
     expect(insightFixture.value.openPythonQueryConfig).toHaveBeenCalledOnce()
     expect(insightFixture.value.openPythonResultPreview).not.toHaveBeenCalled()
     warning.mockRestore()

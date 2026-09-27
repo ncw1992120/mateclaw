@@ -16,12 +16,13 @@ export function buildSystemScript(
   _parameters: DashboardScriptParameter[] = [],
   _bindings: DashboardScriptFilterBinding[] = [],
   outputContract?: { kind: string; example: string; fieldRules: { minColumns: number; minDimensionColumns: number; minNumericColumns: number } },
+  samplesByInputName: Record<string, Record<string, unknown>[]> = {},
+  queryParameters: Array<{ field: string; title: string; parameterName: string; operators: string[] }> = [],
 ): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const lines = [
     SYSTEM_SCRIPT_START,
-    '# 每个输入已是查询计划处理后的结果：页面筛选、排序和分页在读取前应用。',
-    '# 只读区域：请勿在此拼接 filters/orders/limit/offset 等页面查询参数。',
+    '# 上游输入已按查询计划应用页面筛选、排序和分页；默认读取该查询结果。',
   ]
   if (outputContract) {
     lines.push(
@@ -32,8 +33,49 @@ export function buildSystemScript(
       ...outputContract.example.split('\n').map(line => `# ${line}`),
     )
   }
+  if (queryParameters.length) {
+    lines.push('', '# 查询参数参考：以下参数由「查看数据」查询配置应用于 Python 输出结果，不会作为 Python 变量注入。')
+    queryParameters.forEach((parameter) => {
+      lines.push(`# 参数 ${parameter.parameterName}：筛选字段「${parameter.title}」(${parameter.field})，可用操作符 ${parameter.operators.join('、') || '未指定'}`)
+    })
+  }
+
+  if (validInputs.length) {
+    lines.push(
+      '',
+      '# 造数示例：默认注释；取消对应注释即可用上游「查看数据-查询」的最近结果进行本地调试。',
+      '# 造数优先：变量已在此处赋值时，下面会跳过对应的真实数据读取。',
+      '# import json',
+      '# import polars as pl',
+    )
+  }
   validInputs.forEach((input) => {
-    lines.push('', `${input.inputName} = datasets.input(`, `    input_name=${JSON.stringify(input.inputName)},`, ').to_polars()')
+    const rows = samplesByInputName[input.inputName] ?? []
+    const sampleData = rows.length
+      ? rows
+      : (input.fieldMappings ?? []).map((field) => ({ [field.source]: null }))
+    if (rows.length) {
+      lines.push(`# ${input.inputName} = pl.DataFrame(json.loads(${JSON.stringify(JSON.stringify(sampleData))}))`)
+    } else if (sampleData.length) {
+      lines.push(`# ${input.inputName} = pl.DataFrame({`)
+      sampleData.forEach((row) => {
+        const [field, value] = Object.entries(row)[0] ?? []
+        lines.push(`#     ${JSON.stringify(field)}: [${value === null ? 'None' : JSON.stringify(value)}],`)
+      })
+      lines.push('# })')
+    } else {
+      lines.push(`# ${input.inputName} = pl.DataFrame()  # 先在上游数据集「查看数据-查询」以获取字段和样例行`)
+    }
+  })
+
+  validInputs.forEach((input) => {
+    lines.push(
+      '',
+      `if ${JSON.stringify(input.inputName)} not in locals():`,
+      `    ${input.inputName} = datasets.input(`,
+      `        input_name=${JSON.stringify(input.inputName)},`,
+      '    ).to_polars()',
+    )
   })
   if (!validInputs.length) {
     lines.push('', '# 当前没有已绑定的数据集输入。')

@@ -153,45 +153,39 @@
         </div>
       </div>
 
-      <!-- 5. Python 预处理（位于数据集之后、结果集之前：
-           有脚本时结果集由用户处理区产出，面板顺序与数据流保持一致） -->
+      <!-- 5. Python 预处理 -->
       <div class="section">
         <div class="section-head">
           <span class="section-title">Python 预处理</span>
-          <InlineHelp label="Python 预处理" content="系统区域由平台生成，用户区域用于 Join、合并、计算和业务规则。" />
+          <InlineHelp label="Python 预处理" content="先完成查询配置，再在展开编辑中编写处理代码；上游数据已按查询配置执行。" />
         </div>
 
-        <!-- 未配置：提供入口（1 个数据集时可选；2+ 时用户处理区必填） -->
-        <div v-if="!state.hasPython" class="python-empty">
-          <el-button size="small" @click="openPython">编辑 Python 脚本</el-button>
+        <div class="python-box">
+          <el-input
+            :model-value="state.pythonUser"
+            type="textarea"
+            :rows="4"
+            readonly
+            class="py-user-preview"
+            data-testid="python-script-preview"
+            aria-label="Python 脚本预览，点击展开编辑"
+            :placeholder="state.hasPython ? '点击展开编辑 Python 脚本' : '先完成查询配置，再展开编辑 Python 脚本'"
+            @click="openPythonEditor"
+          />
+          <div class="py-actions">
+            <el-button size="small" text bg @click="openPythonQueryConfig">查询配置</el-button>
+            <el-button size="small" text bg @click="openPythonEditor">展开编辑</el-button>
+            <el-button size="small" text bg @click="viewPythonResult">查看数据</el-button>
+            <el-button size="small" type="danger" text data-testid="remove-python" :disabled="!state.hasPython" @click="removePython">移除</el-button>
+          </div>
           <el-alert
             v-if="pythonRequired"
             class="python-required-alert"
             type="warning"
             :closable="false"
-            title="已添加多个数据集，请使用 Python 脚本合并或处理"
-            description="单个数据集的预览仅用于检查输入；组件最终数据格式将在 Python 输出预览后校验。"
+            title="已添加多个数据集，请在脚本中编写合并或处理逻辑"
+            description="查看数据时会按查询配置读取上游数据，并校验 Python 输出契约。"
           />
-        </div>
-
-        <!-- 已配置：系统生成区(只读) + 用户处理区(可编辑) -->
-        <div v-else class="python-box">
-          <div class="py-sub">系统生成区域（只读）</div>
-          <pre class="py-system">{{ state.pythonSystem }}</pre>
-          <div class="py-sub">用户处理区域（可编辑）</div>
-          <el-input
-            v-model="state.pythonUser"
-            type="textarea"
-            :rows="6"
-            class="py-user"
-            placeholder="编写 Join、合并、计算和业务规则"
-          />
-          <div class="py-actions">
-            <el-button size="small" text bg @click="openPythonQueryConfig">查询配置</el-button>
-            <el-button size="small" text bg @click="viewPythonResult">查看数据</el-button>
-            <el-button size="small" @click="openPython">展开编辑</el-button>
-            <el-button size="small" type="danger" text @click="removePython">移除 Python 脚本</el-button>
-          </div>
         </div>
       </div>
 
@@ -244,11 +238,20 @@ const componentSample = computed(() => resolveComponentSample({
 
 function viewPythonResult(): void {
   if (!isFinalResultQueryConfigured(state.finalResultQueryConfig)) {
-    ElMessage.warning('请先完成 Python 查询配置，再查看最终结果数据')
+    ElMessage.warning('请先完成 Python 查询配置，再查看数据')
     openPythonQueryConfig()
     return
   }
   openPythonResultPreview()
+}
+
+function openPythonEditor(): void {
+  if (!isFinalResultQueryConfigured(state.finalResultQueryConfig)) {
+    ElMessage.warning('请先完成 Python 查询配置，再展开编辑')
+    openPythonQueryConfig()
+    return
+  }
+  openPython()
 }
 
 /** 告警被用户关闭后不再重复打扰（切换卡片时应重新提示） */

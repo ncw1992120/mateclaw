@@ -33,6 +33,23 @@ const filterOptions = [
 ]
 
 describe('PythonQueryConfigDialog', () => {
+  it('查询配置不再编辑展示字段，只配置结果筛选、排序和分页', async () => {
+    const wrapper = mount(PythonQueryConfigDialog, {
+      props: { modelValue: true, config, fieldCatalog: config.displayFields, filterOptions },
+      global: { stubs },
+    })
+
+    expect(wrapper.text()).not.toContain('展示字段')
+    expect(wrapper.find('[data-testid="python-qc-field-rows"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="python-qc-filter-row"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('允许排序')
+    expect(wrapper.text()).toContain('分页')
+    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
+
+    const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
+    expect(saved.displayFields).toEqual(config.displayFields)
+  })
+
   it('允许保存没有筛选字段绑定的查询配置', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
       props: { modelValue: true, config: { ...config, filterFields: [] }, fieldCatalog: config.displayFields, filterOptions: [] },
@@ -45,56 +62,22 @@ describe('PythonQueryConfigDialog', () => {
     expect((wrapper.emitted('save')![0][0] as FinalResultQueryConfig).filterFields).toEqual([])
   })
 
-  it('使用查询配置弹窗结构展示字段、筛选字段、排序和分页并保存', async () => {
+  it('查询配置不展示或编辑 Python 输出字段，但保留原有字段元数据', async () => {
     const wrapper = mount(PythonQueryConfigDialog, {
       props: { modelValue: true, config, fieldCatalog: config.displayFields, filterOptions },
       global: { stubs },
     })
 
-    expect(wrapper.findAll('[data-testid="python-qc-field-row"]').length).toBe(2)
+    expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-testid="python-qc-filter-row"]').length).toBe(1)
     expect(wrapper.text()).toContain('允许排序')
     expect(wrapper.text()).toContain('分页')
 
-    await wrapper.find('[data-testid="python-qc-role-toggle"]').trigger('click')
     await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
 
     expect(wrapper.emitted('save')).toHaveLength(1)
     const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
-    expect(saved.displayFields.map((field) => field.field)).toEqual(['region', 'amount'])
-    expect(saved.displayFields[0].role).toBe('measure')
-  })
-
-  it('允许添加并编辑 Python 输出字段，同时将筛选字段保存为真实配置', async () => {
-    const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [], filterOptions },
-      global: { stubs },
-    })
-
-    await wrapper.find('[data-testid="python-qc-new-field-name"]').setValue('customer_id')
-    await wrapper.find('[data-testid="python-qc-new-field-title"]').setValue('客户ID')
-    await wrapper.find('[data-testid="python-qc-add-new-field"]').trigger('click')
-
-    expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(1)
-    await wrapper.find('[data-testid="python-qc-field-tech-input"]').setValue('customer_code')
-    await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
-    await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
-
-    const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig
-    expect(saved.displayFields[0]).toMatchObject({ field: 'customer_code', title: '客户ID' })
-    expect(saved.filterFields[0]).toMatchObject({ field: 'customer_code', parameterName: 'customer_code' })
-  })
-
-  it('拒绝不符合英文数字下划线规则的技术字段名', async () => {
-    const wrapper = mount(PythonQueryConfigDialog, {
-      props: { modelValue: true, config: { ...config, displayFields: [], filterFields: [] }, fieldCatalog: [], filterOptions },
-      global: { stubs },
-    })
-
-    await wrapper.find('[data-testid="python-qc-new-field-name"]').setValue('客户名称')
-    await wrapper.find('[data-testid="python-qc-add-new-field"]').trigger('click')
-
-    expect(wrapper.findAll('[data-testid="python-qc-field-row"]')).toHaveLength(0)
+    expect(saved.displayFields).toEqual(config.displayFields)
   })
 
   it('筛选字段使用筛选器名称绑定结果字段', async () => {
@@ -106,6 +89,7 @@ describe('PythonQueryConfigDialog', () => {
     await wrapper.find('[data-testid="python-qc-add-filter"]').trigger('click')
     expect(wrapper.find('[data-testid="python-qc-filter-component"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="python-qc-filter-field"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="python-qc-filter-field"]').setValue('region')
     await wrapper.find('[data-testid="python-qc-save"]').trigger('click')
 
     const saved = wrapper.emitted('save')![0][0] as FinalResultQueryConfig

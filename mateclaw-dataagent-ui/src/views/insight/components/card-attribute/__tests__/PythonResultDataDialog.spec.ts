@@ -10,8 +10,8 @@ const stubs = {
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="alert">{{ title }}</div>' },
-  'el-table': { template: '<div class="result-table" />' },
-  'el-table-column': { template: '<div />' },
+  'el-table': { template: '<div class="result-table"><slot /></div>' },
+  'el-table-column': { props: ['prop', 'label'], template: '<div class="result-column" :data-prop="prop" :data-label="label" />' },
   'el-input': {
     inheritAttrs: false,
     props: ['modelValue'],
@@ -41,6 +41,38 @@ beforeEach(() => {
 })
 
 describe('PythonResultDataDialog', () => {
+  it('查看数据展示全部输出列，并允许在结果区配置展示名', async () => {
+    Object.assign(state.resultSet, {
+      columns: [
+        { name: 'amount', type: 'number' },
+        { name: 'region', type: 'string' },
+      ],
+      rows: [{ amount: 10, region: '华东' }],
+      rowCount: 1,
+    })
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'test',
+      confirmed: true,
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr').map((row) => row.findAll('td')[1].text()))
+      .toEqual(['amount', 'region'])
+    expect(wrapper.findAll('.result-table .result-column').map((column) => column.attributes('data-label')))
+      .toEqual(['amount', '区域'])
+    await wrapper.findAll('.dd-display-table input')[0].setValue('统计金额')
+    expect(state.finalResultQueryConfig?.displayFields.find((field) => field.field === 'amount')?.title).toBe('统计金额')
+    expect(wrapper.find('.result-column[data-prop="amount"]').attributes('data-label')).toBe('统计金额')
+    wrapper.unmount()
+  })
+
   it('没有筛选字段时允许直接查看全部 Python 输出', async () => {
     const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()
@@ -65,10 +97,7 @@ describe('PythonResultDataDialog', () => {
     const component = { id: 'table-1', type: 'table', title: '结果表' } as any
     Object.assign(state.resultSet, {
       columns: [{ name: 'result', type: 'string' }, { name: 'internal_note', type: 'string' }],
-      rows: [
-        { result: '保留行', internal_note: '不展示' },
-        { result: '过滤行', internal_note: '不展示' },
-      ],
+      rows: [{ result: '保留行', internal_note: '不展示' }],
       rowCount: 2,
     })
     state.finalResultQueryConfig = {
@@ -84,7 +113,7 @@ describe('PythonResultDataDialog', () => {
     state.filterCatalog = [{ id: 'result-filter', title: '结果筛选器', type: 'filter', selectionMode: 'single' }]
     const wrapper = mount(PythonResultDataDialog, { props: { component }, global: { stubs } })
     await flushPromises()
-    await wrapper.find('input:not([type="checkbox"])').setValue('保留行')
+    await wrapper.find('.dd-filter-table input:not([type="checkbox"])').setValue('保留行')
     await wrapper.find('input[type="checkbox"]').setValue(true)
 
     await wrapper.get('[data-testid="python-run-query"]').trigger('click')
@@ -94,7 +123,7 @@ describe('PythonResultDataDialog', () => {
       componentId: 'table-1',
       status: 'ready',
       source: 'script',
-      rows: [{ result: '保留行' }],
+      rows: [{ result: '保留行', internal_note: '不展示' }],
       fieldLabels: { result: '结果' },
     })
     wrapper.unmount()
