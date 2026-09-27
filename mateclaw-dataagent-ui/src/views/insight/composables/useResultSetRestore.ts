@@ -47,6 +47,10 @@ export function toComponentData(
   rows: Record<string, unknown>[],
   fieldLabels?: Record<string, string>,
 ): InsightComponentData {
+  if (component.type === 'kpi') {
+    const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))].map((name) => ({ name }))
+    reconcileKpiProjection(component, columns, readComponentDatasetPipeline(component))
+  }
   return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component), fieldLabels, {
     chartType: component.chartType,
     config: component.config,

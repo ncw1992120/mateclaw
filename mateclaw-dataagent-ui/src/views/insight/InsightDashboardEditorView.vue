@@ -1401,9 +1401,7 @@ function handleComponentResultSet(payload: {
     .filter((item) => item.type === 'combination')
     .map((item) => findCombinationChild(item, payload.componentId))
     .find((item) => item !== null)
-  const component = topLevel ?? (nestedChild
-    ? { ...nestedChild, position: { x: 0, y: 0, w: 6, h: 4 } } as InsightComponent
-    : null)
+  const component = topLevel ?? (nestedChild as InsightComponent | null)
   if (!component) return
   if (payload.status === 'empty') {
     delete componentDataMap.value[payload.componentId]

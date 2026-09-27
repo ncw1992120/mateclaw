@@ -62,7 +62,9 @@ public sealed interface DatasetSourceDefinition
             requireDatasource(datasourceId);
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
-            if (metrics.isEmpty()) throw new IllegalArgumentException("Aloudata metrics are required");
+            if (metrics.isEmpty() && dimensions.isEmpty()) {
+                throw new IllegalArgumentException("Aloudata metrics or dimensions are required");
+            }
         }
         @Override public String sourceType() { return "ALOUDATA_METRICS"; }
     }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { InsightComponent } from '@/types'
 import type { ComponentDatasetPipeline } from '@/types'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
-import { collectResultSetComponents, reconcileKpiProjection } from '../useResultSetRestore'
+import { collectResultSetComponents, reconcileKpiProjection, toComponentData } from '../useResultSetRestore'
 
 describe('reconcileKpiProjection', () => {
   it('adds result-set KPI fields missing from an older persisted projection', () => {
@@ -54,6 +54,38 @@ describe('reconcileKpiProjection', () => {
     expect(component.kpiMetrics?.map(({ displayName }) => displayName)).toEqual([
       '触达次数', '触达人数', '下发次数', '下发人数',
     ])
+  })
+
+  it('reconciles a Python result schema before projecting values onto a KPI card', () => {
+    const component = {
+      id: 'python-kpi',
+      type: 'kpi',
+      config: {
+        datasetPipeline: {
+          datasetInputs: [],
+          script: 'result = rows',
+          finalResultQueryConfig: {
+            schemaFingerprint: 'python-result-v1',
+            displayFields: [
+              { field: '转化规模', title: '转化规模', role: 'measure' },
+              { field: '转化人数', title: '转化人数', role: 'measure' },
+            ],
+            filterFields: [],
+            sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+            paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 100, returnTotalCount: false },
+          },
+        },
+      },
+      kpiMetrics: [{
+        fieldKey: '下发次数', displayName: '下发次数', unit: '', helperText: '', visible: true,
+        x: 0, y: 0, w: 160, h: 80, styles: defaultMetricStyles(),
+      }],
+    } as unknown as InsightComponent
+
+    const data = toComponentData(component, [{ 转化规模: 1250000, 转化人数: 128 }])
+
+    expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual(['转化规模', '转化人数'])
+    expect(data.kpiList?.map(({ value }) => value)).toEqual(['1250000', '128'])
   })
 
   it('includes KPI children inside combination tabs in the same result-set restoration pass', () => {
