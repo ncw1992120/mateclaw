@@ -85,7 +85,7 @@
         :page-sizes="pageSizes"
         :total="activeTableRows.length"
         :pager-count="5"
-        layout="total, sizes, prev, pager, next"
+        layout="total, sizes, prev, pager, next, jumper"
         size="small"
       />
     </div>
@@ -132,7 +132,7 @@ const emit = defineEmits<{
 }>()
 
 /** 分页选项；最终仍受查询配置的 maxPageSize 限制。 */
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500]
+const PAGE_SIZE_OPTIONS = [1, 2, 5, 10, 20, 50, 100, 200, 500]
 
 const tableData = computed(() => props.componentData?.table)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)

@@ -207,6 +207,21 @@
             </select>
             <span>条</span>
           </label>
+          <label class="dd-page-jump">
+            <span>跳至</span>
+            <input
+              v-model="pageDraft"
+              type="number"
+              min="1"
+              :max="maxPage ?? undefined"
+              aria-label="跳转页码"
+              data-testid="page-jump-input"
+              :disabled="loading"
+              @keydown.enter.prevent="jumpToPage"
+            />
+            <span>页</span>
+            <el-button size="small" data-testid="page-jump" :disabled="loading" @click="jumpToPage">跳转</el-button>
+          </label>
           <el-button size="small" :disabled="currentPage <= 1 || loading" data-testid="page-previous" @click="changePage(currentPage - 1)">上一页</el-button>
           <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
         </div>
@@ -258,6 +273,7 @@ const scrollRef = ref<HTMLElement | null>(null)
 const sortState = ref<QuerySortSpec | null>(null)
 const currentPage = ref(1)
 const currentPageSize = ref(DEFAULT_BATCH_SIZE)
+const pageDraft = ref('1')
 const stateReady = ref(false)
 /** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
 let requestSequence = 0
@@ -299,11 +315,14 @@ const componentPreviewColumns = computed(() => {
 })
 const paginationPolicy = computed(() => props.dataset.queryConfig?.paginationPolicy)
 const paginationEnabled = computed(() => paginationPolicy.value?.enabled === true)
+const maxPage = computed(() => totalCount.value === null
+  ? null
+  : Math.max(1, Math.ceil(totalCount.value / currentPageSize.value)))
 const sortPolicy = computed(() => props.dataset.queryConfig?.sortPolicy)
 const pageSizeOptions = computed(() => {
   const max = Math.max(1, paginationPolicy.value?.maxPageSize || 500)
   const initial = Math.min(max, Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE))
-  return [...new Set([initial, 10, 20, 50, 100, 200, 500].filter((size) => size <= max))].sort((a, b) => a - b)
+  return [...new Set([initial, 1, 2, 5, 10, 20, 50, 100, 200, 500].filter((size) => size <= max))].sort((a, b) => a - b)
 })
 
 function isFieldSortable(field: string): boolean {
@@ -619,6 +638,7 @@ function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'des
   sortState.value = next
   if (changed) {
     currentPage.value = 1
+    pageDraft.value = '1'
     void fetchRows(true)
   }
 }
@@ -631,13 +651,29 @@ function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): Qu
 async function query(): Promise<void> {
   if (queryDisabled.value) return
   currentPage.value = 1
+  pageDraft.value = '1'
   await fetchRows(true)
 }
 
 function changePage(page: number): void {
   if (page < 1 || page === currentPage.value) return
   currentPage.value = page
+  pageDraft.value = String(page)
   void fetchRows(true)
+}
+
+/** 可在总数未知时按 offset 直达任意正整数页；总数已知时限制在最后一页。 */
+function jumpToPage(): void {
+  const requestedPage = Number.parseInt(pageDraft.value, 10)
+  if (!Number.isFinite(requestedPage) || requestedPage < 1) {
+    pageDraft.value = String(currentPage.value)
+    return
+  }
+  const targetPage = maxPage.value === null
+    ? requestedPage
+    : Math.min(requestedPage, maxPage.value)
+  pageDraft.value = String(targetPage)
+  changePage(targetPage)
 }
 
 function onPageSizeChange(event: Event): void {
@@ -645,6 +681,7 @@ function onPageSizeChange(event: Event): void {
   const max = Math.max(1, paginationPolicy.value?.maxPageSize || 500)
   currentPageSize.value = Math.min(max, Math.max(1, value))
   currentPage.value = 1
+  pageDraft.value = '1'
   void fetchRows(true)
 }
 
@@ -667,6 +704,7 @@ async function open(): Promise<void> {
   queryFilterRows.value = createQueryFilterRows()
   sortState.value = sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
   currentPage.value = 1
+  pageDraft.value = '1'
   currentPageSize.value = Math.min(
     Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE),
     Math.max(1, paginationPolicy.value?.maxPageSize || 500),
@@ -702,6 +740,7 @@ async function open(): Promise<void> {
       Math.max(1, paginationPolicy.value?.maxPageSize || 500),
     )
     currentPage.value = paginationEnabled.value ? Math.max(1, cachedState.page || 1) : 1
+    pageDraft.value = String(currentPage.value)
   }
   columns.value = []
   rows.value = []
@@ -907,6 +946,25 @@ watch(() => ui.dataDialog.visible, (visible) => {
   border-radius: var(--radius-sm);
   color: var(--db-text-secondary);
   background: var(--db-surface);
+}
+.dd-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dd-page-jump input {
+  width: 58px;
+  height: 26px;
+  padding: 0 5px;
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-sm);
+  color: var(--db-text-secondary);
+  background: var(--db-surface);
+  font: inherit;
+}
+.dd-page-jump input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 </style>
 

@@ -68,10 +68,15 @@
           <el-empty v-else-if="loading" description="查询中…" />
           <el-empty v-else :description="error || '点击「查询」获取数据'" />
         </div>
-        <div v-if="paginationEnabled && visibleColumns.length" class="dd-pagination">
-          <span>第 {{ page }} 页 · 共 {{ filteredRows.length }} 条</span>
-          <el-button size="small" :disabled="page <= 1" @click="page -= 1">上一页</el-button>
-          <el-button size="small" :disabled="page * pageSize >= filteredRows.length" @click="page += 1">下一页</el-button>
+        <div v-if="paginationEnabled && visibleColumns.length" class="dd-pagination" data-testid="python-result-pagination">
+          <el-pagination
+            :current-page="page"
+            :page-size="pageSize"
+            :total="filteredRows.length"
+            layout="total, prev, pager, next, jumper"
+            size="small"
+            @current-change="page = $event"
+          />
         </div>
       </section>
     </div>
