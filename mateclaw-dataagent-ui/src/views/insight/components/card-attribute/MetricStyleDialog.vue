@@ -287,7 +287,7 @@ function syncMetricStyles() {
 }
 .ms-style-row {
   display: grid;
-  grid-template-columns: max-content 76px 36px minmax(88px, 1fr);
+  grid-template-columns: 64px 76px 36px minmax(88px, 1fr);
   gap: 8px;
   align-items: center;
   padding: 9px 0;
