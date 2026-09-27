@@ -10,7 +10,7 @@
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
 # 环境变量：
-#   后端每次启动均从本地 feature/dev_fu 分支 HEAD 创建临时工作树并执行 clean package
+#   后端每次直接使用本地 feature/dev_fu 工作区执行 clean package
 #   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
 #   ALOUDATA_MOCK_PORT=18081        mock 服务端口
 #   ALOUDATA_MOCK_SERVER=...        mock 服务基地址（默认 http://127.0.0.1:<port>）
@@ -26,9 +26,6 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 BUILD_PROJECT_ROOT="$PROJECT_ROOT"
-DEPLOY_BRANCH="feature/dev_fu"
-DEPLOY_WORKTREE=""
-DEPLOY_WORKTREE_PARENT="${TMPDIR:-/tmp}/mateclaw-dataagent-deploy"
 source "$PROJECT_ROOT/dev-support/local-simulation/scripts/lib/latest-deploy-worktree.sh"
 JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 BACKEND_PORT="18089"
@@ -45,6 +42,7 @@ PYTHON_RUNNER_PORT="${MATECLAW_RUNNER_PORT:-18090}"
 PYTHON_RUNNER_URL="http://127.0.0.1:${PYTHON_RUNNER_PORT}"
 PYTHON_RUNNER_HEALTH_URL="${PYTHON_RUNNER_URL%/}/health"
 PYTHON_RUNNER_LOG="/tmp/mateclaw-python-runner-${PYTHON_RUNNER_PORT}.log"
+RUNNER_LOG_TAIL_PID=""
 
 ACTION="${1:-all}"
 LAUNCH_AGENT_LABEL="com.srant.mateclaw-dataagent-backend"
@@ -62,8 +60,8 @@ usage() {
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
 
-后端启动时会从本地 feature/dev_fu 分支 HEAD 创建临时隔离工作树并 clean package，
-构建成功后再启动；本地分支不存在时会停止，不会回退到远端或其他分支。
+后端启动时直接使用本地 feature/dev_fu 工作区 clean package（包含未提交修改），
+构建成功后再启动；当前分支不匹配时会停止，不会切换或覆盖工作区。
 
 环境变量：
   ALOUDATA_MOCK=on|embed|off      上游模式：本地 HTTP mock（默认）/ 内置夹具 / 真实 Aloudata
@@ -233,12 +231,13 @@ start_python_runner() {
   fi
 
   echo "启动本地 Python Runner：$PYTHON_RUNNER_URL"
+  : >"$PYTHON_RUNNER_LOG"
   (
     cd "$PYTHON_RUNNER_DIR"
     nohup "$PYTHON_RUNNER_EXECUTABLE" \
       --app-dir "$PYTHON_RUNNER_DIR/src" runner.app:app \
       --host 127.0.0.1 --port "$PYTHON_RUNNER_PORT" \
-      >"$PYTHON_RUNNER_LOG" 2>&1 &
+      >>"$PYTHON_RUNNER_LOG" 2>&1 &
   )
   disown 2>/dev/null || true
 
@@ -294,29 +293,15 @@ case "$ACTION" in
     ;;
 esac
 
-cleanup_deploy_worktree() {
-  [[ -n "$DEPLOY_WORKTREE" ]] || return 0
-  if [[ "$PWD" == "$DEPLOY_WORKTREE" || "$PWD" == "$DEPLOY_WORKTREE/"* ]]; then
-    cd "$PROJECT_ROOT"
-  fi
-  if git -C "$PROJECT_ROOT" worktree remove "$DEPLOY_WORKTREE"; then
-    DEPLOY_WORKTREE=""
-  else
-    echo "警告：部署工作树未能自动清理：$DEPLOY_WORKTREE" >&2
-  fi
-}
-
-# 每次启动后端都从本地指定分支创建独立临时工作树；不切换或覆盖用户工作树。
-# 工作树会在后端停止/启动失败后清理，避免 Maven 构建旧 checkout 的代码。
-mkdir -p "$DEPLOY_WORKTREE_PARENT"
-if ! DEPLOY_WORKTREE="$(mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH" "$DEPLOY_WORKTREE_PARENT")"; then
+# 每次直接构建本地 feature/dev_fu 工作区，不切换分支、不忽略未提交修改。
+CURRENT_BRANCH="$(git -C "$PROJECT_ROOT" branch --show-current)"
+if [[ "$CURRENT_BRANCH" != "feature/dev_fu" ]]; then
+  echo "错误：当前分支是 ${CURRENT_BRANCH:-detached HEAD}，要求 feature/dev_fu；未执行构建或重启。" >&2
   exit 1
 fi
-trap cleanup_deploy_worktree EXIT
-BUILD_PROJECT_ROOT="$DEPLOY_WORKTREE"
 JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
-DEPLOY_COMMIT="$(git -C "$BUILD_PROJECT_ROOT" rev-parse --short HEAD)"
-echo "本次部署源码：本地分支提交 $DEPLOY_COMMIT，工作树 $BUILD_PROJECT_ROOT"
+DEPLOY_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+echo "本次部署源码：本地 feature/dev_fu 工作区（HEAD ${DEPLOY_COMMIT:-未知}，包含未提交修改）"
 
 # ---------------------------------------------------------------- 后端
 
@@ -356,7 +341,10 @@ restore_dataagent_launch_agent() {
     fi
   fi
 
-  cleanup_deploy_worktree
+  if [[ -n "$RUNNER_LOG_TAIL_PID" ]]; then
+    kill "$RUNNER_LOG_TAIL_PID" 2>/dev/null || true
+    wait "$RUNNER_LOG_TAIL_PID" 2>/dev/null || true
+  fi
   exit "$exit_status"
 }
 
@@ -585,9 +573,9 @@ fi
 export ES_URIS="${ES_URIS:-http://127.0.0.1:9200}"
 export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED="${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}"
 
-# 本地测试不启用领航认证和 Python 执行器。
+# 本地开发默认启用 Python Executor，并启动配套 Runner；可显式设为 false 关闭。
 export MATECLAW_PILOT_ENABLED="${MATECLAW_PILOT_ENABLED:-false}"
-export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-false}"
+export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"
 
 # 本地 Python Runner 不走 Docker 服务名：DataAgent 提交脚本、Runner 回读数据
 # 都必须通过宿主机回环地址访问，避免默认的 python-runner:8080 / mateclaw-dataagent
@@ -633,7 +621,7 @@ fi
 
 echo "使用 Maven：$MAVEN_BIN"
 echo "清理并重新构建最新 DataAgent（跳过完整测试套件，避免每次本地重启重复执行耗时测试）..."
-"$MAVEN_BIN" -f "$BUILD_PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests
+"$MAVEN_BIN" -f "$PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests
 
 if [[ ! -f "$JAR_PATH" ]]; then
   echo "错误：DataAgent 构建完成后仍找不到 JAR：$JAR_PATH" >&2
@@ -650,6 +638,9 @@ python_runner_enabled() {
 if python_runner_enabled; then
   echo "重启本地 Python Runner（复用现有虚拟环境，不执行 rebuild）..."
   restart_python_runner || exit 1
+  echo "Python Runner 日志（同时写入 $PYTHON_RUNNER_LOG）："
+  tail -n +1 -F "$PYTHON_RUNNER_LOG" &
+  RUNNER_LOG_TAIL_PID=$!
 else
   echo "Python Executor 未启用，跳过本地 Python Runner 重启。"
 fi

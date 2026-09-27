@@ -17,12 +17,12 @@ if (( build_line >= jar_check_line || build_line >= launch_line )); then
   exit 1
 fi
 
-if ! grep -Fq 'mateclaw_create_latest_worktree "$PROJECT_ROOT" "$DEPLOY_BRANCH"' "$SCRIPT"; then
-  echo "后端启动前必须准备本地 feature/dev_fu 的独立部署工作树。" >&2
+if ! grep -Fq 'CURRENT_BRANCH="$(git -C "$PROJECT_ROOT" branch --show-current)"' "$SCRIPT"; then
+  echo "后端重启必须直接验证并使用当前 feature/dev_fu 工作区。" >&2
   exit 1
 fi
-if ! grep -Fq 'BUILD_PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests' "$SCRIPT"; then
-  echo "Maven clean package 必须针对最新部署工作树执行。" >&2
+if ! grep -Fq '"$PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTests' "$SCRIPT"; then
+  echo "Maven clean package 必须针对当前工作区执行。" >&2
   exit 1
 fi
 if ! grep -Fq 'mateclaw_same_git_repository "$PROJECT_ROOT" "$cwd"' "$SCRIPT"; then
@@ -69,6 +69,26 @@ fi
 
 if ! grep -Fq 'export MATECLAW_DATASET_READ_BASE_URL=' "$SCRIPT"; then
   echo "DataAgent 必须通过 application.yml 使用的变量配置 Runner 数据回读地址。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"' "$SCRIPT"; then
+  echo "本地重启默认必须启用 Python Executor，以便启动 Python Runner。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'tail -n +1 -F "$PYTHON_RUNNER_LOG"' "$SCRIPT"; then
+  echo "Python Runner 日志必须实时输出到当前终端。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'DEPLOY_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || true)"' "$SCRIPT"; then
+  echo "部署提交号必须从当前工作区安全解析。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'echo "本次部署源码：本地 feature/dev_fu 工作区（HEAD ${DEPLOY_COMMIT:-未知}' "$SCRIPT"; then
+  echo "部署日志不得因 DEPLOY_COMMIT 未设置而在 set -u 下中断。" >&2
   exit 1
 fi
 
