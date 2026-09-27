@@ -280,6 +280,39 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(wrapper.find('.dd-kv').exists()).toBe(false)
   })
 
+  it('无筛选器绑定时，保存查询配置会同步展示字段，并可查询渲染到画布', async () => {
+    const originalDatasets = state.datasets
+    const dataset = metricViewDataset({ queryConfig: undefined })
+    state.datasets = [dataset]
+    const wrapper = await openWith(state.datasets[0], { id: 'table-no-bindings', type: 'table', title: '策略表' })
+
+    try {
+      expect(wrapper.find('[data-testid="display-fields-empty"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="query-filter-row"]').exists()).toBe(false)
+
+      const saveError = useInsight().saveQueryConfig(dataset.id, queryConfig([]))
+      await flushPromises()
+
+      expect(saveError).toBeNull()
+      expect(wrapper.findAll('[data-testid="display-field-row"]')).toHaveLength(3)
+      expect(wrapper.text()).toContain('交易日期')
+      expect(wrapper.text()).toContain('客户类型')
+      expect(wrapper.text()).toContain('金额')
+
+      await wrapper.get('[data-testid="run-query"]').trigger('click')
+      await flushPromises()
+
+      expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }))
+      expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
+        componentId: 'table-no-bindings',
+        table: { columns: ['trade_date', 'cust_type', 'amount'] },
+      })
+    } finally {
+      wrapper.unmount()
+      state.datasets = originalDatasets
+    }
+  })
+
   it('结果表头使用查询配置中的展示名，排序只开放已配置字段', async () => {
     previewDatasetDraft.mockResolvedValueOnce({
       rows: [{ trade_date: '2026-09-01', amount: 18 }],
