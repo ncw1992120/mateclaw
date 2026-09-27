@@ -33,7 +33,7 @@ import {
 } from '@/utils/field-mapping'
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
-import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
+import { collectSparseRowColumns, extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
@@ -1658,6 +1658,9 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
           commitResultSet({
             source: 'script',
             rows: envelope.data.rows,
+            // envelope 的 columns 是脚本显式声明的输出 schema（契约要求且已通过校验），
+            // 优先于行推断，避免任何行缺键时把结果集列截断、进而删掉指标配置
+            columns: envelope.data.columns.map((column) => ({ name: column.name, type: column.dataType })),
             fieldLabels: Object.fromEntries(envelope.data.columns.filter((column) => column.title?.trim()).map((column) => [column.name, column.title.trim()])),
             executionId,
             elapsedMs: Date.now() - startedAt,
@@ -1750,8 +1753,9 @@ function inferType(v: unknown): string {
   return 'string'
 }
 function rowsToColumns(rows: Record<string, unknown>[]): { name: string; type: string }[] {
-  if (!rows.length) return []
-  return Object.keys(rows[0]).map((k) => ({ name: k, type: inferType(rows[0][k]) }))
+  // 稀疏行防护（API/文件/脚本按条件构造的行对象首行可能缺列）：
+  // 只看首行会把结果集列截断，导致按完整列投影出的指标配置在 hydrate 时被静默删除。
+  return collectSparseRowColumns(rows).map(({ name, sample }) => ({ name, type: inferType(sample) }))
 }
 function nowHms(): string {
   return new Date().toTimeString().slice(0, 8)
@@ -1953,16 +1957,18 @@ export function scheduleResultSet(): void {
   }, 800)
 }
 
-/** 产物提交：写入结果集并置为就绪（status 最后置位，保证观察者看到 ready 时其余字段已就绪） */
+/** 产物提交：写入结果集并置为就绪（status 最后置位，保证观察者看到 ready 时其余字段已就绪）。
+ * columns 可传脚本 envelope 声明的列 schema（声明优先于行推断，行推断仅作缺省兜底）。 */
 function commitResultSet(payload: {
   source: 'dataset' | 'script'
   rows: Record<string, unknown>[]
+  columns?: { name: string; type: string }[]
   fieldLabels?: Record<string, string>
   executionId?: string
   elapsedMs: number
 }): void {
   state.resultSet.source = payload.source
-  state.resultSet.columns = rowsToColumns(payload.rows)
+  state.resultSet.columns = payload.columns?.length ? payload.columns : rowsToColumns(payload.rows)
   state.resultSet.fieldLabels = payload.fieldLabels
   state.resultSet.rows = payload.rows
   state.resultSet.rowCount = payload.rows.length

@@ -1317,7 +1317,9 @@ function handleComponentChange(updated: InsightComponent): void {
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
       child.multiKpi = updated.multiKpi
-      child.kpiMetrics = updated.kpiMetrics
+      if (child.type === 'kpi') {
+        child.kpiMetrics = updated.kpiMetrics
+      }
       if (child.type === 'combination') {
         child.children = child.children ?? updated.children ?? []
         child.containerConfig = mergeCombinationConfig(child, updated)

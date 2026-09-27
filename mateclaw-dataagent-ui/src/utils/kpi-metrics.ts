@@ -122,11 +122,18 @@ export function resolveMetricVisual(
   }
 }
 
-/** 单个指标的默认自由布局（两列错落） */
+/** 单个指标的默认自由布局（两列错落，紧凑间距：横向留 12px、纵向留 8px） */
 export function defaultMetricLayout(index: number): Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'> {
   const col = index % 2
   const row = Math.floor(index / 2)
-  return { x: col * 296, y: row * 96, w: 284, h: 88 }
+  return { x: col * 204, y: row * 80, w: 192, h: 72 }
+}
+
+/** 旧版默认布局尺寸（284×88、步距 296×96）。
+ *  自动投影且从未被用户挪动/缩放过的指标，坐标必然精确命中这组值；
+ *  用户拖动后坐标任意、缩放会改 w/h —— 都不会命中，保持用户布局不动。 */
+function isLegacyDefaultLayout(m: Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>): boolean {
+  return m.w === 284 && m.h === 88 && m.x % 296 === 0 && m.y % 96 === 0
 }
 
 /** 结果集字段 → 指标默认展示列名（显示名优先，回落字段名） */
@@ -156,7 +163,9 @@ export function buildKpiMetrics(
     const unit = (field.unit ?? '').trim()
     const prev = byKey.get(field.name)
     if (prev) {
-      return { ...prev, displayName, unit, styles: cloneStyles(prev.styles) }
+      // 旧默认布局吸附迁移：只搬「机器生成且从未被用户摆放过」的坐标（见 isLegacyDefaultLayout）
+      const layout = isLegacyDefaultLayout(prev) ? defaultMetricLayout(index) : prev
+      return { ...prev, ...layout, displayName, unit, styles: cloneStyles(prev.styles) }
     }
     return {
       fieldKey: field.name,

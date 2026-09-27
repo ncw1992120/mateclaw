@@ -89,15 +89,14 @@ function hydrate(): void {
   // 下一拍解除标记：让本次 state 同步（reactive 赋值）先完成，再允许回写
   nextTick(() => {
     hydrating.value = false
-    // KPI 指标按结果集字段投影。除完全缺失的旧配置外，已有部分指标的组件
-    // 也需要补齐新增字段，否则属性面板有完整投影而画布仍只渲染旧指标清单。
-    const componentMetricKeys = (component.kpiMetrics ?? []).map((metric) => metric.fieldKey)
-    const projectedMetricKeys = state.kpiMetrics.map((metric) => metric.fieldKey)
-    if (
-      component.type === 'kpi'
-      && projectedMetricKeys.length > 0
-      && JSON.stringify(componentMetricKeys) !== JSON.stringify(projectedMetricKeys)
-    ) {
+    // 把缺失的投影指标、旧版默认布局迁移结果回写组件；同时避免覆盖用户已保存的布局。
+    const componentMetrics = component.kpiMetrics ?? []
+    const projectedMetrics = state.kpiMetrics
+    const keysChanged = JSON.stringify(componentMetrics.map((metric) => metric.fieldKey))
+      !== JSON.stringify(projectedMetrics.map((metric) => metric.fieldKey))
+    const layoutChanged = JSON.stringify(projectedMetrics.map((metric) => [metric.fieldKey, metric.x, metric.y, metric.w, metric.h]))
+      !== layoutSignatureBefore
+    if (component.type === 'kpi' && projectedMetrics.length > 0 && (keysChanged || layoutChanged)) {
       scheduleEmit()
     }
   })

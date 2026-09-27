@@ -86,11 +86,33 @@ export function extractResultSchema(envelope: ScriptResultEnvelope): ResultSchem
   return { ...schema, fingerprint: fingerprintResultSchema(schema) }
 }
 
+/**
+ * 稀疏行安全地收集列：按首次出现顺序合并**全部行**的 key，
+ * 并取该列首个非空值作为类型推断样本。
+ * 只看首行会在「首行缺列」时把结果集列截断，进而让按完整列
+ * 投影出的指标配置在下次 hydrate 时被静默删除（指标卡片丢列的根因）。
+ */
+export function collectSparseRowColumns(rows: Record<string, unknown>[]): Array<{ name: string; sample: unknown }> {
+  const names: string[] = []
+  const samples = new Map<string, unknown>()
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      const known = samples.get(key)
+      if (!samples.has(key)) {
+        samples.set(key, row[key])
+        names.push(key)
+      } else if (known == null && row[key] != null) {
+        samples.set(key, row[key])
+      }
+    }
+  }
+  return names.map((name) => ({ name, sample: samples.get(name) }))
+}
+
 /** 把数据集直出行归一成与 Python 结果相同的强类型 table envelope，供统一契约校验。 */
 export function tableEnvelopeFromRows(rows: Record<string, unknown>[]): ScriptTableEnvelope {
-  const sample = rows[0] ?? {}
-  const columns = Object.keys(sample).map((name): ScriptResultColumn => {
-    const value = sample[name]
+  const columns = collectSparseRowColumns(rows).map(({ name, sample }): ScriptResultColumn => {
+    const value = sample
     const dataType: ScriptDataType = typeof value === 'number'
       ? 'number'
       : typeof value === 'boolean'
