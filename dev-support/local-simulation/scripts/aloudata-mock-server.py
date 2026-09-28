@@ -42,6 +42,10 @@ VIEW_ORDER = ["cljd_zcl_zb_view", "cljd_zcl_wd_view"]
 
 CONDITION = re.compile(r"\['?([^'\]]+)'?\]\s*(<>|>=|<=|=|>|<|IN|NotIn)\s*(.+)", re.IGNORECASE)
 FIELD_REFERENCE = re.compile(r"\['?([^'\]]+)'?\]")
+METRIC_TIME_BOUNDARY = re.compile(
+    r"\[\s*metric_time\s*\]\s*(<>|>=|<=|=|>|<)\s*['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
 
 
 def load_fixture(name: str) -> dict:
@@ -183,6 +187,17 @@ def apply_filters(rows: list, filters) -> list:
     return rows
 
 
+def apply_time_constraint(rows: list[dict], expression: str) -> list[dict]:
+    """Apply metric_time bounds even when Aloudata wraps them in dateTrunc/DATEADD."""
+    boundaries = [(operator.upper(), value) for operator, value in METRIC_TIME_BOUNDARY.findall(expression)]
+    if not boundaries:
+        return apply_filters(rows, [expression])
+    return [
+        row for row in rows
+        if all(matches(row.get("metric_time"), operator, [value]) for operator, value in boundaries)
+    ]
+
+
 def sort_rows(rows: list, orders) -> list:
     """按 Aloudata orders 的字段顺序排序，稳定支持 asc/desc。"""
     result = list(rows)
@@ -267,6 +282,57 @@ def resolve_view_for_metrics(requested_metrics, requested_dimensions, filters=()
         if available and wanted.issubset(available):
             return candidate
     return None
+
+
+def dashboard_preview_sample_rows(source: dict, rows: list[dict], filters: list[str]) -> list[dict]:
+    """Complete the local strategy-preview sample through Sep 3 and distinguish selector choices.
+
+    The checked-in strategy fixtures predate the dashboard runtime-filter acceptance scenario:
+    they only contain Sep 1-2, and the WD fixture repeats the same KPI values for all conversion
+    metric names. Extend these demo-only sources deterministically so browser verification can
+    prove the requested three-day range and metric-name filter. Production data is untouched.
+    """
+    trace_id = source.get("traceId")
+    if trace_id not in {
+        "mock-trace-data-cljd_zcl_zb_view",
+        "mock-trace-data-cljd_zcl_wd_view",
+    }:
+        return rows
+
+    dates = {str(row.get("metric_time"))[:10] for row in rows}
+    if "2026-09-03" not in dates:
+        rows = [
+            *rows,
+            *({**row, "metric_time": "2026-09-03"}
+              for row in rows if str(row.get("metric_time"))[:10] == "2026-09-02"),
+        ]
+
+    if trace_id != "mock-trace-data-cljd_zcl_wd_view" or not any(
+        "metric_name" in expression for expression in filters
+    ):
+        return rows
+
+    metric_name_offsets = {
+        "经纪个人客户场内公募非货当年净买入": 0,
+        "经纪个人场内公募非货交易量": 1,
+        "经纪个人场内公募非货加仓交易量": 2,
+    }
+    increments = {
+        "digo_strategy_cnt_distr_1": 1,
+        "digo_distr_count_1": 10,
+        "digo_distr_user_cnt_a": 8,
+        "digo_touch_cnt_1": 6,
+        "digo_touch_user_cnt_1": 4,
+    }
+    distinguished = []
+    for row in rows:
+        sample = dict(row)
+        offset = metric_name_offsets.get(str(sample.get("metric_name")), 0)
+        for metric, increment in increments.items():
+            if isinstance(sample.get(metric), (int, float)):
+                sample[metric] += offset * increment
+        distinguished.append(sample)
+    return distinguished
 
 
 # --------------------------------------------------------------------- 端点实现
@@ -388,9 +454,10 @@ def handle_metrics_query(query, body, headers):
     source_columns = ((source_data.get("table") or {}).get("columns")) or {}
     requested = [name for name in list(dimensions) + list(metrics)]
     rows = columns_to_rows(source_columns)
+    rows = dashboard_preview_sample_rows(source, rows, filters)
     rows = apply_filters(rows, filters)
     if body.get("timeConstraint"):
-        rows = apply_filters(rows, [body["timeConstraint"]])
+        rows = apply_time_constraint(rows, body["timeConstraint"])
     result_filters = body.get("resultFilters") or []
     if any(not isinstance(item, str) for item in result_filters):
         return envelope(None, code="SM99002", success=False,

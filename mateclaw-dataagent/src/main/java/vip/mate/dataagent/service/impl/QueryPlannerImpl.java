@@ -16,6 +16,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 /**
  * 默认查询计划器实现。
@@ -80,6 +82,16 @@ public class QueryPlannerImpl implements QueryPlanner {
                 ? readAuthoritativeBindings(queryConfig, alias, fieldRoles.keySet())
                 : readLegacyBindings(component, alias);
 
+        // Python transforms need their bound filter fields in the prepared input rows,
+        // even when those fields are deliberately absent from the visible projection.
+        if (hasPython) {
+            for (Binding binding : bindings) {
+                if (fieldRoles.containsKey(binding.field) && !columns.contains(binding.field)) {
+                    columns.add(binding.field);
+                }
+            }
+        }
+
         // ---- 绑定的筛选器组件必须仍然存在（被删除的映射在 Planner 阶段失败） ----
         Set<String> boundFilterIds = readBoundFilterComponentIds(component);
         if (!boundFilterIds.isEmpty()) {
@@ -118,6 +130,20 @@ public class QueryPlannerImpl implements QueryPlanner {
             if (value instanceof Collection<?> collection && collection.size() > MAX_FILTER_VALUE_ITEMS) {
                 throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
                         "filter value exceeds " + MAX_FILTER_VALUE_ITEMS + " items: " + binding.parameterName);
+            }
+            boolean hasExplicitEndBoundary = bindings.stream().anyMatch(candidate ->
+                    binding.filterComponentId.equals(candidate.filterComponentId)
+                            && binding.field.equals(candidate.field)
+                            && (candidate.operator.equals("lt") || candidate.operator.equals("lte")));
+            if (binding.operator.equals("gte") && !hasExplicitEndBoundary
+                    && value instanceof List<?> range && range.size() == 2) {
+                String start = dateRangeEndpoint(range.get(0), binding.parameterName).toString();
+                String endExclusive = dateRangeEndpoint(range.get(1), binding.parameterName).plusDays(1).toString();
+                new DatasetFilter(binding.field, fieldRoles.getOrDefault(binding.field, "dimension"), "gte", start);
+                new DatasetFilter(binding.field, fieldRoles.getOrDefault(binding.field, "dimension"), "lt", endExclusive);
+                filters.add(new DatasetQueryPlanDTO.FilterSpec(binding.field, "gte", start));
+                filters.add(new DatasetQueryPlanDTO.FilterSpec(binding.field, "lt", endExclusive));
+                continue;
             }
             // 复用 DatasetFilter 校验运算符与值合法性（is_null/is_not_null 允许 null）
             Object filterValue = normalizeFilterValue(binding.operator, value);
@@ -370,6 +396,15 @@ public class QueryPlannerImpl implements QueryPlanner {
             return true;
         }
         return value;
+    }
+
+    private LocalDate dateRangeEndpoint(Object value, String parameterName) {
+        try {
+            return LocalDate.parse(String.valueOf(value));
+        } catch (DateTimeParseException | NullPointerException ex) {
+            throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
+                    "time range must use yyyy-MM-dd values: " + parameterName);
+        }
     }
 
     private String requiredText(JsonNode node, String name, String what) {

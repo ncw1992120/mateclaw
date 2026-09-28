@@ -125,6 +125,22 @@ class QueryPlannerTest {
     }
 
     @Test
+    @DisplayName("单个时间筛选器绑定也会展开为起始包含、结束日期次日排除")
+    void singleTimeFilterBindingExpandsDateRange() throws Exception {
+        String inputJson = QUERY_CONFIG_INPUT.replace(
+                "{\"filterComponentId\": \"date_range\", \"parameterName\": \"end_date\", \"field\": \"metric_date\", \"operator\": \"lt\"},\n", "");
+        JsonNode component = component(inputJson);
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("start_date", List.of("2026-09-01", "2026-09-03"));
+
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component), context(parameters), false);
+
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-09-01"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-09-04"));
+    }
+
+    @Test
     @DisplayName("单选 eq 与数值范围、文本搜索按各自运算符下推")
     void singleSelectNumericRangeAndContains() throws Exception {
         JsonNode component = component(QUERY_CONFIG_INPUT.replace("\"operator\": \"in\"", "\"operator\": \"eq\"")
@@ -296,6 +312,36 @@ class QueryPlannerTest {
         // 输入级筛选仍然下推
         assertThat(plan.filters()).isNotEmpty();
         assertThat(plan.pushdown().filters()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Python 输入保留绑定筛选字段，即使该字段不属于展示列")
+    void scriptInputIncludesBoundFilterFieldsOutsideDisplayProjection() throws Exception {
+        JsonNode component = component("""
+                {
+                  "datasetId": "42",
+                  "inputName": "strategy_data",
+                  "queryConfig": {
+                    "queryableFields": [
+                      {"name": "metric_time", "role": "dimension"},
+                      {"name": "strategy_id", "role": "dimension"}
+                    ],
+                    "displayFields": [
+                      {"field": "strategy_id", "title": "策略编码", "role": "dimension"}
+                    ],
+                    "parameterBindings": [
+                      {"filterComponentId": "date_range", "parameterName": "metric_date", "field": "metric_time", "operator": "eq"}
+                    ]
+                  }
+                }
+                """);
+
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component),
+                context(Map.of("metric_date", "2026-09-01")), true);
+
+        assertThat(plan.columns()).containsExactly("strategy_id", "metric_time");
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("metric_time", "eq", "2026-09-01"));
     }
 
     @Test

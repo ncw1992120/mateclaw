@@ -19,6 +19,8 @@ class TaskRequest(BaseModel):
     datasetReadEndpoint: str
     # 新契约：prepared input 端点（只按 inputName 读取）；旧任务可缺省
     datasetInputEndpoint: str | None = None
+    # 带 dashboard QueryPlan 的执行应让兼容 datasets.read(alias) 读取已筛选输入
+    preferPreparedInputs: bool = False
     resultUploadEndpoint: str | None = None
     readToken: str = Field(min_length=1)
 

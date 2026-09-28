@@ -47,6 +47,45 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('bubbles filter changes from components inside a combination card', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'filter-combo', type: 'combination', title: '组合卡片',
+          children: [
+            { id: 'nested-filter', type: 'filter', title: '指标名称', config: { field: 'metric_name' }, layout: { x: 0, y: 0, col: 6, h: 80 } },
+            { id: 'nested-time-filter', type: 'timeFilter', title: '指标日期', config: { field: 'metric_time' }, layout: { x: 0, y: 90, col: 6, h: 80 } },
+          ],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        runtimeFilterState: {
+          'nested-filter': { field: 'metric_name', value: '交易量', scope: 'global', targetComponentIds: [] },
+          'nested-time-filter': { field: 'metric_time', value: { preset: 'custom', start: '2026-09-01', end: '2026-09-03' }, scope: 'global', targetComponentIds: [] },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], emits: ['change'], template: '<button :data-testid="\'filter-\' + component.id" @click="$emit(\'change\', { field: \'metric_name\', value: \'交易量\' })" />' },
+          TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue'], emits: ['change'], template: '<button data-testid="time-filter" @click="$emit(\'change\', { field: \'metric_time\', timeRange: { preset: \'custom\', start: \'2026-09-01\', end: \'2026-09-03\' } })" />' },
+          AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="filter-nested-filter"]').trigger('click')
+    await wrapper.get('[data-testid="time-filter"]').trigger('click')
+
+    expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('modelValue')).toBe('交易量')
+    expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('modelValue')).toEqual({ preset: 'custom', start: '2026-09-01', end: '2026-09-03' })
+    expect(wrapper.emitted('filter-change')?.[0]?.[0]).toEqual({ componentId: 'nested-filter', field: 'metric_name', value: '交易量' })
+    expect(wrapper.emitted('time-filter-change')?.[0]?.[0]).toEqual({
+      componentId: 'nested-time-filter', field: 'metric_time',
+      timeRange: { preset: 'custom', start: '2026-09-01', end: '2026-09-03' },
+    })
+  })
+
   it('passes nested KPI metrics to the canvas widget and bubbles metric style edits with child context', async () => {
     const metrics = [{
       fieldKey: 'revenue', displayName: '收入', unit: '', helperText: '', visible: true,

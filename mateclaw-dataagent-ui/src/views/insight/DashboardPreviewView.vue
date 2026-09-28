@@ -115,6 +115,7 @@
         v-else
         :components="currentPageComponents"
         :component-data-map="componentDataMap"
+        :runtime-filter-state="getRuntimeFilterState()"
         :dataset-inputs="schema.datasetInputs"
         :editable="false"
         :dashboard-theme="dashboardTheme"
@@ -162,18 +163,24 @@ import type {
   TimeRangeValue,
   DashboardFilterContext,
   DashboardPage,
+  DashboardRuntimeFilterState,
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'
+import * as datasetApi from '@/api/dataset'
 import { generateReport, getReport, publishReport } from '@/api/insight-report'
-import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
+import { collectDashboardComponents, useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
-import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
-import { restoreResultSetData } from './composables/useResultSetRestore'
+import { extractResultSchema, parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
+import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
+import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -232,6 +239,11 @@ const reportChartInstances = ref<echarts.ECharts[]>([])
 
 /** 防抖定时器 */
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
+/** 旧直连 preview 与组件查询共用的单调请求序列；晚到的整页响应不能覆盖新查询。 */
+let queryRequestSequence = 0
+const latestComponentRequest = new Map<string, number>()
+let previousRuntimeFilterState: DashboardRuntimeFilterState = {}
+let previewDatasetMaterialization: Promise<void> | null = null
 
 /** 当前激活的页面 ID */
 const activePageId = ref<string>('')
@@ -302,6 +314,7 @@ const {
   setTimeRange,
   setDimensionFilter,
   initializeDefaults,
+  getRuntimeFilterState,
 } = useDashboardFilterContext(
   () => currentPageComponents.value,
   (context) => scheduleReloadWithFilters(context),
@@ -348,25 +361,110 @@ async function loadDashboard(): Promise<void> {
       activePageId.value = schema.pages[0].id
     }
     initializeDefaults()
+    await materializePreviewDatasetInputs()
+    previousRuntimeFilterState = getRuntimeFilterState()
     await reloadComponentData(filterContext.value)
     await reloadScriptBindings(filterContext.value)
-    // 管道组件的结果集恢复（有脚本回读执行结果、无脚本回源重算）
-    await reloadPipelineResults()
+    // 首次预览与筛选刷新共用组件管线，避免沿用上次编辑保存的静态快照。
+    await refreshPipelineComponents(getRuntimeFilterState(), true)
     // 加载已生成的报告
     await loadReport()
   }
 }
 
 /**
- * 管道组件的结果集恢复。
- * 必须排在 reloadComponentData 之后：后端预览只认旧版直连 dataSource 的组件，
- * 而管道组件的唯一数据来源是结果集，这里按持久化元数据把它补齐。
+ * QueryPlanPreview 与脚本执行接口只接受已落库的数字 datasetId。旧看板可能保存
+ * `ds-*` 草稿 ID；预览时按来源定义复用现有数据集或确认草稿，并只回填当前内存
+ * Schema，避免把临时 ID 发送到 long 参数接口，也不在只读预览时覆盖看板记录。
  */
-async function reloadPipelineResults(): Promise<void> {
-  const page = schema.pages.find((item) => item.id === activePageId.value)
-  if (!page) return
-  const data = await restoreResultSetData(page.components)
-  componentDataMap.value = { ...componentDataMap.value, ...data }
+async function materializePreviewDatasetInputs(): Promise<void> {
+  if (previewDatasetMaterialization) return previewDatasetMaterialization
+  const operation = materializePreviewDatasetInputsOnce()
+  previewDatasetMaterialization = operation
+  try {
+    await operation
+  } finally {
+    if (previewDatasetMaterialization === operation) previewDatasetMaterialization = null
+  }
+}
+
+async function materializePreviewDatasetInputsOnce(): Promise<void> {
+  const temporaryInputs = pipelineComponents().flatMap((component) => {
+    const pipeline = readComponentDatasetPipeline(component)
+    return (pipeline?.datasetInputs ?? [])
+      .filter((input) => (!/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
+        && Boolean(input.sourceType && input.sourceConfig))
+      .map((input) => ({ component, pipeline: pipeline!, input }))
+  })
+  if (!temporaryInputs.length) return
+
+  const existing = await datasetApi.list() as unknown as Array<{
+    id: string; datasourceId?: string; sourceType?: string; sourceConfig?: string | Record<string, unknown>
+  }>
+  const sourceConfigFor = (sourceType: string, config: Record<string, unknown>): Record<string, unknown> => {
+    switch (sourceType) {
+      case 'ALOUDATA_METRICS': return { metrics: config.metrics ?? [], dimensions: config.dimensions ?? [] }
+      case 'ALOUDATA_ANALYSIS_VIEW': return { analysisViewId: config.analysisViewId ?? '' }
+      case 'JDBC_SQL': return { sql: config.sql ?? '' }
+      case 'HTTP_API': return { apiDefinitionId: config.apiDefinitionId ?? '' }
+      case 'FILE': return { objectId: config.objectId ?? '', format: config.format ?? 'CSV' }
+      default: throw new Error(`暂不支持自动落库的数据集类型：${sourceType || '未知'}`)
+    }
+  }
+  const stableValue = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stableValue)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, stableValue(child)]))
+    }
+    return value
+  }
+  const canonical = (value: Record<string, unknown>) => JSON.stringify(stableValue(value))
+  const hashSource = (value: string): string => {
+    const mask = (1n << 64n) - 1n
+    let hash = 14695981039346656037n
+    for (let index = 0; index < value.length; index += 1) {
+      hash = ((hash ^ BigInt(value.charCodeAt(index))) * 1099511628211n) & mask
+    }
+    return hash.toString(36)
+  }
+  const confirmedBySource = new Map<string, string>()
+  for (const { component, pipeline, input } of temporaryInputs) {
+    const sourceType = String(input.sourceType ?? '').toUpperCase()
+    const source = input.sourceConfig as Record<string, unknown> | undefined
+    const datasourceId = String(source?.datasourceId ?? '')
+    if (!sourceType || !source || !datasourceId) {
+      throw new Error(`组件「${component.title || component.id}」的数据集「${input.inputName}」缺少来源配置，无法解析临时 ID`)
+    }
+    const definition = sourceConfigFor(sourceType, source)
+    const signature = `${sourceType}:${datasourceId}:${canonical(definition)}`
+    const datasetName = `preview_${props.dashboardId}_${component.id.slice(-8)}_${input.inputName}_${hashSource(signature)}`
+    let datasetId = confirmedBySource.get(signature)
+    if (!datasetId) {
+      const match = existing.find((candidate) => {
+        // DatasetVO intentionally omits sourceConfig; the stable name embeds a hash of it.
+        return candidate.name === datasetName
+          && String(candidate.sourceType ?? '').toUpperCase() === sourceType
+          && String(candidate.datasourceId ?? '') === datasourceId
+      })
+      if (match) datasetId = String(match.id)
+      else {
+        const result = await datasetApi.confirmDraft({
+          sourceType,
+          datasourceId,
+          sourceConfig: definition,
+          name: datasetName,
+          description: `看板预览自动确认的数据集：${component.title || component.id}`,
+        }) as unknown as { datasetId: string }
+        datasetId = String(result.datasetId)
+        existing.push({ id: datasetId, datasourceId, sourceType, sourceConfig: { ...definition, datasourceId, sourceType } })
+      }
+      confirmedBySource.set(signature, datasetId)
+    }
+    input.datasetId = datasetId
+    component.config = writeComponentDatasetPipeline(component, pipeline).config
+  }
 }
 
 /** 加载已生成的报告 */
@@ -381,26 +479,222 @@ async function loadReport(): Promise<void> {
   }
 }
 
-/** 带筛选条件重新加载组件数据（全量替换） */
+/** 旧版直连组件仍走预览接口，但按组件合并并拒绝过期整页响应。 */
 async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
+  const requestId = ++queryRequestSequence
+  const directIds = new Set(collectDashboardComponents(currentPageComponents.value)
+    .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
+    .map((component) => component.id))
+  if (directIds.size === 0) return
+  directIds.forEach((componentId) => latestComponentRequest.set(componentId, requestId))
   dataLoading.value = true
   try {
     const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
-    const dataMap: Record<string, InsightComponentData> = {}
+    const dataMap = { ...componentDataMap.value }
     for (const item of dataList ?? []) {
-      dataMap[item.componentId] = item
+      if (directIds.has(item.componentId) && latestComponentRequest.get(item.componentId) === requestId) dataMap[item.componentId] = item
     }
     componentDataMap.value = dataMap
-  } catch {
+  } catch (error) {
+    const dataMap = { ...componentDataMap.value }
+    for (const componentId of directIds) {
+      if (latestComponentRequest.get(componentId) !== requestId) continue
+      const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+      if (!component) continue
+      dataMap[componentId] = {
+        componentId,
+        renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table',
+        error: error instanceof Error ? error.message : t('insight.previewDataFailed'),
+      }
+    }
+    componentDataMap.value = dataMap
     ElMessage.warning(t('insight.previewDataFailed'))
   } finally {
     dataLoading.value = false
   }
 }
 
+function pipelineComponents(): InsightComponent[] {
+  return collectDashboardComponents(currentPageComponents.value)
+    .filter((component) => ['kpi', 'chart', 'table'].includes(component.type)
+      && Boolean(readComponentDatasetPipeline(component)?.datasetInputs?.length))
+}
+
+function componentUsesFilter(component: InsightComponent, filterId: string): boolean {
+  const pipeline = readComponentDatasetPipeline(component)
+  const inputBound = pipeline?.datasetInputs?.some((input) =>
+    input.queryConfig?.parameterBindings?.some((binding) => binding.filterComponentId === filterId))
+  const outputBound = pipeline?.finalResultQueryConfig?.filterFields?.some((field) => field.filterComponentId === filterId)
+  return Boolean(inputBound || outputBound)
+}
+
+function filterTargetsComponent(filterId: string, component: InsightComponent, state: DashboardRuntimeFilterState): boolean {
+  const filter = state[filterId]
+  return !filter || filter.scope !== 'scoped' || filter.targetComponentIds.includes(component.id)
+}
+
+function finalResultFilterParameters(component: InsightComponent, state: DashboardRuntimeFilterState): Record<string, unknown> {
+  const pipeline = readComponentDatasetPipeline(component)
+  const config = pipeline?.finalResultQueryConfig
+  const parameters: Record<string, unknown> = {}
+  for (const field of config?.filterFields ?? []) {
+    if (!field.filterComponentId) continue
+    const runtimeFilter = state[field.filterComponentId]
+    if (!runtimeFilter || runtimeFilter.value == null || runtimeFilter.value === ''
+      || (Array.isArray(runtimeFilter.value) && runtimeFilter.value.length === 0)) continue
+    const value = runtimeFilter.value
+    const operators = field.operators ?? []
+    let operator: string | undefined
+    let parameterValue: unknown = value
+    if (Array.isArray(value)) operator = operators.includes('in') ? 'in' : operators[0]
+    else if (typeof value === 'object' && 'preset' in value) {
+      if (operators.includes('between') && value.start && value.end) {
+        operator = 'between'
+        parameterValue = [value.start, value.end]
+      } else if (operators.includes('gte') && value.start) {
+        operator = 'gte'
+        parameterValue = value.start
+      } else if (operators.includes('lt') && value.end) {
+        operator = 'lt'
+        parameterValue = value.end
+      }
+    } else operator = operators.includes('eq') ? 'eq' : operators[0]
+    if (!operator) continue
+    parameters[field.parameterName] = parameterValue
+  }
+  return parameters
+}
+
+function finalResultQueryConfig(component: InsightComponent, state: DashboardRuntimeFilterState): Record<string, unknown> | undefined {
+  const config = readComponentDatasetPipeline(component)?.finalResultQueryConfig
+  if (!config || !isFinalResultQueryConfigured(config)) return undefined
+  return {
+    ...config,
+    parameterBindings: config.filterFields
+      .filter((field) => field.filterComponentId && field.operators?.length)
+      .map((field) => ({
+        parameterName: field.parameterName,
+        field: field.field,
+        operator: (() => {
+          const value = field.filterComponentId ? state[field.filterComponentId]?.value : undefined
+          if (Array.isArray(value)) return field.operators.includes('in') ? 'in' : field.operators[0]
+          if (value && typeof value === 'object' && 'preset' in value) {
+            return field.operators.includes('between') ? 'between'
+              : field.operators.includes('gte') ? 'gte' : field.operators[0]
+          }
+          return field.operators.includes('eq') ? 'eq' : field.operators[0]
+        })(),
+      })),
+  }
+}
+
+/** 对一个当前页管道组件执行受控输入查询，必要时再运行 Python 和输出阶段过滤。 */
+async function refreshPipelineComponent(
+  component: InsightComponent,
+  filters: DashboardRuntimeFilterState,
+): Promise<void> {
+  const pipeline = readComponentDatasetPipeline(component)
+  if (!pipeline?.datasetInputs?.length) return
+  const requestId = ++queryRequestSequence
+  latestComponentRequest.set(component.id, requestId)
+  try {
+    const invalidInput = pipeline.datasetInputs.find((input) => !/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
+    if (invalidInput) throw new Error(`数据集「${invalidInput.inputName}」尚未落库，无法在预览中查询`)
+    const queryContext = {
+      dashboardId: props.dashboardId,
+      componentId: component.id,
+      parameters: buildComponentQueryParameters(component, filters),
+      requestId: String(requestId),
+    }
+    let rows: Record<string, unknown>[]
+    let fieldLabels: Record<string, string> | undefined
+    const script = pipeline.script?.trim()
+    if (script) {
+      const created = await insightDashboardApi.executeComponent(
+        props.dashboardId, component.id, {}, JSON.stringify(schema), queryContext,
+      ) as unknown as { executionId?: string }
+      if (!created.executionId) throw new Error('未获取到组件执行 ID')
+      let envelope: unknown
+      let terminalStatus = ''
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        const status = await insightDashboardApi.getExecutionStatus(created.executionId) as unknown as {
+          status?: string; result?: string; error?: string
+        }
+        if (status.status === 'SUCCEEDED') {
+          envelope = status.result ? JSON.parse(status.result) : undefined
+          terminalStatus = status.status
+          break
+        }
+        if (status.status === 'RESULT_REF') {
+          const result = await insightDashboardApi.getExecutionResult(created.executionId) as unknown as { envelope?: unknown }
+          envelope = result.envelope
+          terminalStatus = status.status
+          break
+        }
+        if (status.status && status.status !== 'RUNNING') throw new Error(status.error || `组件执行失败：${status.status}`)
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+      if (!terminalStatus) throw new Error('组件执行等待超时')
+      const outputConfig = finalResultQueryConfig(component, filters)
+      const parsed = parseScriptResultEnvelope(envelope)
+      if (parsed.kind !== 'table') throw new Error(parsed.kind === 'message' ? parsed.message : 'Python 输出不是表格结果')
+      const pipelineConfig = pipeline.finalResultQueryConfig
+      const outputConfigStatus = finalResultQueryConfigStatus(
+        pipelineConfig,
+        outputConfig ? extractResultSchema(parsed) : undefined,
+      )
+      if (outputConfig && outputConfigStatus !== 'conflict') {
+        const result = await insightDashboardApi.previewExecutionResult(created.executionId, {
+          parameters: finalResultFilterParameters(component, filters), requestId: String(requestId),
+          finalResultQueryConfig: outputConfig,
+        }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[] }
+        rows = result.rows ?? []
+        const configured = pipeline.finalResultQueryConfig?.displayFields ?? []
+        fieldLabels = Object.fromEntries(configured.map((field) => [field.field, field.title]))
+      } else {
+        rows = parsed.data.rows
+        fieldLabels = Object.fromEntries(parsed.data.columns.map((column) => [column.name, column.title ?? column.name]))
+      }
+    } else {
+      if (pipeline.datasetInputs.length !== 1) {
+        throw new Error(`组件 ${component.title || component.id} 配置了多个输入但没有 Python 脚本，无法确定组合方式`)
+      }
+      const input = pipeline.datasetInputs[0]
+      const result = await datasetApi.previewQueryPlan({
+        datasetId: input.datasetId,
+        inputName: input.inputName,
+        queryConfig: input.queryConfig,
+        queryContext,
+      })
+      rows = result.rows ?? []
+      fieldLabels = Object.fromEntries((input.queryConfig?.displayFields ?? []).map((field) => [field.field, field.title]))
+    }
+    if (latestComponentRequest.get(component.id) !== requestId) return
+    componentDataMap.value = { ...componentDataMap.value, [component.id]: toComponentData(component, rows, fieldLabels) }
+  } catch (error) {
+    if (latestComponentRequest.get(component.id) !== requestId) return
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [component.id]: { componentId: component.id, renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table', error: error instanceof Error ? error.message : String(error) },
+    }
+  }
+}
+
+async function refreshPipelineComponents(filters: DashboardRuntimeFilterState, initial = false): Promise<void> {
+  const changedFilterIds = Object.keys({ ...previousRuntimeFilterState, ...filters }).filter((filterId) =>
+    JSON.stringify(previousRuntimeFilterState[filterId]?.value) !== JSON.stringify(filters[filterId]?.value))
+  previousRuntimeFilterState = filters
+  const components = pipelineComponents().filter((component) => initial
+    || changedFilterIds.some((filterId) => filterTargetsComponent(filterId, component, filters)
+      && componentUsesFilter(component, filterId)))
+  await Promise.all(components.map((component) => refreshPipelineComponent(component, filters)))
+}
+
 /** 执行已保存脚本，并将用户确认过的结果绑定覆盖到对应组件。 */
 async function reloadScriptBindings(context: DashboardFilterContext = filterContext.value): Promise<void> {
   if (!schema.script?.trim() || !schema.scriptBindings?.length) return
+  const requestId = ++queryRequestSequence
+  schema.scriptBindings.forEach((binding) => latestComponentRequest.set(binding.componentId, requestId))
   try {
     const created = await insightDashboardApi.execute(
       props.dashboardId,
@@ -430,7 +724,9 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
     for (const binding of schema.scriptBindings) {
-      const component = schema.pages.flatMap((page) => page.components).find((item) => item.id === binding.componentId)
+      if (latestComponentRequest.get(binding.componentId) !== requestId) continue
+      const component = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+        .find((item) => item.id === binding.componentId)
       if (!component) continue
       const envelope = parseScriptResultEnvelope(resultEnvelope)
       const adapted = resultEnvelopeToComponentData({
@@ -476,12 +772,17 @@ async function reloadScopedComponentData(context: DashboardFilterContext): Promi
 }
 
 /** 防抖重载（筛选频繁变化时避免过多请求） */
-function scheduleReloadWithFilters(context: DashboardFilterContext): void {
+function scheduleReloadWithFilters(context: DashboardFilterContext, refreshAllPipelines = false): void {
   if (filterReloadTimer) {
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
-    void reloadScopedComponentData(context).then(() => reloadScriptBindings(context))
+    const state = getRuntimeFilterState()
+    void Promise.all([
+      reloadScopedComponentData(context),
+      reloadScriptBindings(context),
+      refreshPipelineComponents(state, refreshAllPipelines),
+    ])
   }, 300)
 }
 
@@ -514,6 +815,8 @@ function handleComponentTimeRangeChange(payload: { componentId: string; timeRang
 
 /** 重新加载单个组件数据（组件级时间筛选变化时） */
 async function reloadSingleComponentData(componentId: string, componentTimeRange?: TimeRangeValue): Promise<void> {
+  const requestId = ++queryRequestSequence
+  latestComponentRequest.set(componentId, requestId)
   // 构建该组件专属的筛选上下文：合并全局筛选 + 组件级时间覆盖
   const context: DashboardFilterContext = {
     ...filterContext.value,
@@ -523,6 +826,7 @@ async function reloadSingleComponentData(componentId: string, componentTimeRange
   }
   try {
     const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    if (latestComponentRequest.get(componentId) !== requestId) return
     const dataMap = { ...componentDataMap.value }
     for (const item of dataList ?? []) {
       if (item.componentId === componentId) {
@@ -747,8 +1051,9 @@ function handlePageChange(pageId: string): void {
     return
   }
   activePageId.value = pageId
+  initializeDefaults()
   // 页面切换后重新加载数据（筛选上下文不变，但可见组件变化）
-  scheduleReloadWithFilters(filterContext.value)
+  scheduleReloadWithFilters(filterContext.value, true)
 }
 
 function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: string): void {

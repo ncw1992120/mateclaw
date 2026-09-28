@@ -190,14 +190,18 @@
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
             :component="childWidgetComponent(child)"
+            :model-value="runtimeFilterState?.[child.id] ? (runtimeFilterState[child.id].value ?? null) : undefined"
             :show-title="true"
             :dashboard-theme="dashboardTheme"
+            @change="(payload) => emit('filter-change', { componentId: child.id, ...payload })"
           />
           <TimeFilterWidget
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
+            :model-value="runtimeFilterState?.[child.id]?.value"
             :show-title="true"
             :dashboard-theme="dashboardTheme"
+            @change="(payload) => emit('time-filter-change', { componentId: child.id, ...payload })"
           />
           <AiAnalysisWidget
             v-else-if="child.type === 'aiAnalysis'"
@@ -210,11 +214,14 @@
             v-else-if="child.type === 'combination'"
             :component="toWidgetComponent(child)"
             :component-data-map="componentDataMap"
+            :runtime-filter-state="runtimeFilterState"
             :editable="editable"
             :selected="selectedChildId === child.id"
             :dashboard-theme="dashboardTheme"
             :title-icon-style-preview="titleIconStylePreview"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            @filter-change="(payload) => emit('filter-change', payload)"
+            @time-filter-change="(payload) => emit('time-filter-change', payload)"
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
@@ -257,6 +264,7 @@ import type {
   InsightCombinationConfig,
   ChartType,
   InsightComponentData,
+  DashboardRuntimeFilterState,
   ComponentTitleIconStyle,
   DashboardTabTitleIconStylePreview,
   ResolvedDashboardTheme,
@@ -281,6 +289,7 @@ const props = withDefaults(
   defineProps<{
     component: InsightComponent
     componentDataMap?: Record<string, InsightComponentData>
+    runtimeFilterState?: DashboardRuntimeFilterState
     /** 容器本身不展示样例数据；内部子组件按自身类型决定，保留字段兼容旧调用方。 */
     sampleMode?: boolean
     editable?: boolean
@@ -309,6 +318,9 @@ const emit = defineEmits<{
   (e: 'edit-child-title-icon-style', payload: { containerId: string; childId: string; anchor?: HTMLElement }): void
   (e: 'open-metric-style', payload: { containerId: string; childId: string; fieldKey: string; field: string }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
+  /** 筛选事件需要携带实际子组件 ID，才能命中组件的数据集绑定。 */
+  (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
+  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
 }>()
 
 const { t } = useI18n()

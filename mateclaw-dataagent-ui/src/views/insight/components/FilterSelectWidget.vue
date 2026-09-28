@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, FilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, FilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme, TimeRangeValue } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import FilterControlShell from './FilterControlShell.vue'
 import * as datasourceApi from '@/api/datasource'
@@ -55,6 +55,8 @@ defineOptions({
 const props = defineProps<{
   /** 组件配置 */
   component: InsightComponent
+  /** 预览态由仪表盘会话管理的选中值。 */
+  modelValue?: string | string[] | TimeRangeValue | null
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
   /** 正在编辑的组件标题图标样式即时预览 */
@@ -144,6 +146,18 @@ watch(
   },
   { immediate: true },
 )
+watch(() => props.modelValue, (value) => {
+  if (value === null) {
+    selectedValue.value = selectionBehavior.value.selectionMode === 'multiple' ? [] : ''
+  } else if (typeof value === 'string' || Array.isArray(value)) {
+    selectedValue.value = Array.isArray(value) ? [...value] : value
+  } else {
+    const defaultValue = filterConfig.value?.defaultValue
+    selectedValue.value = defaultValue == null
+      ? (selectionBehavior.value.selectionMode === 'multiple' ? [] : '')
+      : (Array.isArray(defaultValue) ? [...defaultValue] : defaultValue)
+  }
+}, { immediate: true })
 
 function handleChange(value: string | string[]): void {
   const field = filterConfig.value?.field ?? ''

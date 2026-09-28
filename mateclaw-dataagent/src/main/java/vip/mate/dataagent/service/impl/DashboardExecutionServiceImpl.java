@@ -130,6 +130,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         runnerRequest.put("datasetReadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/read");
         // 新契约：prepared input 只按 inputName 读取；旧 datasetReadEndpoint 保留供旧脚本兼容
         runnerRequest.put("datasetInputEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/input");
+        runnerRequest.put("preferPreparedInputs", !plans.isEmpty());
         runnerRequest.put("resultUploadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/result");
         runnerRequest.put("readToken", prepared.readToken());
         DashboardExecutionEntity execution = new DashboardExecutionEntity();
@@ -170,11 +171,30 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         JsonNode pages = schema.path("pages");
         if (!pages.isArray()) return null;
         for (JsonNode page : pages) {
-            JsonNode components = page.path("components");
-            if (!components.isArray()) continue;
-            for (JsonNode component : components) {
-                if (componentId.equals(text(component, "id"))) return component;
-            }
+            JsonNode match = findComponentInChildren(page.path("components"), componentId);
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    /** Find a component in the dashboard tree, including combination-card children and tab children. */
+    private JsonNode findComponentInChildren(JsonNode children, String componentId) {
+        if (!children.isArray()) return null;
+        for (JsonNode component : children) {
+            if (componentId.equals(text(component, "id"))) return component;
+            JsonNode nested = findComponentInChildren(component.path("children"), componentId);
+            if (nested != null) return nested;
+            nested = findComponentInTabs(component.path("containerConfig").path("tabs"), componentId);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    private JsonNode findComponentInTabs(JsonNode tabs, String componentId) {
+        if (!tabs.isArray()) return null;
+        for (JsonNode tab : tabs) {
+            JsonNode nested = findComponentInChildren(tab.path("children"), componentId);
+            if (nested != null) return nested;
         }
         return null;
     }

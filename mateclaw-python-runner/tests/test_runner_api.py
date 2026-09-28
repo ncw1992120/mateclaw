@@ -58,6 +58,31 @@ def test_task_parameters_reach_injected_dataset_client():
     assert status["status"] == "SUCCEEDED"
     assert status["status"] == "SUCCEEDED" and status["result"]["data"]["rows"] == [{"region": "east"}]
 
+def test_prefer_prepared_inputs_is_passed_to_task_executor(monkeypatch):
+    captured = {}
+
+    def fake_start(task_id, script, env, *args, **kwargs):
+        captured.update(env)
+        return {"status": "SUCCEEDED", "output": "", "result": None, "returncode": 0}
+
+    monkeypatch.setattr("runner.app.executor.start", fake_start)
+    response = client.post("/v1/tasks", json={
+        "taskId": "t-prepared-inputs",
+        "script": "result = []",
+        "datasetReadEndpoint": "http://dataagent/read",
+        "datasetInputEndpoint": "http://dataagent/input",
+        "preferPreparedInputs": True,
+        "readToken": "secret",
+    })
+    assert response.status_code == 202
+    import time
+    for _ in range(100):
+        status = client.get("/v1/tasks/t-prepared-inputs").json()
+        if status["status"] != "RUNNING": break
+        time.sleep(.02)
+    assert status["status"] == "SUCCEEDED"
+    assert captured["MATECLAW_PREFER_PREPARED_INPUT"] == "1"
+
 def test_executor_crash_is_terminal_failure(monkeypatch):
     def crash(*args, **kwargs):
         raise RuntimeError("executor crashed")

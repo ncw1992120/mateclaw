@@ -29,12 +29,20 @@ public class AloudataAnalysisViewQueryCompiler {
         view.metrics().forEach(m -> addNames(allowedFields, m));
         view.dimensions().forEach(d -> addNames(allowedFields, d));
         List<String> filters = new ArrayList<>();
+        List<String> metricTimeFilters = new ArrayList<>();
         for (DatasetFilter filter : request.filters()) {
             if (!allowedFields.contains(filter.field())) {
                 throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
                         "指标视图不支持字段筛选: " + filter.field());
             }
-            filters.add(toExpression(filter));
+            String expression = toExpression(filter);
+            if ("metric_time".equals(filter.field()) && "dimension".equalsIgnoreCase(filter.role())) {
+                // metric_time controls the interval, not output grain. Keeping it in `filters` makes
+                // Aloudata apply its default metric-time grouping when dimensions is empty.
+                metricTimeFilters.add(expression);
+            } else {
+                filters.add(expression);
+            }
         }
 
         List<String> projectedColumns = resolveColumns(view, request.columns());
@@ -53,15 +61,28 @@ public class AloudataAnalysisViewQueryCompiler {
         body.put("metrics", selectedNames(view.metrics(), projectedSet));
         body.put("dimensions", selectedNames(view.dimensions(), projectedSet));
         if (!filters.isEmpty()) body.put("filters", filters);
-        if (view.timeConstraint() != null && !view.timeConstraint().isBlank()) {
-            body.put("timeConstraint", view.timeConstraint());
-        }
+        String timeConstraint = combineTimeConstraints(view.timeConstraint(), metricTimeFilters);
+        if (timeConstraint != null) body.put("timeConstraint", timeConstraint);
         if (request.limit() != null) body.put("limit", request.limit());
         if (request.offset() != null) body.put("offset", request.offset());
         if (!orders.isEmpty()) body.put("orders", orders);
         if (request.requestTotalCount()) body.put("isQueryTotalCount", true);
         body.put("queryResultType", "DATA");
         return Map.copyOf(body);
+    }
+
+    private String combineTimeConstraints(String viewTimeConstraint, List<String> metricTimeFilters) {
+        List<String> constraints = new ArrayList<>();
+        if (viewTimeConstraint != null && !viewTimeConstraint.isBlank()) {
+            constraints.add(viewTimeConstraint.trim());
+        }
+        if (!metricTimeFilters.isEmpty()) {
+            constraints.add(metricTimeFilters.size() == 1
+                    ? metricTimeFilters.get(0)
+                    : "(" + String.join(" AND ", metricTimeFilters) + ")");
+        }
+        if (constraints.isEmpty()) return null;
+        return constraints.size() == 1 ? constraints.get(0) : "(" + String.join(" AND ", constraints) + ")";
     }
 
     /** 展示列是输出契约；其余指标/维度不进入查询，时间筛选字段可只过滤而不参与分组。 */

@@ -28,12 +28,14 @@
             <FilterSelectWidget
               v-if="comp.type === 'filter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :model-value="runtimeFilterState?.[comp.id] ? (runtimeFilterState[comp.id].value ?? null) : undefined"
               :show-title="false"
               @change="(payload) => handleFilterChange(comp.id, payload)"
             />
             <TimeFilterWidget
               v-else-if="comp.type === 'timeFilter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :model-value="runtimeFilterState?.[comp.id]?.value"
               :show-title="false"
               @change="(payload) => handleTimeFilterChange(comp.id, payload)"
             />
@@ -210,6 +212,7 @@
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getWidgetComponent(item.i)!"
+                :model-value="runtimeFilterState?.[item.i] ? (runtimeFilterState[item.i].value ?? null) : undefined"
                 :show-title="true"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
@@ -218,6 +221,7 @@
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getWidgetComponent(item.i)!"
+                :model-value="runtimeFilterState?.[item.i]?.value"
                 :show-title="true"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
@@ -236,6 +240,7 @@
                 v-else-if="getComponent(item.i)?.type === 'combination'"
                 :component="getComponent(item.i)!"
                 :component-data-map="componentDataMapWithFieldLabels"
+                :runtime-filter-state="runtimeFilterState"
                 :editable="editable"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
@@ -250,9 +255,11 @@
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
                 @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
-                @open-metric-style="(payload) => emit('open-metric-style', payload)"
                 @edit-child-title-icon-style="openChildTitleIconStyle"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
+                @open-metric-style="(p) => emit('open-metric-style', p)"
+                @filter-change="(payload) => emit('filter-change', payload)"
+                @time-filter-change="(payload) => emit('time-filter-change', payload)"
               />
             </template>
           </div>
@@ -288,7 +295,7 @@ import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
-import type { ComponentTitleIconStyle, DashboardDatasetInput, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { ComponentTitleIconStyle, DashboardDatasetInput, DashboardRuntimeFilterState, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -318,6 +325,8 @@ const props = withDefaults(defineProps<{
   components: InsightComponent[]
   /** 组件渲染数据映射（componentId -> data） */
   componentDataMap?: Record<string, InsightComponentData>
+  /** 预览会话中的筛选值，用于刷新/重渲染后维持控件状态。 */
+  runtimeFilterState?: DashboardRuntimeFilterState
   /** 仪表盘级数据集输入；旧版组件管道可能只保存在此处 */
   datasetInputs?: DashboardDatasetInput[]
   /** 是否可编辑 */

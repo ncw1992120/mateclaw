@@ -419,7 +419,7 @@ public class LocalAloudataFixtures {
             rows = filterRows(rows, expressions);
             String timeConstraint = firstString(params.get("timeConstraint"));
             if (timeConstraint != null) {
-                rows = filterRows(rows, List.of(timeConstraint));
+                rows = filterTimeConstraintRows(rows, timeConstraint);
             }
         } catch (InvalidFilterExpressionException e) {
             log.warn("[local-mock] metrics_query 收到无法解析的筛选条件，按真实服务行为返回 SM99002");
@@ -662,6 +662,25 @@ public class LocalAloudataFixtures {
             rows = kept;
         }
         return rows;
+    }
+
+    /**
+     * 本地样例数据无法动态计算视图内的 dateTrunc/DATEADD 相对日期表达式；跳过这些视图约束，
+     * 但仍按本地支持的语法严格执行同一 timeConstraint 中明确的字段比较条件。
+     */
+    private List<Map<String, Object>> filterTimeConstraintRows(List<Map<String, Object>> rows, String expression) {
+        Pattern simpleCondition = Pattern.compile(
+                "\\['?([^'\\]]+)'?\\]\\s*(<>|>=|<=|=|>|<)\\s*(\\\"[^\\\"]*\\\"|'[^']*'|[^\\s)]+)",
+                Pattern.CASE_INSENSITIVE);
+        Matcher matcher = simpleCondition.matcher(expression);
+        List<String> supportedClauses = new ArrayList<>();
+        while (matcher.find()) {
+            supportedClauses.add(matcher.group());
+        }
+        if (supportedClauses.isEmpty() && !expression.matches("(?is).*\\b(dateTrunc|dateadd)\\s*\\(.*")) {
+            throw new InvalidFilterExpressionException(expression);
+        }
+        return filterRows(rows, supportedClauses);
     }
 
     /**

@@ -393,6 +393,28 @@ class LocalAloudataFixturesTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryIgnoresUnsupportedViewDateFunctionsButAppliesExplicitDateRange() {
+        String viewDateRange = "(((dateTrunc(['metric_time'], \"DAY\")) >= "
+                + "(DATEADD(DateTrunc(TODAY(), \"DAY\"), -(364), \"DAY\")))) AND "
+                + "(((dateTrunc(['metric_time'], \"DAY\")) <= "
+                + "(DATEADD(DateTrunc(TODAY(), \"DAY\"), 0, \"DAY\")))) AND "
+                + "([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-02\")";
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_distr_count_1"),
+                "dimensions", List.of("metric_time"),
+                "timeConstraint", viewDateRange), null);
+
+        assertEquals(Boolean.TRUE, body.get("success"));
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, List<Map<String, Object>>> columns = (Map<String, List<Map<String, Object>>>)
+                ((Map<String, Object>) data.get("table")).get("columns");
+        assertEquals(1, columns.get("metric_time").size());
+        assertEquals("2026-09-01", columns.get("metric_time").getFirst().get("value"));
+        assertEquals(1470, ((Number) columns.get("digo_distr_count_1").getFirst().get("value")).intValue());
+    }
+
+    @Test
     void metricsQueryAcceptsAllDocumentedOptionalParameterShapes() {
         Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
                 "metrics", List.of("digo_cust_asset_in"),

@@ -13,12 +13,14 @@ MAX_FILTERS = 50
 
 class DatasetClient:
     def __init__(self, endpoint: str, read_token: str, parameters: dict[str, Any] | None = None,
-                 timeout: float = 60, input_endpoint: str | None = None):
+                 timeout: float = 60, input_endpoint: str | None = None,
+                 prefer_prepared_input: bool = False):
         if not endpoint.startswith("http://") and not endpoint.startswith("https://"):
             raise ValueError("dataset endpoint must be HTTP(S)")
         if not read_token: raise ValueError("read token is required")
         self._endpoint, self._token, self._timeout = endpoint, read_token, timeout
         self._input_endpoint = input_endpoint
+        self._prefer_prepared_input = prefer_prepared_input
         self.params = Params(parameters or {})
 
     def input(self, input_name: str) -> DatasetInput:
@@ -102,6 +104,9 @@ class DatasetClient:
         for value in normalized:
             if value["operator"] in {"in", "not_in"} and isinstance(value["value"], (list, tuple)) and len(value["value"]) == 0:
                 return DatasetInput(input_name, (), ())
+        if self._prefer_prepared_input:
+            prepared = self.input(input_name)
+            return self._apply_prepared_read_options(prepared, columns, normalized)
         payload = {"inputName": input_name, "columns": list(columns or []),
                    "filters": normalized, "parameters": dict(self.params)}
         request = urllib.request.Request(self._endpoint, data=json.dumps(payload).encode(), method="POST",
@@ -123,3 +128,48 @@ class DatasetClient:
                                     c.get("nullable", True), c.get("semanticRole")) for c in descriptor.get("schema", []))
         rows = tuple(payload.get("rows", ()))
         return DatasetInput(input_name, schema, rows, payload.get("objectRef"))
+
+    @staticmethod
+    def _apply_prepared_read_options(prepared: DatasetInput, columns, filters) -> DatasetInput:
+        """Keep legacy read(columns, filters) semantics on the already-filtered prepared rows."""
+        selected = list(columns or [])
+        schema_by_name = {column.name: column for column in prepared.schema}
+        unknown = [name for name in selected if name not in schema_by_name]
+        if unknown:
+            raise ValueError(f"unknown prepared input columns: {', '.join(unknown)}")
+        if not selected:
+            selected = [column.name for column in prepared.schema]
+        rows = prepared._materialized_rows()
+        for condition in filters:
+            field = condition["field"]
+            if field not in schema_by_name:
+                raise ValueError(f"unknown prepared input filter field: {field}")
+            operator = condition["operator"].lower()
+            expected = condition.get("value")
+
+            def matches(row):
+                actual = row.get(field)
+                try:
+                    left, right = float(actual), float(expected)
+                    compare = (left > right) - (left < right)
+                except (TypeError, ValueError):
+                    left, right = str(actual) if actual is not None else "", str(expected) if expected is not None else ""
+                    compare = (left > right) - (left < right)
+                if operator == "eq": return actual == expected
+                if operator == "neq": return actual != expected
+                if operator == "gt": return compare > 0
+                if operator == "gte": return compare >= 0
+                if operator == "lt": return compare < 0
+                if operator == "lte": return compare <= 0
+                if operator == "in": return actual in expected
+                if operator == "not_in": return actual not in expected
+                if operator == "between": return str(expected[0]) <= str(actual) <= str(expected[1])
+                if operator == "contains": return str(expected) in str(actual)
+                if operator == "is_null": return actual is None
+                if operator == "is_not_null": return actual is not None
+                raise ValueError(f"unsupported filter operator: {operator}")
+
+            rows = tuple(row for row in rows if matches(row))
+        projected = tuple({name: row.get(name) for name in selected} for row in rows)
+        schema = tuple(schema_by_name[name] for name in selected)
+        return DatasetInput(prepared.input_name, schema, projected, row_count=len(projected))

@@ -167,3 +167,80 @@ def test_metrics_query_can_filter_by_a_dimension_not_returned_in_the_projection(
     columns = response["data"]["table"]["columns"]
     assert columns["metric_time"] == [{"value": "2026-09-01", "flag": 0, "count": 1}]
     assert columns["digo_strategy_cnt"] == [{"value": 9, "flag": 0, "count": 1}]
+
+
+def test_strategy_summary_fixture_has_three_days_and_metric_specific_values():
+    common = {
+        "metrics": [
+            "digo_strategy_cnt_distr_1",
+            "digo_distr_count_1",
+            "digo_distr_user_cnt_a",
+            "digo_touch_cnt_1",
+            "digo_touch_user_cnt_1",
+        ],
+        "dimensions": [],
+        "filters": [
+            '([metric_time] >= "2026-09-01" AND [metric_time] < "2026-09-04")'
+        ],
+        "limit": 100,
+    }
+
+    values_by_metric_name = {}
+    for metric_name in [
+        "经纪个人客户场内公募非货当年净买入",
+        "经纪个人场内公募非货交易量",
+        "经纪个人场内公募非货加仓交易量",
+    ]:
+        response = aloudata_mock_server.handle_metrics_query(
+            {}, {**common, "filters": [*common["filters"], f'[metric_name] = "{metric_name}"']}, {}
+        )
+        columns = response["data"]["table"]["columns"]
+        values_by_metric_name[metric_name] = tuple(
+            columns[metric][0]["value"] for metric in common["metrics"]
+        )
+
+    assert values_by_metric_name == {
+        "经纪个人客户场内公募非货当年净买入": (21, 1470, 1215, 984, 789),
+        "经纪个人场内公募非货交易量": (30, 1560, 1287, 1038, 825),
+        "经纪个人场内公募非货加仓交易量": (39, 1650, 1359, 1092, 861),
+    }
+
+
+def test_strategy_conversion_dataset_fixture_includes_sep_3():
+    response = aloudata_mock_server.handle_metrics_query(
+        {},
+        {
+            "metrics": ["digo_trd_fund_amt_inout_cy_jjgr"],
+            "dimensions": ["metric_time"],
+            "filters": [
+                '([metric_time] >= "2026-09-01" AND [metric_time] < "2026-09-04")'
+            ],
+            "limit": 100,
+        },
+        {},
+    )
+
+    columns = response["data"]["table"]["columns"]
+    assert [cell["value"] for cell in columns["metric_time"]] == [
+        "2026-09-01", "2026-09-02", "2026-09-03"
+    ]
+
+
+def test_metrics_query_applies_date_bounds_inside_aloudata_time_constraint():
+    response = aloudata_mock_server.handle_metrics_query(
+        {},
+        {
+            "metrics": ["digo_strategy_cnt_distr_1"],
+            "dimensions": ["metric_time"],
+            "timeConstraint": (
+                '((((dateTrunc([\'metric_time\'], "DAY")) >= (DATEADD(DateTrunc(TODAY(), "DAY"), -(364), "DAY")))) '
+                'AND (((dateTrunc([\'metric_time\'], "DAY")) <= (DATEADD(DateTrunc(TODAY(), "DAY"), 0, "DAY")))) '
+                'AND ([metric_time] >= "2026-09-01" AND [metric_time] < "2026-09-02"))'
+            ),
+            "limit": 100,
+        },
+        {},
+    )
+
+    columns = response["data"]["table"]["columns"]
+    assert [cell["value"] for cell in columns["metric_time"]] == ["2026-09-01"]

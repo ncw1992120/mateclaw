@@ -17,8 +17,8 @@ const stubs = {
   KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
   ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
   DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
-  FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component'], template: '<div />' },
-  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component'], template: '<div />' },
+  FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], template: '<div />' },
+  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue'], template: '<div />' },
   AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['componentData'], template: '<div />' },
   CombinationCardWidget: { name: 'CombinationCardWidget', props: ['componentDataMap', 'sampleMode'], template: '<div />' },
 }
@@ -300,6 +300,38 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('component')).toEqual(filter)
     expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('component')).toEqual(timeFilter)
+  })
+
+  it('restores runtime values into global filter controls after the preview canvas remounts', () => {
+    const filter = {
+      id: 'metric-filter',
+      type: 'filter' as const,
+      title: '转化指标名称',
+      config: { field: 'metric_name', defaultValue: '默认指标', scope: 'global' },
+      position: { x: 0, y: 0, w: 4, h: 2 },
+    }
+    const timeFilter = {
+      id: 'date-filter',
+      type: 'timeFilter' as const,
+      title: '指标日期',
+      config: { field: 'metric_time', scope: 'global' },
+      position: { x: 4, y: 0, w: 4, h: 2 },
+    }
+    const selectedRange = { preset: 'custom' as const, start: '2026-09-01', end: '2026-09-03' }
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [filter, timeFilter, { ...component, config: { datasetPipeline: { datasetInputs: [{ datasetId: '101' }] } } }],
+        editable: false,
+        runtimeFilterState: {
+          'metric-filter': { field: 'metric_name', scope: 'global', targetComponentIds: [], value: '用户选择的指标' },
+          'date-filter': { field: 'metric_time', scope: 'global', targetComponentIds: [], value: selectedRange },
+        },
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('modelValue')).toBe('用户选择的指标')
+    expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('modelValue')).toEqual(selectedRange)
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {

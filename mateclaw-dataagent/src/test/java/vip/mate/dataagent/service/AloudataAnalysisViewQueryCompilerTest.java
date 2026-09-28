@@ -80,7 +80,45 @@ class AloudataAnalysisViewQueryCompilerTest {
 
         assertEquals(List.of("revenue"), body.get("metrics"));
         assertEquals(List.of("region"), body.get("dimensions"));
-        assertEquals(List.of("[metric_time] >= \"2026-09-01\"", "[metric_time] < \"2026-09-02\""), body.get("filters"));
+        assertEquals("([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-02\")",
+                body.get("timeConstraint"));
+    }
+
+    @Test
+    void sendsDateRangeAsTimeConstraintWhenNoDimensionIsDisplayed() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-03")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("revenue"), body.get("metrics"));
+        assertEquals(List.of(), body.get("dimensions"));
+        assertEquals("([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-03\")",
+                body.get("timeConstraint"));
+        assertFalse(body.containsKey("filters"));
+    }
+
+    @Test
+    void combinesMetricDateFiltersWithViewTimeConstraintWithoutGroupingByDate() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                "([metric_time__day] >= \"2026-09-01\")", List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-03")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals("(([metric_time__day] >= \"2026-09-01\") AND ([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-03\"))",
+                body.get("timeConstraint"));
+        assertEquals(List.of(), body.get("dimensions"));
+        assertFalse(body.containsKey("filters"));
     }
 
     @Test

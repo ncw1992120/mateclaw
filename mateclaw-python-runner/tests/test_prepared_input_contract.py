@@ -192,3 +192,56 @@ def test_read_legacy_contract_unchanged(server):
         assert captured["filters"][0]["field"] == "a"
     finally:
         FakeDataAgent.do_POST = original_do_POST
+
+
+def test_read_uses_prepared_input_when_dashboard_query_plan_is_enabled(server):
+    FakeDataAgent.prepared["table_wd"] = {
+        "schema": [
+            {"name": "metric_time", "dataType": "STRING"},
+            {"name": "metric_id", "dataType": "STRING"},
+        ],
+        "rows": [
+            {"metric_time": "2026-09-01", "metric_id": "A"},
+        ],
+    }
+    client = DatasetClient(
+        server + "/internal/v1/script-tasks/task-1/datasets/read",
+        "token-1",
+        input_endpoint=server + "/internal/v1/script-tasks/task-1/datasets/input",
+        prefer_prepared_input=True,
+    )
+
+    result = client.read("table_wd")
+
+    assert result.rows == ({"metric_time": "2026-09-01", "metric_id": "A"},)
+    assert FakeDataAgent.requests[-1]["path"].endswith("/datasets/input")
+    assert FakeDataAgent.requests[-1]["body"] == {"inputName": "table_wd"}
+
+
+def test_prepared_read_preserves_local_projection_and_filter_options(server):
+    FakeDataAgent.prepared["table_wd"] = {
+        "schema": [
+            {"name": "metric_time", "dataType": "STRING"},
+            {"name": "metric_id", "dataType": "STRING"},
+        ],
+        "rows": [
+            {"metric_time": "2026-09-01", "metric_id": "A"},
+            {"metric_time": "2026-09-02", "metric_id": "B"},
+        ],
+    }
+    client = DatasetClient(
+        server + "/internal/v1/script-tasks/task-1/datasets/read",
+        "token-1",
+        input_endpoint=server + "/internal/v1/script-tasks/task-1/datasets/input",
+        prefer_prepared_input=True,
+    )
+
+    result = client.read(
+        "table_wd",
+        columns=["metric_id"],
+        filters=[{"field": "metric_time", "operator": "eq", "value": "2026-09-01"}],
+    )
+
+    assert result.rows == ({"metric_id": "A"},)
+    assert [column.name for column in result.schema] == ["metric_id"]
+    assert FakeDataAgent.requests[-1]["path"].endswith("/datasets/input")

@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
@@ -38,6 +38,8 @@ defineOptions({
 const props = defineProps<{
   /** 组件配置 */
   component: InsightComponent
+  /** 预览态由仪表盘会话管理的时间范围。 */
+  modelValue?: TimeRangeValue | string | string[]
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
   /** 正在编辑的组件标题图标样式即时预览 */
@@ -54,6 +56,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const customDateRange = ref<[string, string] | null>(null)
+watch(() => props.modelValue, (value) => {
+  customDateRange.value = value && typeof value === 'object' && !Array.isArray(value) && 'start' in value && 'end' in value
+    ? [value.start, value.end]
+    : null
+}, { immediate: true })
 
 /** 从组件 config 提取时间筛选配置 */
 const timeFilterConfig = computed<TimeFilterComponentConfig>(() => {

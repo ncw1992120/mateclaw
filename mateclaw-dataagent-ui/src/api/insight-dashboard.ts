@@ -70,6 +70,17 @@ export function getExecutionResult(executionId: string) {
   return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`)
 }
 
+/** 对 Runner 的完整输出结果应用已确认的最终结果查询配置。 */
+export function previewExecutionResult(executionId: string, request: {
+  parameters?: Record<string, unknown>
+  requestId?: string
+  finalResultQueryConfig: Record<string, unknown>
+}) {
+  return api.post<Record<string, unknown>>(
+    `${BASE_URL}/executions/${encodeURIComponent(executionId)}/result/preview`, request,
+  )
+}
+
 /** 取消脚本执行（幂等由 Runner 保证） */
 export function cancelExecution(executionId: string) {
   return api.post<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}/cancel`)

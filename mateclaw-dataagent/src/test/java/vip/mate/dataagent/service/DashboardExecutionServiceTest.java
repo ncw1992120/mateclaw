@@ -7,9 +7,12 @@ import vip.mate.dataagent.dataset.DatasetInputDescriptor;
 import vip.mate.dataagent.dataset.DatasetSourceType;
 import vip.mate.dataagent.dto.DashboardExecutionRequest;
 import vip.mate.dataagent.dto.InsightDashboardVO;
+import vip.mate.dataagent.dto.DatasetQueryPlanDTO;
+import vip.mate.dataagent.dto.QueryContextDTO;
 import vip.mate.dataagent.service.code.PythonExecutionService;
 import vip.mate.dataagent.service.code.ScriptTaskPreparationService;
 import vip.mate.dataagent.service.impl.DashboardExecutionServiceImpl;
+import vip.mate.dataagent.service.impl.QueryPlannerImpl;
 import vip.mate.dataagent.repository.DashboardExecutionMapper;
 import vip.mate.dataagent.objectref.ObjectRefService;
 
@@ -21,6 +24,90 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DashboardExecutionServiceTest {
+    @Test
+    void executesNestedTabComponentWithIndependentPerInputFilterPlans() throws Exception {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        ObjectRefService objectRefs = mock(ObjectRefService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        when(guard.currentUserId()).thenReturn(8L);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setId(42L);
+        dashboard.setSchemaJson("{}");
+        when(dashboards.getDashboard(42L)).thenReturn(dashboard);
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), anyMap()))
+                .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result = []", Map.of(), Map.of(), "token"));
+        when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
+
+        String schemaJson = """
+                {
+                  "pages": [{"id": "main", "components": [{
+                    "id": "combination", "type": "combination",
+                    "containerConfig": {"tabs": [{"id": "tab-1", "children": [{
+                      "id": "nested-python", "type": "table",
+                      "config": {"datasetPipeline": {
+                        "script": "result = []",
+                        "boundFilterComponentIds": ["date-filter", "region-filter"],
+                        "datasetInputs": [
+                          {"datasetId": 9, "inputName": "input_a", "queryConfig": {
+                            "displayFields": [{"field": "event_date_a", "title": "日期"}],
+                            "queryableFields": [{"name": "event_date_a", "role": "dimension"}, {"name": "region_a", "role": "dimension"}],
+                            "parameterBindings": [
+                              {"filterComponentId": "date-filter", "parameterName": "date_from_a", "field": "event_date_a", "operator": "gte"},
+                              {"filterComponentId": "region-filter", "parameterName": "regions_a", "field": "region_a", "operator": "in"}
+                            ]
+                          }},
+                          {"datasetId": 10, "inputName": "input_b", "queryConfig": {
+                            "displayFields": [{"field": "event_date_b", "title": "日期"}],
+                            "queryableFields": [{"name": "event_date_b", "role": "dimension"}, {"name": "region_b", "role": "dimension"}],
+                            "parameterBindings": [
+                              {"filterComponentId": "date-filter", "parameterName": "date_from_b", "field": "event_date_b", "operator": "gte"},
+                              {"filterComponentId": "region-filter", "parameterName": "regions_b", "field": "region_b", "operator": "in"}
+                            ]
+                          }},
+                          {"datasetId": 11, "inputName": "input_unbound", "queryConfig": {
+                            "displayFields": [{"field": "unfiltered_value", "title": "未绑定"}],
+                            "queryableFields": [{"name": "unfiltered_value", "role": "dimension"}],
+                            "parameterBindings": []
+                          }}
+                        ]
+                      }}
+                    }]}]}
+                  }] }]
+                }
+                """;
+        Map<String, Object> runtimeParameters = Map.of(
+                "date_from_a", "2026-09-01", "date_from_b", "2026-09-01",
+                "regions_a", List.of("north", "south"), "regions_b", List.of("north", "south"));
+        QueryContextDTO queryContext = new QueryContextDTO(
+                "dashboard-42", "nested-python", null, runtimeParameters, null, null, "request-123");
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(),
+                executionMapper, objectRefs, new vip.mate.dataagent.service.code.ScriptResultContractService(),
+                "http://mateclaw-dataagent:18089/dataagent/api/", new QueryPlannerImpl());
+
+        service.submit(42L, new DashboardExecutionRequest(Map.of(), "nested-python", schemaJson, queryContext));
+
+        var plansCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), plansCaptor.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, DatasetQueryPlanDTO> plans = plansCaptor.getValue();
+        assertEquals(List.of("event_date_a", "region_a"), plans.get("input_a").filters().stream()
+                .map(DatasetQueryPlanDTO.FilterSpec::field).toList());
+        assertEquals(List.of("event_date_b", "region_b"), plans.get("input_b").filters().stream()
+                .map(DatasetQueryPlanDTO.FilterSpec::field).toList());
+        assertTrue(plans.get("input_a").filters().stream().anyMatch(filter ->
+                filter.field().equals("region_a") && filter.value().equals(List.of("north", "south"))));
+        assertTrue(plans.get("input_unbound").filters().isEmpty());
+
+        var requestCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(runner).submit(requestCaptor.capture());
+        assertEquals(Map.of(), requestCaptor.getValue().get("parameters"));
+        assertEquals(Boolean.TRUE, requestCaptor.getValue().get("preferPreparedInputs"));
+    }
+
     @Test
     void executesTransientPreviewSchemaWithoutReloadingOrSavingDashboardSchema() {
         InsightDashboardService dashboards = mock(InsightDashboardService.class);
@@ -91,6 +178,7 @@ class DashboardExecutionServiceTest {
         assertEquals(120, limits.get("timeout_seconds"));
         assertEquals("http://mateclaw-dataagent:18089/dataagent/api/internal/v1/script-tasks/" + executionId + "/datasets/read", runnerRequest.get("datasetReadEndpoint"));
         assertEquals("secret-token", runnerRequest.get("readToken"));
+        assertEquals(Boolean.FALSE, runnerRequest.get("preferPreparedInputs"));
         assertFalse(runnerRequest.containsKey("requirements"));
     }
 

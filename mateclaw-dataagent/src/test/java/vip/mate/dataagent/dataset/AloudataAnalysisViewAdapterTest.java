@@ -107,9 +107,9 @@ class AloudataAnalysisViewAdapterTest {
         verify(apiClient).callWithParams(eq("metrics_query"), any(), argThat(p ->
                 p.get("metrics").equals(List.of("revenue"))
                         && p.get("dimensions").equals(List.of("region"))
-                        && p.get("filters").equals(List.of(
-                                "[metric_time] >= \"2026-09-01\"",
-                                "[metric_time] < \"2026-09-02\""))));
+                        && p.get("timeConstraint").equals(
+                                "([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-02\")")
+                        && !p.containsKey("filters")));
     }
 
     @Test

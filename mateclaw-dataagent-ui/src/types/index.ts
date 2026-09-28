@@ -1594,6 +1594,17 @@ export interface QueryContext {
   requestId?: string
 }
 
+/** 一个页面筛选器在当前预览会话中的值及其绑定作用范围。 */
+export interface DashboardRuntimeFilterValue {
+  field: string
+  value: string | string[] | TimeRangeValue | undefined
+  scope: FilterScope
+  targetComponentIds: string[]
+}
+
+/** 按筛选器组件 ID 索引的运行态；与 Schema 中的 defaultValue 分离。 */
+export type DashboardRuntimeFilterState = Record<string, DashboardRuntimeFilterValue>
+
 /** Python 输出阶段的运行时查询值；不向输入 Query Planner 反向下推。 */
 export interface FinalResultQueryContext {
   parameters: Record<string, unknown>

@@ -1,12 +1,31 @@
 import { ref, reactive, computed } from 'vue'
 import type {
   InsightComponent,
+  InsightCombinationChild,
+  DashboardRuntimeFilterState,
   DashboardFilterContext,
   TimeRangeValue,
   FilterScope,
   FilterComponentConfig,
   TimeFilterComponentConfig,
 } from '@/types'
+
+/** Flatten container children and tab children while retaining their component IDs. */
+export function collectDashboardComponents(components: InsightComponent[]): InsightComponent[] {
+  const result: InsightComponent[] = []
+  const visited = new Set<string>()
+  const visit = (component: InsightComponent | InsightCombinationChild): void => {
+    if (visited.has(component.id)) return
+    visited.add(component.id)
+    result.push(component as InsightComponent)
+    for (const child of component.children ?? []) visit(child)
+    for (const tab of component.containerConfig?.tabs ?? []) {
+      for (const child of tab.children ?? []) visit(child)
+    }
+  }
+  components.forEach(visit)
+  return result
+}
 
 /**
  * 仪表盘筛选上下文管理（支持作用范围机制）
@@ -36,6 +55,41 @@ export function useDashboardFilterContext(
     timeRange?: TimeRangeValue
     dimensionFilters: Record<string, string | string[]>
   }>>({})
+  /** 当前运行态按 filter component id 保存，避免同字段筛选器互相覆盖。 */
+  const runtimeFilterState = reactive<DashboardRuntimeFilterState>({})
+
+  const allComponents = () => collectDashboardComponents(components())
+
+  function filterMetadata(filterComponentId: string): Pick<DashboardRuntimeFilterState[string], 'field' | 'scope' | 'targetComponentIds'> | undefined {
+    const comp = allComponents().find(c => c.id === filterComponentId)
+    if (!comp) return undefined
+    if (comp.type === 'filter') {
+      const config = comp.config as FilterComponentConfig | undefined
+      if (!config?.field) return undefined
+      return { field: config.field, scope: config.scope ?? 'global', targetComponentIds: [...(config.targetComponentIds ?? [])] }
+    }
+    if (comp.type === 'timeFilter') {
+      const config = comp.config as TimeFilterComponentConfig | undefined
+      if (!config?.field) return undefined
+      return { field: config.field, scope: config.scope ?? 'global', targetComponentIds: [...(config.targetComponentIds ?? [])] }
+    }
+    return undefined
+  }
+
+  function setRuntimeFilterValue(filterComponentId: string, value: DashboardRuntimeFilterState[string]['value']): void {
+    const metadata = filterMetadata(filterComponentId)
+    if (!metadata) return
+    runtimeFilterState[filterComponentId] = { ...metadata, value: Array.isArray(value) ? [...value] : value }
+  }
+
+  /** Snapshot the latest values so async preview refreshes never consult configuration defaults. */
+  function getRuntimeFilterState(): DashboardRuntimeFilterState {
+    return Object.fromEntries(Object.entries(runtimeFilterState).map(([id, entry]) => [id, {
+      ...entry,
+      targetComponentIds: [...entry.targetComponentIds],
+      value: Array.isArray(entry.value) ? [...entry.value] : entry.value,
+    }]))
+  }
 
   /** 当前全局筛选上下文（计算属性，不含 sourceFilterId） */
   const filterContext = computed<DashboardFilterContext>(() => ({
@@ -59,24 +113,10 @@ export function useDashboardFilterContext(
    * 获取筛选器组件的作用范围配置
    */
   function getFilterScope(filterComponentId: string): { scope: FilterScope; targetComponentIds: string[] } {
-    const comp = components().find(c => c.id === filterComponentId)
-    if (!comp) return { scope: 'global', targetComponentIds: [] }
-
-    if (comp.type === 'filter') {
-      const config = comp.config as FilterComponentConfig | undefined
-      return {
-        scope: config?.scope ?? 'global',
-        targetComponentIds: config?.targetComponentIds ?? [],
-      }
-    }
-    if (comp.type === 'timeFilter') {
-      const config = comp.config as TimeFilterComponentConfig | undefined
-      return {
-        scope: config?.scope ?? 'global',
-        targetComponentIds: config?.targetComponentIds ?? [],
-      }
-    }
-    return { scope: 'global', targetComponentIds: [] }
+    const metadata = filterMetadata(filterComponentId)
+    return metadata
+      ? { scope: metadata.scope, targetComponentIds: metadata.targetComponentIds }
+      : { scope: 'global', targetComponentIds: [] }
   }
 
   /**
@@ -97,7 +137,9 @@ export function useDashboardFilterContext(
   /**
    * 设置时间范围（由筛选器组件触发，支持作用范围）
    */
-  function setTimeRange(range: TimeRangeValue | undefined, sourceFilterId?: string): void {
+  function setTimeRange(range: TimeRangeValue | undefined | null, sourceFilterId?: string): void {
+    const activeRange = range == null ? undefined : range
+    if (sourceFilterId) setRuntimeFilterValue(sourceFilterId, activeRange)
     if (sourceFilterId) {
       const { scope } = getFilterScope(sourceFilterId)
       if (scope === 'scoped') {
@@ -105,40 +147,44 @@ export function useDashboardFilterContext(
         if (!scopedFilterStates[sourceFilterId]) {
           scopedFilterStates[sourceFilterId] = { dimensionFilters: {} }
         }
-        scopedFilterStates[sourceFilterId].timeRange = range
+        scopedFilterStates[sourceFilterId].timeRange = activeRange
         // 通知受影响的组件
         emitScopedFilterChange(sourceFilterId)
         return
       }
     }
     // 全局时间范围（不传 sourceFilterId，避免被误判为 scoped 筛选器）
-    globalTimeRange.value = range
+    globalTimeRange.value = activeRange
     onFilterChange({ ...filterContext.value })
   }
 
   /**
    * 设置维度筛选值（由筛选器组件触发，支持作用范围）
    */
-  function setDimensionFilter(field: string, value: string | string[] | undefined, sourceFilterId?: string): void {
+  function setDimensionFilter(field: string, value: string | string[] | undefined | null, sourceFilterId?: string): void {
+    const activeValue = value == null || value === '' || (Array.isArray(value) && value.length === 0)
+      ? undefined
+      : value
+    if (sourceFilterId) setRuntimeFilterValue(sourceFilterId, activeValue)
     if (sourceFilterId) {
       const { scope } = getFilterScope(sourceFilterId)
       if (scope === 'scoped') {
         if (!scopedFilterStates[sourceFilterId]) {
           scopedFilterStates[sourceFilterId] = { dimensionFilters: {} }
         }
-        if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+        if (activeValue === undefined) {
           delete scopedFilterStates[sourceFilterId].dimensionFilters[field]
         } else {
-          scopedFilterStates[sourceFilterId].dimensionFilters[field] = value
+          scopedFilterStates[sourceFilterId].dimensionFilters[field] = activeValue
         }
         emitScopedFilterChange(sourceFilterId)
         return
       }
     }
-    if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+    if (activeValue === undefined) {
       delete globalDimensionFilterMap[field]
     } else {
-      globalDimensionFilterMap[field] = value
+      globalDimensionFilterMap[field] = activeValue
     }
     onFilterChange({ ...filterContext.value })
   }
@@ -173,28 +219,54 @@ export function useDashboardFilterContext(
     Object.keys(scopedFilterStates).forEach((key) => {
       delete scopedFilterStates[key]
     })
+    for (const filterId of Object.keys(runtimeFilterState)) {
+      runtimeFilterState[filterId].value = undefined
+    }
     onFilterChange(filterContext.value)
   }
 
   /** 将筛选器配置中的默认值装载为初始运行态；不触发多次网络请求。 */
   function initializeDefaults(): void {
-    globalTimeRange.value = undefined
-    Object.keys(globalDimensionFilterMap).forEach((key) => delete globalDimensionFilterMap[key])
-    Object.keys(scopedFilterStates).forEach((key) => delete scopedFilterStates[key])
+    const currentFilters = allComponents().filter(comp => comp.type === 'filter' || comp.type === 'timeFilter')
+    const currentIds = new Set(currentFilters.map(comp => comp.id))
+    for (const filterId of Object.keys(runtimeFilterState)) {
+      if (!currentIds.has(filterId)) delete runtimeFilterState[filterId]
+    }
 
-    for (const comp of components()) {
-      if (comp.type !== 'filter') continue
-      const config = comp.config as FilterComponentConfig | undefined
-      const value = config?.defaultValue
-      if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) continue
-      const scope = config?.scope ?? 'global'
-      if (!config?.field) continue
-      if (scope === 'scoped') {
-        scopedFilterStates[comp.id] = {
-          dimensionFilters: { [config.field]: value },
+    globalTimeRange.value = undefined
+    Object.keys(globalDimensionFilterMap).forEach(key => delete globalDimensionFilterMap[key])
+    Object.keys(scopedFilterStates).forEach(key => delete scopedFilterStates[key])
+
+    for (const comp of currentFilters) {
+      const metadata = filterMetadata(comp.id)
+      if (!metadata) continue
+      if (runtimeFilterState[comp.id]) {
+        // Rebuild the compatibility contexts from the live value, never from defaultValue.
+        const value = runtimeFilterState[comp.id].value
+        if (metadata.scope === 'scoped') {
+          const state = scopedFilterStates[comp.id] ??= { dimensionFilters: {} }
+          if (comp.type === 'timeFilter') state.timeRange = value as TimeRangeValue | undefined
+          else if (typeof value === 'string' || Array.isArray(value)) state.dimensionFilters[metadata.field] = value
+        } else if (comp.type === 'timeFilter') {
+          globalTimeRange.value = value as TimeRangeValue | undefined
+        } else if (typeof value === 'string' || Array.isArray(value)) {
+          globalDimensionFilterMap[metadata.field] = value
         }
-      } else {
-        globalDimensionFilterMap[config.field] = value
+        continue
+      }
+
+      const config = comp.config as FilterComponentConfig | TimeFilterComponentConfig | undefined
+      const value = comp.type === 'filter' ? (config as FilterComponentConfig | undefined)?.defaultValue : undefined
+      const activeValue = value === null || value === '' || (Array.isArray(value) && value.length === 0) ? undefined : value
+      runtimeFilterState[comp.id] = { ...metadata, value: Array.isArray(activeValue) ? [...activeValue] : activeValue }
+      if (metadata.scope === 'scoped') {
+        const state = scopedFilterStates[comp.id] ??= { dimensionFilters: {} }
+        if (comp.type === 'timeFilter') state.timeRange = undefined
+        else if (typeof activeValue === 'string' || Array.isArray(activeValue)) state.dimensionFilters[metadata.field] = activeValue
+      } else if (comp.type === 'timeFilter') {
+        globalTimeRange.value = undefined
+      } else if (typeof activeValue === 'string' || Array.isArray(activeValue)) {
+        globalDimensionFilterMap[metadata.field] = activeValue
       }
     }
   }
@@ -204,7 +276,7 @@ export function useDashboardFilterContext(
    * 合并全局筛选 + 该组件绑定的所有专属筛选器
    */
   function getEffectiveFilterContextForComponent(componentId: string): DashboardFilterContext {
-    const comp = components().find(c => c.id === componentId)
+    const comp = allComponents().find(c => c.id === componentId)
     if (!comp) return filterContext.value
 
     const boundFilterIds = comp.boundFilterIds
@@ -242,6 +314,7 @@ export function useDashboardFilterContext(
     globalTimeRange,
     globalDimensionFilterMap,
     scopedFilterStates,
+    getRuntimeFilterState,
     filterContext,
     hasFilters,
     setTimeRange,
