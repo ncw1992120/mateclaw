@@ -26,6 +26,9 @@
         <mybatis-plus.version>3.5.16</mybatis-plus.version>
         <elasticsearch-client.version>8.19.16</elasticsearch-client.version>
         <agentscope.version>1.0.9</agentscope.version>
+        <clickhouse-jdbc.version>0.9.8</clickhouse-jdbc.version>
+        <starrocks-connector-j.version>1.1.1</starrocks-connector-j.version>
+        <mssql-jdbc.version>13.6.0.jre11</mssql-jdbc.version>
     </properties>
 
     <dependencyManagement>
@@ -105,6 +108,27 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ===== OLAP 与 SQL Server JDBC 驱动 ===== -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>${clickhouse-jdbc.version}</version>
+            <classifier>all</classifier>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>starrocks-connector-j</artifactId>
+            <version>${starrocks-connector-j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>${mssql-jdbc.version}</version>
             <scope>runtime</scope>
         </dependency>
 

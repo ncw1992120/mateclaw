@@ -29,6 +29,9 @@ public final class DataAgentConstants {
     /** 数据源类型：PostgreSQL */
     public static final String SOURCE_TYPE_POSTGRESQL = "postgresql";
 
+    /** 数据源类型：SQL Server */
+    public static final String SOURCE_TYPE_SQLSERVER = "sqlserver";
+
     /** 数据源类型：Oracle */
     public static final String SOURCE_TYPE_ORACLE = "oracle";
 
@@ -46,6 +49,9 @@ public final class DataAgentConstants {
 
     /** 数据源类型：Doris */
     public static final String SOURCE_TYPE_DORIS = "doris";
+
+    /** 数据源类型：StarRocks */
+    public static final String SOURCE_TYPE_STARROCKS = "starrocks";
 
     /** 数据源类型：MongoDB */
     public static final String SOURCE_TYPE_MONGODB = "mongodb";

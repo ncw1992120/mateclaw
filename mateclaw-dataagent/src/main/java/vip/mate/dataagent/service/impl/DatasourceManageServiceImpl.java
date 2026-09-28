@@ -28,6 +28,7 @@ import vip.mate.dataagent.repository.DatasourceTableMapper;
 import vip.mate.dataagent.repository.ResourceGrantMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
+import vip.mate.dataagent.util.JdbcUtils;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -681,8 +682,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
                 return aloudataService.testConnection(config);
             }
             return switch (sourceType) {
-                case "mysql", "postgresql", "oracle", "clickhouse", "doris" -> testJdbcConnection(entity);
-                default -> true;
+                case "mysql", "postgresql", "sqlserver", "oracle", "clickhouse", "doris", "starrocks" -> testJdbcConnection(entity);
+                default -> false;
             };
         } catch (Exception e) {
             return false;
@@ -708,47 +709,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      * 构建 JDBC URL
      */
     private String buildJdbcUrl(DatasourceEntity entity) {
-        String sourceType = entity.getSourceType();
-        String host = entity.getHost();
-        Integer port = entity.getPort();
-        String databaseName = entity.getDatabaseName();
-        String extraParams = entity.getConnectionParams();
-        StringBuilder url = new StringBuilder();
-        switch (sourceType) {
-            case "mysql":
-                url.append("jdbc:mysql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                } else {
-                    url.append("?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai");
-                }
-                break;
-            case "postgresql":
-                url.append("jdbc:postgresql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            case "oracle":
-                url.append("jdbc:oracle:thin:@").append(host).append(":").append(port).append(":").append(databaseName);
-                break;
-            case "clickhouse":
-                url.append("jdbc:clickhouse://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            case "doris":
-                url.append("jdbc:mysql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            default:
-                url.append("jdbc:").append(sourceType).append("://").append(host).append(":").append(port).append("/").append(databaseName);
-                break;
-        }
-        return url.toString();
+        return JdbcUtils.buildJdbcUrl(entity);
     }
 
     /**
@@ -762,9 +723,11 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         switch (sourceType) {
             case "mysql":
             case "postgresql":
+            case "sqlserver":
             case "oracle":
             case "clickhouse":
             case "doris":
+            case "starrocks":
                 discoverJdbcSchema(entity);
                 break;
             default:
@@ -783,7 +746,11 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         String catalog = databaseName;
         String schemaPattern = null;
         String sourceType = entity.getSourceType();
-        if ("postgresql".equals(sourceType)) {
+        if ("starrocks".equals(sourceType)) {
+            String[] catalogAndDatabase = databaseName.split("\\.", 2);
+            catalog = catalogAndDatabase.length == 2 ? catalogAndDatabase[0] : "default_catalog";
+            schemaPattern = catalogAndDatabase.length == 2 ? catalogAndDatabase[1] : databaseName;
+        } else if ("postgresql".equals(sourceType)) {
             String schema = entity.getSchemaName();
             if (schema == null || schema.isEmpty()) {
                 schema = "public";

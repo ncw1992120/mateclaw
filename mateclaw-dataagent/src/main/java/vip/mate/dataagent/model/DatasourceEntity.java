@@ -30,7 +30,7 @@ public class DatasourceEntity {
     /** 描述 */
     private String description;
 
-    /** 数据源类型：mysql / postgresql / oracle / snowflake / bigquery / redshift / clickhouse / doris / mongodb / elasticsearch / csv / excel / parquet / api / kafka */
+    /** 数据源类型：mysql / postgresql / sqlserver / oracle / snowflake / bigquery / redshift / clickhouse / doris / starrocks / mongodb / elasticsearch / csv / excel / parquet / api / kafka */
     private String sourceType;
 
     /** 主机地址（通用字段，可作为历史数据兜底） */

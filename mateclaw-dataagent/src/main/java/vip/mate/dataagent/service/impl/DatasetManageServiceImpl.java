@@ -270,7 +270,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
                 || datasourceType.equals("http_api")
                 || datasourceType.contains("http-api");
         boolean jdbc = Set.of("jdbc", "mysql", "postgresql", "sqlserver", "oracle", "snowflake",
-                "bigquery", "redshift", "clickhouse", "doris").contains(datasourceType);
+                "bigquery", "redshift", "clickhouse", "doris", "starrocks").contains(datasourceType);
         if ((definition instanceof DatasetSourceDefinition.JdbcTableDefinition
                 || definition instanceof DatasetSourceDefinition.JdbcSqlDefinition) && aloudata) {
             throw new IllegalArgumentException("JDBC 数据集不能绑定 Aloudata 数据源");

@@ -36,8 +36,9 @@
             {{ t('dsForm.selfHostedDB') }} - {{ datasourceInfo.name }}
           </h2>
 
-          <p v-if="selectedDbId !== 60" class="version-hint">{{ '\uD83D\uDCA1' }} {{ t('dsForm.versionHint', { versions: '5.5、5.6、5.7、8.0' }) }}</p>
-          <p v-else class="version-hint">{{ '\uD83D\uDCA1' }} Aloudata CAN 指标平台，支持指标查询、维度分析等功能</p>
+          <p v-if="selectedDbId === 3" class="version-hint">{{ '\uD83D\uDCA1' }} {{ t('dsForm.versionHint', { versions: '5.5、5.6、5.7、8.0' }) }}</p>
+          <p v-else-if="selectedDbId === 60" class="version-hint">{{ '\uD83D\uDCA1' }} Aloudata CAN 指标平台，支持指标查询、维度分析等功能</p>
+          <p v-else class="version-hint">{{ '\uD83D\uDCA1' }} 通过对应数据库的 JDBC 驱动建立连接</p>
 
           <div class="form-grid">
             <!-- 显示名称 -->
@@ -398,7 +399,6 @@ onMounted(async () => {
         }
         form.productHost = cpAnyHost || ds.productHost || ds.host || ''
         form.semanticHost = cpSemHost || ds.semanticHost || ds.host || ''
-        form.port = String(ds.port || 3306)
         form.aloudataPort = String((ds.sourceType === 'aloudata' && ds.connectionParams)
           ? (JSON.parse(ds.connectionParams).anymetricsPort || 8083)
           : (ds.port || 8083))
@@ -410,9 +410,13 @@ onMounted(async () => {
           mysql: 3,
           postgresql: 15,
           sqlserver: 17,
+          doris: 61,
+          clickhouse: 62,
+          starrocks: 63,
           aloudata: 60,
         }
         selectedDbId.value = sourceTypeMap[ds.sourceType?.toLowerCase()] || 3
+        form.port = String(ds.port || defaultPort(selectedDbId.value))
         // 加载 Aloudata 额外配置
         if (ds.connectionParams) {
           try {
@@ -446,9 +450,12 @@ onMounted(async () => {
 /** 当前选中的数据源信息 */
 const datasourceInfo = computed(() => {
   const allSources: Record<number, { name: string; icon: string }> = {
-    3: { name: 'MySQL', icon: '\uD83D\uDC17' },
+    3: { name: 'MySQL', icon: '\uD83D\uDC2C' },
     15: { name: 'PostgreSQL', icon: '\uD83D\uDC18' },
     17: { name: 'SQL Server', icon: '\uD83D\uDD35' },
+    61: { name: 'Doris', icon: '\uD83D\uDC3F\uFE0F' },
+    62: { name: 'ClickHouse', icon: '\uD83D\uDFE1' },
+    63: { name: 'StarRocks', icon: '\u2B50' },
     60: { name: 'Aloudata', icon: '\u274E' },
   }
   return allSources[selectedDbId.value] || { name: 'MySQL', icon: '\uD83D\uDC17' }
@@ -461,7 +468,7 @@ const form = reactive({
   // Aloudata 产品层与语义层独立地址（独立进程服务）
   productHost: '',
   semanticHost: '',
-  port: '3306',
+  port: String(defaultPort(props.sourceId)),
   database: '',
   username: '',
   password: '',
@@ -497,6 +504,10 @@ const versionOptions = [
   { value: '5.6', label: '5.6' },
   { value: '5.5', label: '5.5' },
 ]
+
+function defaultPort(sourceId: number): number {
+  return ({ 15: 5432, 17: 1433, 61: 9030, 62: 8123, 63: 9030 } as Record<number, number>)[sourceId] || 3306
+}
 
 /** 白名单 IP */
 const whitelistIps = `47.101.100.24/0,191.0.0.0/47,10.137.30/0,192.92.0/0,234.204.106.15.160/0,24.106.15.160/0,23.106/15`
@@ -577,6 +588,9 @@ async function buildCreateRequest() {
     3: 'mysql',
     15: 'postgresql',
     17: 'sqlserver',
+    61: 'doris',
+    62: 'clickhouse',
+    63: 'starrocks',
     60: 'aloudata',
   }
   const isAloudata = selectedDbId.value === 60

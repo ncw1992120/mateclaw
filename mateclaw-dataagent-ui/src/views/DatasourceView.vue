@@ -12,8 +12,9 @@
 
     <div v-else-if="showSourcePicker" class="source-picker-page">
       <div class="source-picker-card">
-        <h1>选择数据源类型</h1>
-        <p>先选择连接类型，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。</p>
+        <h1>{{ jdbcSourcePickerStep ? '选择 JDBC 数据库' : '选择数据源类型' }}</h1>
+        <p>{{ jdbcSourcePickerStep ? '选择数据库引擎，再填写连接信息。' : '先选择连接方式，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。' }}</p>
+        <button v-if="jdbcSourcePickerStep" class="source-picker-back" @click="jdbcSourcePickerStep = false">← 返回</button>
         <div class="source-options">
           <button v-for="source in sourceOptions" :key="source.id" class="source-option" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
             <AloudataBrandMark v-if="source.id === 60" class="source-option-icon" />
@@ -272,6 +273,7 @@ const METRIC_PLATFORM_TYPES = new Set(['aloudata', 'metric_platform', 'metricpla
 /** 是否显示数据源配置表单页 */
 const showFormPage = ref(false)
 const showSourcePicker = ref(false)
+const jdbcSourcePickerStep = ref(false)
 const selectedSourceTypeId = ref(3)
 /** 当前编辑的数据源ID（空字符串表示新建） */
 const editingDsId = ref('')
@@ -366,15 +368,20 @@ function resolveAccountBadge(dsId: string): { text: string; dotClass: string; te
 /** 跳转到新建数据源 */
 function handleCreateDatasource(): void {
   editingDsId.value = ''
+  jdbcSourcePickerStep.value = false
   showSourcePicker.value = true
 }
 
 function displaySourceType(sourceType?: string): string {
   const value = (sourceType || '').toLowerCase()
   if (METRIC_PLATFORM_TYPES.has(value)) return t('datasourcePage.typeMetricPlatform')
+  if (value === 'mysql') return 'MySQL'
   if (value === 'postgresql') return 'PostgreSQL'
   if (value === 'sqlserver') return 'SQL Server'
-  return 'MySQL/JDBC'
+  if (value === 'doris') return 'Doris'
+  if (value === 'clickhouse') return 'ClickHouse'
+  if (value === 'starrocks') return 'StarRocks'
+  return 'JDBC'
 }
 
 function handleEditDatasource(ds: Datasource): void {
@@ -382,15 +389,29 @@ function handleEditDatasource(ds: Datasource): void {
   showFormPage.value = true
 }
 
-const sourceOptions = [
-  { id: 3, name: 'MySQL', icon: '🐬', description: 'JDBC 关系型数据库' },
-  { id: 15, name: 'PostgreSQL', icon: '🐘', description: 'JDBC 关系型数据库' },
-  { id: 17, name: 'SQL Server', icon: '🔷', description: 'JDBC 关系型数据库' },
-  { id: 60, name: 'Aloudata', icon: '', description: '指标视图语义层' },
+const jdbcSourceOptions = [
+  { id: 3, name: 'MySQL', icon: '🐬', description: '关系型数据库' },
+  { id: 15, name: 'PostgreSQL', icon: '🐘', description: '关系型数据库' },
+  { id: 17, name: 'SQL Server', icon: '🔷', description: '关系型数据库' },
+  { id: 61, name: 'Doris', icon: '🐿️', description: 'OLAP 数据库 · MySQL 协议' },
+  { id: 62, name: 'ClickHouse', icon: '🟡', description: 'OLAP 数据库' },
+  { id: 63, name: 'StarRocks', icon: '⭐', description: 'OLAP 数据库' },
 ]
 
-function selectSourceType(sourceId: number): void {
+const sourceOptions = computed(() => jdbcSourcePickerStep.value
+  ? jdbcSourceOptions
+  : [
+      { id: 60, name: 'Aloudata', icon: '', description: '指标视图语义层' },
+      { id: 'jdbc' as const, name: 'JDBC', icon: '🔌', description: '连接关系型数据库与分析型数据库' },
+    ])
+
+function selectSourceType(sourceId: number | 'jdbc'): void {
+  if (sourceId === 'jdbc') {
+    jdbcSourcePickerStep.value = true
+    return
+  }
   selectedSourceTypeId.value = sourceId
+  jdbcSourcePickerStep.value = false
   showSourcePicker.value = false
   showFormPage.value = true
 }
@@ -399,6 +420,7 @@ function selectSourceType(sourceId: number): void {
 function handleBackFromForm(): void {
   showFormPage.value = false
   showSourcePicker.value = false
+  jdbcSourcePickerStep.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -407,6 +429,7 @@ function handleBackFromForm(): void {
 function handleFormSubmit(): void {
   showFormPage.value = false
   showSourcePicker.value = false
+  jdbcSourcePickerStep.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -715,6 +738,7 @@ async function handleTestAccountConnection(): Promise<void> {
 .source-picker-card { width: min(760px, 100%); padding: 32px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-surface); box-shadow: 0 8px 32px rgba(0,0,0,.06); }
 .source-picker-card h1 { margin: 0 0 8px; color: var(--theme-text); font-size: 24px; }
 .source-picker-card p { margin: 0 0 24px; color: var(--theme-text-muted); }
+.source-picker-back { margin: -12px 0 16px; padding: 4px 0; border: 0; background: transparent; color: var(--main-orange); cursor: pointer; }
 .source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .source-option { display: flex; align-items: center; gap: 14px; padding: 16px; text-align: left; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-bg); color: var(--theme-text); cursor: pointer; }
 .source-option:hover { border-color: var(--main-orange); background: var(--theme-surface-hover); }
