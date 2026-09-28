@@ -136,7 +136,11 @@ function handleVisibleChange(visible: boolean): void {
 
 /** 组件配置变化时重置动态选项和选中值 */
 watch(
-  () => [filterConfig.value?.field, filterConfig.value?.defaultValue, filterConfig.value?.selectionMode] as const,
+  [
+    () => filterConfig.value?.field,
+    () => filterConfig.value?.defaultValue,
+    () => filterConfig.value?.selectionMode,
+  ],
   () => {
     const defaultValue = filterConfig.value?.defaultValue
     selectedValue.value = defaultValue == null

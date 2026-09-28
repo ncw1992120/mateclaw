@@ -132,6 +132,16 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                     || "aiAnalysis".equals(component.getType())) {
                 continue;
             }
+            // 筛选器变更只查询受影响组件，避免先把整张仪表盘全部取数再丢弃无关结果。
+            if (componentLevelTargetId != null && !componentLevelTargetId.equals(component.getId())) {
+                continue;
+            }
+            if (componentLevelTargetId == null && sourceFilterId != null && !sourceFilterId.isBlank()) {
+                List<String> boundIds = component.getBoundFilterIds();
+                if (boundIds == null || !boundIds.contains(sourceFilterId)) {
+                    continue;
+                }
+            }
             InsightComponentDataDTO data = bindComponentWithFilters(component, filterContext);
             if (data != null) {
                 componentDataMap.put(component.getId(), data);
@@ -147,6 +157,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                     }
                     // aiAnalysis 组件：构建查询概要（模板填充），AI 分析部分由前端触发生成
                     if ("aiAnalysis".equals(component.getType())) {
+                        if (sourceFilterId != null && !sourceFilterId.isBlank()) {
+                            return null;
+                        }
                         return buildAiAnalysisData(component, schema, filterContext, componentDataMap);
                     }
                     // 组件级时间筛选：仅影响指定组件

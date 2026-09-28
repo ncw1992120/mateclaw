@@ -363,7 +363,7 @@ async function loadDashboard(): Promise<void> {
     initializeDefaults()
     await materializePreviewDatasetInputs()
     previousRuntimeFilterState = getRuntimeFilterState()
-    await reloadComponentData(filterContext.value)
+    await reloadComponentData(filterContext.value, true)
     await reloadScriptBindings(filterContext.value)
     // 首次预览与筛选刷新共用组件管线，避免沿用上次编辑保存的静态快照。
     await refreshPipelineComponents(getRuntimeFilterState(), true)
@@ -480,14 +480,14 @@ async function loadReport(): Promise<void> {
 }
 
 /** 旧版直连组件仍走预览接口，但按组件合并并拒绝过期整页响应。 */
-async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
+async function reloadComponentData(context: DashboardFilterContext, showPageLoading = false): Promise<void> {
   const requestId = ++queryRequestSequence
   const directIds = new Set(collectDashboardComponents(currentPageComponents.value)
     .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
     .map((component) => component.id))
   if (directIds.size === 0) return
   directIds.forEach((componentId) => latestComponentRequest.set(componentId, requestId))
-  dataLoading.value = true
+  if (showPageLoading) dataLoading.value = true
   try {
     const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
     const dataMap = { ...componentDataMap.value }
@@ -510,7 +510,7 @@ async function reloadComponentData(context: DashboardFilterContext): Promise<voi
     componentDataMap.value = dataMap
     ElMessage.warning(t('insight.previewDataFailed'))
   } finally {
-    dataLoading.value = false
+    if (showPageLoading) dataLoading.value = false
   }
 }
 

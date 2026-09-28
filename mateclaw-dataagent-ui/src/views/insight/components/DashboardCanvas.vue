@@ -1253,22 +1253,19 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 
 .global-filter-items {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-md);
   flex-wrap: wrap;
 }
 
-/* 筛选器的标题语义是表单标签而非卡片标题，故标签与控件左右排列 */
 .global-filter-item {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-sm);
-  min-width: 240px;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 200px;
 }
 
 .global-filter-label {
-  flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--db-text-secondary);
@@ -1282,8 +1279,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   padding: var(--space-sm) var(--space-md);
-  flex: 1 1 auto;
-  min-width: 160px;
+  min-width: 180px;
   transition: border-color var(--transition-fast);
 }
 

@@ -87,4 +87,33 @@ describe('筛选类组件的横向工具栏布局', () => {
 
     expect(wrapper.find('.filter-control-label').text()).toContain('转化指标名称')
   })
+
+  it('父级以新对象重渲染相同配置时仍保留用户当前选择，而不是回退默认值', async () => {
+    const selectedComponent = {
+      ...filterComponent,
+      config: { ...filterComponent.config, defaultValue: 'metric-default' },
+    }
+    const wrapper = mount(FilterSelectWidget, {
+      props: { component: selectedComponent, modelValue: 'metric-default', showTitle: false },
+      global,
+    })
+
+    await wrapper.setProps({ modelValue: 'metric-selected' })
+    await wrapper.setProps({ component: { ...selectedComponent }, modelValue: 'metric-selected' })
+
+    expect((wrapper.vm as any).selectedValue).toBe('metric-selected')
+  })
+
+  it('重新挂载时立即采用会话中已有的筛选值，而不是只显示配置默认值', () => {
+    const wrapper = mount(FilterSelectWidget, {
+      props: {
+        component: { ...filterComponent, config: { ...filterComponent.config, defaultValue: 'metric-default' } },
+        modelValue: 'metric-selected',
+        showTitle: false,
+      },
+      global,
+    })
+
+    expect((wrapper.vm as any).selectedValue).toBe('metric-selected')
+  })
 })

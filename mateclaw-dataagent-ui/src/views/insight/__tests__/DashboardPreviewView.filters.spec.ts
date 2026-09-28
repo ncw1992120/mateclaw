@@ -60,6 +60,14 @@ const unboundDatasetComponent = {
     displayFields: [{ field: 'channel', title: '渠道', role: 'dimension' }], parameterBindings: [],
   } }] } },
 } as any
+const scopedFilter = {
+  ...filter,
+  config: { ...filter.config, scope: 'scoped', targetComponentIds: ['legacy-bound-table'] },
+} as any
+const legacyBoundComponent = {
+  id: 'legacy-bound-table', type: 'table', title: '绑定表格',
+  position: { x: 1, y: 0, w: 2, h: 1 }, boundFilterIds: ['filter-region'], dataSource: { datasetId: 'legacy-dataset' },
+} as any
 
 describe('DashboardPreviewView runtime filter query flow', () => {
   let wrapper: ReturnType<typeof mount> | undefined
@@ -114,6 +122,41 @@ describe('DashboardPreviewView runtime filter query flow', () => {
     }))
     expect(mocks.previewQueryPlan).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-test="canvas"]').text()).toContain('华南')
+  })
+
+  it('keeps the dashboard canvas mounted while a scoped filter refresh is pending', async () => {
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({
+      version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [scopedFilter, legacyBoundComponent] }],
+    })
+    let finishPreview!: (value: unknown[]) => void
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          DashboardCanvas: {
+            emits: ['filter-change'],
+            template: '<div data-test="canvas"><button data-test="change" @click="$emit(\'filter-change\', { componentId: \'filter-region\', field: \'region\', value: \'华南\' })" />画布内容</div>',
+          },
+          ElButton: true, ElIcon: true, ElDrawer: true,
+        },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+
+    mocks.preview.mockImplementationOnce(() => new Promise((resolve) => { finishPreview = resolve }))
+    await wrapper.get('[data-test="change"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(350)
+    await nextTick()
+
+    expect(wrapper.find('[data-test="canvas"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('insight.loadingData')
+    finishPreview([])
+    await flushPromises()
   })
 
   it('materializes each temporary dataset only once when dashboard loads overlap', async () => {
