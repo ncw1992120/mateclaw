@@ -28,14 +28,17 @@ const TreeStub = defineComponent({
   props: {
     data: { type: Array, default: () => [] },
     props: { type: Object, default: () => ({}) },
+    defaultExpandedKeys: { type: Array, default: () => [] },
   },
   emits: ['node-click'],
   setup(props) {
+    const setExpanded = vi.fn()
     return {
-      leaves: computed(() => props.data.flatMap((node: any) => node.children ?? [node])),
+      setExpanded,
+      nodes: computed(() => props.data.flatMap((node: any) => [node, ...(node.children ?? [])])),
     }
   },
-  template: '<div><div v-for="node in leaves" :key="node.id"><slot :data="node" /></div></div>',
+  template: '<div><div v-for="node in nodes" :key="node.id"><slot :data="node" /></div></div>',
 })
 const DialogStub = defineComponent({
   name: 'ElDialog',
@@ -64,16 +67,24 @@ describe('添加数据集发布范围', () => {
 
     const tree = wrapper.findComponent(TreeStub)
     const nodes = (tree.props('data') as Array<Record<string, any>>)
-      .flatMap((node) => node.children ?? [node])
+      .flatMap((node) => [node, ...(node.children ?? [])])
     const available = nodes.find((node) => node.id === 'aloudata-metrics')
-    const unavailable = nodes.filter((node) => node.id !== 'aloudata-metrics')
+    const unavailable = nodes.filter((node) => node.id !== 'aloudata-metrics' && node.id !== 'cat-aloudata')
+    const categories = nodes.filter((node) => node.type === 'category')
+    const unavailableDirectories = categories.filter((node) => ['cat-jdbc', 'cat-file'].includes(node.id))
 
     expect(tree.props('props').disabled).toBe('disabled')
+    expect(tree.props('defaultExpandedKeys')).toEqual(['cat-aloudata'])
+    expect(unavailableDirectories).toHaveLength(2)
+    expect(unavailableDirectories.every((node) => node.disabled)).toBe(true)
     expect(available.disabled).toBe(false)
     expect(unavailable.length).toBeGreaterThan(0)
     expect(unavailable.every((node) => node.disabled)).toBe(true)
     expect(wrapper.findAll('.tree-node--disabled')).toHaveLength(unavailable.length)
     expect(wrapper.find('.tree-node--disabled').attributes('title')).toBe('开发中，还未上线，敬请期待')
+
+    tree.vm.$emit('node-click', unavailableDirectories[0], { expanded: false })
+    expect(tree.vm.setExpanded).not.toHaveBeenCalled()
 
     tree.vm.$emit('node-click', unavailable.find((node) => node.id === 'datasource-jdbc-1'), {})
     expect(fixture.onSelectLeaf).not.toHaveBeenCalled()

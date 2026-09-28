@@ -14,7 +14,7 @@
       :data="treeData"
       :props="treeProps"
       node-key="id"
-      default-expand-all
+      :default-expanded-keys="defaultExpandedKeys"
       :filter-node-method="filterNode"
       :loading="loading"
       @node-click="onNodeClick"
@@ -65,7 +65,7 @@ interface Leaf {
 const unavailableHint = '开发中，还未上线，敬请期待'
 
 function isUnavailable(data: any): boolean {
-  return data.type !== 'category' && data.disabled === true
+  return data.disabled === true
 }
 
 function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
@@ -127,6 +127,7 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
       id: `cat-${cat}`,
       label: datasetCategoryLabel(cat),
       type: 'category',
+      disabled: cat !== 'aloudata',
       children,
     }]
   })
@@ -155,6 +156,7 @@ watch(
 onMounted(loadTree)
 
 const treeProps = { label: 'label', children: 'children', disabled: 'disabled' }
+const defaultExpandedKeys = ['cat-aloudata']
 
 // 搜索：过滤树节点
 function filterNode(value: string, data: any) {
@@ -167,11 +169,11 @@ function applyFilter() {
 }
 // 点击节点：分类节点仅展开/收起；叶子节点进入对应配置流程
 function onNodeClick(data: any, node: any) {
+  if (data.disabled) return
   if (data.type === 'category') {
     treeRef.value?.setExpanded(node, !node.expanded)
     return
   }
-  if (data.disabled) return
   onSelectLeaf(data)
 }
 </script>
