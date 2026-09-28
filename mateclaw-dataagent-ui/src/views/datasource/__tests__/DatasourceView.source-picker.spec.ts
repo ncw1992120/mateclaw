@@ -58,7 +58,7 @@ describe('DatasourceView source picker', () => {
     expect(wrapper.findAll('.source-option strong').map((item) => item.text())).toEqual(['Aloudata', 'JDBC'])
   })
 
-  it('shows JDBC engines on the second step and opens the selected engine form', async () => {
+  it('keeps JDBC unavailable and explains that it is not released yet', async () => {
     const wrapper = mount(DatasourceView, {
       global: {
         stubs: {
@@ -78,12 +78,12 @@ describe('DatasourceView source picker', () => {
     })
 
     await wrapper.find('.btn-create-top').trigger('click')
-    await wrapper.get('[aria-label="选择JDBC数据源"]').trigger('click')
-    expect(wrapper.findAll('.source-option strong').map((item) => item.text())).toEqual([
-      'MySQL', 'PostgreSQL', 'SQL Server', 'Doris', 'ClickHouse', 'StarRocks',
-    ])
+    const jdbcOption = wrapper.get('[aria-label="选择JDBC数据源"]')
+    expect(jdbcOption.attributes('disabled')).toBeDefined()
+    expect(jdbcOption.text()).toContain('开发中，还未上线，敬请期待')
 
-    await wrapper.get('[aria-label="选择StarRocks数据源"]').trigger('click')
-    expect(wrapper.get('[data-testid="datasource-form"]').attributes('data-source-id')).toBe('63')
+    await jdbcOption.trigger('click')
+    expect(wrapper.findAll('.source-option strong').map((item) => item.text())).toEqual(['Aloudata', 'JDBC'])
+    expect(wrapper.find('[data-testid="datasource-form"]').exists()).toBe(false)
   })
 })

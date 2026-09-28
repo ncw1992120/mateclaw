@@ -21,7 +21,7 @@
       class="src-tree"
     >
       <template #default="{ data }">
-        <span class="tree-node">
+        <span class="tree-node" :class="{ 'tree-node--disabled': isUnavailable(data) }" :title="isUnavailable(data) ? unavailableHint : undefined">
           <el-icon v-if="data.type === 'category'"><Folder /></el-icon>
           <el-icon v-else><Coin /></el-icon>
           <span>{{ data.label }}</span>
@@ -59,6 +59,13 @@ interface Leaf {
   mode?: string
   fileType?: string
   realId?: string
+  disabled?: boolean
+}
+
+const unavailableHint = '开发中，还未上线，敬请期待'
+
+function isUnavailable(data: any): boolean {
+  return data.type !== 'category' && data.disabled === true
 }
 
 function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
@@ -77,6 +84,7 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
       mode: cat === 'aloudata' ? 'metric-view' : undefined,
       fileType: cat === 'file' ? (d as any).fileFormat : undefined,
       realId: String(d.id),
+      disabled: true,
     })
   })
 
@@ -91,18 +99,19 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
       type: cat,
       meta: '数据源连接',
       db: String(s.id),
+      disabled: true,
     })
   })
 
   // 固定快捷节点：与原型一致，选完直接进入对应配置弹窗
   if (aloudataId !== undefined) {
-    leaves.push({ id: 'aloudata-view', label: '指标视图', type: 'aloudata', meta: '选择已有视图', db: String(aloudataId), mode: 'metric-view' })
-    leaves.push({ id: 'aloudata-metrics', label: '指标&维度', type: 'aloudata', meta: '配置指标与维度', db: String(aloudataId), mode: 'metric-dim' })
+    leaves.push({ id: 'aloudata-view', label: '指标视图', type: 'aloudata', meta: '选择已有视图', db: String(aloudataId), mode: 'metric-view', disabled: true })
+    leaves.push({ id: 'aloudata-metrics', label: '指标&维度', type: 'aloudata', meta: '配置指标与维度', db: String(aloudataId), mode: 'metric-dim', disabled: false })
   }
   ;['Excel', 'CSV', 'TXT', 'JSON', 'Parquet'].forEach((fmt) =>
-    leaves.push({ id: `file-${fmt}`, label: fmt, type: 'file', meta: '文件数据集', fileType: fmt }),
+    leaves.push({ id: `file-${fmt}`, label: fmt, type: 'file', meta: '文件数据集', fileType: fmt, disabled: true }),
   )
-  leaves.push({ id: 'http-api', label: '接口', type: 'api', meta: '' })
+  leaves.push({ id: 'http-api', label: '接口', type: 'api', meta: '', disabled: true })
 
   // 按类别分组（顺序：Aloudata / JDBC / 接口 / 文件）
   const order = ['aloudata', 'jdbc', 'api', 'file'] as const
@@ -145,7 +154,7 @@ watch(
 )
 onMounted(loadTree)
 
-const treeProps = { label: 'label', children: 'children' }
+const treeProps = { label: 'label', children: 'children', disabled: 'disabled' }
 
 // 搜索：过滤树节点
 function filterNode(value: string, data: any) {
@@ -162,6 +171,7 @@ function onNodeClick(data: any, node: any) {
     treeRef.value?.setExpanded(node, !node.expanded)
     return
   }
+  if (data.disabled) return
   onSelectLeaf(data)
 }
 </script>
@@ -179,6 +189,11 @@ function onNodeClick(data: any, node: any) {
 .tree-meta {
   color: var(--db-text-muted, #999);
   font-size: 12px;
+}
+.tree-node--disabled {
+  color: var(--db-text-muted, #999);
+  opacity: .55;
+  cursor: not-allowed;
 }
 :deep(.el-tree-node__content) {
   height: 34px;

@@ -16,7 +16,7 @@
         <p>{{ jdbcSourcePickerStep ? '选择数据库引擎，再填写连接信息。' : '先选择连接方式，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。' }}</p>
         <button v-if="jdbcSourcePickerStep" class="source-picker-back" @click="jdbcSourcePickerStep = false">← 返回</button>
         <div class="source-options">
-          <button v-for="source in sourceOptions" :key="source.id" class="source-option" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
+          <button v-for="source in sourceOptions" :key="source.id" class="source-option" :class="{ 'source-option--disabled': source.disabled }" :disabled="source.disabled" :title="source.disabled ? '开发中，还未上线，敬请期待' : undefined" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
             <AloudataBrandMark v-if="source.id === 60" class="source-option-icon" />
             <span v-else class="source-option-icon">{{ source.icon }}</span>
             <span><strong>{{ source.name }}</strong><small>{{ source.description }}</small></span>
@@ -402,7 +402,7 @@ const sourceOptions = computed(() => jdbcSourcePickerStep.value
   ? jdbcSourceOptions
   : [
       { id: 60, name: 'Aloudata', icon: '', description: '指标视图语义层' },
-      { id: 'jdbc' as const, name: 'JDBC', icon: '🔌', description: '连接关系型数据库与分析型数据库' },
+      { id: 'jdbc' as const, name: 'JDBC', icon: '🔌', description: '开发中，还未上线，敬请期待', disabled: true },
     ])
 
 function selectSourceType(sourceId: number | 'jdbc'): void {
@@ -741,7 +741,8 @@ async function handleTestAccountConnection(): Promise<void> {
 .source-picker-back { margin: -12px 0 16px; padding: 4px 0; border: 0; background: transparent; color: var(--main-orange); cursor: pointer; }
 .source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .source-option { display: flex; align-items: center; gap: 14px; padding: 16px; text-align: left; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-bg); color: var(--theme-text); cursor: pointer; }
-.source-option:hover { border-color: var(--main-orange); background: var(--theme-surface-hover); }
+.source-option:hover:not(:disabled) { border-color: var(--main-orange); background: var(--theme-surface-hover); }
+.source-option--disabled { color: var(--theme-text-muted); opacity: .55; cursor: not-allowed; }
 .source-option-icon { font-size: 26px; }
 .source-option strong, .source-option small { display: block; }
 .source-option small { margin-top: 4px; color: var(--theme-text-muted); }
