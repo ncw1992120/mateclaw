@@ -80,6 +80,7 @@ const stubs = {
   },
   'el-empty': { props: ['description'], template: '<div class="stub-empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
+  ComponentDataPreview: { template: '<div data-testid="component-render-preview">组件预览 <slot /></div>' },
 }
 
 /** Aloudata 指标视图数据集：筛选字段来自视图维度 */
@@ -150,11 +151,16 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     wrapper.unmount()
   })
 
-  it('点击查询后立即把当前结果渲染到画布中的组件', async () => {
+  it('查询后等待手动点击组件渲染，再更新画布并展示组件预览', async () => {
     const component = { id: 'table-1', type: 'table', title: '订单明细' }
     const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }), component)
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
+
+    expect(wrapper.emitted('render')).toBeUndefined()
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="component-render"]').trigger('click')
 
     expect(wrapper.emitted('render')).toHaveLength(1)
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
@@ -163,8 +169,75 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
       table: { columns: ['trade_date', 'cust_type', 'amount'], rows: [['2026-09-01', '', '']] },
     })
     expect((wrapper.emitted('render')?.[0]?.[0] as { fieldLabels?: Record<string, string> }).fieldLabels?.trade_date).toBe('交易日期')
-    expect(wrapper.text()).not.toContain('组件预览')
-    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('指标卡查询返回多行时提示校验错误、保留原始结果并阻止画布渲染', async () => {
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [
+        { amount: 1215, count: 1470 },
+        { amount: 1215, count: 1470 },
+      ],
+      schema: ['amount', 'count'],
+      rowCount: 2,
+      last: true,
+    })
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: {
+        ...queryConfig(),
+        displayFields: [
+          { field: 'amount', title: '下发人数', role: 'measure' },
+          { field: 'count', title: '下发次数', role: 'measure' },
+        ],
+      },
+    }), {
+      id: 'kpi-multi-row',
+      type: 'kpi',
+      title: '指标卡',
+      kpiMetrics: [
+        { fieldKey: 'amount', displayName: '下发人数' },
+        { fieldKey: 'count', displayName: '下发次数' },
+      ],
+    })
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="component-preview-validation"]').text()).toContain('返回 2 行')
+    expect(wrapper.findAll('.dd-result-body .stub-table')).toHaveLength(1)
+    expect(wrapper.emitted('render')).toBeUndefined()
+    expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('分页查询的指标卡按总行数校验，即使当前页只有一行也不渲染', async () => {
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [{ amount: 1215 }],
+      schema: ['amount'],
+      rowCount: 1,
+      totalCount: 2,
+      last: false,
+    })
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: {
+        ...queryConfig(),
+        displayFields: [{ field: 'amount', title: '下发人数', role: 'measure' }],
+        paginationPolicy: { enabled: true, defaultPageSize: 1, maxPageSize: 10, returnTotalCount: false },
+      },
+    }), {
+      id: 'kpi-paginated-multi-row',
+      type: 'kpi',
+      title: '指标卡',
+      kpiMetrics: [{ fieldKey: 'amount', displayName: '下发人数' }],
+    })
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ requestTotalCount: true }))
+    expect(wrapper.get('[data-testid="component-preview-validation"]').text()).toContain('返回 2 行')
+    expect(wrapper.emitted('render')).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -182,6 +255,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
+    await wrapper.get('[data-testid="component-render"]').trigger('click')
     const rendered = wrapper.emitted('render')?.[0]?.[0] as { table?: { columns: string[]; rows: unknown[][] } }
     expect(rendered.table).toEqual({ columns: ['amount'], rows: [['18']] })
     wrapper.unmount()
@@ -210,6 +284,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
+    await wrapper.get('[data-testid="component-render"]').trigger('click')
     const rendered = wrapper.emitted('render')?.[0]?.[0] as { kpiList?: Array<{ fieldKey: string }> }
     expect(rendered.kpiList?.map(({ fieldKey }) => fieldKey)).toEqual(['amount'])
     wrapper.unmount()
@@ -326,6 +401,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
       await wrapper.get('[data-testid="run-query"]').trigger('click')
       await flushPromises()
+      await wrapper.get('[data-testid="component-render"]').trigger('click')
 
       expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
         columns: ['trade_date', 'cust_type', 'amount'],
@@ -366,6 +442,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
+    await wrapper.get('[data-testid="component-render"]').trigger('click')
     expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }))
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-first-open',

@@ -25,6 +25,7 @@ const stubs = {
     emits: ['update:modelValue'],
     template: '<input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },
+  ComponentDataPreview: { template: '<div data-testid="component-render-preview">组件预览 <slot /></div>' },
 }
 
 beforeEach(() => {
@@ -93,7 +94,7 @@ describe('PythonResultDataDialog', () => {
     wrapper.unmount()
   })
 
-  it('点击查询后将 Python 查询结果推送到当前组件', async () => {
+  it('查询后点击组件渲染，将 Python 结果渲染到画布并展示预览', async () => {
     const component = { id: 'table-1', type: 'table', title: '结果表' } as any
     Object.assign(state.resultSet, {
       columns: [{ name: 'result', type: 'string' }, { name: 'internal_note', type: 'string' }],
@@ -118,13 +119,16 @@ describe('PythonResultDataDialog', () => {
 
     await wrapper.get('[data-testid="python-run-query"]').trigger('click')
 
-    expect(wrapper.text()).not.toContain('组件预览')
-    expect(wrapper.emitted('resultset')?.[0]?.[0]).toMatchObject({
+    expect(wrapper.emitted('resultset')).toBeUndefined()
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="python-component-render"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(true)
+    expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-1',
-      status: 'ready',
-      source: 'script',
-      rows: [{ result: '保留行', internal_note: '不展示' }],
+      renderType: 'table',
       fieldLabels: { result: '结果' },
+      table: { columns: ['result', 'internal_note'], rows: [['保留行', '不展示']] },
     })
     wrapper.unmount()
   })

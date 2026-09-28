@@ -11,10 +11,14 @@ import type { ResultSchema, ScriptDataType } from './script-result'
 
 export type FinalResultQueryConfigStatus = 'missing' | 'ready' | 'stale' | 'conflict'
 
+/** 默认字段顺序：维度在前、指标在后；相同角色保持传入顺序。 */
+export function sortDisplayFieldsDimensionsFirst<T extends Pick<QueryDisplayField, 'role'>>(fields: T[]): T[] {
+  return [...fields].sort((a, b) => Number(a.role === 'measure') - Number(b.role === 'measure'))
+}
+
 export function isFinalResultQueryConfigured(config: FinalResultQueryConfig | undefined): boolean {
   return config?.confirmed === true
 }
-
 
 function roleFor(dataType: ScriptDataType): QueryDisplayField['role'] {
   return dataType === 'number' ? 'measure' : 'dimension'

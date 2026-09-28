@@ -110,6 +110,17 @@ describe('AttributePanel', () => {
     warning.mockRestore()
   })
 
+  it('移除多数据集提示，并将移除按钮保留在同一操作行末尾', () => {
+    insightFixture.value.state.hasPython = true
+    insightFixture.value.pythonRequired = true
+    const wrapper = mountPanel()
+
+    expect(wrapper.find('.python-required-alert').exists()).toBe(false)
+    expect(wrapper.find('.py-actions').findAll('button').map((button) => button.text()))
+      .toEqual(['查询配置', '展开编辑', '查看数据', '移除'])
+    wrapper.unmount()
+  })
+
   it('在 Python 区域直接提供查询配置和查看数据入口', async () => {
     insightFixture.value.state.hasPython = true
     const wrapper = mountPanel()

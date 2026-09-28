@@ -165,12 +165,30 @@
         <span class="dd-hint">{{ queryHint }}</span>
         <el-button data-testid="run-query" type="primary" :loading="loading" :disabled="queryDisabled" @click="query()">查询</el-button>
       </div>
+      <el-alert
+        v-if="componentValidationError"
+        data-testid="component-preview-validation"
+        type="error"
+        :title="componentValidationError"
+        :closable="false"
+        show-icon
+      />
 
       <!-- ⑤ 结果 -->
       <section class="dd-block dd-result">
         <div class="dd-head">
           <span class="dd-title">原始数据</span>
-          <span class="dd-hint">{{ resultHint }}</span>
+          <div class="dd-result-actions">
+            <span class="dd-hint">{{ resultHint }}</span>
+            <el-button
+              v-if="component"
+              data-testid="component-render"
+              size="small"
+              type="primary"
+              :disabled="!hasCurrentResult || Boolean(componentValidationError)"
+              @click="renderComponent"
+            >组件渲染</el-button>
+          </div>
         </div>
         <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
           <el-table
@@ -226,6 +244,14 @@
           <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
         </div>
       </section>
+
+      <section v-if="component && componentPreviewVisible" class="dd-block" data-testid="component-preview-section">
+        <div class="dd-head">
+          <span class="dd-title">组件预览</span>
+          <span class="dd-hint">预览与画布使用相同的组件和本次查询结果</span>
+        </div>
+        <ComponentDataPreview :component="component" :component-data="componentRenderData!" />
+      </section>
     </div>
   </el-dialog>
 </template>
@@ -252,6 +278,7 @@ import {
 } from '@/utils/runtime-filter-bindings'
 import { toFixedDatasetFilters } from '@/utils/fixed-dataset-filters'
 import { componentPreviewData } from '@/utils/component-preview-data'
+import ComponentDataPreview from './ComponentDataPreview.vue'
 
 const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
 const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
@@ -263,6 +290,8 @@ const DEFAULT_BATCH_SIZE = 50
 
 const loading = ref(false)
 const error = ref('')
+const componentValidationError = ref('')
+const componentPreviewVisible = ref(false)
 const elapsed = ref('')
 const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
@@ -385,7 +414,10 @@ interface PreviewQueryFilterRow extends RuntimeFilterRow {
 }
 
 function fieldTitle(field: string): string {
-  return displayFields.value.find((row) => row.field === field)?.title || field
+  return displayFields.value.find((row) => row.field === field)?.title
+    || props.dataset.queryConfig?.queryableFields?.find((row) => row.name === field)?.displayName
+    || props.dataset.fields.find((row) => row.name === field)?.displayName
+    || field
 }
 
 function operatorLabel(operator: QueryParameterBinding['operator']): string {
@@ -518,6 +550,10 @@ const cacheStale = computed(() => {
   const cached = getCachedQuery(props.dataset.id)
   return !!cached && cached.signature !== currentSignature.value
 })
+const hasCurrentResult = computed(() => queriedAt.value > 0 && !cacheStale.value && !loading.value && !error.value)
+const componentRenderData = computed(() => props.component && columns.value.length
+  ? componentPreviewData(props.component, rows.value, componentPreviewColumns.value)
+  : undefined)
 
 const resultHint = computed(() => {
   if (loading.value) return '查询中…'
@@ -532,6 +568,8 @@ const resultHint = computed(() => {
 async function fetchRows(reset: boolean): Promise<void> {
   loading.value = true
   error.value = ''
+  if (reset) componentPreviewVisible.value = false
+  if (reset) componentValidationError.value = ''
   const started = Date.now()
   try {
     const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
@@ -553,7 +591,8 @@ async function fetchRows(reset: boolean): Promise<void> {
       ? (currentPage.value - 1) * currentPageSize.value
       : reset ? 0 : rows.value.length
     const orders = sortState.value && isFieldSortable(sortState.value.field) ? [sortState.value] : []
-    const requestTotalCount = paginationEnabled.value && paginationPolicy.value?.returnTotalCount === true
+    const requestTotalCount = paginationEnabled.value
+      && (paginationPolicy.value?.returnTotalCount === true || props.component?.type === 'kpi')
     const hasConfiguredDisplayFields = displayFields.value.length > 0
     const requestedColumns = hasConfiguredDisplayFields
       ? resultDisplayFieldList().map(({ field }) => field)
@@ -612,8 +651,9 @@ async function fetchRows(reset: boolean): Promise<void> {
       totalCount: totalCount.value,
     })
     persistQueryState()
-    if (props.component) {
-      emit('render', componentPreviewData(props.component, rows.value, componentPreviewColumns.value))
+    const resultRowCount = totalCount.value ?? rows.value.length
+    if (props.component?.type === 'kpi' && resultRowCount > 1) {
+      componentValidationError.value = `指标卡只支持 0–1 行结果，当前查询返回 ${resultRowCount} 行；原始数据仍可查看，请检查查询聚合配置。`
     }
     if (reset) {
       await nextTick()
@@ -621,6 +661,7 @@ async function fetchRows(reset: boolean): Promise<void> {
     }
   } catch (e) {
     error.value = (e as Error)?.message || '查询失败'
+    if (reset) componentValidationError.value = ''
     if (reset) {
       columns.value = []
       rows.value = []
@@ -628,6 +669,13 @@ async function fetchRows(reset: boolean): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+/** 将最近一次有效查询结果显式应用到画布，并在弹窗展示同一份组件数据。 */
+function renderComponent(): void {
+  if (!props.component || !hasCurrentResult.value || componentValidationError.value || !componentRenderData.value) return
+  emit('render', componentRenderData.value)
+  componentPreviewVisible.value = true
 }
 
 /** 表头三态：新字段从升序开始；同字段 asc → desc → 取消；变化后页码回 1 并立即重新查询 */
@@ -918,6 +966,11 @@ watch(() => ui.dataDialog.visible, (visible) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.dd-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .dd-result-body {
   height: 300px;

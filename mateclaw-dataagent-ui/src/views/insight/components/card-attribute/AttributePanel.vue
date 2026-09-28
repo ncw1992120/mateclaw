@@ -178,14 +178,6 @@
             <el-button size="small" text bg @click="viewPythonResult">查看数据</el-button>
             <el-button size="small" type="danger" text data-testid="remove-python" :disabled="!state.hasPython" @click="removePython">移除</el-button>
           </div>
-          <el-alert
-            v-if="pythonRequired"
-            class="python-required-alert"
-            type="warning"
-            :closable="false"
-            title="已添加多个数据集，请在脚本中编写合并或处理逻辑"
-            description="查看数据时会按查询配置读取上游数据，并校验 Python 输出契约。"
-          />
         </div>
       </div>
 
@@ -222,7 +214,7 @@ import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
 import { isFinalResultQueryConfigured } from '@/utils/final-result-query'
 
-const { state, activeCard, isKpiCard, datasetCount, pythonRequired, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
 
 const DEFAULT_COMPONENT_COLOR = '#1E40AF'
 const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
@@ -410,12 +402,6 @@ function typeLabel(t: string) {
   gap: 8px;
   justify-items: start;
 }
-.python-required-alert {
-  width: 100%;
-}
-.python-required-alert :deep(.el-alert__description) {
-  line-height: 1.5;
-}
 .python-empty > .el-button {
   justify-self: start;
 }
@@ -451,8 +437,12 @@ function typeLabel(t: string) {
 }
 .py-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 0;
+}
+.py-actions :deep(.el-button) {
+  padding-right: 6px;
+  padding-left: 6px;
 }
 </style>

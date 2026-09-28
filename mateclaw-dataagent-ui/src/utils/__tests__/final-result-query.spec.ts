@@ -6,6 +6,7 @@ import {
   finalResultQueryConfigStatus,
   isFinalResultQueryConfigured,
   normalizeFinalResultQueryContext,
+  sortDisplayFieldsDimensionsFirst,
 } from '../final-result-query'
 
 function schema(columns: ResultSchema['columns'], fingerprint = 'schema-1'): ResultSchema {
@@ -30,6 +31,21 @@ describe('buildFinalResultQueryConfig', () => {
     expect(config.sortPolicy.enabled).toBe(false)
     expect(config.paginationPolicy.enabled).toBe(false)
     expect(config.displayFields[0].title).toBe('ID')
+  })
+})
+
+describe('sortDisplayFieldsDimensionsFirst', () => {
+  it('默认维度在前、指标在后，并保持各自原有顺序', () => {
+    const fields = [
+      { field: 'amount_1', title: '金额1', role: 'measure' as const },
+      { field: 'region', title: '区域', role: 'dimension' as const },
+      { field: 'amount_2', title: '金额2', role: 'measure' as const },
+      { field: 'date', title: '日期', role: 'dimension' as const },
+    ]
+
+    expect(sortDisplayFieldsDimensionsFirst(fields).map((field) => field.field))
+      .toEqual(['region', 'date', 'amount_1', 'amount_2'])
+    expect(fields.map((field) => field.field)).toEqual(['amount_1', 'region', 'amount_2', 'date'])
   })
 })
 

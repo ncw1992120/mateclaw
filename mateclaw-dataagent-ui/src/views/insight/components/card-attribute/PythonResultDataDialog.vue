@@ -60,7 +60,20 @@
       </div>
 
       <section class="dd-block dd-result">
-        <div class="dd-head"><span class="dd-title">Python 原始结果</span><span class="dd-hint">{{ resultHint }}</span></div>
+        <div class="dd-head">
+          <span class="dd-title">Python 原始结果</span>
+          <div class="dd-result-actions">
+            <span class="dd-hint">{{ resultHint }}</span>
+            <el-button
+              v-if="component"
+              type="primary"
+              size="small"
+              data-testid="python-component-render"
+              :disabled="!hasQueried"
+              @click="renderComponent"
+            >组件渲染</el-button>
+          </div>
+        </div>
         <div class="dd-result-body">
           <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
             <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
@@ -79,6 +92,11 @@
           />
         </div>
       </section>
+
+      <section v-if="component && componentPreviewVisible" class="dd-block" data-testid="python-component-preview-section">
+        <div class="dd-head"><span class="dd-title">组件预览</span><span class="dd-hint">预览与画布使用相同的组件和本次查询结果</span></div>
+        <ComponentDataPreview :component="component" :component-data="componentRenderData!" />
+      </section>
     </div>
   </el-dialog>
 </template>
@@ -90,19 +108,12 @@ import type { QuerySortSpec } from '@/types'
 import { needsValue, type FilterCondition } from '@/utils/filter-conditions'
 import { applyResultFilters } from '@/utils/result-preview-filter'
 import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/utils/python-result-filter-conditions'
-import type { InsightComponent } from '@/types'
+import type { InsightComponent, InsightComponentData } from '@/types'
+import { componentPreviewData } from '@/utils/component-preview-data'
+import ComponentDataPreview from '../ComponentDataPreview.vue'
 
 const props = defineProps<{ component?: InsightComponent | null }>()
-const emit = defineEmits<{
-  (event: 'resultset', payload: {
-    componentId: string
-    status: 'ready'
-    source: 'script'
-    rows: Record<string, unknown>[]
-    fieldLabels?: Record<string, string>
-    error: ''
-  }): void
-}>()
+const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
 const { state, previewState, loadResultPreview } = useInsight()
 const ui = state.ui
 const loading = computed(() => previewState.loading)
@@ -120,6 +131,8 @@ const page = ref(1)
 const conditionRows = ref<ReturnType<typeof createPythonResultFilterRows>>([])
 const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
+const hasQueried = ref(false)
+const componentPreviewVisible = ref(false)
 
 const visibleColumns = computed(() => {
   return previewState.payload?.dataColumns ?? []
@@ -143,6 +156,9 @@ const componentRows = computed(() => {
   const fields = visibleColumns.value.map((column) => column.name)
   return sortedRows.value.map((row) => Object.fromEntries(fields.map((field) => [field, row[field]])))
 })
+const componentRenderData = computed(() => props.component
+  ? componentPreviewData(props.component, componentRows.value, displayRows.value.map(({ name, title }) => ({ name, title })))
+  : undefined)
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)
 const queryHint = computed(() => conditionRows.value.length ? '筛选条件来自查询配置；关闭条件后点击查询可查看全部结果' : '未配置筛选字段，本次将展示全部 Python 输出')
 const resultHint = computed(() => previewState.payload ? `${filteredRows.value.length} / ${(previewState.payload.dataRows ?? []).length} 行` : '请点击查询')
@@ -176,24 +192,21 @@ function onSortChange(detail: { prop?: string; order?: 'ascending' | 'descending
 function query(): void {
   appliedConditions.value = enabledPythonResultConditions(conditionRows.value)
   page.value = 1
-  if (!props.component || !previewState.payload) return
-  const fieldLabels = {
-    ...(state.resultSet.fieldLabels ?? {}),
-    ...Object.fromEntries(displayFields.value.map((field) => [field.field, field.title || field.field])),
-  }
-  emit('resultset', {
-    componentId: props.component.id,
-    status: 'ready',
-    source: 'script',
-    rows: componentRows.value,
-    fieldLabels,
-    error: '',
-  })
+  hasQueried.value = Boolean(previewState.payload)
+  componentPreviewVisible.value = false
+}
+
+function renderComponent(): void {
+  if (!props.component || !hasQueried.value || !componentRenderData.value) return
+  emit('render', componentRenderData.value)
+  componentPreviewVisible.value = true
 }
 
 function initialize(): void {
   page.value = 1
   sortState.value = null
+  hasQueried.value = false
+  componentPreviewVisible.value = false
   appliedConditions.value = []
   conditionRows.value = createPythonResultFilterRows(filterFields.value, state.filterCatalog)
   void loadResultPreview()
@@ -218,6 +231,7 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-display-empty, .dd-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
 .dd-binding-error { display: block; color: var(--el-color-danger); font-size: 12px; margin-top: 4px; }
 .dd-query-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dd-result-actions { display: flex; align-items: center; gap: 10px; }
 .dd-result-body { min-height: 160px; }
 .dd-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--db-text-muted); }
 </style>
