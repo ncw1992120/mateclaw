@@ -164,7 +164,7 @@ function handleGenerate(): void {
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   border: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   border-radius: var(--radius-lg);
   animation: fadeIn var(--transition-base) both;
@@ -337,7 +337,7 @@ function handleGenerate(): void {
 }
 
 .section-content :deep(th) {
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   font-weight: 600;
   color: var(--db-text-secondary);
 }
@@ -372,7 +372,7 @@ function handleGenerate(): void {
   text-align: center;
   padding: var(--space-sm) var(--space-md);
   border-top: 1px solid var(--db-border);
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   flex-shrink: 0;
 }
 

@@ -139,8 +139,12 @@ function handleDateChange(dates: [string, string] | null): void {
 
 .time-filter-widget :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   box-shadow: 0 0 0 1px var(--db-border) inset;
+}
+
+.time-filter-widget :deep(.el-date-editor.is-disabled.el-input__wrapper) {
+  background: var(--db-hover);
 }
 
 .time-filter-widget :deep(.el-input__inner) {

@@ -53,9 +53,7 @@ export function resolveComponentVisualStyle(
     ? normalized.background.color
     : normalized.background?.mode === 'transparent'
       ? 'transparent'
-      : type === 'combination'
-        ? 'var(--db-surface-container, var(--db-surface-card, var(--db-card)))'
-        : 'var(--db-surface-card, var(--db-card))'
+      : 'var(--db-surface-card, var(--db-card))'
 
   return {
     '--component-border': border.mode === 'visible'
