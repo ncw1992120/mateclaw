@@ -2,7 +2,7 @@
   <div class="component-data-preview" data-testid="component-render-preview">
     <KpiCardWidget
       v-if="component.type === 'kpi'"
-      :component="component"
+      :component="previewComponent"
       :component-data="componentData"
       :show-title="true"
     />
@@ -23,17 +23,41 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { InsightComponent, InsightComponentData } from '@/types'
+import { buildKpiMetrics } from '@/utils/kpi-metrics'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
 import KpiCardWidget from './KpiCardWidget.vue'
 
 defineOptions({ name: 'ComponentDataPreview' })
 
-defineProps<{
+const props = defineProps<{
   component: InsightComponent
   componentData: InsightComponentData
 }>()
+
+/** KPI 预览以本次结果字段为准，使用临时组件配置，不污染画布中的持久化指标配置。 */
+const previewComponent = computed<InsightComponent>(() => {
+  if (props.component.type !== 'kpi' || !Array.isArray(props.componentData.kpiList)) {
+    return props.component
+  }
+
+  const fields = props.componentData.kpiList.map((item) => {
+    const name = item.fieldKey || item.name
+    return {
+      name,
+      displayName: props.componentData.fieldLabels?.[name] || item.name || name,
+      role: 'measure',
+      unit: item.unit,
+    }
+  })
+
+  return {
+    ...props.component,
+    kpiMetrics: fields.length ? buildKpiMetrics(fields, props.component.kpiMetrics ?? []) : [],
+  }
+})
 </script>
 
 <style scoped>
