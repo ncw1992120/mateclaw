@@ -1323,11 +1323,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .grid-item-content::before {
   content: '';
   position: absolute;
-  inset: 0 0 auto;
+  inset: 0;
   z-index: 2;
-  height: 4px;
   border-radius: inherit;
-  background: var(--component-group-accent, transparent);
+  /* 顶线以整卡渐变叠加绘制：叠加层全高继承圆角不会被压缩，顶线转角与卡片圆角逐像素吻合 */
+  background: linear-gradient(to bottom, var(--component-group-accent, transparent) 0 6px, transparent 6px);
   pointer-events: none;
 }
 
