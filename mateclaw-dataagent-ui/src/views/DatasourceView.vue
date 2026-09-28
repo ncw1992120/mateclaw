@@ -16,7 +16,8 @@
         <p>先选择连接类型，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。</p>
         <div class="source-options">
           <button v-for="source in sourceOptions" :key="source.id" class="source-option" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
-            <span class="source-option-icon">{{ source.icon }}</span>
+            <AloudataBrandMark v-if="source.id === 60" class="source-option-icon" />
+            <span v-else class="source-option-icon">{{ source.icon }}</span>
             <span><strong>{{ source.name }}</strong><small>{{ source.description }}</small></span>
           </button>
         </div>
@@ -257,6 +258,7 @@ import type { Datasource } from '@/types'
 import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 import DatasourceForm from './datasource/DatasourceForm.vue'
 import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
+import AloudataBrandMark from '@/components/AloudataBrandMark.vue'
 
 const { t } = useI18n()
 const store = useDatasourceStore()
@@ -384,7 +386,7 @@ const sourceOptions = [
   { id: 3, name: 'MySQL', icon: '🐬', description: 'JDBC 关系型数据库' },
   { id: 15, name: 'PostgreSQL', icon: '🐘', description: 'JDBC 关系型数据库' },
   { id: 17, name: 'SQL Server', icon: '🔷', description: 'JDBC 关系型数据库' },
-  { id: 60, name: 'Aloudata', icon: '❎', description: '指标视图语义层' },
+  { id: 60, name: 'Aloudata', icon: '', description: '指标视图语义层' },
 ]
 
 function selectSourceType(sourceId: number): void {
