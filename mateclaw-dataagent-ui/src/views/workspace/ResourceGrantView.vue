@@ -1,29 +1,35 @@
 <template>
   <div class="grant-page">
-    <header class="grant-header">
-      <h2 class="page-title">资源授权管理</h2>
-      <p class="page-desc">将数据源、知识库等私有资源授权给其他成员使用</p>
-    </header>
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1 class="page-title">资源授权管理</h1>
+        <p class="page-desc">将数据源、知识库等私有资源授权给其他成员使用</p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn-create-pill" @click="openGrantDialog">
+          <el-icon :size="14"><Plus /></el-icon>
+          新增授权
+        </button>
+      </div>
+    </div>
 
     <!-- 授权记录表格 -->
-    <div class="grant-table-wrapper">
-      <div class="table-toolbar">
-        <el-select v-model="filterResourceType" placeholder="资源类型" clearable size="small" style="width: 140px" @change="loadGrants">
+    <div class="page-body">
+      <div class="grant-toolbar">
+        <el-select v-model="filterResourceType" placeholder="按资源类型筛选" clearable style="width: 160px" @change="loadGrants">
           <el-option label="数据源" value="datasource" />
           <el-option label="知识库" value="knowledge" />
           <el-option label="技能" value="skill" />
           <el-option label="智能体" value="agent" />
           <el-option label="词典" value="business_term" />
         </el-select>
-        <el-button type="primary" size="small" @click="openGrantDialog">
-          新增授权
-        </el-button>
+        <span class="grant-count">共 {{ filteredGrants.length }} 条</span>
       </div>
 
-      <el-table :data="filteredGrants" v-loading="loading" stripe size="small" style="width: 100%">
-        <el-table-column prop="resourceType" label="资源类型" width="120">
+      <el-table :data="filteredGrants" v-loading="loading" class="mc-table">
+        <el-table-column prop="resourceType" label="资源类型" width="110">
           <template #default="{ row }">
-            {{ resourceTypeLabel(row.resourceType) }}
+            <span class="mc-tag" :class="row.resourceType">{{ resourceTypeLabel(row.resourceType) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="资源名称" min-width="160">
@@ -33,8 +39,8 @@
         </el-table-column>
         <el-table-column label="授权对象" width="180">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ grantTypeLabel(row.grantType) }}</el-tag>
-            <span style="margin-left: 6px">{{ resolveGranteeName(row) }}</span>
+            <span class="mc-tag" :class="row.grantType === 'role' ? 'agent' : 'text'">{{ grantTypeLabel(row.grantType) }}</span>
+            <span class="grantee-name">{{ resolveGranteeName(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="授权人" width="120">
@@ -44,48 +50,38 @@
         </el-table-column>
         <el-table-column prop="permission" label="权限" width="100">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.permission === 'edit' ? 'warning' : row.permission === 'use' ? 'success' : 'info'">
-              {{ permissionLabel(row.permission) }}
-            </el-tag>
+            <span class="mc-tag" :class="permissionClass(row.permission)">{{ permissionLabel(row.permission) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'">
-              {{ row.status === 1 ? '生效' : '已撤销' }}
-            </el-tag>
+            <span class="mc-tag" :class="row.status === 1 ? 'delivered' : 'revoked'">{{ row.status === 1 ? '生效' : '已撤销' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="过期时间" width="170">
+        <el-table-column label="过期时间" width="150">
           <template #default="{ row }">
-            {{ row.expireTime ? new Date(row.expireTime).toLocaleString() : '永久' }}
+            {{ row.expireTime ? formatDateTime(row.expireTime) : '永久' }}
           </template>
         </el-table-column>
-        <el-table-column label="授权时间" width="170">
+        <el-table-column label="授权时间" width="150">
           <template #default="{ row }">
-            {{ new Date(row.createTime).toLocaleString() }}
+            {{ formatDateTime(row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="90" fixed="right">
           <template #default="{ row }">
-            <el-button
-              v-if="row.status === 1"
-              size="small"
-              link
-              type="primary"
-              @click="openEditDialog(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-if="row.status === 1"
-              size="small"
-              link
-              type="danger"
-              @click="handleRevoke(row)"
-            >
-              撤销
-            </el-button>
+            <div class="row-actions">
+              <el-tooltip content="编辑" placement="top" :disabled="row.status !== 1">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.status !== 1 }" @click="row.status === 1 && openEditDialog(row)">
+                  <Edit />
+                </el-icon>
+              </el-tooltip>
+              <el-tooltip content="撤销" placement="top" :disabled="row.status !== 1">
+                <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': row.status !== 1 }" @click="row.status === 1 && handleRevoke(row)">
+                  <CircleClose />
+                </el-icon>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -200,6 +196,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Edit, CircleClose } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import { useAgentStore } from '@/stores/useAgentStore'
@@ -288,6 +286,12 @@ function grantTypeLabel(type: string): string {
 function permissionLabel(perm: string): string {
   const map: Record<string, string> = { view: '查看', use: '使用', edit: '编辑' }
   return map[perm] || perm
+}
+
+/** 权限胶囊样式映射：查看蓝 / 使用绿 / 编辑琥珀 */
+function permissionClass(perm: string): string {
+  const map: Record<string, string> = { view: 'text', use: 'delivered', edit: 'pending' }
+  return map[perm] || ''
 }
 
 /** 根据资源类型和 ID 解析资源名称 */
@@ -508,41 +512,129 @@ onMounted(() => {
 .grant-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
   height: 100%;
-  overflow: auto;
+  gap: 16px;
+  box-sizing: border-box;
 }
 
-.grant-header {
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.page-header-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  color: var(--el-text-color-primary);
-  margin: 0 0 4px;
+  color: var(--db-text);
+  margin: 0;
+  line-height: 1.3;
 }
 
 .page-desc {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  margin: 0;
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
 }
 
-.grant-table-wrapper {
+/* 胶囊按钮：主题色实心 + 白字 + 阴影 */
+.btn-create-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--main-orange);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
+}
+
+.btn-create-pill:hover {
+  filter: brightness(1.08);
+}
+
+.page-body {
   flex: 1;
   min-height: 0;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.table-toolbar {
+.grant-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
+}
+
+.grant-count {
+  font-size: 12.5px;
+  color: var(--db-text-muted, var(--theme-text-muted));
+}
+
+.grantee-name {
+  margin-left: 6px;
+  color: var(--db-text, var(--theme-text));
+}
+
+/* row-actions + action-icon：与工作区管理页同约定 */
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.action-icon:hover {
+  opacity: 1;
+  background: var(--db-hover);
+  color: var(--db-text);
+}
+
+.action-icon.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 </style>

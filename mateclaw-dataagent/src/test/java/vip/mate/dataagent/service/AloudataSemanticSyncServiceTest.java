@@ -17,6 +17,7 @@ import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
 import vip.mate.dataagent.aloudata.AloudataEndpointService;
 import vip.mate.dataagent.service.impl.AloudataSemanticSyncServiceImpl;
+import vip.mate.dataagent.support.AloudataSyncFilterSupport;
 import vip.mate.llm.service.ModelConfigService;
 
 import java.util.List;
@@ -49,7 +50,7 @@ class AloudataSemanticSyncServiceTest {
                 endpointService,
                 mock(AloudataSemanticEsService.class),
                 mock(ModelConfigService.class),
-                mock(AloudataService.class));
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
         DatasourceEntity datasource = new DatasourceEntity();
         datasource.setSourceType("aloudata");
         AloudataConfigDTO config = new AloudataConfigDTO();
@@ -97,7 +98,7 @@ class AloudataSemanticSyncServiceTest {
                 endpointService,
                 mock(AloudataSemanticEsService.class),
                 mock(ModelConfigService.class),
-                mock(AloudataService.class));
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
         DatasourceEntity datasource = new DatasourceEntity();
         datasource.setSourceType("aloudata");
         AloudataConfigDTO config = new AloudataConfigDTO();
@@ -137,7 +138,7 @@ class AloudataSemanticSyncServiceTest {
                 mock(AloudataEndpointService.class),
                 mock(AloudataSemanticEsService.class),
                 mock(ModelConfigService.class),
-                mock(AloudataService.class));
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
         DatasourceEntity datasource = new DatasourceEntity();
         datasource.setSourceType("aloudata");
         AloudataConfigDTO config = new AloudataConfigDTO();
@@ -169,7 +170,7 @@ class AloudataSemanticSyncServiceTest {
                 endpointService,
                 mock(AloudataSemanticEsService.class),
                 mock(ModelConfigService.class),
-                mock(AloudataService.class));
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
         DatasourceEntity datasource = new DatasourceEntity();
         datasource.setSourceType("aloudata");
         AloudataConfigDTO config = new AloudataConfigDTO();
@@ -206,7 +207,7 @@ class AloudataSemanticSyncServiceTest {
                 mock(AloudataEndpointService.class),
                 mock(AloudataSemanticEsService.class),
                 mock(ModelConfigService.class),
-                mock(AloudataService.class));
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
 
         Map<String, Object> metric = Map.of(
                 "metricName", "metric_a",

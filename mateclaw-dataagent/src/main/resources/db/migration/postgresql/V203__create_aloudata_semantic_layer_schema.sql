@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_version ON dataagent_aloudata_metric (sync_v
 
 CREATE INDEX IF NOT EXISTS idx_metric_ds_category ON dataagent_aloudata_metric (datasource_id, metric_category_id);
 
-CREATE INDEX IF NOT EXISTS idx_metric_ds_name ON dataagent_aloudata_metric (datasource_id, metric_name);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_metric_ds_name ON dataagent_aloudata_metric (datasource_id, metric_name);
 
 CREATE INDEX IF NOT EXISTS idx_metric_keyword ON dataagent_aloudata_metric (datasource_id, metric_name, metric_display_name);
 

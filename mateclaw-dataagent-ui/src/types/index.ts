@@ -31,6 +31,15 @@ export interface WorkspaceMember {
   updateTime: string
 }
 
+/** 工作区成员分页响应（对齐 MyBatis Plus IPage 结构） */
+export interface WorkspaceMemberPage {
+  records: WorkspaceMember[]
+  total: number
+  size: number
+  current: number
+  pages: number
+}
+
 /** 登录响应 */
 export interface LoginResponse {
   id: number | string
@@ -476,14 +485,14 @@ export interface PlanMeta {
   steps: string[]
   currentStep: number
   stepResults?: { result: string; status: 'completed' | 'failed' }[]
-  /** 计划整体状态：running / completed / failed */
-  planStatus?: 'running' | 'completed' | 'failed'
+  /** 计划整体状态：running / completed / failed / stopped（用户主动中断） */
+  planStatus?: 'running' | 'completed' | 'failed' | 'stopped'
 }
 
 /** 委派子 agent 执行的工具条目（delegation_progress 累积） */
 export interface DelegationToolEntry {
   name: string
-  status: 'running' | 'completed' | 'error'
+  status: 'running' | 'completed' | 'error' | 'stopped'
 }
 
 /**
@@ -494,7 +503,7 @@ export interface DelegationToolEntry {
 export interface DelegationNode {
   subagentId: string
   agentName: string
-  status: 'running' | 'completed' | 'error'
+  status: 'running' | 'completed' | 'error' | 'stopped'
   depth: number
   task?: string
   result?: string
@@ -532,6 +541,8 @@ export interface ChatMessage {
   status?: ChatMessageStatus
   /** 错误信息（status=failed 时存在） */
   errorInfo?: import('./chatError').ChatErrorInfo
+  /** 该轮回复对应的数据源 ID 快照（发送时锁定，不随输入框后续改动变化） */
+  datasourceIds?: string[]
 }
 
 /** SSE 结构化事件 */
@@ -834,12 +845,51 @@ export interface Skill {
   workspaceId: number
   /** 安全扫描状态 */
   securityScanStatus: string
+  /** 最近一次安全扫描的发现列表（JSON 序列化的 SkillSecurityFinding[]） */
+  securityScanResult?: string
+  /** 最近一次安全扫描时间 */
+  securityScanTime?: string
   /** 生命周期状态：active / stale / archived */
   lifecycleState: string
   /** 是否被钉住 */
   pinned: boolean
+  /** SKILL.md 协议正文（详情接口返回） */
+  skillContent?: string
   createTime: string
   updateTime: string
+}
+
+/** 技能 bundle 文件视图（references/、scripts/ 目录下） */
+export interface SkillFileView {
+  /** 相对路径，例如 references/notes.md */
+  filePath: string
+  /** 文件正文（列表接口不返回，读取接口返回） */
+  content: string | null
+  /** 正文大小（字节） */
+  contentSize: number | null
+  /** SHA-256 哈希 */
+  sha256: string | null
+  updateTime: string | null
+}
+
+/** 技能安全扫描发现项（securityScanResult JSON 数组元素） */
+export interface SkillSecurityFinding {
+  /** 严重度：CRITICAL / HIGH / MEDIUM / LOW / INFO */
+  severity: string
+  /** 规则 ID，例如 REVERSE_SHELL */
+  ruleId: string
+  /** 风险类别，例如 CODE_EXECUTION */
+  category?: string
+  /** 所在文件路径 */
+  filePath?: string
+  /** 所在行号 */
+  lineNumber?: number
+  /** 发现标题 */
+  title?: string
+  /** 发现描述 */
+  description?: string
+  /** 修复建议 */
+  remediation?: string
 }
 
 /** 技能类型选项（对齐后端 SkillEntity.skillType 实际值：builtin / custom / mcp） */

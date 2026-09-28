@@ -1,6 +1,6 @@
 import api from './index'
 
-const BASE_URL = '/dataagent/api/v1/knowledge'
+const BASE_URL = '/v1/knowledge'
 
 /** 知识库信息 */
 export interface KnowledgeBase {

@@ -191,6 +191,25 @@
 
           <!-- 定时同步（仅 Aloudata 指标平台数据源） -->
           <template v-if="isAloudata">
+            <!-- 同步过滤规则（QLExpress 黑名单，命中不入库） -->
+            <div class="form-field form-field-wide">
+              <label class="form-label">
+                <span>同步过滤规则</span>
+                <el-tooltip
+                  :content="ALOUDATA_SYNC_FILTER_TOOLTIP"
+                  placement="top"
+                >
+                  <span class="form-tip">?</span>
+                </el-tooltip>
+              </label>
+              <textarea
+                v-model="form.syncFilterExpressions"
+                class="form-textarea"
+                rows="3"
+                :disabled="!isEditing"
+                placeholder="categoryName in ('测试类目', '敏感数据')&#10;metricName.startsWith('test_')"
+              ></textarea>
+            </div>
             <div class="form-field form-field-wide">
               <label class="checkbox-label">
                 <label class="switch">
@@ -222,6 +241,9 @@
                 readonly
                 :placeholder="t('metricPlatform.syncScheduleCronPlaceholder')"
               />
+              <p v-if="!isEditing && aloudataSyncCronDesc" class="field-desc" style="margin: 0; font-size: 12px; color: var(--theme-text-muted);">
+                {{ aloudataSyncCronDesc }}
+              </p>
 
               <p v-if="form.lastAloudataSyncTime" class="field-desc" style="margin: 6px 0 0; font-size: 12px; color: var(--theme-text-muted);">
                 {{ t('metricPlatform.syncScheduleLastTime') }}：{{ formatSyncTime(form.lastAloudataSyncTime) }}
@@ -585,6 +607,8 @@ import {
 import CategoryTreeNode from './CategoryTreeNode.vue'
 import type { CategoryTreeNodeGroup } from './CategoryTreeNode.vue'
 import CronExpressionField from '@/components/CronExpressionField.vue'
+import { describeCron } from '@/utils/cronDescribe'
+import { ALOUDATA_SYNC_FILTER_TOOLTIP } from '@/constants/aloudataSyncFilter'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import type { AloudataCategoryCount, Datasource } from '@/types'
 import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
@@ -641,7 +665,14 @@ const form = reactive({
   aloudataSyncEnabled: false,
   aloudataSyncCron: '',
   lastAloudataSyncTime: '',
+  syncFilterExpressions: '',
 })
+
+/** 存量 connection_params 原始配置（保存时合并，避免覆盖 apiOverrides 等自定义配置） */
+const rawConnectionParams = ref<Record<string, any>>({})
+
+/** cron 表达式的人类可读描述（编辑态由组件内部渲染，查看态复用同一工具渲染，保证两态一致） */
+const aloudataSyncCronDesc = computed(() => describeCron(form.aloudataSyncCron, t))
 
 /** 是否 Aloudata 指标平台数据源（仅此类支持语义层定时同步配置） */
 const isAloudata = computed(() => currentDatasource.value?.sourceType === 'aloudata')
@@ -679,6 +710,8 @@ function parseConnectionParams(raw: string | undefined | null): ConnectionParams
 /** 根据详情接口回填表单 */
 function fillFormFromDatasource(ds: Datasource): void {
   const cp = parseConnectionParams(ds.connectionParams)
+  // 缓存存量配置（apiOverrides 等自定义 key 保存时需保留）
+  rawConnectionParams.value = { ...cp }
   // 产品层与语义层地址统一从 connection_params 读取（JSON 中 anymetricsHost / semanticHost）；
   // 未配置时回退到独立字段，再回退到通用 host 字段（兼容历史数据）
   form.displayName = ds.name || ''
@@ -688,6 +721,10 @@ function fillFormFromDatasource(ds: Datasource): void {
   form.semanticPort = cp.semanticPort != null ? String(cp.semanticPort) : ''
   form.tenantId = ds.username || ''
   form.authMethod = cp.authType || 'UID'
+  // 同步过滤规则（表达式数组回填为每行一条）
+  form.syncFilterExpressions = Array.isArray(cp.syncFilterExpressions)
+    ? cp.syncFilterExpressions.join('\n')
+    : ''
   // 认证值不再回显，编辑时留空表示不修改密码
   form.authValue = ''
   form.metaShared = ds.metaShared ?? false
@@ -1269,17 +1306,27 @@ async function handleSave(): Promise<void> {
     if (props.datasourceId) {
       // 产品层与语义层是独立的进程服务，地址分别保存到 connection_params 中，
       // 不再使用 host 字段作为兜底，避免历史上 host 字段相同时两个地址被同步覆盖
-      const params = {
-        anymetricsHost: form.productAddress,
-        semanticHost: form.semanticAddress,
-        anymetricsPort: Number(form.productPort) || 8080,
-        semanticPort: Number(form.semanticPort) || 8080,
-        authType: form.authMethod,
+      // 合并存量配置（apiOverrides 等自定义 key 保留），避免编辑保存时整体覆盖丢失
+      const merged: Record<string, any> = { ...rawConnectionParams.value }
+      merged.anymetricsHost = form.productAddress
+      merged.semanticHost = form.semanticAddress
+      merged.anymetricsPort = Number(form.productPort) || 8080
+      merged.semanticPort = Number(form.semanticPort) || 8080
+      merged.authType = form.authMethod
+      // 同步过滤规则按行拆分为表达式数组；清空时同步移除，避免残留旧配置
+      const syncFilterExpressions = form.syncFilterExpressions
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+      if (syncFilterExpressions.length > 0) {
+        merged.syncFilterExpressions = syncFilterExpressions
+      } else {
+        delete merged.syncFilterExpressions
       }
       const payload: Record<string, any> = {
         name: form.displayName,
         username: form.tenantId,
-        connectionParams: JSON.stringify(params),
+        connectionParams: JSON.stringify(merged),
         metaShared: form.metaShared,
       }
       // 定时同步配置（仅 Aloudata 数据源提交；关闭时清空 cron）
@@ -1344,7 +1391,7 @@ const indicators = reactive([
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 24px 32px 40px;
+  padding: 20px;
   background: var(--theme-bg);
   min-height: 100%;
   box-sizing: border-box;
@@ -1538,8 +1585,8 @@ const indicators = reactive([
 }
 
 .form-input,
-.form-select {
-  height: 36px;
+.form-select,
+.form-textarea {
   border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 0 12px;
@@ -1553,26 +1600,38 @@ const indicators = reactive([
   width: 100%;
 }
 
+.form-textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
 .form-input:hover:not(:disabled),
-.form-select:hover:not(:disabled) {
+.form-select:hover:not(:disabled),
+.form-textarea:hover:not(:disabled) {
   border-color: var(--theme-border-strong);
 }
 
 .form-input:focus,
-.form-select:focus {
+.form-select:focus,
+.form-textarea:focus {
   border-color: var(--main-orange);
   box-shadow: 0 0 0 3px rgba(65, 118, 230, 0.08);
 }
 
 .form-input:disabled,
-.form-select:disabled {
+.form-select:disabled,
+.form-textarea:disabled {
   background: var(--theme-bg);
   color: var(--theme-text);
   cursor: not-allowed;
   border-color: var(--theme-border);
 }
 
-.form-input::placeholder {
+.form-input::placeholder,
+.form-textarea::placeholder {
   color: var(--theme-text-muted);
 }
 

@@ -1,0 +1,136 @@
+/**
+ * 示例2：季节性残差检测 — 日粒度订单量的周末高峰不应被误判为异常
+ * 用户: "近35天订单量有没有异常"
+ *
+ * 关键点：订单量存在稳定的周末高峰（周六/周日约为工作日的 1.35 倍），
+ * 直接对原序列做点检测会把每个周末都报成异常。检测引擎先做稳健结构识别
+ * （自相关推断周期 = 7，Theil–Sen 局部线性趋势 + 相位中位数季节 = 稳健基线），
+ * 再对残差判定，因此周末高峰不报、真实残差异常才报。
+ *
+ * 工具调用流程:
+ * 1. getCurrentDate() → 2025-06-19（相对时间必须先取真实日期，禁止主观推算）
+ * 2. aloudata_search_semantic(datasourceId=..., keyword="订单量") → metricName="order_count"
+ * 3. aloudata_metrics_query(dimensions=["metric_time__day"]、升序、近35天) → 时间序列
+ * 4. runSkillScript(skillName="aloudata_metric_anomaly_detection", scriptPath="scripts/anomaly_detect.py", args=步骤4请求)
+ * 5. 对 05-18 的凹陷按 region 维度下钻定位根因
+ */
+
+/* ========== 步骤3: 取数请求（日粒度 + 时间升序）========== */
+{
+    "metrics": ["order_count"],
+    "dimensions": ["metric_time__day"],
+    "timeConstraint": "([metric_time__day]>=DateAdd(Today(),-35,\"DAY\"))",
+    "orders": [{"metric_time__day": "asc"}],
+    "limit": 200
+}
+
+/* ========== 步骤4: 检测请求（直接给序列；透传 queryResult 亦可，脚本自动提取时间序列）========== */
+{
+    "metric": "order_count",
+    "granularity": "DAY",
+    "method": "auto",
+    "direction": "both",
+    "series": [
+        {"time": "2025-05-16", "value": 4934},
+        {"time": "2025-05-17", "value": 6745},
+        {"time": "2025-05-18", "value": 2294},
+        {"time": "2025-05-19", "value": 4916},
+        {"time": "2025-05-20", "value": 4965},
+        {"time": "2025-05-21", "value": 4930},
+        {"time": "2025-05-22", "value": 5026},
+        {"time": "2025-05-23", "value": 5094},
+        {"time": "2025-05-24", "value": 6715},
+        {"time": "2025-05-25", "value": 6720},
+        {"time": "2025-05-26", "value": 5066},
+        {"time": "2025-05-27", "value": 4997},
+        {"time": "2025-05-28", "value": 5600},
+        {"time": "2025-05-29", "value": 4924},
+        {"time": "2025-05-30", "value": 5024},
+        {"time": "2025-05-31", "value": 6607},
+        {"time": "2025-06-01", "value": 6699},
+        {"time": "2025-06-02", "value": 5010},
+        {"time": "2025-06-03", "value": 5055},
+        {"time": "2025-06-04", "value": 5095},
+        {"time": "2025-06-05", "value": 5096},
+        {"time": "2025-06-06", "value": 4900},
+        {"time": "2025-06-07", "value": 6778},
+        {"time": "2025-06-08", "value": 6714},
+        {"time": "2025-06-09", "value": 4968},
+        {"time": "2025-06-10", "value": 5084},
+        {"time": "2025-06-11", "value": 4958},
+        {"time": "2025-06-12", "value": 5051},
+        {"time": "2025-06-13", "value": 4926},
+        {"time": "2025-06-14", "value": 6681},
+        {"time": "2025-06-15", "value": 6607},
+        {"time": "2025-06-16", "value": 4905},
+        {"time": "2025-06-17", "value": 4906},
+        {"time": "2025-06-18", "value": 5066},
+        {"time": "2025-06-19", "value": 5038}
+    ]
+}
+
+/* ========== 步骤4 响应（真实输出，节选）========== */
+{
+    "config": {
+        "method": "auto",
+        "methodsUsed": ["mad", "iqr", "moving"],
+        "minVotes": 2,
+        "direction": "both",
+        "granularity": "DAY",
+        "period": 7,
+        "seasonalAdjusted": true,
+        "seasonalStrength": 0.992,
+        "params": {"madThreshold": 3.5, "zscoreThreshold": 3.0, "iqrK": 1.5, "iqrExtremeK": 3.0, "window": 7, "movingThreshold": 3.5, "ewmaAlpha": 0.3, "ewmaL": 3.0, "minDeviationRatio": 0.03}
+    },
+    "summary": {
+        "anomalyCount": 2,
+        "episodeCount": 2,
+        "severityCounts": {"CRITICAL": 2},
+        "isStable": false,
+        "trendHint": "flat",
+        "conclusion": "检出 2 个异常点、2 个异常片段；最显著的是 2025-05-18（CRITICAL，偏离基线约 65.3%，得分 -62.11）。"
+    },
+    "anomalies": [
+        {
+            "index": 2, "time": "2025-05-18", "value": 2294, "expected": 6608.894444,
+            "score": -62.114, "deviationRatio": 0.6529, "direction": "down",
+            "severity": "CRITICAL", "type": "DIP", "methods": ["iqr", "mad", "moving"]
+        },
+        {
+            "index": 12, "time": "2025-05-28", "value": 5600, "expected": 5073.361905,
+            "score": 5.841, "deviationRatio": 0.1038, "direction": "up",
+            "severity": "CRITICAL", "type": "SPIKE", "methods": ["iqr", "mad", "moving"]
+        }
+    ],
+    "episodes": [
+        {
+            "startTime": "2025-05-18", "endTime": "2025-05-18", "length": 1,
+            "type": "DIP", "severity": "CRITICAL", "maxScore": 62.114, "meanDeviationRatio": 0.6529
+        },
+        {
+            "startTime": "2025-05-28", "endTime": "2025-05-28", "length": 1,
+            "type": "SPIKE", "severity": "CRITICAL", "maxScore": 5.841, "meanDeviationRatio": 0.1038
+        }
+    ],
+    "warnings": []
+}
+
+/* ========== 步骤5: 对 05-18 凹陷按区域下钻（dimensions 加业务维度）========== */
+{
+    "metrics": ["order_count"],
+    "dimensions": ["region", "metric_time__day"],
+    "timeConstraint": "([metric_time__day]>=DateAdd(Today(),-35,\"DAY\"))",
+    "orders": [{"metric_time__day": "asc"}],
+    "limit": 1000
+}
+
+/* 解读：
+   - 序列有明显的周末高峰（约 6700 vs 工作日 5000），因季节强度 0.992 被分解为基线，
+     除 05-18 外其余 9 个周末高点无一点被报为异常 → 周期波动不误判
+   - 05-18（周日）实际 2294、基线 6609：连周末基线都大幅跌破、向下偏离 65.3%（CRITICAL DIP），
+     三个检测器一致命中 → 高可信凹陷，优先排查渠道中断、缺货、支付故障或数据延迟
+   - 05-28 实际 5600、基线 5073，仅向上偏离 10.4%，却因序列规整（噪声小）超出 3×IQR 极值围栏
+     被判 CRITICAL → 印证"得分/严重度是模型相对的"：规整序列统计门限敏感，判读以
+     deviationRatio 为主、score 为辅，业务上按 +10% 尖峰对待
+   - 若 05-18 各区域同步下跌 → 系统性原因（口径变更、上游延迟、大盘波动）；
+     仅个别区域下跌 → 局部业务问题 */

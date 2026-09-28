@@ -1,11 +1,7 @@
 package vip.mate.dataagent.auth.service;
 
-import vip.mate.dataagent.auth.dto.AuthModeVO;
-import vip.mate.dataagent.auth.dto.DataAgentLoginRequest;
-import vip.mate.dataagent.auth.dto.PilotCaptchaVO;
-import vip.mate.dataagent.auth.dto.PilotSsoRequest;
+import vip.mate.dataagent.auth.dto.*;
 import vip.mate.dataagent.auth.enterprise.EnterpriseIdentityProvider;
-import vip.mate.dataagent.auth.dto.DataAgentLoginResponse;
 
 /**
  * DataAgent 认证服务

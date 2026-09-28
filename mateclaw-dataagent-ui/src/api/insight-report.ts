@@ -2,10 +2,10 @@ import api from './index'
 import type { InsightReport, InsightReportPublishInput } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/insight/dashboards'
+const BASE_URL = '/v1/insight/dashboards'
 
 /** 报告 API 路径常量 */
-const REPORT_BASE_URL = '/dataagent/api/v1/insight/reports'
+const REPORT_BASE_URL = '/v1/insight/reports'
 
 /** 归因分析请求参数 */
 export interface AttributionAnalysisParams {

@@ -16,8 +16,8 @@
              #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON DUPLICATE KEY UPDATE
-            `dim_display_name` = VALUES(`dim_display_name`),
             `dim_code` = VALUES(`dim_code`),
+            `dim_display_name` = VALUES(`dim_display_name`),
             `dim_category_id` = VALUES(`dim_category_id`),
             `dim_category_name` = VALUES(`dim_category_name`),
             `origin_data_type` = VALUES(`origin_data_type`),
@@ -51,8 +51,8 @@
              #{item.embedding}, #{item.embeddingModelId}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON CONFLICT (datasource_id, dim_name) DO UPDATE SET
-            dim_display_name = EXCLUDED.dim_display_name,
             dim_code = EXCLUDED.dim_code,
+            dim_display_name = EXCLUDED.dim_display_name,
             dim_category_id = EXCLUDED.dim_category_id,
             dim_category_name = EXCLUDED.dim_category_name,
             origin_data_type = EXCLUDED.origin_data_type,

@@ -1,36 +1,58 @@
 <template>
   <div class="member-manage-page">
     <div class="page-header">
-      <div>
+      <div class="page-header-left">
         <h1 class="page-title">{{ t('memberManage.title') }}</h1>
         <p class="page-desc">{{ t('memberManage.desc') }}</p>
       </div>
-      <button v-if="canManage" class="btn-primary" @click="openAddModal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        {{ t('memberManage.addMember') }}
-      </button>
+      <div v-if="canManage" class="page-header-actions">
+        <button class="btn-create-pill" @click="openAddModal">
+          <el-icon :size="14"><Plus /></el-icon>
+          {{ t('memberManage.addMember') }}
+        </button>
+      </div>
     </div>
 
     <div class="page-body surface-card">
+      <!-- 工具栏：关键词搜索（用户名/昵称，防抖） + 角色过滤，共同操纵当前分页视图 -->
+      <div class="member-toolbar">
+        <el-input
+          v-model="query.keyword"
+          class="member-search-input"
+          :prefix-icon="Search"
+          clearable
+          :placeholder="t('memberManage.searchPlaceholder')"
+          @input="debouncedReload.invoke"
+        />
+        <el-select
+          v-model="query.role"
+          class="member-role-filter"
+          :placeholder="t('memberManage.allRoles')"
+          clearable
+          @change="reloadFromFirstPage"
+        >
+          <el-option v-for="r in filterRoles" :key="r" :label="r" :value="r" />
+        </el-select>
+      </div>
+
       <el-table v-loading="loading" :data="members" stripe class="member-table">
         <el-table-column prop="username" :label="t('memberManage.colUsername')" min-width="140" />
         <el-table-column prop="nickname" :label="t('memberManage.colNickname')" min-width="140" />
         <el-table-column prop="role" :label="t('memberManage.colRole')" width="120">
           <template #default="{ row }">
-            <span class="role-tag" :class="row.role">{{ row.role }}</span>
+            <span class="mc-tag" :class="row.role">{{ row.role }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="170" />
-        <el-table-column v-if="canManage" :label="t('common.action')" width="160" fixed="right">
+        <el-table-column prop="createTime" :label="t('memberManage.colJoinTime')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column v-if="canManage" :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
-              <el-dropdown trigger="click" size="small" @command="(role: string) => handleChangeRole(row, role)">
-                <button class="action-link" :disabled="row.role === 'owner'">
-                  {{ t('memberManage.changeRole') }}
-                </button>
+              <el-dropdown trigger="click" size="small" :disabled="row.role === 'owner'" @command="(role: string) => handleChangeRole(row, role)">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': row.role === 'owner' }">
+                  <Edit />
+                </el-icon>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="admin">admin</el-dropdown-item>
@@ -39,13 +61,27 @@
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
-              <button class="action-link danger" :disabled="row.role === 'owner'" @click="handleRemove(row)">
-                {{ t('memberManage.remove') }}
-              </button>
+              <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': row.role === 'owner' }" @click="handleRemove(row)">
+                <Delete />
+              </el-icon>
             </div>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页：过滤后无数据或仅一页时不展示 -->
+      <div v-if="!loading && total > 0" class="member-pagination">
+        <el-pagination
+          v-model:current-page="query.page"
+          v-model:page-size="query.size"
+          :page-sizes="[10, 20, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next"
+          background
+          @current-change="loadMembers"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
 
     <!-- 添加成员弹窗 -->
@@ -100,8 +136,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
+import { useDebouncedFn } from '@/composables/useDebouncedFn'
+import { encryptSensitiveField, SensitiveCryptoError } from '@/utils/sensitiveCrypto'
 import type { WorkspaceMember } from '@/types'
 
 const { t } = useI18n()
@@ -109,8 +150,20 @@ const userStore = useUserStore()
 
 const loading = ref(false)
 const members = ref<WorkspaceMember[]>([])
+const total = ref(0)
 const showModal = ref(false)
 const submitting = ref(false)
+
+/** 列表查询条件：关键词模糊匹配用户名/昵称，role 精确过滤 */
+const query = reactive({
+  keyword: '',
+  role: '',
+  page: 1,
+  size: 20,
+})
+
+/** 角色过滤可选项（与成员角色取值一致） */
+const filterRoles = ['owner', 'admin', 'member', 'viewer']
 
 const form = reactive({
   username: '',
@@ -124,6 +177,12 @@ const canManage = computed(() => {
   return ws && (ws.effectiveRole === 'owner' || ws.effectiveRole === 'admin' || userStore.isAdmin)
 })
 
+/** 关键词输入防抖触发重查，避免逐键请求 */
+const debouncedReload = useDebouncedFn(() => {
+  query.page = 1
+  loadMembers()
+}, 400)
+
 onMounted(() => {
   loadMembers()
 })
@@ -135,11 +194,45 @@ async function loadMembers(): Promise<void> {
   }
   loading.value = true
   try {
-    members.value = await workspaceApi.listWorkspaceMembers(workspaceId)
+    const data = await workspaceApi.pageWorkspaceMembers(workspaceId, {
+      page: query.page,
+      size: query.size,
+      keyword: query.keyword.trim() || undefined,
+      role: query.role || undefined,
+    })
+    members.value = data.records
+    // 后端 Long 全局序列化为字符串（防雪花 ID 精度丢失），total 会以 "8" 形式返回；
+    // ElPagination 以 typeof === 'number' 判定 total 是否有效，字符串会被当作未传值而整体不渲染
+    total.value = Number(data.total) || 0
   } catch {
     // 错误已由 axios 拦截器提示
   } finally {
     loading.value = false
+  }
+}
+
+/** 过滤条件变化时回到第一页并立即重查 */
+function reloadFromFirstPage(): void {
+  debouncedReload.cancel()
+  query.page = 1
+  loadMembers()
+}
+
+/** 改变每页条数后回到第一页重查 */
+function handleSizeChange(): void {
+  query.page = 1
+  loadMembers()
+}
+
+/**
+ * 增删改后刷新当前页；若当前页已越界（如移除末页最后一条、
+ * 角色改动后不再满足过滤条件），回退一页重查，避免空页
+ */
+async function reloadWithPageGuard(): Promise<void> {
+  await loadMembers()
+  if (members.value.length === 0 && query.page > 1) {
+    query.page -= 1
+    await loadMembers()
   }
 }
 
@@ -177,9 +270,12 @@ async function handleSubmit(): Promise<void> {
     })
     ElMessage.success(t('memberManage.addSuccess'))
     showModal.value = false
-    await loadMembers()
-  } catch {
-    // 错误已由 axios 拦截器提示
+    await reloadWithPageGuard()
+  } catch (e) {
+    // axios 链路错误已由拦截器统一提示；仅加密工具自身失败（不经过拦截器）需在此兜底提示，避免静默无响应
+    if (e instanceof SensitiveCryptoError) {
+      ElMessage.error(e.message)
+    }
   } finally {
     submitting.value = false
   }
@@ -196,13 +292,16 @@ async function handleChangeRole(row: WorkspaceMember, role: string): Promise<voi
   try {
     await workspaceApi.updateWorkspaceMemberRole(workspaceId, row.userId, role)
     ElMessage.success(t('memberManage.updateRoleSuccess'))
-    await loadMembers()
+    await reloadWithPageGuard()
   } catch {
     // 错误已由 axios 拦截器提示
   }
 }
 
 async function handleRemove(row: WorkspaceMember): Promise<void> {
+  if (row.role === 'owner') {
+    return
+  }
   try {
     await ElMessageBox.confirm(
       t('memberManage.removeConfirm', { name: row.username }),
@@ -219,7 +318,7 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   try {
     await workspaceApi.removeWorkspaceMember(workspaceId, row.userId)
     ElMessage.success(t('memberManage.removeSuccess'))
-    await loadMembers()
+    await reloadWithPageGuard()
   } catch {
     // 错误已由 axios 拦截器提示
   }
@@ -230,50 +329,66 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
 .member-manage-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 24px;
   gap: 16px;
   box-sizing: border-box;
 }
 
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.page-header-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
   margin: 0;
+  line-height: 1.3;
 }
 
 .page-desc {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--theme-text-secondary);
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
 }
 
-.btn-primary {
+/* 胶囊按钮：主题色实心 + 白字 + 阴影 */
+.btn-create-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
 }
 
-.btn-primary:hover {
-  background: var(--dark-orange);
+.btn-create-pill:hover {
+  filter: brightness(1.08);
 }
 
 .page-body {
@@ -281,6 +396,9 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   overflow: hidden;
   border-radius: 12px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .surface-card {
@@ -288,8 +406,37 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   border: 1px solid var(--theme-border);
 }
 
+.member-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 搜索框：白底描边胶囊皮肤，与技能管理页一致 */
+.member-search-input {
+  width: 260px;
+}
+
+.member-search-input :deep(.el-input__wrapper) {
+  border-radius: 999px;
+}
+
+.member-role-filter {
+  width: 140px;
+}
+
 .member-table {
   width: 100%;
+  flex: 1;
+  overflow: auto;
+}
+
+.member-pagination {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding-top: 4px;
 }
 
 .role-tag {
@@ -303,42 +450,41 @@ async function handleRemove(row: WorkspaceMember): Promise<void> {
   color: var(--theme-text-secondary);
 }
 
-.role-tag.owner {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
-.role-tag.admin {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
+/* row-actions + action-icon */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 4px;
 }
 
-.action-link {
-  border: none;
-  background: transparent;
-  color: var(--main-orange);
-  font-size: 13px;
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
   cursor: pointer;
-  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.action-link:hover:not(:disabled) {
-  text-decoration: underline;
+.action-icon:hover {
+  opacity: 1;
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.action-link:disabled {
-  color: var(--theme-text-muted);
+.action-icon.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
   cursor: not-allowed;
-}
-
-.action-link.danger {
-  color: #e53e3e;
 }
 
 .form-body {

@@ -19,6 +19,7 @@ import vip.mate.dataagent.repository.DatasourceAccountMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceAccountService;
+import vip.mate.dataagent.service.UserUidMappingService;
 import vip.mate.dataagent.util.JdbcUtils;
 
 import java.sql.Connection;
@@ -44,18 +45,21 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     private final AloudataService aloudataService;
     private final AloudataConfigHelper aloudataConfigHelper;
     private final TransportCryptoService transportCryptoService;
+    private final UserUidMappingService userUidMappingService;
 
     public DatasourceAccountServiceImpl(
             DatasourceAccountMapper datasourceAccountMapper,
             DatasourceMapper datasourceMapper,
             @Lazy AloudataService aloudataService,
             AloudataConfigHelper aloudataConfigHelper,
-            TransportCryptoService transportCryptoService) {
+            TransportCryptoService transportCryptoService,
+            UserUidMappingService userUidMappingService) {
         this.datasourceAccountMapper = datasourceAccountMapper;
         this.datasourceMapper = datasourceMapper;
         this.aloudataService = aloudataService;
         this.aloudataConfigHelper = aloudataConfigHelper;
         this.transportCryptoService = transportCryptoService;
+        this.userUidMappingService = userUidMappingService;
     }
 
     /**
@@ -70,19 +74,47 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
     }
 
     /**
+     * 查询用户在指定数据源上"可用"的绑定：启用中（status=1）且认证值非空
+     * <p>
+     * 统一的可用性判定，问数解析（{@link #resolveAloudataAuthValue}）与测试连接共用，
+     * 保证两条链路不会对同一绑定得出相反的取舍（如停用绑定测试可用、问数却走映射）。
+     *
+     * @return 可用绑定，绑定行不存在、已停用或认证值为空时返回 null
+     */
+    private DatasourceAccountEntity getActiveAccount(Long datasourceId, Long userId) {
+        DatasourceAccountEntity account = getByDatasourceIdAndUserId(datasourceId, userId);
+        if (account == null) {
+            return null;
+        }
+        boolean active = account.getStatus() != null && account.getStatus() == 1;
+        if (active) {
+            // decrypt 幂等兜底：TypeHandler 已解密时为明文原样返回，旧构建/脏数据时为密文则解为明文
+            String decrypted = AesPasswordCryptor.decrypt(account.getQueryPassword());
+            active = decrypted != null && !decrypted.isBlank();
+        }
+        return active ? account : null;
+    }
+
+    /**
      * 解析当前用户在指定 Aloudata 数据源上的认证值（auth-value）
+     * <p>
+     * 解析顺序：手动绑定优先（用户显式配置并测试过的查询账号），
+     * 自动映射兜底（登录名 + 数据源租户 → UID 映射表）；
+     * 两者均未命中时返回 null。
      */
     @Override
     public String resolveAloudataAuthValue(Long datasourceId, Long userId) {
         if (datasourceId == null || userId == null) {
             return null;
         }
-        DatasourceAccountEntity account = getByDatasourceIdAndUserId(datasourceId, userId);
-        if (account == null || account.getStatus() == null || account.getStatus() != 1) {
-            return null;
+        // 手动绑定优先：显式配置的账号优先于自动同步的映射，避免错误映射静默覆盖用户已验证的绑定
+        DatasourceAccountEntity account = getActiveAccount(datasourceId, userId);
+        if (account != null) {
+            // getActiveAccount 已保证认证值非空，decrypt 幂等兜底保证明文
+            return AesPasswordCryptor.decrypt(account.getQueryPassword());
         }
-        // decrypt 幂等兜底：TypeHandler 已解密时为明文原样返回，旧构建/脏数据时为密文则解为明文
-        return AesPasswordCryptor.decrypt(account.getQueryPassword());
+        // 自动映射兜底：未手动绑定（或绑定已停用、认证值为空）时使用同步的用户 UID
+        return userUidMappingService.resolveAutoAuthValue(datasourceId, userId);
     }
 
     /**
@@ -153,7 +185,10 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
      * </ul>
      * <p>
      * 支持传入临时账号参数进行预测试，此时不修改数据库；
-     * 不传参数时使用已绑定的账号测试并更新 last_test_time / last_test_ok。
+     * 不传参数时使用已绑定的账号测试并更新 last_test_time / last_test_ok；
+     * 绑定行的取舍与问数解析链同口径：仅"启用中且认证值非空"的绑定算数，
+     * 停用/空值视同未绑定——命中 UID 自动映射时用映射的认证值即席测试（不持久化结果），
+     * 未命中则报"未找到绑定"。
      */
     @Override
     public boolean testAccountConnection(Long datasourceId, Long userId, DatasourceAccountRequest request) {
@@ -178,10 +213,19 @@ public class DatasourceAccountServiceImpl implements DatasourceAccountService {
             return ok;
         }
 
-        // 非临时测试：使用已绑定的账号
-        DatasourceAccountEntity account = getByDatasourceIdAndUserId(datasourceId, userId);
+        // 非临时测试：使用已绑定的账号（getActiveAccount 已过滤停用/空认证值，与问数解析链同口径）
+        DatasourceAccountEntity account = getActiveAccount(datasourceId, userId);
         if (account == null) {
-            throw new IllegalArgumentException("未找到该用户在此数据源上的查询账号绑定");
+            // 未手动绑定（或绑定已停用、认证值为空）：命中 UID 自动映射时用映射的认证值即席测试，
+            // 与问数的解析链保持一致（否则能问数却提示"未绑定"）；无绑定行故不回写测试结果
+            String autoAuthValue = userUidMappingService.resolveAutoAuthValue(datasourceId, userId);
+            if (autoAuthValue == null) {
+                throw new IllegalArgumentException("未找到该用户在此数据源上的查询账号绑定");
+            }
+            DatasourceAccountEntity mappedAccount = new DatasourceAccountEntity();
+            mappedAccount.setUserId(userId);
+            mappedAccount.setQueryPassword(autoAuthValue);
+            return testAloudataAccountConnection(datasource, mappedAccount);
         }
 
         if (DataAgentConstants.SOURCE_TYPE_ALOUDATA.equals(datasource.getSourceType())) {

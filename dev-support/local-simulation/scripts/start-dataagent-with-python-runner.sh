@@ -8,7 +8,7 @@ RUNNER_RESTART_SCRIPT="$PROJECT_ROOT/docs/策略解读/restart-dataagent-backend
 BACKEND_PORT="${SERVER_PORT:-18089}"
 
 export MATECLAW_RUNNER_URL="${MATECLAW_RUNNER_URL:-http://127.0.0.1:18090}"
-export MATECLAW_DATASET_READ_BASE_URL="${MATECLAW_DATASET_READ_BASE_URL:-http://127.0.0.1:${BACKEND_PORT}/dataagent/api}"
+export MATECLAW_DATASET_READ_BASE_URL="${MATECLAW_DATASET_READ_BASE_URL:-http://127.0.0.1:${BACKEND_PORT}}"
 
 if [[ ! -f "$JAR_PATH" ]]; then
   echo "错误：未找到已构建的 DataAgent JAR：$JAR_PATH（此启动器不会执行 rebuild）。" >&2

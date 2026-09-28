@@ -112,9 +112,11 @@ public class ShadowAccountService {
      */
     private void recordLogin(String username) {
         try {
+            // 查询键与映射表 username 同源归一化（统一大写），避免大小写差异导致命中失败
+            String normalizedUsername = AuthService.normalizeUsername(username);
             EnterpriseAccountEntity mapping = enterpriseAccountMapper.selectOne(
                     new LambdaQueryWrapper<EnterpriseAccountEntity>()
-                            .eq(EnterpriseAccountEntity::getUsername, username)
+                            .eq(EnterpriseAccountEntity::getUsername, normalizedUsername)
                             .last("LIMIT 1"));
             if (mapping != null) {
                 mapping.setLastLoginAt(LocalDateTime.now());

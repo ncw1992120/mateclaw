@@ -36,7 +36,7 @@ from mateclaw_dataagent import DataAgentClient
 
 # 初始化客户端
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1
 )
 
@@ -66,7 +66,7 @@ client.close()
 from mateclaw_dataagent import DataAgentClient
 
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1
 )
 client.login(username="admin", password="admin123")
@@ -97,7 +97,7 @@ client.close()
 from mateclaw_dataagent import DataAgentClient, LlmChatMessage
 
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1
 )
 client.login(username="admin", password="admin123")
@@ -169,7 +169,7 @@ from mateclaw_dataagent import DataAgentClient, EvaluationRunner
 
 # 初始化客户端
 client = DataAgentClient(
-    base_url="http://localhost:18089/dataagent/api",
+    base_url="http://localhost:18089",
     workspace_id=1
 )
 client.login(username="admin", password="admin123")
@@ -237,7 +237,7 @@ python examples/verify_evaluation.py --cases examples/test_cases.json
 
 ```python
 client = DataAgentClient(
-    base_url: str,        # API 基础路径，如 "http://localhost:18089/dataagent/api"
+    base_url: str,        # API 基础路径，如 "http://localhost:18089"
     workspace_id: int,    # 工作区 ID
     timeout: int = 60,    # 请求超时时间（秒）
 )
@@ -342,7 +342,7 @@ with DataAgentClient(base_url, workspace_id=1) as client:
 ```python
 from mateclaw_dataagent import DataAgentClient, ApiError
 
-client = DataAgentClient("http://localhost:18089/dataagent/api", workspace_id=1)
+client = DataAgentClient("http://localhost:18089", workspace_id=1)
 
 try:
     client.login("admin", "wrong_password")

@@ -2,7 +2,7 @@ import api from './index'
 import type { ModelConfig, ModelProvider } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/models'
+const BASE_URL = '/v1/models'
 
 /** 获取启用的 Provider 列表 */
 export function listEnabledProviders() {

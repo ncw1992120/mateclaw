@@ -1,7 +1,7 @@
 ---
 name: aloudata_metric_attribution_analysis
 version: "1.0.0"
-description: "指标归因分析入口。当用户问'为什么下降/上升/变化''什么原因导致''归因'时，必须先 load_skill('aloudata_metric_attribution_analysis') 加载归因工作流。流程：检索指标英文名 → 归因校验 → LLM 自动选维度跑多维归因 → 对主因维度下钻 → 解读贡献率。硬约束：metric/dimensions 必须用英文名（先走 aloudata_search_semantic）；先 attribution_check 校验能否归因，再调归因查询；comparisonType 与时间粒度匹配；对比时间涉及相对表述（上月/去年/上周几等）必须先调 DateTimeTool.getCurrentDate 获取当前日期，禁止主观推算。"
+description: "指标归因分析入口。当用户问'为什么下降/上升/变化''什么原因导致''归因'时，必须先 load_skill('aloudata_metric_attribution_analysis') 加载归因工作流。流程：必须先加载 aloudata_metric_query 完成指标英文名检索 → 归因校验 → LLM 自动选维度跑多维归因 → 对主因维度下钻 → 解读贡献率。硬约束：检索前置条件——必须先 load_skill('aloudata_metric_query') 加载查询工作流，指标检索严格按其流程执行，禁止绕过直接检索；metric/dimensions 必须用英文名（先走 aloudata_search_semantic）；先 attribution_check 校验能否归因，再调归因查询；comparisonType 与时间粒度匹配；对比时间涉及相对表述（上月/去年/上周几等）必须先调 DateTimeTool.getCurrentDate 获取当前日期，禁止主观推算。"
 dependencies:
   tools:
     - search_business_term
@@ -18,6 +18,8 @@ templates:
 ---
 
 # 指标归因分析技能
+
+**前置依赖（硬性）**：本技能的指标检索建立在 `aloudata_metric_query` 之上——归因前必须先 load_skill('aloudata_metric_query') 加载查询工作流，指标英文名检索严格按其流程执行（术语标准化 → 语义检索 → 族级消歧），禁止绕过该流程直接检索。本技能只负责"归因与解读"。
 
 ## 适用场景
 

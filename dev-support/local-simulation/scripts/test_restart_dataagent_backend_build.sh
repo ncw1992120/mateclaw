@@ -72,6 +72,11 @@ if ! grep -Fq 'export MATECLAW_DATASET_READ_BASE_URL=' "$SCRIPT"; then
   exit 1
 fi
 
+if ! grep -Fq 'BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/actuator/health"' "$SCRIPT"; then
+  echo "DataAgent 启动健康检查必须与根 context-path 配置一致。" >&2
+  exit 1
+fi
+
 if ! grep -Fq 'export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"' "$SCRIPT"; then
   echo "本地重启默认必须启用 Python Executor，以便启动 Python Runner。" >&2
   exit 1

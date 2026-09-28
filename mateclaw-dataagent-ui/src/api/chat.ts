@@ -1,9 +1,9 @@
 import api from './index'
 import type { ChatRequest, SseEvent } from '@/types'
 
-const CHAT_URL = '/dataagent/api/v1/chat'
-const STREAM_URL = '/dataagent/api/v1/chat/stream'
-const STOP_URL = '/dataagent/api/v1/chat/stream'
+const CHAT_URL = '/v1/chat'
+const STREAM_URL = '/v1/chat/stream'
+const STOP_URL = '/v1/chat/stream'
 
 // 5min：后端 DataAgentStreamTracker 心跳最长 10s（streaming 阶段），
 // 300s 可容忍连续 30 个心跳丢失，排除网络抖动 / 代理缓冲 SSE 导致的误断。
@@ -139,6 +139,8 @@ export interface StreamOptions {
   onLastEventId?: (id: string) => void
   /** Set of already-seen event ids for dedup */
   seenEventIds?: Set<string>
+  /** 创建 AbortController 后回调，供调用方持有以主动中断连接（stopChat 用） */
+  onAbortController?: (controller: AbortController) => void
 }
 
 /** 终态事件必须由业务处理完成后再清理续连状态，不能提前持久化其 id。 */
@@ -199,6 +201,7 @@ export async function* streamChat(
   }
 
   const abortController = new AbortController()
+  options?.onAbortController?.(abortController)
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null
 
   const resetTimeout = () => {
@@ -297,6 +300,7 @@ export async function* reconnectStream(
   }
 
   const abortController = new AbortController()
+  options?.onAbortController?.(abortController)
   let timeoutTimer: ReturnType<typeof setTimeout> | null = null
 
   const resetTimeout = () => {
@@ -375,7 +379,7 @@ export async function* reconnectStream(
   }
 }
 
-const UPLOAD_URL = '/dataagent/api/v1/chat/upload'
+const UPLOAD_URL = '/v1/chat/upload'
 
 /** 上传聊天附件结果 */
 export interface ChatUploadResult {
@@ -425,7 +429,7 @@ export async function uploadAttachment(conversationId: string, file: File): Prom
   return result.data
 }
 
-const OPTIMIZE_URL = '/dataagent/api/v1/chat/optimize'
+const OPTIMIZE_URL = '/v1/chat/optimize'
 
 /** 优化结果 */
 export interface OptimizeResult {
@@ -435,11 +439,11 @@ export interface OptimizeResult {
 /** 一键优化输入内容 */
 export async function optimizePrompt(input: string): Promise<OptimizeResult> {
   const data = await api.post(OPTIMIZE_URL, { input })
-  return data as OptimizeResult
+  return data as unknown as OptimizeResult
 }
 
-const CHART_METRIC_META_URL = '/dataagent/api/v1/chat/chart/metric-meta'
-const CHART_INTERPRET_URL = '/dataagent/api/v1/chat/chart/interpret'
+const CHART_METRIC_META_URL = '/v1/chat/chart/metric-meta'
+const CHART_INTERPRET_URL = '/v1/chat/chart/interpret'
 
 /** 图表「指标查看」请求：从图表所属消息的 metrics_query 工具入参提取 */
 export interface ChartMetricMetaPayload {
@@ -484,11 +488,11 @@ export interface ChartInterpretPayload {
 /** 解析图表背后的指标元数据（指标名/口径/维度/时间范围/业务限定） */
 export async function resolveChartMetricMeta(payload: ChartMetricMetaPayload): Promise<ChartMetricMeta> {
   const data = await api.post(CHART_METRIC_META_URL, payload)
-  return data as ChartMetricMeta
+  return data as unknown as ChartMetricMeta
 }
 
 /** 对单张图表数据做一次性 AI 解读，返回解读文字 */
 export async function interpretChart(payload: ChartInterpretPayload): Promise<string> {
   const data = await api.post(CHART_INTERPRET_URL, payload)
-  return (data as string) || ''
+  return (data as unknown as string) || ''
 }

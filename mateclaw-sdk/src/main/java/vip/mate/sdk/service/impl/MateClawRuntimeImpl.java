@@ -32,6 +32,7 @@ import vip.mate.skill.installer.model.HubSkillInfo;
 import vip.mate.skill.installer.model.InstallRequest;
 import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.tool.model.AvailableToolDTO;
 import vip.mate.wiki.model.WikiKnowledgeBaseEntity;
 import vip.mate.workspace.core.model.WorkspaceEntity;
@@ -429,6 +430,26 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     }
 
     @Override
+    public SkillEntity rescanSkill(Long id) {
+        return skillRuntime.rescanSkill(id);
+    }
+
+    @Override
+    public List<SkillFileView> listSkillFiles(Long skillId) {
+        return skillRuntime.listSkillFiles(skillId);
+    }
+
+    @Override
+    public SkillFileView getSkillFileContent(Long skillId, String filePath) {
+        return skillRuntime.getSkillFileContent(skillId, filePath);
+    }
+
+    @Override
+    public SkillFileView updateSkillFileContent(Long skillId, String filePath, String content) {
+        return skillRuntime.updateSkillFileContent(skillId, filePath, content);
+    }
+
+    @Override
     public List<HubSkillInfo> searchSkillHub(String query, int limit) {
         return skillRuntime.searchSkillHub(query, limit);
     }
@@ -509,6 +530,12 @@ public class MateClawRuntimeImpl implements MateClawRuntime {
     @Override
     public List<WorkspaceMemberEntity> listWorkspaceMembers(Long workspaceId) {
         return workspaceRuntime.listWorkspaceMembers(workspaceId);
+    }
+
+    @Override
+    public IPage<WorkspaceMemberEntity> pageWorkspaceMembers(Long workspaceId, int page, int size,
+                                                             String keyword, String role) {
+        return workspaceRuntime.pageWorkspaceMembers(workspaceId, page, size, keyword, role);
     }
 
     @Override

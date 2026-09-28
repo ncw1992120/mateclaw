@@ -13,8 +13,11 @@ import vip.mate.skill.installer.model.HubSkillInfo;
 import vip.mate.skill.installer.model.InstallRequest;
 import vip.mate.skill.installer.model.InstallTask;
 import vip.mate.skill.model.SkillEntity;
+import vip.mate.skill.model.SkillFileView;
 import vip.mate.skill.runtime.SkillFrontmatterParser;
+import vip.mate.skill.service.SkillFileService;
 import vip.mate.skill.service.SkillService;
+import vip.mate.skill.workspace.SkillFileSyncer;
 
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,8 @@ import java.util.Map;
 public class SkillRuntimeImpl implements SkillRuntime {
 
     private final SkillService skillService;
+    private final SkillFileService skillFileService;
+    private final SkillFileSyncer skillFileSyncer;
     private final SkillInstaller skillInstaller;
     private final SkillFrontmatterParser skillFrontmatterParser;
 
@@ -72,6 +77,35 @@ public class SkillRuntimeImpl implements SkillRuntime {
     @Override
     public SkillEntity toggleSkill(Long id, boolean enabled) {
         return skillService.toggleSkill(id, enabled);
+    }
+
+    @Override
+    public SkillEntity rescanSkill(Long id) {
+        return skillService.rescanSecurity(id);
+    }
+
+    @Override
+    public List<SkillFileView> listSkillFiles(Long skillId) {
+        if (skillId == null) {
+            return List.of();
+        }
+        return skillFileService.listBySkillId(skillId).stream()
+                .map(row -> SkillFileView.from(row, false))
+                .toList();
+    }
+
+    @Override
+    public SkillFileView getSkillFileContent(Long skillId, String filePath) {
+        if (skillId == null) {
+            return null;
+        }
+        return SkillFileView.from(
+                skillFileService.getBySkillIdAndPath(skillId, SkillFileService.validateBundlePath(filePath)), true);
+    }
+
+    @Override
+    public SkillFileView updateSkillFileContent(Long skillId, String filePath, String content) {
+        return skillFileSyncer.updateBundleFileAndSync(skillService.getSkill(skillId), filePath, content);
     }
 
     @Override

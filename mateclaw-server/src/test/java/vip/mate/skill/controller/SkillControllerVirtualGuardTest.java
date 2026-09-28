@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 class SkillControllerVirtualGuardTest {
 
     private final SkillController controller = new SkillController(
-            null, null, null, null, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, null, null, null, null, null, null,
             null, null, null);
 
     @Test
@@ -64,7 +64,7 @@ class SkillControllerVirtualGuardTest {
     void toggleForwardsVirtualMcpToBridge() {
         McpSkillBridge bridge = mock(McpSkillBridge.class);
         SkillController c = new SkillController(
-                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
                 bridge, null, null, null, null);
         long virtualMcpId = McpSkillBridge.VIRTUAL_ID_BASE + 42L;
         SkillEntity toggled = new SkillEntity();
@@ -97,7 +97,7 @@ class SkillControllerVirtualGuardTest {
         // not the guard.
         SkillController real = new SkillController(
                 mock(vip.mate.skill.service.SkillService.class),
-                null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null);
         long snowflakeId = 1_900_000_001_000_000_902L;
         // updateSkill on a mocked SkillService returns null without throwing,

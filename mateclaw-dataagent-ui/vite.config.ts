@@ -8,10 +8,10 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = process.env.VITE_DATAAGENT_PROXY_TARGET ?? 'http://localhost:18089'
 
   return {
-  // 生产部署时 SPA 由 Spring Boot 服务（context-path /dataagent/api）承载，
-  // 资源引用必须带该前缀，否则 /assets/** 落到根路径 404。
+  // 生产部署时 SPA 由 Spring Boot fat jar 根路径承载（context-path 为 /），
+  // 前后端同域同根路径，base 保持 / 即可。
   // dev server 挂在根路径，直接访问 http://localhost:5174/ 即可。
-  base: mode === 'production' ? '/dataagent/api/' : '/',
+  base: '/',
   plugins: [
     vue(),
     tailwindcss(),
@@ -25,6 +25,15 @@ export default defineConfig(({ mode }) => {
     port: devPort,
     proxy: {
       '/dataagent': {
+        target: proxyTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/dataagent\/api(?=\/|$)/, ''),
+      },
+      '/api/v1': {
+        target: proxyTarget,
+        changeOrigin: true,
+      },
+      '/v1': {
         target: proxyTarget,
         changeOrigin: true,
       },

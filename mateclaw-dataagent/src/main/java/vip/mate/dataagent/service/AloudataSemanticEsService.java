@@ -57,6 +57,16 @@ public interface AloudataSemanticEsService {
     void deleteByDatasourceId(Long datasourceId);
 
     /**
+     * 按同步版本清理数据源的过期文档
+     * <p>
+     * 删除 syncVersion 小于指定版本的文档；兼容清理无 syncVersion 字段的历史残留文档。
+     *
+     * @param datasourceId 数据源 ID
+     * @param syncVersion  当前同步版本号，小于该版本的文档视为过期
+     */
+    void deleteBySyncVersionBefore(Long datasourceId, int syncVersion);
+
+    /**
      * 混合检索指标和维度
      * <p>
      * 同时执行关键词检索和向量语义检索，使用 RRF 融合结果。

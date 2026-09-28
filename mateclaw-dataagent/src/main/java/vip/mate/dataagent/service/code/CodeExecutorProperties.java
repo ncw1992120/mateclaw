@@ -3,12 +3,14 @@ package vip.mate.dataagent.service.code;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
  * Python 代码执行器配置属性
  */
 @Getter
 @Setter
+@Component
 @ConfigurationProperties(prefix = CodeExecutorProperties.CONFIG_PREFIX)
 public class CodeExecutorProperties {
 

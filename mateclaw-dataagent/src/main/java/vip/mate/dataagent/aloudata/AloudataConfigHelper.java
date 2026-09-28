@@ -8,6 +8,7 @@ import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 import vip.mate.dataagent.model.DatasourceEntity;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -61,6 +62,13 @@ public class AloudataConfigHelper {
                     Map<String, String> overrides = objectMapper.convertValue(
                             params.get("apiOverrides"), new TypeReference<Map<String, String>>() {});
                     config.setApiOverrides(overrides);
+                }
+                // 解析数据源级别的元数据同步黑名单过滤表达式
+                if (params.get("syncFilterExpressions") != null) {
+                    List<String> expressions = objectMapper.convertValue(
+                            params.get("syncFilterExpressions"), new TypeReference<>() {
+                            });
+                    config.setSyncFilterExpressions(expressions.stream().filter(e -> e != null && !e.isBlank()).toList());
                 }
             } catch (Exception e) {
                 log.warn("解析 connectionParams 失败，使用默认配置: {}", e.getMessage());

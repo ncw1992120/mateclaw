@@ -1,5 +1,6 @@
 package vip.mate.sdk.service.workspace;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import vip.mate.workspace.core.model.WorkspaceEntity;
 import vip.mate.workspace.core.model.WorkspaceMemberEntity;
 import vip.mate.workspace.core.model.WorkspaceWithRoleVO;
@@ -97,6 +98,22 @@ public interface WorkspaceRuntime {
      * @return 成员列表
      */
     List<WorkspaceMemberEntity> listWorkspaceMembers(Long workspaceId);
+
+    /**
+     * 分页查询工作区成员（含用户名、昵称），支持按用户名/昵称关键词与角色过滤
+     * <p>
+     * 用户名、昵称存储于用户表，故在富化用户信息后于内存中过滤与分页；
+     * 单工作区成员规模有限，该实现可满足管理页查询需求。
+     *
+     * @param workspaceId 工作区 ID
+     * @param page        页码（从 1 开始）
+     * @param size        每页条数
+     * @param keyword     关键词，模糊匹配用户名或昵称（不区分大小写），为空不过滤
+     * @param role        角色精确过滤（不区分大小写），为空不过滤
+     * @return 分页结果
+     */
+    IPage<WorkspaceMemberEntity> pageWorkspaceMembers(Long workspaceId, int page, int size,
+                                                      String keyword, String role);
 
     /**
      * 添加工作区成员

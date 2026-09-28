@@ -23,7 +23,7 @@ const developmentRoutes = import.meta.env.DEV
   : []
 
 const router = createRouter({
-  // 与 vite base（/dataagent/api/）保持一致：路由路径在部署基座下解析
+  // 与 vite base（/）保持一致：路由路径在部署基座下解析
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {

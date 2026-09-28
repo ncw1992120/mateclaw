@@ -2,7 +2,7 @@ import JSEncrypt from 'jsencrypt'
 import api from '@/api'
 
 /** 传输加密公钥接口路径（与后端 DataAgentAuthController 一致） */
-const PUB_KEY_PATH = '/dataagent/api/v1/auth/pubkey'
+const PUB_KEY_PATH = '/v1/auth/pubkey'
 
 /** 传输加密公钥响应结构 */
 export interface PublicKeyInfo {
@@ -10,6 +10,12 @@ export interface PublicKeyInfo {
   publicKey: string
   algorithm: string
 }
+
+/**
+ * 加密工具自身失败（非 HTTP 请求错误）：不走 axios 拦截器，调用方需自行提示。
+ * 用于区分"已被拦截器 toast 过的请求错误"与"需要调用方兜底提示的本地错误"。
+ */
+export class SensitiveCryptoError extends Error {}
 
 /**
  * 敏感字段传输加密：信封 `base64( RSA-OAEP( base64(UTF-8("毫秒时间戳:明文")) ) )`。
@@ -24,7 +30,7 @@ export async function encryptSensitiveField(plain: string): Promise<string> {
   // 响应拦截器已解开 R 信封，返回值即 { publicKey, algorithm } 本体
   const info = await api.get<PublicKeyInfo>(PUB_KEY_PATH)
   if (!info?.publicKey) {
-    throw new Error('获取传输加密公钥失败，请刷新页面重试')
+    throw new SensitiveCryptoError('获取传输加密公钥失败，请刷新页面重试')
   }
   const enc = new JSEncrypt()
   enc.setPublicKey(info.publicKey)
@@ -38,7 +44,7 @@ export async function encryptSensitiveField(plain: string): Promise<string> {
   }
   const encrypted = enc.encryptOAEP(window.btoa(bin))
   if (!encrypted) {
-    throw new Error('敏感字段加密失败，请刷新页面重试')
+    throw new SensitiveCryptoError('敏感字段加密失败，请刷新页面重试')
   }
   return encrypted
 }

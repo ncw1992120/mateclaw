@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.MapUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import vip.mate.tool.builtin.ToolExecutionContext;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataApiProperties.ApiEndpoint;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
@@ -19,6 +18,7 @@ import vip.mate.dataagent.aloudata.ApiParam;
 import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
+import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.AloudataMetricDimensionEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
@@ -28,12 +28,13 @@ import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.MetricQueryEvidence;
-import vip.mate.dataagent.support.AloudataTimeResolver;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
 import vip.mate.dataagent.support.DataAgentChatScopeContext.ScopeResolveResult;
-import vip.mate.dataagent.support.NameMatchSupport;
+import vip.mate.dataagent.util.AloudataTimeResolver;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.sdk.service.MateClawRuntime;
 import vip.mate.skill.knowledge.SkillScopedToolCallback;
+import vip.mate.tool.builtin.ToolExecutionContext;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -499,14 +500,15 @@ public class AloudataCallTool {
             AloudataConfigDTO config = configHelper.parseConfig(entity);
 
             // 用户查询时必须使用自己的 Aloudata 认证值（auth-value），不允许使用数据源管理员的认证值
-            // tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户绑定的认证值
+            // tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户自己的认证值
+            // （解析链：手动绑定优先，UID 自动映射兜底，见 resolveAloudataAuthValue）
             Long currentUserId = UserContextHolder.getUserId();
             if (currentUserId == null) {
                 return error("当前用户未登录，无法执行 Aloudata 查询");
             }
             String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
             if (userAuthValue == null) {
-                return error("当前用户未绑定 Aloudata 认证值，请先在数据源页面配置查询账号后再执行查询");
+                return error("当前用户未配置 Aloudata 认证值（未手动绑定且 UID 自动映射未命中），请在数据源页面绑定查询账号，或联系管理员同步 UID 映射后再执行查询");
             }
             config.setAuthValue(userAuthValue);
             log.info("用户 {} 使用自定义 Aloudata 认证值访问数据源 {}", currentUserId, datasourceId);
@@ -570,6 +572,10 @@ public class AloudataCallTool {
             return error("参数类型错误: " + e.getMessage()
                     + "。请检查参数结构是否符合 API 契约：orders 必须为对象数组（如 [{\"metric_time__day\": \"asc\"}]），"
                     + "metrics/dimensions/filters 必须为字符串数组。");
+        } catch (BusinessException e) {
+            // 熔断降级：查询服务不可用时直接向 LLM 下达停止重试指令，避免盲目变换参数继续穿透
+            log.error("Aloudata Tool [{}] 熔断降级: {}", endpointName, e.getMessage());
+            return error("查询服务暂时不可用（系统熔断保护中）。请停止重试，直接向用户说明当前暂时无法获取指标数据，建议稍后再试。");
         } catch (Exception e) {
             log.error("Aloudata Tool [{}] 调用失败: {}", endpointName, e.getMessage(), e);
             return error("调用失败: " + e.getMessage());
@@ -626,11 +632,11 @@ public class AloudataCallTool {
             // 避免 LLM 拿到 "返回错误: null" 后只能盲目变换参数重试
             String combinedMsg = extractApiErrorMessage(responseBody);
             if (combinedMsg == null) {
-                log.error("Aloudata API [{}] 返回失败且无错误明细，完整响应: {}", endpointName, JSONUtil.toJsonStr(responseBody));
                 String bodyPreview = JSONUtil.toJsonStr(responseBody);
                 if (bodyPreview.length() > 600) {
                     bodyPreview = bodyPreview.substring(0, 600) + "...(截断)";
                 }
+                log.error("Aloudata API [{}] 返回失败且无错误明细，响应预览: {}", endpointName, bodyPreview);
                 return error("API: " + endpointName + " 返回失败（success=false），但未携带错误信息。完整响应: " + bodyPreview
                         + "\n提示: 此类错误多为数据源查询通道/查询引擎问题而非参数格式问题，请检查数据源（指标应用→API集成）的查询服务地址与认证配置；若连续 5 次返回相同错误，请停止重试并向用户说明。");
             }
@@ -2067,7 +2073,7 @@ public class AloudataCallTool {
     /**
      * 提取字符串中的所有中文字符。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractChineseChars(String)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#extractChineseChars(String)}，
      * 供检索层维度相关性打分等处共用同一实现。
      */
     private static Set<String> extractChineseChars(String text) {
@@ -2077,7 +2083,7 @@ public class AloudataCallTool {
     /**
      * 提取字符串中的英文单词（按下划线和非字母数字分隔）。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#extractEnglishWords(String)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#extractEnglishWords(String)}，
      * 供检索层维度相关性打分等处共用同一实现。
      */
     private static Set<String> extractEnglishWords(String text) {
@@ -2096,7 +2102,7 @@ public class AloudataCallTool {
      * 背景：用户问句常带全角括号、半角括号、连接符等标点，LLM 生成检索 keyword
      * 时可能截断 / 改写 / 转换全角半角，导致「按关键词匹配指标名称」失配。此方法只用于
      * 「是否匹配」的判定；判定命中后仍使用原始 metricName / 展示名构造查询，不改写查询值。
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport}，与业务术语/维度
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport}，与业务术语/维度
      * MySQL 降级检索的标点不敏感 LIKE 模式共用同一套字符归一化规则。
      */
     private static String normalizeKey(String text) {
@@ -2851,7 +2857,7 @@ public class AloudataCallTool {
      * 语义：展示名中有多少比例的字符出现在用户原话中。
      * 值域 [0, 1]，1 表示展示名的每个字符都在原话中出现。
      * <p>
-     * 实现委托 {@link vip.mate.dataagent.support.NameMatchSupport#charOverlapRatio(Set, Set)}，
+     * 实现委托 {@link vip.mate.dataagent.util.NameMatchSupport#charOverlapRatio(Set, Set)}，
      * 供检索层维度相关性打分等处共用同一实现。
      *
      * @param origChars 用户原话的中文字符集合
@@ -2868,7 +2874,8 @@ public class AloudataCallTool {
      * @param baseName 指标族基名；未触发时为 null
      * @param family   整族成员；未触发时为空。
      *                 口径族场景 ≥2；宽泛词聚合场景可能 =1（唯一前缀成员即目标）。
-     * @param resolved 由用户原话唯一确定的目标口径指标；未唯一确定时为空
+     * @param matched 按口径词命中的族成员列表（强命中优先，剔除子串支配项）；
+     *                可能多选（如"对比整体和个人"）；宽泛词聚合整族唯一时为该唯一成员；未命中时为空
      */
     private record FamilyBackfillResult(String baseName,
                                         List<AloudataMetricEntity> family,

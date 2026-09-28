@@ -262,6 +262,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
         String indexName = DataAgentConstants.SCHEMA_ELASTICSEARCH_INDEX;
         // 放大候选池，排序后再截断
         int pool = retrievalPoolSize(topK);
+        long startMs = System.currentTimeMillis();
         try {
             SearchResponse<Map> response = client.search(s -> s
                             .index(indexName)
@@ -286,12 +287,17 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                     Map.class
             );
 
-            return extractTableHits(response, "keyword");
+            List<SchemaSearchResult.TableHit> hits = extractTableHits(response, "keyword");
+            log.info("[ES] 关键词检索完成: datasourceId={}, hits={}, costMs={}",
+                    datasourceId, hits.size(), System.currentTimeMillis() - startMs);
+            return hits;
         } catch (IOException e) {
-            log.error("ES 关键词检索失败: {}", e.getMessage());
+            log.error("[ES] 关键词检索失败: datasourceId={}, costMs={}, error={}",
+                    datasourceId, System.currentTimeMillis() - startMs, e.getMessage());
             return List.of();
         } catch (Exception e) {
-            log.error("ES 关键词检索异常: {}", e.getMessage());
+            log.error("[ES] 关键词检索异常: datasourceId={}, costMs={}, error={}",
+                    datasourceId, System.currentTimeMillis() - startMs, e.getMessage());
             return List.of();
         }
     }
@@ -312,6 +318,7 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
         String indexName = DataAgentConstants.SCHEMA_ELASTICSEARCH_INDEX;
         // 放大候选池，过滤后再截断
         int pool = retrievalPoolSize(topK);
+        long startMs = System.currentTimeMillis();
         try {
             /* 构建查询向量 */
             List<Float> queryVectorList = new ArrayList<>(queryVector.length);
@@ -342,12 +349,16 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
             hits = hits.stream()
                     .filter(h -> h.getScore() >= similarityThreshold)
                     .toList();
+            log.info("[ES] 向量语义检索完成: datasourceId={}, hits={}, costMs={}",
+                    datasourceId, hits.size(), System.currentTimeMillis() - startMs);
             return hits;
         } catch (IOException e) {
-            log.error("ES 向量语义检索失败: {}", e.getMessage());
+            log.error("[ES] 向量语义检索失败: datasourceId={}, costMs={}, error={}",
+                    datasourceId, System.currentTimeMillis() - startMs, e.getMessage());
             return List.of();
         } catch (Exception e) {
-            log.error("ES 向量语义检索异常: {}", e.getMessage());
+            log.error("[ES] 向量语义检索异常: datasourceId={}, costMs={}, error={}",
+                    datasourceId, System.currentTimeMillis() - startMs, e.getMessage());
             return List.of();
         }
     }
@@ -457,11 +468,13 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
                 h.setMatchSource(matchSource);
             }
         } catch (IOException e) {
-            log.error("ES 混合检索失败，降级为关键词检索: {}", e.getMessage());
+            log.error("[ES] 混合检索失败，降级为关键词检索: datasourceId={}, error={}",
+                    request.getDatasourceId(), e.getMessage());
             tableHits = keywordSearch(request.getDatasourceId(), request.getQuery(), topK);
             matchSource = "keyword";
         } catch (Exception e) {
-            log.error("ES 混合检索异常: {}", e.getMessage());
+            log.error("[ES] 混合检索异常: datasourceId={}, error={}",
+                    request.getDatasourceId(), e.getMessage());
             tableHits = List.of();
             matchSource = "keyword";
         }
@@ -469,6 +482,8 @@ public class SchemaElasticsearchServiceImpl implements SchemaElasticsearchServic
         result.setTableHits(tableHits);
         result.setRelations(List.of());
         result.setElapsedMs(System.currentTimeMillis() - startTime);
+        log.info("[ES] 混合检索完成: datasourceId={}, matchSource={}, hits={}, costMs={}",
+                request.getDatasourceId(), matchSource, tableHits.size(), result.getElapsedMs());
         return result;
     }
 

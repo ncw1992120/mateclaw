@@ -231,6 +231,12 @@ public final class DataAgentConstants {
     /** Aloudata 同步：批量 Upsert 大小 */
     public static final int ALOUDATA_SYNC_BATCH_UPSERT_SIZE = 500;
 
+    /** UID 映射来源：定时同步（JDBC 拉取外部用户系统） */
+    public static final String UID_SYNC_SOURCE_JDBC = "jdbc_sync";
+
+    /** UID 映射来源：手动录入 */
+    public static final String UID_SYNC_SOURCE_MANUAL = "manual";
+
     /** Aloudata 语义检索默认 Top-K */
     public static final int ALOUDATA_SEARCH_DEFAULT_TOP_K = 10;
 
@@ -283,6 +289,15 @@ public final class DataAgentConstants {
 
     /** Aloudata 类目类型：维度类目 */
     public static final String ALOUDATA_CATEGORY_TYPE_DIMENSION = "CATEGORY_DIMENSION";
+
+    /**
+     * 系统配置 key：Aloudata 元数据同步黑名单过滤表达式（全局级）。
+     * <p>
+     * 值为 QLExpress 布尔表达式 JSON 数组，命中任一表达式即视为黑名单，
+     * 对应元数据（类目/指标/维度）不落库持久化。与数据源级
+     * connection_params.syncFilterExpressions 合并生效。
+     */
+    public static final String ALOUDATA_SYNC_FILTER_EXPRESSIONS_KEY = "aloudata.sync.filter.expressions";
 
     /** 默认 Embedding 向量维度 */
     public static final int DEFAULT_EMBEDDING_DIMENSION = 1024;
@@ -605,4 +620,26 @@ public final class DataAgentConstants {
             + "最后给出一句结论或行动建议。"
             + "要求：不要编造数据、不要复述配置字段、不要输出图表代码，直接给分析文字，"
             + "可用简短小标题或短句分点，总长控制在 300 字以内。";
+    // ==================== 服务保护（限流 / 熔断 / 降级） ====================
+
+    /** Aloudata API 熔断器实例名（对应 resilience4j.circuitbreaker.instances 配置） */
+    public static final String CIRCUIT_BREAKER_ALOUDATA = "aloudataApi";
+
+    /** 限流场景：对话流 */
+    public static final String RATE_LIMIT_SCENE_CHAT = "chat";
+
+    /** 限流场景：提示词优化 */
+    public static final String RATE_LIMIT_SCENE_CHAT_OPTIMIZE = "chat-optimize";
+
+    /** 限流场景：洞察生成 */
+    public static final String RATE_LIMIT_SCENE_INSIGHT = "insight";
+
+    /** 高成本限流路径前缀：提示词优化（context-path 剥离后） */
+    public static final String PROTECTION_PATH_CHAT_OPTIMIZE = "/v1/chat/optimize";
+
+    /** 高成本限流路径前缀：洞察（context-path 剥离后） */
+    public static final String PROTECTION_PATH_INSIGHT = "/v1/insight";
+
+    /** 限流器缓存键分隔符（scene|username） */
+    public static final String RATE_LIMIT_KEY_SEPARATOR = "|";
 }

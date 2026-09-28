@@ -19,6 +19,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 认证服务（JWT）
@@ -47,7 +48,7 @@ public class AuthService {
      */
     public LoginResponse login(LoginRequest request) {
         UserEntity user = userMapper.selectOne(new LambdaQueryWrapper<UserEntity>()
-                .eq(UserEntity::getUsername, request.getUsername())
+                .eq(UserEntity::getUsername, normalizeUsername(request.getUsername()))
                 .eq(UserEntity::getEnabled, true));
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
@@ -70,6 +71,8 @@ public class AuthService {
      * 创建用户
      */
     public UserEntity createUser(UserEntity user) {
+        // 用户名归一化（统一大写），保证忽略大小写的全局唯一
+        user.setUsername(normalizeUsername(user.getUsername()));
         // 检查用户名是否已存在
         Long count = userMapper.selectCount(new LambdaQueryWrapper<UserEntity>()
                 .eq(UserEntity::getUsername, user.getUsername()));
@@ -202,7 +205,7 @@ public class AuthService {
      */
     public UserEntity findByUsername(String username) {
         return userMapper.selectOne(new LambdaQueryWrapper<UserEntity>()
-                .eq(UserEntity::getUsername, username));
+                .eq(UserEntity::getUsername, normalizeUsername(username)));
     }
 
     /**
@@ -210,6 +213,16 @@ public class AuthService {
      */
     public UserEntity findById(Long userId) {
         return userMapper.selectById(userId);
+    }
+
+    /**
+     * 用户名归一化：去首尾空格并统一转大写，保证账号忽略大小写唯一。
+     * <p>
+     * 入库（createUser）与查询（login/findByUsername）两侧统一调用，
+     * 使校验不依赖数据库排序规则的大小写行为。
+     */
+    public static String normalizeUsername(String username) {
+        return username == null ? null : username.trim().toUpperCase(Locale.ROOT);
     }
 
     private String generateToken(UserEntity user) {

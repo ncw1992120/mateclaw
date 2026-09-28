@@ -1,7 +1,7 @@
 server:
   port: 18089
   servlet:
-    context-path: /dataagent/api
+    context-path: /
 
 spring:
   application:
@@ -22,7 +22,7 @@ mateclaw:
     token-secret: ${MATECLAW_RUNNER_TOKEN_SECRET:change-me-in-production}
     # Runner must call the DataAgent internal controller, including the servlet context path.
     # Override this for a gateway or local process deployment.
-    dataset-read-base-url: ${MATECLAW_DATASET_READ_BASE_URL:http://mateclaw-dataagent:18089/dataagent/api}
+    dataset-read-base-url: ${MATECLAW_DATASET_READ_BASE_URL:http://mateclaw-dataagent:18089}
   object-ref:
     endpoint: ${MATECLAW_OBJECT_REF_ENDPOINT:http://minio:9000}
     access-key: ${MATECLAW_OBJECT_REF_ACCESS_KEY:}
@@ -104,6 +104,7 @@ mateclaw:
     timeout: 5s
     local-fallback-users:
       - admin
+      - PINGANSTOCK
   # 传输加密：无 TLS 部署下对 password/ssoCookie/改密口令做 RSA-OAEP 公钥加密（前端 jsencrypt）。
   # private-key-pem 为 PKCS#8 私钥 PEM；多实例部署必须显式配置共享私钥，留空则启动自动生成内存密钥
   # （重启后公钥变化，前端会重新拉取，但多实例无法互解）。
@@ -158,6 +159,78 @@ springdoc:
     path: /v1/api-docs
   swagger-ui:
     path: /v1/swagger-ui.html
+
+# ========== 服务保护配置（限流 / 熔断 / 降级） ==========
+# 进程内实现（与内网单实例部署规模匹配）；多实例/公网部署需替换为分布式限流。
+dataagent:
+  protection:
+    chat:
+      # 对话流（/v1/chat/stream）单用户准入：窗口内限频 + 并发舱壁
+      per-user-rate-limit: 10           # 单用户每窗口最大对话请求数
+      per-user-rate-window-seconds: 60  # 限频统计窗口（秒）
+      max-concurrent-per-user: 3        # 单用户最大并发 SSE 对话流数
+    high-cost:
+      # 高成本端点（提示词优化 / 洞察报告与仪表盘 AI 生成）单用户限频
+      per-user-rate-limit: 20           # 单用户每窗口最大请求数
+      window-seconds: 60                # 限频统计窗口（秒）
+    aloudata:
+      # Aloudata API HTTP 超时（原实现无超时，下游挂起会拖垮 sseExecutor 线程池）
+      connect-timeout-ms: 3000          # 连接超时（毫秒）
+      read-timeout-ms: 600000            # 读取超时（毫秒），须大于下方 slow-call 阈值
+  uid-sync:
+    # 用户 Aloudata UID 映射定时同步：从外部用户系统同步「登录名+租户 → UID」映射，
+    # 问数时使用映射 UID 认证（手动绑定 dataagent_datasource_account 优先，映射兜底）
+    enabled: false                      # 默认关闭，按环境开启
+    cron: "0 0 2 * * *"                 # Spring 6 段 cron，默认每日 02:00
+    # ---- 同步源连接：两种写法二选一 ----
+    # 1) 推荐：分片字段，应用自动拼 JDBC URL（mysql / postgresql）
+    source-type: ${UID_SYNC_SOURCE_TYPE:postgresql}        # 数据库类型：mysql / postgresql
+    source-host: ${UID_SYNC_SOURCE_HOST:localhost}        # 主机
+    source-port: ${UID_SYNC_SOURCE_PORT:5432}        # 端口（MySQL 默认 3306，PG 默认 5432）
+    source-database: ${UID_SYNC_SOURCE_DATABASE:postgres} # 库名（PG 为 database；跨 schema 查询写进 SQL 限定表名）
+    # 2) 高级：完整 JDBC URL（填写时优先于上面的分片字段；可自带连接参数）
+    source-url: ${UID_SYNC_SOURCE_URL:}
+    source-username: ${UID_SYNC_SOURCE_USERNAME:postgres} # 源库用户名
+    source-password: ${UID_SYNC_SOURCE_PASSWORD:root} # 源库密码（环境变量注入）
+    # 拉取 SQL：必须返回 username / tenant_id / aloudata_uid 三列（列名或 as 别名均可），
+    # 按列名取值（大小写不敏感、列序不限），缺列会显式报错并回显实际列名。
+    # 可选返回 nickname 列（昵称，仅展示用），缺失或为空时回落 mate_user.nickname。
+    # 同键（登录名+租户）重复行按结果顺序保留最后一条，需要稳定取舍时 SQL 应带确定性排序（如 ORDER BY）。
+    # 注意：MySQL 的 库.表 与 PG 的 模式.表 语义不同，按源库实际结构书写；
+    # PG 不能跨 database 查询，表在别的库时须让 URL 指向那个库。
+    # 例：SELECT account AS username, tenant_id AS tenant_id, username AS nickname, user_id AS aloudata_uid FROM anymetrics.cip_user
+    query-sql: ${UID_SYNC_QUERY_SQL:select account as username, tenant_id as tenant_id, username as nickname, user_id as aloudata_uid from anymetrics.cip_user}
+    batch-size: 500                     # 单批 upsert 大小
+
+# Resilience4j 熔断器：Aloudata API 专用实例
+# 失败（含超时抛出的异常）计入计数滑动窗口，失败率/慢调用率超阈值后打开熔断，
+# 后续请求快速失败（BusinessException 503），open 30s 后转半开试探恢复。
+resilience4j:
+  circuitbreaker:
+    instances:
+      aloudataApi:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10                                # 统计窗口：最近 10 次调用
+        minimum-number-of-calls: 5                             # 至少 5 次调用才计算失败率
+        failure-rate-threshold: 50                             # 失败率 >= 50% 打开熔断
+        slow-call-duration-threshold: 30s                      # 超过 30s 视为慢调用
+        slow-call-rate-threshold: 80                           # 慢调用率 >= 80% 也触发熔断
+        wait-duration-in-open-state: 30s                       # 熔断打开持续 30s 后转半开
+        permitted-number-of-calls-in-half-open-state: 2        # 半开状态放行的试探请求数
+        automatic-transition-from-open-to-half-open-enabled: true
+        event-consumer-buffer-size: 10                         # 事件缓冲区上限，防异常对象堆积
+        ignore-exceptions:                                     # 4xx 客户端错误不计入失败率（Aloudata 业务错误
+          - org.springframework.web.client.HttpClientErrorException  # 走 HTTP 200 + success:false，4xx 多为调用方参数/认证问题）
+
+# 关闭 Resilience4j 熔断器对 /actuator/health 的参与：
+# aloudataApi 熔断打开时若计入健康计算会把 health 整体拉为 DOWN，
+# 存活探针（K8s / 负载均衡 / 运维脚本）会误判应用不健康并触发重启，
+# 导致 Aloudata 的一次故障升级为整个服务的重启循环。
+# 熔断状态可通过应用日志（Resilience4j 状态流转事件）观测。
+management:
+  health:
+    circuitbreakers:
+      enabled: false
 
 # MateClaw Agent 配置（DataAgent 侧扩展）
 # tool-result.excluded-tools 在此完整声明：Spring Boot 对 List 属性是整体覆盖

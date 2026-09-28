@@ -2,6 +2,14 @@
   <div class="datasource-form-page">
     <!-- 页面头部 -->
     <header class="form-header">
+      <!-- 返回列表：与右上角关闭/底部取消同一语义，顶部提供显式返回入口 -->
+      <button type="button" class="form-back-btn" @click="handleCancel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 12H5" />
+          <path d="M12 19l-7-7 7-7" />
+        </svg>
+        <span>{{ t('common.back') || '返回' }}</span>
+      </button>
       <h1 class="form-title">{{ isEditMode ? t('dsForm.editTitle') : t('dsForm.title') }}</h1>
       <!-- 步骤条 -->
       <div class="step-bar">
@@ -157,6 +165,24 @@
                     <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                   </button>
                 </div>
+              </div>
+              <!-- 同步过滤规则（QLExpress 黑名单，命中不入库） -->
+              <div class="form-field form-field-wide">
+                <label class="form-label">
+                  <span>同步过滤规则</span>
+                  <el-tooltip
+                    :content="ALOUDATA_SYNC_FILTER_TOOLTIP"
+                    placement="top"
+                  >
+                    <span class="form-tip">?</span>
+                  </el-tooltip>
+                </label>
+                <textarea
+                  v-model="form.syncFilterExpressions"
+                  class="form-textarea"
+                  rows="3"
+                  placeholder="categoryName in ('测试类目', '敏感数据')&#10;metricName.startsWith('test_')"
+                ></textarea>
               </div>
             </template>
 
@@ -337,6 +363,7 @@ import { ElMessage } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
 import { useDatasourceStore } from '@/stores/useDatasourceStore'
 import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
+import { ALOUDATA_SYNC_FILTER_TOOLTIP } from '@/constants/aloudataSyncFilter'
 
 const props = withDefaults(defineProps<{
   sourceId?: number
@@ -370,6 +397,8 @@ const testing = ref(false)
 const createdDsId = ref<string | null>(null)
 /** 表单加载中 */
 const formLoading = ref(false)
+/** 存量 connection_params 原始配置（编辑模式回填，保存时合并避免覆盖 apiOverrides 等自定义配置） */
+const rawConnectionParams = ref<Record<string, any>>({})
 
 /** 编辑模式下加载已有数据源 */
 onMounted(async () => {
@@ -421,11 +450,17 @@ onMounted(async () => {
         if (ds.connectionParams) {
           try {
             const params = JSON.parse(ds.connectionParams)
+            // 缓存存量配置（apiOverrides 等自定义 key 编辑保存时需保留）
+            rawConnectionParams.value = params
             if (params.semanticPort) {
               form.semanticPort = String(params.semanticPort)
             }
             if (params.authType) {
               form.authType = params.authType
+            }
+            // 同步过滤规则（表达式数组回填为每行一条）
+            if (Array.isArray(params.syncFilterExpressions)) {
+              form.syncFilterExpressions = params.syncFilterExpressions.join('\n')
             }
           } catch {
             // 忽略解析错误
@@ -485,6 +520,8 @@ const form = reactive({
   tenantId: '',
   authType: 'UID',
   authValue: '',
+  // 元数据同步黑名单过滤规则（QLExpress 表达式，每行一条）
+  syncFilterExpressions: '',
 })
 
 /**
@@ -612,13 +649,25 @@ async function buildCreateRequest() {
   }
   // Aloudata 类型：产品层与语义层地址统一存到 connection_params，避免使用 host 字段
   if (isAloudata) {
-    request.connectionParams = JSON.stringify({
-      anymetricsHost: form.productHost,
-      semanticHost: form.semanticHost,
-      anymetricsPort: Number(form.aloudataPort) || 8083,
-      semanticPort: Number(form.semanticPort) || 8085,
-      authType: form.authType,
-    })
+    // 过滤规则按行拆分为表达式数组，未配置时不携带该字段
+    const syncFilterExpressions = form.syncFilterExpressions
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    // 合并存量配置（apiOverrides 等自定义 key 保留），避免编辑保存时整体覆盖丢失
+    const merged = { ...rawConnectionParams.value }
+    merged.anymetricsHost = form.productHost
+    merged.semanticHost = form.semanticHost
+    merged.anymetricsPort = Number(form.aloudataPort) || 8083
+    merged.semanticPort = Number(form.semanticPort) || 8085
+    merged.authType = form.authType
+    if (syncFilterExpressions.length > 0) {
+      merged.syncFilterExpressions = syncFilterExpressions
+    } else {
+      // 用户清空过滤规则时，同步移除存量规则，避免残留旧配置
+      delete merged.syncFilterExpressions
+    }
+    request.connectionParams = JSON.stringify(merged)
   } else {
     request.host = form.host
   }
@@ -714,6 +763,32 @@ async function handleSubmit(): Promise<void> {
   flex-shrink: 0;
   gap: 32px;
   position: relative;
+}
+
+/* 返回按钮：头部左侧显式入口，与表单浅色调式一致 */
+.form-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.form-back-btn:hover {
+  border-color: var(--main-orange);
+  color: var(--main-orange);
+  background: #fff;
 }
 
 .form-title {
@@ -817,7 +892,7 @@ async function handleSubmit(): Promise<void> {
 .form-main {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
 }
@@ -947,6 +1022,37 @@ async function handleSubmit(): Promise<void> {
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
   border-color: var(--theme-border-strong);
+}
+
+/* 多行文本域：继承输入框视觉风格，高度自适应且可纵向拉伸 */
+.form-textarea {
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1d2129;
+  outline: none;
+  transition: all 0.15s;
+  font-family: inherit;
+  background: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.form-textarea:hover {
+  border-color: #c9cdd4;
+}
+
+.form-textarea:focus {
+  border-color: #165dff;
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+}
+
+.form-textarea::placeholder {
+  color: #c9cdd4;
 }
 
 .form-input:focus,

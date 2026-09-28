@@ -64,7 +64,7 @@ class DataAgentClient:
         初始化客户端
 
         Args:
-            base_url: API 基础路径，如 "http://localhost:18089/dataagent/api"
+            base_url: API 基础路径，如 "http://localhost:18089"
             workspace_id: 工作区 ID
             timeout: 请求超时时间（秒）
         """

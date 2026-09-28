@@ -18,11 +18,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
 import vip.mate.dataagent.dto.DatasourceVO;
 import vip.mate.dataagent.model.QueryStateEntity;
-import vip.mate.dataagent.service.BusinessTermEsService;
-import vip.mate.dataagent.service.DataAgentChatService;
-import vip.mate.dataagent.service.DataAgentStreamTracker;
-import vip.mate.dataagent.service.DatasourceManageService;
-import vip.mate.dataagent.service.QueryStateService;
+import vip.mate.dataagent.service.*;
 import vip.mate.dataagent.service.grounding.GroundingResult;
 import vip.mate.dataagent.service.grounding.MetricAnswerVerifier;
 import vip.mate.dataagent.support.DataAgentChatScopeContext;
@@ -34,11 +30,7 @@ import vip.mate.workspace.conversation.model.MessageEntity;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -72,6 +64,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
     private final MetricAnswerVerifier metricAnswerVerifier;
     private final WorkspaceGuard workspaceGuard;
     private final AgentGuard agentGuard;
+    private final UserAdmissionService admissionService;
     private final ExecutorService sseExecutor;
 
     /**
@@ -101,7 +94,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                     QueryStateService queryStateService,
                                     MetricAnswerVerifier metricAnswerVerifier,
                                     WorkspaceGuard workspaceGuard,
-                                    AgentGuard agentGuard) {
+                                    AgentGuard agentGuard,
+                                    UserAdmissionService admissionService) {
         this.runtime = runtime;
         this.conversationService = conversationService;
         this.streamTracker = streamTracker;
@@ -113,6 +107,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
         this.metricAnswerVerifier = metricAnswerVerifier;
         this.workspaceGuard = workspaceGuard;
         this.agentGuard = agentGuard;
+        this.admissionService = admissionService;
         // 有界线程池：核心 4 线程（提高首次调度响应），最大 CPU*2 线程，队列容量 256，CallerRunsPolicy 防止静默丢弃
         int maxThreads = Math.max(4, Runtime.getRuntime().availableProcessors() * 2);
         this.sseExecutor = new ThreadPoolExecutor(
@@ -155,6 +150,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                                  List<MessageContentPart> contentParts) {
         // 校验 Agent 归属当前工作区，防止跨工作区越权访问（在 HTTP 线程内执行，UserContextHolder 仍有效）
         agentGuard.requireAgentInCurrentWorkspace(agentId);
+        // 准入控制：单用户限频 + 并发舱壁（HTTP 线程内快速失败，超限直接抛 429，
+        // 在创建 SSE 资源与提交异步任务之前执行，避免超限请求占用线程池资源）
+        admissionService.acquireChatSlot(workspaceGuard.currentUsername());
         // 将 String 类型的数据源 ID 转换为 Long 类型
         List<Long> longIds = convertToLongIds(datasourceIds);
         // 把"用户勾选数据源"信息写入会话级上下文，供 DatasourceQueryTool 在工具执行阶段读取
@@ -186,6 +184,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             }
             StreamAccumulator accumulator = new StreamAccumulator();
             AtomicBoolean finalized = new AtomicBoolean(false);
+            // 订阅是否已建立：决定初始化失败时是否由本路径释放并发槽位
+            boolean subscribed = false;
             try {
                 // 1. 同步：创建/获取会话（LLM 调用需要 conversationId）
                 conversationService.getOrCreateConversation(conversationId, agentId, username, workspaceId);
@@ -272,7 +272,7 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             String persistStatus = wasStopped ? "stopped" : "completed";
                             // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
                             finalizeExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus, agentId, message));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, persistStatus, agentId, message, username));
                         })
                         .doOnError(e -> {
                             if (!finalized.compareAndSet(false, true)) return;
@@ -282,20 +282,22 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                             log.warn("[DataAgent] Stream {} for conversation {}: {}", status, conversationId, e.getMessage());
                             // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
                             finalizeExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status, agentId, message));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, status, agentId, message, username));
                         })
                         .doOnCancel(() -> {
                             if (!finalized.compareAndSet(false, true)) return;
                             log.info("[DataAgent] Stream cancelled for conversation {}", conversationId);
                             // 提交到 finalizeExecutor 执行，避免阻塞 Reactor 线程，并与订阅处理线程池隔离
                             finalizeExecutor.execute(() ->
-                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped", agentId, message));
+                                handleStreamFinalize(emitter, emitterDone, accumulator, conversationId, "stopped", agentId, message, username));
                         })
                         .subscribe(
                                 chunk -> {},
                                 err -> log.debug("[DataAgent] Subscription terminated: {}", err.getMessage()),
                                 () -> log.debug("[DataAgent] Subscription completed: conversationId={}", conversationId)
                         );
+                // 订阅已成功：流终态（doOnComplete/doOnError/doOnCancel → handleStreamFinalize）负责释放槽位
+                subscribed = true;
 
                 streamTracker.setDisposable(conversationId, disposable);
             } catch (Exception e) {
@@ -318,6 +320,11 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
                 scopeContext.clear(conversationId);
                 conversationService.updateStreamStatus(conversationId, "idle");
                 completeEmitterQuietly(emitter, emitterDone);
+                // 仅在订阅尚未建立时释放并发槽位（初始化失败路径）；
+                // 订阅已成功时由流终态 handleStreamFinalize 释放，避免双重释放抬高并发许可
+                if (!subscribed) {
+                    admissionService.releaseChatSlot(username);
+                }
             } finally {
                 // sseExecutor 线程池复用线程，必须清理 InheritableThreadLocal 防止下一个请求继承到上一个用户的身份
                 UserContextHolder.clear();
@@ -881,7 +888,8 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
 
     private void handleStreamFinalize(SseEmitter emitter, AtomicBoolean emitterDone,
                                        StreamAccumulator accumulator, String conversationId,
-                                       String status, Long agentId, String userMessage) {
+                                       String status, Long agentId, String userMessage,
+                                       String username) {
         try {
             String assistantText = accumulator.getContent();
             List<MessageContentPart> assistantParts = accumulator.toAssistantParts();
@@ -1025,6 +1033,9 @@ public class DataAgentChatServiceImpl implements DataAgentChatService {
             // DataAgentStreamTracker.broadcast() 是同步推送（锁内 emitter.send()），
             // done 事件广播后数据已刷出，无需额外延迟。直接 complete emitter。
             completeEmitterQuietly(emitter, emitterDone);
+            // 流终态释放并发槽位（与 streamChat 入口的 acquireChatSlot 配对，每个流严格释放一次；
+            // finalize 与 sseExecutor 初始化失败路径互斥，不会重复释放）
+            admissionService.releaseChatSlot(username);
         }
     }
 

@@ -1,42 +1,50 @@
 <template>
   <div class="workspace-manage-page">
     <div class="page-header">
-      <h1 class="page-title">{{ t('workspaceManage.title') }}</h1>
-      <button class="btn-primary" @click="openCreateModal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        {{ t('workspaceManage.create') }}
-      </button>
+      <div class="page-header-left">
+        <h1 class="page-title">{{ t('workspaceManage.title') }}</h1>
+        <p class="page-desc">{{ t('workspaceManage.desc') }}</p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn-create-pill" @click="openCreateModal">
+          <el-icon :size="14"><Plus /></el-icon>
+          {{ t('workspaceManage.create') }}
+        </button>
+      </div>
     </div>
 
     <div class="page-body surface-card">
-      <el-table v-loading="loading" :data="workspaces" stripe class="workspace-table">
+      <el-table v-loading="loading" :data="workspaces" class="mc-table">
         <el-table-column prop="name" :label="t('workspaceManage.colName')" min-width="160">
           <template #default="{ row }">
-            <span class="workspace-name" :title="row.name">{{ row.name }}</span>
+            <span class="cell-name">{{ row.name }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="slug" :label="t('workspaceManage.colSlug')" min-width="140" />
         <el-table-column prop="description" :label="t('workspaceManage.colDescription')" min-width="200" show-overflow-tooltip />
         <el-table-column prop="memberRole" :label="t('workspaceManage.colMyRole')" width="120">
           <template #default="{ row }">
-            <span class="role-tag" :class="row.effectiveRole || row.memberRole">
+            <span class="mc-tag" :class="row.effectiveRole || row.memberRole">
               {{ row.effectiveRole || row.memberRole || '-' }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" :label="t('workspaceManage.colCreateTime')" width="170" />
-        <el-table-column :label="t('common.action')" width="160" fixed="right">
+        <el-table-column prop="createTime" :label="t('workspaceManage.colCreateTime')" width="150">
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('common.action')" width="80" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
-              <button class="action-link" :disabled="!canEdit(row)" @click="openEditModal(row)">
-                {{ t('common.edit') }}
-              </button>
-              <button class="action-link danger" :disabled="!canDelete(row)" @click="handleDelete(row)">
-                {{ t('common.delete') }}
-              </button>
+              <el-tooltip :content="t('common.edit')" placement="top" :disabled="!canEdit(row)">
+                <el-icon :size="14" class="action-icon" :class="{ 'is-disabled': !canEdit(row) }" @click="openEditModal(row)">
+                  <Edit />
+                </el-icon>
+              </el-tooltip>
+              <el-tooltip :content="t('common.delete')" placement="top" :disabled="!canDelete(row)">
+                <el-icon :size="14" class="action-icon danger" :class="{ 'is-disabled': !canDelete(row) }" @click="handleDelete(row)">
+                  <Delete />
+                </el-icon>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
@@ -86,6 +94,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/time'
 import { useUserStore } from '@/stores/useUserStore'
 import * as workspaceApi from '@/api/workspace'
 import type { Workspace } from '@/types'
@@ -207,7 +217,6 @@ async function handleDelete(row: Workspace): Promise<void> {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 24px;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -216,104 +225,102 @@ async function handleDelete(row: Workspace): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.page-header-left {
+  min-width: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--theme-text);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--db-text);
   margin: 0;
+  line-height: 1.3;
 }
 
-.btn-primary {
+.page-desc {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--db-text-secondary, var(--theme-text-secondary));
+  line-height: 1.4;
+}
+
+/* 胶囊按钮：主题色实心 + 白字 + 阴影 */
+.btn-create-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
+  height: 36px;
   padding: 0 16px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--main-orange);
   color: #fff;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: var(--shadow-md);
+  transition: filter var(--transition-fast, 0.15s);
 }
 
-.btn-primary:hover {
-  background: var(--dark-orange);
+.btn-create-pill:hover {
+  filter: brightness(1.08);
 }
 
 .page-body {
   flex: 1;
-  overflow: hidden;
-  border-radius: 12px;
-  padding: 16px;
+  overflow: auto;
 }
 
-.surface-card {
-  background: var(--theme-surface);
-  border: 1px solid var(--theme-border);
-}
-
-.workspace-table {
-  width: 100%;
-}
-
-.workspace-name {
-  font-weight: 600;
-  color: var(--theme-text);
-}
-
-.role-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: capitalize;
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-
-.role-tag.owner {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
-.role-tag.admin {
-  background: rgba(65, 118, 230, 0.12);
-  color: var(--main-orange);
-}
-
+/* row-actions + action-icon */
 .row-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 4px;
 }
 
-.action-link {
-  border: none;
-  background: transparent;
-  color: var(--main-orange);
-  font-size: 13px;
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--db-text-secondary);
+  opacity: 0.7;
   cursor: pointer;
-  padding: 0;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.action-link:hover:not(:disabled) {
-  text-decoration: underline;
+.action-icon:hover {
+  opacity: 1;
+  background: var(--db-hover);
+  color: var(--db-text);
 }
 
-.action-link:disabled {
-  color: var(--theme-text-muted);
+.action-icon.danger:hover {
+  background: rgba(245, 63, 63, 0.1);
+  color: #f53f3f;
+}
+
+.action-icon.is-disabled {
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
-.action-link.danger {
-  color: #e53e3e;
+.cell-name {
+  color: var(--db-text);
+  font-weight: 500;
 }
 
 .form-body {

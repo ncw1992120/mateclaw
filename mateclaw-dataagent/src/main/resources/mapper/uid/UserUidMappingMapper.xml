@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="vip.mate.dataagent.repository.UserUidMappingMapper">
+
+    <insert id="upsertBatch" parameterType="java.util.List">
+        INSERT INTO `dataagent_user_uid_mapping`
+        (`id`, `username`, `tenant_id`, `nickname`, `aloudata_uid`, `status`, `sync_source`, `sync_time`, `create_time`, `update_time`)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.username}, #{item.tenantId}, #{item.nickname},
+             #{item.aloudataUid, typeHandler=vip.mate.dataagent.auth.crypto.AesPasswordTypeHandler},
+             #{item.status}, #{item.syncSource}, #{item.syncTime}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            `nickname` = COALESCE(VALUES(`nickname`), `nickname`),
+            `aloudata_uid` = VALUES(`aloudata_uid`),
+            `status` = VALUES(`status`),
+            `sync_source` = VALUES(`sync_source`),
+            `sync_time` = VALUES(`sync_time`),
+            `update_time` = VALUES(`update_time`)
+    </insert>
+
+    <!-- PostgreSQL 方言版本：按业务唯一键 (username, tenant_id) 冲突更新 -->
+    <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
+        INSERT INTO dataagent_user_uid_mapping
+        (id, username, tenant_id, nickname, aloudata_uid, status, sync_source, sync_time, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.id}, #{item.username}, #{item.tenantId}, #{item.nickname},
+             #{item.aloudataUid, typeHandler=vip.mate.dataagent.auth.crypto.AesPasswordTypeHandler},
+             #{item.status}, #{item.syncSource}, #{item.syncTime}, #{item.createTime}, #{item.updateTime})
+        </foreach>
+        ON CONFLICT (username, tenant_id) DO UPDATE SET
+            nickname = COALESCE(EXCLUDED.nickname, dataagent_user_uid_mapping.nickname),
+            aloudata_uid = EXCLUDED.aloudata_uid,
+            status = EXCLUDED.status,
+            sync_source = EXCLUDED.sync_source,
+            sync_time = EXCLUDED.sync_time,
+            update_time = EXCLUDED.update_time
+    </insert>
+
+</mapper>

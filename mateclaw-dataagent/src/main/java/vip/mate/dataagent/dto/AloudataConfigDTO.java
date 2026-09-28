@@ -3,6 +3,7 @@ package vip.mate.dataagent.dto;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,4 +44,14 @@ public class AloudataConfigDTO implements Serializable {
      * 示例：{"metrics_list": "/anymetrics/api/v2/metrics/list"}
      */
     private Map<String, String> apiOverrides;
+
+    /**
+     * 数据源级别的元数据同步黑名单过滤表达式（QLExpress 布尔表达式）
+     * <p>
+     * 命中任一表达式即视为黑名单，对应元数据（类目/指标/维度）不落库持久化。
+     * 与全局配置（aloudata.sync.filter.expressions）合并生效。
+     * <p>
+     * 示例：categoryName in ("测试类目", "敏感数据")
+     */
+    private List<String> syncFilterExpressions;
 }

@@ -62,6 +62,7 @@ public class SkillScriptExecutionService {
 
         Path stdoutFile = null;
         Path stderrFile = null;
+        List<Path> argFiles = null;
 
         try {
             // 构建命令（结构化参数，避免 shell 注入）
@@ -101,8 +102,27 @@ public class SkillScriptExecutionService {
             }
 
             command.add(scriptPath.toString());
-            if (args != null) {
-                command.addAll(args);
+            if (args != null && !args.isEmpty()) {
+                if (IS_WINDOWS) {
+                    // Windows 的 CRT 命令行解析会剥掉 argv 中的内嵌双引号（ProcessBuilder
+                    // 只对参数加引号、不做 MSDN 反斜杠转义），JSON 载荷经命令行传递必然
+                    // 损坏：实测紧凑 JSON 同样丢引号，值含空格时还会被拆成多个参数。
+                    // 含引号的参数改为写入 UTF-8 临时文件、以路径传递——脚本侧普遍支持
+                    // "JSON 文本或文件路径"双通道输入（如 anomaly_detect.py 的 load_payload）。
+                    argFiles = new ArrayList<>(args.size());
+                    for (String arg : args) {
+                        if (arg != null && arg.indexOf('"') >= 0) {
+                            Path argFile = Files.createTempFile("mc_script_arg_", ".txt");
+                            Files.write(argFile, arg.getBytes(StandardCharsets.UTF_8));
+                            argFiles.add(argFile);
+                            command.add(argFile.toString());
+                        } else {
+                            command.add(arg);
+                        }
+                    }
+                } else {
+                    command.addAll(args);
+                }
             }
 
             // 重定向到临时文件，使 waitFor(timeout) 不被管道阻塞
@@ -150,6 +170,11 @@ public class SkillScriptExecutionService {
         } finally {
             deleteQuietly(stdoutFile);
             deleteQuietly(stderrFile);
+            if (argFiles != null) {
+                for (Path argFile : argFiles) {
+                    deleteQuietly(argFile);
+                }
+            }
         }
     }
 

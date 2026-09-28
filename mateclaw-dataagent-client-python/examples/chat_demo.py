@@ -15,7 +15,7 @@ def main():
     """运行基础对话示例"""
 
     # ==================== 配置 ====================
-    BASE_URL = "http://localhost:18089/dataagent/api"
+    BASE_URL = "http://localhost:18089"
     WORKSPACE_ID = 1
     USERNAME = "admin"
     PASSWORD = "admin123"

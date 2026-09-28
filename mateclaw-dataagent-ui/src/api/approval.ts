@@ -1,6 +1,6 @@
 import api from './index'
 
-const BASE_URL = '/dataagent/api/v1/approvals'
+const BASE_URL = '/v1/approvals'
 
 /** 审批记录 */
 export interface ApprovalRecord {

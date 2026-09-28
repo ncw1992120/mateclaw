@@ -29,6 +29,8 @@
         <clickhouse-jdbc.version>0.9.8</clickhouse-jdbc.version>
         <starrocks-connector-j.version>1.1.1</starrocks-connector-j.version>
         <mssql-jdbc.version>13.6.0.jre11</mssql-jdbc.version>
+        <qlexpress.version>3.3.4</qlexpress.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
     <dependencyManagement>
@@ -76,6 +78,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- ===== Resilience4j 服务保护（限流 / 熔断 / 舱壁隔离） ===== -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
 
         <!-- ===== Spring Security ===== -->
@@ -196,6 +205,13 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope</artifactId>
             <version>${agentscope.version}</version>
+        </dependency>
+
+        <!-- ===== QLExpress 表达式引擎（Aloudata 元数据同步黑名单动态过滤） ===== -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>QLExpress</artifactId>
+            <version>${qlexpress.version}</version>
         </dependency>
 
         <!-- ===== Test ===== -->

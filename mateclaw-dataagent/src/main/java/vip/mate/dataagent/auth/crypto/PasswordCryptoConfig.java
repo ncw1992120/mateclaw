@@ -1,10 +1,9 @@
 package vip.mate.dataagent.auth.crypto;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
-
-import jakarta.annotation.PostConstruct;
 
 /**
  * 密码存储加密初始化配置

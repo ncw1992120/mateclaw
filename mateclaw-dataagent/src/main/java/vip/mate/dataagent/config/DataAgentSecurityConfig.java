@@ -18,7 +18,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 /**
  * DataAgent Spring Security 配置
  * <p>
- * 由于 dataagent 的 context-path 为 {@code /dataagent/api}，实际接口路径为 {@code /v1/**}，
+ * dataagent 的 context-path 为 {@code /}，实际接口路径为 {@code /v1/**}，
  * mateclaw-server 的 SecurityConfig 仅保护 {@code /api/**}，无法覆盖 dataagent 接口。
  * 本配置以 {@code @Order(1)} + {@code securityMatcher("/v1/**")} 优先匹配 dataagent 路径，
  * 复用 mateclaw-server 的 {@link JwtAuthFilter} 完成 JWT/PAT 认证。

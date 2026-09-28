@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS `dataagent_aloudata_metric` (
     KEY `idx_status` (`status`),
     KEY `idx_sync_version` (`sync_version`),
     KEY `idx_metric_ds_category` (`datasource_id`, `metric_category_id`),
-    KEY `idx_metric_ds_name` (`datasource_id`, `metric_name`),
+    UNIQUE KEY `uk_metric_ds_name` (`datasource_id`, `metric_name`),
     KEY `idx_metric_keyword` (`datasource_id`, `metric_name`, `metric_display_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Aloudata指标元数据表';
 

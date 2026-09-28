@@ -16,7 +16,6 @@ metadata:
     nginx.ingress.kubernetes.io/keepalive: "32"
     nginx.ingress.kubernetes.io/websocket-services: "datareasonagentservice"
     nginx.ingress.kubernetes.io/service-upstream: "true"
-    nginx.ingress.kubernetes.io/app-root: "/dataagent/api/"
 spec:
   ingressClassName: nginx
   rules:
@@ -24,7 +23,7 @@ spec:
   - host: dataagent.example.com
     http:
       paths:
-      # fat jar 同时承载前端 SPA（/）与后端 API（/dataagent/api，context-path），
+      # fat jar 同时承载前端 SPA（/）与后端 API（/v1/**，context-path 为 /），
       # 单服务单路径即可，无需前后端分离路由
       - path: /
         pathType: Prefix

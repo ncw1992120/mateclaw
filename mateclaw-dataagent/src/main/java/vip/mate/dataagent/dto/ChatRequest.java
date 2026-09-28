@@ -1,10 +1,9 @@
 package vip.mate.dataagent.dto;
 
 import lombok.Data;
+import vip.mate.workspace.conversation.model.MessageContentPart;
 
 import java.util.List;
-
-import vip.mate.workspace.conversation.model.MessageContentPart;
 
 @Data
 public class ChatRequest {

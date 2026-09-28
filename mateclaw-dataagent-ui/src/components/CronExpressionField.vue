@@ -151,6 +151,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { describeCron } from '@/utils/cronDescribe'
 
 interface Props {
   /** 5 字段 cron 表达式（分 时 日 月 周） */
@@ -337,52 +338,9 @@ const PRESET_DEFS = [
 ]
 const presets = computed(() => PRESET_DEFS)
 
-function pad(n: string | number): string {
-  const s = String(n)
-  return s.length < 2 ? '0' + s : s
-}
-
-function describeDow(dow: string): string {
-  const fmt = (n: string) => weekLabel(Number(n) % 7)
-  if (/^\d+-\d+$/.test(dow)) {
-    const [a, b] = dow.split('-')
-    return `${fmt(a)}-${fmt(b)}`
-  }
-  if (/^\d+(,\d+)+$/.test(dow)) {
-    return dow.split(',').map(fmt).join('/')
-  }
-  if (/^\d+$/.test(dow)) return fmt(dow)
-  return dow
-}
-
+/** 复用公共描述工具，供输入框下方与弹窗预览渲染 */
 function describe(expr: string): string {
-  if (!expr || !expr.trim()) return ''
-  const parts = expr.trim().split(/\s+/)
-  if (parts.length !== 5) return ''
-  const [mi, ho, dom, mon, dow] = parts
-  if (parts.every((p) => p === '*')) return t('cronField.desc.everyMinute')
-  if (/^\*\/\d+$/.test(mi) && ho === '*' && dom === '*' && mon === '*' && dow === '*') {
-    return t('cronField.desc.everyNMin', { n: mi.slice(2) })
-  }
-  if (mi === '0' && /^\*\/\d+$/.test(ho) && dom === '*' && mon === '*' && dow === '*') {
-    return t('cronField.desc.everyNHour', { n: ho.slice(2) })
-  }
-  if (/^\d+$/.test(mi) && ho === '*' && dom === '*' && mon === '*' && dow === '*') {
-    return t('cronField.desc.hourlyAt', { m: mi })
-  }
-  if (/^\d+$/.test(mi) && /^\d+$/.test(ho)) {
-    const time = `${pad(ho)}:${pad(mi)}`
-    if (dom === '*' && mon === '*' && dow === '*') {
-      return t('cronField.desc.dailyAt', { time })
-    }
-    if (dom === '*' && mon === '*' && dow !== '*') {
-      return t('cronField.desc.weeklyAt', { days: describeDow(dow), time })
-    }
-    if (/^\d+$/.test(dom) && mon === '*' && dow === '*') {
-      return t('cronField.desc.monthlyAt', { day: dom, time })
-    }
-  }
-  return ''
+  return describeCron(expr, t)
 }
 </script>
 

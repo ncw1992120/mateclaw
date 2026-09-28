@@ -1,10 +1,9 @@
 package vip.mate.dataagent.service;
 
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import vip.mate.workspace.conversation.model.MessageContentPart;
 
 import java.util.List;
-
-import vip.mate.workspace.conversation.model.MessageContentPart;
 
 /**
  * DataAgent 对话服务接口

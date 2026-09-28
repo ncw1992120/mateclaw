@@ -5,16 +5,18 @@
     <insert id="upsertBatch" parameterType="java.util.List">
         INSERT INTO `dataagent_aloudata_category`
         (`id`, `datasource_id`, `category_id`, `category_name`, `category_type`,
-         `parent_id`, `sync_version`, `create_time`, `update_time`)
+         `parent_id`, `front_id`, `type`, `sync_version`, `create_time`, `update_time`)
         VALUES
         <foreach collection="list" item="item" separator=",">
             (#{item.id}, #{item.datasourceId}, #{item.categoryId}, #{item.categoryName}, #{item.categoryType},
-             #{item.parentId}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
+             #{item.parentId}, #{item.frontId}, #{item.type}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON DUPLICATE KEY UPDATE
             `category_name` = VALUES(`category_name`),
             `category_type` = VALUES(`category_type`),
             `parent_id` = VALUES(`parent_id`),
+            `front_id` = VALUES(`front_id`),
+            `type` = VALUES(`type`),
             `sync_version` = VALUES(`sync_version`),
             `update_time` = VALUES(`update_time`)
     </insert>
@@ -23,16 +25,18 @@
     <insert id="upsertBatch" parameterType="java.util.List" databaseId="postgresql">
         INSERT INTO dataagent_aloudata_category
         (id, datasource_id, category_id, category_name, category_type,
-         parent_id, sync_version, create_time, update_time)
+         parent_id, front_id, type, sync_version, create_time, update_time)
         VALUES
         <foreach collection="list" item="item" separator=",">
             (#{item.id}, #{item.datasourceId}, #{item.categoryId}, #{item.categoryName}, #{item.categoryType},
-             #{item.parentId}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
+             #{item.parentId}, #{item.frontId}, #{item.type}, #{item.syncVersion}, #{item.createTime}, #{item.updateTime})
         </foreach>
         ON CONFLICT (datasource_id, category_id) DO UPDATE SET
             category_name = EXCLUDED.category_name,
             category_type = EXCLUDED.category_type,
             parent_id = EXCLUDED.parent_id,
+            front_id = EXCLUDED.front_id,
+            type = EXCLUDED.type,
             sync_version = EXCLUDED.sync_version,
             update_time = EXCLUDED.update_time
     </insert>

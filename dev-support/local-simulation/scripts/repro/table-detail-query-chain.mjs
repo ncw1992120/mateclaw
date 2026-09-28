@@ -2,7 +2,7 @@
 /**
  * 表格详情页查询链路 — 本地跨端联调脚本（实施计划任务 8）。
  *
- * 前置：本地 DataAgent 已启动（默认 http://127.0.0.1:18089/dataagent/api，可用
+ * 前置：本地 DataAgent 已启动（默认 http://127.0.0.1:18089，可用
  * docs/策略解读/restart-dataagent-backend.sh 启动）。
  *
  * 阶段：
@@ -16,7 +16,7 @@
  */
 import crypto from 'node:crypto'
 
-const BASE = process.env.MATECLAW_BASE_URL || 'http://127.0.0.1:18089/dataagent/api'
+const BASE = process.env.MATECLAW_BASE_URL || 'http://127.0.0.1:18089'
 const USERNAME = process.env.MATECLAW_USERNAME || 'admin'
 const PASSWORD = process.env.MATECLAW_PASSWORD || 'admin123'
 const requestId = `chain-${Date.now()}`

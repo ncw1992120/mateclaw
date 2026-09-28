@@ -2,7 +2,7 @@ import api from './index'
 import type { SchemaSearchRequest, SchemaSearchResult } from '@/types'
 
 /** API 路径常量 */
-const BASE_URL = '/dataagent/api/v1/schema-search'
+const BASE_URL = '/v1/schema-search'
 
 /** 为数据源生成 Schema 嵌入 */
 export function embedSchema(datasourceId: string) {

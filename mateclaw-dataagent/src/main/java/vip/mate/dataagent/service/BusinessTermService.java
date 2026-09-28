@@ -1,10 +1,6 @@
 package vip.mate.dataagent.service;
 
-import vip.mate.dataagent.dto.BusinessTermCreateRequest;
-import vip.mate.dataagent.dto.BusinessTermReferenceOptions;
-import vip.mate.dataagent.dto.BusinessTermSearchResult;
-import vip.mate.dataagent.dto.BusinessTermUpdateRequest;
-import vip.mate.dataagent.dto.BusinessTermVO;
+import vip.mate.dataagent.dto.*;
 
 import java.util.List;
 

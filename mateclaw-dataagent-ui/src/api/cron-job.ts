@@ -1,7 +1,7 @@
 import api from './index'
 
 /** 定时任务 API 基础路径（通过 dataagent 后端 SDK 代理） */
-const BASE_URL = '/dataagent/api/v1/cron-jobs'
+const BASE_URL = '/v1/cron-jobs'
 
 /** 定时任务 DTO（与后端 CronJobDTO 一一对应） */
 export interface CronJob {
