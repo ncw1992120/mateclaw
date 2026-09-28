@@ -1151,7 +1151,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   overflow: auto;
   padding: var(--space-xl);
   box-sizing: border-box;
-  background: #fff;
+  background: var(--db-bg, #F7F8FA);
   display: flex;
   flex-direction: column;
 }
