@@ -830,6 +830,22 @@ function handlePasteChild(payload: { containerId: string; childId: string | null
   if (!container || !source) return
   const children = getActiveCombinationChildren(container)
   const pasted = cloneCombinationChildForPaste(source, generateId)
+  const overlaps = (left: number, top: number): boolean => children.some((child) => (
+    left < child.layout.x + child.layout.col * 80
+      && left + pasted.layout.col * 80 > child.layout.x
+      && top < child.layout.y + (child.layout.h ?? 180)
+      && top + (pasted.layout.h ?? 180) > child.layout.y
+  ))
+  let x = pasted.layout.x
+  let y = pasted.layout.y
+  while (overlaps(x, y)) {
+    x += 12
+    if (x + pasted.layout.col * 80 > 960) {
+      x = 0
+      y += 12
+    }
+  }
+  pasted.layout = { ...pasted.layout, x, y }
   children.push(pasted)
   selectedComponentId.value = container.id
   selectedChildInfo.value = { containerId: container.id, childId: pasted.id }
@@ -1303,9 +1319,6 @@ function handleComponentChange(updated: InsightComponent): void {
       child.boundFilterIds = updated.boundFilterIds
       child.enableTimeFilter = updated.enableTimeFilter
       child.multiKpi = updated.multiKpi
-      if (child.type === 'kpi') {
-        child.kpiMetrics = updated.kpiMetrics
-      }
       if (child.type === 'combination') {
         child.children = child.children ?? updated.children ?? []
         child.containerConfig = mergeCombinationConfig(child, updated)
@@ -1403,10 +1416,6 @@ function handleComponentResultSet(payload: {
     .find((item) => item !== null)
   const component = topLevel ?? (nestedChild as InsightComponent | null)
   if (!component) return
-  if (payload.status === 'empty') {
-    delete componentDataMap.value[payload.componentId]
-    return
-  }
   if (payload.status === 'ready') {
     componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)
     return
