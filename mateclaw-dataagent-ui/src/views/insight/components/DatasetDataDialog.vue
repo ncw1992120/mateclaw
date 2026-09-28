@@ -177,9 +177,8 @@
       <!-- ⑤ 结果 -->
       <section class="dd-block dd-result">
         <div class="dd-head">
-          <span class="dd-title">原始数据</span>
-          <div class="dd-result-actions">
-            <span class="dd-hint">{{ resultHint }}</span>
+          <div class="dd-head-left">
+            <span class="dd-title">原始数据</span>
             <el-button
               v-if="component"
               data-testid="component-render"
@@ -188,6 +187,9 @@
               :disabled="!hasCurrentResult || Boolean(componentValidationError)"
               @click="renderComponent"
             >组件渲染</el-button>
+          </div>
+          <div class="dd-result-actions">
+            <span class="dd-hint">{{ resultHint }}</span>
           </div>
         </div>
         <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
@@ -838,7 +840,7 @@ watch(() => ui.dataDialog.visible, (visible) => {
   justify-content: space-between;
   gap: 12px;
 }
-.dd-head-right {
+.dd-head-left {
   display: flex;
   align-items: center;
   gap: 10px;

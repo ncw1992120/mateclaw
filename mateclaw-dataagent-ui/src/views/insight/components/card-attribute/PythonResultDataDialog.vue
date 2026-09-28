@@ -61,9 +61,8 @@
 
       <section class="dd-block dd-result">
         <div class="dd-head">
-          <span class="dd-title">Python 原始结果</span>
-          <div class="dd-result-actions">
-            <span class="dd-hint">{{ resultHint }}</span>
+          <div class="dd-head-left">
+            <span class="dd-title">Python 原始结果</span>
             <el-button
               v-if="component"
               type="primary"
@@ -72,6 +71,9 @@
               :disabled="!hasQueried"
               @click="renderComponent"
             >组件渲染</el-button>
+          </div>
+          <div class="dd-result-actions">
+            <span class="dd-hint">{{ resultHint }}</span>
           </div>
         </div>
         <div class="dd-result-body">
@@ -221,6 +223,7 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-body { display: flex; flex-direction: column; gap: 14px; max-height: 80vh; overflow: auto; }
 .dd-block { border: 1px solid var(--db-border); border-radius: var(--radius-md); padding: 12px; background: #fff; }
 .dd-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.dd-head-left { display: flex; align-items: center; gap: 10px; }
 .dd-title { font-weight: 600; font-size: 13px; color: var(--db-text); }
 .dd-hint { font-size: 12px; color: var(--db-text-muted); }
 .dd-table-wrap { overflow: auto; }
