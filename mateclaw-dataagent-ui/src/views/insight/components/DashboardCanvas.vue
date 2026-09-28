@@ -1325,8 +1325,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   position: absolute;
   inset: 0 0 auto;
   z-index: 2;
-  height: 1px;
-  background: color-mix(in srgb, var(--component-group-accent, transparent) 30%, transparent);
+  height: 3px;
+  background: var(--component-group-accent, transparent);
   pointer-events: none;
 }
 
