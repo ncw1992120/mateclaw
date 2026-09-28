@@ -107,10 +107,11 @@ function onPickerChange(value: string | null): void {
 </script>
 
 <style scoped>
-.insight-color-field { display: grid; gap: 6px; }
+.insight-color-field { display: grid; gap: 6px; min-width: 0; }
 .insight-color-field__label { color: var(--el-text-color-regular); font-size: 13px; }
-.insight-color-field__controls { display: flex; align-items: center; gap: 8px; }
-.insight-color-field__controls input { min-width: 0; width: 112px; padding: 6px 8px; border: 1px solid var(--el-border-color); border-radius: 4px; color: var(--el-text-color-primary); font: inherit; font-family: monospace; }
+.insight-color-field__controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.insight-color-field__controls :deep(.el-color-picker) { flex-shrink: 0; }
+.insight-color-field__controls input { min-width: 0; flex: 1 1 112px; width: auto; padding: 6px 8px; border: 1px solid var(--el-border-color); border-radius: 4px; color: var(--el-text-color-primary); font: inherit; font-family: monospace; }
 .insight-color-field__controls input[aria-invalid="true"] { border-color: var(--el-color-danger); }
 .insight-color-field__error { margin: 0; color: var(--el-color-danger); font-size: 12px; }
 </style>
