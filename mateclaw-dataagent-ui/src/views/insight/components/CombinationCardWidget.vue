@@ -1037,7 +1037,9 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-child-head {
   position: relative;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; background: var(--component-group-header-surface, transparent); border-bottom: 1px solid color-mix(in srgb, var(--component-group-border, var(--db-border)) 55%, transparent);
+  /* 标题条跟随子卡片表面色：自定义背景时整个子卡片（含标题条）统一变色；
+     未自定义时 --component-surface 仍由主题注入（--db-surface-card），观感与原组头表面一致 */
+  padding: 6px 10px; background: var(--component-surface, var(--component-group-header-surface, transparent)); border-bottom: 1px solid color-mix(in srgb, var(--component-group-border, var(--db-border)) 55%, transparent);
   border-radius: 7px 7px 0 0;
   flex-shrink: 0;
 }
