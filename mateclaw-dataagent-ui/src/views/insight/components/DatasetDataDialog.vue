@@ -177,21 +177,33 @@
       <!-- ⑤ 结果 -->
       <section class="dd-block dd-result">
         <div class="dd-head">
-          <div class="dd-head-left">
-            <span class="dd-title">原始数据</span>
-            <el-button
+          <div class="dd-result-tabs" role="tablist" aria-label="结果视图">
+            <button
+              type="button"
+              class="dd-tab"
+              :class="{ active: resultTab === 'raw' }"
+              role="tab"
+              :aria-selected="resultTab === 'raw'"
+              data-testid="result-tab-raw"
+              @click="resultTab = 'raw'"
+            >原始数据</button>
+            <button
               v-if="component"
+              type="button"
+              class="dd-tab"
+              :class="{ active: resultTab === 'render' }"
+              role="tab"
+              :aria-selected="resultTab === 'render'"
               data-testid="component-render"
-              size="small"
-              type="primary"
-              :disabled="!hasCurrentResult || Boolean(componentValidationError)"
-              @click="renderComponent"
-            >组件渲染</el-button>
+              :disabled="!canRenderComponent"
+              @click="switchToRenderTab"
+            >组件渲染</button>
           </div>
           <div class="dd-result-actions">
             <span class="dd-hint">{{ resultHint }}</span>
           </div>
         </div>
+        <template v-if="!component || resultTab === 'raw'">
         <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
           <el-table
             v-if="columns.length"
@@ -245,14 +257,11 @@
           <el-button size="small" :disabled="currentPage <= 1 || loading" data-testid="page-previous" @click="changePage(currentPage - 1)">上一页</el-button>
           <el-button size="small" :disabled="!hasMore || loading" data-testid="page-next" @click="changePage(currentPage + 1)">下一页</el-button>
         </div>
-      </section>
-
-      <section v-if="component && componentPreviewVisible" class="dd-block" data-testid="component-preview-section">
-        <div class="dd-head">
-          <span class="dd-title">组件预览</span>
-          <span class="dd-hint">预览与画布使用相同的组件和本次查询结果</span>
+        </template>
+        <div v-else class="dd-result-body dd-render-pane" data-testid="component-preview-section">
+          <ComponentDataPreview v-if="componentRenderData" :component="component" :component-data="componentRenderData" />
+          <el-empty v-else description="暂无可渲染的组件数据" />
         </div>
-        <ComponentDataPreview :component="component" :component-data="componentRenderData!" />
       </section>
     </div>
   </el-dialog>
@@ -293,7 +302,8 @@ const DEFAULT_BATCH_SIZE = 50
 const loading = ref(false)
 const error = ref('')
 const componentValidationError = ref('')
-const componentPreviewVisible = ref(false)
+/** 结果区页签：原始数据 / 组件渲染 */
+const resultTab = ref<'raw' | 'render'>('raw')
 const elapsed = ref('')
 const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
@@ -556,6 +566,11 @@ const hasCurrentResult = computed(() => queriedAt.value > 0 && !cacheStale.value
 const componentRenderData = computed(() => props.component && columns.value.length
   ? componentPreviewData(props.component, rows.value, componentPreviewColumns.value)
   : undefined)
+/** 「组件渲染」页签可用条件：有组件、结果新鲜且通过组件校验 */
+const canRenderComponent = computed(() => Boolean(props.component)
+  && hasCurrentResult.value
+  && !componentValidationError.value
+  && !!componentRenderData.value)
 
 const resultHint = computed(() => {
   if (loading.value) return '查询中…'
@@ -570,8 +585,10 @@ const resultHint = computed(() => {
 async function fetchRows(reset: boolean): Promise<void> {
   loading.value = true
   error.value = ''
-  if (reset) componentPreviewVisible.value = false
-  if (reset) componentValidationError.value = ''
+  if (reset) {
+    componentValidationError.value = ''
+    resultTab.value = 'raw'
+  }
   const started = Date.now()
   try {
     const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
@@ -673,11 +690,17 @@ async function fetchRows(reset: boolean): Promise<void> {
   }
 }
 
-/** 将最近一次有效查询结果显式应用到画布，并在弹窗展示同一份组件数据。 */
+/** 将最近一次有效查询结果显式应用到画布，并在「组件渲染」页签展示同一份组件数据。 */
 function renderComponent(): void {
   if (!props.component || !hasCurrentResult.value || componentValidationError.value || !componentRenderData.value) return
   emit('render', componentRenderData.value)
-  componentPreviewVisible.value = true
+}
+
+/** 切到「组件渲染」页签：同步画布 + 页签内预览 */
+function switchToRenderTab(): void {
+  if (!canRenderComponent.value) return
+  renderComponent()
+  resultTab.value = 'render'
 }
 
 /** 表头三态：新字段从升序开始；同字段 asc → desc → 取消；变化后页码回 1 并立即重新查询 */
@@ -798,6 +821,7 @@ async function open(): Promise<void> {
   totalCount.value = null
   elapsed.value = ''
   error.value = ''
+  resultTab.value = 'raw'
 
   // 恢复最近一次执行结果：条件与结果都还在，不必重新点「查询」。
   // 若条件已被改过，结果照常展示、结果区标注「条件已变更」，由用户决定是否重查。
@@ -840,10 +864,33 @@ watch(() => ui.dataDialog.visible, (visible) => {
   justify-content: space-between;
   gap: 12px;
 }
-.dd-head-left {
+.dd-result-tabs {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 18px;
+}
+.dd-tab {
+  padding: 4px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--db-text-muted);
+  cursor: pointer;
+}
+.dd-tab.active {
+  color: var(--db-text);
+  font-weight: 600;
+  border-bottom-color: var(--el-color-primary, var(--db-text));
+}
+.dd-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.dd-render-pane {
+  display: flex;
+  flex-direction: column;
 }
 .dd-title {
   font-size: 13px;

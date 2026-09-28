@@ -61,21 +61,33 @@
 
       <section class="dd-block dd-result">
         <div class="dd-head">
-          <div class="dd-head-left">
-            <span class="dd-title">Python 原始结果</span>
-            <el-button
+          <div class="dd-result-tabs" role="tablist" aria-label="结果视图">
+            <button
+              type="button"
+              class="dd-tab"
+              :class="{ active: resultTab === 'raw' }"
+              role="tab"
+              :aria-selected="resultTab === 'raw'"
+              data-testid="python-result-tab-raw"
+              @click="resultTab = 'raw'"
+            >Python 原始结果</button>
+            <button
               v-if="component"
-              type="primary"
-              size="small"
+              type="button"
+              class="dd-tab"
+              :class="{ active: resultTab === 'render' }"
+              role="tab"
+              :aria-selected="resultTab === 'render'"
               data-testid="python-component-render"
-              :disabled="!hasQueried"
-              @click="renderComponent"
-            >组件渲染</el-button>
+              :disabled="!canRenderComponent"
+              @click="switchToRenderTab"
+            >组件渲染</button>
           </div>
           <div class="dd-result-actions">
             <span class="dd-hint">{{ resultHint }}</span>
           </div>
         </div>
+        <template v-if="!component || resultTab === 'raw'">
         <div class="dd-result-body">
           <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
             <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
@@ -93,11 +105,11 @@
             @current-change="page = $event"
           />
         </div>
-      </section>
-
-      <section v-if="component && componentPreviewVisible" class="dd-block" data-testid="python-component-preview-section">
-        <div class="dd-head"><span class="dd-title">组件预览</span><span class="dd-hint">预览与画布使用相同的组件和本次查询结果</span></div>
-        <ComponentDataPreview :component="component" :component-data="componentRenderData!" />
+        </template>
+        <div v-else class="dd-result-body dd-render-pane" data-testid="python-component-preview-section">
+          <ComponentDataPreview v-if="componentRenderData" :component="component" :component-data="componentRenderData" />
+          <el-empty v-else description="暂无可渲染的组件数据" />
+        </div>
       </section>
     </div>
   </el-dialog>
@@ -134,7 +146,8 @@ const conditionRows = ref<ReturnType<typeof createPythonResultFilterRows>>([])
 const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
 const hasQueried = ref(false)
-const componentPreviewVisible = ref(false)
+/** 结果区页签：Python 原始结果 / 组件渲染 */
+const resultTab = ref<'raw' | 'render'>('raw')
 
 const visibleColumns = computed(() => {
   return previewState.payload?.dataColumns ?? []
@@ -195,20 +208,29 @@ function query(): void {
   appliedConditions.value = enabledPythonResultConditions(conditionRows.value)
   page.value = 1
   hasQueried.value = Boolean(previewState.payload)
-  componentPreviewVisible.value = false
+  resultTab.value = 'raw'
 }
+
+/** 「组件渲染」页签可用条件：有组件且已查询 */
+const canRenderComponent = computed(() => Boolean(props.component) && hasQueried.value)
 
 function renderComponent(): void {
   if (!props.component || !hasQueried.value || !componentRenderData.value) return
   emit('render', componentRenderData.value)
-  componentPreviewVisible.value = true
+}
+
+/** 切到「组件渲染」页签：同步画布 + 页签内预览 */
+function switchToRenderTab(): void {
+  if (!canRenderComponent.value) return
+  renderComponent()
+  resultTab.value = 'render'
 }
 
 function initialize(): void {
   page.value = 1
   sortState.value = null
   hasQueried.value = false
-  componentPreviewVisible.value = false
+  resultTab.value = 'raw'
   appliedConditions.value = []
   conditionRows.value = createPythonResultFilterRows(filterFields.value, state.filterCatalog)
   void loadResultPreview()
@@ -223,7 +245,11 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-body { display: flex; flex-direction: column; gap: 14px; max-height: 80vh; overflow: auto; }
 .dd-block { border: 1px solid var(--db-border); border-radius: var(--radius-md); padding: 12px; background: #fff; }
 .dd-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.dd-head-left { display: flex; align-items: center; gap: 10px; }
+.dd-result-tabs { display: flex; align-items: center; gap: 18px; }
+.dd-tab { padding: 4px 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 13px; color: var(--db-text-muted); cursor: pointer; }
+.dd-tab.active { color: var(--db-text); font-weight: 600; border-bottom-color: var(--el-color-primary, var(--db-text)); }
+.dd-tab:disabled { cursor: not-allowed; opacity: 0.5; }
+.dd-render-pane { display: flex; flex-direction: column; }
 .dd-title { font-weight: 600; font-size: 13px; color: var(--db-text); }
 .dd-hint { font-size: 12px; color: var(--db-text-muted); }
 .dd-table-wrap { overflow: auto; }
