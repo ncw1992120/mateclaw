@@ -1030,7 +1030,7 @@ const { onTabKeydown } = useTabKeyboard(
   cursor: pointer;
   transition: box-shadow 0.2s, border-color 0.15s;
 }
-.cc-child::before { content: ''; position: absolute; inset: 0 0 auto; z-index: 2; height: 3px; border-radius: inherit; background: var(--component-group-accent, transparent); pointer-events: none; }
+.cc-child::before { content: ''; position: absolute; inset: 0 0 auto; z-index: 2; height: 4px; border-radius: inherit; background: var(--component-group-accent, transparent); pointer-events: none; }
 .cc-body.mode-vertical .cc-child { position: relative; }
 .cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }

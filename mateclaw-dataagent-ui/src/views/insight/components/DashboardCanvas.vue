@@ -1325,7 +1325,8 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   position: absolute;
   inset: 0 0 auto;
   z-index: 2;
-  height: 3px;
+  height: 4px;
+  border-radius: inherit;
   background: var(--component-group-accent, transparent);
   pointer-events: none;
 }
