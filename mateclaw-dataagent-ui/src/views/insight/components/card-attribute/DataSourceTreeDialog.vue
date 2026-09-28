@@ -110,14 +110,17 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
   leaves.forEach((leaf) => {
     ;(groups[leaf.type] ||= []).push(leaf)
   })
-  return order
-    .map((cat) => ({
+  return order.flatMap((cat) => {
+    const children = groups[cat] ?? []
+    if (children.length === 0) return []
+    if (cat === 'api') return children
+    return [{
       id: `cat-${cat}`,
       label: datasetCategoryLabel(cat),
       type: 'category',
-      children: groups[cat] ?? [],
-    }))
-    .filter((g) => g.children.length > 0)
+      children,
+    }]
+  })
 }
 
 async function loadTree(): Promise<void> {
