@@ -14,7 +14,7 @@ import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 const stubs = {
   GridLayout: { template: '<div><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
-  KpiCardWidget: { name: 'KpiCardWidget', props: ['componentData'], template: '<div />' },
+  KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData'], template: '<div />' },
   ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
   DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], template: '<div />' },
@@ -127,6 +127,48 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
     expect(wrapper.findComponent({ name: 'ChartWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
     expect(wrapper.findComponent({ name: 'DataTableWidget' }).props('componentData').fieldLabels).toEqual(expectedLabels)
+  })
+
+  it('projects Python result fields onto the canvas KPI without mutating saved metrics', () => {
+    const componentWithOldMetrics = {
+      ...component,
+      kpiMetrics: Array.from({ length: 13 }, (_, index) => ({
+        fieldKey: `old_metric_${index}`,
+        displayName: `旧指标${index}`,
+        visible: true,
+        x: index * 10,
+        y: 0,
+        w: 100,
+        h: 60,
+        styles: {
+          name: { size: 14, family: 'system', color: '', colorMode: 'theme', bold: 'normal' },
+          value: { size: 28, family: 'system', color: '', colorMode: 'theme', bold: 'bold' },
+          unit: { size: 15, family: 'system', color: '', colorMode: 'theme', bold: 'normal' },
+          helper: { size: 12, family: 'system', color: '', colorMode: 'theme', bold: 'normal' },
+        },
+      })),
+    }
+    const componentDataMap = {
+      'kpi-1': {
+        componentId: 'kpi-1',
+        renderType: 'kpi' as const,
+        pythonResultPreview: true,
+        kpiList: [
+          { fieldKey: '转化规模', name: '转化规模', value: '27948000' },
+          { fieldKey: '转化人数', name: '转化人数', value: '2964' },
+        ],
+      },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [componentWithOldMetrics], editable: true, componentDataMap },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const renderedComponent = wrapper.findComponent({ name: 'KpiCardWidget' }).props('component') as typeof componentWithOldMetrics
+    expect(renderedComponent.kpiMetrics).toHaveLength(2)
+    expect(renderedComponent.kpiMetrics.map((metric: { fieldKey: string }) => metric.fieldKey)).toEqual(['转化规模', '转化人数'])
+    expect(componentWithOldMetrics.kpiMetrics).toHaveLength(13)
+    wrapper.unmount()
   })
 
   it('passes resolved display names to components nested inside a combination card', () => {

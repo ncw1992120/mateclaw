@@ -175,7 +175,7 @@
             <template v-else>
               <KpiCardWidget
                 v-if="getComponent(item.i)?.type === 'kpi'"
-                :component="getComponent(item.i)!"
+                :component="getWidgetComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
                 :dashboard-theme="dashboardTheme"
@@ -309,6 +309,7 @@ import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/ut
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { projectPythonResultKpi } from '@/utils/kpi-result-projection'
 import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
@@ -872,11 +873,13 @@ function isSampleData(id: string): boolean {
 
 function getWidgetComponent(id: string): InsightComponent | undefined {
   const component = getComponent(id)
-  if (!component || !isSampleData(id) || component.type !== 'filter') return component
+  if (!component) return component
+  const projected = projectPythonResultKpi(component, props.componentDataMap?.[id])
+  if (!isSampleData(id) || projected.type !== 'filter') return projected
   const sample = JSON.parse(resolveComponentSample(component).json) as { data?: { options?: Array<{ label: string; value: string }> } }
   return {
-    ...component,
-    config: { ...(component.config ?? {}), optionSource: 'static', staticOptions: sample.data?.options ?? [] },
+    ...projected,
+    config: { ...(projected.config ?? {}), optionSource: 'static', staticOptions: sample.data?.options ?? [] },
   }
 }
 

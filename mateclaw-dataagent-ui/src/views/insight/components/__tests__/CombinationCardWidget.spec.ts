@@ -119,6 +119,45 @@ describe('CombinationCardWidget', () => {
     })
   })
 
+  it('projects Python result fields for a nested KPI while preserving its configured metrics', () => {
+    const configuredMetrics = [{
+      fieldKey: 'old_metric', displayName: '旧指标', unit: '', helperText: '', visible: true,
+      x: 12, y: 18, w: 160, h: 80, styles: defaultMetricStyles(),
+    }]
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'combo', type: 'combination', title: '组合卡片',
+          children: [{ id: 'nested-kpi', type: 'kpi', title: '指标', kpiMetrics: configuredMetrics, layout: { x: 0, y: 0, col: 6, h: 120 } }],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        componentDataMap: {
+          'nested-kpi': {
+            componentId: 'nested-kpi', renderType: 'kpi', pythonResultPreview: true,
+            kpiList: [
+              { fieldKey: '转化规模', name: '转化规模', value: '27948000' },
+              { fieldKey: '转化人数', name: '转化人数', value: '2964' },
+            ],
+          },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData'], template: '<div />' },
+          ChartWidget: true, DataTableWidget: true, FilterSelectWidget: true, TimeFilterWidget: true,
+          AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    const kpi = wrapper.findComponent({ name: 'KpiCardWidget' })
+    expect(kpi.props('component').kpiMetrics.map((metric: { fieldKey: string }) => metric.fieldKey)).toEqual(['转化规模', '转化人数'])
+    expect(kpi.props('componentData').kpiList).toHaveLength(2)
+    expect(configuredMetrics).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('drags a nested KPI metric without moving its combination child card', () => {
     const metric = {
       fieldKey: 'revenue', displayName: '收入', unit: '', helperText: '', visible: true,

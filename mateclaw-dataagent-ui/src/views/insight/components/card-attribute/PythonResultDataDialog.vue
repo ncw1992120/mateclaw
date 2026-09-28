@@ -171,9 +171,13 @@ const componentRows = computed(() => {
   const fields = visibleColumns.value.map((column) => column.name)
   return sortedRows.value.map((row) => Object.fromEntries(fields.map((field) => [field, row[field]])))
 })
-const componentRenderData = computed(() => props.component
-  ? componentPreviewData(props.component, componentRows.value, displayRows.value.map(({ name, title }) => ({ name, title })))
-  : undefined)
+const componentRenderData = computed(() => {
+  if (!props.component) return undefined
+  return {
+    ...componentPreviewData(props.component, componentRows.value, displayRows.value.map(({ name, title }) => ({ name, title }))),
+    pythonResultPreview: true,
+  }
+})
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)
 const queryHint = computed(() => conditionRows.value.length ? '筛选条件来自查询配置；关闭条件后点击查询可查看全部结果' : '未配置筛选字段，本次将展示全部 Python 输出')
 const resultHint = computed(() => previewState.payload ? `${filteredRows.value.length} / ${(previewState.payload.dataRows ?? []).length} 行` : '请点击查询')

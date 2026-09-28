@@ -282,6 +282,7 @@ import { useTabKeyboard } from '../composables/useTabKeyboard'
 import { calculateCombinationChildResize } from './combinationChildLayout'
 import { defaultCombinationChildLayout } from '@/utils/combination-tabs'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
+import { projectPythonResultKpi } from '@/utils/kpi-result-projection'
 
 defineOptions({ name: 'CombinationCardWidget' })
 
@@ -458,7 +459,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
 }
 
 function childWidgetComponent(child: InsightCombinationChild): InsightComponent {
-  return toWidgetComponent(child)
+  return projectPythonResultKpi(toWidgetComponent(child), props.componentDataMap?.[child.id])
 }
 
 function childComponentData(child: InsightCombinationChild): InsightComponentData | undefined {

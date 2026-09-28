@@ -2001,6 +2001,8 @@ export interface InsightComponentData {
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
   /** 字段技术名到展示名的渲染元数据；不参与查询、排序或数据映射。 */
   fieldLabels?: Record<string, string>
+  /** 标记临时 Python 结果预览；画布据此按本次输出字段投影 KPI，不改持久化配置。 */
+  pythonResultPreview?: boolean
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
