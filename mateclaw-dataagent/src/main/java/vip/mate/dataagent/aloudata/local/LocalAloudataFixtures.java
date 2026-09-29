@@ -310,7 +310,11 @@ public class LocalAloudataFixtures {
         int from = Math.min(matched.size(), (pageNumber - 1) * pageSize);
         int to = Math.min(matched.size(), from + pageSize);
         List<String> page = pageSize == 0 ? List.of() : new ArrayList<>(matched.subList(from, to));
-        return envelope(page, "mock-trace-dimension-values");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("metas", List.of(Map.of(
+                "name", dimName, "dataTypeName", "STRING", "schemaName", "", "tableName", "")));
+        result.put("table", Map.of(dimName, page.stream().map(value -> List.of(value)).toList()));
+        return envelope(result, "mock-trace-dimension-values");
     }
 
     /** 视图详情：按 viewName 命中；未知视图返回 SM_02_0038，模拟「无该视图权限」。 */

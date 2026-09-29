@@ -27,6 +27,8 @@ class DatasetCatalogMigrationPostgresIT {
             statement.execute("DROP TABLE IF EXISTS dataagent_dashboard_execution");
             statement.execute("DROP TABLE IF EXISTS dataagent_user_uid_mapping");
             statement.execute("DROP TABLE IF EXISTS dataagent_dataset");
+            statement.execute("DROP TABLE IF EXISTS mate_system_setting");
+            statement.execute("CREATE TABLE mate_system_setting (id BIGINT PRIMARY KEY, setting_key VARCHAR(128) UNIQUE NOT NULL, setting_value TEXT, description VARCHAR(256), create_time TIMESTAMP NOT NULL, update_time TIMESTAMP NOT NULL)");
             statement.execute("DROP FUNCTION IF EXISTS set_update_time() CASCADE");
             statement.execute("""
                     CREATE FUNCTION set_update_time() RETURNS trigger AS $$
@@ -62,7 +64,7 @@ class DatasetCatalogMigrationPostgresIT {
                 .load();
         flyway.migrate();
 
-        assertEquals("222", flyway.info().current().getVersion().getVersion());
+        assertEquals("223", flyway.info().current().getVersion().getVersion());
         try (var connection = POSTGRES.createConnection("")) {
             try (ResultSet columns = connection.getMetaData().getColumns(null, null, "dataagent_dataset", "source_type")) {
                 assertNotNull(columns);
@@ -115,7 +117,7 @@ class DatasetCatalogMigrationPostgresIT {
         flyway.repair();
         flyway.migrate();
 
-        assertEquals("222", flyway.info().current().getVersion().getVersion());
+        assertEquals("223", flyway.info().current().getVersion().getVersion());
         try (var connection = POSTGRES.createConnection("")) {
             try (var statement = connection.createStatement();
                  var rows = statement.executeQuery("SELECT source_type, schema_version FROM dataagent_dataset WHERE id = 1")) {

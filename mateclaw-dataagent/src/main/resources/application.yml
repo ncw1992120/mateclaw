@@ -73,7 +73,7 @@ mateclaw:
     #   application-mysql.yml    -> classpath:db/migration/mysql
     #   application-pgsql.yml    -> classpath:db/migration/postgresql
     # classpath 扫描同时覆盖本模块与内嵌 mateclaw-server JAR 中的同名目录
-    # （server 提供 V1-V140，本模块提供 V200-V217，版本号不冲突）。
+    # （server 提供 V1-V140，本模块提供 V200-V223，版本号不冲突）。
     validate-on-migrate: true
     clean-disabled: true
     placeholder-replacement: false

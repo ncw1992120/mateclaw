@@ -64,4 +64,27 @@ class AloudataEndpointServiceTest {
         assertEquals("所属大区", dimensionParams.get("keyword"));
         assertEquals("dimension-category-2", dimensionParams.get("categoryId"));
     }
+
+    @Test
+    void providesDimensionValuesEndpointContractForFilterOptions() {
+        SystemSettingService settings = mock(SystemSettingService.class);
+        when(settings.getString("aloudata.api.endpoints", "")).thenReturn("");
+        AloudataEndpointService service = new AloudataEndpointService(
+                new AloudataApiProperties(settings, new ObjectMapper()));
+        AloudataConfigDTO config = new AloudataConfigDTO();
+
+        AloudataApiProperties.ApiEndpoint endpoint = service.getEndpoint("dimension_values");
+        Map<String, Object> params = service.buildParamsFromConfigAndInput("dimension_values", config,
+                Map.of("dimName", "shop_code_agent", "dimValueKeyword", "店", "pageNumber", 1, "pageSize", 200));
+
+        assertNotNull(endpoint);
+        assertEquals("/anymetrics/api/v1/dimension/values", endpoint.getPath());
+        assertEquals("POST", endpoint.getMethod());
+        assertEquals("shop_code_agent", params.get("dimName"));
+        assertEquals("店", params.get("dimValueKeyword"));
+        assertEquals(1, params.get("pageNumber"));
+        assertEquals(200, params.get("pageSize"));
+        assertTrue(endpoint.getRequestParams().stream().anyMatch(param -> "dimValueKeyword".equals(param.getName())));
+        assertFalse(endpoint.getRequestParams().stream().anyMatch(param -> "keyword".equals(param.getName())));
+    }
 }

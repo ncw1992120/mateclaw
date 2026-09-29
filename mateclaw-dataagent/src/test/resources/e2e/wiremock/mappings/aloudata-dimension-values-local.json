@@ -17,11 +17,18 @@
     "jsonBody": {
       "code": "200",
       "success": true,
-      "data": [
-        "经纪个人客户场内公募非货当年净买入",
-        "经纪个人场内公募非货交易量",
-        "经纪个人场内公募非货加仓交易量"
-      ],
+      "data": {
+        "metas": [
+          {"name": "metric_name", "dataTypeName": "STRING", "schemaName": "", "tableName": ""}
+        ],
+        "table": {
+          "metric_name": [
+            ["经纪个人客户场内公募非货当年净买入"],
+            ["经纪个人场内公募非货交易量"],
+            ["经纪个人场内公募非货加仓交易量"]
+          ]
+        }
+      },
       "errorMsg": null,
       "detailErrorMsg": null,
       "traceId": "mock-trace-dimension-values"

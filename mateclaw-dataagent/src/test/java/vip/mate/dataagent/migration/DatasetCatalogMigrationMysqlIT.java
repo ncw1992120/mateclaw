@@ -27,6 +27,8 @@ class DatasetCatalogMigrationMysqlIT {
             statement.execute("DROP TABLE IF EXISTS dataagent_dashboard_execution");
             statement.execute("DROP TABLE IF EXISTS dataagent_user_uid_mapping");
             statement.execute("DROP TABLE IF EXISTS dataagent_dataset");
+            statement.execute("DROP TABLE IF EXISTS mate_system_setting");
+            statement.execute("CREATE TABLE mate_system_setting (id BIGINT PRIMARY KEY, setting_key VARCHAR(128) UNIQUE NOT NULL, setting_value TEXT, description VARCHAR(256), create_time DATETIME NOT NULL, update_time DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         }
     }
 
@@ -53,7 +55,7 @@ class DatasetCatalogMigrationMysqlIT {
                 .load();
         flyway.migrate();
 
-        assertEquals("222", flyway.info().current().getVersion().getVersion());
+        assertEquals("223", flyway.info().current().getVersion().getVersion());
         try (var connection = MYSQL.createConnection("")) {
             try (ResultSet columns = connection.getMetaData().getColumns(null, null, "dataagent_dataset", "source_type")) {
                 assertNotNull(columns);
@@ -106,7 +108,7 @@ class DatasetCatalogMigrationMysqlIT {
         flyway.repair();
         flyway.migrate();
 
-        assertEquals("222", flyway.info().current().getVersion().getVersion());
+        assertEquals("223", flyway.info().current().getVersion().getVersion());
         try (var connection = MYSQL.createConnection("")) {
             try (var statement = connection.createStatement();
                  var rows = statement.executeQuery("SELECT source_type, schema_version FROM dataagent_dataset WHERE id = 1")) {

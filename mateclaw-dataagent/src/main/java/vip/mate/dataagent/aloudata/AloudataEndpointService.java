@@ -152,6 +152,12 @@ public class AloudataEndpointService {
                         new ApiParam("pager", "Object", false, null, "分页器", "BODY")))));
         endpoints.put("dimension_detail", endpoint("anymetrics", "/anymetrics/api/v1/dimension/detail", "GET",
                 mergeParams(headers, List.of(new ApiParam("dimName", "String", true, null, "维度名称", "QUERY")))));
+        endpoints.put("dimension_values", endpoint("anymetrics", "/anymetrics/api/v1/dimension/values", "POST",
+                mergeParams(headers, List.of(
+                        new ApiParam("dimName", "String", true, null, "维度名称", "BODY"),
+                        new ApiParam("dimValueKeyword", "String", false, null, "维度值搜索关键字", "BODY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码，从1开始", "BODY"),
+                        new ApiParam("pageSize", "Integer", false, "200", "每页数据记录条数", "BODY")))));
         endpoints.put("metrics_query", endpoint("semantic", "/semantic/api/v1.1/metrics/query", "POST",
                 mergeParams(headers, List.of(
                         new ApiParam("metrics", "Array", true, null, "指标列表", "BODY"),

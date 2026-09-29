@@ -210,10 +210,13 @@ class LocalAloudataFixturesTest {
                 "dimValueKeyword", "加仓",
                 "pageNumber", 1,
                 "pageSize", 1), null);
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, Object> table = (Map<String, Object>) data.get("table");
+        List<List<String>> rows = (List<List<String>>) table.get("metric_name");
 
         assertEquals("200", body.get("code"));
         assertEquals(Boolean.TRUE, body.get("success"));
-        assertEquals(List.of("经纪个人场内公募非货加仓交易量"), body.get("data"));
+        assertEquals(List.of(List.of("经纪个人场内公募非货加仓交易量")), rows);
     }
 
     @Test

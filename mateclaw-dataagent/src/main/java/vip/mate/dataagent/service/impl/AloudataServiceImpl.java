@@ -46,7 +46,7 @@ public class AloudataServiceImpl implements AloudataService {
     private static final String TEST_CONNECTION_ENDPOINT = "category_list";
 
     /** 指标列表端点名 */
-    private static final String METRICS_LIST_ENDPOINT = "metrics_list";
+    private static final String METRICS_LIST_ENDPOINT = "metric_list";
 
     /** 指标查询端点名 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
@@ -58,7 +58,7 @@ public class AloudataServiceImpl implements AloudataService {
     private static final String METRIC_AVAILABLE_DIMENSIONS_ENDPOINT = "metric_available_dimensions";
 
     /** 维度列表端点名 */
-    private static final String DIMENSIONS_LIST_ENDPOINT = "dimensions_list";
+    private static final String DIMENSIONS_LIST_ENDPOINT = "dimension_list";
 
     /** 维度详情端点名 */
     private static final String DIMENSION_DETAIL_ENDPOINT = "dimension_detail";
@@ -366,11 +366,10 @@ public class AloudataServiceImpl implements AloudataService {
             Map<String, Object> input = new HashMap<>();
             input.put("dimName", dimName);
             if (keyword != null && !keyword.isBlank()) {
-                input.put("keyword", keyword);
+                input.put("dimValueKeyword", keyword);
             }
-            if (limit > 0) {
-                input.put("limit", limit);
-            }
+            input.put("pageNumber", 1);
+            input.put("pageSize", limit > 0 ? limit : 200);
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
                     DIMENSION_VALUES_ENDPOINT, config, input);
 
@@ -381,10 +380,28 @@ public class AloudataServiceImpl implements AloudataService {
                 Map<String, Object> body = response.getBody();
                 if (Boolean.TRUE.equals(body.get("success")) && body.get("data") != null) {
                     Object dataObj = body.get("data");
-                    if (dataObj instanceof List) {
-                        for (Object item : (List<?>) dataObj) {
-                            if (item != null) {
-                                values.add(String.valueOf(item));
+                    Object rawValues = dataObj instanceof Map<?, ?> data
+                            ? Optional.ofNullable(data.get("table"))
+                                    .filter(Map.class::isInstance)
+                                    .map(Map.class::cast)
+                                    .map(table -> table.get(dimName))
+                                    .orElseGet(() -> Optional.ofNullable(data.get("tables"))
+                                            .filter(Map.class::isInstance)
+                                            .map(Map.class::cast)
+                                            .map(tables -> tables.get("values"))
+                                            .orElse(null))
+                            : dataObj;
+                    if (rawValues instanceof List<?> list) {
+                        for (Object item : list) {
+                            Object value = item;
+                            if (item instanceof List<?> row) {
+                                value = row.isEmpty() ? null : row.get(0);
+                            } else if (item instanceof Map<?, ?> row) {
+                                value = row.containsKey(dimName) ? row.get(dimName)
+                                        : row.containsKey("value") ? row.get("value") : null;
+                            }
+                            if (value != null) {
+                                values.add(String.valueOf(value));
                             }
                         }
                     }
