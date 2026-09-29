@@ -75,7 +75,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
       global: { stubs, plugins: [i18n] },
     })
 
-    expect(wrapper.get('.combination-card').attributes('style')).toContain('var(--db-surface-container')
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('--component-surface: var(--db-surface-card')
   })
 
   it('容器明确选择自定义背景时保留用户颜色', () => {
@@ -91,7 +91,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
     })
 
     expect(wrapper.get('.combination-card').attributes('style')).toContain('--component-surface: #FFE4D6')
-    expect(wrapper.get('.combination-card').attributes('style')).not.toContain('var(--db-surface-container)')
+    expect(wrapper.get('.combination-card').attributes('style')).not.toContain('--component-surface: var(--db-surface-card')
   })
 
   it('容器阴影使用所有组件共用的 visualStyle 配置', () => {

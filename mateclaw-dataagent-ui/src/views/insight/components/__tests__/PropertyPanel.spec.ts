@@ -109,13 +109,13 @@ describe('PropertyPanel', () => {
 
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
     expect(fields).toHaveLength(3)
-    const borderField = fields.find(field => field.attributes('aria-label') === '自定义边框颜色')!
+    const toplineField = fields.find(field => field.attributes('aria-label') === '自定义顶线颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
-    expect(borderField.element.tagName).toBe('INPUT')
-    expect(borderField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
+    expect(toplineField.element.tagName).toBe('INPUT')
+    expect(toplineField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
 
-    await borderField.setValue('#A1B2C3')
+    await toplineField.setValue('#A1B2C3')
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
       visualStyle: { border: { mode: 'visible', colorMode: 'custom', color: '#A1B2C3' } },
     })
@@ -163,7 +163,7 @@ describe('PropertyPanel', () => {
     expect(borderSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '显示', '隐藏'])
     await borderSelect.setValue('visible')
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { border: { mode: 'visible' } } })
-    expect(wrapper.find('select[aria-label="组件边框颜色"]').exists()).toBe(true)
+    expect(wrapper.find('select[aria-label="组件顶线颜色"]').exists()).toBe(true)
     expect(wrapper.find('select[aria-label="组件背景"]').exists()).toBe(true)
   })
 

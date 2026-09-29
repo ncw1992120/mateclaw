@@ -178,10 +178,10 @@ describe('AttributePanel', () => {
     const card = insightFixture.value.activeCard.value
 
     expect(fields).toHaveLength(3)
-    const borderField = fields.find(field => field.attributes('aria-label') === '自定义边框颜色')!
+    const toplineField = fields.find(field => field.attributes('aria-label') === '自定义顶线颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
     const componentColorField = fields.find(field => field.attributes('aria-label') === '组件配色')!
-    expect(borderField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
+    expect(toplineField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(componentColorField.attributes('data-suggested-colors')).toBeTruthy()
     expect(componentColorField.attributes('data-show-picker')).toBe('true')
@@ -189,6 +189,21 @@ describe('AttributePanel', () => {
     await backgroundField.setValue('#AABBCC')
     expect(card.visualStyle.background).toEqual({ mode: 'custom', color: '#AABBCC' })
     expect(card.visualStyle.border).toEqual({ mode: 'visible', colorMode: 'custom', color: '#112233', width: 1, style: 'solid' })
+  })
+
+  it('顶线颜色选择器独立于边框模式，写入 border.colorMode 并在自定义时展示颜色字段', async () => {
+    const wrapper = mountPanel()
+    const card = insightFixture.value.activeCard.value
+
+    const toplineSelect = wrapper.get('select[aria-label="组件顶线颜色"]')
+    expect(toplineSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '自定义颜色'])
+    await toplineSelect.setValue('theme')
+    expect(card.visualStyle.border.colorMode).toBe('theme')
+    expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(false)
+
+    await toplineSelect.setValue('custom')
+    expect(card.visualStyle.border.colorMode).toBe('custom')
+    expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(true)
   })
 
   it('retains theme and transparent mode choices on the active card', async () => {

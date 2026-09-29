@@ -1723,6 +1723,7 @@ export interface DashboardPage {
 
 export type DashboardThemeMode = 'preset' | 'custom'
 export type DashboardThemePresetId =
+  | 'default'
   | 'blue' | 'indigo' | 'teal' | 'amber' | 'dark-data'
   | 'rose' | 'coral' | 'orange' | 'gold' | 'burgundy'
 export type DashboardDensity = 'compact' | 'standard' | 'large'

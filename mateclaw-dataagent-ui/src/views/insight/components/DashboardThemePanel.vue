@@ -12,6 +12,21 @@
         <p class="theme-hint">主题作用于整个仪表盘，切换页面和预览会保持一致。</p>
         <div class="theme-presets" role="radiogroup" aria-label="仪表盘预设主题" @keydown="onPresetKeydown">
           <button
+            data-preset-id="default"
+            type="button"
+            role="radio"
+            class="theme-preset"
+            :class="{ active: modelValue.presetId === 'default' }"
+            :aria-checked="modelValue.presetId === 'default'"
+            :tabindex="modelValue.presetId === 'default' ? 0 : -1"
+            @click="requestPreset('default')"
+          >
+            <span class="theme-swatch theme-swatch-default">
+              <i /><i /><i />
+            </span>
+            <span class="theme-preset-label">默认主题</span>
+          </button>
+          <button
             v-for="(preset, id) in DASHBOARD_THEME_PRESETS"
             :key="id"
             :data-preset-id="id"
@@ -72,7 +87,7 @@
           <div class="theme-preview-icon" :style="{ background: `${resolved.primary}14`, color: resolved.primary }"><DashboardComponentIcon type="kpi" :dashboard-theme="resolved" /></div>
           <div><strong>指标概览</strong><div class="theme-preview-value">12,345</div></div>
         </div>
-        <div class="theme-source">当前主色：{{ themeSource(resolved, 'primary') }}</div>
+        <div class="theme-source">当前主色：{{ resolved.source === 'legacy' ? '默认（未启用主题色）' : themeSource(resolved, 'primary') }}</div>
         <div class="theme-accent-legend" aria-label="主题强调色">
           <span><i class="theme-dot" :style="{ background: resolved.primary }" />主色</span>
           <span><i class="theme-dot" :style="{ background: resolved.accentAlt }" />辅助色</span>
@@ -135,7 +150,7 @@ function requestPreset(presetId: string): void {
 }
 
 function applyPreset(presetId: string): void {
-  if (!DASHBOARD_THEME_PRESETS[presetId]) return
+  if (presetId !== 'default' && !DASHBOARD_THEME_PRESETS[presetId]) return
   emit('update:modelValue', {
     ...props.modelValue,
     mode: 'preset',
@@ -189,6 +204,8 @@ defineExpose({ applyPreset })
 .theme-preset:hover, .theme-preset:focus-visible, .theme-preset.active { border-color: var(--theme-primary, #2563eb); outline: 2px solid color-mix(in srgb, var(--theme-primary, #2563eb) 20%, transparent); }
 .theme-swatch { display: flex; align-items: end; width: 42px; height: 28px; padding: 4px; border: 1px solid; border-radius: 5px; gap: 2px; }
 .theme-swatch i { width: 8px; height: 18px; border-radius: 2px; }
+.theme-swatch-default { background: #FFFFFF; border-color: #E1E5EB; }
+.theme-swatch-default i { background: #E1E5EB; }
 .theme-preset-label { font-size: 12px; }
 .theme-option-group { display: grid; gap: 7px; margin-top: 12px; }
 .theme-option-label { color: var(--theme-text-secondary); font-size: 12px; }

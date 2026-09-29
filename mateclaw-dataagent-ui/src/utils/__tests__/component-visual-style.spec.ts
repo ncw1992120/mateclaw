@@ -8,10 +8,17 @@ describe('component-visual-style', () => {
     expect(defaultComponentVisualStyle('kpi').border?.mode).toBe('theme')
   })
 
-  it('支持跟随主题、显示和隐藏三态边框', () => {
+  it('支持跟随主题、显示和隐藏三态边框，边框本体不再消费自定义色', () => {
     expect(resolveComponentVisualStyle({ border: { mode: 'theme' } }, 'kpi')['--component-border']).toBe('1px solid var(--db-border)')
-    expect(resolveComponentVisualStyle({ border: { mode: 'visible', colorMode: 'custom', color: '#FF5500', width: 2 } }, 'kpi')['--component-border']).toBe('2px solid #FF5500')
+    expect(resolveComponentVisualStyle({ border: { mode: 'visible', colorMode: 'custom', color: '#FF5500', width: 2 } }, 'kpi')['--component-border']).toBe('2px solid var(--db-border)')
     expect(resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'kpi')['--component-border']).toBe('1px solid transparent')
+  })
+
+  it('自定义颜色作为顶线颜色输出，与边框模式无关', () => {
+    expect(resolveComponentVisualStyle({ border: { mode: 'visible', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-group-accent']).toBe('#FF5500')
+    expect(resolveComponentVisualStyle({ border: { mode: 'hidden', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-group-accent']).toBe('#FF5500')
+    expect(resolveComponentVisualStyle({ border: { mode: 'theme' } }, 'kpi')['--component-group-accent']).toBeUndefined()
+    expect(resolveComponentVisualStyle({ border: { mode: 'theme', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-border']).toBe('1px solid var(--db-border)')
   })
 
 })

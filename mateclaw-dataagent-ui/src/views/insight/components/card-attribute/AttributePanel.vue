@@ -45,6 +45,17 @@
               @update:model-value="activeCard.componentColor = $event"
             />
           </div>
+          <div v-if="!['filter', 'timeFilter'].includes(activeCard.type)" class="field">
+            <label class="field-label">顶线颜色</label>
+            <el-select v-model="activeCard.visualStyle.border!.colorMode" aria-label="组件顶线颜色" style="width: 100%">
+              <el-option value="theme" label="跟随主题" />
+              <el-option value="custom" label="自定义颜色" />
+            </el-select>
+          </div>
+          <div v-if="!['filter', 'timeFilter'].includes(activeCard.type) && activeCard.visualStyle.border?.colorMode === 'custom'" class="field">
+            <label class="field-label">自定义顶线颜色</label>
+            <InsightColorField v-model="activeCard.visualStyle.border.color" label="自定义顶线颜色" />
+          </div>
           <div class="field">
             <label class="field-label">边框</label>
             <el-select v-model="activeCard.visualStyle.border!.mode" aria-label="组件边框" style="width: 100%">
@@ -63,13 +74,6 @@
           </div>
           <template v-if="activeCard.visualStyle.border?.mode === 'visible'">
             <div class="field">
-              <label class="field-label">边框颜色</label>
-              <el-select v-model="activeCard.visualStyle.border.colorMode" aria-label="组件边框颜色" style="width: 100%">
-            <el-option value="theme" label="跟随主题" />
-            <el-option value="custom" label="自定义颜色" />
-              </el-select>
-            </div>
-            <div class="field">
               <label class="field-label">边框粗细</label>
               <el-select v-model="activeCard.visualStyle.border.width" aria-label="组件边框粗细" style="width: 100%">
             <el-option :value="1" label="1px" />
@@ -82,10 +86,6 @@
             <el-option value="solid" label="实线" />
             <el-option value="dashed" label="虚线" />
               </el-select>
-            </div>
-            <div v-if="activeCard.visualStyle.border.colorMode === 'custom'" class="field">
-              <label class="field-label">自定义边框颜色</label>
-              <InsightColorField v-model="activeCard.visualStyle.border.color" label="自定义边框颜色" />
             </div>
           </template>
           <div v-if="activeCard.visualStyle.background?.mode === 'custom'" class="field">

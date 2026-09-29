@@ -30,6 +30,34 @@ describe('DashboardThemePanel', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ mode: 'preset', presetId: 'rose' })
   })
 
+  it('预设首位提供默认主题，点击后写入 default 哨兵并清空覆盖', async () => {
+    const wrapper = mount(DashboardThemePanel, {
+      props: {
+        modelValue: { mode: 'preset', presetId: 'teal' },
+        visible: true,
+      },
+      global: { stubs: globalStubs },
+    })
+
+    const defaultOption = wrapper.find('[data-preset-id="default"]')
+    expect(defaultOption.exists()).toBe(true)
+    expect(defaultOption.text()).toContain('默认主题')
+
+    await defaultOption.trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ mode: 'preset', presetId: 'default', overrides: {} })
+  })
+
+  it('选中默认主题时高亮 default 选项', () => {
+    const wrapper = mount(DashboardThemePanel, {
+      props: {
+        modelValue: { mode: 'preset', presetId: 'default' },
+        visible: true,
+      },
+      global: { stubs: globalStubs },
+    })
+    expect(wrapper.find('[data-preset-id="default"]').classes()).toContain('active')
+  })
+
   it('存在主题覆盖时切换预设要求确认', async () => {
     const wrapper = mount(DashboardThemePanel, {
       props: {

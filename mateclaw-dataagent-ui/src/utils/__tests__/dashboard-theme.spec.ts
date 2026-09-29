@@ -14,6 +14,14 @@ describe('dashboard theme · 旧配置兼容与预设', () => {
     expect(themeCssVariables(legacy)).toEqual({})
   })
 
+  it('默认主题哨兵与未配置主题同效，且校验不报 invalid_preset', () => {
+    const bySentinel = resolveDashboardTheme({ mode: 'preset', presetId: 'default' }, 'light')
+    const byMissing = resolveDashboardTheme(undefined, 'light')
+    expect(bySentinel).toEqual(byMissing)
+    expect(themeCssVariables(bySentinel)).toEqual({})
+    expect(validateDashboardTheme({ mode: 'preset', presetId: 'default' })).toEqual([])
+  })
+
   it('新仪表盘默认使用 blue 预设并区分指标与图表色板', () => {
     const blue = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
     expect(blue.source).toBe('configured')

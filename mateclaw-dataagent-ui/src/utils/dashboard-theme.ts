@@ -95,6 +95,8 @@ function mergePreset(preset: ThemePreset, overrides: DashboardThemeOverrides): T
 
 export function resolveDashboardTheme(config: DashboardThemeConfig | undefined, globalMode: ResolvedDashboardTheme['mode']): ResolvedDashboardTheme {
   if (!config) return { ...LEGACY_THEME, mode: globalMode }
+  // 「默认主题」哨兵：显式切回未启用主题的默认外观，与配置缺失同效
+  if (config.presetId === 'default') return { ...LEGACY_THEME, mode: globalMode }
   const presetId = typeof config.presetId === 'string' && DASHBOARD_THEME_PRESETS[config.presetId] ? config.presetId : 'blue'
   const preset = DASHBOARD_THEME_PRESETS[presetId]
   const overrides = config.overrides ?? {}
@@ -296,7 +298,7 @@ function contrastRatio(foreground: string, background: string): number {
 
 export function validateDashboardTheme(config: DashboardThemeConfig): ThemeValidationError[] {
   const errors: ThemeValidationError[] = []
-  if (!config.presetId || !DASHBOARD_THEME_PRESETS[config.presetId]) errors.push({ code: 'invalid_preset', field: 'presetId', message: '预设主题不存在，将回退到经典蓝' })
+  if (config.presetId !== 'default' && (!config.presetId || !DASHBOARD_THEME_PRESETS[config.presetId])) errors.push({ code: 'invalid_preset', field: 'presetId', message: '预设主题不存在，将回退到经典蓝' })
   const overrides = config.overrides ?? {}
   for (const [field, value] of Object.entries(overrides)) {
     if (field.endsWith('Palette')) {

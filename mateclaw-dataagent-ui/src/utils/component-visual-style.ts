@@ -48,7 +48,9 @@ export function resolveComponentVisualStyle(
 ): Record<string, string> {
   const normalized = normalizeComponentVisualStyle(style, type)
   const border = normalized.border ?? { mode: 'hidden' as const }
-  const borderColor = border.colorMode === 'custom' && border.color ? border.color : 'var(--db-border)'
+  // 边框颜色语义已迁移为顶线颜色：自定义色不再画边框，而是覆盖卡片顶线（--component-group-accent），
+  // 顶线独立于边框模式，即使边框隐藏/跟随主题也可生效
+  const topline = border.colorMode === 'custom' && border.color ? border.color : undefined
   const background = normalized.background?.mode === 'custom' && normalized.background.color
     ? normalized.background.color
     : normalized.background?.mode === 'transparent'
@@ -56,12 +58,11 @@ export function resolveComponentVisualStyle(
       : 'var(--db-surface-card, var(--db-card))'
 
   return {
-    '--component-border': border.mode === 'visible'
-      ? `${border.width ?? 1}px ${border.style ?? 'solid'} ${borderColor}`
-      : border.mode === 'theme'
-        ? `${border.width ?? 1}px ${border.style ?? 'solid'} var(--db-border)`
-        : '1px solid transparent',
+    '--component-border': border.mode === 'hidden'
+      ? '1px solid transparent'
+      : `${border.width ?? 1}px ${border.style ?? 'solid'} var(--db-border)`,
     '--component-surface': background,
+    ...(topline ? { '--component-group-accent': topline } : {}),
     '--component-radius': `${normalized.radius ?? 12}px`,
     '--component-shadow': SHADOW_TOKENS[normalized.shadow ?? 'subtle'],
     '--component-padding': `${normalized.padding ?? 0}px`,
