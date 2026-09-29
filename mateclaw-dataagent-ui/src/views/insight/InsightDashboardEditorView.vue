@@ -377,6 +377,7 @@ import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
+import { createComponentPreviewRevisions } from '@/composables/component-preview-revisions'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -590,6 +591,8 @@ const editingPageName = ref<string>('')
 
 /** 预览防抖定时器 */
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+/** 阻止过期的自动预览响应覆盖用户刚手动应用到画布的数据。 */
+const componentPreviewRevisions = createComponentPreviewRevisions()
 
 /** 树形节点类型（DashboardPage + children） */
 interface PageTreeNode extends DashboardPage {
@@ -1363,6 +1366,11 @@ function handleComponentChange(updated: InsightComponent): void {
 /** 处理属性面板验证数据结果，写入 componentDataMap 让画布组件渲染 */
 function handlePreviewResult(data: InsightComponentData): void {
   if (data.componentId) {
+    if (previewTimer) {
+      clearTimeout(previewTimer)
+      previewTimer = null
+    }
+    componentPreviewRevisions.begin(data.componentId)
     componentDataMap.value[data.componentId] = data
   }
 }
@@ -1395,6 +1403,7 @@ function schedulePreview(): void {
     clearTimeout(previewTimer)
   }
   previewTimer = setTimeout(() => {
+    previewTimer = null
     previewAllConfiguredComponents()
   }, 500)
 }
@@ -1465,10 +1474,13 @@ async function previewAllConfiguredComponents(): Promise<void> {
       && c.dataSource?.datasourceId && c.dataSource?.metrics?.length
       && !readComponentDatasetPipeline(c))
     .map(async (c) => {
+      const revision = componentPreviewRevisions.begin(c.id)
       try {
         const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+        if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
         componentDataMap.value[c.id] = result
       } catch (e: any) {
+        if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
         componentDataMap.value[c.id] = {
           componentId: c.id,
           renderType: 'table',
@@ -1630,6 +1642,7 @@ function scheduleIncrementalPreview(oldSignatures: Map<string, string>): void {
     clearTimeout(previewTimer)
   }
   previewTimer = setTimeout(() => {
+    previewTimer = null
     previewChangedComponents(oldSignatures)
   }, 500)
 }
@@ -1652,10 +1665,13 @@ async function previewChangedComponents(oldSignatures: Map<string, string>): Pro
         continue
       }
       tasks.push((async () => {
+        const revision = componentPreviewRevisions.begin(c.id)
         try {
           const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+          if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
           componentDataMap.value[c.id] = result
         } catch (e: any) {
+          if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
           componentDataMap.value[c.id] = {
             componentId: c.id,
             renderType: 'table',

@@ -28,7 +28,7 @@ vi.mock('@/api/dataset', async (importOriginal) => {
 })
 
 import DatasetDataDialog from '../DatasetDataDialog.vue'
-import { clearAllCachedQueries } from '../dataset-data-cache'
+import { clearAllCachedQueries, setCachedQuery } from '../dataset-data-cache'
 import { useInsight } from '../card-attribute/useInsight'
 import type { DatasetConfig } from '../card-attribute/useInsight'
 import type { DatasetQueryConfig } from '@/types'
@@ -170,6 +170,28 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     })
     expect((wrapper.emitted('render')?.[0]?.[0] as { fieldLabels?: Record<string, string> }).fieldLabels?.trade_date).toBe('交易日期')
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('从过期缓存重新查询成功后应立即允许组件渲染', async () => {
+    const dataset = metricViewDataset({ queryConfig: queryConfig() })
+    setCachedQuery(dataset.id, {
+      rows: [{ trade_date: '2026-08-01' }],
+      columns: ['trade_date', 'cust_type', 'amount'],
+      hasMore: false,
+      elapsed: '0.1s',
+      queriedAt: Date.now(),
+      signature: 'stale-signature',
+    })
+    const wrapper = await openWith(dataset, { id: 'table-1', type: 'table', title: '订单明细' })
+
+    expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="component-render"]').trigger('click')
+    expect(wrapper.emitted('render')).toHaveLength(1)
     wrapper.unmount()
   })
 

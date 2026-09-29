@@ -508,6 +508,8 @@ const queryHint = computed(() => {
 
 /** 最近一次执行的时间（展示用 HH:mm） */
 const queriedAt = ref(0)
+/** 最近一次成功查询对应的条件指纹；不用非响应式结果缓存驱动 computed。 */
+const queriedSignature = ref<string | null>(null)
 
 /**
  * 当前定义、SQL 参数和查询配置筛选条件的指纹：用于判断缓存结果是否过期。
@@ -559,8 +561,7 @@ watch(
 
 /** 缓存的结果是否还对应当前条件 */
 const cacheStale = computed(() => {
-  const cached = getCachedQuery(props.dataset.id)
-  return !!cached && cached.signature !== currentSignature.value
+  return queriedAt.value > 0 && queriedSignature.value !== currentSignature.value
 })
 const hasCurrentResult = computed(() => queriedAt.value > 0 && !cacheStale.value && !loading.value && !error.value)
 const componentRenderData = computed(() => props.component && columns.value.length
@@ -583,6 +584,7 @@ const resultHint = computed(() => {
 })
 
 async function fetchRows(reset: boolean): Promise<void> {
+  const requestSignature = currentSignature.value
   loading.value = true
   error.value = ''
   if (reset) {
@@ -651,6 +653,7 @@ async function fetchRows(reset: boolean): Promise<void> {
         : batch.schema?.length ? batch.schema : nextRows.length ? Object.keys(nextRows[0]) : []
       queriedAt.value = Date.now()
     }
+    queriedSignature.value = requestSignature
     hasMore.value = typeof batch.hasNext === 'boolean'
       ? batch.hasNext
       : typeof batch.last === 'boolean'
@@ -666,7 +669,7 @@ async function fetchRows(reset: boolean): Promise<void> {
       hasMore: hasMore.value,
       elapsed: elapsed.value,
       queriedAt: queriedAt.value,
-      signature: currentSignature.value,
+      signature: requestSignature,
       totalCount: totalCount.value,
     })
     persistQueryState()
@@ -817,6 +820,8 @@ async function open(): Promise<void> {
   }
   columns.value = []
   rows.value = []
+  queriedAt.value = 0
+  queriedSignature.value = null
   hasMore.value = false
   totalCount.value = null
   elapsed.value = ''
@@ -833,6 +838,7 @@ async function open(): Promise<void> {
     totalCount.value = cached.totalCount ?? null
     elapsed.value = cached.elapsed
     queriedAt.value = cached.queriedAt
+    queriedSignature.value = cached.signature
     error.value = ''
   }
   stateReady.value = true
