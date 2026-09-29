@@ -73,9 +73,9 @@
           <div class="picker-heading"><strong>选择维度</strong><button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" @click="hideUnavailable = !hideUnavailable"><span>自动隐藏不可分析内容</span><i :class="{ 'is-on': hideUnavailable }" /></button></div>
           <div class="picker-toolbar"><el-input v-model="dimensionKeyword" placeholder="搜索维度展示名或字段名称" clearable @input="onKeywordInput" /><span>{{ dimensionPage.total }} 个维度</span></div>
           <div class="directory-layout">
-            <aside class="directory-categories" aria-label="维度目录" v-loading="categoryLoading"><el-tree :data="filteredDimensionCategories" :props="treeProps" node-key="categoryId" highlight-current :default-expanded-keys="[allDimensionsId, ...expandedDimensionKeys]" :expand-on-click-node="false" :render-after-expand="false" @node-click="onDimensionCategorySelect"><template #default="{ data }"><span class="category-node-label">{{ data.categoryName }}</span><span v-if="data.count !== undefined" class="category-node-count">{{ data.count }}</span></template></el-tree><div v-if="!dimensionCategories.length && !categoryLoading" class="directory-empty">暂无维度目录</div></aside>
+            <aside class="directory-categories" aria-label="维度目录" v-loading="categoryLoading"><button v-if="matchesAloudataMetricTimeDimension(dimensionKeyword)" type="button" class="system-dimension-node" data-system-dimension="metric_time" :aria-current="selectedDimensionCategoryId === systemDimensionCategoryId ? 'true' : undefined" @click="selectSystemDimension">{{ ALOUDATA_METRIC_TIME_DIMENSION.dimDisplayName }}<code>{{ ALOUDATA_METRIC_TIME_DIMENSION.dimName }}</code></button><el-tree :data="filteredDimensionCategories" :props="treeProps" node-key="categoryId" highlight-current :default-expanded-keys="[allDimensionsId, ...expandedDimensionKeys]" :expand-on-click-node="false" :render-after-expand="false" @node-click="onDimensionCategorySelect"><template #default="{ data }"><span class="category-node-label">{{ data.categoryName }}</span><span v-if="data.count !== undefined" class="category-node-count">{{ data.count }}</span></template></el-tree><div v-if="!dimensionCategories.length && !categoryLoading" class="directory-empty">暂无维度目录</div></aside>
             <section class="directory-results" v-loading="dimensionsLoading">
-              <label v-for="item in visibleDimensions" :key="item.dimName" class="directory-item" :class="{ 'is-unavailable': dimensionUnavailableReason(item.dimName) && !dimensions.includes(item.dimName) }">
+              <label v-for="item in visibleDimensions" :key="item.dimName" class="directory-item" :data-field-code="item.dimName" :class="{ 'is-unavailable': dimensionUnavailableReason(item.dimName) && !dimensions.includes(item.dimName) }">
                 <el-tooltip v-if="dimensionUnavailableReason(item.dimName) && !dimensions.includes(item.dimName)" :content="dimensionUnavailableReason(item.dimName)" placement="top"><span class="disabled-checkbox-target"><el-checkbox :model-value="false" :label="item.dimName" disabled /></span></el-tooltip>
                 <el-checkbox v-else :model-value="dimensions.includes(item.dimName)" :label="item.dimName" @change="(checked: boolean) => toggleSelection('dimensions', item.dimName, checked)" />
                 <el-popover trigger="hover" placement="right" :width="290" :show-after="250" popper-class="aloudata-source-detail-popper" @show="loadDimensionDetail(item.dimName)">
@@ -100,6 +100,7 @@ import { ElMessage } from 'element-plus'
 import { getAloudataDimensionDetail, getAloudataMetricDetail, listAloudataCategoryCounts, pageAloudataDimensions, pageAloudataMetrics } from '@/api/semantic-model'
 import type { AloudataCategoryCount, AloudataDimensionPage, AloudataMetricPage, AloudataSyncedDimension, AloudataSyncedMetric } from '@/types'
 import { buildCategoryTree, filterCategoryTree } from './card-attribute/dataset/aloudata-metric-directory'
+import { ALOUDATA_METRIC_TIME_DIMENSION, matchesAloudataMetricTimeDimension } from './card-attribute/dataset/aloudata-system-dimension'
 import type { AloudataCategoryTreeNode } from './card-attribute/dataset/aloudata-metric-directory'
 
 const props = defineProps<{ datasourceId: string; metrics: string[]; dimensions: string[] }>()
@@ -111,6 +112,7 @@ const emit = defineEmits<{
 
 const pageSize = 20
 const allDimensionsId = '__all_dimensions__'
+const systemDimensionCategoryId = '__system_metric_time__'
 const treeProps = { label: 'categoryName', children: 'children' }
 const activePicker = ref<'metrics' | 'dimensions'>('metrics')
 const metricPickerVisible = ref(false)
@@ -135,6 +137,7 @@ const dimensionDetailLoading = reactive<Record<string, boolean>>({})
 const metricDimensions = reactive<Record<string, string[]>>({})
 const metricPage = reactive<AloudataMetricPage>({ records: [], total: 0, size: pageSize, current: 1, pages: 0 })
 const dimensionPage = reactive<AloudataDimensionPage>({ records: [], total: 0, size: pageSize, current: 1, pages: 0 })
+let dimensionRequestVersion = 0
 const selectedRelationsReady = computed(() => props.metrics.every(name => Array.isArray(metricDimensions[name])))
 const relationsUnverified = computed(() => props.metrics.length > 0 && !selectedRelationsReady.value)
 const selectionConflict = computed(() => props.metrics.length > 0 && props.dimensions.length > 0 && selectedRelationsReady.value
@@ -156,6 +159,7 @@ watch(() => [...props.dimensions], names => names.forEach(name => { if (!dimensi
 
 onMounted(() => { if (props.datasourceId) void loadCategories() })
 watch(() => props.datasourceId, () => {
+  dimensionRequestVersion += 1
   metricCategories.value = []
   dimensionCategories.value = []
   selectedMetricCategoryId.value = ''
@@ -229,6 +233,12 @@ function onDimensionCategorySelect(category: AloudataCategoryTreeNode): void {
   selectedDimensionCategoryId.value = category.categoryId
   void loadDimensions(1)
 }
+function selectSystemDimension(): void {
+  dimensionRequestVersion += 1
+  selectedDimensionCategoryId.value = systemDimensionCategoryId
+  Object.assign(dimensionPage, { records: [ALOUDATA_METRIC_TIME_DIMENSION], total: 1, size: pageSize, current: 1, pages: 1 })
+  dimensionLabelMap[ALOUDATA_METRIC_TIME_DIMENSION.dimName] = ALOUDATA_METRIC_TIME_DIMENSION.dimDisplayName
+}
 
 async function loadMetrics(page: number): Promise<void> {
   if (!props.datasourceId) return
@@ -252,15 +262,24 @@ async function loadMetrics(page: number): Promise<void> {
 
 async function loadDimensions(page: number): Promise<void> {
   if (!props.datasourceId) return
+  if (selectedDimensionCategoryId.value === systemDimensionCategoryId) {
+    dimensionRequestVersion += 1
+    Object.assign(dimensionPage, { records: [ALOUDATA_METRIC_TIME_DIMENSION], total: 1, size: pageSize, current: page, pages: 1 })
+    dimensionLabelMap[ALOUDATA_METRIC_TIME_DIMENSION.dimName] = ALOUDATA_METRIC_TIME_DIMENSION.dimDisplayName
+    return
+  }
   const datasourceId = props.datasourceId
+  const requestVersion = ++dimensionRequestVersion
   dimensionsLoading.value = true
   try {
     const result = await pageAloudataDimensions(datasourceId, { pageNumber: page, pageSize, keyword: dimensionKeyword.value.trim() || undefined, categoryId: selectedDimensionCategoryId.value === allDimensionsId ? undefined : selectedDimensionCategoryId.value })
-    if (datasourceId !== props.datasourceId) return
-    Object.assign(dimensionPage, result)
-    result.records.forEach(item => { dimensionLabelMap[item.dimName] = item.dimDisplayName || item.dimName })
+    if (datasourceId !== props.datasourceId || requestVersion !== dimensionRequestVersion) return
+    const records = result.records.filter(item => item.dimName !== ALOUDATA_METRIC_TIME_DIMENSION.dimName)
+    const total = result.total - (records.length < result.records.length ? 1 : 0)
+    Object.assign(dimensionPage, { ...result, records, total })
+    records.forEach(item => { dimensionLabelMap[item.dimName] = item.dimDisplayName || item.dimName })
   } catch {
-    if (datasourceId !== props.datasourceId) return
+    if (datasourceId !== props.datasourceId || requestVersion !== dimensionRequestVersion) return
     dimensionPage.records = []
     dimensionPage.total = 0
     ElMessage.error('加载 Aloudata 维度失败')
@@ -340,6 +359,11 @@ async function loadMetricDetail(name: string): Promise<void> {
 
 async function loadDimensionDetail(name: string): Promise<void> {
   if (!props.datasourceId || dimensionDetails[name] || dimensionDetailLoading[name]) return
+  if (name === ALOUDATA_METRIC_TIME_DIMENSION.dimName) {
+    dimensionDetails[name] = ALOUDATA_METRIC_TIME_DIMENSION
+    dimensionLabelMap[name] = ALOUDATA_METRIC_TIME_DIMENSION.dimDisplayName
+    return
+  }
   const datasourceId = props.datasourceId
   dimensionDetailLoading[name] = true
   try {
@@ -375,6 +399,9 @@ onBeforeUnmount(() => { if (keywordTimer) clearTimeout(keywordTimer) })
 .directory-layout { display: grid; height: 390px; grid-template-columns: 210px minmax(0, 1fr); overflow: hidden; border: 1px solid var(--el-border-color-lighter); border-radius: 6px; }
 .directory-categories { overflow: auto; padding: 6px 8px; border-right: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-lighter); }
 .directory-categories :deep(.el-tree) { background: transparent; }
+.system-dimension-node { display: flex; width: 100%; min-height: 32px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; margin-bottom: 4px; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--el-text-color-primary); text-align: left; cursor: pointer; }
+.system-dimension-node:hover, .system-dimension-node[aria-current="true"] { background: var(--el-color-primary-light-9); }
+.system-dimension-node code { color: var(--el-text-color-secondary); font-size: 10px; }
 .category-node-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-node-count { flex: none; margin-left: auto; color: var(--el-text-color-placeholder); font-size: 12px; }
 .directory-categories :deep(.el-tree-node__content) { display: flex; gap: 8px; }

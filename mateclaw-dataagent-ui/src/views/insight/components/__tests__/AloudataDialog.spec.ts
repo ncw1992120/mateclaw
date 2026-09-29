@@ -423,6 +423,26 @@ describe('Aloudata 指标&维度选择', () => {
     expect(field.find('.el-checkbox').attributes('label')).toBeUndefined()
   })
 
+  it('shows 指标日期 as the first standalone dimension outside Aloudata categories', async () => {
+    state.ui.aloudata.metrics = []
+    state.ui.aloudata.dims = []
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('[data-testid="open-dimension-picker"]').trigger('click')
+    await flushPromises()
+
+    const rootDimension = wrapper.find('.dimension-picker-popup [data-system-dimension="metric_time"]')
+    const firstCategory = wrapper.find('.dimension-picker-popup [data-category-id="dim-root"]')
+    expect(rootDimension.exists()).toBe(true)
+    expect(rootDimension.text()).toContain('指标日期')
+    expect(rootDimension.element.compareDocumentPosition(firstCategory.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await rootDimension.find('.directory-item').trigger('click')
+    expect(state.ui.aloudata.dims).toContain('metric_time')
+    expect(pageAloudataDimensions).not.toHaveBeenCalledWith('aloudata-1', expect.objectContaining({ keyword: 'metric_time' }))
+  })
+
   it('shows separate configured-field areas with removable selected chips', async () => {
     const wrapper = mount(AloudataDialog, { global: { stubs } })
     state.ui.aloudata.visible = true

@@ -22,6 +22,7 @@ defineOptions({ name: 'AloudataFieldDirectory' })
 
 const props = defineProps<{
   nodes: DirectoryCategory[]
+  rootFields?: DirectoryField[]
   autoExpand?: boolean
   defaultExpandedCategoryIds?: string[]
 }>()
@@ -59,11 +60,14 @@ function toggle(node: DirectoryCategory) {
   if (open) emit('toggle', node, true)
 }
 
-const hasNodes = computed(() => props.nodes.length > 0)
+const hasNodes = computed(() => props.nodes.length > 0 || Boolean(props.rootFields?.length))
 </script>
 
 <template>
   <div v-if="hasNodes" class="field-directory" role="tree">
+    <div v-for="field in rootFields" :key="field.nodeKey" class="root-field-group" role="treeitem" :data-system-dimension="field.code">
+      <slot name="field" :field="field" />
+    </div>
     <div v-for="category in nodes" :key="category.nodeKey" class="category-group" role="treeitem" :aria-expanded="isExpanded(category)">
       <button
         type="button"
@@ -99,6 +103,7 @@ const hasNodes = computed(() => props.nodes.length > 0)
 
 <style scoped>
 .category-group { min-width: 0; }
+.root-field-group { min-width: 0; }
 .category-row {
   display: flex;
   align-items: center;

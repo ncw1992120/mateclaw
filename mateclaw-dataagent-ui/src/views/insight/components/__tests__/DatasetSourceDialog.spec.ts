@@ -159,6 +159,27 @@ describe('DatasetSourceDialog', () => {
     }))
   })
 
+  it('offers 指标日期 outside ordinary dimension folders and lets the user select it', async () => {
+    const wrapper = mount(DatasetSourceDialog, {
+      props: { modelValue: true, selection: { sourceType: 'ALOUDATA_METRICS', datasourceId: 'aloudata-1' } },
+      ...mountOptions,
+    })
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await nextTick()
+    await nextTick()
+
+    const systemDimension = wrapper.find('.dimension-picker-popup [data-system-dimension="metric_time"]')
+    expect(systemDimension.exists()).toBe(true)
+    expect(systemDimension.text()).toContain('指标日期')
+    await systemDimension.trigger('click')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await nextTick()
+    await wrapper.find('.dimension-picker-popup .directory-item[data-field-code="metric_time"] .picker-checkbox').setValue(true)
+    await nextTick()
+    expect(wrapper.find('.dimension-selection-box').text()).toContain('指标日期')
+    expect(getAloudataDimensionDetail).not.toHaveBeenCalledWith('aloudata-1', 'metric_time')
+  })
+
   it('keeps preview in the same dialog and exposes one primary confirm action', async () => {
     const wrapper = mount(DatasetSourceDialog, {
       props: {

@@ -59,11 +59,11 @@
                       clearable
                       @input="onDimensionKeywordInput"
                     ><template #prefix><svg class="picker-search-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m12.5 12.5 4 4" /></svg></template></el-input>
-                    <span>{{ dimensionPage.total }} 个维度</span>
+                    <span>{{ dimensionDisplayTotal }} 个维度</span>
                   </div>
                   <div class="picker-visibility"><span class="visibility-info">ⓘ</span><span>自动隐藏不可分析内容</span><button class="hide-unavailable-toggle" type="button" role="switch" :aria-checked="hideUnavailable" aria-label="自动隐藏不可分析内容" @click="hideUnavailable = !hideUnavailable"><i :class="{ 'is-on': hideUnavailable }" /></button></div>
                   <div class="directory-layout" v-loading="dimensionsLoading">
-                    <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :auto-expand="Boolean(dimensionKeyword.trim())" :default-expanded-category-ids="dimensionDefaultExpandedCategoryIds" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
+                    <AloudataFieldDirectory :key="dimensionPickerRevision" :nodes="dimensionPickerTree" :root-fields="dimensionRootFields" :auto-expand="Boolean(dimensionKeyword.trim())" :default-expanded-category-ids="dimensionDefaultExpandedCategoryIds" @toggle="loadDimensionCategory" @more="loadMoreDimensionCategory">
                       <template #field="{ field }">
                         <AloudataPickerField
                           :kind="'dimension'"
@@ -248,6 +248,7 @@ import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
 import AloudataFieldDirectory from './AloudataFieldDirectory.vue'
 import AloudataPickerField from './AloudataPickerField.vue'
 import type { DirectoryCategory, DirectoryField } from './AloudataFieldDirectory.vue'
+import { ALOUDATA_METRIC_TIME_DIMENSION, matchesAloudataMetricTimeDimension } from './aloudata-system-dimension'
 import { clampPickerDragOffset, getPickerViewportLayout, resizePickerBounds } from './aloudata-picker-layout'
 import type { PickerOffset, PickerPanelBounds, PickerPlacement, PickerResizeHandle } from './aloudata-picker-layout'
 
@@ -348,6 +349,14 @@ const dimensionPickerTree = computed(() => toDirectoryTree(
   dimensionKeyword.value ? dimensionPage.records : dimensionCategoryFields,
   'dimension',
 ))
+const dimensionRootFields = computed<DirectoryField[]>(() => {
+  const field = ALOUDATA_METRIC_TIME_DIMENSION
+  const unavailable = Boolean(dimensionUnavailableReason(field.dimName))
+  if (!matchesAloudataMetricTimeDimension(dimensionKeyword.value)
+    || (hideUnavailable.value && unavailable && !ui.aloudata.dims.includes(field.dimName))) return []
+  return [{ nodeType: 'field', nodeKey: 'dimension:system:metric_time', code: field.dimName, label: field.dimDisplayName, source: field }]
+})
+const dimensionDisplayTotal = computed(() => dimensionPage.total + dimensionRootFields.value.length)
 const dimensionDefaultExpandedCategoryIds = computed(() => findCategoryIdsByName(dimensionCategories.value, '未分类'))
 
 function findCategoryIdsByName(categories: AloudataCategoryTreeNode[], name: string): string[] {
@@ -504,6 +513,11 @@ async function loadMetricDetail(metricName: string) {
 
 async function loadDimensionDetail(dimName: string) {
   if (dimensionDetails[dimName] || dimensionDetailLoading[dimName]) return
+  if (dimName === ALOUDATA_METRIC_TIME_DIMENSION.dimName) {
+    dimensionDetails[dimName] = ALOUDATA_METRIC_TIME_DIMENSION
+    dimLabelMap[dimName] = ALOUDATA_METRIC_TIME_DIMENSION.dimDisplayName
+    return
+  }
   dimensionDetailLoading[dimName] = true
   try {
     dimensionDetails[dimName] = await getAloudataDimensionDetail(datasourceId.value, dimName)
@@ -704,6 +718,7 @@ function toDirectoryTree<T extends AloudataSyncedMetric | AloudataSyncedDimensio
     const source = records ?? categoryRecords?.[category.categoryId] ?? []
     const fields: DirectoryField[] = source
       .filter((item) => {
+        if (kind === 'dimension' && (item as AloudataSyncedDimension).dimName === ALOUDATA_METRIC_TIME_DIMENSION.dimName) return false
         const itemCategoryId = kind === 'metric'
           ? (item as AloudataSyncedMetric).metricCategoryId
           : (item as AloudataSyncedDimension).categoryId
