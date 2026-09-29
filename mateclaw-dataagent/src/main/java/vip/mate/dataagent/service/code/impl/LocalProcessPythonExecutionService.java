@@ -3,7 +3,10 @@ package vip.mate.dataagent.service.code.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
 import vip.mate.dataagent.service.code.PythonExecutionService;
 import vip.mate.dataagent.service.code.PythonWorkerProperties;
 
@@ -27,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class LocalProcessPythonExecutionService implements PythonExecutionService, AutoCloseable {
+    private static final String DEPENDENCY_PROBE = "import importlib.util,sys; required=('pandas','polars','pydantic','pyarrow'); missing=[name for name in required if importlib.util.find_spec(name) is None]; print(','.join(missing)); sys.exit(bool(missing))";
+    private static final List<String> WORKER_DEPENDENCIES = List.of("pandas", "polars", "pydantic", "pyarrow");
     private static final Set<String> TERMINAL = Set.of(
             "SUCCEEDED", "FAILED", "TIMEOUT", "CANCELLED", "OUTPUT_LIMIT", "RESULT_LIMIT",
             "OUTPUT_CONTRACT_ERROR", "RESULT_REF");
@@ -36,14 +41,22 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
 
     private final PythonWorkerProperties properties;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
     private final Map<String, TaskState> tasks = new ConcurrentHashMap<>();
     private final Object admissionLock = new Object();
     private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
     private volatile boolean closed;
 
-    public LocalProcessPythonExecutionService(PythonWorkerProperties properties, ObjectMapper objectMapper) {
+    @Autowired
+    public LocalProcessPythonExecutionService(PythonWorkerProperties properties, ObjectMapper objectMapper,
+                                             ApplicationEventPublisher eventPublisher) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
+    }
+
+    public LocalProcessPythonExecutionService(PythonWorkerProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, event -> { });
     }
 
     @Override
@@ -59,6 +72,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         synchronized (admissionLock) {
             if (closed) return failed(taskId, "Python worker service is shutting down");
             if (tasks.containsKey(taskId)) throw new IllegalStateException("task already exists");
+            pruneCompletedTasks();
             long activeCount = tasks.values().stream().filter(TaskState::isActive).count();
             if (activeCount >= Math.max(1, properties.getMaxConcurrentTasks())) {
                 return failed(taskId, "maximum concurrent Python tasks reached");
@@ -68,6 +82,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             tasks.put(taskId, state);
             try {
                 Path workerHome = resolveWorkerHome();
+                String pythonCommand = requirePythonCommand(workerHome);
                 Path taskDirectory = createTaskDirectory(taskId);
                 state.taskDirectory = taskDirectory;
                 Path requestFile = taskDirectory.resolve("request.json");
@@ -76,7 +91,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
                 restrictFile(requestFile);
 
                 ProcessBuilder processBuilder = new ProcessBuilder(
-                        requirePythonCommand(), "-m", "runner.worker",
+                        pythonCommand, "-m", "runner.worker",
                         "--request", requestFile.toAbsolutePath().toString(),
                         "--response", responseFile.toAbsolutePath().toString());
                 processBuilder.directory(workerHome.toFile());
@@ -222,9 +237,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         Path current = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
         List<Path> candidates = List.of(
                 current.resolve("python-worker"),
-                current.resolve("mateclaw-python-runner"),
-                current,
-                current.getParent() == null ? current : current.getParent().resolve("mateclaw-python-runner"));
+                current.resolve("mateclaw-dataagent/python-worker"),
+                current.resolve("mateclaw-dataagent").resolve("python-worker"),
+                current);
         return candidates.stream().filter(LocalProcessPythonExecutionService::hasWorker).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Python Worker entry not found; configure MATECLAW_PYTHON_WORKER_HOME"));
     }
@@ -260,10 +275,81 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         }
     }
 
-    private String requirePythonCommand() {
-        String command = properties.getPythonCommand();
-        if (command == null || command.isBlank()) throw new IllegalStateException("Python command is not configured");
-        return command.trim();
+    private String requirePythonCommand(Path workerHome) {
+        String configured = properties.getPythonCommand();
+        if (configured != null && !configured.isBlank()) {
+            String command = configured.trim();
+            String failure = inspectPython(command, workerHome);
+            if (failure == null) return command;
+            throw pythonUnavailable(command, failure, workerHome);
+        }
+
+        Path virtualEnvironmentPython = virtualEnvironmentPython(workerHome, System.getProperty("os.name", ""));
+        List<String> diagnostics = new ArrayList<>();
+        if (virtualEnvironmentPython != null) {
+            String command = virtualEnvironmentPython.toString();
+            String failure = inspectPython(command, workerHome);
+            if (failure == null) return command;
+            diagnostics.add(command + ": " + failure);
+        }
+
+        List<String> systemCandidates = isWindows()
+                ? List.of("python.exe", "python")
+                : List.of("python3", "python");
+        for (String command : systemCandidates) {
+            String failure = inspectPython(command, workerHome);
+            if (failure == null) return command;
+            diagnostics.add(command + ": " + failure);
+        }
+        String selectedFailure = diagnostics.isEmpty()
+                ? "no Python interpreter candidate was found"
+                : String.join("; ", diagnostics);
+        throw pythonUnavailable(virtualEnvironmentPython == null ? systemCandidates.get(0)
+                : virtualEnvironmentPython.toString(), selectedFailure, workerHome);
+    }
+
+    private String inspectPython(String command, Path workerHome) {
+        Process process = null;
+        try {
+            ProcessBuilder builder = new ProcessBuilder(command, "-c", DEPENDENCY_PROBE)
+                    .directory(workerHome.toFile())
+                    .redirectErrorStream(true);
+            prepareEnvironment(builder, workerHome);
+            process = builder.start();
+            if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                terminateTree(process);
+                return "dependency check timed out";
+            }
+            String output = new String(process.getInputStream().readNBytes(4096), StandardCharsets.UTF_8).trim();
+            if (process.exitValue() == 0) return null;
+            String missing = output.isBlank() ? "dependency check failed" : "missing dependencies: " + output;
+            return missing;
+        } catch (IOException exception) {
+            return "cannot start interpreter: " + safeMessage(exception, null);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            if (process != null) terminateTree(process);
+            return "dependency check interrupted";
+        }
+    }
+
+    private IllegalStateException pythonUnavailable(String command, String reason, Path workerHome) {
+        return new IllegalStateException("Python Worker cannot use interpreter '" + command + "': " + reason
+                + ". Required modules: " + String.join(", ", WORKER_DEPENDENCIES)
+                + ". Install the locked dependencies offline with: uv sync --locked --directory \""
+                + workerHome + "\".");
+    }
+
+    private static Path virtualEnvironmentPython(Path workerHome, String osName) {
+        boolean windows = osName.toLowerCase(java.util.Locale.ROOT).contains("win");
+        Path candidate = windows
+                ? workerHome.resolve(".venv/Scripts/python.exe")
+                : workerHome.resolve(".venv/bin/python");
+        return Files.isRegularFile(candidate) && (windows || Files.isExecutable(candidate)) ? candidate : null;
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
     }
 
     private int timeoutSeconds(Map<String, Object> request) {
@@ -299,6 +385,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     }
 
     private void finish(TaskState state, String status, Map<String, Object> response, String error, int returnCode) {
+        Map<String, Object> snapshot;
         synchronized (state) {
             if (isTerminal(state.status)) return;
             state.status = status;
@@ -307,7 +394,37 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             state.error = error;
             state.returnCode = returnCode;
             state.completedAt = System.currentTimeMillis();
+            snapshot = state.snapshot();
         }
+        try {
+            // Spring's default event multicaster is synchronous: the database listener finishes
+            // before this task is eligible for cache eviction.
+            eventPublisher.publishEvent(new PythonWorkerCompletedEvent(snapshot));
+            state.persisted = true;
+        } catch (RuntimeException exception) {
+            org.slf4j.LoggerFactory.getLogger(LocalProcessPythonExecutionService.class)
+                    .error("Could not persist terminal Python Worker snapshot for task {}", state.taskId, exception);
+        }
+        pruneCompletedTasks();
+    }
+
+    private void pruneCompletedTasks() {
+        long now = System.currentTimeMillis();
+        long ttlMillis = Math.max(0, properties.getCompletedTaskTtlMillis());
+        List<TaskState> completed = tasks.values().stream()
+                .filter(state -> state.persisted && isTerminal(state.status))
+                .sorted(Comparator.comparingLong(state -> state.completedAt))
+                .toList();
+        for (TaskState state : completed) {
+            if (now - state.completedAt >= ttlMillis) tasks.remove(state.taskId, state);
+        }
+
+        completed = tasks.values().stream()
+                .filter(state -> state.persisted && isTerminal(state.status))
+                .sorted(Comparator.comparingLong(state -> state.completedAt))
+                .toList();
+        int excess = completed.size() - Math.max(0, properties.getMaxCompletedTasks());
+        for (int i = 0; i < excess; i++) tasks.remove(completed.get(i).taskId, completed.get(i));
     }
 
     private static void joinReader(Thread reader) throws InterruptedException { reader.join(2_000); }
@@ -362,6 +479,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         private volatile String error;
         private volatile int returnCode = -1;
         private volatile long completedAt;
+        private volatile boolean persisted;
 
         private TaskState(String taskId, String token, int maxStdoutBytes, int maxStderrBytes) {
             this.taskId = taskId;

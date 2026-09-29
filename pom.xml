@@ -12,11 +12,13 @@
     <name>MateClaw</name>
     <description>MateClaw monorepo reactor and Maven parent</description>
 
-    <!-- Reactor modules. Keep plugin-api before consumers for predictable local builds. -->
+    <!-- Reactor modules. Keep shared runtime modules before their consumers. -->
     <modules>
         <module>mateclaw-plugin-api</module>
         <module>mateclaw-server</module>
         <module>mateclaw-plugin-sample</module>
+        <module>mateclaw-sdk</module>
+        <module>mateclaw-dataagent</module>
     </modules>
 
     <properties>

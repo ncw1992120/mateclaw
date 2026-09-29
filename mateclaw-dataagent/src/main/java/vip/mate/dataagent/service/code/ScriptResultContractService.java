@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import vip.mate.dataagent.dto.result.ScriptResultEnvelope;
 
 import java.util.ArrayList;
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,7 +153,7 @@ public class ScriptResultContractService {
                     throw new ScriptResultContractException("result.data.rows[" + index + "]." + name,
                             expected, typeName(value), "统一列 " + name + " 的类型");
                 }
-                normalized.put(name, value);
+                normalized.put(name, numericJsonValue(expected, value));
             }
             rows.add(normalized);
         }
@@ -177,7 +178,8 @@ public class ScriptResultContractService {
             throw new ScriptResultContractException("result.data.value", dataType, typeName(value),
                     "scalar 值类型与 dataType 不一致");
         }
-        return new ValidatedEnvelope("1.0", "scalar", Map.of("value", value, "dataType", dataType), validateMeta(map, 0));
+        return new ValidatedEnvelope("1.0", "scalar",
+                Map.of("value", numericJsonValue(dataType, value), "dataType", dataType), validateMeta(map, 0));
     }
 
     private ValidatedEnvelope validateMessage(Map<?, ?> map) {
@@ -219,6 +221,18 @@ public class ScriptResultContractService {
             case "string", "date", "datetime" -> value instanceof String;
             default -> false;
         };
+    }
+
+    /**
+     * The application-wide Jackson policy serializes Long as a string to protect identifiers from
+     * JavaScript precision loss. Result-contract values are explicitly typed, so numeric Long cells
+     * must instead be serialized as JSON numbers to remain consistent with their declared dataType.
+     */
+    private Object numericJsonValue(String dataType, Object value) {
+        if ("number".equals(dataType) && value instanceof Long number) {
+            return BigDecimal.valueOf(number);
+        }
+        return value;
     }
 
     private String columnDataType(List<ValidatedEnvelope.Column> columns, String name) {

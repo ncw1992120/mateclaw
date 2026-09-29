@@ -92,7 +92,7 @@ pandas==2.2.3 \
     --hash=sha256:f00d1345d84d8c86a63e476bb4955e46458b304b9575dcf71102b5c705320015 \
     --hash=sha256:f3a255b2c19987fbbe62a9dfd6cff7ff2aa9ccab3fc75218fd4b7530f01efa24 \
     --hash=sha256:fffb8ae78d8af97f849404f21411c95062db1496aeb3e56f146f0355c9989319
-    # via mateclaw-python-runner
+    # via mateclaw-dataagent-python-worker
 polars==1.20.0 \
     --hash=sha256:4474bd004376599f7e4906bd350026cbbe805ba604121090578a97f63da15381 \
     --hash=sha256:4996e17cb6f57d9aeaf79f66c54ef2913cea7bd025410c076ef8c05d4f7d792a \
@@ -101,7 +101,7 @@ polars==1.20.0 \
     --hash=sha256:d488ffb92d4934d9c326fa2d0fb2e9a4e3c2c625c59f4a77a77e4acd4d5a0d66 \
     --hash=sha256:e8e9e3156fae02b58e276e5f2c16a5907a79b38617a9e2d731b533d87798f451 \
     --hash=sha256:f474f3d65450138cd2dbab2d9b6041b8646c30fad0b28e6d62457788f994bf62
-    # via mateclaw-python-runner
+    # via mateclaw-dataagent-python-worker
 pyarrow==18.1.0 \
     --hash=sha256:0743e503c55be0fdb5c08e7d44853da27f19dc854531c0570f9f394ec9671d54 \
     --hash=sha256:0ad4892617e1a6c7a551cfc827e072a633eaff758fa09f21c4ee548c30bcaf99 \
@@ -124,11 +124,11 @@ pyarrow==18.1.0 \
     --hash=sha256:da31fbca07c435be88a0c321402c4e31a2ba61593ec7473630769de8346b54ee \
     --hash=sha256:f591704ac05dfd0477bb8f8e0bd4b5dc52c1cadf50503858dce3a15db6e46ff2 \
     --hash=sha256:f96bd502cb11abb08efea6dab09c003305161cb6c9eafd432e35e76e7fa9b90c
-    # via mateclaw-python-runner
+    # via mateclaw-dataagent-python-worker
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73 \
     --hash=sha256:51a9c5f7b2f8e636f04c6cada605d9b6a3bf1348fdf945a3d8869b19bba0ee08
-    # via mateclaw-python-runner
+    # via mateclaw-dataagent-python-worker
 pydantic-core==2.46.5 \
     --hash=sha256:013d6f3483d81e02e7c328831808f336c8596ee33b4bd4026b9ffb1e960b8942 \
     --hash=sha256:03b9666e41e35d8909852ba191a0607520f81b74eaf12ccf8737005dbb313821 \

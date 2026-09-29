@@ -25,6 +25,16 @@ if ! grep -Fq 'MATECLAW_PYTHON_WORKER_HOME=' "$SCRIPT"; then
   exit 1
 fi
 
+if ! grep -Fq '$PROJECT_ROOT/mateclaw-dataagent/python-worker' "$SCRIPT"; then
+  echo "LaunchAgent 必须将 Worker 路径指向 DataAgent 模块内部。" >&2
+  exit 1
+fi
+
+if grep -Fq 'mateclaw-python-runner' "$SCRIPT"; then
+  echo "LaunchAgent 不得再依赖已删除的 Python Runner 源码目录。" >&2
+  exit 1
+fi
+
 if ! grep -Fq 'MATECLAW_DATASET_READ_BASE_URL="${MATECLAW_DATASET_READ_BASE_URL:-http://127.0.0.1:${BACKEND_PORT}}"' "$SCRIPT"; then
   echo "LaunchAgent 必须配置 Runner 回读数据的本机 DataAgent 地址。" >&2
   exit 1

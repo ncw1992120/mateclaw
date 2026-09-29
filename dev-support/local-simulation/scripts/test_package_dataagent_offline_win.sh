@@ -12,9 +12,13 @@ cat > "$TEST_TMP/bin/uv" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 out=""
+project=""
 while (($#)); do
-  if [[ "$1" == "--output-file" ]]; then out="$2"; shift 2; else shift; fi
+  if [[ "$1" == "--output-file" ]]; then out="$2"; shift 2
+  elif [[ "$1" == "--project" ]]; then project="$2"; shift 2
+  else shift; fi
 done
+printf '%s\n' "$project" > "$UV_PROJECT_LOG"
 printf 'pydantic==2.13.5\n' > "$out"
 SH
 cat > "$TEST_TMP/bin/python3" <<'SH'
@@ -30,6 +34,7 @@ chmod +x "$TEST_TMP/bin/uv" "$TEST_TMP/bin/python3"
 DATAAGENT_JAR="$TEST_TMP/app.jar" \
 DATAAGENT_OFFLINE_PACKAGE_OUTPUT="$TEST_TMP/output/package.zip" \
 UV_CMD="$TEST_TMP/bin/uv" \
+UV_PROJECT_LOG="$TEST_TMP/uv-project.txt" \
 PYTHON_COMMAND="$TEST_TMP/bin/python3" \
 PATH="$TEST_TMP/bin:$PATH" \
   bash "$ROOT_DIR/dev-support/package-dataagent-offline-win.sh"
@@ -40,4 +45,9 @@ grep -Fxq 'DataAgent/mateclaw-dataagent-1.0.0-SNAPSHOT.jar' "$TEST_TMP/archive-e
 grep -Fxq 'DataAgent/python-worker/src/runner/worker.py' "$TEST_TMP/archive-entries.txt"
 grep -Fxq 'DataAgent/python-worker/requirements.txt' "$TEST_TMP/archive-entries.txt"
 grep -Fxq 'DataAgent/python-worker/wheelhouse/pydantic-2.13.5-py3-none-any.whl' "$TEST_TMP/archive-entries.txt"
+grep -Fxq "$ROOT_DIR/mateclaw-dataagent/python-worker" "$TEST_TMP/uv-project.txt"
+if grep -Fq 'mateclaw-python-runner' "$ROOT_DIR/dev-support/package-dataagent-offline-win.sh"; then
+  echo "Windows 离线包脚本不得再依赖已移除的 Python Runner 路径。" >&2
+  exit 1
+fi
 echo "Windows 离线包结构和 ZIP 完整性检查通过。"

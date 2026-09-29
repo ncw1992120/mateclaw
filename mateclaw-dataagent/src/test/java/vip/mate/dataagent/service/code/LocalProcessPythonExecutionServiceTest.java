@@ -5,20 +5,28 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
 import vip.mate.dataagent.service.code.impl.LocalProcessPythonExecutionService;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class LocalProcessPythonExecutionServiceTest {
+    @Test
+    void completedTaskRetentionDefaultsToFiveMinutes() {
+        assertEquals(300_000L, new PythonWorkerProperties().getCompletedTaskTtlMillis());
+    }
+
     @Test
     void submitIsRejectedWhenPythonExecutorIsDisabled() throws Exception {
         PythonWorkerProperties properties = new PythonWorkerProperties();
@@ -41,7 +49,9 @@ class LocalProcessPythonExecutionServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         properties = new PythonWorkerProperties();
-        properties.setPythonCommand("python3");
+        Path testPython = tempDir.resolve("test-python");
+        writePythonCommand(testPython, "test-python", false);
+        properties.setPythonCommand(testPython.toString());
         properties.setWorkerHome(tempDir.resolve("worker").toString());
         properties.setTempRoot(tempDir.resolve("tasks"));
         properties.setMaxConcurrentTasks(2);
@@ -146,6 +156,173 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     @Test
+    void discoversWorkerFromDataAgentAndRepositoryWorkingDirectories() throws Exception {
+        Path repository = tempDir.resolve("repository");
+        Path dataAgent = repository.resolve("mateclaw-dataagent");
+        Path workerHome = dataAgent.resolve("python-worker");
+        Path marker = writePythonCommand(workerHome.resolve(".venv/bin/python"), "managed-python", false);
+        writeWorkerAt(workerHome);
+        properties.setWorkerHome(null);
+        properties.setPythonCommand(null);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        String originalUserDir = System.getProperty("user.dir");
+        try {
+            System.setProperty("user.dir", dataAgent.toString());
+            assertEquals("RUNNING", service.submit(request("module-root")).get("status"));
+            assertEquals("SUCCEEDED", awaitStatus("module-root", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+
+            System.setProperty("user.dir", repository.toString());
+            assertEquals("RUNNING", service.submit(request("repository-root")).get("status"));
+            assertEquals("SUCCEEDED", awaitStatus("repository-root", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+        assertEquals(List.of("managed-python", "managed-python", "managed-python", "managed-python"), Files.readAllLines(marker));
+    }
+
+    @Test
+    void explicitWorkerHomeAndPythonCommandTakePriority() throws Exception {
+        Path repository = tempDir.resolve("repository");
+        Path discoveredWorker = repository.resolve("mateclaw-dataagent/python-worker");
+        Path discoveredMarker = writePythonCommand(discoveredWorker.resolve(".venv/bin/python"), "venv-python", false);
+        writeWorkerAt(discoveredWorker);
+        Path explicitWorker = tempDir.resolve("explicit-worker");
+        writeWorkerAt(explicitWorker);
+        Path explicitCommand = tempDir.resolve("explicit-python");
+        Path explicitMarker = writePythonCommand(explicitCommand, "explicit-python", false);
+        properties.setWorkerHome(explicitWorker.toString());
+        properties.setPythonCommand(explicitCommand.toString());
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        String originalUserDir = System.getProperty("user.dir");
+        try {
+            System.setProperty("user.dir", repository.toString());
+            service.submit(request("explicit-priority"));
+            assertEquals("SUCCEEDED", awaitStatus("explicit-priority", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+        assertEquals(List.of("explicit-python", "explicit-python"), Files.readAllLines(explicitMarker));
+        assertFalse(Files.exists(discoveredMarker));
+    }
+
+    @Test
+    void discoversWindowsAndPosixVirtualEnvironmentLayouts() throws Exception {
+        Path workerHome = tempDir.resolve("platform-worker");
+        writeWorkerAt(workerHome);
+        Path posixMarker = writePythonCommand(workerHome.resolve(".venv/bin/python"), "posix-python", false);
+        properties.setWorkerHome(workerHome.toString());
+        properties.setPythonCommand(null);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.submit(request("posix-venv"));
+        assertEquals("SUCCEEDED", awaitStatus("posix-venv", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+        assertEquals(List.of("posix-python", "posix-python"), Files.readAllLines(posixMarker));
+
+        service.close();
+        Path windowsMarker = writePythonCommand(workerHome.resolve(".venv/Scripts/python.exe"), "windows-python", false);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+        String originalOsName = System.getProperty("os.name");
+        try {
+            System.setProperty("os.name", "Windows 10");
+            service.submit(request("windows-venv"));
+            assertEquals("SUCCEEDED", awaitStatus("windows-venv", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+        } finally {
+            System.setProperty("os.name", originalOsName);
+        }
+        assertEquals(List.of("windows-python", "windows-python"), Files.readAllLines(windowsMarker));
+    }
+
+    @Test
+    void reportsMissingWorkerDependenciesAndOfflineRepairCommand() throws Exception {
+        Path python = tempDir.resolve("missing-dependencies-python");
+        writePythonCommand(python, "", true);
+        properties.setPythonCommand(python.toString());
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        Map<String, Object> result = service.submit(request("missing-dependencies"));
+
+        String error = String.valueOf(result.get("error"));
+        assertEquals("FAILED", result.get("status"));
+        assertTrue(error.contains("missing-dependencies-python"), error);
+        assertTrue(error.contains("polars"), error);
+        assertTrue(error.contains("pyarrow"), error);
+        assertTrue(error.contains("uv sync --locked"), error);
+    }
+
+    @Test
+    void terminalCacheEvictsOldEntriesButNeverAnActiveTask() throws Exception {
+        properties.setMaxCompletedTasks(1);
+        properties.setCompletedTaskTtlMillis(1_800_000L);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+        Map<String, Object> activeRequest = request("active-task");
+        activeRequest.put("script", "sleep");
+        ((Map<String, Object>) activeRequest.get("limits")).put("timeout_seconds", 30);
+        service.submit(activeRequest);
+        service.submit(request("terminal-old"));
+        awaitStatus("terminal-old", status -> "SUCCEEDED".equals(status.get("status")));
+        service.submit(request("terminal-new"));
+        awaitStatus("terminal-new", status -> "SUCCEEDED".equals(status.get("status")));
+
+        assertEquals("RUNNING", service.getStatus("active-task").get("status"));
+        assertThrows(IllegalArgumentException.class, () -> service.getStatus("terminal-old"));
+        assertEquals("SUCCEEDED", service.getStatus("terminal-new").get("status"));
+        service.cancel("active-task");
+    }
+
+    @Test
+    void terminalCacheExpiresCompletedTasksAfterConfiguredTtl() throws Exception {
+        properties.setCompletedTaskTtlMillis(0L);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.submit(request("expired-terminal"));
+        await(() -> {
+            try {
+                service.getStatus("expired-terminal");
+                return false;
+            } catch (IllegalArgumentException expected) {
+                return true;
+            }
+        });
+
+        assertThrows(IllegalArgumentException.class, () -> service.getStatus("expired-terminal"));
+    }
+
+    @Test
+    void publishesTerminalSnapshotForSynchronousPersistence() throws Exception {
+        List<PythonWorkerCompletedEvent> events = new CopyOnWriteArrayList<>();
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper(),
+                event -> events.add((PythonWorkerCompletedEvent) event));
+
+        service.submit(request("event-task"));
+        awaitStatus("event-task", status -> "SUCCEEDED".equals(status.get("status")));
+
+        assertEquals(1, events.size());
+        assertEquals("event-task", events.getFirst().taskSnapshot().get("taskId"));
+        assertEquals("SUCCEEDED", events.getFirst().taskSnapshot().get("status"));
+        assertEquals("worker log", events.getFirst().taskSnapshot().get("output"));
+        assertNotNull(events.getFirst().taskSnapshot().get("result"));
+    }
+
+    @Test
+    void allowsTwoConcurrentWorkersAndFastFailsTheThird() throws Exception {
+        for (String taskId : List.of("active-one", "active-two")) {
+            Map<String, Object> activeRequest = request("sleep");
+            activeRequest.put("taskId", taskId);
+            ((Map<String, Object>) activeRequest.get("limits")).put("timeout_seconds", 30);
+            assertEquals("RUNNING", service.submit(activeRequest).get("status"));
+        }
+
+        Map<String, Object> rejected = service.submit(request("third-worker"));
+
+        assertEquals("FAILED", rejected.get("status"));
+        assertTrue(String.valueOf(rejected.get("error")).contains("maximum concurrent"));
+        assertEquals("RUNNING", service.getStatus("active-one").get("status"));
+        assertEquals("RUNNING", service.getStatus("active-two").get("status"));
+    }
+
+    @Test
     void missingOrCorruptResponseBecomesFailedInsteadOfRunningForever() throws Exception {
         for (String taskId : List.of("no-response", "bad-response")) {
             service.submit(request(taskId));
@@ -177,7 +354,7 @@ class LocalProcessPythonExecutionServiceTest {
         List<String> names = new ObjectMapper().readValue((String) completed.get("output"), List.class);
         assertTrue(names.stream().allMatch(name -> List.of(
                 "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "WINDIR",
-                "SYSTEMDRIVE", "PATHEXT", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONDONTWRITEBYTECODE"
+                "SYSTEMDRIVE", "PATHEXT", "PWD", "SHLVL", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONDONTWRITEBYTECODE"
         ).contains(name)), names.toString());
     }
 
@@ -209,9 +386,49 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     private void writeWorker(String source) throws Exception {
-        Path worker = tempDir.resolve("worker/src/runner/worker.py");
+        writeWorkerAt(tempDir.resolve("worker"), source);
+    }
+
+    private static void writeWorkerAt(Path workerHome) throws Exception {
+        writeWorkerAt(workerHome, """
+                import argparse, json
+                from pathlib import Path
+                parser = argparse.ArgumentParser()
+                parser.add_argument('--request', required=True)
+                parser.add_argument('--response', required=True)
+                args = parser.parse_args()
+                request = json.loads(Path(args.request).read_text(encoding='utf-8'))
+                response = {'taskId': request['taskId'], 'status': 'SUCCEEDED', 'output': 'worker log', 'result': {'schemaVersion': '1.0', 'kind': 'scalar', 'data': {'value': 9, 'dataType': 'number'}, 'meta': {'rowCount': 0, 'truncated': False, 'sourceInputs': []}}, 'outputRef': None, 'error': None, 'stats': {'returncode': 0}}
+                Path(args.response).write_text(json.dumps(response), encoding='utf-8')
+                """);
+    }
+
+    private static void writeWorkerAt(Path workerHome, String source) throws Exception {
+        Path worker = workerHome.resolve("src/runner/worker.py");
         Files.createDirectories(worker.getParent());
         Files.writeString(worker, source);
+    }
+
+    private Path writePythonCommand(Path command, String marker, boolean missingDependencies) throws Exception {
+        Files.createDirectories(command.getParent());
+        Path markerFile = command.resolveSibling(command.getFileName() + ".invocations");
+        String quote = "'" + markerFile.toString().replace("'", "'\\''") + "'";
+        String probe = missingDependencies
+                ? "printf '%s\\n' 'polars,pyarrow'; exit 1"
+                : "exit 0";
+        String script = "#!/bin/sh\nprintf '%%s\\n' '%s' >> %s\n"
+                + "if [ \"$1\" = \"-c\" ]; then %s; fi\n"
+                + "exec python3 \"$@\"\n";
+        Files.writeString(command, script.formatted(marker, quote, probe));
+        try {
+            Files.setPosixFilePermissions(command, java.util.EnumSet.of(
+                    PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE,
+                    PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_EXECUTE,
+                    PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_EXECUTE));
+        } catch (UnsupportedOperationException ignored) {
+            command.toFile().setExecutable(true);
+        }
+        return markerFile;
     }
 
     private static void awaitFile(Path root, String relativePath) throws Exception {

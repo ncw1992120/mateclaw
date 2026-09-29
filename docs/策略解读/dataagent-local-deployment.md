@@ -8,7 +8,7 @@
 - Maven 3.9+
 - Node.js 和 npm
 - Python 3.12（洞察 Python 卡片执行）
-- Python Worker 固定依赖（首次在联网环境执行 `uv sync --locked --no-dev`，或配置 `PYTHON_COMMAND` 指向含依赖的 Python 3.12 环境）
+- Python Worker 固定依赖（在 `mateclaw-dataagent/python-worker` 执行 `uv sync --python 3.12 --locked --no-dev`）
 - 可访问的 PostgreSQL 数据库
 
 当前本地服务端口：
@@ -56,15 +56,23 @@ export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED=false
 
 export MATECLAW_PILOT_ENABLED=false
 export PYTHON_EXECUTOR_ENABLED=true
-export PYTHON_COMMAND="/绝对路径/python3.12"
-export MATECLAW_PYTHON_WORKER_HOME="/Users/srant/IdeaProjects/codex/mateclaw-1/mateclaw-python-runner"
+export MATECLAW_PYTHON_WORKER_HOME="/Users/srant/IdeaProjects/codex/mateclaw-1/mateclaw-dataagent/python-worker"
+# 可省略此项：DataAgent 会优先发现 Worker 项目 .venv 中的 Python；显式配置时请指向已安装 Worker 固定依赖的解释器。
+export PYTHON_COMMAND="/Users/srant/IdeaProjects/codex/mateclaw-1/mateclaw-dataagent/python-worker/.venv/bin/python"
 export JAVA_TOOL_OPTIONS='-Xms256m -Xmx1g -Duser.timezone=Asia/Shanghai'
 
 java -jar mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar
 ```
 
 数据库密码只通过环境变量传入，不要写入 Git 代码或配置文件。
-Python Worker 是 DataAgent 启动的本机子进程，不需要单独启动 HTTP 服务或占用 18090 端口。Worker 源码默认位于项目中的 `mateclaw-python-runner`；上面的 `MATECLAW_PYTHON_WORKER_HOME` 只在自定义路径时需要配置。
+Python Worker 是 DataAgent 启动的本机子进程，不需要单独启动 HTTP 服务或占用 18090 端口。Worker 源码位于 `mateclaw-dataagent/python-worker`；从 DataAgent 模块目录或仓库根目录启动时会自动发现该路径，上面的 `MATECLAW_PYTHON_WORKER_HOME` 可用于显式指定。
+
+在本地创建锁定的 Worker 虚拟环境：
+
+```bash
+cd /Users/srant/IdeaProjects/codex/mateclaw-1/mateclaw-dataagent/python-worker
+uv sync --python 3.12 --locked --no-dev
+```
 
 ### Windows 内网离线部署包
 

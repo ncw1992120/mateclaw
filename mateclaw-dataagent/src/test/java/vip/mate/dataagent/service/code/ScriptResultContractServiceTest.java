@@ -1,5 +1,8 @@
 package vip.mate.dataagent.service.code;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.junit.jupiter.api.Test;
 import vip.mate.dataagent.service.code.ScriptResultContractService.ValidatedEnvelope;
 
@@ -62,6 +65,24 @@ class ScriptResultContractServiceTest {
                 List.<Map<String, Object>>of(Map.of("amount", 12.5)));
         assertThat(result.data().rows()).containsExactly(Map.of("amount", 12.5));
         assertThat(result.meta().rowCount()).isEqualTo(1);
+    }
+
+    @Test
+    void keepsLongMetricValuesNumericWithTheApplicationJacksonPolicy() throws Exception {
+        long metricValue = 248_796_016_335L;
+        var envelope = service.validate(tableEnvelope(
+                List.of(numberColumn("amount")), List.of(Map.of("amount", metricValue))));
+        ObjectMapper applicationMapper = new ObjectMapper();
+        SimpleModule longToString = new SimpleModule();
+        longToString.addSerializer(Long.class, ToStringSerializer.instance);
+        longToString.addSerializer(Long.TYPE, ToStringSerializer.instance);
+        applicationMapper.registerModule(longToString);
+
+        var rowValue = applicationMapper.readTree(applicationMapper.writeValueAsString(envelope.toEnvelope()))
+                .at("/data/rows/0/amount");
+
+        assertThat(rowValue.isNumber()).isTrue();
+        assertThat(rowValue.longValue()).isEqualTo(metricValue);
     }
 
     @Test

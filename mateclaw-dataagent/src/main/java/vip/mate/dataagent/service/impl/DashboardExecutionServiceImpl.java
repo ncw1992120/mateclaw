@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.dto.DashboardExecutionRequest;
@@ -18,6 +19,7 @@ import vip.mate.dataagent.service.DashboardExecutionService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.code.ScriptTaskPreparationService;
 import vip.mate.dataagent.service.code.PythonExecutionService;
+import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
 import vip.mate.dataagent.service.code.ScriptResultContractException;
 import vip.mate.dataagent.service.code.ScriptResultContractService;
 
@@ -243,6 +245,22 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         } catch (RuntimeException e) {
             return response(execution, persistedResult(execution));
         }
+    }
+
+    /** Persist a completed local Worker even if the browser has stopped polling. */
+    @EventListener
+    public void onPythonWorkerCompleted(PythonWorkerCompletedEvent event) {
+        Map<String, Object> snapshot = event.taskSnapshot();
+        String executionId = stringValue(snapshot.get("taskId"));
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("Python Worker completion event is missing taskId");
+        }
+        DashboardExecutionEntity execution = executionMapper.selectOne(new LambdaQueryWrapper<DashboardExecutionEntity>()
+                .eq(DashboardExecutionEntity::getExecutionId, executionId));
+        if (execution == null) {
+            throw new IllegalStateException("dashboard execution record not found for completed task " + executionId);
+        }
+        updateFromRunner(execution, snapshot);
     }
 
     @Override

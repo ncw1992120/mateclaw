@@ -30,7 +30,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mateclaw-python-runner"
+name = "mateclaw-dataagent-python-worker"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

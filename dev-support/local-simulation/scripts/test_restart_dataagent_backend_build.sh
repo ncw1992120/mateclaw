@@ -50,6 +50,11 @@ if ! grep -Fq 'export MATECLAW_DATASET_READ_BASE_URL=' "$SCRIPT"; then
   exit 1
 fi
 
+if ! grep -Fq 'export MATECLAW_ALOUDATA_LOG_REQUEST="${MATECLAW_ALOUDATA_LOG_REQUEST:-true}"' "$SCRIPT"; then
+  echo "本地 DataAgent 重启应默认打印 Aloudata 实际请求日志，并允许通过环境变量关闭。" >&2
+  exit 1
+fi
+
 if ! grep -Fq 'BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/actuator/health"' "$SCRIPT"; then
   echo "DataAgent 启动健康检查必须与根 context-path 配置一致。" >&2
   exit 1

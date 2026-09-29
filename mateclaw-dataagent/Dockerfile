@@ -53,8 +53,8 @@ RUN python3 -m venv /app/python \
         scipy scikit-learn statsmodels
 # Dashboard Worker runs as a one-shot child process in this DataAgent image.
 # Install its exact locked runtime dependencies into the existing Python venv.
-COPY --chown=8001:8001 mateclaw-python-runner/requirements-worker.txt /app/python-worker/requirements.txt
-COPY --chown=8001:8001 mateclaw-python-runner/src /app/python-worker/src
+COPY --chown=8001:8001 mateclaw-dataagent/python-worker/requirements-worker.txt /app/python-worker/requirements.txt
+COPY --chown=8001:8001 mateclaw-dataagent/python-worker/src /app/python-worker/src
 RUN /app/python/bin/pip install --no-cache-dir -r /app/python-worker/requirements.txt
 # PYTHON_COMMAND / PIP_COMMAND bind to mateclaw.code-executor.* via the
 # ${PYTHON_COMMAND:} placeholders in application.yml. PATH is also prepended so

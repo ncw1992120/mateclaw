@@ -452,21 +452,22 @@ export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED="${MANAGEMENT_HEALTH_ELASTICSEARC
 # 本地开发默认启用 DataAgent 管理的 Python Worker；Worker 不需要独立端口或服务。
 export MATECLAW_PILOT_ENABLED="${MATECLAW_PILOT_ENABLED:-false}"
 export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"
-export MATECLAW_PYTHON_WORKER_HOME="${MATECLAW_PYTHON_WORKER_HOME:-$PROJECT_ROOT/mateclaw-python-runner}"
+WORKER_HOME="${MATECLAW_PYTHON_WORKER_HOME:-$PROJECT_ROOT/mateclaw-dataagent/python-worker}"
+export MATECLAW_PYTHON_WORKER_HOME="$WORKER_HOME"
 if [[ -z "${PYTHON_COMMAND:-}" ]]; then
-  if [[ -x "$PROJECT_ROOT/mateclaw-python-runner/.venv/bin/python" ]]; then
-    export PYTHON_COMMAND="$PROJECT_ROOT/mateclaw-python-runner/.venv/bin/python"
-  else
-    export PYTHON_COMMAND="$(command -v python3 || true)"
+  if [[ -x "$WORKER_HOME/.venv/bin/python" ]]; then
+    export PYTHON_COMMAND="$WORKER_HOME/.venv/bin/python"
+  elif [[ -x "$WORKER_HOME/.venv/Scripts/python.exe" ]]; then
+    export PYTHON_COMMAND="$WORKER_HOME/.venv/Scripts/python.exe"
   fi
 fi
 if [[ "${PYTHON_EXECUTOR_ENABLED}" =~ ^(true|TRUE|1|on|ON)$ ]]; then
-  if [[ -z "$PYTHON_COMMAND" || ! -x "$PYTHON_COMMAND" ]]; then
-    echo "错误：找不到 Python Worker 解释器；请配置 PYTHON_COMMAND 或在 mateclaw-python-runner 执行 uv sync --locked --no-dev。" >&2
+  if [[ -n "${PYTHON_COMMAND:-}" && ! -x "$PYTHON_COMMAND" ]] && ! command -v "$PYTHON_COMMAND" >/dev/null 2>&1; then
+    echo "错误：找不到 Python Worker 解释器：$PYTHON_COMMAND；请在 $WORKER_HOME 执行 uv sync --locked --no-dev，或配置 PYTHON_COMMAND。" >&2
     exit 1
   fi
-  if [[ ! -f "$MATECLAW_PYTHON_WORKER_HOME/src/runner/worker.py" ]]; then
-    echo "错误：未找到 Python Worker 入口：$MATECLAW_PYTHON_WORKER_HOME/src/runner/worker.py" >&2
+  if [[ ! -f "$WORKER_HOME/src/runner/worker.py" ]]; then
+    echo "错误：未找到 Python Worker 入口：$WORKER_HOME/src/runner/worker.py" >&2
     exit 1
   fi
 fi

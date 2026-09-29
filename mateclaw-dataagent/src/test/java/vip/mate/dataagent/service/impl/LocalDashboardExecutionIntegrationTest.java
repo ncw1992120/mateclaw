@@ -16,12 +16,15 @@ import vip.mate.dataagent.objectref.ObjectRefService;
 import vip.mate.dataagent.service.DashboardExecutionService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.code.PythonExecutionService;
+import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
 import vip.mate.dataagent.service.code.ScriptResultContractService;
 import vip.mate.dataagent.service.code.ScriptTaskPreparationService;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +64,45 @@ class LocalDashboardExecutionIntegrationTest {
                 workspaceGuard, new ObjectMapper(), executionMapper, mock(ObjectRefService.class),
                 new ScriptResultContractService(), "http://localhost:18089/dataagent/api");
         assertEquals("FAILED", dashboardExecution.status("running-id").get("status"));
+    }
+
+    @Test
+    void persistsWorkerCompletionEventWithoutWaitingForDashboardPolling() throws Exception {
+        DashboardExecutionEntity execution = execution("dashboard-12-task", "RUNNING");
+        execution.setWorkspaceId(7L);
+        when(executionMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(execution);
+        WorkspaceGuard workspaceGuard = mock(WorkspaceGuard.class);
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(7L);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("task not found"))
+                .when(runner).getStatus("dashboard-12-task");
+        DashboardExecutionServiceImpl dashboardExecution = new DashboardExecutionServiceImpl(
+                mock(InsightDashboardService.class), mock(ScriptTaskPreparationService.class),
+                runner, workspaceGuard, new ObjectMapper(), executionMapper,
+                mock(ObjectRefService.class), new ScriptResultContractService(),
+                "http://localhost:18089/dataagent/api");
+
+        Map<String, Object> resultEnvelope = Map.of(
+                "schemaVersion", "1.0", "kind", "scalar",
+                "data", Map.of("value", 9, "dataType", "number"),
+                "meta", Map.of("rowCount", 0, "truncated", false, "sourceInputs", List.of()));
+        PythonWorkerCompletedEvent event = new PythonWorkerCompletedEvent(Map.of(
+                "taskId", "dashboard-12-task", "status", "SUCCEEDED", "output", "worker completed",
+                "result", resultEnvelope, "outputRef", "", "error", "",
+                "stats", Map.of("returncode", 0)));
+        dashboardExecution.onPythonWorkerCompleted(event);
+
+        assertEquals("SUCCEEDED", execution.getStatus());
+        assertEquals("worker completed", execution.getLogs());
+        assertNotNull(execution.getOutputJson());
+        assertEquals(0, execution.getReturnCode());
+        assertEquals("", execution.getErrorMessage());
+        verify(executionMapper).updateById(execution);
+        assertEquals("SUCCEEDED", dashboardExecution.status("dashboard-12-task").get("status"));
+        assertEquals("worker completed", dashboardExecution.logs("dashboard-12-task").get("output"));
+        Map<String, Object> result = dashboardExecution.result("dashboard-12-task");
+        assertEquals("SUCCEEDED", result.get("status"));
+        assertNotNull(result.get("envelope"));
     }
 
     private DashboardExecutionEntity execution(String id, String status) {

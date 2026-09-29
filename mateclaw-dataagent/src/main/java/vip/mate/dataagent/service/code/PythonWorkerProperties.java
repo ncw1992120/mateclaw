@@ -10,10 +10,12 @@ import java.nio.file.Paths;
 @ConfigurationProperties(prefix = "mateclaw.python.worker")
 public class PythonWorkerProperties {
     private boolean enabled = true;
-    private String pythonCommand = "python3";
+    private String pythonCommand = "";
     private String workerHome;
     private Path tempRoot = Paths.get(System.getProperty("java.io.tmpdir"), "mateclaw-python-worker");
     private int maxConcurrentTasks = 2;
+    private int maxCompletedTasks = 256;
+    private long completedTaskTtlMillis = 300_000;
     private int defaultTimeoutSeconds = 60;
     private int maxStdoutBytes = 50_000;
     private int maxStderrBytes = 10_000;
@@ -29,6 +31,10 @@ public class PythonWorkerProperties {
     public void setTempRoot(Path tempRoot) { this.tempRoot = tempRoot; }
     public int getMaxConcurrentTasks() { return maxConcurrentTasks; }
     public void setMaxConcurrentTasks(int maxConcurrentTasks) { this.maxConcurrentTasks = maxConcurrentTasks; }
+    public int getMaxCompletedTasks() { return maxCompletedTasks; }
+    public void setMaxCompletedTasks(int maxCompletedTasks) { this.maxCompletedTasks = maxCompletedTasks; }
+    public long getCompletedTaskTtlMillis() { return completedTaskTtlMillis; }
+    public void setCompletedTaskTtlMillis(long completedTaskTtlMillis) { this.completedTaskTtlMillis = completedTaskTtlMillis; }
     public int getDefaultTimeoutSeconds() { return defaultTimeoutSeconds; }
     public void setDefaultTimeoutSeconds(int defaultTimeoutSeconds) { this.defaultTimeoutSeconds = defaultTimeoutSeconds; }
     public int getMaxStdoutBytes() { return maxStdoutBytes; }

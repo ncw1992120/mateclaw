@@ -19,12 +19,13 @@ PACKAGE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/dataagent-offline-win.XXXXXX")"
 trap 'rm -rf "$PACKAGE_TMP"' EXIT
 PACKAGE_ROOT="$PACKAGE_TMP/DataAgent"
 WORKER_ROOT="$PACKAGE_ROOT/python-worker"
+WORKER_PROJECT="$ROOT_DIR/mateclaw-dataagent/python-worker"
 WHEELHOUSE="$WORKER_ROOT/wheelhouse"
 mkdir -p "$WHEELHOUSE" "$(dirname "$OUTPUT_PATH")"
 cp "$JAR_PATH" "$PACKAGE_ROOT/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
-cp -R "$ROOT_DIR/mateclaw-python-runner/src" "$WORKER_ROOT/src"
+cp -R "$WORKER_PROJECT/src" "$WORKER_ROOT/src"
 
-"$UV_CMD" export --locked --offline --project "$ROOT_DIR/mateclaw-python-runner" \
+"$UV_CMD" export --locked --offline --project "$WORKER_PROJECT" \
   --format requirements.txt --no-dev --no-emit-project --no-header \
   --output-file "$WORKER_ROOT/requirements.txt"
 "$PYTHON_CMD" -m pip download \

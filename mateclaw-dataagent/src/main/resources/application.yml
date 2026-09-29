@@ -24,10 +24,12 @@ mateclaw:
   python:
     worker:
       enabled: ${PYTHON_EXECUTOR_ENABLED:true}
-      python-command: ${PYTHON_COMMAND:python3}
+      python-command: ${PYTHON_COMMAND:}
       worker-home: ${MATECLAW_PYTHON_WORKER_HOME:}
       temp-root: ${MATECLAW_PYTHON_WORKER_TEMP:${java.io.tmpdir}/mateclaw-python-worker}
       max-concurrent-tasks: ${MATECLAW_PYTHON_WORKER_MAX_CONCURRENT:2}
+      max-completed-tasks: ${MATECLAW_PYTHON_WORKER_MAX_COMPLETED:256}
+      completed-task-ttl-millis: ${MATECLAW_PYTHON_WORKER_COMPLETED_TTL_MS:300000}
       default-timeout-seconds: ${MATECLAW_PYTHON_WORKER_TIMEOUT:60}
       max-stdout-bytes: ${PYTHON_MAX_STDOUT:50000}
       max-stderr-bytes: ${PYTHON_MAX_STDERR:10000}
