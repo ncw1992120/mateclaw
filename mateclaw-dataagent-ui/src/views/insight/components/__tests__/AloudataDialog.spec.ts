@@ -286,6 +286,66 @@ describe('Aloudata 指标&维度选择', () => {
     wrapper.unmount()
   })
 
+  it('resizes the metric picker from the southeast corner while keeping the opposite corner fixed', async () => {
+    const wrapper = mount(AloudataDialog, { attachTo: document.body, global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+
+    const trigger = wrapper.find('[data-testid="open-metric-picker"]')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 140,
+      left: 80,
+      right: 160,
+      width: 80,
+      height: 40,
+      x: 80,
+      y: 100,
+      toJSON: () => ({}),
+    } as DOMRect)
+    vi.stubGlobal('innerHeight', 800)
+    vi.stubGlobal('innerWidth', 1200)
+
+    await trigger.trigger('click')
+    await flushPromises()
+
+    const panel = wrapper.find('.metric-picker-popup')
+    const popper = panel.element.closest<HTMLElement>('.el-popper')!
+    vi.spyOn(popper, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 500,
+      left: 100,
+      right: 450,
+      width: 350,
+      height: 400,
+      x: 100,
+      y: 100,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+    const handle = panel.find('[data-testid="metric-picker-resize-se"]')
+    expect(handle.exists()).toBe(true)
+    handle.element.dispatchEvent(new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: 440,
+      clientY: 490,
+    }))
+    window.dispatchEvent(new MouseEvent('pointermove', {
+      clientX: 500,
+      clientY: 550,
+    }))
+    await nextTick()
+
+    expect(popper.style.width).toBe('410px')
+    expect(popper.style.height).toBe('460px')
+    expect(popper.style.getPropertyValue('--picker-drag-offset')).toBe('0px 0px')
+
+    window.dispatchEvent(new MouseEvent('pointerup'))
+    vi.unstubAllGlobals()
+    wrapper.unmount()
+  })
+
   it('renders the analysis builder and opens the matching live picker from each add button', async () => {
     state.ui.aloudata.metrics = []
     state.ui.aloudata.dims = []

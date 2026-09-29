@@ -91,6 +91,7 @@
                       small
                     />
                   </div>
+                  <button v-for="handle in pickerResizeHandles" :key="handle" type="button" class="picker-resize-handle" :class="handle" :data-testid="`dimension-picker-resize-${handle}`" :aria-label="`调整维度选择弹窗大小（${pickerResizeHandleLabels[handle]}）`" @pointerdown.stop.prevent="startPickerResize('dimension', handle, $event)"><span aria-hidden="true" /></button>
                 </div>
               </el-popover>
             </div>
@@ -165,6 +166,7 @@
                     small
                   />
                 </div>
+                <button v-for="handle in pickerResizeHandles" :key="handle" type="button" class="picker-resize-handle" :class="handle" :data-testid="`metric-picker-resize-${handle}`" :aria-label="`调整指标选择弹窗大小（${pickerResizeHandleLabels[handle]}）`" @pointerdown.stop.prevent="startPickerResize('metric', handle, $event)"><span aria-hidden="true" /></button>
               </div>
             </el-popover>
             </div>
@@ -246,8 +248,8 @@ import type { AloudataCategoryTreeNode } from './aloudata-metric-directory'
 import AloudataFieldDirectory from './AloudataFieldDirectory.vue'
 import AloudataPickerField from './AloudataPickerField.vue'
 import type { DirectoryCategory, DirectoryField } from './AloudataFieldDirectory.vue'
-import { clampPickerDragOffset, getPickerViewportLayout } from './aloudata-picker-layout'
-import type { PickerOffset, PickerPanelBounds, PickerPlacement } from './aloudata-picker-layout'
+import { clampPickerDragOffset, getPickerViewportLayout, resizePickerBounds } from './aloudata-picker-layout'
+import type { PickerOffset, PickerPanelBounds, PickerPlacement, PickerResizeHandle } from './aloudata-picker-layout'
 
 const { state, confirmAloudata } = useInsight()
 const ui = state.ui
@@ -256,6 +258,14 @@ const aloudataTitle = computed(() =>
 )
 
 const pageSize = 20
+const DEFAULT_PICKER_WIDTH = 350
+const pickerResizeHandles: PickerResizeHandle[] = ['nw', 'ne', 'sw', 'se']
+const pickerResizeHandleLabels: Record<PickerResizeHandle, string> = {
+  nw: '左上角',
+  ne: '右上角',
+  sw: '左下角',
+  se: '右下角',
+}
 const datasourceId = ref('')
 const metricPickerVisible = ref(false)
 const dimensionPickerVisible = ref(false)
@@ -555,6 +565,9 @@ function updatePickerViewportLayout(kind: 'metric' | 'dimension') {
     if (!popper.querySelector(popupSelector)) return
     popper.style.maxHeight = `${pickerLayout.maxHeight}px`
     popper.style.overflow = 'visible'
+    popper.style.width = `${DEFAULT_PICKER_WIDTH}px`
+    popper.style.height = ''
+    popper.classList.remove('is-resized')
     popper.style.setProperty('--picker-drag-offset', '0px 0px')
   })
 }
@@ -565,6 +578,16 @@ const pickerPanelStyle = computed(() => ({
 
 let pickerDrag: {
   kind: 'metric' | 'dimension'
+  startX: number
+  startY: number
+  bounds: PickerPanelBounds
+  origin: PickerOffset
+  popper: HTMLElement
+} | undefined
+
+let pickerResize: {
+  kind: 'metric' | 'dimension'
+  handle: PickerResizeHandle
   startX: number
   startY: number
   bounds: PickerPanelBounds
@@ -589,6 +612,51 @@ function stopPickerDrag() {
   window.removeEventListener('pointermove', movePickerDrag)
   window.removeEventListener('pointerup', stopPickerDrag)
   window.removeEventListener('pointercancel', stopPickerDrag)
+}
+
+function movePickerResize(event: PointerEvent) {
+  if (!pickerResize) return
+  const resized = resizePickerBounds(
+    pickerResize.bounds,
+    pickerResize.handle,
+    { x: event.clientX - pickerResize.startX, y: event.clientY - pickerResize.startY },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
+  const nextOffset = {
+    x: pickerResize.origin.x + resized.left - pickerResize.bounds.left,
+    y: pickerResize.origin.y + resized.top - pickerResize.bounds.top,
+  }
+  pickerResize.popper.style.width = `${resized.width}px`
+  pickerResize.popper.style.height = `${resized.height}px`
+  pickerResize.popper.classList.add('is-resized')
+  pickerResize.popper.style.setProperty('--picker-drag-offset', `${nextOffset.x}px ${nextOffset.y}px`)
+}
+
+function stopPickerResize() {
+  pickerResize = undefined
+  window.removeEventListener('pointermove', movePickerResize)
+  window.removeEventListener('pointerup', stopPickerResize)
+  window.removeEventListener('pointercancel', stopPickerResize)
+}
+
+function startPickerResize(kind: 'metric' | 'dimension', handle: PickerResizeHandle, event: PointerEvent) {
+  if (event.button !== 0) return
+  const popper = (event.currentTarget as HTMLElement).closest<HTMLElement>('.el-popper')
+  if (!popper) return
+  event.preventDefault()
+  const bounds = popper.getBoundingClientRect()
+  pickerResize = {
+    kind,
+    handle,
+    startX: event.clientX,
+    startY: event.clientY,
+    bounds: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom },
+    origin: { ...pickerOffsets[kind] },
+    popper,
+  }
+  window.addEventListener('pointermove', movePickerResize)
+  window.addEventListener('pointerup', stopPickerResize)
+  window.addEventListener('pointercancel', stopPickerResize)
 }
 
 function startPickerDrag(kind: 'metric' | 'dimension', event: PointerEvent) {
@@ -809,6 +877,7 @@ function onDimensionPageChange(page: number) { loadDimensions(page) }
 
 onBeforeUnmount(() => {
   stopPickerDrag()
+  stopPickerResize()
   if (viewKwTimer) clearTimeout(viewKwTimer)
   if (metricKeywordTimer) clearTimeout(metricKeywordTimer)
   if (dimensionKeywordTimer) clearTimeout(dimensionKeywordTimer)
@@ -934,11 +1003,47 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 .picker-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
 }
+:global(.aloudata-picker-popper.is-resized) {
+  box-sizing: border-box;
+  max-height: none !important;
+}
+:global(.aloudata-picker-popper.is-resized .picker-panel) {
+  height: 100%;
+  max-height: none !important;
+}
+.picker-resize-handle {
+  position: absolute;
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+.picker-resize-handle span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--el-text-color-placeholder);
+  border-style: solid;
+  opacity: .65;
+}
+.picker-resize-handle:hover span { border-color: var(--el-color-primary); opacity: 1; }
+.picker-resize-handle.nw { top: 0; left: 0; cursor: nwse-resize; }
+.picker-resize-handle.ne { top: 0; right: 0; cursor: nesw-resize; }
+.picker-resize-handle.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.picker-resize-handle.se { right: 0; bottom: 0; cursor: nwse-resize; }
+.picker-resize-handle.nw span { top: 4px; left: 4px; border-width: 1px 0 0 1px; }
+.picker-resize-handle.ne span { top: 4px; right: 4px; border-width: 1px 1px 0 0; }
+.picker-resize-handle.sw span { bottom: 4px; left: 4px; border-width: 0 0 1px 1px; }
+.picker-resize-handle.se span { right: 4px; bottom: 4px; border-width: 0 1px 1px 0; }
 .picker-heading {
   display: flex;
   align-items: center;
@@ -1043,6 +1148,12 @@ onBeforeUnmount(() => {
   overflow: auto;
   padding: 8px 10px;
   background: var(--el-bg-color);
+}
+:global(.aloudata-picker-popper.is-resized .directory-layout) {
+  height: auto;
+  max-height: none;
+  min-height: 100px;
+  flex: 1 1 0;
 }
 .directory-empty {
   display: grid;
