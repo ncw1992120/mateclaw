@@ -176,7 +176,13 @@ class DashboardExecutionServiceTest {
         Map<?, ?> runnerRequest = captor.getValue();
         Map<?, ?> limits = (Map<?, ?>) runnerRequest.get("limits");
         assertEquals(120, limits.get("timeout_seconds"));
+        assertEquals(50000, limits.get("max_stdout_bytes"));
+        assertEquals("result = datasets.read(input_name='orders')", runnerRequest.get("script"));
+        assertEquals(Map.of("orders", descriptor), runnerRequest.get("inputCatalog"));
+        assertEquals(Map.of("date", "2026-09-12"), runnerRequest.get("parameters"));
         assertEquals("http://mateclaw-dataagent:18089/dataagent/api/internal/v1/script-tasks/" + executionId + "/datasets/read", runnerRequest.get("datasetReadEndpoint"));
+        assertEquals("http://mateclaw-dataagent:18089/dataagent/api/internal/v1/script-tasks/" + executionId + "/datasets/input", runnerRequest.get("datasetInputEndpoint"));
+        assertEquals("http://mateclaw-dataagent:18089/dataagent/api/internal/v1/script-tasks/" + executionId + "/result", runnerRequest.get("resultUploadEndpoint"));
         assertEquals("secret-token", runnerRequest.get("readToken"));
         assertEquals(Boolean.FALSE, runnerRequest.get("preferPreparedInputs"));
         assertFalse(runnerRequest.containsKey("requirements"));

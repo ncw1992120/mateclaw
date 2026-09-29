@@ -5,7 +5,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Python Runner 与 DataAgent 之间的版本化结果信封。
+ * Python Worker 与 DataAgent 之间的版本化结果信封。
  * <p>
  * 组件只消费 table、scalar 或 message 三种结果，不直接消费 Python 原始对象。
  */

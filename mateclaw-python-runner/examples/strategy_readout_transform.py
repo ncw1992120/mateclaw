@@ -1,7 +1,7 @@
 """策略解读数据集 Python 预处理规范样例。
 
 这个文件是一个可以直接复制、修改和注册到 Python Dataset 的完整脚本。
-脚本由 MateClaw Python Runner 执行时，Runner 会预先注入 ``datasets`` 对象，
+脚本由 DataAgent 管理的 Python Worker 执行时，Worker 会预先注入 ``datasets`` 对象，
 并读取脚本最后的 ``result`` 变量作为处理结果。
 
 本样例演示的处理链路是：
@@ -188,13 +188,13 @@ def transform_strategy_readout(wd, zb):
 
 
 # ---------------------------------------------------------------------------
-# 2. Runner 执行入口
+# 2. Worker 执行入口
 # ---------------------------------------------------------------------------
-# Runner 会在执行用户脚本前注入 datasets。保留这个判断是为了让本文件也能被
+# Worker 会在执行用户脚本前注入 datasets。保留这个判断是为了让本文件也能被
 # 测试代码 import，测试时只复用上面的纯处理函数，不会误发起数据集读取请求。
 if "datasets" in globals():
     wd = datasets.read("cljd_zcl_wd").to_pandas()
     zb = datasets.read("cljd_zcl_zb").to_pandas()
 
-    # Runner 会序列化 result。list[dict] 是当前 Python Runner 的通用结果契约。
+    # Worker 会序列化 result。list[dict] 是当前 Python Worker 的通用结果契约。
     result = transform_strategy_readout(wd, zb).to_dict(orient="records")

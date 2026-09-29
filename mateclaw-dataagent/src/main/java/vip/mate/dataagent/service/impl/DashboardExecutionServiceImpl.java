@@ -26,8 +26,8 @@ import java.util.*;
 /**
  * 仪表盘 Python 执行编排。
  * <p>
- * execution 元数据和最近一次 Runner 状态持久化到 DataAgent，Runner 重启或 DataAgent 重启后
- * 仍可查询最后已知状态；运行中的实时状态继续向 Runner 查询并回写。
+ * execution 元数据和最近一次 Python Worker 状态持久化到 DataAgent；运行中的实时状态
+ * 通过本地进程监督器查询并回写。
  */
 @Service
 public class DashboardExecutionServiceImpl implements DashboardExecutionService {
@@ -201,7 +201,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
 
     /**
      * 执行顺序：权限校验（入口）→ Schema/组件/绑定校验（上方）→ Planner → Adapter（在
-     * preparation 物化中）→ prepared input → Runner。queryContext 缺省时 plans 为空（存量契约）。
+     * preparation 物化中）→ prepared input → Python Worker。queryContext 缺省时 plans 为空（存量契约）。
      */
     private Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> buildPlans(
             vip.mate.dataagent.dto.QueryContextDTO context, JsonNode schema, JsonNode pipeline,

@@ -1,1 +1,1 @@
-"""MateClaw isolated Python runner."""
+"""MateClaw single-task Python Worker CLI."""

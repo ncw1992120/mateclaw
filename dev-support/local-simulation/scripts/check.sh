@@ -79,10 +79,4 @@ if actual != expected:
     raise SystemExit(f"MinIO object size mismatch: expected={expected}, actual={actual}")
 print("MinIO object size contract passed")
 PY
-runner_health="$(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" exec -T python-runner /app/.venv/bin/python -c 'import urllib.request; print(urllib.request.urlopen("http://localhost:8080/health").read().decode())')"
-grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' <<<"$runner_health"
-if docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" exec -T python-runner /app/.venv/bin/python -c 'import urllib.request; urllib.request.urlopen("https://example.com", timeout=2)' >/dev/null 2>&1; then
-  echo 'Runner 外网访问未被内部网络阻断' >&2
-  exit 1
-fi
 echo "本地模拟环境健康检查通过。"

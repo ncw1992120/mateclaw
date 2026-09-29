@@ -18,11 +18,20 @@ mateclaw:
       # 仅允许固定 e2e-http:8443 HTTPS fixture；不放宽明文 HTTP。
       allow-tls-test-endpoint: ${MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT:false}
   runner:
-    url: ${MATECLAW_RUNNER_URL:http://python-runner:8080}
     token-secret: ${MATECLAW_RUNNER_TOKEN_SECRET:change-me-in-production}
-    # Runner must call the DataAgent internal controller, including the servlet context path.
-    # Override this for a gateway or local process deployment.
+    # The Worker calls DataAgent's task-scoped input endpoints from a local process.
     dataset-read-base-url: ${MATECLAW_DATASET_READ_BASE_URL:http://mateclaw-dataagent:18089}
+  python:
+    worker:
+      enabled: ${PYTHON_EXECUTOR_ENABLED:true}
+      python-command: ${PYTHON_COMMAND:python3}
+      worker-home: ${MATECLAW_PYTHON_WORKER_HOME:}
+      temp-root: ${MATECLAW_PYTHON_WORKER_TEMP:${java.io.tmpdir}/mateclaw-python-worker}
+      max-concurrent-tasks: ${MATECLAW_PYTHON_WORKER_MAX_CONCURRENT:2}
+      default-timeout-seconds: ${MATECLAW_PYTHON_WORKER_TIMEOUT:60}
+      max-stdout-bytes: ${PYTHON_MAX_STDOUT:50000}
+      max-stderr-bytes: ${PYTHON_MAX_STDERR:10000}
+      termination-grace-millis: ${MATECLAW_PYTHON_WORKER_TERMINATION_GRACE_MS:250}
   object-ref:
     endpoint: ${MATECLAW_OBJECT_REF_ENDPOINT:http://minio:9000}
     access-key: ${MATECLAW_OBJECT_REF_ACCESS_KEY:}

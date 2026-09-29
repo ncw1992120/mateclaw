@@ -25,50 +25,28 @@ if ! grep -Fq '"$PROJECT_ROOT/mateclaw-dataagent/pom.xml" clean package -DskipTe
   echo "Maven clean package 必须针对当前工作区执行。" >&2
   exit 1
 fi
-if ! grep -Fq 'mateclaw_same_git_repository "$PROJECT_ROOT" "$cwd"' "$SCRIPT"; then
-  echo "只能重启来自同一 Git 仓库其他工作树的 DataAgent 进程。" >&2
+if ! grep -Fq 'git -C "$cwd" rev-parse --show-toplevel' "$SCRIPT"; then
+	echo "只能重启当前本地仓库启动的 DataAgent 进程。" >&2
   exit 1
 fi
 
-runner_restart_line="$(grep -nFx '  restart_python_runner || exit 1' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
-runner_url_line="$(grep -nF 'MATECLAW_RUNNER_URL' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
-if [[ -z "$runner_restart_line" || -z "$runner_url_line" ]]; then
-  echo "启动脚本必须配置并重启本地 Python Runner。" >&2
+if grep -Eq 'MATECLAW_RUNNER_URL|18090|uvicorn|runner\.app:app|restart_python_runner' "$SCRIPT"; then
+  echo "DataAgent 本地启动链路不得配置或启动独立 Python Runner。" >&2
   exit 1
 fi
 
-if ! grep -Fq 'if python_runner_enabled; then' "$SCRIPT"; then
-  echo "Python Runner 未启用时，启动脚本不得无条件重启 Runner。" >&2
+if ! grep -Fq 'MATECLAW_PYTHON_WORKER_HOME=' "$SCRIPT"; then
+  echo "本地启动必须将随 DataAgent 管理的 Python Worker 源码位置明确配置。" >&2
   exit 1
 fi
 
-runner_enabled_helper="$(sed -n '/^python_runner_enabled()/,/^}/p' "$SCRIPT")"
-disabled_result="$(PYTHON_EXECUTOR_ENABLED=false bash -c "$runner_enabled_helper
-if python_runner_enabled; then echo enabled; else echo disabled; fi")"
-enabled_result="$(PYTHON_EXECUTOR_ENABLED=true bash -c "$runner_enabled_helper
-if python_runner_enabled; then echo enabled; else echo disabled; fi")"
-if [[ "$disabled_result" != "disabled" || "$enabled_result" != "enabled" ]]; then
-  echo "Python Runner 启动条件没有正确遵循 PYTHON_EXECUTOR_ENABLED。" >&2
-  exit 1
-fi
-
-if (( runner_restart_line <= jar_check_line || runner_restart_line >= launch_line )); then
-  echo "Python Runner 必须在 DataAgent 构建成功后、启动前重启。" >&2
-  exit 1
-fi
-
-if ! grep -Fq 'uvicorn' "$SCRIPT" || ! grep -Fq '18090' "$SCRIPT"; then
-  echo "Python Runner 应复用本地环境并监听配置的端口。" >&2
-  exit 1
-fi
-
-if grep -Eq 'docker compose.*(build|up --build)' "$SCRIPT"; then
-  echo "本地 Python Runner 重启不得触发 Docker rebuild。" >&2
+if ! grep -Fq 'export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"' "$SCRIPT"; then
+  echo "本地启动默认必须启用 DataAgent Python Worker。" >&2
   exit 1
 fi
 
 if ! grep -Fq 'export MATECLAW_DATASET_READ_BASE_URL=' "$SCRIPT"; then
-  echo "DataAgent 必须通过 application.yml 使用的变量配置 Runner 数据回读地址。" >&2
+  echo "DataAgent 必须通过 application.yml 使用的变量配置 Worker 数据回读地址。" >&2
   exit 1
 fi
 
@@ -78,12 +56,12 @@ if ! grep -Fq 'BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/actuator/hea
 fi
 
 if ! grep -Fq 'export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"' "$SCRIPT"; then
-  echo "本地重启默认必须启用 Python Executor，以便启动 Python Runner。" >&2
+  echo "本地重启默认必须启用 DataAgent Python Worker。" >&2
   exit 1
 fi
 
-if ! grep -Fq 'tail -n +1 -F "$PYTHON_RUNNER_LOG"' "$SCRIPT"; then
-  echo "Python Runner 日志必须实时输出到当前终端。" >&2
+if ! grep -Fq 'java -jar "$JAR_PATH"' "$SCRIPT"; then
+  echo "DataAgent 必须以前台方式运行，使日志直接输出到当前终端。" >&2
   exit 1
 fi
 

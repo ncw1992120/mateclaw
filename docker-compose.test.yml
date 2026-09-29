@@ -72,24 +72,6 @@ services:
       timeout: 5s
       retries: 30
 
-  python-runner:
-    build:
-      context: ./mateclaw-python-runner
-      dockerfile: Dockerfile
-    container_name: mateclaw-e2e-python-runner
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=512m
-    ports:
-      - "18090:8080"
-    networks:
-      - runner_internal
-    healthcheck:
-      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
   mateclaw-dataagent:
     build:
       context: .
@@ -99,8 +81,6 @@ services:
       e2e-mysql:
         condition: service_healthy
       minio:
-        condition: service_healthy
-      python-runner:
         condition: service_healthy
       e2e-http:
         condition: service_healthy
@@ -124,7 +104,7 @@ services:
       MATECLAW_OBJECT_REF_ACCESS_KEY: e2e-minio-user
       MATECLAW_OBJECT_REF_SECRET_KEY: e2e-minio-password
       MATECLAW_OBJECT_REF_BUCKET: mateclaw-temp
-      MATECLAW_RUNNER_URL: http://python-runner:8080
+      PYTHON_EXECUTOR_ENABLED: "true"
       MATECLAW_DATASET_READ_BASE_URL: http://mateclaw-dataagent:18089/dataagent/api
       MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT: "true"
       JAVA_TOOL_OPTIONS: >-
@@ -137,9 +117,6 @@ services:
       - "18189:18089"
     volumes:
       - e2e_tls:/run/e2e-tls:ro
-    networks:
-      - default
-      - runner_internal
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:18089/dataagent/api/actuator/health"]
       interval: 10s
@@ -178,7 +155,3 @@ volumes:
   e2e_minio_data:
   e2e_ui_node_modules:
   e2e_tls:
-
-networks:
-  runner_internal:
-    internal: true

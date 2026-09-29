@@ -51,6 +51,11 @@ RUN python3 -m venv /app/python \
     && /app/python/bin/pip install --no-cache-dir \
         numpy pandas matplotlib seaborn plotly openpyxl \
         scipy scikit-learn statsmodels
+# Dashboard Worker runs as a one-shot child process in this DataAgent image.
+# Install its exact locked runtime dependencies into the existing Python venv.
+COPY --chown=8001:8001 mateclaw-python-runner/requirements-worker.txt /app/python-worker/requirements.txt
+COPY --chown=8001:8001 mateclaw-python-runner/src /app/python-worker/src
+RUN /app/python/bin/pip install --no-cache-dir -r /app/python-worker/requirements.txt
 # PYTHON_COMMAND / PIP_COMMAND bind to mateclaw.code-executor.* via the
 # ${PYTHON_COMMAND:} placeholders in application.yml. PATH is also prepended so
 # any hardcoded `python3` subprocess (e.g. DocumentExtractTool's pdfplumber/
@@ -58,6 +63,7 @@ RUN python3 -m venv /app/python \
 # which lacks the data-analysis packages.
 ENV PATH=/app/python/bin:$PATH \
     PYTHON_COMMAND=/app/python/bin/python \
+    MATECLAW_PYTHON_WORKER_HOME=/app/python-worker \
     PIP_COMMAND=/app/python/bin/pip \
     TZ=Asia/Shanghai \
     LANG=C.UTF-8 \

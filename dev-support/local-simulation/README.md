@@ -40,7 +40,7 @@ mvn -f mateclaw-dataagent/pom.xml -Dtest=AloudataAnalysisViewExternalIT test -q
 | MinIO Console | `127.0.0.1:19001` | 查看本地 bucket |
 | WireMock HTTP | `127.0.0.1:18081` | HTTP/API、Aloudata 脱敏接口快速调试 |
 | WireMock HTTPS | `127.0.0.1:18443` | HTTPS endpoint、TLS 和参数透传验证（本地临时证书） |
-| Python Runner | 仅内部网络 | `/health`、无运行时 `pip install` 和外网访问阻断验证 |
+| Python Worker | DataAgent 子进程 | 固定依赖随 DataAgent 镜像交付；不启动单独服务 |
 
 启动脚本会创建 `mateclaw-sim` bucket 并将 `files/` 下的四种 fixture 上传为稳定的 `files/<name>` 对象键。`files/fixtures-manifest.json` 记录字节数、SHA-256、Schema、过滤预期和 Join 键；它只用于本地校验，不上传到 bucket。
 

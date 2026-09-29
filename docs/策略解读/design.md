@@ -553,7 +553,7 @@ Spring/DataAgent 在运行脚本前向 Runner 注入当前任务可用的输入�
 ```python
 from mateclaw.filters import Filter
 
-# `datasets` 由 Python Runner 按任务输入目录注入，不从模块导入。
+# `datasets` 由 Python Worker 按任务输入目录注入，不从模块导入。
 
 orders = datasets.read(
     input_name="orders",
@@ -593,9 +593,9 @@ DatasetInput（Python SDK 包装）
 
 Spring 在任务启动时通过 JSON 传递 Descriptor，不传递事实数据、Python 函数或数据库连接。脚本调用 `datasets.read` 后，DataAgent 才查询并返回受限 `DatasetReadResult`；当前 SDK 消费其中的内联批次，脚本大结果使用 `dataRef` 写入对象存储并供页面受限预览。输入侧根据 `dataRef` 创建远程批次读取器需要独立读取接口，列入后续扩展，不作为本阶段已实现能力。JDBC 数据集 Schema 通过 `DatabaseMetaData` 或零行元数据探测获取，第一阶段 Aloudata 新数据集复用指标视图 Schema，文件数据集读取文件 Schema 或受限样本推断。
 
-Python 运行环境必须与 MateClaw 主 JVM 隔离，避免大数据处理拖垮主服务。本阶段暂定采用“兼容双模式（方案 B）”：旧 Agent Python 保持现有本地执行路径；新仪表盘多数据源脚本使用独立 Python Runner。
+Python 运行环境必须与 MateClaw 主 JVM 隔离，避免大数据处理拖垮主服务。2026-09-29 的实现决策将此前“独立 Python Runner 服务”方案替换为 DataAgent 管理的一任务一进程 Python Worker：旧 Agent Python 保持现有本地执行路径；新仪表盘多数据源脚本由 DataAgent 通过 `ProcessBuilder` 启动 Worker CLI，不增加 HTTP 服务或 Pod。
 
-现有 Agent Python 分析能力暂不重写，继续保留 `PythonAnalysisTool → LocalCodeExecutorService` 兼容路径。新仪表盘多数据源脚本预处理使用独立的 `PythonExecutionService → PythonRunner` 路径，二者通过任务类型或能力标识区分。新路径不调用旧执行器，也不接受运行时依赖安装参数。旧路径的运行时 `pip install` 暂不改动，但必须标记为兼容模式，并作为后续安全迁移范围。
+现有 Agent Python 分析能力暂不重写，继续保留 `PythonAnalysisTool → LocalCodeExecutorService` 兼容路径。新仪表盘多数据源脚本预处理使用 `PythonExecutionService → LocalProcessPythonExecutionService → Python Worker 子进程` 路径，二者通过任务类型或能力标识区分。新路径不调用旧执行器，也不接受运行时依赖安装参数。旧路径的运行时 `pip install` 暂不改动，但必须标记为兼容模式，并作为后续安全迁移范围。
 
 ```text
 浏览器
@@ -605,9 +605,9 @@ Spring / DataAgent
   ├── 数据源查询与条件下推
   ├── Python 任务管理
   └── 日志与调试接口
-        ↓
-Python Runner
-  ├── Python 解释器
+        ↓ ProcessBuilder（单任务子进程）
+DataAgent 管理的 Python Worker
+  ├── Python 解释器（复用部署包环境）
   ├── Pandas / Polars
   ├── 用户脚本沙箱
   └── 批处理执行
@@ -615,7 +615,7 @@ Python Runner
 临时对象存储 / Arrow / Parquet
 ```
 
-Spring 负责配置、编排、权限、查询计划、任务状态和日志；Python Runner 只负责执行用户处理代码。用户脚本不能绕过统一查询执行层直接连接 Doris、MySQL 或其他数据源。
+DataAgent 负责配置、编排、权限、查询计划、任务状态和日志；Python Worker 子进程只负责执行用户处理代码。用户脚本不能绕过统一查询执行层直接连接 Doris、MySQL 或其他数据源。
 
 Python 任务不应把大数据集通过 JSON 传给 Spring 或 Python。小规模预览可以使用受限 JSON，但必须限制输入字节数、行数、列数、嵌套深度和执行时间；正式处理应优先使用 Arrow RecordBatch、Arrow IPC、Parquet 或临时对象存储引用。
 
@@ -641,7 +641,7 @@ Spring 编译各数据源查询
     ↓
 各数据源先完成条件下推
     ↓
-按受限批次传给 Python Runner（输入 dataRef 批读为后续扩展）
+按受限批次传给 Python Worker（输入 dataRef 批读为后续扩展）
     ↓
 Python 处理多个输入数据集
     ↓
@@ -650,24 +650,22 @@ Python 处理多个输入数据集
 
 预览任务采用同步执行并直接返回受限结果；正式查询采用异步任务，支持状态查询、取消、重试和日志读取。
 
-本项目整体采用 Docker 部署。方案 B 下，新 Python Runner 以预构建、版本固定的 Docker 镜像部署，例如 `mateclaw-python-runner:<version>`；开发环境可提供 `local` 模式复用本机 Python。运行新任务时不重新构建镜像，也不在任务内安装依赖。旧 `LocalCodeExecutorService` 继续按现有策略运行，并明确标记为兼容模式。
+本项目整体采用 Docker 部署。DataAgent 镜像内包含固定版本的 Worker 源码及依赖，Worker 在 DataAgent 容器内按任务启动独立进程；本地开发与 Windows 离线包采用相同 CLI 和锁定依赖。日常运行只启动 DataAgent，不新增 Python HTTP 服务或 Pod。运行新任务时不在任务内安装依赖。旧 `LocalCodeExecutorService` 继续按现有策略运行，并明确标记为兼容模式。
 
 Docker 环境的推荐部署形态为：
 
 ```text
 mateclaw-dataagent 容器
-    ↓ 任务 API
-Python Runner Manager 容器
-    ↓ 调度
-一次性 Python Task 容器（固定 Runner 镜像）
+    ├── Spring Boot / HTTP API
+    └── 一任务一进程 Python Worker
 ```
 
-第一阶段在 Docker Compose 下，Runner Manager 容器内部按任务创建隔离进程；后续多租户正式环境再升级为一次性任务容器或 Kubernetes Job。DataAgent 主容器不直接挂载 Docker Socket，避免获得宿主机控制权限。Runner 不要求每个任务都重新创建 Docker 容器，但任务之间不得共享 Python 进程状态。
+DataAgent 主容器不挂载 Docker Socket，避免获得宿主机控制权限。Worker 不要求每个任务都重新创建 Docker 容器，但任务之间不得共享 Python 进程状态。当前进程监督提供并发、超时、输出限制和进程树取消，不等于强安全沙箱，也不提供跨平台硬内存/CPU 限制；执行不可信的多租户脚本时，应另行采用容器或 Kubernetes Job 隔离。
 
 每个任务必须具备：
 
 - 最大执行时间；
-- 最大内存和 CPU；
+- 当前不提供跨平台硬内存和 CPU 限制；多租户不可信脚本须使用容器或 Kubernetes Job 隔离；
 - 最大输入和输出行数；
 - 临时目录和文件访问范围；
 - 依赖包白名单；
@@ -675,7 +673,7 @@ Python Runner Manager 容器
 - 任务取消能力；
 - 运行日志和错误堆栈。
 
-正式环境建议将 Python Runner 作为独立容器或独立服务部署，禁止用户脚本访问宿主机、Spring 凭据和任意外部网络。Runner 使用预构建、版本固定的依赖环境，第一阶段默认提供 `pandas`、`polars` 和 `pyarrow`，不支持任务内 `pip install`；未包含在环境中的依赖应返回明确的不可用错误。
+Worker 子进程只获得当前任务短期数据读取 token 和必要端点，不继承数据库密码、模型密钥或完整 DataAgent 环境变量；依赖通过预构建镜像/离线包统一管理，第一阶段默认提供 `pandas`、`polars`、`pyarrow` 和 Pydantic，不支持任务内 `pip install`，未包含的依赖应返回明确错误。操作系统子进程边界本身不能阻断文件系统或网络访问，生产多租户部署必须在基础设施层配置隔离策略。
 
 默认情况下只保存 `PyDataset` 定义，不保存最终结果；后续如需缓存，必须采用带 TTL、workspace 和权限绑定的可选缓存。
 
@@ -909,7 +907,7 @@ PythonRunner
 - 不引入 Trino 作为当前阶段的跨源查询引擎；
 - 多数据源通过脚本节点组合为一个最终数据集；
 - 现有 `PythonAnalysisTool → LocalCodeExecutorService` 保持兼容；
-- 新 Runner 不支持运行时 `pip install`，依赖通过固定运行环境提供。
+- 新 Python Worker 不支持运行时 `pip install`，依赖通过固定运行环境提供。
 
 #### 方案 A：自研 Runner + Apache Arrow/Parquet
 
@@ -1217,7 +1215,7 @@ DatasourceQueryExecutor
 - 数据预览；
 - Python `datasets.read` 条件读取：JDBC 条件下推、API 参数透传、文件数据集受控读取；
 - HTTP/API 和文件输入与 Python 多数据源预处理的统一 `DatasetInputDescriptor`；
-- 独立 Python Runner（方案 B）；
+- DataAgent 管理的 Python Worker 子进程（替代原独立 Python Runner 方案）；
 - 受限预览 JSON、Arrow/Parquet 分批传输；
 - Python 任务状态、取消、超时和资源限制；
 - 固定依赖环境（不支持运行时 pip install）；
@@ -1389,7 +1387,7 @@ MateClaw 原生 UI / Schema / 权限 / 联动
 1. **契约层**：定义 `DatasetRef`、`QuerySpec`、`DatasetBatch`、`ScriptTask`、`ExecutionResult`、`ObjectRef` 和 `CapabilityDescriptor`。
 2. **数据源层**：将现有 Aloudata 查询包装为 `AloudataAdapter`，新增 JDBC Adapter 和标准 SQL 只读校验。
 3. **数据集层**：以数据源已固化的数据集为输入，建立可复用 `DatasetCatalogService`，禁止在组件中重复保存数据源细节。
-4. **执行层**：先实现受限预览 JSON，再实现 Arrow/Parquet + `dataRef`；接入独立 Python Runner，旧 `LocalCodeExecutorService` 保持原路径。
+4. **执行层**：先实现受限预览 JSON，再实现 Arrow/Parquet + `dataRef`；接入 DataAgent 管理的 Python Worker 子进程，旧 `LocalCodeExecutorService` 保持原路径。
 5. **仪表盘层**：将组件绑定到数据集或 Python 输出，并向脚本传递 typed parameters，保留旧 Schema 读取兼容。
 6. **运行时层**：实现参数、事件、动作、刷新依赖、错误状态和异步任务状态。
 7. **治理层**：补齐权限、审计、扫描预算、对象 TTL、取消、重试、导出和发布回滚。

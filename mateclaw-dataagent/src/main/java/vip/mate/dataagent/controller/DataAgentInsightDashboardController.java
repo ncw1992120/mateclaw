@@ -134,7 +134,7 @@ public class DataAgentInsightDashboardController {
 
     @PostMapping("/{id}/executions")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "创建仪表盘 Python 执行", description = "按已保存 Schema 的数据集输入和脚本创建受控 Runner 任务")
+    @Operation(summary = "创建仪表盘 Python 执行", description = "按已保存 Schema 的数据集输入和脚本创建受控 Worker 任务")
     public R<Map<String, Object>> execute(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id,
             @RequestBody(required = false) DashboardExecutionRequest request) {

@@ -121,7 +121,7 @@ class DatasetClient:
             if body.get("success") is False:
                 raise RuntimeError(f"dataset read failed: {body.get('msg') or body.get('message') or 'request rejected'}")
         # DataAgent controllers return the shared R<T> envelope; keep direct
-        # payload parsing for local adapters and older Runner test fixtures.
+        # payload parsing for local adapters and legacy compatibility fixtures.
         payload = body.get("data") if isinstance(body, dict) and isinstance(body.get("data"), dict) else body
         descriptor = payload.get("descriptor", payload)
         schema = tuple(DatasetColumn(c["name"], c.get("title", c["name"]), c.get("dataType", "string"),

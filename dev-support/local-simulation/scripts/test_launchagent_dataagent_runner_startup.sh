@@ -9,15 +9,19 @@ if [[ ! -f "$SCRIPT" ]]; then
   exit 1
 fi
 
-runner_line="$(grep -nF 'bash "$RUNNER_RESTART_SCRIPT" runner' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
 java_line="$(grep -nF 'exec "$JAVA_BIN" -jar "$JAR_PATH"' "$SCRIPT" | head -1 | cut -d: -f1 || true)"
-if [[ -z "$runner_line" || -z "$java_line" ]] || (( runner_line >= java_line )); then
-  echo "LaunchAgent 必须先确保 Python Runner 就绪，再 exec DataAgent。" >&2
+if [[ -z "$java_line" ]]; then
+  echo "LaunchAgent 启动器必须以前台 exec 方式运行 DataAgent。" >&2
   exit 1
 fi
 
-if ! grep -Fq 'MATECLAW_RUNNER_URL="${MATECLAW_RUNNER_URL:-http://127.0.0.1:18090}"' "$SCRIPT"; then
-  echo "LaunchAgent 必须将 Python Runner 指向本机 18090。" >&2
+if grep -Eq 'MATECLAW_RUNNER_URL|18090|mateclaw-local-sim-python-runner|runner\.app:app|RUNNER_RESTART_SCRIPT' "$SCRIPT"; then
+  echo "LaunchAgent 不得依赖独立 Python Runner 服务或端口。" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'MATECLAW_PYTHON_WORKER_HOME=' "$SCRIPT"; then
+  echo "LaunchAgent 必须配置随 DataAgent 一起运行的本地 Python Worker 目录。" >&2
   exit 1
 fi
 
@@ -31,4 +35,4 @@ if grep -Eq 'mvn |clean package|docker compose.*build' "$SCRIPT"; then
   exit 1
 fi
 
-echo "LaunchAgent Python Runner 启动顺序与本机地址检查通过。"
+echo "LaunchAgent 本地 Worker 配置与单 DataAgent 启动检查通过。"

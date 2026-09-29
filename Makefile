@@ -1,5 +1,5 @@
 # Dashboard external prerequisite checks
-.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-prerequisites-contract-test dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-prerequisites-contract-test dashboard-dataagent-test dashboard-worker-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
 
 dashboard-prerequisites-local:
 	./scripts/verify-dashboard-external-prerequisites.sh --local
@@ -28,11 +28,11 @@ dashboard-dataagent-test:
 		-w /workspace maven:3.9-eclipse-temurin-21 \
 		mvn -o -f mateclaw-dataagent/pom.xml test -q
 
-# Run the Runner suite from its own uv-managed environment. Keeping the
+# Run the Worker suite from its own uv-managed environment. Keeping the
 # working directory and pytest path scoped to this project avoids collecting
 # the sibling Python client tests with incompatible dependencies.
-dashboard-runner-test:
-	@test -x mateclaw-python-runner/.venv/bin/pytest || { echo "缺少 Runner 虚拟环境，请先在 mateclaw-python-runner 执行 uv sync --dev" >&2; exit 2; }
+dashboard-worker-test:
+	@test -x mateclaw-python-runner/.venv/bin/pytest || { echo "缺少 Worker 测试环境，请先在 mateclaw-python-runner 执行 uv sync --locked --dev" >&2; exit 2; }
 	cd mateclaw-python-runner && .venv/bin/pytest -q
 
 # Run the UI unit suite and production type/build gate with the repository's
@@ -45,7 +45,7 @@ dashboard-ui-build:
 
 # Full local implementation gate. It uses only the disposable simulation
 # stack and never claims the external Aloudata authorization gate.
-dashboard-verify-local: dashboard-prerequisites-contract-test dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build
+dashboard-verify-local: dashboard-prerequisites-contract-test dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-worker-test dashboard-ui-test dashboard-ui-build
 	bash scripts/verify-dashboard-design.sh
 
 # Docker buildx builder setup

@@ -5,7 +5,6 @@
 # 用法：
 #   ./restart-dataagent-backend.sh                 # 重启后端（默认使用本地 HTTP mock）
 #   bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
-#   bash restart-dataagent-backend.sh runner       # 只重启本地 Python Runner（不构建）
 #   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
 #   ./restart-dataagent-backend.sh help            # 查看用法
 #
@@ -25,9 +24,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-BUILD_PROJECT_ROOT="$PROJECT_ROOT"
-source "$PROJECT_ROOT/dev-support/local-simulation/scripts/lib/latest-deploy-worktree.sh"
-JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
+JAR_PATH="$PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 BACKEND_PORT="18089"
 BACKEND_HEALTH_URL="http://127.0.0.1:${BACKEND_PORT}/actuator/health"
 
@@ -36,14 +33,6 @@ MOCK_PORT="${ALOUDATA_MOCK_PORT:-18081}"
 MOCK_URL="${ALOUDATA_MOCK_SERVER:-http://127.0.0.1:${MOCK_PORT}}"
 MOCK_LOG="/tmp/aloudata-mock-server-${MOCK_PORT}.log"
 MOCK_PID_FILE="/tmp/aloudata-mock-server-${MOCK_PORT}.pid"
-PYTHON_RUNNER_DIR="$PROJECT_ROOT/mateclaw-python-runner"
-PYTHON_RUNNER_EXECUTABLE="$PYTHON_RUNNER_DIR/.venv/bin/uvicorn"
-PYTHON_RUNNER_PORT="${MATECLAW_RUNNER_PORT:-18090}"
-PYTHON_RUNNER_URL="http://127.0.0.1:${PYTHON_RUNNER_PORT}"
-PYTHON_RUNNER_HEALTH_URL="${PYTHON_RUNNER_URL%/}/health"
-PYTHON_RUNNER_LOG="/tmp/mateclaw-python-runner-${PYTHON_RUNNER_PORT}.log"
-RUNNER_LOG_TAIL_PID=""
-
 ACTION="${1:-all}"
 LAUNCH_AGENT_LABEL="com.srant.mateclaw-dataagent-backend"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist"
@@ -56,7 +45,6 @@ usage() {
 用法：
   ./restart-dataagent-backend.sh                 # 重启后端（默认使用本地 HTTP mock）
   bash restart-dataagent-backend.sh mock         # 只重启本地 mock 服务（不动后端）
-  bash restart-dataagent-backend.sh runner       # 只重启本地 Python Runner（不构建）
   ./restart-dataagent-backend.sh stop-mock       # 只停止本地 mock 服务
   ./restart-dataagent-backend.sh help            # 查看用法
 
@@ -163,118 +151,11 @@ restart_mock_server() {
   start_mock_server
 }
 
-# ---------------------------------------------------------------- Python Runner
-
-python_runner_listening() {
-  lsof -tiTCP:"$PYTHON_RUNNER_PORT" -sTCP:LISTEN >/dev/null 2>&1
-}
-
-# 只管理由当前项目虚拟环境启动的 Runner，绝不因 PID 文件过期而误杀其他程序。
-python_runner_own_pids() {
-  local pid command cwd
-  for pid in $(lsof -tiTCP:"$PYTHON_RUNNER_PORT" -sTCP:LISTEN 2>/dev/null || true); do
-    command="$(ps -p "$pid" -ww -o command= 2>/dev/null || true)"
-    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
-    if [[ "$command" == *"runner.app:app"* \
-          && "$command" == *"--port $PYTHON_RUNNER_PORT"* \
-          && ( "$command" == *"$PYTHON_RUNNER_EXECUTABLE"* \
-               || ( "$command" == *"./.venv/bin/uvicorn"* && "$cwd" == "$PYTHON_RUNNER_DIR" ) ) ]]; then
-      echo "$pid"
-    fi
-  done
-}
-
-stop_python_runner() {
-  if ! python_runner_listening; then
-    return 0
-  fi
-
-  local listen_pids own_pids
-  listen_pids="$(lsof -tiTCP:"$PYTHON_RUNNER_PORT" -sTCP:LISTEN 2>/dev/null || true)"
-  own_pids="$(python_runner_own_pids || true)"
-  if [[ -z "$own_pids" \
-        || "$(printf '%s\n' "$listen_pids" | grep -c . || true)" != "$(printf '%s\n' "$own_pids" | grep -c . || true)" ]]; then
-    echo "错误：端口 $PYTHON_RUNNER_PORT 被非本项目 Python Runner 进程占用，未执行 kill。" >&2
-    lsof -nP -iTCP:"$PYTHON_RUNNER_PORT" -sTCP:LISTEN >&2 || true
-    return 1
-  fi
-
-  echo "停止本地 Python Runner（PID $(echo "$own_pids" | tr '\n' ' ')）..."
-  # shellcheck disable=SC2086
-  kill $own_pids 2>/dev/null || true
-  for _ in {1..10}; do
-    if ! python_runner_listening; then
-      echo "本地 Python Runner 已停止。"
-      return 0
-    fi
-    sleep 0.5
-  done
-
-  echo "警告：Python Runner 5 秒内未退出，强制结束已确认的 Runner 进程。" >&2
-  own_pids="$(python_runner_own_pids || true)"
-  if [[ -z "$own_pids" ]]; then
-    echo "错误：监听进程已变化，未执行强制结束。" >&2
-    return 1
-  fi
-  # shellcheck disable=SC2086
-  kill -9 $own_pids 2>/dev/null || true
-}
-
-start_python_runner() {
-  if [[ ! -x "$PYTHON_RUNNER_EXECUTABLE" || ! -f "$PYTHON_RUNNER_DIR/src/runner/app.py" ]]; then
-    echo "错误：未找到已安装的本地 Python Runner：$PYTHON_RUNNER_EXECUTABLE（不会自动安装或重建）。" >&2
-    return 1
-  fi
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "错误：未找到 curl，无法检查 Python Runner 健康状态。" >&2
-    return 1
-  fi
-
-  echo "启动本地 Python Runner：$PYTHON_RUNNER_URL"
-  : >"$PYTHON_RUNNER_LOG"
-  (
-    cd "$PYTHON_RUNNER_DIR"
-    nohup "$PYTHON_RUNNER_EXECUTABLE" \
-      --app-dir "$PYTHON_RUNNER_DIR/src" runner.app:app \
-      --host 127.0.0.1 --port "$PYTHON_RUNNER_PORT" \
-      >>"$PYTHON_RUNNER_LOG" 2>&1 &
-  )
-  disown 2>/dev/null || true
-
-  for _ in {1..20}; do
-    if curl --fail --silent --show-error --connect-timeout 1 --max-time 2 \
-      "$PYTHON_RUNNER_HEALTH_URL" >/dev/null 2>&1; then
-      echo "本地 Python Runner 已就绪（日志 $PYTHON_RUNNER_LOG）。"
-      return 0
-    fi
-    if python_runner_listening; then
-      local own_pids
-      own_pids="$(python_runner_own_pids || true)"
-      if [[ -z "$own_pids" ]]; then
-        echo "错误：端口 $PYTHON_RUNNER_PORT 已被非本项目 Python Runner 进程占用。" >&2
-        return 1
-      fi
-    fi
-    sleep 0.5
-  done
-  echo "错误：Python Runner 未能通过健康检查：$PYTHON_RUNNER_HEALTH_URL（查看 $PYTHON_RUNNER_LOG）" >&2
-  return 1
-}
-
-restart_python_runner() {
-  stop_python_runner || return 1
-  start_python_runner
-}
-
 # 「只重启 mock」的入口：不需要后端 JAR，也不改 profile
 case "$ACTION" in
   mock|restart-mock)
     restart_mock_server || exit 1
     echo "提示：后端进程未重启；若后端是以 ALOUDATA_MOCK=on 启动的，本次重启后即刻生效。"
-    exit 0
-    ;;
-  runner|restart-runner)
-    restart_python_runner || exit 1
     exit 0
     ;;
   stop-mock)
@@ -299,7 +180,6 @@ if [[ "$CURRENT_BRANCH" != "feature/dev_fu" ]]; then
   echo "错误：当前分支是 ${CURRENT_BRANCH:-detached HEAD}，要求 feature/dev_fu；未执行构建或重启。" >&2
   exit 1
 fi
-JAR_PATH="$BUILD_PROJECT_ROOT/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"
 DEPLOY_COMMIT="$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || true)"
 echo "本次部署源码：本地 feature/dev_fu 工作区（HEAD ${DEPLOY_COMMIT:-未知}，包含未提交修改）"
 
@@ -341,10 +221,6 @@ restore_dataagent_launch_agent() {
     fi
   fi
 
-  if [[ -n "$RUNNER_LOG_TAIL_PID" ]]; then
-    kill "$RUNNER_LOG_TAIL_PID" 2>/dev/null || true
-    wait "$RUNNER_LOG_TAIL_PID" 2>/dev/null || true
-  fi
   exit "$exit_status"
 }
 
@@ -573,14 +449,27 @@ fi
 export ES_URIS="${ES_URIS:-http://127.0.0.1:9200}"
 export MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED="${MANAGEMENT_HEALTH_ELASTICSEARCH_ENABLED:-false}"
 
-# 本地开发默认启用 Python Executor，并启动配套 Runner；可显式设为 false 关闭。
+# 本地开发默认启用 DataAgent 管理的 Python Worker；Worker 不需要独立端口或服务。
 export MATECLAW_PILOT_ENABLED="${MATECLAW_PILOT_ENABLED:-false}"
 export PYTHON_EXECUTOR_ENABLED="${PYTHON_EXECUTOR_ENABLED:-true}"
-
-# 本地 Python Runner 不走 Docker 服务名：DataAgent 提交脚本、Runner 回读数据
-# 都必须通过宿主机回环地址访问，避免默认的 python-runner:8080 / mateclaw-dataagent
-# 在本机开发环境中解析失败。
-export MATECLAW_RUNNER_URL="${MATECLAW_RUNNER_URL:-$PYTHON_RUNNER_URL}"
+export MATECLAW_PYTHON_WORKER_HOME="${MATECLAW_PYTHON_WORKER_HOME:-$PROJECT_ROOT/mateclaw-python-runner}"
+if [[ -z "${PYTHON_COMMAND:-}" ]]; then
+  if [[ -x "$PROJECT_ROOT/mateclaw-python-runner/.venv/bin/python" ]]; then
+    export PYTHON_COMMAND="$PROJECT_ROOT/mateclaw-python-runner/.venv/bin/python"
+  else
+    export PYTHON_COMMAND="$(command -v python3 || true)"
+  fi
+fi
+if [[ "${PYTHON_EXECUTOR_ENABLED}" =~ ^(true|TRUE|1|on|ON)$ ]]; then
+  if [[ -z "$PYTHON_COMMAND" || ! -x "$PYTHON_COMMAND" ]]; then
+    echo "错误：找不到 Python Worker 解释器；请配置 PYTHON_COMMAND 或在 mateclaw-python-runner 执行 uv sync --locked --no-dev。" >&2
+    exit 1
+  fi
+  if [[ ! -f "$MATECLAW_PYTHON_WORKER_HOME/src/runner/worker.py" ]]; then
+    echo "错误：未找到 Python Worker 入口：$MATECLAW_PYTHON_WORKER_HOME/src/runner/worker.py" >&2
+    exit 1
+  fi
+fi
 export MATECLAW_DATASET_READ_BASE_URL="${MATECLAW_DATASET_READ_BASE_URL:-http://127.0.0.1:${BACKEND_PORT}}"
 
 # 没有配置 DashScope 时，使用占位值避免 Spring AI 语音组件阻塞启动。
@@ -628,23 +517,6 @@ if [[ ! -f "$JAR_PATH" ]]; then
   exit 1
 fi
 
-python_runner_enabled() {
-  case "${PYTHON_EXECUTOR_ENABLED:-false}" in
-    true|TRUE|1|on|ON) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-if python_runner_enabled; then
-  echo "重启本地 Python Runner（复用现有虚拟环境，不执行 rebuild）..."
-  restart_python_runner || exit 1
-  echo "Python Runner 日志（同时写入 $PYTHON_RUNNER_LOG）："
-  tail -n +1 -F "$PYTHON_RUNNER_LOG" &
-  RUNNER_LOG_TAIL_PID=$!
-else
-  echo "Python Executor 未启用，跳过本地 Python Runner 重启。"
-fi
-
 if [[ "$MOCK_MODE" != "1" ]]; then
   if ! suspend_dataagent_launch_agent; then
     exit 1
@@ -658,7 +530,7 @@ backend_own_pids() {
     command="$(ps -p "$pid" -ww -o command= 2>/dev/null || true)"
     if [[ "$command" == *"/mateclaw-dataagent/target/mateclaw-dataagent-1.0.0-SNAPSHOT.jar"* ]]; then
       cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
-      if [[ -n "$cwd" ]] && mateclaw_same_git_repository "$PROJECT_ROOT" "$cwd"; then
+      if [[ -n "$cwd" ]] && [[ "$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)" == "$PROJECT_ROOT" ]]; then
         echo "$pid"
       fi
     fi
@@ -697,7 +569,7 @@ echo "使用 Java：$(java -version 2>&1 | head -1)"
 echo "启动 DataAgent 后端，数据库：$DB_HOST:$DB_PORT/$DB_NAME"
 echo "健康检查地址：$BACKEND_HEALTH_URL"
 
-cd "$BUILD_PROJECT_ROOT"
+cd "$PROJECT_ROOT"
 # 显式锁定 HTTP 端口（命令行参数优先级最高，覆盖任何把 server.port 设成 0/随机的来源）。
 if ! command -v curl >/dev/null 2>&1; then
   echo "错误：未找到 curl，无法执行后端健康检查。" >&2

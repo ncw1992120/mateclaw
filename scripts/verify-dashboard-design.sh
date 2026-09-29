@@ -25,7 +25,7 @@ has() { rg -q -- "$1" "$2"; }
 [[ -f "$prerequisites" ]] || fail "external prerequisites plan is missing"
 [[ -f "$makefile" ]] || fail "repository Makefile is missing"
 [[ -x "$prerequisites_contract" ]] || fail "external prerequisites contract test is missing or not executable"
-for target in dashboard-dataagent-test dashboard-runner-test dashboard-ui-test dashboard-ui-build dashboard-prerequisites-contract-test dashboard-verify-local; do
+for target in dashboard-dataagent-test dashboard-worker-test dashboard-ui-test dashboard-ui-build dashboard-prerequisites-contract-test dashboard-verify-local; do
   has "^${target}:" "$makefile" || fail "Makefile gate target is missing: ${target}"
 done
 has '2026-09-13-dashboard-external-prerequisites.md' "$overall" || fail "overall plan does not reference external prerequisites"
@@ -35,7 +35,7 @@ has '第一阶段范围状态：已冻结' "$design" || fail "design is not mark
 has '首期支持 JDBC、Aloudata 指标视图、HTTP/API 和文件数据源' "$design" || fail "first-phase source scope is missing"
 has 'JS、湖仓目录、流式数据源和 Trino 等能力不在首期范围' "$design" || fail "first-phase exclusions are missing"
 has 'datasets\.read' "$design" || fail "datasets.read contract is missing"
-has 'datasets.*由 Python Runner.*注入' "$design" || fail "design sample does not document Runner-injected datasets client"
+has 'datasets.*由 Python Worker.*注入' "$design" || fail "design sample does not document Worker-injected datasets client"
 if has 'from mateclaw import datasets' "$design"; then
   fail "design sample must not import datasets module instead of using Runner-injected client"
 fi
@@ -48,7 +48,7 @@ fi
 if ! has 'SQL.*仅对 JDBC 数据源开放' "$design" && ! has 'JDBC 数据源才支持用户配置标准 SQL' "$design"; then
   fail "JDBC-only SQL boundary is missing"
 fi
-has '新 Runner 不支持运行时.*pip install' "$design" || fail "Runner dependency boundary is missing"
+has '新 Python Worker 不支持运行时.*pip install' "$design" || fail "Worker dependency boundary is missing"
 has 'CAT-U06' "$matrix" || fail "unified adapter read coverage CAT-U06 is missing"
 has 'CAT-U07' "$matrix" || fail "missing-adapter rejection coverage CAT-U07 is missing"
 if ! has '已绑定候选 SHA' "$overall" && ! has '尚未绑定候选 SHA' "$overall"; then
@@ -75,4 +75,4 @@ for plan in "$plans"/{00-design-freeze-and-acceptance,01-dataset-catalog-contrac
   has '2026-09-11-dashboard-mvp-test-and-acceptance.md' "$plan" || fail "sub-plan does not reference the test matrix: $(basename "$plan")"
 done
 
-printf 'DESIGN-PASS: frozen scope, SQL boundary, datasets.read timing, dependency boundary, and 01-09 matrix references verified\n'
+printf 'DESIGN-PASS: frozen scope, SQL boundary, datasets.read timing, Worker dependency boundary, and 01-09 matrix references verified\n'

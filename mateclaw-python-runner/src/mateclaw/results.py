@@ -2,7 +2,7 @@
 
 kind: table | scalar | message；schemaVersion 固定 "1.0"。
 标准化失败抛 ResultContractError（含 path/expected/actual/suggestion），
-Runner 父进程据此返回 OUTPUT_CONTRACT_ERROR，不掩盖非法输出。
+DataAgent Worker supervisor 据此返回 OUTPUT_CONTRACT_ERROR，不掩盖非法输出。
 """
 from __future__ import annotations
 

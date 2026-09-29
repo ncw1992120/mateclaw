@@ -14,7 +14,7 @@ COMPOSE=(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FIL
 # `docker compose up --wait` also observes one-shot TLS/MinIO init services and
 # may report their expected exit(0) as a failed wait. Poll only long-running
 # services with healthchecks before starting the fixture seed.
-containers=(mateclaw-local-sim-mysql mateclaw-local-sim-postgres mateclaw-local-sim-minio mateclaw-local-sim-wiremock mateclaw-local-sim-python-runner)
+containers=(mateclaw-local-sim-mysql mateclaw-local-sim-postgres mateclaw-local-sim-minio mateclaw-local-sim-wiremock)
 deadline=$((SECONDS + 120))
 ready=0
 while (( SECONDS < deadline )); do

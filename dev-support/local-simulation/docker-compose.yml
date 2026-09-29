@@ -113,28 +113,8 @@ services:
       - ./wiremock/init-tls.sh:/opt/sim/init-tls.sh:ro
     entrypoint: ["/bin/sh", "/opt/sim/init-tls.sh"]
 
-  python-runner:
-    build:
-      context: ../../mateclaw-python-runner
-      dockerfile: Dockerfile
-    container_name: mateclaw-local-sim-python-runner
-    # 宿主机运行 DataAgent 时用于本地联调；生产部署不暴露 Runner 端口。
-    ports:
-      - "${PYTHON_RUNNER_PORT:-18082}:8080"
-    networks:
-      - runner_internal
-    healthcheck:
-      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
 volumes:
   local_sim_mysql:
   local_sim_postgres:
   local_sim_minio:
   local_sim_wiremock_tls:
-
-networks:
-  runner_internal:
-    internal: true
