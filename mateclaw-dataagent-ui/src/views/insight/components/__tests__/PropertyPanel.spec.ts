@@ -416,7 +416,13 @@ describe('PropertyPanel', () => {
       pageSize: 200,
       keyword: undefined,
     })
-    expect(wrapper.find('option[value="metric_name"]').exists()).toBe(true)
+    const dimensionOption = wrapper.find('option[value="metric_name"]')
+    expect(dimensionOption.exists()).toBe(true)
+    expect(dimensionOption.text()).toBe('转化指标名称（metric_name）')
+    await wrapper.find('[aria-label="insight.property.filterField"]').setValue('metric_name')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { field: 'metric_name' },
+    })
     datasourceListMock.splice(0, datasourceListMock.length, { id: '7', name: 'Sales database', sourceType: 'aloudata' } as any)
   })
 

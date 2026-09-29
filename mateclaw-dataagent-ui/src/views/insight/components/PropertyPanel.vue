@@ -527,7 +527,7 @@
               <el-option
                 v-for="d in filterDimensionsOptions"
                 :key="d.dimName"
-                :label="d.dimDisplayName || d.dimName"
+                :label="formatFilterDimensionLabel(d)"
                 :value="d.dimName"
               />
             </el-select>
@@ -835,6 +835,15 @@ const filterDimensionsLoading = ref(false)
 const filterDefaultValues = ref<Array<{ label: string; value: string }>>([])
 const filterDefaultValuesLoading = ref(false)
 let filterDefaultValuesSearchTimer: ReturnType<typeof setTimeout> | null = null
+
+function formatFilterDimensionLabel(dimension: { dimName: string; dimDisplayName: string }): string {
+  const fieldName = dimension.dimName?.trim() ?? ''
+  const displayName = dimension.dimDisplayName?.trim() ?? ''
+  return displayName && displayName !== fieldName
+    ? `${displayName}（${fieldName}）`
+    : fieldName
+}
+
 const filterDefaultOptions = computed(() => localFilterConfig.optionSource === 'static'
   ? (localFilterConfig.staticOptions ?? [])
   : filterDefaultValues.value)
