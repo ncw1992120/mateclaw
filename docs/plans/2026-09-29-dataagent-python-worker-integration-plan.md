@@ -149,11 +149,11 @@ Run: `bash dev-support/local-simulation/scripts/test_package_dataagent_offline_w
 
 说明 Python 仍由 DataAgent 作为本地子进程管理；首次在联网环境同步锁定依赖，离线机器安装 wheelhouse；明确不需要独立 Runner 服务。
 
-- [ ] **Step 4: 运行打包、脚本语法和生产路径检查**
+- [x] **Step 4: 运行打包、脚本语法和生产路径检查**
 
 Run: `bash dev-support/local-simulation/scripts/test_package_dataagent_offline_win.sh && bash dev-support/local-simulation/scripts/test_launchagent_dataagent_runner_startup.sh && bash -n dev-support/package-dataagent-offline-win.sh dev-support/local-simulation/scripts/start-dataagent-with-python-runner.sh docs/策略解读/restart-dataagent-backend.sh`
 Then check active runtime consumers with `rg -n "mateclaw-python-runner" mateclaw-dataagent/src/main mateclaw-dataagent/Dockerfile mateclaw-dataagent/python-worker dev-support/package-dataagent-offline-win.sh dev-support/local-simulation/scripts/start-dataagent-with-python-runner.sh docs/策略解读/restart-dataagent-backend.sh docs/策略解读/dataagent-local-deployment.md Makefile`.
-Expected: tests and Bash syntax pass; the scoped `rg` returns no matches. Historical plans/reports and negative regression assertions may retain the old name intentionally.
+Expected: tests and Bash syntax pass; the scoped `rg` returns no matches. Historical plans/reports and negative regression assertions may retain the old name intentionally. **验证通过**：离线 ZIP、LaunchAgent、重启构建脚本检查和 Bash 语法均通过，生产路径无旧目录引用。
 
 ### Task 5: 全量验证并浏览器验收
 
@@ -166,19 +166,25 @@ Expected: tests and Bash syntax pass; the scoped `rg` returns no matches. Histor
 - Uses Tasks 1–4 的最终源码布局和执行/持久化契约。
 - Produces: 实际浏览器中双数据集 Python 脚本执行成功、结果集 schema 生成、结果值可见；并能查看日志与后续状态。
 
-- [ ] **Step 1: 运行 Python Worker 全量测试和 DataAgent 目标测试**
+- [x] **Step 1: 运行 Python Worker 全量测试和 DataAgent 目标测试**
 
 Run: `uv run --directory mateclaw-dataagent/python-worker --offline -- pytest -q`
 Then: `mvn -f mateclaw-dataagent/pom.xml test`
 
-- [ ] **Step 2: 构建 DataAgent 并验证离线包结构**
+验证记录：Python Worker 全量测试 48 项通过；Worker/仪表盘相关 JUnit 目标测试 30 项通过。DataAgent 全量测试 358 项中有 1 项既有 Aloudata fixture 不一致失败：`LocalAloudataFixturesTest.everyStrategyMetricSupportsEveryStrategyDimension`，期望 13 个维度，fixture 实际仅提供 5 个；与 Python Worker 改动无关。
+
+- [x] **Step 2: 构建 DataAgent 并验证离线包结构**
 
 Run: `mvn -f mateclaw-dataagent/pom.xml package -DskipTests && bash dev-support/local-simulation/scripts/test_package_dataagent_offline_win.sh`
 Expected: 构建成功，发布产物只含一个 DataAgent 服务和内部 Worker 文件，不含独立 HTTP Runner 服务。
 
-- [ ] **Step 3: 在内部浏览器验证真实仪表盘脚本**
+验证记录：`mvn -pl mateclaw-dataagent -am clean package -DskipTests` 构建成功；Windows 离线包结构检查通过。
+
+- [x] **Step 3: 在内部浏览器验证真实仪表盘脚本**
 
 使用用户“测试”仪表盘卡片1的两个数据集执行求和脚本；确认 Worker 数量有界、状态终态持久化、结果 schema/卡片可读。记录 URL、页面状态和执行结果。构建、单测或接口直调不能代替此项。
+
+验证记录：内部 Chrome 候选环境 `http://localhost:5175/insight/dashboard/editor?dashboardId=2104813050178289666`，两次 Aloudata 指标查询 HTTP 200；Python 结果 schema 为数值字段“指标合计”，原始结果及组件渲染均显示 `248796016335`。Worker 执行日志正常，结果持久化读取成功；候选后端与 Vite 验收服务随后已停止。验收发现并修复全局 Jackson 将 `Long` 写成字符串导致结果契约 409 的问题。
 
 - [ ] **Step 4: 检查工作区并按项目规约交付**
 
