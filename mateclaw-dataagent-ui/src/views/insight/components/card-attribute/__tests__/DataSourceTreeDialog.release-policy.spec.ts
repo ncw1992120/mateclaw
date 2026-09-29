@@ -33,12 +33,14 @@ const TreeStub = defineComponent({
   emits: ['node-click'],
   setup(props) {
     const setExpanded = vi.fn()
+    const flatten = (nodes: any[]): any[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])])
     return {
       setExpanded,
-      nodes: computed(() => props.data.flatMap((node: any) => [node, ...(node.children ?? [])])),
+      nodes: computed(() => flatten(props.data)),
+      leaves: computed(() => flatten(props.data).filter((node) => !node.children?.length)),
     }
   },
-  template: '<div><div v-for="node in nodes" :key="node.id"><slot :data="node" /></div></div>',
+  template: '<div><div v-for="node in leaves" :key="node.id"><slot :data="node" /></div></div>',
 })
 const DialogStub = defineComponent({
   name: 'ElDialog',
@@ -66,15 +68,16 @@ describe('添加数据集发布范围', () => {
     await nextTick()
 
     const tree = wrapper.findComponent(TreeStub)
-    const nodes = (tree.props('data') as Array<Record<string, any>>)
-      .flatMap((node) => [node, ...(node.children ?? [])])
-    const available = nodes.find((node) => node.id === 'aloudata-metrics')
-    const unavailable = nodes.filter((node) => node.id !== 'aloudata-metrics' && node.id !== 'cat-aloudata')
+    const flatten = (items: any[]): any[] => items.flatMap((node) => [node, ...flatten(node.children ?? [])])
+    const nodes = flatten(tree.props('data') as Array<Record<string, any>>)
+    const leaves = nodes.filter((node: any) => !node.children?.length)
+    const available = leaves.find((node: any) => node.id === 'aloudata-metrics-aloudata-1')
+    const unavailable = leaves.filter((node: any) => node.id !== 'aloudata-metrics-aloudata-1')
     const categories = nodes.filter((node) => node.type === 'category')
     const unavailableDirectories = categories.filter((node) => ['cat-jdbc', 'cat-file'].includes(node.id))
 
     expect(tree.props('props').disabled).toBe('disabled')
-    expect(tree.props('defaultExpandedKeys')).toEqual(['cat-aloudata'])
+    expect(tree.props('defaultExpandedKeys')).toEqual(['cat-aloudata', 'aloudata-source-aloudata-1'])
     expect(unavailableDirectories).toHaveLength(2)
     expect(unavailableDirectories.every((node) => node.disabled)).toBe(true)
     expect(available.disabled).toBe(false)

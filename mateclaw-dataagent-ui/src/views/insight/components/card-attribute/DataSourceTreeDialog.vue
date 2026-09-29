@@ -70,6 +70,7 @@ function isUnavailable(data: any): boolean {
 
 function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
   const leaves: Leaf[] = []
+  const aloudataSources: Datasource[] = []
 
   // 已配置数据集（按类型归类，作为可复用输入）
   datasets.forEach((d, i) => {
@@ -88,11 +89,14 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
     })
   })
 
-  // 数据源连接（JDBC 等；Aloudata 走固定快捷节点）
-  const aloudataId = datasources.find((s) => classifyDatasourceType(s.sourceType) === 'aloudata')?.id
+  // 数据源连接（Aloudata 按连接分组；其他类型维持原有入口）
   datasources.forEach((s, i) => {
     const cat = classifyDatasourceType(s.sourceType)
-    if (cat === 'aloudata' || cat === 'unknown') return
+    if (cat === 'aloudata') {
+      aloudataSources.push(s)
+      return
+    }
+    if (cat === 'unknown') return
     leaves.push({
       id: `datasource-${s.id ?? i}`,
       label: s.name,
@@ -103,24 +107,32 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
     })
   })
 
-  // 固定快捷节点：与原型一致，选完直接进入对应配置弹窗
-  if (aloudataId !== undefined) {
-    leaves.push({ id: 'aloudata-view', label: '指标视图', type: 'aloudata', meta: '选择已有视图', db: String(aloudataId), mode: 'metric-view', disabled: true })
-    leaves.push({ id: 'aloudata-metrics', label: '指标&维度', type: 'aloudata', meta: '配置指标与维度', db: String(aloudataId), mode: 'metric-dim', disabled: false })
-  }
+  // 每个 Aloudata 连接分别提供快捷配置入口，确保创建的数据集绑定到所选连接。
+  const aloudataConnectionGroups = aloudataSources
+    .filter((source) => source.id !== undefined && source.id !== null)
+    .map((source) => ({
+      id: `aloudata-source-${source.id}`,
+      label: source.name,
+      type: 'category',
+      children: [
+        { id: `aloudata-view-${source.id}`, label: '指标视图', type: 'aloudata', meta: '选择已有视图', db: String(source.id), mode: 'metric-view', disabled: true },
+        { id: `aloudata-metrics-${source.id}`, label: '指标&维度', type: 'aloudata', meta: '配置指标与维度', db: String(source.id), mode: 'metric-dim', disabled: false },
+      ],
+    }))
   ;['Excel', 'CSV', 'TXT', 'JSON', 'Parquet'].forEach((fmt) =>
     leaves.push({ id: `file-${fmt}`, label: fmt, type: 'file', meta: '文件数据集', fileType: fmt, disabled: true }),
   )
   leaves.push({ id: 'http-api', label: '接口', type: 'api', meta: '', disabled: true })
 
-  // 按类别分组（顺序：Aloudata / JDBC / 接口 / 文件）
+  // 按类别分组（顺序：Aloudata / JDBC / 接口 / 文件）；接口项直接平铺到根层。
   const order = ['aloudata', 'jdbc', 'api', 'file'] as const
   const groups: Record<string, Leaf[]> = {}
   leaves.forEach((leaf) => {
     ;(groups[leaf.type] ||= []).push(leaf)
   })
   return order.flatMap((cat) => {
-    const children = groups[cat] ?? []
+    const children = [...(groups[cat] ?? [])]
+    if (cat === 'aloudata') children.push(...aloudataConnectionGroups as any[])
     if (children.length === 0) return []
     if (cat === 'api') return children
     return [{
@@ -141,6 +153,12 @@ async function loadTree(): Promise<void> {
       datasourceApi.list().catch(() => []) as Promise<unknown>,
     ])
     treeData.value = buildTree((dsList as Dataset[]) ?? [], (srcList as Datasource[]) ?? [])
+    defaultExpandedKeys.value = [
+      'cat-aloudata',
+      ...((srcList as Datasource[]) ?? [])
+        .filter((source) => classifyDatasourceType(source.sourceType) === 'aloudata' && source.id !== undefined && source.id !== null)
+        .map((source) => `aloudata-source-${source.id}`),
+    ]
   } finally {
     loading.value = false
   }
@@ -156,7 +174,7 @@ watch(
 onMounted(loadTree)
 
 const treeProps = { label: 'label', children: 'children', disabled: 'disabled' }
-const defaultExpandedKeys = ['cat-aloudata']
+const defaultExpandedKeys = ref(['cat-aloudata'])
 
 // 搜索：过滤树节点
 function filterNode(value: string, data: any) {
