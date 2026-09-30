@@ -2168,6 +2168,8 @@ export interface TimeFilterComponentConfig {
   defaultPreset?: TimeFilterDefaultPreset
   /** 允许的预设选项列表 */
   availablePresets?: TimeRangePreset[]
+  /** 最大可选时间跨度（天，闭区间）；不填表示不限制 */
+  maxRangeDays?: number
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */

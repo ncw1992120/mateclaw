@@ -1872,6 +1872,8 @@ export default {
       filterTargetComponentsPlaceholder: 'Select affected components',
       timeFilterDefault: 'Default Range',
       timeFilterDefaultPlaceholder: 'No default range',
+      timeFilterMaxRangeDays: 'Max Range (days)',
+      timeFilterMaxRangeDaysPlaceholder: 'Leave empty for no limit',
       boundFilters: 'Bound Filters',
       boundFiltersPlaceholder: 'Select bound filters',
       enableTimeFilter: 'Component Time Filter',

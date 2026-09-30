@@ -1883,6 +1883,8 @@ export default {
       filterTargetComponentsPlaceholder: '选择受影响的组件',
       timeFilterDefault: '默认值',
       timeFilterDefaultPlaceholder: '不设置默认时间范围',
+      timeFilterMaxRangeDays: '时间范围大小（天）',
+      timeFilterMaxRangeDaysPlaceholder: '不填则不限制',
       boundFilters: '绑定筛选器',
       boundFiltersPlaceholder: '选择绑定的筛选器',
       enableTimeFilter: '组件级时间筛选',

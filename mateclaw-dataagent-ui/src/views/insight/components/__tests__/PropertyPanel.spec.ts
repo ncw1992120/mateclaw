@@ -37,7 +37,10 @@ vi.mock('@/api/insight-dashboard', () => ({
 const stubs = {
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>' },
   'el-input': { template: '<input v-bind="$attrs" />' },
-  'el-input-number': { template: '<input v-bind="$attrs" />' },
+  'el-input-number': {
+    props: ['modelValue'],
+    template: '<input v-bind="$attrs" :value="modelValue ?? \'\'" @input="$emit(\'update:modelValue\', $event.target.value === \'\' ? undefined : Number($event.target.value))" @change="$emit(\'change\', $event.target.value)" />',
+  },
   'el-select': {
     props: ['modelValue'],
     template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>',
@@ -339,6 +342,35 @@ describe('PropertyPanel', () => {
       config: { field: 'metric_time', defaultPreset: 'monthToDate' },
     })
     expect(JSON.stringify(wrapper.emitted('change')?.at(-1)?.[0])).not.toContain('2026-')
+  })
+
+  it('保存时间范围大小配置，清空时不限制', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'time-filter-max',
+          type: 'timeFilter',
+          title: '时间范围',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: { field: 'metric_time' },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const maxInput = wrapper.find('input[aria-label="insight.property.timeFilterMaxRangeDays"]')
+    expect(maxInput.exists()).toBe(true)
+    await maxInput.setValue(30)
+
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { field: 'metric_time', maxRangeDays: 30 },
+    })
+
+    await maxInput.setValue('')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { maxRangeDays: undefined },
+    })
   })
 
   it('shows static options only after switching to static source', async () => {

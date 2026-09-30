@@ -35,7 +35,7 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined): TimeRangeValue | undefined {
+function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined, maxRangeDays?: number): TimeRangeValue | undefined {
   if (!preset) return undefined
 
   const now = new Date()
@@ -51,6 +51,16 @@ function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined): 
     start = new Date(today.getFullYear(), today.getMonth(), 1)
   } else if (preset === 'yearToDate') {
     start = new Date(today.getFullYear(), 0, 1)
+  }
+
+  // 配置了最大跨度时保持 end 不动，把 start 收敛为「最近 N 天」
+  if (maxRangeDays && Number.isFinite(maxRangeDays) && maxRangeDays >= 1) {
+    const DAY_MS = 24 * 3600 * 1000
+    const startMs = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime()
+    const endMs = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
+    if (endMs - startMs > (Math.floor(maxRangeDays) - 1) * DAY_MS) {
+      start = new Date(endMs - (Math.floor(maxRangeDays) - 1) * DAY_MS)
+    }
   }
 
   return { preset: 'custom', start: formatLocalDate(start), end: formatLocalDate(end) }
@@ -287,7 +297,7 @@ export function useDashboardFilterContext(
       const config = comp.config as FilterComponentConfig | TimeFilterComponentConfig | undefined
       const value = comp.type === 'filter'
         ? (config as FilterComponentConfig | undefined)?.defaultValue
-        : resolveTimeFilterDefault((config as TimeFilterComponentConfig | undefined)?.defaultPreset)
+        : resolveTimeFilterDefault((config as TimeFilterComponentConfig | undefined)?.defaultPreset, (config as TimeFilterComponentConfig | undefined)?.maxRangeDays)
       const activeValue = value === null || value === '' || (Array.isArray(value) && value.length === 0) ? undefined : value
       runtimeFilterState[comp.id] = { ...metadata, value: Array.isArray(activeValue) ? [...activeValue] : activeValue }
       if (metadata.scope === 'scoped') {

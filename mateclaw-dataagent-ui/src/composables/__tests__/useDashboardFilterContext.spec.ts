@@ -129,6 +129,21 @@ describe('useDashboardFilterContext runtime state', () => {
     expect(context.filterContext.value.timeRange).toEqual(expected)
   })
 
+  it('clamps the resolved default range to the configured max span', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 29, 12, 0, 0))
+    const dateFilter = makeFilter('date-filter', {
+      field: 'metric_time',
+      defaultPreset: 'yearToDate',
+      maxRangeDays: 30,
+    }, 'timeFilter')
+    const context = useDashboardFilterContext(() => [dateFilter], () => undefined)
+
+    context.initializeDefaults()
+
+    expect(context.filterContext.value.timeRange).toEqual({ preset: 'custom', start: '2026-08-31', end: '2026-09-29' })
+  })
+
   it('recomputes relative defaults when a new preview session starts on a later date', () => {
     vi.useFakeTimers()
     const dateFilter = makeFilter('date-filter', {

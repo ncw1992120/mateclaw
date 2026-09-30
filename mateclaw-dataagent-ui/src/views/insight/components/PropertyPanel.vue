@@ -650,6 +650,21 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label">{{ t('insight.property.timeFilterMaxRangeDays') }}</label>
+          <el-input-number
+            v-model="localTimeFilterConfig.maxRangeDays"
+            :min="1"
+            :step="1"
+            step-strictly
+            :placeholder="t('insight.property.timeFilterMaxRangeDaysPlaceholder')"
+            :aria-label="t('insight.property.timeFilterMaxRangeDays')"
+            controls-position="right"
+            style="width: 100%"
+            @change="emitTimeFilterConfigChange"
+          />
+        </div>
+
+        <div class="form-group">
           <label class="form-label">{{ t('insight.property.filterScope') }}</label>
           <el-radio-group
             v-model="localFilterScope"
@@ -868,6 +883,7 @@ const filterDefaultOptions = computed(() => localFilterConfig.optionSource === '
 /** 时间筛选组件配置本地副本 */
 const localTimeFilterConfig = reactive<TimeFilterComponentConfig>({
   field: 'metric_time',
+  maxRangeDays: undefined,
 })
 const localTimeFilterPresets = ref<TimeRangePreset[]>(['today', '7d', '30d', '90d', 'custom'])
 
@@ -1048,6 +1064,7 @@ watch(
       const config = newComp.config as TimeFilterComponentConfig | undefined
       localTimeFilterConfig.field = config?.field ?? 'metric_time'
       localTimeFilterConfig.defaultPreset = config?.defaultPreset
+      localTimeFilterConfig.maxRangeDays = config?.maxRangeDays
       localTimeFilterPresets.value = config?.availablePresets ?? ['today', '7d', '30d', '90d', 'custom']
     }
     // 同步筛选器作用范围配置
@@ -1439,6 +1456,7 @@ function emitTimeFilterConfigChange(): void {
   const config: TimeFilterComponentConfig = {
     field: localTimeFilterConfig.field || 'metric_time',
     defaultPreset: localTimeFilterConfig.defaultPreset || undefined,
+    maxRangeDays: localTimeFilterConfig.maxRangeDays || undefined,
     availablePresets: localTimeFilterPresets.value.length > 0
       ? [...localTimeFilterPresets.value]
       : undefined,
