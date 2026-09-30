@@ -169,16 +169,14 @@
             <div v-if="isSampleData(item.i)" class="sample-data-watermark sample-data-watermark--titlebar" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据" title="未绑定数据源，当前为示例内容">示例数据</div>
           </div>
           <div class="grid-item-body">
-            <div v-if="getComponentData(item.i)?.error" class="grid-item-error">
-              <div class="error-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </div>
-              <div class="error-msg" :title="getComponentData(item.i)?.error">{{ getComponentData(item.i)?.error }}</div>
-            </div>
+            <ComponentQueryState
+              v-if="queryDisplayStatus(getComponentData(item.i))"
+              :status="queryDisplayStatus(getComponentData(item.i))!"
+              :title="queryStateTitle(getComponentData(item.i))"
+              :message="getComponentData(item.i)?.error"
+              :retry-label="t('insight.componentQueryRetry')"
+              @retry="emit('retry-component-query', item.i)"
+            />
             <template v-else>
               <KpiCardWidget
                 v-if="getComponent(item.i)?.type === 'kpi'"
@@ -261,6 +259,7 @@
                 @move-component-into="(p) => emit('move-component-into', p)"
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
+                @retry-component-query="(id) => emit('retry-component-query', id)"
                 @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
                 @edit-child-title-icon-style="openChildTitleIconStyle"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
@@ -310,6 +309,7 @@ import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
 import CombinationCardWidget from './CombinationCardWidget.vue'
+import ComponentQueryState from './ComponentQueryState.vue'
 import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
 import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/utils/dashboard-theme'
@@ -482,6 +482,7 @@ const emit = defineEmits<{
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'retry-component-query', componentId: string): void
   (e: 'ai-analysis-generate', componentId: string): void
   (e: 'open-metric-style', payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void
   (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
@@ -812,6 +813,20 @@ function getComponentData(id: string): InsightComponentData | undefined {
   if (!component || hasConfiguredDataset(component)) return undefined
   const sample = resolveComponentSample(component).renderData
   return sample ? withFieldLabels(sample, fieldLabels) : sample
+}
+
+function queryDisplayStatus(data: InsightComponentData | undefined): 'loading' | 'empty' | 'timeout' | 'error' | undefined {
+  if (data?.queryStatus && data.queryStatus !== 'success') return data.queryStatus
+  return data?.error ? 'error' : undefined
+}
+
+function queryStateTitle(data: InsightComponentData | undefined): string {
+  switch (queryDisplayStatus(data)) {
+    case 'loading': return t('insight.componentQueryLoading')
+    case 'empty': return t('insight.componentQueryEmpty')
+    case 'timeout': return t('insight.componentQueryTimeout')
+    default: return t('insight.componentQueryFailed')
+  }
 }
 
 function fieldLabelsForComponent(component: InsightComponent | InsightCombinationChild): Record<string, string> {

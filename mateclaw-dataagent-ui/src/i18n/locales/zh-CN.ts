@@ -1820,6 +1820,11 @@ export default {
     previewMode: '预览模式',
     goEdit: '去编辑',
     previewDataFailed: '组件数据加载失败，请检查数据源配置',
+    componentQueryLoading: '正在查询此组件的数据…',
+    componentQueryEmpty: '查询成功，暂无数据',
+    componentQueryTimeout: '组件查询超时，请重试',
+    componentQueryFailed: '组件查询失败',
+    componentQueryRetry: '重试',
     canvasEmpty: '从左侧拖拽组件到此处',
     paletteTitle: '组件库',
     paletteGroup: {

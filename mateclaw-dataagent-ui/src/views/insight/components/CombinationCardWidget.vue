@@ -155,8 +155,16 @@
         </div>
         <!-- 子组件真实渲染（复用顶层 widget 组件；v1 子卡片数据接入下轮） -->
         <div class="cc-child-body">
+          <ComponentQueryState
+            v-if="queryDisplayStatus(childComponentData(child))"
+            :status="queryDisplayStatus(childComponentData(child))!"
+            :title="queryStateTitle(childComponentData(child))"
+            :message="childComponentData(child)?.error"
+            :retry-label="t('insight.componentQueryRetry')"
+            @retry="emit('retry-component-query', child.id)"
+          />
           <KpiCardWidget
-            v-if="child.type === 'kpi'"
+            v-else-if="child.type === 'kpi'"
             :component="childWidgetComponent(child)"
             :component-data="childComponentData(child)"
             :show-title="false"
@@ -222,6 +230,7 @@
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
             @filter-change="(payload) => emit('filter-change', payload)"
             @time-filter-change="(payload) => emit('time-filter-change', payload)"
+            @retry-component-query="(id) => emit('retry-component-query', id)"
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
@@ -256,6 +265,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import ComponentQueryState from './ComponentQueryState.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 import type {
   InsightComponent,
@@ -322,6 +332,7 @@ const emit = defineEmits<{
   /** 筛选事件需要携带实际子组件 ID，才能命中组件的数据集绑定。 */
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
+  (e: 'retry-component-query', componentId: string): void
 }>()
 
 const { t } = useI18n()
@@ -467,6 +478,20 @@ function childComponentData(child: InsightCombinationChild): InsightComponentDat
   if (actualData) return actualData
   if (!isSampleData(child)) return undefined
   return resolveComponentSample(toWidgetComponent(child)).renderData
+}
+
+function queryDisplayStatus(data: InsightComponentData | undefined): 'loading' | 'empty' | 'timeout' | 'error' | undefined {
+  if (data?.queryStatus && data.queryStatus !== 'success') return data.queryStatus
+  return data?.error ? 'error' : undefined
+}
+
+function queryStateTitle(data: InsightComponentData | undefined): string {
+  switch (queryDisplayStatus(data)) {
+    case 'loading': return t('insight.componentQueryLoading')
+    case 'empty': return t('insight.componentQueryEmpty')
+    case 'timeout': return t('insight.componentQueryTimeout')
+    default: return t('insight.componentQueryFailed')
+  }
 }
 
 function isSampleData(child: InsightCombinationChild): boolean {

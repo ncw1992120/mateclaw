@@ -1809,6 +1809,11 @@ export default {
     previewMode: 'Preview Mode',
     goEdit: 'Go to Edit',
     previewDataFailed: 'Failed to load component data. Please check datasource configuration.',
+    componentQueryLoading: 'Loading data for this component…',
+    componentQueryEmpty: 'Query succeeded, but returned no data',
+    componentQueryTimeout: 'Component query timed out. Please retry.',
+    componentQueryFailed: 'Component query failed',
+    componentQueryRetry: 'Retry',
     canvasEmpty: 'Drag components from the left panel here',
     paletteTitle: 'Components',
     paletteGroup: {

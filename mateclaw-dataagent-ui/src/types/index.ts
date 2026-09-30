@@ -2050,6 +2050,8 @@ export interface KpiItemData {
 export interface InsightComponentData {
   /** 对应组件 ID */
   componentId: string
+  /** 当前预览查询状态；仅运行时使用，不属于仪表盘持久化配置。 */
+  queryStatus?: 'loading' | 'success' | 'empty' | 'timeout' | 'error'
   /** 渲染类型：echarts / kpi / table / aiAnalysis */
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
   /** 字段技术名到展示名的渲染元数据；不参与查询、排序或数据映射。 */

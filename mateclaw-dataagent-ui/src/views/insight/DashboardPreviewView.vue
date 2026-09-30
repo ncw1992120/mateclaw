@@ -87,11 +87,7 @@
         </button>
       </div>
 
-      <div v-if="dataLoading" class="preview-loading">
-        <el-icon class="loading-icon is-loading"><Loading /></el-icon>
-        <div class="loading-text">{{ t('insight.loadingData') }}</div>
-      </div>
-      <div v-else-if="currentPageComponents.length === 0" class="preview-empty">
+      <div v-if="currentPageComponents.length === 0" class="preview-empty">
         <div class="empty-illustration">
           <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
             <rect x="12" y="14" width="56" height="52" rx="10" fill="var(--db-muted)" opacity=".45"/>
@@ -123,6 +119,7 @@
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
         @component-time-range-change="handleComponentTimeRangeChange"
+        @retry-component-query="retryComponentQuery"
         @ai-analysis-generate="handleAiAnalysisGenerate"
       />
     </div>
@@ -224,9 +221,6 @@ const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
 
 /** AI 分析内容状态（componentId → analysisSection） */
 const aiAnalysisContents = reactive<Record<string, string>>({})
-
-/** 组件数据加载中状态（预览/筛选刷新时） */
-const dataLoading = ref(false)
 
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
@@ -372,7 +366,7 @@ async function loadDashboard(): Promise<void> {
     initializeDefaults()
     await materializePreviewDatasetInputs()
     previousRuntimeFilterState = getRuntimeFilterState()
-    await reloadComponentData(filterContext.value, true)
+    await reloadComponentData(filterContext.value)
     await reloadScriptBindings(filterContext.value)
     // 首次预览与筛选刷新共用组件管线，避免沿用上次编辑保存的静态快照。
     await refreshPipelineComponents(getRuntimeFilterState(), true)
@@ -488,20 +482,66 @@ async function loadReport(): Promise<void> {
   }
 }
 
+function componentRenderType(component: InsightComponent): InsightComponentData['renderType'] {
+  return component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table'
+}
+
+function isQueryTimeout(error: unknown): boolean {
+  const value = error as { name?: string; code?: string; message?: string } | null
+  return /timeout|timed out|超时/i.test(`${value?.name ?? ''} ${value?.code ?? ''} ${value?.message ?? error ?? ''}`)
+}
+
+function resolvedQueryData(data: InsightComponentData): InsightComponentData {
+  if (data.error) return { ...data, queryStatus: isQueryTimeout(new Error(data.error)) ? 'timeout' : 'error' }
+  let empty = false
+  if (data.renderType === 'table') empty = !data.table?.rows.length
+  else if (data.renderType === 'kpi') empty = !data.kpi && !data.kpiList?.length
+  else if (data.renderType === 'echarts') {
+    const series = data.option?.series
+    empty = !Array.isArray(series) || series.length === 0 || series.every((item) => {
+      const values = item && typeof item === 'object' ? (item as { data?: unknown[] }).data : undefined
+      return Array.isArray(values) && values.length === 0
+    })
+  }
+  return { ...data, queryStatus: empty ? 'empty' : 'success' }
+}
+
+function writeComponentQueryState(component: InsightComponent, queryStatus: NonNullable<InsightComponentData['queryStatus']>, error?: string): void {
+  const previous = componentDataMap.value[component.id]
+  componentDataMap.value = {
+    ...componentDataMap.value,
+    [component.id]: {
+      ...previous,
+      componentId: component.id,
+      renderType: previous?.renderType ?? componentRenderType(component),
+      queryStatus,
+      error,
+    },
+  }
+}
+
 /** 旧版直连组件仍走预览接口，但按组件合并并拒绝过期整页响应。 */
-async function reloadComponentData(context: DashboardFilterContext, showPageLoading = false): Promise<void> {
+async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
   const requestId = ++queryRequestSequence
-  const directIds = new Set(collectDashboardComponents(currentPageComponents.value)
+  const directComponents = collectDashboardComponents(currentPageComponents.value)
     .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
-    .map((component) => component.id))
-  if (directIds.size === 0) return
+  const directIds = new Set(directComponents.map((component) => component.id))
+  if (directComponents.length === 0) return
   directIds.forEach((componentId) => latestComponentRequest.set(componentId, requestId))
-  if (showPageLoading) dataLoading.value = true
+  directComponents.forEach((component) => writeComponentQueryState(component, 'loading'))
   try {
     const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
     const dataMap = { ...componentDataMap.value }
-    for (const item of dataList ?? []) {
-      if (directIds.has(item.componentId) && latestComponentRequest.get(item.componentId) === requestId) dataMap[item.componentId] = item
+    const returned = new Set<string>()
+    for (const rawItem of dataList ?? []) {
+      if (directIds.has(rawItem.componentId) && latestComponentRequest.get(rawItem.componentId) === requestId) {
+        dataMap[rawItem.componentId] = resolvedQueryData(rawItem)
+        returned.add(rawItem.componentId)
+      }
+    }
+    for (const component of directComponents) {
+      if (latestComponentRequest.get(component.id) !== requestId || returned.has(component.id)) continue
+      dataMap[component.id] = { componentId: component.id, renderType: componentRenderType(component), queryStatus: 'empty' }
     }
     componentDataMap.value = dataMap
   } catch (error) {
@@ -512,14 +552,12 @@ async function reloadComponentData(context: DashboardFilterContext, showPageLoad
       if (!component) continue
       dataMap[componentId] = {
         componentId,
-        renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table',
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
         error: error instanceof Error ? error.message : t('insight.previewDataFailed'),
       }
     }
     componentDataMap.value = dataMap
-    ElMessage.warning(t('insight.previewDataFailed'))
-  } finally {
-    if (showPageLoading) dataLoading.value = false
   }
 }
 
@@ -646,6 +684,7 @@ async function refreshPipelineComponent(
   if (!pipeline?.datasetInputs?.length) return
   const requestId = ++queryRequestSequence
   latestComponentRequest.set(component.id, requestId)
+  writeComponentQueryState(component, 'loading')
   try {
     const effectiveFilters = componentTimeRange
       ? filtersWithComponentTimeRange(component, filters, componentTimeRange)
@@ -722,12 +761,21 @@ async function refreshPipelineComponent(
       fieldLabels = Object.fromEntries((input.queryConfig?.displayFields ?? []).map((field) => [field.field, field.title]))
     }
     if (latestComponentRequest.get(component.id) !== requestId) return
-    componentDataMap.value = { ...componentDataMap.value, [component.id]: toComponentData(component, rows, fieldLabels) }
+    const queryStatus = rows.length === 0 ? 'empty' : 'success'
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [component.id]: { ...toComponentData(component, rows, fieldLabels), queryStatus },
+    }
   } catch (error) {
     if (latestComponentRequest.get(component.id) !== requestId) return
     componentDataMap.value = {
       ...componentDataMap.value,
-      [component.id]: { componentId: component.id, renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table', error: error instanceof Error ? error.message : String(error) },
+      [component.id]: {
+        componentId: component.id,
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: error instanceof Error ? error.message : String(error),
+      },
     }
   }
 }
@@ -743,10 +791,20 @@ async function refreshPipelineComponents(filters: DashboardRuntimeFilterState, i
 }
 
 /** 执行已保存脚本，并将用户确认过的结果绑定覆盖到对应组件。 */
-async function reloadScriptBindings(context: DashboardFilterContext = filterContext.value): Promise<void> {
+async function reloadScriptBindings(
+  context: DashboardFilterContext = filterContext.value,
+  componentIds?: Set<string>,
+): Promise<void> {
   if (!schema.script?.trim() || !schema.scriptBindings?.length) return
+  const bindings = schema.scriptBindings.filter((binding) => !componentIds || componentIds.has(binding.componentId))
+  if (!bindings.length) return
   const requestId = ++queryRequestSequence
-  schema.scriptBindings.forEach((binding) => latestComponentRequest.set(binding.componentId, requestId))
+  const components = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+  bindings.forEach((binding) => {
+    latestComponentRequest.set(binding.componentId, requestId)
+    const component = components.find((item) => item.id === binding.componentId)
+    if (component) writeComponentQueryState(component, 'loading')
+  })
   try {
     const created = await insightDashboardApi.execute(
       props.dashboardId,
@@ -755,6 +813,7 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
     const executionId = (created as unknown as { executionId?: string }).executionId
     if (!executionId) throw new Error('未获取到脚本执行 ID')
     let resultEnvelope: unknown
+    let completed = false
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
         status?: string
@@ -763,11 +822,13 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
       }
       if (status.status === 'SUCCEEDED') {
         resultEnvelope = status.result ? JSON.parse(status.result) : undefined
+        completed = true
         break
       }
       if (status.status === 'RESULT_REF') {
         const result = await insightDashboardApi.getExecutionResult(executionId)
         resultEnvelope = (result as unknown as { envelope?: unknown }).envelope
+        completed = true
         break
       }
       if (status.status && status.status !== 'RUNNING') {
@@ -775,10 +836,10 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
       }
       await new Promise((resolve) => setTimeout(resolve, 500))
     }
-    for (const binding of schema.scriptBindings) {
+    if (!completed) throw new Error('脚本执行等待超时')
+    for (const binding of bindings) {
       if (latestComponentRequest.get(binding.componentId) !== requestId) continue
-      const component = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
-        .find((item) => item.id === binding.componentId)
+      const component = components.find((item) => item.id === binding.componentId)
       if (!component) continue
       const envelope = parseScriptResultEnvelope(resultEnvelope)
       const adapted = resultEnvelopeToComponentData({
@@ -789,11 +850,12 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
         kpiMetrics: component.kpiMetrics,
       }, envelope)
       if (adapted.state === 'message') {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, error: adapted.message }
+        const queryStatus = isQueryTimeout(new Error(adapted.message)) ? 'timeout' : 'error'
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, queryStatus, error: adapted.message }
       } else if (adapted.state === 'empty') {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, fieldLabels: adapted.fieldLabels, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, queryStatus: 'empty', fieldLabels: adapted.fieldLabels, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
       } else if (binding.renderType === 'echarts') {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', option: adapted.option, fieldLabels: adapted.fieldLabels }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', queryStatus: 'success', option: adapted.option, fieldLabels: adapted.fieldLabels }
       } else if (binding.renderType === 'kpi') {
         const kpiList = (adapted.kpiList ?? (adapted.value === undefined ? [] : [{ name: '值', value: adapted.value }]))
           .map((item, index) => ({
@@ -805,16 +867,26 @@ async function reloadScriptBindings(context: DashboardFilterContext = filterCont
         componentDataMap.value[binding.componentId] = {
           componentId: binding.componentId,
           renderType: 'kpi',
+          queryStatus: kpiList.length > 0 ? 'success' : 'empty',
           kpi: kpiList[0],
           kpiList,
           fieldLabels: adapted.fieldLabels,
         }
       } else {
-        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', table: adapted.table, fieldLabels: adapted.fieldLabels }
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', queryStatus: adapted.table.rows.length > 0 ? 'success' : 'empty', table: adapted.table, fieldLabels: adapted.fieldLabels }
       }
     }
-  } catch (error: any) {
-    ElMessage.warning(error?.message || '脚本结果加载失败')
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    for (const binding of bindings) {
+      if (latestComponentRequest.get(binding.componentId) !== requestId) continue
+      componentDataMap.value[binding.componentId] = {
+        componentId: binding.componentId,
+        renderType: binding.renderType,
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: errorMessage,
+      }
+    }
   }
 }
 
@@ -873,8 +945,11 @@ function handleComponentTimeRangeChange(payload: { componentId: string; timeRang
 
 /** 重新加载单个组件数据（组件级时间筛选变化时） */
 async function reloadSingleComponentData(componentId: string, componentTimeRange?: TimeRangeValue): Promise<void> {
+  const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+  if (!component) return
   const requestId = ++queryRequestSequence
   latestComponentRequest.set(componentId, requestId)
+  writeComponentQueryState(component, 'loading')
   // 构建该组件专属的筛选上下文：合并全局筛选 + 组件级时间覆盖
   const context: DashboardFilterContext = {
     ...filterContext.value,
@@ -885,15 +960,40 @@ async function reloadSingleComponentData(componentId: string, componentTimeRange
   try {
     const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
     if (latestComponentRequest.get(componentId) !== requestId) return
-    const dataMap = { ...componentDataMap.value }
-    for (const item of dataList ?? []) {
-      if (item.componentId === componentId) {
-        dataMap[item.componentId] = item
-      }
+    const item = (dataList ?? []).find((candidate) => candidate.componentId === componentId)
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: item
+        ? resolvedQueryData(item)
+        : { componentId, renderType: componentRenderType(component), queryStatus: 'empty' },
     }
-    componentDataMap.value = dataMap
-  } catch {
-    ElMessage.warning(t('insight.previewDataFailed'))
+  } catch (error) {
+    if (latestComponentRequest.get(componentId) !== requestId) return
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: {
+        componentId,
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: error instanceof Error ? error.message : t('insight.previewDataFailed'),
+      },
+    }
+  }
+}
+
+function retryComponentQuery(componentId: string): void {
+  const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+  if (!component) return
+  if (readComponentDatasetPipeline(component)?.datasetInputs?.length) {
+    void refreshPipelineComponent(component, getRuntimeFilterState(), componentTimeRanges[componentId])
+    return
+  }
+  if (component.dataSource) {
+    void reloadSingleComponentData(componentId, componentTimeRanges[componentId])
+    return
+  }
+  if (schema.scriptBindings?.some((binding) => binding.componentId === componentId)) {
+    void reloadScriptBindings(filterContext.value, new Set([componentId]))
   }
 }
 

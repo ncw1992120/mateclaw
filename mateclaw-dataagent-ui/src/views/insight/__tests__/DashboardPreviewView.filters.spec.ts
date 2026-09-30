@@ -337,6 +337,98 @@ describe('DashboardPreviewView runtime filter query flow', () => {
     expect(wrapper.get('[data-test="canvas"]').text()).toContain('查询配置')
   })
 
+  it('tracks pipeline query loading and successful empty results on the component', async () => {
+    const pipeline = {
+      ...datasetComponent,
+      id: 'pipeline-empty',
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: '203', inputName: 'sales', queryConfig: {
+        displayFields: [{ field: 'region', title: '区域', role: 'dimension' }], parameterBindings: [],
+      } }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({ version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [pipeline] }] })
+    let finishQuery!: (result: unknown) => void
+    mocks.previewQueryPlan.mockReturnValueOnce(new Promise((resolve) => { finishQuery = resolve }))
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: { props: ['components', 'componentDataMap'], template: '<div data-test="canvas">{{ JSON.stringify(componentDataMap) }}</div>' },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"loading"')
+    finishQuery({ rows: [], rowCount: 0 })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"empty"')
+  })
+
+  it('marks pipeline timeouts distinctly and retries only the failed component', async () => {
+    const pipeline = {
+      ...datasetComponent,
+      id: 'pipeline-timeout',
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: '204', inputName: 'sales', queryConfig: {
+        displayFields: [{ field: 'region', title: '区域', role: 'dimension' }], parameterBindings: [],
+      } }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({ version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [pipeline] }] })
+    mocks.previewQueryPlan.mockRejectedValueOnce(new Error('查询超时')).mockResolvedValueOnce({ rows: [{ region: '华东' }], rowCount: 1 })
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: {
+          props: ['components', 'componentDataMap'], emits: ['retry-component-query'],
+          template: '<div data-test="canvas"><button data-test="retry" @click="$emit(\'retry-component-query\', \'pipeline-timeout\')" />{{ JSON.stringify(componentDataMap) }}</div>',
+        },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"timeout"')
+    await wrapper.get('[data-test="retry"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.previewQueryPlan).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"success"')
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('华东')
+  })
+
+  it('shows direct component failures locally and retries without a global-only warning', async () => {
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({ version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [legacyBoundComponent] }] })
+    let failPreview!: (error: Error) => void
+    mocks.preview.mockReturnValueOnce(new Promise((_, reject) => { failPreview = reject })).mockResolvedValueOnce([{
+      componentId: 'legacy-bound-table', renderType: 'table', table: { columns: ['region'], rows: [['华东']] },
+    }])
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: {
+          props: ['components', 'componentDataMap'], emits: ['retry-component-query'],
+          template: '<div data-test="canvas"><button data-test="retry" @click="$emit(\'retry-component-query\', \'legacy-bound-table\')" />{{ JSON.stringify(componentDataMap) }}</div>',
+        },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"loading"')
+    failPreview(new Error('数据源连接失败'))
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"error"')
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('数据源连接失败')
+    await wrapper.get('[data-test="retry"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.preview).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('"queryStatus":"success"')
+  })
+
   it('renders the Python result directly when its saved result-query fields are stale', async () => {
     const pythonComponent = {
       ...datasetComponent,
