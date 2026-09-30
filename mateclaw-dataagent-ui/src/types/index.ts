@@ -1467,6 +1467,8 @@ export interface ComponentTitleIconStyle {
   iconKey?: string
   /** SVG 线条粗细 */
   strokeWidth?: 1.5 | 2 | 2.5 | 3
+  /** 图标大小（px）；未设置时按组件类型使用默认（页签 16 / 其他 18） */
+  fontSize?: number
   /** 图标颜色模式 */
   colorMode?: 'theme' | 'custom'
   /** 自定义 HEX 颜色，仅 colorMode=custom 时使用 */

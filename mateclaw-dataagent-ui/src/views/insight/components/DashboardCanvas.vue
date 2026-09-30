@@ -771,7 +771,6 @@ function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
   } else {
     emit('update-title-icon-style', { componentId: target.componentId, titleIconStyle: style })
   }
-  clearTitleIconDialog()
 }
 
 function commitTitleEdit(id: string): void {

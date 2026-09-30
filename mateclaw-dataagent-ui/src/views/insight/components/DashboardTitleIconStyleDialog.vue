@@ -19,7 +19,7 @@
           role="radio"
           :aria-checked="!draft.iconKey"
           aria-label="使用自动匹配图标"
-          @click="draft.iconKey = undefined"
+          @click="selectIcon(undefined)"
         >
           自动
         </button>
@@ -33,7 +33,7 @@
           :aria-checked="draft.iconKey === item.key"
           :aria-label="item.label"
           :title="item.label"
-          @click="draft.iconKey = item.key"
+          @click="selectIcon(item.key)"
         >
           <el-icon :size="18"><component :is="item.component" /></el-icon>
         </button>
@@ -43,11 +43,29 @@
     <div class="style-controls style-controls-inline">
       <div class="control-row">
         <label class="control-label" for="title-icon-stroke-width">粗细</label>
-        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="粗细" style="width: 88px">
+        <el-select id="title-icon-stroke-width" v-model="draft.strokeWidth" aria-label="粗细" style="width: 88px" @change="commit">
           <el-option :value="1.5" label="纤细" />
           <el-option :value="2" label="标准" />
           <el-option :value="2.5" label="加粗" />
           <el-option :value="3" label="粗体" />
+        </el-select>
+      </div>
+      <div class="control-row">
+        <label class="control-label" for="title-icon-font-size">大小</label>
+        <el-select
+          id="title-icon-font-size"
+          v-model="draft.fontSize"
+          aria-label="大小"
+          clearable
+          placeholder="默认"
+          style="width: 88px"
+          @change="commit"
+        >
+          <el-option :value="14" label="14" />
+          <el-option :value="16" label="16" />
+          <el-option :value="18" label="18" />
+          <el-option :value="20" label="20" />
+          <el-option :value="24" label="24" />
         </el-select>
       </div>
       <div class="control-row color-control-row">
@@ -60,7 +78,7 @@
             role="radio"
             :aria-checked="draft.colorMode === 'theme'"
             aria-label="跟随主题颜色模式"
-            @click="draft.colorMode = 'theme'"
+            @click="selectColorMode('theme')"
           ><span class="color-mode-indicator" aria-hidden="true" />跟随主题</button>
           <button
             type="button"
@@ -77,14 +95,14 @@
           v-model="draft.color"
           label="自定义图标颜色"
           :suggested-colors="TEXT_COLOR_PRESETS"
+          @change="commit"
         />
       </div>
     </div>
 
     <template #footer>
       <el-button @click="reset">恢复默认</el-button>
-      <el-button @click="cancel">取消</el-button>
-      <el-button type="primary" @click="save">应用</el-button>
+      <el-button @click="close">关闭</el-button>
     </template>
   </el-dialog>
 </template>
@@ -116,27 +134,38 @@ const emit = defineEmits<{
 const defaults = (): ComponentTitleIconStyle => ({ colorMode: 'theme', strokeWidth: 2 })
 const draft = reactive<ComponentTitleIconStyle>(defaults())
 
-function enableCustomColor(): void {
-  draft.colorMode = 'custom'
-  if (!draft.color) draft.color = props.defaultColor ?? '#8c4a2f'
+/** 任一交互点实时提交：画布立即生效并持久化（无「应用」按钮）。 */
+function commit(): void {
+  emit('preview', { ...draft })
+  emit('save', { ...draft })
 }
 
-watch(draft, (style) => emit('preview', { ...style }), { deep: true })
+function selectIcon(iconKey: string | undefined): void {
+  draft.iconKey = iconKey
+  commit()
+}
+
+function selectColorMode(colorMode: 'theme' | 'custom'): void {
+  draft.colorMode = colorMode
+  if (colorMode === 'custom' && !draft.color) draft.color = props.defaultColor ?? '#8c4a2f'
+  commit()
+}
+
+const enableCustomColor = (): void => selectColorMode('custom')
 
 watch(() => props.modelValue, (visible) => {
-  if (visible) Object.assign(draft, defaults(), props.titleIconStyle ?? {})
-})
+  if (!visible) return
+  Object.assign(draft, defaults(), props.titleIconStyle ?? {})
+}, { immediate: true })
 
 function reset(): void {
+  // 清空全部键再回落默认值，避免 iconKey/color/fontSize 残留
+  for (const key of Object.keys(draft) as (keyof ComponentTitleIconStyle)[]) delete draft[key]
   Object.assign(draft, defaults())
+  commit()
 }
 
-function save(): void {
-  emit('save', { ...draft })
-  emit('update:modelValue', false)
-}
-
-function cancel(): void {
+function close(): void {
   emit('update:modelValue', false)
 }
 

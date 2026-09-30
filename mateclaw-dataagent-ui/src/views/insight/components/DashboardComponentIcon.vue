@@ -55,9 +55,11 @@ const iconStyle = computed(() => {
   const strokeWidth = [1.5, 2, 2.5, 3].includes(Number(props.titleIconStyle?.strokeWidth))
     ? Number(props.titleIconStyle?.strokeWidth)
     : 2.35
+  const fontSize = Number(props.titleIconStyle?.fontSize)
   return {
     ...style,
     ...(customColor ? { '--dashboard-icon-color': customColor } : {}),
+    ...(Number.isFinite(fontSize) && fontSize > 0 ? { '--dashboard-icon-size': `${fontSize}px` } : {}),
     '--dashboard-icon-stroke-width': `${strokeWidth}px`,
   }
 })
