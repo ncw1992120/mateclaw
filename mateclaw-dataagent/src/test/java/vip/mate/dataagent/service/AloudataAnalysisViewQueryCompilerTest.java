@@ -80,12 +80,14 @@ class AloudataAnalysisViewQueryCompilerTest {
 
         assertEquals(List.of("revenue"), body.get("metrics"));
         assertEquals(List.of("region"), body.get("dimensions"));
-        assertEquals("([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-02\")",
-                body.get("timeConstraint"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-02 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
+        assertFalse(body.containsKey("timeConstraint"));
     }
 
     @Test
-    void sendsDateRangeAsTimeConstraintWhenNoDimensionIsDisplayed() {
+    void sendsDateRangeAsSinglePartitionFilterWhenNoDimensionIsDisplayed() {
         AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
                 List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
                 null, List.of(), List.of(), List.of());
@@ -98,13 +100,14 @@ class AloudataAnalysisViewQueryCompilerTest {
 
         assertEquals(List.of("revenue"), body.get("metrics"));
         assertEquals(List.of(), body.get("dimensions"));
-        assertEquals("([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-03\")",
-                body.get("timeConstraint"));
-        assertFalse(body.containsKey("filters"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-03 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
+        assertFalse(body.containsKey("timeConstraint"));
     }
 
     @Test
-    void combinesMetricDateFiltersWithViewTimeConstraintWithoutGroupingByDate() {
+    void keepsStaticViewConstraintSeparateFromRuntimePartitionFilter() {
         AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
                 List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
                 "([metric_time__day] >= \"2026-09-01\")", List.of(), List.of(), List.of());
@@ -115,10 +118,11 @@ class AloudataAnalysisViewQueryCompilerTest {
 
         Map<String, Object> body = compiler.compile(view, request);
 
-        assertEquals("(([metric_time__day] >= \"2026-09-01\") AND ([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-03\"))",
-                body.get("timeConstraint"));
+        assertEquals("([metric_time__day] >= \"2026-09-01\")", body.get("timeConstraint"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-03 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
         assertEquals(List.of(), body.get("dimensions"));
-        assertFalse(body.containsKey("filters"));
     }
 
     @Test

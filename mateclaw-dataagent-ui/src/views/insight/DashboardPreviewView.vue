@@ -488,7 +488,7 @@ function componentRenderType(component: InsightComponent): InsightComponentData[
 
 function isQueryTimeout(error: unknown): boolean {
   const value = error as { name?: string; code?: string; message?: string } | null
-  return /timeout|timed out|超时/i.test(`${value?.name ?? ''} ${value?.code ?? ''} ${value?.message ?? error ?? ''}`)
+  return /timeout|timed.?out|超时|deadline|expired|ECONNABORTED|ETIMEDOUT/i.test(`${value?.name ?? ''} ${value?.code ?? ''} ${value?.message ?? error ?? ''}`)
 }
 
 function resolvedQueryData(data: InsightComponentData): InsightComponentData {
@@ -722,7 +722,9 @@ async function refreshPipelineComponent(
           terminalStatus = status.status
           break
         }
-        if (status.status && status.status !== 'RUNNING') throw new Error(status.error || `组件执行失败：${status.status}`)
+        if (status.status && status.status !== 'RUNNING') {
+          throw new Error(`${status.status}: ${status.error || '组件执行失败'}`)
+        }
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
       if (!terminalStatus) throw new Error('组件执行等待超时')
@@ -832,7 +834,7 @@ async function reloadScriptBindings(
         break
       }
       if (status.status && status.status !== 'RUNNING') {
-        throw new Error(status.error || `脚本执行未成功：${status.status}`)
+        throw new Error(`${status.status}: ${status.error || '脚本执行未成功'}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 500))
     }

@@ -14,6 +14,8 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dataset.DatasetFilter;
 import vip.mate.dataagent.dataset.DatasetBatch;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.DatasetReadErrorCode;
+import vip.mate.dataagent.dataset.DatasetReadException;
 import vip.mate.dataagent.dataset.AloudataMetricRows;
 import vip.mate.dataagent.dataset.DatasetSort;
 import vip.mate.dataagent.dataset.jdbc.SqlValidationService;
@@ -96,10 +98,12 @@ public class DatasetComposerController {
         query.setMetrics(metrics); query.setDimensions(dimensions);
         // filters 必须是 Aloudata 表达式字符串（如 ["[region] = \"华东\""]）；统一由
         // AloudataFilterExpressions 生成 —— 历史的 `[f] EQ ("v")` 与结构化对象在真实服务都会失败。
-        query.setFilters((request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream()
+        // metric_time 是分区字段：生成单引号 DateTrunc/Cast 专用形态（demo 实测通过，见类注释）。
+        query.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(
+                (request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream()
                 .map(AloudataFilterExpressions::of)
                 .filter(Objects::nonNull)
-                .toList());
+                .toList()));
         Set<String> sortable = new HashSet<>(metrics);
         sortable.addAll(dimensions);
         query.setOrders(toOrders(request.orders).stream().filter(order -> sortable.contains(order.field()))
@@ -109,6 +113,9 @@ public class DatasetComposerController {
         query.setLimit(limit); query.setOffset(offset);
         query.setIsQueryTotalCount(request.requestTotalCount);
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(longId(request.datasourceId), query);
+        if (response != null && response.hasBusinessFailure()) {
+            throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, response.failureDescription());
+        }
         List<Map<String, Object>> rows = AloudataMetricRows.from(response);
         Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
         boolean hasNext = total != null ? offset + rows.size() < total : rows.size() >= limit;

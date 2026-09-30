@@ -56,7 +56,11 @@ public class LocalAloudataFixtures {
     /** 筛选表达式：{@code [字段] 运算符 值}，字段可用 {@code ['字段']} 形式。 */
     private static final Pattern CONDITION = Pattern.compile(
             "\\['?([^'\\]]+)'?\\]\\s*(<>|>=|<=|=|>|<|IN|NotIn)\\s*(.+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern FIELD_REFERENCE = Pattern.compile("\\['?([^'\\]]+)'?\\]");
+    /** 指标日期分区形态：{@code DateTrunc(["字段"], "DAY") op (DateTrunc(Cast("<ts>", "TIMESTAMP"), "DAY"))}。 */
+    private static final Pattern DATE_TRUNC_CONDITION = Pattern.compile(
+            "(?i)DateTrunc\\(\\[\"?'?([^\"'\\]]+)\"?'?\\],\\s*\"[^\"]+\"\\)\\s*(<>|>=|<=|=|>|<)"
+                    + "\\s*\\(?\\s*DateTrunc\\(\\s*Cast\\(\"([^\"]*)\",\\s*\"TIMESTAMP\"\\),\\s*\"[^\"]+\"\\)\\s*\\)?");
+    private static final Pattern FIELD_REFERENCE = Pattern.compile("\\[\"?'?([^\"'\\]]+)\"?'?\\]");
     private static final Pattern AGGREGATION = Pattern.compile(
             "\\s*(sum|avg|average|min|max|count)\\s*\\(", Pattern.CASE_INSENSITIVE);
 
@@ -681,6 +685,11 @@ public class LocalAloudataFixtures {
         while (matcher.find()) {
             supportedClauses.add(matcher.group());
         }
+        // 指标日期分区形态子句（DateTrunc/Cast）同样可解析，交给 parseConditions 统一处理
+        Matcher trunc = DATE_TRUNC_CONDITION.matcher(expression);
+        while (trunc.find()) {
+            supportedClauses.add(trunc.group());
+        }
         if (supportedClauses.isEmpty() && !expression.matches("(?is).*\\b(dateTrunc|dateadd)\\s*\\(.*")) {
             throw new InvalidFilterExpressionException(expression);
         }
@@ -707,13 +716,20 @@ public class LocalAloudataFixtures {
                 log.warn("[local-mock] 筛选表达式不支持 OR: {}", clause);
                 throw new InvalidFilterExpressionException(expression);
             }
+            Matcher trunc = DATE_TRUNC_CONDITION.matcher(clause);
+            if (trunc.matches()) {
+                // 指标日期分区条件：行值与 Cast 值都按 DAY 对齐（截取日期部分）再比较
+                conditions.add(new Condition(trunc.group(1), trunc.group(2).toUpperCase(Locale.ROOT),
+                        List.of(dayPart(trunc.group(3))), true));
+                continue;
+            }
             Matcher matcher = CONDITION.matcher(clause);
             if (!matcher.matches()) {
                 log.warn("[local-mock] 筛选表达式片段无法解析: {}", clause);
                 throw new InvalidFilterExpressionException(expression);
             }
             conditions.add(new Condition(matcher.group(1), matcher.group(2).toUpperCase(Locale.ROOT),
-                    unquote(matcher.group(3))));
+                    unquote(matcher.group(3)), false));
         }
         return conditions;
     }
@@ -740,10 +756,16 @@ public class LocalAloudataFixtures {
         return values;
     }
 
+    /** 取时间字符串的日期部分（前 10 位）；已是裸日期或非时间值原样返回。 */
+    private static String dayPart(String value) {
+        return value.length() > 10 ? value.substring(0, 10) : value;
+    }
+
     /** 单个筛选条件：字段 + 运算符 + 取值列表（IN/NotIn 多个，其余取首个）。 */
-    private record Condition(String field, String operator, List<String> values) {
+    private record Condition(String field, String operator, List<String> values, boolean partitionDay) {
         private boolean matches(Object actual) {
             String text = actual == null ? "" : String.valueOf(actual);
+            if (partitionDay) text = dayPart(text);
             return switch (operator) {
                 case "=" -> values.size() == 1 && text.equals(values.get(0));
                 case "<>" -> values.size() == 1 && !text.equals(values.get(0));

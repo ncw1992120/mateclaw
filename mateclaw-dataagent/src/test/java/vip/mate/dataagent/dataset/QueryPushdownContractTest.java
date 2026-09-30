@@ -98,7 +98,7 @@ class QueryPushdownContractTest {
         response.setData(null);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, mock(vip.mate.dataagent.repository.AloudataMetricMapper.class), mock(vip.mate.dataagent.repository.AloudataDimensionMapper.class), service, new com.fasterxml.jackson.databind.ObjectMapper());
         List<DatasetFilter> filters = List.of(
                 new DatasetFilter("strategy_id", "dimension", "in", List.of("A", "B")),
                 new DatasetFilter("metric_date", "dimension", "gte", "2026-09-01"),
@@ -133,7 +133,7 @@ class QueryPushdownContractTest {
         dataset.setSourceConfig("{\"dimensions\":[\"strategy_id\"],\"metrics\":[\"in_account\"]}");
         when(mapper.selectById(7L)).thenReturn(dataset);
         when(service.queryMetrics(eq(3L), any())).thenReturn(new AloudataMetricQueryResponse());
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, mock(vip.mate.dataagent.repository.AloudataMetricMapper.class), mock(vip.mate.dataagent.repository.AloudataDimensionMapper.class), service, new com.fasterxml.jackson.databind.ObjectMapper());
         DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "m", List.of(), List.of(),
                         List.of(new DatasetSort("computed_field", "desc")), 100, 0, Map.of(), false));
@@ -161,7 +161,7 @@ class QueryPushdownContractTest {
         response.setData(data);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, mock(vip.mate.dataagent.repository.AloudataMetricMapper.class), mock(vip.mate.dataagent.repository.AloudataDimensionMapper.class), service, new com.fasterxml.jackson.databind.ObjectMapper());
         DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "m", List.of(), List.of(), List.of(), 100, 0, Map.of(), true));
 
@@ -185,7 +185,7 @@ class QueryPushdownContractTest {
         response.setData(data);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, service, new com.fasterxml.jackson.databind.ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, mock(vip.mate.dataagent.repository.AloudataMetricMapper.class), mock(vip.mate.dataagent.repository.AloudataDimensionMapper.class), service, new com.fasterxml.jackson.databind.ObjectMapper());
         DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "m", List.of(), List.of(), List.of(), 100, 200, Map.of(), true));
 

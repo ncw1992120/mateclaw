@@ -36,9 +36,8 @@ public class AloudataAnalysisViewQueryCompiler {
                         "指标视图不支持字段筛选: " + filter.field());
             }
             String expression = toExpression(filter);
-            if ("metric_time".equals(filter.field()) && "dimension".equalsIgnoreCase(filter.role())) {
-                // metric_time controls the interval, not output grain. Keeping it in `filters` makes
-                // Aloudata apply its default metric-time grouping when dimensions is empty.
+            if (AloudataFilterExpressions.METRIC_TIME_FIELD.equals(filter.field())) {
+                // 分区范围条件要合并成 filters 的单条 DateTrunc/Cast 表达式，不能拆成多个数组项。
                 metricTimeFilters.add(expression);
             } else {
                 filters.add(expression);
@@ -60,8 +59,9 @@ public class AloudataAnalysisViewQueryCompiler {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("metrics", selectedNames(view.metrics(), projectedSet));
         body.put("dimensions", selectedNames(view.dimensions(), projectedSet));
+        filters.addAll(AloudataFilterExpressions.combineMetricTimeExpressions(metricTimeFilters));
         if (!filters.isEmpty()) body.put("filters", filters);
-        String timeConstraint = combineTimeConstraints(view.timeConstraint(), metricTimeFilters);
+        String timeConstraint = combineTimeConstraints(view.timeConstraint());
         if (timeConstraint != null) body.put("timeConstraint", timeConstraint);
         if (request.limit() != null) body.put("limit", request.limit());
         if (request.offset() != null) body.put("offset", request.offset());
@@ -71,18 +71,9 @@ public class AloudataAnalysisViewQueryCompiler {
         return Map.copyOf(body);
     }
 
-    private String combineTimeConstraints(String viewTimeConstraint, List<String> metricTimeFilters) {
-        List<String> constraints = new ArrayList<>();
-        if (viewTimeConstraint != null && !viewTimeConstraint.isBlank()) {
-            constraints.add(viewTimeConstraint.trim());
-        }
-        if (!metricTimeFilters.isEmpty()) {
-            constraints.add(metricTimeFilters.size() == 1
-                    ? metricTimeFilters.get(0)
-                    : "(" + String.join(" AND ", metricTimeFilters) + ")");
-        }
-        if (constraints.isEmpty()) return null;
-        return constraints.size() == 1 ? constraints.get(0) : "(" + String.join(" AND ", constraints) + ")";
+    private String combineTimeConstraints(String viewTimeConstraint) {
+        if (viewTimeConstraint == null || viewTimeConstraint.isBlank()) return null;
+        return viewTimeConstraint.trim();
     }
 
     /** 展示列是输出契约；其余指标/维度不进入查询，时间筛选字段可只过滤而不参与分组。 */

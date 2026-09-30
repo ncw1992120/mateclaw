@@ -68,11 +68,11 @@
       <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
     </div>
 
-    <div class="canvas-grid-stage" :style="canvasZoomStyle">
+    <div class="canvas-grid-stage" :style="editable ? canvasZoomStyle : undefined">
       <GridLayout
         v-if="gridLayout.length > 0"
         :layout="gridLayout"
-        :col-num="24"
+        :col-num="editable ? GRID_COLUMN_COUNT : previewColumnCount"
         :row-height="30"
         :transform-scale="canvasZoom"
         :is-draggable="editable && !isCustomResizing"
@@ -351,13 +351,29 @@ const props = withDefaults(defineProps<{
 
 /** 画布根元素（drop 落点换算用） */
 const canvasRef = ref<HTMLElement | null>(null)
+/** 栅格总列数（与 GridLayout 的 col-num 一致） */
+const GRID_COLUMN_COUNT = 24
 const canvasZoom = ref(1)
 const canvasZoomInput = ref('100')
-const canvasZoomStyle = computed(() => props.editable ? {
-  zoom: canvasZoom.value,
-  width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
-  minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
-} : undefined)
+/** 编辑态舞台样式：有组件时用固定最小宽度画布（配合缩放工具栏）；空画布不锁宽度，铺满浏览器宽度。 */
+const canvasZoomStyle = computed(() => {
+  if (!props.editable) return undefined
+  if (gridLayout.value.length === 0) {
+    return { minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px` }
+  }
+  return {
+    zoom: canvasZoom.value,
+    width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+    minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+  }
+})
+
+/** 预览态栅格列数：按内容实际占用的最大列数收拢栅格，使卡片群铺满画布宽度（随视口等比缩放、天然居中）；
+ *  编辑态固定 24 列（与编辑器拖拽/对齐逻辑一致）。 */
+const previewColumnCount = computed(() => {
+  const spanned = gridLayout.value.map((item) => item.x + item.w)
+  return Math.min(GRID_COLUMN_COUNT, Math.max(1, ...spanned, 1))
+})
 
 function setCanvasZoom(value: number): void {
   canvasZoom.value = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(value * 100) / 100))

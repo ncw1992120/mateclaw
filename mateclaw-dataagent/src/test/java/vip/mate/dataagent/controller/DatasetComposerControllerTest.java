@@ -22,6 +22,28 @@ import static org.mockito.Mockito.*;
 
 class DatasetComposerControllerTest {
     @Test
+    void aloudataMetricsDraftPreviewDoesNotReturnBusinessFailureAsEmptySuccess() throws Exception {
+        AloudataService aloudata = mock(AloudataService.class);
+        AloudataMetricQueryResponse response = new ObjectMapper().readValue(
+                "{\"code\":\"500\",\"detailErrorMsg\":\"invalid metric projection\"}",
+                AloudataMetricQueryResponse.class);
+        when(aloudata.queryMetrics(eq(3L), any())).thenReturn(response);
+        DatasetComposerController controller = new DatasetComposerController(
+                mock(DatasetManageService.class), mock(SqlValidationService.class), new ObjectMapper(),
+                mock(WorkspaceGuard.class), mock(DatasourceMapper.class), new HttpApiRequestPolicy(true),
+                aloudata, mock(HttpApiDatasetAdapter.class), mock(FileDatasetAdapter.class),
+                mock(AloudataAnalysisViewAdapter.class));
+        DatasetComposerController.DraftRequest request = new DatasetComposerController.DraftRequest();
+        request.setSourceType("ALOUDATA_METRICS");
+        request.setDatasourceId("3");
+        request.setSourceConfig(Map.of("metrics", List.of("revenue"), "dimensions", List.of()));
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> controller.preview(request));
+
+        assertTrue(error.getMessage().contains("invalid metric projection"));
+    }
+
+    @Test
     void aloudataMetricsDraftPreviewConvertsColumnarResponseToRows() {
         AloudataService aloudata = mock(AloudataService.class);
         AloudataMetricQueryResponse response = new AloudataMetricQueryResponse();

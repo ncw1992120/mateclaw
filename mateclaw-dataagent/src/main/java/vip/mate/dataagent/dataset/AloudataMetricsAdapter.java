@@ -1,22 +1,32 @@
 package vip.mate.dataagent.dataset;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
+import vip.mate.dataagent.model.AloudataDimensionEntity;
+import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasetEntity;
+import vip.mate.dataagent.repository.AloudataDimensionMapper;
+import vip.mate.dataagent.repository.AloudataMetricMapper;
 import vip.mate.dataagent.repository.DatasetMapper;
 import vip.mate.dataagent.service.AloudataService;
 
 import java.util.*;
 
 /** Aloudata 指标&维度输入 Adapter；查询条件转换为 Aloudata 表达式。 */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     private final DatasetMapper datasetMapper;
+    private final AloudataMetricMapper aloudataMetricMapper;
+    private final AloudataDimensionMapper aloudataDimensionMapper;
     private final AloudataService aloudataService;
     private final ObjectMapper mapper;
 
@@ -25,10 +35,35 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     @Override public DatasetInputDescriptor describe(DatasetAccessContext context, long datasetId) {
         DatasetEntity dataset = require(context, datasetId);
         Map<String, Object> config = config(dataset);
+        // 展示字段标题默认取 Aloudata 平台的「指标名称/维度名称」（metricDisplayName/dimDisplayName），
+        // 未同步或平台未配置中文名时回退技术名。
+        Map<String, String> displayNames = aloudataDisplayNames(dataset.getDatasourceId());
         List<DatasetColumn> columns = new ArrayList<>();
-        strings(config.get("dimensions")).forEach(name -> columns.add(new DatasetColumn(name, name, "STRING", true, "dimension")));
-        strings(config.get("metrics")).forEach(name -> columns.add(new DatasetColumn(name, name, "DECIMAL", true, "measure")));
+        strings(config.get("dimensions")).forEach(name -> columns.add(new DatasetColumn(name, displayNames.getOrDefault(name, name), "STRING", true, "dimension")));
+        strings(config.get("metrics")).forEach(name -> columns.add(new DatasetColumn(name, displayNames.getOrDefault(name, name), "DECIMAL", true, "measure")));
         return new DatasetInputDescriptor(datasetId, dataset.getName(), DatasetSourceType.ALOUDATA_METRICS, columns, dataset.getRowCount(), Map.of("datasourceId", dataset.getDatasourceId()), null);
+    }
+
+    /** 技术名 → 平台展示名映射；元数据查询失败不阻断数据集描述。 */
+    private Map<String, String> aloudataDisplayNames(Long datasourceId) {
+        Map<String, String> result = new HashMap<>();
+        try {
+            aloudataMetricMapper.selectList(new LambdaQueryWrapper<AloudataMetricEntity>()
+                            .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                            .select(AloudataMetricEntity::getMetricName, AloudataMetricEntity::getMetricDisplayName))
+                    .forEach(metric -> putIfNotBlank(result, metric.getMetricName(), metric.getMetricDisplayName()));
+            aloudataDimensionMapper.selectList(new LambdaQueryWrapper<AloudataDimensionEntity>()
+                            .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
+                            .select(AloudataDimensionEntity::getDimName, AloudataDimensionEntity::getDimDisplayName))
+                    .forEach(dim -> putIfNotBlank(result, dim.getDimName(), dim.getDimDisplayName()));
+        } catch (Exception e) {
+            log.warn("[Aloudata指标&维度] 读取平台展示名失败 datasourceId={}: {}", datasourceId, e.getMessage());
+        }
+        return result;
+    }
+
+    private void putIfNotBlank(Map<String, String> map, String name, String displayName) {
+        if (name != null && !name.isBlank() && displayName != null && !displayName.isBlank()) map.put(name, displayName);
     }
 
     @Override public DatasetBatch read(DatasetAccessContext context, DatasetReadRequest request) {
@@ -42,7 +77,10 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         List<String> metrics = configuredMetrics;
         List<String> dimensions = requestedFields(configuredDimensions, request.columns());
         query.setMetrics(metrics); query.setDimensions(dimensions);
-        query.setFilters(request.filters().stream().map(this::expression).toList());
+        // metric_time（分区字段）条件生成单引号 DateTrunc/Cast 专用形态进 filters
+        // （demo 环境实测通过；无引号/双引号字段一律 SM_02_0006/0014，见 AloudataFilterExpressions 类注释）。
+        query.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(
+                request.filters().stream().map(this::expression).toList()));
         // orders 仅当字段属于已选指标/维度时下发；Aloudata 要求排序字段包含在 metrics/dimensions 中
         List<Map<String, String>> orders = ordersExpression(metrics, dimensions, request.orders());
         query.setOrders(orders.isEmpty() ? null : orders);
@@ -65,11 +103,9 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     }
 
     private void requireSuccess(AloudataMetricQueryResponse response) {
-        if (response == null) return;
-        // Aloudata 包络：code 是字符串 "200"，错误信息在 errorMsg/detailErrorMsg
-        if (response.getCode() != null && !"200".equals(response.getCode())) {
+        if (response != null && response.hasBusinessFailure()) {
             throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
-                    "Aloudata 指标查询失败: " + response.getErrorMsg());
+                    response.failureDescription());
         }
     }
 
@@ -104,11 +140,13 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     private Map<String, Object> config(DatasetEntity dataset) { try { return mapper.readValue(dataset.getSourceConfig(), new TypeReference<>() {}); } catch (Exception e) { return Map.of(); } }
     private List<String> strings(Object value) { return value == null ? List.of() : mapper.convertValue(value, new TypeReference<>() {}); }
 
-    /** 条件转 Aloudata 表达式：集合值逐项展开（[field] IN ("A","B")），标量值单值括号。 */
-    String expression(DatasetFilter filter) {
+    /** 保留既有普通维度过滤器的 wire 语法，仅将 metric_time 委托给分区字段专用编译器。 */
+    private String expression(DatasetFilter filter) {
+        if (AloudataFilterExpressions.METRIC_TIME_FIELD.equals(filter.field())) {
+            return AloudataFilterExpressions.of(filter);
+        }
         String field = "[" + filter.field() + "]";
-        String op = filter.operator().toUpperCase(Locale.ROOT).replace("_IN", " IN").replace("_NULL", " NULL");
-        op = switch (filter.operator().toLowerCase(Locale.ROOT)) {
+        String operator = switch (filter.operator().toLowerCase(Locale.ROOT)) {
             case "eq" -> "=";
             case "neq" -> "<>";
             case "gt" -> ">";
@@ -120,22 +158,21 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
             case "between" -> "BETWEEN";
             case "is_null" -> "IS NULL";
             case "is_not_null" -> "IS NOT NULL";
-            case "contains" -> "IN";
+            case "contains" -> throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
+                    "Aloudata 语义层不支持 contains 过滤，请改用等值/集合条件");
             default -> throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
                     "Aloudata 指标查询不支持过滤操作: " + filter.operator());
         };
-        if ("contains".equals(filter.operator().toLowerCase(Locale.ROOT))) {
-            // 语义层不支持 LIKE：contains 退化为对包含该子串的精确集合匹配不可行 → 明确失败而不是丢语义
-            throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
-                    "Aloudata 语义层不支持 contains 过滤，请改用等值/集合条件");
+        if (filter.value() instanceof Collection<?> values) {
+            return field + " " + operator + " (" + values.stream().map(this::literal)
+                    .collect(java.util.stream.Collectors.joining(",")) + ")";
         }
-        String values;
-        if (filter.value() instanceof Collection<?> collection) {
-            values = collection.stream().map(v -> "\"" + String.valueOf(v).replace("\"", "\\\"") + "\"")
-                    .collect(java.util.stream.Collectors.joining(","));
-        } else {
-            values = "\"" + String.valueOf(filter.value()).replace("\"", "\\\"") + "\"";
-        }
-        return field + " " + op + " (" + values + ")";
+        return field + " " + operator + " (" + literal(filter.value()) + ")";
+    }
+
+    private String literal(Object value) {
+        if (value == null) return "null";
+        if (value instanceof Number || value instanceof Boolean) return String.valueOf(value);
+        return "\"" + String.valueOf(value).replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 }

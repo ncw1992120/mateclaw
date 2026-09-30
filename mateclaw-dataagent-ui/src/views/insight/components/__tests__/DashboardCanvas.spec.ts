@@ -99,6 +99,31 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.findComponent({ name: 'AiAnalysisWidget' }).props('componentData')).toMatchObject({ renderType: 'aiAnalysis' })
   })
 
+  it('renders query states inside the affected component and exposes retry only for failures', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [component], editable: false,
+        componentDataMap: { 'kpi-1': { componentId: 'kpi-1', renderType: 'kpi', queryStatus: 'timeout', error: '查询等待超时' } },
+      },
+      global: {
+        stubs,
+        plugins: [createI18n({
+          legacy: false, locale: 'zh-CN', missingWarn: false, fallbackWarn: false,
+          messages: { 'zh-CN': { insight: { componentQueryTimeout: '组件查询超时', componentQueryRetry: '重试' } } },
+        })],
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'ComponentQueryState' }).text()).toContain('组件查询超时')
+    expect(wrapper.findComponent({ name: 'KpiCardWidget' }).exists()).toBe(false)
+    await wrapper.get('.query-state-retry').trigger('click')
+    expect(wrapper.emitted('retry-component-query')?.[0]).toEqual(['kpi-1'])
+
+    await wrapper.setProps({ componentDataMap: { 'kpi-1': { componentId: 'kpi-1', renderType: 'kpi', queryStatus: 'empty' } } })
+    expect(wrapper.findComponent({ name: 'ComponentQueryState' }).exists()).toBe(true)
+    expect(wrapper.find('.query-state-retry').exists()).toBe(false)
+  })
+
   it('prefers dataset display names over stale runtime labels for every data component', () => {
     const components = [
       { ...component, config: { datasetPipeline: { datasetInputs: [{ datasetId: 'orders', alias: 'orders', fieldMappings: [{ source: 'raw_amount', target: '销售额' }] }] } } },
@@ -441,17 +466,26 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.get('[aria-label="从组件库添加组件"]').exists()).toBe(true)
   })
 
-  it('keeps an expanded workspace so the canvas can scroll in both directions', () => {
+  it('keeps an expanded workspace for populated canvases and fits an empty canvas to the viewport', () => {
     expect(DASHBOARD_CANVAS_MIN_WIDTH).toBeGreaterThan(1024)
     expect(DASHBOARD_CANVAS_MIN_HEIGHT).toBeGreaterThan(768)
 
-    const wrapper = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
-    const canvas = wrapper.get('.dashboard-canvas')
-    expect(canvas.attributes('data-canvas-workspace')).toBe('expanded')
-    expect(canvas.attributes('style') ?? '').not.toContain('min-width:')
-    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom:')
-    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain(`width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
-    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
+    // 空画布（默认状态）：不锁宽度，铺满浏览器宽度
+    const empty = mount(DashboardCanvas, { props: { components: [], editable: true }, global: { stubs, plugins: [i18n] } })
+    const emptyCanvas = empty.get('.dashboard-canvas')
+    expect(emptyCanvas.attributes('data-canvas-workspace')).toBe('expanded')
+    expect(emptyCanvas.attributes('style') ?? '').not.toContain('min-width:')
+    const emptyStageStyle = empty.get('.canvas-grid-stage').attributes('style') ?? ''
+    expect(emptyStageStyle).not.toContain('zoom:')
+    expect(emptyStageStyle).not.toContain('width:')
+    expect(emptyStageStyle).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
+
+    // 已有组件的画布：保留固定最小宽度 + 缩放，保证双向滚动
+    const populated = mount(DashboardCanvas, { props: { components: [component], editable: true }, global: { stubs, plugins: [i18n] } })
+    const stageStyle = populated.get('.canvas-grid-stage').attributes('style') ?? ''
+    expect(stageStyle).toContain('zoom:')
+    expect(stageStyle).toContain(`width: ${DASHBOARD_CANVAS_MIN_WIDTH}px`)
+    expect(stageStyle).toContain(`min-height: ${DASHBOARD_CANVAS_MIN_HEIGHT}px`)
   })
 
   it('emits copy and paste commands from canvas keyboard shortcuts', async () => {
