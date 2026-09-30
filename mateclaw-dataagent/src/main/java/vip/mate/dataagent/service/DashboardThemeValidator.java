@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 /** 仪表盘主题和 KPI 视觉配置的结构校验，不执行查询，也不接受任意 CSS/SVG。 */
 public final class DashboardThemeValidator {
-    private static final Set<String> PRESETS = Set.of("blue", "indigo", "teal", "amber", "dark-data", "rose", "coral", "orange", "gold", "burgundy");
+    private static final Set<String> PRESETS = Set.of("default", "blue", "indigo", "teal", "amber", "dark-data", "rose", "coral", "orange", "gold", "burgundy");
     private static final Set<String> MODES = Set.of("preset", "custom");
     private static final Set<String> COLOR_MODES = Set.of("theme", "custom");
     private static final Set<String> RADII = Set.of("small", "medium", "large");

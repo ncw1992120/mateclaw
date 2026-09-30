@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class InsightDashboardThemeServiceTest {
     @Test
     void acceptsAllRegisteredPresetsAndLegacySchema() {
-        for (String preset : List.of("blue", "indigo", "teal", "amber", "dark-data", "rose", "coral", "orange", "gold", "burgundy")) {
+        for (String preset : List.of("default", "blue", "indigo", "teal", "amber", "dark-data", "rose", "coral", "orange", "gold", "burgundy")) {
             InsightDashboardSchemaDTO schema = new InsightDashboardSchemaDTO();
             InsightDashboardSchemaDTO.Theme theme = new InsightDashboardSchemaDTO.Theme();
             theme.setMode("preset");
