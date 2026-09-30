@@ -9,6 +9,8 @@ const fixture = vi.hoisted(() => ({
   datasets: [
     { id: 'api-dataset-1', name: '已配置接口', sourceType: 'api' },
     { id: 'jdbc-dataset-1', name: '已配置 JDBC', sourceType: 'jdbc' },
+    { id: 'preview-dashboard-1_sales_hash', name: 'preview_dashboard-1_sales_hash', description: '看板预览自动确认的数据集：销售组件', sourceType: 'aloudata' },
+    { id: 'preview-business-dataset', name: 'preview_业务数据集', description: '用户创建的真实数据集', sourceType: 'aloudata' },
   ],
   datasources: [
     { id: 'api-source-1', name: '接口连接', sourceType: 'api' },
@@ -49,6 +51,30 @@ const DialogStub = defineComponent({
 afterEach(() => vi.clearAllMocks())
 
 describe('添加数据集数据源树', () => {
+  it('不在可复用数据集列表中展示仪表盘预览自动生成的数据集', async () => {
+    const wrapper = mount(DataSourceTreeDialog, {
+      global: {
+        stubs: {
+          'el-dialog': DialogStub,
+          'el-input': true,
+          'el-icon': true,
+          Search: true,
+          Folder: true,
+          Coin: true,
+        },
+        components: { 'el-tree': TreeStub },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    const treeData = wrapper.findComponent(TreeStub).props('data') as Array<Record<string, any>>
+    const flatten = (nodes: any[]): any[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])])
+    expect(flatten(treeData).some((node) => node.label === 'preview_dashboard-1_sales_hash')).toBe(false)
+    expect(flatten(treeData).some((node) => node.label === 'preview_业务数据集')).toBe(true)
+    wrapper.unmount()
+  })
+
   it('将接口快捷项和已配置接口直接放在根层，其他类型仍按类别分组', async () => {
     const wrapper = mount(DataSourceTreeDialog, {
       global: {
