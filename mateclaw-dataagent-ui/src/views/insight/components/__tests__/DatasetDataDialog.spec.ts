@@ -806,3 +806,37 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
     expect(request.filters).toEqual([])
   })
 })
+
+describe('查看数据弹窗 · 限制条数', () => {
+  it('未分页时默认 10000 条进入查询请求，越界输入收敛到上限 100000', async () => {
+    const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }))
+
+    const limitInput = wrapper.get('[data-testid="query-limit"]')
+    expect((limitInput.element as HTMLInputElement).value).toBe('10000')
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 10000, offset: 0 }))
+
+    await limitInput.setValue('200000')
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100000, offset: 0 }))
+    wrapper.unmount()
+  })
+
+  it('分页模式下限制条数禁用，返回量由每页条数接管', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: {
+        ...queryConfig(),
+        paginationPolicy: { enabled: true, defaultPageSize: 5, maxPageSize: 50, returnTotalCount: false },
+      },
+    }))
+
+    expect(wrapper.get('[data-testid="query-limit"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 5, offset: 0 }))
+    wrapper.unmount()
+  })
+})

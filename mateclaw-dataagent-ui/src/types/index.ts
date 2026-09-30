@@ -1818,6 +1818,8 @@ export interface DatasetLastQueryState {
   sort: { field: string; direction: 'asc' | 'desc' } | null
   page: number
   pageSize: number
+  /** 未分页时的取数上限（限制条数）；缺省回退组件默认值 */
+  queryLimit?: number
 }
 
 /** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */

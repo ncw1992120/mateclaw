@@ -53,7 +53,11 @@ import java.net.URI;
 @RequiredArgsConstructor
 @Tag(name = "数据集编排")
 public class DatasetComposerController {
-    private static final int MAX_DRAFT_PAGE_SIZE = 500;
+    /**
+     * 草稿预览单次取数上限。前端「数据集-查看数据」的限制条数默认 10000、上限 100000，
+     * 依赖本值放行；未传 limit 的旧调用方仍走各 preview 方法的默认值（20）。
+     */
+    private static final int MAX_DRAFT_PAGE_SIZE = 100_000;
     private final DatasetManageService datasets;
     private final SqlValidationService sqlValidation;
     private final ObjectMapper mapper;

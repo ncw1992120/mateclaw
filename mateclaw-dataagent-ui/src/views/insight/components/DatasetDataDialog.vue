@@ -163,6 +163,21 @@
       <!-- ④ 查询：紧跟在筛选条件下方 —— 改完条件顺手点，视线不用跳到弹窗底部 -->
       <div class="dd-query-row">
         <span class="dd-hint">{{ queryHint }}</span>
+        <label class="dd-limit">
+          <span>限制条数</span>
+          <el-input-number
+            v-model="queryLimit"
+            :min="1"
+            :max="100000"
+            :step="1000"
+            :disabled="paginationEnabled"
+            size="small"
+            controls-position="right"
+            data-testid="query-limit"
+            aria-label="限制条数"
+            :title="paginationEnabled ? '分页模式下由每页条数控制返回量' : '单次查询最多返回的行数，默认 10000'"
+          />
+        </label>
         <el-button data-testid="run-query" type="primary" :loading="loading" :disabled="queryDisabled" @click="query()">查询</el-button>
       </div>
       <el-alert
@@ -299,6 +314,10 @@ const ui = state.ui
 /** 未配置分页时沿用预览安全批次，滚动到底继续追加。 */
 const DEFAULT_BATCH_SIZE = 50
 
+/** 未分页时的「限制条数」：默认值与上限（上限与后端数据集预览上限保持一致） */
+const DEFAULT_QUERY_LIMIT = 10000
+const MAX_QUERY_LIMIT = 100000
+
 const loading = ref(false)
 const error = ref('')
 const componentValidationError = ref('')
@@ -315,6 +334,8 @@ const sortState = ref<QuerySortSpec | null>(null)
 const currentPage = ref(1)
 const currentPageSize = ref(DEFAULT_BATCH_SIZE)
 const pageDraft = ref('1')
+/** 未分页模式的取数上限（限制条数），默认 10000、上限 100000；分页模式下由每页条数接管 */
+const queryLimit = ref(DEFAULT_QUERY_LIMIT)
 const stateReady = ref(false)
 /** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
 let requestSequence = 0
@@ -365,6 +386,13 @@ const pageSizeOptions = computed(() => {
   const initial = Math.min(max, Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE))
   return [...new Set([initial, 1, 2, 5, 10, 20, 50, 100, 200, 500].filter((size) => size <= max))].sort((a, b) => a - b)
 })
+
+/** 「限制条数」收敛：空/非数回退默认值，限制在 1..100000 */
+function clampQueryLimit(value: number | null | undefined): number {
+  const normalized = Math.trunc(Number(value))
+  if (!Number.isFinite(normalized)) return DEFAULT_QUERY_LIMIT
+  return Math.min(Math.max(normalized, 1), MAX_QUERY_LIMIT)
+}
 
 function isFieldSortable(field: string): boolean {
   return resultDisplayFieldList().some((item) => item.field === field)
@@ -523,7 +551,7 @@ const currentSignature = computed(() =>
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
     queryFilterRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value, enabled: row.enabled })),
     sortState.value,
-    paginationEnabled.value ? [currentPage.value, currentPageSize.value] : null,
+    paginationEnabled.value ? [currentPage.value, currentPageSize.value] : queryLimit.value,
   ]),
 )
 
@@ -542,6 +570,7 @@ function persistQueryState(): void {
     sort: sortState.value ? { ...sortState.value } : null,
     page: currentPage.value,
     pageSize: currentPageSize.value,
+    queryLimit: queryLimit.value,
   }
   // 查询条件和值是轻量的用户配置：随数据集输入写入仪表盘 Schema，跨刷新/登录恢复。
   props.dataset.lastQueryState = queryState
@@ -555,6 +584,7 @@ watch(
     sortState.value,
     currentPage.value,
     currentPageSize.value,
+    queryLimit.value,
   ]),
   persistQueryState,
 )
@@ -607,7 +637,7 @@ async function fetchRows(reset: boolean): Promise<void> {
       return
     }
     const parameters = { ...namedParameters(), ...buildExecutionParameters(enabledFilterRows) }
-    const limit = paginationEnabled.value ? currentPageSize.value : DEFAULT_BATCH_SIZE
+    const limit = paginationEnabled.value ? currentPageSize.value : clampQueryLimit(queryLimit.value)
     const offset = paginationEnabled.value
       ? (currentPage.value - 1) * currentPageSize.value
       : reset ? 0 : rows.value.length
@@ -781,6 +811,7 @@ async function open(): Promise<void> {
   sortState.value = sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
   currentPage.value = 1
   pageDraft.value = '1'
+  queryLimit.value = DEFAULT_QUERY_LIMIT
   currentPageSize.value = Math.min(
     Math.max(1, paginationPolicy.value?.defaultPageSize || DEFAULT_BATCH_SIZE),
     Math.max(1, paginationPolicy.value?.maxPageSize || 500),
@@ -815,6 +846,7 @@ async function open(): Promise<void> {
       Math.max(1, cachedState.pageSize || currentPageSize.value),
       Math.max(1, paginationPolicy.value?.maxPageSize || 500),
     )
+    queryLimit.value = clampQueryLimit(cachedState.queryLimit ?? queryLimit.value)
     currentPage.value = paginationEnabled.value ? Math.max(1, cachedState.page || 1) : 1
     pageDraft.value = String(currentPage.value)
   }
@@ -1021,6 +1053,18 @@ watch(() => ui.dataDialog.visible, (visible) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.dd-query-row .dd-hint {
+  flex: 1;
+  min-width: 0;
+}
+.dd-limit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--db-text-secondary, #6b7280);
+  white-space: nowrap;
 }
 .dd-result-actions {
   display: flex;
