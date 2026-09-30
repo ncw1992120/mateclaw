@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InsightComponent, InsightCombinationChild } from '@/types'
 import { useDashboardFilterContext } from '../useDashboardFilterContext'
 
@@ -20,6 +20,8 @@ function runtimeState(context: ReturnType<typeof useDashboardFilterContext>) {
     }>
   }).getRuntimeFilterState()
 }
+
+afterEach(() => vi.useRealTimers())
 
 describe('useDashboardFilterContext runtime state', () => {
   it('keeps independent latest values by filter id and does not reapply defaults', () => {
@@ -104,5 +106,44 @@ describe('useDashboardFilterContext runtime state', () => {
       scope: 'scoped',
       targetComponentIds: ['nested-table'],
     })
+  })
+
+  it.each([
+    ['yesterday', '2026-09-28', '2026-09-28'],
+    ['today', '2026-09-29', '2026-09-29'],
+    ['monthToDate', '2026-09-01', '2026-09-29'],
+    ['yearToDate', '2026-01-01', '2026-09-29'],
+  ] as const)('resolves the %s time-filter default from the current local date', (defaultPreset, start, end) => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 8, 29, 12, 0, 0))
+    const dateFilter = makeFilter('date-filter', {
+      field: 'metric_time',
+      defaultPreset,
+    }, 'timeFilter')
+    const context = useDashboardFilterContext(() => [dateFilter], () => undefined)
+
+    context.initializeDefaults()
+
+    const expected = { preset: 'custom', start, end }
+    expect(runtimeState(context)['date-filter'].value).toEqual(expected)
+    expect(context.filterContext.value.timeRange).toEqual(expected)
+  })
+
+  it('recomputes relative defaults when a new preview session starts on a later date', () => {
+    vi.useFakeTimers()
+    const dateFilter = makeFilter('date-filter', {
+      field: 'metric_time',
+      defaultPreset: 'monthToDate',
+    }, 'timeFilter')
+    vi.setSystemTime(new Date(2026, 8, 30, 12, 0, 0))
+    const firstSession = useDashboardFilterContext(() => [dateFilter], () => undefined)
+    firstSession.initializeDefaults()
+
+    vi.setSystemTime(new Date(2026, 9, 1, 12, 0, 0))
+    const nextSession = useDashboardFilterContext(() => [dateFilter], () => undefined)
+    nextSession.initializeDefaults()
+
+    expect(firstSession.filterContext.value.timeRange).toEqual({ preset: 'custom', start: '2026-09-01', end: '2026-09-30' })
+    expect(nextSession.filterContext.value.timeRange).toEqual({ preset: 'custom', start: '2026-10-01', end: '2026-10-01' })
   })
 })

@@ -617,6 +617,23 @@
 
       <!-- 时间筛选组件配置（仅 timeFilter 组件；时间字段固定 metric_time，无需数据源/指标） -->
       <template v-if="component.type === 'timeFilter'">
+        <div class="form-group">
+          <label class="form-label">{{ t('insight.property.timeFilterDefault') }}</label>
+          <el-select
+            v-model="localTimeFilterConfig.defaultPreset"
+            :aria-label="t('insight.property.timeFilterDefault')"
+            :placeholder="t('insight.property.timeFilterDefaultPlaceholder')"
+            clearable
+            style="width: 100%"
+            @change="emitTimeFilterConfigChange"
+          >
+            <el-option value="yesterday" :label="t('insight.timeRange.yesterday')" />
+            <el-option value="today" :label="t('insight.timeRange.today')" />
+            <el-option value="monthToDate" :label="t('insight.timeRange.monthToDate')" />
+            <el-option value="yearToDate" :label="t('insight.timeRange.yearToDate')" />
+          </el-select>
+        </div>
+
         <div class="form-group form-group-column">
           <label class="form-label">{{ t('insight.property.timeFilterPresets') }}</label>
           <el-checkbox-group
@@ -1030,6 +1047,7 @@ watch(
     if (newComp.type === 'timeFilter') {
       const config = newComp.config as TimeFilterComponentConfig | undefined
       localTimeFilterConfig.field = config?.field ?? 'metric_time'
+      localTimeFilterConfig.defaultPreset = config?.defaultPreset
       localTimeFilterPresets.value = config?.availablePresets ?? ['today', '7d', '30d', '90d', 'custom']
     }
     // 同步筛选器作用范围配置
@@ -1420,6 +1438,7 @@ function removeStaticOption(idx: number): void {
 function emitTimeFilterConfigChange(): void {
   const config: TimeFilterComponentConfig = {
     field: localTimeFilterConfig.field || 'metric_time',
+    defaultPreset: localTimeFilterConfig.defaultPreset || undefined,
     availablePresets: localTimeFilterPresets.value.length > 0
       ? [...localTimeFilterPresets.value]
       : undefined,

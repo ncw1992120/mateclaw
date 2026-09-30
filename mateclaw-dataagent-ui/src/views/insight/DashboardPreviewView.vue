@@ -597,22 +597,65 @@ function finalResultQueryConfig(component: InsightComponent, state: DashboardRun
   }
 }
 
+/** 将图表私有时间范围覆盖到该管道实际绑定的时间筛选器，仅影响本次组件查询。 */
+function filtersWithComponentTimeRange(
+  component: InsightComponent,
+  filters: DashboardRuntimeFilterState,
+  timeRange: TimeRangeValue,
+): DashboardRuntimeFilterState {
+  const pipeline = readComponentDatasetPipeline(component)
+  const filterIds = new Set<string>()
+  for (const input of pipeline?.datasetInputs ?? []) {
+    for (const binding of input.queryConfig?.parameterBindings ?? []) {
+      filterIds.add(binding.filterComponentId)
+    }
+  }
+  for (const field of pipeline?.finalResultQueryConfig?.filterFields ?? []) {
+    if (field.filterComponentId) filterIds.add(field.filterComponentId)
+  }
+
+  const timeFilters = collectDashboardComponents(currentPageComponents.value).filter((candidate) => {
+    if (candidate.type !== 'timeFilter' || !filterIds.has(candidate.id)) return false
+    const config = candidate.config as { scope?: string; targetComponentIds?: string[] } | undefined
+    return config?.scope !== 'scoped' || config.targetComponentIds?.includes(component.id) === true
+  })
+  if (timeFilters.length === 0) {
+    throw new Error('组件级时间筛选无法作用于此数据集管道，请先在查询配置中绑定时间筛选器')
+  }
+
+  const nextFilters = { ...filters }
+  for (const timeFilter of timeFilters) {
+    const config = timeFilter.config as { field?: string; scope?: 'global' | 'scoped'; targetComponentIds?: string[] } | undefined
+    nextFilters[timeFilter.id] = {
+      field: config?.field || 'metric_time',
+      scope: config?.scope ?? 'global',
+      targetComponentIds: [...(config?.targetComponentIds ?? [])],
+      value: { ...timeRange },
+    }
+  }
+  return nextFilters
+}
+
 /** 对一个当前页管道组件执行受控输入查询，必要时再运行 Python 和输出阶段过滤。 */
 async function refreshPipelineComponent(
   component: InsightComponent,
   filters: DashboardRuntimeFilterState,
+  componentTimeRange?: TimeRangeValue,
 ): Promise<void> {
   const pipeline = readComponentDatasetPipeline(component)
   if (!pipeline?.datasetInputs?.length) return
   const requestId = ++queryRequestSequence
   latestComponentRequest.set(component.id, requestId)
   try {
+    const effectiveFilters = componentTimeRange
+      ? filtersWithComponentTimeRange(component, filters, componentTimeRange)
+      : filters
     const invalidInput = pipeline.datasetInputs.find((input) => !/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
     if (invalidInput) throw new Error(`数据集「${invalidInput.inputName}」尚未落库，无法在预览中查询`)
     const queryContext = {
       dashboardId: props.dashboardId,
       componentId: component.id,
-      parameters: buildComponentQueryParameters(component, filters),
+      parameters: buildComponentQueryParameters(component, effectiveFilters),
       requestId: String(requestId),
     }
     let rows: Record<string, unknown>[]
@@ -644,7 +687,7 @@ async function refreshPipelineComponent(
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
       if (!terminalStatus) throw new Error('组件执行等待超时')
-      const outputConfig = finalResultQueryConfig(component, filters)
+      const outputConfig = finalResultQueryConfig(component, effectiveFilters)
       const parsed = parseScriptResultEnvelope(envelope)
       if (parsed.kind !== 'table') throw new Error(parsed.kind === 'message' ? parsed.message : 'Python 输出不是表格结果')
       const pipelineConfig = pipeline.finalResultQueryConfig
@@ -654,7 +697,7 @@ async function refreshPipelineComponent(
       )
       if (outputConfig && outputConfigStatus !== 'conflict') {
         const result = await insightDashboardApi.previewExecutionResult(created.executionId, {
-          parameters: finalResultFilterParameters(component, filters), requestId: String(requestId),
+          parameters: finalResultFilterParameters(component, effectiveFilters), requestId: String(requestId),
           finalResultQueryConfig: outputConfig,
         }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[] }
         rows = result.rows ?? []
@@ -818,6 +861,12 @@ function handleComponentTimeRangeChange(payload: { componentId: string; timeRang
     componentTimeRanges[payload.componentId] = payload.timeRange
   } else {
     delete componentTimeRanges[payload.componentId]
+  }
+  const component = collectDashboardComponents(currentPageComponents.value)
+    .find((item) => item.id === payload.componentId)
+  if (component && readComponentDatasetPipeline(component)?.datasetInputs?.length) {
+    void refreshPipelineComponent(component, getRuntimeFilterState(), payload.timeRange)
+    return
   }
   reloadSingleComponentData(payload.componentId, payload.timeRange)
 }

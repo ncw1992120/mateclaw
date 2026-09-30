@@ -314,6 +314,33 @@ describe('PropertyPanel', () => {
     expect(wrapper.find('[data-testid="component-sample-data"]').exists()).toBe(false)
   })
 
+  it('保存时间筛选器的动态默认值选项而不是固定日期', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'time-filter-default',
+          type: 'timeFilter',
+          title: '时间范围',
+          position: { x: 0, y: 0, w: 4, h: 2 },
+          config: { field: 'metric_time' },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const defaultSelect = wrapper.findAll('select').find((select) =>
+      select.attributes('aria-label') === 'insight.property.timeFilterDefault',
+    )
+    expect(defaultSelect).toBeDefined()
+    await defaultSelect!.setValue('monthToDate')
+
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { field: 'metric_time', defaultPreset: 'monthToDate' },
+    })
+    expect(JSON.stringify(wrapper.emitted('change')?.at(-1)?.[0])).not.toContain('2026-')
+  })
+
   it('shows static options only after switching to static source', async () => {
     const wrapper = mount(PropertyPanel, {
       props: {

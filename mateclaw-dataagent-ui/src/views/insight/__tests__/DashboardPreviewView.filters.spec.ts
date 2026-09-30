@@ -259,6 +259,84 @@ describe('DashboardPreviewView runtime filter query flow', () => {
     expect(wrapper.get('[data-test="canvas"]').text()).toContain('华南')
   })
 
+  it('routes a pipeline chart time-range change through its bound time parameters', async () => {
+    const timeFilter = {
+      id: 'time-filter', type: 'timeFilter', title: '时间', position: { x: 0, y: 0, w: 1, h: 1 },
+      config: { field: 'biz_date', scope: 'scoped', targetComponentIds: ['pipeline-chart'] },
+    } as any
+    const pipelineChart = {
+      id: 'pipeline-chart', type: 'chart', title: '管道图表', enableTimeFilter: true,
+      position: { x: 1, y: 0, w: 2, h: 1 },
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: '201', inputName: 'sales', queryConfig: {
+        displayFields: [{ field: 'biz_date', title: '日期', role: 'dimension' }],
+        parameterBindings: [
+          { filterComponentId: 'time-filter', parameterName: 'startDate', field: 'biz_date', operator: 'gte' },
+          { filterComponentId: 'time-filter', parameterName: 'endDate', field: 'biz_date', operator: 'lt' },
+        ],
+      } }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({ version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [timeFilter, pipelineChart] }] })
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: {
+          props: ['components', 'componentDataMap'], emits: ['component-time-range-change'],
+          template: '<div data-test="canvas"><button data-test="set-time" @click="$emit(\'component-time-range-change\', { componentId: \'pipeline-chart\', timeRange: { preset: \'custom\', start: \'2026-09-01\', end: \'2026-09-30\' } })" /><button data-test="clear-time" @click="$emit(\'component-time-range-change\', { componentId: \'pipeline-chart\', timeRange: undefined })" />{{ JSON.stringify(componentDataMap) }}</div>',
+        },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+    mocks.previewQueryPlan.mockClear()
+
+    await wrapper.get('[data-test="set-time"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.previewQueryPlan).toHaveBeenCalledWith(expect.objectContaining({
+      datasetId: '201',
+      queryContext: expect.objectContaining({ parameters: { startDate: '2026-09-01', endDate: '2026-09-30' } }),
+    }))
+
+    mocks.previewQueryPlan.mockClear()
+    await wrapper.get('[data-test="clear-time"]').trigger('click')
+    await flushPromises()
+    expect(mocks.previewQueryPlan).toHaveBeenCalledWith(expect.objectContaining({
+      datasetId: '201', queryContext: expect.objectContaining({ parameters: {} }),
+    }))
+  })
+
+  it('shows a component error instead of querying a pipeline without a bound time filter', async () => {
+    const pipelineChart = {
+      id: 'pipeline-chart', type: 'chart', title: '管道图表', enableTimeFilter: true,
+      position: { x: 1, y: 0, w: 2, h: 1 },
+      config: { datasetPipeline: { datasetInputs: [{ datasetId: '202', inputName: 'sales', queryConfig: {
+        displayFields: [{ field: 'biz_date', title: '日期', role: 'dimension' }], parameterBindings: [],
+      } }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({ version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [pipelineChart] }] })
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: {
+          props: ['components', 'componentDataMap'], emits: ['component-time-range-change'],
+          template: '<div data-test="canvas"><button data-test="set-time" @click="$emit(\'component-time-range-change\', { componentId: \'pipeline-chart\', timeRange: { preset: \'custom\', start: \'2026-09-01\', end: \'2026-09-30\' } })" />{{ JSON.stringify(componentDataMap) }}</div>',
+        },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+    mocks.previewQueryPlan.mockClear()
+
+    await wrapper.get('[data-test="set-time"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.previewQueryPlan).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('组件级时间筛选')
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('查询配置')
+  })
+
   it('renders the Python result directly when its saved result-query fields are stale', async () => {
     const pythonComponent = {
       ...datasetComponent,

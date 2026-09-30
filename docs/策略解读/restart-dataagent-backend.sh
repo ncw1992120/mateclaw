@@ -19,6 +19,7 @@
 #   ALOUDATA_MOCK_SERVER=...        （embed / off 模式下忽略）
 #   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
 #   SPRING_PROFILES_ACTIVE=...      数据库/运行 profile；on/embed 模式仍会强制追加 local-mock
+#   MATECLAW_ALOUDATA_LOG_REQUEST=true|false  是否打印 Aloudata 实际请求明细（默认 true）
 
 set -Eeuo pipefail
 
@@ -63,6 +64,7 @@ usage() {
   DB_HOST/DB_PORT/DB_NAME/DB_USERNAME/DB_PASSWORD  开发环境后端数据库连接
   DB_PRECHECK=on|skip             启动前数据库连通性预检（默认 on，连不上直接报错退出）
   SPRING_PROFILES_ACTIVE=...      数据库/运行 profile；on/embed 模式仍会强制追加 local-mock
+  MATECLAW_ALOUDATA_LOG_REQUEST=true|false  是否打印 Aloudata 实际请求明细（默认 true）
 TXT
 }
 
@@ -477,6 +479,7 @@ export MATECLAW_DATASET_READ_BASE_URL="${MATECLAW_DATASET_READ_BASE_URL:-http://
 export SPRING_AI_DASHSCOPE_API_KEY="${SPRING_AI_DASHSCOPE_API_KEY:-configure-in-admin-ui}"
 export SPRING_AI_DASHSCOPE_AUDIO_SPEECH_API_KEY="${SPRING_AI_DASHSCOPE_AUDIO_SPEECH_API_KEY:-configure-in-admin-ui}"
 export SPRING_AI_DASHSCOPE_AUDIO_TRANSCRIPTION_API_KEY="${SPRING_AI_DASHSCOPE_AUDIO_TRANSCRIPTION_API_KEY:-configure-in-admin-ui}"
+export MATECLAW_ALOUDATA_LOG_REQUEST="${MATECLAW_ALOUDATA_LOG_REQUEST:-true}"
 
 # Route A（直连）：无论调用方环境是否带 SOCKS/HTTP 代理，启动时一律剥离，
 # 避免 JVM 的 JAVA_TOOL_OPTIONS / JDK_JAVA_OPTIONS / _JAVA_OPTIONS 把数据库连接劫持到死代理。

@@ -63,6 +63,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private static final String ENDPOINT_METRIC_LIST = "metric_list";
     private static final String ENDPOINT_METRIC_BATCH_DETAIL = "metric_batch_detail";
     private static final String ENDPOINT_METRIC_ALL_DIMENSIONS = "metric_all_dimensions";
+    private static final String ENDPOINT_METRIC_DIMENSIONS = "metric_dimensions";
     private static final String ENDPOINT_DIMENSION_LIST = "dimension_list";
     private static final String ENDPOINT_DIMENSION_DETAIL = "dimension_detail";
 
@@ -430,7 +431,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     /**
-     * 实时获取单个指标详情：metric_batch_detail（同义词等）+ metric_all_dimensions（关联维度）。
+     * 实时获取单个指标详情：metric_batch_detail（同义词等）+ metric_dimensions（关联维度）。
      * 供弹窗「懒加载详情」使用，不依赖本地同步表。
      */
     @Override
@@ -487,26 +488,21 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         try {
             Map<String, Object> input = new HashMap<>();
             input.put("metricNames", List.of(metricName));
-            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_ALL_DIMENSIONS, config, input);
-            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_ALL_DIMENSIONS, config, params);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_DIMENSIONS, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_DIMENSIONS, config, params);
             Map<String, Object> body = response.getBody();
-            if (body != null && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof Map) {
-                Map<String, Object> data = (Map<String, Object>) body.get("data");
-                Object dimsObj = data.get(metricName);
+            if (body != null && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof List) {
                 List<String> dims = new ArrayList<>();
-                if (dimsObj instanceof List) {
-                    for (Object o : (List<?>) dimsObj) {
-                        if (o instanceof Map) {
-                            Map<String, Object> dm = (Map<String, Object>) o;
-                            String dn = asStr(dm.get("dimName"));
-                            if (dn == null) {
-                                continue;
-                            }
+                for (Object o : (List<?>) body.get("data")) {
+                    if (o instanceof Map) {
+                        Map<String, Object> dm = (Map<String, Object>) o;
+                        String dn = asStr(dm.get("dimName"));
+                        if (dn != null) {
                             // 可用维度用于字段关系匹配，必须只返回稳定的维度编码。
                             dims.add(dn);
-                        } else if (o != null) {
-                            dims.add(String.valueOf(o));
                         }
+                    } else if (o != null) {
+                        dims.add(String.valueOf(o));
                     }
                 }
                 dto.setAvailableDimensions(dims);

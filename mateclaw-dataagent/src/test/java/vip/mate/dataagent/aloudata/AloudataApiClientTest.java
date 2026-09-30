@@ -18,11 +18,12 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AloudataApiClientTest {
 
     @Test
-    void requestLogContainsActualRequestAndMasksAuthenticationValue() {
+    void requestLogShowsMethodUrlAndParamsWithoutHeaders() {
         AloudataApiClient.PreparedRequest request = new AloudataApiClient.PreparedRequest(
                 "metrics_query", HttpMethod.POST, "/semantic/api/v1.1/metrics/query",
-                "https://semantic.example:8085/semantic/api/v1.1/metrics/query",
-                Map.of(), Map.of("metrics", List.of("revenue"), "limit", 100),
+                "https://semantic.example:8085/semantic/api/v1.1/metrics/query?period=2026-09",
+                Map.of("period", "2026-09"), Map.of("metrics", List.of("revenue"), "limit", 100,
+                        "auth-value", "body-secret"),
                 new org.springframework.http.HttpHeaders());
         request.headers().set("tenant-id", "tn-test");
         request.headers().set("auth-type", "UID");
@@ -31,11 +32,35 @@ class AloudataApiClientTest {
         String log = AloudataApiClient.formatRequestLog(request);
 
         org.junit.jupiter.api.Assertions.assertTrue(log.contains("POST"));
-        org.junit.jupiter.api.Assertions.assertTrue(log.contains(request.url()));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains(
+                "url=https://semantic.example:8085/semantic/api/v1.1/metrics/query?period=2026-09"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("period=2026-09"));
         org.junit.jupiter.api.Assertions.assertTrue(log.contains("metrics"));
         org.junit.jupiter.api.Assertions.assertTrue(log.contains("revenue"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("limit=100"));
         org.junit.jupiter.api.Assertions.assertTrue(log.contains("***"));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("headers="));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("tenant-id"));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("auth-type"));
         org.junit.jupiter.api.Assertions.assertFalse(log.contains("secret-value"));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("body-secret"));
+    }
+
+    @Test
+    void requestLogShowsGetQueryInFullUrlWithoutHeaders() {
+        AloudataApiClient.PreparedRequest request = new AloudataApiClient.PreparedRequest(
+                "dimension_detail", HttpMethod.GET, "/dimension/detail",
+                "https://anymetrics.example:8083/dimension/detail?dimName=region&includeInactive=false",
+                Map.of("dimName", "region", "includeInactive", false), null,
+                new org.springframework.http.HttpHeaders());
+
+        String log = AloudataApiClient.formatRequestLog(request);
+
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("method=GET"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains(
+                "url=https://anymetrics.example:8083/dimension/detail?dimName=region&includeInactive=false"));
+        org.junit.jupiter.api.Assertions.assertTrue(log.contains("dimName=region"));
+        org.junit.jupiter.api.Assertions.assertFalse(log.contains("headers="));
     }
 
     @Test

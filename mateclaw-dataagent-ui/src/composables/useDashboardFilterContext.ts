@@ -8,6 +8,7 @@ import type {
   FilterScope,
   FilterComponentConfig,
   TimeFilterComponentConfig,
+  TimeFilterDefaultPreset,
 } from '@/types'
 
 /** Flatten container children and tab children while retaining their component IDs. */
@@ -25,6 +26,34 @@ export function collectDashboardComponents(components: InsightComponent[]): Insi
   }
   components.forEach(visit)
   return result
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined): TimeRangeValue | undefined {
+  if (!preset) return undefined
+
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let start = today
+  let end = today
+
+  if (preset === 'yesterday') {
+    start = new Date(today)
+    start.setDate(start.getDate() - 1)
+    end = start
+  } else if (preset === 'monthToDate') {
+    start = new Date(today.getFullYear(), today.getMonth(), 1)
+  } else if (preset === 'yearToDate') {
+    start = new Date(today.getFullYear(), 0, 1)
+  }
+
+  return { preset: 'custom', start: formatLocalDate(start), end: formatLocalDate(end) }
 }
 
 /**
@@ -256,15 +285,17 @@ export function useDashboardFilterContext(
       }
 
       const config = comp.config as FilterComponentConfig | TimeFilterComponentConfig | undefined
-      const value = comp.type === 'filter' ? (config as FilterComponentConfig | undefined)?.defaultValue : undefined
+      const value = comp.type === 'filter'
+        ? (config as FilterComponentConfig | undefined)?.defaultValue
+        : resolveTimeFilterDefault((config as TimeFilterComponentConfig | undefined)?.defaultPreset)
       const activeValue = value === null || value === '' || (Array.isArray(value) && value.length === 0) ? undefined : value
       runtimeFilterState[comp.id] = { ...metadata, value: Array.isArray(activeValue) ? [...activeValue] : activeValue }
       if (metadata.scope === 'scoped') {
         const state = scopedFilterStates[comp.id] ??= { dimensionFilters: {} }
-        if (comp.type === 'timeFilter') state.timeRange = undefined
+        if (comp.type === 'timeFilter') state.timeRange = activeValue as TimeRangeValue | undefined
         else if (typeof activeValue === 'string' || Array.isArray(activeValue)) state.dimensionFilters[metadata.field] = activeValue
       } else if (comp.type === 'timeFilter') {
-        globalTimeRange.value = undefined
+        globalTimeRange.value = activeValue as TimeRangeValue | undefined
       } else if (typeof activeValue === 'string' || Array.isArray(activeValue)) {
         globalDimensionFilterMap[metadata.field] = activeValue
       }

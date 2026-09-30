@@ -215,6 +215,15 @@ beforeEach(() => {
   }
   getAloudataMetricDirectory.mockClear()
   getAloudataMetricDetail.mockClear()
+  getAloudataMetricDetail.mockImplementation(async (_datasourceId: string, metricName: string) => ({
+    metricName,
+    metricDisplayName: metricName === 'metric_a' ? '指标 A' : '转化率',
+    type: 'DERIVED',
+    businessCaliber: '按用户统计转化率',
+    unit: '%',
+    owner: '数据团队',
+    availableDimensions: ['dim_a'],
+  }))
   getAloudataDimensionDetail.mockClear()
   pageAloudataMetrics.mockClear()
   pageAloudataDimensions.mockClear()
@@ -537,6 +546,38 @@ describe('Aloudata 指标&维度选择', () => {
     const metricA = wrapper.find('.metric-picker-popup').findAll('.directory-item')
       .find((item) => item.text().includes('metric_a'))
     expect(metricA?.find('input').element.disabled).toBe(true)
+  })
+
+  it('allows metrics with different dimension sets when they support the selected dimensions', async () => {
+    state.ui.aloudata.metrics = ['metric_a']
+    state.ui.aloudata.dims = ['dim_a']
+    getAloudataMetricDetail.mockImplementation(async (_datasourceId: string, metricName: string) => ({
+      metricName,
+      metricDisplayName: metricName,
+      type: 'DERIVED',
+      businessCaliber: '',
+      unit: '',
+      owner: '',
+      availableDimensions: metricName === 'metric_a' ? ['dim_a'] : ['dim_a', 'region'],
+    }))
+    const compatibleMetricPage = {
+      records: [
+        { metricName: 'metric_a', metricDisplayName: '指标 A', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
+        { metricName: 'technical_rate', metricDisplayName: '转化率', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a', 'region'] },
+      ], total: 2, current: 1, size: 20, pages: 1,
+    }
+    pageAloudataMetrics.mockImplementationOnce(async () => compatibleMetricPage)
+    pageAloudataMetrics.mockImplementationOnce(async () => compatibleMetricPage)
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+    await expandFieldCategory(wrapper, 'metric')
+
+    const candidate = wrapper.find('.metric-picker-popup').findAll('.directory-item')
+      .find((item) => item.text().includes('technical_rate'))
+    expect(candidate?.find('input').element.disabled).toBe(false)
   })
 
   it('can hide metrics that are incompatible with the selected dimensions', async () => {

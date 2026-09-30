@@ -87,4 +87,21 @@ class AloudataEndpointServiceTest {
         assertTrue(endpoint.getRequestParams().stream().anyMatch(param -> "dimValueKeyword".equals(param.getName())));
         assertFalse(endpoint.getRequestParams().stream().anyMatch(param -> "keyword".equals(param.getName())));
     }
+
+    @Test
+    void providesMetricDimensionEndpointContractForLiveCompatibilityChecks() {
+        SystemSettingService settings = mock(SystemSettingService.class);
+        when(settings.getString("aloudata.api.endpoints", "")).thenReturn("");
+        AloudataEndpointService service = new AloudataEndpointService(
+                new AloudataApiProperties(settings, new ObjectMapper()));
+
+        AloudataApiProperties.ApiEndpoint endpoint = service.getEndpoint("metric_dimensions");
+        Map<String, Object> params = service.buildParamsFromConfigAndInput("metric_dimensions", new AloudataConfigDTO(),
+                Map.of("metricNames", java.util.List.of("metric_a")));
+
+        assertNotNull(endpoint);
+        assertEquals("/anymetrics/api/v1/metrics/dimension", endpoint.getPath());
+        assertEquals("GET", endpoint.getMethod());
+        assertEquals(java.util.List.of("metric_a"), params.get("metricNames"));
+    }
 }

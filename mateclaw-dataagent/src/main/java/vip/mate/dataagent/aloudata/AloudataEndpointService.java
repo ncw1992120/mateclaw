@@ -145,6 +145,8 @@ public class AloudataEndpointService {
                 mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
         endpoints.put("metric_all_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimensionAll", "GET",
                 mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("metric_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimension", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
         endpoints.put("dimension_list", endpoint("anymetrics", "/anymetrics/api/v1/dimension/list", "POST",
                 mergeParams(headers, List.of(new ApiParam("keyword", "String", false, null, "维度展示名或字段名关键字", "BODY"),
                         new ApiParam("categoryId", "String", false, null, "维度类目", "BODY"),

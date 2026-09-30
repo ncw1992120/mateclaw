@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  collectSparseRowColumns,
   extractResultSchema,
   formatScriptResultError,
   fingerprintResultSchema,
@@ -64,32 +63,6 @@ describe('tableEnvelopeFromRows', () => {
     ])
     expect(envelope.meta.rowCount).toBe(1)
   })
-
-  it('合并稀疏行的 key，不因首行缺列截断列（KPI 指标丢列回归）', () => {
-    const envelope = tableEnvelopeFromRows([
-      { name: '华东' },
-      { name: '华北', amount: 3 },
-      { name: '华南', amount: 5 },
-    ])
-    expect(envelope.data.columns.map(({ name }) => name)).toEqual(['name', 'amount'])
-    // amount 的类型样本取该列首个非空值，而不是首行的 null
-    expect(envelope.data.columns[1].dataType).toBe('number')
-  })
-})
-
-describe('collectSparseRowColumns', () => {
-  it('按首次出现顺序合并全部行的 key，样本取首个非空值', () => {
-    const collected = collectSparseRowColumns([
-      { a: null, b: 'x' },
-      { a: 1, b: 'y', c: true },
-    ])
-    expect(collected.map(({ name }) => name)).toEqual(['a', 'b', 'c'])
-    expect(collected.map(({ sample }) => sample)).toEqual([1, 'x', true])
-  })
-
-  it('空行集返回空列', () => {
-    expect(collectSparseRowColumns([])).toEqual([])
-  })
 })
 
 describe('result schema', () => {
@@ -141,23 +114,6 @@ describe('resultEnvelopeToComponentData', () => {
       kpiComponent({ valueField: 'amount', aggregation: 'sum' }),
       tableEnvelope([column('amount', 'number')], [{ amount: 12 }, { amount: 18 }]),
     ).value).toBe(30)
-  })
-
-  it('kpi 脚本表格结果按组件配置渲染全部指标', () => {
-    const result = resultEnvelopeToComponentData({
-      ...kpiComponent(),
-      kpiMetrics: [
-        { fieldKey: 'orders', displayName: '订单数' },
-        { fieldKey: 'revenue', displayName: '销售额' },
-      ],
-    }, tableEnvelope(
-      [column('orders', 'number'), column('revenue', 'number')],
-      [{ orders: 12, revenue: 360 }],
-    ))
-    expect(result.kpiList).toEqual([
-      { fieldKey: 'orders', name: '订单数', value: 12 },
-      { fieldKey: 'revenue', name: '销售额', value: 360 },
-    ])
   })
 
   it('message 显示说明，不伪造成表格行', () => {

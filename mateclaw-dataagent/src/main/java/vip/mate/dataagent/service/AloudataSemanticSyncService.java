@@ -168,7 +168,7 @@ public interface AloudataSemanticSyncService {
     IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query);
 
     /**
-     * 实时获取单个指标详情（直接打 Aloudata：metric_batch_detail 取同义词等 + metric_all_dimensions 取关联维度）。
+     * 实时获取单个指标详情（直接打 Aloudata：metric_batch_detail 取同义词等 + metric_dimensions 取关联维度）。
      *
      * @param datasourceId 数据源 ID
      * @param metricName   指标英文名

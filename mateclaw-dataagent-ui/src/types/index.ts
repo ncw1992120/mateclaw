@@ -1934,7 +1934,7 @@ export type ScriptResultEnvelope =
     meta: ScriptResultMeta
   }
 
-/** Python Runner 执行限制（不包含依赖安装配置）。 */
+/** DataAgent 管理的 Python Worker 执行限制（不包含依赖安装配置）。 */
 export interface DashboardExecutionPolicy {
   timeoutSeconds?: number
   maxRows?: number
@@ -1959,7 +1959,7 @@ export interface InsightDashboardSchema {
   /** 脚本参数定义，不包含字段绑定 */
   parameters?: DashboardScriptParameter[]
   scriptFilterBindings?: DashboardScriptFilterBinding[]
-  /** Runner 资源与超时策略 */
+  /** Python Worker 资源与超时策略 */
   executionPolicy?: DashboardExecutionPolicy
   /** 用户确认后的脚本结果组件绑定 */
   scriptBindings?: DashboardScriptBinding[]
@@ -2101,6 +2101,9 @@ export interface ComponentTabData {
 /** 时间范围预设类型 */
 export type TimeRangePreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 
+/** 时间筛选器按当前日期动态解析的默认范围。 */
+export type TimeFilterDefaultPreset = 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
+
 /** 时间范围筛选值 */
 export interface TimeRangeValue {
   /** 预设类型 */
@@ -2159,6 +2162,8 @@ export interface FilterComponentConfig {
 export interface TimeFilterComponentConfig {
   /** 时间维度字段名（默认 metric_time） */
   field: string
+  /** 每次进入预览时按当前日期重新解析的默认时间范围 */
+  defaultPreset?: TimeFilterDefaultPreset
   /** 允许的预设选项列表 */
   availablePresets?: TimeRangePreset[]
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */

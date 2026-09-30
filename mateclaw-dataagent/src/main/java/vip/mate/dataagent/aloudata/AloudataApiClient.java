@@ -254,18 +254,25 @@ public class AloudataApiClient {
      * 分发后的最终值，不是页面草稿；auth-value 只显示掩码。
      */
     public static String formatRequestLog(PreparedRequest request) {
-        Map<String, String> headers = new LinkedHashMap<>();
-        if (request.headers() != null) {
-            request.headers().forEach((name, values) -> {
-                String value = values == null || values.isEmpty() ? "" : values.get(0);
-                headers.put(name, isSensitiveHeader(name) ? "***" : value);
-            });
-        }
-        return String.format("[aloudata-request] endpoint=%s method=%s url=%s queryParams=%s body=%s headers=%s",
-                request.endpointName(), request.method(), request.url(), request.queryParams(), request.body(), headers);
+        return String.format("[aloudata-request] endpoint=%s method=%s url=%s queryParams=%s body=%s",
+                request.endpointName(), request.method(), request.url(),
+                sanitizeRequestParams(request.queryParams()), sanitizeRequestParams(request.body()));
     }
 
-    private static boolean isSensitiveHeader(String name) {
+    private static Object sanitizeRequestParams(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<Object, Object> sanitized = new LinkedHashMap<>();
+            map.forEach((key, nestedValue) -> sanitized.put(key,
+                    isSensitiveParameter(String.valueOf(key)) ? "***" : sanitizeRequestParams(nestedValue)));
+            return sanitized;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(AloudataApiClient::sanitizeRequestParams).toList();
+        }
+        return value;
+    }
+
+    private static boolean isSensitiveParameter(String name) {
         String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
         return normalized.equals("auth-value") || normalized.contains("authorization") || normalized.contains("token");
     }

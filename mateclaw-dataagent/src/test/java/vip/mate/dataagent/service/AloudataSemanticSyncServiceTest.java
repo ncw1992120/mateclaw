@@ -34,6 +34,38 @@ import static org.mockito.ArgumentMatchers.anyMap;
 class AloudataSemanticSyncServiceTest {
 
     @Test
+    void loadsLiveMetricDimensionsFromMetricDimensionEndpoint() {
+        DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
+        AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);
+        AloudataApiClient apiClient = mock(AloudataApiClient.class);
+        AloudataEndpointService endpointService = mock(AloudataEndpointService.class);
+        AloudataSemanticSyncServiceImpl service = new AloudataSemanticSyncServiceImpl(
+                mock(AloudataMetricMapper.class), mock(AloudataDimensionMapper.class),
+                mock(AloudataMetricDimensionMapper.class), mock(AloudataCategoryMapper.class),
+                datasourceMapper, apiClient, configHelper, endpointService,
+                mock(AloudataSemanticEsService.class), mock(ModelConfigService.class),
+                mock(AloudataService.class), mock(AloudataSyncFilterSupport.class));
+        DatasourceEntity datasource = new DatasourceEntity();
+        datasource.setSourceType("aloudata");
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        when(datasourceMapper.selectById(9L)).thenReturn(datasource);
+        when(configHelper.parseConfig(datasource)).thenReturn(config);
+        when(endpointService.buildParamsFromConfigAndInput(any(), eq(config), anyMap()))
+                .thenReturn(new java.util.HashMap<>());
+        when(apiClient.callWithParams(eq("metric_batch_detail"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", List.of())));
+        when(apiClient.callWithParams(eq("metric_dimensions"), eq(config), anyMap()))
+                .thenReturn(ResponseEntity.ok(Map.of("success", true, "data", List.of(
+                        Map.of("dimName", "metric_time"), Map.of("dimName", "region")))));
+
+        var result = service.getMetricDetail(9L, "metric_a");
+
+        assertEquals(List.of("metric_time", "region"), result.getAvailableDimensions());
+        verify(apiClient).callWithParams(eq("metric_dimensions"), eq(config), anyMap());
+        verify(apiClient, org.mockito.Mockito.never()).callWithParams(eq("metric_all_dimensions"), eq(config), anyMap());
+    }
+
+    @Test
     void enrichesLiveMetricPageWithDimensionCodesFromDimensionAll() {
         DatasourceMapper datasourceMapper = mock(DatasourceMapper.class);
         AloudataConfigHelper configHelper = mock(AloudataConfigHelper.class);

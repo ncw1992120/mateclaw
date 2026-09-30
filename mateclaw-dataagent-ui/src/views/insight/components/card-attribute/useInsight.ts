@@ -33,8 +33,7 @@ import {
 } from '@/utils/field-mapping'
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
-import { selectKpiProjectionFields } from '@/utils/dataset-result'
-import { collectSparseRowColumns, extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
+import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
@@ -281,7 +280,6 @@ export function currentPythonSource(): PythonSystemSource {
     displayName: ds.alias,
     sourceType: mapSourceTypeOut(ds),
     filters: ds.filters as unknown as DashboardDatasetInput['filters'],
-    fieldMappings: toFieldMappings(ds.fields ?? []),
   }))
   const bindings: DashboardScriptFilterBinding[] = state.filterBindings.map((binding) => {
     const scoped = state.datasets.filter((ds) => binding.scope[ds.id] ?? binding.scope[ds.alias])
@@ -299,17 +297,7 @@ export function currentPythonSource(): PythonSystemSource {
   })
   const activeCard = state.cards.find((card) => card.id === state.activeCardId)
   const outputSpec = activeCard ? resolveOutputSpec(activeCard.type) : null
-  return {
-    inputs,
-    bindings,
-    queryParameters: (state.finalResultQueryConfig?.filterFields ?? []).map((field) => ({
-      field: field.field,
-      title: field.title,
-      parameterName: field.parameterName,
-      operators: field.operators,
-    })),
-    outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined,
-  }
+  return { inputs, bindings, outputContract: outputSpec ? outputContractTemplate(outputSpec) : undefined }
 }
 
 /* ============================ 状态单例 ============================ */
@@ -515,12 +503,7 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
 
 function removeDataset(id: string) {
   const idx = state.datasets.findIndex((d) => d.id === id)
-  if (idx >= 0) {
-    state.datasets.splice(idx, 1)
-    // 移除输入后，画布不能继续展示由旧数据集生成的结果；有剩余输入时
-    // Sidebar 会按现有策略自动刷新（无脚本）或等待用户重新生成（有脚本）。
-    resetResultSet('empty')
-  }
+  if (idx >= 0) state.datasets.splice(idx, 1)
 }
 
 /**
@@ -1098,12 +1081,7 @@ function savePython(system: string, user: string) {
     generatedFingerprint: fingerprintSystemSource(source),
     userCode: user,
   }
-  const systemWasEdited = system.trim() !== current.generatedCode.trim()
-  state.pythonSystemState = {
-    ...current,
-    ...(current.mode === 'managed' || systemWasEdited ? { mode: 'managed' as const, managedCode: system } : {}),
-    userCode: user,
-  }
+  state.pythonSystemState = { ...current, userCode: user }
   state.hasPython = true
   state.ui.python.queryConfigOnly = false
   state.ui.python.visible = false
@@ -1150,12 +1128,8 @@ function openQueryConfig(datasetId: string): void {
 function closeQueryConfig(): void {
   state.ui.queryConfigDialog.visible = false
 }
-/** 保存查询配置与每次查询都生效的固定筛选（分别写入 queryConfig 与 datasetInputs[].filters）。 */
-function saveQueryConfig(
-  datasetId: string,
-  config: DatasetQueryConfig,
-  fixedFilters?: InputFilter[],
-): string | null {
+/** 保存查询配置到本地数据集状态（buildPipeline 时写入 datasetInputs[].queryConfig） */
+function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string | null {
   const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
   if (dataset) {
     const titles = new Map(config.displayFields.map((field) => [field.field, field.title.trim()]))
@@ -1166,7 +1140,6 @@ function saveQueryConfig(
     if (error) return error
     dataset.fields = fields
     dataset.queryConfig = config
-    if (fixedFilters) dataset.filters = fixedFilters.map((filter) => ({ ...filter }))
     syncKpiMetricsFromFields()
   }
   // 配置变化后系统区生成代码需要刷新（输入 schema 说明变化）
@@ -1195,15 +1168,16 @@ function boundFilterComponentIds(): string[] {
  */
 export function kpiResultFields(): DatasetFieldMeta[] {
   const rs = state.resultSet
-  const registry = datasetRegistryFields()
-  const byName = new Map(registry.map((field) => [field.name, field]))
-  const fields = (rs.status === 'ready' || rs.status === 'stale') && rs.columns.length
-    ? rs.columns.map((column) => ({ ...byName.get(column.name), name: column.name }))
-    : registry
-  const configuredFields = state.hasPython
-    ? state.finalResultQueryConfig?.displayFields ?? []
-    : state.datasets.flatMap((dataset) => dataset.queryConfig?.displayFields ?? [])
-  return selectKpiProjectionFields(fields, configuredFields.length ? configuredFields : undefined)
+  if ((rs.status === 'ready' || rs.status === 'stale') && rs.columns.length) {
+    const registry = datasetRegistryFields()
+    const byName = new Map(registry.map((f) => [f.name, f]))
+    return rs.columns.map((c) => {
+      const hit = byName.get(c.name)
+      // 命中注册表 → 保留展示名 / 单位；脚本新产出的列尚未登记 → 用字段名兜底
+      return hit ? { ...hit } : ({ name: c.name } as DatasetFieldMeta)
+    })
+  }
+  return datasetRegistryFields()
 }
 
 /** 数据集字段注册表并集（结果集尚未产出时的回退候选来源） */
@@ -1217,15 +1191,7 @@ function datasetRegistryFields(): DatasetFieldMeta[] {
     // 注册表尚未建立（schema 未拉取）时回落后端最近一次原始清单
     ;(ds.schema ?? []).forEach((f) => fields.push({ ...f }))
   })
-  const roles = new Map<string, string>()
-  state.datasets.forEach((dataset) => {
-    dataset.fields.forEach((field) => { if (field.role) roles.set(field.name, field.role) })
-    dataset.queryConfig?.queryableFields?.forEach((field) => roles.set(field.name, field.role))
-    dataset.queryConfig?.displayFields.forEach((field) => roles.set(field.field, field.role))
-    dataset.aloudata?.dims?.forEach((name) => roles.set(name, 'dimension'))
-    dataset.aloudata?.metrics?.forEach((name) => { if (!roles.has(name)) roles.set(name, 'measure') })
-  })
-  return fields.map((field) => ({ ...field, role: roles.get(field.name) ?? field.role }))
+  return fields
 }
 
 /** 按最新结果集字段增量重建指标（命中保留用户配置、新增追加、消失移除；结果集为空不清空） */
@@ -1662,12 +1628,10 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
   if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
   state.backend.running = true
   const startedAt = Date.now()
-  let stage = '准备输入数据集'
   try {
     // “查看数据”是 Python 编辑器内的直接操作，不能要求用户先离开弹窗再点顶部保存。
     // 对仍使用 ds-* 临时 ID 的草稿先落库，再用回填后的真实 datasetId 组装执行 Schema。
     await ensurePersistedDatasetInputs()
-    stage = '提交 Python 执行'
     const executableSchema = buildSchema()
     const { executionId } = await backend.submitComponentExecution(
       state.backend.dashboardId,
@@ -1677,7 +1641,6 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
       createComponentPreviewQueryContext(state.backend.dashboardId, state.backend.componentId),
     )
     state.backend.executionId = executionId
-    stage = '等待 Python 执行结果'
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
     for (let attempt = 0; attempt < 120; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -1695,9 +1658,6 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
           commitResultSet({
             source: 'script',
             rows: envelope.data.rows,
-            // envelope 的 columns 是脚本显式声明的输出 schema（契约要求且已通过校验），
-            // 优先于行推断，避免任何行缺键时把结果集列截断、进而删掉指标配置
-            columns: envelope.data.columns.map((column) => ({ name: column.name, type: column.dataType })),
             fieldLabels: Object.fromEntries(envelope.data.columns.filter((column) => column.title?.trim()).map((column) => [column.name, column.title.trim()])),
             executionId,
             elapsedMs: Date.now() - startedAt,
@@ -1720,12 +1680,8 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
     return { ok: false, message: '执行超时' }
   } catch (e) {
     const msg = (e as Error)?.message || '执行提交失败'
-    const detail = msg.includes('同一工作区内数据集名称已存在')
-      ? `${msg}。请修改该输入别名，或在数据集配置中复用同名且来源配置完全一致的数据集。`
-      : msg
-    const actionableMessage = `${stage}失败（Python 尚未执行或未完成）：${detail}`
-    state.backend.lastError = actionableMessage
-    return { ok: false, message: actionableMessage }
+    state.backend.lastError = msg
+    return { ok: false, message: msg }
   } finally {
     state.backend.running = false
   }
@@ -1794,9 +1750,8 @@ function inferType(v: unknown): string {
   return 'string'
 }
 function rowsToColumns(rows: Record<string, unknown>[]): { name: string; type: string }[] {
-  // 稀疏行防护（API/文件/脚本按条件构造的行对象首行可能缺列）：
-  // 只看首行会把结果集列截断，导致按完整列投影出的指标配置在 hydrate 时被静默删除。
-  return collectSparseRowColumns(rows).map(({ name, sample }) => ({ name, type: inferType(sample) }))
+  if (!rows.length) return []
+  return Object.keys(rows[0]).map((k) => ({ name: k, type: inferType(rows[0][k]) }))
 }
 function nowHms(): string {
   return new Date().toTimeString().slice(0, 8)
@@ -1998,18 +1953,16 @@ export function scheduleResultSet(): void {
   }, 800)
 }
 
-/** 产物提交：写入结果集并置为就绪（status 最后置位，保证观察者看到 ready 时其余字段已就绪）。
- * columns 可传脚本 envelope 声明的列 schema（声明优先于行推断，行推断仅作缺省兜底）。 */
+/** 产物提交：写入结果集并置为就绪（status 最后置位，保证观察者看到 ready 时其余字段已就绪） */
 function commitResultSet(payload: {
   source: 'dataset' | 'script'
   rows: Record<string, unknown>[]
-  columns?: { name: string; type: string }[]
   fieldLabels?: Record<string, string>
   executionId?: string
   elapsedMs: number
 }): void {
   state.resultSet.source = payload.source
-  state.resultSet.columns = payload.columns?.length ? payload.columns : rowsToColumns(payload.rows)
+  state.resultSet.columns = rowsToColumns(payload.rows)
   state.resultSet.fieldLabels = payload.fieldLabels
   state.resultSet.rows = payload.rows
   state.resultSet.rowCount = payload.rows.length
