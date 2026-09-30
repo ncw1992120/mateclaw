@@ -25,6 +25,8 @@ import java.util.*;
  */
 public final class AloudataFilterExpressions {
 
+    private static final Set<String> TIME_GRANULARITIES = Set.of("DAY", "WEEK", "MONTH", "QUARTER", "YEAR");
+
     private AloudataFilterExpressions() {
     }
 
@@ -105,8 +107,12 @@ public final class AloudataFilterExpressions {
 
     /** 单侧 metric_time DateTrunc/Cast 条件（字段单引号引用，日期值补 00:00:00）。 */
     private static String metricTimeCondition(String symbol, Object value) {
-        return "DateTrunc(['metric_time'], \"DAY\") " + symbol
-                + " (DateTrunc(Cast(" + literal(toTimestampLiteral(value)) + ", \"TIMESTAMP\"), \"DAY\"))";
+        return metricTimeCondition(symbol, value, "DAY");
+    }
+
+    private static String metricTimeCondition(String symbol, Object value, String granularity) {
+        return "DateTrunc(['metric_time'], \"" + granularity + "\") " + symbol
+                + " (DateTrunc(Cast(" + literal(toTimestampLiteral(value)) + ", \"TIMESTAMP\"), \"" + granularity + "\"))";
     }
 
     /** 日期值归一为 {@code yyyy-MM-dd HH:mm:ss}：裸日期补 00:00:00，其余原样。 */
@@ -144,8 +150,24 @@ public final class AloudataFilterExpressions {
 
     /** 生成图示中的单条 metric_time 分区范围表达式，结束值按调用方语义决定是否为排他边界。 */
     public static String metricTimeRange(Object startInclusive, Object endExclusive) {
-        return "(" + metricTimeCondition(">=", startInclusive) + ") AND ("
-                + metricTimeCondition("<", endExclusive) + ")";
+        return metricTimeRange(startInclusive, endExclusive, "DAY");
+    }
+
+    /** 生成统一粒度的半开 metric_time 范围；缺省为 DAY，拒绝未定义粒度。 */
+    public static String metricTimeRange(Object startInclusive, Object endExclusive, String granularity) {
+        String normalizedGranularity = normalizeTimeGranularity(granularity);
+        return "(" + metricTimeCondition(">=", startInclusive, normalizedGranularity) + ") AND ("
+                + metricTimeCondition("<", endExclusive, normalizedGranularity) + ")";
+    }
+
+    /** 缺失粒度兼容 DAY；其余输入必须是精确的大写枚举值。 */
+    public static String normalizeTimeGranularity(String granularity) {
+        if (granularity == null || granularity.isBlank()) return "DAY";
+        if (!TIME_GRANULARITIES.contains(granularity)) {
+            throw new IllegalArgumentException("不支持的指标日期粒度: " + granularity
+                    + "（可用: DAY, WEEK, MONTH, QUARTER, YEAR）");
+        }
+        return granularity;
     }
 
     /** 前端/草稿入参形态（Map）→ 表达式；缺少字段或运算符时返回 null 由调用方拒绝。 */

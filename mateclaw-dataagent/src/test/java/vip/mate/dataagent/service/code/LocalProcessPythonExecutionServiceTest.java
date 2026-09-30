@@ -120,6 +120,38 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     @Test
+    void completedTaskExpiresWhileServiceIsIdle() throws Exception {
+        service.close();
+        properties.setCompletedTaskTtlMillis(100);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.submit(request("idle-expiry"));
+        awaitStatus("idle-expiry", status -> "SUCCEEDED".equals(status.get("status")));
+
+        await(() -> {
+            try {
+                service.getStatus("idle-expiry");
+                return false;
+            } catch (IllegalArgumentException expected) {
+                return true;
+            }
+        });
+    }
+
+    @Test
+    void runningTaskIsRetainedPastCompletedTaskTtl() throws Exception {
+        service.close();
+        properties.setCompletedTaskTtlMillis(50);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.submit(request("sleep"));
+        await(() -> "RUNNING".equals(service.getStatus("sleep").get("status")));
+        Thread.sleep(250);
+
+        assertEquals("RUNNING", service.getStatus("sleep").get("status"));
+    }
+
+    @Test
     void outputLimitTerminatesWorkerAndReturnsOutputLimit() throws Exception {
         Map<String, Object> request = request("overflow");
         ((Map<String, Object>) request.get("limits")).put("max_stdout_bytes", 128);

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.FilterValue;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.TimeRangeValue;
@@ -195,10 +196,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
      * 绑定单个组件数据（合并运行时筛选条件）
      * <p>
      * 运行时筛选上下文分为两类，分别对应 Aloudata API 的不同参数：
-     * <ul>
-     *   <li>时间范围（timeRange）→ 转换为 timeConstraint 表达式（API 5.6 节）</li>
-     *   <li>维度筛选（dimensionFilters）→ 转换为 filters 表达式字符串数组（API 5.4 节）</li>
-     * </ul>
+     * 时间范围与维度筛选都转换为 filters 表达式；metric_time 的上下界按 Aloudata 分区格式
+     * 合并成同一个 filters 字符串，避免下推到错误的 timeConstraint 参数。
      */
     private InsightComponentDataDTO bindComponentWithFilters(Component component,
                                                               DashboardFilterContextDTO filterContext) {
@@ -356,14 +355,17 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                 }
             }
         }
-        request.setFilters(filterExpressions);
-
-        // 3. 构建 timeConstraint 表达式（API 5.6 节）：运行时时间范围优先，其次静态配置
-        String timeConstraint = null;
         if (filterContext != null && filterContext.getTimeRange() != null) {
-            timeConstraint = buildTimeConstraint(filterContext.getTimeRange());
+            String partitionFilter = buildMetricTimeFilter(
+                    filterContext.getTimeRange(), filterContext.getTimeGranularity());
+            if (partitionFilter != null) filterExpressions.add(partitionFilter);
         }
-        if (timeConstraint == null && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
+        request.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(filterExpressions));
+
+        // 保留既有静态 timeConstraint；运行时 metric_time 分区条件已按平台格式写入 filters。
+        String timeConstraint = null;
+        if ((filterContext == null || filterContext.getTimeRange() == null)
+                && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
             timeConstraint = ds.getTimeConstraint();
         }
         request.setTimeConstraint(timeConstraint);
@@ -858,11 +860,12 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             return expressions;
         }
         for (Map<String, Object> filter : staticFilters) {
-            String expr = buildFilterExpression(
-                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD),
-                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR),
-                    filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE)
-            );
+            String field = (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD);
+            String operator = (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR);
+            Object value = filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE);
+            String expr = AloudataFilterExpressions.METRIC_TIME_FIELD.equals(field)
+                    ? AloudataFilterExpressions.of(field, operator, value)
+                    : buildFilterExpression(field, operator, value);
             if (expr != null) {
                 expressions.add(expr);
             }
@@ -956,22 +959,12 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
-     * 根据时间范围预设构建 timeConstraint 表达式（API 5.6 节）
-     * <p>
-     * 参考文档示例和生成的 SQL，timeConstraint 使用语义层表达式格式：
-     * <ul>
-     *   <li>自定义日期：使用 &gt;= 和 &lt; 字面量比较，例如
-     *       ([metric_time__day] &gt;= "2024-01-01" AND [metric_time__day] &lt; "2024-02-01")</li>
-     * </ul>
-     * <p>
-     * 注意：结束日期需要 +1 天，使用半开区间 [start, end+1)，
-     * 因为 Aloudata 的指标日期是 DATETIME 类型，"2024-01-31" 实际代表当天零点，
-     * 需要取到 &lt; "2024-02-01" 才能包含 1 月 31 日的数据。
+     * 构建单条 metric_time 分区范围表达式，使用半开区间 [start, end+1)。
      *
      * @param timeRange 时间范围筛选值
-     * @return timeConstraint 表达式字符串，无效预设时返回 null
+     * @return filters 中的表达式字符串，无效预设时返回 null
      */
-    private String buildTimeConstraint(TimeRangeValue timeRange) {
+    private String buildMetricTimeFilter(TimeRangeValue timeRange, String timeGranularity) {
         String preset = timeRange.getPreset();
         if (preset == null || preset.isBlank()) {
             return null;
@@ -997,7 +990,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
         // 结束日期 +1 天，使用半开区间 [start, end+1) 以包含结束日期当天的全部数据
         LocalDate endExclusive = end.plusDays(1);
-        return "([metric_time__day] >= \"" + start.format(fmt) + "\" AND [metric_time__day] < \"" + endExclusive.format(fmt) + "\")";
+        return AloudataFilterExpressions.metricTimeRange(
+                start.format(fmt), endExclusive.format(fmt), timeGranularity);
     }
 
     /**

@@ -8,29 +8,45 @@
     <template #icon>
       <DashboardComponentIcon type="timeFilter" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />
     </template>
-    <el-date-picker
-      v-model="customDateRange"
-      type="daterange"
-      size="small"
-      style="width: 100%"
-      value-format="YYYY-MM-DD"
-      unlink-panels
-      :shortcuts="dateShortcuts"
-      :disabled-date="disabledDate"
-      :start-placeholder="t('insight.timeRange.startPlaceholder')"
-      :end-placeholder="t('insight.timeRange.endPlaceholder')"
-      :aria-label="component.title || t('insight.timeRange.startPlaceholder')"
-      @calendar-change="handleCalendarChange"
-      @visible-change="handlePanelVisibleChange"
-      @change="handleDateChange"
-    />
+    <div class="time-filter-controls">
+      <el-date-picker
+        v-model="customDateRange"
+        class="time-filter-date-range"
+        type="daterange"
+        size="small"
+        value-format="YYYY-MM-DD"
+        unlink-panels
+        :shortcuts="dateShortcuts"
+        :disabled-date="disabledDate"
+        :start-placeholder="t('insight.timeRange.startPlaceholder')"
+        :end-placeholder="t('insight.timeRange.endPlaceholder')"
+        :aria-label="component.title || t('insight.timeRange.startPlaceholder')"
+        @calendar-change="handleCalendarChange"
+        @visible-change="handlePanelVisibleChange"
+        @change="handleDateChange"
+      />
+      <el-select
+        v-if="showTimeGranularity"
+        v-model="selectedTimeGranularity"
+        class="time-filter-granularity"
+        size="small"
+        :aria-label="t('insight.timeRange.granularity')"
+        @change="handleGranularityChange"
+      >
+        <el-option value="DAY" :label="t('insight.timeRange.granularityDay')" />
+        <el-option value="WEEK" :label="t('insight.timeRange.granularityWeek')" />
+        <el-option value="MONTH" :label="t('insight.timeRange.granularityMonth')" />
+        <el-option value="QUARTER" :label="t('insight.timeRange.granularityQuarter')" />
+        <el-option value="YEAR" :label="t('insight.timeRange.granularityYear')" />
+      </el-select>
+    </div>
   </FilterControlShell>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, TimeGranularity, TimeRangePreset, TimeRangeValue, TimeFilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import FilterControlShell from './FilterControlShell.vue'
 
@@ -43,6 +59,8 @@ const props = defineProps<{
   component: InsightComponent
   /** 预览态由仪表盘会话管理的时间范围。 */
   modelValue?: TimeRangeValue | string | string[]
+  /** 预览会话保留的当前粒度，优先于配置默认值。 */
+  timeGranularity?: TimeGranularity
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
   /** 正在编辑的组件标题图标样式即时预览 */
@@ -53,7 +71,7 @@ const props = defineProps<{
 const showLabel = computed(() => props.showTitle === true || (props.showTitle !== false && props.component.titleBarStyle !== 'hidden'))
 
 const emit = defineEmits<{
-  (e: 'change', payload: { field: string; timeRange: TimeRangeValue }): void
+  (e: 'change', payload: { field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void
 }>()
 
 const { t } = useI18n()
@@ -69,6 +87,25 @@ watch(() => props.modelValue, (value) => {
 const timeFilterConfig = computed<TimeFilterComponentConfig>(() => {
   return (props.component.config as TimeFilterComponentConfig) ?? { field: 'metric_time' }
 })
+const showTimeGranularity = computed(() => timeFilterConfig.value.showTimeGranularity !== false)
+const selectedTimeGranularity = ref<TimeGranularity>(props.timeGranularity ?? timeFilterConfig.value.defaultTimeGranularity ?? 'DAY')
+watch(() => [props.timeGranularity, timeFilterConfig.value.defaultTimeGranularity] as const, ([selected, configured]) => {
+  selectedTimeGranularity.value = selected ?? configured ?? 'DAY'
+}, { immediate: true })
+
+function currentRange(): TimeRangeValue | undefined {
+  if (!customDateRange.value?.[0] || !customDateRange.value?.[1]) return undefined
+  return { preset: 'custom', start: customDateRange.value[0], end: customDateRange.value[1] }
+}
+
+function handleGranularityChange(value: TimeGranularity): void {
+  selectedTimeGranularity.value = value
+  emit('change', {
+    field: timeFilterConfig.value.field,
+    timeRange: currentRange(),
+    timeGranularity: value,
+  })
+}
 
 /** 所有快捷选项定义 */
 const allShortcuts: Array<{ key: TimeRangePreset; text: string; value: () => [Date, Date] }> = [
@@ -182,7 +219,7 @@ function clampEnd(start: string, end: string): string {
 function handleDateChange(dates: [string, string] | null): void {
   calendarPick.value = null
   if (!dates || !dates[0] || !dates[1]) {
-    emit('change', { field: timeFilterConfig.value.field, timeRange: undefined as unknown as TimeRangeValue })
+    emit('change', { field: timeFilterConfig.value.field, timeRange: undefined, timeGranularity: selectedTimeGranularity.value })
     return
   }
   const clampedEnd = clampEnd(dates[0], dates[1])
@@ -192,13 +229,26 @@ function handleDateChange(dates: [string, string] | null): void {
     start: dates[0],
     end: clampedEnd,
   }
-  emit('change', { field: timeFilterConfig.value.field, timeRange: range })
+  emit('change', { field: timeFilterConfig.value.field, timeRange: range, timeGranularity: selectedTimeGranularity.value })
 }
 </script>
 
 <style scoped>
-.time-filter-widget :deep(.el-date-editor) {
-  width: 100%;
+.time-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.time-filter-controls :deep(.time-filter-date-range) {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 0;
+}
+
+.time-filter-controls :deep(.time-filter-granularity) {
+  flex: 0 0 92px;
 }
 
 .time-filter-widget :deep(.el-input__wrapper) {

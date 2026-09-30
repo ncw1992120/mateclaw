@@ -258,6 +258,8 @@ public class AloudataServiceImpl implements AloudataService {
                 result.setSuccess((Boolean) responseBody.get("success"));
                 result.setCode((String) responseBody.get("code"));
                 result.setErrorMsg((String) responseBody.get("errorMsg"));
+                result.setDetailErrorMsg((String) responseBody.get("detailErrorMsg"));
+                result.setMessage((String) responseBody.get("message"));
                 result.setTraceId((String) responseBody.get("traceId"));
 
                 if (responseBody.get("data") != null) {

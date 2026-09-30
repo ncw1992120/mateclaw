@@ -74,6 +74,35 @@ class AloudataFilterExpressionsTest {
     }
 
     @Test
+    void metricTimeRangeUsesTheSameRequestedGranularityOnBothSides() {
+        assertEquals("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"DAY\")))",
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "DAY"));
+        assertEquals("(DateTrunc(['metric_time'], \"WEEK\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"WEEK\")))"
+                        + " AND (DateTrunc(['metric_time'], \"WEEK\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"WEEK\")))",
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "WEEK"));
+        assertEquals("(DateTrunc(['metric_time'], \"MONTH\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"MONTH\")))"
+                        + " AND (DateTrunc(['metric_time'], \"MONTH\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"MONTH\")))",
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "MONTH"));
+        assertEquals("(DateTrunc(['metric_time'], \"QUARTER\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))"
+                        + " AND (DateTrunc(['metric_time'], \"QUARTER\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))",
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "QUARTER"));
+        assertEquals("(DateTrunc(['metric_time'], \"YEAR\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"YEAR\")))"
+                        + " AND (DateTrunc(['metric_time'], \"YEAR\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"YEAR\")))",
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "YEAR"));
+    }
+
+    @Test
+    void metricTimeRangeDefaultsToDayAndRejectsUnknownOrLowercaseGranularity() {
+        assertEquals(AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18"),
+                AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", null));
+        assertThrows(IllegalArgumentException.class,
+                () -> AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "day"));
+        assertThrows(IllegalArgumentException.class,
+                () -> AloudataFilterExpressions.metricTimeRange("2026-09-01", "2026-09-18", "DECADE"));
+    }
+
+    @Test
     void metricTimeRejectsSetOperatorsOnPartitionField() {
         assertThrows(IllegalArgumentException.class,
                 () -> AloudataFilterExpressions.of("metric_time", "in", List.of("2026-09-01")));

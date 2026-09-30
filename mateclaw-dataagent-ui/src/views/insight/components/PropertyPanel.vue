@@ -618,6 +618,32 @@
       <!-- 时间筛选组件配置（仅 timeFilter 组件；时间字段固定 metric_time，无需数据源/指标） -->
       <template v-if="component.type === 'timeFilter'">
         <div class="form-group">
+          <label class="form-label" for="time-filter-show-granularity">{{ t('insight.property.showTimeGranularity') }}</label>
+          <el-switch
+            id="time-filter-show-granularity"
+            v-model="localTimeFilterConfig.showTimeGranularity"
+            :aria-label="t('insight.property.showTimeGranularity')"
+            @change="emitTimeFilterConfigChange"
+          />
+        </div>
+
+        <div v-if="localTimeFilterConfig.showTimeGranularity !== false" class="form-group">
+          <label class="form-label">{{ t('insight.property.defaultTimeGranularity') }}</label>
+          <el-select
+            v-model="localTimeFilterConfig.defaultTimeGranularity"
+            :aria-label="t('insight.property.defaultTimeGranularity')"
+            style="width: 100%"
+            @change="emitTimeFilterConfigChange"
+          >
+            <el-option value="DAY" :label="t('insight.timeRange.granularityDay')" />
+            <el-option value="WEEK" :label="t('insight.timeRange.granularityWeek')" />
+            <el-option value="MONTH" :label="t('insight.timeRange.granularityMonth')" />
+            <el-option value="QUARTER" :label="t('insight.timeRange.granularityQuarter')" />
+            <el-option value="YEAR" :label="t('insight.timeRange.granularityYear')" />
+          </el-select>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">{{ t('insight.property.timeFilterDefault') }}</label>
           <el-select
             v-model="localTimeFilterConfig.defaultPreset"
@@ -884,6 +910,8 @@ const filterDefaultOptions = computed(() => localFilterConfig.optionSource === '
 const localTimeFilterConfig = reactive<TimeFilterComponentConfig>({
   field: 'metric_time',
   maxRangeDays: undefined,
+  showTimeGranularity: true,
+  defaultTimeGranularity: 'DAY',
 })
 const localTimeFilterPresets = ref<TimeRangePreset[]>(['today', '7d', '30d', '90d', 'custom'])
 
@@ -1063,6 +1091,8 @@ watch(
     if (newComp.type === 'timeFilter') {
       const config = newComp.config as TimeFilterComponentConfig | undefined
       localTimeFilterConfig.field = config?.field ?? 'metric_time'
+      localTimeFilterConfig.showTimeGranularity = config?.showTimeGranularity ?? true
+      localTimeFilterConfig.defaultTimeGranularity = config?.defaultTimeGranularity ?? 'DAY'
       localTimeFilterConfig.defaultPreset = config?.defaultPreset
       localTimeFilterConfig.maxRangeDays = config?.maxRangeDays
       localTimeFilterPresets.value = config?.availablePresets ?? ['today', '7d', '30d', '90d', 'custom']
@@ -1455,6 +1485,8 @@ function removeStaticOption(idx: number): void {
 function emitTimeFilterConfigChange(): void {
   const config: TimeFilterComponentConfig = {
     field: localTimeFilterConfig.field || 'metric_time',
+    showTimeGranularity: localTimeFilterConfig.showTimeGranularity ?? true,
+    defaultTimeGranularity: localTimeFilterConfig.defaultTimeGranularity || 'DAY',
     defaultPreset: localTimeFilterConfig.defaultPreset || undefined,
     maxRangeDays: localTimeFilterConfig.maxRangeDays || undefined,
     availablePresets: localTimeFilterPresets.value.length > 0

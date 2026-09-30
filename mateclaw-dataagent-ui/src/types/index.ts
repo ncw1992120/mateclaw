@@ -1650,6 +1650,8 @@ export interface QueryContext {
 export interface DashboardRuntimeFilterValue {
   field: string
   value: string | string[] | TimeRangeValue | undefined
+  /** 时间筛选器当前有效粒度；仅 timeFilter 设置。 */
+  timeGranularity?: TimeGranularity
   scope: FilterScope
   targetComponentIds: string[]
 }
@@ -2130,6 +2132,8 @@ export interface FilterValue {
 export interface DashboardFilterContext {
   /** 时间范围筛选 */
   timeRange?: TimeRangeValue
+  /** 时间范围使用的 Aloudata 日期粒度；缺省兼容 DAY。 */
+  timeGranularity?: TimeGranularity
   /** 维度筛选值列表 */
   dimensionFilters: FilterValue[]
   /** 触发此次筛选的筛选器组件 ID（用于区分全局/组件绑定筛选） */
@@ -2163,6 +2167,8 @@ export interface FilterComponentConfig {
 }
 
 /** 时间筛选组件配置（InsightComponent.config 的约定结构） */
+export type TimeGranularity = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR'
+
 export interface TimeFilterComponentConfig {
   /** 时间维度字段名（默认 metric_time） */
   field: string
@@ -2172,6 +2178,10 @@ export interface TimeFilterComponentConfig {
   availablePresets?: TimeRangePreset[]
   /** 最大可选时间跨度（天，闭区间）；不填表示不限制 */
   maxRangeDays?: number
+  /** 是否在画布时间范围右侧显示粒度选择器；历史配置缺省为显示 */
+  showTimeGranularity?: boolean
+  /** 粒度选择器的默认值；历史配置缺省为 DAY */
+  defaultTimeGranularity?: TimeGranularity
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */

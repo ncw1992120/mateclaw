@@ -98,14 +98,34 @@ describe('useDashboardFilterContext runtime state', () => {
     const context = useDashboardFilterContext(() => [combination], () => undefined)
 
     expect(context.getFilterScope('nested-date')).toEqual({ scope: 'scoped', targetComponentIds: ['nested-table'] })
-    context.setTimeRange({ preset: 'custom', start: '2026-09-01', end: '2026-09-02' }, 'nested-date')
+    context.setTimeRange({ preset: 'custom', start: '2026-09-01', end: '2026-09-02' }, 'nested-date', 'MONTH')
 
     expect(runtimeState(context)['nested-date']).toEqual({
       field: 'metric_time',
       value: { preset: 'custom', start: '2026-09-01', end: '2026-09-02' },
+      timeGranularity: 'MONTH',
       scope: 'scoped',
       targetComponentIds: ['nested-table'],
     })
+    expect(context.getEffectiveFilterContextForComponent('nested-table').timeGranularity).toBe('MONTH')
+  })
+
+  it('initializes visible and hidden time filters with their configured granularity and emits grain-only changes', () => {
+    const filters = [
+      makeFilter('date-visible', { field: 'metric_time', defaultTimeGranularity: 'WEEK' }, 'timeFilter'),
+      makeFilter('date-hidden', { field: 'metric_time', showTimeGranularity: false, defaultTimeGranularity: 'QUARTER' }, 'timeFilter'),
+    ]
+    const onFilterChange = vi.fn()
+    const context = useDashboardFilterContext(() => filters, onFilterChange)
+    context.initializeDefaults()
+
+    expect(runtimeState(context)['date-visible'].timeGranularity).toBe('WEEK')
+    expect(runtimeState(context)['date-hidden'].timeGranularity).toBe('QUARTER')
+    expect(context.filterContext.value.timeGranularity).toBe('QUARTER')
+
+    context.setTimeRange(undefined, 'date-hidden', 'YEAR')
+    expect(runtimeState(context)['date-hidden'].timeGranularity).toBe('YEAR')
+    expect(onFilterChange).toHaveBeenCalledWith(expect.objectContaining({ timeGranularity: 'YEAR' }))
   })
 
   it.each([

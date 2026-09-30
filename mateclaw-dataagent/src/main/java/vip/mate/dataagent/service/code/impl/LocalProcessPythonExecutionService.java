@@ -26,10 +26,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class LocalProcessPythonExecutionService implements PythonExecutionService, AutoCloseable {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(LocalProcessPythonExecutionService.class);
     private static final String DEPENDENCY_PROBE = "import importlib.util,sys; required=('pandas','polars','pydantic','pyarrow'); missing=[name for name in required if importlib.util.find_spec(name) is None]; print(','.join(missing)); sys.exit(bool(missing))";
     private static final List<String> WORKER_DEPENDENCIES = List.of("pandas", "polars", "pydantic", "pyarrow");
     private static final Set<String> TERMINAL = Set.of(
@@ -45,6 +49,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     private final Map<String, TaskState> tasks = new ConcurrentHashMap<>();
     private final Object admissionLock = new Object();
     private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
+    private final ScheduledExecutorService completedTaskCleanup;
     private volatile boolean closed;
 
     @Autowired
@@ -53,6 +58,15 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
+        this.completedTaskCleanup = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "python-worker-task-cleanup");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long cleanupPeriodMillis = Math.max(10L,
+                Math.min(1_000L, Math.max(1L, properties.getCompletedTaskTtlMillis())));
+        this.completedTaskCleanup.scheduleWithFixedDelay(this::scheduledPruneCompletedTasks,
+                cleanupPeriodMillis, cleanupPeriodMillis, TimeUnit.MILLISECONDS);
     }
 
     public LocalProcessPythonExecutionService(PythonWorkerProperties properties, ObjectMapper objectMapper) {
@@ -427,6 +441,15 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         for (int i = 0; i < excess; i++) tasks.remove(completed.get(i).taskId, completed.get(i));
     }
 
+    private void scheduledPruneCompletedTasks() {
+        try {
+            pruneCompletedTasks();
+        } catch (RuntimeException exception) {
+            // A failed sweep must not suppress all future scheduled executions.
+            LOGGER.error("Could not prune completed Python Worker tasks", exception);
+        }
+    }
+
     private static void joinReader(Thread reader) throws InterruptedException { reader.join(2_000); }
 
     private static int safeExitValue(Process process) {
@@ -461,6 +484,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     @Override
     public void close() {
         closed = true;
+        completedTaskCleanup.shutdownNow();
         for (Process process : activeProcesses) terminateTree(process);
     }
 

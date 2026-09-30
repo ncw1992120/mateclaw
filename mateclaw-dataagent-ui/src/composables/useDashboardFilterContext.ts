@@ -9,6 +9,7 @@ import type {
   FilterComponentConfig,
   TimeFilterComponentConfig,
   TimeFilterDefaultPreset,
+  TimeGranularity,
 } from '@/types'
 
 /** Flatten container children and tab children while retaining their component IDs. */
@@ -86,12 +87,14 @@ export function useDashboardFilterContext(
 ) {
   /** 全局时间范围 */
   const globalTimeRange = ref<TimeRangeValue | undefined>()
+  const globalTimeGranularity = ref<TimeGranularity>('DAY')
   /** 全局维度筛选值映射（field -> value） */
   const globalDimensionFilterMap = reactive<Record<string, string | string[]>>({})
 
   /** 组件绑定筛选器状态：filterId -> { timeRange?, dimensionFilters: { field -> value } } */
   const scopedFilterStates = reactive<Record<string, {
     timeRange?: TimeRangeValue
+    timeGranularity?: TimeGranularity
     dimensionFilters: Record<string, string | string[]>
   }>>({})
   /** 当前运行态按 filter component id 保存，避免同字段筛选器互相覆盖。 */
@@ -99,7 +102,7 @@ export function useDashboardFilterContext(
 
   const allComponents = () => collectDashboardComponents(components())
 
-  function filterMetadata(filterComponentId: string): Pick<DashboardRuntimeFilterState[string], 'field' | 'scope' | 'targetComponentIds'> | undefined {
+  function filterMetadata(filterComponentId: string): Pick<DashboardRuntimeFilterState[string], 'field' | 'scope' | 'targetComponentIds' | 'timeGranularity'> | undefined {
     const comp = allComponents().find(c => c.id === filterComponentId)
     if (!comp) return undefined
     if (comp.type === 'filter') {
@@ -110,15 +113,28 @@ export function useDashboardFilterContext(
     if (comp.type === 'timeFilter') {
       const config = comp.config as TimeFilterComponentConfig | undefined
       if (!config?.field) return undefined
-      return { field: config.field, scope: config.scope ?? 'global', targetComponentIds: [...(config.targetComponentIds ?? [])] }
+      return {
+        field: config.field,
+        scope: config.scope ?? 'global',
+        targetComponentIds: [...(config.targetComponentIds ?? [])],
+        timeGranularity: config.defaultTimeGranularity ?? 'DAY',
+      }
     }
     return undefined
   }
 
-  function setRuntimeFilterValue(filterComponentId: string, value: DashboardRuntimeFilterState[string]['value']): void {
+  function setRuntimeFilterValue(
+    filterComponentId: string,
+    value: DashboardRuntimeFilterState[string]['value'],
+    timeGranularity?: TimeGranularity,
+  ): void {
     const metadata = filterMetadata(filterComponentId)
     if (!metadata) return
-    runtimeFilterState[filterComponentId] = { ...metadata, value: Array.isArray(value) ? [...value] : value }
+    runtimeFilterState[filterComponentId] = {
+      ...metadata,
+      value: Array.isArray(value) ? [...value] : value,
+      ...(timeGranularity ? { timeGranularity } : {}),
+    }
   }
 
   /** Snapshot the latest values so async preview refreshes never consult configuration defaults. */
@@ -133,6 +149,7 @@ export function useDashboardFilterContext(
   /** 当前全局筛选上下文（计算属性，不含 sourceFilterId） */
   const filterContext = computed<DashboardFilterContext>(() => ({
     timeRange: globalTimeRange.value,
+    timeGranularity: globalTimeGranularity.value,
     dimensionFilters: Object.entries(globalDimensionFilterMap).map(([field, value]) => ({
       field,
       value,
@@ -176,9 +193,16 @@ export function useDashboardFilterContext(
   /**
    * 设置时间范围（由筛选器组件触发，支持作用范围）
    */
-  function setTimeRange(range: TimeRangeValue | undefined | null, sourceFilterId?: string): void {
+  function setTimeRange(
+    range: TimeRangeValue | undefined | null,
+    sourceFilterId?: string,
+    timeGranularity?: TimeGranularity,
+  ): void {
     const activeRange = range == null ? undefined : range
-    if (sourceFilterId) setRuntimeFilterValue(sourceFilterId, activeRange)
+    const selectedGranularity = sourceFilterId
+      ? timeGranularity ?? runtimeFilterState[sourceFilterId]?.timeGranularity ?? filterMetadata(sourceFilterId)?.timeGranularity ?? 'DAY'
+      : timeGranularity ?? globalTimeGranularity.value
+    if (sourceFilterId) setRuntimeFilterValue(sourceFilterId, activeRange, selectedGranularity)
     if (sourceFilterId) {
       const { scope } = getFilterScope(sourceFilterId)
       if (scope === 'scoped') {
@@ -187,6 +211,7 @@ export function useDashboardFilterContext(
           scopedFilterStates[sourceFilterId] = { dimensionFilters: {} }
         }
         scopedFilterStates[sourceFilterId].timeRange = activeRange
+        scopedFilterStates[sourceFilterId].timeGranularity = selectedGranularity
         // 通知受影响的组件
         emitScopedFilterChange(sourceFilterId)
         return
@@ -194,6 +219,7 @@ export function useDashboardFilterContext(
     }
     // 全局时间范围（不传 sourceFilterId，避免被误判为 scoped 筛选器）
     globalTimeRange.value = activeRange
+    globalTimeGranularity.value = selectedGranularity
     onFilterChange({ ...filterContext.value })
   }
 
@@ -238,6 +264,7 @@ export function useDashboardFilterContext(
 
     const context: DashboardFilterContext = {
       timeRange: state.timeRange,
+      timeGranularity: state.timeGranularity ?? 'DAY',
       dimensionFilters: Object.entries(state.dimensionFilters).map(([field, value]) => ({
         field,
         value,
@@ -252,6 +279,7 @@ export function useDashboardFilterContext(
    */
   function resetFilters(): void {
     globalTimeRange.value = undefined
+    globalTimeGranularity.value = 'DAY'
     Object.keys(globalDimensionFilterMap).forEach((key) => {
       delete globalDimensionFilterMap[key]
     })
@@ -260,6 +288,9 @@ export function useDashboardFilterContext(
     })
     for (const filterId of Object.keys(runtimeFilterState)) {
       runtimeFilterState[filterId].value = undefined
+      if (runtimeFilterState[filterId].timeGranularity) {
+        runtimeFilterState[filterId].timeGranularity = filterMetadata(filterId)?.timeGranularity ?? 'DAY'
+      }
     }
     onFilterChange(filterContext.value)
   }
@@ -273,6 +304,7 @@ export function useDashboardFilterContext(
     }
 
     globalTimeRange.value = undefined
+    globalTimeGranularity.value = 'DAY'
     Object.keys(globalDimensionFilterMap).forEach(key => delete globalDimensionFilterMap[key])
     Object.keys(scopedFilterStates).forEach(key => delete scopedFilterStates[key])
 
@@ -282,12 +314,17 @@ export function useDashboardFilterContext(
       if (runtimeFilterState[comp.id]) {
         // Rebuild the compatibility contexts from the live value, never from defaultValue.
         const value = runtimeFilterState[comp.id].value
+        const timeGranularity = runtimeFilterState[comp.id].timeGranularity ?? metadata.timeGranularity
         if (metadata.scope === 'scoped') {
           const state = scopedFilterStates[comp.id] ??= { dimensionFilters: {} }
-          if (comp.type === 'timeFilter') state.timeRange = value as TimeRangeValue | undefined
+          if (comp.type === 'timeFilter') {
+            state.timeRange = value as TimeRangeValue | undefined
+            state.timeGranularity = timeGranularity
+          }
           else if (typeof value === 'string' || Array.isArray(value)) state.dimensionFilters[metadata.field] = value
         } else if (comp.type === 'timeFilter') {
           globalTimeRange.value = value as TimeRangeValue | undefined
+          globalTimeGranularity.value = timeGranularity ?? 'DAY'
         } else if (typeof value === 'string' || Array.isArray(value)) {
           globalDimensionFilterMap[metadata.field] = value
         }
@@ -299,13 +336,21 @@ export function useDashboardFilterContext(
         ? (config as FilterComponentConfig | undefined)?.defaultValue
         : resolveTimeFilterDefault((config as TimeFilterComponentConfig | undefined)?.defaultPreset, (config as TimeFilterComponentConfig | undefined)?.maxRangeDays)
       const activeValue = value === null || value === '' || (Array.isArray(value) && value.length === 0) ? undefined : value
-      runtimeFilterState[comp.id] = { ...metadata, value: Array.isArray(activeValue) ? [...activeValue] : activeValue }
+      runtimeFilterState[comp.id] = {
+        ...metadata,
+        value: Array.isArray(activeValue) ? [...activeValue] : activeValue,
+        ...(comp.type === 'timeFilter' ? { timeGranularity: metadata.timeGranularity ?? 'DAY' } : {}),
+      }
       if (metadata.scope === 'scoped') {
         const state = scopedFilterStates[comp.id] ??= { dimensionFilters: {} }
-        if (comp.type === 'timeFilter') state.timeRange = activeValue as TimeRangeValue | undefined
+        if (comp.type === 'timeFilter') {
+          state.timeRange = activeValue as TimeRangeValue | undefined
+          state.timeGranularity = metadata.timeGranularity ?? 'DAY'
+        }
         else if (typeof activeValue === 'string' || Array.isArray(activeValue)) state.dimensionFilters[metadata.field] = activeValue
       } else if (comp.type === 'timeFilter') {
         globalTimeRange.value = activeValue as TimeRangeValue | undefined
+        globalTimeGranularity.value = metadata.timeGranularity ?? 'DAY'
       } else if (typeof activeValue === 'string' || Array.isArray(activeValue)) {
         globalDimensionFilterMap[metadata.field] = activeValue
       }
@@ -329,6 +374,7 @@ export function useDashboardFilterContext(
 
     // 绑定了专属筛选器 → 合并所有绑定的筛选器状态
     let timeRange: TimeRangeValue | undefined
+    let timeGranularity: TimeGranularity = 'DAY'
     const dimensionFilterMap: Record<string, string | string[]> = {}
 
     for (const filterId of boundFilterIds) {
@@ -336,6 +382,7 @@ export function useDashboardFilterContext(
       if (!state) continue
       if (state.timeRange) {
         timeRange = state.timeRange // 后绑定的覆盖先绑定的
+        timeGranularity = state.timeGranularity ?? 'DAY'
       }
       Object.entries(state.dimensionFilters).forEach(([field, value]) => {
         dimensionFilterMap[field] = value
@@ -344,6 +391,7 @@ export function useDashboardFilterContext(
 
     return {
       timeRange,
+      timeGranularity,
       dimensionFilters: Object.entries(dimensionFilterMap).map(([field, value]) => ({
         field,
         value,

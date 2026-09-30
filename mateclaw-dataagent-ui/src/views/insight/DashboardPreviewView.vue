@@ -167,6 +167,7 @@ import type {
   InsightComponentData,
   InsightComponent,
   TimeRangeValue,
+  TimeGranularity,
   DashboardFilterContext,
   DashboardPage,
   DashboardRuntimeFilterState,
@@ -784,7 +785,8 @@ async function refreshPipelineComponent(
 
 async function refreshPipelineComponents(filters: DashboardRuntimeFilterState, initial = false): Promise<void> {
   const changedFilterIds = Object.keys({ ...previousRuntimeFilterState, ...filters }).filter((filterId) =>
-    JSON.stringify(previousRuntimeFilterState[filterId]?.value) !== JSON.stringify(filters[filterId]?.value))
+    JSON.stringify([previousRuntimeFilterState[filterId]?.value, previousRuntimeFilterState[filterId]?.timeGranularity])
+      !== JSON.stringify([filters[filterId]?.value, filters[filterId]?.timeGranularity]))
   previousRuntimeFilterState = filters
   const components = pipelineComponents().filter((component) => initial
     || changedFilterIds.some((filterId) => filterTargetsComponent(filterId, component, filters)
@@ -921,12 +923,8 @@ function handleFilterChange(payload: { componentId: string; field: string; value
 }
 
 /** 时间筛选组件值变化 */
-function handleTimeFilterChange(payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void {
-  if (!payload.timeRange?.preset) {
-    setTimeRange(undefined, payload.componentId)
-    return
-  }
-  setTimeRange(payload.timeRange, payload.componentId)
+function handleTimeFilterChange(payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void {
+  setTimeRange(payload.timeRange, payload.componentId, payload.timeGranularity)
 }
 
 /** 组件级时间筛选变化（图表右上角时间选择器） */

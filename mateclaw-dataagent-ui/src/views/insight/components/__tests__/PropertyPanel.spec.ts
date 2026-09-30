@@ -344,6 +344,35 @@ describe('PropertyPanel', () => {
     expect(JSON.stringify(wrapper.emitted('change')?.at(-1)?.[0])).not.toContain('2026-')
   })
 
+  it('配置时间粒度选择器的显示状态和默认粒度', async () => {
+    const wrapper = mount(PropertyPanel, {
+      props: {
+        component: {
+          id: 'time-filter-granularity', type: 'timeFilter', title: '时间范围',
+          position: { x: 0, y: 0, w: 4, h: 2 }, config: { field: 'metric_time' },
+        },
+        allComponents: [],
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const showSwitch = wrapper.find('button[aria-label="insight.property.showTimeGranularity"]')
+    const defaultSelect = wrapper.find('select[aria-label="insight.property.defaultTimeGranularity"]')
+    expect(showSwitch.exists()).toBe(true)
+    expect(defaultSelect.exists()).toBe(true)
+    expect((defaultSelect.element as HTMLSelectElement).value).toBe('DAY')
+
+    await defaultSelect.setValue('MONTH')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { showTimeGranularity: true, defaultTimeGranularity: 'MONTH' },
+    })
+
+    await showSwitch.trigger('click')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
+      config: { showTimeGranularity: false, defaultTimeGranularity: 'MONTH' },
+    })
+  })
+
   it('保存时间范围大小配置，清空时不限制', async () => {
     const wrapper = mount(PropertyPanel, {
       props: {

@@ -207,6 +207,7 @@
             v-else-if="child.type === 'timeFilter'"
             :component="toWidgetComponent(child)"
             :model-value="runtimeFilterState?.[child.id]?.value"
+            :time-granularity="runtimeFilterState?.[child.id]?.timeGranularity"
             :show-title="true"
             :dashboard-theme="dashboardTheme"
             @change="(payload) => emit('time-filter-change', { componentId: child.id, ...payload })"
@@ -275,6 +276,7 @@ import type {
   ChartType,
   InsightComponentData,
   DashboardRuntimeFilterState,
+  TimeGranularity,
   ComponentTitleIconStyle,
   DashboardTabTitleIconStylePreview,
   ResolvedDashboardTheme,
@@ -331,7 +333,7 @@ const emit = defineEmits<{
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
   /** 筛选事件需要携带实际子组件 ID，才能命中组件的数据集绑定。 */
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
-  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
+  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void
   (e: 'retry-component-query', componentId: string): void
 }>()
 

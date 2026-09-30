@@ -31,6 +31,8 @@ const datePickerStub = {
 const stubs = {
   FilterControlShell: { template: '<div class="stub-shell"><slot name="icon" /><slot /></div>' },
   DashboardComponentIcon: true,
+  'el-select': { template: '<select><slot /></select>' },
+  'el-option': { template: '<option />' },
   'el-date-picker': datePickerStub,
 }
 
@@ -77,6 +79,7 @@ describe('TimeFilterWidget · 最大可选时间跨度', () => {
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual({
       field: 'metric_time',
       timeRange: { preset: 'custom', start: '2026-01-01', end: '2026-01-30' },
+      timeGranularity: 'DAY',
     })
   })
 
@@ -89,6 +92,7 @@ describe('TimeFilterWidget · 最大可选时间跨度', () => {
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual({
       field: 'metric_time',
       timeRange: { preset: 'custom', start: '2026-01-01', end: '2026-02-15' },
+      timeGranularity: 'DAY',
     })
   })
 

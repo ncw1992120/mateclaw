@@ -36,6 +36,7 @@
               v-else-if="comp.type === 'timeFilter'"
               :component="{ ...comp, titleBarStyle: 'hidden' }"
               :model-value="runtimeFilterState?.[comp.id]?.value"
+              :time-granularity="runtimeFilterState?.[comp.id]?.timeGranularity"
               :show-title="false"
               @change="(payload) => handleTimeFilterChange(comp.id, payload)"
             />
@@ -227,6 +228,7 @@
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
                 :component="getWidgetComponent(item.i)!"
                 :model-value="runtimeFilterState?.[item.i]?.value"
+                :time-granularity="runtimeFilterState?.[item.i]?.timeGranularity"
                 :show-title="true"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
@@ -301,7 +303,7 @@ import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
-import type { ComponentTitleIconStyle, DashboardDatasetInput, DashboardRuntimeFilterState, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
+import type { ComponentTitleIconStyle, DashboardDatasetInput, DashboardRuntimeFilterState, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, TimeGranularity, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -496,7 +498,7 @@ const emit = defineEmits<{
   (e: 'paste-component'): void
   (e: 'context-menu', payload: { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }): void
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
-  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
+  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'retry-component-query', componentId: string): void
   (e: 'ai-analysis-generate', componentId: string): void
@@ -1171,8 +1173,8 @@ function handleFilterChange(componentId: string, payload: { field: string; value
 }
 
 /** 时间筛选组件值变化 */
-function handleTimeFilterChange(componentId: string, payload: { field: string; timeRange: TimeRangeValue }): void {
-  emit('time-filter-change', { componentId, field: payload.field, timeRange: payload.timeRange })
+function handleTimeFilterChange(componentId: string, payload: { field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void {
+  emit('time-filter-change', { componentId, ...payload })
 }
 </script>
 

@@ -18,7 +18,7 @@ const stubs = {
   ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
   DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], template: '<div />' },
-  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue'], template: '<div />' },
+  TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue', 'timeGranularity'], template: '<div />' },
   AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['componentData'], template: '<div />' },
   CombinationCardWidget: { name: 'CombinationCardWidget', props: ['componentDataMap', 'sampleMode'], template: '<div />' },
 }
@@ -391,7 +391,7 @@ describe('DashboardCanvas keyboard interaction', () => {
         editable: false,
         runtimeFilterState: {
           'metric-filter': { field: 'metric_name', scope: 'global', targetComponentIds: [], value: '用户选择的指标' },
-          'date-filter': { field: 'metric_time', scope: 'global', targetComponentIds: [], value: selectedRange },
+          'date-filter': { field: 'metric_time', scope: 'global', targetComponentIds: [], value: selectedRange, timeGranularity: 'MONTH' },
         },
       },
       global: { stubs, plugins: [i18n] },
@@ -399,6 +399,26 @@ describe('DashboardCanvas keyboard interaction', () => {
 
     expect(wrapper.findComponent({ name: 'FilterSelectWidget' }).props('modelValue')).toBe('用户选择的指标')
     expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('modelValue')).toEqual(selectedRange)
+    expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('timeGranularity')).toBe('MONTH')
+  })
+
+  it('forwards time granularity changes from a top-level time filter', () => {
+    const timeFilter = {
+      id: 'date-filter', type: 'timeFilter' as const, title: '指标日期',
+      config: { field: 'metric_time' }, position: { x: 0, y: 0, w: 4, h: 2 },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [timeFilter], editable: false },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    wrapper.findComponent({ name: 'TimeFilterWidget' }).vm.$emit('change', {
+      field: 'metric_time', timeRange: undefined, timeGranularity: 'MONTH',
+    })
+
+    expect(wrapper.emitted('time-filter-change')?.[0]?.[0]).toEqual({
+      componentId: 'date-filter', field: 'metric_time', timeRange: undefined, timeGranularity: 'MONTH',
+    })
   })
 
   it('renames a top-level component from the canvas title toolbar', async () => {

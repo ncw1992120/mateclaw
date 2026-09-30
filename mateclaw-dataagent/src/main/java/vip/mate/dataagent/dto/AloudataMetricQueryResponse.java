@@ -23,11 +23,40 @@ public class AloudataMetricQueryResponse implements Serializable {
     /** 错误信息 */
     private String errorMsg;
 
+    /** 详细错误信息（部分 Aloudata 错误只填充此字段） */
+    private String detailErrorMsg;
+
+    /** 指标查询 API 标准错误详情字段 */
+    private String message;
+
     /** 响应数据 */
     private MetricData data;
 
     /** 追踪 ID */
     private String traceId;
+
+    /** 指标查询业务响应是否失败；兼容旧响应只返回 code 的情况。 */
+    public boolean hasBusinessFailure() {
+        return Boolean.FALSE.equals(success)
+                || (code != null && !"200".equals(code) && !"0".equals(code));
+    }
+
+    /** 统一提取失败详情，兼容 Aloudata API 的 message 及历史错误字段。 */
+    public String failureDescription() {
+        String detail = firstNonBlank(detailErrorMsg, errorMsg, message);
+        StringBuilder message = new StringBuilder("Aloudata 指标查询失败: ")
+                .append(detail == null || detail.isBlank() ? "上游未提供错误详情" : detail);
+        if (code != null && !code.isBlank()) message.append(" (code=").append(code).append(')');
+        if (traceId != null && !traceId.isBlank()) message.append(" (traceId=").append(traceId).append(')');
+        return message.toString();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
 
     /**
      * 指标数据

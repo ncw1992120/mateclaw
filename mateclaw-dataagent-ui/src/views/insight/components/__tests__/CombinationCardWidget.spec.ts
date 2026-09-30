@@ -47,6 +47,33 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('renders nested query failures locally and bubbles retry for that child', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'retry-combo', type: 'combination', title: '组合卡片',
+          children: [{ id: 'retry-child', type: 'table', title: '明细', layout: { x: 0, y: 0, col: 6, h: 120 } }],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        componentDataMap: {
+          'retry-child': { componentId: 'retry-child', renderType: 'table', queryStatus: 'timeout', error: '执行超时' },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'ComponentQueryState' }).exists()).toBe(true)
+    await wrapper.get('.query-state-retry').trigger('click')
+    expect(wrapper.emitted('retry-component-query')?.[0]).toEqual(['retry-child'])
+  })
+
   it('bubbles filter changes from components inside a combination card', async () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {
@@ -68,7 +95,7 @@ describe('CombinationCardWidget', () => {
         stubs: {
           KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
           FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], emits: ['change'], template: '<button :data-testid="\'filter-\' + component.id" @click="$emit(\'change\', { field: \'metric_name\', value: \'交易量\' })" />' },
-          TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue'], emits: ['change'], template: '<button data-testid="time-filter" @click="$emit(\'change\', { field: \'metric_time\', timeRange: { preset: \'custom\', start: \'2026-09-01\', end: \'2026-09-03\' } })" />' },
+          TimeFilterWidget: { name: 'TimeFilterWidget', props: ['component', 'modelValue', 'timeGranularity'], emits: ['change'], template: '<button data-testid="time-filter" @click="$emit(\'change\', { field: \'metric_time\', timeRange: { preset: \'custom\', start: \'2026-09-01\', end: \'2026-09-03\' }, timeGranularity: \'MONTH\' })" />' },
           AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
         },
       },
@@ -83,6 +110,7 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.emitted('time-filter-change')?.[0]?.[0]).toEqual({
       componentId: 'nested-time-filter', field: 'metric_time',
       timeRange: { preset: 'custom', start: '2026-09-01', end: '2026-09-03' },
+      timeGranularity: 'MONTH',
     })
   })
 
