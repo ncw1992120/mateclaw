@@ -322,7 +322,7 @@ const state = reactive({
   // KPI 指标分组（由结果集字段逐列投影；由 hydratePanel 灌入、指标配置弹窗编辑）
   kpiMetrics: [] as KpiMetricConfig[],
   // 仪表盘可用筛选器组件，由 hydratePanel 注入，供查询配置按字段名自动匹配并确定运算符。
-  filterCatalog: [] as Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple' }>,
+  filterCatalog: [] as Array<{ id: string; title: string; type?: string; field?: string; selectionMode?: 'single' | 'multiple'; defaultTimeGranularity?: import('@/types').TimeGranularity }>,
   // 结果集：卡片唯一数据来源（数据集 / 筛选 / 脚本都只是产出它的手段）
   resultSet: {
     status: 'empty',
@@ -708,8 +708,8 @@ function viewDisplayNameMap(detail: unknown): Record<string, string> {
 
 /**
  * 已同步语义层的名称 → 显示名映射（失败只影响描述列，不影响字段名）。
- * 后端 `aloudata/synced-metrics|dimensions` 返回列表（同时兼容 { records } 分页结构）；
- * 单次取 1000 条，超出部分回落源字段名作为目标名称。
+ * 后端 `aloudata/synced-metrics|dimensions` 按更新时间倒序返回且同步表可达数千条，
+ * 单页拉取会截断早期同步的维度/指标（展示名丢失回退技术名），因此循环翻页直到覆盖全部目标名。
  */
 async function aloudataLabelMap(
   datasourceId: string,
@@ -718,18 +718,23 @@ async function aloudataLabelMap(
 ): Promise<Record<string, string>> {
   if (!datasourceId || !names.length) return {}
   try {
-    const res = (kind === 'metric'
-      ? await listAloudataMetrics(datasourceId, 1, 1000)
-      : await listAloudataDimensions(datasourceId, 1, 1000)) as unknown
-    const records: Record<string, unknown>[] = Array.isArray(res)
-      ? (res as Record<string, unknown>[])
-      : ((res as { records?: Record<string, unknown>[] })?.records ?? [])
+    const wanted = new Set(names.map((name) => String(name)))
     const map: Record<string, string> = {}
-    records.forEach((row) => {
-      const name = kind === 'metric' ? row.metricName : row.dimName
-      const display = kind === 'metric' ? row.metricDisplayName : row.dimDisplayName
-      if (name && display) map[String(name)] = String(display)
-    })
+    const pageSize = 1000
+    for (let pageNumber = 1; pageNumber <= 10; pageNumber += 1) {
+      const res = (kind === 'metric'
+        ? await listAloudataMetrics(datasourceId, pageNumber, pageSize)
+        : await listAloudataDimensions(datasourceId, pageNumber, pageSize)) as unknown
+      const records: Record<string, unknown>[] = Array.isArray(res)
+        ? (res as Record<string, unknown>[])
+        : ((res as { records?: Record<string, unknown>[] })?.records ?? [])
+      records.forEach((row) => {
+        const name = kind === 'metric' ? row.metricName : row.dimName
+        const display = kind === 'metric' ? row.metricDisplayName : row.dimDisplayName
+        if (name && display && wanted.has(String(name)) && !map[String(name)]) map[String(name)] = String(display)
+      })
+      if (records.length < pageSize || [...wanted].every((name) => map[name])) break
+    }
     return map
   } catch {
     return {}
@@ -891,6 +896,18 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
     const metrics = ds.aloudata?.metrics ?? []
     const dims = ds.aloudata?.dims ?? []
     if (!metrics.length && !dims.length) return []
+    // 已持久化数据集：descriptor 的字段标题由后端按同步表全量填充（无分页截断），优先使用
+    if (ds.backendDatasetId) {
+      try {
+        const descriptor = await datasetApi.getInputDescriptor(ds.backendDatasetId) as unknown as datasetApi.DatasetInputDescriptor
+        const labels: Record<string, string> = {}
+        ;(descriptor?.schema ?? []).forEach((column) => {
+          const title = (column.title ?? '').trim()
+          if (column.name && title) labels[String(column.name)] = title
+        })
+        if (Object.keys(labels).length) return buildAloudataMetricDimSchema(metrics, dims, labels)
+      } catch { /* descriptor 获取失败时回退分页标签 */ }
+    }
     const [metricLabels, dimLabels] = await Promise.all([
       aloudataLabelMap(datasourceId, metrics, 'metric'),
       aloudataLabelMap(datasourceId, dims, 'dimension'),
