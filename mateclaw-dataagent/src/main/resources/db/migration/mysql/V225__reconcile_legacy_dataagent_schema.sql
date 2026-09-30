@@ -989,6 +989,19 @@ PREPARE v225_feedback_rename_stmt FROM @v225_feedback_rename_ddl;
 EXECUTE v225_feedback_rename_stmt;
 DEALLOCATE PREPARE v225_feedback_rename_stmt;
 
+-- Existing schemas may already have a numeric user_id and no legacy column.
+-- Ensure the preservation column exists before the unconditional backfill below.
+SET @v225_dataagent_help_feedback_legacy_user_id_exists := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dataagent_help_feedback' AND COLUMN_NAME = 'legacy_user_id'
+);
+SET @v225_dataagent_help_feedback_legacy_user_id_ddl := IF(@v225_dataagent_help_feedback_legacy_user_id_exists = 0,
+    'ALTER TABLE `dataagent_help_feedback` ADD COLUMN `legacy_user_id` VARCHAR(100) DEFAULT NULL COMMENT ''历史用户标识（原字符串）''',
+    'SELECT 1');
+PREPARE v225_dataagent_help_feedback_legacy_user_id_stmt FROM @v225_dataagent_help_feedback_legacy_user_id_ddl;
+EXECUTE v225_dataagent_help_feedback_legacy_user_id_stmt;
+DEALLOCATE PREPARE v225_dataagent_help_feedback_legacy_user_id_stmt;
+
 SET @v225_dataagent_help_feedback_user_id_exists := (
     SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dataagent_help_feedback' AND COLUMN_NAME = 'user_id'
