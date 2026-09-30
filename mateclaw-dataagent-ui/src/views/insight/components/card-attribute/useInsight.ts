@@ -935,6 +935,23 @@ async function refreshDatasetSchema(
   }
 }
 
+/**
+ * 仅刷新字段注册表的展示名（不重建查询配置）：打开查询配置弹窗前调用，
+ * 让未定制的展示名跟随数据源最新展示名（如 Aloudata 平台 metricDisplayName/dimDisplayName 中文名）。
+ * 失败静默：注册表刷新失败不阻断弹窗打开，沿用现有展示名。
+ */
+async function syncDatasetFieldLabels(id: string): Promise<void> {
+  const ds = getDataset(id)
+  if (!ds || !canFetchDatasetSchema(ds)) return
+  try {
+    const schema = await fetchDatasetSchema(ds)
+    if (schema.length) {
+      ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
+      ds.schema = schema
+    }
+  } catch { /* 静默兜底 */ }
+}
+
 /* ---- 字段注册表（唯一事实源） ---- */
 /** 在全部数据集中按字段名查找注册表条目 */
 export function findFieldMeta(name: string): DatasetFieldMeta | undefined {
@@ -1121,8 +1138,12 @@ function getLoadedDashboardSchema(): InsightDashboardSchema | null {
   return loadedDashboardSchema
 }
 
-/** 打开「查询配置」弹窗（展示字段 / 筛选器绑定 / 排序 / 分页） */
-function openQueryConfig(datasetId: string): void {
+/** 打开「查询配置」弹窗（展示字段 / 筛选器绑定 / 排序 / 分页）。
+ *  Aloudata 数据集先静默刷新字段注册表：展示名默认跟随平台中文名
+ *  （metricDisplayName/dimDisplayName），旧配置里未定制的技术名默认值随之自愈。 */
+async function openQueryConfig(datasetId: string): Promise<void> {
+  const ds = state.datasets.find((item) => item.id === datasetId || item.backendDatasetId === datasetId)
+  if (ds && ds.sourceType === 'aloudata') await syncDatasetFieldLabels(ds.id)
   state.ui.queryConfigDialog = { visible: true, datasetId }
 }
 function closeQueryConfig(): void {

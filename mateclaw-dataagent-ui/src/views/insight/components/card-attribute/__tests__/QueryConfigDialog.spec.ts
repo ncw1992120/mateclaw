@@ -104,6 +104,27 @@ describe('QueryConfigDialog', () => {
     expect(rows[2].text()).toContain('指标')
   })
 
+  it('回显时未定制的展示名（空或等于技术名）跟随注册表展示名，定制的保留', async () => {
+    const wrapper = mountDialog({
+      initialConfig: {
+        displayFields: [
+          { field: 'metric_date', title: 'metric_date', role: 'dimension' },
+          { field: 'strategy_id', title: '自定义策略', role: 'dimension' },
+          { field: 'in_account', title: '', role: 'measure' },
+        ],
+        queryableFields: [],
+        parameterBindings: [],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      } as DatasetQueryConfig,
+    })
+    await flushPromises()
+    const inputs = findTest(wrapper, 'qc-title-input')
+    expect((inputs[0].element as HTMLInputElement).value).toBe('指标日期')
+    expect((inputs[1].element as HTMLInputElement).value).toBe('自定义策略')
+    expect((inputs[2].element as HTMLInputElement).value).toBe('入金客户数')
+  })
+
   it('移除展示字段不影响筛选绑定，但会移出排序白名单', async () => {
     const saved: DatasetQueryConfig[] = []
     const wrapper = mountDialog({

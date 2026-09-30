@@ -379,7 +379,14 @@ watch(() => props.modelValue, (visible) => {
   fixedFilterRows.value = (props.initialFixedFilters ?? []).map((filter) => toCondition(filter))
   const initial = props.initialConfig
   if (initial && initial.displayFields.length) {
-    fieldRows.value = sortDimensionsFirst(initial.displayFields.map((row) => ({ ...row, role: roleForInitialRow(row) })))
+    fieldRows.value = sortDimensionsFirst(initial.displayFields.map((row) => {
+      const metadata = props.fields.find((field) => field.name === row.field)
+      const saved = (row.title ?? '').trim()
+      // 展示名默认跟随数据集注册表最新展示名（如 Aloudata 平台 metricDisplayName/dimDisplayName 中文名）：
+      // 用户定制过（非空且不等于技术字段名）则保留；空值或旧的技术名默认值用注册表展示名自愈。
+      const title = saved && saved !== row.field ? saved : (metadata?.displayName?.trim() || saved || row.field)
+      return { ...row, title, role: roleForInitialRow(row) }
+    }))
     bindingRows.value = initial.parameterBindings.map((binding) => ({ ...binding }))
     sortEnabled.value = initial.sortPolicy.enabled
     sortAllowed.value = [...initial.sortPolicy.allowedFields]
