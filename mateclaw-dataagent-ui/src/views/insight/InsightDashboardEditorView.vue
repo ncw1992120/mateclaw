@@ -582,6 +582,11 @@ const scriptTargetComponentId = ref('')
 /** 组件渲染数据映射（编辑模式自动预览） */
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 
+/** 用户最近一次在查看数据弹窗显式应用「组件渲染」的时间；结果集通道在该窗口内不得覆盖。 */
+const manualRenderAt = new Map<string, number>()
+/** 手动渲染的保护窗口：飞行中的面板结果集回包晚于此到达时应丢弃，避免覆盖用户显式应用的数据。 */
+const MANUAL_RENDER_GUARD_MS = 3000
+
 /** 当前激活的页面 ID */
 const activePageId = ref<string>('')
 
@@ -1371,6 +1376,7 @@ function handlePreviewResult(data: InsightComponentData): void {
       previewTimer = null
     }
     componentPreviewRevisions.begin(data.componentId)
+    manualRenderAt.set(data.componentId, Date.now())
     componentDataMap.value[data.componentId] = data
   }
 }
@@ -1430,6 +1436,8 @@ function handleComponentResultSet(payload: {
     .find((item) => item !== null)
   const component = topLevel ?? (nestedChild as InsightComponent | null)
   if (!component) return
+  // 手动「组件渲染」保护窗口内，面板结果集回包（飞行中查询晚到）不得覆盖用户显式应用的数据
+  if (Date.now() - (manualRenderAt.get(payload.componentId) ?? 0) < MANUAL_RENDER_GUARD_MS) return
   if (payload.status === 'ready') {
     componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)
     return
