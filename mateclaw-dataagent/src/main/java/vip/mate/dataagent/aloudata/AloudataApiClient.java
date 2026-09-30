@@ -1,5 +1,6 @@
 package vip.mate.dataagent.aloudata;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -243,6 +244,7 @@ public class AloudataApiClient {
         HttpEntity<?> entity = new HttpEntity<>(request.body(), request.headers());
         if (requestLogEnabled) {
             log.info("{}", formatRequestLog(request));
+            log.info("[aloudata-curl] {}", formatCurlCommand(request));
         } else {
             log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
         }
@@ -275,6 +277,37 @@ public class AloudataApiClient {
     private static boolean isSensitiveParameter(String name) {
         String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
         return normalized.equals("auth-value") || normalized.contains("authorization") || normalized.contains("token");
+    }
+
+    /** 仅供联调日志把 body 序列化成 JSON；与业务序列化无关，失败时退化为 toString。 */
+    private static final ObjectMapper CURL_LOG_JSON = new ObjectMapper();
+
+    /**
+     * 将实际请求还原为可直接复制执行的 curl 命令（联调用）。仅包含 URL、方法与
+     * query/body 参数；Content-Type 是 body 能被服务端按 JSON 解析的必要头，
+     * 认证 Header（tenant-id / auth-type / auth-value）按要求不输出，调用时需自行补充。
+     */
+    public static String formatCurlCommand(PreparedRequest request) {
+        StringBuilder command = new StringBuilder("curl -X ")
+                .append(request.method().name())
+                .append(" '").append(request.url()).append('\'');
+        Object body = request.body();
+        if (body instanceof Map<?, ?> map && !map.isEmpty()) {
+            command.append(" -H 'Content-Type: application/json' -d '")
+                    .append(toShellSafeJson(body)).append('\'');
+        }
+        return command.toString();
+    }
+
+    private static String toShellSafeJson(Object body) {
+        String json;
+        try {
+            json = CURL_LOG_JSON.writeValueAsString(body);
+        } catch (Exception e) {
+            json = String.valueOf(body);
+        }
+        /* 单引号包裹的 shell 字符串内部转义：' -> '\'' */
+        return json.replace("'", "'\\''");
     }
 
     /** 底层发送：便于本地 mock 仅改写 host:port 后复用同一套 HTTP 行为（超时、头、反序列化）。 */
