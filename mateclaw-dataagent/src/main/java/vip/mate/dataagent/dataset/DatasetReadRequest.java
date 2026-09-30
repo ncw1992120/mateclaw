@@ -22,12 +22,20 @@ public record DatasetReadRequest(
         Integer limit,
         Integer offset,
         Map<String, Object> parameters,
-        boolean requestTotalCount) {
+        boolean requestTotalCount,
+        String timeGranularity) {
 
     /** 旧构造重载：无排序、不请求总数，保持既有调用方行为不变。 */
     public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
                               Integer limit, Integer offset, Map<String, Object> parameters) {
-        this(datasetId, inputName, columns, filters, List.of(), limit, offset, parameters, false);
+        this(datasetId, inputName, columns, filters, List.of(), limit, offset, parameters, false, null);
+    }
+
+    /** 兼容含排序与总数的旧调用方。 */
+    public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
+                              List<DatasetSort> orders, Integer limit, Integer offset,
+                              Map<String, Object> parameters, boolean requestTotalCount) {
+        this(datasetId, inputName, columns, filters, orders, limit, offset, parameters, requestTotalCount, null);
     }
 
     public DatasetReadRequest {

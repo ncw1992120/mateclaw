@@ -106,7 +106,15 @@
       <section v-if="filterSupported" class="dd-block">
         <div class="dd-head">
           <span class="dd-title">筛选器绑定</span>
-          <span v-if="hasTimeFilterRows" class="dd-hint">时间范围左闭右开：包含开始时间，不包含结束时间</span>
+          <div class="dd-filter-head-actions">
+            <span v-if="hasTimeFilterRows" class="dd-hint">时间范围左闭右开：包含开始时间，不包含结束时间</span>
+            <label v-if="hasTimeFilterRows" class="dd-time-granularity">
+              <span>时间粒度</span>
+              <el-select v-model="timeGranularity" size="small" data-testid="time-granularity" aria-label="本次查询时间粒度">
+                <el-option v-for="option in TIME_GRANULARITY_OPTIONS" :key="option.value" :label="option.label" :value="option.value" />
+              </el-select>
+            </label>
+          </div>
         </div>
         <div v-if="queryFilterRows.length" class="dd-table-wrap dd-conditions">
           <table class="dd-table dd-filter-table" data-testid="query-filter-table">
@@ -284,7 +292,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import type { InsightComponent, InsightComponentData } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeGranularity } from '@/types'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
 import { previewInput } from '@/api/dataset'
@@ -317,6 +325,13 @@ const DEFAULT_BATCH_SIZE = 50
 /** 未分页时的「限制条数」：默认值与上限（上限与后端数据集预览上限保持一致） */
 const DEFAULT_QUERY_LIMIT = 10000
 const MAX_QUERY_LIMIT = 100000
+const TIME_GRANULARITY_OPTIONS: Array<{ label: string; value: TimeGranularity }> = [
+  { label: '天', value: 'DAY' },
+  { label: '周', value: 'WEEK' },
+  { label: '月', value: 'MONTH' },
+  { label: '季度', value: 'QUARTER' },
+  { label: '年', value: 'YEAR' },
+]
 
 const loading = ref(false)
 const error = ref('')
@@ -336,6 +351,7 @@ const currentPageSize = ref(DEFAULT_BATCH_SIZE)
 const pageDraft = ref('1')
 /** 未分页模式的取数上限（限制条数），默认 10000、上限 100000；分页模式下由每页条数接管 */
 const queryLimit = ref(DEFAULT_QUERY_LIMIT)
+const timeGranularity = ref<TimeGranularity>('DAY')
 const stateReady = ref(false)
 /** 递增请求序号：排序/翻页快速切换时丢弃旧请求晚返回的响应 */
 let requestSequence = 0
@@ -512,6 +528,17 @@ function createQueryFilterRows(): PreviewQueryFilterRow[] {
   })
 }
 
+const boundTimeGranularityDefaults = computed(() => [...new Set(
+  queryFilterRows.value
+    .filter((row) => row.timeBoundary)
+    .map((row) => (state.filterCatalog.find((filter) => filter.id === row.filterComponentId) as
+      (typeof state.filterCatalog[number] & { defaultTimeGranularity?: TimeGranularity }) | undefined)?.defaultTimeGranularity)
+    .filter((value): value is TimeGranularity => TIME_GRANULARITY_OPTIONS.some((option) => option.value === value)),
+)])
+const initialTimeGranularity = computed<TimeGranularity>(() =>
+  boundTimeGranularityDefaults.value.length === 1 ? boundTimeGranularityDefaults.value[0] : 'DAY',
+)
+
 function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): void {
   row.enabled = enabled
   if (!enabled) row.value = ''
@@ -550,6 +577,7 @@ const currentSignature = computed(() =>
     displayFields.value.map(({ field, title, role }) => [field, title, role]),
     parameters.value.map((p) => [p.name, paramValues[p.name]]),
     queryFilterRows.value.map((row) => ({ field: row.field, operator: row.operator, parameterName: row.parameterName, value: row.value, enabled: row.enabled })),
+    hasTimeFilterRows.value ? timeGranularity.value : null,
     sortState.value,
     paginationEnabled.value ? [currentPage.value, currentPageSize.value] : queryLimit.value,
   ]),
@@ -571,6 +599,7 @@ function persistQueryState(): void {
     page: currentPage.value,
     pageSize: currentPageSize.value,
     queryLimit: queryLimit.value,
+    ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
   }
   // 查询条件和值是轻量的用户配置：随数据集输入写入仪表盘 Schema，跨刷新/登录恢复。
   props.dataset.lastQueryState = queryState
@@ -663,6 +692,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           limit,
           offset,
           parameters,
+          ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
         })
       : await previewDatasetDraft({
           ...request,
@@ -672,6 +702,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           requestTotalCount,
           limit,
           offset,
+          ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
         })
     // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
     if (currentRequest !== requestSequence) return
@@ -808,6 +839,7 @@ async function open(): Promise<void> {
   }
 
   queryFilterRows.value = createQueryFilterRows()
+  timeGranularity.value = initialTimeGranularity.value
   sortState.value = sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
   currentPage.value = 1
   pageDraft.value = '1'
@@ -819,6 +851,9 @@ async function open(): Promise<void> {
 
   const cachedState = props.dataset.lastQueryState ?? getCachedQueryState(props.dataset.id)
   if (cachedState) {
+    if (cachedState.timeGranularity && TIME_GRANULARITY_OPTIONS.some((option) => option.value === cachedState.timeGranularity)) {
+      timeGranularity.value = cachedState.timeGranularity
+    }
     const restoredRows = new Set<number>()
     cachedState.filters.forEach((saved) => {
       // Bindings can be reordered or have their parameter name regenerated when the
@@ -901,6 +936,24 @@ watch(() => ui.dataDialog.visible, (visible) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.dd-filter-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+.dd-time-granularity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--db-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.dd-time-granularity :deep(.el-select) {
+  width: 112px;
 }
 .dd-result-tabs {
   display: flex;

@@ -101,7 +101,7 @@ public class DatasetComposerController {
         // metric_time 是分区字段：生成单引号 DateTrunc/Cast 专用形态（demo 实测通过，见类注释）。
         query.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(
                 (request.filters == null ? List.<Map<String, Object>>of() : request.filters).stream()
-                .map(AloudataFilterExpressions::of)
+                .map(filter -> AloudataFilterExpressions.of(filter, request.timeGranularity))
                 .filter(Objects::nonNull)
                 .toList()));
         Set<String> sortable = new HashSet<>(metrics);
@@ -204,7 +204,7 @@ public class DatasetComposerController {
                 // adapter.previewDraft 只消费 filters/limit，不读取 datasetId。
                 new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", request.columns, toFilters(request.filters),
                         toOrders(request.orders), Math.min(request.limit == null ? 20 : request.limit, MAX_DRAFT_PAGE_SIZE),
-                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount));
+                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount, request.timeGranularity));
         List<Map<String,Object>> rows = batch.rows() == null ? List.of() : batch.rows();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));
@@ -364,6 +364,8 @@ public class DatasetComposerController {
         /** 分页偏移（配合 limit 做服务端滚动加载；单次上限仍受编译器的 MAX_LIMIT 约束） */
         private Integer offset;
         private boolean requestTotalCount;
+        /** Aloudata metric_time 分区过滤粒度；缺省 DAY。 */
+        private String timeGranularity;
         /**
          * SQL 命名参数值（对应 baseSql 里的 {@code :name} 占位符）。
          * <p>

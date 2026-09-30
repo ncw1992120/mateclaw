@@ -107,6 +107,23 @@ class AloudataAnalysisViewQueryCompilerTest {
     }
 
     @Test
+    void compilesMetricTimePartitionBoundsUsingRequestedGranularity() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-10-01")),
+                List.of(), 50, 0, Map.of(), false, "QUARTER");
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"QUARTER\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))"
+                        + " AND (DateTrunc(['metric_time'], \"QUARTER\") < (DateTrunc(Cast(\"2026-10-01 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))"),
+                body.get("filters"));
+    }
+
+    @Test
     void keepsStaticViewConstraintSeparateFromRuntimePartitionFilter() {
         AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
                 List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),

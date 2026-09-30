@@ -62,6 +62,11 @@ const stubs = {
     props: ['modelValue'],
     template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
+  'el-select': {
+    props: ['modelValue'],
+    template: '<select :value="modelValue" v-bind="$attrs" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
+  },
+  'el-option': { props: ['label', 'value'], template: '<option :value="value">{{ label }}</option>' },
   'el-switch': {
     props: ['modelValue'],
     emits: ['update:modelValue', 'change'],
@@ -690,7 +695,7 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
   })
 
   it('时间筛选器以开始和结束两行展示，并提交包前不包后的过滤条件', async () => {
-    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', selectionMode: 'single' }]
+    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', selectionMode: 'single', defaultTimeGranularity: 'MONTH' }]
     const wrapper = await openWith(metricViewDataset())
 
     const startRow = wrapper.find('[data-time-boundary="start"]')
@@ -704,16 +709,45 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     expect(endRow.find('[data-testid="query-filter-operator"]').text()).toContain('小于')
     expect(endRow.find('input.dd-value').attributes('placeholder')).toContain('不包含')
     expect(wrapper.text()).toContain('包含开始时间，不包含结束时间')
+    expect(wrapper.get('[data-testid="time-granularity"]').element.value).toBe('MONTH')
+    await wrapper.get('[data-testid="time-granularity"]').setValue('WEEK')
 
     await startRow.find('input.dd-value').setValue('2026-09-01')
     await endRow.find('input.dd-value').setValue('2026-10-01')
     await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
     await flushPromises()
 
+    expect(previewDatasetDraft.mock.calls.at(-1)?.[0]).toMatchObject({ timeGranularity: 'WEEK' })
     expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
       { field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' },
       { field: 'trade_date', operator: 'lt', value: '2026-10-01', role: 'dimension' },
     ])
+  })
+
+  it('未绑定时间筛选器时不展示或发送时间粒度', async () => {
+    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'filter', selectionMode: 'single' }]
+    const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig([
+      { filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' },
+    ]) }))
+
+    expect(wrapper.find('[data-testid="time-granularity"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    expect(previewDatasetDraft.mock.calls.at(-1)?.[0]).not.toHaveProperty('timeGranularity')
+  })
+
+  it('已保存数据集也将所选时间粒度传入统一读取接口', async () => {
+    state.filterCatalog = [{ id: 'filter-date', title: '日期范围', type: 'timeFilter', defaultTimeGranularity: 'YEAR' }]
+    const wrapper = await openWith(metricViewDataset({ backendDatasetId: '123' }))
+
+    expect(wrapper.get('[data-testid="time-granularity"]').element.value).toBe('YEAR')
+    await wrapper.get('[data-testid="time-granularity"]').setValue('QUARTER')
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewInput.mock.calls.at(-1)?.[0]).toMatchObject({ timeGranularity: 'QUARTER' })
+    wrapper.unmount()
   })
 
   it('开始和结束条件独立启停；禁用结束时间只提交开始边界', async () => {

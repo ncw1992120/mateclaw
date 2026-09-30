@@ -80,7 +80,7 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         // metric_time（分区字段）条件生成单引号 DateTrunc/Cast 专用形态进 filters
         // （demo 环境实测通过；无引号/双引号字段一律 SM_02_0006/0014，见 AloudataFilterExpressions 类注释）。
         query.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(
-                request.filters().stream().map(this::expression).toList()));
+                request.filters().stream().map(filter -> expression(filter, request.timeGranularity())).toList()));
         // orders 仅当字段属于已选指标/维度时下发；Aloudata 要求排序字段包含在 metrics/dimensions 中
         List<Map<String, String>> orders = ordersExpression(metrics, dimensions, request.orders());
         query.setOrders(orders.isEmpty() ? null : orders);
@@ -141,9 +141,9 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     private List<String> strings(Object value) { return value == null ? List.of() : mapper.convertValue(value, new TypeReference<>() {}); }
 
     /** 保留既有普通维度过滤器的 wire 语法，仅将 metric_time 委托给分区字段专用编译器。 */
-    private String expression(DatasetFilter filter) {
+    private String expression(DatasetFilter filter, String timeGranularity) {
         if (AloudataFilterExpressions.METRIC_TIME_FIELD.equals(filter.field())) {
-            return AloudataFilterExpressions.of(filter);
+            return AloudataFilterExpressions.of(filter, timeGranularity);
         }
         String field = "[" + filter.field() + "]";
         String operator = switch (filter.operator().toLowerCase(Locale.ROOT)) {

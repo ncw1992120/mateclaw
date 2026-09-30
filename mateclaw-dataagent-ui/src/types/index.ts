@@ -788,6 +788,7 @@ export interface DatasetReadRequest {
   offset?: number
   parameters?: Record<string, unknown>
   requestTotalCount?: boolean
+  timeGranularity?: TimeGranularity
 }
 
 /** 统一数据集读取结果 */
@@ -1822,6 +1823,7 @@ export interface DatasetLastQueryState {
   pageSize: number
   /** 未分页时的取数上限（限制条数）；缺省回退组件默认值 */
   queryLimit?: number
+  timeGranularity?: TimeGranularity
 }
 
 /** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */

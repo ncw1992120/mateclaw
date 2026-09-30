@@ -35,7 +35,7 @@ public class AloudataAnalysisViewQueryCompiler {
                 throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
                         "指标视图不支持字段筛选: " + filter.field());
             }
-            String expression = toExpression(filter);
+            String expression = toExpression(filter, request.timeGranularity());
             if (AloudataFilterExpressions.METRIC_TIME_FIELD.equals(filter.field())) {
                 // 分区范围条件要合并成 filters 的单条 DateTrunc/Cast 表达式，不能拆成多个数组项。
                 metricTimeFilters.add(expression);
@@ -122,14 +122,14 @@ public class AloudataAnalysisViewQueryCompiler {
     }
 
     /** 单个下推条件 → Aloudata 筛选表达式；无法等价表达的运算符直接拒绝，不静默丢弃。 */
-    private String toExpression(DatasetFilter filter) {
+    private String toExpression(DatasetFilter filter, String timeGranularity) {
         String operator = filter.operator() == null ? "" : filter.operator().toLowerCase(Locale.ROOT);
         if ("is_null".equals(operator) || "is_not_null".equals(operator)) {
             throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER,
                     "指标视图不支持该筛选运算符: " + filter.operator());
         }
         try {
-            return AloudataFilterExpressions.of(filter);
+            return AloudataFilterExpressions.of(filter, timeGranularity);
         } catch (IllegalArgumentException e) {
             throw new DatasetReadException(DatasetReadErrorCode.UNSUPPORTED_FILTER, e.getMessage());
         }

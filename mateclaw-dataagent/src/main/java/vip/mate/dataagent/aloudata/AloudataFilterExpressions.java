@@ -51,9 +51,14 @@ public final class AloudataFilterExpressions {
 
     /** 由字段 + 运算符 + 取值生成维度过滤表达式；运算符不支持或取值不合法时抛出，绝不静默丢弃条件。 */
     public static String of(String field, String operator, Object value) {
+        return of(field, operator, value, "DAY");
+    }
+
+    /** 由字段 + 运算符 + 取值及指标日期粒度生成过滤表达式；普通维度忽略粒度。 */
+    public static String of(String field, String operator, Object value, String timeGranularity) {
         Objects.requireNonNull(field, "filter field must not be null");
         if (METRIC_TIME_FIELD.equals(field)) {
-            return metricTimeExpression(operator, value);
+            return metricTimeExpression(operator, value, normalizeTimeGranularity(timeGranularity));
         }
         if (operator != null && "between".equalsIgnoreCase(operator.trim())) {
             return between(field, value);
@@ -85,7 +90,7 @@ public final class AloudataFilterExpressions {
      * {@code (DateTrunc(['metric_time'], "DAY") >= (DateTrunc(Cast("2026-08-26 00:00:00", "TIMESTAMP"), "DAY")))}。
      * between 展开为两条 DateTrunc 条件合并的单条 {@code (A AND B)}；IN/NotIn 不适用于分区裁剪，直接拒绝。
      */
-    private static String metricTimeExpression(String operator, Object value) {
+    private static String metricTimeExpression(String operator, Object value, String granularity) {
         if (operator == null || operator.isBlank()) {
             throw new IllegalArgumentException("metric_time 筛选缺少运算符");
         }
@@ -95,14 +100,14 @@ public final class AloudataFilterExpressions {
             if (range.size() < 2) {
                 throw new IllegalArgumentException("between 需要两个边界值: " + METRIC_TIME_FIELD);
             }
-            return "(" + metricTimeCondition(">=", range.get(0)) + " AND " + metricTimeCondition("<=", range.get(1)) + ")";
+            return "(" + metricTimeCondition(">=", range.get(0), granularity) + " AND " + metricTimeCondition("<=", range.get(1), granularity) + ")";
         }
         String symbol = symbol(operator);
         if (!List.of("=", "<>", ">", ">=", "<", "<=").contains(symbol)) {
             throw new IllegalArgumentException("metric_time（分区字段）不支持运算符 " + operator
                     + "（可用: eq, neq, gt, gte, lt, lte, between）");
         }
-        return "(" + metricTimeCondition(symbol, value) + ")";
+        return "(" + metricTimeCondition(symbol, value, granularity) + ")";
     }
 
     /** 单侧 metric_time DateTrunc/Cast 条件（字段单引号引用，日期值补 00:00:00）。 */
@@ -123,6 +128,10 @@ public final class AloudataFilterExpressions {
 
     public static String of(DatasetFilter filter) {
         return of(filter.field(), filter.operator(), filter.value());
+    }
+
+    public static String of(DatasetFilter filter, String timeGranularity) {
+        return of(filter.field(), filter.operator(), filter.value(), timeGranularity);
     }
 
     /**
@@ -172,11 +181,15 @@ public final class AloudataFilterExpressions {
 
     /** 前端/草稿入参形态（Map）→ 表达式；缺少字段或运算符时返回 null 由调用方拒绝。 */
     public static String of(Map<String, Object> filter) {
+        return of(filter, "DAY");
+    }
+
+    public static String of(Map<String, Object> filter, String timeGranularity) {
         if (filter == null) return null;
         Object field = filter.get("field");
         Object operator = filter.get("operator") != null ? filter.get("operator") : filter.get("op");
         if (field == null || operator == null) return null;
-        return of(String.valueOf(field), String.valueOf(operator), filter.get("value"));
+        return of(String.valueOf(field), String.valueOf(operator), filter.get("value"), timeGranularity);
     }
 
     /** 标量字面量：数值/布尔原样，其余加双引号并转义。 */

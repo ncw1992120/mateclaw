@@ -742,6 +742,9 @@ function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
       title: item.title || String(item.id),
       field: typeof item.config?.field === 'string' ? item.config.field : undefined,
       selectionMode,
+      defaultTimeGranularity: item.type === 'timeFilter'
+        ? (item.config?.defaultTimeGranularity as import('@/types').TimeGranularity | undefined)
+        : undefined,
     })
   }
   const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'

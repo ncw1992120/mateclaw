@@ -57,6 +57,7 @@ export interface PanelFilterComponent {
    * 「筛选器绑定」弹窗据此把运算符固定为筛选器自身的语义，不允许在绑定处再编辑。
    */
   selectionMode?: 'single' | 'multiple'
+  defaultTimeGranularity?: import('@/types').TimeGranularity
 }
 
 /** 正式组件类型 → 原型卡片类型 */
@@ -164,6 +165,7 @@ export function hydratePanel(
     type: c.type,
     field: c.field,
     selectionMode: c.selectionMode,
+    defaultTimeGranularity: c.defaultTimeGranularity,
   }))
 
   // 结果集：回填持久化元数据（行数据留空，由画布侧回读或重算补齐）。
