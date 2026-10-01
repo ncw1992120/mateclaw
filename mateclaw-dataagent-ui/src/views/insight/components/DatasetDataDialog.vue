@@ -220,7 +220,7 @@
               data-testid="component-render"
               :disabled="!canRenderComponent"
               @click="switchToRenderTab"
-            >组件渲染</button>
+            >应用</button>
           </div>
           <div class="dd-result-actions">
             <span class="dd-hint">{{ resultHint }}</span>
