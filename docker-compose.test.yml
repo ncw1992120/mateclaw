@@ -22,24 +22,6 @@ services:
       timeout: 5s
       retries: 30
 
-  minio:
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
-    container_name: mateclaw-e2e-minio
-    environment:
-      MINIO_ROOT_USER: e2e-minio-user
-      MINIO_ROOT_PASSWORD: e2e-minio-password
-    command: server /data --console-address ":9001"
-    ports:
-      - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - e2e_minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
   e2e-http:
     image: wiremock/wiremock:3.9.1
     container_name: mateclaw-e2e-http
@@ -80,8 +62,6 @@ services:
     depends_on:
       e2e-mysql:
         condition: service_healthy
-      minio:
-        condition: service_healthy
       e2e-http:
         condition: service_healthy
     environment:
@@ -100,10 +80,8 @@ services:
       DB_PASSWORD: e2e-user-password
       JWT_SECRET: e2e-jwt-secret-change-me
       MATECLAW_DATAAGENT_PWD_AES_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      MATECLAW_OBJECT_REF_ENDPOINT: http://minio:9000
-      MATECLAW_OBJECT_REF_ACCESS_KEY: e2e-minio-user
-      MATECLAW_OBJECT_REF_SECRET_KEY: e2e-minio-password
-      MATECLAW_OBJECT_REF_BUCKET: mateclaw-temp
+      MATECLAW_STORAGE_ROOT: /data/mateclaw-storage
+      MATECLAW_STORAGE_OBJECT_REF_TTL_SECONDS: "3600"
       PYTHON_EXECUTOR_ENABLED: "true"
       MATECLAW_DATASET_READ_BASE_URL: http://mateclaw-dataagent:18089/dataagent/api
       MATECLAW_DATASET_HTTP_ALLOW_TLS_TEST_ENDPOINT: "true"
@@ -117,6 +95,7 @@ services:
       - "18189:18089"
     volumes:
       - e2e_tls:/run/e2e-tls:ro
+      - ${MATECLAW_STORAGE_ROOT:-./data/object-storage-e2e}:/data/mateclaw-storage
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:18089/dataagent/api/actuator/health"]
       interval: 10s
@@ -152,6 +131,5 @@ services:
 
 volumes:
   e2e_mysql_data:
-  e2e_minio_data:
   e2e_ui_node_modules:
   e2e_tls:

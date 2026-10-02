@@ -11,10 +11,8 @@ fi
 COMPOSE=(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE")
 "${COMPOSE[@]}" up -d
 
-# `docker compose up --wait` also observes one-shot TLS/MinIO init services and
-# may report their expected exit(0) as a failed wait. Poll only long-running
-# services with healthchecks before starting the fixture seed.
-containers=(mateclaw-local-sim-mysql mateclaw-local-sim-postgres mateclaw-local-sim-minio mateclaw-local-sim-wiremock)
+# Poll only long-running services with healthchecks before validating fixtures.
+containers=(mateclaw-local-sim-mysql mateclaw-local-sim-postgres mateclaw-local-sim-wiremock)
 deadline=$((SECONDS + 120))
 ready=0
 while (( SECONDS < deadline )); do
@@ -31,5 +29,4 @@ if (( ready != 1 )); then
   "${COMPOSE[@]}" ps
   exit 1
 fi
-"${COMPOSE[@]}" --profile seed run --rm minio-seed
-echo "本地模拟环境已启动：MySQL 13306、PostgreSQL 15432、MinIO 19000/19001、WireMock 18081/18443。"
+echo "本地模拟环境已启动：MySQL 13306、PostgreSQL 15432、WireMock 18081/18443。文件数据集样例保留在 files/，可由 DataAgent 本地存储根目录读取。"

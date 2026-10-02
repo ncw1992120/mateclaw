@@ -11,7 +11,6 @@ set +a
 
 docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" config --quiet
 docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" ps
-curl --fail --silent "http://127.0.0.1:${MINIO_PORT:-19000}/minio/health/ready" >/dev/null
 curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/__admin/health" >/dev/null
 curl --fail --silent --insecure "https://127.0.0.1:${WIREMOCK_HTTPS_PORT:-18443}/__admin/health" >/dev/null
 orders_json="$(curl --fail --silent "http://127.0.0.1:${WIREMOCK_PORT:-18081}/orders")"
@@ -30,10 +29,6 @@ mysql_rows="$(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$EN
 postgres_rows="$(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" exec -T postgres psql -At -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c 'SELECT COUNT(*) FROM orders;')"
 [[ "$mysql_rows" == "10" ]]
 [[ "$postgres_rows" == "10" ]]
-object_listing="$(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" run --rm --no-deps --entrypoint /bin/sh minio-seed -c 'mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls --recursive "local/${MINIO_BUCKET}/files"')"
-for object_name in orders.csv orders.json orders.parquet orders.xlsx; do
-  grep -q "${object_name}" <<<"$object_listing"
-done
 python3 - "${ROOT_DIR}/files/fixtures-manifest.json" "${ROOT_DIR}/files" <<'PY'
 import hashlib
 import json
@@ -61,22 +56,4 @@ for entry in entries:
         raise SystemExit(f"fixture filter contract mismatch: {path.name}")
 print("fixture manifest checksum/schema contract passed")
 PY
-object_stats="$(docker compose -f "${ROOT_DIR}/docker-compose.yml" --env-file "$ENV_FILE" run --rm --no-deps --entrypoint /bin/sh minio-seed -c 'mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && for name in orders.csv orders.json orders.parquet orders.xlsx; do mc stat --json "local/${MINIO_BUCKET}/files/${name}"; done')"
-OBJECT_STATS="$object_stats" python3 - "${ROOT_DIR}/files/fixtures-manifest.json" <<'PY'
-import json
-import os
-import pathlib
-import sys
-
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-expected = {entry["fileName"]: entry["bytes"] for entry in manifest["files"]}
-actual = {}
-for line in os.environ["OBJECT_STATS"].splitlines():
-    if line.strip():
-        item = json.loads(line)
-        actual[item["name"]] = item["size"]
-if actual != expected:
-    raise SystemExit(f"MinIO object size mismatch: expected={expected}, actual={actual}")
-print("MinIO object size contract passed")
-PY
-echo "本地模拟环境健康检查通过。"
+echo "本地模拟环境健康检查通过（文件 fixture 已按 manifest 校验 SHA-256 与大小）。"
