@@ -74,7 +74,7 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void everyStrategyMetricSupportsEveryStrategyDimension() {
+    void strategyMetricsExposeOnlyDimensionsFromTheirOwningView() {
         Map<String, Object> metricList = (Map<String, Object>) fixtures.payload("metric_list", Map.of(
                 "pageNumber", 1, "pageSize", 100), null).get("data");
         List<Map<String, Object>> metrics = (List<Map<String, Object>>) metricList.get("data");
@@ -92,7 +92,24 @@ class LocalAloudataFixturesTest {
         Map<String, Object> relations = (Map<String, Object>) body.get("data");
 
         assertEquals(metricNames, relations.keySet());
-        relations.values().forEach(available -> assertEquals(dimensionNames, new HashSet<>((List<String>) available)));
+        Set<String> zbDimensions = Set.of(
+                "metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel");
+        Set<String> wdDimensions = dimensionNames;
+        Map<String, Object> zbViewEnvelope = fixtures.payload("analysis_view_query_by_name",
+                Map.of("viewName", "cljd_zcl_zb_view"), null);
+        Map<String, Object> wdViewEnvelope = fixtures.payload("analysis_view_query_by_name",
+                Map.of("viewName", "cljd_zcl_wd_view"), null);
+        Map<String, Object> zbView = (Map<String, Object>) zbViewEnvelope.get("data");
+        Map<String, Object> wdView = (Map<String, Object>) wdViewEnvelope.get("data");
+        Set<String> zbMetrics = new HashSet<>((List<String>) zbView.get("metrics"));
+        Set<String> wdMetrics = new HashSet<>((List<String>) wdView.get("metrics"));
+
+        relations.forEach((metricName, available) -> {
+            Set<String> expected = zbMetrics.contains(metricName) ? zbDimensions
+                    : wdMetrics.contains(metricName) ? wdDimensions : Set.of();
+            assertFalse(expected.isEmpty(), "mock metric must belong to one strategy view: " + metricName);
+            assertEquals(expected, new HashSet<>((List<String>) available), metricName);
+        });
     }
 
     @Test
