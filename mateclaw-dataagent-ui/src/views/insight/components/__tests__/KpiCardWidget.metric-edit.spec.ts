@@ -68,6 +68,26 @@ describe('KpiCardWidget · 画布指标编辑', () => {
     wrapper.unmount()
   })
 
+  it('查询结果缺少已配置指标时，不将第一项指标值复用到缺失指标', () => {
+    const metrics = [metric('old-field', 0, 0), metric('field-a', 160, 0), metric('field-b', 320, 0), metric('field-c', 480, 0)]
+    const componentData = {
+      componentId: 'kpi-card',
+      renderType: 'kpi',
+      kpi: { fieldKey: 'field-a', name: 'field-a', value: '100' },
+      kpiList: [
+        { fieldKey: 'field-a', name: 'field-a', value: '100' },
+        { fieldKey: 'field-b', name: 'field-b', value: '200' },
+      ],
+    } as unknown as InsightComponentData
+    const { wrapper } = mountWidget(metrics, componentData)
+
+    expect(wrapper.get('[data-metric="old-field"] .kpi-metric-value').text()).toBe('--')
+    expect(wrapper.get('[data-metric="field-a"] .kpi-metric-value').text()).toBe('100')
+    expect(wrapper.get('[data-metric="field-b"] .kpi-metric-value').text()).toBe('200')
+    expect(wrapper.get('[data-metric="field-c"] .kpi-metric-value').text()).toBe('--')
+    wrapper.unmount()
+  })
+
   it('编辑态可直接拖动指标并保存最终画布位置', () => {
     const source = metric('revenue', 10, 20)
     const { component, wrapper } = mountWidget([source])

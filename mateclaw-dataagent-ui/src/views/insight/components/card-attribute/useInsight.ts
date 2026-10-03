@@ -39,6 +39,7 @@ import { createComponentPreviewQueryContext } from './component-preview-query-co
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
+import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
 import {
   composeExecutionScript,
   effectiveSystemCode,
@@ -503,7 +504,10 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
 
 function removeDataset(id: string) {
   const idx = state.datasets.findIndex((d) => d.id === id)
-  if (idx >= 0) state.datasets.splice(idx, 1)
+  if (idx >= 0) {
+    state.datasets.splice(idx, 1)
+    scheduleResultSet()
+  }
 }
 
 /**
@@ -1115,7 +1119,11 @@ function savePython(system: string, user: string) {
     generatedFingerprint: fingerprintSystemSource(source),
     userCode: user,
   }
-  state.pythonSystemState = { ...current, userCode: user }
+  const previousSystem = effectiveSystemCode(current)
+  const systemWasEdited = system.trim() !== previousSystem.trim()
+  state.pythonSystemState = systemWasEdited
+    ? { ...current, mode: 'managed', managedCode: system, userCode: user }
+    : { ...current, userCode: user }
   state.hasPython = true
   state.ui.python.queryConfigOnly = false
   state.ui.python.visible = false
@@ -1167,7 +1175,7 @@ function closeQueryConfig(): void {
   state.ui.queryConfigDialog.visible = false
 }
 /** 保存查询配置到本地数据集状态（buildPipeline 时写入 datasetInputs[].queryConfig） */
-function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string | null {
+function saveQueryConfig(datasetId: string, config: DatasetQueryConfig, fixedFilters?: InputFilter[]): string | null {
   const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
   if (dataset) {
     const titles = new Map(config.displayFields.map((field) => [field.field, field.title.trim()]))
@@ -1178,6 +1186,7 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig): string 
     if (error) return error
     dataset.fields = fields
     dataset.queryConfig = config
+    if (fixedFilters) dataset.filters = fixedFilters
     syncKpiMetricsFromFields()
   }
   // 配置变化后系统区生成代码需要刷新（输入 schema 说明变化）
@@ -1608,7 +1617,9 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
 async function ensurePersistedDatasetInputs(): Promise<void> {
   const existingDatasets = await datasetApi.list()
   for (const ds of state.datasets) {
-    if (isPersistedBackendDatasetId(ds.backendDatasetId)) continue
+    if (isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) continue
+    // 旧仪表盘可能仍保存数字 ID，但数据集记录已被清理；不能把“数字格式”当成有效引用。
+    ds.backendDatasetId = undefined
     const request = draftRequestForDataset(ds)
     if (!request) throw new Error(`数据集「${ds.alias}」尚未落库，当前类型不支持自动保存`)
 
@@ -1932,6 +1943,31 @@ async function loadResultPreview(): Promise<void> {
           : []),
       ],
     }
+    // 最终结果可能在执行 envelope 中包含更新后的列名/类型；只读到弹窗而不回填状态，
+    // 会导致 KPI 继续沿用输入数据字段，刷新后也无法恢复 Python 输出结构。
+    state.resultSet.columns = columns.map((column) => ({ name: column.name, type: column.type }))
+    state.resultSet.rows = rows
+    state.resultSet.rowCount = rows.length
+    if (state.finalResultQueryConfig) {
+      const previousFields = state.finalResultQueryConfig.displayFields ?? []
+      state.finalResultQueryConfig = {
+        ...state.finalResultQueryConfig,
+        displayFields: columns.map((column) => {
+          const configured = previousFields.find((field) => field.field === column.name)
+          const sampleValue = rows[0]?.[column.name]
+          const role = column.type === 'number' || typeof sampleValue === 'number'
+            ? 'measure'
+            : configured?.role ?? 'dimension'
+          return {
+            field: column.name,
+            title: configured?.title || column.title || column.name,
+            role,
+            dataType: column.type,
+          }
+        }),
+      }
+    }
+    if (activeCard.value?.type === 'kpi') rebuildKpiMetrics()
   } catch (e) {
     previewState.error = (e as Error)?.message || '执行失败'
   } finally {

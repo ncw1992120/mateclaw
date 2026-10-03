@@ -136,7 +136,11 @@ const config = computed(() => state.finalResultQueryConfig)
 const displayFields = computed(() => config.value?.displayFields ?? [])
 const displayRows = computed(() => (previewState.payload?.dataColumns ?? []).map((column) => {
   const configured = displayFields.value.find((field) => field.field === column.name)
-  return { name: column.name, title: configured?.title || column.title || column.name, role: configured?.role ?? (typeof column.sampleValue === 'number' ? 'measure' : 'dimension') }
+  const sampleValue = previewState.payload?.dataRows?.[0]?.[column.name] ?? column.sampleValue
+  const role = column.type === 'number' || typeof sampleValue === 'number'
+    ? 'measure'
+    : configured?.role ?? 'dimension'
+  return { name: column.name, title: configured?.title || column.title || column.name, role }
 }))
 const filterFields = computed(() => config.value?.filterFields ?? [])
 const paginationEnabled = computed(() => config.value?.paginationPolicy.enabled === true)

@@ -16,6 +16,7 @@ const previewInput = vi.fn(async () => ({
   last: false,
   totalCount: 120,
 }))
+const listDatasets = vi.fn(async () => [{ id: '123' }])
 
 vi.mock('../card-attribute/useInsightBackend', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../card-attribute/useInsightBackend')>()
@@ -24,7 +25,11 @@ vi.mock('../card-attribute/useInsightBackend', async (importOriginal) => {
 
 vi.mock('@/api/dataset', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/dataset')>()
-  return { ...actual, previewInput: (...args: unknown[]) => previewInput(...(args as [])) }
+  return {
+    ...actual,
+    list: (...args: unknown[]) => listDatasets(...(args as [])),
+    previewInput: (...args: unknown[]) => previewInput(...(args as [])),
+  }
 })
 
 import DatasetDataDialog from '../DatasetDataDialog.vue'
@@ -126,6 +131,8 @@ beforeEach(() => {
   clearAllCachedQueries()
   previewDatasetDraft.mockClear()
   previewInput.mockClear()
+  listDatasets.mockReset()
+  listDatasets.mockResolvedValue([{ id: '123' }])
 })
 
 describe('查看数据弹窗 · 保留最近一次执行结果', () => {
@@ -359,6 +366,22 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
 
     expect(previewInput).not.toHaveBeenCalled()
     expect(previewDatasetDraft).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('数字数据集 ID 已失效时回退来源草稿预览，不请求不存在的记录', async () => {
+    const dataset = metricViewDataset({ backendDatasetId: '999' })
+    listDatasets.mockResolvedValue([{ id: '101' }])
+    const wrapper = await openWith(dataset)
+    await runQuery(wrapper)
+
+    expect(previewInput).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalled()
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
+      sourceType: 'ALOUDATA_ANALYSIS_VIEW',
+      datasourceId: '2097582897597468673',
+      sourceConfig: { analysisViewId: 'cljd_zcl_zb_view' },
+    })
     wrapper.unmount()
   })
 

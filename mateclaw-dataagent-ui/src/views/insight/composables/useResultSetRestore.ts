@@ -127,8 +127,20 @@ export async function fetchResultSetRows(
 function executionEnvelopeToComponentData(
   component: InsightComponent,
   envelopeValue: unknown,
+  pipeline?: ComponentDatasetPipeline,
 ): InsightComponentData {
   const envelope = parseScriptResultEnvelope(envelopeValue)
+  if (component.type === 'kpi' && envelope.kind === 'table') {
+    // resultSet.columns 是保存时的快照，可能落后于 execution；以实际结果契约重建 KPI 投影。
+    reconcileKpiProjection(component, envelope.data.columns, pipeline)
+    return rowsToComponentData(
+      component.id,
+      envelope.data.rows,
+      'kpi',
+      kpiFieldsOf(component),
+      Object.fromEntries(envelope.data.columns.map((column) => [column.name, column.title])),
+    )
+  }
   const result = resultEnvelopeToComponentData({
     id: component.id,
     type: component.type,
@@ -184,7 +196,7 @@ export async function restoreResultSetData(
       reconcileKpiProjection(component, meta.columns, pipeline)
       if (meta.source === 'script' && meta.executionId) {
         const result = await insightDashboardApi.getExecutionResult(meta.executionId) as { envelope?: unknown }
-        out[component.id] = executionEnvelopeToComponentData(component, result.envelope)
+        out[component.id] = executionEnvelopeToComponentData(component, result.envelope, pipeline)
         return
       }
       const rows = await fetchResultSetRows(pipeline, meta)

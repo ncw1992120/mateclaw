@@ -149,6 +149,14 @@ watch(
   { deep: true },
 )
 
+// 恢复/读取 Python 最终结果时，结果列 schema 可能变化但 status 仍是 ready；
+// 列变化也必须写回 pipeline，表格/图表没有 KPI 指标 watcher 可代为触发。
+watch(
+  () => state.resultSet.columns,
+  () => scheduleEmit(),
+  { deep: true },
+)
+
 /**
  * 输入配置变更 → 结果集标记过期；无脚本时防抖自动重算，有脚本时等用户点「生成结果集」。
  * 只监听「产出结果集的输入」（数据集 / 筛选器绑定 / 脚本），卡片标题等元信息不影响数据。
@@ -195,6 +203,9 @@ watch(
       fieldLabels: state.resultSet.fieldLabels,
       error: state.resultSet.error,
     })
+    // 结果集 schema / executionId 是重开仪表盘后恢复画布数据的唯一依据。
+    // 只更新运行态 componentDataMap 会导致刷新后回到旧字段或空值，因此成功生成后也要回写 pipeline。
+    if (status === 'ready' || status === 'failed') scheduleEmit()
   },
 )
 </script>

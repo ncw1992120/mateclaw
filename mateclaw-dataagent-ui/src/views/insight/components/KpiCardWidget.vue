@@ -265,7 +265,8 @@ const kpiListByField = computed<Record<string, KpiItemData>>(() => {
 const kpiListOrdered = computed<KpiItemData[]>(() => (props.component.kpiMetrics ?? []).map((metric, index) => {
   const byField = kpiListByField.value[metric.fieldKey]
   if (byField) return byField
-  return effectiveKpiList.value[index] ?? null
+  const supportsPositionFallback = effectiveKpiList.value.every((item) => !item.fieldKey)
+  return supportsPositionFallback ? (effectiveKpiList.value[index] ?? null) : null
 }).filter((x): x is KpiItemData => !!x))
 
 function metricLabel(metric: KpiMetricConfig): string {
@@ -276,14 +277,15 @@ function kpiItemLabel(item: KpiItemData): string {
   return (item.fieldKey && props.componentData?.fieldLabels?.[item.fieldKey]) || item.name
 }
 
-/** 取某指标的渲染值：优先按 fieldKey 命中，缺失时按下标对齐，最后回落 kpi */
+/** 取某指标的渲染值：按 fieldKey 或兼容的顺序匹配；无对应结果时显示空态，不复用其他指标值。 */
 function metricValue(metric: KpiMetricConfig): string {
   const byField = kpiListByField.value[metric.fieldKey]
   if (byField) return byField.value ?? '--'
   const index = (props.component.kpiMetrics ?? []).findIndex((m) => m.fieldKey === metric.fieldKey)
-  const byIndex = effectiveKpiList.value[index]
+  const supportsPositionFallback = effectiveKpiList.value.every((item) => !item.fieldKey)
+  const byIndex = supportsPositionFallback ? effectiveKpiList.value[index] : undefined
   if (byIndex) return byIndex.value ?? '--'
-  return kpiData.value?.value ?? '--'
+  return '--'
 }
 
 const dashboardTheme = computed(() => props.dashboardTheme ?? resolveDashboardTheme(undefined, 'light'))

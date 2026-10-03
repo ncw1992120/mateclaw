@@ -363,6 +363,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
+import { mergeCombinationChildComponentUpdate } from './composables/combinationChildComponentUpdate'
 import DatasetDataDialog from './components/DatasetDataDialog.vue'
 import QueryConfigDialog from './components/card-attribute/QueryConfigDialog.vue'
 import { draftQueryConfigFromLegacyBindings } from '@/utils/component-dataset-pipeline'
@@ -1361,23 +1362,10 @@ function handleComponentChange(updated: InsightComponent): void {
     const container = findCombinationContainer(selectedChildInfo.value!.containerId)
     const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
     if (child) {
-      child.title = updated.title
-      child.titleBarStyle = updated.titleBarStyle
-      child.titleIconStyle = updated.titleIconStyle
-      child.themeAccentGroup = updated.themeAccentGroup
-      child.componentColor = updated.componentColor
-      child.visualStyle = updated.visualStyle
-      child.chartType = updated.chartType
-      child.config = updated.config
-      child.tabs = mergeComponentTabIconStyles(child.tabs, updated.tabs)
-      child.dataSource = updated.dataSource
-      child.boundFilterIds = updated.boundFilterIds
-      child.enableTimeFilter = updated.enableTimeFilter
-      child.multiKpi = updated.multiKpi
-      if (child.type === 'combination') {
-        child.children = child.children ?? updated.children ?? []
-        child.containerConfig = mergeCombinationConfig(child, updated)
-      }
+      const merged = mergeCombinationChildComponentUpdate(child, updated)
+      merged.tabs = mergeComponentTabIconStyles(child.tabs, updated.tabs)
+      if (child.type === 'combination') merged.containerConfig = mergeCombinationConfig(child, updated)
+      Object.assign(child, merged)
       scheduleSchemaAutoSave()
     }
     return

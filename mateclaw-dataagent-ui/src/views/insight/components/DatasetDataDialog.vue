@@ -295,8 +295,9 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type { InsightComponent, InsightComponentData, TimeGranularity } from '@/types'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
-import { previewInput } from '@/api/dataset'
+import { list as listDatasets, previewInput } from '@/api/dataset'
 import { draftRequestForDataset, isPersistedBackendDatasetId } from './card-attribute/useInsight'
+import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
 import type { DatasetConfig } from './card-attribute/useInsight'
 import { extractApiParameters, extractSqlParameters, type ExtractedParameter } from '@/utils/parameter-extract'
 import { getCachedQuery, getCachedQueryState, setCachedQuery, setCachedQueryState } from './dataset-data-cache'
@@ -321,6 +322,7 @@ const ui = state.ui
 
 /** 未配置分页时沿用预览安全批次，滚动到底继续追加。 */
 const DEFAULT_BATCH_SIZE = 50
+const persistedDatasetAvailability = new Map<string, boolean>()
 
 /** 未分页时的「限制条数」：默认值与上限（上限与后端数据集预览上限保持一致） */
 const DEFAULT_QUERY_LIMIT = 10000
@@ -679,7 +681,22 @@ async function fetchRows(reset: boolean): Promise<void> {
       : []
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 数据定义在查看数据弹窗中只读；已落库数据集统一走输入读取接口。
-    const savedDefinitionUnchanged = isPersistedBackendDatasetId(props.dataset.backendDatasetId)
+    let savedDefinitionUnchanged = false
+    if (isPersistedBackendDatasetId(props.dataset.backendDatasetId)) {
+      const backendDatasetId = props.dataset.backendDatasetId
+      let available = persistedDatasetAvailability.get(backendDatasetId)
+      if (available === undefined) {
+        try {
+          const datasets = await listDatasets()
+          available = isPersistedDatasetReferenceAvailable(backendDatasetId, datasets)
+        } catch {
+          // 若数据集目录暂时不可用，保留原读取路径；不能因此改写配置或误判 ID 失效。
+          available = true
+        }
+        persistedDatasetAvailability.set(backendDatasetId, available)
+      }
+      savedDefinitionUnchanged = available
+    }
     const currentRequest = ++requestSequence
     const batch = savedDefinitionUnchanged
       ? await previewInput({

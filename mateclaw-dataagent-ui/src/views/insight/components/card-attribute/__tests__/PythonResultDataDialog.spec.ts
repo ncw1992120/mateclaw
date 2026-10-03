@@ -32,6 +32,7 @@ beforeEach(() => {
   state.ui.preview = { visible: true, kind: 'result', datasetId: null, tab: 'data' }
   state.finalResultQueryConfig = undefined
   state.filterCatalog = []
+  state.kpiMetrics = []
   Object.assign(state.resultSet, {
     status: 'ready', source: 'script', columns: [{ name: 'result', type: 'string' }],
     rows: [{ result: 'rendered' }], rowCount: 1, elapsedMs: 1, executionId: '', error: '',
@@ -51,7 +52,7 @@ describe('PythonResultDataDialog', () => {
       rows: [{ amount: 10, region: '华东' }],
       rowCount: 1,
     })
-    state.finalResultQueryConfig = {
+  state.finalResultQueryConfig = {
       schemaFingerprint: 'test',
       confirmed: true,
       displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
@@ -71,6 +72,43 @@ describe('PythonResultDataDialog', () => {
     await wrapper.findAll('.dd-display-table input')[0].setValue('统计金额')
     expect(state.finalResultQueryConfig?.displayFields.find((field) => field.field === 'amount')?.title).toBe('统计金额')
     expect(wrapper.find('.result-column[data-prop="amount"]').attributes('data-label')).toBe('统计金额')
+    wrapper.unmount()
+  })
+
+  it('Python 数值输出列应按指标保存，不能沿用旧的维度分类', async () => {
+    Object.assign(state.resultSet, {
+      columns: [{ name: '转化规模', type: 'number' }, { name: '转化人数', type: 'number' }],
+      rows: [{ 转化规模: 27948000, 转化人数: 2964 }],
+      rowCount: 1,
+    })
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'old-input-schema',
+      confirmed: true,
+      displayFields: [
+        { field: '转化规模', title: '转化规模', role: 'dimension' },
+        { field: '转化人数', title: '转化人数', role: 'dimension' },
+      ],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+    state.cards = [{ id: 'strategy-kpi', type: 'kpi', title: '策略贡献' } as any]
+    state.activeCardId = 'strategy-kpi'
+
+    const wrapper = mount(PythonResultDataDialog, {
+      props: { component: { id: 'strategy-kpi', type: 'kpi', title: '策略贡献' } as any },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr').map((row) => row.find('td').text()))
+      .toEqual(['指标', '指标'])
+    expect(state.finalResultQueryConfig?.displayFields.map(({ role }) => role)).toEqual(['measure', 'measure'])
+    expect(state.kpiMetrics.map(({ fieldKey }) => fieldKey)).toEqual(['转化规模', '转化人数'])
+    expect(state.resultSet.columns).toEqual([
+      { name: '转化规模', type: 'number' },
+      { name: '转化人数', type: 'number' },
+    ])
     wrapper.unmount()
   })
 

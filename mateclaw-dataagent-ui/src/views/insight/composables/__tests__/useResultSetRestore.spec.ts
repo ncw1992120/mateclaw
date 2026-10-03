@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InsightComponent } from '@/types'
 import type { ComponentDatasetPipeline } from '@/types'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
-import { collectResultSetComponents, reconcileKpiProjection, toComponentData } from '../useResultSetRestore'
+import { collectResultSetComponents, reconcileKpiProjection, restoreResultSetData, toComponentData } from '../useResultSetRestore'
+
+const getExecutionResult = vi.hoisted(() => vi.fn())
+vi.mock('@/api/insight-dashboard', () => ({ getExecutionResult }))
+
+beforeEach(() => getExecutionResult.mockReset())
 
 describe('reconcileKpiProjection', () => {
   it('adds result-set KPI fields missing from an older persisted projection', () => {
@@ -86,6 +91,52 @@ describe('reconcileKpiProjection', () => {
 
     expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual(['转化规模', '转化人数'])
     expect(data.kpiList?.map(({ value }) => value)).toEqual(['1250000', '128'])
+  })
+
+  it('恢复 Python KPI 时以 execution envelope 的实际列修正过期结果集列元数据', async () => {
+    const component = {
+      id: 'python-kpi-restore',
+      type: 'kpi',
+      config: {
+        datasetPipeline: {
+          datasetInputs: [],
+          script: 'result = rows',
+          finalResultQueryConfig: {
+            displayFields: [
+              { field: '转化规模', title: '转化规模', role: 'measure' },
+              { field: '转化人数', title: '转化人数', role: 'measure' },
+            ],
+          },
+          resultSet: {
+            source: 'script', status: 'ready', executionId: 'exec-latest',
+            // 页面旧版本遗留的列元数据，与 execution 的真实输出不一致。
+            columns: [{ name: '旧字段一' }, { name: '旧字段二' }],
+          },
+        },
+      },
+      kpiMetrics: ['旧字段一', '旧字段二', '旧字段三'].map((fieldKey, index) => ({
+        fieldKey, displayName: fieldKey, unit: '', helperText: '', visible: true,
+        x: index * 160, y: 0, w: 160, h: 80, styles: defaultMetricStyles(),
+      })),
+    } as unknown as InsightComponent
+    getExecutionResult.mockResolvedValue({
+      envelope: {
+        schemaVersion: '1.0', kind: 'table',
+        data: {
+          columns: [
+            { name: '转化规模', title: '转化规模', dataType: 'number', nullable: false },
+            { name: '转化人数', title: '转化人数', dataType: 'number', nullable: false },
+          ],
+          rows: [{ 转化规模: 27948000, 转化人数: 2964 }],
+        },
+        meta: { rowCount: 1, truncated: false },
+      },
+    })
+
+    const data = await restoreResultSetData([component])
+
+    expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual(['转化规模', '转化人数'])
+    expect(data[component.id].kpiList?.map(({ value }) => value)).toEqual(['27948000', '2964'])
   })
 
   it('includes KPI children inside combination tabs in the same result-set restoration pass', () => {
