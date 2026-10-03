@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addCombinationTab,
+  combinationChildToComponent,
   combinationTabChildCount,
   componentToCombinationChild,
   defaultCombinationChildLayout,
@@ -171,5 +172,33 @@ describe('组合卡片 · 顶层组件移入', () => {
     })
     expect(child.layout).toEqual({ x: 40, y: 60, col: 6, h: 96 })
     expect((child as unknown as { position?: unknown }).position).toBeUndefined()
+  })
+})
+
+describe('组合卡片 · 子卡片拖出为顶层组件', () => {
+  it('按比例换算栅格尺寸并去掉自由布局坐标', () => {
+    const child = makeChild('c1')
+    child.layout = { x: 24, y: 36, col: 7, h: 180 }
+    const component = combinationChildToComponent(child, { x: 2, y: 5 })
+
+    expect(component.id).toBe('c1')
+    expect(component.position).toEqual({ x: 2, y: 5, w: 14, h: Math.round((180 + 12) / 42) })
+    expect((component as unknown as { layout?: unknown }).layout).toBeUndefined()
+  })
+
+  it('列宽与高度越界时钳制到合法范围', () => {
+    const child = makeChild('c2')
+    child.layout = { x: 0, y: 0, col: 12, h: 24 }
+    const component = combinationChildToComponent(child, { x: -4, y: -1 })
+
+    expect(component.position).toMatchObject({ x: 0, y: 0, w: 24, h: 3 })
+  })
+
+  it('高度缺省时回退默认 4 行', () => {
+    const child = makeChild('c3')
+    child.layout = { x: 0, y: 0, col: 6 }
+    const component = combinationChildToComponent(child, { x: 0, y: 0 })
+
+    expect(component.position).toMatchObject({ w: 12, h: 4 })
   })
 })

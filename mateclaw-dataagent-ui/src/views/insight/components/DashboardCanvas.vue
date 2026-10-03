@@ -91,6 +91,7 @@
           :w="item.w"
           :h="item.h"
           :static="!editable"
+          :class="{ 'is-selected-top': editable && selectedId === item.i }"
           :drag-ignore-from="'a, button, .cc-child, .grid-item-toolbar'"
           @click.stop="handleSelectComponent(item.i)"
         >
@@ -251,6 +252,7 @@
                 :editable="editable"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
+                :drop-hint="editable && draggingComponentId !== null && draggingComponentId !== item.i"
                 :dashboard-theme="dashboardTheme"
                 :component-title-icon-style-preview="componentTitleIconStylePreview"
                 :title-icon-style-preview="childTitleIconStylePreview"
@@ -259,6 +261,7 @@
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
                 @move-component-into="(p) => emit('move-component-into', p)"
+                @move-child-out="handleChildDragOut"
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
                 @retry-component-query="(id) => emit('retry-component-query', id)"
@@ -491,6 +494,7 @@ const emit = defineEmits<{
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  (e: 'move-child-out', payload: { containerId: string; childId: string; position: { x: number; y: number } }): void
   (e: 'copy-child', payload: { containerId: string; childId: string }): void
   (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
   (e: 'delete-component', id: string): void
@@ -596,20 +600,12 @@ watch(
   { immediate: true }
 )
 
-/** 布局更新回调（拖拽/缩放/compact 后触发） */
-function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
-  // 始终更新本地 gridLayout，让 :layout prop 与 GridLayout 内部 currentLayout 保持一致
-  // 避免重渲染时 :layout 传旧值导致位置被重置
-  gridLayout.value = newLayout
+/** 自定义缩放期间 GridLayout 内部碰撞整理的最新布局；松手时统一采纳，避免拖拽中回写导致跳动。 */
+let pendingCollisionLayout: GridLayoutItem[] | null = null
 
-  // 仅在编辑态且非 props 同步时 emit 给 Editor（预览态为 static，不应回写 schema）
-  if (isSyncingFromProps || !props.editable || isCustomResizing.value) {
-    return
-  }
-
-  // 过滤掉非用户操作导致的位置变更（如 grid-layout-plus 内部碰撞下推产生的副作用）
-  // 只保留用户主动拖拽/缩放产生的真实变化
-  const realChanges = newLayout.filter((item) => {
+/** 计算布局中与组件 schema position 不同的真实变化项（用户主动操作的结果）。 */
+function collectRealLayoutChanges(layout: GridLayoutItem[]): GridLayoutItem[] {
+  return layout.filter((item) => {
     const comp = props.components.find((c) => c.id === item.i)
     if (!comp) return true
     return comp.position.x !== item.x
@@ -617,6 +613,28 @@ function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
       || comp.position.w !== item.w
       || comp.position.h !== item.h
   })
+}
+
+function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
+  // 自定义缩放中：GridLayout 因碰撞对相邻组件让位会产生 layout-updated，
+  // 此时不能把整理结果回写 gridLayout——回写会反向移动正在拖拽的卡片，造成拖拽跳动。
+  if (isCustomResizing.value) {
+    pendingCollisionLayout = newLayout
+    return
+  }
+
+  // 始终更新本地 gridLayout，让 :layout prop 与 GridLayout 内部 currentLayout 保持一致
+  // 避免重渲染时 :layout 传旧值导致位置被重置
+  gridLayout.value = newLayout
+
+  // 仅在编辑态且非 props 同步时 emit 给 Editor（预览态为 static，不应回写 schema）
+  if (isSyncingFromProps || !props.editable) {
+    return
+  }
+
+  // 过滤掉非用户操作导致的位置变更（如 grid-layout-plus 内部碰撞下推产生的副作用）
+  // 只保留用户主动拖拽/缩放产生的真实变化
+  const realChanges = collectRealLayoutChanges(newLayout)
   if (realChanges.length === 0) return
 
   // 向上 emit 让 Editor 更新 schema.components 的 position
@@ -929,6 +947,9 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
+/** 拖拽中状态：正在以 HTML5 拖拽移动的顶层组件 ID（用于组合卡片放置提示） */
+const draggingComponentId = ref<string | null>(null)
+
 /** 组件标题栏是进入组合容器的专用拖拽把手，避免和画布栅格移动冲突。 */
 function handleComponentDragStart(event: DragEvent, componentId: string): void {
   if (!props.editable || !event.dataTransfer) return
@@ -938,6 +959,11 @@ function handleComponentDragStart(event: DragEvent, componentId: string): void {
     componentId,
     componentType: getComponent(componentId)?.type,
   }))
+  draggingComponentId.value = componentId
+  window.addEventListener('dragend', clearDraggingComponent, { once: true })
+}
+function clearDraggingComponent(): void {
+  draggingComponentId.value = null
 }
 
 /** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
@@ -953,15 +979,15 @@ const GRID_GAP = 12
  * 空画布没有网格容器时退化为画布根元素边界。列坐标钳制到 [0, COLS-1]，
  * 行坐标只钳下界（画布可向下无限增长）。
  */
-function dropToGrid(event: DragEvent): { x: number; y: number } {
+function dropToGrid(clientX: number, clientY: number): { x: number; y: number } {
   const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
   const stage = canvasRef.value?.querySelector<HTMLElement>('.canvas-grid-stage')
   const rect = (grid ?? stage ?? canvasRef.value)?.getBoundingClientRect()
   if (!rect) return { x: 0, y: 0 }
   const scale = props.editable ? canvasZoom.value : 1
   const logicalWidth = rect.width / scale
-  const offsetX = (event.clientX - rect.left) / scale
-  const offsetY = (event.clientY - rect.top) / scale
+  const offsetX = (clientX - rect.left) / scale
+  const offsetY = (clientY - rect.top) / scale
   const colWidth = (logicalWidth - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
   if (colWidth <= 0) return { x: 0, y: 0 }
   const col = Math.floor((offsetX - GRID_GAP) / (colWidth + GRID_GAP))
@@ -970,6 +996,15 @@ function dropToGrid(event: DragEvent): { x: number; y: number } {
     x: Math.max(0, Math.min(col, GRID_COLS - 1)),
     y: Math.max(0, row),
   }
+}
+
+/** 子卡片拖出组合卡片：把释放点的视口坐标换算为画布栅格落点后交给编辑器 */
+function handleChildDragOut(payload: { containerId: string; childId: string; clientX: number; clientY: number }): void {
+  emit('move-child-out', {
+    containerId: payload.containerId,
+    childId: payload.childId,
+    position: dropToGrid(payload.clientX, payload.clientY),
+  })
 }
 
 /** 从物料面板拖入新组件（携带鼠标落点的栅格坐标，由编辑器按此放置） */
@@ -984,7 +1019,7 @@ function handleDrop(event: DragEvent): void {
   try {
     const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
     if ((payload as { kind?: string }).kind === 'canvas-component') return
-    emit('add-component', { ...payload, position: dropToGrid(event) })
+    emit('add-component', { ...payload, position: dropToGrid(event.clientX, event.clientY) })
   } catch (e) {
     console.error('[DashboardCanvas] drop parse error:', e)
   }
@@ -1093,6 +1128,7 @@ function startResize(event: PointerEvent, id: string, edge: GridResizeEdge): voi
   event.preventDefault()
   event.stopPropagation()
   isCustomResizing.value = true
+  pendingCollisionLayout = null
   resizingItem.value = {
     id,
     edge,
@@ -1149,15 +1185,36 @@ function handleResizeEnd(event?: PointerEvent): void {
   }
   if (resizeLastPoint) applyResizePoint(resizeLastPoint)
   if (resizingItem.value) {
-    const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
-    if (item) {
-      emit('update-layout', [{
-        id: resizingItem.value.id,
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-      }])
+    // 缩放期间 GridLayout 因碰撞让位产生的整理布局，在松手时统一采纳：
+    // 拖拽中的让位结果只渲染在库内部，这里同步回 gridLayout 并连同被推挤组件一起持久化，
+    // 避免保存后重新打开时邻居位置弹回。
+    if (pendingCollisionLayout) {
+      // 库内整理布局可能不含最后一次 pointermove 的最终尺寸，先把当前卡片的最终值合并进去
+      const current = gridLayout.value.find((g) => g.i === resizingItem.value.id)
+      const finalItem = pendingCollisionLayout.find((g) => g.i === resizingItem.value.id)
+      if (current && finalItem) {
+        Object.assign(finalItem, { x: current.x, y: current.y, w: current.w, h: current.h })
+      }
+      gridLayout.value = pendingCollisionLayout
+      pendingCollisionLayout = null
+      const realChanges = collectRealLayoutChanges(gridLayout.value)
+      if (realChanges.length > 0) {
+        emit(
+          'update-layout',
+          realChanges.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
+        )
+      }
+    } else {
+      const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
+      if (item) {
+        emit('update-layout', [{
+          id: resizingItem.value.id,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+        }])
+      }
     }
   }
   resizeLastPoint = null
@@ -1185,6 +1242,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   --vgl-placeholder-bg: var(--db-accent);
   --vgl-placeholder-opacity: 0.08;
   --vgl-placeholder-radius: 8px;
+}
+
+/* 选中的组件置顶：压过相邻/重叠的卡片（含组合卡片内溢出的绝对定位子卡片） */
+.dashboard-canvas :deep(.vgl-item.is-selected-top) {
+  z-index: 30;
 }
 
 .dashboard-canvas {

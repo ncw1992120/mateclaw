@@ -65,6 +65,27 @@ export function componentToCombinationChild(
   return { ...child, layout } as InsightCombinationChild
 }
 
+/**
+ * 将组合卡片子组件拖出为画布顶层组件：去掉自由布局坐标，按比例换算画布栅格尺寸。
+ * 组合内容区为 12 列、画布为 24 列，宽度等比 ×2；高度按 rowHeight=30 + margin=12 反推行数。
+ */
+export function combinationChildToComponent(
+  child: InsightCombinationChild,
+  position: { x: number; y: number },
+): InsightComponent {
+  const clone = JSON.parse(JSON.stringify(child)) as InsightCombinationChild
+  const { layout } = clone
+  const { layout: _layout, ...component } = clone
+  const result = component as InsightComponent
+  result.position = {
+    x: Math.max(0, position.x),
+    y: Math.max(0, position.y),
+    w: Math.min(24, Math.max(2, Math.round((layout.col / 12) * 24))),
+    h: layout.h && layout.h > 0 ? Math.max(3, Math.round((layout.h + 12) / 42)) : 4,
+  }
+  return result
+}
+
 export interface AddCombinationTabResult {
   /** 新建的页签（无 containerConfig 时返回 null） */
   tab: CombinationTab | null

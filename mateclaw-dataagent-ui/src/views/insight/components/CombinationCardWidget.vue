@@ -72,7 +72,11 @@
     </div>
 
     <!-- 主体：自由布局作为绝对定位参考系；整卡为拖入落区 -->
-    <div ref="ccBodyRef" class="cc-body" :class="{ 'mode-free': cfg.layoutMode === 'free', 'mode-grid': cfg.layoutMode === 'grid', 'mode-vertical': cfg.layoutMode === 'vertical' }">
+    <div ref="ccBodyRef" class="cc-body" :class="{ 'mode-free': cfg.layoutMode === 'free', 'mode-grid': cfg.layoutMode === 'grid', 'mode-vertical': cfg.layoutMode === 'vertical', 'drop-hint': editable && dropHint }">
+      <!-- 画布正在拖动顶层组件：显示可放置提示（pointer-events:none，不拦截 drop） -->
+      <div v-if="editable && dropHint" class="cc-drop-hint" data-testid="combination-drop-hint">
+        <span>{{ t('insight.combination.dropIntoHint') }}</span>
+      </div>
       <!-- 空状态（共享 EmptyState 组件，线性图标替代 emoji） -->
       <div v-if="activeChildren.length === 0" class="cc-empty">
         <EmptyState :text="editable ? t('insight.combination.emptyEditable') : t('insight.combination.empty')" />
@@ -82,7 +86,7 @@
         v-for="(child, childIndex) in activeChildren"
         :key="child.id"
         class="cc-child"
-        :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id, 'inline-filter-child': isInlineFilterChild(child) }]"
+        :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id, 'is-dragout': dragOutChild?.childId === child.id, 'inline-filter-child': isInlineFilterChild(child) }]"
         :style="childStyle(child)"
         :data-child="child.id"
         :tabindex="editable ? 0 : undefined"
@@ -226,6 +230,7 @@
             :runtime-filter-state="runtimeFilterState"
             :editable="editable"
             :selected="selectedChildId === child.id"
+            :drop-hint="dropHint"
             :dashboard-theme="dashboardTheme"
             :title-icon-style-preview="titleIconStylePreview"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
@@ -235,6 +240,8 @@
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
+            @move-component-into="(payload) => emit('move-component-into', payload)"
+            @move-child-out="(payload) => emit('move-child-out', payload)"
             @copy-child="(payload) => emit('copy-child', payload)"
             @paste-child="(payload) => emit('paste-child', payload)"
             @context-menu="(payload) => emit('context-menu', payload)"
@@ -257,6 +264,18 @@
         </template>
       </div>
     </div>
+
+    <!-- 子卡片拖出提示：Teleport 到 body，避免被容器/画布的 overflow 与 transform 裁剪或偏移 -->
+    <Teleport to="body">
+      <div
+        v-if="dragOutChild"
+        class="cc-dragout-ghost"
+        data-testid="combination-dragout-ghost"
+        :style="{ left: `${dragOutChild.x + 12}px`, top: `${dragOutChild.y + 12}px` }"
+      >
+        ⤴ {{ t('insight.combination.dragOutHint', { name: dragOutChild.title }) }}
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -307,6 +326,8 @@ const props = withDefaults(
     sampleMode?: boolean
     editable?: boolean
     selected?: boolean
+    /** 画布正在拖动顶层组件：组合卡片显示可放置提示 */
+    dropHint?: boolean
     dashboardTheme?: ResolvedDashboardTheme
     titleIconStylePreview?: { childId: string; style: ComponentTitleIconStyle }
     componentTitleIconStylePreview?: ComponentTitleIconStyle
@@ -324,6 +345,8 @@ const emit = defineEmits<{
   (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
   /** 将画布中的已有组件移入当前组合容器/页签 */
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  /** 子卡片拖出组合卡片：释放点为视口坐标，由画布换算栅格落点后转回顶层组件 */
+  (e: 'move-child-out', payload: { containerId: string; childId: string; clientX: number; clientY: number }): void
   /** 组合卡片内部子组件剪贴板操作 */
   (e: 'copy-child', payload: { containerId: string; childId: string }): void
   (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
@@ -344,6 +367,8 @@ const rootRef = ref<HTMLElement | null>(null)
 const selectedChildId = ref<string | null>(null)
 const hoverChildId = ref<string | null>(null)
 const movingId = ref<string | null>(null)
+/** 子卡片拖出模式：跟随指针的提示标签（Teleport 到 body，避免被容器 overflow:hidden 裁剪） */
+const dragOutChild = ref<{ childId: string; title: string; x: number; y: number } | null>(null)
 const resizingId = ref<string | null>(null)
 const editingTab = ref<string | null>(null)
 const editingTabTitle = ref('')
@@ -727,6 +752,21 @@ function isInlineFilterChild(child: InsightCombinationChild): boolean {
 function onChildMouseMove(e: MouseEvent) {
   if (!mv) return
   mvLast = { x: e.clientX, y: e.clientY }
+  // 指针离开组合卡片内容区（含少量缓冲）→ 进入「拖出」模式：冻结容器内位置，
+  // 显示跟随指针的提示标签；拖回容器内则恢复普通拖动。
+  if (isOutsideBody(e.clientX, e.clientY)) {
+    if (!dragOutChild.value) {
+      const child = getActiveChildren().find((c) => c.id === mv.id)
+      if (child) {
+        dragOutChild.value = { childId: child.id, title: child.title, x: e.clientX, y: e.clientY }
+        movingId.value = null
+      }
+    } else {
+      dragOutChild.value = { ...dragOutChild.value, x: e.clientX, y: e.clientY }
+    }
+    return
+  }
+  if (dragOutChild.value) dragOutChild.value = null
   if (mvRaf) return
   mvRaf = requestAnimationFrame(() => {
     mvRaf = 0
@@ -736,9 +776,23 @@ function onChildMouseMove(e: MouseEvent) {
     mv.el?.style.setProperty('top', p.y + 'px')
   })
 }
+
+/** 指针是否已离开组合卡片内容区（rect 为缩放后的屏幕坐标，与 clientX/Y 同一坐标系） */
+function isOutsideBody(clientX: number, clientY: number): boolean {
+  const r = ccBodyRef.value?.getBoundingClientRect()
+  if (!r || r.width <= 0 || r.height <= 0) return false
+  const margin = 8
+  return clientX < r.left - margin || clientX > r.right + margin
+    || clientY < r.top - margin || clientY > r.bottom + margin
+}
+
 function onChildMouseUp() {
   if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0 }
-  if (mv && mvLast) {
+  if (dragOutChild.value) {
+    const { childId, x, y } = dragOutChild.value
+    dragOutChild.value = null
+    emit('move-child-out', { containerId: props.component.id, childId, clientX: x, clientY: y })
+  } else if (mv && mvLast) {
     const child = getActiveChildren().find((c) => c.id === mv!.id)
     if (child) {
       const p = computeMove(mv, mvLast)
@@ -1062,6 +1116,41 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-body.mode-vertical .cc-child { position: relative; }
 .cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }
+/* 拖出模式：冻结容器内位置，交出视觉焦点给跟随指针的提示标签 */
+.cc-child.moving.is-dragout { opacity: 0.45; }
+/* 画布正在拖动顶层组件：整卡高亮为可放置落区 */
+.cc-body.drop-hint { outline: 2px dashed var(--db-accent, var(--el-color-primary)); outline-offset: -2px; }
+.cc-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--db-accent, var(--el-color-primary)) 8%, transparent);
+}
+.cc-drop-hint span {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--db-accent, var(--el-color-primary));
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* 子卡片拖出提示标签：跟随指针，位于 body 层级不受画布缩放/裁剪影响 */
+.cc-dragout-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--db-accent, var(--el-color-primary));
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 22%);
+  white-space: nowrap;
+}
 .cc-child-head {
   position: relative;
   display: flex; align-items: center; justify-content: space-between;

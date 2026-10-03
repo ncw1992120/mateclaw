@@ -1943,6 +1943,8 @@ export default {
       childDataHint: '子卡片的数据源配置将在下个版本接入，当前仅展示结构与交互',
       empty: '暂无子组件',
       emptyEditable: '从左侧组件库拖入子组件',
+      dropIntoHint: '松开移入组合卡片',
+      dragOutHint: '释放到画布，移出「{name}」',
       deleteChild: '删除子组件',
       deleteChildConfirm: '确定删除子组件「{name}」吗？',
     },

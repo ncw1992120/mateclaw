@@ -710,4 +710,80 @@ describe('CombinationCardWidget', () => {
 
     expect(wrapper.emitted('move-component-into')).toEqual([[{ containerId: 'outer-combination', componentId: 'canvas-kpi-1', x: 0, y: 0 }]])
   })
+
+  const mountEditableCombination = (children: Array<Record<string, unknown>>, extraProps: Record<string, unknown> = {}) =>
+    mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'dragout-combo', type: 'combination', title: '组合卡片',
+          children, containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        ...extraProps,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+  it('emits move-child-out when a child is dragged out of the combination body', () => {
+    const child = { id: 'out-child', type: 'kpi' as const, title: '策略KPI', layout: { x: 36, y: 48, col: 6, h: 120 } }
+    const wrapper = mountEditableCombination([child])
+    const body = wrapper.get('.cc-body').element as HTMLElement
+    Object.defineProperty(body, 'getBoundingClientRect', {
+      value: () => ({ left: 100, top: 100, right: 600, bottom: 400, width: 500, height: 300 }),
+    })
+    const el = wrapper.get('[data-child="out-child"]').element as HTMLElement
+    Object.defineProperty(el, 'offsetWidth', { value: 250 })
+    Object.defineProperty(el, 'offsetHeight', { value: 120 })
+
+    // 按住子卡片（容器内）→ 拖出容器右边界 → 释放
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 200 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 200 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 700, clientY: 240 }))
+    window.dispatchEvent(new MouseEvent('mouseup'))
+
+    expect(wrapper.emitted('move-child-out')).toEqual([
+      [{ containerId: 'dragout-combo', childId: 'out-child', clientX: 700, clientY: 240 }],
+    ])
+    // 拖出不改写容器内坐标
+    expect(child.layout).toEqual({ x: 36, y: 48, col: 6, h: 120 })
+    wrapper.unmount()
+  })
+
+  it('keeps normal in-container dragging when the pointer returns inside before release', () => {
+    const child = { id: 'back-child', type: 'kpi' as const, title: '策略KPI', layout: { x: 36, y: 48, col: 6, h: 120 } }
+    const wrapper = mountEditableCombination([child])
+    const body = wrapper.get('.cc-body').element as HTMLElement
+    Object.defineProperty(body, 'getBoundingClientRect', {
+      value: () => ({ left: 100, top: 100, right: 600, bottom: 400, width: 500, height: 300 }),
+    })
+    const el = wrapper.get('[data-child="back-child"]').element as HTMLElement
+    Object.defineProperty(el, 'offsetWidth', { value: 250 })
+    Object.defineProperty(el, 'offsetHeight', { value: 120 })
+
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 200 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 700, clientY: 240 })) // 出界
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 300, clientY: 220 })) // 拖回
+    window.dispatchEvent(new MouseEvent('mouseup'))
+
+    expect(wrapper.emitted('move-child-out')).toBeUndefined()
+    // 拖回后按起点+位移计算：x = 36 + (300-200) = 136，y = 48 + (220-200) = 68，均在合法区间
+    expect(child.layout).toMatchObject({ x: 136, y: 68 })
+    wrapper.unmount()
+  })
+
+  it('shows a drop hint overlay while a canvas component is being dragged', () => {
+    const wrapper = mountEditableCombination(
+      [{ id: 'hint-child', type: 'kpi' as const, title: '策略KPI', layout: { x: 0, y: 0, col: 6, h: 120 } }],
+      { dropHint: true },
+    )
+    expect(wrapper.find('[data-testid="combination-drop-hint"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })

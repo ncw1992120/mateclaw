@@ -199,6 +199,7 @@
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
           @move-component-into="handleMoveComponentInto"
+          @move-child-out="handleMoveChildOut"
           @copy-child="handleCopyChild"
           @paste-child="handlePasteChild"
           @delete-component="handleDeleteComponent"
@@ -370,7 +371,7 @@ import PanelFloatButton from './components/PanelFloatButton.vue'
 import { rowsToComponentData } from '@/utils/dataset-result'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
-import { componentToCombinationChild, defaultCombinationChildLayout } from '@/utils/combination-tabs'
+import { componentToCombinationChild, combinationChildToComponent, defaultCombinationChildLayout } from '@/utils/combination-tabs'
 import { addCombinationTab, findCombinationChild, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
@@ -1259,6 +1260,44 @@ function handleMoveComponentInto(payload: { containerId: string; componentId: st
   page.components.splice(sourceIndex, 1)
   selectedComponentId.value = container.id
   selectedChildInfo.value = { containerId: container.id, childId: child.id }
+}
+
+/** 从组合容器（children 或页签 children，含嵌套组合）中移除并返回子卡片 */
+function removeChildFromCombination(container: CombinationContainer, childId: string): InsightCombinationChild | null {
+  const cfg = container.containerConfig
+  if (cfg?.tabs.length) {
+    for (const tab of cfg.tabs) {
+      const idx = tab.children.findIndex((c) => c.id === childId)
+      if (idx >= 0) return tab.children.splice(idx, 1)[0] ?? null
+    }
+  }
+  if (container.children) {
+    const idx = container.children.findIndex((c) => c.id === childId)
+    if (idx >= 0) return container.children.splice(idx, 1)[0] ?? null
+  }
+  const nestedContainers = [
+    ...(container.children ?? []).filter((child) => child.type === 'combination'),
+    ...(cfg?.tabs ?? []).flatMap((tab) => tab.children).filter((child) => child.type === 'combination'),
+  ]
+  for (const nested of nestedContainers) {
+    const removed = removeChildFromCombination(nested, childId)
+    if (removed) return removed
+  }
+  return null
+}
+
+/** 子卡片拖出组合卡片：从容器/页签移除，转回顶层组件并落到画布栅格位置 */
+function handleMoveChildOut(payload: { containerId: string; childId: string; position: { x: number; y: number } }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
+  const container = findCombinationContainer(payload.containerId)
+  if (!container || container.type !== 'combination' || container.id === payload.childId) return
+  const child = removeChildFromCombination(container, payload.childId)
+  if (!child) return
+  const component = combinationChildToComponent(child, payload.position)
+  page.components.push(component)
+  selectedComponentId.value = component.id
+  selectedChildInfo.value = null
 }
 
 /** 属性面板「添加页签」 */
