@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
 import CombinationCardWidget from '../CombinationCardWidget.vue'
 
@@ -269,12 +270,14 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('input[aria-label="子组件标题"]').exists()).toBe(false)
   })
 
-  it('renders default sample data and a title watermark for a newly dropped child', async () => {
+  it('renders default sample data and a title watermark for a newly added child', async () => {
     const component = {
       id: 'combination-sample-child',
       type: 'combination' as const,
       title: '组合卡片',
-      children: [] as Array<{ id: string; type: 'kpi'; title: string; layout: { x: number; y: number; col: number; h: number } }>,
+      children: [
+        { id: 'cc-sample-kpi', type: 'kpi' as const, title: '订单数', layout: { x: 24, y: 24, col: 6, h: 90 } },
+      ] as Array<{ id: string; type: 'kpi'; title: string; layout: { x: number; y: number; col: number; h: number } }>,
       containerConfig,
       position: { x: 0, y: 0, w: 12, h: 8 },
     }
@@ -298,13 +301,6 @@ describe('CombinationCardWidget', () => {
       },
     })
 
-    const dataTransfer = {
-      getData: (type: string) => type === 'application/json'
-        ? JSON.stringify({ type: 'kpi' })
-        : '',
-    }
-    await wrapper.get('.combination-card').trigger('drop', { clientX: 40, clientY: 50, dataTransfer })
-
     expect(wrapper.findComponent({ name: 'KpiCardWidget' }).props('componentData')).toMatchObject({
       renderType: 'kpi',
       kpi: { value: '1,284' },
@@ -313,6 +309,50 @@ describe('CombinationCardWidget', () => {
     expect(watermark.text()).toBe('示例数据')
     expect(watermark.element.parentElement?.classList.contains('cc-child-head')).toBe(true)
     expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
+  })
+
+  it('ignores a palette drop so it bubbles to the canvas for free placement', async () => {
+    const component = {
+      id: 'combination-palette-drop',
+      type: 'combination' as const,
+      title: '组合卡片',
+      children: [],
+      containerConfig,
+      position: { x: 0, y: 0, w: 12, h: 8 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    const event = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', {
+      value: { getData: (type: string) => (type === 'application/json' ? JSON.stringify({ type: 'kpi' }) : '') },
+    })
+    Object.defineProperty(event, 'clientX', { value: 40 })
+    Object.defineProperty(event, 'clientY', { value: 50 })
+    const stopPropagation = vi.spyOn(event, 'stopPropagation')
+    wrapper.get('.combination-card').element.dispatchEvent(event)
+    await nextTick()
+
+    // 组件库物料不再被组合拦截：不 stopPropagation（冒泡到画布）、不产生子卡片
+    expect(stopPropagation).not.toHaveBeenCalled()
+    expect(component.children).toHaveLength(0)
   })
 
   it('prefers actual result data and hides the child sample watermark', () => {

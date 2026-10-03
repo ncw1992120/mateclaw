@@ -2,13 +2,11 @@
   <div
     ref="rootRef"
     class="combination-card"
-    :class="{ editing: editable, selected, 'cc-drop': editable && paletteOver, 'cc-interacting': movingId !== null || resizingId !== null }"
+    :class="{ editing: editable, selected, 'cc-interacting': movingId !== null || resizingId !== null }"
     :style="rootStyle"
     @click="onRootClick"
-    @dragenter="onBodyDragEnter"
-    @dragleave="onBodyDragLeave"
-    @dragover.prevent="onBodyDragOver"
-    @drop.stop.prevent="onBodyDrop"
+    @dragover.prevent
+    @drop="onBodyDrop"
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
@@ -292,7 +290,6 @@ import type {
   InsightComponentType,
   InsightCombinationChild,
   InsightCombinationConfig,
-  ChartType,
   InsightComponentData,
   DashboardRuntimeFilterState,
   TimeGranularity,
@@ -548,35 +545,28 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
   return { ...themeStyle, ...visualStyle }
 }
 
-// ── 拖拽添加子组件（整卡落区）────────────────────────────
-// 注意：dragover 阶段浏览器禁止读取 dataTransfer 内容，故高亮在 dragenter/over 直接点亮，
-// 真实类型在 drop 时解析（drop 阶段 getData 可用）。
-const paletteOver = ref(false)
-function onBodyDragEnter() { if (props.editable) paletteOver.value = true }
-function onBodyDragLeave(e: DragEvent) {
-  if (e.relatedTarget && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) paletteOver.value = false
-}
-function onBodyDragOver(e: DragEvent) {
-  if (props.editable) { e.preventDefault(); paletteOver.value = true }
-}
+// ── 拖入组合卡片（标题栏 HTML5 通道）──────────────────────
+/**
+ * 组合卡片的 drop 只处理「画布顶层组件拖入」（标题栏 HTML5 通道）。
+ * 组件库物料的 drop 不再拦截：不 stopPropagation，事件冒泡到画布后按鼠标落点
+ * 放置为画布顶层组件（允许与组合卡片重叠），实现「放到画布任意位置」。
+ */
 function onBodyDrop(e: DragEvent) {
   if (!props.editable || !e.dataTransfer) return
   const raw = e.dataTransfer.getData('application/json')
   if (!raw) return
   try {
-    const payload = JSON.parse(raw) as { kind?: string; componentId?: string; componentType?: InsightComponentType; type?: InsightComponentType; chartType?: ChartType }
+    const payload = JSON.parse(raw) as { kind?: string; componentId?: string; componentType?: InsightComponentType }
     if (payload.kind === 'canvas-component' && payload.componentId) {
+      e.stopPropagation()
+      e.preventDefault()
       const layout = defaultCombinationChildLayout(payload.componentType ?? 'kpi')
       const pos = dropPosFromEvent(e, layout.col, layout.h ?? 180)
       emit('move-component-into', { containerId: props.component.id, componentId: payload.componentId, ...pos })
-    } else if (payload.type) {
-      const size = defaultSize(payload.type)
-      addChild(payload.type, payload.chartType, dropPosFromEvent(e, size.col, size.h))
     }
   } catch (err) {
     console.error('[CombinationCardWidget] drop parse error:', err)
   }
-  paletteOver.value = false
 }
 /**
  * 落点 → 合法初始位置。
@@ -591,66 +581,6 @@ function dropPosFromEvent(e: DragEvent, col: number, h: number): { x: number; y:
   const x = Math.min(Math.max(e.clientX - rect.left, 0), Math.max(0, rect.width - w))
   const y = Math.min(Math.max(e.clientY - rect.top, 0), Math.max(0, rect.height - h))
   return { x: Math.round(x), y: Math.round(y) }
-}
-
-const TITLE_MAP: Record<string, string> = {
-  kpi: t('insight.component.kpi'),
-  'chart-line': t('insight.component.line'),
-  'chart-bar': t('insight.component.bar'),
-  'chart-pie': t('insight.component.pie'),
-  'chart-area': t('insight.component.area'),
-  'chart-scatter': t('insight.component.scatter'),
-  'chart-radar': t('insight.component.radar'),
-  table: t('insight.component.table'),
-  filter: t('insight.component.filter'),
-  timeFilter: t('insight.component.timeFilter'),
-  aiAnalysis: t('insight.component.aiAnalysis'),
-  combination: t('insight.component.combination'),
-}
-function defaultTitle(type: InsightComponentType, chartType?: ChartType): string {
-  const key = type === 'chart' && chartType ? `chart-${chartType}` : type
-  return TITLE_MAP[key] ?? type
-}
-
-function genId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-}
-
-/** 子组件默认尺寸（col 为 12 栅格列数，h 为像素高）—— 落点换算与新增子组件共用同一来源 */
-function defaultSize(type: InsightComponentType): { col: number; h: number } {
-  const layout = defaultCombinationChildLayout(type)
-  return { col: layout.col, h: layout.h ?? 180 }
-}
-
-function addChild(type: InsightComponentType, chartType: ChartType | undefined, pos: { x: number; y: number }): void {
-  const arr = getActiveChildren()
-  const size = defaultSize(type)
-  const child: InsightCombinationChild = {
-    id: genId('cc'),
-    type,
-    title: defaultTitle(type, chartType),
-    chartType,
-    config:
-      type === 'timeFilter'
-        ? { field: 'metric_time', availablePresets: ['today', '7d', '30d', '90d', 'custom'] }
-        : type === 'aiAnalysis'
-          ? { autoGenerate: false }
-          : undefined,
-    dataSource:
-      type !== 'filter' && type !== 'timeFilter' && type !== 'aiAnalysis'
-        ? { datasourceId: '', metrics: [], dimensions: [], filters: [], limit: 100 }
-        : undefined,
-    children: type === 'combination' ? [] : undefined,
-    containerConfig: type === 'combination' ? defaultConfig() : undefined,
-    layout: {
-      x: pos.x,
-      y: pos.y,
-      col: size.col,
-      h: size.h,
-    },
-  }
-  arr.push(child)
-  selectedChildId.value = child.id
 }
 
 // ── 子组件自由拖动（鼠标事件）──────────────────────────
@@ -818,9 +748,11 @@ let rzRaf = 0
 let rzLast: { x: number; y: number } | null = null
 
 /** 起点 + 当前鼠标坐标 → 目标盒子（缩放过程与落点共用）。col/h/位置三者联动一致，全程不读 DOM。 */
+/** snap=false 用于拖动预览：像素连续跟随；snap=true 用于松手落格：吸附整列与整数像素。 */
 function computeResize(
   start: NonNullable<typeof rz>,
   last: { x: number; y: number },
+  snap = true,
 ): { x: number; y: number; col: number; h: number } {
   const box = calculateCombinationChildResize(
     {
@@ -835,6 +767,7 @@ function computeResize(
       columnWidth: start.colW,
     },
     last,
+    snap,
   )
   return { x: box.x, y: box.y, col: box.col, h: box.height }
 }
@@ -873,7 +806,8 @@ function onChildResizeMove(e: MouseEvent) {
     rzRaf = 0
     if (!rz || !rzLast || !rz.el) return
     const colW = rz.colW
-    const box = computeResize(rz, rzLast)
+    // 拖动预览：像素连续（col 不取整），完全跟随鼠标，不吸附
+    const box = computeResize(rz, rzLast, false)
     rz.el.style.setProperty('left', box.x + 'px')
     rz.el.style.setProperty('top', box.y + 'px')
     rz.el.style.setProperty('width', Math.round(box.col * colW) + 'px')

@@ -70,14 +70,16 @@
     </div>
 
     <div class="canvas-grid-stage" :style="editable ? canvasZoomStyle : undefined">
+      <!-- GridItem 恒为 static：库只负责栅格渲染与定位，拖动/缩放全部走自研 pointer 通道。
+           这样可绕过库内部 compact 的强制碰撞下推（vertical-compact=false 也会把重叠 item 推开），
+           使组件可以放到画布任意位置（包括与组合卡片重叠）。 -->
       <GridLayout
         v-if="gridLayout.length > 0"
         :layout="gridLayout"
         :col-num="editable ? GRID_COLUMN_COUNT : previewColumnCount"
         :row-height="30"
         :transform-scale="canvasZoom"
-        :is-draggable="editable && !isCustomResizing"
-        :is-resizable="editable && !isCustomResizing"
+        :is-resizable="false"
         :vertical-compact="false"
         :margin="[12, 12]"
         @layout-updated="handleLayoutUpdated"
@@ -90,26 +92,26 @@
           :y="item.y"
           :w="item.w"
           :h="item.h"
-          :static="!editable"
-          :class="{ 'is-selected-top': editable && selectedId === item.i }"
-          :drag-ignore-from="'a, button, .cc-child, .grid-item-toolbar'"
+          :static="true"
+          :class="{ 'is-selected-top': editable && selectedId === item.i, 'is-pointer-dragging': pointerDraggingId === item.i }"
           @click.stop="handleSelectComponent(item.i)"
         >
           <div
             class="grid-item-content mc-card grid-item-animated"
           :data-component-id="item.i"
           tabindex="0"
-          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)) }"
-          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup, getComponent(item.i)?.componentColor), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms` }"
+          @pointerdown="handleItemPointerDown($event, item.i)"
+          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)), 'custom-resizing': resizingItem?.id === item.i }"
+          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup, getComponent(item.i)?.componentColor), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms`, ...(resizingItem?.id === item.i && resizePreviewStyle ? resizePreviewStyle : {}) }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
-          <!-- 四边拖动热区（仅编辑态） -->
+          <!-- 四边拖动热区（仅编辑态）：mousedown 一并拦截，防止冒泡到 GridItem 触发库的拖动/缩放与像素预览打架 -->
           <template v-if="editable">
-            <div class="resize-handle resize-handle-top" @pointerdown.stop.prevent="startResize($event, item.i, 'top')" />
-            <div class="resize-handle resize-handle-right" @pointerdown.stop.prevent="startResize($event, item.i, 'right')" />
-            <div class="resize-handle resize-handle-bottom" @pointerdown.stop.prevent="startResize($event, item.i, 'bottom')" />
-            <div class="resize-handle resize-handle-left" @pointerdown.stop.prevent="startResize($event, item.i, 'left')" />
+            <div class="resize-handle resize-handle-top" @pointerdown.stop.prevent="startResize($event, item.i, 'top')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-right" @pointerdown.stop.prevent="startResize($event, item.i, 'right')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-bottom" @pointerdown.stop.prevent="startResize($event, item.i, 'bottom')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-left" @pointerdown.stop.prevent="startResize($event, item.i, 'left')" @mousedown.stop.prevent />
           </template>
           <div
             v-if="editable"
@@ -252,7 +254,7 @@
                 :editable="editable"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
-                :drop-hint="editable && draggingComponentId !== null && draggingComponentId !== item.i"
+                :drop-hint="editable && ((draggingComponentId !== null && draggingComponentId !== item.i) || gridDragHoverComboId === item.i)"
                 :dashboard-theme="dashboardTheme"
                 :component-title-icon-style-preview="componentTitleIconStylePreview"
                 :title-icon-style-preview="childTitleIconStylePreview"
@@ -301,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
@@ -322,7 +324,7 @@ import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { projectPythonResultKpi } from '@/utils/kpi-result-projection'
-import { calculateGridResize, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
+import { calculateGridResize, calculateResizePreview, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
   name: 'DashboardCanvas',
@@ -966,6 +968,156 @@ function clearDraggingComponent(): void {
   draggingComponentId.value = null
 }
 
+/** 自研指针拖动中的顶层组件 ID（用于渲染 pointer-events:none 与置顶，null 表示未拖动） */
+const pointerDraggingId = ref<string | null>(null)
+
+/** 拖动悬停中的目标组合卡片 ID：null 表示未悬停在任何组合上方（用于放置提示） */
+const gridDragHoverComboId = ref<string | null>(null)
+
+/** 确认进入拖动的位移阈值（px） */
+const POINTER_DRAG_THRESHOLD = 4
+
+interface PointerDragState {
+  componentId: string
+  pointerId: number
+  startX: number
+  startY: number
+  originX: number
+  originY: number
+  originW: number
+  originH: number
+  active: boolean
+}
+
+let pointerDrag: PointerDragState | null = null
+
+/** pointerdown 候选：与库拖动的 drag-ignore-from 语义保持一致，命中交互元素时不进入拖动 */
+function isPointerDragIgnoreTarget(target: EventTarget | null): boolean {
+  return !!(target instanceof Element && target.closest(
+    'a, button, input, select, textarea, .grid-item-toolbar, .cc-child, .resize-handle, .component-resize-hotzone'
+  ))
+}
+
+/** 自研拖动入口（GridItem 全部 static 后库拖动已禁用）：先记录候选，位移超阈值才确认为拖动 */
+function handleItemPointerDown(event: PointerEvent, componentId: string): void {
+  if (!props.editable || event.button !== 0 || isPointerDragIgnoreTarget(event.target)) return
+  const item = gridLayout.value.find((g) => g.i === componentId)
+  if (!item) return
+  pointerDrag = {
+    componentId,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: item.x,
+    originY: item.y,
+    originW: item.w,
+    originH: item.h,
+    active: false,
+  }
+  window.addEventListener('pointermove', onPointerDragMove)
+  window.addEventListener('pointerup', onPointerDragUp)
+  window.addEventListener('pointercancel', onPointerDragUp)
+}
+
+/** 解绑 window 上的拖动监听 */
+function unbindPointerDragListeners(): void {
+  window.removeEventListener('pointermove', onPointerDragMove)
+  window.removeEventListener('pointerup', onPointerDragUp)
+  window.removeEventListener('pointercancel', onPointerDragUp)
+}
+
+/** 拖动位移（视口 px）→ 栅格增量（列/行），按画布缩放归一 */
+function pointerDragGridDelta(dxPx: number, dyPx: number): { dx: number; dy: number } {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const stage = canvasRef.value?.querySelector<HTMLElement>('.canvas-grid-stage')
+  const rect = (grid ?? stage)?.getBoundingClientRect()
+  const scale = props.editable ? canvasZoom.value : 1
+  const logicalWidth = rect ? rect.width / scale : 0
+  const colWidth = logicalWidth > GRID_GAP * (GRID_COLS + 1)
+    ? (logicalWidth - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
+    : 0
+  return {
+    dx: colWidth > 0 ? Math.round(dxPx / scale / (colWidth + GRID_GAP)) : 0,
+    dy: Math.round(dyPx / scale / (GRID_ROW_HEIGHT + GRID_GAP)),
+  }
+}
+
+/**
+ * 悬停命中测试：同步内联禁用被拖卡片的 pointer-events 后再取 elementFromPoint。
+ * 不能只依赖 .is-pointer-dragging 的 CSS——它在 Vue 渲染周期中异步生效，首次
+ * pointermove 时被拖卡片仍会拦截命中，导致悬停检测在拖动第一步失效。
+ * 拖动中的组件 pointer-events:none 后，elementFromPoint 直接命中其下方元素，
+ * 嵌套组合天然取到最上层的最内层卡片。
+ */
+function hitTestExcludingDragged(x: number, y: number, componentId: string): Element | null {
+  const draggedEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${componentId}"]`)
+  if (draggedEl) draggedEl.style.pointerEvents = 'none'
+  const hit = document.elementFromPoint(x, y)
+  if (draggedEl) draggedEl.style.pointerEvents = ''
+  return hit
+}
+
+function onPointerDragMove(event: PointerEvent): void {
+  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return
+  const drag = pointerDrag
+  if (!drag.active) {
+    if (Math.abs(event.clientX - drag.startX) < POINTER_DRAG_THRESHOLD && Math.abs(event.clientY - drag.startY) < POINTER_DRAG_THRESHOLD) return
+    drag.active = true
+    pointerDraggingId.value = drag.componentId
+    // 拖动即置顶：复用选中置顶，避免拖动中的卡片被其他卡片遮挡
+    handleSelectComponent(drag.componentId)
+  }
+  event.preventDefault()
+  const { dx, dy } = pointerDragGridDelta(event.clientX - drag.startX, event.clientY - drag.startY)
+  const item = gridLayout.value.find((g) => g.i === drag.componentId)
+  if (!item) return
+  item.x = Math.max(0, Math.min(drag.originX + dx, GRID_COLS - drag.originW))
+  item.y = Math.max(0, drag.originY + dy)
+
+  const hitCard = hitTestExcludingDragged(event.clientX, event.clientY, drag.componentId)?.closest('.combination-card')
+  const hostItem = hitCard?.closest('.vgl-item')
+  const hostId = hostItem?.querySelector<HTMLElement>('[data-component-id]')?.getAttribute('data-component-id') ?? null
+  gridDragHoverComboId.value = !hostId || hostId === drag.componentId ? null : hostId
+}
+
+/** 拖动结束：悬停在组合卡片上则移入，否则提交最终位置；未达阈值的视为普通点击（交给 @click） */
+function onPointerDragUp(event: PointerEvent): void {
+  const drag = pointerDrag
+  pointerDrag = null
+  unbindPointerDragListeners()
+  if (!drag || event.pointerId !== drag.pointerId) return
+  if (!drag.active) return
+  pointerDraggingId.value = null
+  const targetId = gridDragHoverComboId.value
+  gridDragHoverComboId.value = null
+
+  const item = gridLayout.value.find((g) => g.i === drag.componentId)
+  if (!item) return
+
+  if (targetId) {
+    const itemEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${drag.componentId}"]`)?.closest('.vgl-item')
+    const bodyEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${targetId}"] .combination-card > .cc-body`)
+    const ir = itemEl?.getBoundingClientRect()
+    const br = bodyEl?.getBoundingClientRect()
+    if (ir && br && ir.width > 0 && br.width > 0) {
+      const scale = props.editable ? canvasZoom.value : 1
+      emit('move-component-into', {
+        containerId: targetId,
+        componentId: drag.componentId,
+        x: Math.max(0, (ir.left - br.left) / scale),
+        y: Math.max(0, (ir.top - br.top) / scale),
+      })
+    }
+    return
+  }
+
+  if (item.x !== drag.originX || item.y !== drag.originY) {
+    emit('update-layout', [{ id: drag.componentId, x: item.x, y: item.y, w: drag.originW, h: drag.originH }])
+  }
+}
+
+onBeforeUnmount(unbindPointerDragListeners)
+
 /** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
 const GRID_COLS = 24
 const GRID_ROW_HEIGHT = 30
@@ -1114,6 +1266,8 @@ const resizingItem = ref<{
 const isCustomResizing = ref(false)
 let resizeRaf = 0
 let resizeLastPoint: { x: number; y: number } | null = null
+/** 拖拽中的像素级预览样式：直接作用于卡片 DOM，不触碰网格布局，松手时一次性吸附提交。 */
+const resizePreviewStyle = ref<Record<string, string> | null>(null)
 
 function readGridResizeMetrics(): GridResizeMetrics {
   const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
@@ -1163,7 +1317,7 @@ function applyResizePoint(point: { x: number; y: number }): void {
   if (item) Object.assign(item, { x: result.newX, y: result.newY, w: result.newW, h: result.newH })
 }
 
-/** 拖动中：合并到下一帧，避免每个 pointermove 都触发布局重算。 */
+/** 拖动中：像素级预览跟随鼠标（不触碰网格布局，避免库内碰撞重排引起跳动），合并到下一帧执行。 */
 function handleResizeMove(event: PointerEvent): void {
   if (!resizingItem.value || event.pointerId !== resizingItem.value.pointerId) return
   event.preventDefault()
@@ -1171,7 +1325,15 @@ function handleResizeMove(event: PointerEvent): void {
   if (!resizeRaf) {
     resizeRaf = requestAnimationFrame(() => {
       resizeRaf = 0
-      if (resizeLastPoint) applyResizePoint(resizeLastPoint)
+      const start = resizingItem.value
+      if (!start || !resizeLastPoint) return
+      resizePreviewStyle.value = calculateResizePreview({
+        edge: start.edge,
+        startW: start.startW,
+        startH: start.startH,
+        dx: (resizeLastPoint.x - start.startX) / canvasZoom.value,
+        dy: (resizeLastPoint.y - start.startY) / canvasZoom.value,
+      }, start.metrics)
     })
   }
 }
@@ -1183,6 +1345,8 @@ function handleResizeEnd(event?: PointerEvent): void {
     cancelAnimationFrame(resizeRaf)
     resizeRaf = 0
   }
+  // 撤销像素预览，按最终鼠标位置吸附到栅格，一次性写入布局并提交
+  resizePreviewStyle.value = null
   if (resizeLastPoint) applyResizePoint(resizeLastPoint)
   if (resizingItem.value) {
     // 缩放期间 GridLayout 因碰撞让位产生的整理布局，在松手时统一采纳：
@@ -1247,6 +1411,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 /* 选中的组件置顶：压过相邻/重叠的卡片（含组合卡片内溢出的绝对定位子卡片） */
 .dashboard-canvas :deep(.vgl-item.is-selected-top) {
   z-index: 30;
+}
+
+/* 自研指针拖动中的组件不拦截指针：悬停检测（elementFromPoint）需要命中其下方的组合卡片 */
+.dashboard-canvas :deep(.is-pointer-dragging) {
+  pointer-events: none;
 }
 
 .dashboard-canvas {
@@ -1429,6 +1598,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   /* 顶线以整卡渐变叠加绘制：叠加层全高继承圆角不会被压缩，顶线转角与卡片圆角逐像素吻合 */
   background: linear-gradient(to bottom, var(--component-group-accent, transparent) 0 6px, transparent 6px);
   pointer-events: none;
+}
+/* 自定义拉伸预览：卡片以像素级盒模型临时生长/收缩，需溢出 GridItem 且压过相邻卡片 */
+.grid-item-content.custom-resizing {
+  overflow: visible;
+  z-index: 30;
 }
 
 .dashboard-canvas.is-resizing,
