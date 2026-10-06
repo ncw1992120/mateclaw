@@ -26,7 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,9 +51,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
     private final Map<String, TaskState> tasks = new ConcurrentHashMap<>();
-    private final Object admissionLock = new Object();
     private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService completedTaskCleanup;
+    private final ThreadPoolExecutor workerExecutor;
     private volatile boolean closed;
 
     @Autowired
@@ -58,6 +62,16 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
+        int maxConcurrentTasks = Math.max(1, properties.getMaxConcurrentTasks());
+        ThreadFactory workerThreadFactory = runnable -> {
+            Thread thread = new Thread(runnable, "python-worker-launch");
+            thread.setDaemon(true);
+            return thread;
+        };
+        this.workerExecutor = new ThreadPoolExecutor(maxConcurrentTasks, maxConcurrentTasks,
+                0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(Math.max(1, properties.getMaxQueuedTasks())),
+                workerThreadFactory, new ThreadPoolExecutor.AbortPolicy());
         this.completedTaskCleanup = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "python-worker-task-cleanup");
             thread.setDaemon(true);
@@ -83,49 +97,56 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         if (!properties.isEnabled()) return failed(taskId, "Python execution is disabled");
         String token = text(request.get("readToken"));
 
-        synchronized (admissionLock) {
-            if (closed) return failed(taskId, "Python worker service is shutting down");
-            if (tasks.containsKey(taskId)) throw new IllegalStateException("task already exists");
-            pruneCompletedTasks();
-            long activeCount = tasks.values().stream().filter(TaskState::isActive).count();
-            if (activeCount >= Math.max(1, properties.getMaxConcurrentTasks())) {
-                return failed(taskId, "maximum concurrent Python tasks reached");
-            }
+        if (closed) return failed(taskId, "Python worker service is shutting down");
+        pruneCompletedTasks();
+        TaskState state = new TaskState(taskId, token, stdoutLimit(request), stderrLimit());
+        if (tasks.putIfAbsent(taskId, state) != null) throw new IllegalStateException("task already exists");
+        try {
+            workerExecutor.execute(() -> runTask(state, request));
+        } catch (RejectedExecutionException exception) {
+            finish(state, "FAILED", null, "Python task queue is full", 1);
+        }
+        return state.snapshot();
+    }
 
-            TaskState state = new TaskState(taskId, token, stdoutLimit(request), stderrLimit());
-            tasks.put(taskId, state);
-            try {
-                Path workerHome = resolveWorkerHome();
-                String pythonCommand = requirePythonCommand(workerHome);
-                Path taskDirectory = createTaskDirectory(taskId);
-                state.taskDirectory = taskDirectory;
-                Path requestFile = taskDirectory.resolve("request.json");
-                Path responseFile = taskDirectory.resolve("response.json");
-                objectMapper.writeValue(requestFile.toFile(), request);
-                restrictFile(requestFile);
+    private void runTask(TaskState state, Map<String, Object> request) {
+        if (isTerminal(state.status)) return;
+        try {
+            Path workerHome = resolveWorkerHome();
+            String pythonCommand = requirePythonCommand(workerHome);
+            Path taskDirectory = createTaskDirectory(state.taskId);
+            state.taskDirectory = taskDirectory;
+            Path requestFile = taskDirectory.resolve("request.json");
+            Path responseFile = taskDirectory.resolve("response.json");
+            objectMapper.writeValue(requestFile.toFile(), request);
+            restrictFile(requestFile);
 
-                ProcessBuilder processBuilder = new ProcessBuilder(
-                        pythonCommand, "-m", "runner.worker",
-                        "--request", requestFile.toAbsolutePath().toString(),
-                        "--response", responseFile.toAbsolutePath().toString());
-                processBuilder.directory(workerHome.toFile());
-                prepareEnvironment(processBuilder, workerHome);
-                Process process = processBuilder.start();
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    pythonCommand, "-m", "runner.worker",
+                    "--request", requestFile.toAbsolutePath().toString(),
+                    "--response", responseFile.toAbsolutePath().toString());
+            processBuilder.directory(workerHome.toFile());
+            prepareEnvironment(processBuilder, workerHome);
+            Process process = processBuilder.start();
+            synchronized (state) {
+                if (isTerminal(state.status)) {
+                    terminateTree(process);
+                    cleanup(taskDirectory);
+                    return;
+                }
                 state.process = process;
                 state.status = "RUNNING";
                 activeProcesses.add(process);
-                Thread.ofVirtual().name("python-worker-" + taskId).start(
-                        () -> monitor(state, process, responseFile, timeoutSeconds(request)));
-                return state.snapshot();
-            } catch (Exception exception) {
-                if (state.process != null) {
-                    terminateTree(state.process);
-                    activeProcesses.remove(state.process);
-                }
-                finish(state, "FAILED", null, safeMessage(exception, token), 1);
-                cleanup(state.taskDirectory);
-                return state.snapshot();
             }
+            monitor(state, process, responseFile, timeoutSeconds(request));
+        } catch (Exception exception) {
+            Process process = state.process;
+            if (process != null) {
+                terminateTree(process);
+                activeProcesses.remove(process);
+            }
+            finish(state, "FAILED", null, safeMessage(exception, state.token), 1);
+            cleanup(state.taskDirectory);
         }
     }
 
@@ -141,7 +162,12 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         TaskState state = tasks.get(taskId);
         if (state == null) throw new IllegalArgumentException("task not found");
         Process process = state.process;
-        if (process == null || isTerminal(state.status)) return state.snapshot();
+        if (isTerminal(state.status)) return state.snapshot();
+        if (process == null) {
+            finish(state, "CANCELLED", null, "task cancelled", 1);
+            cleanup(state.taskDirectory);
+            return state.snapshot();
+        }
         finish(state, "CANCELLED", null, "task cancelled", safeExitValue(process));
         terminateTree(process);
         return state.snapshot();
@@ -453,6 +479,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     private static void joinReader(Thread reader) throws InterruptedException { reader.join(2_000); }
 
     private static int safeExitValue(Process process) {
+        if (process == null) return -1;
         try { return process.exitValue(); } catch (IllegalThreadStateException ignored) { return -1; }
     }
 
@@ -485,7 +512,15 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     public void close() {
         closed = true;
         completedTaskCleanup.shutdownNow();
-        for (Process process : activeProcesses) terminateTree(process);
+        workerExecutor.shutdownNow();
+        for (TaskState state : tasks.values()) {
+            if (!isTerminal(state.status)) {
+                Process process = state.process;
+                finish(state, "CANCELLED", null, "Python worker service is shutting down", safeExitValue(process));
+                if (process != null) terminateTree(process);
+                cleanup(state.taskDirectory);
+            }
+        }
     }
 
     private static final class TaskState {
@@ -511,8 +546,6 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             this.maxStdoutBytes = maxStdoutBytes;
             this.maxStderrBytes = maxStderrBytes;
         }
-
-        private boolean isActive() { return !isTerminal(status); }
 
         private void appendStdout(String value) {
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);

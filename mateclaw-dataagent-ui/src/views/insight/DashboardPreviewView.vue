@@ -727,7 +727,7 @@ async function refreshPipelineComponent(
           terminalStatus = status.status
           break
         }
-        if (status.status && status.status !== 'RUNNING') {
+        if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
           throw new Error(`${status.status}: ${status.error || '组件执行失败'}`)
         }
         await new Promise((resolve) => setTimeout(resolve, 500))
@@ -839,7 +839,7 @@ async function reloadScriptBindings(
         completed = true
         break
       }
-      if (status.status && status.status !== 'RUNNING') {
+      if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
         throw new Error(`${status.status}: ${status.error || '脚本执行未成功'}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 500))

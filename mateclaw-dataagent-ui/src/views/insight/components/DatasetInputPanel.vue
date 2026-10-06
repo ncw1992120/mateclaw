@@ -659,7 +659,7 @@ async function executeScriptPreview(): Promise<void> {
         executionOutputRef.value = resolved.outputRef ?? null
         return
       }
-      if (status.status && status.status !== 'RUNNING') {
+      if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
         throw new Error(status.error || `执行未成功：${status.status}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 500))

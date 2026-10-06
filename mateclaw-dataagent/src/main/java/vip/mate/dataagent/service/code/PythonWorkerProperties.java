@@ -14,6 +14,7 @@ public class PythonWorkerProperties {
     private String workerHome;
     private Path tempRoot = Paths.get(System.getProperty("java.io.tmpdir"), "mateclaw-python-worker");
     private int maxConcurrentTasks = 2;
+    private int maxQueuedTasks = 32;
     private int maxCompletedTasks = 256;
     private long completedTaskTtlMillis = 300_000;
     private int defaultTimeoutSeconds = 60;
@@ -31,6 +32,8 @@ public class PythonWorkerProperties {
     public void setTempRoot(Path tempRoot) { this.tempRoot = tempRoot; }
     public int getMaxConcurrentTasks() { return maxConcurrentTasks; }
     public void setMaxConcurrentTasks(int maxConcurrentTasks) { this.maxConcurrentTasks = maxConcurrentTasks; }
+    public int getMaxQueuedTasks() { return maxQueuedTasks; }
+    public void setMaxQueuedTasks(int maxQueuedTasks) { this.maxQueuedTasks = maxQueuedTasks; }
     public int getMaxCompletedTasks() { return maxCompletedTasks; }
     public void setMaxCompletedTasks(int maxCompletedTasks) { this.maxCompletedTasks = maxCompletedTasks; }
     public long getCompletedTaskTtlMillis() { return completedTaskTtlMillis; }

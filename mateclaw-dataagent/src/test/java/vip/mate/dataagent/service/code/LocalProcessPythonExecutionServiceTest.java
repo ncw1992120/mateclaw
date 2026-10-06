@@ -23,8 +23,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class LocalProcessPythonExecutionServiceTest {
     @Test
-    void completedTaskRetentionDefaultsToFiveMinutes() {
-        assertEquals(300_000L, new PythonWorkerProperties().getCompletedTaskTtlMillis());
+    void workerQueueAndCompletedTaskRetentionHaveSafeDefaults() {
+        PythonWorkerProperties defaults = new PythonWorkerProperties();
+        assertEquals(32, defaults.getMaxQueuedTasks());
+        assertEquals(300_000L, defaults.getCompletedTaskTtlMillis());
     }
 
     @Test
@@ -95,9 +97,9 @@ class LocalProcessPythonExecutionServiceTest {
     @Test
     void submitTracksWorkerStatusAndResult() throws Exception {
         Map<String, Object> submitted = service.submit(request("success"));
-        assertEquals("RUNNING", submitted.get("status"));
+        assertAccepted(submitted);
 
-        Map<String, Object> completed = awaitStatus("success", status -> !"RUNNING".equals(status.get("status")));
+        Map<String, Object> completed = awaitStatus("success", LocalProcessPythonExecutionServiceTest::isTerminal);
         assertEquals("SUCCEEDED", completed.get("status"));
         assertEquals("worker log", completed.get("output"));
         assertEquals(9, ((Map<?, ?>) completed.get("result")).get("data") instanceof Map<?, ?> data
@@ -115,7 +117,7 @@ class LocalProcessPythonExecutionServiceTest {
         ((Map<String, Object>) request.get("limits")).put("timeout_seconds", 1);
         service.submit(request);
 
-        Map<String, Object> completed = awaitStatus("sleep", status -> !"RUNNING".equals(status.get("status")));
+        Map<String, Object> completed = awaitStatus("sleep", LocalProcessPythonExecutionServiceTest::isTerminal);
         assertEquals("TIMEOUT", completed.get("status"));
     }
 
@@ -157,7 +159,7 @@ class LocalProcessPythonExecutionServiceTest {
         ((Map<String, Object>) request.get("limits")).put("max_stdout_bytes", 128);
         service.submit(request);
 
-        Map<String, Object> completed = awaitStatus("overflow", status -> !"RUNNING".equals(status.get("status")));
+        Map<String, Object> completed = awaitStatus("overflow", LocalProcessPythonExecutionServiceTest::isTerminal);
         assertEquals("OUTPUT_LIMIT", completed.get("status"));
         assertTrue(((String) completed.get("output")).getBytes().length <= 128);
     }
@@ -183,8 +185,9 @@ class LocalProcessPythonExecutionServiceTest {
 
         Map<String, Object> result = service.submit(request("success"));
 
-        assertEquals("FAILED", result.get("status"));
-        assertTrue(String.valueOf(result.get("error")).contains("missing-python"));
+        Map<String, Object> completed = awaitStatus("success", LocalProcessPythonExecutionServiceTest::isTerminal);
+        assertEquals("FAILED", completed.get("status"));
+        assertTrue(String.valueOf(completed.get("error")).contains("missing-python"));
     }
 
     @Test
@@ -201,11 +204,11 @@ class LocalProcessPythonExecutionServiceTest {
         String originalUserDir = System.getProperty("user.dir");
         try {
             System.setProperty("user.dir", dataAgent.toString());
-            assertEquals("RUNNING", service.submit(request("module-root")).get("status"));
+            assertAccepted(service.submit(request("module-root")));
             assertEquals("SUCCEEDED", awaitStatus("module-root", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
 
             System.setProperty("user.dir", repository.toString());
-            assertEquals("RUNNING", service.submit(request("repository-root")).get("status"));
+            assertAccepted(service.submit(request("repository-root")));
             assertEquals("SUCCEEDED", awaitStatus("repository-root", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
         } finally {
             System.setProperty("user.dir", originalUserDir);
@@ -273,7 +276,8 @@ class LocalProcessPythonExecutionServiceTest {
         properties.setPythonCommand(python.toString());
         service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
 
-        Map<String, Object> result = service.submit(request("missing-dependencies"));
+        service.submit(request("missing-dependencies"));
+        Map<String, Object> result = awaitStatus("missing-dependencies", LocalProcessPythonExecutionServiceTest::isTerminal);
 
         String error = String.valueOf(result.get("error"));
         assertEquals("FAILED", result.get("status"));
@@ -338,19 +342,25 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     @Test
-    void allowsTwoConcurrentWorkersAndFastFailsTheThird() throws Exception {
+    void queuesTasksAboveTheConcurrencyLimitAndRunsThemWhenCapacityIsFreed() throws Exception {
         for (String taskId : List.of("active-one", "active-two")) {
             Map<String, Object> activeRequest = request("sleep");
             activeRequest.put("taskId", taskId);
             ((Map<String, Object>) activeRequest.get("limits")).put("timeout_seconds", 30);
-            assertEquals("RUNNING", service.submit(activeRequest).get("status"));
+            assertAccepted(service.submit(activeRequest));
         }
 
-        Map<String, Object> rejected = service.submit(request("third-worker"));
+        Map<String, Object> queuedRequest = request("success");
+        queuedRequest.put("taskId", "third-worker");
+        Map<String, Object> queued = service.submit(queuedRequest);
 
-        assertEquals("FAILED", rejected.get("status"));
-        assertTrue(String.valueOf(rejected.get("error")).contains("maximum concurrent"));
-        assertEquals("RUNNING", service.getStatus("active-one").get("status"));
+        assertTrue(List.of("SUBMITTING", "RUNNING").contains(queued.get("status")));
+        await(() -> "RUNNING".equals(service.getStatus("active-one").get("status"))
+                && "RUNNING".equals(service.getStatus("active-two").get("status")));
+
+        service.cancel("active-one");
+        Map<String, Object> completed = awaitStatus("third-worker", status -> "SUCCEEDED".equals(status.get("status")));
+        assertEquals("SUCCEEDED", completed.get("status"));
         assertEquals("RUNNING", service.getStatus("active-two").get("status"));
     }
 
@@ -358,36 +368,64 @@ class LocalProcessPythonExecutionServiceTest {
     void missingOrCorruptResponseBecomesFailedInsteadOfRunningForever() throws Exception {
         for (String taskId : List.of("no-response", "bad-response")) {
             service.submit(request(taskId));
-            Map<String, Object> completed = awaitStatus(taskId, status -> !"RUNNING".equals(status.get("status")));
+            Map<String, Object> completed = awaitStatus(taskId, LocalProcessPythonExecutionServiceTest::isTerminal);
             assertEquals("FAILED", completed.get("status"));
         }
     }
 
     @Test
-    void enforcesMaximumConcurrentTasks() throws Exception {
+    void queuesAdditionalTasksWhenConcurrencyLimitIsReached() throws Exception {
         properties.setMaxConcurrentTasks(1);
         service.close();
         service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
         service.submit(request("sleep"));
 
-        Map<String, Object> rejected = service.submit(request("second"));
+        Map<String, Object> queuedRequest = request("success");
+        queuedRequest.put("taskId", "second");
+        Map<String, Object> queued = service.submit(queuedRequest);
 
-        assertEquals("FAILED", rejected.get("status"));
-        assertTrue(String.valueOf(rejected.get("error")).contains("concurrent"));
+        assertTrue(List.of("SUBMITTING", "RUNNING").contains(queued.get("status")));
         service.cancel("sleep");
+        assertEquals("SUCCEEDED", awaitStatus("second", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
+    }
+
+    @Test
+    void rejectsOnlyWhenTheBoundedQueueIsFull() throws Exception {
+        properties.setMaxConcurrentTasks(1);
+        properties.setMaxQueuedTasks(1);
+        service.close();
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.submit(request("sleep"));
+        Map<String, Object> queuedRequest = request("success");
+        queuedRequest.put("taskId", "queued-one");
+        assertAccepted(service.submit(queuedRequest));
+
+        Map<String, Object> rejectedRequest = request("success");
+        rejectedRequest.put("taskId", "queue-full");
+        Map<String, Object> rejected = service.submit(rejectedRequest);
+        assertEquals("FAILED", rejected.get("status"));
+        assertTrue(String.valueOf(rejected.get("error")).contains("queue is full"));
+
+        service.cancel("sleep");
+        assertEquals("SUCCEEDED", awaitStatus("queued-one", status -> "SUCCEEDED".equals(status.get("status"))).get("status"));
     }
 
     @Test
     void childReceivesOnlyAllowlistedEnvironment() throws Exception {
         service.submit(request("env"));
-        Map<String, Object> completed = awaitStatus("env", status -> !"RUNNING".equals(status.get("status")));
+        Map<String, Object> completed = awaitStatus("env", LocalProcessPythonExecutionServiceTest::isTerminal);
 
         @SuppressWarnings("unchecked")
         List<String> names = new ObjectMapper().readValue((String) completed.get("output"), List.class);
-        assertTrue(names.stream().allMatch(name -> List.of(
+        java.util.Set<String> allowed = new java.util.HashSet<>(List.of(
                 "PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT", "WINDIR",
                 "SYSTEMDRIVE", "PATHEXT", "PWD", "SHLVL", "PYTHONPATH", "PYTHONIOENCODING", "PYTHONDONTWRITEBYTECODE"
-        ).contains(name)), names.toString());
+        ));
+        if (System.getProperty("os.name", "").toLowerCase().contains("mac")) {
+            allowed.add("__CF_USER_TEXT_ENCODING");
+        }
+        assertTrue(names.stream().allMatch(allowed::contains), names.toString());
     }
 
     private Map<String, Object> request(String taskId) {
@@ -397,7 +435,7 @@ class LocalProcessPythonExecutionServiceTest {
         request.put("inputCatalog", Map.of());
         request.put("parameters", Map.of());
         request.put("limits", new LinkedHashMap<>(Map.of(
-                "timeout_seconds", 5, "max_stdout_bytes", 4096, "max_result_bytes", 4096)));
+                "timeout_seconds", 30, "max_stdout_bytes", 4096, "max_result_bytes", 4096)));
         request.put("datasetReadEndpoint", "http://127.0.0.1:18089/dataagent/api/internal/read");
         request.put("datasetInputEndpoint", "http://127.0.0.1:18089/dataagent/api/internal/input");
         request.put("preferPreparedInputs", true);
@@ -406,7 +444,7 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     private Map<String, Object> awaitStatus(String taskId, Predicate<Map<String, Object>> done) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos();
+        long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
         Map<String, Object> status;
         do {
             status = service.getStatus(taskId);
@@ -415,6 +453,15 @@ class LocalProcessPythonExecutionServiceTest {
         } while (System.nanoTime() < deadline);
         fail("task did not reach a terminal status: " + taskId + " " + service.getStatus(taskId));
         return Map.of();
+    }
+
+    private static boolean isTerminal(Map<String, Object> status) {
+        return List.of("SUCCEEDED", "FAILED", "TIMEOUT", "CANCELLED", "OUTPUT_LIMIT", "RESULT_LIMIT",
+                "OUTPUT_CONTRACT_ERROR", "RESULT_REF").contains(status.get("status"));
+    }
+
+    private static void assertAccepted(Map<String, Object> status) {
+        assertTrue(List.of("SUBMITTING", "RUNNING", "SUCCEEDED").contains(status.get("status")), status.toString());
     }
 
     private void writeWorker(String source) throws Exception {
