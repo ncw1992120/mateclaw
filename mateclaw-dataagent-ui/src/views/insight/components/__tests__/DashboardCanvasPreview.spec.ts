@@ -7,7 +7,9 @@ import DashboardCanvas from '../DashboardCanvas.vue'
 /**
  * 预览态所见即所得等比缩放：
  * 舞台固定 1440px 逻辑宽（与编辑器一致，列宽不变 → 组合卡片内部 px 绝对定位不错位、图表不变形），
- * zoom = 视口可用宽 / 1440（上限 1 居中留白，下限 0.2），ResizeObserver 随视口重算。
+ * 「自适应宽度」开关由父级工具栏按钮通过 previewFillWidth prop 控制：收拢列数铺满 +
+ * 必要时 zoom 等比缩小（不挤压变形），ResizeObserver 随视口重算。
+ * 注意：按钮位于 DashboardPreviewView 工具栏，不在本组件内——交互统一用 setProps 驱动。
  */
 const stubs = {
   GridLayout: { name: 'GridLayout', props: ['colNum', 'layout'], template: '<div><slot /></div>' },
@@ -104,7 +106,7 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     expect(style).toContain('width: 1440px')
     expect(style).toContain('min-height: 1200px')
     expect(style).toContain('margin-inline: auto')
-    // 默认 100% 原始大小，点「自适应宽度」后才等比缩放铺满
+    // 默认 100% 原始大小，父级传入 previewFillWidth=true 后才等比缩放铺满
     expect(style).toContain('zoom: 1')
     wrapper.unmount()
   })
@@ -114,7 +116,7 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     clientWidth = 2880
     const wide = mountPreview()
     await nextTick()
-    await wide.get('button.preview-fill-button').trigger('click')
+    await wide.setProps({ previewFillWidth: true })
     await nextTick()
     const wideStyle = stageStyleAttr(wide)
     expect(wideStyle).toContain('width: 2880px')
@@ -125,7 +127,7 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     clientWidth = 100
     const narrow = mountPreview()
     await nextTick()
-    await narrow.get('button.preview-fill-button').trigger('click')
+    await narrow.setProps({ previewFillWidth: true })
     await nextTick()
     const narrowStyle = stageStyleAttr(narrow)
     expect(narrowStyle).toContain('width: 964px')
@@ -149,7 +151,7 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     expect(wrapper.getComponent({ name: 'GridLayout' }).props('colNum')).toBe(24)
 
     // 自适应：收拢到内容实际占用的最大列数（mock 布局最大 x+w = 16）
-    await wrapper.get('button.preview-fill-button').trigger('click')
+    await wrapper.setProps({ previewFillWidth: true })
     await nextTick()
     expect(wrapper.getComponent({ name: 'GridLayout' }).props('colNum')).toBe(16)
     wrapper.unmount()
@@ -172,33 +174,30 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     expect(observer.disconnected).toBe(true)
   })
 
-  it('默认 100% 原始大小（1440 舞台）；点击「自适应宽度」后舞台铺满视口宽度，再点恢复', async () => {
-    // 宽视口：默认 100%（zoom 1 + 1440 舞台），点击后舞台铺满 2880px
+  it('默认 100% 原始大小（1440 舞台）；父级开关置 true 后舞台铺满视口宽度，再关恢复', async () => {
+    // 宽视口：默认 100%（zoom 1 + 1440 舞台），开启后舞台铺满 2880px
     clientWidth = 2880
     const wide = mountPreview()
     await nextTick()
-    const button = wide.get('button.preview-fill-button')
     expect(stageStyleAttr(wide)).toContain('zoom: 1')
     expect(stageStyleAttr(wide)).toContain('width: 1440px')
-    expect(button.attributes('aria-pressed')).toBe('false')
 
-    await button.trigger('click')
+    await wide.setProps({ previewFillWidth: true })
     await nextTick()
     expect(stageStyleAttr(wide)).toContain('width: 2880px')
-    expect(button.attributes('aria-pressed')).toBe('true')
 
-    await button.trigger('click')
+    await wide.setProps({ previewFillWidth: false })
     await nextTick()
     expect(stageStyleAttr(wide)).toContain('width: 1440px')
-    expect(button.attributes('aria-pressed')).toBe('false')
+    expect(stageStyleAttr(wide)).toContain('zoom: 1')
     wide.unmount()
 
-    // 窄视口：默认 100% 超宽可横向滚动，点击后保持内容物理宽 964 并 zoom 等比缩小铺满
+    // 窄视口：默认 100% 超宽可横向滚动，开启后保持内容物理宽 964 并 zoom 等比缩小铺满
     clientWidth = 720
     const narrow = mountPreview()
     await nextTick()
     expect(stageStyleAttr(narrow)).toContain('width: 1440px')
-    await narrow.get('button.preview-fill-button').trigger('click')
+    await narrow.setProps({ previewFillWidth: true })
     await nextTick()
     expect(stageStyleAttr(narrow)).toContain('width: 964px')
     expect(stageStyleAttr(narrow)).toContain('zoom: 0.7')
@@ -209,7 +208,7 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     clientWidth = 1440
     const wrapper = mountPreview()
     await nextTick()
-    await wrapper.get('button.preview-fill-button').trigger('click')
+    await wrapper.setProps({ previewFillWidth: true })
     await nextTick()
     expect(stageStyleAttr(wrapper)).toContain('width: 1440px')
 
@@ -218,10 +217,27 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     await nextTick()
     expect(stageStyleAttr(wrapper)).toContain('width: 964px')
 
-    await wrapper.get('button.preview-fill-button').trigger('click')
+    await wrapper.setProps({ previewFillWidth: false })
     await nextTick()
     expect(stageStyleAttr(wrapper)).toContain('width: 1440px')
     expect(stageStyleAttr(wrapper)).toContain('zoom: 1')
+    wrapper.unmount()
+  })
+
+  it('预览态布局整体左移补齐（minX 归零）：内容不再因左侧留白偏右', async () => {
+    clientWidth = 720
+    // 所有组件 x 均大于 0（模拟全局筛选器移除后留下的左侧空列）
+    const leftCombo = { ...comboComponent, id: 'combo-left', position: { x: 8, y: 3, w: 12, h: 8 } }
+    const leftKpi = { ...kpi, id: 'kpi-left', position: { x: 4, y: 0, w: 4, h: 3 } }
+    const wrapper = mountPreview([leftCombo, leftKpi])
+    await nextTick()
+    const layout = wrapper.getComponent({ name: 'GridLayout' }).props('layout') as Array<{ i: string; x: number; y: number }>
+    expect(Math.min(...layout.map((item) => item.x))).toBe(0)
+    // 相对列位置保持不变（整体平移，非压缩）
+    const kpiItem = layout.find((item) => item.i === 'kpi-left')
+    const comboItem = layout.find((item) => item.i === 'combo-left')
+    expect(kpiItem?.x).toBe(0)
+    expect(comboItem?.x).toBe(4)
     wrapper.unmount()
   })
 })

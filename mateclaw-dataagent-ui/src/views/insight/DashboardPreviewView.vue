@@ -15,6 +15,16 @@
       </div>
       <div class="toolbar-right mc-toolbar-right">
         <el-button
+          v-if="currentPageComponents.length > 0"
+          class="toolbar-btn preview-fill-btn"
+          :class="{ active: previewFillWidth }"
+          :aria-pressed="previewFillWidth"
+          title="收拢栅格列数铺满浏览器宽度，再次点击恢复 100% 原始大小"
+          @click="togglePreviewFillWidth"
+        >
+          自适应宽度
+        </el-button>
+        <el-button
           v-if="canCreate && !reportGenerating"
           type="primary"
           class="toolbar-btn"
@@ -114,6 +124,7 @@
         :runtime-filter-state="getRuntimeFilterState()"
         :dataset-inputs="schema.datasetInputs"
         :editable="false"
+        :preview-fill-width="previewFillWidth"
         :dashboard-theme="dashboardTheme"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
         @filter-change="handleFilterChange"
@@ -226,6 +237,14 @@ const aiAnalysisContents = reactive<Record<string, string>>({})
 
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
+
+/** 预览态「自适应宽度」开关：收拢栅格列数铺满浏览器宽度，再点恢复 100% 原始大小（开关状态传给画布） */
+const previewFillWidth = ref(false)
+
+/** 切换预览态「自适应宽度」 */
+function togglePreviewFillWidth(): void {
+  previewFillWidth.value = !previewFillWidth.value
+}
 
 /** 报告抽屉可见性 */
 const reportDrawerVisible = ref(false)
@@ -1377,6 +1396,13 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   background: var(--main-orange);
   border-color: var(--main-orange);
   filter: brightness(1.08);
+}
+
+/* 「自适应宽度」激活态：填充主题强调色，与 100% 原始大小区分 */
+.toolbar-right :deep(.el-button.preview-fill-btn.active) {
+  background: var(--db-accent);
+  border-color: var(--db-accent);
+  color: #fff;
 }
 
 .generating-indicator {

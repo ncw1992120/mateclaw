@@ -69,18 +69,7 @@
       <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
     </div>
 
-    <!-- 预览态缩放工具栏：一键按比例自适应浏览器宽度（整体 zoom 缩放，组件不会重叠） -->
-    <div v-else-if="!editable && gridLayout.length > 0" class="canvas-zoom-toolbar" role="toolbar" aria-label="预览画布缩放">
-      <button
-        type="button"
-        class="preview-fill-button"
-        :class="{ active: previewFillWidth }"
-        :aria-pressed="previewFillWidth"
-        title="按当前浏览器宽度等比缩放画布正好铺满（再次点击恢复 100% 原始大小）"
-        @click="togglePreviewFillWidth"
-      >自适应宽度</button>
-    </div>
-
+    <!-- 预览态「自适应宽度」开关由父级工具栏控制（previewFillWidth prop），画布内不再放置按钮 -->
     <div class="canvas-grid-stage" :style="canvasZoomStyle">
       <!-- GridItem 恒为 static：库只负责栅格渲染与定位，拖动/缩放全部走自研 pointer 通道。
            这样可绕过库内部 compact 的强制碰撞下推（vertical-compact=false 也会把重叠 item 推开），
@@ -360,6 +349,8 @@ const props = withDefaults(defineProps<{
   datasetInputs?: DashboardDatasetInput[]
   /** 是否可编辑 */
   editable?: boolean
+  /** 预览态「自适应宽度」开关（由父级工具栏按钮控制）：收拢栅格列数到内容实际占宽并铺满视口 */
+  previewFillWidth?: boolean
   /** 当前选中的组件 ID */
   selectedId?: string
   /** 当前仪表盘解析后的主题 */
@@ -383,8 +374,8 @@ const PREVIEW_EDIT_COL_WIDTH = (DASHBOARD_CANVAS_MIN_WIDTH - PREVIEW_GRID_GAP * 
 /** 预览态「自适应宽度」：收拢栅格列数到内容实际占宽并铺满视口——组件横向等比加宽，
  *  纵向位置/高度保持不动（保证不重叠交错）；组合卡片内部 free 子卡片由组件自身按
  *  内宽比例等比映射。视口窄于内容物理宽时等比缩小铺满（不挤压变形）。
- *  未开启时为 100% 原始大小（1440 舞台）。 */
-const previewFillWidth = ref(false)
+ *  未开启时为 100% 原始大小（1440 舞台）。开关由父级工具栏按钮通过 prop 控制。 */
+const previewFillWidth = computed(() => props.previewFillWidth ?? false)
 const previewAvailableWidth = ref(0)
 let previewResizeObserver: ResizeObserver | null = null
 
@@ -411,11 +402,8 @@ function updatePreviewFit(): void {
   previewAvailableWidth.value = Math.max(0, canvas.clientWidth - horizontalPadding)
 }
 
-/** 切换预览态「自适应宽度」：100% 原始大小 ⇄ 收拢列数铺满浏览器宽度。 */
-function togglePreviewFillWidth(): void {
-  previewFillWidth.value = !previewFillWidth.value
-  updatePreviewFit()
-}
+/** 开关切回时重测可用宽度（舞台宽度变化可能引起滚动条出现/消失）。 */
+watch(previewFillWidth, () => updatePreviewFit())
 
 /** 舞台样式：空画布不锁宽度，铺满浏览器宽度；
  *  编辑态有组件时用固定最小宽度画布（配合缩放工具栏）；
@@ -629,7 +617,7 @@ const effectiveComponents = computed<InsightComponent[]>(() => {
   return props.components.filter((c) => !globalFilterComponentIds.value.has(c.id))
 })
 
-/** 构建 grid-layout-plus 所需的布局（预览态去除全局筛选器后整体向上补齐，避免顶部留白） */
+/** 构建 grid-layout-plus 所需的布局（预览态去除全局筛选器后整体向左上补齐，避免顶部/左侧留白导致内容偏右偏下） */
 function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
   if (components.length === 0) {
     return []
@@ -644,9 +632,10 @@ function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
     }))
   }
   const minY = Math.min(...components.map((c) => c.position.y))
+  const minX = Math.min(...components.map((c) => c.position.x))
   return components.map((c) => ({
     i: c.id,
-    x: c.position.x,
+    x: c.position.x - minX,
     y: c.position.y - minY,
     w: c.position.w,
     h: c.position.h,
@@ -1593,11 +1582,6 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .canvas-zoom-toolbar .canvas-fit-button {
   border-left: 1px solid var(--db-border);
   border-radius: 0 5px 5px 0;
-}
-
-.canvas-zoom-toolbar .preview-fill-button.active {
-  background: var(--db-accent, #4c6bfb);
-  color: #fff;
 }
 
 .canvas-grid-stage {
