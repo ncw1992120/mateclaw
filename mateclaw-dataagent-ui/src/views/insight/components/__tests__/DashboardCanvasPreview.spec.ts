@@ -155,4 +155,36 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     wrapper.unmount()
     expect(observer.disconnected).toBe(true)
   })
+
+  it('「自适应宽度」按钮：点击后取消 1 倍封顶按比例铺满，再次点击恢复', async () => {
+    clientWidth = 2880
+    const wrapper = mountPreview()
+    await nextTick()
+    const button = wrapper.get('button.preview-fill-button')
+    // 默认模式宽视口封顶 1（居中留白）
+    expect(stageStyleAttr(wrapper)).toContain('zoom: 1')
+    expect(button.attributes('aria-pressed')).toBe('false')
+
+    await button.trigger('click')
+    await nextTick()
+    // 铺满模式：2880/1440 = 2（上限 2），等比放大不重叠
+    expect(stageStyleAttr(wrapper)).toContain('zoom: 2')
+    expect(button.attributes('aria-pressed')).toBe('true')
+
+    await button.trigger('click')
+    await nextTick()
+    expect(stageStyleAttr(wrapper)).toContain('zoom: 1')
+    expect(button.attributes('aria-pressed')).toBe('false')
+    wrapper.unmount()
+  })
+
+  it('窄视口下开启「自适应宽度」与默认缩放一致（缩小铺满宽度）', async () => {
+    clientWidth = 720
+    const wrapper = mountPreview()
+    await nextTick()
+    await wrapper.get('button.preview-fill-button').trigger('click')
+    await nextTick()
+    expect(stageStyleAttr(wrapper)).toContain('zoom: 0.5')
+    wrapper.unmount()
+  })
 })

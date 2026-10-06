@@ -69,6 +69,18 @@
       <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
     </div>
 
+    <!-- 预览态缩放工具栏：一键按比例自适应浏览器宽度（整体 zoom 缩放，组件不会重叠） -->
+    <div v-else-if="!editable && gridLayout.length > 0" class="canvas-zoom-toolbar" role="toolbar" aria-label="预览画布缩放">
+      <button
+        type="button"
+        class="preview-fill-button"
+        :class="{ active: previewFillWidth }"
+        :aria-pressed="previewFillWidth"
+        title="按当前浏览器宽度等比缩放画布（再次点击恢复原始比例上限）"
+        @click="togglePreviewFillWidth"
+      >自适应宽度</button>
+    </div>
+
     <div class="canvas-grid-stage" :style="canvasZoomStyle">
       <!-- GridItem 恒为 static：库只负责栅格渲染与定位，拖动/缩放全部走自研 pointer 通道。
            这样可绕过库内部 compact 的强制碰撞下推（vertical-compact=false 也会把重叠 item 推开），
@@ -262,6 +274,7 @@
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
+                @delete-child="(p) => emit('combination-delete-child', p)"
                 @move-component-into="(p) => emit('move-component-into', p)"
                 @move-child-out="handleChildDragOut"
                 @copy-child="(p) => emit('copy-child', p)"
@@ -364,7 +377,11 @@ const canvasZoom = ref(1)
 const canvasZoomInput = ref('100')
 /** 预览态等比缩放下限：极窄视口时避免无限缩小导致不可读。 */
 const PREVIEW_MIN_ZOOM = 0.2
-/** 预览态适配缩放：zoom = 视口可用宽 / 1440（上限 1 居中留白，下限 PREVIEW_MIN_ZOOM）。 */
+/** 预览态铺满宽度模式的放大上限：超宽视口时避免过度放大。 */
+const PREVIEW_MAX_FILL_ZOOM = 2
+/** 预览态适配缩放：默认 zoom = 视口可用宽 / 1440（上限 1 居中留白，下限 PREVIEW_MIN_ZOOM）；
+ *  开启「自适应宽度」后取消 1 倍封顶，宽视口也按比例放大铺满（上限 PREVIEW_MAX_FILL_ZOOM）。 */
+const previewFillWidth = ref(false)
 const previewFitZoom = ref(1)
 let previewResizeObserver: ResizeObserver | null = null
 
@@ -375,7 +392,16 @@ function updatePreviewFitZoom(): void {
   const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
   const availableWidth = canvas.clientWidth - horizontalPadding
   if (availableWidth <= 0) return
-  previewFitZoom.value = Math.max(PREVIEW_MIN_ZOOM, Math.min(1, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
+  const ratio = availableWidth / DASHBOARD_CANVAS_MIN_WIDTH
+  previewFitZoom.value = previewFillWidth.value
+    ? Math.min(PREVIEW_MAX_FILL_ZOOM, Math.max(PREVIEW_MIN_ZOOM, ratio))
+    : Math.max(PREVIEW_MIN_ZOOM, Math.min(1, ratio))
+}
+
+/** 切换预览态「自适应宽度」铺满模式，并立即按当前视口重算缩放。 */
+function togglePreviewFillWidth(): void {
+  previewFillWidth.value = !previewFillWidth.value
+  updatePreviewFitZoom()
 }
 
 /** 舞台样式：空画布不锁宽度，铺满浏览器宽度；
@@ -514,6 +540,7 @@ const emit = defineEmits<{
   (e: 'select-child', payload: { containerId: string; childId: string | null }): void
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'combination-delete-child', payload: { containerId: string; childId: string }): void
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
   (e: 'move-child-out', payload: { containerId: string; childId: string; position: { x: number; y: number } }): void
   (e: 'copy-child', payload: { containerId: string; childId: string }): void
@@ -1545,6 +1572,11 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .canvas-zoom-toolbar .canvas-fit-button {
   border-left: 1px solid var(--db-border);
   border-radius: 0 5px 5px 0;
+}
+
+.canvas-zoom-toolbar .preview-fill-button.active {
+  background: var(--db-accent, #4c6bfb);
+  color: #fff;
 }
 
 .canvas-grid-stage {
