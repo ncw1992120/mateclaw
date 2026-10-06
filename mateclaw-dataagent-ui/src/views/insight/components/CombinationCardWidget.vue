@@ -324,6 +324,8 @@ const props = withDefaults(
     sampleMode?: boolean
     editable?: boolean
     selected?: boolean
+    /** 预览画布启用自适应宽度时，按组合卡片内宽比例映射自由布局子组件的位置。 */
+    previewFillWidth?: boolean
     /** 画布正在拖动顶层组件：组合卡片显示可放置提示 */
     dropHint?: boolean
     dashboardTheme?: ResolvedDashboardTheme
@@ -331,7 +333,7 @@ const props = withDefaults(
     componentTitleIconStylePreview?: ComponentTitleIconStyle
     tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
   }>(),
-  { editable: false, selected: false },
+  { editable: false, selected: false, previewFillWidth: false },
 )
 
 const emit = defineEmits<{
@@ -382,7 +384,15 @@ onMounted(() => {
   baseCcBodyWidth.value = ccBodyRef.value.offsetWidth
   if (typeof ResizeObserver === 'undefined') return
   ccBodyWidthObserver = new ResizeObserver(() => {
-    currentCcBodyWidth.value = ccBodyRef.value?.offsetWidth ?? 0
+    const width = ccBodyRef.value?.offsetWidth ?? 0
+    currentCcBodyWidth.value = width
+    // 初次渲染/字体和栅格布局稳定前，ResizeObserver 可能报告与最终自然宽度不同的值。
+    // 非自适应状态持续校准基准宽度；只有进入自适应后才冻结基准并缩放子组件位置。
+    if (!props.previewFillWidth && width > 0) {
+      baseCcBodyWidth.value = width
+    } else if (!baseCcBodyWidth.value && width > 0) {
+      baseCcBodyWidth.value = width
+    }
   })
   ccBodyWidthObserver.observe(ccBodyRef.value)
 })
@@ -390,6 +400,16 @@ onMounted(() => {
 onBeforeUnmount(() => {
   ccBodyWidthObserver?.disconnect()
   ccBodyWidthObserver = null
+})
+
+watch(() => props.previewFillWidth, (isFilling) => {
+  if (!isFilling) {
+    const width = ccBodyRef.value?.offsetWidth ?? 0
+    if (width > 0) {
+      baseCcBodyWidth.value = width
+      currentCcBodyWidth.value = width
+    }
+  }
 })
 
 const rootRef = ref<HTMLElement | null>(null)

@@ -264,6 +264,7 @@
                 :component-data-map="componentDataMapWithFieldLabels"
                 :runtime-filter-state="runtimeFilterState"
                 :editable="editable"
+                :preview-fill-width="!editable && previewFillWidth"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
                 :drop-hint="editable && ((draggingComponentId !== null && draggingComponentId !== item.i) || gridDragHoverComboId === item.i)"
