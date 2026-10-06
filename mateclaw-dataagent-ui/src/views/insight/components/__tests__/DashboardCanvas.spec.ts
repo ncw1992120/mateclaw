@@ -24,6 +24,22 @@ const stubs = {
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { canvasEmpty: '暂无组件' } } }, missingWarn: false, fallbackWarn: false })
 
+/** jsdom 无 PointerEvent 构造器，用 Event + defineProperty 模拟 document 级 pointer 事件。 */
+function pointerEvent(type: 'pointermove' | 'pointerup', clientX: number, clientY: number): Event {
+  const event = new Event(type, { bubbles: true })
+  Object.defineProperty(event, 'pointerId', { value: 1 })
+  Object.defineProperty(event, 'clientX', { value: clientX })
+  Object.defineProperty(event, 'clientY', { value: clientY })
+  return event
+}
+const pointerMove = (x: number, y: number): Event => pointerEvent('pointermove', x, y)
+const pointerUp = (x: number, y: number): Event => pointerEvent('pointerup', x, y)
+/** 等待拖拽预览的 rAF 回调执行并完成 Vue 渲染。 */
+async function afterFrame(): Promise<void> {
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+  await nextTick()
+}
+
 const component = {
   id: 'kpi-1',
   type: 'kpi' as const,
@@ -228,6 +244,53 @@ describe('DashboardCanvas keyboard interaction', () => {
     })
 
     expect(wrapper.findComponent({ name: 'CombinationCardWidget' }).props('componentDataMap')['nested-kpi'].fieldLabels).toEqual({ raw_amount: '销售额' })
+  })
+
+  it('previews edge resizing with pixel-level styles on the card and snaps the grid only on pointerup', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    const card = wrapper.get('[data-component-id="kpi-1"]')
+    const handle = wrapper.get('.resize-handle-right')
+
+    await handle.trigger('pointerdown', { pointerId: 1, clientX: 500, clientY: 300, button: 0 })
+    // pointerdown 同步阶段即进入自定义拉伸：卡片带 custom-resizing（像素盒在首个 pointermove 应用）
+    expect(card.classes()).toContain('custom-resizing')
+
+    // 拖动中：像素级预览跟随鼠标（width 变化），但不触发 update-layout（不触碰网格）
+    // jsdom 无真实网格宽度：columnStep 退化 1px、GAP=12 → 基准宽 max(1, 4*1-12)=1 → 1+60=61px
+    document.dispatchEvent(pointerMove(560, 300))
+    await afterFrame()
+    const moveStyle = card.attributes('style') ?? ''
+    expect(moveStyle).toContain('width: 61px')
+    expect(moveStyle).toContain('margin-left: 0px')
+    expect(wrapper.emitted('update-layout')).toBeUndefined()
+
+    // 松手：吸附到栅格并提交布局（jsdom 无真实网格尺寸，列步长退化为 1px，60px 位移吸附到 24 列上限）
+    document.dispatchEvent(pointerUp(560, 300))
+    await nextTick()
+    expect(card.classes()).not.toContain('custom-resizing')
+    expect(wrapper.emitted('update-layout')?.at(-1)?.[0]).toEqual([{ id: 'kpi-1', x: 0, y: 0, w: 24, h: 3 }])
+  })
+
+  it('previews top-edge resizing with a negative top margin and restores it on pointerup', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+    const card = wrapper.get('[data-component-id="kpi-1"]')
+    const handle = wrapper.get('.resize-handle-top')
+
+    await handle.trigger('pointerdown', { pointerId: 1, clientX: 300, clientY: 500, button: 0 })
+    document.dispatchEvent(pointerMove(300, 440))
+    await afterFrame()
+    const moveStyle = card.attributes('style') ?? ''
+    expect(moveStyle).toContain('margin-top: -60px')
+
+    document.dispatchEvent(pointerUp(300, 440))
+    await nextTick()
+    expect(card.classes()).not.toContain('custom-resizing')
   })
 
   it('starts at 100 percent and applies manually entered zoom', async () => {

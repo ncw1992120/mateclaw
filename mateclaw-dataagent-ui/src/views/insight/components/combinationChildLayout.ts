@@ -23,21 +23,26 @@ function clampBox(
   y: number,
   width: number,
   height: number,
+  snap: boolean,
 ): { x: number; y: number } {
-  if (!bounds) return { x: Math.max(0, Math.round(x)), y: Math.max(0, Math.round(y)) }
+  const round = (value: number): number => (snap ? Math.round(value) : value)
+  if (!bounds) return { x: Math.max(0, round(x)), y: Math.max(0, round(y)) }
   return {
-    x: Math.round(Math.min(Math.max(x, 0), Math.max(0, bounds.width - width))),
-    y: Math.round(Math.min(Math.max(y, 0), Math.max(0, bounds.height - height))),
+    x: round(Math.min(Math.max(x, 0), Math.max(0, bounds.width - width))),
+    y: round(Math.min(Math.max(y, 0), Math.max(0, bounds.height - height))),
   }
 }
 
-function clampCol(col: number): number {
-  return Math.max(1, Math.min(12, Math.round(col)))
+/** 列数边界：snap=true 时吸附整列（松手落格），false 时像素连续（拖动预览）。 */
+function clampCol(col: number, snap: boolean): number {
+  const rounded = snap ? Math.round(col) : col
+  return Math.max(1, Math.min(12, rounded))
 }
 
 export function calculateCombinationChildResize(
   start: CombinationChildResizeStart,
   last: { x: number; y: number },
+  snap = true,
 ): CombinationChildResizeResult {
   const colW = start.columnWidth || 40
   const dx = last.x - start.startX
@@ -47,9 +52,9 @@ export function calculateCombinationChildResize(
   let col = start.originCol
   let height = start.originHeight
 
-  if (start.direction.includes('e')) col = clampCol(start.originCol + dx / colW)
+  if (start.direction.includes('e')) col = clampCol(start.originCol + dx / colW, snap)
   if (start.direction.includes('w')) {
-    const next = clampCol(start.originCol - dx / colW)
+    const next = clampCol(start.originCol - dx / colW, snap)
     x = start.originX + (start.originCol - next) * colW
     col = next
   }
@@ -60,6 +65,6 @@ export function calculateCombinationChildResize(
     height = next
   }
 
-  const box = clampBox(start.bounds, x, y, col * colW, height)
-  return { x: box.x, y: box.y, col, height: Math.round(height) }
+  const box = clampBox(start.bounds, x, y, col * colW, height, snap)
+  return { x: box.x, y: box.y, col, height: snap ? Math.round(height) : height }
 }

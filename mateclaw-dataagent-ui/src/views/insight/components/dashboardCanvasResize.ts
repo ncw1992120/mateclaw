@@ -62,3 +62,40 @@ export function calculateGridResize(start: GridResizeStart, metrics: GridResizeM
 
   return { newX, newY, newW, newH }
 }
+
+/** 栅格项对应的像素盒（相对其 GridItem 定位原点，即卡片内容应呈现的宽高）。 */
+export function gridItemPixelBox(w: number, h: number, metrics: GridResizeMetrics): { width: number; height: number } {
+  const columnWidth = (metrics.gridWidth - metrics.marginX * (metrics.columns + 1)) / metrics.columns
+  const columnStep = Math.max(1, columnWidth + metrics.marginX)
+  const rowStep = Math.max(1, metrics.rowHeight + metrics.marginY)
+  return { width: Math.max(1, w * columnStep - metrics.marginX), height: Math.max(1, h * rowStep - metrics.marginY) }
+}
+
+/**
+ * 拖拽中的像素级预览盒：完全跟随鼠标（无吸附），不触碰网格布局。
+ * 返回应用在卡片内容上的 CSS 盒模型增量（left/top 方向用负 margin 让卡片向反方向生长）。
+ */
+export function calculateResizePreview(
+  start: Pick<GridResizeStart, 'edge' | 'startW' | 'startH' | 'dx' | 'dy'>,
+  metrics: GridResizeMetrics
+): Record<string, string> {
+  const base = gridItemPixelBox(start.startW, start.startH, metrics)
+  const style: Record<string, string> = {
+    width: `${base.width}px`,
+    height: `${base.height}px`,
+    marginLeft: '0px',
+    marginTop: '0px',
+  }
+  if (start.edge === 'right') {
+    style.width = `${Math.max(1, base.width + start.dx)}px`
+  } else if (start.edge === 'left') {
+    style.width = `${Math.max(1, base.width - start.dx)}px`
+    style.marginLeft = `${start.dx}px`
+  } else if (start.edge === 'bottom') {
+    style.height = `${Math.max(1, base.height + start.dy)}px`
+  } else {
+    style.height = `${Math.max(1, base.height - start.dy)}px`
+    style.marginTop = `${start.dy}px`
+  }
+  return style
+}
