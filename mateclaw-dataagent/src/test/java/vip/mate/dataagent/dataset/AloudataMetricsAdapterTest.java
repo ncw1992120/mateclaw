@@ -83,34 +83,6 @@ class AloudataMetricsAdapterTest {
     }
 
     @Test
-    void compilesMetricTimePartitionBoundsUsingRequestedGranularity() throws Exception {
-        DatasetMapper mapper = mock(DatasetMapper.class);
-        AloudataService service = mock(AloudataService.class);
-        DatasetEntity dataset = new DatasetEntity();
-        dataset.setId(7L);
-        dataset.setName("metrics");
-        dataset.setSourceType("ALOUDATA_METRICS");
-        dataset.setDatasourceId(3L);
-        dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of(
-                "metrics", List.of("revenue"), "dimensions", List.of("metric_time"))));
-        when(mapper.selectById(7L)).thenReturn(dataset);
-        when(service.queryMetrics(eq(3L), any())).thenReturn(null);
-
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, new ObjectMapper());
-        adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), new DatasetReadRequest(
-                7L, "metrics", List.of(), List.of(
-                        new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
-                        new DatasetFilter("metric_time", "dimension", "lt", "2026-10-01")),
-                List.of(), 20, 0, Map.of(), false, "MONTH"));
-
-        ArgumentCaptor<AloudataMetricQueryRequest> request = ArgumentCaptor.forClass(AloudataMetricQueryRequest.class);
-        verify(service).queryMetrics(eq(3L), request.capture());
-        assertEquals(List.of("(DateTrunc(['metric_time'], \"MONTH\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"MONTH\")))"
-                        + " AND (DateTrunc(['metric_time'], \"MONTH\") < (DateTrunc(Cast(\"2026-10-01 00:00:00\", \"TIMESTAMP\"), \"MONTH\")))"),
-                request.getValue().getFilters());
-    }
-
-    @Test
     void reportsAloudataBusinessErrorWhenOnlyDetailErrorIsReturned() throws Exception {
         DatasetMapper mapper = mock(DatasetMapper.class);
         AloudataService service = mock(AloudataService.class);

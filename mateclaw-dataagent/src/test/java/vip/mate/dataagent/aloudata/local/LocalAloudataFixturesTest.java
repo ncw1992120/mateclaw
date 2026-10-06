@@ -1,6 +1,7 @@
 package vip.mate.dataagent.aloudata.local;
 
 import org.junit.jupiter.api.Test;
+import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 
 import java.util.HashSet;
 import java.util.List;
@@ -29,10 +30,12 @@ class LocalAloudataFixturesTest {
 
         assertEquals(Boolean.TRUE, body.get("success"));
         assertEquals("策略解读", roots.getFirst().get("categoryName"));
+        assertEquals("metric-strategy", roots.getFirst().get("categoryId"));
         List<Map<String, Object>> metrics = (List<Map<String, Object>>) roots.getFirst().get("metricList");
         assertTrue(metrics.stream().anyMatch(metric -> "digo_cust_asset_in".equals(metric.get("metricName"))));
         List<Map<String, Object>> children = (List<Map<String, Object>>) roots.getFirst().get("subCategory");
         assertEquals("子策略", children.getFirst().get("categoryName"));
+        assertEquals("metric-sub-strategy", children.getFirst().get("categoryId"));
     }
 
     @Test
@@ -207,6 +210,26 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void touchMetricNamesAndUnitsMatchTheirCountSemanticsAcrossMockCatalogs() {
+        Map<String, Object> batch = fixtures.payload("metric_batch_detail", Map.of(), null);
+        List<Map<String, Object>> metrics = (List<Map<String, Object>>) batch.get("data");
+        Map<String, Map<String, Object>> byName = metrics.stream().collect(
+                java.util.stream.Collectors.toMap(item -> (String) item.get("metricName"), item -> item));
+        assertEquals("触达次数", byName.get("digo_touch_cnt_1").get("metricDisplayName"));
+        assertEquals("次", byName.get("digo_touch_cnt_1").get("unit"));
+        assertEquals("触达人数", byName.get("digo_touch_user_cnt_1").get("metricDisplayName"));
+        assertEquals("人", byName.get("digo_touch_user_cnt_1").get("unit"));
+
+        Map<String, Object> detail = fixtures.payload("analysis_view_query_by_name",
+                Map.of("viewName", "cljd_zcl_wd_view"), null);
+        Map<String, Object> view = (Map<String, Object>) detail.get("data");
+        Map<String, String> displayNames = (Map<String, String>) view.get("displayNameMap");
+        assertEquals("触达次数", displayNames.get("digo_touch_cnt_1"));
+        assertEquals("触达人数", displayNames.get("digo_touch_user_cnt_1"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void dimensionListCarriesDisplayNameAndDescription() {
         Map<String, Object> body = fixtures.payload("dimension_list", Map.of(), null);
         Map<String, Object> data = (Map<String, Object>) body.get("data");
@@ -322,6 +345,59 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void metricsQueryAcceptsDashboardMetricTimeRangeExpression() {
+        String lowerBound = AloudataFilterExpressions.of("metric_time", ">=", "2026-09-01", "DAY");
+        String upperBound = AloudataFilterExpressions.of("metric_time", "<", "2026-09-02", "DAY");
+        List<String> range = AloudataFilterExpressions.combineMetricTimeExpressions(
+                List.of(lowerBound, upperBound));
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_distr_count_1"),
+                "dimensions", List.of("metric_time"),
+                "filters", range,
+                "limit", 100,
+                "offset", 0,
+                "isQueryTotalCount", true), null);
+
+        assertEquals(Boolean.TRUE, body.get("success"), body.toString());
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, List<Map<String, Object>>> columns = (Map<String, List<Map<String, Object>>>)
+                ((Map<String, Object>) data.get("table")).get("columns");
+        assertEquals(1, data.get("total"));
+        assertEquals("2026-09-01", columns.get("metric_time").getFirst().get("value"));
+        assertEquals(1470, ((Number) columns.get("digo_distr_count_1").getFirst().get("value")).intValue());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryMatchesHttpMockThreeDayConversionSamples() {
+        List<String> metrics = List.of("digo_strategy_cnt_distr_1", "digo_distr_count_1",
+                "digo_distr_user_cnt_a", "digo_touch_cnt_1", "digo_touch_user_cnt_1");
+        List<String> names = List.of("经纪个人客户场内公募非货当年净买入", "经纪个人场内公募非货交易量",
+                "经纪个人场内公募非货加仓交易量");
+        List<List<Integer>> expected = List.of(
+                List.of(21, 1470, 1215, 984, 789),
+                List.of(30, 1560, 1287, 1038, 825),
+                List.of(39, 1650, 1359, 1092, 861));
+
+        for (int index = 0; index < names.size(); index++) {
+            Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                    "metrics", metrics,
+                    "dimensions", List.of(),
+                    "filters", List.of(
+                            "([metric_time] >= \"2026-09-01\" AND [metric_time] < \"2026-09-04\")",
+                            "[metric_name] = \"" + names.get(index) + "\""),
+                    "limit", 100), null);
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            Map<String, List<Map<String, Object>>> columns = (Map<String, List<Map<String, Object>>>)
+                    ((Map<String, Object>) data.get("table")).get("columns");
+            assertEquals(Boolean.TRUE, body.get("success"), body.toString());
+            assertEquals(expected.get(index), metrics.stream()
+                    .map(metric -> ((Number) columns.get(metric).getFirst().get("value")).intValue()).toList());
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void metricsQueryCanFilterByADimensionOutsideTheReturnedProjection() {
         Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
                 "metrics", List.of("digo_strategy_cnt"),
@@ -359,6 +435,16 @@ class LocalAloudataFixturesTest {
         assertEquals("SM99002", body.get("code"));
         assertEquals(false, body.get("success"));
         assertNull(body.get("data"));
+    }
+
+    @Test
+    void metricsQueryDoesNotSplitAndInsideQuotedFilterValues() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_cust_asset_in"),
+                "filters", List.of("[channel] = \"APP AND WEB\"")), null);
+
+        assertEquals(Boolean.TRUE, body.get("success"), body.toString());
+        assertEquals("200", body.get("code"));
     }
 
     /** 范围筛选编译成 `([f] >= "a" AND [f] <= "b")`，mock 必须能解析 AND 组合。 */

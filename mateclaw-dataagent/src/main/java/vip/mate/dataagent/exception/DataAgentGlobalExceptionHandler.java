@@ -139,9 +139,7 @@ public class DataAgentGlobalExceptionHandler {
     public ResponseEntity<R<Void>> handleResourceAccessException(ResourceAccessException e) {
         String target = extractUpstreamTarget(e.getMessage());
         String message = "上游服务不可达" + (target == null ? "" : "：" + target)
-                + "。请确认上游地址可访问；本地 mock 模式请确认 mock 服务已启动"
-                + "（python3 dev-support/local-simulation/scripts/aloudata-mock-server.py --port 18081，"
-                + "或重跑 docs/策略解读/restart-dataagent-backend.sh 自动拉起）";
+                + "。请确认上游地址可访问；使用 local-mock 内置夹具时请清空 ALOUDATA_MOCK_SERVER";
         log.warn("上游不可达: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(R.fail(503, message));
     }

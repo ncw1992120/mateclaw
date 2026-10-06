@@ -1,6 +1,9 @@
 package vip.mate.dataagent.dataset.http;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import vip.mate.dataagent.dataset.DatasetFilter;
 
 import java.net.URI;
@@ -11,6 +14,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class HttpApiRequestPolicyTest {
     private final HttpApiRequestPolicy policy = new HttpApiRequestPolicy();
+
+    @Test
+    void applicationPropertiesCannotEnableLocalTestEndpoints() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(PolicyConfiguration.class)
+                .withPropertyValues(
+                        "mateclaw.dataset.http.allow-insecure-test-endpoint=true",
+                        "mateclaw.dataset.http.allow-tls-test-endpoint=true")
+                .run(context -> {
+                    HttpApiRequestPolicy configuredPolicy = context.getBean(HttpApiRequestPolicy.class);
+                    assertThrows(IllegalArgumentException.class, () -> configuredPolicy.validate(
+                            URI.create("http://e2e-http:8080/orders"), List.of("e2e-http")));
+                    assertThrows(IllegalArgumentException.class, () -> configuredPolicy.validate(
+                            URI.create("https://127.0.0.1:8443/orders"), List.of("127.0.0.1")));
+                });
+    }
 
     @Test
     void testEndpointOverrideIsDisabledByDefault() {
@@ -68,5 +87,10 @@ class HttpApiRequestPolicyTest {
                 URI.create("https://api.example.com/orders"), List.of("example.com")));
         assertThrows(IllegalArgumentException.class, () -> policy.validate(
                 URI.create("https://user:pass@example.com/orders"), List.of("example.com")));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Import(HttpApiRequestPolicy.class)
+    static class PolicyConfiguration {
     }
 }

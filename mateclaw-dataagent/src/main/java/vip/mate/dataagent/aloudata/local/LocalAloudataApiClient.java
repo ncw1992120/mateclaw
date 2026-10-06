@@ -23,14 +23,12 @@ import java.util.Map;
  * 让「洞察-仪表盘-组件-卡片-添加数据集-指标视图」与其「字段名称默认值」在本地跑通，
  * 且**不改变任何生产行为**（未激活 profile 时不会创建该 Bean）。
  * <p>
- * **与正式环境唯一的差异是 host:port**：请求的构建仍走真实逻辑
+ * **与正式环境的差异只在请求发送目标**：请求的构建仍走真实逻辑
  * （端点声明 → 默认值 → 必填/枚举校验 → HEADER/QUERY/BODY 分发 → 拼 URL + 方法），
- * 接管只发生在"把请求发出去"这一步。两种本地模式：
+ * 接管只发生在"把请求发出去"这一步。默认使用内置夹具，也可选配置兼容的 HTTP mock：
  * <ol>
- *   <li><b>HTTP mock（推荐，最高保真）</b>：配置 {@code ALOUDATA_MOCK_SERVER=http://127.0.0.1:18081}，
- *       请求会以真实 HTTP 发到本地 mock 服务（{@code dev-support/local-simulation/scripts/aloudata-mock-server.py}），
- *       路径、query/body、请求方式、状态码与真实环境完全一致；</li>
- *   <li><b>内置夹具（零依赖兜底）</b>：未配置该地址时直接返回内置夹具报文，不发起任何网络请求。</li>
+ *   <li><b>内置夹具（默认）</b>：未配置 {@code ALOUDATA_MOCK_SERVER} 时直接返回内置夹具，不发网络请求；</li>
+ *   <li><b>外部 HTTP mock（可选）</b>：仅在特定集成测试显式需要时配置该地址，例如本地 WireMock。</li>
  * </ol>
  * 无论哪种模式，参数校验、URL 拼装、请求方式都由真实代码决定，本地不会掩盖
  * 「参数写错 / 方法配错 / 必填缺失 / 请求体形状错误」这类真机必炸的问题。
@@ -45,7 +43,7 @@ public class LocalAloudataApiClient extends AloudataApiClient {
 
     private final LocalAloudataFixtures fixtures;
 
-    /** 本地 mock 服务基地址（http://127.0.0.1:18081）；为空时退回内置夹具。 */
+    /** 可选的兼容 HTTP mock 基地址；为空时使用 Java 内置夹具。 */
     private final String mockServerUrl;
 
     public LocalAloudataApiClient(AloudataEndpointService endpointService, LocalAloudataFixtures fixtures,

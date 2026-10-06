@@ -422,7 +422,7 @@ public class LocalAloudataFixtures {
             }
         }
 
-        List<Map<String, Object>> rows = toRows(sourceColumns);
+        List<Map<String, Object>> rows = completeDashboardPreviewRows(source, toRows(sourceColumns), expressions);
         try {
             rows = filterRows(rows, expressions);
             String timeConstraint = firstString(params.get("timeConstraint"));
@@ -475,6 +475,53 @@ public class LocalAloudataFixtures {
             data.put("sql", buildMockSql(requested, expressions, params));
         }
         return envelope(data, source.get("traceId"));
+    }
+
+    /** 与 Python HTTP mock 保持一致：为本地策略解读筛选预览补齐第三天并区分转化指标样例值。 */
+    private List<Map<String, Object>> completeDashboardPreviewRows(Map<String, Object> source,
+                                                                     List<Map<String, Object>> rows,
+                                                                     List<String> expressions) {
+        String traceId = firstString(source.get("traceId"));
+        if (!Set.of("mock-trace-data-cljd_zcl_zb_view", "mock-trace-data-cljd_zcl_wd_view").contains(traceId)) {
+            return rows;
+        }
+
+        if (rows.stream().noneMatch(row -> "2026-09-03".equals(String.valueOf(row.get("metric_time"))))) {
+            List<Map<String, Object>> thirdDay = rows.stream()
+                    .filter(row -> "2026-09-02".equals(String.valueOf(row.get("metric_time"))))
+                    .map(row -> {
+                        Map<String, Object> copy = new LinkedHashMap<>(row);
+                        copy.put("metric_time", "2026-09-03");
+                        return copy;
+                    }).toList();
+            rows.addAll(thirdDay);
+        }
+
+        if (!"mock-trace-data-cljd_zcl_wd_view".equals(traceId)
+                || expressions.stream().noneMatch(expression -> expression.contains("metric_name"))) {
+            return rows;
+        }
+
+        Map<String, Integer> metricNameOffsets = Map.of(
+                "经纪个人客户场内公募非货当年净买入", 0,
+                "经纪个人场内公募非货交易量", 1,
+                "经纪个人场内公募非货加仓交易量", 2);
+        Map<String, Integer> increments = Map.of(
+                "digo_strategy_cnt_distr_1", 1,
+                "digo_distr_count_1", 10,
+                "digo_distr_user_cnt_a", 8,
+                "digo_touch_cnt_1", 6,
+                "digo_touch_user_cnt_1", 4);
+        for (Map<String, Object> row : rows) {
+            int offset = metricNameOffsets.getOrDefault(firstString(row.get("metric_name")), 0);
+            for (Map.Entry<String, Integer> increment : increments.entrySet()) {
+                Object value = row.get(increment.getKey());
+                if (value instanceof Number number) {
+                    row.put(increment.getKey(), number.longValue() + (long) offset * increment.getValue());
+                }
+            }
+        }
+        return rows;
     }
 
     private List<Map<String, Object>> aggregateRows(List<Map<String, Object>> rows, List<String> dimensions,
@@ -702,15 +749,9 @@ public class LocalAloudataFixtures {
      */
     private List<Condition> parseConditions(String expression) {
         List<Condition> conditions = new ArrayList<>();
-        String normalized = expression.trim();
-        while (normalized.startsWith("(") && normalized.endsWith(")")) {
-            normalized = normalized.substring(1, normalized.length() - 1).trim();
-        }
-        for (String part : normalized.split("(?i)\\s+AND\\s+")) {
-            String clause = part.trim();
-            while (clause.startsWith("(") && clause.endsWith(")")) {
-                clause = clause.substring(1, clause.length() - 1).trim();
-            }
+        String normalized = stripEnclosingParentheses(expression.trim());
+        for (String part : splitTopLevelAnd(normalized)) {
+            String clause = stripEnclosingParentheses(part.trim());
             if (clause.isBlank()) continue;
             if (clause.matches(".*(?i)\\s+OR\\s+.*")) {
                 log.warn("[local-mock] 筛选表达式不支持 OR: {}", clause);
@@ -732,6 +773,79 @@ public class LocalAloudataFixtures {
                     unquote(matcher.group(3)), false));
         }
         return conditions;
+    }
+
+    /** 按括号深度拆分顶层 AND，避免拆开括号包裹的 DateTrunc/Cast 条件。 */
+    private List<String> splitTopLevelAnd(String expression) {
+        List<String> parts = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        char quote = 0;
+        boolean escaped = false;
+        for (int index = 0; index < expression.length(); index++) {
+            char current = expression.charAt(index);
+            if (quote != 0) {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == quote) quote = 0;
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                quote = current;
+                continue;
+            }
+            if (current == '(') {
+                depth++;
+                continue;
+            }
+            if (current == ')') {
+                depth--;
+                if (depth < 0) throw new InvalidFilterExpressionException(expression);
+                continue;
+            }
+            if (depth == 0 && expression.regionMatches(true, index, "AND", 0, 3)
+                    && (index == 0 || Character.isWhitespace(expression.charAt(index - 1)))
+                    && (index + 3 == expression.length() || Character.isWhitespace(expression.charAt(index + 3)))) {
+                parts.add(expression.substring(start, index));
+                start = index + 3;
+                index += 2;
+            }
+        }
+        if (depth != 0 || quote != 0) throw new InvalidFilterExpressionException(expression);
+        parts.add(expression.substring(start));
+        return parts;
+    }
+
+    /** 仅移除确实包住整段表达式的一层括号。 */
+    private String stripEnclosingParentheses(String expression) {
+        String result = expression;
+        while (result.startsWith("(") && result.endsWith(")")) {
+            int depth = 0;
+            boolean wrapsWholeExpression = true;
+            char quote = 0;
+            boolean escaped = false;
+            for (int index = 0; index < result.length(); index++) {
+                char current = result.charAt(index);
+                if (quote != 0) {
+                    if (escaped) escaped = false;
+                    else if (current == '\\') escaped = true;
+                    else if (current == quote) quote = 0;
+                    continue;
+                }
+                if (current == '"' || current == '\'') {
+                    quote = current;
+                    continue;
+                }
+                if (current == '(') depth++;
+                else if (current == ')' && --depth == 0 && index < result.length() - 1) {
+                    wrapsWholeExpression = false;
+                    break;
+                }
+            }
+            if (!wrapsWholeExpression || quote != 0 || depth != 0) break;
+            result = result.substring(1, result.length() - 1).trim();
+        }
+        return result;
     }
 
     private static final class InvalidFilterExpressionException extends RuntimeException {

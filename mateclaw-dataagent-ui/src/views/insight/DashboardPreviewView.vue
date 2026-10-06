@@ -175,6 +175,7 @@ import type {
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import * as datasetApi from '@/api/dataset'
+import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
 import { generateReport, getReport, publishReport } from '@/api/insight-report'
 import { collectDashboardComponents, useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
@@ -393,18 +394,21 @@ async function materializePreviewDatasetInputs(): Promise<void> {
 }
 
 async function materializePreviewDatasetInputsOnce(): Promise<void> {
-  const temporaryInputs = pipelineComponents().flatMap((component) => {
+  const configuredInputs = pipelineComponents().flatMap((component) => {
     const pipeline = readComponentDatasetPipeline(component)
     return (pipeline?.datasetInputs ?? [])
-      .filter((input) => (!/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
-        && Boolean(input.sourceType && input.sourceConfig))
+      .filter((input) => Boolean(input.sourceType && input.sourceConfig))
       .map((input) => ({ component, pipeline: pipeline!, input }))
   })
-  if (!temporaryInputs.length) return
+  if (!configuredInputs.length) return
 
   const existing = await datasetApi.list() as unknown as Array<{
     id: string; datasourceId?: string; sourceType?: string; sourceConfig?: string | Record<string, unknown>
   }>
+  const staleInputs = configuredInputs.filter(({ input }) =>
+    !isPersistedDatasetReferenceAvailable(input.datasetId, existing),
+  )
+  if (!staleInputs.length) return
   const sourceConfigFor = (sourceType: string, config: Record<string, unknown>): Record<string, unknown> => {
     switch (sourceType) {
       case 'ALOUDATA_METRICS': return { metrics: config.metrics ?? [], dimensions: config.dimensions ?? [] }
@@ -434,7 +438,7 @@ async function materializePreviewDatasetInputsOnce(): Promise<void> {
     return hash.toString(36)
   }
   const confirmedBySource = new Map<string, string>()
-  for (const { component, pipeline, input } of temporaryInputs) {
+  for (const { component, pipeline, input } of staleInputs) {
     const sourceType = String(input.sourceType ?? '').toUpperCase()
     const source = input.sourceConfig as Record<string, unknown> | undefined
     const datasourceId = String(source?.datasourceId ?? '')

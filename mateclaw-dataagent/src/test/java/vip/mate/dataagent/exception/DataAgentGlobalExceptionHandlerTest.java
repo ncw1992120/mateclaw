@@ -27,7 +27,7 @@ class DataAgentGlobalExceptionHandlerTest {
         assertEquals(503, response.getBody().getCode());
         String message = response.getBody().getMsg();
         assertTrue(message.contains("http://127.0.0.1:18081/anymetrics/api/v1/analysisview/list"), message);
-        assertTrue(message.contains("mock 服务"), message);
+        assertTrue(message.contains("清空 ALOUDATA_MOCK_SERVER"), message);
     }
 
     @Test

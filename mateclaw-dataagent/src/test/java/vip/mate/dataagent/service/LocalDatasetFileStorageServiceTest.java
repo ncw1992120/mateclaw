@@ -2,6 +2,8 @@ package vip.mate.dataagent.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.core.env.MapPropertySource;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.DatasetReadErrorCode;
 import vip.mate.dataagent.dataset.DatasetReadException;
@@ -27,6 +29,18 @@ class LocalDatasetFileStorageServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void springCreatesStorageServiceUsingConfiguredRoot() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("test", Map.of(
+                    "mateclaw.storage.root", tempDir.toString())));
+            context.register(LocalDatasetFileStorageService.class);
+
+            assertDoesNotThrow(context::refresh);
+            assertNotNull(context.getBean(LocalDatasetFileStorageService.class));
+        }
+    }
 
     @Test
     void storesAndReadsCsvJsonXlsxAndParquetWithStableWorkspaceKeys() throws Exception {

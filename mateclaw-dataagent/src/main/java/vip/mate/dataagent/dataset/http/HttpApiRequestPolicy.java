@@ -1,6 +1,5 @@
 package vip.mate.dataagent.dataset.http;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import vip.mate.dataagent.dataset.DatasetFilter;
 
@@ -11,10 +10,8 @@ import java.util.*;
 @Component
 public final class HttpApiRequestPolicy {
     private static final Set<String> SENSITIVE_HEADERS = Set.of("authorization", "cookie", "set-cookie", "proxy-authorization");
-    @Value("${mateclaw.dataset.http.allow-insecure-test-endpoint:false}")
-    private boolean allowInsecureTestEndpoint;
-    @Value("${mateclaw.dataset.http.allow-tls-test-endpoint:false}")
-    private boolean allowTlsTestEndpoint;
+    private final boolean allowInsecureTestEndpoint;
+    private final boolean allowTlsTestEndpoint;
 
     public HttpApiRequestPolicy() {
         this(false, false);

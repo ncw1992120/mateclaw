@@ -897,7 +897,7 @@ git commit -m "feat: 统一脚本结果预览与组件渲染"
 
 > seed 适配：`seed-dashboard-mvp.sh` 新增 `MATECLAW_E2E_JDBC_DATASET_ID`、`MATECLAW_E2E_HTTP_DATASET_ID`、`MATECLAW_E2E_FILE_DATASET_ID`，可复用已有数据集而跳过本地 JDBC 创建和对象存储上传，默认未设置时保持原行为。rerun-34 使用该路径成功生成全新状态；由于复用数据集无字段/行数据，主 Python E2E 为 3/6（筛选、系统区、输出表格通过），A→B、契约错误、大结果仍在数据集读取阶段失败，未将其误判为前端通过。
 
-> 历史记录（rerun-35）：本地无 Docker 补齐时，`dev-support/local-simulation/scripts/aloudata-mock-server.py` 增加 `/orders` HTTP fixture（10 行，支持 `status` 等值过滤）；`seed-dashboard-mvp.sh` 增加 `MATECLAW_E2E_HTTP_HOST`、`MATECLAW_E2E_HTTP_PORT` 与 `MATECLAW_E2E_FILE_DATASET_FALLBACK_ID`。当时 A→B 在 `[aria-label="数据预览"]` 等待阶段超时，未将数据夹具可用误判为端到端执行通过；后续 rerun-40 已通过主 Python E2E 6/6，当前结论以文末补充进度为准。
+> 历史记录（rerun-35）：当时本地 Aloudata Python HTTP mock 曾提供 `/orders` HTTP fixture（10 行，支持 `status` 等值过滤）；该 Python mock 已于 2026-10-03 删除，当前洞察仪表盘本地联调使用 Java `local-mock` 内嵌夹具。`seed-dashboard-mvp.sh` 增加的 `MATECLAW_E2E_HTTP_HOST`、`MATECLAW_E2E_HTTP_PORT` 与 `MATECLAW_E2E_FILE_DATASET_FALLBACK_ID` 仍保留。当时 A→B 在 `[aria-label="数据预览"]` 等待阶段超时，未将数据夹具可用误判为端到端执行通过；后续 rerun-40 已通过主 Python E2E 6/6，当前结论以文末补充进度为准。
 
 > rerun-38/39 根因修复与复验：本地 DataAgent 以 `MATECLAW_DATASET_HTTP_ALLOW_INSECURE_TEST_ENDPOINT=true` 启动，mock 响应增加 `Connection: close`、显式 flush；seed 增加 `id` 查询参数和动态 `MATECLAW_E2E_FILE_DATASET_FALLBACK_TO_HTTP`，A→B 用户脚本改为读取 A 的首个 id 后以等值条件查询 B，且修正了 A→B/输出契约种子的错误 userCode。真实统一数据集预览返回 10 行；Chrome channel 主 Python E2E 中前 5/6 用例通过（25.9s）：筛选边界、A→B、系统区恢复、表格 envelope、`OUTPUT_CONTRACT_ERROR` 均通过。第 6 条大结果执行状态为 `RESULT_LIMIT`，未返回 `inline=false + outputRef`，原因是当前环境未提供 S3/MinIO ObjectRef 服务；该门禁仍 BLOCKED。
 
@@ -1242,7 +1242,7 @@ git diff --check
 
 ### 后续补充进度（2026-09-22，本地 Aloudata 双源门禁与输出契约）
 
-- 修复 `dev-support/local-simulation/scripts/aloudata-mock-server.py`：补齐种子脚本使用的 `local_sales_view` 视图详情、`analysisView/query` 和 `metrics/query` 结果；视图字段使用与 Java 适配器一致的对象结构，并保留 `region=east` 下推筛选和确定性 `revenue=120.5` 验证行。
+- 历史实现：当时的 `aloudata-mock-server.py` 曾提供 `local_sales_view` 视图详情、`analysisView/query` 和 `metrics/query` 结果；Python HTTP mock 已于 2026-10-03 删除，当前仪表盘 mock 走 Java `local-mock` 内嵌夹具。WireMock 的独立 HTTP/API 集成测试配置未受影响。
 - 修复 `scripts/e2e/seed-dashboard-mvp.sh` 的多源测试夹具：JDBC 与 Aloudata 结果先归一化为 `{region, order_date, revenue}`，避免异构数据集直接拼接造成输出契约缺列；同时在 Schema 的 `datasetInputs` 中保存 `JDBC_SQL` / `ALOUDATA_ANALYSIS_VIEW`、`HTTP_API` / `FILE` 类型，避免打开编辑器保存后丢失数据源类型。
 - 修复多源 E2E 断言：结果接口断言统一 envelope 的 `meta.rowCount=11`，数据预览按系统受控预览上限断言可见 10 行；避免把“真实总行数”和“预览返回行数”混为一谈。
 - 使用本地 JDK 21.0.12、Maven 3.9.16、UI 5174、DataAgent 18089、Aloudata mock 18081，不使用 Docker；真实 Google Chrome `channel=chrome` 全量运行 `dashboard-multi-source.spec.ts`，4/4 PASS：JDBC+Aloudata、API+File、ObjectRef 大结果、ECharts 组件预览；截图基线已在同一 Chrome 通道更新并复跑通过。

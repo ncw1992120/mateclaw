@@ -85,8 +85,8 @@ METRICS = [
     ("digo_strategy_cnt_distr_1", "下发策略数", "下发策略数", "个"),
     ("digo_distr_count_1", "下发次数", "下发次数", "次"),
     ("digo_distr_user_cnt_a", "下发人数", "下发人数", "人"),
-    ("digo_touch_cnt_1", "触达人数", "触达人数", "人"),
-    ("digo_touch_user_cnt_1", "触达次数", "触达次数", "次"),
+    ("digo_touch_cnt_1", "触达次数", "触达次数", "次"),
+    ("digo_touch_user_cnt_1", "触达人数", "触达人数", "人"),
 ]
 
 # dimName / 展示名 / 描述 / originDataType

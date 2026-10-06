@@ -1,5 +1,6 @@
 package vip.mate.dataagent.service.impl;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
@@ -32,6 +33,7 @@ public class LocalDatasetFileStorageService implements DatasetFileStorageService
 
     private final LocalObjectFileStore files;
 
+    @Autowired
     public LocalDatasetFileStorageService(
             @Value("${mateclaw.storage.root:${java.io.tmpdir}/mateclaw-storage}") Path storageRoot) {
         this(new LocalObjectFileStore(storageRoot));

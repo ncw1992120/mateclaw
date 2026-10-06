@@ -2,7 +2,7 @@
   "data": {
     "rootList": [
       {
-        "categoryId": "fixture-strategy",
+        "categoryId": "metric-strategy",
         "categoryName": "策略解读",
         "metricList": [
           {
@@ -16,7 +16,7 @@
         ],
         "subCategory": [
           {
-            "categoryId": "fixture-sub-strategy",
+            "categoryId": "metric-sub-strategy",
             "categoryName": "子策略",
             "metricList": [
               {

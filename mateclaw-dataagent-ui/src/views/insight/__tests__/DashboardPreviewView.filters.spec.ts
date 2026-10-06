@@ -210,6 +210,30 @@ describe('DashboardPreviewView runtime filter query flow', () => {
     expect(mocks.previewQueryPlan).toHaveBeenCalledWith(expect.objectContaining({ datasetId: createdDatasetId }))
   })
 
+  it('re-materializes a numeric dataset reference that no longer exists', async () => {
+    const staleComponent = {
+      ...datasetComponent,
+      id: 'stale-dataset-table',
+      config: { datasetPipeline: { datasetInputs: [{
+        datasetId: '999', inputName: 'sales', sourceType: 'ALOUDATA_METRICS',
+        sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] },
+        queryConfig: { displayFields: [{ field: 'region', title: '区域', role: 'dimension' }], parameterBindings: [] },
+      }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({
+      version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [staleComponent] }],
+    })
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: { DashboardCanvas: true, ElButton: true, ElIcon: true, ElDrawer: true } },
+    })
+    await flushPromises()
+
+    expect(mocks.confirmDatasetDraft).toHaveBeenCalledTimes(1)
+    expect(mocks.previewQueryPlan).toHaveBeenCalledWith(expect.objectContaining({ datasetId: '101' }))
+  })
+
   it('runs Python only after component execution receives its bound input values, then filters output by its own binding', async () => {
     const pythonComponent = {
       ...datasetComponent,
