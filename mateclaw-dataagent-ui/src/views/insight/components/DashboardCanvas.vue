@@ -76,7 +76,7 @@
         class="preview-fill-button"
         :class="{ active: previewFillWidth }"
         :aria-pressed="previewFillWidth"
-        title="按当前浏览器宽度等比缩放画布（再次点击恢复原始比例上限）"
+        title="按当前浏览器宽度等比缩放画布正好铺满（再次点击恢复 100% 原始大小）"
         @click="togglePreviewFillWidth"
       >自适应宽度</button>
     </div>
@@ -379,26 +379,28 @@ const canvasZoomInput = ref('100')
 const PREVIEW_MIN_ZOOM = 0.2
 /** 预览态铺满宽度模式的放大上限：超宽视口时避免过度放大。 */
 const PREVIEW_MAX_FILL_ZOOM = 2
-/** 预览态适配缩放：默认 zoom = 视口可用宽 / 1440（上限 1 居中留白，下限 PREVIEW_MIN_ZOOM）；
- *  开启「自适应宽度」后取消 1 倍封顶，宽视口也按比例放大铺满（上限 PREVIEW_MAX_FILL_ZOOM）。 */
+/** 预览态缩放：默认 100% 原始大小（与编辑器同款 1440px 舞台）；
+ *  开启「自适应宽度」后按 视口可用宽 / 1440 等比缩放正好铺满浏览器宽度
+ *  （窄屏缩小、宽屏放大，上限 PREVIEW_MAX_FILL_ZOOM），再次点击恢复 100%。 */
 const previewFillWidth = ref(false)
 const previewFitZoom = ref(1)
 let previewResizeObserver: ResizeObserver | null = null
 
 function updatePreviewFitZoom(): void {
+  if (!previewFillWidth.value) {
+    previewFitZoom.value = 1
+    return
+  }
   const canvas = canvasRef.value
   if (!canvas) return
   const styles = getComputedStyle(canvas)
   const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
   const availableWidth = canvas.clientWidth - horizontalPadding
   if (availableWidth <= 0) return
-  const ratio = availableWidth / DASHBOARD_CANVAS_MIN_WIDTH
-  previewFitZoom.value = previewFillWidth.value
-    ? Math.min(PREVIEW_MAX_FILL_ZOOM, Math.max(PREVIEW_MIN_ZOOM, ratio))
-    : Math.max(PREVIEW_MIN_ZOOM, Math.min(1, ratio))
+  previewFitZoom.value = Math.min(PREVIEW_MAX_FILL_ZOOM, Math.max(PREVIEW_MIN_ZOOM, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
 }
 
-/** 切换预览态「自适应宽度」铺满模式，并立即按当前视口重算缩放。 */
+/** 切换预览态「自适应宽度」：100% 原始大小 ⇄ 等比缩放铺满浏览器宽度。 */
 function togglePreviewFillWidth(): void {
   previewFillWidth.value = !previewFillWidth.value
   updatePreviewFitZoom()
