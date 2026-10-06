@@ -3,7 +3,7 @@
     ref="rootRef"
     class="combination-card"
     :class="{ editing: editable, selected, 'cc-interacting': movingId !== null || resizingId !== null }"
-    :style="rootStyle"
+    :style="[rootStyle, { '--cc-h-scale': String(ccHScale) }]"
     @click="onRootClick"
     @dragover.prevent
     @drop="onBodyDrop"
@@ -238,6 +238,7 @@
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
+            @delete-child="(payload) => emit('delete-child', payload)"
             @move-component-into="(payload) => emit('move-component-into', payload)"
             @move-child-out="(payload) => emit('move-child-out', payload)"
             @copy-child="(payload) => emit('copy-child', payload)"
@@ -278,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
@@ -340,6 +341,8 @@ const emit = defineEmits<{
   (e: 'add-tab', payload: { containerId: string }): void
   /** 删除页签（编辑器负责二次确认与「最后一个页签组件平移回容器」） */
   (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
+  /** 删除筛选类子组件交由编辑器统一确认，并清理全仪表盘绑定。 */
+  (e: 'delete-child', payload: { containerId: string; childId: string }): void
   /** 将画布中的已有组件移入当前组合容器/页签 */
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
   /** 子卡片拖出组合卡片：释放点为视口坐标，由画布换算栅格落点后转回顶层组件 */
@@ -360,6 +363,35 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const ccBodyRef = ref<HTMLElement | null>(null)
+
+// ── 预览态「自适应宽度」：free 子卡片横向坐标按「当前内宽 / 基准内宽」等比映射 ──
+// 基准内宽在挂载时捕获（预览默认 100% 模式 = 编辑器同款 1440 舞台，与保存布局时的
+// 内宽一致）；开启自适应铺满后内宽变化，由 ResizeObserver 实时重算映射比例，宽度
+// （col/12 百分比）与 left（px × 比例）因此完全自洽，不会重叠交错。编辑态恒为 1。
+const baseCcBodyWidth = ref(0)
+const currentCcBodyWidth = ref(0)
+let ccBodyWidthObserver: ResizeObserver | null = null
+const ccHScale = computed(() => {
+  if (props.editable || !baseCcBodyWidth.value || !currentCcBodyWidth.value) return 1
+  return currentCcBodyWidth.value / baseCcBodyWidth.value
+})
+
+onMounted(() => {
+  if (props.editable || !ccBodyRef.value) return
+  // 用 offsetWidth（布局宽）：预览窄视口下舞台有 zoom 视觉缩放，getBoundingClientRect 会被污染
+  baseCcBodyWidth.value = ccBodyRef.value.offsetWidth
+  if (typeof ResizeObserver === 'undefined') return
+  ccBodyWidthObserver = new ResizeObserver(() => {
+    currentCcBodyWidth.value = ccBodyRef.value?.offsetWidth ?? 0
+  })
+  ccBodyWidthObserver.observe(ccBodyRef.value)
+})
+
+onBeforeUnmount(() => {
+  ccBodyWidthObserver?.disconnect()
+  ccBodyWidthObserver = null
+})
+
 const rootRef = ref<HTMLElement | null>(null)
 const selectedChildId = ref<string | null>(null)
 const hoverChildId = ref<string | null>(null)
@@ -533,7 +565,9 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
       ...themeStyle,
       ...visualStyle,
       position: 'absolute',
-      left: child.layout.x + 'px',
+      // free 子卡片横向坐标按 ccHScale 等比映射（预览「自适应宽度」铺满后随画布一起加宽）；
+      // 纵向 top/height 不映射，保证加宽后纵向布局不变、不重叠交错。
+      left: `calc(${child.layout.x}px * var(--cc-h-scale, 1))`,
       top: child.layout.y + 'px',
       width: `calc(${child.layout.col} / 12 * 100%)`,
       ...(child.layout.h != null ? { height: child.layout.h + 'px' } : {}),
@@ -898,6 +932,10 @@ function onChildContextMenu(event: MouseEvent, child: InsightCombinationChild): 
 
 async function deleteChild(id: string) {
   const child = getActiveChildren().find((c) => c.id === id)
+  if (child?.type === 'filter' || child?.type === 'timeFilter') {
+    emit('delete-child', { containerId: props.component.id, childId: id })
+    return
+  }
   try {
     await ElMessageBox.confirm(
       t('insight.combination.deleteChildConfirm', { name: child?.title ?? id }),

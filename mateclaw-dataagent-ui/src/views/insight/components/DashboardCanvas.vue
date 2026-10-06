@@ -88,7 +88,7 @@
       <GridLayout
         v-if="gridLayout.length > 0"
         :layout="gridLayout"
-        :col-num="GRID_COLUMN_COUNT"
+        :col-num="editable ? GRID_COLUMN_COUNT : previewColumnCount"
         :row-height="30"
         :transform-scale="canvasZoom"
         :is-resizable="false"
@@ -375,35 +375,45 @@ const canvasRef = ref<HTMLElement | null>(null)
 const GRID_COLUMN_COUNT = 24
 const canvasZoom = ref(1)
 const canvasZoomInput = ref('100')
-/** 预览态等比缩放下限：极窄视口时避免无限缩小导致不可读。 */
-const PREVIEW_MIN_ZOOM = 0.2
-/** 预览态铺满宽度模式的放大上限：超宽视口时避免过度放大。 */
-const PREVIEW_MAX_FILL_ZOOM = 2
-/** 预览态缩放：默认 100% 原始大小（与编辑器同款 1440px 舞台）；
- *  开启「自适应宽度」后按 视口可用宽 / 1440 等比缩放正好铺满浏览器宽度
- *  （窄屏缩小、宽屏放大，上限 PREVIEW_MAX_FILL_ZOOM），再次点击恢复 100%。 */
+/** 预览态栅格列间距（与 GridLayout margin 一致）。 */
+const PREVIEW_GRID_GAP = 12
+/** 编辑态基准列宽：colWidth = (容器宽 - gap × (cols + 1)) / cols。 */
+const PREVIEW_EDIT_COL_WIDTH = (DASHBOARD_CANVAS_MIN_WIDTH - PREVIEW_GRID_GAP * (GRID_COLUMN_COUNT + 1)) / GRID_COLUMN_COUNT
+/** 预览态「自适应宽度」：收拢栅格列数到内容实际占宽并铺满视口——组件横向等比加宽，
+ *  纵向位置/高度保持不动（保证不重叠交错）；组合卡片内部 free 子卡片由组件自身按
+ *  内宽比例等比映射。视口窄于内容物理宽时等比缩小铺满（不挤压变形）。
+ *  未开启时为 100% 原始大小（1440 舞台）。 */
 const previewFillWidth = ref(false)
-const previewFitZoom = ref(1)
+const previewAvailableWidth = ref(0)
 let previewResizeObserver: ResizeObserver | null = null
 
-function updatePreviewFitZoom(): void {
-  if (!previewFillWidth.value) {
-    previewFitZoom.value = 1
-    return
-  }
+/** 自适应时的栅格列数：收拢到内容实际占用的最大列数（上限 24）。 */
+const previewColumnCount = computed(() => {
+  if (!previewFillWidth.value) return GRID_COLUMN_COUNT
+  const spanned = gridLayout.value.map((item) => item.x + item.w)
+  return Math.min(GRID_COLUMN_COUNT, Math.max(1, ...spanned, 1))
+})
+
+/** 自适应舞台宽度：铺满视口；视口窄于内容物理宽（收拢列数下的自然宽度）时取内容物理宽，
+ *  配合 zoom 等比缩小铺满，避免列宽被挤压变形。 */
+const previewStageWidth = computed(() => {
+  if (!previewFillWidth.value || previewAvailableWidth.value <= 0) return 0
+  const contentWidth = previewColumnCount.value * PREVIEW_EDIT_COL_WIDTH + PREVIEW_GRID_GAP * (previewColumnCount.value + 1)
+  return Math.max(previewAvailableWidth.value, contentWidth)
+})
+
+function updatePreviewFit(): void {
   const canvas = canvasRef.value
   if (!canvas) return
   const styles = getComputedStyle(canvas)
   const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
-  const availableWidth = canvas.clientWidth - horizontalPadding
-  if (availableWidth <= 0) return
-  previewFitZoom.value = Math.min(PREVIEW_MAX_FILL_ZOOM, Math.max(PREVIEW_MIN_ZOOM, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
+  previewAvailableWidth.value = Math.max(0, canvas.clientWidth - horizontalPadding)
 }
 
-/** 切换预览态「自适应宽度」：100% 原始大小 ⇄ 等比缩放铺满浏览器宽度。 */
+/** 切换预览态「自适应宽度」：100% 原始大小 ⇄ 收拢列数铺满浏览器宽度。 */
 function togglePreviewFillWidth(): void {
   previewFillWidth.value = !previewFillWidth.value
-  updatePreviewFitZoom()
+  updatePreviewFit()
 }
 
 /** 舞台样式：空画布不锁宽度，铺满浏览器宽度；
@@ -415,8 +425,16 @@ const canvasZoomStyle = computed(() => {
     return { minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px` }
   }
   if (!props.editable) {
+    if (previewFillWidth.value && previewStageWidth.value > 0) {
+      return {
+        zoom: Math.min(1, previewAvailableWidth.value / previewStageWidth.value),
+        width: `${previewStageWidth.value}px`,
+        minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+        marginInline: 'auto',
+      }
+    }
     return {
-      zoom: previewFitZoom.value,
+      zoom: 1,
       width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
       minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
       marginInline: 'auto',
@@ -1173,9 +1191,9 @@ onBeforeUnmount(() => {
 /** 预览态：观察画布根元素尺寸变化（窗口缩放、侧栏收起等），实时重算等比缩放。 */
 onMounted(() => {
   if (props.editable) return
-  updatePreviewFitZoom()
+  updatePreviewFit()
   if (canvasRef.value && typeof ResizeObserver !== 'undefined') {
-    previewResizeObserver = new ResizeObserver(updatePreviewFitZoom)
+    previewResizeObserver = new ResizeObserver(updatePreviewFit)
     previewResizeObserver.observe(canvasRef.value)
   }
 })

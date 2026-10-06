@@ -109,21 +109,27 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     wrapper.unmount()
   })
 
-  it('自适应模式下宽视口放大封顶 2 倍，极窄视口不低于 0.2', async () => {
+  it('自适应模式宽视口铺满（无缩小），极窄视口保持内容物理宽并 zoom 等比缩小', async () => {
+    // 宽视口：stage 铺满 2880（收拢 16 列后内容物理宽 964 < 2880，无 zoom 缩小）
     clientWidth = 2880
     const wide = mountPreview()
     await nextTick()
     await wide.get('button.preview-fill-button').trigger('click')
     await nextTick()
-    expect(stageStyleAttr(wide)).toContain('zoom: 2')
+    const wideStyle = stageStyleAttr(wide)
+    expect(wideStyle).toContain('width: 2880px')
+    expect(wideStyle).toContain('zoom: 1')
     wide.unmount()
 
+    // 极窄视口：stage 保持内容物理宽 964（16×47.5 + 17×12），zoom = 100/964 等比缩小铺满
     clientWidth = 100
     const narrow = mountPreview()
     await nextTick()
     await narrow.get('button.preview-fill-button').trigger('click')
     await nextTick()
-    expect(stageStyleAttr(narrow)).toContain('zoom: 0.2')
+    const narrowStyle = stageStyleAttr(narrow)
+    expect(narrowStyle).toContain('width: 964px')
+    expect(narrowStyle).toContain('zoom: 0.1')
     narrow.unmount()
   })
 
@@ -137,10 +143,15 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     wrapper.unmount()
   })
 
-  it('预览态栅格恒为 24 列（与编辑器一致，不再按内容收拢列数）', () => {
+  it('预览默认 24 列；自适应模式收拢到内容实际占宽列数', async () => {
     clientWidth = 720
     const wrapper = mountPreview()
     expect(wrapper.getComponent({ name: 'GridLayout' }).props('colNum')).toBe(24)
+
+    // 自适应：收拢到内容实际占用的最大列数（mock 布局最大 x+w = 16）
+    await wrapper.get('button.preview-fill-button').trigger('click')
+    await nextTick()
+    expect(wrapper.getComponent({ name: 'GridLayout' }).props('colNum')).toBe(16)
     wrapper.unmount()
   })
 
@@ -161,52 +172,55 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     expect(observer.disconnected).toBe(true)
   })
 
-  it('默认 100% 原始大小；「自适应宽度」按钮点击后等比铺满（宽视口放大、窄视口缩小），再点恢复', async () => {
-    // 宽视口：默认 1（100% 原始大小），点击后 2880/1440 = 2 等比放大铺满
+  it('默认 100% 原始大小（1440 舞台）；点击「自适应宽度」后舞台铺满视口宽度，再点恢复', async () => {
+    // 宽视口：默认 100%（zoom 1 + 1440 舞台），点击后舞台铺满 2880px
     clientWidth = 2880
     const wide = mountPreview()
     await nextTick()
     const button = wide.get('button.preview-fill-button')
     expect(stageStyleAttr(wide)).toContain('zoom: 1')
+    expect(stageStyleAttr(wide)).toContain('width: 1440px')
     expect(button.attributes('aria-pressed')).toBe('false')
 
     await button.trigger('click')
     await nextTick()
-    expect(stageStyleAttr(wide)).toContain('zoom: 2')
+    expect(stageStyleAttr(wide)).toContain('width: 2880px')
     expect(button.attributes('aria-pressed')).toBe('true')
 
     await button.trigger('click')
     await nextTick()
-    expect(stageStyleAttr(wide)).toContain('zoom: 1')
+    expect(stageStyleAttr(wide)).toContain('width: 1440px')
     expect(button.attributes('aria-pressed')).toBe('false')
     wide.unmount()
 
-    // 窄视口：默认 100% 超宽可横向滚动，点击后缩小到 0.5 正好铺满
+    // 窄视口：默认 100% 超宽可横向滚动，点击后保持内容物理宽 964 并 zoom 等比缩小铺满
     clientWidth = 720
     const narrow = mountPreview()
     await nextTick()
-    expect(stageStyleAttr(narrow)).toContain('zoom: 1')
+    expect(stageStyleAttr(narrow)).toContain('width: 1440px')
     await narrow.get('button.preview-fill-button').trigger('click')
     await nextTick()
-    expect(stageStyleAttr(narrow)).toContain('zoom: 0.5')
+    expect(stageStyleAttr(narrow)).toContain('width: 964px')
+    expect(stageStyleAttr(narrow)).toContain('zoom: 0.7')
     narrow.unmount()
   })
 
-  it('自适应模式下视口尺寸变化实时重算铺满缩放，恢复默认后恒为 100%', async () => {
+  it('自适应模式下视口尺寸变化实时重算舞台宽度，恢复默认后回到 1440 舞台', async () => {
     clientWidth = 1440
     const wrapper = mountPreview()
     await nextTick()
     await wrapper.get('button.preview-fill-button').trigger('click')
     await nextTick()
-    expect(stageStyleAttr(wrapper)).toContain('zoom: 1')
+    expect(stageStyleAttr(wrapper)).toContain('width: 1440px')
 
     clientWidth = 720
     ResizeObserverStub.instances[0].trigger()
     await nextTick()
-    expect(stageStyleAttr(wrapper)).toContain('zoom: 0.5')
+    expect(stageStyleAttr(wrapper)).toContain('width: 964px')
 
     await wrapper.get('button.preview-fill-button').trigger('click')
     await nextTick()
+    expect(stageStyleAttr(wrapper)).toContain('width: 1440px')
     expect(stageStyleAttr(wrapper)).toContain('zoom: 1')
     wrapper.unmount()
   })
