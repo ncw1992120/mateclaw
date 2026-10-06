@@ -200,6 +200,7 @@ import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
+import { removeDanglingFilterBindings } from '@/utils/dashboard-filter-deletion'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -373,6 +374,7 @@ async function loadDashboard(): Promise<void> {
       schema.executionPolicy = migrated.executionPolicy ?? {}
       schema.scriptBindings = migrated.scriptBindings ?? []
       schema.theme = migrated.theme
+      removeDanglingFilterBindings(schema)
     } catch {
       schema.pages = [{
         id: generateId('page'),

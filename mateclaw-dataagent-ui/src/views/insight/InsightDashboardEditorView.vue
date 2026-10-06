@@ -198,6 +198,7 @@
           @select-child="handleSelectChild"
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
+          @combination-delete-child="handleDeleteCombinationChild"
           @move-component-into="handleMoveComponentInto"
           @move-child-out="handleMoveChildOut"
           @copy-child="handleCopyChild"
@@ -363,6 +364,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
+import { collectFilterComponents, findFilterBindingDependents, removeDanglingFilterBindings, removeFilterBindings } from '@/utils/dashboard-filter-deletion'
 import { mergeCombinationChildComponentUpdate } from './composables/combinationChildComponentUpdate'
 import DatasetDataDialog from './components/DatasetDataDialog.vue'
 import QueryConfigDialog from './components/card-attribute/QueryConfigDialog.vue'
@@ -974,6 +976,11 @@ async function loadDashboard(id: string): Promise<void> {
       schema.scriptBindings = migrated.scriptBindings ?? []
       schema.theme = migrated.theme
       scriptTargetComponentId.value = schema.scriptBindings[0]?.componentId ?? ''
+      const repairedFilterIds = removeDanglingFilterBindings(schema)
+      if (repairedFilterIds.length) {
+        console.info('[InsightDashboard] Removed stale filter bindings:', repairedFilterIds)
+        scheduleSchemaAutoSave()
+      }
     } catch {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
       schema.pages = [{
@@ -1201,10 +1208,12 @@ async function removeTabFromContainer(container: InsightComponent, tabId: string
   const tab = cfg.tabs.find((x) => x.id === tabId)
   if (!tab) return
   const isLastTab = cfg.tabs.length === 1
+  const deletedFilters = !isLastTab ? collectFilterComponents(tab.children) : []
+  const bindingImpact = filterDeletionImpactText(deletedFilters)
   if (!isLastTab && tab.children.length > 0) {
     try {
       await ElMessageBox.confirm(
-        t('insight.combination.deleteTabConfirm', { name: tab.title, count: tab.children.length }),
+        `${t('insight.combination.deleteTabConfirm', { name: tab.title, count: tab.children.length })}${bindingImpact ? `\n\n${bindingImpact}` : ''}`,
         '',
         {
           confirmButtonText: t('common.confirm'),
@@ -1216,6 +1225,7 @@ async function removeTabFromContainer(container: InsightComponent, tabId: string
       return // 用户取消
     }
   }
+  deletedFilters.forEach((filter) => removeFilterBindings(schema, filter.id))
   const res = removeCombinationTab(container, tabId)
   if (!res.removed) return
   // 选中的子卡片若随页签一起没了，清掉面板选中态
@@ -1313,14 +1323,52 @@ function handleCombinationRemoveTabFromPanel(tabId: string): void {
   if (container?.type === 'combination') void removeTabFromContainer(container, tabId)
 }
 
-/** 删除组件 */
-function handleDeleteComponent(id: string): void {
-  const page = schema.pages.find((p) => p.id === activePageId.value)
-  if (!page) {
-    return
+function filterDeletionImpactText(filters: Array<{ id: string; title: string; type: 'filter' | 'timeFilter' }>): string {
+  return filters.flatMap((filter) => {
+    const dependents = findFilterBindingDependents(schema, filter.id)
+    if (!dependents.length) return []
+    const title = filter.title || (filter.type === 'timeFilter' ? '未命名时间筛选' : '未命名筛选器')
+    const dependentList = dependents
+      .map((dependent) => `  • ${dependent.componentTitle}（${dependent.pageName}）`)
+      .join('\n')
+    return [`筛选器“${title}”绑定了以下组件：\n${dependentList}`]
+  }).join('\n\n')
+}
+
+async function confirmFilterDeletion(
+  filters: Array<{ id: string; title: string; type: 'filter' | 'timeFilter' }>,
+  deletingTitle: string,
+): Promise<boolean> {
+  const impact = filterDeletionImpactText(filters)
+  if (impact) {
+    try {
+      await ElMessageBox.confirm(
+        `删除“${deletingTitle}”后，将同时移除以下绑定关系：\n\n${impact}\n\n绑定的组件本身不会删除。确认继续吗？`,
+        '删除筛选器',
+        {
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+          customClass: 'dashboard-filter-delete-confirm',
+        },
+      )
+    } catch {
+      return false
+    }
   }
+  filters.forEach((filter) => removeFilterBindings(schema, filter.id))
+  return true
+}
+
+/** 删除画布顶层组件；组件树中含筛选器时先确认并清理全仪表盘引用。 */
+async function handleDeleteComponent(id: string): Promise<void> {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
   const idx = page.components.findIndex((c) => c.id === id)
   if (idx >= 0) {
+    const component = page.components[idx]
+    const filters = collectFilterComponents([component])
+    if (filters.length && !await confirmFilterDeletion(filters, component.title || '组件')) return
     page.components.splice(idx, 1)
     if (selectedComponentId.value === id) {
       selectedComponentId.value = ''
@@ -1329,7 +1377,20 @@ function handleDeleteComponent(id: string): void {
     if (selectedChildInfo.value?.containerId === id) {
       selectedChildInfo.value = null
     }
+    scheduleSchemaAutoSave()
   }
+}
+
+/** 删除组合卡片中的筛选子组件，也走相同确认与清理逻辑。 */
+async function handleDeleteCombinationChild(payload: { containerId: string; childId: string }): Promise<void> {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (!container || !child) return
+  const filters = collectFilterComponents([child])
+  if (filters.length && !await confirmFilterDeletion(filters, child.title || '子组件')) return
+  removeChildFromCombination(container, child.id)
+  if (selectedChildInfo.value?.childId === child.id) selectedChildInfo.value = null
+  scheduleSchemaAutoSave()
 }
 
 /**

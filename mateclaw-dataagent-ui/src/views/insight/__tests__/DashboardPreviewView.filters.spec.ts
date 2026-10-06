@@ -242,12 +242,20 @@ describe('DashboardPreviewView runtime filter query flow', () => {
         script: 'return sales',
         datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, queryConfig: {
           displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
-          parameterBindings: [{ filterComponentId: 'filter-region', parameterName: 'inputRegion', field: 'region', operator: 'eq' }],
+          parameterBindings: [
+            { filterComponentId: 'filter-region', parameterName: 'inputRegion', field: 'region', operator: 'eq' },
+            { filterComponentId: 'deleted-filter', parameterName: 'staleRegion', field: 'region', operator: 'eq' },
+          ],
         } }],
+        boundFilterComponentIds: ['filter-region', 'deleted-filter'],
+        scriptFilterBindings: [{ filterComponentId: 'filter-region', inputNames: ['sales'] }, { filterComponentId: 'deleted-filter', inputNames: ['sales'] }],
         finalResultQueryConfig: {
           confirmed: true, schemaFingerprint: 'schema-1',
           displayFields: [{ field: 'region', title: '结果区域', role: 'dimension' }],
-          filterFields: [{ field: 'region', title: '区域', dataType: 'string', parameterName: 'outputRegion', operators: ['eq'], filterComponentId: 'filter-region' }],
+          filterFields: [
+            { field: 'region', title: '区域', dataType: 'string', parameterName: 'outputRegion', operators: ['eq'], filterComponentId: 'filter-region' },
+            { field: 'region', title: '旧区域', dataType: 'string', parameterName: 'staleOutput', operators: ['eq'], filterComponentId: 'deleted-filter' },
+          ],
           sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
           paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
         },
@@ -280,6 +288,9 @@ describe('DashboardPreviewView runtime filter query flow', () => {
       finalResultQueryConfig: expect.objectContaining({ parameterBindings: [{ parameterName: 'outputRegion', field: 'region', operator: 'eq' }] }),
     }))
     expect(mocks.executeComponent).toHaveBeenCalledWith('dashboard-1', 'python-table', {}, expect.stringContaining('"datasetId":"101"'), expect.anything())
+    const executionSchema = JSON.parse(mocks.executeComponent.mock.calls.at(-1)![3])
+    expect(JSON.stringify(executionSchema)).not.toContain('deleted-filter')
+    expect(JSON.stringify(executionSchema)).toContain('filter-region')
     expect(wrapper.get('[data-test="canvas"]').text()).toContain('华南')
   })
 
