@@ -69,14 +69,14 @@
       <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
     </div>
 
-    <div class="canvas-grid-stage" :style="editable ? canvasZoomStyle : undefined">
+    <div class="canvas-grid-stage" :style="canvasZoomStyle">
       <!-- GridItem 恒为 static：库只负责栅格渲染与定位，拖动/缩放全部走自研 pointer 通道。
            这样可绕过库内部 compact 的强制碰撞下推（vertical-compact=false 也会把重叠 item 推开），
            使组件可以放到画布任意位置（包括与组合卡片重叠）。 -->
       <GridLayout
         v-if="gridLayout.length > 0"
         :layout="gridLayout"
-        :col-num="editable ? GRID_COLUMN_COUNT : previewColumnCount"
+        :col-num="GRID_COLUMN_COUNT"
         :row-height="30"
         :transform-scale="canvasZoom"
         :is-resizable="false"
@@ -303,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
 import { EditPen } from '@element-plus/icons-vue'
@@ -362,24 +362,43 @@ const canvasRef = ref<HTMLElement | null>(null)
 const GRID_COLUMN_COUNT = 24
 const canvasZoom = ref(1)
 const canvasZoomInput = ref('100')
-/** 编辑态舞台样式：有组件时用固定最小宽度画布（配合缩放工具栏）；空画布不锁宽度，铺满浏览器宽度。 */
+/** 预览态等比缩放下限：极窄视口时避免无限缩小导致不可读。 */
+const PREVIEW_MIN_ZOOM = 0.2
+/** 预览态适配缩放：zoom = 视口可用宽 / 1440（上限 1 居中留白，下限 PREVIEW_MIN_ZOOM）。 */
+const previewFitZoom = ref(1)
+let previewResizeObserver: ResizeObserver | null = null
+
+function updatePreviewFitZoom(): void {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  const styles = getComputedStyle(canvas)
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  const availableWidth = canvas.clientWidth - horizontalPadding
+  if (availableWidth <= 0) return
+  previewFitZoom.value = Math.max(PREVIEW_MIN_ZOOM, Math.min(1, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
+}
+
+/** 舞台样式：空画布不锁宽度，铺满浏览器宽度；
+ *  编辑态有组件时用固定最小宽度画布（配合缩放工具栏）；
+ *  预览态所见即所得——与编辑器相同的 24 列 / 1440px 逻辑舞台，用 zoom 等比适配视口并居中，
+ *  保证列宽与编辑器一致（组合卡片内部的 px 绝对定位不会错位、图表不变形）。 */
 const canvasZoomStyle = computed(() => {
-  if (!props.editable) return undefined
   if (gridLayout.value.length === 0) {
     return { minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px` }
+  }
+  if (!props.editable) {
+    return {
+      zoom: previewFitZoom.value,
+      width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+      minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+      marginInline: 'auto',
+    }
   }
   return {
     zoom: canvasZoom.value,
     width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
     minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
   }
-})
-
-/** 预览态栅格列数：按内容实际占用的最大列数收拢栅格，使卡片群铺满画布宽度（随视口等比缩放、天然居中）；
- *  编辑态固定 24 列（与编辑器拖拽/对齐逻辑一致）。 */
-const previewColumnCount = computed(() => {
-  const spanned = gridLayout.value.map((item) => item.x + item.w)
-  return Math.min(GRID_COLUMN_COUNT, Math.max(1, ...spanned, 1))
 })
 
 function setCanvasZoom(value: number): void {
@@ -1116,7 +1135,21 @@ function onPointerDragUp(event: PointerEvent): void {
   }
 }
 
-onBeforeUnmount(unbindPointerDragListeners)
+onBeforeUnmount(() => {
+  unbindPointerDragListeners()
+  previewResizeObserver?.disconnect()
+  previewResizeObserver = null
+})
+
+/** 预览态：观察画布根元素尺寸变化（窗口缩放、侧栏收起等），实时重算等比缩放。 */
+onMounted(() => {
+  if (props.editable) return
+  updatePreviewFitZoom()
+  if (canvasRef.value && typeof ResizeObserver !== 'undefined') {
+    previewResizeObserver = new ResizeObserver(updatePreviewFitZoom)
+    previewResizeObserver.observe(canvasRef.value)
+  }
+})
 
 /** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
 const GRID_COLS = 24
