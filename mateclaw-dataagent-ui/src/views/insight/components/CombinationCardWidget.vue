@@ -233,6 +233,7 @@
             :dashboard-theme="dashboardTheme"
             :title-icon-style-preview="titleIconStylePreview"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
+            :preview-fill-width="previewFillWidth"
             @filter-change="(payload) => emit('filter-change', payload)"
             @time-filter-change="(payload) => emit('time-filter-change', payload)"
             @retry-component-query="(id) => emit('retry-component-query', id)"

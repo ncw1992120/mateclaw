@@ -724,6 +724,44 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.findAll('[data-testid="cc-sample-data-watermark"]')).toHaveLength(0)
   })
 
+  it('passes previewFillWidth down to nested combination cards so the whole canvas adapts', () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: false,
+        previewFillWidth: true,
+        component: {
+          id: 'outer-combination',
+          type: 'combination',
+          title: '外层组合',
+          children: [nestedCombination],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.findAll('.combination-card')).toHaveLength(2)
+    const outer = wrapper.findComponent({ name: 'CombinationCardWidget' })
+    expect(outer.props('previewFillWidth')).toBe(true)
+    // 修复前嵌套实例收不到该 prop → 内层基准宽度被持续校准、ccHScale 恒为 1，
+    // 嵌套组合内部的组件在预览「自适应宽度」下不再横向自适应并可能出现交叉重叠
+    const inner = outer.findComponent({ name: 'CombinationCardWidget' })
+    expect(inner.props('previewFillWidth')).toBe(true)
+  })
+
   it('switches an inner combination tab without starting the parent child drag', async () => {
     const innerConfig = {
       ...containerConfig,
