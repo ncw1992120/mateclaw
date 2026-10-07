@@ -39,6 +39,10 @@ function clampCol(col: number, snap: boolean): number {
   return Math.max(1, Math.min(12, rounded))
 }
 
+function precise(value: number): number {
+  return Math.round(value * 10000) / 10000
+}
+
 export function calculateCombinationChildResize(
   start: CombinationChildResizeStart,
   last: { x: number; y: number },
@@ -66,5 +70,10 @@ export function calculateCombinationChildResize(
   }
 
   const box = clampBox(start.bounds, x, y, col * colW, height, snap)
-  return { x: box.x, y: box.y, col, height: snap ? Math.round(height) : height }
+  return {
+    x: precise(box.x),
+    y: precise(box.y),
+    col: precise(col),
+    height: snap ? Math.round(height) : precise(height),
+  }
 }

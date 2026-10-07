@@ -419,6 +419,13 @@ const movingId = ref<string | null>(null)
 /** 子卡片拖出模式：跟随指针的提示标签（Teleport 到 body，避免被容器 overflow:hidden 裁剪） */
 const dragOutChild = ref<{ childId: string; title: string; x: number; y: number } | null>(null)
 const resizingId = ref<string | null>(null)
+/**
+ * 拖动/缩放中的子卡片预览盒（布局像素）：预览走响应式绑定而非直接改 DOM。
+ * Vue 的 patchStyle 每次重渲染都会无条件重写全部样式键（无等值跳过），手动内联值
+ * 会被重渲染冲回旧绑定值（如 hover 邻卡触发重渲染时），表现为拖动中盒子回缩跳动；
+ * 让绑定本身渲染预览值即可从根上消除这一竞争，松手写回 layout 后数值不变、零跳变。
+ */
+const childPreview = ref<{ id: string; x: number; y: number; col: number; h: number } | null>(null)
 const editingTab = ref<string | null>(null)
 const editingTabTitle = ref('')
 const tabEditInput = ref<HTMLInputElement | null>(null)
@@ -581,16 +588,17 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
   const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup, child.componentColor)
   if (cfg.value.layoutMode === 'free') {
+    const l = childPreview.value && childPreview.value.id === child.id ? childPreview.value : child.layout
     return {
       ...themeStyle,
       ...visualStyle,
       position: 'absolute',
       // free 子卡片横向坐标按 ccHScale 等比映射（预览「自适应宽度」铺满后随画布一起加宽）；
       // 纵向 top/height 不映射，保证加宽后纵向布局不变、不重叠交错。
-      left: `calc(${child.layout.x}px * var(--cc-h-scale, 1))`,
-      top: child.layout.y + 'px',
-      width: `calc(${child.layout.col} / 12 * 100%)`,
-      ...(child.layout.h != null ? { height: child.layout.h + 'px' } : {}),
+      left: `calc(${l.x}px * var(--cc-h-scale, 1))`,
+      top: l.y + 'px',
+      width: `calc(${l.col} / 12 * 100%)`,
+      ...(l.h != null ? { height: l.h + 'px' } : {}),
     }
   }
   if (cfg.value.layoutMode === 'grid') {
@@ -660,10 +668,24 @@ interface ChildBounds { width: number; height: number }
  * 拖起来发涩。本次拖动/缩放期间容器尺寸不变，按下时取一次即可（过程与落点共用同一份）。
  */
 function readChildBounds(): ChildBounds | null {
-  const r = ccBodyRef.value?.getBoundingClientRect()
-  // jsdom 以及尚未完成布局的隐藏容器会返回 0×0 的 DOMRect。此时不能把可移动范围
-  // 误判成只有原点，否则键盘微调会被 clampBox 永久钳在 (0, 0)。
-  return r && r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null
+  const body = ccBodyRef.value
+  if (!body) return null
+  const r = body.getBoundingClientRect()
+  // 画布 CSS zoom 下 getBoundingClientRect 是视觉像素，offsetWidth 才是布局像素。
+  // 子卡片落格宽度是 col/12 百分比（布局像素体系），边界、列宽、内联 left/width 必须同基准，
+  // 否则 zoom≠1 时拖动预览与松手落格差一个 zoom 系数（表现为松手跳变）。
+  const width = body.offsetWidth || r.width
+  const height = body.offsetHeight || r.height
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+/** 画布缩放比（视觉像素/布局像素）：鼠标 clientX/Y 位移需除以它换算回布局像素。 */
+function readBodyScale(): number {
+  const body = ccBodyRef.value
+  if (!body) return 1
+  const r = body.getBoundingClientRect()
+  const layout = body.offsetWidth
+  return r.width > 0 && layout > 0 ? r.width / layout : 1
 }
 
 /** 位置钳制：保证子组件整体可见 —— 这也保证八向手柄永远落在容器里、永远抓得到 */
@@ -683,16 +705,17 @@ function clampBox(
 let lastInteractAt = 0
 function markInteracted(): void { lastInteractAt = Date.now() }
 
-let mv: { id: string; sx: number; sy: number; ox: number; oy: number; el: HTMLElement | null; bounds: ChildBounds | null; elW: number; elH: number } | null = null
+let mv: { id: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null; bounds: ChildBounds | null; elW: number; elH: number; scale: number } | null = null
 let mvRaf = 0
 let mvLast: { x: number; y: number } | null = null
 
 /** 起点 + 当前鼠标坐标 → 目标位置（拖动过程与落点共用，保证两者完全一致）。全程不读 DOM。 */
 function computeMove(start: NonNullable<typeof mv>, last: { x: number; y: number }): { x: number; y: number } {
+  const scale = start.scale || 1
   return clampBox(
     start.bounds ?? undefined,
-    start.ox + last.x - start.sx,
-    start.oy + last.y - start.sy,
+    start.ox + (last.x - start.sx) / scale,
+    start.oy + (last.y - start.sy) / scale,
     start.elW,
     start.elH,
   )
@@ -716,11 +739,14 @@ function onChildMouseDown(e: MouseEvent, child: InsightCombinationChild) {
     sy: e.clientY,
     ox: child.layout.x,
     oy: child.layout.y,
+    ocol: child.layout.col,
+    oh: child.layout.h ?? 120,
     el,
     // 按下时一次性读布局，过程与落点提交复用（详见 readChildBounds 注释）
     bounds: readChildBounds(),
     elW: el?.offsetWidth ?? 0,
     elH: el?.offsetHeight ?? 0,
+    scale: readBodyScale(),
   }
   mvLast = { x: e.clientX, y: e.clientY }
   markInteracted()
@@ -756,8 +782,8 @@ function onChildMouseMove(e: MouseEvent) {
     mvRaf = 0
     if (!mv || !mvLast) return
     const p = computeMove(mv, mvLast)
-    mv.el?.style.setProperty('left', p.x + 'px')
-    mv.el?.style.setProperty('top', p.y + 'px')
+    // 预览走响应式绑定（childStyle 优先读 childPreview），不直接改 DOM
+    childPreview.value = { id: mv.id, x: p.x, y: p.y, col: mv.ocol, h: mv.oh }
   })
 }
 
@@ -782,32 +808,34 @@ function onChildMouseUp() {
       const p = computeMove(mv, mvLast)
       child.layout.x = p.x
       child.layout.y = p.y
-      // 同步写回 DOM。这里不能 removeProperty：Vue 的 style patch 只下发「发生变化」的
-      // 属性，若移除内联值而 layout 又没变（例如纯点击未拖动），元素会瞬间丢失 left/top
-      // 定位。保留内联值更稳，后续 layout 变化时 Vue 自然会覆盖它。
-      mv.el?.style.setProperty('left', p.x + 'px')
-      mv.el?.style.setProperty('top', p.y + 'px')
     }
   }
   mv = null
   mvLast = null
+  // 同 tick 清预览：绑定随即渲染新 layout，数值与预览一致，零跳变
+  childPreview.value = null
   movingId.value = null
   window.removeEventListener('mousemove', onChildMouseMove)
   window.removeEventListener('mouseup', onChildMouseUp)
 }
 
-// ── 八向缩放（与拖动同策略：过程改 DOM，落点提交）──────
-let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null; bounds: ChildBounds | null; colW: number } | null = null
+// ── 八向缩放（预览走响应式 childPreview 绑定，落点提交 layout）──────
+let rz: { id: string; dir: string; sx: number; sy: number; ox: number; oy: number; ocol: number; oh: number; el: HTMLElement | null; bounds: ChildBounds | null; colW: number; scale: number } | null = null
 let rzRaf = 0
 let rzLast: { x: number; y: number } | null = null
 
-/** 起点 + 当前鼠标坐标 → 目标盒子（缩放过程与落点共用）。col/h/位置三者联动一致，全程不读 DOM。 */
-/** snap=false 用于拖动预览：像素连续跟随；snap=true 用于松手落格：吸附整列与整数像素。 */
+/** 起点 + 当前鼠标坐标 → 目标盒子（预览与落点共用），横向列宽按鼠标连续变化。 */
 function computeResize(
   start: NonNullable<typeof rz>,
   last: { x: number; y: number },
   snap = true,
 ): { x: number; y: number; col: number; h: number } {
+  const scale = start.scale || 1
+  // 鼠标 clientX/Y 是视觉像素，先除以缩放比换算回布局像素，与 colW/bounds 同基准
+  const layoutLast = {
+    x: start.sx + (last.x - start.sx) / scale,
+    y: start.sy + (last.y - start.sy) / scale,
+  }
   const box = calculateCombinationChildResize(
     {
       direction: start.dir,
@@ -820,7 +848,7 @@ function computeResize(
       bounds: start.bounds,
       columnWidth: start.colW,
     },
-    last,
+    layoutLast,
     snap,
   )
   return { x: box.x, y: box.y, col: box.col, h: box.height }
@@ -845,6 +873,7 @@ function onChildResizeDown(e: MouseEvent, child: InsightCombinationChild, dir: s
     // 按下时一次性读布局：列宽基准与边界都在此固定，缩放过程不再触发同步布局
     bounds,
     colW: bounds ? bounds.width / 12 : 40,
+    scale: readBodyScale(),
   }
   rzLast = { x: e.clientX, y: e.clientY }
   markInteracted()
@@ -858,14 +887,10 @@ function onChildResizeMove(e: MouseEvent) {
   if (rzRaf) return
   rzRaf = requestAnimationFrame(() => {
     rzRaf = 0
-    if (!rz || !rzLast || !rz.el) return
-    const colW = rz.colW
-    // 拖动预览：像素连续（col 不取整），完全跟随鼠标，不吸附
+    if (!rz || !rzLast) return
+    // 拖动预览与松手落格同用吸附结果（snap=true）且都渲染自绑定：所见即所得，松手零跳变
     const box = computeResize(rz, rzLast, false)
-    rz.el.style.setProperty('left', box.x + 'px')
-    rz.el.style.setProperty('top', box.y + 'px')
-    rz.el.style.setProperty('width', Math.round(box.col * colW) + 'px')
-    rz.el.style.setProperty('height', box.h + 'px')
+    childPreview.value = { id: rz.id, x: box.x, y: box.y, col: box.col, h: box.h }
   })
 }
 function onChildResizeUp() {
@@ -873,21 +898,17 @@ function onChildResizeUp() {
   if (rz && rzLast) {
     const child = getActiveChildren().find((c) => c.id === rz!.id)
     if (child) {
-      const colW = rz.colW
-      const box = computeResize(rz, rzLast)
+      const box = computeResize(rz, rzLast, false)
       child.layout.x = box.x
       child.layout.y = box.y
       child.layout.col = box.col
       child.layout.h = box.h
-      // 与拖动同理：保留内联值而非 removeProperty，避免纯点击时丢失定位
-      rz.el?.style.setProperty('left', box.x + 'px')
-      rz.el?.style.setProperty('top', box.y + 'px')
-      rz.el?.style.setProperty('width', Math.round(box.col * colW) + 'px')
-      rz.el?.style.setProperty('height', box.h + 'px')
     }
   }
   rz = null
   rzLast = null
+  // 同 tick 清预览：绑定随即渲染新 layout，数值与预览一致，零跳变
+  childPreview.value = null
   resizingId.value = null
   window.removeEventListener('mousemove', onChildResizeMove)
   window.removeEventListener('mouseup', onChildResizeUp)

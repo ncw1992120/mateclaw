@@ -227,6 +227,50 @@ describe('CombinationCardWidget', () => {
     wrapper.unmount()
   })
 
+  it('resizes a combination child continuously and keeps the same width after release', async () => {
+    const child = {
+      id: 'resizable-child', type: 'table' as const, title: '明细',
+      layout: { x: 0, y: 0, col: 6, h: 120 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'resize-combo', type: 'combination', title: '组合卡片',
+          children: [child], containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+    const body = wrapper.get('.cc-body').element as HTMLElement
+    Object.defineProperties(body, {
+      offsetWidth: { value: 600 },
+      offsetHeight: { value: 300 },
+      getBoundingClientRect: { value: () => ({ width: 600, height: 300, left: 0, top: 0, right: 600, bottom: 300 }) },
+    })
+
+    await wrapper.get('[data-child="resizable-child"]').trigger('mouseenter')
+    await wrapper.get('.rs.e').trigger('mousedown', { clientX: 100, clientY: 100, button: 0 })
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 125, clientY: 100 }))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await nextTick()
+    const previewStyle = wrapper.get('[data-child="resizable-child"]').attributes('style') ?? ''
+    expect(previewStyle).toContain('width: calc(54.1667%)')
+
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await nextTick()
+    expect(child.layout.col).toBe(6.5)
+    expect(wrapper.get('[data-child="resizable-child"]').attributes('style')).toContain('width: calc(54.1667%)')
+    wrapper.unmount()
+  })
+
   it('renames a child component from its canvas title pen', async () => {
     const child = {
       id: 'child-kpi',

@@ -360,10 +360,10 @@ public class InsightDashboardSchemaDTO implements Serializable {
 
         private static final long serialVersionUID = 1L;
 
-        private Integer x;
-        private Integer y;
-        private Integer w;
-        private Integer h;
+        private Double x;
+        private Double y;
+        private Double w;
+        private Double h;
     }
 
     /**

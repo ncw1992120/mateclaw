@@ -31,12 +31,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+/** 列/行步进（舞台像素）：换算与呈现共用，避免两处公式漂移。 */
+export function gridSteps(metrics: GridResizeMetrics): { columnStep: number; rowStep: number } {
+  const columnWidth = (metrics.gridWidth - metrics.marginX * (metrics.columns + 1)) / metrics.columns
+  return {
+    columnStep: Math.max(1, columnWidth + metrics.marginX),
+    rowStep: Math.max(1, metrics.rowHeight + metrics.marginY),
+  }
+}
+
 /** 将鼠标位移换算成栅格尺寸，过程和最终提交共用这一纯函数。 */
 export function calculateGridResize(start: GridResizeStart, metrics: GridResizeMetrics): GridResizeResult {
-  const columnWidth = (metrics.gridWidth - metrics.marginX * (metrics.columns + 1)) / metrics.columns
-  const columnStep = Math.max(1, columnWidth + metrics.marginX)
-  const rowStep = Math.max(1, metrics.rowHeight + metrics.marginY)
-  const columnDelta = Math.round(start.dx / columnStep)
+  const { columnStep, rowStep } = gridSteps(metrics)
+  // w/x 使用连续列坐标，GridItem 会把其换算成像素盒；避免横向每跨整列才跳一次。
+  const columnDelta = start.dx / columnStep
   const rowDelta = Math.round(start.dy / rowStep)
 
   let newX = start.startXPos
@@ -60,42 +68,41 @@ export function calculateGridResize(start: GridResizeStart, metrics: GridResizeM
     newH = Math.max(1, start.startH + rowDelta)
   }
 
-  return { newX, newY, newW, newH }
+  return { newX: precise(newX), newY, newW: precise(newW), newH }
 }
 
-/** 栅格项对应的像素盒（相对其 GridItem 定位原点，即卡片内容应呈现的宽高）。 */
+/** 限制浮点误差，布局在反复拖动及 JSON 保存/重载后保持稳定。 */
+function precise(value: number): number {
+  return Math.round(value * 10000) / 10000
+}
+
+/** 栅格项对应的像素盒（与 grid-layout-plus 的取整公式保持一致）。 */
 export function gridItemPixelBox(w: number, h: number, metrics: GridResizeMetrics): { width: number; height: number } {
   const columnWidth = (metrics.gridWidth - metrics.marginX * (metrics.columns + 1)) / metrics.columns
-  const columnStep = Math.max(1, columnWidth + metrics.marginX)
-  const rowStep = Math.max(1, metrics.rowHeight + metrics.marginY)
-  return { width: Math.max(1, w * columnStep - metrics.marginX), height: Math.max(1, h * rowStep - metrics.marginY) }
+  return {
+    width: Math.max(1, Math.round(columnWidth * w + Math.max(0, w - 1) * metrics.marginX)),
+    height: Math.max(1, Math.round(metrics.rowHeight * h + Math.max(0, h - 1) * metrics.marginY)),
+  }
 }
 
 /**
- * 拖拽中的像素级预览盒：完全跟随鼠标（无吸附），不触碰网格布局。
- * 返回应用在卡片内容上的 CSS 盒模型增量（left/top 方向用负 margin 让卡片向反方向生长）。
+ * 拖动中的连续预览：按最终鼠标点计算浮点列宽并按 GridItem 公式转换为像素盒；
+ * 松手时写入相同布局值，避免横向整列吸附和预览/落点公式差异造成跳变。
+ * left/top 方向的位移用负 margin 让卡片向反方向生长。
  */
 export function calculateResizePreview(
-  start: Pick<GridResizeStart, 'edge' | 'startW' | 'startH' | 'dx' | 'dy'>,
+  start: Pick<GridResizeStart, 'edge' | 'startW' | 'startH' | 'startXPos' | 'startYPos' | 'dx' | 'dy'>,
   metrics: GridResizeMetrics
 ): Record<string, string> {
-  const base = gridItemPixelBox(start.startW, start.startH, metrics)
-  const style: Record<string, string> = {
-    width: `${base.width}px`,
-    height: `${base.height}px`,
-    marginLeft: '0px',
-    marginTop: '0px',
+  const result = calculateGridResize({ ...start, startX: 0, startY: 0 }, metrics)
+  const { columnStep, rowStep } = gridSteps(metrics)
+  const box = gridItemPixelBox(result.newW, result.newH, metrics)
+  const gridItemOffset = (position: number, size: number, margin: number): number =>
+    Math.round(position * size + (position + 1) * margin)
+  return {
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    marginLeft: `${gridItemOffset(result.newX, columnStep - metrics.marginX, metrics.marginX) - gridItemOffset(start.startXPos, columnStep - metrics.marginX, metrics.marginX)}px`,
+    marginTop: `${gridItemOffset(result.newY, rowStep - metrics.marginY, metrics.marginY) - gridItemOffset(start.startYPos, rowStep - metrics.marginY, metrics.marginY)}px`,
   }
-  if (start.edge === 'right') {
-    style.width = `${Math.max(1, base.width + start.dx)}px`
-  } else if (start.edge === 'left') {
-    style.width = `${Math.max(1, base.width - start.dx)}px`
-    style.marginLeft = `${start.dx}px`
-  } else if (start.edge === 'bottom') {
-    style.height = `${Math.max(1, base.height + start.dy)}px`
-  } else {
-    style.height = `${Math.max(1, base.height - start.dy)}px`
-    style.marginTop = `${start.dy}px`
-  }
-  return style
 }

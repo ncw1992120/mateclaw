@@ -109,7 +109,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
             4. 图表子类型(chartType)可选值：line(折线图)、bar(柱状图)、pie(饼图)、area(面积图)、scatter(散点图)、radar(雷达图)
             5. renderType对应关系：chart类型 -> "echarts"，kpi类型 -> "kpi"，table类型 -> "table"
-            6. position说明：栅格布局，总宽度24列。w=12表示半宽，w=24表示全宽。h=4为默认高度。x、y、w、h 均为整数，w 范围 1-24，h 范围 1-30。
+            6. position说明：栅格布局，总宽度24列。w=12表示半宽，w=24表示全宽。h=4为默认高度。x、y、w、h 为数字，支持小数以保留画布手动缩放精度；新建组件默认使用整数列，修改布局时保留现有小数坐标，除非用户明确要求重排。w 范围 1-24，h 范围 1-30。
             7. 组件布局要求：每行放2个组件（w=12），从上到下依次排列，y值递增
             8. metrics 必须使用数据源信息中列出的指标英文名(metricName)，dimensions 必须使用维度英文名(dimName)。不要使用物理字段名或自造名称。
             9. 根据用户需求合理选择图表类型：
@@ -1003,7 +1003,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
             for (InsightDashboardSchemaDTO.Component c : page.getComponents()) {
                 InsightDashboardSchemaDTO.Position p = c.getPosition();
-                String pos = p == null ? "无" : String.format("(x=%d,y=%d,w=%d,h=%d)", p.getX(), p.getY(), p.getW(), p.getH());
+                String pos = p == null ? "无" : String.format("(x=%s,y=%s,w=%s,h=%s)", p.getX(), p.getY(), p.getW(), p.getH());
                 sb.append("  - id=").append(c.getId())
                         .append(" | type=").append(c.getType())
                         .append(" | title=").append(c.getTitle())
@@ -1324,10 +1324,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         InsightDashboardSchemaDTO.Position p = c.getPosition();
         if (op.getW() != null) {
-            p.setW(Math.max(1, Math.min(24, op.getW())));
+            p.setW((double) Math.max(1, Math.min(24, op.getW())));
         }
         if (op.getH() != null) {
-            p.setH(Math.max(1, Math.min(30, op.getH())));
+            p.setH((double) Math.max(1, Math.min(30, op.getH())));
         }
     }
 
@@ -1343,10 +1343,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         InsightDashboardSchemaDTO.Position p = c.getPosition();
         if (op.getX() != null) {
-            p.setX(Math.max(0, Math.min(23, op.getX())));
+            p.setX((double) Math.max(0, Math.min(23, op.getX())));
         }
         if (op.getY() != null) {
-            p.setY(Math.max(0, op.getY()));
+            p.setY((double) Math.max(0, op.getY()));
         }
     }
 
@@ -1727,16 +1727,16 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 int col = componentIndex % DataAgentConstants.INSIGHT_GENERATE_COLUMNS_PER_ROW;
                 int row = componentIndex / DataAgentConstants.INSIGHT_GENERATE_COLUMNS_PER_ROW;
                 if (pos.getX() == null) {
-                    pos.setX(col * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
+                    pos.setX((double) (col * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W));
                 }
                 if (pos.getY() == null) {
-                    pos.setY(row * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
+                    pos.setY((double) (row * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H));
                 }
                 if (pos.getW() == null || pos.getW() == 0) {
-                    pos.setW(DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
+                    pos.setW((double) DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
                 }
                 if (pos.getH() == null || pos.getH() == 0) {
-                    pos.setH(DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
+                    pos.setH((double) DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
                 }
 
                 if (component.getRenderType() == null || component.getRenderType().isBlank()) {

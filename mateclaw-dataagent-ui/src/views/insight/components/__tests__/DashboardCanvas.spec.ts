@@ -12,7 +12,7 @@ import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dash
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 
 const stubs = {
-  GridLayout: { template: '<div><slot /></div>' },
+  GridLayout: { template: '<div class="vgl-layout"><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
   KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData'], template: '<div />' },
   ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
@@ -246,51 +246,60 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.findComponent({ name: 'CombinationCardWidget' }).props('componentDataMap')['nested-kpi'].fieldLabels).toEqual({ raw_amount: '销售额' })
   })
 
-  it('previews edge resizing with pixel-level styles on the card and snaps the grid only on pointerup', async () => {
+  it('previews horizontal resizing continuously and commits the same fractional grid width', async () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true },
       global: { stubs, plugins: [i18n] },
     })
+    const grid = wrapper.get('.vgl-layout').element as HTMLElement
+    grid.getBoundingClientRect = () => ({ width: 1440, height: 900, top: 0, right: 1440, bottom: 900, left: 0, x: 0, y: 0, toJSON() {} }) as DOMRect
     const card = wrapper.get('[data-component-id="kpi-1"]')
     const handle = wrapper.get('.resize-handle-right')
 
     await handle.trigger('pointerdown', { pointerId: 1, clientX: 500, clientY: 300, button: 0 })
-    // pointerdown 同步阶段即进入自定义拉伸：卡片带 custom-resizing（像素盒在首个 pointermove 应用）
+    // pointerdown 同步阶段即进入自定义拉伸；真实列宽由舞台 1440px / 24 列计算
     expect(card.classes()).toContain('custom-resizing')
 
-    // 拖动中：像素级预览跟随鼠标（width 变化），但不触发 update-layout（不触碰网格）
-    // jsdom 无真实网格宽度：columnStep 退化 1px、GAP=12 → 基准宽 max(1, 4*1-12)=1 → 1+60=61px
+    // 60px 指针位移小于一个列宽，宽度也应按像素比例连续变化，不应整列跳宽
     document.dispatchEvent(pointerMove(560, 300))
     await afterFrame()
     const moveStyle = card.attributes('style') ?? ''
-    expect(moveStyle).toContain('width: 61px')
+    expect(moveStyle).toContain('width: 286px')
     expect(moveStyle).toContain('margin-left: 0px')
     expect(wrapper.emitted('update-layout')).toBeUndefined()
 
-    // 松手：吸附到栅格并提交布局（jsdom 无真实网格尺寸，列步长退化为 1px，60px 位移吸附到 24 列上限）
+    // 松手保留同一个小数列宽；不会回跳到整数列
     document.dispatchEvent(pointerUp(560, 300))
     await nextTick()
     expect(card.classes()).not.toContain('custom-resizing')
-    expect(wrapper.emitted('update-layout')?.at(-1)?.[0]).toEqual([{ id: 'kpi-1', x: 0, y: 0, w: 24, h: 3 }])
+    const updated = wrapper.emitted('update-layout')?.at(-1)?.[0] as Array<{ w: number }>
+    expect(updated[0].w).toBeGreaterThan(5)
+    expect(updated[0].w).toBeLessThan(5.1)
   })
 
-  it('previews top-edge resizing with a negative top margin and restores it on pointerup', async () => {
+  it('previews top-edge resizing with a negative top margin from the snapped rows', async () => {
     const wrapper = mount(DashboardCanvas, {
-      props: { components: [component], editable: true },
+      props: {
+        components: [{ ...component, position: { ...component.position, y: 1 } }],
+        editable: true,
+      },
       global: { stubs, plugins: [i18n] },
     })
     const card = wrapper.get('[data-component-id="kpi-1"]')
     const handle = wrapper.get('.resize-handle-top')
 
     await handle.trigger('pointerdown', { pointerId: 1, clientX: 300, clientY: 500, button: 0 })
+    // jsdom rowStep=max(1,30+12)=42：-60px → 上移 1 行 → y:1→0、h:3→4 → margin-top=(0-1)*42=-42px
     document.dispatchEvent(pointerMove(300, 440))
     await afterFrame()
     const moveStyle = card.attributes('style') ?? ''
-    expect(moveStyle).toContain('margin-top: -60px')
+    expect(moveStyle).toContain('margin-top: -42px')
+    expect(moveStyle).toContain('height: 156px')
 
     document.dispatchEvent(pointerUp(300, 440))
     await nextTick()
     expect(card.classes()).not.toContain('custom-resizing')
+    expect(wrapper.emitted('update-layout')?.at(-1)?.[0]).toEqual([{ id: 'kpi-1', x: 0, y: 0, w: 4, h: 4 }])
   })
 
   it('starts at 100 percent and applies manually entered zoom', async () => {

@@ -82,6 +82,24 @@ class InsightDashboardSchemaDTOTest {
         assertTrue(written.contains("\"managedCode\":\"orders = custom_read()\""));
     }
 
+    @Test
+    void positionRoundTripsFractionalHorizontalResizeCoordinates() throws Exception {
+        String json = """
+                {"version":"1.1","pages":[{"id":"page-1","components":[{
+                  "id":"kpi-1","type":"kpi","title":"订单数",
+                  "position":{"x":1.375,"y":2,"w":6.625,"h":4}
+                }]}]}
+                """;
+
+        ObjectMapper mapper = new ObjectMapper();
+        InsightDashboardSchemaDTO schema = mapper.readValue(json, InsightDashboardSchemaDTO.class);
+        JsonNode roundTrip = mapper.readTree(mapper.writeValueAsString(schema));
+        JsonNode position = roundTrip.at("/pages/0/components/0/position");
+
+        assertEquals(1.375, position.get("x").asDouble());
+        assertEquals(6.625, position.get("w").asDouble());
+    }
+
     /**
      * KPI 指标分组防丢测试：复制组件 / AI 修改会把 schema_json 反序列化为 DTO 再序列化，
      * kpiMetrics 必须在 roundtrip 后逐字段保留（含嵌套 styles 与小数布局坐标）。

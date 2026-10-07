@@ -1222,7 +1222,7 @@ export type ChartType =
   | 'sunburst' | 'parallel' | 'gauge' | 'funnel'
   | 'sankey' | 'themeRiver' | 'pictorialBar'
 
-/** 栅格位置（grid-layout-plus 坐标系） */
+/** 栅格位置（grid-layout-plus 坐标系）；横向缩放可使用小数列，保存手动连续宽度。 */
 export interface ComponentPosition {
   x: number
   y: number

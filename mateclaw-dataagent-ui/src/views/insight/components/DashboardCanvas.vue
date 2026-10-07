@@ -1176,15 +1176,50 @@ onBeforeUnmount(() => {
   unbindPointerDragListeners()
   previewResizeObserver?.disconnect()
   previewResizeObserver = null
+  autoFitObserver?.disconnect()
+  autoFitObserver = null
 })
+
+/** 编辑态自动适配：只在进入编辑器后执行一次，之后用户手动缩放不被覆盖。 */
+let autoFitDone = false
+let autoFitObserver: ResizeObserver | null = null
+
+/**
+ * 舞台固定 1440px 宽，可视区更窄时卡片右缘会伸进属性面板覆盖区，
+ * 右缘/底缘把手被面板拦截导致「拖不动、跳动」。有组件且可用宽不足时
+ * 自动缩小到适配比例（等价于点一次「适配」），保证把手始终可命中。
+ */
+function tryAutoFitOnce(): void {
+  if (autoFitDone || !props.editable || gridLayout.value.length === 0) return
+  const canvas = canvasRef.value
+  if (!canvas) return
+  autoFitDone = true
+  autoFitObserver?.disconnect()
+  autoFitObserver = null
+  const styles = getComputedStyle(canvas)
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  const availableWidth = canvas.clientWidth - horizontalPadding
+  if (availableWidth > 0 && availableWidth < DASHBOARD_CANVAS_MIN_WIDTH && canvasZoom.value === 1) {
+    setCanvasZoom(availableWidth / DASHBOARD_CANVAS_MIN_WIDTH)
+  }
+}
 
 /** 预览态：观察画布根元素尺寸变化（窗口缩放、侧栏收起等），实时重算等比缩放。 */
 onMounted(() => {
-  if (props.editable) return
-  updatePreviewFit()
-  if (canvasRef.value && typeof ResizeObserver !== 'undefined') {
-    previewResizeObserver = new ResizeObserver(updatePreviewFit)
-    previewResizeObserver.observe(canvasRef.value)
+  if (!props.editable) {
+    updatePreviewFit()
+    if (canvasRef.value && typeof ResizeObserver !== 'undefined') {
+      previewResizeObserver = new ResizeObserver(updatePreviewFit)
+      previewResizeObserver.observe(canvasRef.value)
+    }
+    return
+  }
+  // 布局多为异步载入：监听舞台出现首张卡片后执行一次自动适配
+  nextTick(() => tryAutoFitOnce())
+  watch(() => gridLayout.value.length, () => nextTick(() => tryAutoFitOnce()))
+  if (typeof ResizeObserver !== 'undefined') {
+    autoFitObserver = new ResizeObserver(() => nextTick(() => tryAutoFitOnce()))
+    if (canvasRef.value) autoFitObserver.observe(canvasRef.value)
   }
 })
 
@@ -1336,7 +1371,7 @@ const resizingItem = ref<{
 const isCustomResizing = ref(false)
 let resizeRaf = 0
 let resizeLastPoint: { x: number; y: number } | null = null
-/** 拖拽中的像素级预览样式：直接作用于卡片 DOM，不触碰网格布局，松手时一次性吸附提交。 */
+/** 拖拽中的连续尺寸预览：布局栅格坐标保留小数，预览与持久化使用相同几何。 */
 const resizePreviewStyle = ref<Record<string, string> | null>(null)
 
 function readGridResizeMetrics(): GridResizeMetrics {
@@ -1387,7 +1422,7 @@ function applyResizePoint(point: { x: number; y: number }): void {
   if (item) Object.assign(item, { x: result.newX, y: result.newY, w: result.newW, h: result.newH })
 }
 
-/** 拖动中：像素级预览跟随鼠标（不触碰网格布局，避免库内碰撞重排引起跳动），合并到下一帧执行。 */
+/** 拖动中：按指针连续更新宽度；仅垂直方向仍按行吸附，松手提交与预览同一几何。 */
 function handleResizeMove(event: PointerEvent): void {
   if (!resizingItem.value || event.pointerId !== resizingItem.value.pointerId) return
   event.preventDefault()
@@ -1401,6 +1436,8 @@ function handleResizeMove(event: PointerEvent): void {
         edge: start.edge,
         startW: start.startW,
         startH: start.startH,
+        startXPos: start.startXPos,
+        startYPos: start.startYPos,
         dx: (resizeLastPoint.x - start.startX) / canvasZoom.value,
         dy: (resizeLastPoint.y - start.startY) / canvasZoom.value,
       }, start.metrics)
@@ -1415,7 +1452,7 @@ function handleResizeEnd(event?: PointerEvent): void {
     cancelAnimationFrame(resizeRaf)
     resizeRaf = 0
   }
-  // 撤销像素预览，按最终鼠标位置吸附到栅格，一次性写入布局并提交
+  // 清除预览前按最终鼠标位置写入布局；横向小数列宽保证预览与最终盒子一致
   resizePreviewStyle.value = null
   if (resizeLastPoint) applyResizePoint(resizeLastPoint)
   if (resizingItem.value) {
