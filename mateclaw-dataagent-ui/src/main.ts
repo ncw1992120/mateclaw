@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
@@ -12,13 +11,14 @@ import './assets/dashboard-design.css'
 import './assets/insight-title-bar.css'
 import { useThemeStore } from '@/stores/useThemeStore'
 import { permissionDirective } from '@/directives/permission'
+import { elementPlusConfig } from './element-plus-config'
 
 const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
+app.use(ElementPlus, elementPlusConfig)
 app.use(i18n)
 
 // 注册全局权限指令 v-permission
