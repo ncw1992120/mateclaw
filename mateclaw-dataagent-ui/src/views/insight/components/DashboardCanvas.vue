@@ -253,6 +253,7 @@
                 :component-data-map="componentDataMapWithFieldLabels"
                 :runtime-filter-state="runtimeFilterState"
                 :editable="editable"
+                :container-resizing="resizingItem?.id === item.i"
                 :preview-fill-width="!editable && previewFillWidth"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"

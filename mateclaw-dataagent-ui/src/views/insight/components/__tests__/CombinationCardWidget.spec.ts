@@ -48,6 +48,22 @@ const nestedCombination = {
 }
 
 describe('CombinationCardWidget', () => {
+  it('keeps child wrappers clipped by the combination card boundary', () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'overflow-combo', type: 'combination', title: '组合卡片',
+          children: [{ ...nestedCombination, layout: { x: 240, y: 180, col: 6, h: 120 } }],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: { plugins: [i18n], stubs: { CombinationCardWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true } },
+    })
+
+    expect(wrapper.get('.combination-card').classes()).not.toContain('free-layout')
+    expect(wrapper.get('[data-child="nested-combination"] .cc-child-body').classes()).not.toContain('is-combination')
+  })
+
   it('renders nested query failures locally and bubbles retry for that child', async () => {
     const wrapper = mount(CombinationCardWidget, {
       props: {

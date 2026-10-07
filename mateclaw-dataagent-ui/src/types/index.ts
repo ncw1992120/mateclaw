@@ -1408,8 +1408,10 @@ export interface CombinationChildLayout {
   x: number
   /** 距内容区顶部 px */
   y: number
-  /** 宽度列数（1~12，渲染为百分比宽） */
+  /** 宽度列数（1~12）；未固定宽度时按百分比渲染。 */
   col: number
+  /** 外层组合卡片缩放后固定子卡片宽度（px）；缺省时按 col 百分比渲染。 */
+  widthPx?: number
   /** 高度 px（可选，缺省由内容自适应） */
   h?: number
 }

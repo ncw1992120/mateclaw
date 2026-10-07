@@ -72,6 +72,25 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.get('.grid-item-toolbar').classes()).toContain('title-bar-accent')
   })
 
+  it('keeps combination content clipped to the resized outer card', () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [{
+          ...component,
+          id: 'combo-1',
+          type: 'combination' as const,
+          containerConfig: { layoutMode: 'free' as const, tabs: [] },
+          children: [],
+        }],
+        editable: true,
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('[data-component-id="combo-1"]').classes()).not.toContain('has-combination-widget')
+    expect(wrapper.get('[data-component-id="combo-1"] .grid-item-body').classes()).not.toContain('has-combination-widget')
+  })
+
   it('renders default component sample data with a visible watermark until a dataset is configured', () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true },

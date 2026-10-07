@@ -227,6 +227,7 @@
             :component-data-map="componentDataMap"
             :runtime-filter-state="runtimeFilterState"
             :editable="editable"
+            :container-resizing="resizingId === child.id"
             :selected="selectedChildId === child.id"
             :drop-hint="dropHint"
             :dashboard-theme="dashboardTheme"
@@ -326,6 +327,8 @@ const props = withDefaults(
     selected?: boolean
     /** 预览画布启用自适应宽度时，按组合卡片内宽比例映射自由布局子组件的位置。 */
     previewFillWidth?: boolean
+    /** 外层正在缩放此组合卡片；期间冻结子组件像素宽度。 */
+    containerResizing?: boolean
     /** 画布正在拖动顶层组件：组合卡片显示可放置提示 */
     dropHint?: boolean
     dashboardTheme?: ResolvedDashboardTheme
@@ -333,7 +336,7 @@ const props = withDefaults(
     componentTitleIconStylePreview?: ComponentTitleIconStyle
     tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
   }>(),
-  { editable: false, selected: false, previewFillWidth: false },
+  { editable: false, selected: false, previewFillWidth: false, containerResizing: false },
 )
 
 const emit = defineEmits<{
@@ -365,6 +368,34 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const ccBodyRef = ref<HTMLElement | null>(null)
+const childWidthsBeforeContainerResize = new Map<string, number>()
+let containerResizeStartWidth: number | undefined
+
+watch(() => props.containerResizing, (resizing, wasResizing) => {
+  const body = ccBodyRef.value
+  if (resizing) {
+    containerResizeStartWidth = props.component.position?.w
+    childWidthsBeforeContainerResize.clear()
+    if (cfg.value.layoutMode !== 'free') return
+    for (const child of activeChildren.value) {
+      const el = body?.querySelector<HTMLElement>(`[data-child="${child.id}"]`)
+      const width = el?.offsetWidth ?? 0
+      if (width > 0) childWidthsBeforeContainerResize.set(child.id, width)
+    }
+    return
+  }
+  if (!wasResizing) return
+  const widthChanged = containerResizeStartWidth !== undefined
+    && props.component.position?.w !== containerResizeStartWidth
+  if (cfg.value.layoutMode === 'free' && widthChanged) {
+    for (const child of activeChildren.value) {
+      const width = childWidthsBeforeContainerResize.get(child.id)
+      if (width && child.layout.widthPx !== width) child.layout.widthPx = width
+    }
+  }
+  childWidthsBeforeContainerResize.clear()
+  containerResizeStartWidth = undefined
+}, { flush: 'sync' })
 
 // ── 预览态「自适应宽度」：free 子卡片横向坐标按「当前内宽 / 基准内宽」等比映射 ──
 // 基准内宽在挂载时捕获（预览默认 100% 模式 = 编辑器同款 1440 舞台，与保存布局时的
@@ -425,7 +456,7 @@ const resizingId = ref<string | null>(null)
  * 会被重渲染冲回旧绑定值（如 hover 邻卡触发重渲染时），表现为拖动中盒子回缩跳动；
  * 让绑定本身渲染预览值即可从根上消除这一竞争，松手写回 layout 后数值不变、零跳变。
  */
-const childPreview = ref<{ id: string; x: number; y: number; col: number; h: number } | null>(null)
+const childPreview = ref<{ id: string; x: number; y: number; col: number; h: number; widthPx?: number } | null>(null)
 const editingTab = ref<string | null>(null)
 const editingTabTitle = ref('')
 const tabEditInput = ref<HTMLInputElement | null>(null)
@@ -588,7 +619,10 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
   const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup, child.componentColor)
   if (cfg.value.layoutMode === 'free') {
-    const l = childPreview.value && childPreview.value.id === child.id ? childPreview.value : child.layout
+    const l = childPreview.value && childPreview.value.id === child.id
+      ? { ...child.layout, ...childPreview.value }
+      : child.layout
+    const widthPx = l.widthPx ?? (props.containerResizing ? childWidthsBeforeContainerResize.get(child.id) : undefined)
     return {
       ...themeStyle,
       ...visualStyle,
@@ -597,7 +631,9 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
       // 纵向 top/height 不映射，保证加宽后纵向布局不变、不重叠交错。
       left: `calc(${l.x}px * var(--cc-h-scale, 1))`,
       top: l.y + 'px',
-      width: `calc(${l.col} / 12 * 100%)`,
+      width: widthPx
+        ? `${widthPx * (props.previewFillWidth ? ccHScale.value : 1)}px`
+        : `calc(${l.col} / 12 * 100%)`,
       ...(l.h != null ? { height: l.h + 'px' } : {}),
     }
   }
@@ -890,7 +926,11 @@ function onChildResizeMove(e: MouseEvent) {
     if (!rz || !rzLast) return
     // 拖动预览与松手落格同用吸附结果（snap=true）且都渲染自绑定：所见即所得，松手零跳变
     const box = computeResize(rz, rzLast, false)
-    childPreview.value = { id: rz.id, x: box.x, y: box.y, col: box.col, h: box.h }
+    const resizedChild = getActiveChildren().find((child) => child.id === rz!.id)
+    childPreview.value = {
+      id: rz.id, x: box.x, y: box.y, col: box.col, h: box.h,
+      ...(resizedChild?.layout.widthPx != null ? { widthPx: box.col * rz.colW } : {}),
+    }
   })
 }
 function onChildResizeUp() {
@@ -903,6 +943,7 @@ function onChildResizeUp() {
       child.layout.y = box.y
       child.layout.col = box.col
       child.layout.h = box.h
+      if (child.layout.widthPx != null) child.layout.widthPx = box.col * rz.colW
     }
   }
   rz = null
