@@ -39,7 +39,7 @@ function mountDialog() {
           props: ['modelValue', 'size', 'clearable'],
           template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
-        'el-dialog': { template: '<div><slot /><slot name="footer" /></div>' },
+        'el-dialog': { template: '<div data-testid="dialog" v-bind="$attrs"><slot /><slot name="footer" /></div>' },
         'el-switch': { template: '<button type="button"><slot /></button>' },
         'el-icon': { template: '<span><slot /></span>' },
         'el-input-number': { template: '<span />' },
@@ -90,6 +90,12 @@ beforeEach(() => {
 })
 
 describe('MetricStyleDialog shared color fields', () => {
+  it('renders the style dialog under document body to escape canvas stacking contexts', () => {
+    const wrapper = mountDialog()
+
+    expect(wrapper.get('[data-testid="dialog"]').attributes()).toHaveProperty('append-to-body', '')
+  })
+
   it('edits display name, unit and helper text from the style dialog', async () => {
     const wrapper = mountDialog()
     const metric = insightFixture.value.state.kpiMetrics[0]

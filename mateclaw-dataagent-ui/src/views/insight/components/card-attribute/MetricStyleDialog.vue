@@ -2,6 +2,7 @@
   <el-dialog
     v-model="ui.metricStyle.visible"
     class="insight-dialog--md"
+    append-to-body
     :title="`字段样式 · ${metric ? metric.displayName || metric.fieldKey : ''}`"
     width="420px"
     destroy-on-close
