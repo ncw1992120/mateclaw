@@ -7,6 +7,7 @@
     :style="{ marginLeft: left }"
     :draggable="draggable"
     :close-on-click-modal="false"
+    append-to-body
     @update:model-value="handleVisibilityChange"
   >
     <section class="icon-style-section" aria-labelledby="title-icon-choice-label">

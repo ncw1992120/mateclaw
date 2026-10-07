@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.metricConfig.visible" class="insight-dialog--lg" title="指标配置" width="920px" destroy-on-close :close-on-click-modal="false" aria-label="指标配置">
+  <el-dialog v-model="ui.metricConfig.visible" class="insight-dialog--lg" title="指标配置" width="920px" append-to-body destroy-on-close :close-on-click-modal="false" aria-label="指标配置">
     <div class="mc-body">
       <template v-if="metrics.length">
         <div class="mc-head">

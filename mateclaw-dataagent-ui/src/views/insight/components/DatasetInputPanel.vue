@@ -116,13 +116,13 @@
         </div>
         <div v-else-if="sourceType(input) === 'HTTP_API' || sourceType(input) === 'FILE'" class="source-config-block unified-source-hint">接口/文件数据集使用已创建的数据集；本页负责选择、字段预览和筛选，不直接访问外部地址。</div>
         <div class="dataset-card-actions"><el-button text size="small" @click="toggleMapping(index)">字段名称</el-button><el-button text size="small" @click="toggleFilters(index)">筛选预览</el-button></div>
-        <el-dialog v-model="mappingOpen[index]" title="修改字段名称" width="520px" aria-label="字段映射编辑器">
+        <el-dialog v-model="mappingOpen[index]" title="修改字段名称" width="520px" append-to-body aria-label="字段映射编辑器">
           <div class="inline-editor-title">字段映射（原字段 → 目标字段）</div>
           <div v-for="column in descriptors[input.datasetId]?.schema || []" :key="column.name" class="mapping-row"><span>{{ column.name }}</span><input :value="mappingTarget(index, input, column.name)" :aria-label="`${column.name} 目标字段`" placeholder="目标字段" @input="updateMapping(index, column.name, ($event.target as HTMLInputElement).value)" /></div>
           <span v-if="!descriptors[input.datasetId]?.schema?.length" class="form-hint">先点击“查看字段”获取字段结构。</span>
           <template #footer><el-button @click="cancelMapping(index)">取消</el-button><el-button type="primary" @click="commitMapping(index)">确定</el-button></template>
         </el-dialog>
-        <el-dialog v-model="filtersOpen[index]" title="输入筛选" width="520px" aria-label="输入筛选编辑器">
+        <el-dialog v-model="filtersOpen[index]" title="输入筛选" width="520px" append-to-body aria-label="输入筛选编辑器">
           <div class="inline-editor-title">输入筛选（在源数据查询阶段执行）</div>
           <div v-for="(filter, filterIndex) in (filterDrafts[index] || input.filters || [])" :key="`${filter.field}-${filterIndex}`" class="filter-row"><input :value="filter.field" aria-label="筛选字段" placeholder="字段" @input="updateFilter(index, filterIndex, { field: ($event.target as HTMLInputElement).value })" /><select :value="filter.operator" aria-label="筛选操作符" @change="updateFilter(index, filterIndex, { operator: ($event.target as HTMLSelectElement).value as any })"><option value="eq">等于</option><option value="in">包含</option><option value="between">范围</option></select><input :value="String(filter.value ?? '')" aria-label="筛选值" placeholder="筛选值" @input="updateFilter(index, filterIndex, { value: ($event.target as HTMLInputElement).value })" /></div>
           <el-button text size="small" @click="addFilter(index)">添加筛选条件</el-button>

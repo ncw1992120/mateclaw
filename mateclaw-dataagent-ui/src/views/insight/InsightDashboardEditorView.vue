@@ -333,6 +333,7 @@
         v-model="showAiChat"
         direction="rtl"
         size="400px"
+        append-to-body
         :with-header="false"
         class="ai-drawer-overlay"
       >

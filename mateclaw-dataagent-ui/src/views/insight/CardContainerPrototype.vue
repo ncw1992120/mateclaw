@@ -813,7 +813,7 @@ function chartSvg(d: any): string {
     </div>
 
     <!-- 添加组件弹窗 -->
-    <el-dialog v-model="showAdd" title="添加到：组合卡片 / 页签" width="440px">
+    <el-dialog v-model="showAdd" title="添加到：组合卡片 / 页签" width="440px" append-to-body>
       <div class="picker-group"><div class="pg-title">数据展示</div>
         <div class="picker-grid">
           <div class="picker-item" @click="addChild('kpi')"><span class="pi">📊</span>KPI 卡片</div>

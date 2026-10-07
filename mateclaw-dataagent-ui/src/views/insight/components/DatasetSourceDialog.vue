@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="title" :width="draft.sourceType === 'ALOUDATA_METRICS' ? 'min(920px, calc(100vw - 32px))' : '560px'" aria-label="配置数据集来源" @close="cancel">
+  <el-dialog v-model="visible" :title="title" :width="draft.sourceType === 'ALOUDATA_METRICS' ? 'min(920px, calc(100vw - 32px))' : '560px'" append-to-body aria-label="配置数据集来源" @close="cancel">
     <div v-if="activeView === 'config'" class="source-dialog-body">
       <template v-if="draft.sourceType === 'JDBC_SQL'">
         <div class="source-caption">JDBC · {{ draft.datasourceName || draft.datasourceId }}</div>

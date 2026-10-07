@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.aloudata.visible" :title="aloudataTitle" width="920px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.aloudata.visible" :title="aloudataTitle" width="920px" append-to-body :close-on-click-modal="false">
     <template v-if="ui.aloudata.mode === 'metric-dim'">
       <el-alert
         v-if="!datasourceId"

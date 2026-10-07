@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.file.visible" :title="`配置文件（${ui.file.fileType}）`" width="700px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.file.visible" :title="`配置文件（${ui.file.fileType}）`" width="700px" append-to-body :close-on-click-modal="false">
     <p class="hint">仅支持 Excel / CSV / TXT / JSON / Parquet。文件先上传到临时对象存储，再识别类型并预览内容（适配 macOS / Windows）。</p>
 
     <el-button size="small" :loading="uploading" @click="pickFile">选择文件</el-button>

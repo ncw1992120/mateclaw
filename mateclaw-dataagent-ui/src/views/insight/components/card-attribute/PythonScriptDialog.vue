@@ -6,6 +6,7 @@
     title="展开编辑 · Python"
     width="min(1040px, calc(100vw - 32px))"
     top="4vh"
+    append-to-body
     destroy-on-close
     :close-on-click-modal="false"
     aria-label="展开编辑 Python 脚本"

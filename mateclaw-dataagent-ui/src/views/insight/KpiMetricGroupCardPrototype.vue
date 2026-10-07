@@ -549,7 +549,7 @@ function togglePreview() {
     </div>
 
     <!-- 指标基础属性弹窗（§5.5 仅字体大小，R2） -->
-    <el-dialog v-model="showBaseAttr" title="指标基础属性" width="360px">
+    <el-dialog v-model="showBaseAttr" title="指标基础属性" width="360px" append-to-body>
       <div class="base-attr">
         <div class="edit-row">
           <label>指标值字号</label>
@@ -572,7 +572,7 @@ function togglePreview() {
     </el-dialog>
 
     <!-- 批量设置弹窗（§5.6 R9） -->
-    <el-dialog v-model="showBatch" title="批量设置单位 / 格式" width="360px">
+    <el-dialog v-model="showBatch" title="批量设置单位 / 格式" width="360px" append-to-body>
       <div class="base-attr">
         <div class="edit-row">
           <label>单位</label>

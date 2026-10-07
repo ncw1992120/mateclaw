@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.jdbc.visible" title="输入 SQL" width="680px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.jdbc.visible" title="输入 SQL" width="680px" append-to-body :close-on-click-modal="false">
     <p class="hint">
       只允许 <code>SELECT</code> / <code>WITH</code> 只读查询；参数使用绑定方式（<code>:param</code>），不强制包含 WHERE；写入/多语句/危险函数由后端拒绝。
     </p>

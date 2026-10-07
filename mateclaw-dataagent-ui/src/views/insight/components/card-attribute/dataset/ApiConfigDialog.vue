@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.api.visible" title="配置接口" width="560px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.api.visible" title="配置接口" width="560px" append-to-body :close-on-click-modal="false">
     <el-form label-width="80px" class="api-form">
       <el-form-item label="Host">
         <el-input v-model="ui.api.host" placeholder="https://..." />

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="ui.treeVisible" title="添加数据集" width="440px" :close-on-click-modal="false">
+  <el-dialog v-model="ui.treeVisible" title="添加数据集" width="440px" append-to-body :close-on-click-modal="false">
     <!-- 搜索框只存在于数据源选择树中（文档 10.3 / 11.3） -->
     <el-input
       v-model="search"

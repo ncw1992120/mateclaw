@@ -4,6 +4,7 @@
     class="insight-dialog--lg"
     title="查询配置"
     width="860px"
+    append-to-body
     destroy-on-close
     :close-on-click-modal="false"
     aria-label="查询配置"

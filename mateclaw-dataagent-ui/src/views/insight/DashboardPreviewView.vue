@@ -140,6 +140,7 @@
       v-model="reportDrawerVisible"
       direction="rtl"
       size="50%"
+      append-to-body
       :close-on-press-escape="true"
       class="report-detail-drawer"
       @close="handleReportDrawerClose"

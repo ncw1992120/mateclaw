@@ -5,6 +5,7 @@
     title="查看数据 · Python 最终结果"
     width="1020px"
     top="5vh"
+    append-to-body
     :close-on-click-modal="false"
   >
     <div class="dd-body">
