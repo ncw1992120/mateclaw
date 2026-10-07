@@ -106,14 +106,14 @@ describe('KpiCardWidget · 画布指标编辑', () => {
     wrapper.unmount()
   })
 
-  it('画布缩放时按逻辑像素提交拖动后的指标位置', async () => {
+  it.each([0.4, 0.75, 1, 1.2])('画布缩放为 %s 时按逻辑像素提交拖动后的指标位置', async (scale) => {
     const source = metric('revenue', 10, 20)
     const { component, wrapper } = mountWidget([source])
     const group = wrapper.get('.kpi-metric-group').element as HTMLElement
     Object.defineProperties(group, {
       offsetWidth: { value: 500 },
       offsetHeight: { value: 300 },
-      getBoundingClientRect: { value: () => ({ width: 200, height: 120 }) },
+      getBoundingClientRect: { value: () => ({ width: 500 * scale, height: 300 * scale }) },
     })
     const item = wrapper.get('[data-metric="revenue"]').element as HTMLElement
     Object.defineProperties(item, {
@@ -122,12 +122,38 @@ describe('KpiCardWidget · 画布指标编辑', () => {
     })
 
     item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 20 }))
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 24, clientY: 32 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 10 + 35 * scale, clientY: 20 + 30 * scale }))
     window.dispatchEvent(new MouseEvent('mouseup'))
     await nextTick()
 
     expect(component.kpiMetrics?.[0]).toMatchObject({ x: 45, y: 50 })
     expect(wrapper.get('[data-metric="revenue"]').attributes('style')).toContain('left: 45px; top: 50px;')
+    wrapper.unmount()
+  })
+
+  it('拖动结果集投影指标时向父级发出配置更新，避免临时投影重渲染后位置回退', async () => {
+    const source = metric('revenue', 10, 20)
+    const projected = { ...({ id: 'kpi-card', type: 'kpi', title: '指标卡片', position: { x: 0, y: 0, w: 6, h: 4 } } as InsightComponent), kpiMetrics: [{ ...source }] }
+    const wrapper = mount(KpiCardWidget, {
+      props: { component: projected, editable: true },
+      global: { plugins: [i18n], stubs: { 'el-icon': true, 'el-date-picker': true } },
+    })
+    const group = wrapper.get('.kpi-metric-group').element as HTMLElement
+    Object.defineProperties(group, {
+      offsetWidth: { value: 500 },
+      offsetHeight: { value: 300 },
+      getBoundingClientRect: { value: () => ({ width: 500, height: 300 }) },
+    })
+    const item = wrapper.get('[data-metric="revenue"]').element as HTMLElement
+    Object.defineProperties(item, { offsetWidth: { value: 160 }, offsetHeight: { value: 80 } })
+
+    item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 20 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 45, clientY: 58 }))
+    window.dispatchEvent(new MouseEvent('mouseup'))
+
+    expect(wrapper.emitted('metric-layout-change')?.[0]?.[0]).toEqual({
+      componentId: 'kpi-card', fieldKey: 'revenue', x: 45, y: 58, w: 160, h: 80,
+    })
     wrapper.unmount()
   })
 

@@ -341,6 +341,47 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect((zoomInput.element as HTMLInputElement).value).toBe('75')
   })
 
+  it('画布较窄时进入编辑页仍保持默认 100% 缩放', async () => {
+    const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('dashboard-canvas') ? 600 : 0
+    })
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      attachTo: document.body,
+      global: { stubs, plugins: [i18n] },
+    })
+    await nextTick()
+    await nextTick()
+
+    expect((wrapper.get('input[aria-label="画布缩放百分比"]').element as HTMLInputElement).value).toBe('100')
+    expect(wrapper.get('.canvas-grid-stage').attributes('style')).toContain('zoom: 1')
+    wrapper.unmount()
+    clientWidth.mockRestore()
+  })
+
+  it('将 KPI 指标布局更新事件转发给仪表盘编辑器', async () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [component], editable: true },
+      global: {
+        stubs: {
+          ...stubs,
+          KpiCardWidget: {
+            name: 'KpiCardWidget',
+            emits: ['metric-layout-change'],
+            template: '<button data-testid="emit-metric-layout" @click="$emit(\'metric-layout-change\', { componentId: \'kpi-1\', fieldKey: \'revenue\', x: 45, y: 58, w: 160, h: 80 })">move</button>',
+          },
+        },
+        plugins: [i18n],
+      },
+    })
+
+    await wrapper.get('[data-testid="emit-metric-layout"]').trigger('click')
+
+    expect(wrapper.emitted('metric-layout-change')?.[0]?.[0]).toEqual({
+      componentId: 'kpi-1', fieldKey: 'revenue', x: 45, y: 58, w: 160, h: 80,
+    })
+  })
+
   it('hides the canvas zoom toolbar while a modal overlay is open, then restores it', async () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true },

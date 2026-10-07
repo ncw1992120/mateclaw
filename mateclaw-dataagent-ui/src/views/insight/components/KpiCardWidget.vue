@@ -170,6 +170,7 @@ const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   /** 打开某指标的字段样式弹窗（默认定位到「指标值」字段） */
   (e: 'open-metric-style', payload: { componentId: string; fieldKey: string; field: KpiMetricField }): void
+  (e: 'metric-layout-change', payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
@@ -394,10 +395,13 @@ function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
     apply: (p) => applyCss(el, p),
     commit: (p) => {
       const m = (props.component.kpiMetrics ?? []).find((x) => x.fieldKey === metric.fieldKey)
+      const x = parseInt(p.left, 10)
+      const y = parseInt(p.top, 10)
       if (m) {
-        m.x = parseInt(p.left, 10)
-        m.y = parseInt(p.top, 10)
+        m.x = x
+        m.y = y
       }
+      emit('metric-layout-change', { componentId: props.component.id, fieldKey: metric.fieldKey, x, y, w: metric.w, h: metric.h })
       // 保留内联值而非 removeProperty：纯点击未拖动时，Vue 不会重发未变化的 style，
       // 移除内联值会瞬间丢失定位。
       applyCss(el, p)
@@ -458,12 +462,17 @@ function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string)
     apply: (p) => applyCss(el, p),
     commit: (p) => {
       const m = (props.component.kpiMetrics ?? []).find((x) => x.fieldKey === metric.fieldKey)
+      const x = parseInt(p.left, 10)
+      const y = parseInt(p.top, 10)
+      const w = parseInt(p.width, 10)
+      const h = parseInt(p.height, 10)
       if (m) {
-        m.x = parseInt(p.left, 10)
-        m.y = parseInt(p.top, 10)
-        m.w = parseInt(p.width, 10)
-        m.h = parseInt(p.height, 10)
+        m.x = x
+        m.y = y
+        m.w = w
+        m.h = h
       }
+      emit('metric-layout-change', { componentId: props.component.id, fieldKey: metric.fieldKey, x, y, w, h })
       applyCss(el, p)
     },
   })

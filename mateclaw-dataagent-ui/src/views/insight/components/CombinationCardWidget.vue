@@ -174,6 +174,7 @@
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
             @open-metric-style="(payload) => emit('open-metric-style', { ...payload, containerId: component.id, childId: child.id })"
+            @metric-layout-change="(payload) => emit('metric-layout-change', payload)"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
           />
           <ChartWidget
@@ -249,6 +250,7 @@
             @context-menu="(payload) => emit('context-menu', payload)"
             @edit-child-title-icon-style="(payload) => emit('edit-child-title-icon-style', payload)"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
+            @metric-layout-change="(payload) => emit('metric-layout-change', payload)"
           />
         </div>
 
@@ -363,6 +365,7 @@ const emit = defineEmits<{
   (e: 'context-menu', payload: { containerId: string; childId: string; x: number; y: number }): void
   (e: 'edit-child-title-icon-style', payload: { containerId: string; childId: string; anchor?: HTMLElement }): void
   (e: 'open-metric-style', payload: { containerId: string; childId: string; fieldKey: string; field: string }): void
+  (e: 'metric-layout-change', payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; anchor: HTMLElement }): void
   /** 筛选事件需要携带实际子组件 ID，才能命中组件的数据集绑定。 */
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void

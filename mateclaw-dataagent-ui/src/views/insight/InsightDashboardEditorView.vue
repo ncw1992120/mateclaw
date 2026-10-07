@@ -209,6 +209,7 @@
           @paste-component="handlePasteComponent"
           @context-menu="handleComponentContextMenu"
           @open-metric-style="handleOpenMetricStyle"
+          @metric-layout-change="handleMetricLayoutChange"
           @update-title-icon-style="handleCanvasTitleIconStyleUpdate"
           @update-child-title-icon-style="handleCanvasChildTitleIconStyleUpdate"
           @update-tab-title-icon-style="handleCanvasTabTitleIconStyleUpdate"
@@ -1205,6 +1206,27 @@ function handleOpenMetricStyle(payload: { componentId?: string; containerId?: st
     }
   })
 }
+/** KPI 渲染时可能使用结果字段投影副本；指标布局必须写回仪表盘原始组件配置。 */
+function handleMetricLayoutChange(payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void {
+  const findOwner = (items: Array<InsightComponent | InsightCombinationChild>): InsightComponent | InsightCombinationChild | undefined => {
+    for (const item of items) {
+      if (item.id === payload.componentId) return item
+      if (item.type !== 'combination') continue
+      const descendants = [
+        ...(item.children ?? []),
+        ...((item.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+      ]
+      const nested = findOwner(descendants)
+      if (nested) return nested
+    }
+    return undefined
+  }
+  const owner = findOwner(currentPageComponents.value)
+  const metric = owner?.kpiMetrics?.find((item) => item.fieldKey === payload.fieldKey)
+  if (!metric) return
+  Object.assign(metric, { x: payload.x, y: payload.y, w: payload.w, h: payload.h })
+}
+
 
 /** 画布内组合卡片子组件选中/取消（childId=null 表示回到容器） */
 function handleSelectChild(payload: { containerId: string; childId: string | null }): void {

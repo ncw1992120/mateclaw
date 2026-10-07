@@ -164,6 +164,41 @@ describe('CombinationCardWidget', () => {
     })
   })
 
+  it('bubbles nested KPI metric layout changes so projected child configuration can be persisted', async () => {
+    const metrics = [{
+      fieldKey: 'revenue', displayName: '收入', unit: '', helperText: '', visible: true,
+      x: 12, y: 18, w: 160, h: 80, styles: defaultMetricStyles(),
+    }]
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'combo', type: 'combination', title: '组合卡片',
+          children: [{ id: 'nested-kpi', type: 'kpi', title: '指标', kpiMetrics: metrics, layout: { x: 0, y: 0, col: 6, h: 120 } }],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: {
+            name: 'KpiCardWidget',
+            emits: ['metric-layout-change'],
+            template: '<button data-testid="move-nested-kpi" @click="$emit(\'metric-layout-change\', { componentId: \'nested-kpi\', fieldKey: \'revenue\', x: 45, y: 58, w: 160, h: 80 })">move</button>',
+          },
+          ChartWidget: true, DataTableWidget: true, FilterSelectWidget: true, TimeFilterWidget: true,
+          AiAnalysisWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="move-nested-kpi"]').trigger('click')
+
+    expect(wrapper.emitted('metric-layout-change')?.[0]?.[0]).toEqual({
+      componentId: 'nested-kpi', fieldKey: 'revenue', x: 45, y: 58, w: 160, h: 80,
+    })
+  })
+
   it('projects Python result fields for a nested KPI while preserving its configured metrics', () => {
     const configuredMetrics = [{
       fieldKey: 'old_metric', displayName: '旧指标', unit: '', helperText: '', visible: true,

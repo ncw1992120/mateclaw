@@ -192,6 +192,7 @@
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @open-metric-style="(payload) => emit('open-metric-style', payload)"
+                @metric-layout-change="(payload) => emit('metric-layout-change', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
@@ -276,6 +277,7 @@
                 @edit-child-title-icon-style="openChildTitleIconStyle"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
                 @open-metric-style="(p) => emit('open-metric-style', p)"
+                @metric-layout-change="(p) => emit('metric-layout-change', p)"
                 @filter-change="(payload) => emit('filter-change', payload)"
                 @time-filter-change="(payload) => emit('time-filter-change', payload)"
               />
@@ -567,6 +569,7 @@ const emit = defineEmits<{
   (e: 'retry-component-query', componentId: string): void
   (e: 'ai-analysis-generate', componentId: string): void
   (e: 'open-metric-style', payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void
+  (e: 'metric-layout-change', payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void
   (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
   (e: 'update-child-title-icon-style', payload: { containerId: string; childId: string; titleIconStyle: ComponentTitleIconStyle }): void
   (e: 'update-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; titleIconStyle: ComponentTitleIconStyle }): void
@@ -1185,33 +1188,7 @@ onBeforeUnmount(() => {
   unbindPointerDragListeners()
   previewResizeObserver?.disconnect()
   previewResizeObserver = null
-  autoFitObserver?.disconnect()
-  autoFitObserver = null
 })
-
-/** 编辑态自动适配：只在进入编辑器后执行一次，之后用户手动缩放不被覆盖。 */
-let autoFitDone = false
-let autoFitObserver: ResizeObserver | null = null
-
-/**
- * 舞台固定 1440px 宽，可视区更窄时卡片右缘会伸进属性面板覆盖区，
- * 右缘/底缘把手被面板拦截导致「拖不动、跳动」。有组件且可用宽不足时
- * 自动缩小到适配比例（等价于点一次「适配」），保证把手始终可命中。
- */
-function tryAutoFitOnce(): void {
-  if (autoFitDone || !props.editable || gridLayout.value.length === 0) return
-  const canvas = canvasRef.value
-  if (!canvas) return
-  autoFitDone = true
-  autoFitObserver?.disconnect()
-  autoFitObserver = null
-  const styles = getComputedStyle(canvas)
-  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
-  const availableWidth = canvas.clientWidth - horizontalPadding
-  if (availableWidth > 0 && availableWidth < DASHBOARD_CANVAS_MIN_WIDTH && canvasZoom.value === 1) {
-    setCanvasZoom(availableWidth / DASHBOARD_CANVAS_MIN_WIDTH)
-  }
-}
 
 /** 预览态：观察画布根元素尺寸变化（窗口缩放、侧栏收起等），实时重算等比缩放。 */
 onMounted(() => {
@@ -1222,13 +1199,6 @@ onMounted(() => {
       previewResizeObserver.observe(canvasRef.value)
     }
     return
-  }
-  // 布局多为异步载入：监听舞台出现首张卡片后执行一次自动适配
-  nextTick(() => tryAutoFitOnce())
-  watch(() => gridLayout.value.length, () => nextTick(() => tryAutoFitOnce()))
-  if (typeof ResizeObserver !== 'undefined') {
-    autoFitObserver = new ResizeObserver(() => nextTick(() => tryAutoFitOnce()))
-    if (canvasRef.value) autoFitObserver.observe(canvasRef.value)
   }
 })
 
