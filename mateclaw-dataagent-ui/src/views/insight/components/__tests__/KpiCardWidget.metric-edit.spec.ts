@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent, InsightComponentData, KpiMetricConfig } from '@/types'
@@ -102,6 +103,57 @@ describe('KpiCardWidget · 画布指标编辑', () => {
     window.dispatchEvent(new MouseEvent('mouseup'))
 
     expect(component.kpiMetrics?.[0]).toMatchObject({ x: 45, y: 58 })
+    wrapper.unmount()
+  })
+
+  it('画布缩放时按逻辑像素提交拖动后的指标位置', async () => {
+    const source = metric('revenue', 10, 20)
+    const { component, wrapper } = mountWidget([source])
+    const group = wrapper.get('.kpi-metric-group').element as HTMLElement
+    Object.defineProperties(group, {
+      offsetWidth: { value: 500 },
+      offsetHeight: { value: 300 },
+      getBoundingClientRect: { value: () => ({ width: 200, height: 120 }) },
+    })
+    const item = wrapper.get('[data-metric="revenue"]').element as HTMLElement
+    Object.defineProperties(item, {
+      offsetWidth: { value: 160 },
+      offsetHeight: { value: 80 },
+    })
+
+    item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 20 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 24, clientY: 32 }))
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await nextTick()
+
+    expect(component.kpiMetrics?.[0]).toMatchObject({ x: 45, y: 50 })
+    expect(wrapper.get('[data-metric="revenue"]').attributes('style')).toContain('left: 45px; top: 50px;')
+    wrapper.unmount()
+  })
+
+  it('画布缩放时按逻辑像素提交缩放后的指标尺寸', async () => {
+    const source = metric('revenue', 10, 20)
+    const { component, wrapper } = mountWidget([source])
+    const group = wrapper.get('.kpi-metric-group').element as HTMLElement
+    Object.defineProperties(group, {
+      offsetWidth: { value: 500 },
+      offsetHeight: { value: 300 },
+      getBoundingClientRect: { value: () => ({ width: 200, height: 120 }) },
+    })
+    const item = wrapper.get('[data-metric="revenue"]').element as HTMLElement
+    Object.defineProperties(item, {
+      offsetWidth: { value: 160 },
+      offsetHeight: { value: 80 },
+    })
+
+    await item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.get('.kpi-rs.e').trigger('mousedown', { clientX: 100, clientY: 100, button: 0 })
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 120, clientY: 100 }))
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await nextTick()
+
+    expect(component.kpiMetrics?.[0]).toMatchObject({ w: 210, h: 80 })
+    expect(wrapper.get('[data-metric="revenue"]').attributes('style')).toContain('width: 210px; height: 80px;')
     wrapper.unmount()
   })
 

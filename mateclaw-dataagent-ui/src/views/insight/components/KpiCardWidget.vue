@@ -336,7 +336,11 @@ function applyCss(el: HTMLElement | null, props: Record<string, string>): void {
 }
 
 /** 指标分组容器的边界快照（宽/高） */
-interface MetricBounds { w: number; h: number }
+interface MetricGeometry {
+  bounds: { w: number; h: number } | null
+  scaleX: number
+  scaleY: number
+}
 
 /**
  * 读一次指标分组容器尺寸。
@@ -347,9 +351,20 @@ interface MetricBounds { w: number; h: number }
  * 卡片内指标多、同页图表多时就会把帧预算吃满，表现为**拖动发涩、跟手迟滞**。
  * 本次拖动/缩放期间容器尺寸不会变化，按下时取一次即可（过程与落点共用同一份）。
  */
-function readGroupBounds(): MetricBounds | null {
+function readGroupGeometry(): MetricGeometry {
   const r = groupRef.value?.getBoundingClientRect()
-  return r ? { w: r.width, h: r.height } : null
+  const group = groupRef.value
+  if (!r || !group) return { bounds: null, scaleX: 1, scaleY: 1 }
+
+  // clientX/Y 和 getBoundingClientRect 是屏幕像素；KPI 的 left/top/width/height
+  // 与 offsetWidth/offsetHeight 是布局像素。画布使用 CSS zoom 时必须转换到同一坐标系。
+  const layoutWidth = group.offsetWidth || r.width
+  const layoutHeight = group.offsetHeight || r.height
+  return {
+    bounds: layoutWidth > 0 && layoutHeight > 0 ? { w: layoutWidth, h: layoutHeight } : null,
+    scaleX: r.width > 0 && layoutWidth > 0 ? r.width / layoutWidth : 1,
+    scaleY: r.height > 0 && layoutHeight > 0 ? r.height / layoutHeight : 1,
+  }
 }
 
 function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
@@ -360,19 +375,19 @@ function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
   e.stopPropagation()
   selectMetric(metric.fieldKey)
   const el = e.currentTarget as HTMLElement | null
-  // 按下时读一次布局，拖动过程与落点提交共用（详见 readGroupBounds 注释）
-  const bounds = readGroupBounds()
+  // 按下时读取一次几何信息，拖动过程与落点提交共用（详见 readGroupGeometry 注释）
+  const geometry = readGroupGeometry()
   const elW = el?.offsetWidth ?? 0
   const elH = el?.offsetHeight ?? 0
   const start = { sx: e.clientX, sy: e.clientY, ox: metric.x, oy: metric.y }
   movingId.value = metric.fieldKey
   interaction.begin<Record<string, string>>({
     compute: (last) => {
-      let nx = start.ox + last.x - start.sx
-      let ny = start.oy + last.y - start.sy
-      if (bounds) {
-        nx = Math.max(0, Math.min(nx, Math.max(0, bounds.w - elW)))
-        ny = Math.max(0, Math.min(ny, Math.max(0, bounds.h - elH)))
+      let nx = start.ox + (last.x - start.sx) / geometry.scaleX
+      let ny = start.oy + (last.y - start.sy) / geometry.scaleY
+      if (geometry.bounds) {
+        nx = Math.max(0, Math.min(nx, Math.max(0, geometry.bounds.w - elW)))
+        ny = Math.max(0, Math.min(ny, Math.max(0, geometry.bounds.h - elH)))
       }
       return { left: Math.round(nx) + 'px', top: Math.round(ny) + 'px' }
     },
@@ -394,10 +409,10 @@ function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
 function computeMetricResize(
   start: { dir: string; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number },
   last: { x: number; y: number },
-  bounds: MetricBounds | null,
+  geometry: MetricGeometry,
 ): Record<string, string> {
-  const dx = last.x - start.sx
-  const dy = last.y - start.sy
+  const dx = (last.x - start.sx) / geometry.scaleX
+  const dy = (last.y - start.sy) / geometry.scaleY
   const dir = start.dir
   let ox = start.ox, oy = start.oy, ow = start.ow, oh = start.oh
   if (dir.includes('e')) ow = start.ow + dx
@@ -408,9 +423,9 @@ function computeMetricResize(
   if (oh < 56) { if (dir.includes('n')) oy -= 56 - oh; oh = 56 }
   if (ox < 0) { ow += ox; ox = 0 }
   if (oy < 0) { oh += oy; oy = 0 }
-  if (bounds) {
-    if (ox + ow > bounds.w) ow = bounds.w - ox
-    if (oy + oh > bounds.h) oh = bounds.h - oy
+  if (geometry.bounds) {
+    if (ox + ow > geometry.bounds.w) ow = geometry.bounds.w - ox
+    if (oy + oh > geometry.bounds.h) oh = geometry.bounds.h - oy
   }
   return {
     left: Math.round(ox) + 'px',
@@ -427,7 +442,7 @@ function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string)
   selectMetric(metric.fieldKey)
   const el = (e.currentTarget as HTMLElement).closest('.kpi-metric') as HTMLElement | null
   // 同上：按下时读一次布局，缩放过程与落点提交共用
-  const bounds = readGroupBounds()
+  const geometry = readGroupGeometry()
   const start = {
     dir,
     sx: e.clientX,
@@ -439,7 +454,7 @@ function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string)
   }
   resizingId.value = metric.fieldKey
   interaction.begin<Record<string, string>>({
-    compute: (last) => computeMetricResize(start, last, bounds),
+    compute: (last) => computeMetricResize(start, last, geometry),
     apply: (p) => applyCss(el, p),
     commit: (p) => {
       const m = (props.component.kpiMetrics ?? []).find((x) => x.fieldKey === metric.fieldKey)
