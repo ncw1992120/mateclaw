@@ -267,6 +267,7 @@
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
                 @delete-child="(p) => emit('combination-delete-child', p)"
                 @move-component-into="(p) => emit('move-component-into', p)"
+                @add-component-into="(p) => emit('add-component-into', p)"
                 @move-child-out="handleChildDragOut"
                 @copy-child="(p) => emit('copy-child', p)"
                 @paste-child="(p) => emit('paste-child', p)"
@@ -552,6 +553,7 @@ const emit = defineEmits<{
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
   (e: 'combination-delete-child', payload: { containerId: string; childId: string }): void
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  (e: 'add-component-into', payload: { containerId: string; type: InsightComponentType; chartType?: ChartType; x: number; y: number }): void
   (e: 'move-child-out', payload: { containerId: string; childId: string; position: { x: number; y: number } }): void
   (e: 'copy-child', payload: { containerId: string; childId: string }): void
   (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
@@ -577,6 +579,8 @@ interface GridLayoutItem {
   y: number
   w: number
   h: number
+  /** 同时传给 grid-layout-plus 的布局数据，避免其 compact 阶段把重叠组件推到容器底部。 */
+  static?: boolean
 }
 
 /** 用 ref 管理布局，传给 grid-layout-plus 的 :layout prop */
@@ -630,6 +634,9 @@ function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
       y: c.position.y,
       w: c.position.w,
       h: c.position.h,
+      // GridItem 的 static prop 只约束交互；布局对象也必须标记 static，
+      // 否则 grid-layout-plus 的 compact 仍会把重叠项（例如组合卡片子项拖出）下推。
+      static: true,
     }))
   }
   const minY = Math.min(...components.map((c) => c.position.y))
@@ -640,6 +647,7 @@ function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
     y: c.position.y - minY,
     w: c.position.w,
     h: c.position.h,
+    static: true,
   }))
 }
 

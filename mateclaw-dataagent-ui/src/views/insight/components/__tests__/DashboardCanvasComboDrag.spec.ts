@@ -7,7 +7,7 @@ import DashboardCanvas from '../DashboardCanvas.vue'
 /**
  * 自研指针拖动（GridItem 全部 static 后替代库拖动）：
  * pointerdown 候选 → 位移超阈值确认 → 吸附更新 + 悬停组合检测 → pointerup 移入或提交位置。
- * 另覆盖：组件库物料 drop 落在组合卡片上时冒泡到画布按落点放置（不再被组合拦截）。
+ * 另覆盖：组件库物料 drop 落在组合卡片上时由容器接管并向编辑器转发。
  * GridItem 用带 .vgl-item 根 class 的 stub 承载真实 DOM 结构，矩形与 elementFromPoint 均为 mock。
  */
 const stubs = {
@@ -22,7 +22,18 @@ const stubs = {
   CombinationCardWidget: {
     name: 'CombinationCardWidget',
     props: ['component', 'dropHint'],
-    template: '<div class="combination-card"><div class="cc-body" /></div>',
+    emits: ['add-component-into'],
+    template: '<div class="combination-card" @drop.stop.prevent="handleDrop"><div class="cc-body" /></div>',
+    setup(_props: unknown, { emit }: { emit: (event: string, payload: unknown) => void }) {
+      return {
+        handleDrop(event: DragEvent) {
+          const raw = event.dataTransfer?.getData('application/json')
+          if (!raw) return
+          const payload = JSON.parse(raw) as { type: string; chartType?: string }
+          emit('add-component-into', { containerId: 'combo-1', ...payload, x: 100, y: 80 })
+        },
+      }
+    },
   },
 }
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false, fallbackWarn: false })
@@ -167,7 +178,7 @@ describe('DashboardCanvas 指针拖动与组合卡片移入', () => {
     wrapper.unmount()
   })
 
-  it('组件库物料 drop 落在组合卡片上时冒泡到画布按落点放置（允许任意位置）', async () => {
+  it('组件库物料 drop 落在组合卡片上时转发为容器内新增请求', async () => {
     const wrapper = mountCanvas()
     const dropTarget = wrapper.get('[data-component-id="combo-1"] .combination-card').element
     const event = new Event('drop', { bubbles: true, cancelable: true })
@@ -177,9 +188,10 @@ describe('DashboardCanvas 指针拖动与组合卡片移入', () => {
     dropTarget.dispatchEvent(event)
     await nextTick()
 
-    // stage rect mock (0,0,1188,1000)：列步长 49px、行步长 42px → (300,200) 落在第 5 列第 4 行
-    expect(wrapper.emitted('add-component')?.at(-1)?.[0]).toEqual({ type: 'kpi', position: { x: 5, y: 4 } })
-    expect(wrapper.emitted('move-component-into')).toBeUndefined()
+    expect(wrapper.emitted('add-component-into')?.at(-1)?.[0]).toEqual({
+      containerId: 'combo-1', type: 'kpi', x: 100, y: 80,
+    })
+    expect(wrapper.emitted('add-component')).toBeUndefined()
     wrapper.unmount()
   })
 

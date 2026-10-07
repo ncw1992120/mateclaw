@@ -200,6 +200,7 @@
           @combination-remove-tab="handleCombinationRemoveTab"
           @combination-delete-child="handleDeleteCombinationChild"
           @move-component-into="handleMoveComponentInto"
+          @add-component-into="handleAddComponentInto"
           @move-child-out="handleMoveChildOut"
           @copy-child="handleCopyChild"
           @paste-child="handlePasteChild"
@@ -1027,47 +1028,54 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
   return titleMap[key] ?? type
 }
 
-/** 添加新组件到当前页面（拖入时携带鼠标落点的栅格坐标，点选物料面板时落到画布底部） */
-function handleAddComponent(payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void {
-  const page = schema.pages.find((p) => p.id === activePageId.value)
-  if (!page) {
-    return
-  }
-  const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
-  const w = 6
-  const h = 4
-  // 拖入落点优先：新组件放在鼠标松开的位置（列钳制到画布内），与物料面板点选的「追加到底部」区分
-  const x = payload.position ? Math.max(0, Math.min(payload.position.x, 24 - w)) : 0
-  const y = payload.position ? Math.max(0, payload.position.y) : maxY
+type NewComponentPayload = { type: InsightComponentType; chartType?: ChartType }
+
+/** 构造画布组件配置，供顶层添加和组合卡片内添加共用。 */
+function createNewComponent(payload: NewComponentPayload, position: InsightComponent['position']): InsightComponent {
+  const { type } = payload
   const newComponent: InsightComponent = {
     id: generateId('comp'),
-    type: payload.type,
-    title: getDefaultTitle(payload.type, payload.chartType),
-    position: { x, y, w, h },
+    type,
+    title: getDefaultTitle(type, payload.chartType),
+    position,
     chartType: payload.chartType,
     titleBarStyle: 'standard',
-    visualStyle: defaultComponentVisualStyle(payload.type),
-    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' && payload.type !== 'combination' ? {
+    visualStyle: defaultComponentVisualStyle(type),
+    dataSource: type !== 'filter' && type !== 'timeFilter' && type !== 'aiAnalysis' && type !== 'combination' ? {
       datasourceId: '',
       metrics: [],
       dimensions: [],
       filters: [],
       limit: 100,
     } : undefined,
-    config: payload.type === 'timeFilter' ? {
+    config: type === 'timeFilter' ? {
       field: 'metric_time',
       availablePresets: ['today', '7d', '30d', '90d', 'custom'],
-    } : payload.type === 'aiAnalysis' ? {
+    } : type === 'aiAnalysis' ? {
       autoGenerate: false,
     } : undefined,
     // 组合卡片：默认空子卡片 + 容器配置
-    children: payload.type === 'combination' ? [] : undefined,
-    containerConfig: payload.type === 'combination' ? {
+    children: type === 'combination' ? [] : undefined,
+    containerConfig: type === 'combination' ? {
       layoutMode: 'free',
       tabs: [],
       activeTab: undefined,
     } : undefined,
   }
+  return newComponent
+}
+
+/** 添加新组件到当前页面（拖入时携带鼠标落点的栅格坐标，点选物料面板时落到画布底部） */
+function handleAddComponent(payload: NewComponentPayload & { position?: { x: number; y: number } }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
+  const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
+  const w = 6
+  const h = 4
+  // 拖入落点优先：新组件放在鼠标松开的位置（列钳制到画布内），与物料面板点选的「追加到底部」区分
+  const x = payload.position ? Math.max(0, Math.min(payload.position.x, 24 - w)) : 0
+  const y = payload.position ? Math.max(0, payload.position.y) : maxY
+  const newComponent = createNewComponent(payload, { x, y, w, h })
   page.components.push(newComponent)
   selectedComponentId.value = newComponent.id
   selectedChildInfo.value = null
@@ -1075,6 +1083,23 @@ function handleAddComponent(payload: { type: InsightComponentType; chartType?: C
   if (!scriptTargetComponentId.value) {
     scriptTargetComponentId.value = newComponent.id
   }
+}
+
+/** 将物料面板新组件直接创建为组合卡片当前页签的子组件。 */
+function handleAddComponentInto(payload: NewComponentPayload & { containerId: string; x: number; y: number }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (!container || container.type !== 'combination') return
+  const component = createNewComponent(payload, { x: 0, y: 0, w: 6, h: 4 })
+  const child = componentToCombinationChild(
+    component,
+    defaultCombinationChildLayout(payload.type, payload.x, payload.y),
+  )
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (container.containerConfig?.tabs.length && activeTab) activeTab.children.push(child)
+  else (container.children ??= []).push(child)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: child.id }
+  if (!scriptTargetComponentId.value) scriptTargetComponentId.value = child.id
 }
 
 /** 更新布局（拖动/缩放后） */

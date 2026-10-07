@@ -241,6 +241,7 @@
             @remove-tab="(payload) => emit('remove-tab', payload)"
             @delete-child="(payload) => emit('delete-child', payload)"
             @move-component-into="(payload) => emit('move-component-into', payload)"
+            @add-component-into="(payload) => emit('add-component-into', payload)"
             @move-child-out="(payload) => emit('move-child-out', payload)"
             @copy-child="(payload) => emit('copy-child', payload)"
             @paste-child="(payload) => emit('paste-child', payload)"
@@ -288,6 +289,7 @@ import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import ComponentQueryState from './ComponentQueryState.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
 import type {
+  ChartType,
   InsightComponent,
   InsightComponentType,
   InsightCombinationChild,
@@ -350,6 +352,8 @@ const emit = defineEmits<{
   (e: 'delete-child', payload: { containerId: string; childId: string }): void
   /** 将画布中的已有组件移入当前组合容器/页签 */
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  /** 将物料面板新组件直接添加到当前组合卡片的落点。 */
+  (e: 'add-component-into', payload: { containerId: string; type: InsightComponentType; chartType?: ChartType; x: number; y: number }): void
   /** 子卡片拖出组合卡片：释放点为视口坐标，由画布换算栅格落点后转回顶层组件 */
   (e: 'move-child-out', payload: { containerId: string; childId: string; clientX: number; clientY: number }): void
   /** 组合卡片内部子组件剪贴板操作 */
@@ -448,7 +452,7 @@ const selectedChildId = ref<string | null>(null)
 const hoverChildId = ref<string | null>(null)
 const movingId = ref<string | null>(null)
 /** 子卡片拖出模式：跟随指针的提示标签（Teleport 到 body，避免被容器 overflow:hidden 裁剪） */
-const dragOutChild = ref<{ childId: string; title: string; x: number; y: number } | null>(null)
+const dragOutChild = ref<{ childId: string; title: string; x: number; y: number; grabOffsetX: number; grabOffsetY: number } | null>(null)
 const resizingId = ref<string | null>(null)
 /**
  * 拖动/缩放中的子卡片预览盒（布局像素）：预览走响应式绑定而非直接改 DOM。
@@ -645,22 +649,37 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
 
 // ── 拖入组合卡片（标题栏 HTML5 通道）──────────────────────
 /**
- * 组合卡片的 drop 只处理「画布顶层组件拖入」（标题栏 HTML5 通道）。
- * 组件库物料的 drop 不再拦截：不 stopPropagation，事件冒泡到画布后按鼠标落点
- * 放置为画布顶层组件（允许与组合卡片重叠），实现「放到画布任意位置」。
+ * 组合卡片接管两种 drop：组件库物料新增为当前组合子组件，画布顶层组件移动进当前组合。
  */
 function onBodyDrop(e: DragEvent) {
   if (!props.editable || !e.dataTransfer) return
   const raw = e.dataTransfer.getData('application/json')
   if (!raw) return
   try {
-    const payload = JSON.parse(raw) as { kind?: string; componentId?: string; componentType?: InsightComponentType }
+    const payload = JSON.parse(raw) as {
+      kind?: string
+      componentId?: string
+      componentType?: InsightComponentType
+      type?: InsightComponentType
+      chartType?: ChartType
+    }
     if (payload.kind === 'canvas-component' && payload.componentId) {
       e.stopPropagation()
       e.preventDefault()
       const layout = defaultCombinationChildLayout(payload.componentType ?? 'kpi')
       const pos = dropPosFromEvent(e, layout.col, layout.h ?? 180)
       emit('move-component-into', { containerId: props.component.id, componentId: payload.componentId, ...pos })
+    } else if (payload.type) {
+      e.stopPropagation()
+      e.preventDefault()
+      const layout = defaultCombinationChildLayout(payload.type)
+      const pos = dropPosFromEvent(e, layout.col, layout.h ?? 180)
+      emit('add-component-into', {
+        containerId: props.component.id,
+        type: payload.type,
+        chartType: payload.chartType,
+        ...pos,
+      })
     }
   } catch (err) {
     console.error('[CombinationCardWidget] drop parse error:', err)
@@ -804,7 +823,15 @@ function onChildMouseMove(e: MouseEvent) {
     if (!dragOutChild.value) {
       const child = getActiveChildren().find((c) => c.id === mv.id)
       if (child) {
-        dragOutChild.value = { childId: child.id, title: child.title, x: e.clientX, y: e.clientY }
+        const rect = mv.el?.getBoundingClientRect()
+        dragOutChild.value = {
+          childId: child.id,
+          title: child.title,
+          x: e.clientX,
+          y: e.clientY,
+          grabOffsetX: rect ? mv.sx - rect.left : 0,
+          grabOffsetY: rect ? mv.sy - rect.top : 0,
+        }
         movingId.value = null
       }
     } else {
@@ -835,9 +862,14 @@ function isOutsideBody(clientX: number, clientY: number): boolean {
 function onChildMouseUp() {
   if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0 }
   if (dragOutChild.value) {
-    const { childId, x, y } = dragOutChild.value
+    const { childId, x, y, grabOffsetX, grabOffsetY } = dragOutChild.value
     dragOutChild.value = null
-    emit('move-child-out', { containerId: props.component.id, childId, clientX: x, clientY: y })
+    emit('move-child-out', {
+      containerId: props.component.id,
+      childId,
+      clientX: x - grabOffsetX,
+      clientY: y - grabOffsetY,
+    })
   } else if (mv && mvLast) {
     const child = getActiveChildren().find((c) => c.id === mv!.id)
     if (child) {

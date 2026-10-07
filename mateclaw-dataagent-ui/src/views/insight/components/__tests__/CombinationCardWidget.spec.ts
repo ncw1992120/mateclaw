@@ -371,7 +371,7 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('[data-testid="sample-data-watermark"]').exists()).toBe(false)
   })
 
-  it('ignores a palette drop so it bubbles to the canvas for free placement', async () => {
+  it('captures a palette drop so it can be created inside the combination', async () => {
     const component = {
       id: 'combination-palette-drop',
       type: 'combination' as const,
@@ -406,12 +406,13 @@ describe('CombinationCardWidget', () => {
     })
     Object.defineProperty(event, 'clientX', { value: 40 })
     Object.defineProperty(event, 'clientY', { value: 50 })
-    const stopPropagation = vi.spyOn(event, 'stopPropagation')
     wrapper.get('.combination-card').element.dispatchEvent(event)
     await nextTick()
 
-    // 组件库物料不再被组合拦截：不 stopPropagation（冒泡到画布）、不产生子卡片
-    expect(stopPropagation).not.toHaveBeenCalled()
+    expect(wrapper.emitted('add-component-into')?.[0]?.[0]).toMatchObject({
+      containerId: component.id,
+      type: 'kpi',
+    })
     expect(component.children).toHaveLength(0)
   })
 
@@ -811,6 +812,43 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.emitted('move-component-into')).toEqual([[{ containerId: 'outer-combination', componentId: 'canvas-kpi-1', x: 0, y: 0 }]])
   })
 
+  it('accepts a component-palette drop and emits an add request for the active combo position', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'outer-combination', type: 'combination', title: '外层组合', children: [],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+    const body = wrapper.get('.cc-body').element as HTMLElement
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue({
+      left: 100, top: 80, right: 600, bottom: 380, width: 500, height: 300,
+      x: 100, y: 80, toJSON: () => ({}),
+    } as DOMRect)
+    const dataTransfer = {
+      getData: (type: string) => type === 'application/json'
+        ? JSON.stringify({ type: 'chart', chartType: 'line' })
+        : '',
+    }
+    await wrapper.get('.combination-card').trigger('drop', {
+      clientX: 220, clientY: 160, dataTransfer,
+    })
+
+    expect(wrapper.emitted('add-component-into')).toEqual([[
+      { containerId: 'outer-combination', type: 'chart', chartType: 'line', x: 120, y: 80 },
+    ]])
+  })
+
   const mountEditableCombination = (children: Array<Record<string, unknown>>, extraProps: Record<string, unknown> = {}) =>
     mount(CombinationCardWidget, {
       props: {
@@ -841,15 +879,19 @@ describe('CombinationCardWidget', () => {
     const el = wrapper.get('[data-child="out-child"]').element as HTMLElement
     Object.defineProperty(el, 'offsetWidth', { value: 250 })
     Object.defineProperty(el, 'offsetHeight', { value: 120 })
+    vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
+      left: 150, top: 160, right: 400, bottom: 280, width: 250, height: 120,
+      x: 150, y: 160, toJSON: () => ({}),
+    } as DOMRect)
 
     // 按住子卡片（容器内）→ 拖出容器右边界 → 释放
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 200, clientY: 200 }))
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 200 }))
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 700, clientY: 240 }))
-    window.dispatchEvent(new MouseEvent('mouseup'))
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 700, clientY: 240 }))
 
     expect(wrapper.emitted('move-child-out')).toEqual([
-      [{ containerId: 'dragout-combo', childId: 'out-child', clientX: 700, clientY: 240 }],
+      [{ containerId: 'dragout-combo', childId: 'out-child', clientX: 650, clientY: 200 }],
     ])
     // 拖出不改写容器内坐标
     expect(child.layout).toEqual({ x: 36, y: 48, col: 6, h: 120 })
