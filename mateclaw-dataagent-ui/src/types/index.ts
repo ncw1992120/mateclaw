@@ -2066,6 +2066,8 @@ export interface InsightComponentData {
   fieldLabels?: Record<string, string>
   /** 标记临时 Python 结果预览；画布据此按本次输出字段投影 KPI，不改持久化配置。 */
   pythonResultPreview?: boolean
+  /** 标记按本次查询结果渲染；画布据此按实际结果字段投影 KPI，不改持久化配置。 */
+  resultFieldProjection?: boolean
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */

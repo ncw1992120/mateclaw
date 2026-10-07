@@ -25,8 +25,10 @@ export function componentPreviewData(
       unit: metric.unit,
     })).filter((metric) => visibleFields.has(metric.fieldKey))
     : []
-  return rowsToComponentData(component.id, projectedRows, renderType, kpiFields, fieldLabels, {
+  const data = rowsToComponentData(component.id, projectedRows, renderType, kpiFields, fieldLabels, {
     chartType: component.chartType,
     config: component.config,
   })
+  if (renderType === 'kpi') data.resultFieldProjection = true
+  return data
 }
