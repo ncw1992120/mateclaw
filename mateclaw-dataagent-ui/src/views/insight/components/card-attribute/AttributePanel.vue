@@ -181,21 +181,6 @@
         </div>
       </div>
 
-      <!-- 6. 指标配置（仅 KPI 卡：结果集逐列投影的指标分组汇总表单）
-           排在 Python 预处理之后：指标由「最终结果集」字段投影而来，而结果集可能由
-           Python 用户处理区产生，放最后才符合「先出结果集、再配置指标」的使用顺序。 -->
-      <div v-if="isKpiCard" class="section">
-        <div class="section-head">
-          <span class="section-title">指标配置</span>
-          <span v-if="kpiMetricCount" class="metric-count">{{ kpiMetricCount }} 个指标</span>
-        </div>
-        <el-button size="small" type="primary" :disabled="!resultSetHasOutput" @click="openMetricConfig">配置指标</el-button>
-        <div class="metric-hint">
-          {{ resultSetHasOutput
-            ? '指标由最终结果集字段自动投影生成，可配置展示列名、单位、辅助说明及各字段样式。'
-            : '请先生成结果集：指标候选字段以结果集 schema 为准。' }}
-        </div>
-      </div>
     </div>
     <ComponentSampleDialog v-model="sampleDialogVisible" :title="activeCard.title" :sample="componentSample" />
   </div>
@@ -214,12 +199,11 @@ import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
 import { isFinalResultQueryConfigured } from '@/utils/final-result-query'
 
-const { state, activeCard, isKpiCard, datasetCount, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython, openMetricConfig, resultSetHasOutput } = useInsight()
+const { state, activeCard, isKpiCard, datasetCount, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython } = useInsight()
 
 const DEFAULT_COMPONENT_COLOR = '#1E40AF'
 const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
 
-const kpiMetricCount = computed(() => state.kpiMetrics.length)
 const sampleDialogVisible = ref(false)
 const componentSample = computed(() => resolveComponentSample({
   id: activeCard.value.id,
@@ -386,17 +370,6 @@ function typeLabel(t: string) {
 .add-bottom {
   align-self: flex-start;
 }
-.metric-count {
-  font-size: 12px;
-  color: var(--db-text-muted);
-}
-.metric-hint {
-  font-size: 12px;
-  color: var(--db-text-muted);
-  line-height: 1.6;
-  margin-top: 8px;
-}
-
 .python-empty {
   display: grid;
   gap: 8px;

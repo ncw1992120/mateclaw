@@ -94,6 +94,17 @@ beforeEach(() => {
 })
 
 describe('AttributePanel', () => {
+  it('不再在属性面板显示指标配置摘要入口', () => {
+    insightFixture.value.isKpiCard = true
+    insightFixture.value.resultSetHasOutput = true
+    insightFixture.value.state.kpiMetrics = [{ id: 'metric-1' }, { id: 'metric-2' }]
+    const wrapper = mountPanel()
+
+    expect(wrapper.text()).not.toContain('指标配置')
+    expect(wrapper.text()).not.toContain('配置指标')
+    expect(wrapper.text()).not.toContain('2 个指标')
+  })
+
   it('Python 属性区统一显示操作入口，并在未完成查询配置时阻止展开编辑', async () => {
     insightFixture.value.state.hasPython = true
     insightFixture.value.state.finalResultQueryConfig = { confirmed: false }
