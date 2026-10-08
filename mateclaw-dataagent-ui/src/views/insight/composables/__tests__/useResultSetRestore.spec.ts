@@ -192,6 +192,39 @@ describe('reconcileKpiProjection', () => {
     expect(data[component.id].table).toEqual({ columns: ['amount'], rows: [['30'], ['10']] })
   })
 
+  it('恢复已应用的数据集图表结果，而不依赖编辑器运行态缓存', async () => {
+    const component = {
+      id: 'dataset-chart',
+      type: 'chart',
+      chartType: 'line',
+      config: {
+        dimensionField: 'day',
+        metricFields: ['amount'],
+        datasetPipeline: {
+          datasetInputs: [{ datasetId: 'dataset-chart-source', inputName: 'chart_rows' }],
+          script: '',
+          resultSet: {
+            source: 'dataset', status: 'ready', rowCount: 2, generatedAt: 'now',
+            columns: [{ name: 'day', type: 'string' }, { name: 'amount', type: 'number' }],
+          },
+        },
+      },
+    } as unknown as InsightComponent
+    fetchDatasetSampleRows.mockResolvedValue({
+      rows: [{ day: '周一', amount: 12 }, { day: '周二', amount: 18 }],
+      columns: ['day', 'amount'],
+    })
+
+    const data = await restoreResultSetData([component])
+
+    expect(data[component.id].renderType).toBe('echarts')
+    expect(data[component.id].option).toMatchObject({
+      xAxis: { data: ['周一', '周二'] },
+      series: [{ name: 'amount', data: [12, 18] }],
+    })
+    expect(fetchDatasetSampleRows).toHaveBeenCalledOnce()
+  })
+
   it('includes KPI children inside combination tabs in the same result-set restoration pass', () => {
     const child = {
       id: 'nested-kpi',

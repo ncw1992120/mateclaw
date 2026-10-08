@@ -367,6 +367,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
 import { useInsight } from './components/card-attribute/useInsight'
 import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
+import { persistAppliedComponentResultSet, persistAppliedKpiProjection } from './composables/appliedKpiProjection'
 import { collectFilterComponents, findFilterBindingDependents, removeDanglingFilterBindings, removeFilterBindings } from '@/utils/dashboard-filter-deletion'
 import { mergeCombinationChildComponentUpdate } from './composables/combinationChildComponentUpdate'
 import DatasetDataDialog from './components/DatasetDataDialog.vue'
@@ -1522,16 +1523,21 @@ function handlePreviewResult(data: InsightComponentData): void {
         .filter((item) => item.type === 'combination')
         .map((container) => findCombinationChild(container, data.componentId))
         .find((item) => item !== null)
+    let schemaChanged = false
+    if (component && persistAppliedComponentResultSet(component, data)) {
+      schemaChanged = true
+    }
     if (component && data.pythonResultPreview && data.pythonAppliedResultView) {
       component.config = {
         ...component.config,
         pythonAppliedResultView: data.pythonAppliedResultView,
       }
-      scheduleSchemaAutoSave()
+      schemaChanged = true
     }
     if (component && persistAppliedKpiProjection(component as InsightComponent, data)) {
-      scheduleSchemaAutoSave()
+      schemaChanged = true
     }
+    if (schemaChanged) scheduleSchemaAutoSave()
   }
 }
 

@@ -181,6 +181,7 @@ const componentRenderData = computed(() => {
   return {
     ...componentPreviewData(props.component, componentRows.value, displayRows.value.map(({ name, title }) => ({ name, title }))),
     pythonResultPreview: true,
+    appliedResultSource: 'script',
     pythonAppliedResultView: {
       filters: appliedConditions.value.map(({ field, op, value }) => ({ field, op, value })),
       sort: sortState.value ? { ...sortState.value } : null,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent, InsightComponentData } from '@/types'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
-import { persistAppliedKpiProjection } from '../appliedKpiProjection'
+import { persistAppliedComponentResultSet, persistAppliedKpiProjection } from '../appliedKpiProjection'
 
 describe('persistAppliedKpiProjection', () => {
   it('keeps only the applied KPI fields and preserves matching metric presentation', () => {
@@ -71,5 +71,61 @@ describe('persistAppliedKpiProjection', () => {
 
     expect(persistAppliedKpiProjection(component, data)).toBe(false)
     expect(component.kpiMetrics?.map(({ fieldKey }) => fieldKey)).toEqual(['legacy_dimension'])
+  })
+})
+
+describe('persistAppliedComponentResultSet', () => {
+  it('explicitly applied dataset data becomes restorable dataset result metadata', () => {
+    const component = {
+      id: 'table-1',
+      type: 'table',
+      config: {
+        datasetPipeline: {
+          datasetInputs: [{ datasetId: 'dataset-1', inputName: 'table_ab', lastQueryState: { queryLimit: 100 } }],
+          script: '',
+        },
+      },
+    } as unknown as InsightComponent
+
+    const changed = persistAppliedComponentResultSet(component, {
+      componentId: 'table-1',
+      renderType: 'table',
+      resultFieldProjection: true,
+      appliedResultSource: 'dataset',
+      appliedResultRows: [{ amount: 12 }],
+      fieldLabels: { amount: '金额' },
+    })
+
+    expect(changed).toBe(true)
+    expect((component.config?.datasetPipeline as any).resultSet).toMatchObject({
+      source: 'dataset', status: 'ready', rowCount: 1, columns: [{ name: 'amount' }],
+    })
+    expect((component.config?.datasetPipeline as any).datasetInputs[0].lastQueryState).toEqual({ queryLimit: 100 })
+  })
+
+  it('keeps Python execution reference when persisting an applied Python view', () => {
+    const component = {
+      id: 'python-table',
+      type: 'table',
+      config: {
+        datasetPipeline: {
+          datasetInputs: [], script: 'result = rows',
+          resultSet: { source: 'script', status: 'ready', columns: [{ name: 'amount' }], rowCount: 2, generatedAt: 'now', executionId: 'exec-1' },
+        },
+      },
+    } as unknown as InsightComponent
+
+    const changed = persistAppliedComponentResultSet(component, {
+      componentId: 'python-table',
+      renderType: 'table',
+      resultFieldProjection: true,
+      appliedResultSource: 'script',
+      appliedResultRows: [{ amount: 12 }],
+    })
+
+    expect(changed).toBe(true)
+    expect((component.config?.datasetPipeline as any).resultSet).toMatchObject({
+      source: 'script', status: 'ready', executionId: 'exec-1', rowCount: 1,
+    })
   })
 })

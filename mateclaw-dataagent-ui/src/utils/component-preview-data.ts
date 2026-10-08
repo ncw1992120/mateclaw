@@ -29,6 +29,8 @@ export function componentPreviewData(
     chartType: component.chartType,
     config: component.config,
   })
-  if (renderType === 'kpi') data.resultFieldProjection = true
+  data.resultFieldProjection = true
+  data.appliedResultRows = projectedRows
+  data.appliedResultSource = 'dataset'
   return data
 }

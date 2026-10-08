@@ -5,6 +5,24 @@ import { componentPreviewData } from '@/utils/component-preview-data'
 import { projectPythonResultKpi } from '@/utils/kpi-result-projection'
 
 describe('dataset query result KPI projection', () => {
+  it.each([
+    ['kpi', 'kpi'],
+    ['chart', 'echarts'],
+    ['table', 'table'],
+  ] as const)('marks explicitly applied %s preview data for result restoration', (type, renderType) => {
+    const component = { id: `${type}-1`, type, config: {} } as unknown as InsightComponent
+    const rows = [{ amount: 12 }]
+    const result = componentPreviewData(component, rows, [{ name: 'amount', title: '金额' }])
+
+    expect(result).toMatchObject({
+      componentId: component.id,
+      renderType,
+      resultFieldProjection: true,
+      appliedResultRows: rows,
+      appliedResultSource: 'dataset',
+    })
+  })
+
   it('renders only queried measures when an older KPI config still contains dimensions', () => {
     const component = {
       id: 'strategy-summary',

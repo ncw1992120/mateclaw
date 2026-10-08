@@ -2073,6 +2073,10 @@ export interface InsightComponentData {
     filters: Array<{ field: string; op: string; value: string }>
     sort: QuerySortSpec | null
   }
+  /** 本次显式应用的原始结果行，只在应用回调中使用，不写入运行态地图。 */
+  appliedResultRows?: Array<Record<string, unknown>>
+  /** 本次显式应用结果的来源，用于记录可恢复的结果集类型。 */
+  appliedResultSource?: 'dataset' | 'script'
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
