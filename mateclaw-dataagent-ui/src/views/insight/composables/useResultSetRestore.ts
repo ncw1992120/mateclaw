@@ -18,9 +18,9 @@ import { rowsToComponentData, type KpiProjectionField } from '@/utils/dataset-re
 import { buildKpiMetrics } from '@/utils/kpi-metrics'
 import { selectKpiProjectionFields } from '@/utils/dataset-result'
 import { parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
-import { draftRequestForDataset } from '../components/card-attribute/useInsight'
+import { applyResultFilters } from '@/utils/result-preview-filter'
 import { inputToDatasetConfig } from '../components/card-attribute/useCardAttributeBridge'
-import { previewDatasetDraft } from '../components/card-attribute/useInsightBackend'
+import { fetchDatasetSampleRows } from '../components/dataset-sample-query'
 
 /** 能承载结果集的数据组件类型（筛选类 / AI 分析走各自链路） */
 const RESULT_SET_COMPONENT_TYPES = new Set(['kpi', 'chart', 'table'])
@@ -117,10 +117,20 @@ export async function fetchResultSetRows(
   }
   const input = pipeline.datasetInputs?.[0]
   if (!input) return null
-  const req = draftRequestForDataset(inputToDatasetConfig(input, 0))
-  if (!req) return null
-  const batch = await previewDatasetDraft(req)
-  return (batch.rows as Record<string, unknown>[] | null) ?? []
+  const dataset = inputToDatasetConfig(input, 0)
+  const savedFilters = input.lastQueryState?.filters ?? []
+  const filterTypes = new Map<string, string>()
+  savedFilters.forEach((filter) => {
+    if (filter.filterComponentId) {
+      filterTypes.set(filter.filterComponentId, filter.timeBoundary ? 'timeFilter' : 'filter')
+    }
+  })
+  const filterCatalog = [...filterTypes].map(([id, type]) => ({ id, type }))
+  const result = await fetchDatasetSampleRows(dataset, filterCatalog, {
+    // 与查看数据默认限制一致；分页模式仍以保存的页码和每页大小为准。
+    limit: input.lastQueryState?.queryLimit ?? 10_000,
+  })
+  return result.rows
 }
 
 /** 统一执行结果 → 现有画布数据契约，避免展示态重新猜测行列。 */
@@ -129,7 +139,42 @@ function executionEnvelopeToComponentData(
   envelopeValue: unknown,
   pipeline?: ComponentDatasetPipeline,
 ): InsightComponentData {
-  const envelope = parseScriptResultEnvelope(envelopeValue)
+  let envelope = parseScriptResultEnvelope(envelopeValue)
+  if (envelope.kind === 'table') {
+    const configuredFields = pipeline?.finalResultQueryConfig?.displayFields ?? []
+    const available = new Set(envelope.data.columns.map(({ name }) => name))
+    const fields = configuredFields.length
+      ? configuredFields.filter(({ field }) => available.has(field))
+      : envelope.data.columns.map(({ name, title }) => ({ field: name, title }))
+    const columns = fields.map(({ field, title }) => {
+      const column = envelope.data.columns.find(({ name }) => name === field)!
+      return { ...column, title: title || column.title }
+    })
+    const view = component.config?.pythonAppliedResultView as {
+      filters?: Array<{ field: string; op: string; value: string }>
+      sort?: { field: string; direction: 'asc' | 'desc' } | null
+    } | undefined
+    let rows = view?.filters?.length ? applyResultFilters(envelope.data.rows, view.filters) : envelope.data.rows
+    if (view?.sort && envelope.data.columns.some(({ name }) => name === view.sort!.field)) {
+      const { field, direction } = view.sort
+      rows = [...rows].sort((left, right) => {
+        const a = left[field]
+        const b = right[field]
+        if (a === b) return 0
+        if (a == null) return -1
+        if (b == null) return 1
+        const order = typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b))
+        return direction === 'asc' ? order : -order
+      })
+    }
+    envelope = {
+      ...envelope,
+      data: {
+        columns,
+        rows: rows.map((row) => Object.fromEntries(fields.map(({ field }) => [field, row[field]]))),
+      },
+    }
+  }
   if (component.type === 'kpi' && envelope.kind === 'table') {
     // resultSet.columns 是保存时的快照，可能落后于 execution；以实际结果契约重建 KPI 投影。
     reconcileKpiProjection(component, envelope.data.columns, pipeline)

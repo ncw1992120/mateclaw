@@ -15,7 +15,7 @@
     <PythonResultDataDialog
       v-else
       :component="component"
-      @render="emit('render', $event)"
+      @render="handleRender"
       @resultset="emit('resultset', $event)"
     />
     <MetricConfigDialog />
@@ -44,6 +44,7 @@ import PythonResultDataDialog from './PythonResultDataDialog.vue'
 import MetricConfigDialog from './MetricConfigDialog.vue'
 import MetricStyleDialog from './MetricStyleDialog.vue'
 import { useComponentPropertyDraft } from '../property/useComponentPropertyDraft'
+import { persistAppliedKpiProjection } from '../../composables/appliedKpiProjection'
 
 const props = defineProps<{
   /** 当前选中的数据组件（kpi / chart / table） */
@@ -75,6 +76,17 @@ const { state, scheduleResultSet } = useInsight()
 // 面板仍复用 useInsight 的领域动作，但最终组件回写经过独立草稿控制器，
 // 避免切换组件时把未确认的配置引用带到下一张卡片。
 const propertyDraft = useComponentPropertyDraft()
+
+/** 显式应用查询结果时，同步面板草稿里的 KPI 投影，避免后续配置回写带回旧字段。 */
+function handleRender(data: InsightComponentData): void {
+  if (props.component) {
+    const component = { ...props.component }
+    if (persistAppliedKpiProjection(component, data)) {
+      state.kpiMetrics = component.kpiMetrics ?? []
+    }
+  }
+  emit('render', data)
+}
 
 /** 灌入中标记：避免 hydrate 重置 state 时误触发回写 */
 const hydrating = ref(false)

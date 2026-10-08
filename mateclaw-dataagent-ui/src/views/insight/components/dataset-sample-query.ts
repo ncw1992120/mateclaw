@@ -75,13 +75,14 @@ function querySort(dataset: DatasetConfig): QuerySortSpec[] {
 export async function fetchDatasetSampleRows(
   dataset: DatasetConfig,
   filterCatalog: Array<{ id: string; type?: string }>,
+  options: { limit?: number } = {},
 ): Promise<{ rows: Record<string, unknown>[]; columns: string[] }> {
   const queryState = dataset.lastQueryState ?? getCachedQueryState(dataset.id)
   const policy = dataset.queryConfig?.paginationPolicy
   const paginationEnabled = policy?.enabled === true
   const pageSize = paginationEnabled
     ? Math.min(Math.max(1, queryState?.pageSize || policy.defaultPageSize || DEFAULT_BATCH_SIZE), Math.max(1, policy.maxPageSize || 500))
-    : DEFAULT_BATCH_SIZE
+    : Math.min(Math.max(1, options.limit ?? DEFAULT_BATCH_SIZE), 100_000)
   const page = paginationEnabled ? Math.max(1, queryState?.page || 1) : 1
   const runtimeRows = queryFilterRows(dataset, filterCatalog)
   const request = {
@@ -91,6 +92,9 @@ export async function fetchDatasetSampleRows(
     parameters: { ...queryParameters(dataset), ...buildExecutionParameters(runtimeRows) },
     limit: pageSize,
     offset: (page - 1) * pageSize,
+    ...(runtimeRows.some((row) => row.timeBoundary) && queryState?.timeGranularity
+      ? { timeGranularity: queryState.timeGranularity }
+      : {}),
   }
 
   let result

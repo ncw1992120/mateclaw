@@ -2064,10 +2064,15 @@ export interface InsightComponentData {
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
   /** 字段技术名到展示名的渲染元数据；不参与查询、排序或数据映射。 */
   fieldLabels?: Record<string, string>
-  /** 标记临时 Python 结果预览；画布据此按本次输出字段投影 KPI，不改持久化配置。 */
+  /** 标记 Python 结果显式应用；KPI 指标投影会同步持久化，供后续恢复。 */
   pythonResultPreview?: boolean
-  /** 标记按本次查询结果渲染；画布据此按实际结果字段投影 KPI，不改持久化配置。 */
+  /** 标记按本次查询结果显式应用；KPI 指标投影会同步持久化，供后续恢复。 */
   resultFieldProjection?: boolean
+  /** Python 最终结果本次应用的筛选/排序；仅用于持久化恢复画布展示。 */
+  pythonAppliedResultView?: {
+    filters: Array<{ field: string; op: string; value: string }>
+    sort: QuerySortSpec | null
+  }
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */

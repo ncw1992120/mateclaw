@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InsightComponent } from '@/types'
 import type { ComponentDatasetPipeline } from '@/types'
 import { defaultMetricStyles } from '@/utils/kpi-metrics'
-import { collectResultSetComponents, reconcileKpiProjection, restoreResultSetData, toComponentData } from '../useResultSetRestore'
+import { collectResultSetComponents, fetchResultSetRows, reconcileKpiProjection, restoreResultSetData, toComponentData } from '../useResultSetRestore'
 
 const getExecutionResult = vi.hoisted(() => vi.fn())
+const fetchDatasetSampleRows = vi.hoisted(() => vi.fn())
 vi.mock('@/api/insight-dashboard', () => ({ getExecutionResult }))
+vi.mock('../../components/dataset-sample-query', () => ({ fetchDatasetSampleRows }))
 
-beforeEach(() => getExecutionResult.mockReset())
+beforeEach(() => {
+  getExecutionResult.mockReset()
+  fetchDatasetSampleRows.mockReset()
+})
 
 describe('reconcileKpiProjection', () => {
   it('adds result-set KPI fields missing from an older persisted projection', () => {
@@ -139,6 +144,54 @@ describe('reconcileKpiProjection', () => {
     expect(data[component.id].kpiList?.map(({ value }) => value)).toEqual(['27948000', '2964'])
   })
 
+  it('恢复 Python 表格时遵循最终查询配置字段，并重放上次应用的筛选和排序', async () => {
+    const component = {
+      id: 'python-table',
+      type: 'table',
+      config: {
+        pythonAppliedResultView: {
+          filters: [{ field: 'region', op: '=', value: '华东' }],
+          sort: { field: 'amount', direction: 'desc' },
+        },
+        datasetPipeline: {
+          datasetInputs: [],
+          script: 'result = rows',
+          finalResultQueryConfig: {
+            schemaFingerprint: 'python-result-v1',
+            confirmed: true,
+            displayFields: [{ field: 'amount', title: '金额', role: 'measure' }],
+            filterFields: [],
+            sortPolicy: { enabled: true, mode: 'single', allowedFields: ['amount'] },
+            paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+          },
+          resultSet: { source: 'script', status: 'ready', executionId: 'exec-table', columns: [] },
+        },
+      },
+    } as unknown as InsightComponent
+    getExecutionResult.mockResolvedValue({
+      envelope: {
+        schemaVersion: '1.0', kind: 'table',
+        data: {
+          columns: [
+            { name: 'region', title: '地区', dataType: 'string', nullable: false },
+            { name: 'amount', title: '金额', dataType: 'number', nullable: false },
+            { name: 'legacy', title: '旧字段', dataType: 'string', nullable: false },
+          ],
+          rows: [
+            { region: '华东', amount: 10, legacy: 'x' },
+            { region: '华南', amount: 99, legacy: 'y' },
+            { region: '华东', amount: 30, legacy: 'z' },
+          ],
+        },
+        meta: { rowCount: 3, truncated: false },
+      },
+    })
+
+    const data = await restoreResultSetData([component])
+
+    expect(data[component.id].table).toEqual({ columns: ['amount'], rows: [['30'], ['10']] })
+  })
+
   it('includes KPI children inside combination tabs in the same result-set restoration pass', () => {
     const child = {
       id: 'nested-kpi',
@@ -178,5 +231,43 @@ describe('reconcileKpiProjection', () => {
     })
 
     expect(child.kpiMetrics.map(({ fieldKey }) => fieldKey)).toEqual(['orders'])
+  })
+})
+
+describe('fetchResultSetRows', () => {
+  it('恢复数据集结果时重放保存的查询字段、运行筛选和限制行数', async () => {
+    fetchDatasetSampleRows.mockResolvedValue({ rows: [{ amount: 12 }], columns: ['amount'] })
+    const pipeline: ComponentDatasetPipeline = {
+      datasetInputs: [{
+        datasetId: 'dataset-restore',
+        inputName: 'table_ab',
+        sourceType: 'JDBC_SQL',
+        sourceConfig: { datasourceId: 'db-1', sql: 'select amount from sales' },
+        queryConfig: {
+          displayFields: [{ field: 'amount', title: '金额', role: 'measure' }],
+          parameterBindings: [],
+          sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+          paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+        },
+        lastQueryState: {
+          filters: [
+            { filterComponentId: 'date-filter', field: 'biz_date', parameterName: 'start', timeBoundary: 'start', value: '2026-10-01', enabled: true },
+            { filterComponentId: 'date-filter', field: 'biz_date', parameterName: '', timeBoundary: 'end', value: '2026-10-08', enabled: true },
+          ],
+          parameters: {}, sort: null, page: 1, pageSize: 100, queryLimit: 700, timeGranularity: 'DAY',
+        },
+      }],
+    }
+
+    const rows = await fetchResultSetRows(pipeline, {
+      source: 'dataset', status: 'ready', columns: [{ name: 'amount' }], rowCount: 1, generatedAt: '',
+    })
+
+    expect(rows).toEqual([{ amount: 12 }])
+    expect(fetchDatasetSampleRows).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'table_ab', lastQueryState: pipeline.datasetInputs[0].lastQueryState }),
+      [{ id: 'date-filter', type: 'timeFilter' }],
+      { limit: 700 },
+    )
   })
 })

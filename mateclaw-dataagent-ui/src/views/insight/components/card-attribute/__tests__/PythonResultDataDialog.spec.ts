@@ -167,6 +167,10 @@ describe('PythonResultDataDialog', () => {
       renderType: 'table',
       fieldLabels: { result: '结果' },
       table: { columns: ['result', 'internal_note'], rows: [['保留行', '不展示']] },
+      pythonAppliedResultView: {
+        filters: [{ field: 'result', op: '=', value: '保留行' }],
+        sort: null,
+      },
     })
     wrapper.unmount()
   })

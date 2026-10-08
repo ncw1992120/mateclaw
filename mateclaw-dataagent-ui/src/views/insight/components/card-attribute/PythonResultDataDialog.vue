@@ -181,6 +181,10 @@ const componentRenderData = computed(() => {
   return {
     ...componentPreviewData(props.component, componentRows.value, displayRows.value.map(({ name, title }) => ({ name, title }))),
     pythonResultPreview: true,
+    pythonAppliedResultView: {
+      filters: appliedConditions.value.map(({ field, op, value }) => ({ field, op, value })),
+      sort: sortState.value ? { ...sortState.value } : null,
+    },
   }
 })
 const pagedRows = computed(() => paginationEnabled.value ? sortedRows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value) : sortedRows.value)

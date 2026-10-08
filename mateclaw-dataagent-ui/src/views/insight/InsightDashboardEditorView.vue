@@ -1517,6 +1517,21 @@ function handlePreviewResult(data: InsightComponentData): void {
     componentPreviewRevisions.begin(data.componentId)
     manualRenderAt.set(data.componentId, Date.now())
     componentDataMap.value[data.componentId] = data
+    const component = currentPageComponents.value.find((item) => item.id === data.componentId)
+      ?? currentPageComponents.value
+        .filter((item) => item.type === 'combination')
+        .map((container) => findCombinationChild(container, data.componentId))
+        .find((item) => item !== null)
+    if (component && data.pythonResultPreview && data.pythonAppliedResultView) {
+      component.config = {
+        ...component.config,
+        pythonAppliedResultView: data.pythonAppliedResultView,
+      }
+      scheduleSchemaAutoSave()
+    }
+    if (component && persistAppliedKpiProjection(component as InsightComponent, data)) {
+      scheduleSchemaAutoSave()
+    }
   }
 }
 

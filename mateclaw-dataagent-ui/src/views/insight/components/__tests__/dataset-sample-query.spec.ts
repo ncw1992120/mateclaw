@@ -66,4 +66,17 @@ describe('fetchDatasetSampleRows', () => {
     expect(previewDatasetDraft).toHaveBeenCalledOnce()
     expect(result.rows).toEqual([{ amount: 12 }])
   })
+
+  it('结果恢复可按上次查看数据的限制行数重放查询', async () => {
+    const dataset = {
+      id: 'local-3', backendDatasetId: '13', sourceType: 'jdbc', sourceLabel: 'JDBC', alias: 'table_ab',
+      jdbc: { db: 'db-1', sql: 'select amount from sales' }, fields: [], filters: [],
+      queryConfig: { displayFields: [{ field: 'amount', title: '金额', role: 'measure' }], parameterBindings: [], sortPolicy: { enabled: false, mode: 'single', allowedFields: [] }, paginationPolicy: { enabled: false, defaultPageSize: 50, maxPageSize: 500, returnTotalCount: false } },
+      lastQueryState: { filters: [], parameters: {}, sort: null, page: 1, pageSize: 50, queryLimit: 320 },
+    } as any
+
+    await fetchDatasetSampleRows(dataset, [], { limit: dataset.lastQueryState.queryLimit })
+
+    expect(previewInput.mock.calls[0][0]).toMatchObject({ columns: ['amount'], limit: 320, offset: 0 })
+  })
 })
