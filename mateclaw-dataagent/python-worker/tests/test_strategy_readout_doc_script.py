@@ -85,6 +85,44 @@ def test_documented_script_accepts_the_two_input_aliases_in_either_order():
     assert swapped == normal
 
 
+def test_documented_script_accepts_live_inputs_without_unprojected_metric_time():
+    # 子策略贡献表当前 table_ab/table_wd 的实际查询结果不含 metric_time；
+    # table_wd 还会携带自己的 digo_ 统计列，角色应由 metric_id 与别名确定。
+    dimensions = {
+        "attribution_plan_id": "PLAN-001",
+        "attribution_strategy_id": "STR-001",
+        "platform_id": "SUB-001",
+        "channel": "APP",
+    }
+    wd = pd.DataFrame([
+        {
+            **dimensions,
+            "metric_id": "metric_x",
+            "metric_name": "指标X",
+            "digo_strategy_cnt": 2,
+        },
+    ])
+    zb = pd.DataFrame([
+        {**dimensions, "digo_metric_x": 120, "digo_metric_x_trans_user_cnt": 8},
+    ])
+
+    result = execute_documented_script(zb, wd)
+
+    assert result == [{
+        "attribution_plan_id": "PLAN-001",
+        "attribution_strategy_id": "STR-001",
+        "platform_id": "SUB-001",
+        "channel": "APP",
+        "metric_id": "metric_x",
+        "metric_name": "指标X",
+        "digo_strategy_cnt": 2,
+        "转化指标id": "metric_x",
+        "转化规模": 120,
+        "转化人数": 8,
+        "转化率": 15.0,
+    }]
+
+
 def test_documented_script_aggregates_duplicate_rows_and_handles_zero_denominator():
     dimensions = {
         "metric_time": "2026-09-01",
@@ -133,3 +171,46 @@ def test_documented_script_reports_all_missing_join_columns():
 
     with pytest.raises(ValueError, match="维度数据集 缺少必要字段: platform_id, channel"):
         execute_documented_script(zb, wd)
+
+
+def test_documented_script_returns_empty_rows_when_both_inputs_are_empty():
+    zb = pd.DataFrame(columns=[
+        "metric_time", "attribution_plan_id", "attribution_strategy_id",
+        "platform_id", "channel", "digo_metric_x", "digo_metric_x_trans_user_cnt",
+    ])
+    wd = pd.DataFrame(columns=[
+        "metric_time", "attribution_plan_id", "attribution_strategy_id",
+        "platform_id", "channel", "metric_id", "metric_name",
+    ])
+
+    assert execute_documented_script(zb, wd) == []
+
+
+def test_documented_script_returns_empty_rows_when_dimension_input_has_no_rows():
+    zb = pd.DataFrame(columns=[
+        "metric_time", "attribution_plan_id", "attribution_strategy_id",
+        "platform_id", "channel", "digo_metric_x", "digo_metric_x_trans_user_cnt",
+    ])
+    wd = pd.DataFrame(columns=[
+        "metric_time", "attribution_plan_id", "attribution_strategy_id",
+        "platform_id", "channel", "metric_id", "metric_name",
+    ])
+
+    assert execute_documented_script(zb, wd) == []
+
+
+def test_documented_script_returns_empty_rows_when_one_filtered_input_is_empty():
+    dimensions = {
+        "metric_time": "2026-09-01",
+        "attribution_plan_id": "PLAN-001",
+        "attribution_strategy_id": "STR-001",
+        "platform_id": "SUB-001",
+        "channel": "APP",
+    }
+    wd = pd.DataFrame([{**dimensions, "metric_id": "metric_x", "metric_name": "指标X"}])
+    zb = pd.DataFrame(columns=[
+        "metric_time", "attribution_plan_id", "attribution_strategy_id",
+        "platform_id", "channel", "digo_metric_x", "digo_metric_x_trans_user_cnt",
+    ])
+
+    assert execute_documented_script(zb, wd) == []
