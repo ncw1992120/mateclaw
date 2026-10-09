@@ -1,12 +1,15 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardSaveAsTemplateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/v1/insight/dashboards'
 
-/** 查询仪表盘列表 */
-export function list() {
-  return api.get<InsightDashboard[]>(BASE_URL)
+/**
+ * 查询仪表盘列表
+ * @param params 可选过滤条件；visibility 为逗号分隔取值，如 "template,official"
+ */
+export function list(params?: { visibility?: string }) {
+  return api.get<InsightDashboard[]>(BASE_URL, { params })
 }
 
 /** 查询仪表盘详情 */
@@ -32,6 +35,13 @@ export function remove(id: string) {
 /** 复制仪表盘 */
 export function copy(id: string) {
   return api.post<InsightDashboard>(`${BASE_URL}/${id}/copy`)
+}
+
+/**
+ * 存为样例模板：派生为团队共享样例模板（visibility=template），副本带示例数据可直接使用
+ */
+export function saveAsTemplate(id: string, data: InsightDashboardSaveAsTemplateInput) {
+  return api.post<InsightDashboard>(`${BASE_URL}/${id}/save-as-template`, data)
 }
 
 /** 预览仪表盘（获取所有组件渲染数据，支持运行时筛选条件） */

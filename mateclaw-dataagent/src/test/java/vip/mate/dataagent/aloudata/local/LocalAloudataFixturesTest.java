@@ -117,6 +117,19 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void metricDimensionsReturnsTheRequestedMetricDimensionNames() {
+        String metricName = "digo_touch_cnt_1";
+        Map<String, Object> allRelations = fixtures.payload("metric_all_dimensions",
+                Map.of("metricNames", List.of(metricName)), null);
+        Map<String, Object> singleRelation = fixtures.payload("metric_dimensions",
+                Map.of("metricNames", List.of(metricName)), null);
+
+        assertEquals(Boolean.TRUE, singleRelation.get("success"));
+        assertEquals(((Map<String, Object>) allRelations.get("data")).get(metricName), singleRelation.get("data"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void dimensionDetailExposesFieldNameDisplayNameAndDescription() {
         Map<String, Object> body = fixtures.payload("dimension_detail", Map.of("dimName", "metric_name"), null);
         Map<String, Object> detail = (Map<String, Object>) body.get("data");

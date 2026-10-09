@@ -41,6 +41,12 @@ public class InsightDashboardVO implements Serializable {
     /** 负责人名称 */
     private String ownerName;
 
+    /** 可见性：private / workspace / template / official */
+    private String visibility;
+
+    /** 模板元信息 JSON */
+    private String templateMeta;
+
     /** 修改人 */
     private String modifier;
 

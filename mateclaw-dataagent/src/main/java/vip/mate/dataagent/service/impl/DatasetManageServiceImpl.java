@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
@@ -16,6 +17,7 @@ import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.DatasetColumn;
 import vip.mate.dataagent.dataset.DatasetInputDescriptor;
 import vip.mate.dataagent.dataset.DatasetSourceType;
+import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.*;
@@ -44,6 +46,12 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private final ObjectMapper objectMapper;
     private final WorkspaceGuard workspaceGuard;
     private final DatasourceManageService datasourceManageService;
+    private StrategyReadoutDemoDatasetFixtures strategyReadoutFixtures;
+
+    @Autowired(required = false)
+    public void setStrategyReadoutFixtures(StrategyReadoutDemoDatasetFixtures fixtures) {
+        this.strategyReadoutFixtures = fixtures;
+    }
 
     private static final Set<String> NUMERIC_TYPES = Set.of(
             "int", "bigint", "smallint", "tinyint", "decimal", "float", "double",
@@ -60,6 +68,9 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         if (!Objects.equals(context.workspaceId(), workspaceGuard.currentWorkspaceId())
                 || !Objects.equals(context.userId(), workspaceGuard.currentUserId())) {
             throw new BusinessException(403, "工作区上下文不匹配");
+        }
+        if (strategyReadoutFixtures != null && strategyReadoutFixtures.supports(datasetId)) {
+            return strategyReadoutFixtures.describe(context, datasetId, inputName);
         }
         DatasetEntity entity = datasetMapper.selectById(datasetId);
         if (entity == null) {

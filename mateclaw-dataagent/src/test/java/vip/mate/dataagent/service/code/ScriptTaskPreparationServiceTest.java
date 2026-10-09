@@ -3,6 +3,7 @@ package vip.mate.dataagent.service.code;
 import org.junit.jupiter.api.Test;
 import vip.mate.dataagent.dataset.*;
 import vip.mate.dataagent.dto.DatasetQueryPlanDTO;
+import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.objectref.ObjectRefService;
 import vip.mate.dataagent.service.DatasetManageService;
 import java.util.*;
@@ -12,6 +13,30 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class ScriptTaskPreparationServiceTest {
+    @Test void materializesKnownStrategyReadoutFixtureWithoutJdbcAdapter() {
+        long datasetId = StrategyReadoutDemoDatasetFixtures.DIMENSION_DATASET_ID;
+        var fixtures = new StrategyReadoutDemoDatasetFixtures();
+        DatasetManageService datasets = mock(DatasetManageService.class);
+        when(datasets.getInputDescriptor(any(), eq(datasetId), eq("table_wd")))
+                .thenAnswer(invocation -> fixtures.describe(invocation.getArgument(0), datasetId, "table_wd"));
+        var registry = new ScriptTaskInputRegistry();
+        var service = new ScriptTaskPreparationService(datasets, registry,
+                new ScriptDatasetReadTokenService("secret"), List.of(), mock(ObjectRefService.class));
+        service.setStrategyReadoutFixtures(fixtures);
+        DatasetQueryPlanDTO plan = new DatasetQueryPlanDTO(String.valueOf(datasetId), "table_wd", List.of(),
+                List.of(), List.of(), null, new DatasetQueryPlanDTO.PushdownSpec(false, false, false),
+                List.of(), false, null);
+
+        var prepared = service.prepare("fixture-task", 1L, 2L, Map.of("table_wd", datasetId),
+                "result = []", Map.of(), Map.of("table_wd", plan));
+
+        var input = prepared.preparedInputs().get("table_wd");
+        assertNotNull(input);
+        assertEquals(4, input.rowCount());
+        assertTrue(input.schema().stream().anyMatch(column -> column.name().equals("metric_name")));
+        assertEquals(4, registry.requirePreparedInput("fixture-task", "table_wd").inlineRows().size());
+    }
+
     @Test void registersAliasesBeforeIssuingToken() {
         DatasetManageService datasets=mock(DatasetManageService.class); var tokens=new ScriptDatasetReadTokenService("secret");
         when(datasets.getInputDescriptor(any(),eq(3L),eq("orders"))).thenReturn(new DatasetInputDescriptor(3,"orders",DatasetSourceType.JDBC_TABLE,List.of(),null,Map.of(),null));

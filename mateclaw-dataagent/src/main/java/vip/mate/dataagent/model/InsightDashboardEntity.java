@@ -58,4 +58,12 @@ public class InsightDashboardEntity {
 
     /** 逻辑删除标记 */
     private Integer deleted;
+
+    /** 可见性：private / workspace / template / official */
+    @TableField("visibility")
+    private String visibility;
+
+    /** 模板元信息 JSON：{tags, category, cover, isOfficial, usageCount, sourceDashboardId} */
+    @TableField("template_meta")
+    private String templateMeta;
 }

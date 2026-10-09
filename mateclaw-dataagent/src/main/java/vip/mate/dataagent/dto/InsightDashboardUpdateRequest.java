@@ -33,6 +33,12 @@ public class InsightDashboardUpdateRequest implements Serializable {
     /** 负责人名称 */
     private String ownerName;
 
+    /** 可见性（可选）：private / workspace / template / official */
+    private String visibility;
+
+    /** 模板元信息 JSON（可选） */
+    private String templateMeta;
+
     /** 乐观锁版本：客户端读取到的 update_time；为空时兼容旧调用方。 */
     private String expectedUpdateTime;
 }

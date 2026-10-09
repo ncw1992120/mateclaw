@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import vip.mate.dataagent.dataset.*;
+import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.service.code.*;
 import vip.mate.dataagent.service.impl.DatasetExecutionServiceImpl;
 import java.util.*;
@@ -12,6 +13,24 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class DatasetExecutionServiceTest {
+    @Test void usesTheLocalFixtureForKnownDatasetDescriptorAndPreview() {
+        long datasetId = StrategyReadoutDemoDatasetFixtures.METRIC_DATASET_ID;
+        var fixtures = new StrategyReadoutDemoDatasetFixtures();
+        DatasetManageService catalog = mock(DatasetManageService.class);
+        DatasetSourceAdapter adapter = mock(DatasetSourceAdapter.class);
+        DatasetAccessContext context = new DatasetAccessContext(1L, 2L, "preview", Set.of(datasetId));
+        when(catalog.getInputDescriptor(context, datasetId, "table_ab"))
+                .thenAnswer(invocation -> fixtures.describe(context, datasetId, "table_ab"));
+        var service = new DatasetExecutionServiceImpl(List.of(adapter), mock(ScriptTaskPreparationService.class), catalog);
+        service.setStrategyReadoutFixtures(fixtures);
+        DatasetReadRequest request = new DatasetReadRequest(datasetId, "table_ab",
+                List.of("metric_time", "digo_trd_fund_amt_inout_cy_jjgr"), List.of(), 10, 0, Map.of());
+
+        assertEquals("table_ab", service.descriptor(context, datasetId, "table_ab").inputName());
+        assertEquals(4, service.preview(context, request).rows().size());
+        verifyNoInteractions(adapter);
+    }
+
     @Test void selectsAdapterFromCatalogDescriptor() {
         DatasetManageService catalog=mock(DatasetManageService.class); DatasetSourceAdapter adapter=mock(DatasetSourceAdapter.class);
         var descriptor=new DatasetInputDescriptor(9,"orders",DatasetSourceType.JDBC_TABLE,List.of(),null,Map.of(),null);

@@ -1,7 +1,9 @@
 package vip.mate.dataagent.service.code;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import vip.mate.dataagent.dataset.*;
+import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.dto.DatasetQueryPlanDTO;
 import vip.mate.dataagent.objectref.DatasetBatchCodec;
 import vip.mate.dataagent.objectref.ObjectRefService;
@@ -20,10 +22,16 @@ public class ScriptTaskPreparationService {
 
     private final DatasetManageService datasets; private final ScriptTaskInputRegistry registry; private final ScriptDatasetReadTokenService tokens;
     private final List<DatasetSourceAdapter> adapters; private final ObjectRefService objectRefs;
+    private StrategyReadoutDemoDatasetFixtures strategyReadoutFixtures;
     public ScriptTaskPreparationService(DatasetManageService datasets, ScriptTaskInputRegistry registry,
                                         ScriptDatasetReadTokenService tokens, List<DatasetSourceAdapter> adapters,
                                         ObjectRefService objectRefs) {
         this.datasets = datasets; this.registry = registry; this.tokens = tokens; this.adapters = adapters; this.objectRefs = objectRefs;
+    }
+
+    @Autowired(required = false)
+    public void setStrategyReadoutFixtures(StrategyReadoutDemoDatasetFixtures fixtures) {
+        this.strategyReadoutFixtures = fixtures;
     }
 
     public PreparedTask prepare(String taskId, Long workspaceId, Long userId, Map<String,Long> inputDatasets, String script, Map<String,Object> parameters) {
@@ -73,7 +81,10 @@ public class ScriptTaskPreparationService {
             return new ScriptTaskInputRegistry.PreparedInput(alias, descriptor.schema(), List.of(), null, 0,
                     System.currentTimeMillis() + PREPARED_INPUT_TTL_MS);
         }
-        DatasetSourceAdapter adapter = adapters.stream().filter(a -> a.supports(descriptor.sourceType())).findFirst()
+        boolean useStrategyFixture = strategyReadoutFixtures != null
+                && strategyReadoutFixtures.supports(descriptor.datasetId());
+        DatasetSourceAdapter adapter = useStrategyFixture ? null : adapters.stream()
+                .filter(a -> a.supports(descriptor.sourceType())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("no adapter for plan input: " + alias));
         int readLimit = plan.readLimit() != null ? Math.min(plan.readLimit(), 100_000) : PAGE_SIZE;
         int offset = plan.pushdown().pagination() && plan.pagination() != null ? plan.pagination().offset() : 0;
@@ -84,10 +95,13 @@ public class ScriptTaskPreparationService {
         int pages = 0;
         while (pages++ < MAX_PAGES && rows.size() < effectiveLimit) {
             int size = Math.min(PAGE_SIZE, effectiveLimit - rows.size());
-            DatasetBatch batch = adapter.read(context, new DatasetReadRequest(datasetIdOf(plan, context, alias), alias,
+            DatasetReadRequest readRequest = new DatasetReadRequest(datasetIdOf(plan, context, alias), alias,
                     plan.columns(), filtersOf(plan), plan.orders().stream()
                             .map(o -> new DatasetSort(o.field(), o.direction())).toList(),
-                    size, pageOffset, Map.of(), false));
+                    size, pageOffset, Map.of(), false);
+            DatasetBatch batch = useStrategyFixture
+                    ? strategyReadoutFixtures.read(context, readRequest)
+                    : adapter.read(context, readRequest);
             List<Map<String, Object>> pageRows = batch.rows() == null ? List.of() : batch.rows();
             rows.addAll(pageRows);
             if (pageRows.size() < size || batch.last()) break;

@@ -85,6 +85,7 @@ public class LocalAloudataFixtures {
             case "analysis_view_query_by_name" -> viewByName(owner, safeParams);
             case "metric_batch_detail" -> metricBatchDetail(owner, safeParams);
             case "metric_all_dimensions" -> metricAllDimensions(safeParams);
+            case "metric_dimensions" -> metricDimensions(safeParams);
             case "dimension_list" -> dimensionList(owner, safeParams);
             case "dimension_detail" -> dimensionDetail(safeParams);
             case "dimension_values" -> dimensionValues(safeParams);
@@ -239,6 +240,19 @@ public class LocalAloudataFixtures {
             }
         }
         return envelope(relations, "mock-trace-metric-dimensions");
+    }
+
+    /** 单指标详情端点：返回 metric_dimensions 真实接口使用的维度名称数组。 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> metricDimensions(Map<String, Object> params) {
+        String metricName = nameSet(params.get("metricNames")).stream().findFirst().orElse(null);
+        if (metricName == null) {
+            return envelope(List.of(), "mock-trace-metric-dimensions");
+        }
+        Map<String, Object> allRelations = metricAllDimensions(Map.of("metricNames", List.of(metricName)));
+        Map<String, Object> relations = asMap(allRelations.get("data"));
+        Object dimensions = relations.get(metricName);
+        return envelope(dimensions instanceof List<?> ? dimensions : List.of(), "mock-trace-metric-dimensions");
     }
 
     /** 维度悬浮详情复用维度视图同一条目录记录。 */

@@ -482,6 +482,17 @@ public final class DataAgentConstants {
     /** 仪表盘复制名称后缀 */
     public static final String INSIGHT_DASHBOARD_COPY_SUFFIX = " 副本";
 
+    /** 仪表盘可见性：私有（默认，仅创建者/工作区管理员可改） */
+    public static final String INSIGHT_DASHBOARD_VISIBILITY_PRIVATE = "private";
+    /** 仪表盘可见性：工作区共享（团队内成员可见） */
+    public static final String INSIGHT_DASHBOARD_VISIBILITY_WORKSPACE = "workspace";
+    /** 仪表盘可见性：团队样例模板（workspace 内共享，可基于此创建） */
+    public static final String INSIGHT_DASHBOARD_VISIBILITY_TEMPLATE = "template";
+    /** 仪表盘可见性：官方样例（只读，仅可派生） */
+    public static final String INSIGHT_DASHBOARD_VISIBILITY_OFFICIAL = "official";
+    /** 仪表盘可见性默认值 */
+    public static final String INSIGHT_DASHBOARD_VISIBILITY_DEFAULT = INSIGHT_DASHBOARD_VISIBILITY_PRIVATE;
+
     /** 组件渲染类型：ECharts 图表 */
     public static final String INSIGHT_RENDER_TYPE_ECHARTS = "echarts";
 

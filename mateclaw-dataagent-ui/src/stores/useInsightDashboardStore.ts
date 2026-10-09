@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardSaveAsTemplateInput, InsightDashboardAiChatInput } from '@/types'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import type { StreamAiChatCallbacks } from '@/api/insight-dashboard'
 
@@ -20,11 +20,14 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     loading.value = false
   }
 
-  /** 获取仪表盘列表 */
-  async function fetchDashboards(): Promise<void> {
+  /**
+   * 获取仪表盘列表
+   * @param params 可选过滤条件；传 visibility 时只返回对应可见性的仪表盘（模板库用 "template,official"）
+   */
+  async function fetchDashboards(params?: { visibility?: string }): Promise<void> {
     loading.value = true
     try {
-      const data = await insightDashboardApi.list()
+      const data = await insightDashboardApi.list(params)
       dashboards.value = data as unknown as InsightDashboard[]
     } finally {
       loading.value = false
@@ -69,6 +72,13 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     return copied as unknown as InsightDashboard
   }
 
+  /** 存为样例模板：派生为团队共享样例模板，副本带示例数据可直接使用 */
+  async function saveAsTemplate(id: string, data: InsightDashboardSaveAsTemplateInput): Promise<InsightDashboard> {
+    const created = await insightDashboardApi.saveAsTemplate(id, data)
+    await fetchDashboards()
+    return created as unknown as InsightDashboard
+  }
+
   /**
    * AI助手流式对话
    * @param data 请求参数
@@ -103,6 +113,7 @@ export const useInsightDashboardStore = defineStore('insightDashboard', () => {
     updateDashboard,
     deleteDashboard,
     copyDashboard,
+    saveAsTemplate,
     streamAiChatDashboard,
     reset,
   }

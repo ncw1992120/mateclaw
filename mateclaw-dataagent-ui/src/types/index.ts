@@ -1991,6 +1991,32 @@ export interface InsightDashboard {
   modifier?: string
   createTime: string
   updateTime: string
+  /** 可见性：private（默认）/ workspace / template / official */
+  visibility?: string
+  /** 模板元信息 JSON 字符串；非模板为 null */
+  templateMeta?: string | null
+}
+
+/** 模板元信息（templateMeta 解析后的结构） */
+export interface InsightDashboardTemplateMeta {
+  sourceDashboardId?: number
+  authorName?: string
+  tags?: string[]
+  category?: string
+  cover?: string
+  usageCount?: number
+  isOfficial?: boolean
+  /** 派生副本的来源模板（复制模板时写入，用于「替换示例数据」提示） */
+  sourceTemplateId?: number
+  sourceTemplateName?: string
+}
+
+/** 存为样例模板输入 */
+export interface InsightDashboardSaveAsTemplateInput {
+  name?: string
+  description?: string
+  tags?: string[]
+  category?: string
 }
 
 /** 创建仪表盘输入 */
@@ -2000,6 +2026,10 @@ export interface InsightDashboardCreateInput {
   schemaJson?: string
   agentId?: string
   ownerName?: string
+  /** 可见性（可选，默认 private） */
+  visibility?: string
+  /** 模板元信息 JSON 字符串（可选） */
+  templateMeta?: string | null
 }
 
 /** 更新仪表盘输入 */
@@ -2010,6 +2040,10 @@ export interface InsightDashboardUpdateInput {
   status?: string
   agentId?: string
   ownerName?: string
+  /** 可见性（可选） */
+  visibility?: string
+  /** 模板元信息 JSON 字符串（可选） */
+  templateMeta?: string | null
   /** 乐观锁：更新前读取到的仪表盘更新时间。 */
   expectedUpdateTime?: string
 }

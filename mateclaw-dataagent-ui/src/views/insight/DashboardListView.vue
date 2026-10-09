@@ -13,7 +13,7 @@
           </span>
           <div class="list-title-text">
             <h2 class="list-title">{{ t('insight.title') }}</h2>
-            <p class="list-subtitle">{{ t('insight.headerSub', { count: store.dashboards.length }) }}</p>
+            <p class="list-subtitle">{{ t('insight.headerSub', { count: scopedDashboards.length }) }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -24,22 +24,46 @@
             clearable
             class="search-input"
           />
-          <el-button class="ai-assistant-btn" :class="{ on: showAiPanel }" @click="toggleAiPanel">
+          <el-button v-if="activeTab === 'mine'" class="ai-assistant-btn" :class="{ on: showAiPanel }" @click="toggleAiPanel">
             <template #icon>
               <RobotIcon style="width: 16px; height: 16px;" />
             </template>
             {{ t('insight.aiAssistant') }}
           </el-button>
-          <el-button v-if="canCreate" type="primary" :icon="Plus" @click="handleCreate">
+          <el-button v-if="canCreate && activeTab === 'mine'" type="primary" :icon="Plus" @click="handleCreate">
             {{ t('insight.create') }}
           </el-button>
         </div>
       </div>
       <div class="list-body">
         <div class="list-content">
+          <!-- 一级范围 Tab：我的仪表盘 / 模板（样例库） -->
+          <div class="main-tabs" role="tablist" aria-label="仪表盘范围">
+            <button
+              type="button"
+              class="main-tab"
+              :class="{ active: activeTab === 'mine' }"
+              role="tab"
+              :aria-selected="activeTab === 'mine'"
+              @click="switchTab('mine')"
+            >
+              {{ t('insight.tabMine') }}<span class="main-tab-cnt">{{ mineCount }}</span>
+            </button>
+            <button
+              type="button"
+              class="main-tab"
+              :class="{ active: activeTab === 'templates' }"
+              role="tab"
+              :aria-selected="activeTab === 'templates'"
+              @click="switchTab('templates')"
+            >
+              {{ t('insight.tabTemplates') }}<span class="main-tab-cnt">{{ templateCount }}</span>
+            </button>
+          </div>
+
           <!-- 筛选行：状态 Tab（胶囊式，与报告页统一） / 排序 / 视图切换 -->
           <div class="filter-row">
-            <div class="filter-tabs">
+            <div v-if="activeTab === 'mine'" class="filter-tabs">
               <button
                 type="button"
                 class="filter-tab"
@@ -111,10 +135,10 @@
               </svg>
             </div>
             <div class="empty-copy">
-              <div class="empty-title">{{ searchKeyword ? t('insight.searchNoResult') : t('insight.listEmpty') }}</div>
-              <div class="empty-hint">{{ searchKeyword ? t('insight.searchNoResultHint') : t('insight.emptyHint') }}</div>
+              <div class="empty-title">{{ searchKeyword ? t('insight.searchNoResult') : (activeTab === 'templates' ? t('insight.templateEmpty') : t('insight.listEmpty')) }}</div>
+              <div class="empty-hint">{{ searchKeyword ? t('insight.searchNoResultHint') : (activeTab === 'templates' ? t('insight.templateEmptyHint') : t('insight.emptyHint')) }}</div>
             </div>
-            <div class="empty-actions">
+            <div v-if="activeTab === 'mine'" class="empty-actions">
               <el-button @click="toggleAiPanel">
                 <template #icon><RobotIcon style="width: 16px; height: 16px;" /></template>
                 {{ t('insight.aiAssistant') }}
@@ -152,6 +176,7 @@
                 </div>
                 <span class="card-name">{{ dashboard.name }}</span>
                 <el-tag
+                  v-if="activeTab === 'mine'"
                   class="card-status"
                   :type="dashboard.status === 'published' ? 'success' : 'warning'"
                   effect="light"
@@ -159,6 +184,16 @@
                   round
                 >
                   <span class="status-dot"></span>{{ dashboard.status === 'published' ? t('insight.status.published') : t('insight.status.draft') }}
+                </el-tag>
+                <el-tag
+                  v-else-if="templateMetaOf(dashboard).isOfficial"
+                  class="card-status card-status-official"
+                  type="primary"
+                  effect="light"
+                  size="small"
+                  round
+                >
+                  {{ t('insight.templateOfficial') }}
                 </el-tag>
               </div>
 
@@ -264,6 +299,12 @@
                 </span>
               </div>
 
+              <!-- 模板分类与标签（仅模板态展示） -->
+              <div v-if="activeTab === 'templates'" class="card-template-meta">
+                <span v-if="templateMetaOf(dashboard).category" class="tpl-category">{{ templateMetaOf(dashboard).category }}</span>
+                <span v-for="tag in templateTagsOf(dashboard)" :key="tag" class="tpl-tag">{{ tag }}</span>
+              </div>
+
               <!-- 操作栏 -->
               <div class="card-actions" @click.stop @keydown.stop>
                 <div class="action-group">
@@ -272,7 +313,15 @@
                     {{ t('insight.preview') }}
                   </button>
                   <button
-                    v-if="canCreate"
+                    v-if="canCreate && activeTab === 'templates'"
+                    class="card-action-btn action-primary"
+                    @click="handleCreateFromTemplate(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/><line x1="15" y1="12" x2="21" y2="12"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
+                    {{ t('insight.createFromTemplate') }}
+                  </button>
+                  <button
+                    v-if="canCreate && activeTab === 'mine'"
                     class="card-action-btn"
                     @click="handleCopy(dashboard)"
                   >
@@ -280,7 +329,7 @@
                     {{ t('insight.copy') }}
                   </button>
                   <button
-                    v-if="canCreate && dashboard.status === 'draft'"
+                    v-if="canCreate && activeTab === 'mine' && dashboard.status === 'draft'"
                     class="card-action-btn action-publish"
                     @click="handlePublish(dashboard)"
                   >
@@ -288,7 +337,7 @@
                     {{ t('insight.publish') }}
                   </button>
                   <button
-                    v-if="canModifyDashboard(dashboard) && dashboard.status === 'published'"
+                    v-if="canModifyDashboard(dashboard) && activeTab === 'mine' && dashboard.status === 'published'"
                     class="card-action-btn action-unpublish"
                     @click="handleUnpublish(dashboard)"
                   >
@@ -296,7 +345,7 @@
                     {{ t('insight.unpublish') }}
                   </button>
                 </div>
-                <div v-if="canModifyDashboard(dashboard)" class="action-group action-group-right">
+                <div v-if="canModifyDashboard(dashboard) && activeTab === 'mine'" class="action-group action-group-right">
                   <button
                     v-if="canModifyDashboard(dashboard)"
                     class="card-action-btn"
@@ -307,6 +356,14 @@
                   </button>
                   <button
                     v-if="canModifyDashboard(dashboard)"
+                    class="card-action-btn"
+                    @click="openSaveTemplate(dashboard)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    {{ t('insight.saveAsTemplate') }}
+                  </button>
+                  <button
+                    v-if="canModifyDashboard(dashboard)"
                     class="card-action-btn action-delete"
                     @click="handleDelete(dashboard)"
                   >
@@ -314,7 +371,7 @@
                     {{ t('insight.delete') }}
                   </button>
                  </div>
-                <span v-else class="no-perm">
+                <span v-else-if="activeTab === 'mine'" class="no-perm">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   {{ t('insight.noEditPermission') }}
                 </span>
@@ -339,6 +396,40 @@
           @dashboard-updated="handleAiDashboardUpdated"
         />
       </el-drawer>
+
+      <!-- 存为样例模板弹窗 -->
+      <el-dialog
+        v-model="saveTemplateVisible"
+        :title="t('insight.saveAsTemplateTitle')"
+        width="480px"
+        append-to-body
+      >
+        <div class="save-template-form">
+          <p class="save-template-hint">{{ t('insight.saveAsTemplateHint') }}</p>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateName') }}</span>
+            <el-input v-model="saveTemplateForm.name" maxlength="100" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateDesc') }}</span>
+            <el-input v-model="saveTemplateForm.description" type="textarea" :rows="2" maxlength="300" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateCategory') }}</span>
+            <el-input v-model="saveTemplateForm.category" :placeholder="t('insight.templateCategoryPlaceholder')" maxlength="50" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateTags') }}</span>
+            <el-input v-model="saveTemplateForm.tags" :placeholder="t('insight.templateTagsPlaceholder')" maxlength="200" />
+          </label>
+        </div>
+        <template #footer>
+          <el-button @click="saveTemplateVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="saveTemplateSaving" @click="confirmSaveTemplate">
+            {{ t('common.confirm') }}
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -362,7 +453,7 @@ import { Plus, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import dayjs from 'dayjs'
 import { formatRelativeTime } from '@/utils/time'
-import type { InsightDashboard } from '@/types'
+import type { InsightDashboard, InsightDashboardTemplateMeta } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
@@ -401,13 +492,67 @@ const showAiPanel = ref(false)
 /** 搜索关键词 */
 const searchKeyword = ref('')
 
+/** 一级范围 Tab：mine=我的仪表盘 / templates=团队样例模板库 */
+const activeTab = ref<'mine' | 'templates'>('mine')
+
+/** 是否样例模板（含官方样例） */
+function isTemplateDashboard(dashboard: InsightDashboard): boolean {
+  return dashboard.visibility === 'template' || dashboard.visibility === 'official'
+}
+
+/** 当前作用域下的仪表盘：模板 Tab 只看模板，我的仪表盘 Tab 排除模板 */
+const scopedDashboards = computed(() => {
+  return activeTab.value === 'templates'
+    ? store.dashboards.filter(isTemplateDashboard)
+    : store.dashboards.filter((d) => !isTemplateDashboard(d))
+})
+
+/** 两个 Tab 的计数（不受搜索影响） */
+const mineCount = computed(() => store.dashboards.filter((d) => !isTemplateDashboard(d)).length)
+const templateCount = computed(() => store.dashboards.filter(isTemplateDashboard).length)
+
+/** 解析模板元信息 JSON，缺失或解析失败返回空对象 */
+function templateMetaOf(dashboard: InsightDashboard): InsightDashboardTemplateMeta {
+  if (!dashboard.templateMeta) {
+    return {}
+  }
+  try {
+    return JSON.parse(dashboard.templateMeta) as InsightDashboardTemplateMeta
+  } catch {
+    return {}
+  }
+}
+
+/** 模板标签（兜底空数组） */
+function templateTagsOf(dashboard: InsightDashboard): string[] {
+  const tags = templateMetaOf(dashboard).tags
+  return Array.isArray(tags) ? tags : []
+}
+
+/** 按当前作用域取数：模板 Tab 走后端 visibility 过滤 */
+function loadDashboards(): Promise<void> {
+  const params = activeTab.value === 'templates' ? { visibility: 'template,official' } : undefined
+  return store.fetchDashboards(params)
+}
+
+/** 切换一级 Tab 并重新取数 */
+function switchTab(tab: 'mine' | 'templates'): void {
+  if (activeTab.value === tab) {
+    return
+  }
+  activeTab.value = tab
+  loadDashboards().catch(() => {
+    ElMessage.error(t('insight.loadFailed'))
+  })
+}
+
 /** 按关键词过滤仪表盘列表 */
 const filteredDashboards = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase()
   if (!keyword) {
-    return store.dashboards
+    return scopedDashboards.value
   }
-  return store.dashboards.filter((d) => {
+  return scopedDashboards.value.filter((d) => {
     return d.name?.toLowerCase().includes(keyword)
       || d.description?.toLowerCase().includes(keyword)
       || d.ownerName?.toLowerCase().includes(keyword)
@@ -463,7 +608,8 @@ const statusCounts = computed(() => {
 /** 最终展示列表：状态筛选 + 按更新时间排序 */
 const displayedDashboards = computed(() => {
   let list = filteredDashboards.value
-  if (statusFilter.value !== 'all') {
+  // 状态筛选只作用于「我的仪表盘」：模板态该控件已隐藏，残留的筛选值会把模板筛成空
+  if (activeTab.value === 'mine' && statusFilter.value !== 'all') {
     list = list.filter((d) => d.status === statusFilter.value)
   }
   const sorted = [...list]
@@ -488,7 +634,7 @@ function toggleSortOrder(): void {
 
 onMounted(() => {
   window.addEventListener('resize', handleWindowResize)
-  store.fetchDashboards().catch(() => {
+  loadDashboards().catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
   // 刷新后恢复预览模式时，需要加载对应仪表盘数据；编辑器由正式路由负责加载。
@@ -522,7 +668,7 @@ function handleAiDashboardUpdated(dashboardId: string): void {
     void router.push({ name: 'insight-dashboard-editor', query: { dashboardId } })
   }
   showAiPanel.value = false
-  store.fetchDashboards().catch(() => {
+  loadDashboards().catch(() => {
     // 静默失败
   })
 }
@@ -571,6 +717,62 @@ async function handleUnpublish(dashboard: InsightDashboard): Promise<void> {
     ElMessage.success(t('insight.unpublishSuccess'))
   } catch {
     ElMessage.error(t('insight.unpublishFailed'))
+  }
+}
+
+/** 存为样例模板弹窗 */
+const saveTemplateVisible = ref(false)
+const saveTemplateSaving = ref(false)
+const saveTemplateSource = ref<InsightDashboard | null>(null)
+const saveTemplateForm = ref({ name: '', description: '', category: '', tags: '' })
+
+/** 打开「存为样例模板」弹窗 */
+function openSaveTemplate(dashboard: InsightDashboard): void {
+  saveTemplateSource.value = dashboard
+  saveTemplateForm.value = {
+    name: dashboard.name || '',
+    description: dashboard.description || '',
+    category: '',
+    tags: '',
+  }
+  saveTemplateVisible.value = true
+}
+
+/** 确认存为样例模板 */
+async function confirmSaveTemplate(): Promise<void> {
+  const source = saveTemplateSource.value
+  if (!source) {
+    return
+  }
+  saveTemplateSaving.value = true
+  try {
+    const tags = saveTemplateForm.value.tags
+      .split(/[,，\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    await store.saveAsTemplate(source.id, {
+      name: saveTemplateForm.value.name.trim() || source.name,
+      description: saveTemplateForm.value.description.trim() || undefined,
+      category: saveTemplateForm.value.category.trim() || undefined,
+      tags,
+    })
+    ElMessage.success(t('insight.saveTemplateSuccess'))
+    saveTemplateVisible.value = false
+  } catch {
+    ElMessage.error(t('insight.saveTemplateFailed'))
+  } finally {
+    saveTemplateSaving.value = false
+  }
+}
+
+/** 基于此模板创建：复制为当前用户的私有副本，带示例数据可直接使用 */
+async function handleCreateFromTemplate(dashboard: InsightDashboard): Promise<void> {
+  try {
+    await store.copyDashboard(dashboard.id)
+    ElMessage.success(t('insight.createFromTemplateSuccess'))
+    await loadDashboards()
+  } catch {
+    ElMessage.error(t('insight.createFromTemplateFailed'))
   }
 }
 
@@ -732,7 +934,7 @@ function getDashboardIconType(dashboard: InsightDashboard): 'bar' | 'line' | 'pi
 function handleBackToList(): void {
   mode.value = 'list'
   currentDashboardId.value = ''
-  store.fetchDashboards().catch(() => {
+  loadDashboards().catch(() => {
     // 静默失败
   })
 }
@@ -970,6 +1172,139 @@ function handleBackToList(): void {
   .filter-tabs {
     gap: 12px;
   }
+}
+
+/* 一级范围 Tab：我的仪表盘 / 模板。
+   比状态 Tab 更高一级，故用「下划线式」而非灰底胶囊，避免两级都用 pill 造成层级混淆 */
+.main-tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid var(--db-border);
+  margin-bottom: 12px;
+}
+
+.main-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 10px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.main-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.main-tab:hover:not(.active) {
+  color: var(--db-text);
+}
+
+.main-tab.active {
+  color: var(--main-orange);
+  font-weight: 600;
+}
+
+.main-tab.active::after {
+  background: var(--main-orange);
+}
+
+.main-tab-cnt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--db-bg);
+  color: var(--db-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.main-tab.active .main-tab-cnt {
+  background: color-mix(in srgb, var(--main-orange) 14%, transparent);
+  color: var(--main-orange);
+}
+
+/* 模板卡片的分类与标签 */
+.card-template-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tpl-category {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--main-orange) 12%, transparent);
+  color: var(--main-orange);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tpl-tag {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--db-bg);
+  color: var(--db-text-secondary);
+  font-size: 11px;
+}
+
+.card-status-official {
+  border-color: color-mix(in srgb, var(--main-orange) 40%, transparent);
+}
+
+/* 主操作：基于此创建 */
+.card-action-btn.action-primary {
+  color: var(--main-orange);
+  font-weight: 600;
+}
+
+/* 存为样例模板弹窗 */
+.save-template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.save-template-hint {
+  margin: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--db-text-muted);
+}
+
+.st-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.st-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
 }
 
 /* 状态 Tab 容器：灰底分段胶囊（次级控件，内 3px 衬住激活项） */

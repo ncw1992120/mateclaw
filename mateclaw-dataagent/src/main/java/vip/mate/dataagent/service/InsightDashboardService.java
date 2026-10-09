@@ -3,6 +3,7 @@ package vip.mate.dataagent.service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.dataagent.dto.InsightDashboardAiChatRequest;
 import vip.mate.dataagent.dto.InsightDashboardCreateRequest;
+import vip.mate.dataagent.dto.InsightDashboardSaveAsTemplateRequest;
 import vip.mate.dataagent.dto.InsightDashboardUpdateRequest;
 import vip.mate.dataagent.dto.InsightDashboardVO;
 
@@ -18,9 +19,11 @@ public interface InsightDashboardService {
     /**
      * 列出当前工作区的仪表盘
      *
+     * @param visibility 可见性过滤（可选）：逗号分隔的 visibility 取值，如 "template,official"；
+     *                   为空或不传时返回工作区内全部仪表盘
      * @return 仪表盘列表
      */
-    List<InsightDashboardVO> listDashboards();
+    List<InsightDashboardVO> listDashboards(String visibility);
 
     /**
      * 获取仪表盘详情
@@ -61,6 +64,16 @@ public interface InsightDashboardService {
      * @return 复制后的新仪表盘视图对象
      */
     InsightDashboardVO copyDashboard(Long id);
+
+    /**
+     * 存为样例模板：将指定仪表盘派生为团队共享样例模板（visibility=template）。
+     * 模板副本保留数据集绑定与 Schema，带示例数据可直接使用；模板元信息记录来源与作者。
+     *
+     * @param id      源仪表盘 ID（需为当前用户所有或工作区管理员）
+     * @param request 模板元信息（名称/描述/标签/分类），为空时使用源仪表盘信息
+     * @return 生成的模板视图对象
+     */
+    InsightDashboardVO saveAsTemplate(Long id, InsightDashboardSaveAsTemplateRequest request);
 
     /**
      * AI助手对话（流式）

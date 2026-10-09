@@ -9,6 +9,7 @@ import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.DatasetInputDescriptor;
 import vip.mate.dataagent.dataset.DatasetSourceType;
+import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.dto.DatasetCreateRequest;
 import vip.mate.dataagent.dto.DatasetSourceDefinition;
 import vip.mate.dataagent.dto.DatasetUpdateRequest;
@@ -75,6 +76,37 @@ class DatasetCatalogServiceTest {
         assertThrows(RuntimeException.class, () -> service.getInputDescriptor(
                 new DatasetAccessContext(11L, 99L, "task-1", Set.of()), 7L, "orders"));
         verifyNoInteractions(datasetMapper);
+    }
+
+    @Test
+    void descriptorUsesKnownLocalStrategyFixtureAfterAuthorizationInsteadOfReturningNotFound() {
+        DatasetManageServiceImpl service = newService();
+        service.setStrategyReadoutFixtures(new StrategyReadoutDemoDatasetFixtures());
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+        when(workspaceGuard.currentUserId()).thenReturn(99L);
+
+        DatasetInputDescriptor descriptor = service.getInputDescriptor(
+                new DatasetAccessContext(11L, 99L, "task-fixture", Set.of(2104203094760529922L)),
+                2104203094760529922L, "table_wd");
+
+        assertEquals("table_wd", descriptor.inputName());
+        assertTrue(descriptor.schema().stream().anyMatch(field -> field.name().equals("metric_name")));
+        verify(datasetMapper, never()).selectById(2104203094760529922L);
+    }
+
+    @Test
+    void localStrategyFixtureDoesNotMaskOtherMissingDatasetIds() {
+        DatasetManageServiceImpl service = newService();
+        service.setStrategyReadoutFixtures(new StrategyReadoutDemoDatasetFixtures());
+        when(workspaceGuard.currentWorkspaceId()).thenReturn(11L);
+        when(workspaceGuard.currentUserId()).thenReturn(99L);
+
+        var error = assertThrows(vip.mate.dataagent.exception.BusinessException.class,
+                () -> service.getInputDescriptor(new DatasetAccessContext(11L, 99L, "task-missing", Set.of(999999L)),
+                        999999L, "unknown"));
+
+        assertEquals(404, error.getCode());
+        assertTrue(error.getMessage().contains("数据集不存在"));
     }
 
     @Test

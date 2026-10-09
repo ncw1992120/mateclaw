@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -213,12 +214,36 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     }
 
     @Override
-    public List<InsightDashboardVO> listDashboards() {
+    public List<InsightDashboardVO> listDashboards(String visibility) {
         LambdaQueryWrapper<InsightDashboardEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(InsightDashboardEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.orderByDesc(InsightDashboardEntity::getUpdateTime);
         List<InsightDashboardEntity> entities = insightDashboardMapper.selectList(wrapper);
-        return entities.stream().map(this::toVO).collect(Collectors.toList());
+        return filterByVisibility(entities, visibility).stream()
+                .map(this::toVO).collect(Collectors.toList());
+    }
+
+    /**
+     * 按可见性过滤（纯函数，便于单测）：
+     * DB 层仅按 workspace 过滤，可见性在此做精确匹配。
+     * visibility 为空或空白时返回原列表；取值逗号分隔，缺省按 private 处理。
+     */
+    static List<InsightDashboardEntity> filterByVisibility(List<InsightDashboardEntity> entities, String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return entities;
+        }
+        Set<String> wanted = Arrays.stream(visibility.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        if (wanted.isEmpty()) {
+            return entities;
+        }
+        return entities.stream()
+                .filter(e -> wanted.contains(e.getVisibility() != null
+                        ? e.getVisibility()
+                        : DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -236,6 +261,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         entity.setDescription(request.getDescription());
         entity.setSchemaJson(request.getSchemaJson() != null ? request.getSchemaJson() : "{\"version\":\"1.0\",\"components\":[]}");
         entity.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        entity.setVisibility(request.getVisibility() != null
+                ? request.getVisibility()
+                : DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_DEFAULT);
+        entity.setTemplateMeta(request.getTemplateMeta());
         entity.setAgentId(request.getAgentId());
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setOwnerId(workspaceGuard.currentUserId());
@@ -278,6 +307,12 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (request.getOwnerName() != null) {
             entity.setOwnerName(request.getOwnerName());
         }
+        if (request.getVisibility() != null) {
+            entity.setVisibility(request.getVisibility());
+        }
+        if (request.getTemplateMeta() != null) {
+            entity.setTemplateMeta(request.getTemplateMeta());
+        }
         entity.setModifier(workspaceGuard.currentUserNickname());
         insightDashboardMapper.updateById(entity);
         log.info("仪表盘更新审计: dashboardId={}, userId={}, workspaceId={}, fields={}, schemaBytes={}, source=dashboard-api",
@@ -295,6 +330,8 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (request.getStatus() != null) fields.add("status");
         if (request.getAgentId() != null) fields.add("agentId");
         if (request.getOwnerName() != null) fields.add("ownerName");
+        if (request.getVisibility() != null) fields.add("visibility");
+        if (request.getTemplateMeta() != null) fields.add("templateMeta");
         return String.join(",", fields);
     }
 
@@ -313,14 +350,18 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public InsightDashboardVO copyDashboard(Long id) {
-        requireOwnership(id);
+        requireWorkspaceScoped(id);
         InsightDashboardEntity source = insightDashboardMapper.selectById(id);
-        if (source == null || source.getDeleted() == 1) {
+        if (source == null || (source.getDeleted() != null && source.getDeleted() == 1)) {
             throw new BusinessException(404, "仪表盘不存在: " + id);
         }
 
         InsightDashboardEntity copy = new InsightDashboardEntity();
         BeanUtils.copyProperties(source, copy);
+        // fork 语义：副本归当前用户私有；清空模板展示元数据（tags/category/usageCount），
+        // 仅当源为模板时保留来源标记，供编辑器提示「示例数据来自模板 X，可替换为自有数据」
+        copy.setVisibility(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE);
+        copy.setTemplateMeta(buildDerivedProvenance(source));
         copy.setId(null);
         copy.setName(generateCopyName(source.getName()));
         copy.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
@@ -336,6 +377,84 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         insightDashboardMapper.insert(copy);
         log.info("复制仪表盘: sourceId={}, newId={}, name={}", id, copy.getId(), copy.getName());
         return toVO(copy);
+    }
+
+    /**
+     * 存为样例模板：派生一份 visibility=template 的副本，保留数据集绑定与 Schema（带示例数据可直接使用），
+     * 并记录模板元信息（来源、作者、标签、分类）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InsightDashboardVO saveAsTemplate(Long id, InsightDashboardSaveAsTemplateRequest request) {
+        requireOwnership(id);
+        InsightDashboardEntity source = insightDashboardMapper.selectById(id);
+        if (source == null || (source.getDeleted() != null && source.getDeleted() == 1)) {
+            throw new BusinessException(404, "仪表盘不存在: " + id);
+        }
+        InsightDashboardSaveAsTemplateRequest req =
+                request != null ? request : new InsightDashboardSaveAsTemplateRequest();
+
+        InsightDashboardEntity template = new InsightDashboardEntity();
+        BeanUtils.copyProperties(source, template);
+        template.setId(null);
+        template.setName(req.getName() != null && !req.getName().isBlank()
+                ? req.getName() : source.getName());
+        template.setDescription(req.getDescription() != null ? req.getDescription() : source.getDescription());
+        template.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        template.setOwnerId(workspaceGuard.currentUserId());
+        template.setOwnerName(workspaceGuard.currentUserNickname());
+        template.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        template.setSchemaJson(remapSchemaIds(source.getSchemaJson()));
+        template.setVisibility(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_TEMPLATE);
+        template.setTemplateMeta(buildTemplateMeta(req, id));
+        template.setModifier(null);
+        template.setCreateTime(null);
+        template.setUpdateTime(null);
+        template.setDeleted(0);
+
+        insightDashboardMapper.insert(template);
+        log.info("存为样例模板: sourceId={}, templateId={}, name={}", id, template.getId(), template.getName());
+        return toVO(template);
+    }
+
+    /**
+     * 模板派生副本的来源标记：仅当源是模板/官方样例时写入 {sourceTemplateId, sourceTemplateName}；
+     * 非模板返回 null，保证普通复制的 templateMeta 始终为空。
+     */
+    private String buildDerivedProvenance(InsightDashboardEntity source) {
+        String sourceVisibility = source.getVisibility();
+        boolean fromTemplate = DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_TEMPLATE.equals(sourceVisibility)
+                || DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_OFFICIAL.equals(sourceVisibility);
+        if (!fromTemplate || source.getId() == null) {
+            return null;
+        }
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("sourceTemplateId", source.getId());
+        meta.put("sourceTemplateName", source.getName());
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (JsonProcessingException e) {
+            log.warn("模板派生来源标记序列化失败: sourceId={}", source.getId());
+            return null;
+        }
+    }
+
+    /**
+     * 构建模板元信息 JSON：{sourceDashboardId, authorName, tags, category, usageCount, isOfficial}
+     */
+    private String buildTemplateMeta(InsightDashboardSaveAsTemplateRequest request, Long sourceId) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("sourceDashboardId", sourceId);
+        meta.put("authorName", workspaceGuard.currentUserNickname());
+        meta.put("tags", request.getTags() == null ? List.of() : request.getTags());
+        meta.put("category", request.getCategory());
+        meta.put("usageCount", 0);
+        meta.put("isOfficial", Boolean.FALSE);
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "模板元信息序列化失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -1821,7 +1940,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      */
     private void requireOwnership(Long id) {
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null || (entity.getDeleted() != null && entity.getDeleted() == 1)) {
             throw new BusinessException(404, "仪表盘不存在: " + id);
         }
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
@@ -1830,6 +1949,23 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             throw new BusinessException(403, "无权访问该仪表盘");
         }
         workspaceGuard.requireResourceOwner(entity.getOwnerId());
+    }
+
+    /**
+     * 工作区内可见性校验（仅存在性 + workspace 一致，不校验归属）：
+     * 用于「复制」——模板/官方样例由他人或系统拥有，但工作区内成员可见即可派生。
+     */
+    private InsightDashboardEntity requireWorkspaceScoped(Long id) {
+        InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
+        if (entity == null || (entity.getDeleted() != null && entity.getDeleted() == 1)) {
+            throw new BusinessException(404, "仪表盘不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该仪表盘");
+        }
+        return entity;
     }
 
     private InsightDashboardVO toVO(InsightDashboardEntity entity) {

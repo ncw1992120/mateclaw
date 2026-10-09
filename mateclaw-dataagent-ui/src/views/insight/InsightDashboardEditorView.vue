@@ -60,19 +60,44 @@
           class="toolbar-owner-input"
           :aria-label="t('insight.ownerName')"
           size="small"
+          :disabled="isOfficialTemplate"
           :placeholder="t('insight.ownerName')"
           @change="handleOwnerNameChange"
         />
         <span class="toolbar-separator"></span>
-        <el-button class="ai-assistant-btn toolbar-btn" :class="{ on: showAiChat }" @click="toggleAiChat">
+        <el-button class="ai-assistant-btn toolbar-btn" :class="{ on: showAiChat }" :disabled="isOfficialTemplate" @click="toggleAiChat">
           <template #icon>
             <RobotIcon style="width: 16px; height: 16px;" />
           </template>
           {{ t('insight.aiAssistant') }}
         </el-button>
-        <el-button class="toolbar-btn" aria-label="主题外观" @click="showThemePanel = true">主题外观</el-button>
+        <el-button class="toolbar-btn" aria-label="主题外观" :disabled="isOfficialTemplate" @click="showThemePanel = true">主题外观</el-button>
+        <el-button v-if="!isOfficialTemplate" class="toolbar-btn" @click="openSaveTemplate">
+          <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></template>
+          {{ t('insight.saveAsTemplate') }}
+        </el-button>
+        <el-button
+          class="toolbar-btn history-action"
+          :disabled="!canUndoEdit || isOfficialTemplate"
+          title="撤销（⌘Z / Ctrl+Z）"
+          aria-label="撤销"
+          aria-keyshortcuts="Meta+Z Control+Z"
+          @click="undoEdit"
+        >
+          <el-icon><RefreshLeft /></el-icon>
+        </el-button>
+        <el-button
+          class="toolbar-btn history-action"
+          :disabled="!canRedoEdit || isOfficialTemplate"
+          title="重做（⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y）"
+          aria-label="重做"
+          aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z Control+Y"
+          @click="redoEdit"
+        >
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
         <span v-if="dashboard" :class="['editor-save-status', `is-${schemaSaveState}`]" role="status" aria-live="polite">{{ schemaSaveStatusText }}</span>
-        <el-button class="toolbar-btn" @click="handleSave" :loading="saving">
+        <el-button class="toolbar-btn" @click="handleSave" :loading="saving" :disabled="isOfficialTemplate">
           <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
           {{ t('insight.save') }}
         </el-button>
@@ -83,8 +108,24 @@
       </div>
     </div>
 
+    <!-- 官方样例模板：只读提示条 -->
+    <div v-if="isOfficialTemplate" class="editor-notice notice-readonly" role="status">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span class="notice-text">{{ t('insight.officialReadonlyHint') }}</span>
+      <el-button size="small" type="primary" @click="handleCreateFromOfficial">{{ t('insight.createFromTemplate') }}</el-button>
+    </div>
+    <!-- 模板派生副本：示例数据替换提示（非阻塞，可关闭） -->
+    <div v-else-if="derivedFromTemplate" class="editor-notice notice-sample" role="status">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      <span class="notice-text">{{ t('insight.sampleDataHint', { name: derivedFromTemplateName }) }}</span>
+      <el-button size="small" text @click="handleReplaceSampleData">{{ t('insight.replaceSampleData') }}</el-button>
+      <button type="button" class="notice-close" :aria-label="t('common.close')" @click="sampleHintDismissed = true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
     <!-- 四栏布局：页面菜单 | 物料面板 | 画布 | 属性面板 -->
-    <div class="editor-body">
+    <div class="editor-body" :class="{ 'editor-readonly': isOfficialTemplate }">
       <!-- 页面菜单树 -->
       <div v-if="!pagesCollapsed" class="editor-pages" :class="{ 'mobile-open': showMobilePages }">
         <div class="pages-header">
@@ -344,6 +385,40 @@
           @dashboard-updated="handleAiDashboardUpdated"
         />
       </el-drawer>
+
+      <!-- 存为样例模板弹窗 -->
+      <el-dialog
+        v-model="saveTemplateVisible"
+        :title="t('insight.saveAsTemplateTitle')"
+        width="480px"
+        append-to-body
+      >
+        <div class="save-template-form">
+          <p class="save-template-hint">{{ t('insight.saveAsTemplateHint') }}</p>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateName') }}</span>
+            <el-input v-model="saveTemplateForm.name" maxlength="100" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateDesc') }}</span>
+            <el-input v-model="saveTemplateForm.description" type="textarea" :rows="2" maxlength="300" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateCategory') }}</span>
+            <el-input v-model="saveTemplateForm.category" :placeholder="t('insight.templateCategoryPlaceholder')" maxlength="50" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateTags') }}</span>
+            <el-input v-model="saveTemplateForm.tags" :placeholder="t('insight.templateTagsPlaceholder')" maxlength="200" />
+          </label>
+        </div>
+        <template #footer>
+          <el-button @click="saveTemplateVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="saveTemplateSaving" @click="confirmSaveTemplate">
+            {{ t('common.confirm') }}
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -353,9 +428,9 @@ import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, nextTick } 
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
+import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold, RefreshLeft, RefreshRight } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage, DatasetQueryConfig } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage, DatasetQueryConfig, InsightDashboardTemplateMeta, InsightDashboardSaveAsTemplateInput } from '@/types'
 import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { useUserStore } from '@/stores/useUserStore'
@@ -386,6 +461,7 @@ import DashboardThemePanel from './components/DashboardThemePanel.vue'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
 import { createComponentPreviewRevisions } from '@/composables/component-preview-revisions'
+import { createDashboardEditHistory, resolveDashboardHistoryShortcut } from './composables/dashboard-edit-history'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -461,6 +537,38 @@ const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
+
+/** 示例数据提示是否已关闭（仅本次会话内生效，不写入后端） */
+const sampleHintDismissed = ref(false)
+
+/** 是否官方样例模板：只读，仅允许「基于此创建」 */
+const isOfficialTemplate = computed(() => dashboard.value?.visibility === 'official')
+
+/** 当前看板的模板元信息（缺失或非法 JSON 时返回空对象） */
+const templateMeta = computed<InsightDashboardTemplateMeta>(() => {
+  const raw = dashboard.value?.templateMeta
+  if (!raw) {
+    return {}
+  }
+  try {
+    return JSON.parse(raw) as InsightDashboardTemplateMeta
+  } catch {
+    return {}
+  }
+})
+
+/** 是否由模板派生的副本：本身不是模板，但带有来源标记 */
+const derivedFromTemplate = computed(() => {
+  const visibility = dashboard.value?.visibility
+  if (sampleHintDismissed.value || visibility === 'template' || visibility === 'official') {
+    return false
+  }
+  return Boolean(templateMeta.value.sourceTemplateId)
+})
+
+const derivedFromTemplateName = computed(
+  () => templateMeta.value.sourceTemplateName || t('insight.unknownTemplate'),
+)
 
 const schemaSaveStatusText = computed(() => ({
   saved: '已保存',
@@ -568,6 +676,109 @@ const schema = reactive<InsightDashboardSchema>({
   scriptBindings: [],
   scriptFilterBindings: [],
 })
+
+type DashboardEditorHistorySnapshot = {
+  schema: InsightDashboardSchema
+  dashboardName: string
+  dashboardDescription: string
+  dashboardOwnerName: string
+}
+
+const editHistory = createDashboardEditHistory<DashboardEditorHistorySnapshot>(80)
+const editHistoryRevision = ref(0)
+const canUndoEdit = computed(() => {
+  editHistoryRevision.value
+  return editHistory.canUndo
+})
+const canRedoEdit = computed(() => {
+  editHistoryRevision.value
+  return editHistory.canRedo
+})
+let editHistoryReady = false
+let editHistoryTimer: ReturnType<typeof setTimeout> | null = null
+
+function captureEditorState(): DashboardEditorHistorySnapshot {
+  return JSON.parse(JSON.stringify({
+    schema,
+    dashboardName: dashboardName.value,
+    dashboardDescription: dashboardDescription.value,
+    dashboardOwnerName: dashboardOwnerName.value,
+  })) as DashboardEditorHistorySnapshot
+}
+
+function serializeEditorState(): string {
+  return JSON.stringify({
+    schema,
+    dashboardName: dashboardName.value,
+    dashboardDescription: dashboardDescription.value,
+    dashboardOwnerName: dashboardOwnerName.value,
+  })
+}
+
+function commitEditorHistory(): void {
+  if (!editHistoryReady) return
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  if (editHistory.push(captureEditorState())) editHistoryRevision.value += 1
+}
+
+function resetEditorHistory(): void {
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  editHistory.reset(captureEditorState())
+  editHistoryReady = true
+  editHistoryRevision.value += 1
+}
+
+function applyEditorHistoryState(snapshot: DashboardEditorHistorySnapshot): void {
+  const nextSchema = snapshot.schema as unknown as Record<string, unknown>
+  const currentSchema = schema as unknown as Record<string, unknown>
+  Object.keys(currentSchema).forEach((key) => {
+    if (!(key in nextSchema)) delete currentSchema[key]
+  })
+  Object.assign(schema, snapshot.schema)
+  dashboardName.value = snapshot.dashboardName
+  dashboardDescription.value = snapshot.dashboardDescription
+  dashboardOwnerName.value = snapshot.dashboardOwnerName
+  if (!schema.pages.some((page) => page.id === activePageId.value)) {
+    activePageId.value = schema.pages[0]?.id ?? ''
+  }
+  if (!currentPageComponents.value.some((component) => component.id === selectedComponentId.value)) {
+    selectedComponentId.value = ''
+  }
+  selectedChildInfo.value = null
+  editHistoryRevision.value += 1
+  scheduleSchemaAutoSave()
+  void enqueueDashboardUpdate({
+    name: dashboardName.value,
+    description: dashboardDescription.value,
+    ownerName: dashboardOwnerName.value,
+  }).catch(() => undefined)
+}
+
+function undoEdit(): void {
+  commitEditorHistory()
+  const snapshot = editHistory.undo()
+  if (snapshot) applyEditorHistoryState(snapshot)
+  editHistoryRevision.value += 1
+}
+
+function redoEdit(): void {
+  commitEditorHistory()
+  const snapshot = editHistory.redo()
+  if (snapshot) applyEditorHistoryState(snapshot)
+  editHistoryRevision.value += 1
+}
+
+watch(serializeEditorState, () => {
+  if (!editHistoryReady) return
+  if (editHistoryTimer) clearTimeout(editHistoryTimer)
+  editHistoryTimer = setTimeout(commitEditorHistory, 350)
+}, { flush: 'post' })
 
 const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
 
@@ -782,6 +993,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleEditorClipboardKeydown)
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
   if (schemaAutoSaveTimer) {
     clearTimeout(schemaAutoSaveTimer)
     schemaAutoSaveTimer = null
@@ -927,9 +1142,21 @@ function pasteFromContextMenu(): void {
 }
 
 function handleEditorClipboardKeydown(event: KeyboardEvent): void {
+  const target = event.target instanceof HTMLElement ? event.target : null
+  const editingText = Boolean(target?.isContentEditable || target?.closest(
+    'input, textarea, select, [contenteditable="true"], [role="textbox"], .monaco-editor, .CodeMirror, .cm-editor',
+  ))
+  const protectedFocusContext = editingText || Boolean(target?.closest('.el-overlay, .el-dialog, .el-drawer'))
+  const historyAction = resolveDashboardHistoryShortcut(event, protectedFocusContext)
+  if (historyAction) {
+    event.preventDefault()
+    if (historyAction === 'undo') undoEdit()
+    else redoEdit()
+    return
+  }
+
   if (!event.ctrlKey && !event.metaKey) return
   if (event.altKey || event.key.toLowerCase() !== 'v') return
-  const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
   if (selectedChildInfo.value && clipboardChild.value) {
     event.preventDefault()
@@ -948,6 +1175,11 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
 
 /** 加载仪表盘数据 */
 async function loadDashboard(id: string): Promise<void> {
+  editHistoryReady = false
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
   // App.vue 会异步恢复 /auth/me；编辑器不能在 userId 尚未恢复时先做归属校验，
   // 否则真实刷新或 E2E 直达编辑器会把创建者误判成无权限并留下空画布。
   if (userStore.token && userStore.userId == null) {
@@ -1006,6 +1238,7 @@ async function loadDashboard(id: string): Promise<void> {
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
+    resetEditorHistory()
     // 结果集持久化（决策 B）：按各组件已保存的结果集恢复画布数据，不阻塞编辑器打开
     void restorePipelineResults()
   }
@@ -1207,6 +1440,7 @@ function handleOpenMetricStyle(payload: { componentId?: string; containerId?: st
     }
   })
 }
+
 /** KPI 渲染时可能使用结果字段投影副本；指标布局必须写回仪表盘原始组件配置。 */
 function handleMetricLayoutChange(payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void {
   const findOwner = (items: Array<InsightComponent | InsightCombinationChild>): InsightComponent | InsightCombinationChild | undefined => {
@@ -1227,7 +1461,6 @@ function handleMetricLayoutChange(payload: { componentId: string; fieldKey: stri
   if (!metric) return
   Object.assign(metric, { x: payload.x, y: payload.y, w: payload.w, h: payload.h })
 }
-
 
 /** 画布内组合卡片子组件选中/取消（childId=null 表示回到容器） */
 function handleSelectChild(payload: { containerId: string; childId: string | null }): void {
@@ -1660,6 +1893,77 @@ async function previewAllConfiguredComponents(): Promise<void> {
 }
 
 /** 保存仪表盘 */
+/** 存为样例模板弹窗 */
+const saveTemplateVisible = ref(false)
+const saveTemplateSaving = ref(false)
+const saveTemplateForm = ref({ name: '', description: '', category: '', tags: '' })
+
+/** 打开「存为样例模板」弹窗 */
+function openSaveTemplate(): void {
+  saveTemplateForm.value = {
+    name: dashboard.value?.name || '',
+    description: dashboard.value?.description || '',
+    category: '',
+    tags: '',
+  }
+  saveTemplateVisible.value = true
+}
+
+/** 确认存为样例模板 */
+async function confirmSaveTemplate(): Promise<void> {
+  const id = props.dashboardId
+  if (!id) {
+    return
+  }
+  saveTemplateSaving.value = true
+  try {
+    const payload: InsightDashboardSaveAsTemplateInput = {
+      name: saveTemplateForm.value.name.trim() || dashboard.value?.name,
+      description: saveTemplateForm.value.description.trim() || undefined,
+      category: saveTemplateForm.value.category.trim() || undefined,
+      tags: saveTemplateForm.value.tags
+        .split(/[,，\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }
+    await store.saveAsTemplate(id, payload)
+    ElMessage.success(t('insight.saveTemplateSuccess'))
+    saveTemplateVisible.value = false
+  } catch {
+    ElMessage.error(t('insight.saveTemplateFailed'))
+  } finally {
+    saveTemplateSaving.value = false
+  }
+}
+
+/** 官方样例模板：复制为当前用户的私有副本后跳转编辑 */
+async function handleCreateFromOfficial(): Promise<void> {
+  const id = props.dashboardId
+  if (!id) {
+    return
+  }
+  try {
+    const copy = await store.copyDashboard(id)
+    ElMessage.success(t('insight.createFromTemplateSuccess'))
+    void router.push({ name: 'insight-dashboard-editor', query: { dashboardId: copy.id } })
+  } catch {
+    ElMessage.error(t('insight.createFromTemplateFailed'))
+  }
+}
+
+/** 替换示例数据：定位到第一个带数据集的组件并打开其属性配置 */
+function handleReplaceSampleData(): void {
+  const target = currentPageComponents.value.find((c) => {
+    const ds = (c as InsightComponent & { dataSource?: { datasourceId?: string } }).dataSource
+    return Boolean(ds?.datasourceId)
+  }) ?? currentPageComponents.value[0]
+  if (!target) {
+    ElMessage.info(t('insight.noComponentToEdit'))
+    return
+  }
+  selectedComponentId.value = target.id
+}
+
 async function handleSave(): Promise<void> {
   if (!dashboard.value) {
     return
@@ -2053,6 +2357,86 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   overflow: hidden;
   /* 与列表页一致：四周留灰底边距，工具栏与各面板悬浮于页面底色之上 */
   padding: var(--space-md) var(--space-lg) var(--space-lg);
+}
+
+/* 顶部非阻塞提示条：官方样例只读 / 模板副本的示例数据说明 */
+.editor-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--db-border);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.editor-notice.notice-readonly {
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--db-text);
+}
+
+.editor-notice.notice-sample {
+  background: var(--db-bg);
+  color: var(--db-text-secondary);
+}
+
+.notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.notice-close:hover {
+  background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
+  color: var(--db-text);
+}
+
+/* 官方样例模板只读：禁用主要编辑区交互（工具栏按钮另由 disabled 控制） */
+.editor-readonly .editor-palette,
+.editor-readonly .editor-canvas,
+.editor-readonly .editor-property {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+/* 存为样例模板弹窗 */
+.save-template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.save-template-hint {
+  margin: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--db-text-muted);
+}
+
+.st-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.st-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
 }
 
 /* 页头工具栏：白色纸面卡片（描边+圆角+投影），与列表页 .page-card 同一层级语言，

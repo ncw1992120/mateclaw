@@ -42,9 +42,11 @@ public class DataAgentInsightDashboardController {
      */
     @GetMapping
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "仪表盘列表", description = "获取当前工作区的所有仪表盘")
-    public R<List<InsightDashboardVO>> list() {
-        return R.ok(dashboardService.listDashboards());
+    @Operation(summary = "仪表盘列表", description = "获取当前工作区的仪表盘；可通过 visibility 过滤（如 template,official）")
+    public R<List<InsightDashboardVO>> list(
+            @Parameter(description = "可见性过滤：逗号分隔取值 template,official / private 等；为空返回工作区内全部")
+            @RequestParam(required = false) String visibility) {
+        return R.ok(dashboardService.listDashboards(visibility));
     }
 
     /**
@@ -101,6 +103,20 @@ public class DataAgentInsightDashboardController {
     public R<InsightDashboardVO> copy(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return R.ok(dashboardService.copyDashboard(id));
+    }
+
+    /**
+     * 存为样例模板
+     */
+    @PostMapping("/{id}/save-as-template")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "存为样例模板", description = "将指定仪表盘派生为团队共享样例模板（visibility=template），副本带示例数据可直接使用")
+    public R<InsightDashboardVO> saveAsTemplate(
+            @Parameter(description = "源仪表盘 ID") @PathVariable Long id,
+            @RequestBody(required = false) InsightDashboardSaveAsTemplateRequest request) {
+        InsightDashboardSaveAsTemplateRequest payload =
+                request != null ? request : new InsightDashboardSaveAsTemplateRequest();
+        return R.ok(dashboardService.saveAsTemplate(id, payload));
     }
 
     /**
