@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    # createDatabaseIfNotExist=true — MySQL Connector/J 首次连接时若库不存在则自动 CREATE DATABASE，
+    # 要求 DB user 具备 CREATE 权限；受限账号请提前手工执行：
+    #   CREATE DATABASE data_agent CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    # characterEncoding 接收 Java NIO 字符集名（UTF-8），连接层强制 connectionCollation=utf8mb4_unicode_ci，
+    # 保证 emoji / 生僻字等 4 字节字符完整落库。
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:data_agent}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+
+  flyway:
+    locations:
+      - classpath:db/migration/mysql

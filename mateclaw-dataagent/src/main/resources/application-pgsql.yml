@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    # currentSchema=dataagent：连接默认 search_path 指向 dataagent 模式，
+    # 迁移与应用的 SQL（表/函数均不带 schema 前缀）自动解析到该模式；
+    # stringtype=unspecified：String 参数由 PG 按目标列类型推断，兼容 JSONB 列写入。
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}?currentSchema=dataagent&stringtype=unspecified
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:root}
+
+  flyway:
+    locations:
+      - classpath:db/migration/postgresql
+    # Flyway 迁移前自动创建缺失的 dataagent 模式（create-schemas 默认 true），
+    # flyway_schema_history 历史表同样落在该模式。
+    schemas: dataagent
