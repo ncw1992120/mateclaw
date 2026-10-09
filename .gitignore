@@ -43,13 +43,6 @@ target/
 *.tar
 *.tar.gz
 
-# Local Spring Boot application configuration (including profile overrides)
-**/application.yml
-**/application-*.yml
-!mateclaw-dataagent/src/main/resources/application.yml
-!mateclaw-dataagent/src/main/resources/application-mysql.yml
-!mateclaw-dataagent/src/main/resources/application-pgsql.yml
-
 ### logs ####
 /logs/
 mateclaw-server/logs/
