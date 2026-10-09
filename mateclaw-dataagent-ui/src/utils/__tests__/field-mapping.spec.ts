@@ -129,6 +129,22 @@ describe('字段注册表 · 按 schema 增量合并', () => {
     expect(rows[0].displayName).toBe('策略编号')
   })
 
+  it('固化的技术名默认值不算用户编辑，自愈跟随最新展示名（查询配置时序窗口回归）', () => {
+    // 历史缺陷：schema 刷新完成前保存查询配置，会把英文技术名固化进注册表，
+    // 之后被误判为「用户改过」而永久保留，不再跟随同步后的中文名。
+    const existing: DatasetFieldMeta[] = [{ name: 'strategy_cost', displayName: 'strategy_cost' }]
+    const rows = reconcileFieldMetas([{ name: 'strategy_cost', displayName: '策略成本' }], existing)
+    expect(rows[0].displayName).toBe('策略成本')
+  })
+
+  it('有上一版比对时，固化的技术名默认值同样自愈', () => {
+    const existing: DatasetFieldMeta[] = [{ name: 'strategy_cost', displayName: 'strategy_cost' }]
+    const rows = reconcileFieldMetas([{ name: 'strategy_cost', displayName: '策略成本' }], existing, [
+      { name: 'strategy_cost', displayName: '策略成本' },
+    ])
+    expect(rows[0].displayName).toBe('策略成本')
+  })
+
   it('描述 / 角色始终跟随 schema，单位保留用户配置', () => {
     const existing: DatasetFieldMeta[] = [{ name: 'amount', displayName: '金额', unit: '万元' }]
     const rows = reconcileFieldMetas(

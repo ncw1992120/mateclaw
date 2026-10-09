@@ -1197,9 +1197,13 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig, fixedFil
   const dataset = state.datasets.find((ds) => ds.id === datasetId || ds.backendDatasetId === datasetId)
   if (dataset) {
     const titles = new Map(config.displayFields.map((field) => [field.field, field.title.trim()]))
-    const fields = dataset.fields.map((field) => titles.has(field.name)
-      ? { ...field, displayName: titles.get(field.name) || undefined }
-      : field)
+    const fields = dataset.fields.map((field) => {
+      if (!titles.has(field.name)) return field
+      const raw = titles.get(field.name) || ''
+      // 技术名默认值不固化进注册表：留给 reconcile 跟随后端最新展示名
+      // （如 Aloudata 同步后的中文名），否则会被误判为「用户定制」永久保留。
+      return { ...field, displayName: raw && raw !== field.name ? raw : undefined }
+    })
     const error = validateFieldMetas(fields)
     if (error) return error
     dataset.fields = fields

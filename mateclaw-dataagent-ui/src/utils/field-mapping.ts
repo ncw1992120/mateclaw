@@ -164,8 +164,10 @@ export function reconcileFieldMetas(
     const description = (field.description ?? '').trim() || display
     const prevDefault = (prevByName.get(field.name)?.displayName ?? '').trim()
     const prevDisplay = (prev?.displayName ?? '').trim()
-    // 与上一版自动填充值不同即视为用户手工改过；无上一版可比对时，非空的自定义展示名一律保留
-    const userEdited = !!prevDisplay && prevDisplay !== prevDefault
+    // 与上一版自动填充值不同即视为用户手工改过；无上一版可比对时，非空的自定义展示名一律保留。
+    // 例外：等于技术字段名的值是「未定制的默认值」曾被固化进注册表（如 schema 刷新完成前
+    // 保存过查询配置），不算用户编辑，仍跟随后端最新展示名自愈（与弹窗 saved!==field 同构）。
+    const userEdited = !!prevDisplay && prevDisplay !== prevDefault && prevDisplay !== field.name
     return {
       name: field.name,
       displayName: userEdited ? prevDisplay : (display || undefined),
