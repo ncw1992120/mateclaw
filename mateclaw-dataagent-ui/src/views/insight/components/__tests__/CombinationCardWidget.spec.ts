@@ -1002,3 +1002,89 @@ describe('CombinationCardWidget', () => {
     wrapper.unmount()
   })
 })
+
+describe('CombinationCardWidget · 页签移动与复制', () => {
+  function mountWithTabs() {
+    return mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'combo-tabs', type: 'combination', title: '组合卡片',
+          children: [],
+          containerConfig: {
+            ...containerConfig,
+            tabs: [
+              { id: 't1', title: '页签 1', children: [] },
+              { id: 't2', title: '页签 2', children: [] },
+              { id: 't3', title: '页签 3', children: [] },
+            ],
+            activeTab: 't1',
+          },
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        editable: true,
+        selected: true,
+      },
+      global: { plugins: [i18n], stubs: { CombinationCardWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true, DashboardTabTitle: { template: '<span />' }, DashboardComponentIcon: { template: '<span />' } } },
+    })
+  }
+
+  const dataTransfer = { setData: vi.fn(), getData: vi.fn(() => 't1'), effectAllowed: '', dropEffect: '' }
+
+  it('拖拽页签 A 到页签 C 之后：emit move-tab（先删后插 toIndex）', async () => {
+    const wrapper = mountWithTabs()
+    const tabs = wrapper.findAll('.cc-tab')
+    await tabs[0].trigger('dragstart', { dataTransfer })
+    await tabs[2].trigger('dragover', { dataTransfer, clientX: 999 })
+    expect(tabs[2].classes()).toContain('drop-after')
+    await tabs[2].trigger('drop', { dataTransfer, clientX: 999 })
+    await tabs[2].trigger('dragend', { dataTransfer })
+
+    const move = wrapper.emitted('move-tab')?.at(-1)?.[0]
+    expect(move).toEqual({ containerId: 'combo-tabs', tabId: 't1', toIndex: 3 })
+    expect(tabs[2].classes()).not.toContain('drop-after')
+    wrapper.unmount()
+  })
+
+  it('拖拽到目标前半段：emit 的 toIndex 指向插入其前', async () => {
+    const wrapper = mountWithTabs()
+    const tabs = wrapper.findAll('.cc-tab')
+    await tabs[0].trigger('dragstart', { dataTransfer })
+    await tabs[1].trigger('dragover', { dataTransfer, clientX: -1 })
+    expect(tabs[1].classes()).toContain('drop-before')
+    await tabs[1].trigger('drop', { dataTransfer, clientX: -1 })
+
+    expect(wrapper.emitted('move-tab')?.at(-1)?.[0]).toEqual({ containerId: 'combo-tabs', tabId: 't1', toIndex: 1 })
+    wrapper.unmount()
+  })
+
+  it('页签右键：emit tab-context-menu 携带坐标', async () => {
+    const wrapper = mountWithTabs()
+    await wrapper.findAll('.cc-tab')[1].trigger('contextmenu', { clientX: 120, clientY: 60 })
+
+    expect(wrapper.emitted('tab-context-menu')?.[0]?.[0]).toMatchObject({ containerId: 'combo-tabs', tabId: 't2', x: 120, y: 60 })
+    wrapper.unmount()
+  })
+
+  it('页签聚焦时 Ctrl+C：emit copy-tab；预览态（非编辑）不触发', async () => {
+    const wrapper = mountWithTabs()
+    const tab = wrapper.findAll('.cc-tab')[1]
+    await tab.trigger('keydown', { ctrlKey: true, key: 'c' })
+    expect(wrapper.emitted('copy-tab')?.[0]?.[0]).toEqual({ containerId: 'combo-tabs', tabId: 't2' })
+
+    const preview = mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'combo-preview', type: 'combination', title: '组合卡片', children: [],
+          containerConfig: { ...containerConfig, tabs: [{ id: 't1', title: '页签 1', children: [] }], activeTab: 't1' },
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        editable: false,
+      },
+      global: { plugins: [i18n], stubs: { CombinationCardWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true, DashboardTabTitle: { template: '<span />' }, DashboardComponentIcon: { template: '<span />' } } },
+    })
+    await preview.findAll('.cc-tab')[0].trigger('keydown', { ctrlKey: true, key: 'c' })
+    expect(preview.emitted('copy-tab')).toBeUndefined()
+    wrapper.unmount()
+    preview.unmount()
+  })
+})

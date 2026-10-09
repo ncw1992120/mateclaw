@@ -1,4 +1,4 @@
-import type { CombinationChildLayout, InsightCombinationChild, InsightComponent } from '@/types'
+import type { CombinationChildLayout, CombinationTab, InsightCombinationChild, InsightComponent } from '@/types'
 
 export type ClipboardIdFactory = (prefix: 'comp' | 'tab') => string
 
@@ -86,5 +86,20 @@ export function cloneCombinationChildForPaste(
   }
   cloneNode(clone as unknown as Record<string, any>)
   clone.layout = getCombinationChildPasteLayout(clone.layout, offset)
+  return clone
+}
+
+/**
+ * 复制组合卡片页签：页签 id、每个子组件及其嵌套页签/子组件的 id 全部重生成，
+ * 布局保持原样（页签复制不产生位移错开），标题由调用方处理。
+ */
+export function cloneCombinationTabForPaste(
+  source: CombinationTab,
+  createId: ClipboardIdFactory,
+): CombinationTab {
+  const clone = JSON.parse(JSON.stringify(source)) as CombinationTab
+  clone.id = createId('tab')
+  clone.children = (clone.children ?? []).map((child) =>
+    cloneCombinationChildForPaste(child, createId, { x: 0, y: 0 }))
   return clone
 }

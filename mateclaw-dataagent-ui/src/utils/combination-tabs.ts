@@ -1,4 +1,5 @@
 import type { CombinationChildLayout, CombinationTab, InsightCombinationChild, InsightComponent, InsightComponentType } from '@/types'
+import { cloneCombinationTabForPaste, type ClipboardIdFactory } from '@/utils/insight-component-clipboard'
 
 /**
  * 组合卡片页签增删的纯逻辑（画布与属性面板共用，保证两个入口行为一致）。
@@ -152,4 +153,54 @@ export function removeCombinationTab(component: InsightComponent, tabId: string)
     cfg.activeTab = cfg.tabs[0].id
   }
   return { removed: true, migrated: false, migratedCount: 0, deletedCount: tab.children.length }
+}
+
+export interface MoveCombinationTabResult {
+  moved: boolean
+  fromIndex: number
+  toIndex: number
+}
+
+/**
+ * 移动页签位置（拖拽排序/左右移动共用）。
+ * `toIndex` 越界时钳制到有效范围；激活页签保持不变（页签随内容整体移动）。
+ */
+export function moveCombinationTab(component: InsightComponent, tabId: string, toIndex: number): MoveCombinationTabResult {
+  const cfg = component.containerConfig
+  if (!cfg) return { moved: false, fromIndex: -1, toIndex: -1 }
+  const fromIndex = cfg.tabs.findIndex((x) => x.id === tabId)
+  if (fromIndex < 0) return { moved: false, fromIndex: -1, toIndex: -1 }
+  const target = Math.max(0, Math.min(cfg.tabs.length - 1, toIndex))
+  if (target === fromIndex) return { moved: false, fromIndex, toIndex: target }
+  const [tab] = cfg.tabs.splice(fromIndex, 1)
+  cfg.tabs.splice(target, 0, tab)
+  return { moved: true, fromIndex, toIndex: target }
+}
+
+export interface DuplicateCombinationTabResult {
+  /** 新复制出的页签（源页签不存在返回 null） */
+  created: CombinationTab | null
+  sourceIndex: number
+  insertedIndex: number
+}
+
+/**
+ * 复制页签：内容（含嵌套组合卡片的子组件/页签）深拷贝并重生成全部 ID，
+ * 插入到源页签之后并激活；标题追加「副本」以区分。
+ */
+export function duplicateCombinationTab(
+  component: InsightComponent,
+  tabId: string,
+  createId: ClipboardIdFactory,
+): DuplicateCombinationTabResult {
+  const cfg = component.containerConfig
+  if (!cfg) return { created: null, sourceIndex: -1, insertedIndex: -1 }
+  const sourceIndex = cfg.tabs.findIndex((x) => x.id === tabId)
+  if (sourceIndex < 0) return { created: null, sourceIndex: -1, insertedIndex: -1 }
+  const source = cfg.tabs[sourceIndex]
+  const clone = cloneCombinationTabForPaste(source, createId)
+  clone.title = `${source.title} 副本`
+  cfg.tabs.splice(sourceIndex + 1, 0, clone)
+  cfg.activeTab = clone.id
+  return { created: clone, sourceIndex, insertedIndex: sourceIndex + 1 }
 }

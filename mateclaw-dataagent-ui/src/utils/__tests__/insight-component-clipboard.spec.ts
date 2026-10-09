@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { InsightComponent } from '@/types'
-import { cloneCombinationChildForPaste, cloneInsightComponentForPaste, getCombinationChildPasteLayout } from '../insight-component-clipboard'
+import {
+  cloneCombinationChildForPaste,
+  cloneCombinationTabForPaste,
+  cloneInsightComponentForPaste,
+  getCombinationChildPasteLayout,
+} from '../insight-component-clipboard'
 
 function createComponent(): InsightComponent {
   return {
@@ -81,5 +86,31 @@ describe('Insight component clipboard', () => {
     }
 
     expect(getCombinationChildPasteLayout(source.layout)).toEqual({ x: 132, y: 92, col: 6, h: 96 })
+  })
+
+  it('cloneCombinationTabForPaste：页签与全部子孙 id 重生成，布局不位移', () => {
+    const source = {
+      id: 'tab-source',
+      title: '策略视角',
+      titleIconStyle: { iconKey: 'trend-charts', colorMode: 'theme' },
+      children: [
+        {
+          id: 'child-1', type: 'kpi' as const, title: '下发次数',
+          layout: { x: 24, y: 36, col: 6, h: 180 },
+          children: [{ id: 'nested-child', type: 'kpi' as const, title: '深层', layout: { x: 8, y: 8, col: 6, h: 96 } }],
+          containerConfig: { tabs: [{ id: 'tab-nested', title: '内层', children: [] }], activeTab: 'tab-nested' },
+        },
+      ],
+    } as any
+    let sequence = 0
+    const clone = cloneCombinationTabForPaste(source, (prefix) => `${prefix}-new-${++sequence}`)
+
+    expect(clone.id).toBe('tab-new-1')
+    expect(clone.title).toBe('策略视角')
+    // 布局保持原样（页签复制不错位）
+    expect(clone.children[0].layout).toEqual(source.children[0].layout)
+    expect(clone.children[0].id).toBe('comp-new-2')
+    expect(clone.children[0].children[0].id).toBe('comp-new-3')
+    expect(clone.children[0].containerConfig.tabs[0].id).toBe('tab-new-4')
   })
 })

@@ -239,6 +239,9 @@
           @select-child="handleSelectChild"
           @combination-add-tab="handleCombinationAddTab"
           @combination-remove-tab="handleCombinationRemoveTab"
+          @combination-move-tab="handleCombinationMoveTab"
+          @combination-copy-tab="handleCombinationCopyTab"
+          @combination-tab-context-menu="handleCombinationTabContextMenu"
           @combination-delete-child="handleDeleteCombinationChild"
           @move-component-into="handleMoveComponentInto"
           @add-component-into="handleAddComponentInto"
@@ -353,22 +356,44 @@
         @click.stop
         @contextmenu.stop.prevent
       >
-        <button
-          v-if="componentContextMenu.childId || componentContextMenu.componentId"
-          type="button"
-          role="menuitem"
-          @click="copyFromContextMenu"
-        >
-          <span>{{ componentContextMenu.childId ? '复制子组件' : '复制组件' }}</span><kbd>⌘ / Ctrl + C</kbd>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          :disabled="componentContextMenu.childId ? !clipboardChild : !clipboardComponent"
-          @click="pasteFromContextMenu"
-        >
-          <span>{{ componentContextMenu.childId ? '粘贴子组件' : '粘贴组件' }}</span><kbd>⌘ / Ctrl + V</kbd>
-        </button>
+        <!-- 页签右键：复制整个页签（含子组件/嵌套页签/配置）与左右移动 -->
+        <template v-if="componentContextMenu.tabId">
+          <button type="button" role="menuitem" @click="duplicateTabFromContextMenu">
+            <span>{{ t('insight.combination.duplicateTab') }}</span><kbd>⌘ / Ctrl + C</kbd>
+          </button>
+          <button
+            type="button" role="menuitem"
+            :disabled="!canMoveContextMenuTab(-1)"
+            @click="moveTabFromContextMenu(-1)"
+          >
+            <span>{{ t('insight.combination.moveTabLeft') }}</span>
+          </button>
+          <button
+            type="button" role="menuitem"
+            :disabled="!canMoveContextMenuTab(1)"
+            @click="moveTabFromContextMenu(1)"
+          >
+            <span>{{ t('insight.combination.moveTabRight') }}</span>
+          </button>
+        </template>
+        <template v-else>
+          <button
+            v-if="componentContextMenu.childId || componentContextMenu.componentId"
+            type="button"
+            role="menuitem"
+            @click="copyFromContextMenu"
+          >
+            <span>{{ componentContextMenu.childId ? '复制子组件' : '复制组件' }}</span><kbd>⌘ / Ctrl + C</kbd>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            :disabled="componentContextMenu.childId ? !clipboardChild : !clipboardComponent"
+            @click="pasteFromContextMenu"
+          >
+            <span>{{ componentContextMenu.childId ? '粘贴子组件' : '粘贴组件' }}</span><kbd>⌘ / Ctrl + V</kbd>
+          </button>
+        </template>
       </div>
       <!-- AI助手抽屉 -->
       <el-drawer
@@ -454,7 +479,7 @@ import { rowsToComponentData } from '@/utils/dataset-result'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { componentToCombinationChild, combinationChildToComponent, defaultCombinationChildLayout } from '@/utils/combination-tabs'
-import { addCombinationTab, findCombinationChild, removeCombinationTab } from '@/utils/combination-tabs'
+import { addCombinationTab, duplicateCombinationTab, findCombinationChild, moveCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
 import { insightDashboardListLocation } from './insightDashboardNavigation'
 import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
 import DashboardThemePanel from './components/DashboardThemePanel.vue'
@@ -613,7 +638,7 @@ async function persistSchemaChanges(version: number): Promise<void> {
   }
 }
 
-type ComponentContextMenu = { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }
+type ComponentContextMenu = { componentId: string | null; containerId?: string; childId?: string; tabId?: string; x: number; y: number }
 const componentContextMenu = ref<ComponentContextMenu | null>(null)
 const clipboardComponent = ref<InsightComponent | null>(null)
 const clipboardChild = ref<InsightCombinationChild | null>(null)
@@ -1141,6 +1166,37 @@ function pasteFromContextMenu(): void {
   handlePasteComponent()
 }
 
+/** 页签右键菜单动作 */
+function contextMenuTabContainer(): { container: InsightComponent; tabId: string; tabIndex: number } | null {
+  const ctx = componentContextMenu.value
+  if (!ctx?.containerId || !ctx.tabId) return null
+  const container = findCombinationContainer(ctx.containerId)
+  if (container?.type !== 'combination') return null
+  const tabIndex = (container as InsightComponent).containerConfig?.tabs.findIndex((x) => x.id === ctx.tabId) ?? -1
+  if (tabIndex < 0) return null
+  return { container: container as InsightComponent, tabId: ctx.tabId, tabIndex }
+}
+
+function canMoveContextMenuTab(direction: -1 | 1): boolean {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return false
+  const total = ctx.container.containerConfig?.tabs.length ?? 0
+  return ctx.tabIndex + direction >= 0 && ctx.tabIndex + direction < total
+}
+
+function moveTabFromContextMenu(direction: -1 | 1): void {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return
+  handleCombinationMoveTab({ containerId: ctx.container.id, tabId: ctx.tabId, toIndex: ctx.tabIndex + direction })
+  closeComponentContextMenu()
+}
+
+function duplicateTabFromContextMenu(): void {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return
+  handleCombinationCopyTab({ containerId: ctx.container.id, tabId: ctx.tabId })
+}
+
 function handleEditorClipboardKeydown(event: KeyboardEvent): void {
   const target = event.target instanceof HTMLElement ? event.target : null
   const editingText = Boolean(target?.isContentEditable || target?.closest(
@@ -1531,6 +1587,29 @@ function handleCombinationAddTab(payload: { containerId: string }): void {
 function handleCombinationRemoveTab(payload: { containerId: string; tabId: string }): void {
   const container = findCombinationContainer(payload.containerId)
   if (container?.type === 'combination') void removeTabFromContainer(container as InsightComponent, payload.tabId)
+}
+
+/** 页签拖拽排序 / 右键左右移动：统一走 moveCombinationTab（钳制 + 激活态保持） */
+function handleCombinationMoveTab(payload: { containerId: string; tabId: string; toIndex: number }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') moveCombinationTab(container as InsightComponent, payload.tabId, payload.toIndex)
+}
+
+/** 复制页签：内容深拷贝 + 全量重生成 ID，插入源页签之后并激活 */
+function handleCombinationCopyTab(payload: { containerId: string; tabId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type !== 'combination') return
+  const res = duplicateCombinationTab(container as InsightComponent, payload.tabId, generateId)
+  if (!res.created) return
+  closeComponentContextMenu()
+  ElMessage.success(t('insight.combination.tabDuplicated', { name: res.created.title, count: res.created.children.length }))
+}
+
+/** 页签右键：选中该组合卡片并记录 tabId 上下文，弹出统一右键菜单 */
+function handleCombinationTabContextMenu(payload: { containerId: string; tabId: string; x: number; y: number }): void {
+  selectedComponentId.value = payload.containerId
+  selectedChildInfo.value = null
+  componentContextMenu.value = { componentId: payload.containerId, containerId: payload.containerId, tabId: payload.tabId, x: payload.x, y: payload.y }
 }
 
 /** 将画布已有的顶层组件拖入组合卡片当前页签，并从顶层栅格中移除。 */

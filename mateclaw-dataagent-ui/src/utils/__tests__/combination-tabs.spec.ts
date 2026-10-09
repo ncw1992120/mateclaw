@@ -5,7 +5,9 @@ import {
   combinationTabChildCount,
   componentToCombinationChild,
   defaultCombinationChildLayout,
+  duplicateCombinationTab,
   findCombinationChild,
+  moveCombinationTab,
   removeCombinationTab,
 } from '@/utils/combination-tabs'
 import type { InsightCombinationChild, InsightComponent } from '@/types'
@@ -138,6 +140,94 @@ describe('组合卡片页签 · 删除页签', () => {
 
     expect(combinationTabChildCount(c, 'tab_a')).toBe(1)
     expect(combinationTabChildCount(c, 'tab_missing')).toBe(0)
+  })
+})
+
+describe('组合卡片页签 · 移动位置', () => {
+  it('页签后移：顺序更新，内容与激活态不变', () => {
+    const c = makeContainer([], [
+      { id: 'tab_a', title: '页签 1', children: [makeChild('c1')] },
+      { id: 'tab_b', title: '页签 2', children: [] },
+      { id: 'tab_c', title: '页签 3', children: [] },
+    ])
+    const res = moveCombinationTab(c, 'tab_a', 2)
+
+    expect(res).toEqual({ moved: true, fromIndex: 0, toIndex: 2 })
+    expect(c.containerConfig!.tabs.map((t) => t.id)).toEqual(['tab_b', 'tab_c', 'tab_a'])
+    expect(c.containerConfig!.tabs[2].children.map((x) => x.id)).toEqual(['c1'])
+    expect(c.containerConfig!.activeTab).toBe('tab_a') // 激活态保持
+  })
+
+  it('页签前移与边界钳制：toIndex 越界时收敛到有效范围', () => {
+    const c = makeContainer([], [
+      { id: 'tab_a', title: '页签 1', children: [] },
+      { id: 'tab_b', title: '页签 2', children: [] },
+    ])
+    expect(moveCombinationTab(c, 'tab_b', 0).moved).toBe(true)
+    expect(c.containerConfig!.tabs.map((t) => t.id)).toEqual(['tab_b', 'tab_a'])
+    // 越界钳制：toIndex 99 钳到 1、-3 钳到 0，均按钳制结果移动
+    expect(moveCombinationTab(c, 'tab_b', 99)).toEqual({ moved: true, fromIndex: 0, toIndex: 1 })
+    expect(c.containerConfig!.tabs.map((t) => t.id)).toEqual(['tab_a', 'tab_b'])
+    expect(moveCombinationTab(c, 'tab_b', -3)).toEqual({ moved: true, fromIndex: 1, toIndex: 0 })
+    expect(c.containerConfig!.tabs.map((t) => t.id)).toEqual(['tab_b', 'tab_a'])
+    // 原位不动：moved=false
+    expect(moveCombinationTab(c, 'tab_b', 0)).toEqual({ moved: false, fromIndex: 0, toIndex: 0 })
+  })
+
+  it('页签不存在或无页签态时不做改动', () => {
+    const noTabs = makeContainer([makeChild('c1')])
+    expect(moveCombinationTab(noTabs, 'tab_x', 0).moved).toBe(false)
+    const c = makeContainer([], [{ id: 'tab_a', title: '页签 1', children: [] }])
+    expect(moveCombinationTab(c, 'tab_missing', 0).moved).toBe(false)
+  })
+})
+
+describe('组合卡片页签 · 复制页签', () => {
+  it('复制页签：插入源页签之后、激活新页签、标题追加副本、内容与配置完整保留', () => {
+    const c = makeContainer([], [
+      { id: 'tab_a', title: '策略视角', children: [makeChild('c1'), makeChild('c2')] },
+      { id: 'tab_b', title: '页签 2', children: [] },
+    ])
+    let seq = 0
+    const res = duplicateCombinationTab(c, 'tab_a', () => `new_${++seq}`)
+
+    expect(res.insertedIndex).toBe(1)
+    expect(c.containerConfig!.tabs.map((t) => t.id)).toEqual(['tab_a', 'new_1', 'tab_b'])
+    expect(c.containerConfig!.tabs[1].title).toBe('策略视角 副本')
+    expect(c.containerConfig!.tabs[1].children).toHaveLength(2)
+    // 子组件 id 全部重生成，内容字段保留
+    expect(c.containerConfig!.tabs[1].children.map((x) => x.id)).toEqual(['new_2', 'new_3'])
+    expect(c.containerConfig!.tabs[1].children[0].title).toBe('c1')
+    expect(c.containerConfig!.activeTab).toBe('new_1')
+    // 源页签不受影响
+    expect(c.containerConfig!.tabs[0].children.map((x) => x.id)).toEqual(['c1', 'c2'])
+  })
+
+  it('复制的嵌套组合卡片内部页签与子组件 id 全部重生成', () => {
+    const nested = makeContainer([], [{
+      id: 'nested-tab', title: '子页签', children: [makeChild('nested-child')],
+    }])
+    const c = makeContainer([], [{
+      id: 'tab_a', title: '外层', children: [componentToCombinationChild(nested, { x: 0, y: 0, col: 12 })],
+    }])
+    let seq = 0
+    const res = duplicateCombinationTab(c, 'tab_a', () => `id_${++seq}`)
+
+    const copy = res.created!.children[0]
+    expect(copy.id).not.toBe(c.containerConfig!.tabs[0].children[0].id)
+    const copyNestedTabs = (copy as InsightCombinationChild).containerConfig!.tabs
+    expect(copyNestedTabs[0].id).not.toBe('nested-tab')
+    expect(copyNestedTabs[0].children[0].id).not.toBe('nested-child')
+    expect(copyNestedTabs[0].children[0].title).toBe('nested-child')
+  })
+
+  it('源页签不存在时不做改动', () => {
+    const c = makeContainer([], [{ id: 'tab_a', title: '页签 1', children: [] }])
+    const res = duplicateCombinationTab(c, 'tab_missing', () => 'x')
+
+    expect(res.created).toBeNull()
+    expect(c.containerConfig!.tabs).toHaveLength(1)
+    expect(c.containerConfig!.activeTab).toBe('tab_a')
   })
 })
 

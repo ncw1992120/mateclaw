@@ -10,7 +10,7 @@
   >
     <!-- 容器标题：仅预览态渲染（编辑态由画布 grid-item-toolbar 统一展示标题，避免双标题） -->
     <div v-if="!editable && component.titleBarStyle !== 'hidden'" class="cc-head" :class="`title-bar-${component.titleBarStyle ?? 'standard'}`">
-      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="componentTitleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</span>
+      <span class="cc-title"><DashboardComponentIcon type="combination" :dashboard-theme="dashboardTheme" :title-icon-style="componentTitleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
     </div>
 
     <!-- 页签栏（编辑态常驻渲染：无页签时也能从「+」建出第一个页签） -->
@@ -19,13 +19,20 @@
         v-for="(tab, tabIndex) in cfg.tabs"
         :key="tab.id"
         class="cc-tab"
-        :class="{ active: tab.id === cfg.activeTab }"
+        :class="{ active: tab.id === cfg.activeTab, dragging: dragState.tabId === tab.id, 'drop-before': dropIndicator.tabId === tab.id && dropIndicator.position === 'before', 'drop-after': dropIndicator.tabId === tab.id && dropIndicator.position === 'after' }"
         role="tab"
         :aria-selected="tab.id === cfg.activeTab"
         :tabindex="tab.id === cfg.activeTab || (!cfg.activeTab && tab.id === cfg.tabs[0]?.id) ? 0 : -1"
         :data-tab-id="tab.id"
+        :draggable="editable"
         @click.stop="selectTab(tab.id)"
         @keydown="onTabKeydown($event, tab.id)"
+        @contextmenu.stop.prevent="onTabContextMenu($event, tab.id)"
+        @dragstart="onTabDragStart($event, tab.id)"
+        @dragover="onTabDragOver($event, tab.id, tabIndex)"
+        @dragleave="onTabDragLeave(tab.id)"
+        @drop="onTabDrop($event, tab.id, tabIndex)"
+        @dragend="clearDragState"
       >
         <input
           v-if="editable && editingTab === tab.id"
@@ -118,7 +125,6 @@
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style="childIconTitleStyle(child)"
                 :theme-accent-group="child.themeAccentGroup"
-                :component-color="child.componentColor"
                 :variant="childIndex"
               />
               <button
@@ -284,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { Close, Plus, EditPen } from '@element-plus/icons-vue'
@@ -351,6 +357,12 @@ const emit = defineEmits<{
   (e: 'add-tab', payload: { containerId: string }): void
   /** 删除页签（编辑器负责二次确认与「最后一个页签组件平移回容器」） */
   (e: 'remove-tab', payload: { containerId: string; tabId: string }): void
+  /** 移动页签位置（拖拽排序与右键左右移动共用；toIndex 以先删后插语义为准） */
+  (e: 'move-tab', payload: { containerId: string; tabId: string; toIndex: number }): void
+  /** 复制页签（含页签内全部子组件/嵌套页签/配置；编辑器深拷贝并重生成 ID） */
+  (e: 'copy-tab', payload: { containerId: string; tabId: string }): void
+  /** 页签右键菜单（编辑器统一渲染：复制/左右移动） */
+  (e: 'tab-context-menu', payload: { containerId: string; tabId: string; x: number; y: number }): void
   /** 删除筛选类子组件交由编辑器统一确认，并清理全仪表盘绑定。 */
   (e: 'delete-child', payload: { containerId: string; childId: string }): void
   /** 将画布中的已有组件移入当前组合容器/页签 */
@@ -549,7 +561,7 @@ function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boole
 const rootStyle = computed<Record<string, string>>(() => {
   const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
   return {
-    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup, props.component.componentColor),
+    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup),
     ...shared,
   }
 })
@@ -575,7 +587,6 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     titleBarStyle: child.titleBarStyle,
     titleIconStyle: child.titleIconStyle,
     themeAccentGroup: child.themeAccentGroup,
-    componentColor: child.componentColor,
     visualStyle: child.visualStyle,
     position: { x: 0, y: 0, w: child.layout.col, h: child.layout.h ? Math.round(child.layout.h / 30) : 4 },
     chartType: child.chartType,
@@ -625,7 +636,7 @@ function isSampleData(child: InsightCombinationChild): boolean {
 /** 子卡片定位样式 */
 function childStyle(child: InsightCombinationChild): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
-  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup, child.componentColor)
+  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup)
   if (cfg.value.layoutMode === 'free') {
     const l = childPreview.value && childPreview.value.id === child.id
       ? { ...child.layout, ...childPreview.value }
@@ -1107,8 +1118,73 @@ function selectTab(id: string) {
   if (props.component.containerConfig) props.component.containerConfig.activeTab = id
 }
 
+// ── 页签拖拽排序（仅编辑态；页签栏在卡片头部，不与 cc-body 自由布局拖拽冲突）──
+const dragState = reactive<{ tabId: string | null }>({ tabId: null })
+const dropIndicator = reactive<{ tabId: string | null; position: 'before' | 'after' }>({ tabId: null, position: 'before' })
+
+function clearDragState(): void {
+  dragState.tabId = null
+  dropIndicator.tabId = null
+  dropIndicator.position = 'before'
+}
+
+function onTabDragStart(event: DragEvent, tabId: string): void {
+  if (!props.editable || editingTab.value === tabId) {
+    // 重命名编辑中禁止拖拽（input 在捕获阶段会触发 dragstart）
+    event.preventDefault()
+    return
+  }
+  dragState.tabId = tabId
+  event.dataTransfer?.setData('text/plain', tabId)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onTabDragOver(event: DragEvent, tabId: string, tabIndex: number): void {
+  if (!dragState.tabId || dragState.tabId === tabId) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  dropIndicator.tabId = tabId
+  dropIndicator.position = event.clientX < rect.left + rect.width / 2 ? 'before' : 'after'
+  void tabIndex
+}
+
+function onTabDragLeave(tabId: string): void {
+  if (dropIndicator.tabId === tabId) dropIndicator.tabId = null
+}
+
+function onTabDrop(event: DragEvent, tabId: string, tabIndex: number): void {
+  event.preventDefault()
+  // 阻断冒泡：页签 drop 不进入卡片级「画布组件拖入」drop 处理
+  event.stopPropagation()
+  const dragging = dragState.tabId
+  const position = dropIndicator.position
+  clearDragState()
+  if (!dragging || dragging === tabId) return
+  // toIndex 以「先删后插」语义为准：插入点 = before→tabIndex，after→tabIndex + 1
+  const toIndex = position === 'before' ? tabIndex : tabIndex + 1
+  emit('move-tab', { containerId: props.component.id, tabId: dragging, toIndex })
+}
+
+/** 页签右键菜单：编辑态弹出（复制/左右移动统一由编辑器渲染与执行） */
+function onTabContextMenu(event: MouseEvent, tabId: string): void {
+  if (!props.editable) return
+  emit('tab-context-menu', { containerId: props.component.id, tabId, x: event.clientX, y: event.clientY })
+}
+
+/** 页签键盘：聚焦页签时 Ctrl/⌘+C 复制该页签（与子组件复制快捷键同语义）；其余交给共享导航 */
+function onTabKeydown(event: KeyboardEvent, tabId: string): void {
+  if (props.editable && (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'c') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('copy-tab', { containerId: props.component.id, tabId })
+    return
+  }
+  tabNav.onTabKeydown(event, tabId)
+}
+
 /** 页签键盘导航（与 KPI 卡共用同一 composable；容器内局部查找，避免跨卡串元素） */
-const { onTabKeydown } = useTabKeyboard(
+const tabNav = useTabKeyboard(
   () => cfg.value.tabs,
   selectTab,
   (id) => rootRef.value?.querySelector(`[role="tab"][data-tab-id="${id}"]`) ?? null,
@@ -1164,6 +1240,10 @@ const { onTabKeydown } = useTabKeyboard(
 .cc-tab:hover { color: var(--db-accent); }
 .cc-tab.active { color: var(--db-accent); border-bottom-color: var(--db-accent); font-weight: 600; }
 .cc-tab:focus-visible { outline: 2px solid var(--db-accent-border); border-radius: 4px; }
+.cc-tab[draggable='true'] { cursor: grab; }
+.cc-tab.dragging { opacity: 0.45; }
+.cc-tab.drop-before { box-shadow: inset 2px 0 0 var(--db-accent); }
+.cc-tab.drop-after { box-shadow: inset -2px 0 0 var(--db-accent); }
 .tab-edit { width: 64px; border: 1px solid var(--db-accent); border-radius: 4px; padding: 2px 4px; font-size: 12px; }
 .tab-rename-button { border: none; background: transparent; color: inherit; display: inline-flex; align-items: center; padding: 2px; border-radius: 4px; cursor: pointer; }
 .tab-rename-button:hover { background: var(--db-hover); }

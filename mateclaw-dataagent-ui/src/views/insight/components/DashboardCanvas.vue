@@ -103,7 +103,7 @@
           tabindex="0"
           @pointerdown="handleItemPointerDown($event, item.i)"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)), 'custom-resizing': resizingItem?.id === item.i }"
-          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup, getComponent(item.i)?.componentColor), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms`, ...(resizingItem?.id === item.i && resizePreviewStyle ? resizePreviewStyle : {}) }"
+          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms`, ...(resizingItem?.id === item.i && resizePreviewStyle ? resizePreviewStyle : {}) }"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -142,7 +142,6 @@
                     :dashboard-theme="dashboardTheme"
                     :title-icon-style="toolbarTitleIconStyle(item.i)"
                     :theme-accent-group="getComponent(item.i)?.themeAccentGroup"
-                    :component-color="getComponent(item.i)?.componentColor"
                     :variant="sameRowIconVariant(item)"
                   />
                   <button
@@ -266,6 +265,9 @@
                 @select-child="handleSelectChild"
                 @add-tab="(p) => emit('combination-add-tab', p)"
                 @remove-tab="(p) => emit('combination-remove-tab', p)"
+                @move-tab="(p) => emit('combination-move-tab', p)"
+                @copy-tab="(p) => emit('combination-copy-tab', p)"
+                @tab-context-menu="(p) => emit('combination-tab-context-menu', p)"
                 @delete-child="(p) => emit('combination-delete-child', p)"
                 @move-component-into="(p) => emit('move-component-into', p)"
                 @add-component-into="(p) => emit('add-component-into', p)"
@@ -532,7 +534,6 @@ const editingTitleIconDefaultColor = computed(() => {
     editingTitleIconTitle.value,
     0,
     owner?.themeAccentGroup,
-    owner?.componentColor,
   )
   return iconStyle['--dashboard-icon-color'] ?? props.dashboardTheme?.textSecondary ?? '#8c4a2f'
 })
@@ -553,6 +554,9 @@ const emit = defineEmits<{
   (e: 'select-child', payload: { containerId: string; childId: string | null }): void
   (e: 'combination-add-tab', payload: { containerId: string }): void
   (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'combination-move-tab', payload: { containerId: string; tabId: string; toIndex: number }): void
+  (e: 'combination-copy-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'combination-tab-context-menu', payload: { containerId: string; tabId: string; x: number; y: number }): void
   (e: 'combination-delete-child', payload: { containerId: string; childId: string }): void
   (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
   (e: 'add-component-into', payload: { containerId: string; type: InsightComponentType; chartType?: ChartType; x: number; y: number }): void
